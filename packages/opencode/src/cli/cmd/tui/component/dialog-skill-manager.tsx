@@ -173,7 +173,7 @@ Supporting Files: ${
         <box gap={1}>
           <text>No skills found</text>
           <text fg={theme.textMuted}>
-            Create skills in .codesurf/skills/, .claude/skills/, or ~/.codesurf/skills/
+            Create skills in .opencode/skills/, .claude/skills/, or ~/.opencode/skills/
           </text>
           <box marginTop={1}>
             <text attributes={TextAttributes.BOLD}>Skill Structure:</text>

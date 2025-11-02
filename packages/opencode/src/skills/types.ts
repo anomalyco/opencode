@@ -122,10 +122,10 @@ export interface SkillMatch {
  * Configuration for skill discovery and loading
  */
 export interface SkillSystemConfig {
-  /** Path to project skills directory (default: .codesurf/skills, also checks .claude/skills) */
+  /** Path to project skills directory (default: .opencode/skills, also checks .claude/skills) */
   projectSkillsPath?: string
 
-  /** Path to user skills directory (default: ~/.codesurf/skills, also checks ~/.claude/skills) */
+  /** Path to user skills directory (default: ~/.opencode/skills, also checks ~/.claude/skills) */
   userSkillsPath?: string
 
   /** Whether to load plugin skills (default: false) */

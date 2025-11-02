@@ -105,8 +105,8 @@ export class SkillLoader {
 
   constructor(config: SkillSystemConfig = {}) {
     this.config = {
-      projectSkillsPath: config.projectSkillsPath || ".codesurf/skills",
-      userSkillsPath: config.userSkillsPath || join(homedir(), ".codesurf", "skills"),
+      projectSkillsPath: config.projectSkillsPath || ".opencode/skills",
+      userSkillsPath: config.userSkillsPath || join(homedir(), ".opencode", "skills"),
       loadPluginSkills: config.loadPluginSkills ?? false,
       pluginSkillsPaths: config.pluginSkillsPaths || [],
       minConfidenceThreshold: config.minConfidenceThreshold ?? 0.6,
@@ -124,17 +124,17 @@ export class SkillLoader {
     this.log("Starting skill discovery...")
     this.discoveredSkills.clear()
 
-    // Check both .codesurf and .claude paths for compatibility
-    const projectPaths = [".codesurf/skills", ".claude/skills"]
-    const userPaths = [join(homedir(), ".codesurf", "skills"), join(homedir(), ".claude", "skills")]
+    // Check both .opencode and .claude paths for compatibility
+    const projectPaths = [".opencode/skills", ".claude/skills"]
+    const userPaths = [join(homedir(), ".opencode", "skills"), join(homedir(), ".claude", "skills")]
 
     this.log(`Checking project paths: ${projectPaths.join(", ")}`)
     this.log(`Checking user paths: ${userPaths.join(", ")}`)
 
     const discoveries = await Promise.allSettled([
-      // Project skills from both .codesurf and .claude
+      // Project skills from both .opencode and .claude
       ...projectPaths.map((path) => this.discoverFromPath(path, "project")),
-      // User skills from both ~/.codesurf and ~/.claude
+      // User skills from both ~/.opencode and ~/.claude
       ...userPaths.map((path) => this.discoverFromPath(path, "user")),
       // Plugin skills if enabled
       ...(this.config.loadPluginSkills
@@ -147,9 +147,9 @@ export class SkillLoader {
     for (const result of discoveries) {
       if (result.status === "fulfilled") {
         for (const skill of result.value) {
-          // Prefer .codesurf over .claude if duplicate names
+          // Prefer .opencode over .claude if duplicate names
           const existing = skillsMap.get(skill.frontmatter.name)
-          if (!existing || skill.path.includes(".codesurf")) {
+          if (!existing || skill.path.includes(".opencode")) {
             skillsMap.set(skill.frontmatter.name, skill)
           }
         }
