@@ -6,7 +6,7 @@
  * Run with: bun test-livekit-direct.ts
  */
 
-import { Room, RoomEvent } from "livekit-client"
+import { Room, RoomEvent, ConnectionState } from "@livekit/rtc-node"
 import { AccessToken } from "livekit-server-sdk"
 
 // Get config from environment
@@ -69,8 +69,9 @@ async function connectToRoom() {
     room.on(RoomEvent.Connected, () => {
       console.log("✅ Connected event fired!")
       console.log(`   Room name: ${room.name}`)
-      console.log(`   Participant ID: ${room.localParticipant?.identity}`)
-      console.log(`   Connection state: ${room.state}`)
+      console.log(`   Participant SID: ${room.localParticipant?.sid}`)
+      console.log(`   Participant Identity: ${room.localParticipant?.identity}`)
+      console.log(`   Connection state: ${room.connectionState}`)
     })
 
     room.on(RoomEvent.Disconnected, (reason) => {
@@ -97,22 +98,20 @@ async function connectToRoom() {
     console.log(`   URL: ${config.url}`)
     console.log(`   Room: ${config.roomName}`)
 
-    await room.connect(config.url, token)
+    await room.connect(config.url, token, {
+      autoSubscribe: true,
+      dynacast: true,
+    })
 
     console.log("\n✅ Successfully connected to LiveKit!")
-    console.log(`   Connection state: ${room.state}`)
+    console.log(`   Connection state: ${room.connectionState}`)
     console.log(`   Room name: ${room.name}`)
     console.log(`   Local participant: ${room.localParticipant?.identity}`)
     console.log(`   Remote participants: ${room.remoteParticipants.size}`)
 
-    // Try to enable microphone
-    console.log("\n🎤 Attempting to enable microphone...")
-    try {
-      await room.localParticipant.setMicrophoneEnabled(true)
-      console.log("✅ Microphone enabled successfully")
-    } catch (error) {
-      console.error("❌ Failed to enable microphone:", error)
-    }
+    // Note: Microphone handling in rtc-node requires AudioSource setup
+    // Skipping microphone test in this simple connection test
+    console.log("\n✅ Connection test successful (mic test skipped for rtc-node)")
 
     // Keep connection alive for a few seconds
     console.log("\n⏳ Keeping connection alive for 5 seconds...")
