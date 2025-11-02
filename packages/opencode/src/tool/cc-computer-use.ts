@@ -184,8 +184,9 @@ export const ClaudeCodeComputerUseTool = Tool.define("cc_computer_use", {
           let y = 0
 
           if (platform === "darwin") {
+            // Use Python to get mouse position (most reliable on macOS)
             const result =
-              await $`osascript -e 'tell application "System Events" to get position of mouse'`.text()
+              await $`python3 -c "from Quartz import CGEventGetLocation, CGEventCreate; loc = CGEventGetLocation(CGEventCreate(None)); print(f'{int(loc.x)},{int(loc.y)}')"`.text()
             const coords = result.trim().split(",")
             x = parseInt(coords[0])
             y = parseInt(coords[1])
