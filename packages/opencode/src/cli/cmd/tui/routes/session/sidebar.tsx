@@ -8,14 +8,14 @@ import { TextAttributes } from "@opentui/core"
 import { ContextUsageBar } from "../../component/context-usage-bar"
 import { useLocal } from "../../context/local"
 import { useKeyboard, useRenderer } from "@opentui/solid"
-type TabType = "files" | "todos" | "mcp"
+type TabType = "files" | "todos" | "tools"
 
 export function Sidebar(props: { sessionID: string; onToggle: () => void }) {
   const sync = useSync()
   const { theme } = useTheme()
   const local = useLocal()
   const renderer = useRenderer()
-  const [activeTab, setActiveTab] = createSignal<TabType>("mcp")
+  const [activeTab, setActiveTab] = createSignal<TabType>("tools")
   const [expandedMcpServers, setExpandedMcpServers] = createSignal<Set<string>>(new Set())
   const [mcpTools, setMcpTools] = createSignal<Record<string, Record<string, any>>>({})
   const [selectedFiles, setSelectedFiles] = createSignal<Set<string>>(new Set())
@@ -27,9 +27,29 @@ export function Sidebar(props: { sessionID: string; onToggle: () => void }) {
 
   // Add keyboard shortcuts for tab switching
   useKeyboard((evt) => {
-    if (evt.name === "1") setActiveTab("mcp")
+    if (evt.name === "1") setActiveTab("tools")
     if (evt.name === "2") setActiveTab("todos")
     if (evt.name === "3") setActiveTab("files")
+  })
+
+  // Track tools used in this session
+  const toolsUsed = createMemo(() => {
+    const toolCounts: Record<string, number> = {}
+
+    // Get all parts for messages in this session
+    messages().forEach((msg) => {
+      const parts = sync.data.part[msg.id] || []
+      parts.forEach((part) => {
+        if (part.type === "tool" && part.state?.status === "completed") {
+          const toolName = part.tool
+          toolCounts[toolName] = (toolCounts[toolName] || 0) + 1
+        }
+      })
+    })
+
+    return Object.entries(toolCounts)
+      .sort((a, b) => b[1] - a[1]) // Sort by usage count
+      .slice(0, 10) // Top 10
   })
 
   async function handleCommit() {
@@ -162,13 +182,13 @@ export function Sidebar(props: { sessionID: string; onToggle: () => void }) {
         <box flexDirection="row" gap={2}>
           <text
             style={{
-              fg: activeTab() === "mcp" ? theme.accent : theme.textMuted,
-              attributes: activeTab() === "mcp" ? TextAttributes.BOLD : undefined,
+              fg: activeTab() === "tools" ? theme.accent : theme.textMuted,
+              attributes: activeTab() === "tools" ? TextAttributes.BOLD : undefined,
             }}
-            onMouseUp={() => setActiveTab("mcp")}
+            onMouseUp={() => setActiveTab("tools")}
           >
-            {activeTab() === "mcp" ? "●" : "○"} MCP/LSP(
-            {Object.keys(sync.data.mcp).length + sync.data.lsp.length})
+            {activeTab() === "tools" ? "●" : "○"} Tools(
+            {toolsUsed().length + Object.keys(sync.data.mcp).length + sync.data.lsp.length})
           </text>
           <text
             style={{
@@ -191,7 +211,27 @@ export function Sidebar(props: { sessionID: string; onToggle: () => void }) {
         </box>
 
         {/* Tab Content */}
-        <Show when={activeTab() === "mcp"}>
+        <Show when={activeTab() === "tools"}>
+          <Show when={toolsUsed().length > 0}>
+            <box marginTop={0}>
+              <text>
+                <b>Tools Used</b>
+              </text>
+              <For each={toolsUsed()}>
+                {([toolName, count]) => {
+                  const isClaudeCode = toolName.startsWith("cc_")
+                  return (
+                    <box flexDirection="row" gap={1} justifyContent="space-between">
+                      <text fg={isClaudeCode ? theme.accent : theme.text}>
+                        {isClaudeCode ? "⚡" : "⚙"} {toolName}
+                      </text>
+                      <text fg={theme.textMuted}>×{count}</text>
+                    </box>
+                  )
+                }}
+              </For>
+            </box>
+          </Show>
           <Show when={sync.data.lsp.length > 0}>
             <box marginTop={0}>
               <text>
