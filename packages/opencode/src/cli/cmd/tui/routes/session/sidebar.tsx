@@ -8,6 +8,7 @@ import { TextAttributes } from "@opentui/core"
 import { ContextUsageBar } from "../../component/context-usage-bar"
 import { useLocal } from "../../context/local"
 import { useKeyboard, useRenderer } from "@opentui/solid"
+import { $ } from "bun"
 type TabType = "files" | "todos" | "tools"
 
 export function Sidebar(props: { sessionID: string; onToggle: () => void }) {
@@ -21,15 +22,56 @@ export function Sidebar(props: { sessionID: string; onToggle: () => void }) {
   const [selectedFiles, setSelectedFiles] = createSignal<Set<string>>(new Set())
   const [commitMessage, setCommitMessage] = createSignal("")
   const [isCommitting, setIsCommitting] = createSignal(false)
+  const [committedFiles, setCommittedFiles] = createSignal<Set<string>>(new Set())
   const session = createMemo(() => sync.session.get(props.sessionID)!)
   const todo = createMemo(() => sync.data.todo[props.sessionID] ?? [])
   const messages = createMemo(() => sync.data.message[props.sessionID] ?? [])
 
+  // Check which files are committed
+  const checkCommittedFiles = async () => {
+    try {
+      const diffs = session().summary?.diffs || []
+      if (diffs.length === 0) return
+
+      const { $ } = await import("bun")
+      const result = await $`git status --short`.text().catch(() => "")
+      const uncommittedSet = new Set(
+        result
+          .split("\n")
+          .filter(Boolean)
+          .map((line) => line.substring(3).trim()),
+      )
+
+      const committed = new Set<string>()
+      for (const diff of diffs) {
+        if (!uncommittedSet.has(diff.file)) {
+          committed.add(diff.file)
+        }
+      }
+      setCommittedFiles(committed)
+    } catch (error) {
+      console.error("Failed to check git status", error)
+    }
+  }
+
+  // Check committed files when tab switches to files
+  const handleTabChange = (tab: TabType) => {
+    setActiveTab(tab)
+    if (tab === "files") {
+      checkCommittedFiles()
+    }
+  }
+
+  const uncommittedFiles = createMemo(() => {
+    const diffs = session().summary?.diffs || []
+    return diffs.filter((d) => !committedFiles().has(d.file))
+  })
+
   // Add keyboard shortcuts for tab switching
   useKeyboard((evt) => {
-    if (evt.name === "1") setActiveTab("tools")
-    if (evt.name === "2") setActiveTab("todos")
-    if (evt.name === "3") setActiveTab("files")
+    if (evt.name === "1") handleTabChange("tools")
+    if (evt.name === "2") handleTabChange("todos")
+    if (evt.name === "3") handleTabChange("files")
   })
 
   // Track tools used in this session
@@ -185,7 +227,7 @@ export function Sidebar(props: { sessionID: string; onToggle: () => void }) {
               fg: activeTab() === "tools" ? theme.accent : theme.textMuted,
               attributes: activeTab() === "tools" ? TextAttributes.BOLD : undefined,
             }}
-            onMouseUp={() => setActiveTab("tools")}
+            onMouseUp={() => handleTabChange("tools")}
           >
             {activeTab() === "tools" ? "●" : "○"} Tools(
             {toolsUsed().length + Object.keys(sync.data.mcp).length + sync.data.lsp.length})
@@ -195,7 +237,7 @@ export function Sidebar(props: { sessionID: string; onToggle: () => void }) {
               fg: activeTab() === "todos" ? theme.accent : theme.textMuted,
               attributes: activeTab() === "todos" ? TextAttributes.BOLD : undefined,
             }}
-            onMouseUp={() => setActiveTab("todos")}
+            onMouseUp={() => handleTabChange("todos")}
           >
             {activeTab() === "todos" ? "●" : "○"} Todos({todo().length})
           </text>
@@ -204,7 +246,7 @@ export function Sidebar(props: { sessionID: string; onToggle: () => void }) {
               fg: activeTab() === "files" ? theme.accent : theme.textMuted,
               attributes: activeTab() === "files" ? TextAttributes.BOLD : undefined,
             }}
-            onMouseUp={() => setActiveTab("files")}
+            onMouseUp={() => handleTabChange("files")}
           >
             {activeTab() === "files" ? "●" : "○"} Files({session().summary?.diffs?.length || 0})
           </text>
@@ -339,24 +381,24 @@ export function Sidebar(props: { sessionID: string; onToggle: () => void }) {
             <box marginTop={0} flexDirection="column">
               <box flexDirection="row" justifyContent="space-between">
                 <text>
-                  <b>Modified Files</b>
+                  <b>Session Files</b>
                 </text>
-                <text
-                  fg={theme.accent}
-                  onMouseUp={() => {
-                    if (renderer.getSelection()?.getSelectedText()) return
-                    const diffs = session().summary?.diffs || []
-                    if (selectedFiles().size === diffs.length) {
-                      setSelectedFiles(new Set<string>())
-                    } else {
-                      setSelectedFiles(new Set<string>(diffs.map((d) => d.file)))
-                    }
-                  }}
-                >
-                  {selectedFiles().size === (session().summary?.diffs || []).length
-                    ? "Desel All"
-                    : "Sel All"}
-                </text>
+                <Show when={uncommittedFiles().length > 0}>
+                  <text
+                    fg={theme.accent}
+                    onMouseUp={() => {
+                      if (renderer.getSelection()?.getSelectedText()) return
+                      const uncommitted = uncommittedFiles()
+                      if (selectedFiles().size === uncommitted.length) {
+                        setSelectedFiles(new Set<string>())
+                      } else {
+                        setSelectedFiles(new Set<string>(uncommitted.map((d) => d.file)))
+                      }
+                    }}
+                  >
+                    {selectedFiles().size === uncommittedFiles().length ? "Desel All" : "Sel All"}
+                  </text>
+                </Show>
               </box>
               <For each={session().summary?.diffs || []}>
                 {(item) => {
@@ -366,6 +408,7 @@ export function Sidebar(props: { sessionID: string; onToggle: () => void }) {
                     const rest = splits.slice(0, -1).join(path.sep)
                     return Locale.truncateMiddle(rest, 30 - last.length) + "/" + last
                   })
+                  const isCommitted = createMemo(() => committedFiles().has(item.file))
                   const isSelected = createMemo(() => selectedFiles().has(item.file))
                   return (
                     <box
@@ -374,6 +417,7 @@ export function Sidebar(props: { sessionID: string; onToggle: () => void }) {
                       justifyContent="space-between"
                       onMouseUp={() => {
                         if (renderer.getSelection()?.getSelectedText()) return
+                        if (isCommitted()) return
                         setSelectedFiles((prev) => {
                           const newFiles = new Set(prev)
                           if (prev.has(item.file)) {
@@ -385,8 +429,16 @@ export function Sidebar(props: { sessionID: string; onToggle: () => void }) {
                         })
                       }}
                     >
-                      <text fg={isSelected() ? theme.accent : theme.textMuted}>
-                        [{isSelected() ? "✓" : " "}] {file()}
+                      <text
+                        fg={
+                          isCommitted()
+                            ? theme.success
+                            : isSelected()
+                              ? theme.accent
+                              : theme.textMuted
+                        }
+                      >
+                        {isCommitted() ? "[✓]" : isSelected() ? "[✓]" : "[ ]"} {file()}
                       </text>
                       <box flexDirection="row" gap={1} flexShrink={0}>
                         <Show when={item.additions}>
@@ -400,34 +452,47 @@ export function Sidebar(props: { sessionID: string; onToggle: () => void }) {
                   )
                 }}
               </For>
-              <box marginTop={1}>
-                <text fg={theme.textMuted}>{commitMessage() || "Click Auto or type message"}</text>
-              </box>
-              <box flexDirection="row" gap={2}>
-                <text
-                  fg={selectedFiles().size > 0 && !isCommitting() ? theme.success : theme.textMuted}
-                  onMouseUp={() => {
-                    if (selectedFiles().size === 0 || isCommitting()) return
-                    const count = selectedFiles().size
-                    setCommitMessage(`Update ${count} file${count > 1 ? "s" : ""}`)
-                  }}
-                >
-                  [Auto]
-                </text>
-                <text
-                  fg={
-                    selectedFiles().size > 0 && commitMessage() && !isCommitting()
-                      ? theme.success
-                      : theme.textMuted
-                  }
-                  onMouseUp={() => {
-                    if (!isCommitting()) handleCommit()
-                  }}
-                >
-                  {isCommitting() ? "[Committing...]" : "[Commit]"}
-                </text>
-              </box>
-              <text fg={theme.textMuted}>{selectedFiles().size} selected</text>
+              <Show when={uncommittedFiles().length > 0}>
+                <box marginTop={1}>
+                  <text fg={theme.textMuted}>
+                    {commitMessage() || "Click Auto or type message"}
+                  </text>
+                </box>
+                <box flexDirection="row" gap={2}>
+                  <text
+                    fg={
+                      selectedFiles().size > 0 && !isCommitting() ? theme.success : theme.textMuted
+                    }
+                    onMouseUp={() => {
+                      if (selectedFiles().size === 0 || isCommitting()) return
+                      const count = selectedFiles().size
+                      setCommitMessage(`Update ${count} file${count > 1 ? "s" : ""}`)
+                    }}
+                  >
+                    [Auto]
+                  </text>
+                  <text
+                    fg={
+                      selectedFiles().size > 0 && commitMessage() && !isCommitting()
+                        ? theme.success
+                        : theme.textMuted
+                    }
+                    onMouseUp={() => {
+                      if (!isCommitting()) handleCommit()
+                    }}
+                  >
+                    {isCommitting() ? "[Committing...]" : "[Commit]"}
+                  </text>
+                </box>
+                <text fg={theme.textMuted}>{selectedFiles().size} selected</text>
+              </Show>
+              <Show
+                when={
+                  uncommittedFiles().length === 0 && (session().summary?.diffs?.length || 0) > 0
+                }
+              >
+                <text fg={theme.success}>All files committed ✓</text>
+              </Show>
             </box>
           </Show>
         </Show>
