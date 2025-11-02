@@ -12,3 +12,6 @@ tmp
 dist
 .turbo
 .opencode
+.opencode/raid.db-wal
+.opencode/raid.db-shm
+.opencode/raid.db
