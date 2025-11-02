@@ -258,4 +258,50 @@ export namespace MCP {
     }
     return client.tools()
   }
+
+  export const DiscoveredServer = z
+    .object({
+      name: z.string(),
+      description: z.string(),
+      vendor: z.string(),
+      sourceUrl: z.string(),
+      homepage: z.string().optional(),
+      license: z.string().optional(),
+      runtime: z.string().optional(),
+      installCommand: z.string(),
+    })
+    .meta({ ref: "MCPDiscoveredServer" })
+  export type DiscoveredServer = z.infer<typeof DiscoveredServer>
+
+  export async function discover(): Promise<DiscoveredServer[]> {
+    try {
+      const response = await fetch("https://smithery.ai/api/servers")
+      if (!response.ok) {
+        log.warn("failed to discover MCP servers", { status: response.status })
+        return []
+      }
+      const data = await response.json()
+
+      if (!Array.isArray(data)) {
+        log.warn("unexpected response format from discovery endpoint")
+        return []
+      }
+
+      return data.map((server: any) => ({
+        name: server.name || "Unknown",
+        description: server.description || "",
+        vendor: server.vendor || server.author || "Unknown",
+        sourceUrl: server.repository?.url || server.sourceUrl || "",
+        homepage: server.homepage,
+        license: server.license,
+        runtime: server.runtime || "node",
+        installCommand: server.package ? `npx -y ${server.package}` : server.installCommand || "",
+      }))
+    } catch (error) {
+      log.error("failed to discover MCP servers", {
+        error: error instanceof Error ? error.message : String(error),
+      })
+      return []
+    }
+  }
 }

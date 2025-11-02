@@ -1404,6 +1404,26 @@ export namespace Server {
         },
       )
       .get(
+        "/mcp/discover",
+        describeRoute({
+          description: "Discover available MCP servers from registry",
+          operationId: "mcp.discover",
+          responses: {
+            200: {
+              description: "List of discoverable MCP servers",
+              content: {
+                "application/json": {
+                  schema: resolver(MCP.DiscoveredServer.array()),
+                },
+              },
+            },
+          },
+        }),
+        async (c) => {
+          return c.json(await MCP.discover())
+        },
+      )
+      .get(
         "/mcp/:serverName/tools",
         describeRoute({
           description: "Get tools for a specific MCP server",

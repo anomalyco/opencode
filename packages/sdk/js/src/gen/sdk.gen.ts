@@ -65,6 +65,9 @@ import type {
   SessionPromptData,
   SessionPromptResponses,
   SessionPromptErrors,
+  SessionMessagesRecentData,
+  SessionMessagesRecentResponses,
+  SessionMessagesRecentErrors,
   SessionMessageData,
   SessionMessageResponses,
   SessionMessageErrors,
@@ -276,6 +279,24 @@ class Path extends _HeyApiClient {
   public get<ThrowOnError extends boolean = false>(options?: Options<PathGetData, ThrowOnError>) {
     return (options?.client ?? this._client).get<PathGetResponses, unknown, ThrowOnError>({
       url: "/path",
+      ...options,
+    })
+  }
+}
+
+class Messages extends _HeyApiClient {
+  /**
+   * Get recent messages for a session (optimized for faster loading)
+   */
+  public recent<ThrowOnError extends boolean = false>(
+    options: Options<SessionMessagesRecentData, ThrowOnError>,
+  ) {
+    return (options.client ?? this._client).get<
+      SessionMessagesRecentResponses,
+      SessionMessagesRecentErrors,
+      ThrowOnError
+    >({
+      url: "/session/{id}/message/recent",
       ...options,
     })
   }
@@ -517,7 +538,7 @@ class Session extends _HeyApiClient {
   }
 
   /**
-   * List messages for a session
+   * List messages for a session with optional pagination
    */
   public messages<ThrowOnError extends boolean = false>(
     options: Options<SessionMessagesData, ThrowOnError>,

@@ -27,8 +27,9 @@ export function DialogMCPManager() {
   const sdk = useSDK()
 
   const [selectedServer, setSelectedServer] = createSignal<string>()
-  const [view, setView] = createSignal<"list" | "tools" | "add">("list")
+  const [view, setView] = createSignal<"list" | "tools" | "add" | "discover">("list")
   const [serverTools, setServerTools] = createSignal<Record<string, any>>({})
+  const [discoveredServers, setDiscoveredServers] = createSignal<any[]>([])
 
   onMount(() => {
     dialog.setSize("large")
@@ -194,6 +195,103 @@ Press 'e' to edit configuration
     })
   }
 
+  async function discoverServers() {
+    try {
+      toast.show({
+        message: "Discovering MCP servers...",
+        variant: "info",
+      })
+
+      const response = await fetch("https://smithery.ai/api/servers")
+      if (!response.ok) {
+        throw new Error(`HTTP ${response.status}`)
+      }
+      const data = await response.json()
+
+      const servers = Array.isArray(data)
+        ? data.map((server: any) => ({
+            name: server.name || "Unknown",
+            description: server.description || "",
+            vendor: server.vendor || server.author || "Unknown",
+            sourceUrl: server.repository?.url || server.sourceUrl || "",
+            homepage: server.homepage,
+            license: server.license,
+            runtime: server.runtime || "node",
+            installCommand: server.package ? `npx -y ${server.package}` : "",
+          }))
+        : []
+
+      setDiscoveredServers(servers)
+      setView("discover")
+
+      toast.show({
+        message: `Found ${servers.length} available MCP servers`,
+        variant: "success",
+      })
+    } catch (error) {
+      toast.show({
+        message: `Failed to discover servers: ${error instanceof Error ? error.message : String(error)}`,
+        variant: "error",
+      })
+    }
+  }
+
+  if (view() === "discover") {
+    const discoverOptions = discoveredServers().map((server) => ({
+      value: server.name,
+      title: server.name,
+      footer: server.description,
+      category: server.vendor,
+    }))
+
+    return (
+      <DialogSelect
+        title={`Discover MCP Servers (${discoveredServers().length} available)`}
+        options={discoverOptions}
+        limit={50}
+        onSelect={(option) => {
+          const server = discoveredServers().find((s) => s.name === option.value)
+          if (!server) return
+
+          const details = `
+${server.name}
+
+Description: ${server.description}
+Vendor: ${server.vendor}
+${server.homepage ? `Homepage: ${server.homepage}\n` : ""}${server.license ? `License: ${server.license}\n` : ""}
+Install Command:
+${server.installCommand}
+
+To add this server, copy the install command and add to opencode.json:
+
+"mcp": {
+  "${server.name}": {
+    "type": "local",
+    "command": ${JSON.stringify(server.installCommand.split(" "))}
+  }
+}
+
+Then press 'f' to refresh.
+          `.trim()
+
+          toast.show({
+            message: details,
+            variant: "info",
+          })
+        }}
+        keybind={[
+          {
+            keybind: Keybind.parse("esc")[0],
+            title: "back",
+            onTrigger: () => {
+              setView("list")
+            },
+          },
+        ]}
+      />
+    )
+  }
+
   if (mcpServers().length === 0) {
     return (
       <box paddingLeft={2} paddingRight={2} gap={1} paddingBottom={1} flexDirection="column">
@@ -234,8 +332,9 @@ Press 'e' to edit configuration
             <text fg={theme.textMuted}> {`}`}</text>
             <text fg={theme.textMuted}>{`}`}</text>
           </box>
-          <box marginTop={1}>
+          <box marginTop={1} flexDirection="column">
             <text fg={theme.textMuted}>Press 'a' to get add server template</text>
+            <text fg={theme.textMuted}>Press 'D' to discover servers from registry</text>
           </box>
         </box>
       </box>
@@ -319,6 +418,13 @@ Tools: Press 't' to list
               message: statusInfo,
               variant: "info",
             })
+          },
+        },
+        {
+          keybind: Keybind.parse("D")[0],
+          title: "discover",
+          onTrigger: async () => {
+            await discoverServers()
           },
         },
       ]}

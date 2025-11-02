@@ -526,6 +526,10 @@ export type Config = {
     chatMaxRetries?: number
     disable_paste_summary?: boolean
   }
+  /**
+   * Directories outside the project that agents can access
+   */
+  allowedDirectories?: Array<string>
 }
 
 export type BadRequestError = {
@@ -2008,6 +2012,14 @@ export type SessionMessagesData = {
   }
   query?: {
     directory?: string
+    /**
+     * Maximum number of messages to return
+     */
+    limit?: number
+    /**
+     * Number of messages to skip
+     */
+    offset?: number
   }
   url: "/session/{id}/message"
 }
@@ -2088,6 +2100,51 @@ export type SessionPromptResponses = {
 }
 
 export type SessionPromptResponse = SessionPromptResponses[keyof SessionPromptResponses]
+
+export type SessionMessagesRecentData = {
+  body?: never
+  path: {
+    /**
+     * Session ID
+     */
+    id: string
+  }
+  query?: {
+    directory?: string
+    /**
+     * Number of recent messages to return
+     */
+    count?: number
+  }
+  url: "/session/{id}/message/recent"
+}
+
+export type SessionMessagesRecentErrors = {
+  /**
+   * Bad request
+   */
+  400: BadRequestError
+  /**
+   * Not found
+   */
+  404: NotFoundError
+}
+
+export type SessionMessagesRecentError =
+  SessionMessagesRecentErrors[keyof SessionMessagesRecentErrors]
+
+export type SessionMessagesRecentResponses = {
+  /**
+   * List of recent messages
+   */
+  200: Array<{
+    info: Message
+    parts: Array<Part>
+  }>
+}
+
+export type SessionMessagesRecentResponse =
+  SessionMessagesRecentResponses[keyof SessionMessagesRecentResponses]
 
 export type SessionMessageData = {
   body?: never
