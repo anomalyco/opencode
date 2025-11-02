@@ -61,7 +61,6 @@ import { DialogConfirm } from "@tui/ui/dialog-confirm"
 import { DialogTimeline } from "./dialog-timeline"
 import { Sidebar } from "./sidebar"
 import { LeftSidebar } from "./left-sidebar"
-import { Footer } from "./footer"
 import { LANGUAGE_EXTENSIONS } from "@/lsp/language"
 import parsers from "../../../../../../parsers-config.ts"
 import { Clipboard } from "../../util/clipboard"
@@ -89,7 +88,38 @@ export function Session() {
   const kv = useKV()
   const { theme } = useTheme()
   const session = createMemo(() => sync.session.get(route.sessionID)!)
-  const messages = createMemo(() => sync.data.message[route.sessionID] ?? [])
+
+  // Keep previous messages while loading to prevent flashing
+  const [cachedMessages, setCachedMessages] = createSignal<{
+    sessionID: string
+    messages: (typeof sync.data.message)[string]
+  }>({
+    sessionID: route.sessionID,
+    messages: sync.data.message[route.sessionID] ?? [],
+  })
+
+  const messages = createMemo(() => {
+    const currentSessionID = route.sessionID
+    const current = sync.data.message[currentSessionID]
+
+    // If switching sessions, clear cache and use new session data
+    if (cachedMessages().sessionID !== currentSessionID) {
+      const newData = { sessionID: currentSessionID, messages: current ?? [] }
+      setCachedMessages(newData)
+      return newData.messages
+    }
+
+    // If current data exists and has messages, update cache
+    if (current && current.length > 0) {
+      setCachedMessages({ sessionID: currentSessionID, messages: current })
+      return current
+    }
+
+    // If messages is empty or undefined, keep showing cached messages for this session
+    // This prevents flashing during reloads/syncs
+    return cachedMessages().messages
+  })
+
   const permissions = createMemo(() => sync.data.permission[route.sessionID] ?? [])
 
   const pending = createMemo(() => {
@@ -887,9 +917,6 @@ export function Session() {
           <Sidebar sessionID={route.sessionID} onToggle={toggleRightSidebar} />
         </Show>
       </box>
-
-      {/* Footer */}
-      <Footer />
     </context.Provider>
   )
 }

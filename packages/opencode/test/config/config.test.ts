@@ -390,6 +390,33 @@ test("resolves scoped npm plugins in config", async () => {
     },
   })
 
+test("handles anthropic configuration with all features", async () => {
+  await using tmp = await tmpdir({
+    init: async (dir) => {
+      await Bun.write(
+        path.join(dir, "opencode.json"),
+        JSON.stringify({
+          $schema: "https://opencode.ai/config.json",
+          anthropic: {
+            promptCaching: true,
+            contextEditing: true,
+            extendedThinking: true,
+            citations: true,
+            tokenEfficientToolUse: true,
+            fineGrainedToolStreaming: true,
+            codeExecutionTool: true,
+            textEditorTool: true,
+            webFetchTool: true,
+            computerUseTool: false,
+            webSearchTool: true,
+            memoryTool: true,
+            prefillAssistantMessages: true,
+            chainLongPrompts: true,
+          },
+        }),
+      )
+    },
+  })
   await Instance.provide({
     directory: tmp.path,
     fn: async () => {
@@ -404,6 +431,89 @@ test("resolves scoped npm plugins in config", async () => {
       const scopedEntry = pluginEntries.find((entry) => entry === expected)
       expect(scopedEntry).toBeDefined()
       expect(scopedEntry?.includes("/node_modules/@scope/plugin/")).toBe(true)
+      expect(config.anthropic?.promptCaching).toBe(true)
+      expect(config.anthropic?.contextEditing).toBe(true)
+      expect(config.anthropic?.extendedThinking).toBe(true)
+      expect(config.anthropic?.citations).toBe(true)
+      expect(config.anthropic?.tokenEfficientToolUse).toBe(true)
+      expect(config.anthropic?.fineGrainedToolStreaming).toBe(true)
+      expect(config.anthropic?.codeExecutionTool).toBe(true)
+      expect(config.anthropic?.textEditorTool).toBe(true)
+      expect(config.anthropic?.webFetchTool).toBe(true)
+      expect(config.anthropic?.computerUseTool).toBe(false)
+      expect(config.anthropic?.webSearchTool).toBe(true)
+      expect(config.anthropic?.memoryTool).toBe(true)
+      expect(config.anthropic?.prefillAssistantMessages).toBe(true)
+      expect(config.anthropic?.chainLongPrompts).toBe(true)
+    },
+  })
+})
+
+test("handles anthropic configuration with defaults", async () => {
+  await using tmp = await tmpdir({
+    init: async (dir) => {
+      await Bun.write(
+        path.join(dir, "opencode.json"),
+        JSON.stringify({
+          $schema: "https://opencode.ai/config.json",
+          anthropic: {},
+        }),
+      )
+    },
+  })
+  await Instance.provide({
+    directory: tmp.path,
+    fn: async () => {
+      const config = await Config.get()
+      // All features should be optional and not cause validation errors
+      expect(config.anthropic).toBeDefined()
+    },
+  })
+})
+
+test("handles prefillAssistant plugin configuration", async () => {
+  await using tmp = await tmpdir({
+    init: async (dir) => {
+      await Bun.write(
+        path.join(dir, "opencode.json"),
+        JSON.stringify({
+          $schema: "https://opencode.ai/config.json",
+          plugin: ["@opencode-ai/plugin-prefill-assistant"],
+        }),
+      )
+    },
+  })
+  await Instance.provide({
+    directory: tmp.path,
+    fn: async () => {
+      const config = await Config.get()
+      expect(config.plugin).toContain("@opencode-ai/plugin-prefill-assistant")
+      // Note: prefillAssistant config is passed to plugin via plugin.config() hook
+      // It's not part of the core config schema
+    },
+  })
+})
+
+test("validates anthropic configuration schema", async () => {
+  await using tmp = await tmpdir({
+    init: async (dir) => {
+      await Bun.write(
+        path.join(dir, "opencode.json"),
+        JSON.stringify({
+          $schema: "https://opencode.ai/config.json",
+          anthropic: {
+            promptCaching: true,
+            // All anthropic fields are optional booleans
+          },
+        }),
+      )
+    },
+  })
+  await Instance.provide({
+    directory: tmp.path,
+    fn: async () => {
+      const config = await Config.get()
+      expect(config.anthropic?.promptCaching).toBe(true)
     },
   })
 })

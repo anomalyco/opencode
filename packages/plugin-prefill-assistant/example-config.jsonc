@@ -1,0 +1,55 @@
+{
+  "$schema": "https://opencode.ai/schema.json",
+  
+  // Add the prefill assistant plugin
+  "plugin": [
+    "@opencode-ai/plugin-prefill-assistant"
+  ],
+  
+  // Configure the prefill assistant
+  "prefillAssistant": {
+    // Master toggle - set to false to disable all prefilling
+    "enabled": true,
+    
+    // Enable automatic prefilling based on active agent
+    "agentPrefilling": true,
+    
+    // Enable detection of user intent patterns
+    "patternDetection": true,
+    
+    // Minimum conversation depth before applying role maintenance
+    "minDepthForRole": 10,
+    
+    // Prefill contexts - customize these to your needs
+    "contexts": {
+      // Force JSON output without preamble
+      "jsonOutput": "{",
+      
+      // Force code-only responses
+      "codeOnly": "```",
+      
+      // Agent role markers
+      "orchestrator": "[Orchestrator]",
+      "general": "[General Agent]",
+      "plan": "[Planning Mode - Read Only]",
+      
+      // Response style modifiers
+      "concise": "Here's the solution:",
+      "technical": "Technical analysis:",
+      "debugging": "[Debug Context]",
+      
+      // Add your own custom contexts
+      "security": "[Security Review]",
+      "performance": "[Performance Analysis]"
+    }
+  },
+  
+  // Other OpenCode configuration
+  "anthropic": {
+    "prefillAssistantMessages": true,
+    "promptCaching": true,
+    "contextEditing": true,
+    "extendedThinking": true,
+    "citations": true
+  }
+}

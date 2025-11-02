@@ -254,6 +254,57 @@ export namespace SessionPrompt {
       await using _ = defer(async () => {
         await processor.end()
       })
+
+      // Build messages array and allow plugins to modify it
+      // Extract user message text for plugin consumption (safely)
+      const userText = msgs
+        .filter((m) => m?.info?.role === "user")
+        .flatMap((m) => {
+          if (!m.parts || !Array.isArray(m.parts)) return []
+          return m.parts
+            .filter((p) => p?.type === "text")
+            .map((p: any) => p?.text || "")
+            .filter(Boolean)
+        })
+        .join("\n")
+
+      const messages = await Plugin.trigger(
+        "chat.messages",
+        {
+          model: model.info,
+          provider: await Provider.getProvider(model.providerID),
+          userMessage: userMsg,
+          userText,
+          agent: input.agent,
+          conversationDepth: msgs.length,
+        },
+        {
+          messages: [
+            ...system.map(
+              (x): ModelMessage => ({
+                role: "system",
+                content: x,
+              }),
+            ),
+            ...MessageV2.toModelMessage(
+              msgs.filter((m) => {
+                if (m.info.role !== "assistant" || m.info.error === undefined) {
+                  return true
+                }
+                if (
+                  MessageV2.AbortedError.isInstance(m.info.error) &&
+                  m.parts.some((part) => part.type !== "step-start" && part.type !== "reasoning")
+                ) {
+                  return true
+                }
+
+                return false
+              }),
+            ),
+          ],
+        },
+      ).then((x) => x.messages)
+
       const doStream = () =>
         streamText({
           onError(error) {
@@ -309,29 +360,7 @@ export namespace SessionPrompt {
           stopWhen: stepCountIs(1),
           temperature: params.temperature,
           topP: params.topP,
-          messages: [
-            ...system.map(
-              (x): ModelMessage => ({
-                role: "system",
-                content: x,
-              }),
-            ),
-            ...MessageV2.toModelMessage(
-              msgs.filter((m) => {
-                if (m.info.role !== "assistant" || m.info.error === undefined) {
-                  return true
-                }
-                if (
-                  MessageV2.AbortedError.isInstance(m.info.error) &&
-                  m.parts.some((part) => part.type !== "step-start" && part.type !== "reasoning")
-                ) {
-                  return true
-                }
-
-                return false
-              }),
-            ),
-          ],
+          messages: messages,
           tools: model.info.tool_call === false ? undefined : tools,
           model: wrapLanguageModel({
             model: model.language,

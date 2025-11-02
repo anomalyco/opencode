@@ -151,6 +151,23 @@ export interface Hooks {
     input: { model: Model; provider: Provider; message: UserMessage },
     output: { temperature: number; topP: number; options: Record<string, any> },
   ) => Promise<void>
+  /**
+   * Modify messages array before sending to LLM
+   * Allows plugins to add prefill messages, inject context, etc.
+   */
+  "chat.messages"?: (
+    input: { 
+      model: Model
+      provider: Provider
+      userMessage: UserMessage
+      userText: string
+      agent: string
+      conversationDepth: number
+    },
+    output: { 
+      messages: Array<{ role: "system" | "user" | "assistant"; content: string | any[] }>
+    },
+  ) => Promise<void>
   "permission.ask"?: (input: Permission, output: { status: "ask" | "deny" | "allow" }) => Promise<void>
   "tool.execute.before"?: (
     input: { tool: string; sessionID: string; callID: string },

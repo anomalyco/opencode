@@ -79,7 +79,7 @@ The content of the file is added to the conversation automatically.
 
 ## Bash commands
 
-Start a message with `!` to run a **shell** command.
+Start a message with `!` to run a shell command.
 
 ```bash frame="none"
 !ls -la

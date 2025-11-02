@@ -1,5 +1,5 @@
 import { useSync } from "@tui/context/sync"
-import { createMemo, createSignal, For, Show, Switch, Match } from "solid-js"
+import { createMemo, createSignal, For, Show, Switch, Match, onMount, onCleanup } from "solid-js"
 import { useTheme } from "../../context/theme"
 import { Locale } from "@/util/locale"
 import path from "path"
@@ -10,6 +10,8 @@ import { useLocal } from "../../context/local"
 import { useKeyboard, useRenderer } from "@opentui/solid"
 import { useToast } from "../../ui/toast"
 import { useSDK } from "../../context/sdk"
+import { useDialog } from "../../ui/dialog"
+import { DialogSelect, type DialogSelectOption } from "../../ui/dialog-select"
 import { $ } from "bun"
 type TabType = "files" | "todos" | "tools"
 
@@ -20,7 +22,61 @@ export function Sidebar(props: { sessionID: string; onToggle: () => void }) {
   const renderer = useRenderer()
   const toast = useToast()
   const sdk = useSDK()
+  const dialog = useDialog()
   const [activeTab, setActiveTab] = createSignal<TabType>("tools")
+  const [serverStatus, setServerStatus] = createSignal<"connected" | "disconnected">("connected")
+
+  // Extract port from URL
+  const port = sdk.url.split(":").pop() || "unknown"
+
+  // Ping server periodically
+  let pingInterval: NodeJS.Timeout
+  onMount(() => {
+    pingInterval = setInterval(async () => {
+      try {
+        const response = await fetch(`${sdk.url}/health`, {
+          method: "GET",
+          signal: AbortSignal.timeout(1000),
+        })
+        setServerStatus(response.ok ? "connected" : "disconnected")
+      } catch {
+        setServerStatus("disconnected")
+      }
+    }, 5000)
+  })
+
+  onCleanup(() => {
+    if (pingInterval) clearInterval(pingInterval)
+  })
+
+  const showServerDialog = () => {
+    const options: DialogSelectOption<string>[] = [
+      {
+        title: "Restart Server",
+        value: "restart",
+        description: "Restart the OpenCode server",
+        onSelect: async (ctx) => {
+          ctx.clear()
+          try {
+            await fetch(`${sdk.url}/server/restart`, { method: "POST" })
+          } catch (error) {
+            console.error("Failed to restart server:", error)
+          }
+        },
+      },
+      {
+        title: "Copy Server URL",
+        value: "copy",
+        description: `Copy ${sdk.url} to clipboard`,
+        onSelect: (ctx) => {
+          console.log("Server URL:", sdk.url)
+          ctx.clear()
+        },
+      },
+    ]
+
+    dialog.replace(() => <DialogSelect title="Server Management" options={options} />)
+  }
   const [expandedMcpServers, setExpandedMcpServers] = createSignal<Set<string>>(new Set())
   const [mcpTools, setMcpTools] = createSignal<Record<string, Record<string, any>>>({})
   const [selectedFiles, setSelectedFiles] = createSignal<Set<string>>(new Set())
@@ -312,6 +368,17 @@ export function Sidebar(props: { sessionID: string; onToggle: () => void }) {
             }}
           >
             ▶
+          </text>
+        </box>
+        <box>
+          <text
+            fg={theme.textMuted}
+            onMouseUp={() => {
+              if (renderer.getSelection()?.getSelectedText()) return
+              showServerDialog()
+            }}
+          >
+            server:{port}
           </text>
         </box>
         <box>
