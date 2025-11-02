@@ -18,6 +18,13 @@ export const LiveKitProvider: ParentComponent = (props) => {
   const [manager, setManager] = createSignal<RoomManager | undefined>()
 
   const connect = async (config: LiveKitConfig) => {
+    console.log("[LiveKit] Starting connection with config:", {
+      url: config.url,
+      roomName: config.roomName,
+      hasApiKey: !!config.apiKey,
+      hasApiSecret: !!config.apiSecret,
+    })
+
     try {
       // Create RoomManager with LiveKit config
       const roomManager = new RoomManager({
@@ -25,36 +32,44 @@ export const LiveKitProvider: ParentComponent = (props) => {
         apiKey: config.apiKey,
         apiSecret: config.apiSecret,
       })
+      console.log("[LiveKit] RoomManager created")
 
       // Set up event listeners
       roomManager.on("connected", () => {
-        console.log("[LiveKit] Connected to room")
+        console.log("[LiveKit] ✅ Connected to room successfully")
         setConnected(true)
       })
 
-      roomManager.on("disconnected", () => {
-        console.log("[LiveKit] Disconnected from room")
+      roomManager.on("disconnected", (reason) => {
+        console.log("[LiveKit] ❌ Disconnected from room:", reason)
         setConnected(false)
       })
 
       roomManager.on("participantJoined", (participant) => {
-        console.log("[LiveKit] Participant joined:", participant.name)
+        console.log("[LiveKit] 👤 Participant joined:", participant.name)
       })
 
       roomManager.on("participantLeft", (participant) => {
-        console.log("[LiveKit] Participant left:", participant.name)
+        console.log("[LiveKit] 👋 Participant left:", participant.name)
       })
 
       // Connect to the room
+      console.log("[LiveKit] Attempting to connect to room:", config.roomName)
       await roomManager.connect({
         name: config.roomName,
         participantName: "OpenCode User",
       })
+      console.log("[LiveKit] Connect call completed")
 
       setRoomName(config.roomName)
       setManager(roomManager)
+      console.log("[LiveKit] State updated, connection process complete")
     } catch (error) {
-      console.error("[LiveKit] Failed to connect:", error)
+      console.error("[LiveKit] ❌ Failed to connect - ERROR:", error)
+      console.error("[LiveKit] Error details:", {
+        message: error instanceof Error ? error.message : String(error),
+        stack: error instanceof Error ? error.stack : undefined,
+      })
       throw error
     }
   }
