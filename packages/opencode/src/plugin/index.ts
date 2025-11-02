@@ -110,6 +110,7 @@ export namespace Plugin {
     for (const hook of pluginState.hooks) {
       await hook.config?.(config)
     }
+    // Only subscribe once per plugin instance to prevent duplicate event firing
     if (!pluginState.subscribed) {
       pluginState.subscribed = true
       Bus.subscribeAll(async (input) => {
