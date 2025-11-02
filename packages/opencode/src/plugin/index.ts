@@ -73,6 +73,7 @@ export namespace Plugin {
     return {
       hooks,
       input,
+      subscribed: false,
     }
   })
 
@@ -104,18 +105,21 @@ export namespace Plugin {
   }
 
   export async function init() {
-    const hooks = await state().then((x) => x.hooks)
+    const pluginState = await state()
     const config = await Config.get()
-    for (const hook of hooks) {
+    for (const hook of pluginState.hooks) {
       await hook.config?.(config)
     }
-    Bus.subscribeAll(async (input) => {
-      const hooks = await state().then((x) => x.hooks)
-      for (const hook of hooks) {
-        hook["event"]?.({
-          event: input,
-        })
-      }
-    })
+    if (!pluginState.subscribed) {
+      pluginState.subscribed = true
+      Bus.subscribeAll(async (input) => {
+        const hooks = await state().then((x) => x.hooks)
+        for (const hook of hooks) {
+          hook["event"]?.({
+            event: input,
+          })
+        }
+      })
+    }
   }
 }
