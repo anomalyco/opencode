@@ -15,6 +15,44 @@ const log = Log.create({ service: "computer-use-tool" })
  * ⚠️ EXPERIMENTAL - Requires special permissions
  */
 
+// Check for required dependencies on first use
+let dependenciesChecked = false
+let missingDependencies: string[] = []
+
+async function checkDependencies() {
+  if (dependenciesChecked) return
+
+  const platform = process.platform
+
+  if (platform === "darwin") {
+    // Check for cliclick on macOS
+    try {
+      await $`which cliclick`.quiet()
+    } catch {
+      missingDependencies.push("cliclick (install with: brew install cliclick)")
+    }
+  } else if (platform === "linux") {
+    // Check for xdotool on Linux
+    try {
+      await $`which xdotool`.quiet()
+    } catch {
+      missingDependencies.push("xdotool (install with: sudo apt install xdotool)")
+    }
+  }
+
+  dependenciesChecked = true
+
+  if (missingDependencies.length > 0) {
+    log.warn("Missing computer use dependencies", { missing: missingDependencies })
+  }
+}
+
+function getDependencyErrorMessage(): string {
+  if (missingDependencies.length === 0) return ""
+
+  return `\n\n⚠️ Missing dependencies:\n${missingDependencies.map((d) => `  - ${d}`).join("\n")}\n\nPlease install the required tools to use computer control features.`
+}
+
 export const ClaudeCodeComputerUseTool = Tool.define("cc_computer_use", {
   description: DESCRIPTION,
   parameters: z.object({
@@ -38,6 +76,17 @@ export const ClaudeCodeComputerUseTool = Tool.define("cc_computer_use", {
   }),
   async execute(params, ctx) {
     log.info("computer use", { action: params.action })
+
+    // Check dependencies on first use
+    await checkDependencies()
+
+    if (missingDependencies.length > 0) {
+      return {
+        title: "Missing Dependencies",
+        output: `Cannot perform ${params.action}: ${getDependencyErrorMessage()}`,
+        metadata: {},
+      }
+    }
 
     const platform = process.platform
 
