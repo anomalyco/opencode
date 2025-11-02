@@ -3,7 +3,7 @@ import { useTheme } from "@tui/context/theme"
 import { entries, filter, flatMap, groupBy, pipe, take } from "remeda"
 import { batch, createEffect, createMemo, For, Show } from "solid-js"
 import { createStore } from "solid-js/store"
-import { useKeyboard, useTerminalDimensions } from "@opentui/solid"
+import { useTerminalDimensions, useKeyboard } from "@opentui/solid"
 import * as fuzzysort from "fuzzysort"
 import { isDeepEqual } from "remeda"
 import { useDialog, type DialogContext } from "@tui/ui/dialog"
@@ -122,6 +122,7 @@ export function DialogSelect<T>(props: DialogSelectProps<T>) {
   }
 
   const keybind = useKeybind()
+
   useKeyboard((evt) => {
     if (evt.name === "up" || (evt.ctrl && evt.name === "k") || (evt.ctrl && evt.name === "p"))
       move(-1)
@@ -139,7 +140,9 @@ export function DialogSelect<T>(props: DialogSelectProps<T>) {
     }
 
     for (const item of props.keybind ?? []) {
-      if (Keybind.match(item.keybind, keybind.parse(evt))) {
+      const parsedEvt = { ...evt, source: "raw" as const }
+      const parsed = keybind.parse(parsedEvt)
+      if (Keybind.match(item.keybind, parsed)) {
         const s = selected()
         if (s) {
           evt.preventDefault()
@@ -177,7 +180,32 @@ export function DialogSelect<T>(props: DialogSelectProps<T>) {
                 props.onFilter?.(e)
               })
             }}
-            onKeyDown={(e) => {}}
+            onKeyDown={(evt) => {
+              if (evt.name === "up" || (evt.ctrl && evt.name === "p")) move(-1)
+              if (evt.name === "down" || (evt.ctrl && evt.name === "n")) move(1)
+              if (evt.name === "pageup") move(-10)
+              if (evt.name === "pagedown") move(10)
+              if (evt.name === "return") {
+                const option = selected()
+                if (option) {
+                  evt.preventDefault()
+                  if (option.onSelect) option.onSelect(dialog)
+                  props.onSelect?.(option)
+                }
+              }
+
+              for (const item of props.keybind ?? []) {
+                const parsedEvt = { ...evt, source: "raw" as const }
+                const parsed = keybind.parse(parsedEvt)
+                if (Keybind.match(item.keybind, parsed)) {
+                  const s = selected()
+                  if (s) {
+                    evt.preventDefault()
+                    item.onTrigger(s)
+                  }
+                }
+              }
+            }}
             focusedBackgroundColor={theme.backgroundPanel}
             cursorColor={theme.primary}
             focusedTextColor={theme.textMuted}
@@ -251,12 +279,12 @@ export function DialogSelect<T>(props: DialogSelectProps<T>) {
       <box paddingRight={2} paddingLeft={3} flexDirection="row" paddingBottom={1} gap={1}>
         <For each={props.keybind ?? []}>
           {(item) => (
-            <text>
-              <span style={{ fg: theme.text, attributes: TextAttributes.BOLD }}>
+            <box flexDirection="row">
+              <text fg={theme.text} attributes={TextAttributes.BOLD}>
                 {Keybind.toString(item.keybind)}
-              </span>
-              <span style={{ fg: theme.textMuted }}> {item.title}</span>
-            </text>
+              </text>
+              <text fg={theme.textMuted}> {item.title}</text>
+            </box>
           )}
         </For>
       </box>
@@ -275,19 +303,22 @@ function Option(props: {
   const { theme } = useTheme()
   return (
     <>
-      <text
-        flexGrow={1}
-        fg={props.active ? theme.background : props.current ? theme.primary : theme.text}
-        attributes={props.active ? TextAttributes.BOLD : undefined}
-        overflow="hidden"
-        wrapMode="none"
-      >
-        {Locale.truncate(props.title, 62)}
-        <span style={{ fg: props.active ? theme.background : theme.textMuted }}>
-          {" "}
-          {props.description}
-        </span>
-      </text>
+      <box flexGrow={1} flexDirection="row">
+        <text
+          fg={props.active ? theme.background : props.current ? theme.primary : theme.text}
+          attributes={props.active ? TextAttributes.BOLD : undefined}
+          overflow="hidden"
+          wrapMode="none"
+        >
+          {Locale.truncate(props.title, 62)}
+        </text>
+        <Show when={props.description}>
+          <text fg={props.active ? theme.background : theme.textMuted}>
+            {" "}
+            {props.description}
+          </text>
+        </Show>
+      </box>
       <Show when={props.footer}>
         <box flexShrink={0}>
           <text fg={props.active ? theme.background : theme.textMuted}>{props.footer}</text>
