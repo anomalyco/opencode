@@ -213,7 +213,7 @@ Supporting Files: ${
           },
         },
         {
-          keybind: Keybind.parse("r")[0],
+          keybind: Keybind.parse("ctrl+r")[0],
           title: "reload",
           onTrigger: async () => {
             await loadSkills()

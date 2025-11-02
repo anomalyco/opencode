@@ -351,7 +351,7 @@ Then press 'f' to refresh.
       }}
       keybind={[
         {
-          keybind: Keybind.parse("r")[0],
+          keybind: Keybind.parse("ctrl+r")[0],
           title: "reconnect",
           onTrigger: async (option) => {
             await reconnectServer(option.value)
@@ -393,7 +393,7 @@ Then press 'f' to refresh.
           },
         },
         {
-          keybind: Keybind.parse("d")[0],
+          keybind: Keybind.parse("ctrl+d")[0],
           title: "delete",
           onTrigger: async (option) => {
             await removeServer(option.value)
