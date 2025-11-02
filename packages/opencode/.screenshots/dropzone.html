@@ -1,0 +1,267 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Screenshot Dropzone</title>
+    <style>
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+        }
+        
+        body {
+            font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            display: flex;
+            justify-content: center;
+            align-items: center;
+            min-height: 100vh;
+            padding: 20px;
+        }
+        
+        .container {
+            background: white;
+            border-radius: 20px;
+            box-shadow: 0 20px 60px rgba(0,0,0,0.3);
+            padding: 40px;
+            max-width: 600px;
+            width: 100%;
+        }
+        
+        h1 {
+            color: #333;
+            margin-bottom: 10px;
+            font-size: 28px;
+        }
+        
+        .subtitle {
+            color: #666;
+            margin-bottom: 30px;
+            font-size: 14px;
+        }
+        
+        .dropzone {
+            border: 3px dashed #667eea;
+            border-radius: 15px;
+            padding: 60px 20px;
+            text-align: center;
+            background: #f8f9ff;
+            cursor: pointer;
+            transition: all 0.3s ease;
+        }
+        
+        .dropzone:hover {
+            border-color: #764ba2;
+            background: #f0f2ff;
+            transform: translateY(-2px);
+        }
+        
+        .dropzone.dragover {
+            border-color: #764ba2;
+            background: #e8ebff;
+            transform: scale(1.02);
+        }
+        
+        .dropzone-icon {
+            font-size: 64px;
+            margin-bottom: 20px;
+        }
+        
+        .dropzone-text {
+            color: #667eea;
+            font-size: 18px;
+            font-weight: 600;
+            margin-bottom: 10px;
+        }
+        
+        .dropzone-hint {
+            color: #999;
+            font-size: 14px;
+        }
+        
+        #preview {
+            margin-top: 30px;
+            display: none;
+        }
+        
+        #preview img {
+            max-width: 100%;
+            border-radius: 10px;
+            box-shadow: 0 5px 20px rgba(0,0,0,0.1);
+            margin-bottom: 20px;
+        }
+        
+        .info {
+            background: #f8f9ff;
+            border-left: 4px solid #667eea;
+            padding: 15px;
+            margin-top: 20px;
+            border-radius: 5px;
+        }
+        
+        .info-title {
+            font-weight: 600;
+            color: #667eea;
+            margin-bottom: 10px;
+        }
+        
+        .info-content {
+            font-family: 'Monaco', 'Courier New', monospace;
+            background: white;
+            padding: 10px;
+            border-radius: 5px;
+            color: #333;
+            font-size: 13px;
+            word-break: break-all;
+        }
+        
+        .success {
+            background: #d4edda;
+            border-color: #28a745;
+            color: #155724;
+            padding: 15px;
+            border-radius: 5px;
+            margin-top: 20px;
+            display: none;
+        }
+        
+        .success-icon {
+            font-size: 24px;
+            margin-right: 10px;
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <h1>📸 Screenshot Dropzone</h1>
+        <p class="subtitle">Drop your screenshots here for OpenCode AI</p>
+        
+        <div class="dropzone" id="dropzone">
+            <div class="dropzone-icon">🖼️</div>
+            <div class="dropzone-text">Drop image here</div>
+            <div class="dropzone-hint">or click to browse</div>
+        </div>
+        
+        <input type="file" id="fileInput" accept="image/*" style="display: none;">
+        
+        <div id="preview">
+            <img id="previewImg" src="" alt="Preview">
+            <div class="info">
+                <div class="info-title">✅ Saved to:</div>
+                <div class="info-content" id="savePath"></div>
+            </div>
+            <div class="info">
+                <div class="info-title">💬 Tell the AI:</div>
+                <div class="info-content" id="aiCommand"></div>
+            </div>
+        </div>
+        
+        <div class="success" id="success">
+            <span class="success-icon">✨</span>
+            <span>Image saved successfully!</span>
+        </div>
+    </div>
+    
+    <script>
+        const dropzone = document.getElementById('dropzone');
+        const fileInput = document.getElementById('fileInput');
+        const preview = document.getElementById('preview');
+        const previewImg = document.getElementById('previewImg');
+        const savePath = document.getElementById('savePath');
+        const aiCommand = document.getElementById('aiCommand');
+        const success = document.getElementById('success');
+        
+        // Click to browse
+        dropzone.addEventListener('click', () => fileInput.click());
+        
+        // Prevent default drag behaviors
+        ['dragenter', 'dragover', 'dragleave', 'drop'].forEach(eventName => {
+            dropzone.addEventListener(eventName, preventDefaults, false);
+            document.body.addEventListener(eventName, preventDefaults, false);
+        });
+        
+        function preventDefaults(e) {
+            e.preventDefault();
+            e.stopPropagation();
+        }
+        
+        // Highlight drop zone when dragging over it
+        ['dragenter', 'dragover'].forEach(eventName => {
+            dropzone.addEventListener(eventName, () => {
+                dropzone.classList.add('dragover');
+            });
+        });
+        
+        ['dragleave', 'drop'].forEach(eventName => {
+            dropzone.addEventListener(eventName, () => {
+                dropzone.classList.remove('dragover');
+            });
+        });
+        
+        // Handle dropped files
+        dropzone.addEventListener('drop', handleDrop);
+        fileInput.addEventListener('change', (e) => {
+            if (e.target.files.length) {
+                handleFiles(e.target.files);
+            }
+        });
+        
+        function handleDrop(e) {
+            const dt = e.dataTransfer;
+            const files = dt.files;
+            handleFiles(files);
+        }
+        
+        async function handleFiles(files) {
+            if (files.length === 0) return;
+            
+            const file = files[0];
+            if (!file.type.startsWith('image/')) {
+                alert('Please drop an image file');
+                return;
+            }
+            
+            // Generate filename
+            const timestamp = new Date().toISOString().replace(/[:.]/g, '-').slice(0, -5);
+            const extension = file.name.split('.').pop();
+            const filename = `screenshot-${timestamp}.${extension}`;
+            
+            // Show preview
+            const reader = new FileReader();
+            reader.onload = (e) => {
+                previewImg.src = e.target.result;
+                preview.style.display = 'block';
+                savePath.textContent = `.screenshots/${filename}`;
+                aiCommand.textContent = `check .screenshots/${filename}`;
+                
+                // Save the file
+                saveFile(file, filename);
+            };
+            reader.readAsDataURL(file);
+        }
+        
+        async function saveFile(file, filename) {
+            // Create a download link to save the file
+            const url = URL.createObjectURL(file);
+            const a = document.createElement('a');
+            a.href = url;
+            a.download = filename;
+            document.body.appendChild(a);
+            a.click();
+            document.body.removeChild(a);
+            URL.revokeObjectURL(url);
+            
+            // Show success message
+            success.style.display = 'block';
+            setTimeout(() => {
+                success.style.display = 'none';
+            }, 3000);
+            
+            // Show instructions
+            alert(`📁 File will be downloaded as: ${filename}\n\n✅ Move it to:\n.screenshots/\n\n💬 Then tell the AI:\n"check .screenshots/${filename}"`);
+        }
+    </script>
+</body>
+</html>

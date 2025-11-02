@@ -1,0 +1,46 @@
+{
+  "allowedDirectories": ["/Users/jkneen/Documents/GitHub/flows/opencode-stt"],
+  "plugin": ["@opencode-ai/plugin-prefill-assistant"],
+  "anthropic": {
+    "computerUseTool": true,
+    "promptCaching": true,
+    "extendedThinking": true,
+    "citations": true,
+    "tokenEfficientToolUse": true,
+    "fineGrainedToolStreaming": true,
+    "prefillAssistantMessages": true
+  },
+  "prefillAssistant": {
+    "enabled": true,
+    "agentPrefilling": true,
+    "patternDetection": true,
+    "minDepthForRole": 10,
+    "contexts": {
+      "jsonOutput": "{",
+      "codeOnly": "```",
+      "orchestrator": "[Orchestrator]",
+      "general": "[General Agent]",
+      "plan": "[Planning Mode - Read Only]",
+      "concise": "Here's the solution:",
+      "technical": "Technical analysis:",
+      "debugging": "[Debug Context]"
+    }
+  },
+  "mcp": {
+    "filesystem": {
+      "type": "local",
+      "command": [
+        "npx",
+        "-y",
+        "@modelcontextprotocol/server-filesystem",
+        "/Users/jkneen/Documents/GitHub/flows/opencode-stt"
+      ],
+      "enabled": true
+    },
+    "fetch": {
+      "type": "local",
+      "command": ["npx", "-y", "@modelcontextprotocol/server-fetch"],
+      "enabled": true
+    }
+  }
+}
