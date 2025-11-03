@@ -54,14 +54,18 @@
     },
     "windows": [
       {
+        "label": "main",
         "fullscreen": false,
         "resizable": true,
-        "title": "LiveKit Player",
+        "title": "",
         "width": 400,
         "height": 500,
-        "decorations": false,
-        "transparent": true,
-        "alwaysOnTop": true
+        "decorations": true,
+        "transparent": false,
+        "alwaysOnTop": true,
+        "visible": true,
+        "hiddenTitle": true,
+        "titleBarStyle": "Overlay"
       }
     ]
   }

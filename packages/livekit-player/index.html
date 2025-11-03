@@ -5,37 +5,8 @@
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
     <title>LiveKit Player</title>
     <link rel="icon" type="image/svg+xml" href="/favicon.svg" />
-    <style>
-      body {
-        margin: 0;
-        padding: 0;
-        overflow: hidden;
-        border-radius: 3rem;
-        background: transparent;
-        -webkit-font-smoothing: antialiased;
-        -webkit-backface-visibility: hidden;
-        backface-visibility: hidden;
-      }
-      #root {
-        border-radius: 3rem;
-        overflow: hidden;
-        -webkit-transform: translateZ(0);
-        transform: translateZ(0);
-        will-change: transform;
-      }
-      .draggable-area {
-        position: fixed;
-        top: 0;
-        left: 0;
-        right: 0;
-        height: 40px;
-        -webkit-app-region: drag;
-        z-index: 9999;
-      }
-    </style>
   </head>
-  <body>
-    <div class="draggable-area"></div>
+  <body style="background: transparent; margin: 0; overflow: hidden;">
     <div id="root"></div>
     <script type="module" src="/src/main.tsx"></script>
   </body>
