@@ -49,7 +49,12 @@ export function Autocomplete(props: {
   })
   const filter = createMemo(() => {
     if (!store.visible) return
-    return props.value.substring(store.index + 1).split(" ")[0]
+    // Track props.value to make memo reactive to text changes
+    props.value // <- there surely is a better way to do this, like making .input() reactive
+
+    const val = props.input().getTextRange(store.index + 1, props.input().visualCursor.offset + 1)
+
+    return val
   })
 
   function insertPart(text: string, part: PromptInfo["parts"][number]) {
@@ -70,7 +75,7 @@ export function Autocomplete(props: {
 
     const virtualText = "@" + text
     const extmarkStart = store.index
-    const extmarkEnd = extmarkStart + virtualText.length
+    const extmarkEnd = extmarkStart + Bun.stringWidth(virtualText)
 
     const styleId =
       part.type === "file"
@@ -364,7 +369,7 @@ export function Autocomplete(props: {
         return store.visible
       },
       onInput(value: string) {
-        if (store.visible && value.length <= store.index) hide()
+        if (store.visible && Bun.stringWidth(value) <= store.index) hide()
       },
       onKeyDown(e: KeyEvent) {
         if (store.visible) {
@@ -378,7 +383,10 @@ export function Autocomplete(props: {
           if (e.name === "@") {
             const cursorOffset = props.input().visualCursor.offset
             const charBeforeCursor =
-              cursorOffset === 0 ? undefined : props.value.at(cursorOffset - 1)
+              cursorOffset === 0
+                ? undefined
+                : props.input().getTextRange(cursorOffset - 1, cursorOffset)
+
             if (
               charBeforeCursor === " " ||
               charBeforeCursor === "\n" ||
