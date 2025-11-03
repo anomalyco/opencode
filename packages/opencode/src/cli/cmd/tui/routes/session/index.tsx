@@ -1154,17 +1154,37 @@ ToolRegistry.register<typeof TaskTool>({
   container: "block",
   render(props) {
     const { theme } = useTheme()
+    const { navigate } = useRoute()
+    const [hover, setHover] = createSignal(false)
     const keybind = useKeybind()
 
     return (
       <>
-        <ToolTitle
-          icon="%"
-          fallback="Delegating..."
-          when={props.input.subagent_type ?? props.input.description}
-        >
-          Task [{props.input.subagent_type ?? "unknown"}] {props.input.description}
-        </ToolTitle>
+        <box justifyContent="space-between" flexDirection="row">
+          <ToolTitle
+            icon="%"
+            fallback="Delegating..."
+            when={props.input.subagent_type ?? props.input.description}
+          >
+            Task [{props.input.subagent_type ?? "unknown"}] {props.input.description}
+          </ToolTitle>
+          <box
+            onMouseOver={() => setHover(true)}
+            onMouseOut={() => setHover(false)}
+            onMouseUp={() => {
+              navigate({
+                type: "session",
+                sessionID: props.metadata.sessionId!,
+              })
+            }}
+            paddingLeft={2}
+            paddingRight={2}
+            marginRight={2}
+            backgroundColor={hover() ? theme.accent : theme.backgroundElement}
+          >
+            <text fg={theme.text}>Open task →</text>
+          </box>
+        </box>
         <Show when={props.metadata.summary?.length}>
           <box>
             <For each={props.metadata.summary ?? []}>
