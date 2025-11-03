@@ -239,10 +239,10 @@ export async function handler(
       .filter((provider) => !provider.disabled)
       .flatMap((provider) => Array<typeof provider>(provider.weight ?? 1).fill(provider))
 
-    // Use last character of IP address to select a provider
-    const lastChar = ip.charCodeAt(ip.length - 1) || 0
-    const index = lastChar % providers.length
-    const provider = providers[index]
+    // Use the last 2 characters of IP address to select a provider
+    const lastChars = ip.slice(-2)
+    const index = parseInt(lastChars, 16) % providers.length
+    const provider = providers[index || 0]
 
     if (!(provider.id in zenData.providers)) {
       throw new ModelError(`Provider ${provider.id} not supported`)

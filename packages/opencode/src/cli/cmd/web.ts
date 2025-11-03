@@ -1,9 +1,10 @@
 import { Server } from "../../server/server"
 import { UI } from "../ui"
 import { cmd } from "./cmd"
+import open from "open"
 
-export const ServeCommand = cmd({
-  command: "serve",
+export const WebCommand = cmd({
+  command: "web",
   builder: (yargs) =>
     yargs
       .option("port", {
@@ -25,12 +26,12 @@ export const ServeCommand = cmd({
       port,
       hostname,
     })
-    UI.println(
-      UI.Style.TEXT_NORMAL_BOLD,
-      "Web interface:    ",
-      UI.Style.TEXT_NORMAL,
-      `https://desktop.dev.opencode.ai?url=${server.url}`,
-    )
+    const url = `https://desktop.dev.opencode.ai?url=${server.url}`
+    UI.empty()
+    UI.println(UI.logo("  "))
+    UI.empty()
+    UI.println(UI.Style.TEXT_INFO_BOLD + "  Web interface:    ", UI.Style.TEXT_NORMAL, url)
+    open(url).catch(() => {})
     await new Promise(() => {})
     await server.stop()
   },

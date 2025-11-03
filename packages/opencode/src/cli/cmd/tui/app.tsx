@@ -178,12 +178,16 @@ function App() {
 
   useKeyboard(async (evt) => {
     if (evt.meta && evt.name === "t") {
-      renderer.toggleDebugOverlay()
+      if (process.env.DEBUG) {
+        renderer.toggleDebugOverlay()
+      }
       return
     }
 
     if (evt.meta && evt.name === "d") {
-      renderer.console.toggle()
+      if (process.env.DEBUG) {
+        renderer.console.toggle()
+      }
       return
     }
   })

@@ -47,7 +47,7 @@ export namespace ZenData {
   })
 
   export const list = fn(z.void(), () => {
-    const json = JSON.parse(Resource.ZEN_MODELS.value)
+    const json = JSON.parse(Resource.ZEN_MODELS1.value + Resource.ZEN_MODELS2.value)
     return ModelsSchema.parse(json)
   })
 }
@@ -56,7 +56,9 @@ export namespace Model {
   export const enable = fn(z.object({ model: z.string() }), ({ model }) => {
     Actor.assertAdmin()
     return Database.use((db) =>
-      db.delete(ModelTable).where(and(eq(ModelTable.workspaceID, Actor.workspace()), eq(ModelTable.model, model))),
+      db
+        .delete(ModelTable)
+        .where(and(eq(ModelTable.workspaceID, Actor.workspace()), eq(ModelTable.model, model))),
     )
   })
 
