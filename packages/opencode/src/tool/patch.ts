@@ -39,7 +39,7 @@ export const PatchTool = Tool.define("patch", {
     }
 
     // Validate file paths and check permissions
-    const agent = await Agent.get(ctx.agent)
+    const agent = await Agent.get(ctx.agent || "build")
     const fileChanges: Array<{
       filePath: string
       oldContent: string
@@ -127,7 +127,7 @@ export const PatchTool = Tool.define("patch", {
     }
 
     // Check permissions if needed
-    if (agent.permission.edit === "ask") {
+    if (agent?.permission?.edit === "ask") {
       await Permission.ask({
         type: "edit",
         sessionID: ctx.sessionID,

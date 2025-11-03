@@ -110,6 +110,8 @@ export const { use: useLocal, provider: LocalProvider } = createSimpleContext({
           })
         },
         color(name: string) {
+          const agent = agents().find((x) => x.name === name) as any
+          if (agent?.color) return agent.color
           const index = agents().findIndex((x) => x.name === name)
           return colors()[index % colors().length]
         },
@@ -243,8 +245,7 @@ export const { use: useLocal, provider: LocalProvider } = createSimpleContext({
     const setInitialPrompt = createEventBus<string>()
 
     onMount(() => {
-      if (props.initialPrompt)
-        setInitialPrompt.emit(props.initialPrompt)
+      if (props.initialPrompt) setInitialPrompt.emit(props.initialPrompt)
     })
 
     const result = {

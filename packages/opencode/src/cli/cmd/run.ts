@@ -190,6 +190,15 @@ export const RunCommand = cmd({
         return Agent.list().then((x) => x[0])
       })()
 
+      const agentColor = (() => {
+        const hex = agent.color
+        if (!hex) return
+        const r = parseInt(hex.slice(1, 3), 16)
+        const g = parseInt(hex.slice(3, 5), 16)
+        const b = parseInt(hex.slice(5, 7), 16)
+        return `\x1b[38;2;${r};${g};${b}m\x1b[1m`
+      })()
+
       const { providerID, modelID } = await (async () => {
         if (args.model) return Provider.parseModel(args.model)
         if (agent.model) return agent.model
@@ -228,14 +237,14 @@ export const RunCommand = cmd({
 
         if (part.type === "tool" && part.state.status === "completed") {
           if (outputJsonEvent("tool_use", { part })) return
-          const [tool, color] = TOOL[part.tool] ?? [part.tool, UI.Style.TEXT_INFO_BOLD]
+          const [tool, toolColor] = TOOL[part.tool] ?? [part.tool, UI.Style.TEXT_INFO_BOLD]
           const title =
             part.state.title ||
             (Object.keys(part.state.input).length > 0
               ? JSON.stringify(part.state.input)
               : "Unknown")
 
-          printEvent(color, tool, title)
+          printEvent(agentColor ?? toolColor, tool, title)
 
           if (part.tool === "bash" && part.state.output && part.state.output.trim()) {
             UI.println()

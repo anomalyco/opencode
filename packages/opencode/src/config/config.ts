@@ -364,6 +364,7 @@ export namespace Config {
       disable: z.boolean().optional(),
       description: z.string().optional().describe("Description of when to use the agent"),
       mode: z.union([z.literal("subagent"), z.literal("primary"), z.literal("all")]).optional(),
+      color: z.string().optional().describe("Hex color code for the agent (e.g., #FF5733)"),
       permission: z
         .object({
           edit: Permission.optional(),
