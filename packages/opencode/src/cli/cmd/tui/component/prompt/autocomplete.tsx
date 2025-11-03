@@ -52,7 +52,9 @@ export function Autocomplete(props: {
     // Track props.value to make memo reactive to text changes
     props.value // <- there surely is a better way to do this, like making .input() reactive
 
-    const val = props.input().getTextRange(store.index + 1, props.input().visualCursor.offset + 1)
+    const val = props
+      .input()
+      .plainText.slice(store.index + 1, props.input().visualCursor.offset + 1)
 
     return val
   })
@@ -385,7 +387,7 @@ export function Autocomplete(props: {
             const charBeforeCursor =
               cursorOffset === 0
                 ? undefined
-                : props.input().getTextRange(cursorOffset - 1, cursorOffset)
+                : props.input().plainText.slice(cursorOffset - 1, cursorOffset)
 
             if (
               charBeforeCursor === " " ||
