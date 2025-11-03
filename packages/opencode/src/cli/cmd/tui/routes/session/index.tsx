@@ -467,47 +467,6 @@ export function Session() {
         dialog.clear()
       },
     },
-    {
-      title: "Copy last assistant message",
-      value: "messages.copy",
-      keybind: "messages_copy",
-      category: "Session",
-      onSelect: (dialog) => {
-        const lastAssistantMessage = messages().findLast((msg) => msg.role === "assistant")
-        if (lastAssistantMessage) {
-          const parts = sync.data.part[lastAssistantMessage.id] ?? []
-          const textParts = parts.filter((part) => part.type === "text")
-          if (textParts.length > 0) {
-            const text = textParts
-              .map((part) => part.text)
-              .join("\n")
-              .trim()
-            if (text) {
-              Clipboard.copy(text)
-                .then(() =>
-                  toast.show({ message: "Message copied to clipboard!", variant: "success" }),
-                )
-                .catch(() =>
-                  toast.show({ message: "Failed to copy to clipboard", variant: "error" }),
-                )
-            } else {
-              toast.show({
-                message: "No text content found in last assistant message",
-                variant: "error",
-              })
-            }
-          } else {
-            toast.show({
-              message: "No text parts found in last assistant message",
-              variant: "error",
-            })
-          }
-        } else {
-          toast.show({ message: "No assistant messages found", variant: "error" })
-        }
-        dialog.clear()
-      },
-    },
   ])
 
   const revert = createMemo(() => {
