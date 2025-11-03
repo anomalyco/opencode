@@ -9,7 +9,7 @@ import {
   dim,
   fg,
 } from "@opentui/core"
-import { createEffect, createMemo, Match, Switch, type JSX, onMount, batch } from "solid-js"
+import { createEffect, createMemo, Match, Switch, Show, type JSX, onMount, batch, createSignal } from "solid-js"
 import { useLocal } from "@tui/context/local"
 import { useTheme } from "@tui/context/theme"
 import { SplitBorder } from "@tui/component/border"
@@ -28,6 +28,9 @@ import { useExit } from "../../context/exit"
 import { Clipboard } from "../../util/clipboard"
 import type { FilePart } from "@opencode-ai/sdk"
 import { TuiEvent } from "../../event"
+import { Audio } from "@/util/audio"
+import { Whisper } from "@/util/whisper"
+import { useToast } from "../../ui/toast"
 
 export type PromptProps = {
   sessionID?: string
@@ -61,6 +64,20 @@ export function Prompt(props: PromptProps) {
   const command = useCommandDialog()
   const renderer = useRenderer()
   const { theme, syntax } = useTheme()
+  const toast = useToast()
+
+  const [recording, setRecording] = createSignal<Audio.RecordingSession | null>(null)
+  const [recordingAvailable, setRecordingAvailable] = createSignal(false)
+  const [whisperConfigured, setWhisperConfigured] = createSignal(false)
+
+  onMount(async () => {
+    const available = await Audio.checkRecordingAvailable()
+    console.log("Recording available:", available)
+    setRecordingAvailable(available)
+    
+    // Whisper uses OpenAI provider key - always available if OpenAI is configured
+    setWhisperConfigured(true)
+  })
 
   const textareaKeybindings = createMemo(() => {
     const newlineBindings = keybind.all.input_newline || []
@@ -156,6 +173,16 @@ export function Prompt(props: PromptProps) {
           }
         },
       },
+          {
+            title: recording() ? "Stop notation" : "Start notation",
+            value: "prompt.voice",
+            disabled: !recordingAvailable(),
+            category: "Prompt",
+            onSelect: (dialog) => {
+              toggleRecording()
+              dialog.clear()
+            },
+          },
     ]
   })
 
@@ -456,6 +483,70 @@ export function Prompt(props: PromptProps) {
     return
   }
 
+  async function toggleRecording() {
+    const currentRecording = recording()
+    
+    if (currentRecording) {
+      try {
+        toast.show({
+          message: "Processing audio...",
+          variant: "info",
+        })
+        
+        const audioBlob = await currentRecording.stop()
+        setRecording(null)
+        
+        console.log("Audio blob:", { size: audioBlob.size, type: audioBlob.type })
+        
+        const text = await Whisper.transcribe(audioBlob)
+        
+        console.log("Transcription result:", text)
+        
+        if (text && text.trim()) {
+          input.insertText(text + " ")
+          
+          toast.show({
+            message: "Transcription complete",
+            variant: "success",
+          })
+        } else {
+          toast.show({
+            message: "No text detected in audio",
+            variant: "warning",
+          })
+        }
+      } catch (error) {
+        setRecording(null)
+        
+        if (error instanceof Whisper.ConfigError) {
+          toast.show({
+            message: "OpenAI not configured. Run: opencode auth login",
+            variant: "error",
+          })
+        } else {
+          toast.show({
+            message: `Recording failed: ${error instanceof Error ? error.message : String(error)}`,
+            variant: "error",
+          })
+        }
+      }
+    } else {
+      try {
+        const session = await Audio.startRecording()
+        setRecording(session)
+        toast.show({
+          message: "Recording... Click mic to stop",
+          variant: "info",
+        })
+      } catch (error) {
+        toast.show({
+          message: `Failed to start recording: ${error instanceof Error ? error.message : String(error)}`,
+          variant: "error",
+        })
+      }
+    }
+  }
+
   return (
     <>
       <Autocomplete
@@ -688,10 +779,48 @@ export function Prompt(props: PromptProps) {
           </box>
           <box
             backgroundColor={theme.backgroundElement}
-            width={1}
             justifyContent="center"
             alignItems="center"
-          ></box>
+          >
+            <Show when={recordingAvailable()}>
+              <Switch>
+                <Match when={recording()}>
+              <box
+                paddingLeft={1}
+                paddingRight={1}
+                marginRight={1}
+                height={1}
+                backgroundColor={theme.error}
+                onMouseDown={(e: MouseEvent) => {
+                  e.preventDefault()
+                  toggleRecording()
+                }}
+              >
+                <text fg={theme.background} attributes={TextAttributes.BOLD}>
+                  Stop
+                </text>
+              </box>
+            </Match>
+            <Match when={!recording()}>
+              <box
+                paddingLeft={1}
+                paddingRight={1}
+                marginRight={1}
+                height={1}
+                backgroundColor={theme.primary}
+                onMouseDown={(e: MouseEvent) => {
+                  e.preventDefault()
+                  toggleRecording()
+                }}
+              >
+                <text fg={theme.background} attributes={TextAttributes.BOLD}>
+                  Notate
+                </text>
+              </box>
+                </Match>
+              </Switch>
+            </Show>
+          </box>
         </box>
         <box flexDirection="row" justifyContent="space-between">
           <text flexShrink={0} wrapMode="none" fg={theme.text}>

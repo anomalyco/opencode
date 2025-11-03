@@ -597,6 +597,13 @@ export namespace Config {
         )
         .optional()
         .describe("Custom provider configurations and model overrides"),
+      whisper: z
+        .object({
+          model: z.string().optional().default("whisper-1").describe("Whisper model to use (default: whisper-1)"),
+          baseURL: z.string().optional().default("https://api.openai.com/v1").describe("OpenAI API base URL (default: https://api.openai.com/v1)"),
+        })
+        .optional()
+        .describe("OpenAI Whisper configuration for voice input (uses OpenAI provider API key from 'opencode auth login')"),
       mcp: z
         .record(z.string(), Mcp)
         .optional()
