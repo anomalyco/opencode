@@ -9,7 +9,6 @@ import os from "os"
 import { Global } from "../../global"
 import { Plugin } from "../../plugin"
 import { Instance } from "../../project/instance"
-import { normalizeDomain } from "../../util/url"
 
 export const AuthCommand = cmd({
   command: "auth",
@@ -140,10 +139,6 @@ export const AuthLoginCommand = cmd({
 
       if (prompts.isCancel(provider)) throw new UI.CancelledError()
 
-      if (provider === "github-copilot") {
-        return await handleGithubCopilotAuth(provider)
-      }
-
       const plugin = await Plugin.list().then((x) => x.find((x) => x.auth?.provider === provider))
       if (plugin && plugin.auth) {
         let index = 0
@@ -226,6 +221,37 @@ export const AuthLoginCommand = cmd({
               prompts.log.success("Login successful")
             }
           }
+
+          prompts.outro("Done")
+          return
+        }
+
+        if (method.type === "custom") {
+          await new Promise((resolve) => setTimeout(resolve, 10))
+          const inputs: Record<string, string> = {}
+          for (const prompt of method.prompts) {
+            const value = await prompts.text({
+              message: prompt.message,
+              placeholder: prompt.placeholder,
+              validate: prompt.validate,
+            })
+            if (prompts.isCancel(value)) throw new UI.CancelledError()
+            inputs[prompt.key] = value
+          }
+
+          const result = await method.authorize(inputs)
+
+          if (result.type === "failed") {
+            prompts.log.error("Failed to authorize")
+          }
+          if (result.type === "success") {
+            const { type: _, auth_type, ...authData } = result
+            await Auth.set(provider, {
+              type: auth_type,
+              ...authData,
+            })
+            prompts.log.success("Login successful")
+          }
           prompts.outro("Done")
           return
         }
@@ -300,151 +326,3 @@ export const AuthLogoutCommand = cmd({
     prompts.outro("Logout successful")
   },
 })
-
-async function handleGithubCopilotAuth(providerID: string) {
-  try {
-    const CLIENT_ID = "Iv1.b507a08c87ecfe98"
-    const USER_AGENT = "GitHubCopilotChat/0.26.7"
-
-    const deploymentType = await prompts.select({
-      message: "Select GitHub deployment type",
-      options: [
-        {
-          label: "GitHub.com",
-          value: "github.com",
-          hint: "Public",
-        },
-        {
-          label: "GitHub Enterprise",
-          value: "enterprise",
-          hint: "Self-hosted or data residency",
-        },
-      ],
-    })
-
-    if (prompts.isCancel(deploymentType)) throw new UI.CancelledError()
-
-    let enterpriseUrl: string | undefined
-    let actualProviderID = providerID
-
-    if (deploymentType === "enterprise") {
-      const enterpriseHost = await prompts.text({
-        message: "Enter your GitHub Enterprise URL or domain",
-        placeholder: "company.ghe.com or https://company.ghe.com",
-        validate: (value) => {
-          if (!value) return "URL or domain is required"
-          try {
-            // Test if it's a valid URL
-            const url = value.includes("://") ? new URL(value) : new URL(`https://${value}`)
-            if (!url.hostname) return "Please enter a valid URL or domain"
-            return undefined
-          } catch {
-            return "Please enter a valid URL (e.g., company.ghe.com or https://company.ghe.com)"
-          }
-        },
-      })
-
-      if (prompts.isCancel(enterpriseHost)) throw new UI.CancelledError()
-
-      enterpriseUrl = enterpriseHost.includes("://") ? enterpriseHost : `https://${enterpriseHost}`
-
-      actualProviderID = "github-copilot-enterprise"
-    }
-
-    // Construct URLs based on deployment type
-    const baseUrl = enterpriseUrl ? normalizeDomain(enterpriseUrl) : "github.com"
-    const DEVICE_CODE_URL = `https://${baseUrl}/login/device/code`
-    const ACCESS_TOKEN_URL = `https://${baseUrl}/login/oauth/access_token`
-
-    // Step 1: Initiate device code flow
-    const deviceResponse = await fetch(DEVICE_CODE_URL, {
-      method: "POST",
-      headers: {
-        Accept: "application/json",
-        "Content-Type": "application/json",
-        "User-Agent": USER_AGENT,
-      },
-      body: JSON.stringify({
-        client_id: CLIENT_ID,
-        scope: "read:user",
-      }),
-    })
-
-    if (!deviceResponse.ok) {
-      throw new Error(`Failed to initiate device code flow: ${deviceResponse.statusText}`)
-    }
-
-    const deviceData = await deviceResponse.json()
-
-    prompts.log.info(`Go to: ${deviceData.verification_uri}`)
-    prompts.log.info(`Enter code: ${deviceData.user_code}`)
-
-    const spinner = prompts.spinner()
-    spinner.start("Waiting for authorization...")
-
-    // Step 2: Poll for authorization
-    const interval = deviceData.interval || 5
-    const maxAttempts = Math.ceil(deviceData.expires_in / interval)
-    let attempts = 0
-
-    while (attempts < maxAttempts) {
-      await new Promise((resolve) => setTimeout(resolve, interval * 1000))
-
-      const tokenResponse = await fetch(ACCESS_TOKEN_URL, {
-        method: "POST",
-        headers: {
-          Accept: "application/json",
-          "Content-Type": "application/json",
-          "User-Agent": USER_AGENT,
-        },
-        body: JSON.stringify({
-          client_id: CLIENT_ID,
-          device_code: deviceData.device_code,
-          grant_type: "urn:ietf:params:oauth:grant-type:device_code",
-        }),
-      })
-
-      if (!tokenResponse.ok) {
-        spinner.stop("Failed to authorize", 1)
-        prompts.outro("Authentication failed")
-        return
-      }
-
-      const tokenData = await tokenResponse.json()
-
-      if (tokenData.access_token) {
-        // Success! Store credentials with enterpriseUrl for enterprise deployments
-        await Auth.set(actualProviderID, {
-          type: "oauth",
-          refresh: tokenData.access_token,
-          access: "",
-          expires: 0,
-          ...(actualProviderID === "github-copilot-enterprise" && enterpriseUrl ? { enterpriseUrl } : {}),
-        })
-        spinner.stop("Login successful")
-        prompts.outro("Done")
-        return
-      }
-
-      if (tokenData.error === "authorization_pending") {
-        // Continue polling
-        attempts++
-        continue
-      }
-
-      if (tokenData.error) {
-        spinner.stop("Failed to authorize", 1)
-        prompts.outro(`Authentication failed: ${tokenData.error_description || tokenData.error}`)
-        return
-      }
-
-      attempts++
-    }
-
-    spinner.stop("Authorization timed out", 1)
-    prompts.outro("Please try again")
-  } catch (error) {
-    prompts.log.error(`Authentication failed: ${error instanceof Error ? error.message : String(error)}`)
-    prompts.outro("Done")
-  }
-}

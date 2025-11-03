@@ -227,36 +227,6 @@ export namespace Provider {
         },
       }
     },
-    "github-copilot-enterprise": async (provider) => {
-      const { Auth } = await import("../auth")
-      const { Config } = await import("../config/config")
-      const { normalizeDomain } = await import("../util/url")
-
-      // Get enterprise URL from auth data or config
-      const authInfo = await Auth.get("github-copilot-enterprise")
-      const config = await Config.get()
-
-      const enterpriseUrl =
-        (authInfo && "enterpriseUrl" in authInfo ? authInfo.enterpriseUrl : undefined) ||
-        config?.provider?.["github-copilot-enterprise"]?.options?.enterpriseUrl
-
-      let baseURL = provider?.api
-      if (enterpriseUrl) {
-        const domain = normalizeDomain(enterpriseUrl)
-        baseURL = `https://copilot-api.${domain}`
-      }
-
-      // Token management is now handled by the opencode-copilot-auth plugin
-      return {
-        autoload: false,
-        options: {
-          baseURL,
-          headers: {
-            "Editor-Version": "vscode/1.103.2",
-          },
-        },
-      }
-    },
   }
 
   const state = Instance.state(async () => {
@@ -404,9 +374,6 @@ export namespace Provider {
       if (disabled.has(providerID)) continue
       if (provider.type === "api") {
         mergeProvider(providerID, { apiKey: provider.key }, "api")
-      }
-      if (providerID === "github-copilot-enterprise" && provider.type === "oauth") {
-        mergeProvider(providerID, {}, "api")
       }
     }
 

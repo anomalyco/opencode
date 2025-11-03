@@ -80,6 +80,26 @@ export interface Hooks {
             )
           >
         }
+      | {
+          type: "custom"
+          label: string
+          prompts: Array<{
+            key: string
+            message: string
+            placeholder?: string
+            validate?: (value: string) => string | undefined
+          }>
+          authorize(inputs: Record<string, string>): Promise<
+            | {
+                type: "success"
+                auth_type: "oauth" | "api" | "wellknown"
+                [key: string]: any
+              }
+            | {
+                type: "failed"
+              }
+          >
+        }
       | { type: "api"; label: string }
     )[]
   }
