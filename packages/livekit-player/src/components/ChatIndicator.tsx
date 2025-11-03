@@ -96,7 +96,7 @@ export default function ChatIndicator({ room, connectionState }: ChatIndicatorPr
   const getStatusColor = () => {
     switch (agentState) {
       case 'disconnected':
-        return '#666'
+        return '#666666'
       case 'connecting':
         return '#fbbf24'
       case 'listening':
@@ -106,6 +106,10 @@ export default function ChatIndicator({ room, connectionState }: ChatIndicatorPr
       case 'speaking':
         return '#a78bfa'
     }
+  }
+
+  const getGradientId = () => {
+    return `gradient-${agentState}`
   }
 
   const getQualityIcon = () => {
@@ -155,15 +159,88 @@ export default function ChatIndicator({ room, connectionState }: ChatIndicatorPr
 
   return (
     <div className="chat-indicator">
+      {/* SVG Filters and Gradients for ferrofluid effect */}
+      <svg style={{ position: 'absolute', width: 0, height: 0 }}>
+        <defs>
+          {/* Metallic shine */}
+          <filter id="metallic">
+            <feGaussianBlur in="SourceGraphic" stdDeviation="2" result="blur" />
+            <feColorMatrix in="blur" mode="matrix" values="1 0 0 0 0  0 1 0 0 0  0 0 1 0 0  0 0 0 25 -10" result="goo" />
+            <feComposite in="SourceGraphic" in2="goo" operator="atop"/>
+          </filter>
+
+          {/* 3D Metallic Gradient for listening (green) */}
+          <radialGradient id="gradient-listening" cx="30%" cy="30%">
+            <stop offset="0%" stopColor="#a7f3d0" stopOpacity="1" />
+            <stop offset="30%" stopColor="#6ee7b7" stopOpacity="1" />
+            <stop offset="60%" stopColor="#34d399" stopOpacity="1" />
+            <stop offset="100%" stopColor="#059669" stopOpacity="1" />
+          </radialGradient>
+
+          {/* 3D Metallic Gradient for thinking (blue) */}
+          <radialGradient id="gradient-thinking" cx="30%" cy="30%">
+            <stop offset="0%" stopColor="#bfdbfe" stopOpacity="1" />
+            <stop offset="30%" stopColor="#93c5fd" stopOpacity="1" />
+            <stop offset="60%" stopColor="#3b82f6" stopOpacity="1" />
+            <stop offset="100%" stopColor="#1d4ed8" stopOpacity="1" />
+          </radialGradient>
+
+          {/* 3D Metallic Gradient for speaking (purple) */}
+          <radialGradient id="gradient-speaking" cx="30%" cy="30%">
+            <stop offset="0%" stopColor="#e9d5ff" stopOpacity="1" />
+            <stop offset="30%" stopColor="#c4b5fd" stopOpacity="1" />
+            <stop offset="60%" stopColor="#8b5cf6" stopOpacity="1" />
+            <stop offset="100%" stopColor="#6d28d9" stopOpacity="1" />
+          </radialGradient>
+
+          {/* 3D Metallic Gradient for connecting (yellow) */}
+          <radialGradient id="gradient-connecting" cx="30%" cy="30%">
+            <stop offset="0%" stopColor="#fef3c7" stopOpacity="1" />
+            <stop offset="30%" stopColor="#fde68a" stopOpacity="1" />
+            <stop offset="60%" stopColor="#f59e0b" stopOpacity="1" />
+            <stop offset="100%" stopColor="#d97706" stopOpacity="1" />
+          </radialGradient>
+
+          {/* 3D Metallic Gradient for disconnected (gray) */}
+          <radialGradient id="gradient-disconnected" cx="30%" cy="30%">
+            <stop offset="0%" stopColor="#d1d5db" stopOpacity="1" />
+            <stop offset="30%" stopColor="#9ca3af" stopOpacity="1" />
+            <stop offset="60%" stopColor="#6b7280" stopOpacity="1" />
+            <stop offset="100%" stopColor="#374151" stopOpacity="1" />
+          </radialGradient>
+
+          {/* Specular metallic shine */}
+          <radialGradient id="shine" cx="25%" cy="25%">
+            <stop offset="0%" stopColor="rgba(255,255,255,0.9)" />
+            <stop offset="30%" stopColor="rgba(255,255,255,0.4)" />
+            <stop offset="70%" stopColor="rgba(255,255,255,0.1)" />
+            <stop offset="100%" stopColor="rgba(255,255,255,0)" />
+          </radialGradient>
+        </defs>
+      </svg>
+
       <div className="status-container">
-        {/* Single unified orb that changes color */}
-        <div className="status-orb-wrapper">
-          <div 
-            className={`status-orb ${agentState}`}
-            style={{ backgroundColor: getStatusColor() }}
-          >
-            <div className="pulse-ring" style={{ borderColor: getStatusColor() }} />
-          </div>
+        {/* Ferrofluid SVG Blob */}
+        <div className="blob-container">
+          <svg viewBox="0 0 200 200" xmlns="http://www.w3.org/2000/svg" className="blob-svg">
+            {/* Main ferrofluid blob with metallic gradient */}
+            <path 
+              className={`blob-path ${agentState}`}
+              fill={`url(#${getGradientId()})`}
+              d="M100,20 C120,20 140,25 155,40 C170,55 180,75 180,100 C180,125 170,145 155,160 C140,175 120,180 100,180 C80,180 60,175 45,160 C30,145 20,125 20,100 C20,75 30,55 45,40 C60,25 80,20 100,20 Z" 
+            />
+            {/* Metallic shine overlay */}
+            <ellipse
+              className="blob-shine"
+              cx="70"
+              cy="60"
+              rx="50"
+              ry="40"
+              fill="url(#shine)"
+              opacity="0.8"
+            />
+          </svg>
+          <div className="blob-glow" style={{ backgroundColor: getStatusColor() }} />
         </div>
 
         {/* Status text */}

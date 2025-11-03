@@ -3,146 +3,298 @@
   flex-direction: column;
   align-items: center;
   justify-content: center;
-  height: 100%;
-  width: 100%;
-  background: linear-gradient(135deg, #0f0f0f 0%, #1a1a1a 100%);
-  -webkit-app-region: drag;
-  font-family: -apple-system, BlinkMacSystemFont, 'SF Pro Display', 'Segoe UI', system-ui, sans-serif;
+  overflow: visible;
 }
 
 .status-container {
   display: flex;
   flex-direction: column;
   align-items: center;
-  gap: 24px;
+  gap: 32px;
   -webkit-app-region: no-drag;
 }
 
-.status-orb-wrapper {
+.blob-container {
+  width: 280px;
+  height: 280px;
   position: relative;
-  width: 160px;
-  height: 160px;
   display: flex;
   align-items: center;
   justify-content: center;
+  overflow: visible;
 }
 
-.status-orb {
-  width: 140px;
-  height: 140px;
-  border-radius: 50%;
-  position: relative;
-  transition: all 0.4s cubic-bezier(0.4, 0, 0.2, 1);
-  box-shadow: 0 8px 32px rgba(0, 0, 0, 0.4);
-  display: flex;
-  align-items: center;
-  justify-content: center;
+.blob-container svg {
+  max-width: 70%;
+  max-height: 70%;
 }
 
-/* Gentle breathing animation for all states */
-.status-orb {
-  animation: breathe 4s ease-in-out infinite;
+.blob-svg {
+  width: 100%;
+  height: 100%;
+  filter: 
+    drop-shadow(0 30px 60px rgba(0, 0, 0, 0.8))
+    drop-shadow(0 15px 30px rgba(0, 0, 0, 0.6))
+    drop-shadow(0 5px 15px rgba(0, 0, 0, 0.4));
 }
 
-@keyframes breathe {
+.blob-path {
+  transform-origin: center;
+  transition: 
+    d 0.8s cubic-bezier(0.4, 0, 0.2, 1),
+    fill 0.6s cubic-bezier(0.4, 0, 0.2, 1);
+}
+
+.blob-shine {
+  pointer-events: none;
+  mix-blend-mode: overlay;
+  transform-origin: center;
+  transition: opacity 0.6s ease, transform 0.8s cubic-bezier(0.4, 0, 0.2, 1);
+}
+
+/* Listening - gentle magnetic pulse */
+.blob-path.listening {
+  animation: ferrofluid-calm 6s ease-in-out infinite;
+}
+
+.blob-path.listening ~ .blob-shine {
+  animation: shine-float 4s ease-in-out infinite;
+}
+
+@keyframes ferrofluid-calm {
   0%, 100% {
-    transform: scale(1);
+    d: path("M100,15 C125,16 148,28 165,48 C182,68 188,92 185,115 C182,138 168,158 148,172 C130,184 108,190 86,188 C64,186 44,174 30,155 C16,136 10,112 12,88 C14,64 26,42 46,26 C66,10 84,14 100,15 Z");
+  }
+  25% {
+    d: path("M100,18 C122,17 145,27 162,45 C179,63 187,87 186,110 C185,133 172,154 153,169 C136,182 115,189 94,188 C73,187 52,177 37,160 C22,143 15,120 15,97 C15,74 25,52 43,35 C61,18 82,19 100,18 Z");
   }
   50% {
-    transform: scale(1.04);
+    d: path("M100,12 C127,13 152,26 170,47 C188,68 194,94 192,118 C190,142 175,163 154,178 C135,191 112,198 89,196 C66,194 44,182 28,163 C12,144 6,119 7,94 C8,69 21,45 42,27 C63,9 85,11 100,12 Z");
+  }
+  75% {
+    d: path("M100,16 C124,15 147,26 164,46 C181,66 189,90 188,113 C187,136 174,157 155,172 C138,185 117,192 96,191 C75,190 54,180 38,163 C22,146 14,123 14,100 C14,77 24,54 42,37 C60,20 82,17 100,16 Z");
   }
 }
 
-/* Speaking state - more active pulse */
-.status-orb.speaking {
-  animation: breathe-active 1.8s ease-in-out infinite;
-  box-shadow: 0 8px 48px rgba(167, 139, 250, 0.4);
-}
-
-@keyframes breathe-active {
+@keyframes shine-float {
   0%, 100% {
-    transform: scale(1);
+    transform: translate(0, 0) scale(1);
+    opacity: 0.7;
   }
   50% {
-    transform: scale(1.08);
+    transform: translate(-10px, -10px) scale(1.05);
+    opacity: 0.9;
   }
 }
 
-/* Thinking state - subtle pulse */
-.status-orb.thinking {
-  animation: breathe-thinking 2.5s ease-in-out infinite;
-  box-shadow: 0 8px 48px rgba(96, 165, 250, 0.3);
+/* Speaking - DRAMATIC ferrofluid spikes! */
+.blob-path.speaking {
+  animation: ferrofluid-spike 0.8s ease-in-out infinite;
 }
 
-@keyframes breathe-thinking {
-  0%, 100% {
-    transform: scale(1);
-  }
-  50% {
-    transform: scale(1.06);
-  }
+.blob-path.speaking ~ .blob-shine {
+  animation: shine-intense 0.8s ease-in-out infinite;
 }
 
-/* Listening state */
-.status-orb.listening {
-  box-shadow: 0 8px 48px rgba(74, 222, 128, 0.3);
-}
-
-/* Pulse ring - only shows when speaking or thinking */
-.pulse-ring {
-  position: absolute;
-  top: -12px;
-  left: -12px;
-  right: -12px;
-  bottom: -12px;
-  border: 2px solid;
-  border-radius: 50%;
-  opacity: 0;
-}
-
-.status-orb.speaking .pulse-ring,
-.status-orb.thinking .pulse-ring {
-  animation: pulse 2s ease-out infinite;
-}
-
-@keyframes pulse {
+@keyframes ferrofluid-spike {
   0% {
-    transform: scale(0.95);
-    opacity: 0.5;
+    d: path("M100,8 C130,5 158,20 178,45 C198,70 208,100 205,130 C202,160 185,188 158,205 C135,220 108,228 80,225 C52,222 26,207 10,182 C-6,157 -10,125 -5,95 C0,65 15,35 40,15 C65,-5 85,11 100,8 Z");
+    transform: scale(1.3);
+  }
+  25% {
+    d: path("M100,5 C135,8 165,25 185,52 C205,79 210,112 203,142 C196,172 175,196 145,210 C120,222 90,225 62,218 C34,211 10,192 -5,165 C-20,138 -22,105 -15,75 C-8,45 8,18 35,3 C62,-12 78,2 100,5 Z");
+    transform: scale(1.35) rotate(5deg);
+  }
+  50% {
+    d: path("M100,10 C128,12 155,28 175,50 C195,72 202,100 198,128 C194,156 178,182 152,198 C130,212 104,218 78,214 C52,210 28,196 12,173 C-4,150 -8,122 -3,94 C2,66 16,40 38,22 C60,4 82,8 100,10 Z");
+    transform: scale(1.32) rotate(-5deg);
+  }
+  75% {
+    d: path("M100,6 C132,9 162,24 182,48 C202,72 209,102 204,132 C199,162 182,188 155,204 C132,218 106,224 79,220 C52,216 27,202 11,178 C-5,154 -9,124 -4,94 C1,64 15,36 38,17 C61,-2 84,3 100,6 Z");
+    transform: scale(1.34) rotate(3deg);
   }
   100% {
+    d: path("M100,8 C130,5 158,20 178,45 C198,70 208,100 205,130 C202,160 185,188 158,205 C135,220 108,228 80,225 C52,222 26,207 10,182 C-6,157 -10,125 -5,95 C0,65 15,35 40,15 C65,-5 85,11 100,8 Z");
     transform: scale(1.3);
-    opacity: 0;
+  }
+}
+
+@keyframes shine-intense {
+  0%, 100% {
+    transform: translate(0, 0) scale(1);
+    opacity: 0.9;
+  }
+  50% {
+    transform: translate(-15px, -15px) scale(1.2);
+    opacity: 1;
+  }
+}
+
+/* Thinking - moderate magnetic pull */
+.blob-path.thinking {
+  animation: ferrofluid-pulse 1.5s ease-in-out infinite;
+}
+
+.blob-path.thinking ~ .blob-shine {
+  animation: shine-pulse 1.5s ease-in-out infinite;
+}
+
+@keyframes ferrofluid-pulse {
+  0%, 100% {
+    d: path("M100,20 C122,18 145,28 162,46 C179,64 188,88 188,110 C188,132 179,154 162,172 C145,190 122,200 100,200 C78,200 55,190 38,172 C21,154 12,132 12,110 C12,88 21,64 38,46 C55,28 78,22 100,20 Z");
+    transform: scale(1.15);
+  }
+  50% {
+    d: path("M100,15 C125,14 150,25 168,45 C186,65 195,90 194,113 C193,136 182,158 163,175 C146,190 124,198 100,198 C76,198 54,190 37,175 C18,158 7,136 6,113 C5,90 14,65 32,45 C50,25 75,16 100,15 Z");
+    transform: scale(1.2);
+  }
+}
+
+@keyframes shine-pulse {
+  0%, 100% {
+    transform: translate(0, 0) scale(1);
+    opacity: 0.75;
+  }
+  50% {
+    transform: translate(-12px, -12px) scale(1.15);
+    opacity: 0.95;
+  }
+}
+
+/* Connecting - rotating ferrofluid */
+.blob-path.connecting {
+  animation: ferrofluid-connect 2s ease-in-out infinite;
+}
+
+@keyframes ferrofluid-connect {
+  0% {
+    d: path("M100,18 C124,20 146,32 163,50 C180,68 190,92 188,115 C186,138 172,159 152,174 C134,187 112,194 90,192 C68,190 47,178 32,160 C17,142 10,119 11,96 C12,73 23,51 42,34 C61,17 82,16 100,18 Z");
+    transform: rotate(0deg) scale(1.1);
+  }
+  25% {
+    d: path("M100,22 C120,24 142,34 158,51 C174,68 184,90 184,112 C184,134 174,155 158,171 C142,187 120,196 100,196 C80,196 58,187 42,171 C26,155 16,134 16,112 C16,90 26,68 42,51 C58,34 80,20 100,22 Z");
+    transform: rotate(90deg) scale(1.08);
+  }
+  50% {
+    d: path("M100,20 C122,18 144,30 162,48 C180,66 190,90 189,113 C188,136 176,157 157,173 C140,187 118,195 96,194 C74,193 52,183 36,166 C20,149 12,126 12,103 C12,80 22,57 40,40 C58,23 80,22 100,20 Z");
+    transform: rotate(180deg) scale(1.1);
+  }
+  75% {
+    d: path("M100,21 C121,22 143,33 160,50 C177,67 187,90 186,112 C185,134 174,155 157,171 C141,186 119,195 98,194 C77,193 56,183 40,167 C24,151 15,129 15,107 C15,85 24,63 41,47 C58,31 79,20 100,21 Z");
+    transform: rotate(270deg) scale(1.08);
+  }
+  100% {
+    d: path("M100,18 C124,20 146,32 163,50 C180,68 190,92 188,115 C186,138 172,159 152,174 C134,187 112,194 90,192 C68,190 47,178 32,160 C17,142 10,119 11,96 C12,73 23,51 42,34 C61,17 82,16 100,18 Z");
+    transform: rotate(360deg) scale(1.1);
+  }
+}
+
+/* Disconnected - dormant */
+.blob-path.disconnected {
+  animation: ferrofluid-dormant 8s ease-in-out infinite;
+  opacity: 0.4;
+  transform: scale(0.85);
+}
+
+@keyframes ferrofluid-dormant {
+  0%, 100% {
+    d: path("M100,30 C118,30 135,38 148,52 C162,65 170,83 170,100 C170,117 162,135 148,148 C135,162 118,170 100,170 C82,170 65,162 52,148 C38,135 30,117 30,100 C30,83 38,65 52,52 C65,38 82,30 100,30 Z");
+  }
+  50% {
+    d: path("M100,28 C120,28 138,37 152,50 C166,64 175,82 175,100 C175,118 166,136 152,150 C138,163 120,172 100,172 C80,172 62,163 48,150 C34,136 25,118 25,100 C25,82 34,64 48,50 C62,37 80,28 100,28 Z");
+  }
+}
+
+/* Massive dramatic glow */
+.blob-glow {
+  position: absolute;
+  width: 250px;
+  height: 250px;
+  border-radius: 50%;
+  filter: blur(100px);
+  opacity: 0.5;
+  z-index: -1;
+  transition: 
+    background-color 0.6s cubic-bezier(0.4, 0, 0.2, 1),
+    transform 0.4s cubic-bezier(0.4, 0, 0.2, 1),
+    opacity 0.4s ease;
+}
+
+.blob-path.speaking ~ .blob-glow {
+  animation: glow-explosion 0.8s ease-in-out infinite;
+}
+
+.blob-path.thinking ~ .blob-glow {
+  animation: glow-surge 1.5s ease-in-out infinite;
+}
+
+.blob-path.listening ~ .blob-glow {
+  animation: glow-gentle 4s ease-in-out infinite;
+}
+
+@keyframes glow-explosion {
+  0%, 100% {
+    transform: scale(1.2);
+    opacity: 0.6;
+  }
+  50% {
+    transform: scale(1.8);
+    opacity: 0.9;
+  }
+}
+
+@keyframes glow-surge {
+  0%, 100% {
+    transform: scale(1.1);
+    opacity: 0.5;
+  }
+  50% {
+    transform: scale(1.4);
+    opacity: 0.75;
+  }
+}
+
+@keyframes glow-gentle {
+  0%, 100% {
+    transform: scale(1);
+    opacity: 0.4;
+  }
+  50% {
+    transform: scale(1.15);
+    opacity: 0.6;
   }
 }
 
 .status-text {
-  font-size: 28px;
+  font-size: 32px;
   font-weight: 600;
   color: #ffffff;
   text-align: center;
   letter-spacing: -0.02em;
-  transition: color 0.3s ease;
+  transition: all 0.5s cubic-bezier(0.4, 0, 0.2, 1);
+  text-shadow: 0 2px 20px rgba(0, 0, 0, 0.3);
 }
 
 .connection-info {
   display: flex;
   flex-direction: column;
-  gap: 8px;
+  gap: 10px;
   margin-top: 8px;
-  padding: 16px 24px;
-  background: rgba(255, 255, 255, 0.03);
-  border-radius: 12px;
-  backdrop-filter: blur(10px);
-  border: 1px solid rgba(255, 255, 255, 0.05);
+  padding: 18px 28px;
+  background: rgba(255, 255, 255, 0.04);
+  border-radius: 14px;
+  backdrop-filter: blur(20px);
+  border: 1px solid rgba(255, 255, 255, 0.06);
+  box-shadow: 0 4px 24px rgba(0, 0, 0, 0.2);
+  transition: all 0.3s ease;
 }
 
 .info-row {
   display: flex;
   align-items: center;
   justify-content: center;
-  gap: 8px;
-  font-size: 13px;
+  gap: 10px;
+  font-size: 14px;
   font-weight: 500;
   color: #888;
   transition: color 0.3s ease;
@@ -152,12 +304,12 @@
   color: #666;
   text-transform: uppercase;
   font-size: 11px;
-  letter-spacing: 0.05em;
+  letter-spacing: 0.08em;
   font-weight: 600;
 }
 
 .info-value {
-  color: #aaa;
+  color: #bbb;
   font-variant-numeric: tabular-nums;
 }
 
