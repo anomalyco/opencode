@@ -1,0 +1,424 @@
+import { useEffect, useState, useRef } from 'react'
+import { Room, RoomEvent, ConnectionState, RemoteParticipant, ConnectionQuality, RemoteAudioTrack } from 'livekit-client'
+import { Signal, SignalHigh, SignalMedium, SignalLow, SignalZero, Users } from 'lucide-react'
+import { BlobAudioReactor } from './BlobAudioReactor'
+import './ChatIndicator.css'
+
+type AgentState = 'disconnected' | 'connecting' | 'listening' | 'speaking'
+
+interface ChatIndicatorProps {
+  room: Room
+  connectionState: ConnectionState
+}
+
+export default function ChatIndicator({ room, connectionState }: ChatIndicatorProps) {
+  const [agentState, setAgentState] = useState<AgentState>('disconnected')
+  const [participantCount, setParticipantCount] = useState(0)
+  const [connectionQuality, setConnectionQuality] = useState<ConnectionQuality>(ConnectionQuality.Excellent)
+  const speakingCooldownRef = useRef<NodeJS.Timeout>()
+  const audioContextRef = useRef<AudioContext | null>(null)
+  const analyserRef = useRef<AnalyserNode | null>(null)
+  const micAnimationFrameRef = useRef<number>()
+  const agentAnimationFrameRef = useRef<number>()
+  const agentAudioContextRef = useRef<AudioContext | null>(null)
+  const agentAnalyserRef = useRef<AnalyserNode | null>(null)
+  const blobReactorRef = useRef<BlobAudioReactor | null>(null)
+  const lastUserSpeakTimeRef = useRef<number>(0)
+  
+  // Refs for all orbs
+  const listeningMainRef = useRef<SVGCircleElement>(null)
+  const speakingMainRef = useRef<SVGCircleElement>(null)
+  const listeningOrb1Ref = useRef<SVGCircleElement>(null)
+  const listeningOrb2Ref = useRef<SVGCircleElement>(null)
+  const listeningOrb3Ref = useRef<SVGCircleElement>(null)
+  const listeningOrb4Ref = useRef<SVGCircleElement>(null)
+  
+  const speakingOrb1Ref = useRef<SVGCircleElement>(null)
+  const speakingOrb2Ref = useRef<SVGCircleElement>(null)
+  const speakingOrb3Ref = useRef<SVGCircleElement>(null)
+  const speakingOrb4Ref = useRef<SVGCircleElement>(null)
+
+  // Initialize blob reactor
+  useEffect(() => {
+    blobReactorRef.current = new BlobAudioReactor()
+    
+    return () => {
+      if (blobReactorRef.current) {
+        blobReactorRef.current.destroy()
+      }
+    }
+  }, [])
+
+  // Attach orb references when they're ready
+  useEffect(() => {
+    if (blobReactorRef.current) {
+      if (listeningMainRef.current) {
+        blobReactorRef.current.attachListeningMain(listeningMainRef.current)
+      }
+      
+      if (speakingMainRef.current) {
+        blobReactorRef.current.attachSpeakingMain(speakingMainRef.current)
+      }
+      
+      const listeningOrbs = [
+        listeningOrb1Ref.current,
+        listeningOrb2Ref.current,
+        listeningOrb3Ref.current,
+        listeningOrb4Ref.current,
+      ].filter(Boolean) as SVGCircleElement[]
+      
+      const speakingOrbs = [
+        speakingOrb1Ref.current,
+        speakingOrb2Ref.current,
+        speakingOrb3Ref.current,
+        speakingOrb4Ref.current,
+      ].filter(Boolean) as SVGCircleElement[]
+      
+      if (listeningOrbs.length > 0) {
+        blobReactorRef.current.attachListeningOrbs(listeningOrbs)
+      }
+      
+      if (speakingOrbs.length > 0) {
+        blobReactorRef.current.attachSpeakingOrbs(speakingOrbs)
+      }
+    }
+  }, [])
+
+  // Monitor YOUR microphone - ALWAYS RUNNING
+  useEffect(() => {
+    const setupMicMonitoring = async () => {
+      try {
+        console.log('🎤 Setting up frequency-band microphone monitoring...')
+        
+        const stream = await navigator.mediaDevices.getUserMedia({ audio: true })
+        const audioContext = new AudioContext()
+        const analyser = audioContext.createAnalyser()
+        const microphone = audioContext.createMediaStreamSource(stream)
+        
+        analyser.fftSize = 512
+        analyser.smoothingTimeConstant = 0.6
+        microphone.connect(analyser)
+        
+        audioContextRef.current = audioContext
+        analyserRef.current = analyser
+        
+        const dataArray = new Uint8Array(analyser.frequencyBinCount)
+        
+        const checkMicLevel = () => {
+          if (!analyserRef.current) return
+          
+          analyserRef.current.getByteFrequencyData(dataArray)
+          
+          // Split into 4 frequency bands for 4 orbs
+          const bandSize = Math.floor(dataArray.length / 4)
+          const bands: number[] = []
+          
+          for (let i = 0; i < 4; i++) {
+            const start = i * bandSize
+            const end = start + bandSize
+            const bandData = dataArray.slice(start, end)
+            const average = bandData.reduce((a, b) => a + b, 0) / bandData.length
+            bands.push(average / 255)
+          }
+          
+          // Track when user is speaking
+          const maxBand = Math.max(...bands)
+          if (maxBand > 0.01) {
+            lastUserSpeakTimeRef.current = Date.now()
+          }
+          
+          // ALWAYS dispatch - animation runs continuously
+          window.dispatchEvent(new CustomEvent('userMicLevel', { 
+            detail: bands 
+          }))
+          
+          micAnimationFrameRef.current = requestAnimationFrame(checkMicLevel)
+        }
+        
+        checkMicLevel()
+        
+      } catch (err) {
+        console.error('❌ Microphone access failed:', err)
+      }
+    }
+    
+    setupMicMonitoring()
+    
+    return () => {
+      if (micAnimationFrameRef.current) {
+        cancelAnimationFrame(micAnimationFrameRef.current)
+      }
+      if (audioContextRef.current) {
+        audioContextRef.current.close()
+        audioContextRef.current = null
+      }
+    }
+  }, [])
+
+  useEffect(() => {
+    const updateState = () => {
+      if (connectionState === ConnectionState.Disconnected) {
+        setAgentState('disconnected')
+        return
+      }
+      
+      if (connectionState === ConnectionState.Connecting || connectionState === ConnectionState.Reconnecting) {
+        setAgentState('connecting')
+        return
+      }
+      
+      if (connectionState === ConnectionState.Connected) {
+        const remoteParticipants = Array.from(room.remoteParticipants.values())
+        setParticipantCount(remoteParticipants.length + 1)
+        
+        // Check if AGENT is speaking
+        const agentSpeaking = remoteParticipants.some((p: RemoteParticipant) => p.isSpeaking)
+        
+        // Check if USER interrupted (spoke in last 500ms)
+        const timeSinceUserSpoke = Date.now() - lastUserSpeakTimeRef.current
+        const userInterrupted = timeSinceUserSpoke < 500
+        
+        if (agentSpeaking && !userInterrupted) {
+          // Agent speaking and user NOT interrupting - show purple
+          if (speakingCooldownRef.current) clearTimeout(speakingCooldownRef.current)
+          setAgentState('speaking')
+        } else if (userInterrupted) {
+          // User interrupted - show green immediately
+          if (speakingCooldownRef.current) clearTimeout(speakingCooldownRef.current)
+          console.log('👂 USER INTERRUPTED - showing listening')
+          setAgentState('listening')
+        } else if (agentState === 'speaking' && !agentSpeaking) {
+          // Agent finished speaking - stay in speaking mode briefly, then switch
+          if (speakingCooldownRef.current) clearTimeout(speakingCooldownRef.current)
+          
+          speakingCooldownRef.current = setTimeout(() => {
+            console.log('👂 Agent finished - switching to LISTENING')
+            setAgentState('listening')
+          }, 300)
+        } else if (agentState !== 'speaking') {
+          setAgentState('listening')
+        }
+      }
+    }
+
+    updateState()
+
+    // REAL-TIME agent audio monitoring - ALWAYS RUNNING
+    const setupAgentAudioMonitoring = () => {
+      if (!room?.remoteParticipants) return
+
+      room.remoteParticipants.forEach((participant) => {
+        if (!participant?.audioTracks) return
+        
+        Array.from(participant.audioTracks.values()).forEach((publication) => {
+          const track = publication.track as RemoteAudioTrack
+          if (track) {
+            console.log('✅ Setting up REAL-TIME agent audio analysis:', publication.trackSid)
+            
+            const mediaStreamTrack = track.mediaStreamTrack
+            if (!mediaStreamTrack) {
+              console.warn('⚠️ No mediaStreamTrack found')
+              return
+            }
+            
+            const audioContext = new AudioContext()
+            const analyser = audioContext.createAnalyser()
+            analyser.fftSize = 512
+            analyser.smoothingTimeConstant = 0.6
+            
+            const stream = new MediaStream([mediaStreamTrack])
+            const source = audioContext.createMediaStreamSource(stream)
+            source.connect(analyser)
+            
+            agentAudioContextRef.current = audioContext
+            agentAnalyserRef.current = analyser
+            
+            const dataArray = new Uint8Array(analyser.frequencyBinCount)
+            
+            const analyzeAgentAudio = () => {
+              if (!agentAnalyserRef.current) return
+              
+              agentAnalyserRef.current.getByteFrequencyData(dataArray)
+              
+              const bandSize = Math.floor(dataArray.length / 4)
+              const bands: number[] = []
+              
+              for (let i = 0; i < 4; i++) {
+                const start = i * bandSize
+                const end = start + bandSize
+                const bandData = dataArray.slice(start, end)
+                const average = bandData.reduce((a, b) => a + b, 0) / bandData.length
+                bands.push(average / 255)
+              }
+              
+              // ALWAYS dispatch - animation runs continuously
+              window.dispatchEvent(new CustomEvent('agentAudioLevel', { 
+                detail: bands 
+              }))
+              
+              agentAnimationFrameRef.current = requestAnimationFrame(analyzeAgentAudio)
+            }
+            
+            analyzeAgentAudio()
+          }
+        })
+      })
+    }
+
+    setupAgentAudioMonitoring()
+    
+    const t1 = setTimeout(setupAgentAudioMonitoring, 1000)
+    const t2 = setTimeout(setupAgentAudioMonitoring, 2000)
+    const t3 = setTimeout(setupAgentAudioMonitoring, 3000)
+
+    const handleTrackSubscribed = () => {
+      console.log('📢 New track subscribed!')
+      setupAgentAudioMonitoring()
+    }
+
+    room.on(RoomEvent.TrackSubscribed, handleTrackSubscribed)
+
+    const interval = setInterval(updateState, 50) // Check more frequently for interruptions
+    
+    return () => {
+      clearInterval(interval)
+      clearTimeout(t1)
+      clearTimeout(t2)
+      clearTimeout(t3)
+      if (speakingCooldownRef.current) clearTimeout(speakingCooldownRef.current)
+      if (agentAnimationFrameRef.current) cancelAnimationFrame(agentAnimationFrameRef.current)
+      if (agentAudioContextRef.current) {
+        agentAudioContextRef.current.close()
+        agentAudioContextRef.current = null
+      }
+      room.off(RoomEvent.TrackSubscribed, handleTrackSubscribed)
+    }
+  }, [room, connectionState, agentState])
+
+  const getStatusMessage = () => {
+    switch (agentState) {
+      case 'disconnected': return 'Disconnected'
+      case 'connecting': return 'Connecting...'
+      case 'listening': return 'Listening'
+      case 'speaking': return 'Speaking'
+    }
+  }
+
+  const getStatusColor = () => {
+    switch (agentState) {
+      case 'disconnected': return '#666666'
+      case 'connecting': return '#fbbf24'
+      case 'listening': return '#4ade80'
+      case 'speaking': return '#a78bfa'
+    }
+  }
+
+  const getQualityIcon = () => {
+    switch (connectionQuality) {
+      case ConnectionQuality.Excellent: return <SignalHigh size={14} />
+      case ConnectionQuality.Good: return <SignalMedium size={14} />
+      case ConnectionQuality.Poor: return <SignalLow size={14} />
+      case ConnectionQuality.Lost: return <SignalZero size={14} />
+      default: return <Signal size={14} />
+    }
+  }
+
+  const getQualityColor = () => {
+    switch (connectionQuality) {
+      case ConnectionQuality.Excellent: return '#4ade80'
+      case ConnectionQuality.Good: return '#fbbf24'
+      case ConnectionQuality.Poor: return '#fb7185'
+      case ConnectionQuality.Lost: return '#666'
+      default: return '#888'
+    }
+  }
+
+  const getQualityLabel = () => {
+    switch (connectionQuality) {
+      case ConnectionQuality.Excellent: return 'Excellent'
+      case ConnectionQuality.Good: return 'Good'
+      case ConnectionQuality.Poor: return 'Poor'
+      case ConnectionQuality.Lost: return 'Lost'
+      default: return 'Unknown'
+    }
+  }
+
+  return (
+    <div className="chat-indicator">
+      <div className="status-container">
+        <div className="blob-container">
+          <svg viewBox="0 0 200 200" xmlns="http://www.w3.org/2000/svg" className="blob-svg">
+            <defs>
+              <filter id="goo">
+                <feGaussianBlur in="SourceGraphic" stdDeviation="10" result="blur" />
+                <feColorMatrix in="blur" mode="matrix" values="1 0 0 0 0  0 1 0 0 0  0 0 1 0 0  0 0 0 18 -8" result="goo" />
+                <feBlend in="SourceGraphic" in2="goo" />
+              </filter>
+              
+              <radialGradient id="shine" cx="30%" cy="30%">
+                <stop offset="0%" stopColor="rgba(255,255,255,0.9)" />
+                <stop offset="30%" stopColor="rgba(255,255,255,0.4)" />
+                <stop offset="70%" stopColor="rgba(255,255,255,0.1)" />
+                <stop offset="100%" stopColor="rgba(255,255,255,0)" />
+              </radialGradient>
+            </defs>
+            
+            {/* GREEN - YOUR MIC - visibility controlled by agentState */}
+            <g filter="url(#goo)" className={`blob-group listening ${agentState === 'listening' ? 'active' : 'hidden'}`}>
+              <circle ref={listeningMainRef} className="blob-main" cx="100" cy="100" r="60" fill="#4ade80" />
+              <circle ref={listeningOrb1Ref} className="blob-orb" cx="100" cy="100" r="25" fill="#4ade80" />
+              <circle ref={listeningOrb2Ref} className="blob-orb" cx="100" cy="100" r="20" fill="#4ade80" />
+              <circle ref={listeningOrb3Ref} className="blob-orb" cx="100" cy="100" r="18" fill="#4ade80" />
+              <circle ref={listeningOrb4Ref} className="blob-orb" cx="100" cy="100" r="15" fill="#4ade80" />
+            </g>
+            
+            {/* PURPLE - AGENT AUDIO - visibility controlled by agentState */}
+            <g filter="url(#goo)" className={`blob-group speaking ${agentState === 'speaking' ? 'active' : 'hidden'}`}>
+              <circle ref={speakingMainRef} className="blob-main" cx="100" cy="100" r="72" fill="#a78bfa" />
+              <circle ref={speakingOrb1Ref} className="blob-orb" cx="100" cy="100" r="25" fill="#a78bfa" />
+              <circle ref={speakingOrb2Ref} className="blob-orb" cx="100" cy="100" r="20" fill="#a78bfa" />
+              <circle ref={speakingOrb3Ref} className="blob-orb" cx="100" cy="100" r="18" fill="#a78bfa" />
+              <circle ref={speakingOrb4Ref} className="blob-orb" cx="100" cy="100" r="15" fill="#a78bfa" />
+            </g>
+            
+            <g filter="url(#goo)" className={`blob-group connecting ${agentState === 'connecting' ? 'active' : 'hidden'}`}>
+              <circle className="blob-main" cx="100" cy="100" r="63" fill="#fbbf24" />
+              <circle className="blob-orb" cx="100" cy="100" r="25" fill="#fbbf24" />
+              <circle className="blob-orb" cx="100" cy="100" r="20" fill="#fbbf24" />
+              <circle className="blob-orb" cx="100" cy="100" r="18" fill="#fbbf24" />
+              <circle className="blob-orb" cx="100" cy="100" r="15" fill="#fbbf24" />
+            </g>
+            
+            <g filter="url(#goo)" className={`blob-group disconnected ${agentState === 'disconnected' ? 'active' : 'hidden'}`}>
+              <circle className="blob-main" cx="100" cy="100" r="48" fill="#666666" />
+              <circle className="blob-orb" cx="100" cy="100" r="25" fill="#666666" />
+              <circle className="blob-orb" cx="100" cy="100" r="20" fill="#666666" />
+              <circle className="blob-orb" cx="100" cy="100" r="18" fill="#666666" />
+              <circle className="blob-orb" cx="100" cy="100" r="15" fill="#666666" />
+            </g>
+            
+            <ellipse className="blob-shine" cx="80" cy="80" rx="40" ry="35" fill="url(#shine)" opacity="0.6" />
+          </svg>
+          <div className="blob-glow" style={{ backgroundColor: getStatusColor() }} />
+        </div>
+
+        <div className="status-text">{getStatusMessage()}</div>
+        
+        <div className="connection-info">
+          <div className="info-row">
+            <span className="info-label">Room</span>
+            <span className="info-value">{room?.name || 'N/A'}</span>
+          </div>
+          <div className="info-row">
+            <Users size={14} className="info-icon" />
+            <span className="info-value">{participantCount}</span>
+          </div>
+          <div className="info-row" style={{ color: getQualityColor() }}>
+            {getQualityIcon()}
+            <span className="info-value">{getQualityLabel()}</span>
+          </div>
+        </div>
+      </div>
+    </div>
+  )
+}

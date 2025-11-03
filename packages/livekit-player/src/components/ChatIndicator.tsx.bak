@@ -55,12 +55,19 @@ export default function ChatIndicator({ room, connectionState }: ChatIndicatorPr
     setAgentState('speaking')
     
     const handleTrackSubscribed = (track: Track, publication: any, participant: RemoteParticipant) => {
+      console.log('📢 ChatIndicator: Track subscribed', track.kind, 'from', participant.identity)
+      
       if (track.kind !== Track.Kind.Audio) return
       
       const audioTrack = track as RemoteAudioTrack
       const mediaStreamTrack = audioTrack.mediaStreamTrack
       
-      if (!mediaStreamTrack) return
+      if (!mediaStreamTrack) {
+        console.log('❌ No mediaStreamTrack')
+        return
+      }
+      
+      console.log('✅ Got agent audio track! readyState:', mediaStreamTrack.readyState)
       
       // Clean up old context
       if (agentAudioContextRef.current) {
@@ -82,6 +89,7 @@ export default function ChatIndicator({ room, connectionState }: ChatIndicatorPr
       agentAudioContextRef.current = audioContext
       
       const dataArray = new Uint8Array(analyser.frequencyBinCount)
+      let frameCount = 0
       
       const analyze = () => {
         analyser.getByteFrequencyData(dataArray)
@@ -97,12 +105,21 @@ export default function ChatIndicator({ room, connectionState }: ChatIndicatorPr
           bands.push(average / 255)
         }
         
+        const maxBand = Math.max(...bands)
+        
+        // Update ref directly (no state update needed, animation loop handles renders)
         agentBandsRef.current = bands
+        
+        // Log every 30 frames
+        if (frameCount++ % 30 === 0) {
+          console.log('🔊 Agent audio level:', maxBand.toFixed(3), 'bands:', bands.map(b => b.toFixed(2)).join(','))
+        }
         
         agentAnimationFrameRef.current = requestAnimationFrame(analyze)
       }
       
       analyze()
+      console.log('🔊 Agent audio analyzer ACTIVE')
     }
     
     room.on(RoomEvent.TrackSubscribed, handleTrackSubscribed)
@@ -126,10 +143,11 @@ export default function ChatIndicator({ room, connectionState }: ChatIndicatorPr
     }
   }, [room, connectionState])
 
+  // Use ref for bands (updated in animation loop)
   const audioBands = agentBandsRef.current
   
   const avgIntensity = audioBands.reduce((a, b) => a + b, 0) / audioBands.length
-  const baseRadius = 50
+  const baseRadius = 72
   const radiusPulse = Math.pow(avgIntensity, 0.5) * 18
   const radius = baseRadius + radiusPulse
 
@@ -147,10 +165,10 @@ export default function ChatIndicator({ room, connectionState }: ChatIndicatorPr
       return { x: 100, y: 100, scale: 1 }
     }
     
-    const intensity = Math.pow(bandLevel, 0.3) * 60
+    const intensity = Math.pow(bandLevel, 0.4) * 60
     const baseAngle = (index / 4) * Math.PI * 2
-    const angleVariation = bandLevel * 8
-    const angle = baseAngle + Math.sin(Date.now() / 500 + index) * angleVariation
+    const angleVariation = bandLevel * 3
+    const angle = baseAngle + Math.sin(Date.now() / 1000 + index) * angleVariation
     
     return {
       x: 100 + Math.cos(angle) * intensity,
@@ -217,7 +235,7 @@ export default function ChatIndicator({ room, connectionState }: ChatIndicatorPr
           <div className="blob-glow" style={{ backgroundColor: getStatusColor() }} />
         </div>
 
-        <div className="status-text">Speaking</div>
+        <div className="status-text">Speaking (testing agent audio)</div>
         
         <div className="connection-info">
           <div className="info-row">
