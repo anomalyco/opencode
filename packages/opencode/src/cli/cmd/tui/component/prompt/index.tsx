@@ -712,7 +712,7 @@ export function Prompt(props: PromptProps) {
             <Match when={props.hint}>{props.hint!}</Match>
             <Match when={true}>
               <text fg={theme.text}>
-                ctrl+p <span style={{ fg: theme.textMuted }}>commands</span>
+                {keybind.print("command_list")} <span style={{ fg: theme.textMuted }}>commands</span>
               </text>
             </Match>
           </Switch>
