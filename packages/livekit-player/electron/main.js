@@ -20,7 +20,8 @@ function createWindow() {
     frame: !isChromeless,
     alwaysOnTop: true,
     resizable: true,
-    backgroundColor: isTransparent ? undefined : '#000000',
+    backgroundColor: '#00000000',
+    hasShadow: false,
     webPreferences: {
       nodeIntegration: false,
       contextIsolation: true
@@ -56,7 +57,8 @@ function recreateWindow() {
     frame: !isChromeless,
     alwaysOnTop: true,
     resizable: true,
-    backgroundColor: isTransparent ? undefined : '#000000',
+    backgroundColor: '#00000000',
+    hasShadow: false,
     webPreferences: {
       nodeIntegration: false,
       contextIsolation: true
