@@ -166,6 +166,14 @@ export type KeybindsConfig = {
    * Previous history item
    */
   history_next?: string
+  /**
+   * Next child session
+   */
+  session_child_cycle?: string
+  /**
+   * Previous child session
+   */
+  session_child_cycle_reverse?: string
 }
 
 export type AgentConfig = {
@@ -182,6 +190,10 @@ export type AgentConfig = {
    */
   description?: string
   mode?: "subagent" | "primary" | "all"
+  /**
+   * Hex color code for the agent (e.g., #FF5733)
+   */
+  color?: string
   permission?: {
     edit?: "ask" | "allow" | "deny"
     bash?:
@@ -1028,6 +1040,7 @@ export type Agent = {
   builtIn: boolean
   topP?: number
   temperature?: number
+  color?: string
   permission: {
     edit: "ask" | "allow" | "deny"
     bash: {

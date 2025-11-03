@@ -134,6 +134,7 @@ export function Prompt(props: PromptProps) {
         keybind: "input_submit",
         category: "Prompt",
         onSelect: (dialog) => {
+          if (!input.focused) return
           submit()
           dialog.clear()
         },

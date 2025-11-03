@@ -1,17 +1,8 @@
 import { useKeyboard, useRenderer, useTerminalDimensions } from "@opentui/solid"
-import {
-  batch,
-  createContext,
-  createEffect,
-  Show,
-  useContext,
-  type JSX,
-  type ParentProps,
-} from "solid-js"
+import { batch, createContext, Show, useContext, type JSX, type ParentProps } from "solid-js"
 import { useTheme } from "@tui/context/theme"
 import { Renderable, RGBA } from "@opentui/core"
 import { createStore } from "solid-js/store"
-import { createEventBus } from "@solid-primitives/event-bus"
 
 export function Dialog(
   props: ParentProps<{
@@ -59,7 +50,6 @@ function init() {
     }[],
     size: "medium" as "medium" | "large",
   })
-  const allClosedEvent = createEventBus<void>()
 
   useKeyboard((evt) => {
     if (evt.name === "escape" && store.stack.length > 0) {
@@ -90,12 +80,6 @@ function init() {
     }, 1)
   }
 
-  createEffect(() => {
-    if (store.stack.length === 0) {
-      allClosedEvent.emit()
-    }
-  })
-
   return {
     clear() {
       for (const item of store.stack) {
@@ -108,7 +92,9 @@ function init() {
       refocus()
     },
     replace(input: any, onClose?: () => void) {
-      if (store.stack.length === 0) focus = renderer.currentFocusedRenderable
+      if (store.stack.length === 0) {
+        focus = renderer.currentFocusedRenderable
+      }
       for (const item of store.stack) {
         if (item.onClose) item.onClose()
       }
@@ -128,9 +114,6 @@ function init() {
     },
     setSize(size: "medium" | "large") {
       setStore("size", size)
-    },
-    get allClosedEvent() {
-      return allClosedEvent
     },
   }
 }

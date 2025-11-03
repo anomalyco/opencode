@@ -60,9 +60,7 @@ export const BashTool = Tool.define("bash", {
     if (!tree) {
       throw new Error("Failed to parse command")
     }
-    const permissions = await Agent.get(ctx.agent || "build").then(
-      (x) => x?.permission.bash ?? { "*": "allow" },
-    )
+    const permissions = await Agent.get(ctx.agent).then((x) => x.permission.bash)
 
     const askPatterns = new Set<string>()
     for (const node of tree.rootNode.descendantsOfType("command")) {

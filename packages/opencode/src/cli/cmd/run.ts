@@ -4,6 +4,7 @@ import { Bus } from "../../bus"
 import { Provider } from "../../provider/provider"
 import { Session } from "../../session"
 import { UI } from "../ui"
+import { Color } from "@/util/color"
 import { cmd } from "./cmd"
 import { Flag } from "../../flag/flag"
 import { Config } from "../../config/config"
@@ -190,14 +191,7 @@ export const RunCommand = cmd({
         return Agent.list().then((x) => x[0])
       })()
 
-      const agentColor = (() => {
-        const hex = agent.color
-        if (!hex) return
-        const r = parseInt(hex.slice(1, 3), 16)
-        const g = parseInt(hex.slice(3, 5), 16)
-        const b = parseInt(hex.slice(5, 7), 16)
-        return `\x1b[38;2;${r};${g};${b}m\x1b[1m`
-      })()
+      const agentColor = Color.hexToAnsiBold(agent.color)
 
       const { providerID, modelID } = await (async () => {
         if (args.model) return Provider.parseModel(args.model)
