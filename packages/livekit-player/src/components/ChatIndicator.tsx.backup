@@ -35,7 +35,7 @@ export default function ChatIndicator({ room, connectionState }: ChatIndicatorPr
     }
   }, [])
 
-  // Setup local microphone audio monitoring
+  // Setup agent audio monitoring via TrackSubscribed event
   useEffect(() => {
     if (connectionState === ConnectionState.Disconnected) {
       setAgentState('disconnected')
@@ -54,55 +54,61 @@ export default function ChatIndicator({ room, connectionState }: ChatIndicatorPr
     // FORCE SPEAKING for testing
     setAgentState('speaking')
     
-    // Get local microphone audio
-    navigator.mediaDevices.getUserMedia({ audio: true })
-      .then(stream => {
-        // Clean up old context
-        if (agentAudioContextRef.current) {
-          agentAudioContextRef.current.close()
+    const handleTrackSubscribed = (track: Track, publication: any, participant: RemoteParticipant) => {
+      if (track.kind !== Track.Kind.Audio) return
+      
+      const audioTrack = track as RemoteAudioTrack
+      const mediaStreamTrack = audioTrack.mediaStreamTrack
+      
+      if (!mediaStreamTrack) return
+      
+      // Clean up old context
+      if (agentAudioContextRef.current) {
+        agentAudioContextRef.current.close()
+      }
+      if (agentAnimationFrameRef.current) {
+        cancelAnimationFrame(agentAnimationFrameRef.current)
+      }
+      
+      const audioContext = new AudioContext()
+      const analyser = audioContext.createAnalyser()
+      const stream = new MediaStream([mediaStreamTrack])
+      const source = audioContext.createMediaStreamSource(stream)
+      
+      analyser.fftSize = 512
+      analyser.smoothingTimeConstant = 0.6
+      source.connect(analyser)
+      
+      agentAudioContextRef.current = audioContext
+      
+      const dataArray = new Uint8Array(analyser.frequencyBinCount)
+      
+      const analyze = () => {
+        analyser.getByteFrequencyData(dataArray)
+        
+        const bandSize = Math.floor(dataArray.length / 4)
+        const bands: number[] = []
+        
+        for (let i = 0; i < 4; i++) {
+          const start = i * bandSize
+          const end = start + bandSize
+          const bandData = dataArray.slice(start, end)
+          const average = bandData.reduce((a, b) => a + b, 0) / bandData.length
+          bands.push(average / 255)
         }
-        if (agentAnimationFrameRef.current) {
-          cancelAnimationFrame(agentAnimationFrameRef.current)
-        }
         
-        const audioContext = new AudioContext()
-        const analyser = audioContext.createAnalyser()
-        const source = audioContext.createMediaStreamSource(stream)
+        agentBandsRef.current = bands
         
-        analyser.fftSize = 512
-        analyser.smoothingTimeConstant = 0.6
-        source.connect(analyser)
-        
-        agentAudioContextRef.current = audioContext
-        
-        const dataArray = new Uint8Array(analyser.frequencyBinCount)
-        
-        const analyze = () => {
-          analyser.getByteFrequencyData(dataArray)
-          
-          const bandSize = Math.floor(dataArray.length / 4)
-          const bands: number[] = []
-          
-          for (let i = 0; i < 4; i++) {
-            const start = i * bandSize
-            const end = start + bandSize
-            const bandData = dataArray.slice(start, end)
-            const average = bandData.reduce((a, b) => a + b, 0) / bandData.length
-            bands.push(average / 255)
-          }
-          
-          agentBandsRef.current = bands
-          
-          agentAnimationFrameRef.current = requestAnimationFrame(analyze)
-        }
-        
-        analyze()
-      })
-      .catch(err => {
-        console.error('Failed to get microphone access:', err)
-      })
+        agentAnimationFrameRef.current = requestAnimationFrame(analyze)
+      }
+      
+      analyze()
+    }
+    
+    room.on(RoomEvent.TrackSubscribed, handleTrackSubscribed)
     
     return () => {
+      room.off(RoomEvent.TrackSubscribed, handleTrackSubscribed)
       if (agentAnimationFrameRef.current) {
         cancelAnimationFrame(agentAnimationFrameRef.current)
       }
