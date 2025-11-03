@@ -325,7 +325,10 @@ export const { use: useLocal, provider: LocalProvider } = createSimpleContext({
         })
       }
 
-      const search = (query: string) => sdk.client.find.files({ query: { query } }).then((x) => x.data!)
+      const searchFiles = (query: string) =>
+        sdk.client.find.files({ query: { query, dirs: false } }).then((x) => x.data!)
+      const searchFilesAndDirectories = (query: string) =>
+        sdk.client.find.files({ query: { query, dirs: true } }).then((x) => x.data!)
 
       sdk.event.listen((e) => {
         const event = e.details
@@ -411,7 +414,8 @@ export const { use: useLocal, provider: LocalProvider } = createSimpleContext({
               !x.path.replace(new RegExp(`^${path + "/"}`), "").includes("/"),
           )
         },
-        search,
+        searchFiles,
+        searchFilesAndDirectories,
         relative,
         // active,
         // opened,

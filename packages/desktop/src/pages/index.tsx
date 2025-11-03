@@ -827,7 +827,7 @@ export default function Page() {
           title="Select file"
           placeholder="Search files"
           emptyMessage="No files found"
-          items={local.file.search}
+          items={local.file.searchFiles}
           key={(x) => x}
           onOpenChange={(open) => setStore("fileSelectOpen", open)}
           onSelect={(x) => (x ? local.session.open(x) : undefined)}
