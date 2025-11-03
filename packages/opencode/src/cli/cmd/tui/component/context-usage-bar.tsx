@@ -49,10 +49,10 @@ export const ContextUsageBar: Component<ContextUsageBarProps> = (props) => {
     // Add left border
     segments.push({ char: "▐", color: props.agentColor })
 
-    // Filled segments with color rotation
+    // Filled segments with color rotation (AI, Tool, User)
     for (let i = 0; i < filled; i++) {
       let color: RGBA
-      switch (i % 4) {
+      switch (i % 3) {
         case 0:
           color = props.assistantColor || props.agentColor
           break
@@ -61,9 +61,6 @@ export const ContextUsageBar: Component<ContextUsageBarProps> = (props) => {
           break
         case 2:
           color = props.userColor || props.agentColor
-          break
-        case 3:
-          color = props.assistantColor || props.agentColor
           break
         default:
           color = props.agentColor

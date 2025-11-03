@@ -1,0 +1,35 @@
+* {
+  margin: 0;
+  padding: 0;
+  box-sizing: border-box;
+}
+
+body {
+  font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', 'Roboto', sans-serif;
+  -webkit-font-smoothing: antialiased;
+  -moz-osx-font-smoothing: grayscale;
+  background: #1a1a1a;
+  color: #ffffff;
+  overflow: hidden;
+}
+
+#root {
+  width: 100vw;
+  height: 100vh;
+}
+
+/* LiveKit component overrides */
+.lk-audio-visualizer {
+  display: flex;
+  align-items: flex-end;
+  justify-content: center;
+  gap: 4px;
+}
+
+.lk-audio-visualizer-bar {
+  width: 6px !important;
+  background: linear-gradient(180deg, #a78bfa 0%, #6366f1 100%) !important;
+  border-radius: 3px !important;
+  min-height: 4px !important;
+  transition: height 0.05s ease !important;
+}

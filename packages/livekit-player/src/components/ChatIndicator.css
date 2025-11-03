@@ -1,0 +1,148 @@
+.chat-indicator {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  height: 100%;
+  width: 100%;
+  background: linear-gradient(135deg, #1a1a1a 0%, #2d2d2d 100%);
+  -webkit-app-region: drag;
+}
+
+.status-container {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 20px;
+  -webkit-app-region: no-drag;
+}
+
+.status-orb-container {
+  position: relative;
+  width: 140px;
+  height: 140px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.status-orb {
+  width: 120px;
+  height: 120px;
+  border-radius: 50%;
+  position: relative;
+  transition: all 0.3s ease;
+  box-shadow: 0 0 40px rgba(255, 255, 255, 0.2);
+  animation: float 3s ease-in-out infinite;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.status-orb.speaking {
+  animation: float 3s ease-in-out infinite, pulse-scale 1.5s ease-in-out infinite;
+}
+
+.status-orb.thinking {
+  animation: float 3s ease-in-out infinite, pulse-subtle 2s ease-in-out infinite;
+}
+
+@keyframes float {
+  0%, 100% {
+    transform: translateY(0px);
+  }
+  50% {
+    transform: translateY(-10px);
+  }
+}
+
+@keyframes pulse-scale {
+  0%, 100% {
+    transform: scale(1) translateY(0px);
+  }
+  50% {
+    transform: scale(1.05) translateY(-10px);
+  }
+}
+
+@keyframes pulse-subtle {
+  0%, 100% {
+    transform: scale(1) translateY(0px);
+  }
+  50% {
+    transform: scale(1.02) translateY(-10px);
+  }
+}
+
+.pulse-ring {
+  position: absolute;
+  top: -10px;
+  left: -10px;
+  right: -10px;
+  bottom: -10px;
+  border: 3px solid;
+  border-radius: 50%;
+  animation: pulse 2s ease-out infinite;
+  opacity: 0;
+}
+
+@keyframes pulse {
+  0% {
+    transform: scale(0.8);
+    opacity: 0.8;
+  }
+  100% {
+    transform: scale(1.3);
+    opacity: 0;
+  }
+}
+
+.status-text {
+  font-size: 24px;
+  font-weight: 500;
+  color: #ffffff;
+  text-align: center;
+  letter-spacing: 0.5px;
+}
+
+.audio-visualizer {
+  width: 200px;
+  height: 70px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  margin-top: 10px;
+}
+
+.audio-visualizer.local {
+  width: 160px;
+  height: 50px;
+}
+
+/* Override LiveKit component styles */
+.audio-visualizer :global(.lk-audio-visualizer) {
+  width: 100%;
+  height: 100%;
+}
+
+.audio-visualizer :global(.lk-audio-visualizer-bar) {
+  background: linear-gradient(180deg, #a78bfa 0%, #6366f1 100%);
+  border-radius: 4px;
+  transition: height 0.1s ease;
+}
+
+.audio-visualizer.local :global(.lk-audio-visualizer-bar) {
+  background: linear-gradient(180deg, #60a5fa 0%, #3b82f6 100%);
+}
+
+.connection-info {
+  font-size: 12px;
+  color: #888;
+  text-align: center;
+  line-height: 1.8;
+  margin-top: 10px;
+}
+
+.connection-info > div {
+  padding: 2px 0;
+}

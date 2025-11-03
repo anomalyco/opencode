@@ -240,6 +240,8 @@ export function Sidebar(props: { sessionID: string; onToggle: () => void }) {
       parts.forEach((part) => {
         if (part.type === "tool" && part.state?.status === "completed") {
           const toolName = part.tool
+          // Skip the invalid tool - it's an internal error handler
+          if (toolName === "invalid") return
           toolCounts[toolName] = (toolCounts[toolName] || 0) + 1
         }
       })
