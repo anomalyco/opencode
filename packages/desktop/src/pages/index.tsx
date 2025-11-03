@@ -10,10 +10,10 @@ import {
   Diff,
   Collapsible,
   DiffChanges,
-  ProgressCircle,
   Message,
   Typewriter,
   Card,
+  Code,
 } from "@opencode-ai/ui"
 import { FileIcon } from "@/ui"
 import FileTree from "@/components/file-tree"
@@ -35,7 +35,6 @@ import {
 } from "@thisbeyond/solid-dnd"
 import type { DragEvent, Transformer } from "@thisbeyond/solid-dnd"
 import type { JSX } from "solid-js"
-import { Code } from "@/components/code"
 import { useSync } from "@/context/sync"
 import { useSDK } from "@/context/sdk"
 import { type AssistantMessage as AssistantMessageType } from "@opencode-ai/sdk"
@@ -53,14 +52,6 @@ export default function Page() {
   let inputRef!: HTMLDivElement
   let messageScrollElement!: HTMLDivElement
   const [activeItem, setActiveItem] = createSignal<string | undefined>(undefined)
-
-  createEffect(() => {
-    // Set first message as active if none selected
-    const userMessages = local.session.userMessages()
-    if (userMessages.length > 0 && !local.session.activeMessage()) {
-      local.session.setActiveMessage(userMessages[0].id)
-    }
-  })
 
   const MOD = typeof navigator === "object" && /(Mac|iPod|iPhone|iPad)/.test(navigator.platform) ? "Meta" : "Control"
 
@@ -91,26 +82,26 @@ export default function Page() {
       return
     }
 
-    if (local.file.active()) {
-      const active = local.file.active()!
-      if (event.key === "Enter" && active.selection) {
-        local.context.add({
-          type: "file",
-          path: active.path,
-          selection: { ...active.selection },
-        })
-        return
-      }
-
-      if (event.getModifierState(MOD)) {
-        if (event.key.toLowerCase() === "a") {
-          return
-        }
-        if (event.key.toLowerCase() === "c") {
-          return
-        }
-      }
-    }
+    // if (local.file.active()) {
+    //   const active = local.file.active()!
+    //   if (event.key === "Enter" && active.selection) {
+    //     local.context.add({
+    //       type: "file",
+    //       path: active.path,
+    //       selection: { ...active.selection },
+    //     })
+    //     return
+    //   }
+    //
+    //   if (event.getModifierState(MOD)) {
+    //     if (event.key.toLowerCase() === "a") {
+    //       return
+    //     }
+    //     if (event.key.toLowerCase() === "c") {
+    //       return
+    //     }
+    //   }
+    // }
 
     if (event.key.length === 1 && event.key !== "Unidentified" && !(event.ctrlKey || event.metaKey)) {
       inputRef?.focus()
@@ -140,21 +131,22 @@ export default function Page() {
     }
   }
 
-  const navigateChange = (dir: 1 | -1) => {
-    const active = local.file.active()
-    if (!active) return
-    const current = local.file.changeIndex(active.path)
-    const next = current === undefined ? (dir === 1 ? 0 : -1) : current + dir
-    local.file.setChangeIndex(active.path, next)
-  }
+  // const navigateChange = (dir: 1 | -1) => {
+  //   const active = local.file.active()
+  //   if (!active) return
+  //   const current = local.file.changeIndex(active.path)
+  //   const next = current === undefined ? (dir === 1 ? 0 : -1) : current + dir
+  //   local.file.setChangeIndex(active.path, next)
+  // }
 
   const handleTabChange = (path: string) => {
-    if (path === "chat" || path === "review") return
-    local.file.open(path)
+    local.session.setActiveTab(path)
+    if (path === "chat") return
+    local.session.open(path)
   }
 
   const handleTabClose = (file: LocalFile) => {
-    local.file.close(file.path)
+    local.session.close(file.path)
   }
 
   const handleDragStart = (event: unknown) => {
@@ -166,11 +158,11 @@ export default function Page() {
   const handleDragOver = (event: DragEvent) => {
     const { draggable, droppable } = event
     if (draggable && droppable) {
-      const currentFiles = local.file.opened().map((file) => file.path)
-      const fromIndex = currentFiles.indexOf(draggable.id.toString())
-      const toIndex = currentFiles.indexOf(droppable.id.toString())
-      if (fromIndex !== toIndex) {
-        local.file.move(draggable.id.toString(), toIndex)
+      const currentFiles = local.session.tabs()?.opened.map((file) => file)
+      const fromIndex = currentFiles?.indexOf(draggable.id.toString())
+      const toIndex = currentFiles?.indexOf(droppable.id.toString())
+      if (fromIndex !== toIndex && toIndex !== undefined) {
+        local.session.move(draggable.id.toString(), toIndex)
       }
     }
   }
@@ -179,20 +171,20 @@ export default function Page() {
     setActiveItem(undefined)
   }
 
-  const scrollDiffItem = (element: HTMLElement) => {
-    element.scrollIntoView({ block: "start", behavior: "instant" })
-  }
+  // const scrollDiffItem = (element: HTMLElement) => {
+  //   element.scrollIntoView({ block: "start", behavior: "instant" })
+  // }
 
   const handleDiffTriggerClick = (event: MouseEvent) => {
     // disabling scroll to diff for now
     return
-    const target = event.currentTarget as HTMLElement
-    queueMicrotask(() => {
-      if (target.getAttribute("aria-expanded") !== "true") return
-      const item = target.closest('[data-slot="accordion-item"]') as HTMLElement | null
-      if (!item) return
-      scrollDiffItem(item)
-    })
+    // const target = event.currentTarget as HTMLElement
+    // queueMicrotask(() => {
+    //   if (target.getAttribute("aria-expanded") !== "true") return
+    //   const item = target.closest('[data-slot="accordion-item"]') as HTMLElement | null
+    //   if (!item) return
+    //   scrollDiffItem(item)
+    // })
   }
 
   const handlePromptSubmit = async (parts: ContentPart[]) => {
@@ -205,6 +197,10 @@ export default function Page() {
     if (!session) return
 
     local.session.setActive(session.id)
+    if (!existingSession) {
+      local.session.copyTabs("", session.id)
+    }
+    local.session.setActiveTab(undefined)
     const toAbsolutePath = (path: string) => (path.startsWith("/") ? path : sync.absolute(path))
 
     const text = parts.map((part) => part.content).join("")
@@ -427,20 +423,26 @@ export default function Page() {
           >
             <DragDropSensors />
             <ConstrainDragYAxis />
-            <Tabs onChange={handleTabChange}>
+            <Tabs value={local.session.tabs()?.active ?? "chat"} onChange={handleTabChange}>
               <div class="sticky top-0 shrink-0 flex">
                 <Tabs.List>
                   <Tabs.Trigger value="chat" class="flex gap-x-4 items-center">
                     <div>Chat</div>
-                    <Tooltip value={`${local.session.tokens() ?? 0} Tokens`} class="flex items-center gap-1.5">
-                      <ProgressCircle percentage={local.session.context() ?? 0} />
-                      <div class="text-14-regular text-text-weak text-right">{local.session.context() ?? 0}%</div>
-                    </Tooltip>
+                    {/* <Tooltip value={`${local.session.tokens() ?? 0} Tokens`} class="flex items-center gap-1.5"> */}
+                    {/*   <ProgressCircle percentage={local.session.context() ?? 0} /> */}
+                    {/*   <div class="text-14-regular text-text-weak text-right">{local.session.context() ?? 0}%</div> */}
+                    {/* </Tooltip> */}
                   </Tabs.Trigger>
                   {/* <Tabs.Trigger value="review">Review</Tabs.Trigger> */}
-                  <SortableProvider ids={local.file.opened().map((file) => file.path)}>
-                    <For each={local.file.opened()}>
-                      {(file) => <SortableTab file={file} onTabClick={handleFileClick} onTabClose={handleTabClose} />}
+                  <SortableProvider ids={local.session.tabs()?.opened ?? []}>
+                    <For each={local.session.tabs()?.opened ?? []}>
+                      {(file) => (
+                        <SortableTab
+                          file={local.file.node(file)}
+                          onTabClick={handleFileClick}
+                          onTabClose={handleTabClose}
+                        />
+                      )}
                     </For>
                   </SortableProvider>
                   <div class="bg-background-base h-full flex items-center justify-center border-b border-border-weak-base px-3">
@@ -452,64 +454,6 @@ export default function Page() {
                     />
                   </div>
                 </Tabs.List>
-                <div class="hidden shrink-0 h-full _flex items-center gap-1 px-2 border-b border-border-subtle/40">
-                  <Show when={local.file.active() && local.file.active()!.content?.diff}>
-                    {(() => {
-                      const activeFile = local.file.active()!
-                      const view = local.file.view(activeFile.path)
-                      return (
-                        <div class="flex items-center gap-1">
-                          <Show when={view !== "raw"}>
-                            <div class="mr-1 flex items-center gap-1">
-                              <Tooltip value="Previous change" placement="bottom">
-                                <IconButton icon="arrow-up" variant="ghost" onClick={() => navigateChange(-1)} />
-                              </Tooltip>
-                              <Tooltip value="Next change" placement="bottom">
-                                <IconButton icon="arrow-down" variant="ghost" onClick={() => navigateChange(1)} />
-                              </Tooltip>
-                            </div>
-                          </Show>
-                          <Tooltip value="Raw" placement="bottom">
-                            <IconButton
-                              icon="file-text"
-                              variant="ghost"
-                              classList={{
-                                "text-text": view === "raw",
-                                "text-text-muted/70": view !== "raw",
-                                "bg-background-element": view === "raw",
-                              }}
-                              onClick={() => local.file.setView(activeFile.path, "raw")}
-                            />
-                          </Tooltip>
-                          <Tooltip value="Unified diff" placement="bottom">
-                            <IconButton
-                              icon="checklist"
-                              variant="ghost"
-                              classList={{
-                                "text-text": view === "diff-unified",
-                                "text-text-muted/70": view !== "diff-unified",
-                                "bg-background-element": view === "diff-unified",
-                              }}
-                              onClick={() => local.file.setView(activeFile.path, "diff-unified")}
-                            />
-                          </Tooltip>
-                          <Tooltip value="Split diff" placement="bottom">
-                            <IconButton
-                              icon="columns"
-                              variant="ghost"
-                              classList={{
-                                "text-text": view === "diff-split",
-                                "text-text-muted/70": view !== "diff-split",
-                                "bg-background-element": view === "diff-split",
-                              }}
-                              onClick={() => local.file.setView(activeFile.path, "diff-split")}
-                            />
-                          </Tooltip>
-                        </div>
-                      )
-                    })()}
-                  </Show>
-                </div>
               </div>
               <Tabs.Content value="chat" class="@container select-text flex flex-col flex-1 min-h-0 overflow-y-hidden">
                 <div class="relative px-6 pt-12 max-w-2xl w-full mx-auto flex flex-col flex-1 min-h-0">
@@ -537,250 +481,289 @@ export default function Page() {
                       </div>
                     }
                   >
-                    {(activeSession) => (
-                      <div class="pt-3 flex flex-col flex-1 min-h-0">
-                        <div class="flex-1 min-h-0">
-                          <Show when={local.session.userMessages().length > 1}>
-                            <ul
-                              role="list"
-                              class="absolute right-full mr-8 hidden w-60 shrink-0 @7xl:flex flex-col items-start gap-1"
-                            >
-                              <For each={local.session.userMessages()}>
+                    {(session) => {
+                      const [store, setStore] = createStore<{
+                        messageId?: string
+                      }>()
+
+                      const messages = createMemo(() => sync.data.message[session().id] ?? [])
+                      const userMessages = createMemo(() =>
+                        messages()
+                          .filter((m) => m.role === "user")
+                          .sort((a, b) => b.id.localeCompare(a.id)),
+                      )
+                      const lastUserMessage = createMemo(() => {
+                        return userMessages()?.at(0)
+                      })
+                      const activeMessage = createMemo(() => {
+                        if (!store.messageId) return lastUserMessage()
+                        return userMessages()?.find((m) => m.id === store.messageId)
+                      })
+
+                      return (
+                        <div class="pt-3 flex flex-col flex-1 min-h-0">
+                          <div class="flex-1 min-h-0">
+                            <Show when={userMessages().length > 1}>
+                              <ul
+                                role="list"
+                                class="absolute right-full mr-8 hidden w-60 shrink-0 @7xl:flex flex-col items-start gap-1"
+                              >
+                                <For each={userMessages()}>
+                                  {(message) => {
+                                    const diffs = createMemo(() => message.summary?.diffs ?? [])
+                                    const assistantMessages = createMemo(() => {
+                                      return sync.data.message[session().id]?.filter(
+                                        (m) => m.role === "assistant" && m.parentID == message.id,
+                                      ) as AssistantMessageType[]
+                                    })
+                                    const error = createMemo(() => assistantMessages().find((m) => m?.error)?.error)
+                                    const working = createMemo(() => !message.summary?.body && !error())
+
+                                    return (
+                                      <li class="group/li flex items-center self-stretch">
+                                        <button
+                                          class="flex items-center self-stretch w-full gap-x-2 py-1 cursor-default"
+                                          onClick={() => setStore("messageId", message.id)}
+                                        >
+                                          <Switch>
+                                            <Match when={working()}>
+                                              <Spinner class="text-text-base shrink-0 w-[18px] aspect-square" />
+                                            </Match>
+                                            <Match when={true}>
+                                              <DiffChanges diff={diffs()} variant="bars" />
+                                            </Match>
+                                          </Switch>
+                                          <div
+                                            data-active={activeMessage()?.id === message.id}
+                                            classList={{
+                                              "text-14-regular text-text-weak whitespace-nowrap truncate min-w-0": true,
+                                              "text-text-weak data-[active=true]:text-text-strong group-hover/li:text-text-base": true,
+                                            }}
+                                          >
+                                            <Show when={message.summary?.title} fallback="New message">
+                                              {message.summary?.title}
+                                            </Show>
+                                          </div>
+                                        </button>
+                                      </li>
+                                    )
+                                  }}
+                                </For>
+                              </ul>
+                            </Show>
+                            <div ref={messageScrollElement} class="grow min-w-0 h-full overflow-y-auto no-scrollbar">
+                              <For each={userMessages()}>
                                 {(message) => {
-                                  const diffs = createMemo(() => message.summary?.diffs ?? [])
+                                  const isActive = createMemo(() => activeMessage()?.id === message.id)
+                                  const [titled, setTitled] = createSignal(!!message.summary?.title)
                                   const assistantMessages = createMemo(() => {
-                                    return sync.data.message[activeSession().id]?.filter(
+                                    return sync.data.message[session().id]?.filter(
                                       (m) => m.role === "assistant" && m.parentID == message.id,
                                     ) as AssistantMessageType[]
                                   })
                                   const error = createMemo(() => assistantMessages().find((m) => m?.error)?.error)
-                                  const working = createMemo(() => !message.summary?.body && !error())
+                                  const [completed, setCompleted] = createSignal(!!message.summary?.body || !!error())
+                                  const [expanded, setExpanded] = createSignal(false)
+                                  const parts = createMemo(() => sync.data.part[message.id])
+                                  const title = createMemo(() => message.summary?.title)
+                                  const summary = createMemo(() => message.summary?.body)
+                                  const diffs = createMemo(() => message.summary?.diffs ?? [])
+                                  const hasToolPart = createMemo(() =>
+                                    assistantMessages()
+                                      ?.flatMap((m) => sync.data.part[m.id])
+                                      .some((p) => p?.type === "tool"),
+                                  )
+                                  const working = createMemo(() => !summary() && !error())
+
+                                  // allowing time for the animations to finish
+                                  createEffect(() => {
+                                    title()
+                                    setTimeout(() => setTitled(!!title()), 10_000)
+                                  })
+                                  createEffect(() => {
+                                    const complete = !!summary() || !!error()
+                                    setTimeout(() => setCompleted(complete), 1200)
+                                  })
 
                                   return (
-                                    <li class="group/li flex items-center self-stretch">
-                                      <button
-                                        class="flex items-center self-stretch w-full gap-x-2 py-1 cursor-default"
-                                        onClick={() => local.session.setActiveMessage(message.id)}
+                                    <Show when={isActive()}>
+                                      <div
+                                        data-message={message.id}
+                                        class="flex flex-col items-start self-stretch gap-8 pb-50"
                                       >
-                                        <Switch>
-                                          <Match when={working()}>
-                                            <Spinner class="text-text-base shrink-0 w-[18px] aspect-square" />
-                                          </Match>
-                                          <Match when={true}>
-                                            <DiffChanges diff={diffs()} variant="bars" />
-                                          </Match>
-                                        </Switch>
-                                        <div
-                                          data-active={local.session.activeMessage()?.id === message.id}
-                                          classList={{
-                                            "text-14-regular text-text-weak whitespace-nowrap truncate min-w-0": true,
-                                            "text-text-weak data-[active=true]:text-text-strong group-hover/li:text-text-base": true,
-                                          }}
-                                        >
-                                          <Show when={message.summary?.title} fallback="New message">
-                                            {message.summary?.title}
-                                          </Show>
+                                        {/* Title */}
+                                        <div class="py-2 flex flex-col items-start gap-2 self-stretch sticky top-0 bg-background-stronger z-10">
+                                          <div class="w-full text-14-medium text-text-strong">
+                                            <Show
+                                              when={titled()}
+                                              fallback={
+                                                <Typewriter
+                                                  as="h1"
+                                                  text={title()}
+                                                  class="overflow-hidden text-ellipsis min-w-0 text-nowrap"
+                                                />
+                                              }
+                                            >
+                                              <h1 class="overflow-hidden text-ellipsis min-w-0 text-nowrap">
+                                                {title()}
+                                              </h1>
+                                            </Show>
+                                          </div>
                                         </div>
-                                      </button>
-                                    </li>
+                                        <div class="-mt-8">
+                                          <Message message={message} parts={parts()} />
+                                        </div>
+                                        {/* Summary */}
+                                        <Show when={completed()}>
+                                          <div class="w-full flex flex-col gap-6 items-start self-stretch">
+                                            <div class="flex flex-col items-start gap-1 self-stretch">
+                                              <h2 class="text-12-medium text-text-weak">
+                                                <Switch>
+                                                  <Match when={diffs().length}>Summary</Match>
+                                                  <Match when={true}>Response</Match>
+                                                </Switch>
+                                              </h2>
+                                              <Show when={summary()}>
+                                                {(summary) => (
+                                                  <Markdown
+                                                    classList={{ "[&>*]:fade-up-text": !diffs().length }}
+                                                    text={summary()}
+                                                  />
+                                                )}
+                                              </Show>
+                                            </div>
+                                            <Accordion class="w-full" multiple>
+                                              <For each={diffs()}>
+                                                {(diff) => (
+                                                  <Accordion.Item value={diff.file}>
+                                                    <Accordion.Header>
+                                                      <Accordion.Trigger onClick={handleDiffTriggerClick}>
+                                                        <div class="flex items-center justify-between w-full gap-5">
+                                                          <div class="grow flex items-center gap-5 min-w-0">
+                                                            <FileIcon
+                                                              node={{ path: diff.file, type: "file" }}
+                                                              class="shrink-0 size-4"
+                                                            />
+                                                            <div class="flex grow min-w-0">
+                                                              <Show when={diff.file.includes("/")}>
+                                                                <span class="text-text-base truncate-start">
+                                                                  {getDirectory(diff.file)}&lrm;
+                                                                </span>
+                                                              </Show>
+                                                              <span class="text-text-strong shrink-0">
+                                                                {getFilename(diff.file)}
+                                                              </span>
+                                                            </div>
+                                                          </div>
+                                                          <div class="shrink-0 flex gap-4 items-center justify-end">
+                                                            <DiffChanges diff={diff} />
+                                                            <Icon name="chevron-grabber-vertical" size="small" />
+                                                          </div>
+                                                        </div>
+                                                      </Accordion.Trigger>
+                                                    </Accordion.Header>
+                                                    <Accordion.Content>
+                                                      <Diff
+                                                        before={{
+                                                          name: diff.file!,
+                                                          contents: diff.before!,
+                                                        }}
+                                                        after={{
+                                                          name: diff.file!,
+                                                          contents: diff.after!,
+                                                        }}
+                                                      />
+                                                    </Accordion.Content>
+                                                  </Accordion.Item>
+                                                )}
+                                              </For>
+                                            </Accordion>
+                                          </div>
+                                        </Show>
+                                        <Show when={error() && !expanded()}>
+                                          <Card variant="error" class="text-text-on-critical-base">
+                                            {error()?.data?.message as string}
+                                          </Card>
+                                        </Show>
+                                        {/* Response */}
+                                        <div class="w-full">
+                                          <Switch>
+                                            <Match when={!completed()}>
+                                              <MessageProgress
+                                                assistantMessages={assistantMessages}
+                                                done={!working()}
+                                              />
+                                            </Match>
+                                            <Match when={completed() && hasToolPart()}>
+                                              <Collapsible variant="ghost" open={expanded()} onOpenChange={setExpanded}>
+                                                <Collapsible.Trigger class="text-text-weak hover:text-text-strong">
+                                                  <div class="flex items-center gap-1 self-stretch">
+                                                    <div class="text-12-medium">
+                                                      <Switch>
+                                                        <Match when={expanded()}>Hide details</Match>
+                                                        <Match when={!expanded()}>Show details</Match>
+                                                      </Switch>
+                                                    </div>
+                                                    <Collapsible.Arrow />
+                                                  </div>
+                                                </Collapsible.Trigger>
+                                                <Collapsible.Content>
+                                                  <div class="w-full flex flex-col items-start self-stretch gap-3">
+                                                    <For each={assistantMessages()}>
+                                                      {(assistantMessage) => {
+                                                        const parts = createMemo(
+                                                          () => sync.data.part[assistantMessage.id],
+                                                        )
+                                                        return <Message message={assistantMessage} parts={parts()} />
+                                                      }}
+                                                    </For>
+                                                    <Show when={error()}>
+                                                      <Card variant="error" class="text-text-on-critical-base">
+                                                        {error()?.data?.message as string}
+                                                      </Card>
+                                                    </Show>
+                                                  </div>
+                                                </Collapsible.Content>
+                                              </Collapsible>
+                                            </Match>
+                                          </Switch>
+                                        </div>
+                                      </div>
+                                    </Show>
                                   )
                                 }}
                               </For>
-                            </ul>
-                          </Show>
-                          <div ref={messageScrollElement} class="grow min-w-0 h-full overflow-y-auto no-scrollbar">
-                            <For each={local.session.userMessages()}>
-                              {(message) => {
-                                const isActive = createMemo(() => local.session.activeMessage()?.id === message.id)
-                                const [titled, setTitled] = createSignal(!!message.summary?.title)
-                                const assistantMessages = createMemo(() => {
-                                  return sync.data.message[activeSession().id]?.filter(
-                                    (m) => m.role === "assistant" && m.parentID == message.id,
-                                  ) as AssistantMessageType[]
-                                })
-                                const error = createMemo(() => assistantMessages().find((m) => m?.error)?.error)
-                                const [completed, setCompleted] = createSignal(!!message.summary?.body || !!error())
-                                const [expanded, setExpanded] = createSignal(false)
-                                const parts = createMemo(() => sync.data.part[message.id])
-                                const title = createMemo(() => message.summary?.title)
-                                const summary = createMemo(() => message.summary?.body)
-                                const diffs = createMemo(() => message.summary?.diffs ?? [])
-                                const hasToolPart = createMemo(() =>
-                                  assistantMessages()
-                                    ?.flatMap((m) => sync.data.part[m.id])
-                                    .some((p) => p?.type === "tool"),
-                                )
-                                const working = createMemo(() => !summary() && !error())
-
-                                // allowing time for the animations to finish
-                                createEffect(() => {
-                                  title()
-                                  setTimeout(() => setTitled(!!title()), 10_000)
-                                })
-                                createEffect(() => {
-                                  const complete = !!summary() || !!error()
-                                  setTimeout(() => setCompleted(complete), 1200)
-                                })
-
-                                return (
-                                  <Show when={isActive()}>
-                                    <div
-                                      data-message={message.id}
-                                      class="flex flex-col items-start self-stretch gap-8 pb-50"
-                                    >
-                                      {/* Title */}
-                                      <div class="py-2 flex flex-col items-start gap-2 self-stretch sticky top-0 bg-background-stronger z-10">
-                                        <div class="w-full text-14-medium text-text-strong">
-                                          <Show
-                                            when={titled()}
-                                            fallback={
-                                              <Typewriter
-                                                as="h1"
-                                                text={title()}
-                                                class="overflow-hidden text-ellipsis min-w-0 text-nowrap"
-                                              />
-                                            }
-                                          >
-                                            <h1 class="overflow-hidden text-ellipsis min-w-0 text-nowrap">{title()}</h1>
-                                          </Show>
-                                        </div>
-                                      </div>
-                                      <div class="-mt-8">
-                                        <Message message={message} parts={parts()} />
-                                      </div>
-                                      {/* Summary */}
-                                      <Show when={completed()}>
-                                        <div class="w-full flex flex-col gap-6 items-start self-stretch">
-                                          <div class="flex flex-col items-start gap-1 self-stretch">
-                                            <h2 class="text-12-medium text-text-weak">
-                                              <Switch>
-                                                <Match when={diffs().length}>Summary</Match>
-                                                <Match when={true}>Response</Match>
-                                              </Switch>
-                                            </h2>
-                                            <Show when={summary()}>
-                                              {(summary) => (
-                                                <Markdown
-                                                  classList={{ "[&>*]:fade-up-text": !diffs().length }}
-                                                  text={summary()}
-                                                />
-                                              )}
-                                            </Show>
-                                          </div>
-                                          <Accordion class="w-full" multiple>
-                                            <For each={diffs()}>
-                                              {(diff) => (
-                                                <Accordion.Item value={diff.file}>
-                                                  <Accordion.Header>
-                                                    <Accordion.Trigger onClick={handleDiffTriggerClick}>
-                                                      <div class="flex items-center justify-between w-full gap-5">
-                                                        <div class="grow flex items-center gap-5 min-w-0">
-                                                          <FileIcon
-                                                            node={{ path: diff.file, type: "file" }}
-                                                            class="shrink-0 size-4"
-                                                          />
-                                                          <div class="flex grow min-w-0">
-                                                            <Show when={diff.file.includes("/")}>
-                                                              <span class="text-text-base truncate-start">
-                                                                {getDirectory(diff.file)}&lrm;
-                                                              </span>
-                                                            </Show>
-                                                            <span class="text-text-strong shrink-0">
-                                                              {getFilename(diff.file)}
-                                                            </span>
-                                                          </div>
-                                                        </div>
-                                                        <div class="shrink-0 flex gap-4 items-center justify-end">
-                                                          <DiffChanges diff={diff} />
-                                                          <Icon name="chevron-grabber-vertical" size="small" />
-                                                        </div>
-                                                      </div>
-                                                    </Accordion.Trigger>
-                                                  </Accordion.Header>
-                                                  <Accordion.Content>
-                                                    <Diff
-                                                      before={{
-                                                        name: diff.file!,
-                                                        contents: diff.before!,
-                                                      }}
-                                                      after={{
-                                                        name: diff.file!,
-                                                        contents: diff.after!,
-                                                      }}
-                                                    />
-                                                  </Accordion.Content>
-                                                </Accordion.Item>
-                                              )}
-                                            </For>
-                                          </Accordion>
-                                        </div>
-                                      </Show>
-                                      <Show when={error() && !expanded()}>
-                                        <Card variant="error" class="text-text-on-critical-base">
-                                          {error()?.data?.message as string}
-                                        </Card>
-                                      </Show>
-                                      {/* Response */}
-                                      <div class="w-full">
-                                        <Switch>
-                                          <Match when={!completed()}>
-                                            <MessageProgress assistantMessages={assistantMessages} done={!working()} />
-                                          </Match>
-                                          <Match when={completed() && hasToolPart()}>
-                                            <Collapsible variant="ghost" open={expanded()} onOpenChange={setExpanded}>
-                                              <Collapsible.Trigger class="text-text-weak hover:text-text-strong">
-                                                <div class="flex items-center gap-1 self-stretch">
-                                                  <div class="text-12-medium">
-                                                    <Switch>
-                                                      <Match when={expanded()}>Hide details</Match>
-                                                      <Match when={!expanded()}>Show details</Match>
-                                                    </Switch>
-                                                  </div>
-                                                  <Collapsible.Arrow />
-                                                </div>
-                                              </Collapsible.Trigger>
-                                              <Collapsible.Content>
-                                                <div class="w-full flex flex-col items-start self-stretch gap-3">
-                                                  <For each={assistantMessages()}>
-                                                    {(assistantMessage) => {
-                                                      const parts = createMemo(
-                                                        () => sync.data.part[assistantMessage.id],
-                                                      )
-                                                      return <Message message={assistantMessage} parts={parts()} />
-                                                    }}
-                                                  </For>
-                                                  <Show when={error()}>
-                                                    <Card variant="error" class="text-text-on-critical-base">
-                                                      {error()?.data?.message as string}
-                                                    </Card>
-                                                  </Show>
-                                                </div>
-                                              </Collapsible.Content>
-                                            </Collapsible>
-                                          </Match>
-                                        </Switch>
-                                      </div>
-                                    </div>
-                                  </Show>
-                                )
-                              }}
-                            </For>
+                            </div>
                           </div>
                         </div>
-                      </div>
-                    )}
+                      )
+                    }}
                   </Show>
                 </div>
               </Tabs.Content>
               {/* <Tabs.Content value="review" class="select-text"></Tabs.Content> */}
-              <For each={local.file.opened()}>
+              <For each={local.session.tabs()?.opened}>
                 {(file) => (
-                  <Tabs.Content value={file.path} class="select-text">
+                  <Tabs.Content value={file} class="select-text">
                     {(() => {
-                      const view = local.file.view(file.path)
-                      const showRaw = view === "raw" || !file.content?.diff
-                      const code = showRaw ? (file.content?.content ?? "") : (file.content?.diff ?? "")
-                      return <Code path={file.path} code={code} class="[&_code]:pb-60" />
+                      {
+                        /* const view = local.file.view(file) */
+                      }
+                      {
+                        /* const showRaw = view === "raw" || !file.content?.diff */
+                      }
+                      {
+                        /* const code = showRaw ? (file.content?.content ?? "") : (file.content?.diff ?? "") */
+                      }
+                      const node = local.file.node(file)
+                      return (
+                        <Code
+                          file={{ name: node.path, contents: node.content?.content ?? "" }}
+                          disableFileHeader
+                          overflow="scroll"
+                          class="pt-3 pb-40"
+                        />
+                      )
                     })()}
                   </Tabs.Content>
                 )}
@@ -847,7 +830,7 @@ export default function Page() {
           items={local.file.search}
           key={(x) => x}
           onOpenChange={(open) => setStore("fileSelectOpen", open)}
-          onSelect={(x) => (x ? local.file.open(x, { pinned: true }) : undefined)}
+          onSelect={(x) => (x ? local.session.open(x) : undefined)}
         >
           {(i) => (
             <div

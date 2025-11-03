@@ -1,16 +1,7 @@
 import { createStore, produce, reconcile } from "solid-js/store"
 import { batch, createEffect, createMemo } from "solid-js"
-import { pipe, sumBy, uniqueBy } from "remeda"
-import type {
-  FileContent,
-  FileNode,
-  Model,
-  Provider,
-  File as FileStatus,
-  Part,
-  Message,
-  AssistantMessage,
-} from "@opencode-ai/sdk"
+import { uniqueBy } from "remeda"
+import type { FileContent, FileNode, Model, Provider, File as FileStatus } from "@opencode-ai/sdk"
 import { createSimpleContext } from "./helper"
 import { useSDK } from "./sdk"
 import { useSync } from "./sync"
@@ -204,18 +195,18 @@ export const { use: useLocal, provider: LocalProvider } = createSimpleContext({
     const file = (() => {
       const [store, setStore] = createStore<{
         node: Record<string, LocalFile>
-        opened: string[]
-        active?: string
+        // opened: string[]
+        // active?: string
       }>({
         node: Object.fromEntries(sync.data.node.map((x) => [x.path, x])),
-        opened: [],
+        // opened: [],
       })
 
-      const active = createMemo(() => {
-        if (!store.active) return undefined
-        return store.node[store.active]
-      })
-      const opened = createMemo(() => store.opened.map((x) => store.node[x]))
+      // const active = createMemo(() => {
+      //   if (!store.active) return undefined
+      //   return store.node[store.active]
+      // })
+      // const opened = createMemo(() => store.opened.map((x) => store.node[x]))
       const changeset = createMemo(() => new Set(sync.data.changes.map((f) => f.path)))
       const changes = createMemo(() => Array.from(changeset()).sort((a, b) => a.localeCompare(b)))
 
@@ -303,16 +294,16 @@ export const { use: useLocal, provider: LocalProvider } = createSimpleContext({
       const open = async (path: string, options?: { pinned?: boolean; view?: LocalFile["view"] }) => {
         const relativePath = relative(path)
         if (!store.node[relativePath]) await fetch(path)
-        setStore("opened", (x) => {
-          if (x.includes(relativePath)) return x
-          return [
-            ...opened()
-              .filter((x) => x.pinned)
-              .map((x) => x.path),
-            relativePath,
-          ]
-        })
-        setStore("active", relativePath)
+        // setStore("opened", (x) => {
+        //   if (x.includes(relativePath)) return x
+        //   return [
+        //     ...opened()
+        //       .filter((x) => x.pinned)
+        //       .map((x) => x.path),
+        //     relativePath,
+        //   ]
+        // })
+        // setStore("active", relativePath)
         context.addActive()
         if (options?.pinned) setStore("node", path, "pinned", true)
         if (options?.view && store.node[relativePath].view === undefined) setStore("node", path, "view", options.view)
@@ -363,22 +354,11 @@ export const { use: useLocal, provider: LocalProvider } = createSimpleContext({
       })
 
       return {
-        active,
-        opened,
         node: (path: string) => store.node[path],
         update: (path: string, node: LocalFile) => setStore("node", path, reconcile(node)),
         open,
         load,
         init,
-        close(path: string) {
-          setStore("opened", (opened) => opened.filter((x) => x !== path))
-          if (store.active === path) {
-            const index = store.opened.findIndex((f) => f === path)
-            const previous = store.opened[Math.max(0, index - 1)]
-            setStore("active", previous)
-          }
-          resetNode(path)
-        },
         expand(path: string) {
           setStore("node", path, "expanded", true)
           if (store.node[path].loaded) return
@@ -393,17 +373,6 @@ export const { use: useLocal, provider: LocalProvider } = createSimpleContext({
         },
         scroll(path: string, scrollTop: number) {
           setStore("node", path, "scrollTop", scrollTop)
-        },
-        move(path: string, to: number) {
-          const index = store.opened.findIndex((f) => f === path)
-          if (index === -1) return
-          setStore(
-            "opened",
-            produce((opened) => {
-              opened.splice(to, 0, opened.splice(index, 1)[0])
-            }),
-          )
-          setStore("node", path, "pinned", true)
         },
         view(path: string): View {
           const n = store.node[path]
@@ -444,14 +413,48 @@ export const { use: useLocal, provider: LocalProvider } = createSimpleContext({
         },
         search,
         relative,
+        // active,
+        // opened,
+        // close(path: string) {
+        //   setStore("opened", (opened) => opened.filter((x) => x !== path))
+        //   if (store.active === path) {
+        //     const index = store.opened.findIndex((f) => f === path)
+        //     const previous = store.opened[Math.max(0, index - 1)]
+        //     setStore("active", previous)
+        //   }
+        //   resetNode(path)
+        // },
+        // move(path: string, to: number) {
+        //   const index = store.opened.findIndex((f) => f === path)
+        //   if (index === -1) return
+        //   setStore(
+        //     "opened",
+        //     produce((opened) => {
+        //       opened.splice(to, 0, opened.splice(index, 1)[0])
+        //     }),
+        //   )
+        //   setStore("node", path, "pinned", true)
+        // },
       }
     })()
 
     const session = (() => {
       const [store, setStore] = createStore<{
         active?: string
-        activeMessage?: string
-      }>({})
+        tabs: Record<
+          string,
+          {
+            active?: string
+            opened: string[]
+          }
+        >
+      }>({
+        tabs: {
+          "": {
+            opened: [],
+          },
+        },
+      })
 
       const active = createMemo(() => {
         if (!store.active) return undefined
@@ -461,134 +464,69 @@ export const { use: useLocal, provider: LocalProvider } = createSimpleContext({
       createEffect(() => {
         if (!store.active) return
         sync.session.sync(store.active)
-      })
 
-      const valid = (part: Part) => {
-        if (!part) return false
-        switch (part.type) {
-          case "step-start":
-          case "step-finish":
-          case "file":
-          case "patch":
-            return false
-          case "text":
-            return !part.synthetic && part.text.trim()
-          case "reasoning":
-            return part.text.trim()
-          case "tool":
-            switch (part.tool) {
-              case "todoread":
-              case "todowrite":
-              case "list":
-              case "grep":
-                return false
-            }
-            return true
-          default:
-            return true
+        if (!store.tabs[store.active]) {
+          setStore("tabs", store.active, {
+            opened: [],
+          })
         }
-      }
-
-      const hasValidParts = (message: Message) => {
-        return sync.data.part[message.id]?.filter(valid).length > 0
-      }
-      // const hasTextPart = (message: Message) => {
-      //   return !!sync.data.part[message.id]?.filter(valid).find((p) => p.type === "text")
-      // }
-
-      const messages = createMemo(() => (store.active ? (sync.data.message[store.active] ?? []) : []))
-      const messagesWithValidParts = createMemo(() => messages().filter(hasValidParts) ?? [])
-      const userMessages = createMemo(() =>
-        messages()
-          .filter((m) => m.role === "user")
-          .sort((a, b) => b.id.localeCompare(a.id)),
-      )
-
-      const cost = createMemo(() => {
-        const total = pipe(
-          messages(),
-          sumBy((x) => (x.role === "assistant" ? x.cost : 0)),
-        )
-        return new Intl.NumberFormat("en-US", {
-          style: "currency",
-          currency: "USD",
-        }).format(total)
       })
 
-      const last = createMemo(() => {
-        return messages().findLast((x) => x.role === "assistant") as AssistantMessage
-      })
-
-      const lastUserMessage = createMemo(() => {
-        return userMessages()?.at(0)
-      })
-
-      const activeMessage = createMemo(() => {
-        if (!store.active || !store.activeMessage) return lastUserMessage()
-        return sync.data.message[store.active]?.find((m) => m.id === store.activeMessage)
-      })
-
-      const model = createMemo(() => {
-        if (!last()) return
-        const model = sync.data.provider.find((x) => x.id === last().providerID)?.models[last().modelID]
-        return model
-      })
-
-      const tokens = createMemo(() => {
-        if (!last()) return
-        const tokens = last().tokens
-        const total = tokens.input + tokens.output + tokens.reasoning + tokens.cache.read + tokens.cache.write
-        return new Intl.NumberFormat("en-US", {
-          notation: "compact",
-          compactDisplay: "short",
-        }).format(total)
-      })
-
-      const context = createMemo(() => {
-        if (!last()) return
-        if (!model()?.limit.context) return 0
-        const tokens = last().tokens
-        const total = tokens.input + tokens.output + tokens.reasoning + tokens.cache.read + tokens.cache.write
-        return Math.round((total / model()!.limit.context) * 100)
-      })
-
-      const getMessageText = (message: Message | Message[] | undefined): string => {
-        if (!message) return ""
-        if (Array.isArray(message)) return message.map((m) => getMessageText(m)).join(" ")
-        return sync.data.part[message.id]
-          ?.filter((p) => p.type === "text")
-          ?.filter((p) => !p.synthetic)
-          .map((p) => p.text)
-          .join(" ")
-      }
+      const tabs = createMemo(() => store.tabs[store.active ?? ""])
 
       return {
         active,
-        activeMessage,
-        lastUserMessage,
-        cost,
-        last,
-        model,
-        tokens,
-        context,
-        messages,
-        messagesWithValidParts,
-        userMessages,
-        // working,
-        getMessageText,
         setActive(sessionId: string | undefined) {
           setStore("active", sessionId)
-          setStore("activeMessage", undefined)
         },
         clearActive() {
           setStore("active", undefined)
-          setStore("activeMessage", undefined)
         },
-        setActiveMessage(messageId: string | undefined) {
-          setStore("activeMessage", messageId)
+        tabs,
+        copyTabs(from: string, to: string) {
+          setStore("tabs", to, {
+            opened: store.tabs[from]?.opened ?? [],
+          })
         },
-        clearActiveMessage() {
-          setStore("activeMessage", undefined)
+        setActiveTab(tab: string | undefined) {
+          setStore("tabs", store.active ?? "", "active", tab)
+        },
+        async open(tab: string) {
+          if (tab !== "chat") {
+            await file.open(tab)
+          }
+          if (!tabs()?.opened?.includes(tab)) {
+            setStore("tabs", store.active ?? "", "opened", [...(tabs()?.opened ?? []), tab])
+          }
+          setStore("tabs", store.active ?? "", "active", tab)
+        },
+        close(tab: string) {
+          batch(() => {
+            if (!tabs()) return
+            setStore("tabs", store.active ?? "", {
+              active: tabs()!.active,
+              opened: tabs()!.opened.filter((x) => x !== tab),
+            })
+            if (tabs()!.active === tab) {
+              const index = tabs()!.opened.findIndex((f) => f === tab)
+              const previous = tabs()!.opened[Math.max(0, index - 1)]
+              setStore("tabs", store.active ?? "", "active", previous)
+            }
+          })
+        },
+        move(tab: string, to: number) {
+          if (!tabs()) return
+          const index = tabs()!.opened.findIndex((f) => f === tab)
+          if (index === -1) return
+          setStore(
+            "tabs",
+            store.active ?? "",
+            "opened",
+            produce((opened) => {
+              opened.splice(to, 0, opened.splice(index, 1)[0])
+            }),
+          )
+          // setStore("node", path, "pinned", true)
         },
       }
     })()
@@ -611,9 +549,9 @@ export const { use: useLocal, provider: LocalProvider } = createSimpleContext({
         all() {
           return store.items
         },
-        active() {
-          return store.activeTab ? file.active() : undefined
-        },
+        // active() {
+        //   return store.activeTab ? file.active() : undefined
+        // },
         addActive() {
           setStore("activeTab", true)
         },

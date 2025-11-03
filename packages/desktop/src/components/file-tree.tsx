@@ -19,7 +19,7 @@ export default function FileTree(props: {
       component={p.as ?? "div"}
       classList={{
         "p-0.5 w-full flex items-center gap-x-2 hover:bg-background-element": true,
-        "bg-background-element": local.file.active()?.path === p.node.path,
+        // "bg-background-element": local.file.active()?.path === p.node.path,
         [props.nodeClass ?? ""]: !!props.nodeClass,
       }}
       style={`padding-left: ${level * 10}px`}
@@ -55,7 +55,7 @@ export default function FileTree(props: {
           "text-xs whitespace-nowrap truncate": true,
           "text-text-muted/40": p.node.ignored,
           "text-text-muted/80": !p.node.ignored,
-          "!text-text": local.file.active()?.path === p.node.path,
+          // "!text-text": local.file.active()?.path === p.node.path,
           "!text-primary": local.file.changed(p.node.path),
         }}
       >
