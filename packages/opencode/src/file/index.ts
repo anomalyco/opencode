@@ -284,7 +284,9 @@ export namespace File {
     }
     const resolved = dir ? path.join(Instance.directory, dir) : Instance.directory
     const nodes: Node[] = []
-    for (const entry of await fs.promises.readdir(resolved, { withFileTypes: true })) {
+    for (const entry of await fs.promises.readdir(resolved, {
+      withFileTypes: true,
+    })) {
       if (exclude.includes(entry.name)) continue
       const fullPath = path.join(resolved, entry.name)
       const relativePath = path.relative(Instance.directory, fullPath)

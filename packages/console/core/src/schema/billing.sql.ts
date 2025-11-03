@@ -16,6 +16,8 @@ export const BillingTable = mysqlTable(
     monthlyUsage: bigint("monthly_usage", { mode: "number" }),
     timeMonthlyUsageUpdated: utc("time_monthly_usage_updated"),
     reload: boolean("reload"),
+    reloadTrigger: int("reload_trigger"),
+    reloadAmount: int("reload_amount"),
     reloadError: varchar("reload_error", { length: 255 }),
     timeReloadError: utc("time_reload_error"),
     timeReloadLockedTill: utc("time_reload_locked_till"),

@@ -188,6 +188,7 @@ export function fromAnthropicRequest(body: any): CommonRequest {
   })()
 
   return {
+    model: body.model,
     max_tokens: body.max_tokens,
     temperature: body.temperature,
     top_p: body.top_p,

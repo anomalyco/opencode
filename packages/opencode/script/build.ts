@@ -1,5 +1,9 @@
 #!/usr/bin/env bun
+
+import solidPlugin from "../node_modules/@opentui/solid/scripts/solid-plugin"
 import path from "path"
+import fs from "fs"
+import { $ } from "bun"
 import { fileURLToPath } from "url"
 
 const __filename = fileURLToPath(import.meta.url)
@@ -7,18 +11,13 @@ const __dirname = path.dirname(__filename)
 const dir = path.resolve(__dirname, "..")
 
 process.chdir(dir)
-import { $ } from "bun"
 
 import pkg from "../package.json"
 import { Script } from "@opencode-ai/script"
 
-const GOARCH: Record<string, string> = {
-  arm64: "arm64",
-  x64: "amd64",
-  "x64-baseline": "amd64",
-}
+const singleFlag = process.argv.includes("--single")
 
-const targets = [
+const allTargets = [
   ["windows", "x64"],
   ["linux", "arm64"],
   ["linux", "x64"],
@@ -28,6 +27,10 @@ const targets = [
   ["darwin", "arm64"],
 ]
 
+const targets = singleFlag
+  ? allTargets.filter(([os, arch]) => os === process.platform && arch === process.arch)
+  : allTargets
+
 await $`rm -rf dist`
 
 const binaries: Record<string, string> = {}
@@ -35,16 +38,22 @@ for (const [os, arch] of targets) {
   console.log(`building ${os}-${arch}`)
   const name = `${pkg.name}-${os}-${arch}`
   await $`mkdir -p dist/${name}/bin`
-  await $`CGO_ENABLED=0 GOOS=${os} GOARCH=${GOARCH[arch]} go build -ldflags="-s -w -X main.Version=${Script.version}" -o ../opencode/dist/${name}/bin/tui ../tui/cmd/opencode/main.go`
-    .cwd("../tui")
-    .quiet()
+
+  const opentui = `@opentui/core-${os === "windows" ? "win32" : os}-${arch.replace("-baseline", "")}`
+  await $`mkdir -p ../../node_modules/${opentui}`
+  await $`npm pack ${opentui}@${pkg.dependencies["@opentui/core"]}`.cwd(path.join(dir, "../../node_modules"))
+  await $`tar -xf ../../node_modules/${opentui.replace("@opentui/", "opentui-")}-*.tgz -C ../../node_modules/${opentui} --strip-components=1`
 
   const watcher = `@parcel/watcher-${os === "windows" ? "win32" : os}-${arch.replace("-baseline", "")}${os === "linux" ? "-glibc" : ""}`
   await $`mkdir -p ../../node_modules/${watcher}`
-  await $`npm pack npm pack ${watcher}`.cwd(path.join(dir, "../../node_modules")).quiet()
+  await $`npm pack ${watcher}`.cwd(path.join(dir, "../../node_modules")).quiet()
   await $`tar -xf ../../node_modules/${watcher.replace("@parcel/", "parcel-")}-*.tgz -C ../../node_modules/${watcher} --strip-components=1`
 
+  const parserWorker = fs.realpathSync(path.resolve(dir, "./node_modules/@opentui/core/parser.worker.js"))
   await Bun.build({
+    conditions: ["browser"],
+    tsconfig: "./tsconfig.json",
+    plugins: [solidPlugin],
     sourcemap: "external",
     compile: {
       target: `bun-${os}-${arch}` as any,
@@ -52,13 +61,14 @@ for (const [os, arch] of targets) {
       execArgv: [`--user-agent=opencode/${Script.version}`, `--env-file=""`, `--`],
       windows: {},
     },
-    entrypoints: ["./src/index.ts"],
+    entrypoints: ["./src/index.ts", parserWorker, "./src/cli/cmd/tui/worker.ts"],
     define: {
       OPENCODE_VERSION: `'${Script.version}'`,
+      OTUI_TREE_SITTER_WORKER_PATH: "/$bunfs/root/" + path.relative(dir, parserWorker),
       OPENCODE_CHANNEL: `'${Script.channel}'`,
-      OPENCODE_TUI_PATH: `'../../../dist/${name}/bin/tui'`,
     },
   })
+
   await $`rm -rf ./dist/${name}/bin/tui`
   await Bun.file(`dist/${name}/package.json`).write(
     JSON.stringify(

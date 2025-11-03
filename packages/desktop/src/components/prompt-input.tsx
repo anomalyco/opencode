@@ -71,7 +71,7 @@ export const PromptInput: Component<PromptInputProps> = (props) => {
     }
   })
 
-  const { flat, active, onInput, onKeyDown } = useFilteredList<string>({
+  const { flat, active, onInput, onKeyDown, refetch } = useFilteredList<string>({
     items: local.file.search,
     key: (x) => x,
     onSelect: (path) => {
@@ -79,6 +79,11 @@ export const PromptInput: Component<PromptInputProps> = (props) => {
       addPart({ type: "file", path, content: "@" + getFilename(path), start: 0, end: 0 })
       setStore("popoverIsOpen", false)
     },
+  })
+
+  createEffect(() => {
+    local.model.recent()
+    refetch()
   })
 
   createEffect(
@@ -329,7 +334,7 @@ export const PromptInput: Component<PromptInputProps> = (props) => {
         onSubmit={handleSubmit}
         classList={{
           "bg-surface-raised-stronger-non-alpha border border-border-strong-base": true,
-          "rounded-2xl overflow-clip focus-within:shadow-xs-border-selected": true,
+          "rounded-2xl overflow-clip focus-within:border-transparent focus-within:shadow-xs-border-select": true,
           [props.class ?? ""]: !!props.class,
         }}
       >
@@ -360,6 +365,7 @@ export const PromptInput: Component<PromptInputProps> = (props) => {
               current={local.agent.current().name}
               onSelect={local.agent.set}
               class="capitalize"
+              variant="ghost"
             />
             <SelectDialog
               title="Select model"
@@ -369,16 +375,20 @@ export const PromptInput: Component<PromptInputProps> = (props) => {
               items={local.model.list()}
               current={local.model.current()}
               filterKeys={["provider.name", "name", "id"]}
-              groupBy={(x) => x.provider.name}
+              groupBy={(x) => (local.model.recent().includes(x) ? "Recent" : x.provider.name)}
               sortGroupsBy={(a, b) => {
                 const order = ["opencode", "anthropic", "github-copilot", "openai", "google", "openrouter", "vercel"]
+                if (a.category === "Recent" && b.category !== "Recent") return -1
+                if (b.category === "Recent" && a.category !== "Recent") return 1
                 const aProvider = a.items[0].provider.id
                 const bProvider = b.items[0].provider.id
                 if (order.includes(aProvider) && !order.includes(bProvider)) return -1
                 if (!order.includes(aProvider) && order.includes(bProvider)) return 1
                 return order.indexOf(aProvider) - order.indexOf(bProvider)
               }}
-              onSelect={(x) => local.model.set(x ? { modelID: x.id, providerID: x.provider.id } : undefined)}
+              onSelect={(x) =>
+                local.model.set(x ? { modelID: x.id, providerID: x.provider.id } : undefined, { recent: true })
+              }
               trigger={
                 <Button as="div" variant="ghost">
                   {local.model.current()?.name ?? "Select model"}
@@ -393,9 +403,11 @@ export const PromptInput: Component<PromptInputProps> = (props) => {
                     <img src={`https://models.dev/logos/${i.provider.id}.svg`} class="size-6 p-0.5 shrink-0 " />
                     <div class="flex gap-x-3 items-baseline flex-[1_0_0]">
                       <span class="text-14-medium text-text-strong overflow-hidden text-ellipsis">{i.name}</span>
-                      <span class="text-12-medium text-text-weak overflow-hidden text-ellipsis truncate min-w-0">
-                        {DateTime.fromFormat(i.release_date, "yyyy-MM-dd").toFormat("LLL yyyy")}
-                      </span>
+                      <Show when={i.release_date}>
+                        <span class="text-12-medium text-text-weak overflow-hidden text-ellipsis truncate min-w-0">
+                          {DateTime.fromFormat(i.release_date, "yyyy-MM-dd").toFormat("LLL yyyy")}
+                        </span>
+                      </Show>
                     </div>
                   </div>
                   <Show when={!i.cost || i.cost?.input === 0}>

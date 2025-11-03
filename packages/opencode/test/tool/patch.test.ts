@@ -21,7 +21,9 @@ describe("tool.patch", () => {
     await Instance.provide({
       directory: "/tmp",
       fn: async () => {
-        await expect(patchTool.execute({ patchText: "" }, ctx)).rejects.toThrow("patchText is required")
+        await expect(patchTool.execute({ patchText: "" }, ctx)).rejects.toThrow(
+          "patchText is required",
+        )
       },
     })
   })
@@ -30,7 +32,9 @@ describe("tool.patch", () => {
     await Instance.provide({
       directory: "/tmp",
       fn: async () => {
-        await expect(patchTool.execute({ patchText: "invalid patch" }, ctx)).rejects.toThrow("Failed to parse patch")
+        await expect(patchTool.execute({ patchText: "invalid patch" }, ctx)).rejects.toThrow(
+          "Failed to parse patch",
+        )
       },
     })
   })
@@ -113,7 +117,9 @@ describe("tool.patch", () => {
         // Verify file was created with correct content
         const filePath = path.join(fixture.path, "config.js")
         const content = await fs.readFile(filePath, "utf-8")
-        expect(content).toBe('const API_KEY = "test-key"\nconst DEBUG = false\nconst VERSION = "1.0"')
+        expect(content).toBe(
+          'const API_KEY = "test-key"\nconst DEBUG = false\nconst VERSION = "1.0"',
+        )
       },
     })
   })

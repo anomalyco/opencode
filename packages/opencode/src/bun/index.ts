@@ -74,7 +74,10 @@ export namespace BunProc {
     // - If .npmrc files exist, Bun will use them automatically
     // - If no .npmrc files exist, Bun will default to https://registry.npmjs.org
     // - No need to pass --registry flag
-    log.info("installing package using Bun's default registry resolution", { pkg, version })
+    log.info("installing package using Bun's default registry resolution", {
+      pkg,
+      version,
+    })
 
     await BunProc.run(args, {
       cwd: Global.Path.cache,

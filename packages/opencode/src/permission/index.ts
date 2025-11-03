@@ -41,7 +41,11 @@ export namespace Permission {
     Updated: Bus.event("permission.updated", Info),
     Replied: Bus.event(
       "permission.replied",
-      z.object({ sessionID: z.string(), permissionID: z.string(), response: z.string() }),
+      z.object({
+        sessionID: z.string(),
+        permissionID: z.string(),
+        response: z.string(),
+      }),
     ),
   }
 
@@ -141,16 +145,16 @@ export namespace Permission {
     const match = pending[input.sessionID]?.[input.permissionID]
     if (!match) return
     delete pending[input.sessionID][input.permissionID]
-    if (input.response === "reject") {
-      match.reject(new RejectedError(input.sessionID, input.permissionID, match.info.callID, match.info.metadata))
-      return
-    }
-    match.resolve()
     Bus.publish(Event.Replied, {
       sessionID: input.sessionID,
       permissionID: input.permissionID,
       response: input.response,
     })
+    if (input.response === "reject") {
+      match.reject(new RejectedError(input.sessionID, input.permissionID, match.info.callID, match.info.metadata))
+      return
+    }
+    match.resolve()
     if (input.response === "always") {
       approved[input.sessionID] = approved[input.sessionID] || {}
       const approveKeys = toKeys(match.info.pattern, match.info.type)

@@ -60,7 +60,6 @@ body {
   }
 }
 
-
 [data-page="zen"] {
   background: var(--color-background);
   --padding: 5rem;
@@ -111,9 +110,6 @@ body {
   input:-moz-autofill {
     -moz-text-fill-color: var(--color-text-strong) !important;
   }
-
-
-
 
   [data-component="container"] {
     max-width: 67.5rem;
@@ -178,8 +174,6 @@ body {
         color: var(--color-icon);
       }
     }
-
-
 
     [data-component="nav-mobile-toggle"] {
       border: none;
@@ -258,14 +252,14 @@ body {
   [data-component="hero"] {
     display: flex;
     flex-direction: column;
-    padding: calc(var(--vertical-padding)*2) var(--padding);
+    padding: calc(var(--vertical-padding) * 2) var(--padding);
 
     [data-slot="zen logo dark"] {
       display: none;
     }
 
     @media (max-width: 30rem) {
-      padding: var(--vertical-padding) var(--padding)
+      padding: var(--vertical-padding) var(--padding);
     }
 
     @media (prefers-color-scheme: dark) {
@@ -294,8 +288,6 @@ body {
         font-size: 22px;
       }
     }
-
-
 
     p {
       color: var(--color-text);
@@ -778,11 +770,9 @@ body {
       border-bottom: 1px solid var(--color-border-weak);
     }
 
-
     [data-slot="cell"] {
       flex: 1;
       text-align: center;
-
 
       a {
         text-decoration: none;
@@ -796,7 +786,6 @@ body {
           @media (max-width: 40rem) {
             display: none;
           }
-
         }
       }
 
@@ -835,10 +824,18 @@ body {
   [data-component="legal"] {
     color: var(--color-text-weak);
     text-align: center;
+    display: flex;
+    gap: 32px;
+    justify-content: center;
 
     a {
       color: var(--color-text-weak);
       text-decoration: none;
+    }
+
+    a:hover {
+      color: var(--color-text);
+      text-decoration: underline;
     }
   }
 }

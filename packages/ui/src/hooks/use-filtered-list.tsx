@@ -11,18 +11,22 @@ export interface FilteredListProps<T> {
   current?: T
   groupBy?: (x: T) => string
   sortBy?: (a: T, b: T) => number
-  sortGroupsBy?: (a: { category: string; items: T[] }, b: { category: string; items: T[] }) => number
+  sortGroupsBy?: (
+    a: { category: string; items: T[] },
+    b: { category: string; items: T[] },
+  ) => number
   onSelect?: (value: T | undefined) => void
 }
 
 export function useFilteredList<T>(props: FilteredListProps<T>) {
   const [store, setStore] = createStore<{ filter: string }>({ filter: "" })
 
-  const [grouped] = createResource(
+  const [grouped, { refetch }] = createResource(
     () => store.filter,
     async (filter) => {
       const needle = filter?.toLowerCase()
-      const all = (typeof props.items === "function" ? await props.items(needle) : props.items) || []
+      const all =
+        (typeof props.items === "function" ? await props.items(needle) : props.items) || []
       const result = pipe(
         all,
         (x) => {
@@ -76,10 +80,11 @@ export function useFilteredList<T>(props: FilteredListProps<T>) {
   }
 
   return {
-    filter: () => store.filter,
     grouped,
+    filter: () => store.filter,
     flat,
     reset,
+    refetch,
     clear: () => setStore("filter", ""),
     onKeyDown,
     onInput,

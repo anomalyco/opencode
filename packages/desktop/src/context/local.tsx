@@ -45,6 +45,37 @@ export const { use: useLocal, provider: LocalProvider } = createSimpleContext({
     const sdk = useSDK()
     const sync = useSync()
 
+    function isModelValid(model: ModelKey) {
+      const provider = sync.data.provider.find((x) => x.id === model.providerID)
+      return !!provider?.models[model.modelID]
+    }
+
+    function getFirstValidModel(...modelFns: (() => ModelKey | undefined)[]) {
+      for (const modelFn of modelFns) {
+        const model = modelFn()
+        if (!model) continue
+        if (isModelValid(model)) return model
+      }
+    }
+
+    // Automatically update model when agent changes
+    createEffect(() => {
+      const value = agent.current()
+      if (value.model) {
+        if (isModelValid(value.model))
+          model.set({
+            providerID: value.model.providerID,
+            modelID: value.model.modelID,
+          })
+        // else
+        //   toast.show({
+        //     type: "warning",
+        //     message: `Agent ${value.name}'s configured model ${value.model.providerID}/${value.model.modelID} is not valid`,
+        //     duration: 3000,
+        //   })
+      }
+    })
+
     const agent = (() => {
       const list = createMemo(() => sync.data.agent.filter((x) => x.mode !== "subagent"))
       const [store, setStore] = createStore<{
@@ -76,11 +107,6 @@ export const { use: useLocal, provider: LocalProvider } = createSimpleContext({
     })()
 
     const model = (() => {
-      const list = createMemo(() =>
-        sync.data.provider.flatMap((p) => Object.values(p.models).map((m) => ({ ...m, provider: p }) as LocalModel)),
-      )
-      const find = (key: ModelKey) => list().find((m) => m.id === key?.modelID && m.provider.id === key.providerID)
-
       const [store, setStore] = createStore<{
         model: Record<string, ModelKey>
         recent: ModelKey[]
@@ -95,27 +121,76 @@ export const { use: useLocal, provider: LocalProvider } = createSimpleContext({
         localStorage.setItem("model", JSON.stringify(store.recent))
       })
 
-      const fallback = createMemo(() => {
-        if (store.recent.length) return store.recent[0]
+      const list = createMemo(() =>
+        sync.data.provider.flatMap((p) => Object.values(p.models).map((m) => ({ ...m, provider: p }) as LocalModel)),
+      )
+      const find = (key: ModelKey) => list().find((m) => m.id === key?.modelID && m.provider.id === key.providerID)
+
+      const fallbackModel = createMemo(() => {
+        if (sync.data.config.model) {
+          const [providerID, modelID] = sync.data.config.model.split("/")
+          if (isModelValid({ providerID, modelID })) {
+            return {
+              providerID,
+              modelID,
+            }
+          }
+        }
+
+        for (const item of store.recent) {
+          if (isModelValid(item)) {
+            return item
+          }
+        }
         const provider = sync.data.provider[0]
         const model = Object.values(provider.models)[0]
-        return { modelID: model.id, providerID: provider.id }
+        return {
+          providerID: provider.id,
+          modelID: model.id,
+        }
       })
 
-      const current = createMemo(() => {
+      const currentModel = createMemo(() => {
         const a = agent.current()
-        return find(store.model[agent.current().name]) ?? find(a.model ?? fallback())
+        const key = getFirstValidModel(
+          () => store.model[a.name],
+          () => a.model,
+          fallbackModel,
+        )!
+        return find(key)
       })
 
       const recent = createMemo(() => store.recent.map(find).filter(Boolean))
 
+      const cycle = (direction: 1 | -1) => {
+        const recentList = recent()
+        const current = currentModel()
+        if (!current) return
+
+        const index = recentList.findIndex((x) => x?.provider.id === current.provider.id && x?.id === current.id)
+        if (index === -1) return
+
+        let next = index + direction
+        if (next < 0) next = recentList.length - 1
+        if (next >= recentList.length) next = 0
+
+        const val = recentList[next]
+        if (!val) return
+
+        model.set({
+          providerID: val.provider.id,
+          modelID: val.id,
+        })
+      }
+
       return {
-        list,
-        current,
+        current: currentModel,
         recent,
+        list,
+        cycle,
         set(model: ModelKey | undefined, options?: { recent?: boolean }) {
           batch(() => {
-            setStore("model", agent.current().name, model ?? fallback())
+            setStore("model", agent.current().name, model ?? fallbackModel())
             if (options?.recent && model) {
               const uniq = uniqueBy([model, ...store.recent], (x) => x.providerID + x.modelID)
               if (uniq.length > 5) uniq.pop()
@@ -279,10 +354,10 @@ export const { use: useLocal, provider: LocalProvider } = createSimpleContext({
             }
             break
           case "file.watcher.updated":
-            setTimeout(sync.load.changes, 1000)
-            const relativePath = relative(event.properties.file)
-            if (relativePath.startsWith(".git/")) return
-            load(relativePath)
+            // setTimeout(sync.load.changes, 1000)
+            // const relativePath = relative(event.properties.file)
+            // if (relativePath.startsWith(".git/")) return
+            // load(relativePath)
             break
         }
       })
@@ -480,9 +555,6 @@ export const { use: useLocal, provider: LocalProvider } = createSimpleContext({
       const getMessageText = (message: Message | Message[] | undefined): string => {
         if (!message) return ""
         if (Array.isArray(message)) return message.map((m) => getMessageText(m)).join(" ")
-        const fileParts = sync.data.part[message.id]?.filter((p) => p.type === "file")
-        console.log(fileParts)
-
         return sync.data.part[message.id]
           ?.filter((p) => p.type === "text")
           ?.filter((p) => !p.synthetic)

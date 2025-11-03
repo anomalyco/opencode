@@ -3,12 +3,12 @@ import {
   FileDiff,
   type DiffLineAnnotation,
   type HunkData,
-  DiffFileRendererOptions,
+  FileDiffOptions,
   // registerCustomTheme,
 } from "@pierre/precision-diffs"
 import { ComponentProps, createEffect, splitProps } from "solid-js"
 
-export type DiffProps<T = {}> = Omit<DiffFileRendererOptions<T>, "themes"> & {
+export type DiffProps<T = {}> = FileDiffOptions<T> & {
   before: FileContents
   after: FileContents
   annotations?: DiffLineAnnotation<T>[]
@@ -55,17 +55,15 @@ export function Diff<T>(props: DiffProps<T>) {
   // annotations and a container element to hold the diff
   createEffect(() => {
     const instance = new FileDiff<T>({
-      theme: "pierre-light",
-      // Or can also provide a 'themes' prop, which allows the code to adapt
-      // to your OS light or dark theme
-      // themes: { dark: 'pierre-night', light: 'pierre-light' },
+      // theme: "pierre-light",
+      theme: { dark: "pierre-dark", light: "pierre-light" },
       // When using the 'themes' prop, 'themeType' allows you to force 'dark'
       // or 'light' theme, or inherit from the OS ('system') theme.
       themeType: "system",
       // Disable the line numbers for your diffs, generally not recommended
       disableLineNumbers: false,
       // Whether code should 'wrap' with long lines or 'scroll'.
-      overflow: "scroll",
+      overflow: "wrap",
       // Normally you shouldn't need this prop, but if you don't provide a
       // valid filename or your file doesn't have an extension you may want to
       // override the automatic detection. You can specify that language here:
@@ -111,8 +109,11 @@ export function Diff<T>(props: DiffProps<T>) {
         numCol.dataset["slot"] = "diff-hunk-separator-line-number"
         fragment.appendChild(numCol)
         const contentCol = document.createElement("div")
-        contentCol.textContent = `${hunkData.lines} unmodified lines`
         contentCol.dataset["slot"] = "diff-hunk-separator-content"
+        const span = document.createElement("span")
+        span.dataset["slot"] = "diff-hunk-separator-content-span"
+        span.textContent = `${hunkData.lines} unmodified lines`
+        contentCol.appendChild(span)
         fragment.appendChild(contentCol)
         return fragment
       },
@@ -168,7 +169,7 @@ export function Diff<T>(props: DiffProps<T>) {
         "--pjs-font-family": "var(--font-family-mono)",
         "--pjs-font-size": "var(--font-size-small)",
         "--pjs-line-height": "24px",
-        "--pjs-tab-size": 4,
+        "--pjs-tab-size": 2,
         "--pjs-font-features": "var(--font-family-mono--font-feature-settings)",
         "--pjs-header-font-family": "var(--font-family-sans)",
         "--pjs-gap-block": 0,

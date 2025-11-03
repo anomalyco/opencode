@@ -14,8 +14,8 @@ import { Agent } from "../agent/agent"
 export const WriteTool = Tool.define("write", {
   description: DESCRIPTION,
   parameters: z.object({
-    filePath: z.string().describe("The absolute path to the file to write (must be absolute, not relative)"),
     content: z.string().describe("The content to write to the file"),
+    filePath: z.string().describe("The absolute path to the file to write (must be absolute, not relative)"),
   }),
   async execute(params, ctx) {
     const filepath = path.isAbsolute(params.filePath) ? params.filePath : path.join(Instance.directory, params.filePath)

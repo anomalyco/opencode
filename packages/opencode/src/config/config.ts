@@ -9,14 +9,18 @@ import { Global } from "../global"
 import fs from "fs/promises"
 import { lazy } from "../util/lazy"
 import { NamedError } from "../util/error"
-import matter from "gray-matter"
 import { Flag } from "../flag/flag"
 import { Auth } from "../auth"
-import { type ParseError as JsoncParseError, parse as parseJsonc, printParseErrorCode } from "jsonc-parser"
+import {
+  type ParseError as JsoncParseError,
+  parse as parseJsonc,
+  printParseErrorCode,
+} from "jsonc-parser"
 import { Instance } from "../project/instance"
 import { LSPServer } from "../lsp/server"
 import { BunProc } from "@/bun"
 import { Installation } from "@/installation"
+import { ConfigMarkdown } from "./markdown"
 
 export namespace Config {
   const log = Log.create({ service: "config" })
@@ -45,8 +49,11 @@ export namespace Config {
     for (const [key, value] of Object.entries(auth)) {
       if (value.type === "wellknown") {
         process.env[value.key] = value.token
-        const wellknown = await fetch(`${key}/.well-known/opencode`).then((x) => x.json())
-        result = mergeDeep(result, await load(JSON.stringify(wellknown.config ?? {}), process.cwd()))
+        const wellknown = (await fetch(`${key}/.well-known/opencode`).then((x) => x.json())) as any
+        result = mergeDeep(
+          result,
+          await load(JSON.stringify(wellknown.config ?? {}), process.cwd()),
+        )
       }
     }
 
@@ -57,7 +64,11 @@ export namespace Config {
     const directories = [
       Global.Path.config,
       ...(await Array.fromAsync(
-        Filesystem.up({ targets: [".opencode"], start: Instance.directory, stop: Instance.worktree }),
+        Filesystem.up({
+          targets: [".opencode"],
+          start: Instance.directory,
+          stop: Instance.worktree,
+        }),
       )),
     ]
 
@@ -66,14 +77,16 @@ export namespace Config {
       log.debug("loading config from OPENCODE_CONFIG_DIR", { path: Flag.OPENCODE_CONFIG_DIR })
     }
 
+    const promises: Promise<void>[] = []
     for (const dir of directories) {
       await assertValid(dir)
-      installDependencies(dir)
+      promises.push(installDependencies(dir))
       result.command = mergeDeep(result.command ?? {}, await loadCommand(dir))
       result.agent = mergeDeep(result.agent, await loadAgent(dir))
       result.agent = mergeDeep(result.agent, await loadMode(dir))
       result.plugin.push(...(await loadPlugin(dir)))
     }
+    await Promise.allSettled(promises)
 
     // Migrate deprecated mode field to agent field
     for (const [name, mode] of Object.entries(result.mode)) {
@@ -95,29 +108,13 @@ export namespace Config {
     if (result.autoshare === true && !result.share) {
       result.share = "auto"
     }
-    if (result.keybinds?.messages_revert && !result.keybinds.messages_undo) {
-      result.keybinds.messages_undo = result.keybinds.messages_revert
-    }
 
     // Handle migration from autoshare to share field
     if (result.autoshare === true && !result.share) {
       result.share = "auto"
     }
-    if (result.keybinds?.messages_revert && !result.keybinds.messages_undo) {
-      result.keybinds.messages_undo = result.keybinds.messages_revert
-    }
-    if (result.keybinds?.switch_mode && !result.keybinds.switch_agent) {
-      result.keybinds.switch_agent = result.keybinds.switch_mode
-    }
-    if (result.keybinds?.switch_mode_reverse && !result.keybinds.switch_agent_reverse) {
-      result.keybinds.switch_agent_reverse = result.keybinds.switch_mode_reverse
-    }
-    if (result.keybinds?.switch_agent && !result.keybinds.agent_cycle) {
-      result.keybinds.agent_cycle = result.keybinds.switch_agent
-    }
-    if (result.keybinds?.switch_agent_reverse && !result.keybinds.agent_cycle_reverse) {
-      result.keybinds.agent_cycle_reverse = result.keybinds.switch_agent_reverse
-    }
+
+    if (!result.keybinds) result.keybinds = Info.shape.keybinds.parse({})
 
     return {
       config: result,
@@ -153,22 +150,34 @@ export namespace Config {
 
     const gitignore = path.join(dir, ".gitignore")
     const hasGitIgnore = await Bun.file(gitignore).exists()
-    if (!hasGitIgnore) await Bun.write(gitignore, ["node_modules", "package.json", "bun.lock", ".gitignore"].join("\n"))
+    if (!hasGitIgnore)
+      await Bun.write(
+        gitignore,
+        ["node_modules", "package.json", "bun.lock", ".gitignore"].join("\n"),
+      )
 
     await BunProc.run(
-      ["add", "@opencode-ai/plugin@" + (Installation.isLocal() ? "latest" : Installation.VERSION), "--exact"],
+      [
+        "add",
+        "@opencode-ai/plugin@" + (Installation.isLocal() ? "latest" : Installation.VERSION),
+        "--exact",
+      ],
       {
         cwd: dir,
       },
-    )
+    ).catch(() => {})
   }
 
   const COMMAND_GLOB = new Bun.Glob("command/**/*.md")
   async function loadCommand(dir: string) {
     const result: Record<string, Command> = {}
-    for await (const item of COMMAND_GLOB.scan({ absolute: true, followSymlinks: true, dot: true, cwd: dir })) {
-      const content = await Bun.file(item).text()
-      const md = matter(content)
+    for await (const item of COMMAND_GLOB.scan({
+      absolute: true,
+      followSymlinks: true,
+      dot: true,
+      cwd: dir,
+    })) {
+      const md = await ConfigMarkdown.parse(item)
       if (!md.data) continue
 
       const name = (() => {
@@ -201,9 +210,13 @@ export namespace Config {
   async function loadAgent(dir: string) {
     const result: Record<string, Agent> = {}
 
-    for await (const item of AGENT_GLOB.scan({ absolute: true, followSymlinks: true, dot: true, cwd: dir })) {
-      const content = await Bun.file(item).text()
-      const md = matter(content)
+    for await (const item of AGENT_GLOB.scan({
+      absolute: true,
+      followSymlinks: true,
+      dot: true,
+      cwd: dir,
+    })) {
+      const md = await ConfigMarkdown.parse(item)
       if (!md.data) continue
 
       // Extract relative path from agent folder for nested agents
@@ -239,9 +252,13 @@ export namespace Config {
   const MODE_GLOB = new Bun.Glob("mode/*.md")
   async function loadMode(dir: string) {
     const result: Record<string, Agent> = {}
-    for await (const item of MODE_GLOB.scan({ absolute: true, followSymlinks: true, dot: true, cwd: dir })) {
-      const content = await Bun.file(item).text()
-      const md = matter(content)
+    for await (const item of MODE_GLOB.scan({
+      absolute: true,
+      followSymlinks: true,
+      dot: true,
+      cwd: dir,
+    })) {
+      const md = await ConfigMarkdown.parse(item)
       if (!md.data) continue
 
       const config = {
@@ -265,7 +282,12 @@ export namespace Config {
   async function loadPlugin(dir: string) {
     const plugins: string[] = []
 
-    for await (const item of PLUGIN_GLOB.scan({ absolute: true, followSymlinks: true, dot: true, cwd: dir })) {
+    for await (const item of PLUGIN_GLOB.scan({
+      absolute: true,
+      followSymlinks: true,
+      dot: true,
+      cwd: dir,
+    })) {
       plugins.push("file://" + item)
     }
     return plugins
@@ -280,6 +302,14 @@ export namespace Config {
         .optional()
         .describe("Environment variables to set when running the MCP server"),
       enabled: z.boolean().optional().describe("Enable or disable the MCP server on startup"),
+      timeout: z
+        .number()
+        .int()
+        .positive()
+        .optional()
+        .describe(
+          "Timeout in ms for fetching tools from the MCP server. Defaults to 5000 (5 seconds) if not specified.",
+        ),
     })
     .strict()
     .meta({
@@ -291,7 +321,18 @@ export namespace Config {
       type: z.literal("remote").describe("Type of MCP server connection"),
       url: z.string().describe("URL of the remote MCP server"),
       enabled: z.boolean().optional().describe("Enable or disable the MCP server on startup"),
-      headers: z.record(z.string(), z.string()).optional().describe("Headers to send with the request"),
+      headers: z
+        .record(z.string(), z.string())
+        .optional()
+        .describe("Headers to send with the request"),
+      timeout: z
+        .number()
+        .int()
+        .positive()
+        .optional()
+        .describe(
+          "Timeout in ms for fetching tools from the MCP server. Defaults to 5000 (5 seconds) if not specified.",
+        ),
     })
     .strict()
     .meta({
@@ -339,72 +380,110 @@ export namespace Config {
 
   export const Keybinds = z
     .object({
-      leader: z.string().optional().default("ctrl+x").describe("Leader key for keybind combinations"),
-      app_help: z.string().optional().default("<leader>h").describe("Show help dialog"),
-      app_exit: z.string().optional().default("ctrl+c,<leader>q").describe("Exit the application"),
-      editor_open: z.string().optional().default("<leader>e").describe("Open external editor"),
-      theme_list: z.string().optional().default("<leader>t").describe("List available themes"),
-      project_init: z.string().optional().default("<leader>i").describe("Create/update AGENTS.md"),
-      tool_details: z.string().optional().default("<leader>d").describe("Toggle tool details"),
-      thinking_blocks: z.string().optional().default("<leader>b").describe("Toggle thinking blocks"),
-      session_export: z.string().optional().default("<leader>x").describe("Export session to editor"),
-      session_new: z.string().optional().default("<leader>n").describe("Create a new session"),
-      session_list: z.string().optional().default("<leader>l").describe("List all sessions"),
-      session_timeline: z.string().optional().default("<leader>g").describe("Show session timeline"),
-      session_share: z.string().optional().default("<leader>s").describe("Share current session"),
-      session_unshare: z.string().optional().default("none").describe("Unshare current session"),
-      session_interrupt: z.string().optional().default("esc").describe("Interrupt current session"),
-      session_compact: z.string().optional().default("<leader>c").describe("Compact the session"),
-      session_child_cycle: z.string().optional().default("ctrl+right").describe("Cycle to next child session"),
-      session_child_cycle_reverse: z
+      leader: z
         .string()
         .optional()
-        .default("ctrl+left")
-        .describe("Cycle to previous child session"),
-      messages_page_up: z.string().optional().default("pgup").describe("Scroll messages up by one page"),
-      messages_page_down: z.string().optional().default("pgdown").describe("Scroll messages down by one page"),
-      messages_half_page_up: z.string().optional().default("ctrl+alt+u").describe("Scroll messages up by half page"),
+        .default("ctrl+x")
+        .describe("Leader key for keybind combinations"),
+      app_exit: z
+        .string()
+        .optional()
+        .default("ctrl+c,ctrl+d,<leader>q")
+        .describe("Exit the application"),
+      editor_open: z.string().optional().default("<leader>e").describe("Open external editor"),
+      theme_list: z.string().optional().default("<leader>t").describe("List available themes"),
+      sidebar_toggle: z.string().optional().default("<leader>b").describe("Toggle sidebar"),
+      status_view: z.string().optional().default("<leader>s").describe("View status"),
+      session_export: z
+        .string()
+        .optional()
+        .default("<leader>x")
+        .describe("Export session to editor"),
+      session_new: z.string().optional().default("<leader>n").describe("Create a new session"),
+      session_list: z.string().optional().default("<leader>l").describe("List all sessions"),
+      session_timeline: z
+        .string()
+        .optional()
+        .default("<leader>g")
+        .describe("Show session timeline"),
+      session_share: z.string().optional().default("none").describe("Share current session"),
+      session_unshare: z.string().optional().default("none").describe("Unshare current session"),
+      session_interrupt: z
+        .string()
+        .optional()
+        .default("escape")
+        .describe("Interrupt current session"),
+      session_compact: z.string().optional().default("<leader>c").describe("Compact the session"),
+      messages_page_up: z
+        .string()
+        .optional()
+        .default("pageup")
+        .describe("Scroll messages up by one page"),
+      messages_page_down: z
+        .string()
+        .optional()
+        .default("pagedown")
+        .describe("Scroll messages down by one page"),
+      messages_half_page_up: z
+        .string()
+        .optional()
+        .default("ctrl+alt+u")
+        .describe("Scroll messages up by half page"),
       messages_half_page_down: z
         .string()
         .optional()
         .default("ctrl+alt+d")
         .describe("Scroll messages down by half page"),
-      messages_first: z.string().optional().default("ctrl+g").describe("Navigate to first message"),
-      messages_last: z.string().optional().default("ctrl+alt+g").describe("Navigate to last message"),
+      messages_first: z
+        .string()
+        .optional()
+        .default("ctrl+g,home")
+        .describe("Navigate to first message"),
+      messages_last: z
+        .string()
+        .optional()
+        .default("ctrl+alt+g,end")
+        .describe("Navigate to last message"),
       messages_copy: z.string().optional().default("<leader>y").describe("Copy message"),
       messages_undo: z.string().optional().default("<leader>u").describe("Undo message"),
       messages_redo: z.string().optional().default("<leader>r").describe("Redo message"),
+      messages_toggle_conceal: z
+        .string()
+        .optional()
+        .default("<leader>h")
+        .describe("Toggle code block concealment in messages"),
       model_list: z.string().optional().default("<leader>m").describe("List available models"),
-      model_cycle_recent: z.string().optional().default("f2").describe("Next recent model"),
-      model_cycle_recent_reverse: z.string().optional().default("shift+f2").describe("Previous recent model"),
+      model_cycle_recent: z.string().optional().default("f2").describe("Next recently used model"),
+      model_cycle_recent_reverse: z
+        .string()
+        .optional()
+        .default("shift+f2")
+        .describe("Previous recently used model"),
+      command_list: z.string().optional().default("ctrl+p").describe("List available commands"),
       agent_list: z.string().optional().default("<leader>a").describe("List agents"),
       agent_cycle: z.string().optional().default("tab").describe("Next agent"),
       agent_cycle_reverse: z.string().optional().default("shift+tab").describe("Previous agent"),
       input_clear: z.string().optional().default("ctrl+c").describe("Clear input field"),
+      input_forward_delete: z.string().optional().default("ctrl+d").describe("Forward delete"),
       input_paste: z.string().optional().default("ctrl+v").describe("Paste from clipboard"),
-      input_submit: z.string().optional().default("enter").describe("Submit input"),
-      input_newline: z.string().optional().default("shift+enter,ctrl+j").describe("Insert newline in input"),
-      // Deprecated commands
-      switch_mode: z.string().optional().default("none").describe("@deprecated use agent_cycle. Next mode"),
-      switch_mode_reverse: z
+      input_submit: z.string().optional().default("return").describe("Submit input"),
+      input_newline: z
         .string()
         .optional()
-        .default("none")
-        .describe("@deprecated use agent_cycle_reverse. Previous mode"),
-      switch_agent: z.string().optional().default("tab").describe("@deprecated use agent_cycle. Next agent"),
-      switch_agent_reverse: z
+        .default("shift+return,ctrl+j")
+        .describe("Insert newline in input"),
+      history_previous: z.string().optional().default("up").describe("Previous history item"),
+      history_next: z.string().optional().default("down").describe("Previous history item"),
+      session_child_cycle: z
         .string()
         .optional()
-        .default("shift+tab")
-        .describe("@deprecated use agent_cycle_reverse. Previous agent"),
-      file_list: z.string().optional().default("none").describe("@deprecated Currently not available. List files"),
-      file_close: z.string().optional().default("none").describe("@deprecated Close file"),
-      file_search: z.string().optional().default("none").describe("@deprecated Search file"),
-      file_diff_toggle: z.string().optional().default("none").describe("@deprecated Split/unified diff"),
-      messages_previous: z.string().optional().default("none").describe("@deprecated Navigate to previous message"),
-      messages_next: z.string().optional().default("none").describe("@deprecated Navigate to next message"),
-      messages_layout_toggle: z.string().optional().default("none").describe("@deprecated Toggle layout"),
-      messages_revert: z.string().optional().default("none").describe("@deprecated use messages_undo. Revert message"),
+        .default("ctrl+right")
+        .describe("Next child session"),
+      session_child_cycle_reverse: z
+        .string()
+        .optional()
+        .default("ctrl+left")
+        .describe("Previous child session"),
     })
     .strict()
     .meta({
@@ -446,13 +525,23 @@ export namespace Config {
       autoshare: z
         .boolean()
         .optional()
-        .describe("@deprecated Use 'share' field instead. Share newly created sessions automatically"),
+        .describe(
+          "@deprecated Use 'share' field instead. Share newly created sessions automatically",
+        ),
       autoupdate: z.boolean().optional().describe("Automatically update to the latest version"),
-      disabled_providers: z.array(z.string()).optional().describe("Disable providers that are loaded automatically"),
-      model: z.string().describe("Model to use in the format of provider/model, eg anthropic/claude-2").optional(),
+      disabled_providers: z
+        .array(z.string())
+        .optional()
+        .describe("Disable providers that are loaded automatically"),
+      model: z
+        .string()
+        .describe("Model to use in the format of provider/model, eg anthropic/claude-2")
+        .optional(),
       small_model: z
         .string()
-        .describe("Small model to use for tasks like title generation in the format of provider/model")
+        .describe(
+          "Small model to use for tasks like title generation in the format of provider/model",
+        )
         .optional(),
       username: z
         .string()
@@ -508,7 +597,10 @@ export namespace Config {
         )
         .optional()
         .describe("Custom provider configurations and model overrides"),
-      mcp: z.record(z.string(), Mcp).optional().describe("MCP (Model Context Protocol) server configurations"),
+      mcp: z
+        .record(z.string(), Mcp)
+        .optional()
+        .describe("MCP (Model Context Protocol) server configurations"),
       formatter: z
         .record(
           z.string(),
@@ -552,7 +644,10 @@ export namespace Config {
             error: "For custom LSP servers, 'extensions' array is required.",
           },
         ),
-      instructions: z.array(z.string()).optional().describe("Additional instruction files or patterns to include"),
+      instructions: z
+        .array(z.string())
+        .optional()
+        .describe("Additional instruction files or patterns to include"),
       layout: Layout.optional().describe("@deprecated Always uses stretch layout."),
       permission: z
         .object({
@@ -586,7 +681,10 @@ export namespace Config {
                 .optional(),
             })
             .optional(),
-          chatMaxRetries: z.number().optional().describe("Number of retries for chat completions on failure"),
+          chatMaxRetries: z
+            .number()
+            .optional()
+            .describe("Number of retries for chat completions on failure"),
           disable_paste_summary: z.boolean().optional(),
         })
         .optional(),
@@ -616,7 +714,10 @@ export namespace Config {
         if (provider && model) result.model = `${provider}/${model}`
         result["$schema"] = "https://opencode.ai/config.json"
         result = mergeDeep(result, rest)
-        await Bun.write(path.join(Global.Path.config, "config.json"), JSON.stringify(result, null, 2))
+        await Bun.write(
+          path.join(Global.Path.config, "config.json"),
+          JSON.stringify(result, null, 2),
+        )
         await fs.unlink(path.join(Global.Path.config, "config"))
       })
       .catch(() => {})
@@ -655,7 +756,9 @@ export namespace Config {
         if (filePath.startsWith("~/")) {
           filePath = path.join(os.homedir(), filePath.slice(2))
         }
-        const resolvedPath = path.isAbsolute(filePath) ? filePath : path.resolve(configDir, filePath)
+        const resolvedPath = path.isAbsolute(filePath)
+          ? filePath
+          : path.resolve(configDir, filePath)
         const fileContent = (
           await Bun.file(resolvedPath)
             .text()
@@ -663,7 +766,10 @@ export namespace Config {
               const errMsg = `bad file reference: "${match}"`
               if (error.code === "ENOENT") {
                 throw new InvalidError(
-                  { path: configFilepath, message: errMsg + ` ${resolvedPath} does not exist` },
+                  {
+                    path: configFilepath,
+                    message: errMsg + ` ${resolvedPath} does not exist`,
+                  },
                   { cause: error },
                 )
               }
@@ -717,7 +823,10 @@ export namespace Config {
       return data
     }
 
-    throw new InvalidError({ path: configFilepath, issues: parsed.error.issues })
+    throw new InvalidError({
+      path: configFilepath,
+      issues: parsed.error.issues,
+    })
   }
   export const JsonError = NamedError.create(
     "ConfigJsonError",

@@ -1,5 +1,4 @@
 import type { McpServer } from "@agentclientprotocol/sdk"
-import { Identifier } from "../id/id"
 import { Session } from "../session"
 import { Provider } from "../provider/provider"
 import type { ACPSessionState } from "./types"

@@ -1,0 +1,44 @@
+[data-component="markdown"] {
+  min-width: 0;
+  max-width: 100%;
+  overflow: auto;
+  scrollbar-width: none;
+  color: var(--text-base);
+  text-wrap: pretty;
+
+  /* text-12-regular */
+  font-family: var(--font-family-sans);
+  font-size: var(--font-size-small);
+  font-style: normal;
+  font-weight: var(--font-weight-regular);
+  line-height: var(--line-height-large); /* 166.667% */
+  letter-spacing: var(--letter-spacing-normal);
+
+  &::-webkit-scrollbar {
+    display: none;
+  }
+
+  h1,
+  h2,
+  h3 {
+    margin-top: 16px;
+    margin-bottom: 8px;
+    font-weight: var(--font-weight-medium);
+  }
+
+  p {
+    margin-bottom: 8px;
+  }
+
+  ul,
+  ol {
+    margin-top: 16px;
+    margin-bottom: 16px;
+  }
+
+  hr {
+    margin-top: 8px;
+    margin-bottom: 16px;
+    border-color: var(--border-weaker-base);
+  }
+}

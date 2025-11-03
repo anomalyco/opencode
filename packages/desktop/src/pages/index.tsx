@@ -9,9 +9,14 @@ import {
   Accordion,
   Diff,
   Collapsible,
+  DiffChanges,
+  ProgressCircle,
+  Message,
+  Typewriter,
 } from "@opencode-ai/ui"
 import { FileIcon } from "@/ui"
 import FileTree from "@/components/file-tree"
+import { MessageProgress } from "@/components/message-progress"
 import { For, onCleanup, onMount, Show, Match, Switch, createSignal, createEffect, createMemo } from "solid-js"
 import { useLocal, type LocalFile } from "@/context/local"
 import { createStore } from "solid-js/store"
@@ -32,10 +37,9 @@ import type { JSX } from "solid-js"
 import { Code } from "@/components/code"
 import { useSync } from "@/context/sync"
 import { useSDK } from "@/context/sdk"
-import { ProgressCircle } from "@/components/progress-circle"
-import { AssistantMessage } from "@/components/assistant-message"
 import { type AssistantMessage as AssistantMessageType } from "@opencode-ai/sdk"
-import { DiffChanges } from "@/components/diff-changes"
+import { Markdown } from "@opencode-ai/ui"
+import { Spinner } from "@/components/spinner"
 
 export default function Page() {
   const local = useLocal()
@@ -50,10 +54,11 @@ export default function Page() {
   const [activeItem, setActiveItem] = createSignal<string | undefined>(undefined)
 
   createEffect(() => {
-    if (!local.session.activeMessage()) return
-    if (!messageScrollElement) return
-    const element = messageScrollElement.querySelector(`[data-message="${local.session.activeMessage()?.id}"]`)
-    element?.scrollIntoView({ block: "start", behavior: "instant" })
+    // Set first message as active if none selected
+    const userMessages = local.session.userMessages()
+    if (userMessages.length > 0 && !local.session.activeMessage()) {
+      local.session.setActiveMessage(userMessages[0].id)
+    }
   })
 
   const MOD = typeof navigator === "object" && /(Mac|iPod|iPhone|iPad)/.test(navigator.platform) ? "Meta" : "Control"
@@ -178,6 +183,8 @@ export default function Page() {
   }
 
   const handleDiffTriggerClick = (event: MouseEvent) => {
+    // disabling scroll to diff for now
+    return
     const target = event.currentTarget as HTMLElement
     queueMicrotask(() => {
       if (target.getAttribute("aria-expanded") !== "true") return
@@ -196,6 +203,7 @@ export default function Page() {
     }
     if (!session) return
 
+    local.session.setActive(session.id)
     const toAbsolutePath = (path: string) => (path.startsWith("/") ? path : sync.absolute(path))
 
     const text = parts.map((part) => part.content).join("")
@@ -257,7 +265,6 @@ export default function Page() {
         ],
       },
     })
-    local.session.setActive(session.id)
   }
 
   const handleNewSession = () => {
@@ -268,7 +275,7 @@ export default function Page() {
   const TabVisual = (props: { file: LocalFile }): JSX.Element => {
     return (
       <div class="flex items-center gap-x-1.5">
-        <FileIcon node={props.file} class="_grayscale-100" />
+        <FileIcon node={props.file} class="grayscale-100 group-data-[selected]/tab:grayscale-0" />
         <span
           classList={{
             "text-14-medium": true,
@@ -307,15 +314,21 @@ export default function Page() {
       <div use:sortable classList={{ "h-full": true, "opacity-0": sortable.isActiveDraggable }}>
         <Tooltip value={props.file.path} placement="bottom" class="h-full">
           <div class="relative h-full">
-            <Tabs.Trigger value={props.file.path} class="peer/tab pr-7" onClick={() => props.onTabClick(props.file)}>
+            <Tabs.Trigger
+              value={props.file.path}
+              class="group/tab pl-3 pr-1"
+              onClick={() => props.onTabClick(props.file)}
+            >
               <TabVisual file={props.file} />
+              <IconButton
+                icon="close"
+                class="mt-0.5 opacity-0 text-text-muted/60 group-data-[selected]/tab:opacity-100
+                       group-data-[selected]/tab:text-text group-data-[selected]/tab:hover:bg-border-subtle
+                       hover:opacity-100 group-hover/tab:opacity-100"
+                variant="ghost"
+                onClick={() => props.onTabClose(props.file)}
+              />
             </Tabs.Trigger>
-            <IconButton
-              icon="close"
-              class="absolute right-1 top-1.5 opacity-0 text-text-muted/60 peer-data-[selected]/tab:opacity-100 peer-data-[selected]/tab:text-text peer-data-[selected]/tab:hover:bg-border-subtle hover:opacity-100 peer-hover/tab:opacity-100"
-              variant="ghost"
-              onClick={() => props.onTabClose(props.file)}
-            />
           </div>
         </Tooltip>
       </div>
@@ -374,6 +387,7 @@ export default function Page() {
               {(session) => {
                 const diffs = createMemo(() => session.summary?.diffs ?? [])
                 const filesChanged = createMemo(() => diffs().length)
+                const updated = DateTime.fromMillis(session.time.updated)
                 return (
                   <Tooltip placement="right" value={session.title}>
                     <div>
@@ -382,7 +396,14 @@ export default function Page() {
                           {session.title}
                         </span>
                         <span class="text-12-regular text-text-weak text-right whitespace-nowrap">
-                          {DateTime.fromMillis(session.time.updated).toRelative()}
+                          {Math.abs(updated.diffNow().as("seconds")) < 60
+                            ? "Now"
+                            : updated
+                                .toRelative({ style: "short", unit: ["days", "hours", "minutes"] })
+                                ?.replace(" ago", "")
+                                ?.replace(/ days?/, "d")
+                                ?.replace(" min.", "m")
+                                ?.replace(" hr.", "h")}
                         </span>
                       </div>
                       <div class="flex justify-between items-center self-stretch">
@@ -489,12 +510,12 @@ export default function Page() {
                   </Show>
                 </div>
               </div>
-              <Tabs.Content value="chat" class="select-text flex flex-col flex-1 min-h-0 overflow-y-hidden">
-                <div class="px-6 pt-12 max-w-[904px] w-full mx-auto flex flex-col flex-1 min-h-0">
+              <Tabs.Content value="chat" class="@container select-text flex flex-col flex-1 min-h-0 overflow-y-hidden">
+                <div class="relative px-6 pt-12 max-w-2xl w-full mx-auto flex flex-col flex-1 min-h-0">
                   <Show
                     when={local.session.active()}
                     fallback={
-                      <div class="flex flex-col pb-36 justify-end items-start gap-4 flex-[1_0_0] self-stretch">
+                      <div class="flex flex-col pb-45 justify-end items-start gap-4 flex-[1_0_0] self-stretch">
                         <div class="text-20-medium text-text-weaker">New session</div>
                         <div class="flex justify-center items-center gap-3">
                           <Icon name="folder" size="small" />
@@ -517,115 +538,115 @@ export default function Page() {
                   >
                     {(activeSession) => (
                       <div class="pt-3 flex flex-col flex-1 min-h-0">
-                        <div class="flex items-start gap-8 flex-1 min-h-0">
+                        <div class="flex-1 min-h-0">
                           <Show when={local.session.userMessages().length > 1}>
-                            <ul role="list" class="w-60 shrink-0 flex flex-col items-start gap-1">
+                            <ul
+                              role="list"
+                              class="absolute right-full mr-8 hidden w-60 shrink-0 @7xl:flex flex-col items-start gap-1"
+                            >
                               <For each={local.session.userMessages()}>
                                 {(message) => {
-                                  const countLines = (text: string) => {
-                                    if (!text) return 0
-                                    return text.split("\n").length
-                                  }
-
-                                  const additions = createMemo(
-                                    () =>
-                                      message.summary?.diffs.reduce((acc, diff) => acc + (diff.additions ?? 0), 0) ?? 0,
+                                  const diffs = createMemo(() => message.summary?.diffs ?? [])
+                                  const working = createMemo(() => !message.summary?.body)
+                                  const assistantMessages = createMemo(() => {
+                                    return sync.data.message[activeSession().id]?.filter(
+                                      (m) => m.role === "assistant" && m.parentID == message.id,
+                                    ) as AssistantMessageType[]
+                                  })
+                                  const parts = createMemo(() =>
+                                    assistantMessages().flatMap((m) => sync.data.part[m.id]),
                                   )
+                                  const lastPart = createMemo(() => parts().slice(-1)?.at(0))
+                                  const rawStatus = createMemo(() => {
+                                    const defaultStatus = "Working..."
+                                    const last = lastPart()
+                                    if (!last) return defaultStatus
 
-                                  const deletions = createMemo(
-                                    () =>
-                                      message.summary?.diffs.reduce((acc, diff) => acc + (diff.deletions ?? 0), 0) ?? 0,
-                                  )
-
-                                  const totalBeforeLines = createMemo(
-                                    () =>
-                                      message.summary?.diffs.reduce((acc, diff) => acc + countLines(diff.before), 0) ??
-                                      0,
-                                  )
-
-                                  const blockCounts = createMemo(() => {
-                                    const TOTAL_BLOCKS = 5
-
-                                    const adds = additions()
-                                    const dels = deletions()
-                                    const unchanged = Math.max(0, totalBeforeLines() - dels)
-
-                                    const totalActivity = unchanged + adds + dels
-
-                                    if (totalActivity === 0) {
-                                      return { added: 0, deleted: 0, neutral: TOTAL_BLOCKS }
-                                    }
-
-                                    const percentAdded = adds / totalActivity
-                                    const percentDeleted = dels / totalActivity
-                                    const added_raw = percentAdded * TOTAL_BLOCKS
-                                    const deleted_raw = percentDeleted * TOTAL_BLOCKS
-
-                                    let added = adds > 0 ? Math.ceil(added_raw) : 0
-                                    let deleted = dels > 0 ? Math.ceil(deleted_raw) : 0
-
-                                    let total_allocated = added + deleted
-                                    if (total_allocated > TOTAL_BLOCKS) {
-                                      if (added_raw < deleted_raw) {
-                                        added = Math.floor(added_raw)
-                                      } else {
-                                        deleted = Math.floor(deleted_raw)
+                                    if (last.type === "tool") {
+                                      switch (last.tool) {
+                                        case "task":
+                                          return "Delegating work..."
+                                        case "todowrite":
+                                        case "todoread":
+                                          return "Planning next steps..."
+                                        case "read":
+                                          return "Gathering context..."
+                                        case "list":
+                                        case "grep":
+                                        case "glob":
+                                          return "Searching the codebase..."
+                                        case "webfetch":
+                                          return "Searching the web..."
+                                        case "edit":
+                                        case "write":
+                                          return "Making edits..."
+                                        case "bash":
+                                          return "Running commands..."
+                                        default:
+                                          break
                                       }
-
-                                      total_allocated = added + deleted
-                                      if (total_allocated > TOTAL_BLOCKS) {
-                                        if (added_raw < deleted_raw) {
-                                          deleted = Math.floor(deleted_raw)
-                                        } else {
-                                          added = Math.floor(added_raw)
-                                        }
-                                      }
+                                    } else if (last.type === "reasoning") {
+                                      return "Thinking..."
+                                    } else if (last.type === "text") {
+                                      return "Gathering thoughts..."
                                     }
-
-                                    const neutral = Math.max(0, TOTAL_BLOCKS - added - deleted)
-
-                                    return { added, deleted, neutral }
+                                    return defaultStatus
                                   })
 
-                                  const ADD_COLOR = "var(--icon-diff-add-base)"
-                                  const DELETE_COLOR = "var(--icon-diff-delete-base)"
-                                  const NEUTRAL_COLOR = "var(--icon-weak-base)"
+                                  const [status, setStatus] = createSignal(rawStatus())
+                                  let lastStatusChange = Date.now()
+                                  let statusTimeout: number | undefined
 
-                                  const visibleBlocks = createMemo(() => {
-                                    const counts = blockCounts()
-                                    const blocks = [
-                                      ...Array(counts.added).fill(ADD_COLOR),
-                                      ...Array(counts.deleted).fill(DELETE_COLOR),
-                                      ...Array(counts.neutral).fill(NEUTRAL_COLOR),
-                                    ]
-                                    return blocks.slice(0, 5)
+                                  createEffect(() => {
+                                    const newStatus = rawStatus()
+                                    if (newStatus === status()) return
+
+                                    const timeSinceLastChange = Date.now() - lastStatusChange
+
+                                    if (timeSinceLastChange >= 1000) {
+                                      setStatus(newStatus)
+                                      lastStatusChange = Date.now()
+                                      if (statusTimeout) {
+                                        clearTimeout(statusTimeout)
+                                        statusTimeout = undefined
+                                      }
+                                    } else {
+                                      if (statusTimeout) clearTimeout(statusTimeout)
+                                      statusTimeout = setTimeout(() => {
+                                        setStatus(rawStatus())
+                                        lastStatusChange = Date.now()
+                                        statusTimeout = undefined
+                                      }, 1000 - timeSinceLastChange) as unknown as number
+                                    }
                                   })
 
                                   return (
-                                    <li
-                                      class="group/li flex items-center gap-x-2 py-1 self-stretch cursor-default"
-                                      onClick={() => local.session.setActiveMessage(message.id)}
-                                    >
-                                      <div class="w-[18px] shrink-0">
-                                        <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 18 12" fill="none">
-                                          <g>
-                                            <For each={visibleBlocks()}>
-                                              {(color, i) => (
-                                                <rect x={i() * 4} width="2" height="12" rx="1" fill={color} />
-                                              )}
-                                            </For>
-                                          </g>
-                                        </svg>
-                                      </div>
-                                      <div
-                                        data-active={local.session.activeMessage()?.id === message.id}
-                                        classList={{
-                                          "text-14-regular text-text-weak whitespace-nowrap truncate min-w-0": true,
-                                          "text-text-weak data-[active=true]:text-text-strong group-hover/li:text-text-base": true,
-                                        }}
+                                    <li class="group/li flex items-center self-stretch">
+                                      <button
+                                        class="flex items-center self-stretch w-full gap-x-2 py-1 cursor-default"
+                                        onClick={() => local.session.setActiveMessage(message.id)}
                                       >
-                                        {message.summary?.title ?? local.session.getMessageText(message)}
-                                      </div>
+                                        <Switch>
+                                          <Match when={working()}>
+                                            <Spinner class="text-text-base shrink-0 w-[18px] aspect-square" />
+                                          </Match>
+                                          <Match when={true}>
+                                            <DiffChanges diff={diffs()} variant="bars" />
+                                          </Match>
+                                        </Switch>
+                                        <div
+                                          data-active={local.session.activeMessage()?.id === message.id}
+                                          classList={{
+                                            "text-14-regular text-text-weak whitespace-nowrap truncate min-w-0": true,
+                                            "text-text-weak data-[active=true]:text-text-strong group-hover/li:text-text-base": true,
+                                          }}
+                                        >
+                                          <Switch>
+                                            <Match when={working()}>{status()}</Match>
+                                            <Match when={true}>{message.summary?.title}</Match>
+                                          </Switch>
+                                        </div>
+                                      </button>
                                     </li>
                                   )
                                 }}
@@ -633,78 +654,85 @@ export default function Page() {
                             </ul>
                           </Show>
                           <div ref={messageScrollElement} class="grow min-w-0 h-full overflow-y-auto no-scrollbar">
-                            <div class="flex flex-col items-start gap-50 pb-50">
-                              <For each={local.session.userMessages()}>
-                                {(message) => {
-                                  const title = createMemo(() => message.summary?.title)
-                                  const prompt = createMemo(() => local.session.getMessageText(message))
-                                  const summary = createMemo(() => message.summary?.body)
-                                  const assistantMessages = createMemo(() => {
-                                    return sync.data.message[activeSession().id]?.filter(
-                                      (m) => m.role === "assistant" && m.parentID == message.id,
-                                    ) as AssistantMessageType[]
-                                  })
-                                  const working = createMemo(() => {
-                                    const last = assistantMessages()[assistantMessages().length - 1]
-                                    if (!last) return false
-                                    return !last.time.completed
-                                  })
-                                  const lastWithContent = createMemo(() =>
-                                    assistantMessages().findLast((m) => {
-                                      const parts = sync.data.part[m.id]
-                                      return parts?.find((p) => p.type === "text" || p.type === "tool")
-                                    }),
-                                  )
+                            <For each={local.session.userMessages()}>
+                              {(message) => {
+                                const isActive = createMemo(() => local.session.activeMessage()?.id === message.id)
+                                const [titled, setTitled] = createSignal(!!message.summary?.title)
+                                const [completed, setCompleted] = createSignal(!!message.summary?.body)
+                                const [expanded, setExpanded] = createSignal(false)
+                                const parts = createMemo(() => sync.data.part[message.id])
+                                const title = createMemo(() => message.summary?.title)
+                                const summary = createMemo(() => message.summary?.body)
+                                const diffs = createMemo(() => message.summary?.diffs ?? [])
+                                const assistantMessages = createMemo(() => {
+                                  return sync.data.message[activeSession().id]?.filter(
+                                    (m) => m.role === "assistant" && m.parentID == message.id,
+                                  ) as AssistantMessageType[]
+                                })
+                                const hasToolPart = createMemo(() =>
+                                  assistantMessages()
+                                    ?.flatMap((m) => sync.data.part[m.id])
+                                    .some((p) => p?.type === "tool"),
+                                )
+                                const working = createMemo(() => !summary())
 
-                                  return (
-                                    <div data-message={message.id} class="flex flex-col items-start self-stretch gap-8">
+                                // allowing time for the animations to finish
+                                createEffect(() => {
+                                  title()
+                                  setTimeout(() => setTitled(!!title()), 10_000)
+                                })
+                                createEffect(() => {
+                                  summary()
+                                  setTimeout(() => setCompleted(!!summary()), 1200)
+                                })
+
+                                return (
+                                  <Show when={isActive()}>
+                                    <div
+                                      data-message={message.id}
+                                      class="flex flex-col items-start self-stretch gap-8 pb-50"
+                                    >
                                       {/* Title */}
-                                      <div class="py-2 flex flex-col items-start gap-2 self-stretch sticky top-0 bg-background-stronger">
-                                        <h1 class="text-14-medium text-text-strong overflow-hidden text-ellipsis min-w-0">
-                                          {title() ?? prompt()}
-                                        </h1>
+                                      <div class="py-2 flex flex-col items-start gap-2 self-stretch sticky top-0 bg-background-stronger z-10">
+                                        <div class="w-full text-14-medium text-text-strong">
+                                          <Show
+                                            when={titled()}
+                                            fallback={
+                                              <Typewriter
+                                                as="h1"
+                                                text={title()}
+                                                class="overflow-hidden text-ellipsis min-w-0 text-nowrap"
+                                              />
+                                            }
+                                          >
+                                            <h1 class="overflow-hidden text-ellipsis min-w-0 text-nowrap">{title()}</h1>
+                                          </Show>
+                                        </div>
                                       </div>
-                                      <Show when={title}>
-                                        <div class="-mt-5 text-12-regular text-text-base line-clamp-3">{prompt()}</div>
-                                      </Show>
-                                      {/* Response */}
-                                      <div class="w-full flex flex-col gap-2">
-                                        <Collapsible variant="ghost">
-                                          <Collapsible.Trigger class="text-text-weak hover:text-text-strong">
-                                            <div class="flex items-center gap-1 self-stretch">
-                                              <h2 class="text-12-medium">Show steps</h2>
-                                              <Collapsible.Arrow />
-                                            </div>
-                                          </Collapsible.Trigger>
-                                          <Collapsible.Content>
-                                            <div class="w-full flex flex-col items-start self-stretch gap-8">
-                                              <For each={assistantMessages()}>
-                                                {(assistantMessage) => {
-                                                  const parts = createMemo(() => sync.data.part[assistantMessage.id])
-                                                  return <AssistantMessage message={assistantMessage} parts={parts()} />
-                                                }}
-                                              </For>
-                                            </div>
-                                          </Collapsible.Content>
-                                        </Collapsible>
-                                        <Show when={working() && lastWithContent()}>
-                                          {(last) => {
-                                            const lastParts = createMemo(() => sync.data.part[last().id])
-                                            return (
-                                              <AssistantMessage lastToolOnly message={last()} parts={lastParts()} />
-                                            )
-                                          }}
-                                        </Show>
+                                      <div class="-mt-8">
+                                        <Message message={message} parts={parts()} />
                                       </div>
                                       {/* Summary */}
-                                      <Show when={!working()}>
+                                      <Show when={completed()}>
                                         <div class="w-full flex flex-col gap-6 items-start self-stretch">
                                           <div class="flex flex-col items-start gap-1 self-stretch">
-                                            <h2 class="text-12-medium text-text-weak">Summary</h2>
-                                            <div class="text-14-regular text-text-base self-stretch">{summary()}</div>
+                                            <h2 class="text-12-medium text-text-weak">
+                                              <Switch>
+                                                <Match when={diffs().length}>Summary</Match>
+                                                <Match when={true}>Response</Match>
+                                              </Switch>
+                                            </h2>
+                                            <Show when={summary()}>
+                                              {(summary) => (
+                                                <Markdown
+                                                  classList={{ "[&>*]:fade-up-text": !diffs().length }}
+                                                  text={summary()}
+                                                />
+                                              )}
+                                            </Show>
                                           </div>
                                           <Accordion class="w-full" multiple>
-                                            <For each={message.summary?.diffs || []}>
+                                            <For each={diffs()}>
                                               {(diff) => (
                                                 <Accordion.Item value={diff.file}>
                                                   <Accordion.Header>
@@ -751,11 +779,46 @@ export default function Page() {
                                           </Accordion>
                                         </div>
                                       </Show>
+                                      {/* Response */}
+                                      <div class="w-full">
+                                        <Switch>
+                                          <Match when={!completed()}>
+                                            <MessageProgress assistantMessages={assistantMessages} done={!working()} />
+                                          </Match>
+                                          <Match when={completed() && hasToolPart()}>
+                                            <Collapsible variant="ghost" open={expanded()} onOpenChange={setExpanded}>
+                                              <Collapsible.Trigger class="text-text-weak hover:text-text-strong">
+                                                <div class="flex items-center gap-1 self-stretch">
+                                                  <div class="text-12-medium">
+                                                    <Switch>
+                                                      <Match when={expanded()}>Hide details</Match>
+                                                      <Match when={!expanded()}>Show details</Match>
+                                                    </Switch>
+                                                  </div>
+                                                  <Collapsible.Arrow />
+                                                </div>
+                                              </Collapsible.Trigger>
+                                              <Collapsible.Content>
+                                                <div class="w-full flex flex-col items-start self-stretch gap-3">
+                                                  <For each={assistantMessages()}>
+                                                    {(assistantMessage) => {
+                                                      const parts = createMemo(
+                                                        () => sync.data.part[assistantMessage.id],
+                                                      )
+                                                      return <Message message={assistantMessage} parts={parts()} />
+                                                    }}
+                                                  </For>
+                                                </div>
+                                              </Collapsible.Content>
+                                            </Collapsible>
+                                          </Match>
+                                        </Switch>
+                                      </div>
                                     </div>
-                                  )
-                                }}
-                              </For>
-                            </div>
+                                  </Show>
+                                )
+                              }}
+                            </For>
                           </div>
                         </div>
                       </div>
@@ -784,21 +847,14 @@ export default function Page() {
                 const draggedFile = local.file.node(id)
                 if (!draggedFile) return null
                 return (
-                  <div class="relative px-3 h-8 flex items-center text-sm font-medium text-text whitespace-nowrap shrink-0 bg-background-panel border-x border-border-subtle/40 border-b border-b-transparent">
+                  <div class="relative px-3 h-10 flex items-center bg-background-base border-x border-border-weak-base border-b border-b-transparent">
                     <TabVisual file={draggedFile} />
                   </div>
                 )
               })()}
             </DragOverlay>
           </DragDropProvider>
-          <div
-            classList={{
-              "absolute inset-x-0 px-6 max-w-[904px] flex flex-col justify-center items-center z-50 mx-auto": true,
-              "bottom-8": true,
-              // "bottom-8": !!local.session.active(),
-              // "bottom-1/2 translate-y-1/2": !local.session.active(),
-            }}
-          >
+          <div class="absolute inset-x-0 px-6 max-w-2xl flex flex-col justify-center items-center z-50 mx-auto bottom-8">
             <PromptInput
               ref={(el) => {
                 inputRef = el

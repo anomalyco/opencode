@@ -95,7 +95,7 @@ export interface CommonUsage {
 }
 
 export interface CommonRequest {
-  model?: string
+  model: string
   max_tokens?: number
   temperature?: number
   top_p?: number

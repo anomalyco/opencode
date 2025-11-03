@@ -219,8 +219,8 @@ export default function Home() {
               <div>
                 <span>[*]</span>
                 <p>
-                  With over <strong>26,000</strong> GitHub stars, <strong>188</strong> contributors, and almost{" "}
-                  <strong>3,000</strong> commits, OpenCode is used and trusted by over <strong>200,000</strong>{" "}
+                  With over <strong>29,000</strong> GitHub stars, <strong>230</strong> contributors, and almost{" "}
+                  <strong>3,500</strong> commits, OpenCode is used and trusted by over <strong>250,000</strong>{" "}
                   developers every month.
                 </p>
               </div>
@@ -274,7 +274,7 @@ export default function Home() {
                     </svg>
                   </div>
                   <span>
-                    <figure>Fig 1.</figure> <strong>26K</strong> GitHub Stars
+                    <figure>Fig 1.</figure> <strong>29K</strong> GitHub Stars
                   </span>
                 </div>
 
@@ -577,7 +577,7 @@ export default function Home() {
                     </svg>
                   </div>
                   <span>
-                    <figure>Fig 2.</figure> <strong>188</strong> Contributors
+                    <figure>Fig 2.</figure> <strong>230</strong> Contributors
                   </span>
                 </div>
 
@@ -619,7 +619,7 @@ export default function Home() {
                     </svg>
                   </div>
                   <span>
-                    <figure>Fig 3.</figure> <strong>200K</strong> Monthly Devs
+                    <figure>Fig 3.</figure> <strong>250K</strong> Monthly Devs
                   </span>
                 </div>
               </div>

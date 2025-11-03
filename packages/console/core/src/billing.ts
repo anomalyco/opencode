@@ -13,7 +13,9 @@ export namespace Billing {
   export const CHARGE_NAME = "opencode credits"
   export const CHARGE_FEE_NAME = "processing fee"
   export const CHARGE_AMOUNT = 2000 // $20
+  export const CHARGE_AMOUNT_DOLLAR = 20
   export const CHARGE_FEE = 123 // Stripe fee 4.4% + $0.30
+  export const CHARGE_THRESHOLD_DOLLAR = 5
   export const CHARGE_THRESHOLD = 500 // $5
   export const stripe = () =>
     new Stripe(Resource.STRIPE_SECRET_KEY.value, {
@@ -140,17 +142,6 @@ export namespace Billing {
         customerID,
       })
     })
-  }
-
-  export const disableReload = async () => {
-    return await Database.use((tx) =>
-      tx
-        .update(BillingTable)
-        .set({
-          reload: false,
-        })
-        .where(eq(BillingTable.workspaceID, Actor.workspace())),
-    )
   }
 
   export const setMonthlyLimit = fn(z.number(), async (input) => {

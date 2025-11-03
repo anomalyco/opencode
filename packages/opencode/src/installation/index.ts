@@ -142,7 +142,9 @@ export namespace Installation {
   export const USER_AGENT = `opencode/${CHANNEL}/${VERSION}`
 
   export async function latest() {
-    return fetch(`https://registry.npmjs.org/opencode-ai/${CHANNEL}`)
+    const [major] = VERSION.split(".").map((x) => Number(x))
+    const channel = CHANNEL === "latest" ? `latest-${major}` : CHANNEL
+    return fetch(`https://registry.npmjs.org/opencode-ai/${channel}`)
       .then((res) => {
         if (!res.ok) throw new Error(res.statusText)
         return res.json()

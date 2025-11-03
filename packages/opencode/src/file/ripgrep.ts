@@ -367,6 +367,7 @@ export namespace Ripgrep {
       args.push(`--max-count=${input.limit}`)
     }
 
+    args.push("--")
     args.push(input.pattern)
 
     const command = args.join(" ")

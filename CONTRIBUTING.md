@@ -17,6 +17,7 @@ If you are unsure if a PR would be accepted, feel free to ask a maintainer or lo
 - [`help wanted`](https://github.com/sst/opencode/issues?q=is%3Aissue%20state%3Aopen%20label%3Ahelp-wanted)
 - [`good first issue`](https://github.com/sst/opencode/issues?q=is%3Aissue%20state%3Aopen%20label%3A%22good%20first%20issue%22)
 - [`bug`](https://github.com/sst/opencode/issues?q=is%3Aissue%20state%3Aopen%20label%3Abug)
+- [`perf`](https://github.com/sst/opencode/issues?q=is%3Aopen%20is%3Aissue%20label%3A%22perf%22)
 
 > [!NOTE]
 > PRs that ignore these guardrails will likely be closed.
@@ -25,7 +26,7 @@ Want to take on an issue? Leave a comment and a maintainer may assign it to you 
 
 ## Developing OpenCode
 
-- Requirements: Bun 1.3+, Go 1.24.x.
+- Requirements: Bun 1.3+
 - Install dependencies and start the dev server from the repo root:
 
   ```bash
@@ -35,11 +36,11 @@ Want to take on an issue? Leave a comment and a maintainer may assign it to you 
 
 - Core pieces:
   - `packages/opencode`: OpenCode core business logic & server.
-  - `packages/tui`: The TUI code, written in Go (will be removed soon in favor of [opentui](https://github.com/sst/opentui))
+  - `packages/opencode/src/cli/cmd/tui/`: The TUI code, written in SolidJS with [opentui](https://github.com/sst/opentui)
   - `packages/plugin`: Source for `@opencode-ai/plugin`
 
 > [!NOTE]
-> After touching `packages/opencode/src/server/server.ts`, the OpenCode team must regenerate the Stainless SDK before any client updates merge.
+> After touching `packages/opencode/src/server/server.ts`, run "./packages/sdk/js/script/build.ts" to regenerate the JS sdk.
 
 ## Pull Request Expectations
 

@@ -6,10 +6,11 @@ import { generateText, type ModelMessage } from "ai"
 import { MessageV2 } from "./message-v2"
 import { Identifier } from "@/id/id"
 import { Snapshot } from "@/snapshot"
-
 import { ProviderTransform } from "@/provider/transform"
 import { SystemPrompt } from "./system"
 import { Log } from "@/util/log"
+import path from "path"
+import { Instance } from "@/project/instance"
 
 export namespace SessionSummary {
   const log = Log.create({ service: "session.summary" })
@@ -29,7 +30,18 @@ export namespace SessionSummary {
   )
 
   async function summarizeSession(input: { sessionID: string; messages: MessageV2.WithParts[] }) {
-    const diffs = await computeDiff({ messages: input.messages })
+    const files = new Set(
+      input.messages
+        .flatMap((x) => x.parts)
+        .filter((x) => x.type === "patch")
+        .flatMap((x) => x.files)
+        .map((x) => path.relative(Instance.worktree, x)),
+    )
+    const diffs = await computeDiff({ messages: input.messages }).then((x) =>
+      x.filter((x) => {
+        return files.has(x.file)
+      }),
+    )
     await Session.update(input.sessionID, (draft) => {
       draft.summary = {
         diffs,
@@ -39,7 +51,9 @@ export namespace SessionSummary {
 
   async function summarizeMessage(input: { messageID: string; messages: MessageV2.WithParts[] }) {
     const messages = input.messages.filter(
-      (m) => m.info.id === input.messageID || (m.info.role === "assistant" && m.info.parentID === input.messageID),
+      (m) =>
+        m.info.id === input.messageID ||
+        (m.info.role === "assistant" && m.info.parentID === input.messageID),
     )
     const msgWithParts = messages.find((m) => m.info.id === input.messageID)!
     const userMsg = msgWithParts.info as MessageV2.User
@@ -50,11 +64,14 @@ export namespace SessionSummary {
     }
     await Session.updateMessage(userMsg)
 
-    const assistantMsg = messages.find((m) => m.info.role === "assistant")!.info as MessageV2.Assistant
+    const assistantMsg = messages.find((m) => m.info.role === "assistant")!
+      .info as MessageV2.Assistant
     const small = await Provider.getSmallModel(assistantMsg.providerID)
     if (!small) return
 
-    const textPart = msgWithParts.parts.find((p) => p.type === "text" && !p.synthetic) as MessageV2.TextPart
+    const textPart = msgWithParts.parts.find(
+      (p) => p.type === "text" && !p.synthetic,
+    ) as MessageV2.TextPart
     if (textPart && !userMsg.summary?.title) {
       const result = await generateText({
         maxOutputTokens: small.info.reasoning ? 1500 : 20,
@@ -68,9 +85,15 @@ export namespace SessionSummary {
           ),
           {
             role: "user" as const,
-            content: textPart?.text ?? "",
+            content: `
+              The following is the text to summarize:
+              <text>
+              ${textPart?.text ?? ""}
+              </text>
+            `,
           },
         ],
+        headers: small.info.headers,
         model: small.language,
       })
       log.info("title", { title: result.text })
@@ -81,26 +104,34 @@ export namespace SessionSummary {
     if (
       messages.some(
         (m) =>
-          m.info.role === "assistant" && m.parts.some((p) => p.type === "step-finish" && p.reason !== "tool-calls"),
+          m.info.role === "assistant" &&
+          m.parts.some((p) => p.type === "step-finish" && p.reason !== "tool-calls"),
       )
     ) {
-      const result = await generateText({
-        model: small.language,
-        maxOutputTokens: 100,
-        messages: [
-          {
-            role: "user",
-            content: `
+      let summary = messages
+        .findLast((m) => m.info.role === "assistant")
+        ?.parts.findLast((p) => p.type === "text")?.text
+      if (!summary || diffs.length > 0) {
+        const result = await generateText({
+          model: small.language,
+          maxOutputTokens: 100,
+          messages: [
+            {
+              role: "user",
+              content: `
             Summarize the following conversation into 2 sentences MAX explaining what the assistant did and why. Do not explain the user's input. Do not speak in the third person about the assistant.
             <conversation>
             ${JSON.stringify(MessageV2.toModelMessage(messages))}
             </conversation>
             `,
-          },
-        ],
-      })
-      userMsg.summary.body = result.text
-      log.info("body", { body: result.text })
+            },
+          ],
+          headers: small.info.headers,
+        }).catch(() => {})
+        if (result) summary = result.text
+      }
+      userMsg.summary.body = summary
+      log.info("body", { body: summary })
       await Session.updateMessage(userMsg)
     }
   }
@@ -114,7 +145,9 @@ export namespace SessionSummary {
       let all = await Session.messages(input.sessionID)
       if (input.messageID)
         all = all.filter(
-          (x) => x.info.id === input.messageID || (x.info.role === "assistant" && x.info.parentID === input.messageID),
+          (x) =>
+            x.info.id === input.messageID ||
+            (x.info.role === "assistant" && x.info.parentID === input.messageID),
         )
 
       return computeDiff({

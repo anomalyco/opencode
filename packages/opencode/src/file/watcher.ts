@@ -63,7 +63,8 @@ export namespace FileWatcher {
       return { sub }
     },
     async (state) => {
-      state.sub?.unsubscribe()
+      if (!state.sub) return
+      await state.sub?.unsubscribe()
     },
   )
 
