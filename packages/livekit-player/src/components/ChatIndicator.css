@@ -141,3 +141,8 @@
   overflow: visible !important;
   clip-path: none !important;
 }
+
+.blob-svg, .blob-svg * {
+  border: none !important;
+  outline: none !important;
+}
