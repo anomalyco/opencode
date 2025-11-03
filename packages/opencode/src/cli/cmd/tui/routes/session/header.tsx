@@ -12,6 +12,7 @@ export function Header() {
   const { theme } = useTheme()
   const session = createMemo(() => sync.session.get(route.sessionID)!)
   const messages = createMemo(() => sync.data.message[route.sessionID] ?? [])
+  const shareEnabled = createMemo(() => sync.data.config.share !== "disabled")
 
   const cost = createMemo(() => {
     const total = pipe(
@@ -51,31 +52,48 @@ export function Header() {
       borderColor={theme.backgroundElement}
       flexShrink={0}
     >
-      <text fg={theme.text}>
-        <span style={{ bold: true, fg: theme.accent }}>#</span>{" "}
-        <span style={{ bold: true }}>{session().title}</span>
-      </text>
-      <box flexDirection="row" justifyContent="space-between" gap={1}>
-        <box flexGrow={1} flexShrink={1}>
-          <Switch>
-            <Match when={session().share?.url}>
-              <text fg={theme.textMuted} wrapMode="word">
-                {session().share!.url}
+      <Show
+        when={shareEnabled()}
+        fallback={
+          <box flexDirection="row" justifyContent="space-between" gap={1}>
+            <text fg={theme.text}>
+              <span style={{ bold: true, fg: theme.accent }}>#</span>{" "}
+              <span style={{ bold: true }}>{session().title}</span>
+            </text>
+            <Show when={context()}>
+              <text fg={theme.textMuted} wrapMode="none" flexShrink={0}>
+                {context()} ({cost()})
               </text>
-            </Match>
-            <Match when={true}>
-              <text fg={theme.text} wrapMode="word">
-                /share <span style={{ fg: theme.textMuted }}>to create a shareable link</span>
-              </text>
-            </Match>
-          </Switch>
+            </Show>
+          </box>
+        }
+      >
+        <text fg={theme.text}>
+          <span style={{ bold: true, fg: theme.accent }}>#</span>{" "}
+          <span style={{ bold: true }}>{session().title}</span>
+        </text>
+        <box flexDirection="row" justifyContent="space-between" gap={1}>
+          <box flexGrow={1} flexShrink={1}>
+            <Switch>
+              <Match when={session().share?.url}>
+                <text fg={theme.textMuted} wrapMode="word">
+                  {session().share!.url}
+                </text>
+              </Match>
+              <Match when={true}>
+                <text fg={theme.text} wrapMode="word">
+                  /share <span style={{ fg: theme.textMuted }}>to create a shareable link</span>
+                </text>
+              </Match>
+            </Switch>
+          </box>
+          <Show when={context()}>
+            <text fg={theme.textMuted} wrapMode="none" flexShrink={0}>
+              {context()} ({cost()})
+            </text>
+          </Show>
         </box>
-        <Show when={context()}>
-          <text fg={theme.textMuted} wrapMode="none" flexShrink={0}>
-            {context()} ({cost()})
-          </text>
-        </Show>
-      </box>
+      </Show>
     </box>
   )
 }
