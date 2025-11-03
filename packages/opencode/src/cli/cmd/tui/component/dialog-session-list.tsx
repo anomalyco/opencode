@@ -18,6 +18,8 @@ export function DialogSessionList() {
 
   const [toDelete, setToDelete] = createSignal<string>()
 
+  const deleteKeybind = "ctrl+d"
+
   const options = createMemo(() => {
     const today = new Date().toDateString()
     return sync.data.session
@@ -30,7 +32,7 @@ export function DialogSessionList() {
         }
         const isDeleting = toDelete() === x.id
         return {
-          title: isDeleting ? "Press delete again to confirm" : x.title,
+          title: isDeleting ? `Press ${deleteKeybind} again to confirm` : x.title,
           bg: isDeleting ? theme.error : undefined,
           value: x.id,
           category,
@@ -60,7 +62,7 @@ export function DialogSessionList() {
       }}
       keybind={[
         {
-          keybind: Keybind.parse("ctrl+d")[0],
+          keybind: Keybind.parse(deleteKeybind)[0],
           title: "delete",
           onTrigger: async (option) => {
             if (toDelete() === option.value) {

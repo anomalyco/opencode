@@ -165,7 +165,11 @@ export namespace File {
     const project = Instance.project
     if (project.vcs !== "git") return []
 
-    const diffOutput = await $`git diff --numstat HEAD`.cwd(Instance.directory).quiet().nothrow().text()
+    const diffOutput = await $`git diff --numstat HEAD`
+      .cwd(Instance.directory)
+      .quiet()
+      .nothrow()
+      .text()
 
     const changedFiles: Info[] = []
 
@@ -257,9 +261,14 @@ export namespace File {
 
     if (project.vcs === "git") {
       let diff = await $`git diff ${file}`.cwd(Instance.directory).quiet().nothrow().text()
-      if (!diff.trim()) diff = await $`git diff --staged ${file}`.cwd(Instance.directory).quiet().nothrow().text()
+      if (!diff.trim())
+        diff = await $`git diff --staged ${file}`.cwd(Instance.directory).quiet().nothrow().text()
       if (diff.trim()) {
-        const original = await $`git show HEAD:${file}`.cwd(Instance.directory).quiet().nothrow().text()
+        const original = await $`git show HEAD:${file}`
+          .cwd(Instance.directory)
+          .quiet()
+          .nothrow()
+          .text()
         const patch = structuredPatch(file, file, original, content, "old", "new", {
           context: Infinity,
           ignoreWhitespace: true,
@@ -307,12 +316,12 @@ export namespace File {
     })
   }
 
-  export async function search(input: { query: string; limit?: number }) {
+  export async function search(input: { query: string; limit?: number; dirs?: boolean }) {
     log.info("search", { query: input.query })
     const limit = input.limit ?? 100
     const result = await state().then((x) => x.files())
-    if (!input.query) return result.dirs.toSorted().slice(0, limit)
-    const items = [...result.files, ...result.dirs]
+    if (!input.query) return input.dirs !== false ? result.dirs.toSorted().slice(0, limit) : []
+    const items = input.dirs !== false ? [...result.files, ...result.dirs] : result.files
     const sorted = fuzzysort.go(input.query, items, { limit: limit }).map((r) => r.target)
     log.info("search", { query: input.query, results: sorted.length })
     return sorted
