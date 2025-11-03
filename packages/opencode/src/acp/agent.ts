@@ -4,6 +4,7 @@ import {
   type AuthenticateRequest,
   type CancelNotification,
   type InitializeRequest,
+  type InitializeResponse,
   type LoadSessionRequest,
   type NewSessionRequest,
   type PermissionOption,
@@ -302,7 +303,7 @@ export namespace ACP {
       })
     }
 
-    async initialize(params: InitializeRequest) {
+    async initialize(params: InitializeRequest): Promise<InitializeResponse> {
       log.info("initialize", { protocolVersion: params.protocolVersion })
 
       return {
@@ -325,10 +326,9 @@ export namespace ACP {
             id: "opencode-login",
           },
         ],
-        _meta: {
-          opencode: {
-            version: Installation.VERSION,
-          },
+        agentInfo: {
+          name: "OpenCode",
+          version: Installation.VERSION,
         },
       }
     }
