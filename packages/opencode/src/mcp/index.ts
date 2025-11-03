@@ -230,7 +230,7 @@ export namespace MCP {
     const result: Record<string, Tool> = {}
     for (const [clientName, client] of Object.entries(await clients())) {
       for (const [toolName, tool] of Object.entries(await client.tools())) {
-        const sanitizedClientName = clientName.replace(/\s+/g, "_")
+        const sanitizedClientName = clientName.replace(/[^a-zA-Z0-9_-]/g, "_")
         const sanitizedToolName = toolName.replace(/[^a-zA-Z0-9_-]/g, "_")
         result[sanitizedClientName + "_" + sanitizedToolName] = tool
       }
