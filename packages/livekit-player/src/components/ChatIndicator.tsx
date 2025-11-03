@@ -284,21 +284,24 @@ export default function ChatIndicator({ room, connectionState }: ChatIndicatorPr
   }
 
   // HAL 9000 eye calculations - scales with agent audio
-  const halScale = 1 + (agentAvgIntensity * 0.3)
-  const halGlow = agentAvgIntensity * 80
-  const halOpacity = 0.8 + (agentAvgIntensity * 0.2)
+  const halScale = 1 // + (agentAvgIntensity * 0.3)
+  const halGlow = agentAvgIntensity * 90
+  const halOpacity = 0.6 + (agentAvgIntensity * 0.3)
 
   return (
     <div className="chat-indicator">
       {/* PURPLE - Agent Audio with HAL 9000 Eye Overlay */}
       <div className="status-container">
         <div className="blob-container">
+          <div style={{ position: "absolute", top: "50%", left: "50%", transform: "translate(-50%, -50%) scale(1)", width: "400px", height: "400px", pointerEvents: "none", opacity: 0.6, filter: "drop-shadow(rgba(255, 0, 0, 0.6) 0px 0px 0px)", transition: "opacity 0.1s, transform 0.1s, filter 0.1s" }}>
+            <svg xmlns="http://www.w3.org/2000/svg" xmlnsXlink="http://www.w3.org/1999/xlink" viewBox="0 0 562.5 562.5" width="100%" height="100%"><defs><linearGradient id="linearGradient2781"><stop id="stop2782" offset="0" style={{ stopColor: "rgb(252, 255, 0)", stopOpacity: 1 }} /><stop id="stop2784" offset="1" style={{ stopColor: "rgb(255, 0, 0)", stopOpacity: 1 }} /></linearGradient><linearGradient id="linearGradient1530"><stop id="stop1531" offset="0" style={{ stopColor: "rgb(255, 0, 0)", stopOpacity: 1 }} /><stop id="stop1534" offset="0.5" style={{ stopColor: "rgb(238, 0, 0)", stopOpacity: 1 }} /><stop id="stop4709" offset="0.75" style={{ stopColor: "rgb(164, 0, 0)", stopOpacity: 1 }} /><stop id="stop1532" offset="1" style={{ stopColor: "rgb(0, 0, 0)", stopOpacity: 1 }} /></linearGradient><radialGradient gradientUnits="userSpaceOnUse" xlinkHref="#linearGradient1530" id="radialGradient2175" fy="441.98581" fx="279.27597" r="218.70837" cy="441.98581" cx="279.27597" /><radialGradient gradientUnits="userSpaceOnUse" xlinkHref="#linearGradient2781" id="radialGradient2176" fy="450.62323" fx="279.27597" r="37.428738" cy="450.62323" cx="279.27597" /></defs><g id="g3882" transform="matrix(0.999995,0.000000,0.000000,1.000000,-366.8852,-202.1756)"><g id="g1285" transform="matrix(0.706473,0.000000,0.000000,0.706473,392.0851,234.7421)"><path id="path908" transform="matrix(0.871134,0.000000,0.000000,0.871134,104.5141,-37.87046)" d="M 555.67282 441.98581 A 276.39685 276.39685 0 1 1  2.8791199,441.98581 A 276.39685 276.39685 0 1 1  555.67282 441.98581 z" style={{ fill: "url(#radialGradient2175)", fillOpacity: 1, fillRule: "evenodd", stroke: "rgb(0, 0, 0)", strokeWidth: 1.43491, strokeLinecap: "butt", strokeLinejoin: "round", strokeMiterlimit: 4, strokeOpacity: 1 }} /><path id="path2158" transform="matrix(0.871134,0.000000,0.000000,0.871134,104.5141,-45.39481)" d="M 316.70471 450.62323 A 37.428738 37.428738 0 1 1  241.84723,450.62323 A 37.428738 37.428738 0 1 1  316.70471 450.62323 z" style={{ fill: "url(#radialGradient2176)", fillOpacity: 0.75, fillRule: "evenodd", stroke: "none", strokeWidth: "1pt", strokeLinecap: "butt", strokeLinejoin: "miter", strokeOpacity: 1 }} /></g></g></svg>
+          </div>
+
           <svg viewBox="0 0 200 200" xmlns="http://www.w3.org/2000/svg" className="blob-svg">
             <defs>
               <filter id="goo-agent">
-                <feGaussianBlur in="SourceGraphic" stdDeviation="10" result="blur" />
-                <feColorMatrix in="blur" mode="matrix" values="1 0 0 0 0  0 1 0 0 0  0 0 1 0 0  0 0 0 18 -8" result="goo" />
-                <feBlend in="SourceGraphic" in2="goo" />
+                <feGaussianBlur in="SourceGraphic" stdDeviation="10" result="blur" />                
+                
               </filter>
               
               <filter id="blur-tight">
@@ -306,9 +309,9 @@ export default function ChatIndicator({ room, connectionState }: ChatIndicatorPr
               </filter>
               
               <radialGradient id="glass-purple" cx="50%" cy="50%">
-                <stop offset="0%" stopColor="#a78bfa" stopOpacity="0.3" />
-                <stop offset="50%" stopColor="#a78bfa" stopOpacity="0.4" />
-                <stop offset="100%" stopColor="#7c3aed" stopOpacity="0.2" />
+                <stop offset="0%" stopColor="#a78bfa" stopOpacity="0.4" />
+                <stop offset="50%" stopColor="#a78bfa" stopOpacity="0.6" />
+                <stop offset="100%" stopColor="#7c3aed" stopOpacity="0.3" />
               </radialGradient>
             </defs>
             
@@ -335,8 +338,8 @@ export default function ChatIndicator({ room, connectionState }: ChatIndicatorPr
               top: '50%',
               left: '50%',
               transform: `translate(-50%, -50%) scale(${halScale})`,
-              width: '80%',
-              height: '80%',
+              width: '300px',
+              height: '300px',
               pointerEvents: 'none',
               opacity: halOpacity,
               filter: `drop-shadow(0 0 ${halGlow}px rgba(255, 0, 0, 0.6))`,
@@ -386,12 +389,7 @@ export default function ChatIndicator({ room, connectionState }: ChatIndicatorPr
                   <stop id="stop4788" offset="0" style={{ stopColor: '#000000', stopOpacity: 0 }} />
                   <stop id="stop4789" offset="1" style={{ stopColor: '#000000', stopOpacity: 1 }} />
                 </linearGradient>
-                <linearGradient id="linearGradient4765">
-                  <stop id="stop4766" offset="0" style={{ stopColor: '#ffffff', stopOpacity: 1 }} />
-                  <stop id="stop4767" offset="0.74384898" style={{ stopColor: '#4c4c4c', stopOpacity: 1 }} />
-                  <stop id="stop4768" offset="0.85169548" style={{ stopColor: '#747474', stopOpacity: 1 }} />
-                  <stop id="stop4769" offset="1" style={{ stopColor: '#e4e4e4', stopOpacity: 1 }} />
-                </linearGradient>
+                
                 <linearGradient id="linearGradient4762">
                   <stop id="stop4763" offset="0" style={{ stopColor: '#d7d7d7', stopOpacity: 1 }} />
                   <stop id="stop4764" offset="1" style={{ stopColor: '#6a6a6a', stopOpacity: 1 }} />
@@ -461,10 +459,6 @@ export default function ChatIndicator({ room, connectionState }: ChatIndicatorPr
               <path id="path4760" style={{ fill: 'url(#radialGradient2173)', fillOpacity: 0.75, fillRule: 'evenodd', stroke: 'none', strokeWidth: '1pt', strokeLinecap: 'butt', strokeLinejoin: 'miter', strokeOpacity: 1 }} transform="matrix(0.615430,0.000000,0.000000,0.615433,99.25791,6.046065)" d="M 592.43381 441.60568 A 313.52167 313.52167 0 1 1  -34.609528,441.60568 A 313.52167 313.52167 0 1 1  592.43381 441.60568 z" />
               <path id="path1619" style={{ fill: 'url(#radialGradient2174)', fillOpacity: 0.75, fillRule: 'evenodd', stroke: 'none', strokeWidth: '1pt', strokeLinecap: 'butt', strokeLinejoin: 'miter', strokeOpacity: 1 }} transform="matrix(0.615430,0.000000,0.000000,0.615433,99.25791,6.046065)" d="M 592.43381 441.60568 A 313.52167 313.52167 0 1 1  -34.609528,441.60568 A 313.52167 313.52167 0 1 1  592.43381 441.60568 z" />
               <g id="g3882" transform="matrix(0.999995,0.000000,0.000000,1.000000,-366.8852,-202.1756)">
-                <g id="g1285" transform="matrix(0.706473,0.000000,0.000000,0.706473,392.0851,234.7421)">
-                  <path id="path908" style={{ fill: 'url(#radialGradient2175)', fillOpacity: 1, fillRule: 'evenodd', stroke: '#000000', strokeWidth: 1.4349147, strokeLinecap: 'butt', strokeLinejoin: 'round', strokeMiterlimit: 4, strokeOpacity: 1 }} transform="matrix(0.871134,0.000000,0.000000,0.871134,104.5141,-37.87046)" d="M 555.67282 441.98581 A 276.39685 276.39685 0 1 1  2.8791199,441.98581 A 276.39685 276.39685 0 1 1  555.67282 441.98581 z" />
-                  <path id="path2158" style={{ fill: 'url(#radialGradient2176)', fillOpacity: 0.75, fillRule: 'evenodd', stroke: 'none', strokeWidth: '1pt', strokeLinecap: 'butt', strokeLinejoin: 'miter', strokeOpacity: 1 }} transform="matrix(0.871134,0.000000,0.000000,0.871134,104.5141,-45.39481)" d="M 316.70471 450.62323 A 37.428738 37.428738 0 1 1  241.84723,450.62323 A 37.428738 37.428738 0 1 1  316.70471 450.62323 z" />
-                </g>
                 <g id="g4743" transform="matrix(0.615433,0.000000,0.000000,0.615433,465.9215,207.9876)">
                   <path id="path4044" style={{ fill: 'url(#radialGradient2177)', fillOpacity: 1, fillRule: 'evenodd', stroke: 'none', strokeWidth: '1pt', strokeLinecap: 'butt', strokeLinejoin: 'miter', strokeOpacity: 1 }} transform="matrix(0.863367,-3.820997e-2,3.037779e-2,0.686396,31.41537,100.6770)" d="M 279.28125,162.06250 C 126.36322,162.06250 2.2187600,286.20697 2.2187500,439.12500 C 2.2187500,449.86415 2.9347920,460.42741 4.1250000,470.84375 C 4.1919378,471.13499 4.4511644,471.34140 4.7500000,471.34140 C 5.0488356,471.34140 5.3080622,471.13499 5.3750000,470.84375 C 21.079720,333.50313 137.75254,226.71875 279.28125,226.71875 C 420.81032,226.71875 537.48323,333.50267 553.18750,470.84375 C 553.25444,471.13499 553.51366,471.34140 553.81250,471.34140 C 554.11134,471.34140 554.37056,471.13499 554.43750,470.84375 C 555.62774,460.42646 556.31250,449.86257 556.31250,439.12500 C 556.31247,286.20706 432.19929,162.06250 279.28125,162.06250 z " />
                   <path id="path4679" style={{ fill: 'url(#radialGradient2178)', fillOpacity: 1, fillRule: 'evenodd', stroke: 'none', strokeWidth: '1pt', strokeLinecap: 'butt', strokeLinejoin: 'miter', strokeOpacity: 1 }} transform="matrix(0.801859,0.000000,0.000000,0.580012,54.72754,110.0790)" d="M 279.28125,162.06250 C 126.36322,162.06250 2.2187600,286.20697 2.2187500,439.12500 C 2.2187500,449.86415 2.9347920,460.42741 4.1250000,470.84375 C 4.1919378,471.13499 4.4511644,471.34140 4.7500000,471.34140 C 5.0488356,471.34140 5.3080622,471.13499 5.3750000,470.84375 C 21.079720,333.50313 137.75254,226.71875 279.28125,226.71875 C 420.81032,226.71875 537.48323,333.50267 553.18750,470.84375 C 553.25444,471.13499 553.51366,471.34140 553.81250,471.34140 C 554.11134,471.34140 554.37056,471.13499 554.43750,470.84375 C 555.62774,460.42646 556.31250,449.86257 556.31250,439.12500 C 556.31247,286.20706 432.19929,162.06250 279.28125,162.06250 z " />
@@ -495,9 +489,8 @@ export default function ChatIndicator({ room, connectionState }: ChatIndicatorPr
           <svg viewBox="0 0 200 200" xmlns="http://www.w3.org/2000/svg" className="blob-svg">
             <defs>
               <filter id="goo-user">
-                <feGaussianBlur in="SourceGraphic" stdDeviation="10" result="blur" />
-                <feColorMatrix in="blur" mode="matrix" values="1 0 0 0 0  0 1 0 0 0  0 0 1 0 0  0 0 0 18 -8" result="goo" />
                 <feBlend in="SourceGraphic" in2="goo" />
+                <feGaussianBlur in="SourceGraphic" stdDeviation="10" result="blur" />                
               </filter>
               
               <radialGradient id="glass-blue" cx="50%" cy="50%">
