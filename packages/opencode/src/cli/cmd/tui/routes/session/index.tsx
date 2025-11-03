@@ -1158,8 +1158,12 @@ ToolRegistry.register<typeof TaskTool>({
 
     return (
       <>
-        <ToolTitle icon="%" fallback="Delegating..." when={props.input.description}>
-          Task {props.input.description}
+        <ToolTitle
+          icon="%"
+          fallback="Delegating..."
+          when={props.input.subagent_type ?? props.input.description}
+        >
+          Task [{props.input.subagent_type ?? "unknown"}] {props.input.description}
         </ToolTitle>
         <Show when={props.metadata.summary?.length}>
           <box>
