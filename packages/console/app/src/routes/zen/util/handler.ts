@@ -18,7 +18,6 @@ import {
   createStreamPartConverter,
   createResponseConverter,
 } from "./provider/provider"
-import { Format } from "./format"
 import { anthropicHelper } from "./provider/anthropic"
 import { openaiHelper } from "./provider/openai"
 import { oaCompatHelper } from "./provider/openai-compatible"
@@ -29,7 +28,7 @@ type Model = ZenData["models"][string]
 export async function handler(
   input: APIEvent,
   opts: {
-    format: Format
+    format: ZenData.Format
     parseApiKey: (headers: Headers) => string | undefined
   },
 ) {
@@ -248,12 +247,14 @@ export async function handler(
       throw new ModelError(`Provider ${provider.id} not supported`)
     }
 
+    const format = zenData.providers[provider.id].format
+
     return {
       ...provider,
       ...zenData.providers[provider.id],
-      ...(provider.id === "anthropic"
+      ...(format === "anthropic"
         ? anthropicHelper
-        : provider.id === "openai"
+        : format === "openai"
           ? openaiHelper
           : oaCompatHelper),
     }
