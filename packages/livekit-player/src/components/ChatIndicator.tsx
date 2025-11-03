@@ -275,7 +275,7 @@ export default function ChatIndicator({ room, connectionState }: ChatIndicatorPr
 
   const getQualityColor = () => {
     switch (connectionQuality) {
-      case ConnectionQuality.Excellent: return '#4ade80'
+      case ConnectionQuality.Excellent: return '#3b82f6'
       case ConnectionQuality.Good: return '#fbbf24'
       case ConnectionQuality.Poor: return '#fb7185'
       case ConnectionQuality.Lost: return '#666'
@@ -312,7 +312,6 @@ export default function ChatIndicator({ room, connectionState }: ChatIndicatorPr
               <circle className="blob-orb" cx={agentOrb4.x} cy={agentOrb4.y} r="15" fill="#a78bfa" opacity="0.6" style={{ transform: `scale(${agentOrb4.scale})`, transformOrigin: '100px 100px' }} />
             </g>
             
-            <ellipse className="blob-shine" cx="80" cy="80" rx="40" ry="35" fill="url(#shine-agent)" opacity="0.6" />
           </svg>
           <div className="blob-glow" style={{ backgroundColor: '#a78bfa' }} />
         </div>
@@ -359,16 +358,15 @@ export default function ChatIndicator({ room, connectionState }: ChatIndicatorPr
             </defs>
             
             <g filter="url(#goo-user)">
-              <circle className="blob-main" cx="100" cy="100" r={userRadius} fill="#4ade80" opacity="0.6" />
-              <circle className="blob-orb" cx={userOrb1.x} cy={userOrb1.y} r="25" fill="#4ade80" opacity="0.6" style={{ transform: `scale(${userOrb1.scale})`, transformOrigin: '100px 100px' }} />
-              <circle className="blob-orb" cx={userOrb2.x} cy={userOrb2.y} r="20" fill="#4ade80" opacity="0.6" style={{ transform: `scale(${userOrb2.scale})`, transformOrigin: '100px 100px' }} />
-              <circle className="blob-orb" cx={userOrb3.x} cy={userOrb3.y} r="18" fill="#4ade80" opacity="0.6" style={{ transform: `scale(${userOrb3.scale})`, transformOrigin: '100px 100px' }} />
-              <circle className="blob-orb" cx={userOrb4.x} cy={userOrb4.y} r="15" fill="#4ade80" opacity="0.6" style={{ transform: `scale(${userOrb4.scale})`, transformOrigin: '100px 100px' }} />
+              <circle className="blob-main" cx="100" cy="100" r={userRadius} fill="#3b82f6" opacity="0.3" />
+              <circle className="blob-orb" cx={userOrb1.x} cy={userOrb1.y} r="25" fill="#3b82f6" opacity="0.3" style={{ transform: `scale(${userOrb1.scale})`, transformOrigin: '100px 100px' }} />
+              <circle className="blob-orb" cx={userOrb2.x} cy={userOrb2.y} r="20" fill="#3b82f6" opacity="0.3" style={{ transform: `scale(${userOrb2.scale})`, transformOrigin: '100px 100px' }} />
+              <circle className="blob-orb" cx={userOrb3.x} cy={userOrb3.y} r="18" fill="#3b82f6" opacity="0.3" style={{ transform: `scale(${userOrb3.scale})`, transformOrigin: '100px 100px' }} />
+              <circle className="blob-orb" cx={userOrb4.x} cy={userOrb4.y} r="15" fill="#3b82f6" opacity="0.3" style={{ transform: `scale(${userOrb4.scale})`, transformOrigin: '100px 100px' }} />
             </g>
             
-            <ellipse className="blob-shine" cx="80" cy="80" rx="40" ry="35" fill="url(#shine-user)" opacity="0.6" />
           </svg>
-          <div className="blob-glow" style={{ backgroundColor: '#4ade80' }} />
+          <div className="blob-glow" style={{ backgroundColor: '#3b82f6' }} />
         </div>
 
         <div className="status-text">You</div>
