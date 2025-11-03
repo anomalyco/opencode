@@ -1,17 +1,38 @@
-import { createMemo, Match, Show, Switch } from "solid-js"
+import { type Accessor, createMemo, Match, Show, Switch } from "solid-js"
 import { useRouteData } from "@tui/context/route"
 import { useSync } from "@tui/context/sync"
 import { pipe, sumBy } from "remeda"
 import { useTheme } from "@tui/context/theme"
 import { SplitBorder } from "@tui/component/border"
-import type { AssistantMessage } from "@opencode-ai/sdk"
+import type { AssistantMessage, Session } from "@opencode-ai/sdk"
+
+const Title = (props: { session: Accessor<Session> }) => {
+  const { theme } = useTheme()
+  return (
+    <text fg={theme.text}>
+      <span style={{ bold: true, fg: theme.accent }}>#</span>{" "}
+      <span style={{ bold: true }}>{props.session().title}</span>
+    </text>
+  )
+}
+
+const ContextInfo = (props: { context: Accessor<string | undefined>; cost: Accessor<string> }) => {
+  const { theme } = useTheme()
+  return (
+    <Show when={props.context()}>
+      <text fg={theme.textMuted} wrapMode="none" flexShrink={0}>
+        {props.context()} ({props.cost()})
+      </text>
+    </Show>
+  )
+}
 
 export function Header() {
   const route = useRouteData("session")
   const sync = useSync()
-  const { theme } = useTheme()
   const session = createMemo(() => sync.session.get(route.sessionID)!)
   const messages = createMemo(() => sync.data.message[route.sessionID] ?? [])
+  const shareEnabled = createMemo(() => sync.data.config.share !== "disabled")
 
   const cost = createMemo(() => {
     const total = pipe(
@@ -43,6 +64,8 @@ export function Header() {
     return result
   })
 
+  const { theme } = useTheme()
+
   return (
     <box
       paddingLeft={1}
@@ -51,31 +74,34 @@ export function Header() {
       borderColor={theme.backgroundElement}
       flexShrink={0}
     >
-      <text fg={theme.text}>
-        <span style={{ bold: true, fg: theme.accent }}>#</span>{" "}
-        <span style={{ bold: true }}>{session().title}</span>
-      </text>
-      <box flexDirection="row" justifyContent="space-between" gap={1}>
-        <box flexGrow={1} flexShrink={1}>
-          <Switch>
-            <Match when={session().share?.url}>
-              <text fg={theme.textMuted} wrapMode="word">
-                {session().share!.url}
-              </text>
-            </Match>
-            <Match when={true}>
-              <text fg={theme.text} wrapMode="word">
-                /share <span style={{ fg: theme.textMuted }}>to create a shareable link</span>
-              </text>
-            </Match>
-          </Switch>
+      <Show
+        when={shareEnabled()}
+        fallback={
+          <box flexDirection="row" justifyContent="space-between" gap={1}>
+            <Title session={session} />
+            <ContextInfo context={context} cost={cost} />
+          </box>
+        }
+      >
+        <Title session={session} />
+        <box flexDirection="row" justifyContent="space-between" gap={1}>
+          <box flexGrow={1} flexShrink={1}>
+            <Switch>
+              <Match when={session().share?.url}>
+                <text fg={theme.textMuted} wrapMode="word">
+                  {session().share!.url}
+                </text>
+              </Match>
+              <Match when={true}>
+                <text fg={theme.text} wrapMode="word">
+                  /share <span style={{ fg: theme.textMuted }}>to create a shareable link</span>
+                </text>
+              </Match>
+            </Switch>
+          </box>
+          <ContextInfo context={context} cost={cost} />
         </box>
-        <Show when={context()}>
-          <text fg={theme.textMuted} wrapMode="none" flexShrink={0}>
-            {context()} ({cost()})
-          </text>
-        </Show>
-      </box>
+      </Show>
     </box>
   )
 }
