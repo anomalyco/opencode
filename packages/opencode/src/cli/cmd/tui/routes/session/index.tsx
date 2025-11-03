@@ -112,12 +112,6 @@ export function Session() {
   let prompt: PromptRef
   const keybind = useKeybind()
 
-  createEffect(() => {
-    dialog.allClosedEvent.listen(() => {
-      prompt.focus()
-    })
-  })
-
   useKeyboard((evt) => {
     if (dialog.stack.length > 0) return
 
