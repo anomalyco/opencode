@@ -26,7 +26,7 @@ function App() {
           config.apiSecret
         )
         
-        console.log('🔌 Connecting to room:', config.roomName, 'at', config.url)
+        console.debug('🔌 Connecting to room:', config.roomName, 'at', config.url)
         
         // Room options with audio enabled
         const roomOptions: RoomOptions = {
@@ -42,14 +42,14 @@ function App() {
         // Connect to the room with the token
         await room.connect(config.url, token, roomOptions)
 
-        console.log('✅ Connected to room:', room.name)
+        console.debug('✅ Connected to room:', room.name)
         setConnectionState(ConnectionState.Connected)
         
         // Enable microphone after connecting
         try {
-          console.log('🎤 Requesting microphone access...')
+          console.debug('🎤 Requesting microphone access...')
           await room.localParticipant.setMicrophoneEnabled(true)
-          console.log('✅ Microphone enabled')
+          console.debug('✅ Microphone enabled')
         } catch (micError) {
           console.error('❌ Failed to enable microphone:', micError)
           setError('Failed to access microphone. Please grant permission.')
@@ -57,7 +57,7 @@ function App() {
         
         // Check for existing remote participants and their tracks
         room.remoteParticipants.forEach((participant) => {
-          console.log('👤 Existing participant:', participant.identity)
+          console.debug('👤 Existing participant:', participant.identity)
           participant.trackPublications.forEach((publication) => {
             if (publication.track && publication.track.kind === Track.Kind.Audio) {
               attachAudioTrack(publication.track)
@@ -74,7 +74,7 @@ function App() {
     const attachAudioTrack = (track: Track) => {
       // Check if already attached
       if (audioElementsRef.current.has(track.sid)) {
-        console.log('⚠️ Audio element already exists for track:', track.sid)
+        console.debug('⚠️ Audio element already exists for track:', track.sid)
         return
       }
 
@@ -85,7 +85,7 @@ function App() {
       document.body.appendChild(audioElement)
       audioElementsRef.current.set(track.sid, audioElement)
       
-      console.log('🔊 Audio element attached:', audioElement.id)
+      console.debug('🔊 Audio element attached:', audioElement.id)
       
       // Clean up on track end
       const cleanup = () => {
@@ -93,7 +93,7 @@ function App() {
         if (element) {
           element.remove()
           audioElementsRef.current.delete(track.sid)
-          console.log('🗑️ Audio element removed:', track.sid)
+          console.debug('🗑️ Audio element removed:', track.sid)
         }
       }
       
@@ -105,19 +105,19 @@ function App() {
       if (element) {
         element.remove()
         audioElementsRef.current.delete(trackSid)
-        console.log('🗑️ Audio element detached:', trackSid)
+        console.debug('🗑️ Audio element detached:', trackSid)
       }
     }
 
     // Set up event listeners
     room.on(RoomEvent.Connected, () => {
-      console.log('🎉 Room connected')
+      console.debug('🎉 Room connected')
       setConnectionState(ConnectionState.Connected)
       setIsReconnecting(false)
     })
 
     room.on(RoomEvent.Disconnected, (reason?: DisconnectReason) => {
-      console.log('💔 Room disconnected, reason:', reason)
+      console.debug('💔 Room disconnected, reason:', reason)
       setConnectionState(ConnectionState.Disconnected)
       setIsReconnecting(false)
       
@@ -132,31 +132,31 @@ function App() {
     })
 
     room.on(RoomEvent.Reconnecting, () => {
-      console.log('🔄 Room reconnecting...')
+      console.debug('🔄 Room reconnecting...')
       setConnectionState(ConnectionState.Reconnecting)
       setIsReconnecting(true)
     })
 
     room.on(RoomEvent.Reconnected, () => {
-      console.log('✅ Room reconnected')
+      console.debug('✅ Room reconnected')
       setConnectionState(ConnectionState.Connected)
       setIsReconnecting(false)
     })
 
     room.on(RoomEvent.LocalTrackPublished, (publication) => {
-      console.log('📤 Local track published:', publication.trackName)
+      console.debug('📤 Local track published:', publication.trackName)
     })
 
     room.on(RoomEvent.LocalTrackUnpublished, (publication) => {
-      console.log('📤 Local track unpublished:', publication.trackName)
+      console.debug('📤 Local track unpublished:', publication.trackName)
     })
 
     room.on(RoomEvent.ParticipantConnected, (participant: RemoteParticipant) => {
-      console.log('👤 Participant joined:', participant.identity)
+      console.debug('👤 Participant joined:', participant.identity)
     })
 
     room.on(RoomEvent.ParticipantDisconnected, (participant: RemoteParticipant) => {
-      console.log('👋 Participant left:', participant.identity)
+      console.debug('👋 Participant left:', participant.identity)
     })
 
     room.on(RoomEvent.TrackSubscribed, (
@@ -164,7 +164,7 @@ function App() {
       publication: RemoteTrackPublication,
       participant: RemoteParticipant
     ) => {
-      console.log('📥 Track subscribed:', track.kind, 'from', participant.identity)
+      console.debug('📥 Track subscribed:', track.kind, 'from', participant.identity)
       
       if (track.kind === Track.Kind.Audio) {
         attachAudioTrack(track)
@@ -176,7 +176,7 @@ function App() {
       publication: RemoteTrackPublication,
       participant: RemoteParticipant
     ) => {
-      console.log('📤 Track unsubscribed:', track.kind, 'from', participant.identity)
+      console.debug('📤 Track unsubscribed:', track.kind, 'from', participant.identity)
       
       if (track.kind === Track.Kind.Audio) {
         detachAudioTrack(track.sid)
@@ -187,21 +187,21 @@ function App() {
       publication: RemoteTrackPublication,
       participant: RemoteParticipant
     ) => {
-      console.log('📢 Track published:', publication.kind, 'from', participant.identity)
+      console.debug('📢 Track published:', publication.kind, 'from', participant.identity)
     })
 
     room.on(RoomEvent.TrackUnpublished, (
       publication: RemoteTrackPublication,
       participant: RemoteParticipant
     ) => {
-      console.log('📢 Track unpublished:', publication.kind, 'from', participant.identity)
+      console.debug('📢 Track unpublished:', publication.kind, 'from', participant.identity)
     })
 
     connectToRoom()
 
     // Cleanup on unmount or window close
     const cleanup = () => {
-      console.log('🧹 Cleaning up room connection...')
+      console.debug('🧹 Cleaning up room connection...')
       
       // Clean up all audio elements
       audioElementsRef.current.forEach((element) => {

@@ -15,10 +15,14 @@
     "@livekit/components-react": "2.9.15",
     "@livekit/components-styles": "1.1.6",
     "@livekit/protocol": "1.42.2",
+    "@react-three/drei": "10.7.6",
+    "@react-three/fiber": "9.4.0",
     "jose": "6.1.0",
     "livekit-client": "2.15.14",
+    "lucide-react": "0.552.0",
     "react": "18.3.1",
-    "react-dom": "18.3.1"
+    "react-dom": "18.3.1",
+    "three": "0.181.0"
   },
   "devDependencies": {
     "@tauri-apps/api": "^1.6.0",
