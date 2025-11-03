@@ -6,6 +6,7 @@
   overflow: visible;
   width: 100vw;
   height: 100vh;
+  position: relative;
 }
 
 .status-container {
@@ -14,6 +15,10 @@
   align-items: center;
   gap: 8px;
   -webkit-app-region: no-drag;
+  position: absolute;
+  top: 50%;
+  left: 50%;
+  transform: translate(-50%, -50%);
 }
 
 .blob-container {
@@ -39,95 +44,67 @@
   transition: opacity 0.6s cubic-bezier(0.4, 0, 0.2, 1);
 }
 
-.blob-group.hidden {
-  opacity: 0;
-  pointer-events: none;
-}
-
-.blob-group.active {
-  opacity: 1;
-}
-
-/* Main blob - STATIC, never animated */
 .blob-main {
-  transform-origin: 100px 100px;
+  transition: r 0.05s linear, fill 0.3s ease;
 }
 
-/* Orbs - NO CSS ANIMATIONS, ONLY JavaScript driven by audio */
 .blob-orb {
-  transform-origin: 100px 100px;
-  transition: none;
+  transition: fill 0.3s ease;
 }
 
 .blob-shine {
   pointer-events: none;
-  mix-blend-mode: overlay;
-  transform-origin: center;
-  transition: opacity 0.6s ease;
 }
 
 .blob-glow {
   position: absolute;
-  width: min(400px, 80vw);
-  height: min(400px, 80vw);
-  max-width: 500px;
-  max-height: 500px;
+  top: 50%;
+  left: 50%;
+  transform: translate(-50%, -50%);
+  width: min(300px, 60vw);
+  height: min(300px, 60vw);
   border-radius: 50%;
-  filter: blur(120px);
-  opacity: 0.5;
+  filter: blur(60px);
+  opacity: 0.3;
+  pointer-events: none;
   z-index: -1;
-  transition: 
-    background-color 0.6s cubic-bezier(0.4, 0, 0.2, 1),
-    opacity 0.4s ease;
 }
 
 .status-text {
-  font-size: 32px;
-  font-weight: 600;
-  color: #ffffff;
+  font-size: 14px;
+  font-weight: 500;
+  color: rgba(255, 255, 255, 0.9);
   text-align: center;
-  letter-spacing: -0.02em;
-  transition: all 0.5s cubic-bezier(0.4, 0, 0.2, 1);
-  text-shadow: 0 2px 20px rgba(0, 0, 0, 0.3);
+  margin-top: 8px;
 }
 
 .connection-info {
   display: flex;
-  flex-direction: row;
-  gap: 24px;
-  padding: 12px 32px;
-  background: rgba(255, 255, 255, 0.04);
-  border-radius: 24px;
-  backdrop-filter: blur(20px);
-  border: 1px solid rgba(255, 255, 255, 0.06);
-  box-shadow: 0 4px 24px rgba(0, 0, 0, 0.2);
-  transition: all 0.3s ease;
+  gap: 16px;
+  margin-top: 8px;
+  padding: 8px 16px;
+  background: rgba(0, 0, 0, 0.3);
+  border-radius: 20px;
+  backdrop-filter: blur(10px);
 }
 
 .info-row {
   display: flex;
   align-items: center;
-  justify-content: center;
-  gap: 8px;
-  font-size: 13px;
-  font-weight: 500;
-  color: #888;
-  transition: color 0.3s ease;
+  gap: 6px;
+  font-size: 12px;
+  color: rgba(255, 255, 255, 0.7);
 }
 
 .info-label {
-  color: #666;
-  text-transform: uppercase;
-  font-size: 10px;
-  letter-spacing: 0.08em;
-  font-weight: 600;
+  color: rgba(255, 255, 255, 0.5);
 }
 
 .info-value {
-  color: #bbb;
-  font-variant-numeric: tabular-nums;
+  color: rgba(255, 255, 255, 0.9);
+  font-weight: 500;
 }
 
 .info-icon {
-  flex-shrink: 0;
+  color: rgba(255, 255, 255, 0.7);
 }

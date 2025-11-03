@@ -305,11 +305,11 @@ export default function ChatIndicator({ room, connectionState }: ChatIndicatorPr
             </defs>
             
             <g filter="url(#goo-agent)">
-              <circle className="blob-main" cx="100" cy="100" r={agentRadius} fill="#a78bfa" />
-              <circle className="blob-orb" cx={agentOrb1.x} cy={agentOrb1.y} r="25" fill="#a78bfa" style={{ transform: `scale(${agentOrb1.scale})`, transformOrigin: '100px 100px' }} />
-              <circle className="blob-orb" cx={agentOrb2.x} cy={agentOrb2.y} r="20" fill="#a78bfa" style={{ transform: `scale(${agentOrb2.scale})`, transformOrigin: '100px 100px' }} />
-              <circle className="blob-orb" cx={agentOrb3.x} cy={agentOrb3.y} r="18" fill="#a78bfa" style={{ transform: `scale(${agentOrb3.scale})`, transformOrigin: '100px 100px' }} />
-              <circle className="blob-orb" cx={agentOrb4.x} cy={agentOrb4.y} r="15" fill="#a78bfa" style={{ transform: `scale(${agentOrb4.scale})`, transformOrigin: '100px 100px' }} />
+              <circle className="blob-main" cx="100" cy="100" r={agentRadius} fill="#a78bfa" opacity="0.6" />
+              <circle className="blob-orb" cx={agentOrb1.x} cy={agentOrb1.y} r="25" fill="#a78bfa" opacity="0.6" style={{ transform: `scale(${agentOrb1.scale})`, transformOrigin: '100px 100px' }} />
+              <circle className="blob-orb" cx={agentOrb2.x} cy={agentOrb2.y} r="20" fill="#a78bfa" opacity="0.6" style={{ transform: `scale(${agentOrb2.scale})`, transformOrigin: '100px 100px' }} />
+              <circle className="blob-orb" cx={agentOrb3.x} cy={agentOrb3.y} r="18" fill="#a78bfa" opacity="0.6" style={{ transform: `scale(${agentOrb3.scale})`, transformOrigin: '100px 100px' }} />
+              <circle className="blob-orb" cx={agentOrb4.x} cy={agentOrb4.y} r="15" fill="#a78bfa" opacity="0.6" style={{ transform: `scale(${agentOrb4.scale})`, transformOrigin: '100px 100px' }} />
             </g>
             
             <ellipse className="blob-shine" cx="80" cy="80" rx="40" ry="35" fill="url(#shine-agent)" opacity="0.6" />
@@ -317,7 +317,6 @@ export default function ChatIndicator({ room, connectionState }: ChatIndicatorPr
           <div className="blob-glow" style={{ backgroundColor: '#a78bfa' }} />
         </div>
 
-        <div className="status-text">Agent</div>
         
         <div className="connection-info">
           <div className="info-row">
@@ -360,11 +359,11 @@ export default function ChatIndicator({ room, connectionState }: ChatIndicatorPr
             </defs>
             
             <g filter="url(#goo-user)">
-              <circle className="blob-main" cx="100" cy="100" r={userRadius} fill="#4ade80" />
-              <circle className="blob-orb" cx={userOrb1.x} cy={userOrb1.y} r="25" fill="#4ade80" style={{ transform: `scale(${userOrb1.scale})`, transformOrigin: '100px 100px' }} />
-              <circle className="blob-orb" cx={userOrb2.x} cy={userOrb2.y} r="20" fill="#4ade80" style={{ transform: `scale(${userOrb2.scale})`, transformOrigin: '100px 100px' }} />
-              <circle className="blob-orb" cx={userOrb3.x} cy={userOrb3.y} r="18" fill="#4ade80" style={{ transform: `scale(${userOrb3.scale})`, transformOrigin: '100px 100px' }} />
-              <circle className="blob-orb" cx={userOrb4.x} cy={userOrb4.y} r="15" fill="#4ade80" style={{ transform: `scale(${userOrb4.scale})`, transformOrigin: '100px 100px' }} />
+              <circle className="blob-main" cx="100" cy="100" r={userRadius} fill="#4ade80" opacity="0.6" />
+              <circle className="blob-orb" cx={userOrb1.x} cy={userOrb1.y} r="25" fill="#4ade80" opacity="0.6" style={{ transform: `scale(${userOrb1.scale})`, transformOrigin: '100px 100px' }} />
+              <circle className="blob-orb" cx={userOrb2.x} cy={userOrb2.y} r="20" fill="#4ade80" opacity="0.6" style={{ transform: `scale(${userOrb2.scale})`, transformOrigin: '100px 100px' }} />
+              <circle className="blob-orb" cx={userOrb3.x} cy={userOrb3.y} r="18" fill="#4ade80" opacity="0.6" style={{ transform: `scale(${userOrb3.scale})`, transformOrigin: '100px 100px' }} />
+              <circle className="blob-orb" cx={userOrb4.x} cy={userOrb4.y} r="15" fill="#4ade80" opacity="0.6" style={{ transform: `scale(${userOrb4.scale})`, transformOrigin: '100px 100px' }} />
             </g>
             
             <ellipse className="blob-shine" cx="80" cy="80" rx="40" ry="35" fill="url(#shine-user)" opacity="0.6" />
