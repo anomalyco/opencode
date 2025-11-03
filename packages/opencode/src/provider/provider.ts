@@ -188,12 +188,17 @@ export namespace Provider {
       }
     },
     "github-copilot-enterprise": async (provider) => {
-      const { AuthGithubCopilot } = await import("../auth/github-copilot")
       const { Auth } = await import("../auth")
+      const { Config } = await import("../config/config")
       const { normalizeDomain } = await import("../util/url")
 
+      // Get enterprise URL from auth data or config
       const authInfo = await Auth.get("github-copilot-enterprise")
-      const enterpriseUrl = authInfo && "enterpriseUrl" in authInfo ? authInfo.enterpriseUrl : undefined
+      const config = await Config.get()
+
+      const enterpriseUrl =
+        (authInfo && "enterpriseUrl" in authInfo ? authInfo.enterpriseUrl : undefined) ||
+        config?.provider?.["github-copilot-enterprise"]?.options?.enterpriseUrl
 
       let baseURL = provider?.api
       if (enterpriseUrl) {
@@ -201,13 +206,11 @@ export namespace Provider {
         baseURL = `https://copilot-api.${domain}`
       }
 
-      const token = await AuthGithubCopilot.access("github-copilot-enterprise")
-
+      // Token management is now handled by the opencode-copilot-auth plugin
       return {
         autoload: false,
         options: {
           baseURL,
-          ...(token && { apiKey: token }),
           headers: {
             "Editor-Version": "vscode/1.103.2",
           },
