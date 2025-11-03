@@ -1106,13 +1106,16 @@ export namespace Server {
           "query",
           z.object({
             query: z.string(),
+            dirs: z.boolean().optional(),
           }),
         ),
         async (c) => {
           const query = c.req.valid("query").query
+          const dirs = c.req.valid("query").dirs
           const results = await File.search({
             query,
             limit: 10,
+            dirs,
           })
           return c.json(results)
         },
