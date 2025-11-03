@@ -37,6 +37,7 @@
   max-width: 500px;
   max-height: 500px;
   overflow: visible;
+  mix-blend-mode: screen;
 }
 
 .blob-group {
@@ -68,6 +69,7 @@
   opacity: 0.3;
   pointer-events: none;
   z-index: -1;
+  mix-blend-mode: screen;
 }
 
 .status-text {
