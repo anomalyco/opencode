@@ -1,5 +1,4 @@
 .chat-indicator {
-  background: transparent !important;
   display: flex;
   flex-direction: column;
   align-items: center;
@@ -134,10 +133,4 @@
 
 .state-connecting svg {
   animation: pulse 1.5s ease-in-out infinite;
-}
-
-/* FORCE NO CLIPPING */
-.chat-indicator, .chat-indicator *, .status-container, .status-container *, .blob-container, .blob-container * {
-  overflow: visible !important;
-  clip-path: none !important;
 }

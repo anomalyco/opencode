@@ -3,13 +3,17 @@
   "version": "0.1.0",
   "private": true,
   "type": "module",
+  "main": "electron/main.js",
   "scripts": {
     "dev": "vite",
     "build": "tsc && vite build",
     "preview": "vite preview",
     "tauri": "tauri",
     "tauri:dev": "tauri dev",
-    "tauri:build": "tauri build"
+    "tauri:build": "tauri build",
+    "electron:dev": "NODE_ENV=development ./node_modules/electron/dist/Electron.app/Contents/MacOS/Electron .",
+    "electron:build": "npm run build && electron-builder",
+    "electron:start": "./node_modules/electron/dist/Electron.app/Contents/MacOS/Electron ."
   },
   "dependencies": {
     "@livekit/components-react": "2.9.15",
@@ -27,7 +31,25 @@
     "@types/react": "^18.3.11",
     "@types/react-dom": "^18.3.0",
     "@vitejs/plugin-react": "^4.3.3",
+    "electron": "39.0.0",
     "typescript": "5.9.3",
     "vite": "7.1.12"
+  },
+  "build": {
+    "appId": "com.opencode.livekit-player",
+    "productName": "LiveKit Player",
+    "directories": {
+      "output": "dist-electron"
+    },
+    "files": [
+      "dist/**/*",
+      "electron/**/*"
+    ],
+    "mac": {
+      "category": "public.app-category.utilities",
+      "hardenedRuntime": true,
+      "entitlements": "electron/entitlements.mac.plist",
+      "entitlementsInherit": "electron/entitlements.mac.plist"
+    }
   }
 }

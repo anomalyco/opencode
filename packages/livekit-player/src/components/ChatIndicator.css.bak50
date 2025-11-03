@@ -1,5 +1,4 @@
 .chat-indicator {
-  background: transparent !important;
   display: flex;
   flex-direction: column;
   align-items: center;
@@ -54,8 +53,8 @@
 }
 
 .blob-svg {
-  width: 100%;
-  height: 100%;
+  width: 200%;
+  height: 200%;
   filter: none;
   transform: translateZ(0);
   will-change: transform;
@@ -134,10 +133,4 @@
 
 .state-connecting svg {
   animation: pulse 1.5s ease-in-out infinite;
-}
-
-/* FORCE NO CLIPPING */
-.chat-indicator, .chat-indicator *, .status-container, .status-container *, .blob-container, .blob-container * {
-  overflow: visible !important;
-  clip-path: none !important;
 }

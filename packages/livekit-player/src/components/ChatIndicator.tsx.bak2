@@ -30,22 +30,6 @@ export default function ChatIndicator({ room, connectionState }: ChatIndicatorPr
   const renderAnimationFrameRef = useRef<number>()
 
   // Force re-renders for animation
-
-  // Keyboard shortcut to toggle HAL border (Cmd+B)
-  useEffect(() => {
-    const handleKeyPress = (e: KeyboardEvent) => {
-      if ((e.metaKey || e.ctrlKey) && e.key === 'b') {
-        e.preventDefault()
-        setShowBorder(prev => {
-          const newValue = !prev
-          localStorage.setItem("hal-show-border", String(newValue))
-          return newValue
-        })
-      }
-    }
-    window.addEventListener('keydown', handleKeyPress)
-    return () => window.removeEventListener('keydown', handleKeyPress)
-  }, [])
   useEffect(() => {
     const animate = () => {
       forceUpdate(n => n + 1)

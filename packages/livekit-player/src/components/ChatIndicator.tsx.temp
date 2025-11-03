@@ -1,0 +1,16 @@
+  
+  // Keyboard shortcut to toggle border (Cmd+B)
+  useEffect(() => {
+    const handleKeyPress = (e: KeyboardEvent) => {
+      if ((e.metaKey || e.ctrlKey) && e.key === 'b') {
+        e.preventDefault()
+        setShowBorder(prev => {
+          const newValue = !prev
+          localStorage.setItem("hal-show-border", String(newValue))
+          return newValue
+        })
+      }
+    }
+    window.addEventListener('keydown', handleKeyPress)
+    return () => window.removeEventListener('keydown', handleKeyPress)
+  }, [])

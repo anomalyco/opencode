@@ -4,16 +4,29 @@
   box-sizing: border-box;
 }
 
+html {
+  background: transparent !important;
+  overflow: visible !important;
+}
+
 body {
-  font-family: -apple-system, BlinkMacSystemFont, 'SF Pro Display', 'Segoe UI', system-ui, sans-serif;
+  font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', 'Roboto', 'Oxygen',
+    'Ubuntu', 'Cantarell', 'Fira Sans', 'Droid Sans', 'Helvetica Neue',
+    sans-serif;
   -webkit-font-smoothing: antialiased;
   -moz-osx-font-smoothing: grayscale;
-  color: #ffffff;
+  background: transparent !important;
+  overflow: visible !important;
 }
 
 #root {
   width: 100vw;
   height: 100vh;
-  background: #0f0f0f;
-  overflow: hidden;
+  background: transparent !important;
+  overflow: visible !important;
+}
+
+/* FORCE NO CLIPPING ANYWHERE */
+html, body, #root, * {
+  overflow: visible !important;
 }

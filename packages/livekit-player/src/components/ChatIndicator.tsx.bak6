@@ -314,7 +314,7 @@ export default function ChatIndicator({ room, connectionState }: ChatIndicatorPr
             <svg xmlns="http://www.w3.org/2000/svg" xmlnsXlink="http://www.w3.org/1999/xlink" viewBox="0 0 562.5 562.5" width="100%" height="100%"><defs><linearGradient id="linearGradient2781"><stop id="stop2782" offset="0" style={{ stopColor: "rgb(252, 255, 0)", stopOpacity: 1 }} /><stop id="stop2784" offset="1" style={{ stopColor: "rgb(255, 0, 0)", stopOpacity: 1 }} /></linearGradient><linearGradient id="linearGradient1530"><stop id="stop1531" offset="0" style={{ stopColor: "rgb(255, 0, 0)", stopOpacity: 1 }} /><stop id="stop1534" offset="0.5" style={{ stopColor: "rgb(238, 0, 0)", stopOpacity: 1 }} /><stop id="stop4709" offset="0.75" style={{ stopColor: "rgb(164, 0, 0)", stopOpacity: 1 }} /><stop id="stop1532" offset="1" style={{ stopColor: "rgb(0, 0, 0)", stopOpacity: 1 }} /></linearGradient><radialGradient gradientUnits="userSpaceOnUse" xlinkHref="#linearGradient1530" id="radialGradient2175" fy="441.98581" fx="279.27597" r="218.70837" cy="441.98581" cx="279.27597" /><radialGradient gradientUnits="userSpaceOnUse" xlinkHref="#linearGradient2781" id="radialGradient2176" fy="450.62323" fx="279.27597" r="37.428738" cy="450.62323" cx="279.27597" /></defs><g id="g3882" transform="matrix(0.999995,0.000000,0.000000,1.000000,-366.8852,-202.1756)"><g id="g1285" transform="matrix(0.706473,0.000000,0.000000,0.706473,392.0851,234.7421)"><path id="path908" transform="matrix(0.871134,0.000000,0.000000,0.871134,104.5141,-37.87046)" d="M 555.67282 441.98581 A 276.39685 276.39685 0 1 1  2.8791199,441.98581 A 276.39685 276.39685 0 1 1  555.67282 441.98581 z" style={{ fill: "url(#radialGradient2175)", fillOpacity: 1, fillRule: "evenodd", stroke: showBorder ? "rgb(0, 0, 0)" : "none", strokeWidth: showBorder ? 1.43491 : 0, strokeLinecap: "butt", strokeLinejoin: "round", strokeMiterlimit: 4, strokeOpacity: 1 }} /><path id="path2158" transform="matrix(0.871134,0.000000,0.000000,0.871134,104.5141,-45.39481)" d="M 316.70471 450.62323 A 37.428738 37.428738 0 1 1  241.84723,450.62323 A 37.428738 37.428738 0 1 1  316.70471 450.62323 z" style={{ fill: "url(#radialGradient2176)", fillOpacity: 0.75, fillRule: "evenodd", stroke: "none", strokeWidth: "1pt", strokeLinecap: "butt", strokeLinejoin: "miter", strokeOpacity: 1 }} /></g></g></svg>
           </div>
 
-          <svg viewBox="0 0 200 200" xmlns="http://www.w3.org/2000/svg" className="blob-svg">
+          <svg viewBox="0 0 200 200" xmlns="http://www.w3.org/2000/svg" className="blob-svg" style={{ filter: showBorder ? "drop-shadow(0 0 30px rgba(168, 139, 250, 0.5))" : "none" }}>
             <defs>
               <filter id="goo-agent">
                 <feGaussianBlur in="SourceGraphic" stdDeviation="10" result="blur" />                
@@ -339,7 +339,7 @@ export default function ChatIndicator({ room, connectionState }: ChatIndicatorPr
               <circle cx={agentOrb3.x} cy={agentOrb3.y} r="30" fill="#a78bfa" opacity={0.2 * (agentBands[2] || 0)} filter="url(#blur-tight)" />
               <circle cx={agentOrb4.x} cy={agentOrb4.y} r="25" fill="#a78bfa" opacity={0.2 * (agentBands[3] || 0)} filter="url(#blur-tight)" />
               
-              <circle className="blob-main" cx="100" cy="100" r={agentRadius} fill="url(#glass-purple)" />
+              <circle className="blob-main" cx="100" cy="100" r={agentRadius} fill="url(#glass-purple)" stroke={showBorder ? "rgba(200, 200, 200, 0.3)" : "none"} strokeWidth={showBorder ? "1" : "0"} />
               <circle className="blob-orb" cx={agentOrb1.x} cy={agentOrb1.y} r="25" fill="url(#glass-purple)" style={{ transform: `scale(${agentOrb1.scale})`, transformOrigin: '100px 100px' }} />
               <circle className="blob-orb" cx={agentOrb2.x} cy={agentOrb2.y} r="20" fill="url(#glass-purple)" style={{ transform: `scale(${agentOrb2.scale})`, transformOrigin: '100px 100px' }} />
               <circle className="blob-orb" cx={agentOrb3.x} cy={agentOrb3.y} r="18" fill="url(#glass-purple)" style={{ transform: `scale(${agentOrb3.scale})`, transformOrigin: '100px 100px' }} />
@@ -503,7 +503,7 @@ export default function ChatIndicator({ room, connectionState }: ChatIndicatorPr
       {/* BLUE - User Microphone */}
       <div className="status-container">
         <div className="blob-container">
-          <svg viewBox="0 0 200 200" xmlns="http://www.w3.org/2000/svg" className="blob-svg">
+          <svg viewBox="0 0 200 200" xmlns="http://www.w3.org/2000/svg" className="blob-svg" style={{ filter: showBorder ? "drop-shadow(0 0 30px rgba(168, 139, 250, 0.5))" : "none" }}>
             <defs>
               <filter id="goo-user">
                 <feBlend in="SourceGraphic" in2="goo" />
@@ -525,7 +525,7 @@ export default function ChatIndicator({ room, connectionState }: ChatIndicatorPr
               <circle cx={userOrb3.x} cy={userOrb3.y} r="30" fill="#3b82f6" opacity={0.2 * (userBands[2] || 0)} filter="url(#blur-tight)" />
               <circle cx={userOrb4.x} cy={userOrb4.y} r="25" fill="#3b82f6" opacity={0.2 * (userBands[3] || 0)} filter="url(#blur-tight)" />
               
-              <circle className="blob-main" cx="100" cy="100" r={userRadius} fill="url(#glass-blue)" />
+              <circle className="blob-main" cx="100" cy="100" r={userRadius} fill="url(#glass-blue)" stroke={showBorder ? "rgba(200, 200, 200, 0.3)" : "none"} strokeWidth={showBorder ? "1" : "0"} />
               <circle className="blob-orb" cx={userOrb1.x} cy={userOrb1.y} r="25" fill="url(#glass-blue)" style={{ transform: `scale(${userOrb1.scale})`, transformOrigin: '100px 100px' }} />
               <circle className="blob-orb" cx={userOrb2.x} cy={userOrb2.y} r="20" fill="url(#glass-blue)" style={{ transform: `scale(${userOrb2.scale})`, transformOrigin: '100px 100px' }} />
               <circle className="blob-orb" cx={userOrb3.x} cy={userOrb3.y} r="18" fill="url(#glass-blue)" style={{ transform: `scale(${userOrb3.scale})`, transformOrigin: '100px 100px' }} />

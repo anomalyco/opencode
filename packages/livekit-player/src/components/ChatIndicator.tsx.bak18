@@ -12,6 +12,7 @@ interface ChatIndicatorProps {
 
 export default function ChatIndicator({ room, connectionState }: ChatIndicatorProps) {
   const [showBorder, setShowBorder] = useState(() => localStorage.getItem("hal-show-border") !== "false")
+  const [showBlobOutline, setShowBlobOutline] = useState(() => localStorage.getItem("blob-show-outline") !== "false")
   const [agentState, setAgentState] = useState<AgentState>('disconnected')
   const [participantCount, setParticipantCount] = useState(0)
   const [connectionQuality, setConnectionQuality] = useState<ConnectionQuality>(ConnectionQuality.Excellent)
@@ -32,6 +33,22 @@ export default function ChatIndicator({ room, connectionState }: ChatIndicatorPr
   // Force re-renders for animation
 
   // Keyboard shortcut to toggle HAL border (Cmd+B)
+
+  // Keyboard shortcut to toggle blob outline (Cmd+Shift+B)
+  useEffect(() => {
+    const handleKeyPress = (e: KeyboardEvent) => {
+      if ((e.metaKey || e.ctrlKey) && e.shiftKey && e.key === 'b') {
+        e.preventDefault()
+        setShowBlobOutline(prev => {
+          const newValue = !prev
+          localStorage.setItem('blob-show-outline', String(newValue))
+          return newValue
+        })
+      }
+    }
+    window.addEventListener('keydown', handleKeyPress)
+    return () => window.removeEventListener('keydown', handleKeyPress)
+  }, [])
   useEffect(() => {
     const handleKeyPress = (e: KeyboardEvent) => {
       if ((e.metaKey || e.ctrlKey) && e.key === 'b') {
@@ -326,20 +343,20 @@ export default function ChatIndicator({ room, connectionState }: ChatIndicatorPr
               </filter>
               
               <radialGradient id="glass-purple" cx="50%" cy="50%">
-                <stop offset="0%" stopColor="#a78bfa" stopOpacity="0.4" />
-                <stop offset="50%" stopColor="#a78bfa" stopOpacity="0.6" />
-                <stop offset="100%" stopColor="#7c3aed" stopOpacity="0.3" />
+                <stop offset="0%" stopColor="#a78bfa" stopOpacity="0.8" />
+                <stop offset="50%" stopColor="#c4b5fd" stopOpacity="0.9" />
+                <stop offset="100%" stopColor="#8b5cf6" stopOpacity="0.7" />
               </radialGradient>
             </defs>
             
             <g filter="url(#goo-agent)">
               {/* Orb glow halos - drawn first so they're behind */}
-              <circle cx={agentOrb1.x} cy={agentOrb1.y} r="40" fill="#a78bfa" opacity={0.2 * (agentBands[0] || 0)} filter="url(#blur-tight)" />
-              <circle cx={agentOrb2.x} cy={agentOrb2.y} r="35" fill="#a78bfa" opacity={0.2 * (agentBands[1] || 0)} filter="url(#blur-tight)" />
-              <circle cx={agentOrb3.x} cy={agentOrb3.y} r="30" fill="#a78bfa" opacity={0.2 * (agentBands[2] || 0)} filter="url(#blur-tight)" />
-              <circle cx={agentOrb4.x} cy={agentOrb4.y} r="25" fill="#a78bfa" opacity={0.2 * (agentBands[3] || 0)} filter="url(#blur-tight)" />
+              <circle cx={agentOrb1.x} cy={agentOrb1.y} r="40" fill="#a78bfa" opacity={0.8 * (agentBands[0] || 0)} filter="url(#blur-tight)" />
+              <circle cx={agentOrb2.x} cy={agentOrb2.y} r="35" fill="#a78bfa" opacity={0.8 * (agentBands[1] || 0)} filter="url(#blur-tight)" />
+              <circle cx={agentOrb3.x} cy={agentOrb3.y} r="30" fill="#a78bfa" opacity={0.8 * (agentBands[2] || 0)} filter="url(#blur-tight)" />
+              <circle cx={agentOrb4.x} cy={agentOrb4.y} r="25" fill="#a78bfa" opacity={0.8 * (agentBands[3] || 0)} filter="url(#blur-tight)" />
               
-              <circle className="blob-main" cx="100" cy="100" r={agentRadius} fill="url(#glass-purple)" />
+              <circle className="blob-main" cx="100" cy="100" r={agentRadius} fill="url(#glass-purple)" stroke={showBlobOutline ? "rgba(200, 200, 200, 0.3)" : "none"} strokeWidth={showBlobOutline ? "1" : "0"} />
               <circle className="blob-orb" cx={agentOrb1.x} cy={agentOrb1.y} r="25" fill="url(#glass-purple)" style={{ transform: `scale(${agentOrb1.scale})`, transformOrigin: '100px 100px' }} />
               <circle className="blob-orb" cx={agentOrb2.x} cy={agentOrb2.y} r="20" fill="url(#glass-purple)" style={{ transform: `scale(${agentOrb2.scale})`, transformOrigin: '100px 100px' }} />
               <circle className="blob-orb" cx={agentOrb3.x} cy={agentOrb3.y} r="18" fill="url(#glass-purple)" style={{ transform: `scale(${agentOrb3.scale})`, transformOrigin: '100px 100px' }} />
@@ -520,12 +537,12 @@ export default function ChatIndicator({ room, connectionState }: ChatIndicatorPr
             
             <g filter="url(#goo-user)">
               {/* Blue orb glow halos - drawn first so they're behind */}
-              <circle cx={userOrb1.x} cy={userOrb1.y} r="40" fill="#3b82f6" opacity={0.2 * (userBands[0] || 0)} filter="url(#blur-tight)" />
-              <circle cx={userOrb2.x} cy={userOrb2.y} r="35" fill="#3b82f6" opacity={0.2 * (userBands[1] || 0)} filter="url(#blur-tight)" />
-              <circle cx={userOrb3.x} cy={userOrb3.y} r="30" fill="#3b82f6" opacity={0.2 * (userBands[2] || 0)} filter="url(#blur-tight)" />
-              <circle cx={userOrb4.x} cy={userOrb4.y} r="25" fill="#3b82f6" opacity={0.2 * (userBands[3] || 0)} filter="url(#blur-tight)" />
+              <circle cx={userOrb1.x} cy={userOrb1.y} r="40" fill="#3b82f6" opacity={0.8 * (userBands[0] || 0)} filter="url(#blur-tight)" />
+              <circle cx={userOrb2.x} cy={userOrb2.y} r="35" fill="#3b82f6" opacity={0.8 * (userBands[1] || 0)} filter="url(#blur-tight)" />
+              <circle cx={userOrb3.x} cy={userOrb3.y} r="30" fill="#3b82f6" opacity={0.8 * (userBands[2] || 0)} filter="url(#blur-tight)" />
+              <circle cx={userOrb4.x} cy={userOrb4.y} r="25" fill="#3b82f6" opacity={0.8 * (userBands[3] || 0)} filter="url(#blur-tight)" />
               
-              <circle className="blob-main" cx="100" cy="100" r={userRadius} fill="url(#glass-blue)" />
+              <circle className="blob-main" cx="100" cy="100" r={userRadius} fill="url(#glass-blue)" stroke={showBlobOutline ? "rgba(200, 200, 200, 0.3)" : "none"} strokeWidth={showBlobOutline ? "1" : "0"} />
               <circle className="blob-orb" cx={userOrb1.x} cy={userOrb1.y} r="25" fill="url(#glass-blue)" style={{ transform: `scale(${userOrb1.scale})`, transformOrigin: '100px 100px' }} />
               <circle className="blob-orb" cx={userOrb2.x} cy={userOrb2.y} r="20" fill="url(#glass-blue)" style={{ transform: `scale(${userOrb2.scale})`, transformOrigin: '100px 100px' }} />
               <circle className="blob-orb" cx={userOrb3.x} cy={userOrb3.y} r="18" fill="url(#glass-blue)" style={{ transform: `scale(${userOrb3.scale})`, transformOrigin: '100px 100px' }} />

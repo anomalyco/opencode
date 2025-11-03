@@ -1,5 +1,4 @@
 .chat-indicator {
-  background: transparent !important;
   display: flex;
   flex-direction: column;
   align-items: center;
@@ -27,9 +26,7 @@
   will-change: transform;
   backface-visibility: hidden;
   perspective: 1000px;
-  overflow: visible !important;
-  width: auto;
-  height: auto;
+  scale: min(calc(100vw / 400), calc(100vh / 500));
 }
 
 .status-container:nth-child(1) {
@@ -43,11 +40,13 @@
 }
 
 .blob-container {
+  width: 100%;
+  height: 45vh;
   position: relative;
   display: flex;
   align-items: center;
   justify-content: center;
-  overflow: visible !important;
+  overflow: visible;
   transform: translateZ(0);
   will-change: transform;
   backface-visibility: hidden;
@@ -77,15 +76,15 @@
 }
 
 .blob-glow {
-  position: fixed;
+  position: absolute;
   top: 50%;
   left: 50%;
   transform: translate(-50%, -50%) translateZ(0);
-  width: 800px;
-  height: 800px;
+  width: 300px;
+  height: 300px;
   border-radius: 50%;
-  filter: blur(200px);
-  opacity: 0.8;
+  filter: blur(150px);
+  opacity: 1;
   pointer-events: none;
   z-index: -1;
   will-change: background, opacity;
@@ -134,10 +133,4 @@
 
 .state-connecting svg {
   animation: pulse 1.5s ease-in-out infinite;
-}
-
-/* FORCE NO CLIPPING */
-.chat-indicator, .chat-indicator *, .status-container, .status-container *, .blob-container, .blob-container * {
-  overflow: visible !important;
-  clip-path: none !important;
 }
