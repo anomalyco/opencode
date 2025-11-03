@@ -15,9 +15,17 @@ export default function ChatIndicator({ room, connectionState }: ChatIndicatorPr
   const [participantCount, setParticipantCount] = useState(0)
   const [connectionQuality, setConnectionQuality] = useState<ConnectionQuality>(ConnectionQuality.Excellent)
   const [, forceUpdate] = useState(0)
+  
+  // Agent (remote) audio bands - PURPLE
   const agentBandsRef = useRef<number[]>([0, 0, 0, 0])
   const agentAudioContextRef = useRef<AudioContext | null>(null)
   const agentAnimationFrameRef = useRef<number>()
+  
+  // User (local mic) audio bands - GREEN
+  const userBandsRef = useRef<number[]>([0, 0, 0, 0])
+  const userAudioContextRef = useRef<AudioContext | null>(null)
+  const userAnimationFrameRef = useRef<number>()
+  
   const renderAnimationFrameRef = useRef<number>()
 
   // Force re-renders for animation
@@ -35,34 +43,23 @@ export default function ChatIndicator({ room, connectionState }: ChatIndicatorPr
     }
   }, [])
 
-  // Setup local microphone audio monitoring
+  // Setup local microphone audio monitoring - GREEN
   useEffect(() => {
-    if (connectionState === ConnectionState.Disconnected) {
-      setAgentState('disconnected')
+    if (connectionState !== ConnectionState.Connected) {
       return
     }
-    
-    if (connectionState === ConnectionState.Connecting || connectionState === ConnectionState.Reconnecting) {
-      setAgentState('connecting')
-      return
-    }
-    
-    if (connectionState !== ConnectionState.Connected || !room) {
-      return
-    }
-    
-    // FORCE SPEAKING for testing
-    setAgentState('speaking')
     
     // Get local microphone audio
     navigator.mediaDevices.getUserMedia({ audio: true })
       .then(stream => {
+        console.log('🎤 Got user microphone access')
+        
         // Clean up old context
-        if (agentAudioContextRef.current) {
-          agentAudioContextRef.current.close()
+        if (userAudioContextRef.current) {
+          userAudioContextRef.current.close()
         }
-        if (agentAnimationFrameRef.current) {
-          cancelAnimationFrame(agentAnimationFrameRef.current)
+        if (userAnimationFrameRef.current) {
+          cancelAnimationFrame(userAnimationFrameRef.current)
         }
         
         const audioContext = new AudioContext()
@@ -73,7 +70,7 @@ export default function ChatIndicator({ room, connectionState }: ChatIndicatorPr
         analyser.smoothingTimeConstant = 0.6
         source.connect(analyser)
         
-        agentAudioContextRef.current = audioContext
+        userAudioContextRef.current = audioContext
         
         const dataArray = new Uint8Array(analyser.frequencyBinCount)
         
@@ -91,9 +88,9 @@ export default function ChatIndicator({ room, connectionState }: ChatIndicatorPr
             bands.push(average / 255)
           }
           
-          agentBandsRef.current = bands
+          userBandsRef.current = bands
           
-          agentAnimationFrameRef.current = requestAnimationFrame(analyze)
+          userAnimationFrameRef.current = requestAnimationFrame(analyze)
         }
         
         analyze()
@@ -103,6 +100,109 @@ export default function ChatIndicator({ room, connectionState }: ChatIndicatorPr
       })
     
     return () => {
+      if (userAnimationFrameRef.current) {
+        cancelAnimationFrame(userAnimationFrameRef.current)
+      }
+      if (userAudioContextRef.current) {
+        userAudioContextRef.current.close()
+      }
+    }
+  }, [connectionState])
+
+  // Setup agent audio monitoring - PURPLE
+  useEffect(() => {
+    if (connectionState === ConnectionState.Disconnected) {
+      setAgentState('disconnected')
+      return
+    }
+    
+    if (connectionState === ConnectionState.Connecting || connectionState === ConnectionState.Reconnecting) {
+      setAgentState('connecting')
+      return
+    }
+    
+    if (connectionState !== ConnectionState.Connected || !room) {
+      return
+    }
+    
+    setAgentState('speaking')
+    
+    const setupAgentAudio = (track: Track) => {
+      console.log('🎧 Setting up agent audio monitoring', track.sid)
+      
+      const audioTrack = track as RemoteAudioTrack
+      const mediaStreamTrack = audioTrack.mediaStreamTrack
+      
+      if (!mediaStreamTrack) {
+        console.warn('⚠️ No mediaStreamTrack available')
+        return
+      }
+      
+      // Clean up old context
+      if (agentAudioContextRef.current) {
+        agentAudioContextRef.current.close()
+      }
+      if (agentAnimationFrameRef.current) {
+        cancelAnimationFrame(agentAnimationFrameRef.current)
+      }
+      
+      const audioContext = new AudioContext()
+      const analyser = audioContext.createAnalyser()
+      const stream = new MediaStream([mediaStreamTrack])
+      const source = audioContext.createMediaStreamSource(stream)
+      
+      analyser.fftSize = 512
+      analyser.smoothingTimeConstant = 0.6
+      source.connect(analyser)
+      
+      agentAudioContextRef.current = audioContext
+      
+      const dataArray = new Uint8Array(analyser.frequencyBinCount)
+      
+      const analyze = () => {
+        analyser.getByteFrequencyData(dataArray)
+        
+        const bandSize = Math.floor(dataArray.length / 4)
+        const bands: number[] = []
+        
+        for (let i = 0; i < 4; i++) {
+          const start = i * bandSize
+          const end = start + bandSize
+          const bandData = dataArray.slice(start, end)
+          const average = bandData.reduce((a, b) => a + b, 0) / bandData.length
+          bands.push(average / 255)
+        }
+        
+        agentBandsRef.current = bands
+        
+        agentAnimationFrameRef.current = requestAnimationFrame(analyze)
+      }
+      
+      analyze()
+      console.log('✅ Agent audio monitoring started')
+    }
+    
+    const handleTrackSubscribed = (track: Track, publication: any, participant: RemoteParticipant) => {
+      console.log('📥 Track subscribed:', track.kind, track.sid)
+      if (track.kind !== Track.Kind.Audio) return
+      setupAgentAudio(track)
+    }
+    
+    // Check for existing remote audio tracks
+    room.remoteParticipants.forEach((participant) => {
+      console.log('👤 Checking participant:', participant.identity)
+      participant.trackPublications.forEach((publication) => {
+        if (publication.track && publication.track.kind === Track.Kind.Audio) {
+          console.log('🔊 Found existing audio track')
+          setupAgentAudio(publication.track)
+        }
+      })
+    })
+    
+    room.on(RoomEvent.TrackSubscribed, handleTrackSubscribed)
+    
+    return () => {
+      room.off(RoomEvent.TrackSubscribed, handleTrackSubscribed)
       if (agentAnimationFrameRef.current) {
         cancelAnimationFrame(agentAnimationFrameRef.current)
       }
@@ -120,21 +220,19 @@ export default function ChatIndicator({ room, connectionState }: ChatIndicatorPr
     }
   }, [room, connectionState])
 
-  const audioBands = agentBandsRef.current
-  
-  const avgIntensity = audioBands.reduce((a, b) => a + b, 0) / audioBands.length
-  const baseRadius = 50
-  const radiusPulse = Math.pow(avgIntensity, 0.5) * 18
-  const radius = baseRadius + radiusPulse
+  // Agent (purple) calculations
+  const agentBands = agentBandsRef.current
+  const agentAvgIntensity = agentBands.reduce((a, b) => a + b, 0) / agentBands.length
+  const agentBaseRadius = 50
+  const agentRadiusPulse = Math.pow(agentAvgIntensity, 0.5) * 18
+  const agentRadius = agentBaseRadius + agentRadiusPulse
 
-  const getStatusColor = () => {
-    switch (agentState) {
-      case 'disconnected': return '#666666'
-      case 'connecting': return '#fbbf24'
-      case 'listening': return '#a78bfa'
-      case 'speaking': return '#4ade80'
-    }
-  }
+  // User (green) calculations
+  const userBands = userBandsRef.current
+  const userAvgIntensity = userBands.reduce((a, b) => a + b, 0) / userBands.length
+  const userBaseRadius = 50
+  const userRadiusPulse = Math.pow(userAvgIntensity, 0.5) * 18
+  const userRadius = userBaseRadius + userRadiusPulse
 
   const getOrbPosition = (index: number, bandLevel: number) => {
     if (bandLevel < 0.005) {
@@ -153,10 +251,17 @@ export default function ChatIndicator({ room, connectionState }: ChatIndicatorPr
     }
   }
 
-  const orb1 = getOrbPosition(0, audioBands[0] || 0)
-  const orb2 = getOrbPosition(1, audioBands[1] || 0)
-  const orb3 = getOrbPosition(2, audioBands[2] || 0)
-  const orb4 = getOrbPosition(3, audioBands[3] || 0)
+  // Agent orb positions
+  const agentOrb1 = getOrbPosition(0, agentBands[0] || 0)
+  const agentOrb2 = getOrbPosition(1, agentBands[1] || 0)
+  const agentOrb3 = getOrbPosition(2, agentBands[2] || 0)
+  const agentOrb4 = getOrbPosition(3, agentBands[3] || 0)
+
+  // User orb positions
+  const userOrb1 = getOrbPosition(0, userBands[0] || 0)
+  const userOrb2 = getOrbPosition(1, userBands[1] || 0)
+  const userOrb3 = getOrbPosition(2, userBands[2] || 0)
+  const userOrb4 = getOrbPosition(3, userBands[3] || 0)
 
   const getQualityIcon = () => {
     switch (connectionQuality) {
@@ -180,17 +285,18 @@ export default function ChatIndicator({ room, connectionState }: ChatIndicatorPr
 
   return (
     <div className="chat-indicator">
+      {/* PURPLE - Agent Audio */}
       <div className="status-container">
         <div className="blob-container">
           <svg viewBox="0 0 200 200" xmlns="http://www.w3.org/2000/svg" className="blob-svg">
             <defs>
-              <filter id="goo">
+              <filter id="goo-agent">
                 <feGaussianBlur in="SourceGraphic" stdDeviation="10" result="blur" />
                 <feColorMatrix in="blur" mode="matrix" values="1 0 0 0 0  0 1 0 0 0  0 0 1 0 0  0 0 0 18 -8" result="goo" />
                 <feBlend in="SourceGraphic" in2="goo" />
               </filter>
               
-              <radialGradient id="shine" cx="30%" cy="30%">
+              <radialGradient id="shine-agent" cx="30%" cy="30%">
                 <stop offset="0%" stopColor="rgba(255,255,255,0.9)" />
                 <stop offset="30%" stopColor="rgba(255,255,255,0.4)" />
                 <stop offset="70%" stopColor="rgba(255,255,255,0.1)" />
@@ -198,20 +304,20 @@ export default function ChatIndicator({ room, connectionState }: ChatIndicatorPr
               </radialGradient>
             </defs>
             
-            <g filter="url(#goo)">
-              <circle className="blob-main" cx="100" cy="100" r={radius} fill={getStatusColor()} />
-              <circle className="blob-orb" cx={orb1.x} cy={orb1.y} r="25" fill={getStatusColor()} style={{ transform: `scale(${orb1.scale})`, transformOrigin: '100px 100px' }} />
-              <circle className="blob-orb" cx={orb2.x} cy={orb2.y} r="20" fill={getStatusColor()} style={{ transform: `scale(${orb2.scale})`, transformOrigin: '100px 100px' }} />
-              <circle className="blob-orb" cx={orb3.x} cy={orb3.y} r="18" fill={getStatusColor()} style={{ transform: `scale(${orb3.scale})`, transformOrigin: '100px 100px' }} />
-              <circle className="blob-orb" cx={orb4.x} cy={orb4.y} r="15" fill={getStatusColor()} style={{ transform: `scale(${orb4.scale})`, transformOrigin: '100px 100px' }} />
+            <g filter="url(#goo-agent)">
+              <circle className="blob-main" cx="100" cy="100" r={agentRadius} fill="#a78bfa" />
+              <circle className="blob-orb" cx={agentOrb1.x} cy={agentOrb1.y} r="25" fill="#a78bfa" style={{ transform: `scale(${agentOrb1.scale})`, transformOrigin: '100px 100px' }} />
+              <circle className="blob-orb" cx={agentOrb2.x} cy={agentOrb2.y} r="20" fill="#a78bfa" style={{ transform: `scale(${agentOrb2.scale})`, transformOrigin: '100px 100px' }} />
+              <circle className="blob-orb" cx={agentOrb3.x} cy={agentOrb3.y} r="18" fill="#a78bfa" style={{ transform: `scale(${agentOrb3.scale})`, transformOrigin: '100px 100px' }} />
+              <circle className="blob-orb" cx={agentOrb4.x} cy={agentOrb4.y} r="15" fill="#a78bfa" style={{ transform: `scale(${agentOrb4.scale})`, transformOrigin: '100px 100px' }} />
             </g>
             
-            <ellipse className="blob-shine" cx="80" cy="80" rx="40" ry="35" fill="url(#shine)" opacity="0.6" />
+            <ellipse className="blob-shine" cx="80" cy="80" rx="40" ry="35" fill="url(#shine-agent)" opacity="0.6" />
           </svg>
-          <div className="blob-glow" style={{ backgroundColor: getStatusColor() }} />
+          <div className="blob-glow" style={{ backgroundColor: '#a78bfa' }} />
         </div>
 
-        <div className="status-text">Speaking</div>
+        <div className="status-text">Agent</div>
         
         <div className="connection-info">
           <div className="info-row">
@@ -232,6 +338,41 @@ export default function ChatIndicator({ room, connectionState }: ChatIndicatorPr
             </span>
           </div>
         </div>
+      </div>
+
+      {/* GREEN - User Microphone */}
+      <div className="status-container">
+        <div className="blob-container">
+          <svg viewBox="0 0 200 200" xmlns="http://www.w3.org/2000/svg" className="blob-svg">
+            <defs>
+              <filter id="goo-user">
+                <feGaussianBlur in="SourceGraphic" stdDeviation="10" result="blur" />
+                <feColorMatrix in="blur" mode="matrix" values="1 0 0 0 0  0 1 0 0 0  0 0 1 0 0  0 0 0 18 -8" result="goo" />
+                <feBlend in="SourceGraphic" in2="goo" />
+              </filter>
+              
+              <radialGradient id="shine-user" cx="30%" cy="30%">
+                <stop offset="0%" stopColor="rgba(255,255,255,0.9)" />
+                <stop offset="30%" stopColor="rgba(255,255,255,0.4)" />
+                <stop offset="70%" stopColor="rgba(255,255,255,0.1)" />
+                <stop offset="100%" stopColor="rgba(255,255,255,0)" />
+              </radialGradient>
+            </defs>
+            
+            <g filter="url(#goo-user)">
+              <circle className="blob-main" cx="100" cy="100" r={userRadius} fill="#4ade80" />
+              <circle className="blob-orb" cx={userOrb1.x} cy={userOrb1.y} r="25" fill="#4ade80" style={{ transform: `scale(${userOrb1.scale})`, transformOrigin: '100px 100px' }} />
+              <circle className="blob-orb" cx={userOrb2.x} cy={userOrb2.y} r="20" fill="#4ade80" style={{ transform: `scale(${userOrb2.scale})`, transformOrigin: '100px 100px' }} />
+              <circle className="blob-orb" cx={userOrb3.x} cy={userOrb3.y} r="18" fill="#4ade80" style={{ transform: `scale(${userOrb3.scale})`, transformOrigin: '100px 100px' }} />
+              <circle className="blob-orb" cx={userOrb4.x} cy={userOrb4.y} r="15" fill="#4ade80" style={{ transform: `scale(${userOrb4.scale})`, transformOrigin: '100px 100px' }} />
+            </g>
+            
+            <ellipse className="blob-shine" cx="80" cy="80" rx="40" ry="35" fill="url(#shine-user)" opacity="0.6" />
+          </svg>
+          <div className="blob-glow" style={{ backgroundColor: '#4ade80' }} />
+        </div>
+
+        <div className="status-text">You</div>
       </div>
     </div>
   )
