@@ -50,6 +50,24 @@ function App() {
           console.debug('🎤 Requesting microphone access...')
           await room.localParticipant.setMicrophoneEnabled(true)
           console.debug('✅ Microphone enabled')
+          
+          // Enable audio level monitoring on local tracks
+          setTimeout(() => {
+            if (room.localParticipant?.audioTracks) {
+              room.localParticipant.audioTracks.forEach((publication) => {
+                if (publication.track) {
+                  console.debug('🎧 Enabling audio level observation on track:', publication.trackSid)
+                  publication.track.on('audioLevelChanged', (level: number) => {
+                    // This will be picked up by ChatIndicator
+                    console.debug('🎤 Local audio level:', level.toFixed(3))
+                  })
+                }
+              })
+            } else {
+              console.warn('⚠️ audioTracks not available yet')
+            }
+          }, 1000)
+          
         } catch (micError) {
           console.error('❌ Failed to enable microphone:', micError)
           setError('Failed to access microphone. Please grant permission.')

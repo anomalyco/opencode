@@ -12,13 +12,13 @@
   display: flex;
   flex-direction: column;
   align-items: center;
-  gap: 32px;
+  gap: 8px;
   -webkit-app-region: no-drag;
 }
 
 .blob-container {
   width: 100%;
-  height: 60vh;
+  height: 45vh;
   position: relative;
   display: flex;
   align-items: center;
@@ -27,162 +27,497 @@
 }
 
 .blob-svg {
-  width: 400px;
-  height: 400px;
+  width: min(400px, 80vw);
+  height: min(400px, 80vw);
+  max-width: 500px;
+  max-height: 500px;
   overflow: visible;
-  filter: 
-    drop-shadow(0 30px 60px rgba(0, 0, 0, 0.8))
-    drop-shadow(0 15px 30px rgba(0, 0, 0, 0.6))
-    drop-shadow(0 5px 15px rgba(0, 0, 0, 0.4));
 }
 
-.blob-path {
-  transform-origin: center;
-  transition: fill 0.6s cubic-bezier(0.4, 0, 0.2, 1);
+.blob-group {
+  transform-origin: 100px 100px;
+}
+
+.blob-group.hidden {
+  opacity: 0;
+  pointer-events: none;
+}
+
+.blob-group.active {
+  opacity: 1;
+}
+
+.blob-main {
+  transform-origin: 100px 100px;
+}
+
+.blob-orb {
+  transform-origin: 100px 100px;
 }
 
 .blob-shine {
   pointer-events: none;
   mix-blend-mode: overlay;
   transform-origin: center;
-  transition: opacity 0.6s ease, transform 0.8s cubic-bezier(0.4, 0, 0.2, 1);
+  transition: opacity 0.6s ease;
 }
 
-/* Listening - gentle pulse */
-.blob-path.listening {
-  animation: blob-calm 6s ease-in-out infinite;
+/* Listening - gentle orbiting globules (JS controls main blob for audio reactivity) */
+.blob-group.listening .blob-orb-1 {
+  animation: orbit-slow-1 8s ease-in-out infinite;
 }
 
-.blob-path.listening ~ .blob-shine {
-  animation: shine-float 4s ease-in-out infinite;
+.blob-group.listening .blob-orb-2 {
+  animation: orbit-slow-2 10s ease-in-out infinite;
 }
 
-@keyframes blob-calm {
+.blob-group.listening .blob-orb-3 {
+  animation: orbit-slow-3 12s ease-in-out infinite;
+}
+
+.blob-group.listening .blob-orb-4 {
+  animation: orbit-slow-4 14s ease-in-out infinite;
+}
+
+@keyframes orbit-slow-1 {
   0%, 100% {
-    transform: scale(1) translateY(0);
+    cx: 100px;
+    cy: 100px;
   }
   25% {
-    transform: scale(1.05) translateY(-5px);
+    cx: 145px;
+    cy: 85px;
   }
   50% {
-    transform: scale(0.98) translateY(3px);
+    cx: 100px;
+    cy: 50px;
   }
   75% {
-    transform: scale(1.02) translateY(-2px);
+    cx: 55px;
+    cy: 85px;
   }
 }
 
-@keyframes shine-float {
+@keyframes orbit-slow-2 {
   0%, 100% {
-    transform: translate(0, 0) scale(1);
-    opacity: 0.7;
-  }
-  50% {
-    transform: translate(-10px, -10px) scale(1.05);
-    opacity: 0.9;
-  }
-}
-
-/* Speaking - DRAMATIC spikes! */
-.blob-path.speaking {
-  animation: blob-spike 0.8s ease-in-out infinite;
-}
-
-.blob-path.speaking ~ .blob-shine {
-  animation: shine-intense 0.8s ease-in-out infinite;
-}
-
-@keyframes blob-spike {
-  0%, 100% {
-    transform: scale(1.3);
+    cx: 100px;
+    cy: 100px;
   }
   25% {
-    transform: scale(1.35) rotate(5deg);
+    cx: 55px;
+    cy: 115px;
   }
   50% {
-    transform: scale(1.32) rotate(-5deg);
+    cx: 100px;
+    cy: 150px;
   }
   75% {
-    transform: scale(1.34) rotate(3deg);
+    cx: 145px;
+    cy: 115px;
   }
 }
 
-@keyframes shine-intense {
+@keyframes orbit-slow-3 {
   0%, 100% {
-    transform: translate(0, 0) scale(1);
-    opacity: 0.9;
+    cx: 100px;
+    cy: 100px;
+  }
+  25% {
+    cx: 130px;
+    cy: 130px;
   }
   50% {
-    transform: translate(-15px, -15px) scale(1.2);
-    opacity: 1;
+    cx: 70px;
+    cy: 130px;
+  }
+  75% {
+    cx: 70px;
+    cy: 70px;
   }
 }
 
-/* Thinking - moderate pulse */
-.blob-path.thinking {
-  animation: blob-pulse 1.5s ease-in-out infinite;
+@keyframes orbit-slow-4 {
+  0%, 100% {
+    cx: 100px;
+    cy: 100px;
+  }
+  25% {
+    cx: 70px;
+    cy: 70px;
+  }
+  50% {
+    cx: 130px;
+    cy: 70px;
+  }
+  75% {
+    cx: 130px;
+    cy: 130px;
+  }
 }
 
-.blob-path.thinking ~ .blob-shine {
-  animation: shine-pulse 1.5s ease-in-out infinite;
+/* Speaking - WILD chaotic globules! */
+.blob-group.speaking .blob-main {
+  animation: blob-explode 0.6s ease-in-out infinite;
+}
+
+.blob-group.speaking .blob-orb-1 {
+  animation: orbit-chaos-1 0.8s ease-in-out infinite;
+}
+
+.blob-group.speaking .blob-orb-2 {
+  animation: orbit-chaos-2 0.7s ease-in-out infinite;
+}
+
+.blob-group.speaking .blob-orb-3 {
+  animation: orbit-chaos-3 0.9s ease-in-out infinite;
+}
+
+.blob-group.speaking .blob-orb-4 {
+  animation: orbit-chaos-4 0.75s ease-in-out infinite;
+}
+
+@keyframes blob-explode {
+  0%, 100% {
+    r: 72px;
+  }
+  50% {
+    r: 78px;
+  }
+}
+
+@keyframes orbit-chaos-1 {
+  0%, 100% {
+    cx: 100px;
+    cy: 100px;
+    r: 25px;
+  }
+  25% {
+    cx: 170px;
+    cy: 70px;
+    r: 32px;
+  }
+  50% {
+    cx: 180px;
+    cy: 140px;
+    r: 20px;
+  }
+  75% {
+    cx: 40px;
+    cy: 150px;
+    r: 30px;
+  }
+}
+
+@keyframes orbit-chaos-2 {
+  0%, 100% {
+    cx: 100px;
+    cy: 100px;
+    r: 20px;
+  }
+  25% {
+    cx: 35px;
+    cy: 55px;
+    r: 18px;
+  }
+  50% {
+    cx: 150px;
+    cy: 30px;
+    r: 28px;
+  }
+  75% {
+    cx: 170px;
+    cy: 120px;
+    r: 14px;
+  }
+}
+
+@keyframes orbit-chaos-3 {
+  0%, 100% {
+    cx: 100px;
+    cy: 100px;
+    r: 18px;
+  }
+  25% {
+    cx: 145px;
+    cy: 165px;
+    r: 22px;
+  }
+  50% {
+    cx: 30px;
+    cy: 80px;
+    r: 14px;
+  }
+  75% {
+    cx: 50px;
+    cy: 155px;
+    r: 23px;
+  }
+}
+
+@keyframes orbit-chaos-4 {
+  0%, 100% {
+    cx: 100px;
+    cy: 100px;
+    r: 15px;
+  }
+  25% {
+    cx: 25px;
+    cy: 130px;
+    r: 17px;
+  }
+  50% {
+    cx: 60px;
+    cy: 40px;
+    r: 13px;
+  }
+  75% {
+    cx: 155px;
+    cy: 55px;
+    r: 18px;
+  }
+}
+
+/* Thinking - pulsing orbits */
+.blob-group.thinking .blob-main {
+  animation: blob-pulse 1.2s ease-in-out infinite;
+}
+
+.blob-group.thinking .blob-orb-1 {
+  animation: orbit-pulse-1 2s ease-in-out infinite;
+}
+
+.blob-group.thinking .blob-orb-2 {
+  animation: orbit-pulse-2 2.3s ease-in-out infinite;
+}
+
+.blob-group.thinking .blob-orb-3 {
+  animation: orbit-pulse-3 2.6s ease-in-out infinite;
+}
+
+.blob-group.thinking .blob-orb-4 {
+  animation: orbit-pulse-4 2.9s ease-in-out infinite;
 }
 
 @keyframes blob-pulse {
   0%, 100% {
-    transform: scale(1.15);
+    r: 66px;
   }
   50% {
-    transform: scale(1.2);
+    r: 69px;
   }
 }
 
-@keyframes shine-pulse {
+@keyframes orbit-pulse-1 {
   0%, 100% {
-    transform: translate(0, 0) scale(1);
-    opacity: 0.75;
+    cx: 100px;
+    cy: 100px;
+    r: 25px;
   }
   50% {
-    transform: translate(-12px, -12px) scale(1.15);
-    opacity: 0.95;
+    cx: 155px;
+    cy: 75px;
+    r: 30px;
   }
 }
 
-/* Connecting - rotating */
-.blob-path.connecting {
-  animation: blob-rotate 2s linear infinite;
+@keyframes orbit-pulse-2 {
+  0%, 100% {
+    cx: 100px;
+    cy: 100px;
+    r: 20px;
+  }
+  50% {
+    cx: 45px;
+    cy: 125px;
+    r: 16px;
+  }
 }
 
-@keyframes blob-rotate {
+@keyframes orbit-pulse-3 {
+  0%, 100% {
+    cx: 100px;
+    cy: 100px;
+    r: 18px;
+  }
+  50% {
+    cx: 155px;
+    cy: 125px;
+    r: 22px;
+  }
+}
+
+@keyframes orbit-pulse-4 {
+  0%, 100% {
+    cx: 100px;
+    cy: 100px;
+    r: 15px;
+  }
+  50% {
+    cx: 45px;
+    cy: 75px;
+    r: 18px;
+  }
+}
+
+/* Connecting - spinning vortex */
+.blob-group.connecting .blob-main {
+  animation: blob-spin 2s linear infinite;
+}
+
+.blob-group.connecting .blob-orb-1 {
+  animation: orbit-vortex-1 2s linear infinite;
+}
+
+.blob-group.connecting .blob-orb-2 {
+  animation: orbit-vortex-2 2s linear infinite;
+}
+
+.blob-group.connecting .blob-orb-3 {
+  animation: orbit-vortex-3 2s linear infinite;
+}
+
+.blob-group.connecting .blob-orb-4 {
+  animation: orbit-vortex-4 2s linear infinite;
+}
+
+@keyframes blob-spin {
+  0%, 100% {
+    r: 63px;
+  }
+}
+
+@keyframes orbit-vortex-1 {
   0% {
-    transform: rotate(0deg) scale(1.1);
+    cx: 160px;
+    cy: 100px;
+  }
+  25% {
+    cx: 100px;
+    cy: 40px;
+  }
+  50% {
+    cx: 40px;
+    cy: 100px;
+  }
+  75% {
+    cx: 100px;
+    cy: 160px;
   }
   100% {
-    transform: rotate(360deg) scale(1.1);
+    cx: 160px;
+    cy: 100px;
   }
 }
 
-/* Disconnected - dormant */
-.blob-path.disconnected {
-  animation: blob-dormant 8s ease-in-out infinite;
+@keyframes orbit-vortex-2 {
+  0% {
+    cx: 100px;
+    cy: 40px;
+  }
+  25% {
+    cx: 40px;
+    cy: 100px;
+  }
+  50% {
+    cx: 100px;
+    cy: 160px;
+  }
+  75% {
+    cx: 160px;
+    cy: 100px;
+  }
+  100% {
+    cx: 100px;
+    cy: 40px;
+  }
+}
+
+@keyframes orbit-vortex-3 {
+  0% {
+    cx: 40px;
+    cy: 100px;
+  }
+  25% {
+    cx: 100px;
+    cy: 160px;
+  }
+  50% {
+    cx: 160px;
+    cy: 100px;
+  }
+  75% {
+    cx: 100px;
+    cy: 40px;
+  }
+  100% {
+    cx: 40px;
+    cy: 100px;
+  }
+}
+
+@keyframes orbit-vortex-4 {
+  0% {
+    cx: 100px;
+    cy: 160px;
+  }
+  25% {
+    cx: 160px;
+    cy: 100px;
+  }
+  50% {
+    cx: 100px;
+    cy: 40px;
+  }
+  75% {
+    cx: 40px;
+    cy: 100px;
+  }
+  100% {
+    cx: 100px;
+    cy: 160px;
+  }
+}
+
+/* Disconnected - dormant slow drift */
+.blob-group.disconnected .blob-main {
+  animation: blob-sleep 10s ease-in-out infinite;
   opacity: 0.4;
 }
 
-@keyframes blob-dormant {
+.blob-group.disconnected .blob-orb {
+  animation: orbit-drift 15s ease-in-out infinite;
+  opacity: 0.3;
+}
+
+@keyframes blob-sleep {
   0%, 100% {
-    transform: scale(0.85);
+    r: 48px;
   }
   50% {
-    transform: scale(0.88);
+    r: 51px;
+  }
+}
+
+@keyframes orbit-drift {
+  0%, 100% {
+    cx: 100px;
+    cy: 100px;
+  }
+  50% {
+    cx: 120px;
+    cy: 90px;
   }
 }
 
 /* Massive dramatic glow */
 .blob-glow {
   position: absolute;
-  width: 400px;
-  height: 400px;
+  width: min(400px, 80vw);
+  height: min(400px, 80vw);
+  max-width: 500px;
+  max-height: 500px;
   border-radius: 50%;
-  filter: blur(100px);
+  filter: blur(120px);
   opacity: 0.5;
   z-index: -1;
   transition: 
@@ -191,36 +526,36 @@
     opacity 0.4s ease;
 }
 
-.blob-path.speaking ~ .blob-glow {
+.blob-group.speaking ~ .blob-glow {
   animation: glow-explosion 0.8s ease-in-out infinite;
 }
 
-.blob-path.thinking ~ .blob-glow {
+.blob-group.thinking ~ .blob-glow {
   animation: glow-surge 1.5s ease-in-out infinite;
 }
 
-.blob-path.listening ~ .blob-glow {
+.blob-group.listening ~ .blob-glow {
   animation: glow-gentle 4s ease-in-out infinite;
 }
 
 @keyframes glow-explosion {
   0%, 100% {
-    transform: scale(1.2);
-    opacity: 0.6;
+    transform: scale(1.3);
+    opacity: 0.7;
   }
   50% {
-    transform: scale(1.8);
-    opacity: 0.9;
+    transform: scale(1.9);
+    opacity: 0.95;
   }
 }
 
 @keyframes glow-surge {
   0%, 100% {
-    transform: scale(1.1);
+    transform: scale(1.2);
     opacity: 0.5;
   }
   50% {
-    transform: scale(1.4);
+    transform: scale(1.5);
     opacity: 0.75;
   }
 }
@@ -231,7 +566,7 @@
     opacity: 0.4;
   }
   50% {
-    transform: scale(1.15);
+    transform: scale(1.2);
     opacity: 0.6;
   }
 }
@@ -248,12 +583,11 @@
 
 .connection-info {
   display: flex;
-  flex-direction: column;
-  gap: 10px;
-  margin-top: 8px;
-  padding: 18px 28px;
+  flex-direction: row;
+  gap: 24px;
+  padding: 12px 32px;
   background: rgba(255, 255, 255, 0.04);
-  border-radius: 14px;
+  border-radius: 24px;
   backdrop-filter: blur(20px);
   border: 1px solid rgba(255, 255, 255, 0.06);
   box-shadow: 0 4px 24px rgba(0, 0, 0, 0.2);
@@ -264,8 +598,8 @@
   display: flex;
   align-items: center;
   justify-content: center;
-  gap: 10px;
-  font-size: 14px;
+  gap: 8px;
+  font-size: 13px;
   font-weight: 500;
   color: #888;
   transition: color 0.3s ease;
@@ -274,7 +608,7 @@
 .info-label {
   color: #666;
   text-transform: uppercase;
-  font-size: 11px;
+  font-size: 10px;
   letter-spacing: 0.08em;
   font-weight: 600;
 }
