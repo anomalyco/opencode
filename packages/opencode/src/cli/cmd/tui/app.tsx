@@ -2,7 +2,15 @@ import { render, useKeyboard, useRenderer, useTerminalDimensions } from "@opentu
 import { Clipboard } from "@tui/util/clipboard"
 import { TextAttributes } from "@opentui/core"
 import { RouteProvider, useRoute, type Route } from "@tui/context/route"
-import { Switch, Match, createEffect, untrack, ErrorBoundary, createSignal } from "solid-js"
+import {
+  Switch,
+  Match,
+  createEffect,
+  untrack,
+  ErrorBoundary,
+  createSignal,
+  onCleanup,
+} from "solid-js"
 import { Installation } from "@/installation"
 import { Global } from "@/global"
 import { DialogProvider, useDialog } from "@tui/ui/dialog"
@@ -28,6 +36,7 @@ import type { SessionRoute } from "./context/route"
 import { Session as SessionApi } from "@/session"
 import { TuiEvent } from "./event"
 import { KVProvider, useKV } from "./context/kv"
+import { StatusBar } from "./component/status-bar"
 
 async function getTerminalBackgroundColor(): Promise<"dark" | "light"> {
   return new Promise((resolve) => {
@@ -392,45 +401,7 @@ function App() {
           </Match>
         </Switch>
       </box>
-      <box
-        height={1}
-        backgroundColor={theme.backgroundPanel}
-        flexDirection="row"
-        justifyContent="space-between"
-        flexShrink={0}
-      >
-        <box flexDirection="row">
-          <box
-            flexDirection="row"
-            backgroundColor={theme.backgroundElement}
-            paddingLeft={1}
-            paddingRight={1}
-          >
-            <text fg={theme.textMuted}>open</text>
-            <text fg={theme.text} attributes={TextAttributes.BOLD}>
-              code{" "}
-            </text>
-            <text fg={theme.textMuted}>v{Installation.VERSION}</text>
-          </box>
-          <box paddingLeft={1} paddingRight={1}>
-            <text fg={theme.textMuted}>{process.cwd().replace(Global.Path.home, "~")}</text>
-          </box>
-        </box>
-        <box flexDirection="row" flexShrink={0}>
-          <text fg={theme.textMuted} paddingRight={1}>
-            tab
-          </text>
-          <text fg={local.agent.color(local.agent.current().name)}>{""}</text>
-          <text
-            bg={local.agent.color(local.agent.current().name)}
-            fg={theme.background}
-            wrapMode={undefined}
-          >
-            <span style={{ bold: true }}> {local.agent.current().name.toUpperCase()}</span>
-            <span> AGENT </span>
-          </text>
-        </box>
-      </box>
+      <StatusBar />
     </box>
   )
 }
