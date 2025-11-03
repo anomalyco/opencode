@@ -301,9 +301,9 @@ export default function ChatIndicator({ room, connectionState }: ChatIndicatorPr
               </filter>
               
               <radialGradient id="glass-purple" cx="50%" cy="50%">
-                <stop offset="0%" stopColor="#a78bfa" stopOpacity="0.5" />
-                <stop offset="50%" stopColor="#a78bfa" stopOpacity="0.6" />
-                <stop offset="100%" stopColor="#7c3aed" stopOpacity="0.4" />
+                <stop offset="0%" stopColor="#a78bfa" stopOpacity="0.3" />
+                <stop offset="50%" stopColor="#a78bfa" stopOpacity="0.4" />
+                <stop offset="100%" stopColor="#7c3aed" stopOpacity="0.2" />
               </radialGradient>
             </defs>
             

@@ -21,10 +21,12 @@
 }
 
 .status-container:nth-child(1) {
+  z-index: 2;
   transform: translate(-51%, -51%);
 }
 
 .status-container:nth-child(2) {
+  z-index: 1;
   transform: translate(-49%, -49%);
 }
 
