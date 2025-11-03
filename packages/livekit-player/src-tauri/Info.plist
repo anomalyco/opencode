@@ -1,0 +1,24 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+<plist version="1.0">
+<dict>
+    <key>NSMicrophoneUsageDescription</key>
+    <string>This app needs access to your microphone for voice communication.</string>
+    <key>NSCameraUsageDescription</key>
+    <string>This app needs access to your camera for video communication.</string>
+    <key>NSScreenCaptureUsageDescription</key>
+    <string>This app needs to capture your screen for screen sharing.</string>
+    <key>NSAppleEventsUsageDescription</key>
+    <string>This app needs to control other applications for automation.</string>
+    <key>NSSystemAdministrationUsageDescription</key>
+    <string>This app needs system administration access.</string>
+    <key>com.apple.security.device.audio-input</key>
+    <true/>
+    <key>com.apple.security.device.camera</key>
+    <true/>
+    <key>com.apple.security.automation.apple-events</key>
+    <true/>
+    <key>com.apple.security.personal-information.location</key>
+    <true/>
+</dict>
+</plist>

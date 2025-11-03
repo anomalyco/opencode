@@ -8,12 +8,16 @@ body {
   font-family: -apple-system, BlinkMacSystemFont, 'SF Pro Display', 'Segoe UI', system-ui, sans-serif;
   -webkit-font-smoothing: antialiased;
   -moz-osx-font-smoothing: grayscale;
-  background: #0f0f0f;
+  background: transparent;
   color: #ffffff;
   overflow: hidden;
+  border-radius: 3rem;
 }
 
 #root {
   width: 100vw;
   height: 100vh;
+  background: #0f0f0f;
+  border-radius: 3rem;
+  overflow: hidden;
 }

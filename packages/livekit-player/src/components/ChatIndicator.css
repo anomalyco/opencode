@@ -7,6 +7,10 @@
   width: 100vw;
   height: 100vh;
   position: relative;
+  transform: translateZ(0);
+  will-change: transform;
+  backface-visibility: hidden;
+  perspective: 1000px;
 }
 
 .status-container {
@@ -18,16 +22,20 @@
   position: absolute;
   top: 50%;
   left: 50%;
+  transform: translateZ(0);
+  will-change: transform;
+  backface-visibility: hidden;
+  perspective: 1000px;
 }
 
 .status-container:nth-child(1) {
   z-index: 2;
-  transform: translate(-51%, -51%);
+  transform: translate(calc(-51% + 11px), -51%) translateZ(0);
 }
 
 .status-container:nth-child(2) {
   z-index: 1;
-  transform: translate(-49%, -49%);
+  transform: translate(calc(-49% + 11px), -49%) translateZ(0);
 }
 
 .blob-container {
@@ -38,6 +46,8 @@
   align-items: center;
   justify-content: center;
   overflow: visible;
+  transform: translateZ(0);
+  will-change: transform;
 }
 
 .blob-svg {
@@ -48,19 +58,26 @@
   overflow: visible;
   mix-blend-mode: screen;
   filter: blur(1px);
+  transform: translateZ(0);
+  will-change: transform, opacity;
+  backface-visibility: hidden;
 }
 
 .blob-group {
   transform-origin: 100px 100px;
   transition: opacity 0.6s cubic-bezier(0.4, 0, 0.2, 1);
+  will-change: opacity;
 }
 
 .blob-main {
   transition: r 0.05s linear, fill 0.3s ease;
+  will-change: r, fill;
 }
 
 .blob-orb {
   transition: fill 0.3s ease;
+  transform: translateZ(0);
+  will-change: fill, transform;
 }
 
 .blob-shine {
@@ -71,7 +88,7 @@
   position: absolute;
   top: 50%;
   left: 50%;
-  transform: translate(-50%, -50%);
+  transform: translate(-50%, -50%) translateZ(0);
   width: min(300px, 60vw);
   height: min(300px, 60vw);
   border-radius: 50%;
@@ -80,6 +97,8 @@
   pointer-events: none;
   z-index: -1;
   mix-blend-mode: screen;
+  will-change: background-color, opacity;
+  backface-visibility: hidden;
 }
 
 .status-text {

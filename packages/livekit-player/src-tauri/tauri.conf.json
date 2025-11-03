@@ -12,6 +12,12 @@
   "tauri": {
     "allowlist": {
       "all": false,
+      "process": {
+        "all": false,
+        "exit": true,
+        "relaunch": false,
+        "relaunchDangerousAllowSymlinkMacos": false
+      },
       "window": {
         "all": false,
         "close": true,
@@ -34,7 +40,14 @@
         "icons/128x128@2x.png",
         "icons/icon.icns",
         "icons/icon.ico"
-      ]
+      ],
+      "macOS": {
+        "entitlements": "Info.plist",
+        "exceptionDomain": "",
+        "frameworks": [],
+        "providerShortName": null,
+        "signingIdentity": null
+      }
     },
     "security": {
       "csp": null
@@ -46,8 +59,8 @@
         "title": "LiveKit Player",
         "width": 400,
         "height": 500,
-        "decorations": true,
-        "transparent": false,
+        "decorations": false,
+        "transparent": true,
         "alwaysOnTop": true
       }
     ]
