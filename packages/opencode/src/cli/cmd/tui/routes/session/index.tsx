@@ -64,7 +64,6 @@ import { LANGUAGE_EXTENSIONS } from "@/lsp/language"
 import parsers from "../../../../../../parsers-config.ts"
 import { Clipboard } from "../../util/clipboard"
 import { Toast, useToast } from "../../ui/toast"
-import { DialogSessionRename } from "../../component/dialog-session-rename"
 import { useKV } from "../../context/kv.tsx"
 
 addDefaultParsers(parsers.parsers)
@@ -401,12 +400,49 @@ export function Session() {
       },
     },
     {
-      title: "Rename session",
-      value: "session.rename",
-      keybind: "session_rename",
+      title: "Copy last assistant message",
+      value: "messages.copy",
+      keybind: "messages_copy",
       category: "Session",
       onSelect: (dialog) => {
-        dialog.replace(() => <DialogSessionRename session={route.sessionID} />)
+        const lastAssistantMessage = messages().findLast((msg) => msg.role === "assistant")
+        if (!lastAssistantMessage) {
+          toast.show({ message: "No assistant messages found", variant: "error" })
+          dialog.clear()
+          return
+        }
+
+        const parts = sync.data.part[lastAssistantMessage.id] ?? []
+        const textParts = parts.filter((part) => part.type === "text")
+        if (textParts.length === 0) {
+          toast.show({ message: "No text parts found in last assistant message", variant: "error" })
+          dialog.clear()
+          return
+        }
+
+        const text = textParts
+          .map((part) => part.text)
+          .join("\n")
+          .trim()
+        if (!text) {
+          toast.show({
+            message: "No text content found in last assistant message",
+            variant: "error",
+          })
+          dialog.clear()
+          return
+        }
+
+        console.log(text)
+        const base64 = Buffer.from(text).toString("base64")
+        const osc52 = `\x1b]52;c;${base64}\x07`
+        const finalOsc52 = process.env["TMUX"] ? `\x1bPtmux;\x1b${osc52}\x1b\\` : osc52
+        /* @ts-expect-error */
+        renderer.writeOut(finalOsc52)
+        Clipboard.copy(text)
+          .then(() => toast.show({ message: "Message copied to clipboard!", variant: "success" }))
+          .catch(() => toast.show({ message: "Failed to copy to clipboard", variant: "error" }))
+        dialog.clear()
       },
     },
     {
@@ -428,6 +464,47 @@ export function Session() {
       disabled: true,
       onSelect: (dialog) => {
         moveChild(-1)
+        dialog.clear()
+      },
+    },
+    {
+      title: "Copy last assistant message",
+      value: "messages.copy",
+      keybind: "messages_copy",
+      category: "Session",
+      onSelect: (dialog) => {
+        const lastAssistantMessage = messages().findLast((msg) => msg.role === "assistant")
+        if (lastAssistantMessage) {
+          const parts = sync.data.part[lastAssistantMessage.id] ?? []
+          const textParts = parts.filter((part) => part.type === "text")
+          if (textParts.length > 0) {
+            const text = textParts
+              .map((part) => part.text)
+              .join("\n")
+              .trim()
+            if (text) {
+              Clipboard.copy(text)
+                .then(() =>
+                  toast.show({ message: "Message copied to clipboard!", variant: "success" }),
+                )
+                .catch(() =>
+                  toast.show({ message: "Failed to copy to clipboard", variant: "error" }),
+                )
+            } else {
+              toast.show({
+                message: "No text content found in last assistant message",
+                variant: "error",
+              })
+            }
+          } else {
+            toast.show({
+              message: "No text parts found in last assistant message",
+              variant: "error",
+            })
+          }
+        } else {
+          toast.show({ message: "No assistant messages found", variant: "error" })
+        }
         dialog.clear()
       },
     },

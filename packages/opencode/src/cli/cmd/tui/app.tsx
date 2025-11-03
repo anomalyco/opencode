@@ -177,17 +177,14 @@ function App() {
   const exit = useExit()
 
   useKeyboard(async (evt) => {
+    if (!Installation.isLocal()) return
     if (evt.meta && evt.name === "t") {
-      if (process.env.DEBUG) {
-        renderer.toggleDebugOverlay()
-      }
+      renderer.toggleDebugOverlay()
       return
     }
 
     if (evt.meta && evt.name === "d") {
-      if (process.env.DEBUG) {
-        renderer.console.toggle()
-      }
+      renderer.console.toggle()
       return
     }
   })
