@@ -1,7 +1,7 @@
 #!/usr/bin/env bun
 
 import { $ } from "bun"
-import { createOpencode } from "@opencode-ai/sdk"
+import { createOpencodeClient, createOpencodeServer } from "@opencode-ai/sdk"
 import { Script } from "@opencode-ai/script"
 
 const notes = [] as string[]
@@ -24,7 +24,15 @@ if (!Script.preview) {
     .filter((line) => line && !line.match(/^\w+ (ignore:|test:|chore:)/i))
     .join("\n")
 
-  const opencode = await createOpencode()
+  createOpencodeServer({
+    port: 4096,
+  }).catch(() => {})
+  await new Promise((resolve) => setTimeout(resolve, 1_000))
+  const opencode = {
+    client: createOpencodeClient({
+      baseUrl: `http://127.0.0.1:4096`,
+    }),
+  }
   const session = await opencode.client.session.create()
   console.log("generating changelog since " + previous)
   const raw = await opencode.client.session
@@ -68,7 +76,6 @@ if (!Script.preview) {
     }
   }
   console.log(notes)
-  opencode.server.close()
 }
 
 const pkgjsons = await Array.fromAsync(
