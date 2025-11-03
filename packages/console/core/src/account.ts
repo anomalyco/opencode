@@ -8,7 +8,6 @@ import { AccountTable } from "./schema/account.sql"
 export namespace Account {
   export const create = fn(
     z.object({
-      email: z.string().email(),
       id: z.string().optional(),
     }),
     async (input) =>
@@ -16,7 +15,6 @@ export namespace Account {
         const id = input.id ?? Identifier.create("account")
         await tx.insert(AccountTable).values({
           id,
-          email: input.email,
         })
         return id
       }),
@@ -28,17 +26,6 @@ export namespace Account {
         .select()
         .from(AccountTable)
         .where(eq(AccountTable.id, id))
-        .execute()
-        .then((rows) => rows[0])
-    }),
-  )
-
-  export const fromEmail = fn(z.string().email(), async (email) =>
-    Database.transaction(async (tx) => {
-      return tx
-        .select()
-        .from(AccountTable)
-        .where(eq(AccountTable.email, email))
         .execute()
         .then((rows) => rows[0])
     }),

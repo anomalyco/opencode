@@ -19,10 +19,6 @@ export type KeybindsConfig = {
    */
   leader?: string
   /**
-   * Show help dialog
-   */
-  app_help?: string
-  /**
    * Exit the application
    */
   app_exit?: string
@@ -35,17 +31,13 @@ export type KeybindsConfig = {
    */
   theme_list?: string
   /**
-   * Create/update AGENTS.md
+   * Toggle sidebar
    */
-  project_init?: string
+  sidebar_toggle?: string
   /**
-   * Toggle tool details
+   * View status
    */
-  tool_details?: string
-  /**
-   * Toggle thinking blocks
-   */
-  thinking_blocks?: string
+  status_view?: string
   /**
    * Export session to editor
    */
@@ -78,14 +70,6 @@ export type KeybindsConfig = {
    * Compact the session
    */
   session_compact?: string
-  /**
-   * Cycle to next child session
-   */
-  session_child_cycle?: string
-  /**
-   * Cycle to previous child session
-   */
-  session_child_cycle_reverse?: string
   /**
    * Scroll messages up by one page
    */
@@ -123,17 +107,25 @@ export type KeybindsConfig = {
    */
   messages_redo?: string
   /**
+   * Toggle code block concealment in messages
+   */
+  messages_toggle_conceal?: string
+  /**
    * List available models
    */
   model_list?: string
   /**
-   * Next recent model
+   * Next recently used model
    */
   model_cycle_recent?: string
   /**
-   * Previous recent model
+   * Previous recently used model
    */
   model_cycle_recent_reverse?: string
+  /**
+   * List available commands
+   */
+  command_list?: string
   /**
    * List agents
    */
@@ -151,6 +143,10 @@ export type KeybindsConfig = {
    */
   input_clear?: string
   /**
+   * Forward delete
+   */
+  input_forward_delete?: string
+  /**
    * Paste from clipboard
    */
   input_paste?: string
@@ -163,53 +159,21 @@ export type KeybindsConfig = {
    */
   input_newline?: string
   /**
-   * @deprecated use agent_cycle. Next mode
+   * Previous history item
    */
-  switch_mode?: string
+  history_previous?: string
   /**
-   * @deprecated use agent_cycle_reverse. Previous mode
+   * Previous history item
    */
-  switch_mode_reverse?: string
+  history_next?: string
   /**
-   * @deprecated use agent_cycle. Next agent
+   * Next child session
    */
-  switch_agent?: string
+  session_child_cycle?: string
   /**
-   * @deprecated use agent_cycle_reverse. Previous agent
+   * Previous child session
    */
-  switch_agent_reverse?: string
-  /**
-   * @deprecated Currently not available. List files
-   */
-  file_list?: string
-  /**
-   * @deprecated Close file
-   */
-  file_close?: string
-  /**
-   * @deprecated Search file
-   */
-  file_search?: string
-  /**
-   * @deprecated Split/unified diff
-   */
-  file_diff_toggle?: string
-  /**
-   * @deprecated Navigate to previous message
-   */
-  messages_previous?: string
-  /**
-   * @deprecated Navigate to next message
-   */
-  messages_next?: string
-  /**
-   * @deprecated Toggle layout
-   */
-  messages_layout_toggle?: string
-  /**
-   * @deprecated use messages_undo. Revert message
-   */
-  messages_revert?: string
+  session_child_cycle_reverse?: string
 }
 
 export type AgentConfig = {
@@ -275,6 +239,10 @@ export type McpLocalConfig = {
    * Enable or disable the MCP server on startup
    */
   enabled?: boolean
+  /**
+   * Timeout in ms for fetching tools from the MCP server. Defaults to 5000 (5 seconds) if not specified.
+   */
+  timeout?: number
 }
 
 export type McpRemoteConfig = {
@@ -296,6 +264,10 @@ export type McpRemoteConfig = {
   headers?: {
     [key: string]: string
   }
+  /**
+   * Timeout in ms for fetching tools from the MCP server. Defaults to 5000 (5 seconds) if not specified.
+   */
+  timeout?: number
 }
 
 /**
@@ -413,9 +385,17 @@ export type Config = {
             context: number
             output: number
           }
+          modalities?: {
+            input: Array<"text" | "audio" | "image" | "video" | "pdf">
+            output: Array<"text" | "audio" | "image" | "video" | "pdf">
+          }
           experimental?: boolean
+          status?: "alpha" | "beta" | "deprecated"
           options?: {
             [key: string]: unknown
+          }
+          headers?: {
+            [key: string]: string
           }
           provider?: {
             npm: string
@@ -500,14 +480,20 @@ export type Config = {
         }
       }>
     }
+    /**
+     * Number of retries for chat completions on failure
+     */
+    chatMaxRetries?: number
     disable_paste_summary?: boolean
   }
 }
 
-export type _Error = {
-  data: {
+export type BadRequestError = {
+  data: unknown | null
+  errors: Array<{
     [key: string]: unknown
-  }
+  }>
+  success: false
 }
 
 export type ToolIds = Array<string>
@@ -527,11 +513,22 @@ export type Path = {
   directory: string
 }
 
+export type FileDiff = {
+  file: string
+  before: string
+  after: string
+  additions: number
+  deletions: number
+}
+
 export type Session = {
   id: string
   projectID: string
   directory: string
   parentID?: string
+  summary?: {
+    diffs: Array<FileDiff>
+  }
   share?: {
     url: string
   }
@@ -547,6 +544,13 @@ export type Session = {
     partID?: string
     snapshot?: string
     diff?: string
+  }
+}
+
+export type NotFoundError = {
+  name: "NotFoundError"
+  data: {
+    message: string
   }
 }
 
@@ -575,6 +579,11 @@ export type UserMessage = {
   role: "user"
   time: {
     created: number
+  }
+  summary?: {
+    title?: string
+    body?: string
+    diffs: Array<FileDiff>
   }
 }
 
@@ -607,6 +616,19 @@ export type MessageAbortedError = {
   }
 }
 
+export type ApiError = {
+  name: "APIError"
+  data: {
+    message: string
+    statusCode?: number
+    isRetryable: boolean
+    responseHeaders?: {
+      [key: string]: string
+    }
+    responseBody?: string
+  }
+}
+
 export type AssistantMessage = {
   id: string
   sessionID: string
@@ -615,8 +637,14 @@ export type AssistantMessage = {
     created: number
     completed?: number
   }
-  error?: ProviderAuthError | UnknownError | MessageOutputLengthError | MessageAbortedError
+  error?:
+    | ProviderAuthError
+    | UnknownError
+    | MessageOutputLengthError
+    | MessageAbortedError
+    | ApiError
   system: Array<string>
+  parentID: string
   modelID: string
   providerID: string
   mode: string
@@ -717,11 +745,17 @@ export type FilePart = {
 
 export type ToolStatePending = {
   status: "pending"
+  input: {
+    [key: string]: unknown
+  }
+  raw: string
 }
 
 export type ToolStateRunning = {
   status: "running"
-  input: unknown
+  input: {
+    [key: string]: unknown
+  }
   title?: string
   metadata?: {
     [key: string]: unknown
@@ -746,6 +780,7 @@ export type ToolStateCompleted = {
     end: number
     compacted?: number
   }
+  attachments?: Array<FilePart>
 }
 
 export type ToolStateError = {
@@ -783,6 +818,7 @@ export type StepStartPart = {
   sessionID: string
   messageID: string
   type: "step-start"
+  snapshot?: string
 }
 
 export type StepFinishPart = {
@@ -790,6 +826,8 @@ export type StepFinishPart = {
   sessionID: string
   messageID: string
   type: "step-finish"
+  reason: string
+  snapshot?: string
   cost: number
   tokens: {
     input: number
@@ -832,6 +870,18 @@ export type AgentPart = {
   }
 }
 
+export type RetryPart = {
+  id: string
+  sessionID: string
+  messageID: string
+  type: "retry"
+  attempt: number
+  error: ApiError
+  time: {
+    created: number
+  }
+}
+
 export type Part =
   | TextPart
   | ReasoningPart
@@ -842,6 +892,7 @@ export type Part =
   | SnapshotPart
   | PatchPart
   | AgentPart
+  | RetryPart
 
 export type TextPartInput = {
   id?: string
@@ -904,9 +955,17 @@ export type Model = {
     context: number
     output: number
   }
+  modalities?: {
+    input: Array<"text" | "audio" | "image" | "video" | "pdf">
+    output: Array<"text" | "audio" | "image" | "video" | "pdf">
+  }
   experimental?: boolean
+  status?: "alpha" | "beta" | "deprecated"
   options: {
     [key: string]: unknown
+  }
+  headers?: {
+    [key: string]: string
   }
   provider?: {
     npm: string
@@ -942,6 +1001,7 @@ export type FileNode = {
 }
 
 export type FileContent = {
+  type: "text"
   content: string
   diff?: string
   patch?: {
@@ -958,6 +1018,8 @@ export type FileContent = {
     }>
     index?: string
   }
+  encoding?: "base64"
+  mimeType?: string
 }
 
 export type File = {
@@ -991,6 +1053,78 @@ export type Agent = {
   }
   options: {
     [key: string]: unknown
+  }
+}
+
+export type McpStatusConnected = {
+  status: "connected"
+}
+
+export type McpStatusDisabled = {
+  status: "disabled"
+}
+
+export type McpStatusFailed = {
+  status: "failed"
+  error: string
+}
+
+export type McpStatus = McpStatusConnected | McpStatusDisabled | McpStatusFailed
+
+export type LspStatus = {
+  id: string
+  name: string
+  root: string
+  status: "connected" | "error"
+}
+
+export type FormatterStatus = {
+  name: string
+  extensions: Array<string>
+  enabled: boolean
+}
+
+export type EventTuiPromptAppend = {
+  type: "tui.prompt.append"
+  properties: {
+    text: string
+  }
+}
+
+export type EventTuiCommandExecute = {
+  type: "tui.command.execute"
+  properties: {
+    command:
+      | (
+          | "session.list"
+          | "session.new"
+          | "session.share"
+          | "session.interrupt"
+          | "session.compact"
+          | "session.page.up"
+          | "session.page.down"
+          | "session.half.page.up"
+          | "session.half.page.down"
+          | "session.first"
+          | "session.last"
+          | "prompt.clear"
+          | "prompt.submit"
+          | "agent.cycle"
+        )
+      | string
+  }
+}
+
+export type EventTuiToastShow = {
+  type: "tui.toast.show"
+  properties: {
+    title?: string
+    message: string
+    variant: "info" | "success" | "warning" | "error"
+    /**
+     * Duration in milliseconds
+     */
+    duration?: number
   }
 }
 
@@ -1029,6 +1163,13 @@ export type EventLspClientDiagnostics = {
   }
 }
 
+export type EventLspUpdated = {
+  type: "lsp.updated"
+  properties: {
+    [key: string]: unknown
+  }
+}
+
 export type EventMessageUpdated = {
   type: "message.updated"
   properties: {
@@ -1048,6 +1189,7 @@ export type EventMessagePartUpdated = {
   type: "message.part.updated"
   properties: {
     part: Part
+    delta?: string
   }
 }
 
@@ -1120,10 +1262,27 @@ export type EventTodoUpdated = {
   }
 }
 
+export type EventCommandExecuted = {
+  type: "command.executed"
+  properties: {
+    name: string
+    sessionID: string
+    arguments: string
+    messageID: string
+  }
+}
+
 export type EventSessionIdle = {
   type: "session.idle"
   properties: {
     sessionID: string
+  }
+}
+
+export type EventSessionCreated = {
+  type: "session.created"
+  properties: {
+    info: Session
   }
 }
 
@@ -1145,7 +1304,12 @@ export type EventSessionError = {
   type: "session.error"
   properties: {
     sessionID?: string
-    error?: ProviderAuthError | UnknownError | MessageOutputLengthError | MessageAbortedError
+    error?:
+      | ProviderAuthError
+      | UnknownError
+      | MessageOutputLengthError
+      | MessageAbortedError
+      | ApiError
   }
 }
 
@@ -1156,16 +1320,10 @@ export type EventServerConnected = {
   }
 }
 
-export type EventIdeInstalled = {
-  type: "ide.installed"
-  properties: {
-    ide: string
-  }
-}
-
 export type Event =
   | EventInstallationUpdated
   | EventLspClientDiagnostics
+  | EventLspUpdated
   | EventMessageUpdated
   | EventMessageRemoved
   | EventMessagePartUpdated
@@ -1176,12 +1334,16 @@ export type Event =
   | EventFileEdited
   | EventFileWatcherUpdated
   | EventTodoUpdated
+  | EventCommandExecuted
   | EventSessionIdle
+  | EventSessionCreated
   | EventSessionUpdated
   | EventSessionDeleted
   | EventSessionError
+  | EventTuiPromptAppend
+  | EventTuiCommandExecute
+  | EventTuiToastShow
   | EventServerConnected
-  | EventIdeInstalled
 
 export type ProjectListData = {
   body?: never
@@ -1250,7 +1412,7 @@ export type ConfigUpdateErrors = {
   /**
    * Bad request
    */
-  400: _Error
+  400: BadRequestError
 }
 
 export type ConfigUpdateError = ConfigUpdateErrors[keyof ConfigUpdateErrors]
@@ -1277,7 +1439,7 @@ export type ToolIdsErrors = {
   /**
    * Bad request
    */
-  400: _Error
+  400: BadRequestError
 }
 
 export type ToolIdsError = ToolIdsErrors[keyof ToolIdsErrors]
@@ -1306,7 +1468,7 @@ export type ToolListErrors = {
   /**
    * Bad request
    */
-  400: _Error
+  400: BadRequestError
 }
 
 export type ToolListError = ToolListErrors[keyof ToolListErrors]
@@ -1372,7 +1534,7 @@ export type SessionCreateErrors = {
   /**
    * Bad request
    */
-  400: _Error
+  400: BadRequestError
 }
 
 export type SessionCreateError = SessionCreateErrors[keyof SessionCreateErrors]
@@ -1397,6 +1559,19 @@ export type SessionDeleteData = {
   url: "/session/{id}"
 }
 
+export type SessionDeleteErrors = {
+  /**
+   * Bad request
+   */
+  400: BadRequestError
+  /**
+   * Not found
+   */
+  404: NotFoundError
+}
+
+export type SessionDeleteError = SessionDeleteErrors[keyof SessionDeleteErrors]
+
 export type SessionDeleteResponses = {
   /**
    * Successfully deleted session
@@ -1416,6 +1591,19 @@ export type SessionGetData = {
   }
   url: "/session/{id}"
 }
+
+export type SessionGetErrors = {
+  /**
+   * Bad request
+   */
+  400: BadRequestError
+  /**
+   * Not found
+   */
+  404: NotFoundError
+}
+
+export type SessionGetError = SessionGetErrors[keyof SessionGetErrors]
 
 export type SessionGetResponses = {
   /**
@@ -1439,6 +1627,19 @@ export type SessionUpdateData = {
   url: "/session/{id}"
 }
 
+export type SessionUpdateErrors = {
+  /**
+   * Bad request
+   */
+  400: BadRequestError
+  /**
+   * Not found
+   */
+  404: NotFoundError
+}
+
+export type SessionUpdateError = SessionUpdateErrors[keyof SessionUpdateErrors]
+
 export type SessionUpdateResponses = {
   /**
    * Successfully updated session
@@ -1458,6 +1659,19 @@ export type SessionChildrenData = {
   }
   url: "/session/{id}/children"
 }
+
+export type SessionChildrenErrors = {
+  /**
+   * Bad request
+   */
+  400: BadRequestError
+  /**
+   * Not found
+   */
+  404: NotFoundError
+}
+
+export type SessionChildrenError = SessionChildrenErrors[keyof SessionChildrenErrors]
 
 export type SessionChildrenResponses = {
   /**
@@ -1481,6 +1695,19 @@ export type SessionTodoData = {
   }
   url: "/session/{id}/todo"
 }
+
+export type SessionTodoErrors = {
+  /**
+   * Bad request
+   */
+  400: BadRequestError
+  /**
+   * Not found
+   */
+  404: NotFoundError
+}
+
+export type SessionTodoError = SessionTodoErrors[keyof SessionTodoErrors]
 
 export type SessionTodoResponses = {
   /**
@@ -1508,6 +1735,19 @@ export type SessionInitData = {
   }
   url: "/session/{id}/init"
 }
+
+export type SessionInitErrors = {
+  /**
+   * Bad request
+   */
+  400: BadRequestError
+  /**
+   * Not found
+   */
+  404: NotFoundError
+}
+
+export type SessionInitError = SessionInitErrors[keyof SessionInitErrors]
 
 export type SessionInitResponses = {
   /**
@@ -1551,6 +1791,19 @@ export type SessionAbortData = {
   url: "/session/{id}/abort"
 }
 
+export type SessionAbortErrors = {
+  /**
+   * Bad request
+   */
+  400: BadRequestError
+  /**
+   * Not found
+   */
+  404: NotFoundError
+}
+
+export type SessionAbortError = SessionAbortErrors[keyof SessionAbortErrors]
+
 export type SessionAbortResponses = {
   /**
    * Aborted session
@@ -1570,6 +1823,19 @@ export type SessionUnshareData = {
   }
   url: "/session/{id}/share"
 }
+
+export type SessionUnshareErrors = {
+  /**
+   * Bad request
+   */
+  400: BadRequestError
+  /**
+   * Not found
+   */
+  404: NotFoundError
+}
+
+export type SessionUnshareError = SessionUnshareErrors[keyof SessionUnshareErrors]
 
 export type SessionUnshareResponses = {
   /**
@@ -1591,6 +1857,19 @@ export type SessionShareData = {
   url: "/session/{id}/share"
 }
 
+export type SessionShareErrors = {
+  /**
+   * Bad request
+   */
+  400: BadRequestError
+  /**
+   * Not found
+   */
+  404: NotFoundError
+}
+
+export type SessionShareError = SessionShareErrors[keyof SessionShareErrors]
+
 export type SessionShareResponses = {
   /**
    * Successfully shared session
@@ -1599,6 +1878,27 @@ export type SessionShareResponses = {
 }
 
 export type SessionShareResponse = SessionShareResponses[keyof SessionShareResponses]
+
+export type SessionDiffData = {
+  body?: never
+  path: {
+    id: string
+  }
+  query?: {
+    directory?: string
+    messageID?: string
+  }
+  url: "/session/{id}/diff"
+}
+
+export type SessionDiffResponses = {
+  /**
+   * Successfully retrieved diff
+   */
+  200: Array<FileDiff>
+}
+
+export type SessionDiffResponse = SessionDiffResponses[keyof SessionDiffResponses]
 
 export type SessionSummarizeData = {
   body?: {
@@ -1616,6 +1916,19 @@ export type SessionSummarizeData = {
   }
   url: "/session/{id}/summarize"
 }
+
+export type SessionSummarizeErrors = {
+  /**
+   * Bad request
+   */
+  400: BadRequestError
+  /**
+   * Not found
+   */
+  404: NotFoundError
+}
+
+export type SessionSummarizeError = SessionSummarizeErrors[keyof SessionSummarizeErrors]
 
 export type SessionSummarizeResponses = {
   /**
@@ -1640,6 +1953,19 @@ export type SessionMessagesData = {
   url: "/session/{id}/message"
 }
 
+export type SessionMessagesErrors = {
+  /**
+   * Bad request
+   */
+  400: BadRequestError
+  /**
+   * Not found
+   */
+  404: NotFoundError
+}
+
+export type SessionMessagesError = SessionMessagesErrors[keyof SessionMessagesErrors]
+
 export type SessionMessagesResponses = {
   /**
    * List of messages
@@ -1660,6 +1986,7 @@ export type SessionPromptData = {
       modelID: string
     }
     agent?: string
+    noReply?: boolean
     system?: string
     tools?: {
       [key: string]: boolean
@@ -1677,6 +2004,19 @@ export type SessionPromptData = {
   }
   url: "/session/{id}/message"
 }
+
+export type SessionPromptErrors = {
+  /**
+   * Bad request
+   */
+  400: BadRequestError
+  /**
+   * Not found
+   */
+  404: NotFoundError
+}
+
+export type SessionPromptError = SessionPromptErrors[keyof SessionPromptErrors]
 
 export type SessionPromptResponses = {
   /**
@@ -1707,6 +2047,19 @@ export type SessionMessageData = {
   }
   url: "/session/{id}/message/{messageID}"
 }
+
+export type SessionMessageErrors = {
+  /**
+   * Bad request
+   */
+  400: BadRequestError
+  /**
+   * Not found
+   */
+  404: NotFoundError
+}
+
+export type SessionMessageError = SessionMessageErrors[keyof SessionMessageErrors]
 
 export type SessionMessageResponses = {
   /**
@@ -1740,6 +2093,19 @@ export type SessionCommandData = {
   url: "/session/{id}/command"
 }
 
+export type SessionCommandErrors = {
+  /**
+   * Bad request
+   */
+  400: BadRequestError
+  /**
+   * Not found
+   */
+  404: NotFoundError
+}
+
+export type SessionCommandError = SessionCommandErrors[keyof SessionCommandErrors]
+
 export type SessionCommandResponses = {
   /**
    * Created message
@@ -1769,6 +2135,19 @@ export type SessionShellData = {
   url: "/session/{id}/shell"
 }
 
+export type SessionShellErrors = {
+  /**
+   * Bad request
+   */
+  400: BadRequestError
+  /**
+   * Not found
+   */
+  404: NotFoundError
+}
+
+export type SessionShellError = SessionShellErrors[keyof SessionShellErrors]
+
 export type SessionShellResponses = {
   /**
    * Created message
@@ -1792,6 +2171,19 @@ export type SessionRevertData = {
   url: "/session/{id}/revert"
 }
 
+export type SessionRevertErrors = {
+  /**
+   * Bad request
+   */
+  400: BadRequestError
+  /**
+   * Not found
+   */
+  404: NotFoundError
+}
+
+export type SessionRevertError = SessionRevertErrors[keyof SessionRevertErrors]
+
 export type SessionRevertResponses = {
   /**
    * Updated session
@@ -1811,6 +2203,19 @@ export type SessionUnrevertData = {
   }
   url: "/session/{id}/unrevert"
 }
+
+export type SessionUnrevertErrors = {
+  /**
+   * Bad request
+   */
+  400: BadRequestError
+  /**
+   * Not found
+   */
+  404: NotFoundError
+}
+
+export type SessionUnrevertError = SessionUnrevertErrors[keyof SessionUnrevertErrors]
 
 export type SessionUnrevertResponses = {
   /**
@@ -1834,6 +2239,20 @@ export type PostSessionIdPermissionsPermissionIdData = {
   }
   url: "/session/{id}/permissions/{permissionID}"
 }
+
+export type PostSessionIdPermissionsPermissionIdErrors = {
+  /**
+   * Bad request
+   */
+  400: BadRequestError
+  /**
+   * Not found
+   */
+  404: NotFoundError
+}
+
+export type PostSessionIdPermissionsPermissionIdError =
+  PostSessionIdPermissionsPermissionIdErrors[keyof PostSessionIdPermissionsPermissionIdErrors]
 
 export type PostSessionIdPermissionsPermissionIdResponses = {
   /**
@@ -1927,6 +2346,7 @@ export type FindFilesData = {
   query: {
     directory?: string
     query: string
+    dirs?: "true" | "false"
   }
   url: "/find/file"
 }
@@ -2043,6 +2463,15 @@ export type AppLogData = {
   url: "/log"
 }
 
+export type AppLogErrors = {
+  /**
+   * Bad request
+   */
+  400: BadRequestError
+}
+
+export type AppLogError = AppLogErrors[keyof AppLogErrors]
+
 export type AppLogResponses = {
   /**
    * Log entry written successfully
@@ -2083,8 +2512,48 @@ export type McpStatusResponses = {
   /**
    * MCP server status
    */
-  200: unknown
+  200: {
+    [key: string]: McpStatus
+  }
 }
+
+export type McpStatusResponse = McpStatusResponses[keyof McpStatusResponses]
+
+export type LspStatusData = {
+  body?: never
+  path?: never
+  query?: {
+    directory?: string
+  }
+  url: "/lsp"
+}
+
+export type LspStatusResponses = {
+  /**
+   * LSP server status
+   */
+  200: Array<LspStatus>
+}
+
+export type LspStatusResponse = LspStatusResponses[keyof LspStatusResponses]
+
+export type FormatterStatusData = {
+  body?: never
+  path?: never
+  query?: {
+    directory?: string
+  }
+  url: "/formatter"
+}
+
+export type FormatterStatusResponses = {
+  /**
+   * Formatter status
+   */
+  200: Array<FormatterStatus>
+}
+
+export type FormatterStatusResponse = FormatterStatusResponses[keyof FormatterStatusResponses]
 
 export type TuiAppendPromptData = {
   body?: {
@@ -2096,6 +2565,15 @@ export type TuiAppendPromptData = {
   }
   url: "/tui/append-prompt"
 }
+
+export type TuiAppendPromptErrors = {
+  /**
+   * Bad request
+   */
+  400: BadRequestError
+}
+
+export type TuiAppendPromptError = TuiAppendPromptErrors[keyof TuiAppendPromptErrors]
 
 export type TuiAppendPromptResponses = {
   /**
@@ -2225,6 +2703,15 @@ export type TuiExecuteCommandData = {
   url: "/tui/execute-command"
 }
 
+export type TuiExecuteCommandErrors = {
+  /**
+   * Bad request
+   */
+  400: BadRequestError
+}
+
+export type TuiExecuteCommandError = TuiExecuteCommandErrors[keyof TuiExecuteCommandErrors]
+
 export type TuiExecuteCommandResponses = {
   /**
    * Command executed successfully
@@ -2239,6 +2726,10 @@ export type TuiShowToastData = {
     title?: string
     message: string
     variant: "info" | "success" | "warning" | "error"
+    /**
+     * Duration in milliseconds
+     */
+    duration?: number
   }
   path?: never
   query?: {
@@ -2256,6 +2747,73 @@ export type TuiShowToastResponses = {
 
 export type TuiShowToastResponse = TuiShowToastResponses[keyof TuiShowToastResponses]
 
+export type TuiPublishData = {
+  body?: EventTuiPromptAppend | EventTuiCommandExecute | EventTuiToastShow
+  path?: never
+  query?: {
+    directory?: string
+  }
+  url: "/tui/publish"
+}
+
+export type TuiPublishErrors = {
+  /**
+   * Bad request
+   */
+  400: BadRequestError
+}
+
+export type TuiPublishError = TuiPublishErrors[keyof TuiPublishErrors]
+
+export type TuiPublishResponses = {
+  /**
+   * Event published successfully
+   */
+  200: boolean
+}
+
+export type TuiPublishResponse = TuiPublishResponses[keyof TuiPublishResponses]
+
+export type TuiControlNextData = {
+  body?: never
+  path?: never
+  query?: {
+    directory?: string
+  }
+  url: "/tui/control/next"
+}
+
+export type TuiControlNextResponses = {
+  /**
+   * Next TUI request
+   */
+  200: {
+    path: string
+    body: unknown
+  }
+}
+
+export type TuiControlNextResponse = TuiControlNextResponses[keyof TuiControlNextResponses]
+
+export type TuiControlResponseData = {
+  body?: unknown
+  path?: never
+  query?: {
+    directory?: string
+  }
+  url: "/tui/control/response"
+}
+
+export type TuiControlResponseResponses = {
+  /**
+   * Response submitted successfully
+   */
+  200: boolean
+}
+
+export type TuiControlResponseResponse =
+  TuiControlResponseResponses[keyof TuiControlResponseResponses]
+
 export type AuthSetData = {
   body?: Auth
   path: {
@@ -2271,7 +2829,7 @@ export type AuthSetErrors = {
   /**
    * Bad request
    */
-  400: _Error
+  400: BadRequestError
 }
 
 export type AuthSetError = AuthSetErrors[keyof AuthSetErrors]

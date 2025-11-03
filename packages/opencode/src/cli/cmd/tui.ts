@@ -65,7 +65,6 @@ export const TuiCommand = cmd({
         default: 0,
       })
       .option("hostname", {
-        alias: ["h"],
         type: "string",
         describe: "hostname to listen on",
         default: "127.0.0.1",
@@ -156,9 +155,8 @@ export const TuiCommand = cmd({
         })
 
         ;(async () => {
-          if (Installation.isDev()) return
-          if (Installation.isSnapshot()) return
-          const config = await Config.global()
+          // if (Installation.isLocal()) return
+          const config = await Config.get()
           if (config.autoupdate === false || Flag.OPENCODE_DISABLE_AUTOUPDATE) return
           const latest = await Installation.latest().catch(() => {})
           if (!latest) return
@@ -214,7 +212,7 @@ function getOpencodeCommand(): string[] {
 
   const execPath = process.execPath.toLowerCase()
 
-  if (Installation.isDev()) {
+  if (Installation.isLocal()) {
     // In development, use bun to run the TypeScript entry point
     return [execPath, "run", process.argv[1]]
   }

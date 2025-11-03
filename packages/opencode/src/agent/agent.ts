@@ -1,5 +1,5 @@
 import { Config } from "../config/config"
-import z from "zod/v4"
+import z from "zod"
 import { Provider } from "../provider/provider"
 import { generateObject, type ModelMessage } from "ai"
 import PROMPT_GENERATE from "./generate.txt"
@@ -51,7 +51,44 @@ export namespace Agent {
     const planPermission = mergeAgentPermissions(
       {
         edit: "deny",
-        bash: "ask",
+        bash: {
+          "cut*": "allow",
+          "diff*": "allow",
+          "du*": "allow",
+          "file *": "allow",
+          "find * -delete*": "ask",
+          "find * -exec*": "ask",
+          "find * -fprint*": "ask",
+          "find * -fls*": "ask",
+          "find * -fprintf*": "ask",
+          "find * -ok*": "ask",
+          "find *": "allow",
+          "git diff*": "allow",
+          "git log*": "allow",
+          "git show*": "allow",
+          "git status*": "allow",
+          "git branch": "allow",
+          "git branch -v": "allow",
+          "grep*": "allow",
+          "head*": "allow",
+          "less*": "allow",
+          "ls*": "allow",
+          "more*": "allow",
+          "pwd*": "allow",
+          "rg*": "allow",
+          "sort --output=*": "ask",
+          "sort -o *": "ask",
+          "sort*": "allow",
+          "stat*": "allow",
+          "tail*": "allow",
+          "tree -o *": "ask",
+          "tree*": "allow",
+          "uniq*": "allow",
+          "wc*": "allow",
+          "whereis*": "allow",
+          "which*": "allow",
+          "*": "ask",
+        },
         webfetch: "allow",
       },
       cfg.permission ?? {},
@@ -176,6 +213,16 @@ export namespace Agent {
 }
 
 function mergeAgentPermissions(basePermission: any, overridePermission: any): Agent.Info["permission"] {
+  if (typeof basePermission.bash === "string") {
+    basePermission.bash = {
+      "*": basePermission.bash,
+    }
+  }
+  if (typeof overridePermission.bash === "string") {
+    overridePermission.bash = {
+      "*": overridePermission.bash,
+    }
+  }
   const merged = mergeDeep(basePermission ?? {}, overridePermission ?? {}) as any
   let mergedBash
   if (merged.bash) {
@@ -183,12 +230,10 @@ function mergeAgentPermissions(basePermission: any, overridePermission: any): Ag
       mergedBash = {
         "*": merged.bash,
       }
-    }
-    // if granular permissions are provided, default to "ask"
-    if (typeof merged.bash === "object") {
+    } else if (typeof merged.bash === "object") {
       mergedBash = mergeDeep(
         {
-          "*": "ask",
+          "*": "allow",
         },
         merged.bash,
       )

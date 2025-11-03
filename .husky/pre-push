@@ -1,2 +1,2 @@
 #!/bin/sh
-bun run typecheck
+bun typecheck

@@ -32,7 +32,8 @@ export async function POST(input: APIEvent) {
         .update(BillingTable)
         .set({
           paymentMethodID,
-          paymentMethodLast4: paymentMethod.card!.last4,
+          paymentMethodLast4: paymentMethod.card?.last4 ?? null,
+          paymentMethodType: paymentMethod.type,
         })
         .where(eq(BillingTable.customerID, customerID))
     })
@@ -52,7 +53,8 @@ export async function POST(input: APIEvent) {
 
     await Actor.provide("system", { workspaceID }, async () => {
       const customer = await Billing.get()
-      if (customer?.customerID && customer.customerID !== customerID) throw new Error("Customer ID mismatch")
+      if (customer?.customerID && customer.customerID !== customerID)
+        throw new Error("Customer ID mismatch")
 
       // set customer metadata
       if (!customer?.customerID) {
@@ -68,7 +70,18 @@ export async function POST(input: APIEvent) {
         expand: ["payment_method"],
       })
       const paymentMethod = paymentIntent.payment_method
-      if (!paymentMethod || typeof paymentMethod === "string") throw new Error("Payment method not expanded")
+      if (!paymentMethod || typeof paymentMethod === "string")
+        throw new Error("Payment method not expanded")
+
+      const oldBillingInfo = await Database.use((tx) =>
+        tx
+          .select({
+            customerID: BillingTable.customerID,
+          })
+          .from(BillingTable)
+          .where(eq(BillingTable.workspaceID, workspaceID))
+          .then((rows) => rows[0]),
+      )
 
       await Database.transaction(async (tx) => {
         await tx
@@ -77,10 +90,16 @@ export async function POST(input: APIEvent) {
             balance: sql`${BillingTable.balance} + ${centsToMicroCents(Billing.CHARGE_AMOUNT)}`,
             customerID,
             paymentMethodID: paymentMethod.id,
-            paymentMethodLast4: paymentMethod.card!.last4,
-            reload: true,
-            reloadError: null,
-            timeReloadError: null,
+            paymentMethodLast4: paymentMethod.card?.last4 ?? null,
+            paymentMethodType: paymentMethod.type,
+            // enable reload if first time enabling billing
+            ...(oldBillingInfo?.customerID
+              ? {}
+              : {
+                  reload: true,
+                  reloadError: null,
+                  timeReloadError: null,
+                }),
           })
           .where(eq(BillingTable.workspaceID, workspaceID))
         await tx.insert(PaymentTable).values({
@@ -117,7 +136,12 @@ export async function POST(input: APIEvent) {
         .set({
           timeRefunded: new Date(body.created * 1000),
         })
-        .where(and(eq(PaymentTable.paymentID, paymentIntentID), eq(PaymentTable.workspaceID, workspaceID)))
+        .where(
+          and(
+            eq(PaymentTable.paymentID, paymentIntentID),
+            eq(PaymentTable.workspaceID, workspaceID),
+          ),
+        )
 
       await tx
         .update(BillingTable)

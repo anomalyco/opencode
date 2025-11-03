@@ -51,7 +51,7 @@ export async function createOpencodeServer(options?: ServerOptions) {
             throw new Error(`Failed to parse server url from output: ${line}`)
           }
           clearTimeout(id)
-          resolve(match[1])
+          resolve(match[1]!)
           return
         }
       }

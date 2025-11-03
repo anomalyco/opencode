@@ -1,11 +1,12 @@
 import { Tool } from "./tool"
 import DESCRIPTION from "./task.txt"
-import z from "zod/v4"
+import z from "zod"
 import { Session } from "../session"
 import { Bus } from "../bus"
 import { MessageV2 } from "../session/message-v2"
 import { Identifier } from "../id/id"
 import { Agent } from "../agent/agent"
+import { SessionLock } from "../session/lock"
 import { SessionPrompt } from "../session/prompt"
 
 export const TaskTool = Tool.define("task", async () => {
@@ -32,6 +33,14 @@ export const TaskTool = Tool.define("task", async () => {
       })
       const msg = await Session.getMessage({ sessionID: ctx.sessionID, messageID: ctx.messageID })
       if (msg.info.role !== "assistant") throw new Error("Not an assistant message")
+
+      ctx.metadata({
+        title: params.description,
+        metadata: {
+          sessionId: session.id,
+        },
+      })
+
       const messageID = Identifier.ascending("message")
       const parts: Record<string, MessageV2.ToolPart> = {}
       const unsub = Bus.subscribe(MessageV2.Event.PartUpdated, async (evt) => {
@@ -43,6 +52,7 @@ export const TaskTool = Tool.define("task", async () => {
           title: params.description,
           metadata: {
             summary: Object.values(parts).sort((a, b) => a.id?.localeCompare(b.id)),
+            sessionId: session.id,
           },
         })
       })
@@ -53,7 +63,7 @@ export const TaskTool = Tool.define("task", async () => {
       }
 
       ctx.abort.addEventListener("abort", () => {
-        SessionPrompt.abort(session.id)
+        SessionLock.abort(session.id)
       })
       const result = await SessionPrompt.prompt({
         messageID,
@@ -86,6 +96,7 @@ export const TaskTool = Tool.define("task", async () => {
         title: params.description,
         metadata: {
           summary: all,
+          sessionId: session.id,
         },
         output: (result.parts.findLast((x: any) => x.type === "text") as any)?.text ?? "",
       }

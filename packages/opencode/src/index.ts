@@ -12,15 +12,17 @@ import { Installation } from "./installation"
 import { NamedError } from "./util/error"
 import { FormatError } from "./cli/error"
 import { ServeCommand } from "./cli/cmd/serve"
-import { TuiCommand } from "./cli/cmd/tui"
 import { DebugCommand } from "./cli/cmd/debug"
 import { StatsCommand } from "./cli/cmd/stats"
 import { McpCommand } from "./cli/cmd/mcp"
 import { GithubCommand } from "./cli/cmd/github"
 import { ExportCommand } from "./cli/cmd/export"
-import { AttachCommand } from "./cli/cmd/attach"
-
-const cancel = new AbortController()
+import { AttachCommand } from "./cli/cmd/tui/attach"
+import { TuiThreadCommand } from "./cli/cmd/tui/thread"
+import { TuiSpawnCommand } from "./cli/cmd/tui/spawn"
+import { AcpCommand } from "./cli/cmd/acp"
+import { EOL } from "os"
+import { WebCommand } from "./cli/cmd/web"
 
 process.on("unhandledRejection", (e) => {
   Log.Default.error("rejection", {
@@ -37,6 +39,7 @@ process.on("uncaughtException", (e) => {
 const cli = yargs(hideBin(process.argv))
   .scriptName("opencode")
   .help("help", "show help")
+  .alias("help", "h")
   .version("version", "show version number", Installation.VERSION)
   .alias("version", "v")
   .option("print-logs", {
@@ -51,10 +54,10 @@ const cli = yargs(hideBin(process.argv))
   .middleware(async (opts) => {
     await Log.init({
       print: process.argv.includes("--print-logs"),
-      dev: Installation.isDev(),
+      dev: Installation.isLocal(),
       level: (() => {
         if (opts.logLevel) return opts.logLevel as Log.Level
-        if (Installation.isDev()) return "DEBUG"
+        if (Installation.isLocal()) return "DEBUG"
         return "INFO"
       })(),
     })
@@ -67,8 +70,10 @@ const cli = yargs(hideBin(process.argv))
     })
   })
   .usage("\n" + UI.logo())
+  .command(AcpCommand)
   .command(McpCommand)
-  .command(TuiCommand)
+  .command(TuiThreadCommand)
+  .command(TuiSpawnCommand)
   .command(AttachCommand)
   .command(RunCommand)
   .command(GenerateCommand)
@@ -77,6 +82,7 @@ const cli = yargs(hideBin(process.argv))
   .command(AgentCommand)
   .command(UpgradeCommand)
   .command(ServeCommand)
+  .command(WebCommand)
   .command(ModelsCommand)
   .command(StatsCommand)
   .command(ExportCommand)
@@ -127,8 +133,15 @@ try {
   Log.Default.error("fatal", data)
   const formatted = FormatError(e)
   if (formatted) UI.error(formatted)
-  if (formatted === undefined) UI.error("Unexpected error, check log file at " + Log.file() + " for more details")
+  if (formatted === undefined) {
+    UI.error("Unexpected error, check log file at " + Log.file() + " for more details" + EOL)
+    console.error(e)
+  }
   process.exitCode = 1
+} finally {
+  // Some subprocesses don't react properly to SIGTERM and similar signals.
+  // Most notably, some docker-container-based MCP servers don't handle such signals unless
+  // run using `docker run --init`.
+  // Explicitly exit to avoid any hanging subprocesses.
+  process.exit()
 }
-
-cancel.abort()

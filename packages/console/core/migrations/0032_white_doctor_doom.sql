@@ -1,0 +1,1 @@
+ALTER TABLE `usage` ADD `key_id` varchar(30);

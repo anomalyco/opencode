@@ -7,7 +7,7 @@ import { fn } from "./util/fn"
 import { Actor } from "./actor"
 import { Resource } from "@opencode-ai/console-resource"
 
-export namespace ZenModel {
+export namespace ZenData {
   const ModelCostSchema = z.object({
     input: z.number(),
     output: z.number(),
@@ -16,37 +16,54 @@ export namespace ZenModel {
     cacheWrite1h: z.number().optional(),
   })
 
-  export const ModelSchema = z.object({
+  const ModelSchema = z.object({
+    name: z.string(),
     cost: ModelCostSchema,
     cost200K: ModelCostSchema.optional(),
     allowAnonymous: z.boolean().optional(),
     providers: z.array(
       z.object({
         id: z.string(),
-        api: z.string(),
-        apiKey: z.string(),
         model: z.string(),
         weight: z.number().optional(),
-        headerMappings: z.record(z.string(), z.string()).optional(),
         disabled: z.boolean().optional(),
       }),
     ),
   })
 
-  export const ModelsSchema = z.record(z.string(), ModelSchema)
+  const ProviderSchema = z.object({
+    api: z.string(),
+    apiKey: z.string(),
+    headerMappings: z.record(z.string(), z.string()).optional(),
+  })
 
-  export const list = fn(z.void(), () => ModelsSchema.parse(JSON.parse(Resource.ZEN_MODELS.value)))
+  const ModelsSchema = z.object({
+    models: z.record(z.string(), ModelSchema),
+    providers: z.record(z.string(), ProviderSchema),
+  })
+
+  export const validate = fn(ModelsSchema, (input) => {
+    return input
+  })
+
+  export const list = fn(z.void(), () => {
+    const json = JSON.parse(Resource.ZEN_MODELS1.value + Resource.ZEN_MODELS2.value)
+    return ModelsSchema.parse(json)
+  })
 }
 
 export namespace Model {
   export const enable = fn(z.object({ model: z.string() }), ({ model }) => {
-    const workspaceID = Actor.workspace()
+    Actor.assertAdmin()
     return Database.use((db) =>
-      db.delete(ModelTable).where(and(eq(ModelTable.workspaceID, workspaceID), eq(ModelTable.model, model))),
+      db
+        .delete(ModelTable)
+        .where(and(eq(ModelTable.workspaceID, Actor.workspace()), eq(ModelTable.model, model))),
     )
   })
 
   export const disable = fn(z.object({ model: z.string() }), ({ model }) => {
+    Actor.assertAdmin()
     return Database.use((db) =>
       db
         .insert(ModelTable)

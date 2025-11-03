@@ -61,6 +61,22 @@ opencode run "Hello world"
 
 ---
 
+### Custom directory
+
+You can specify a custom config directory using the `OPENCODE_CONFIG_DIR`
+environment variable. This directory will be searched for agents, commands,
+modes, and plugins just like the standard `.opencode` directory, and should
+follow the same structure.
+
+```bash
+export OPENCODE_CONFIG_DIR=/path/to/my/config-directory
+opencode run "Hello world"
+```
+
+Note: The custom directory is loaded after the global config and `.opencode` directories, so it can override their settings.
+
+---
+
 ## Schema
 
 The config file has a schema that's defined in [**`opencode.ai/config.json`**](https://opencode.ai/config.json).
@@ -83,6 +99,24 @@ You can configure TUI-specific settings through the `tui` option.
 ```
 
 [Learn more about using the TUI here](/docs/tui).
+
+---
+
+### Tools
+
+You can manage the tools an LLM can use through the `tools` option.
+
+```json title="opencode.json"
+{
+  "$schema": "https://opencode.ai/config.json",
+  "tools": {
+    "write": false,
+    "bash": false
+  }
+}
+```
+
+[Learn more about tools here](/docs/tools).
 
 ---
 
@@ -249,7 +283,9 @@ You can configure code formatters through the `formatter` option.
 
 ### Permissions
 
-You can configure permissions to control what AI agents can do in your codebase through the `permission` option.
+By default, opencode **allows all operations** without requiring explicit approval. You can change this using the `permission` option.
+
+For example, to ensure that the `edit` and `bash` tools require user approval:
 
 ```json title="opencode.json"
 {
@@ -260,11 +296,6 @@ You can configure permissions to control what AI agents can do in your codebase 
   }
 }
 ```
-
-This allows you to configure explicit approval requirements for sensitive operations:
-
-- `edit` - Controls whether file editing operations require user approval (`"ask"` or `"allow"`)
-- `bash` - Controls whether bash commands require user approval (can be `"ask"`/`"allow"` or a pattern map)
 
 [Learn more about permissions here](/docs/permissions).
 

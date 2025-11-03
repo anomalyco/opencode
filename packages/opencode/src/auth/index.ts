@@ -1,7 +1,7 @@
 import path from "path"
 import { Global } from "../global"
 import fs from "fs/promises"
-import z from "zod/v4"
+import z from "zod"
 
 export namespace Auth {
   export const Oauth = z

@@ -13,7 +13,7 @@ avoid repeating the title of the page, should be 5-10 words long
 
 Chunks of text should not be more than 2 sentences long
 
-Each section is spearated by a divider of 3 dashes
+Each section is separated by a divider of 3 dashes
 
 The section titles are short with only the first letter of the word capitalized
 

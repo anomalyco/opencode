@@ -1,0 +1,5 @@
+# Configuration for openapi-python-client
+# Ensures consistent project and package names and version when generating.
+project_name_override: opencode-ai
+package_name_override: opencode_ai
+package_version_override: 0.1.0

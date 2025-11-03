@@ -1,8 +1,6 @@
 import { Decimal } from "decimal.js"
-import z from "zod/v4"
+import z from "zod"
 import { type LanguageModelUsage, type ProviderMetadata } from "ai"
-
-import PROMPT_INITIALIZE from "../session/prompt/initialize.txt"
 
 import { Bus } from "../bus"
 import { Config } from "../config/config"
@@ -14,19 +12,26 @@ import { Share } from "../share/share"
 import { Storage } from "../storage/storage"
 import { Log } from "../util/log"
 import { MessageV2 } from "./message-v2"
-import { Project } from "../project/project"
 import { Instance } from "../project/instance"
 import { SessionPrompt } from "./prompt"
 import { fn } from "@/util/fn"
+import { Snapshot } from "@/snapshot"
+import { Command } from "../command"
 
 export namespace Session {
   const log = Log.create({ service: "session" })
 
-  const parentSessionTitlePrefix = "New session - "
-  const childSessionTitlePrefix = "Child session - "
+  const parentTitlePrefix = "New session - "
+  const childTitlePrefix = "Child session - "
 
   function createDefaultTitle(isChild = false) {
-    return (isChild ? childSessionTitlePrefix : parentSessionTitlePrefix) + new Date().toISOString()
+    return (isChild ? childTitlePrefix : parentTitlePrefix) + new Date().toISOString()
+  }
+
+  export function isDefaultTitle(title: string) {
+    return new RegExp(
+      `^(${parentTitlePrefix}|${childTitlePrefix})\\d{4}-\\d{2}-\\d{2}T\\d{2}:\\d{2}:\\d{2}\\.\\d{3}Z$`,
+    ).test(title)
   }
 
   export const Info = z
@@ -35,6 +40,11 @@ export namespace Session {
       projectID: z.string(),
       directory: z.string(),
       parentID: Identifier.schema("session").optional(),
+      summary: z
+        .object({
+          diffs: Snapshot.FileDiff.array(),
+        })
+        .optional(),
       share: z
         .object({
           url: z.string(),
@@ -72,6 +82,12 @@ export namespace Session {
   export type ShareInfo = z.output<typeof ShareInfo>
 
   export const Event = {
+    Created: Bus.event(
+      "session.created",
+      z.object({
+        info: Info,
+      }),
+    ),
     Updated: Bus.event(
       "session.updated",
       z.object({
@@ -146,7 +162,12 @@ export namespace Session {
     })
   })
 
-  export async function createNext(input: { id?: string; title?: string; parentID?: string; directory: string }) {
+  export async function createNext(input: {
+    id?: string
+    title?: string
+    parentID?: string
+    directory: string
+  }) {
     const result: Info = {
       id: Identifier.descending("session", input.id),
       version: Installation.VERSION,
@@ -161,6 +182,9 @@ export namespace Session {
     }
     log.info("created", result)
     await Storage.write(["session", Instance.project.id, result.id], result)
+    Bus.publish(Event.Created, {
+      info: result,
+    })
     const cfg = await Config.get()
     if (!result.parentID && (Flag.OPENCODE_AUTO_SHARE || cfg.share === "auto"))
       share(result.id)
@@ -334,10 +358,25 @@ export namespace Session {
     },
   )
 
-  export const updatePart = fn(MessageV2.Part, async (part) => {
+  const UpdatePartInput = z.union([
+    MessageV2.Part,
+    z.object({
+      part: MessageV2.TextPart,
+      delta: z.string(),
+    }),
+    z.object({
+      part: MessageV2.ReasoningPart,
+      delta: z.string(),
+    }),
+  ])
+
+  export const updatePart = fn(UpdatePartInput, async (input) => {
+    const part = "delta" in input ? input.part : input
+    const delta = "delta" in input ? input.delta : undefined
     await Storage.write(["part", part.messageID, part.id], part)
     Bus.publish(MessageV2.Event.PartUpdated, {
       part,
+      delta,
     })
     return part
   })
@@ -366,7 +405,9 @@ export namespace Session {
           .add(new Decimal(tokens.input).mul(input.model.cost?.input ?? 0).div(1_000_000))
           .add(new Decimal(tokens.output).mul(input.model.cost?.output ?? 0).div(1_000_000))
           .add(new Decimal(tokens.cache.read).mul(input.model.cost?.cache_read ?? 0).div(1_000_000))
-          .add(new Decimal(tokens.cache.write).mul(input.model.cost?.cache_write ?? 0).div(1_000_000))
+          .add(
+            new Decimal(tokens.cache.write).mul(input.model.cost?.cache_write ?? 0).div(1_000_000),
+          )
           .toNumber(),
         tokens,
       }
@@ -387,22 +428,13 @@ export namespace Session {
       messageID: Identifier.schema("message"),
     }),
     async (input) => {
-      await SessionPrompt.prompt({
+      await SessionPrompt.command({
         sessionID: input.sessionID,
         messageID: input.messageID,
-        model: {
-          providerID: input.providerID,
-          modelID: input.modelID,
-        },
-        parts: [
-          {
-            id: Identifier.ascending("part"),
-            type: "text",
-            text: PROMPT_INITIALIZE.replace("${path}", Instance.worktree),
-          },
-        ],
+        model: input.providerID + "/" + input.modelID,
+        command: Command.Default.INIT,
+        arguments: "",
       })
-      await Project.setInitialized(Instance.project.id)
     },
   )
 }

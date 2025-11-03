@@ -119,12 +119,6 @@ To use Amazon Bedrock with OpenCode:
    AWS_ACCESS_KEY_ID=XXX opencode
    ```
 
-   Or add it to a `.env` file in the project root.
-
-   ```bash title=".env"
-   AWS_ACCESS_KEY_ID=XXX
-   ```
-
    Or add it to your bash profile.
 
    ```bash title="~/.bash_profile"
@@ -223,12 +217,6 @@ Or if you already have an API key, you can select **Manually enter API Key** and
 
    ```bash
    AZURE_RESOURCE_NAME=XXX opencode
-   ```
-
-   Or add it to a `.env` file in the project root:
-
-   ```bash title=".env"
-   AZURE_RESOURCE_NAME=XXX
    ```
 
    Or add it to your bash profile:
@@ -386,6 +374,42 @@ Some models need to be manually enabled in your [GitHub Copilot settings](https:
 
 ---
 
+### Google Vertex AI
+
+To use Google Vertex AI with OpenCode:
+
+1. Head over to the **Model Garden** in the Google Cloud Console and check the
+   models available in your region.
+
+   :::tip
+   You need to have a Google Cloud project with Vertex AI API enabled.
+   :::
+
+2. Set the required environment variables:
+   - `GOOGLE_VERTEX_PROJECT`: Your Google Cloud project ID
+   - `GOOGLE_VERTEX_REGION` (optional): The region for Vertex AI (defaults to `us-east5`)
+   - Authentication (choose one):
+     - `GOOGLE_APPLICATION_CREDENTIALS`: Path to your service account JSON key file
+     - Authenticate using gcloud CLI: `gcloud auth application-default login`
+
+   Set them while running opencode.
+
+   ```bash
+   GOOGLE_APPLICATION_CREDENTIALS=/path/to/service-account.json GOOGLE_VERTEX_PROJECT=your-project-id opencode
+   ```
+
+   Or add them to your bash profile.
+
+   ```bash title="~/.bash_profile"
+   export GOOGLE_APPLICATION_CREDENTIALS=/path/to/service-account.json
+   export GOOGLE_VERTEX_PROJECT=your-project-id
+   export GOOGLE_VERTEX_REGION=us-central1
+   ```
+
+3. Run the `/models` command to select the model you want.
+
+---
+
 ### Groq
 
 1. Head over to the [Groq console](https://console.groq.com/), click **Create API Key**, and copy the key.
@@ -419,6 +443,45 @@ Some models need to be manually enabled in your [GitHub Copilot settings](https:
    ```
 
 4. Run the `/models` command to select the one you want.
+
+---
+
+### Hugging Face
+
+[Hugging Face Inference Providers](https://huggingface.co/docs/inference-providers) provides access to open models supported by 17+ providers.
+
+1. Head over to [Hugging Face settings](https://huggingface.co/settings/tokens/new?ownUserPermissions=inference.serverless.write&tokenType=fineGrained) to create a token with permission to make calls to Inference Providers.
+
+2. Run `opencode auth login` and select **Hugging Face**.
+
+   ```bash
+   $ opencode auth login
+
+   ┌  Add credential
+   │
+   ◆  Select provider
+   │  ● Hugging Face
+   │  ...
+   └
+   ```
+
+3. Enter your Hugging Face token.
+
+   ```bash
+   $ opencode auth login
+
+   ┌  Add credential
+   │
+   ◇  Select provider
+   │  Hugging Face
+   │
+   ◇  Enter your API key
+   │  _
+   └
+   ```
+
+4. Run the `/models` command to select a model like _Kimi-K2-Instruct_ or _GLM-4.6_.
+
 
 ---
 
@@ -525,6 +588,10 @@ In this example:
 - `name` is the display name for the provider in the UI.
 - `options.baseURL` is the endpoint for the local server.
 - `models` is a map of model IDs to their configurations. The model name will be displayed in the model selection list.
+
+:::tip
+If tool calls aren't working, try increasing `num_ctx` in Ollama. Start around 16k - 32k.
+:::
 
 ---
 

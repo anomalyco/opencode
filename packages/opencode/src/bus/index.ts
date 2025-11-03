@@ -1,5 +1,5 @@
-import z from "zod/v4"
-import type { ZodType } from "zod/v4"
+import z from "zod"
+import type { ZodType } from "zod"
 import { Log } from "../util/log"
 import { Instance } from "../project/instance"
 

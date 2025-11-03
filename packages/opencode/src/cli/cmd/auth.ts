@@ -80,29 +80,29 @@ export const AuthLoginCommand = cmd({
       async fn() {
         UI.empty()
         prompts.intro("Add credential")
-      if (args.url) {
-        const wellknown = await fetch(`${args.url}/.well-known/opencode`).then((x) => x.json())
-        prompts.log.info(`Running \`${wellknown.auth.command.join(" ")}\``)
-        const proc = Bun.spawn({
-          cmd: wellknown.auth.command,
-          stdout: "pipe",
-        })
-        const exit = await proc.exited
-        if (exit !== 0) {
-          prompts.log.error("Failed")
+        if (args.url) {
+          const wellknown = await fetch(`${args.url}/.well-known/opencode`).then((x) => x.json() as any)
+          prompts.log.info(`Running \`${wellknown.auth.command.join(" ")}\``)
+          const proc = Bun.spawn({
+            cmd: wellknown.auth.command,
+            stdout: "pipe",
+          })
+          const exit = await proc.exited
+          if (exit !== 0) {
+            prompts.log.error("Failed")
+            prompts.outro("Done")
+            return
+          }
+          const token = await new Response(proc.stdout).text()
+          await Auth.set(args.url, {
+            type: "wellknown",
+            key: wellknown.auth.env,
+            token: token.trim(),
+          })
+          prompts.log.success("Logged into " + args.url)
           prompts.outro("Done")
           return
         }
-        const token = await new Response(proc.stdout).text()
-        await Auth.set(args.url, {
-          type: "wellknown",
-          key: wellknown.auth.env,
-          token: token.trim(),
-        })
-        prompts.log.success("Logged into " + args.url)
-        prompts.outro("Done")
-        return
-      }
       await ModelsDev.refresh().catch(() => {})
       const providers = await ModelsDev.get()
       const priority: Record<string, number> = {

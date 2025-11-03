@@ -10,10 +10,14 @@ NC='\033[0m' # No Color
 
 requested_version=${VERSION:-}
 
-os=$(uname -s | tr '[:upper:]' '[:lower:]')
-if [[ "$os" == "darwin" ]]; then
-    os="darwin"
-fi
+raw_os=$(uname -s)
+os=$(echo "$raw_os" | tr '[:upper:]' '[:lower:]')
+# Normalize various Unix-like identifiers
+case "$raw_os" in
+  Darwin*) os="darwin" ;;
+  Linux*) os="linux" ;;
+  MINGW*|MSYS*|CYGWIN*) os="windows" ;;
+ esac
 arch=$(uname -m)
 
 if [[ "$arch" == "aarch64" ]]; then
@@ -96,6 +100,7 @@ download_and_install() {
     curl -# -L -o "$filename" "$url"
     unzip -q "$filename"
     mv opencode "$INSTALL_DIR"
+    chmod 755 "${INSTALL_DIR}/opencode"
     cd .. && rm -rf opencodetmp
 }
 

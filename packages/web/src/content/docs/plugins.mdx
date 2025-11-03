@@ -111,7 +111,7 @@ export const EnvProtection = async ({ project, client, $, directory, worktree })
 Plugins can also add custom tools to opencode:
 
 ```ts title=".opencode/plugin/custom-tools.ts"
-import type { Plugin, tool } from "@opencode-ai/plugin"
+import { type Plugin, tool } from "@opencode-ai/plugin"
 
 export const CustomToolsPlugin: Plugin = async (ctx) => {
   return {

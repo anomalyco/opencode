@@ -1,3 +1,4 @@
+import { Log } from "@/util/log"
 import { Context } from "../util/context"
 import { Project } from "./project"
 import { State } from "./state"
@@ -11,7 +12,11 @@ const context = Context.create<Context>("instance")
 const cache = new Map<string, Context>()
 
 export const Instance = {
-  async provide<R>(input: { directory: string; init?: () => Promise<any>; fn: () => R }): Promise<R> {
+  async provide<R>(input: {
+    directory: string
+    init?: () => Promise<any>
+    fn: () => R
+  }): Promise<R> {
     let existing = cache.get(input.directory)
     if (!existing) {
       const project = await Project.fromDirectory(input.directory)
@@ -23,8 +28,8 @@ export const Instance = {
     }
     return context.provide(existing, async () => {
       if (!cache.has(input.directory)) {
-        await input.init?.()
         cache.set(input.directory, existing)
+        await input.init?.()
       }
       return input.fn()
     })
@@ -42,6 +47,15 @@ export const Instance = {
     return State.create(() => Instance.directory, init, dispose)
   },
   async dispose() {
+    Log.Default.info("disposing instance", { directory: Instance.directory })
     await State.dispose(Instance.directory)
+  },
+  async disposeAll() {
+    for (const [_key, value] of cache) {
+      await context.provide(value, async () => {
+        await Instance.dispose()
+      })
+    }
+    cache.clear()
   },
 }

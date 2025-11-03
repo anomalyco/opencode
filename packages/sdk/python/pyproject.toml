@@ -1,0 +1,56 @@
+[build-system]
+requires = ["hatchling>=1.17.0"]
+build-backend = "hatchling.build"
+
+[project]
+name = "opencode-ai"
+version = "0.1.0"
+description = "Python client for the Opencode API (generated via openapi-python-client)"
+readme = "README.md"
+requires-python = ">=3.8"
+license = {text = "MIT"}
+authors = [
+  { name = "Opencode Authors", email = "support@sst.dev" }
+]
+dependencies = [
+  "httpx>=0.27.0",
+  "pydantic>=2.0.0",
+  "python-dateutil>=2.8.2"
+]
+
+[project.urls]
+Homepage = "https://opencode.ai"
+Repository = "https://github.com/sst/opencode"
+
+[tool.uv]
+# Development-time dependencies installed with `uv sync --dev`
+dev-dependencies = [
+  "openapi-python-client",
+  "black",
+  "isort",
+  "ruff",
+  "pytest",
+  "pytest-asyncio",
+  "sseclient-py",
+  "build",
+  "twine",
+  "mkdocs",
+  "mkdocs-material",
+]
+
+[tool.black]
+line-length = 120
+target-version = ["py38", "py39", "py310", "py311", "py312"]
+
+[tool.isort]
+profile = "black"
+line_length = 120
+
+[tool.ruff]
+line-length = 120
+select = ["E", "F", "I", "UP"]
+ignore = []
+
+[tool.pytest.ini_options]
+addopts = "-q"
+pythonpath = ["src"]

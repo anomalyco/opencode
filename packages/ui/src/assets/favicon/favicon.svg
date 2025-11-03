@@ -1,0 +1,18 @@
+<svg width='300' height='300' viewBox='0 0 300 300' fill='none' xmlns='http://www.w3.org/2000/svg'>
+  <style>
+    /* Light mode colors (default) */
+    .inner-square { fill: #CFCECD; }
+    .outer-path { fill: #211E1E; }
+
+    /* Dark mode colors */
+    @media (prefers-color-scheme: dark) {
+    .inner-square { fill: #4B4646; }
+    .outer-path { fill: #F1ECEC; }
+    }
+  </style>
+  <g>
+    <path class="inner-square" d='M194 215.5H106V127.5H194V215.5Z' />
+    <path class="outer-path" d='M194 83.5H106V215.5H194V83.5ZM238 259.5H62V39.5H238V259.5Z' />
+  </g>
+</svg>
+

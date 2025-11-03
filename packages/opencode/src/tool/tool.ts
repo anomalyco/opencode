@@ -1,9 +1,11 @@
-import z from "zod/v4"
+import z from "zod"
+import type { MessageV2 } from "../session/message-v2"
 
 export namespace Tool {
   interface Metadata {
     [key: string]: any
   }
+
   export type Context<M extends Metadata = Metadata> = {
     sessionID: string
     messageID: string
@@ -25,9 +27,13 @@ export namespace Tool {
         title: string
         metadata: M
         output: string
+        attachments?: MessageV2.FilePart[]
       }>
     }>
   }
+
+  export type InferParameters<T extends Info> = T extends Info<infer P> ? z.infer<P> : never
+  export type InferMetadata<T extends Info> = T extends Info<any, infer M> ? M : never
 
   export function define<Parameters extends z.ZodType, Result extends Metadata>(
     id: string,
@@ -36,8 +42,13 @@ export namespace Tool {
     return {
       id,
       init: async () => {
-        if (init instanceof Function) return init()
-        return init
+        const toolInfo = init instanceof Function ? await init() : init
+        const execute = toolInfo.execute
+        toolInfo.execute = (args, ctx) => {
+          toolInfo.parameters.parse(args)
+          return execute(args, ctx)
+        }
+        return toolInfo
       },
     }
   }

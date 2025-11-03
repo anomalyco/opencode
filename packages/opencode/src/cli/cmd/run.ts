@@ -1,4 +1,5 @@
 import type { Argv } from "yargs"
+import path from "path"
 import { Bus } from "../../bus"
 import { Provider } from "../../provider/provider"
 import { Session } from "../../session"
@@ -12,6 +13,9 @@ import { Identifier } from "../../id/id"
 import { Agent } from "../../agent/agent"
 import { Command } from "../../command"
 import { SessionPrompt } from "../../session/prompt"
+import { EOL } from "os"
+import { Permission } from "@/permission"
+import { select } from "@clack/prompts"
 
 const TOOL: Record<string, [string, string]> = {
   todowrite: ["Todo", UI.Style.TEXT_WARNING_BOLD],
@@ -70,9 +74,48 @@ export const RunCommand = cmd({
         default: "default",
         describe: "format: default (formatted) or json (raw JSON events)",
       })
+      .option("file", {
+        alias: ["f"],
+        type: "string",
+        array: true,
+        describe: "file(s) to attach to message",
+      })
+      .option("title", {
+        type: "string",
+        describe: "title for the session (uses truncated prompt if no value provided)",
+      })
   },
   handler: async (args) => {
     let message = args.message.join(" ")
+
+    let fileParts: any[] = []
+    if (args.file) {
+      const files = Array.isArray(args.file) ? args.file : [args.file]
+
+      for (const filePath of files) {
+        const resolvedPath = path.resolve(process.cwd(), filePath)
+        const file = Bun.file(resolvedPath)
+        const stats = await file.stat().catch(() => {})
+        if (!stats) {
+          UI.error(`File not found: ${filePath}`)
+          process.exit(1)
+        }
+        if (!(await file.exists())) {
+          UI.error(`File not found: ${filePath}`)
+          process.exit(1)
+        }
+
+        const stat = await file.stat()
+        const mime = stat.isDirectory() ? "application/x-directory" : "text/plain"
+
+        fileParts.push({
+          type: "file",
+          url: `file://${resolvedPath}`,
+          filename: path.basename(resolvedPath),
+          mime,
+        })
+      }
+    }
 
     if (!process.stdin.isTTY) message += "\n" + (await Bun.stdin.text())
 
@@ -106,7 +149,19 @@ export const RunCommand = cmd({
 
         if (args.session) return Session.get(args.session)
 
-        return Session.create({})
+        const title = (() => {
+          if (args.title !== undefined) {
+            if (args.title === "") {
+              return message.slice(0, 50) + (message.length > 50 ? "..." : "")
+            }
+            return args.title
+          }
+          return undefined
+        })()
+
+        return Session.create({
+          title,
+        })
       })()
 
       if (!session) {
@@ -158,13 +213,12 @@ export const RunCommand = cmd({
             sessionID: session?.id,
             ...data,
           }
-          process.stdout.write(JSON.stringify(jsonEvent) + "\n")
+          process.stdout.write(JSON.stringify(jsonEvent) + EOL)
           return true
         }
         return false
       }
 
-      let text = ""
       const messageID = Identifier.ascending("message")
 
       Bus.subscribe(MessageV2.Event.PartUpdated, async (evt) => {
@@ -177,7 +231,9 @@ export const RunCommand = cmd({
           const [tool, color] = TOOL[part.tool] ?? [part.tool, UI.Style.TEXT_INFO_BOLD]
           const title =
             part.state.title ||
-            (Object.keys(part.state.input).length > 0 ? JSON.stringify(part.state.input) : "Unknown")
+            (Object.keys(part.state.input).length > 0
+              ? JSON.stringify(part.state.input)
+              : "Unknown")
 
           printEvent(color, tool, title)
 
@@ -196,15 +252,14 @@ export const RunCommand = cmd({
         }
 
         if (part.type === "text") {
-          text = part.text
+          const text = part.text
+          const isPiped = !process.stdout.isTTY
 
           if (part.time?.end) {
             if (outputJsonEvent("text", { part })) return
-            UI.empty()
-            UI.println(UI.markdown(text))
-            UI.empty()
-            text = ""
-            return
+            if (!isPiped) UI.println()
+            process.stdout.write((isPiped ? text : UI.markdown(text)) + EOL)
+            if (!isPiped) UI.println()
           }
         }
       })
@@ -218,13 +273,38 @@ export const RunCommand = cmd({
         if ("data" in error && error.data && "message" in error.data) {
           err = error.data.message
         }
-        errorMsg = errorMsg ? errorMsg + "\n" + err : err
+        errorMsg = errorMsg ? errorMsg + EOL + err : err
 
         if (outputJsonEvent("error", { error })) return
         UI.error(err)
       })
 
-      const result = await (async () => {
+      Bus.subscribe(Permission.Event.Updated, async (evt) => {
+        const permission = evt.properties
+        const message = `Permission required to run: ${permission.title}`
+
+        const result = await select({
+          message,
+          options: [
+            { value: "once", label: "Allow once" },
+            { value: "always", label: "Always allow" },
+            { value: "reject", label: "Reject" },
+          ],
+          initialValue: "once",
+        }).catch(() => "reject")
+        const response = (result.toString().includes("cancel") ? "reject" : result) as
+          | "once"
+          | "always"
+          | "reject"
+
+        Permission.respond({
+          sessionID: session.id,
+          permissionID: permission.id,
+          response,
+        })
+      })
+
+      await (async () => {
         if (args.command) {
           return await SessionPrompt.command({
             messageID,
@@ -244,6 +324,7 @@ export const RunCommand = cmd({
           },
           agent: agent.name,
           parts: [
+            ...fileParts,
             {
               id: Identifier.ascending("part"),
               type: "text",
@@ -252,15 +333,6 @@ export const RunCommand = cmd({
           ],
         })
       })()
-
-      const isPiped = !process.stdout.isTTY
-      if (isPiped) {
-        const match = result.parts.findLast((x: any) => x.type === "text") as any
-        if (outputJsonEvent("text", { text: match })) return
-        if (match) process.stdout.write(UI.markdown(match.text))
-        if (errorMsg) process.stdout.write(errorMsg)
-      }
-      UI.empty()
       if (errorMsg) process.exit(1)
     })
   },

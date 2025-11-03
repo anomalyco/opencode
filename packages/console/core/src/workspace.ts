@@ -52,6 +52,7 @@ export namespace Workspace {
       name: z.string().min(1).max(255),
     }),
     async ({ name }) => {
+      Actor.assertAdmin()
       const workspaceID = Actor.workspace()
       return await Database.use((tx) =>
         tx

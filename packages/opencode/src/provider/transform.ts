@@ -75,7 +75,7 @@ export namespace ProviderTransform {
 
   export function temperature(_providerID: string, modelID: string) {
     if (modelID.toLowerCase().includes("qwen")) return 0.55
-    if (modelID.toLowerCase().includes("claude")) return 1
+    if (modelID.toLowerCase().includes("claude")) return undefined
     return 0
   }
 
@@ -92,17 +92,43 @@ export namespace ProviderTransform {
     }
 
     if (modelID.includes("gpt-5") && !modelID.includes("gpt-5-chat")) {
-      result["reasoningEffort"] = "medium"
+      if (!modelID.includes("codex") && !modelID.includes("gpt-5-pro")) {
+        result["reasoningEffort"] = "medium"
+      }
+
       if (providerID !== "azure") {
         result["textVerbosity"] = modelID.includes("codex") ? "medium" : "low"
       }
+
       if (providerID === "opencode") {
         result["promptCacheKey"] = sessionID
         result["include"] = ["reasoning.encrypted_content"]
-        result["reasoningSummary"] = "detailed"
+        result["reasoningSummary"] = "auto"
       }
     }
     return result
+  }
+
+  export function providerOptions(npm: string | undefined, providerID: string, options: { [x: string]: any }) {
+    switch (npm) {
+      case "@ai-sdk/openai":
+      case "@ai-sdk/azure":
+        return {
+          ["openai" as string]: options,
+        }
+      case "@ai-sdk/amazon-bedrock":
+        return {
+          ["bedrock" as string]: options,
+        }
+      case "@ai-sdk/anthropic":
+        return {
+          ["anthropic" as string]: options,
+        }
+      default:
+        return {
+          [providerID]: options,
+        }
+    }
   }
 
   export function maxOutputTokens(
