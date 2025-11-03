@@ -1,5 +1,4 @@
 import { Server } from "../../server/server"
-import { UI } from "../ui"
 import { cmd } from "./cmd"
 
 export const ServeCommand = cmd({
@@ -25,12 +24,7 @@ export const ServeCommand = cmd({
       port,
       hostname,
     })
-    UI.println(
-      UI.Style.TEXT_NORMAL_BOLD,
-      "Web interface:    ",
-      UI.Style.TEXT_NORMAL,
-      `https://desktop.dev.opencode.ai?url=${server.url}`,
-    )
+    console.log(`opencode server listening on http://${server.hostname}:${server.port}`)
     await new Promise(() => {})
     await server.stop()
   },
