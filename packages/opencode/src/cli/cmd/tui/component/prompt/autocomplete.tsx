@@ -229,6 +229,11 @@ export function Autocomplete(props: {
           description: "rename session",
           onSelect: () => command.trigger("session.rename"),
         },
+        {
+          display: "/timeline",
+          description: "jump to message",
+          onSelect: () => command.trigger("session.timeline"),
+        },
       )
     }
     results.push(
