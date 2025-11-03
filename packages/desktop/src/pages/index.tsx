@@ -13,6 +13,7 @@ import {
   ProgressCircle,
   Message,
   Typewriter,
+  Card,
 } from "@opencode-ai/ui"
 import { FileIcon } from "@/ui"
 import FileTree from "@/components/file-tree"
@@ -547,78 +548,13 @@ export default function Page() {
                               <For each={local.session.userMessages()}>
                                 {(message) => {
                                   const diffs = createMemo(() => message.summary?.diffs ?? [])
-                                  const working = createMemo(() => !message.summary?.body)
                                   const assistantMessages = createMemo(() => {
                                     return sync.data.message[activeSession().id]?.filter(
                                       (m) => m.role === "assistant" && m.parentID == message.id,
                                     ) as AssistantMessageType[]
                                   })
-                                  const parts = createMemo(() =>
-                                    assistantMessages().flatMap((m) => sync.data.part[m.id]),
-                                  )
-                                  const lastPart = createMemo(() => parts().slice(-1)?.at(0))
-                                  const rawStatus = createMemo(() => {
-                                    const defaultStatus = "Working..."
-                                    const last = lastPart()
-                                    if (!last) return defaultStatus
-
-                                    if (last.type === "tool") {
-                                      switch (last.tool) {
-                                        case "task":
-                                          return "Delegating work..."
-                                        case "todowrite":
-                                        case "todoread":
-                                          return "Planning next steps..."
-                                        case "read":
-                                          return "Gathering context..."
-                                        case "list":
-                                        case "grep":
-                                        case "glob":
-                                          return "Searching the codebase..."
-                                        case "webfetch":
-                                          return "Searching the web..."
-                                        case "edit":
-                                        case "write":
-                                          return "Making edits..."
-                                        case "bash":
-                                          return "Running commands..."
-                                        default:
-                                          break
-                                      }
-                                    } else if (last.type === "reasoning") {
-                                      return "Thinking..."
-                                    } else if (last.type === "text") {
-                                      return "Gathering thoughts..."
-                                    }
-                                    return defaultStatus
-                                  })
-
-                                  const [status, setStatus] = createSignal(rawStatus())
-                                  let lastStatusChange = Date.now()
-                                  let statusTimeout: number | undefined
-
-                                  createEffect(() => {
-                                    const newStatus = rawStatus()
-                                    if (newStatus === status()) return
-
-                                    const timeSinceLastChange = Date.now() - lastStatusChange
-
-                                    if (timeSinceLastChange >= 1000) {
-                                      setStatus(newStatus)
-                                      lastStatusChange = Date.now()
-                                      if (statusTimeout) {
-                                        clearTimeout(statusTimeout)
-                                        statusTimeout = undefined
-                                      }
-                                    } else {
-                                      if (statusTimeout) clearTimeout(statusTimeout)
-                                      statusTimeout = setTimeout(() => {
-                                        setStatus(rawStatus())
-                                        lastStatusChange = Date.now()
-                                        statusTimeout = undefined
-                                      }, 1000 - timeSinceLastChange) as unknown as number
-                                    }
-                                  })
+                                  const error = createMemo(() => assistantMessages().find((m) => m?.error)?.error)
+                                  const working = createMemo(() => !message.summary?.body && !error())
 
                                   return (
                                     <li class="group/li flex items-center self-stretch">
@@ -641,10 +577,9 @@ export default function Page() {
                                             "text-text-weak data-[active=true]:text-text-strong group-hover/li:text-text-base": true,
                                           }}
                                         >
-                                          <Switch>
-                                            <Match when={working()}>{status()}</Match>
-                                            <Match when={true}>{message.summary?.title}</Match>
-                                          </Switch>
+                                          <Show when={message.summary?.title} fallback="New message">
+                                            {message.summary?.title}
+                                          </Show>
                                         </div>
                                       </button>
                                     </li>
@@ -658,23 +593,24 @@ export default function Page() {
                               {(message) => {
                                 const isActive = createMemo(() => local.session.activeMessage()?.id === message.id)
                                 const [titled, setTitled] = createSignal(!!message.summary?.title)
-                                const [completed, setCompleted] = createSignal(!!message.summary?.body)
-                                const [expanded, setExpanded] = createSignal(false)
-                                const parts = createMemo(() => sync.data.part[message.id])
-                                const title = createMemo(() => message.summary?.title)
-                                const summary = createMemo(() => message.summary?.body)
-                                const diffs = createMemo(() => message.summary?.diffs ?? [])
                                 const assistantMessages = createMemo(() => {
                                   return sync.data.message[activeSession().id]?.filter(
                                     (m) => m.role === "assistant" && m.parentID == message.id,
                                   ) as AssistantMessageType[]
                                 })
+                                const error = createMemo(() => assistantMessages().find((m) => m?.error)?.error)
+                                const [completed, setCompleted] = createSignal(!!message.summary?.body || !!error())
+                                const [expanded, setExpanded] = createSignal(false)
+                                const parts = createMemo(() => sync.data.part[message.id])
+                                const title = createMemo(() => message.summary?.title)
+                                const summary = createMemo(() => message.summary?.body)
+                                const diffs = createMemo(() => message.summary?.diffs ?? [])
                                 const hasToolPart = createMemo(() =>
                                   assistantMessages()
                                     ?.flatMap((m) => sync.data.part[m.id])
                                     .some((p) => p?.type === "tool"),
                                 )
-                                const working = createMemo(() => !summary())
+                                const working = createMemo(() => !summary() && !error())
 
                                 // allowing time for the animations to finish
                                 createEffect(() => {
@@ -682,8 +618,8 @@ export default function Page() {
                                   setTimeout(() => setTitled(!!title()), 10_000)
                                 })
                                 createEffect(() => {
-                                  summary()
-                                  setTimeout(() => setCompleted(!!summary()), 1200)
+                                  const complete = !!summary() || !!error()
+                                  setTimeout(() => setCompleted(complete), 1200)
                                 })
 
                                 return (
@@ -779,6 +715,11 @@ export default function Page() {
                                           </Accordion>
                                         </div>
                                       </Show>
+                                      <Show when={error() && !expanded()}>
+                                        <Card variant="error" class="text-text-on-critical-base">
+                                          {error()?.data?.message as string}
+                                        </Card>
+                                      </Show>
                                       {/* Response */}
                                       <div class="w-full">
                                         <Switch>
@@ -808,6 +749,11 @@ export default function Page() {
                                                       return <Message message={assistantMessage} parts={parts()} />
                                                     }}
                                                   </For>
+                                                  <Show when={error()}>
+                                                    <Card variant="error" class="text-text-on-critical-base">
+                                                      {error()?.data?.message as string}
+                                                    </Card>
+                                                  </Show>
                                                 </div>
                                               </Collapsible.Content>
                                             </Collapsible>
