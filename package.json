@@ -51,6 +51,7 @@
   "devDependencies": {
     "@tsconfig/bun": "catalog:",
     "husky": "9.1.7",
+    "pino-pretty": "13.1.2",
     "prettier": "3.6.2",
     "sst": "3.17.19",
     "turbo": "2.5.6"

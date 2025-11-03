@@ -1,5 +1,5 @@
 import { createContext, useContext, createSignal, onCleanup, type ParentComponent } from "solid-js"
-import { RoomManager } from "@/livekit/room-manager"
+import type { RoomManager } from "@/livekit/room-manager"
 import type { LiveKitConfig } from "../component/dialog-livekit"
 
 interface LiveKitContextValue {
@@ -26,6 +26,9 @@ export const LiveKitProvider: ParentComponent = (props) => {
     })
 
     try {
+      // Lazy load RoomManager to avoid loading LiveKit at startup
+      const { RoomManager } = await import("@/livekit/room-manager")
+
       // Create RoomManager with LiveKit config
       const roomManager = new RoomManager({
         serverUrl: config.url,

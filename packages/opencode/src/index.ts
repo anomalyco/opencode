@@ -39,7 +39,7 @@ process.on("uncaughtException", (e) => {
 })
 
 const cli = yargs(hideBin(process.argv))
-  .scriptName("opencode")
+  .scriptName("codesurf")
   .help("help", "show help")
   .alias("help", "h")
   .version("version", "show version number", Installation.VERSION)
@@ -66,8 +66,11 @@ const cli = yargs(hideBin(process.argv))
 
     process.env.AGENT = "1"
     process.env.OPENCODE = "1"
+    process.env.CODESURF = "1"
+    process.env["CODESURF"] = "1"
+    process.env["OPENCODE"] = "1" // Keep for backwards compatibility
 
-    Log.Default.info("opencode", {
+    Log.Default.info("codesurf", {
       version: Installation.VERSION,
       args: process.argv.slice(2),
     })

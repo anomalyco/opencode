@@ -1,0 +1,2 @@
+#!/bin/sh
+exec /Users/jkneen/Documents/GitHub/flows/opencode-stt/packages/opencode/dist/@codesurf/cli-darwin-arm64/bin/codesurf "$@"

@@ -2,7 +2,6 @@ import { cmd } from "./cmd"
 import { UI } from "../ui"
 import * as prompts from "@clack/prompts"
 import { Config } from "../../config/config"
-import { createRoomAgent } from "../../livekit/room-agent"
 import type { LiveKitConfig, RoomAgentConfig } from "../../livekit/types"
 
 export const RoomCommand = cmd({
@@ -184,6 +183,7 @@ export const RoomAgentStartCommand = cmd({
       UI.empty()
 
       // Create and start agent
+      const { createRoomAgent } = await import("../../livekit/room-agent")
       const agent = createRoomAgent(liveKitConfig, agentConfig)
 
       UI.println("Connecting to room...")

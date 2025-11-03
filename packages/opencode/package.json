@@ -1,9 +1,8 @@
 {
   "$schema": "https://json.schemastore.org/package.json",
-  "version": "1.0.24",
-  "name": "opencode",
+  "version": "1.0.20",
+  "name": "@codesurf/cli",
   "type": "module",
-  "private": true,
   "scripts": {
     "typecheck": "tsgo --noEmit",
     "test": "bun test",
@@ -12,7 +11,8 @@
     "random": "echo 'Random script updated at $(date)'"
   },
   "bin": {
-    "opencode": "./bin/opencode"
+    "codesurf": "./bin/codesurf",
+    "surf": "./bin/surf"
   },
   "exports": {
     "./*": "./src/*.ts"

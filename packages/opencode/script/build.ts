@@ -73,8 +73,8 @@ for (const [os, arch] of targets) {
     sourcemap: "external",
     compile: {
       target: `bun-${os}-${arch}` as any,
-      outfile: `dist/${name}/bin/opencode`,
-      execArgv: [`--user-agent=opencode/${Script.version}`, `--env-file=""`, `--`],
+      outfile: `dist/${name}/bin/codesurf`,
+      execArgv: [`--user-agent=codesurf/${Script.version}`, `--env-file=""`, `--`],
       windows: {},
     },
     entrypoints: ["./src/index.ts", parserWorker, workerPath],
