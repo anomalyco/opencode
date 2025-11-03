@@ -37,7 +37,7 @@ export function MessageProgress(props: { assistantMessages: () => AssistantMessa
   //     resolvedParts().findLast((p) => p?.type === "reasoning")?.text,
   // )
   const eligibleItems = createMemo(() => {
-    return resolvedParts().filter((p) => p?.type === "tool" && p.state.status === "completed") as ToolPart[]
+    return resolvedParts().filter((p) => p?.type === "tool" && p?.state.status === "completed") as ToolPart[]
   })
   const finishedItems = createMemo<(JSXElement | ToolPart)[]>(() => [
     <div class="h-8 w-full" />,
