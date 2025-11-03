@@ -18,7 +18,14 @@
   position: absolute;
   top: 50%;
   left: 50%;
-  transform: translate(-50%, -50%);
+}
+
+.status-container:nth-child(1) {
+  transform: translate(-52%, -52%);
+}
+
+.status-container:nth-child(2) {
+  transform: translate(-48%, -48%);
 }
 
 .blob-container {
