@@ -295,14 +295,25 @@ export default function ChatIndicator({ room, connectionState }: ChatIndicatorPr
                 <feColorMatrix in="blur" mode="matrix" values="1 0 0 0 0  0 1 0 0 0  0 0 1 0 0  0 0 0 18 -8" result="goo" />
                 <feBlend in="SourceGraphic" in2="goo" />
               </filter>
+              
+              <filter id="blur-tight">
+                <feGaussianBlur in="SourceGraphic" stdDeviation="8" />
+              </filter>
+              
+              <radialGradient id="glass-purple" cx="50%" cy="50%">
+                <stop offset="0%" stopColor="#a78bfa" stopOpacity="0.5" />
+                <stop offset="50%" stopColor="#a78bfa" stopOpacity="0.6" />
+                <stop offset="100%" stopColor="#7c3aed" stopOpacity="0.4" />
+              </radialGradient>
             </defs>
             
             <g filter="url(#goo-agent)">
-              <circle className="blob-main" cx="100" cy="100" r={agentRadius} fill="#a78bfa" opacity="0.6" />
-              <circle className="blob-orb" cx={agentOrb1.x} cy={agentOrb1.y} r="25" fill="#a78bfa" opacity="0.6" style={{ transform: `scale(${agentOrb1.scale})`, transformOrigin: '100px 100px' }} />
-              <circle className="blob-orb" cx={agentOrb2.x} cy={agentOrb2.y} r="20" fill="#a78bfa" opacity="0.6" style={{ transform: `scale(${agentOrb2.scale})`, transformOrigin: '100px 100px' }} />
-              <circle className="blob-orb" cx={agentOrb3.x} cy={agentOrb3.y} r="18" fill="#a78bfa" opacity="0.6" style={{ transform: `scale(${agentOrb3.scale})`, transformOrigin: '100px 100px' }} />
-              <circle className="blob-orb" cx={agentOrb4.x} cy={agentOrb4.y} r="15" fill="#a78bfa" opacity="0.6" style={{ transform: `scale(${agentOrb4.scale})`, transformOrigin: '100px 100px' }} />
+              <circle className="blob-main" cx="100" cy="100" r={agentRadius} fill="url(#glass-purple)" />
+              <circle className="blob-orb" cx={agentOrb1.x} cy={agentOrb1.y} r="25" fill="url(#glass-purple)" style={{ transform: `scale(${agentOrb1.scale})`, transformOrigin: '100px 100px' }} />
+              <circle className="blob-orb" cx={agentOrb2.x} cy={agentOrb2.y} r="20" fill="url(#glass-purple)" style={{ transform: `scale(${agentOrb2.scale})`, transformOrigin: '100px 100px' }} />
+              <circle className="blob-orb" cx={agentOrb3.x} cy={agentOrb3.y} r="18" fill="url(#glass-purple)" style={{ transform: `scale(${agentOrb3.scale})`, transformOrigin: '100px 100px' }} />
+              <circle className="blob-orb" cx={agentOrb4.x} cy={agentOrb4.y} r="15" fill="url(#glass-purple)" style={{ transform: `scale(${agentOrb4.scale})`, transformOrigin: '100px 100px' }} />
+              <circle cx="100" cy="100" r="20" fill="#a78bfa" opacity="0.6" filter="url(#blur-tight)" />
             </g>
           </svg>
           <div className="blob-glow" style={{ backgroundColor: '#a78bfa' }} />
@@ -319,14 +330,21 @@ export default function ChatIndicator({ room, connectionState }: ChatIndicatorPr
                 <feColorMatrix in="blur" mode="matrix" values="1 0 0 0 0  0 1 0 0 0  0 0 1 0 0  0 0 0 18 -8" result="goo" />
                 <feBlend in="SourceGraphic" in2="goo" />
               </filter>
+              
+              <radialGradient id="glass-blue" cx="50%" cy="50%">
+                <stop offset="0%" stopColor="#3b82f6" stopOpacity="0.5" />
+                <stop offset="50%" stopColor="#3b82f6" stopOpacity="0.6" />
+                <stop offset="100%" stopColor="#1d4ed8" stopOpacity="0.4" />
+              </radialGradient>
             </defs>
             
             <g filter="url(#goo-user)">
-              <circle className="blob-main" cx="100" cy="100" r={userRadius} fill="#3b82f6" opacity="0.6" />
-              <circle className="blob-orb" cx={userOrb1.x} cy={userOrb1.y} r="25" fill="#3b82f6" opacity="0.6" style={{ transform: `scale(${userOrb1.scale})`, transformOrigin: '100px 100px' }} />
-              <circle className="blob-orb" cx={userOrb2.x} cy={userOrb2.y} r="20" fill="#3b82f6" opacity="0.6" style={{ transform: `scale(${userOrb2.scale})`, transformOrigin: '100px 100px' }} />
-              <circle className="blob-orb" cx={userOrb3.x} cy={userOrb3.y} r="18" fill="#3b82f6" opacity="0.6" style={{ transform: `scale(${userOrb3.scale})`, transformOrigin: '100px 100px' }} />
-              <circle className="blob-orb" cx={userOrb4.x} cy={userOrb4.y} r="15" fill="#3b82f6" opacity="0.6" style={{ transform: `scale(${userOrb4.scale})`, transformOrigin: '100px 100px' }} />
+              <circle className="blob-main" cx="100" cy="100" r={userRadius} fill="url(#glass-blue)" />
+              <circle className="blob-orb" cx={userOrb1.x} cy={userOrb1.y} r="25" fill="url(#glass-blue)" style={{ transform: `scale(${userOrb1.scale})`, transformOrigin: '100px 100px' }} />
+              <circle className="blob-orb" cx={userOrb2.x} cy={userOrb2.y} r="20" fill="url(#glass-blue)" style={{ transform: `scale(${userOrb2.scale})`, transformOrigin: '100px 100px' }} />
+              <circle className="blob-orb" cx={userOrb3.x} cy={userOrb3.y} r="18" fill="url(#glass-blue)" style={{ transform: `scale(${userOrb3.scale})`, transformOrigin: '100px 100px' }} />
+              <circle className="blob-orb" cx={userOrb4.x} cy={userOrb4.y} r="15" fill="url(#glass-blue)" style={{ transform: `scale(${userOrb4.scale})`, transformOrigin: '100px 100px' }} />
+              <circle cx="100" cy="100" r="20" fill="#3b82f6" opacity="0.6" filter="url(#blur-tight)" />
             </g>
           </svg>
           <div className="blob-glow" style={{ backgroundColor: '#3b82f6' }} />

@@ -21,11 +21,11 @@
 }
 
 .status-container:nth-child(1) {
-  transform: translate(-52%, -52%);
+  transform: translate(-51%, -51%);
 }
 
 .status-container:nth-child(2) {
-  transform: translate(-48%, -48%);
+  transform: translate(-49%, -49%);
 }
 
 .blob-container {
@@ -45,6 +45,7 @@
   max-height: 500px;
   overflow: visible;
   mix-blend-mode: screen;
+  filter: blur(1px);
 }
 
 .blob-group {
