@@ -14,51 +14,69 @@ export function DialogSkillManager() {
   const { theme } = useTheme()
   const toast = useToast()
 
-  const [skills, setSkills] = createSignal<SkillMetadata[]>([])
-  const [activeSkills, setActiveSkills] = createSignal<Set<string>>(new Set())
-  const [loading, setLoading] = createSignal(true)
+  const initialSkills = SkillInstance.list()
+  console.log("[DialogSkillManager] Initial skills on mount:", initialSkills.length)
+
+  const [skills, setSkills] = createSignal<SkillMetadata[]>(initialSkills)
+  const [activeSkills, setActiveSkills] = createSignal<Set<string>>(
+    new Set(SkillInstance.getActive().map((s) => s.frontmatter.name)),
+  )
 
   onMount(() => {
+    console.log("[DialogSkillManager] onMount - isReady:", SkillInstance.isReady())
+    console.log("[DialogSkillManager] onMount - skills().length:", skills().length)
+
     dialog.setSize("large")
-    loadSkills()
+
+    // If already ready, load immediately
+    if (SkillInstance.isReady()) {
+      console.log("[DialogSkillManager] Skills ready, calling loadSkills()")
+      loadSkills()
+    } else {
+      console.log("[DialogSkillManager] Skills not ready, starting poll")
+      // Poll until initialized
+      const interval = setInterval(() => {
+        if (SkillInstance.isReady()) {
+          clearInterval(interval)
+          loadSkills()
+        }
+      }, 100)
+
+      // Timeout after 10 seconds
+      setTimeout(() => {
+        clearInterval(interval)
+        if (!SkillInstance.isReady()) {
+          toast.show({
+            message: "Skill loading timeout - please try again",
+            variant: "error",
+          })
+        }
+      }, 10000)
+    }
   })
 
-  async function loadSkills() {
-    try {
-      setLoading(true)
-      console.log("[DialogSkillManager] Starting to load skills...")
+  function loadSkills() {
+    const discovered = SkillInstance.list()
+    const active = SkillInstance.getActive()
 
-      // Add timeout to prevent hanging
-      const timeoutPromise = new Promise((_, reject) =>
-        setTimeout(() => reject(new Error("Skill loading timeout after 10 seconds")), 10000),
-      )
+    console.log(
+      `[DialogSkillManager] loadSkills() called - Discovered ${discovered.length} skills, ${active.length} active`,
+    )
+    console.log(
+      "[DialogSkillManager] Skills:",
+      discovered.map((s) => s.frontmatter.name),
+    )
 
-      const system = (await Promise.race([SkillInstance.get(), timeoutPromise])) as Awaited<
-        ReturnType<typeof SkillInstance.get>
-      >
+    setSkills(discovered)
+    setActiveSkills(new Set(active.map((s) => s.frontmatter.name)))
 
-      console.log("[DialogSkillManager] Got skill system instance")
-      const discovered = system.getAllSkills()
-      const active = system.getActiveSkills()
+    console.log("[DialogSkillManager] After setSkills, skills().length =", skills().length)
 
-      console.log(
-        `[DialogSkillManager] Discovered ${discovered.length} skills, ${active.length} active`,
-      )
-      setSkills(discovered)
-      setActiveSkills(new Set(active.map((s) => s.frontmatter.name)))
-
+    if (discovered.length > 0) {
       toast.show({
         message: `Loaded ${discovered.length} skills`,
         variant: "success",
       })
-    } catch (error) {
-      console.error("[DialogSkillManager] Failed to load skills:", error)
-      toast.show({
-        message: `Failed to load skills: ${error}`,
-        variant: "error",
-      })
-    } finally {
-      setLoading(false)
     }
   }
 
@@ -151,18 +169,6 @@ Supporting Files: ${
     })
   }
 
-  if (loading()) {
-    return (
-      <box paddingLeft={2} paddingRight={2} gap={1} paddingBottom={1}>
-        <box flexDirection="row" justifyContent="space-between">
-          <text attributes={TextAttributes.BOLD}>Skill Manager</text>
-          <text fg={theme.textMuted}>esc</text>
-        </box>
-        <text>Loading skills...</text>
-      </box>
-    )
-  }
-
   if (skills().length === 0) {
     return (
       <box paddingLeft={2} paddingRight={2} gap={1} paddingBottom={1}>
@@ -199,14 +205,14 @@ Supporting Files: ${
       }}
       keybind={[
         {
-          keybind: Keybind.parse("space")[0],
+          keybind: Keybind.parse("ctrl+t")[0],
           title: "toggle",
           onTrigger: async (option) => {
             await toggleSkillActivation(option.value)
           },
         },
         {
-          keybind: Keybind.parse("i")[0],
+          keybind: Keybind.parse("ctrl+i")[0],
           title: "info",
           onTrigger: async (option) => {
             await showSkillDetails(option.value)
@@ -224,7 +230,7 @@ Supporting Files: ${
           },
         },
         {
-          keybind: Keybind.parse("a")[0],
+          keybind: Keybind.parse("ctrl+a")[0],
           title: "activate all",
           onTrigger: async () => {
             try {
@@ -251,7 +257,7 @@ Supporting Files: ${
           },
         },
         {
-          keybind: Keybind.parse("d")[0],
+          keybind: Keybind.parse("ctrl+d")[0],
           title: "deactivate all",
           onTrigger: async () => {
             try {

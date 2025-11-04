@@ -124,12 +124,22 @@ export function DialogSelect<T>(props: DialogSelectProps<T>) {
   const keybind = useKeybind()
 
   useKeyboard((evt) => {
-    if (evt.name === "up" || (evt.ctrl && evt.name === "k") || (evt.ctrl && evt.name === "p"))
+    if (evt.name === "up" || (evt.ctrl && evt.name === "k") || (evt.ctrl && evt.name === "p")) {
+      evt.preventDefault()
       move(-1)
-    if (evt.name === "down" || (evt.ctrl && evt.name === "j") || (evt.ctrl && evt.name === "n"))
+    }
+    if (evt.name === "down" || (evt.ctrl && evt.name === "j") || (evt.ctrl && evt.name === "n")) {
+      evt.preventDefault()
       move(1)
-    if (evt.name === "pageup" || (evt.ctrl && evt.name === "u")) move(-10)
-    if (evt.name === "pagedown" || (evt.ctrl && evt.name === "d")) move(10)
+    }
+    if (evt.name === "pageup" || (evt.ctrl && evt.name === "u")) {
+      evt.preventDefault()
+      move(-10)
+    }
+    if (evt.name === "pagedown" || (evt.ctrl && evt.name === "d")) {
+      evt.preventDefault()
+      move(10)
+    }
     if (evt.name === "return" || (evt.ctrl && evt.name === "return")) {
       const option = selected()
       if (option) {
@@ -181,10 +191,22 @@ export function DialogSelect<T>(props: DialogSelectProps<T>) {
               })
             }}
             onKeyDown={(evt) => {
-              if (evt.name === "up" || (evt.ctrl && evt.name === "p")) move(-1)
-              if (evt.name === "down" || (evt.ctrl && evt.name === "n")) move(1)
-              if (evt.name === "pageup") move(-10)
-              if (evt.name === "pagedown") move(10)
+              if (evt.name === "up" || (evt.ctrl && evt.name === "p")) {
+                evt.preventDefault()
+                move(-1)
+              }
+              if (evt.name === "down" || (evt.ctrl && evt.name === "n")) {
+                evt.preventDefault()
+                move(1)
+              }
+              if (evt.name === "pageup") {
+                evt.preventDefault()
+                move(-10)
+              }
+              if (evt.name === "pagedown") {
+                evt.preventDefault()
+                move(10)
+              }
               if (evt.name === "return") {
                 const option = selected()
                 if (option) {
@@ -313,10 +335,7 @@ function Option(props: {
           {Locale.truncate(props.title, 62)}
         </text>
         <Show when={props.description}>
-          <text fg={props.active ? theme.background : theme.textMuted}>
-            {" "}
-            {props.description}
-          </text>
+          <text fg={props.active ? theme.background : theme.textMuted}> {props.description}</text>
         </Show>
       </box>
       <Show when={props.footer}>

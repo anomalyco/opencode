@@ -16,6 +16,7 @@ import { SessionPrompt } from "../../session/prompt"
 import { EOL } from "os"
 import { Permission } from "@/permission"
 import { select } from "@clack/prompts"
+import { Parallel } from "../../parallel"
 
 const TOOL: Record<string, [string, string]> = {
   todowrite: ["Todo", UI.Style.TEXT_WARNING_BOLD],
@@ -84,6 +85,14 @@ export const RunCommand = cmd({
         type: "string",
         describe: "title for the session (uses truncated prompt if no value provided)",
       })
+      .option("parallel", {
+        type: "boolean",
+        describe: "run in parallel mode with isolated git worktree",
+      })
+      .option("existing-branch", {
+        type: "string",
+        describe: "use existing branch for parallel mode (requires --parallel)",
+      })
   },
   handler: async (args) => {
     let message = args.message.join(" ")
@@ -122,6 +131,49 @@ export const RunCommand = cmd({
     if (message.trim().length === 0 && !args.command) {
       UI.error("You must provide a message or a command")
       process.exit(1)
+    }
+
+    // Validate parallel mode options
+    if (args.existingBranch && !args.parallel) {
+      UI.error("Error: --existing-branch option requires --parallel flag to be enabled")
+      process.exit(1)
+    }
+
+    if (args.parallel && (args.continue || args.session)) {
+      UI.error("Error: --parallel cannot be used with --continue or --session")
+      process.exit(1)
+    }
+
+    if (args.parallel && !message.trim()) {
+      UI.error("Error: parallel mode requires a prompt message")
+      process.exit(1)
+    }
+
+    // Setup parallel mode if enabled
+    let parallelResult: Parallel.Result | undefined
+    const originalCwd = process.cwd()
+
+    if (args.parallel) {
+      try {
+        parallelResult = await Parallel.setup({
+          enabled: true,
+          existingBranch: args.existingBranch,
+          prompt: message,
+          workspace: originalCwd,
+        })
+
+        // Switch to worktree directory
+        process.chdir(parallelResult.worktreePath)
+        UI.println(
+          UI.Style.TEXT_INFO_BOLD +
+            "📦 Worktree: " +
+            UI.Style.TEXT_NORMAL +
+            parallelResult.branchName,
+        )
+      } catch (error) {
+        UI.error(error instanceof Error ? error.message : String(error))
+        process.exit(1)
+      }
     }
 
     await bootstrap(process.cwd(), async () => {
@@ -335,5 +387,21 @@ export const RunCommand = cmd({
       })()
       if (errorMsg) process.exit(1)
     })
+
+    // Teardown parallel mode if enabled
+    if (parallelResult) {
+      // Switch back to original directory
+      process.chdir(originalCwd)
+
+      try {
+        await Parallel.teardown(parallelResult, true)
+      } catch (error) {
+        UI.error(
+          "Parallel mode teardown failed: " +
+            (error instanceof Error ? error.message : String(error)),
+        )
+        process.exit(1)
+      }
+    }
   },
 })

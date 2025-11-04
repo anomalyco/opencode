@@ -213,6 +213,13 @@ export class RaidKnowledgeBase {
       contentTypeFilter = [],
     } = options
 
+    // Escape FTS5 special characters and wrap in quotes for phrase search
+    const escapedQuery = query
+      .replace(/"/g, '""')
+      .split(/\s+/)
+      .map((word) => `"${word}"`)
+      .join(" OR ")
+
     let sql = `
       SELECT 
         d.*,
@@ -223,7 +230,7 @@ export class RaidKnowledgeBase {
       WHERE documents_fts MATCH ?
     `
 
-    const params: any[] = [query]
+    const params: any[] = [escapedQuery]
 
     if (sourceFilter !== "both") {
       sql += " AND d.source = ?"

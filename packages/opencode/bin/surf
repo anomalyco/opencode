@@ -1,2 +1,69 @@
 #!/bin/sh
-exec /Users/jkneen/Documents/GitHub/flows/opencode-stt/packages/opencode/dist/@codesurf/cli-darwin-arm64/bin/codesurf "$@"
+set -e
+
+# Get the real path of this script, resolving any symlinks
+script_path="$0"
+while [ -L "$script_path" ]; do
+    link_target="$(readlink "$script_path")"
+    case "$link_target" in
+        /*) script_path="$link_target" ;;
+        *) script_path="$(dirname "$script_path")/$link_target" ;;
+    esac
+done
+script_dir="$(dirname "$script_path")"
+script_dir="$(cd "$script_dir" && pwd)"
+pkg_root="$(dirname "$script_dir")"
+
+# Check if running in development mode (src/index.ts exists)
+if [ -f "$pkg_root/src/index.ts" ]; then
+    # Development mode - run source directly
+    exec bun run "$pkg_root/src/index.ts" "$@"
+fi
+
+# Production mode - find built binary
+if [ -n "$OPENCODE_BIN_PATH" ]; then
+    resolved="$OPENCODE_BIN_PATH"
+else
+    # Map platform names
+    case "$(uname -s)" in
+        Darwin) platform="darwin" ;;
+        Linux) platform="linux" ;;
+        MINGW*|CYGWIN*|MSYS*) platform="win32" ;;
+        *) platform="$(uname -s | tr '[:upper:]' '[:lower:]')" ;;
+    esac
+    
+    # Map architecture names  
+    case "$(uname -m)" in
+        x86_64|amd64) arch="x64" ;;
+        aarch64) arch="arm64" ;;
+        armv7l) arch="arm" ;;
+        *) arch="$(uname -m)" ;;
+    esac
+    
+    name="opencode-${platform}-${arch}"
+    binary="opencode"
+    [ "$platform" = "win32" ] && binary="opencode.exe"
+    
+    # Search for the binary starting from real script location
+    resolved=""
+    current_dir="$script_dir"
+    while [ "$current_dir" != "/" ]; do
+        candidate="$current_dir/node_modules/$name/bin/$binary"
+        if [ -f "$candidate" ]; then
+            resolved="$candidate"
+            break
+        fi
+        current_dir="$(dirname "$current_dir")"
+    done
+    
+    if [ -z "$resolved" ]; then
+        printf "It seems that your package manager failed to install the right version of the opencode CLI for your platform. You can try manually installing the \"%s\" package\n" "$name" >&2
+        exit 1
+    fi
+fi
+
+# Handle SIGINT gracefully
+trap '' INT
+
+# Execute the binary with all arguments
+exec "$resolved" "$@"

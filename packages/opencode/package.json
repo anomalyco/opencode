@@ -84,6 +84,7 @@
     "openai": "6.7.0",
     "partial-json": "0.1.7",
     "remeda": "catalog:",
+    "simple-git": "3.30.0",
     "solid-js": "catalog:",
     "speaker": "0.5.5",
     "tree-sitter-bash": "0.25.0",

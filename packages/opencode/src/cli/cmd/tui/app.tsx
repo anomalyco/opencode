@@ -20,6 +20,7 @@ import { DialogSessionList } from "@tui/component/dialog-session-list"
 import { DialogMemoryList } from "@tui/component/dialog-memory-list"
 import { DialogMCPManager } from "@tui/component/dialog-mcp-manager"
 import { DialogSkillManager } from "@tui/component/dialog-skill-manager"
+import { DialogKbManager } from "@tui/component/dialog-kb-manager"
 import { KeybindProvider } from "@tui/context/keybind"
 import { ThemeProvider, useTheme } from "@tui/context/theme"
 import { Home } from "@tui/routes/home"
@@ -363,6 +364,15 @@ function App() {
       category: "System",
       onSelect: () => {
         dialog.replace(() => <DialogSkillManager />)
+      },
+    },
+    {
+      title: "Knowledge Base manager",
+      value: "kb.manage",
+      keybind: "kb_manage" as any,
+      category: "System",
+      onSelect: () => {
+        dialog.replace(() => <DialogKbManager />)
       },
     },
     {
