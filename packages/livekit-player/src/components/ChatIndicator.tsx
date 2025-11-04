@@ -466,7 +466,15 @@ export default function ChatIndicator({ room, connectionState }: ChatIndicatorPr
         {Array.from({ length: 50 }).map((_, i) => (
           <div 
             key={i} 
-            onClick={() => setActiveWidget({ gridIndex: i })}
+            onClick={() => {
+              // Create widget at this grid position if it doesn't exist
+              if (!widgetSizes[i]) {
+                const newSizes = { ...widgetSizes, [i]: { width: 1, height: 1 } }
+                setWidgetSizes(newSizes)
+                localStorage.setItem('widget-sizes', JSON.stringify(newSizes))
+              }
+              setActiveWidget({ gridIndex: i })
+            }}
             style={{ 
               border: "3px dashed rgba(255, 255, 255, 0.2)", 
               borderRadius: "20px", 
