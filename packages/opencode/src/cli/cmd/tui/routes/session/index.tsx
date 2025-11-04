@@ -90,7 +90,6 @@ export function Session() {
   const { navigate } = useRoute()
   const sync = useSync()
   const kv = useKV()
-  const livekit = useLiveKit()
   const { theme } = useTheme()
   const session = createMemo(() => sync.session.get(route.sessionID)!)
 
@@ -677,6 +676,9 @@ export function Session() {
       keybind: "livekit_connect" as any,
       category: "Voice",
       onSelect: (dialog) => {
+        // Get LiveKit context only when needed to avoid reactive re-renders
+        const livekit = useLiveKit()
+
         dialog.replace(() => (
           <DialogLiveKit
             onConnect={async (config) => {
@@ -700,7 +702,6 @@ export function Session() {
       value: "session.child.next",
       keybind: "session_child_cycle",
       category: "Session",
-      disabled: true,
       onSelect: (dialog) => {
         moveChild(1)
         dialog.clear()
@@ -711,7 +712,6 @@ export function Session() {
       value: "session.child.previous",
       keybind: "session_child_cycle_reverse",
       category: "Session",
-      disabled: true,
       onSelect: (dialog) => {
         moveChild(-1)
         dialog.clear()
@@ -1286,7 +1286,7 @@ type ToolProps<T extends Tool.Info> = {
 function GenericTool(props: ToolProps<any>) {
   return (
     <ToolTitle icon="⚙" fallback="Writing command..." when={true}>
-      {props.tool} {input(props.input)}
+      <ToolBadge>{props.tool}</ToolBadge> {input(props.input)}
     </ToolTitle>
   )
 }
@@ -1313,6 +1313,16 @@ const ToolRegistry = (() => {
   }
 })()
 
+function ToolBadge(props: { children: string }) {
+  const { theme } = useTheme()
+  return (
+    <span style={{ bg: theme.textMuted, fg: theme.background, bold: true }}>
+      {" "}
+      {props.children.toUpperCase()}{" "}
+    </span>
+  )
+}
+
 function ToolTitle(props: { fallback: string; when: any; icon: string; children: JSX.Element }) {
   const { theme } = useTheme()
   return (
@@ -1333,7 +1343,7 @@ ToolRegistry.register<typeof BashTool>({
     return (
       <>
         <ToolTitle icon="#" fallback="Writing command..." when={props.input.command}>
-          {props.input.description || "Shell"}
+          <ToolBadge>Bash</ToolBadge> {props.input.description || "Shell"}
         </ToolTitle>
         <Show when={props.input.command}>
           <text fg={theme.text}>$ {props.input.command}</text>
@@ -1355,7 +1365,8 @@ ToolRegistry.register<typeof ReadTool>({
     return (
       <>
         <ToolTitle icon="→" fallback="Reading file..." when={props.input.filePath}>
-          Read {normalizePath(props.input.filePath!)} {input(props.input, ["filePath"])}
+          <ToolBadge>Read</ToolBadge> {normalizePath(props.input.filePath!)}{" "}
+          {input(props.input, ["filePath"])}
         </ToolTitle>
       </>
     )
@@ -1386,7 +1397,7 @@ ToolRegistry.register<typeof WriteTool>({
     return (
       <>
         <ToolTitle icon="←" fallback="Preparing write..." when={props.input.filePath}>
-          Wrote {props.input.filePath}
+          <ToolBadge>Write</ToolBadge> {props.input.filePath}
         </ToolTitle>
         <box flexDirection="row">
           <box flexShrink={0}>
@@ -1414,7 +1425,7 @@ ToolRegistry.register<typeof GlobTool>({
     return (
       <>
         <ToolTitle icon="✱" fallback="Finding files..." when={props.input.pattern}>
-          Glob "{props.input.pattern}"{" "}
+          <ToolBadge>Glob</ToolBadge> "{props.input.pattern}"{" "}
           <Show when={props.input.path}>in {normalizePath(props.input.path)} </Show>
           <Show when={props.metadata.count}>({props.metadata.count} matches)</Show>
         </ToolTitle>
@@ -1429,7 +1440,7 @@ ToolRegistry.register<typeof GrepTool>({
   render(props) {
     return (
       <ToolTitle icon="✱" fallback="Searching content..." when={props.input.pattern}>
-        Grep "{props.input.pattern}"{" "}
+        <ToolBadge>Grep</ToolBadge> "{props.input.pattern}"{" "}
         <Show when={props.input.path}>in {normalizePath(props.input.path)} </Show>
         <Show when={props.metadata.matches}>({props.metadata.matches} matches)</Show>
       </ToolTitle>
@@ -1450,7 +1461,7 @@ ToolRegistry.register<typeof ListTool>({
     return (
       <>
         <ToolTitle icon="→" fallback="Listing directory..." when={props.input.path !== undefined}>
-          List {dir()}
+          <ToolBadge>List</ToolBadge> {dir()}
         </ToolTitle>
       </>
     )
@@ -1473,7 +1484,8 @@ ToolRegistry.register<typeof TaskTool>({
           fallback="Delegating..."
           when={props.input.subagent_type ?? props.input.description}
         >
-          Task [{props.input.subagent_type ?? "unknown"}] {props.input.description}
+          <ToolBadge>Task</ToolBadge> [{props.input.subagent_type ?? "unknown"}]{" "}
+          {props.input.description}
         </ToolTitle>
         <Show when={props.metadata.summary?.length}>
           <box>
@@ -1518,7 +1530,7 @@ ToolRegistry.register<typeof WebFetchTool>({
   render(props) {
     return (
       <ToolTitle icon="%" fallback="Fetching from the web..." when={(props.input as any).url}>
-        WebFetch {(props.input as any).url}
+        <ToolBadge>WebFetch</ToolBadge> {(props.input as any).url}
       </ToolTitle>
     )
   },
@@ -1607,7 +1619,7 @@ ToolRegistry.register<typeof EditTool>({
     return (
       <>
         <ToolTitle icon="←" fallback="Preparing edit..." when={props.input.filePath}>
-          Edit {normalizePath(props.input.filePath!)}{" "}
+          <ToolBadge>Edit</ToolBadge> {normalizePath(props.input.filePath!)}{" "}
           {input({
             replaceAll: props.input.replaceAll,
           })}
@@ -1645,7 +1657,7 @@ ToolRegistry.register<typeof PatchTool>({
     return (
       <>
         <ToolTitle icon="%" fallback="Preparing patch..." when={true}>
-          Patch
+          <ToolBadge>Patch</ToolBadge>
         </ToolTitle>
         <Show when={props.output}>
           <box>

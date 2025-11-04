@@ -25,9 +25,12 @@ export function DialogLiveKit(props: DialogLiveKitProps) {
   let apiKeyInput: TextareaRenderable
   let apiSecretInput: TextareaRenderable
 
+  // Helper to get input refs in order
+  const inputRefs = () => [urlInput, roomInput, apiKeyInput, apiSecretInput]
+
   // Get default values from environment variables
   const defaultUrl = process.env.LIVEKIT_URL || ""
-  const defaultRoom = process.env.LIVEKIT_DEFAULT_ROOM || ""
+  const defaultRoom = process.env.LIVEKIT_DEFAULT_ROOM || "dev"
   const defaultApiKey = process.env.LIVEKIT_API_KEY || ""
   const defaultApiSecret = process.env.LIVEKIT_API_SECRET || ""
 
@@ -71,11 +74,7 @@ export function DialogLiveKit(props: DialogLiveKitProps) {
     const direction = backwards ? -1 : 1
     const nextIndex = (currentIndex + direction + fields.length) % fields.length
     setTimeout(() => {
-      const nextField = fields[nextIndex]
-      if (nextField.name === "url") urlInput?.focus()
-      else if (nextField.name === "roomName") roomInput?.focus()
-      else if (nextField.name === "apiKey") apiKeyInput?.focus()
-      else if (nextField.name === "apiSecret") apiSecretInput?.focus()
+      inputRefs()[nextIndex]?.focus()
     }, 1)
   }
 

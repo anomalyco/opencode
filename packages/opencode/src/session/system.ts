@@ -24,7 +24,8 @@ export namespace SystemPrompt {
 
   export function provider(modelID: string) {
     if (modelID.includes("gpt-5")) return [PROMPT_CODEX]
-    if (modelID.includes("gpt-") || modelID.includes("o1") || modelID.includes("o3")) return [PROMPT_BEAST]
+    if (modelID.includes("gpt-") || modelID.includes("o1") || modelID.includes("o3"))
+      return [PROMPT_BEAST]
     if (modelID.includes("gemini-")) return [PROMPT_GEMINI]
     if (modelID.includes("claude")) return [PROMPT_ANTHROPIC]
     return [PROMPT_ANTHROPIC_WITHOUT_TODO]
@@ -86,6 +87,12 @@ export namespace SystemPrompt {
 
     if (config.instructions) {
       for (let instruction of config.instructions) {
+        // Type guard: ensure instruction is a string
+        if (typeof instruction !== "string") {
+          console.warn("[SystemPrompt] Invalid instruction type (expected string):", instruction)
+          continue
+        }
+
         if (instruction.startsWith("~/")) {
           instruction = path.join(os.homedir(), instruction.slice(2))
         }
@@ -99,7 +106,11 @@ export namespace SystemPrompt {
             }),
           ).catch(() => [])
         } else {
-          matches = await Filesystem.globUp(instruction, Instance.directory, Instance.worktree).catch(() => [])
+          matches = await Filesystem.globUp(
+            instruction,
+            Instance.directory,
+            Instance.worktree,
+          ).catch(() => [])
         }
         matches.forEach((path) => paths.add(path))
       }

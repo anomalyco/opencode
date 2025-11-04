@@ -52,13 +52,20 @@ function init() {
   })
 
   useKeyboard((evt) => {
-    if (evt.ctrl && evt.name === "c" && store.stack.length > 0) {
-      const current = store.stack.at(-1)
-      if (!current) return
-      current.onClose?.()
-      setStore("stack", store.stack.slice(0, -1))
+    // Dialog is open - intercept ALL keypresses
+    if (store.stack.length > 0) {
+      // ESC or Ctrl+C to close dialog
+      if (evt.name === "escape" || (evt.ctrl && evt.name === "c")) {
+        const current = store.stack.at(-1)
+        if (!current) return
+        current.onClose?.()
+        setStore("stack", store.stack.slice(0, -1))
+        evt.preventDefault()
+        refocus()
+        return
+      }
+      // Block all other keys from propagating to underlying components
       evt.preventDefault()
-      refocus()
     }
   })
 
