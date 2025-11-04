@@ -480,22 +480,26 @@ export function Session() {
       const diffText = s.revert?.diff || ""
       if (!diffText) return []
 
-      const patches = parsePatch(diffText)
-      return patches.map((patch) => {
-        const filename = patch.newFileName || patch.oldFileName || "unknown"
-        const cleanFilename = filename.replace(/^[ab]\//, "")
-        return {
-          filename: cleanFilename,
-          additions: patch.hunks.reduce(
-            (sum, hunk) => sum + hunk.lines.filter((line) => line.startsWith("+")).length,
-            0,
-          ),
-          deletions: patch.hunks.reduce(
-            (sum, hunk) => sum + hunk.lines.filter((line) => line.startsWith("-")).length,
-            0,
-          ),
-        }
-      })
+      try {
+        const patches = parsePatch(diffText)
+        return patches.map((patch) => {
+          const filename = patch.newFileName || patch.oldFileName || "unknown"
+          const cleanFilename = filename.replace(/^[ab]\//, "")
+          return {
+            filename: cleanFilename,
+            additions: patch.hunks.reduce(
+              (sum, hunk) => sum + hunk.lines.filter((line) => line.startsWith("+")).length,
+              0,
+            ),
+            deletions: patch.hunks.reduce(
+              (sum, hunk) => sum + hunk.lines.filter((line) => line.startsWith("-")).length,
+              0,
+            ),
+          }
+        })
+      } catch (error) {
+        return []
+      }
     })()
 
     return {
@@ -1245,58 +1249,63 @@ ToolRegistry.register<typeof EditTool>({
     const diff = createMemo(() => {
       const diff = props.metadata.diff ?? props.permission["diff"]
       if (!diff) return null
-      const patches = parsePatch(diff)
-      if (patches.length === 0) return null
 
-      const patch = patches[0]
-      const oldLines: string[] = []
-      const newLines: string[] = []
+      try {
+        const patches = parsePatch(diff)
+        if (patches.length === 0) return null
 
-      for (const hunk of patch.hunks) {
-        let i = 0
-        while (i < hunk.lines.length) {
-          const line = hunk.lines[i]
+        const patch = patches[0]
+        const oldLines: string[] = []
+        const newLines: string[] = []
 
-          if (line.startsWith("-")) {
-            const removedLines: string[] = []
-            while (i < hunk.lines.length && hunk.lines[i].startsWith("-")) {
-              removedLines.push("- " + hunk.lines[i].slice(1))
+        for (const hunk of patch.hunks) {
+          let i = 0
+          while (i < hunk.lines.length) {
+            const line = hunk.lines[i]
+
+            if (line.startsWith("-")) {
+              const removedLines: string[] = []
+              while (i < hunk.lines.length && hunk.lines[i].startsWith("-")) {
+                removedLines.push("- " + hunk.lines[i].slice(1))
+                i++
+              }
+
+              const addedLines: string[] = []
+              while (i < hunk.lines.length && hunk.lines[i].startsWith("+")) {
+                addedLines.push("+ " + hunk.lines[i].slice(1))
+                i++
+              }
+
+              const maxLen = Math.max(removedLines.length, addedLines.length)
+              for (let j = 0; j < maxLen; j++) {
+                oldLines.push(removedLines[j] ?? "")
+                newLines.push(addedLines[j] ?? "")
+              }
+            } else if (line.startsWith("+")) {
+              const addedLines: string[] = []
+              while (i < hunk.lines.length && hunk.lines[i].startsWith("+")) {
+                addedLines.push("+ " + hunk.lines[i].slice(1))
+                i++
+              }
+
+              for (const added of addedLines) {
+                oldLines.push("")
+                newLines.push(added)
+              }
+            } else {
+              oldLines.push("  " + line.slice(1))
+              newLines.push("  " + line.slice(1))
               i++
             }
-
-            const addedLines: string[] = []
-            while (i < hunk.lines.length && hunk.lines[i].startsWith("+")) {
-              addedLines.push("+ " + hunk.lines[i].slice(1))
-              i++
-            }
-
-            const maxLen = Math.max(removedLines.length, addedLines.length)
-            for (let j = 0; j < maxLen; j++) {
-              oldLines.push(removedLines[j] ?? "")
-              newLines.push(addedLines[j] ?? "")
-            }
-          } else if (line.startsWith("+")) {
-            const addedLines: string[] = []
-            while (i < hunk.lines.length && hunk.lines[i].startsWith("+")) {
-              addedLines.push("+ " + hunk.lines[i].slice(1))
-              i++
-            }
-
-            for (const added of addedLines) {
-              oldLines.push("")
-              newLines.push(added)
-            }
-          } else {
-            oldLines.push("  " + line.slice(1))
-            newLines.push("  " + line.slice(1))
-            i++
           }
         }
-      }
 
-      return {
-        oldContent: oldLines.join("\n"),
-        newContent: newLines.join("\n"),
+        return {
+          oldContent: oldLines.join("\n"),
+          newContent: newLines.join("\n"),
+        }
+      } catch (error) {
+        return null
       }
     })
 
