@@ -358,6 +358,7 @@ function App() {
 
   event.on(SessionApi.Event.Deleted.type, (evt) => {
     if (route.data.type === "session" && route.data.sessionID === evt.properties.info.id) {
+      dialog.clear()
       route.navigate({ type: "home" })
       toast.show({
         variant: "info",

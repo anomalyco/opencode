@@ -115,15 +115,11 @@ export function Prompt(props: PromptProps) {
       {
         title: "Clear prompt",
         value: "prompt.clear",
-        disabled: true,
         category: "Prompt",
+        disabled: true,
         onSelect: (dialog) => {
           input.extmarks.clear()
-          setStore("prompt", {
-            input: "",
-            parts: [],
-          })
-          setStore("extmarkToPartIndex", new Map())
+          input.clear()
           dialog.clear()
         },
       },
@@ -156,16 +152,27 @@ export function Prompt(props: PromptProps) {
           }
         },
       },
+      {
+        title: "Interrupt session",
+        value: "session.interrupt",
+        keybind: "session_interrupt",
+        category: "Session",
+        disabled: true,
+        onSelect: (dialog) => {
+          if (!props.sessionID) return
+          sdk.client.session.abort({
+            path: {
+              id: props.sessionID,
+            },
+          })
+          dialog.clear()
+        },
+      },
     ]
   })
 
   sdk.event.on(TuiEvent.PromptAppend.type, (evt) => {
-    setStore(
-      "prompt",
-      produce((draft) => {
-        draft.input += evt.properties.text
-      }),
-    )
+    input.insertText(evt.properties.text)
   })
 
   createEffect(() => {
