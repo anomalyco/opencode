@@ -182,8 +182,8 @@ export function ReloadSection() {
           </div>
         </form>
       </Show>
-      <div data-slot="section-content">
-        <Show when={billingInfo()?.reload && billingInfo()?.reloadError}>
+      <Show when={billingInfo()?.reload && billingInfo()?.reloadError}>
+        <div data-slot="section-content">
           <div data-slot="reload-error">
             <p>
               Reload failed at{" "}
@@ -204,8 +204,8 @@ export function ReloadSection() {
               </button>
             </form>
           </div>
-        </Show>
-      </div>
+        </div>
+      </Show>
     </section>
   )
 }
