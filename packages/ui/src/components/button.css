@@ -50,6 +50,10 @@
     &:focus-visible:active {
       box-shadow: none;
     }
+    &:active {
+      scale: 0.99;
+      transition: all 150ms ease-out;
+    }
 
     [data-slot="icon"] {
       color: var(--icon-strong-base);
