@@ -240,6 +240,11 @@ export function Autocomplete(props: {
           onSelect: () => command.trigger("session.copy"),
         },
         {
+          display: "/export",
+          description: "export session transcript to file",
+          onSelect: () => command.trigger("session.export"),
+        },
+        {
           display: "/timeline",
           description: "jump to message",
           onSelect: () => command.trigger("session.timeline"),
