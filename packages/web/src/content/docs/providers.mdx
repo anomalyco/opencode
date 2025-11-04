@@ -963,6 +963,40 @@ Here's an example setting the `apiKey` and `headers` options.
 
 We are setting the `apiKey` using the `env` variable syntax, [learn more](/docs/config#env-vars).
 
+Here's an example setting the model limits for `context` and `output` tokens.
+These parameters are used to display the session context pecentage and for
+auto-session compaction (they are pulled in from models.dev for standard providers)
+
+```json title="opencode.json" {9,11}
+{
+  "$schema": "https://opencode.ai/config.json",
+  "provider": {
+    "myprovider": {
+      "npm": "@ai-sdk/openai-compatible",
+      "name": "My AI ProviderDisplay Name",
+      "options": {
+        "baseURL": "https://api.myprovider.com/v1",
+        "apiKey": "{env:ANTHROPIC_API_KEY}",
+        "headers": {
+          "Authorization": "Bearer custom-token"
+        }
+      },
+      "models": {
+        "my-model-name": {
+          "name": "My Model Display Name",
+          "limit": {
+            "context": 200000,
+            "output": 65536
+          }
+        }
+      }
+    }
+  }
+}
+```
+
+
+
 ---
 
 ## Troubleshooting
