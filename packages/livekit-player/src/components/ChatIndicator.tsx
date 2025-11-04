@@ -1,3 +1,4 @@
+import React from 'react'
 import { useEffect, useState, useRef } from 'react'
 import { Room, RoomEvent, ConnectionState, RemoteParticipant, ConnectionQuality, RemoteAudioTrack, Track } from 'livekit-client'
 import { Signal, SignalHigh, SignalMedium, SignalLow, SignalZero, Users } from 'lucide-react'
@@ -34,12 +35,73 @@ export default function ChatIndicator({ room, connectionState }: ChatIndicatorPr
 
   // Widget overlay state
   const [activeWidget, setActiveWidget] = useState<{gridIndex: number} | null>(null)
+  const [widgetSizes, setWidgetSizes] = useState<Record<number, {width: number, height: number}>>(() => {
+    const saved = localStorage.getItem('widget-sizes')
+    return saved ? JSON.parse(saved) : {}
+  })
+  const [resizing, setResizing] = useState<{handle: string, startX: number, startY: number, startWidth: number, startHeight: number} | null>(null)
 
   // Camera refs
   const cameraVideoRef = useRef<HTMLVideoElement>(null)
   const cameraCanvasRef = useRef<HTMLCanvasElement>(null)
   const [showCamera, setShowCamera] = useState(true)
 
+
+  // Resize handlers
+  const handleResizeStart = (e: React.MouseEvent<HTMLDivElement>, handle: string) => {
+    if (!activeWidget) return
+    e.stopPropagation()
+    const size = widgetSizes[activeWidget.gridIndex] || {width: 1, height: 1}
+    setResizing({
+      handle,
+      startX: e.clientX,
+      startY: e.clientY,
+      startWidth: size.width,
+      startHeight: size.height
+    })
+  }
+
+  useEffect(() => {
+    if (!resizing || !activeWidget) return
+
+    const handleMouseMove = (e: MouseEvent) => {
+      const deltaX = e.clientX - resizing.startX
+      const deltaY = e.clientY - resizing.startY
+      
+      let newWidth = resizing.startWidth
+      let newHeight = resizing.startHeight
+
+      if (resizing.handle === 'right') {
+        const gridDelta = Math.round(deltaX / 160)
+        newWidth = Math.max(1, resizing.startWidth + gridDelta)
+      } else if (resizing.handle === 'bottom') {
+        const gridDelta = Math.round(deltaY / 160)
+        newHeight = Math.max(1, resizing.startHeight + gridDelta)
+      } else if (resizing.handle === 'left') {
+        const gridDelta = Math.round(deltaX / 160)
+        newWidth = Math.max(1, resizing.startWidth - gridDelta)
+      } else if (resizing.handle === 'top') {
+        const gridDelta = Math.round(deltaY / 160)
+        newHeight = Math.max(1, resizing.startHeight - gridDelta)
+      }
+
+      const newSizes = { ...widgetSizes, [activeWidget.gridIndex]: { width: newWidth, height: newHeight } }
+      setWidgetSizes(newSizes)
+      localStorage.setItem('widget-sizes', JSON.stringify(newSizes))
+    }
+
+    const handleMouseUp = () => {
+      setResizing(null)
+    }
+
+    window.addEventListener('mousemove', handleMouseMove)
+    window.addEventListener('mouseup', handleMouseUp)
+
+    return () => {
+      window.removeEventListener('mousemove', handleMouseMove)
+      window.removeEventListener('mouseup', handleMouseUp)
+    }
+  }, [resizing, activeWidget, widgetSizes])
   // Force re-renders for animation
 
   // Keyboard shortcut to toggle HAL border (Cmd+B)
@@ -416,43 +478,120 @@ export default function ChatIndicator({ room, connectionState }: ChatIndicatorPr
         ))}
       </div>
 
-      {/* Active widget overlay - NO BACKDROP FILTER */}
-      {activeWidget && (
-        <div
-          style={{
-            position: "absolute",
-            left: `${(activeWidget.gridIndex % Math.floor(window.innerWidth / 160)) * 160}px`,
-            top: `${Math.floor(activeWidget.gridIndex / Math.floor(window.innerWidth / 160)) * 160}px`,
-            width: "150px",
-            height: "150px",
-            background: "rgba(59, 130, 246, 0.4)",
-            border: "2px solid rgba(59, 130, 246, 0.8)",
-            borderRadius: "20px",
-            pointerEvents: "auto",
-            zIndex: 50
-          }}
-          onClick={(e) => e.stopPropagation()}
-        >
-          <button
-            onClick={() => setActiveWidget(null)}
+      {/* All widgets - always visible */}
+      {Object.entries(widgetSizes).map(([gridIndexStr, size]) => {
+        const gridIndex = parseInt(gridIndexStr)
+        const widthPx = size.width * 150 + (size.width - 1) * 10
+        const heightPx = size.height * 150 + (size.height - 1) * 10
+        const isActive = activeWidget?.gridIndex === gridIndex
+        
+        return (
+          <div
+            key={gridIndex}
+            onClick={(e) => {
+              e.stopPropagation()
+              setActiveWidget({ gridIndex })
+            }}
             style={{
               position: "absolute",
-              top: "10px",
-              right: "10px",
-              background: "rgba(239, 68, 68, 0.8)",
-              border: "none",
-              borderRadius: "50%",
-              width: "30px",
-              height: "30px",
-              cursor: "pointer",
-              color: "white",
-              fontSize: "18px"
+              left: `${(gridIndex % Math.floor(window.innerWidth / 160)) * 160}px`,
+              top: `${Math.floor(gridIndex / Math.floor(window.innerWidth / 160)) * 160}px`,
+              width: `${widthPx}px`,
+              height: `${heightPx}px`,
+              background: "rgba(59, 130, 246, 0.4)",
+              border: `2px solid rgba(59, 130, 246, ${isActive ? 0.8 : 0.5})`,
+              borderRadius: "20px",
+              pointerEvents: "auto",
+              zIndex: isActive ? 50 : 40,
+              cursor: "pointer"
             }}
           >
-            ×
-          </button>
-        </div>
-      )}
+            {isActive && (
+              <>
+                <button
+                  onClick={(e) => {
+                    e.stopPropagation()
+                    setActiveWidget(null)
+                  }}
+                  style={{
+                    position: "absolute",
+                    top: "10px",
+                    right: "10px",
+                    background: "rgba(239, 68, 68, 0.8)",
+                    border: "none",
+                    borderRadius: "50%",
+                    width: "30px",
+                    height: "30px",
+                    cursor: "pointer",
+                    color: "white",
+                    fontSize: "18px"
+                  }}
+                >
+                  ×
+                </button>
+
+                {/* Resize handles - only on active widget */}
+                <div
+                  onMouseDown={(e) => handleResizeStart(e, 'right')}
+                  style={{
+                    position: "absolute",
+                    right: "-5px",
+                    top: "50%",
+                    transform: "translateY(-50%)",
+                    width: "10px",
+                    height: "60px",
+                    background: "rgba(59, 130, 246, 0.6)",
+                    borderRadius: "5px",
+                    cursor: "ew-resize"
+                  }}
+                />
+                <div
+                  onMouseDown={(e) => handleResizeStart(e, 'bottom')}
+                  style={{
+                    position: "absolute",
+                    bottom: "-5px",
+                    left: "50%",
+                    transform: "translateX(-50%)",
+                    width: "60px",
+                    height: "10px",
+                    background: "rgba(59, 130, 246, 0.6)",
+                    borderRadius: "5px",
+                    cursor: "ns-resize"
+                  }}
+                />
+                <div
+                  onMouseDown={(e) => handleResizeStart(e, 'left')}
+                  style={{
+                    position: "absolute",
+                    left: "-5px",
+                    top: "50%",
+                    transform: "translateY(-50%)",
+                    width: "10px",
+                    height: "60px",
+                    background: "rgba(59, 130, 246, 0.6)",
+                    borderRadius: "5px",
+                    cursor: "ew-resize"
+                  }}
+                />
+                <div
+                  onMouseDown={(e) => handleResizeStart(e, 'top')}
+                  style={{
+                    position: "absolute",
+                    top: "-5px",
+                    left: "50%",
+                    transform: "translateX(-50%)",
+                    width: "60px",
+                    height: "10px",
+                    background: "rgba(59, 130, 246, 0.6)",
+                    borderRadius: "5px",
+                    cursor: "ns-resize"
+                  }}
+                />
+              </>
+            )}
+          </div>
+        )
+      })}
 
       <div className="chat-indicator" style={{ transform: "scale(0.6)" }}>
       {/* PURPLE - Agent Audio with HAL 9000 Eye Overlay */}
