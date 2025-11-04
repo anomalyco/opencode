@@ -1,4 +1,11 @@
-import { createContext, useContext, createSignal, onCleanup, type ParentComponent } from "solid-js"
+import {
+  createContext,
+  useContext,
+  createSignal,
+  onCleanup,
+  batch,
+  type ParentComponent,
+} from "solid-js"
 import type { RoomManager } from "@/livekit/room-manager"
 import type { LiveKitConfig } from "../component/dialog-livekit"
 
@@ -18,13 +25,6 @@ export const LiveKitProvider: ParentComponent = (props) => {
   const [manager, setManager] = createSignal<RoomManager | undefined>()
 
   const connect = async (config: LiveKitConfig) => {
-    console.log("[LiveKit] Starting connection with config:", {
-      url: config.url,
-      roomName: config.roomName,
-      hasApiKey: !!config.apiKey,
-      hasApiSecret: !!config.apiSecret,
-    })
-
     try {
       // Lazy load RoomManager to avoid loading LiveKit at startup
       const { RoomManager } = await import("@/livekit/room-manager")
@@ -35,44 +35,42 @@ export const LiveKitProvider: ParentComponent = (props) => {
         apiKey: config.apiKey,
         apiSecret: config.apiSecret,
       })
-      console.log("[LiveKit] RoomManager created")
 
       // Set up event listeners
       roomManager.on("connected", () => {
-        console.log("[LiveKit] ✅ Connected to room successfully")
+        console.log("[LiveKit] Connected to room:", config.roomName)
         setConnected(true)
       })
 
       roomManager.on("disconnected", (reason) => {
-        console.log("[LiveKit] ❌ Disconnected from room:", reason)
+        console.log("[LiveKit] Disconnected:", reason)
         setConnected(false)
       })
 
       roomManager.on("participantJoined", (participant) => {
-        console.log("[LiveKit] 👤 Participant joined:", participant.name)
+        console.log("[LiveKit] Participant joined:", participant.name)
       })
 
       roomManager.on("participantLeft", (participant) => {
-        console.log("[LiveKit] 👋 Participant left:", participant.name)
+        console.log("[LiveKit] Participant left:", participant.name)
       })
 
       // Connect to the room
-      console.log("[LiveKit] Attempting to connect to room:", config.roomName)
       await roomManager.connect({
         name: config.roomName,
         participantName: "OpenCode User",
       })
-      console.log("[LiveKit] Connect call completed")
 
-      setRoomName(config.roomName)
-      setManager(roomManager)
-      console.log("[LiveKit] State updated, connection process complete")
-    } catch (error) {
-      console.error("[LiveKit] ❌ Failed to connect - ERROR:", error)
-      console.error("[LiveKit] Error details:", {
-        message: error instanceof Error ? error.message : String(error),
-        stack: error instanceof Error ? error.stack : undefined,
+      // Batch signal updates to prevent multiple re-renders
+      batch(() => {
+        setRoomName(config.roomName)
+        setManager(roomManager)
       })
+    } catch (error) {
+      console.error(
+        "[LiveKit] Connection failed:",
+        error instanceof Error ? error.message : String(error),
+      )
       throw error
     }
   }
@@ -81,10 +79,14 @@ export const LiveKitProvider: ParentComponent = (props) => {
     const roomManager = manager()
     if (roomManager) {
       await roomManager.disconnect()
-      setManager(undefined)
     }
-    setRoomName(undefined)
-    setConnected(false)
+
+    // Batch signal updates to prevent multiple re-renders
+    batch(() => {
+      setManager(undefined)
+      setRoomName(undefined)
+      setConnected(false)
+    })
   }
 
   // Cleanup on unmount
@@ -95,6 +97,8 @@ export const LiveKitProvider: ParentComponent = (props) => {
     }
   })
 
+  // Memoize context value to prevent re-renders when signals change
+  // Only recreate if the actual functions change (which they never do)
   const value: LiveKitContextValue = {
     roomName,
     isConnected: connected,
