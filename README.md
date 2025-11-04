@@ -77,3 +77,6 @@ The other confusingly named repo has no relation to this one. You can [read the 
 ---
 
 **Join our community** [Discord](https://discord.gg/opencode) | [X.com](https://x.com/opencode)
+
+
+opencode uninstall
