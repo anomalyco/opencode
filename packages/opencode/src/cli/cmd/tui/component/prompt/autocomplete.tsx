@@ -393,11 +393,31 @@ export function Autocomplete(props: {
       },
       onKeyDown(e: KeyEvent) {
         if (store.visible) {
-          if (e.name === "up") move(-1)
-          if (e.name === "down") move(1)
-          if (e.name === "escape") hide()
-          if (e.name === "return" || e.name === "tab") select()
-          if (["up", "down", "return", "tab", "escape"].includes(e.name)) e.preventDefault()
+          const name = e.name?.toLowerCase()
+          const ctrlOnly = e.ctrl && !e.meta && !e.shift
+          const isNavUp = name === "up" || (ctrlOnly && name === "p")
+          const isNavDown = name === "down" || (ctrlOnly && name === "n")
+
+          if (isNavUp) {
+            move(-1)
+            e.preventDefault()
+            return
+          }
+          if (isNavDown) {
+            move(1)
+            e.preventDefault()
+            return
+          }
+          if (name === "escape") {
+            hide()
+            e.preventDefault()
+            return
+          }
+          if (name === "return" || name === "tab") {
+            select()
+            e.preventDefault()
+            return
+          }
         }
         if (!store.visible) {
           if (e.name === "@") {
