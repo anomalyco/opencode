@@ -182,7 +182,24 @@ export const rlang: Info = {
   command: ["air", "format", "$FILE"],
   extensions: [".R"],
   async enabled() {
-    return Bun.which("air") !== null
+    const airPath = Bun.which("air");
+    if (airPath == null) return false
+  
+    try {
+      const proc = Bun.spawn(["air", "--help"], {
+        stdout: "pipe",
+        stderr: "pipe",
+      });
+      const output = await new Response(proc.stdout).text();
+      
+      // Check for "Air: An R language server and formatter"
+      const firstLine = output.split('\n')[0]
+      const hasR = firstLine.includes("R")
+      const hasFormatter = firstLine.includes("formatter")
+      return hasR && hasFormatter
+    } catch (error) {
+      return false;
+    }
   },
 }
 
