@@ -39,13 +39,35 @@ export interface Hooks {
       | {
           type: "oauth"
           label: string
-          authorize(): Promise<
+          prompts?: Array<
+            | {
+                type: "text"
+                key: string
+                message: string
+                placeholder?: string
+                validate?: (value: string) => string | undefined
+                condition?: (inputs: Record<string, string>) => boolean
+              }
+            | {
+                type: "select"
+                key: string
+                message: string
+                options: Array<{
+                  label: string
+                  value: string
+                  hint?: string
+                }>
+                condition?: (inputs: Record<string, string>) => boolean
+              }
+          >
+          authorize(inputs?: Record<string, string>): Promise<
             { url: string; instructions: string } & (
               | {
                   method: "auto"
                   callback(): Promise<
                     | ({
                         type: "success"
+                        provider?: string
                       } & (
                         | {
                             refresh: string
@@ -64,6 +86,7 @@ export interface Hooks {
                   callback(code: string): Promise<
                     | ({
                         type: "success"
+                        provider?: string
                       } & (
                         | {
                             refresh: string
@@ -80,7 +103,41 @@ export interface Hooks {
             )
           >
         }
-      | { type: "api"; label: string }
+      | {
+          type: "api"
+          label: string
+          prompts?: Array<
+            | {
+                type: "text"
+                key: string
+                message: string
+                placeholder?: string
+                validate?: (value: string) => string | undefined
+                condition?: (inputs: Record<string, string>) => boolean
+              }
+            | {
+                type: "select"
+                key: string
+                message: string
+                options: Array<{
+                  label: string
+                  value: string
+                  hint?: string
+                }>
+                condition?: (inputs: Record<string, string>) => boolean
+              }
+          >
+          authorize?(inputs?: Record<string, string>): Promise<
+            | {
+                type: "success"
+                key: string
+                provider?: string
+              }
+            | {
+                type: "failed"
+              }
+          >
+        }
     )[]
   }
   /**
