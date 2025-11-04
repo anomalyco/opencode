@@ -6,6 +6,8 @@ import { Session } from "@/session"
 import { bootstrap } from "@/cli/bootstrap"
 import path from "path"
 import { UI } from "@/cli/ui"
+import { Server } from "@/server/server"
+import { Instance } from "@/project/instance"
 
 declare global {
   const OPENCODE_WORKER_PATH: string
@@ -64,11 +66,9 @@ export const TuiThreadCommand = cmd({
     // Resolve relative paths against PWD to preserve behavior when using --cwd flag
     const baseCwd = process.env.PWD ?? process.cwd()
     const cwd = args.project ? path.resolve(baseCwd, args.project) : process.cwd()
-    let workerPath: string | URL = new URL("./worker.ts", import.meta.url)
-
-    if (typeof OPENCODE_WORKER_PATH !== "undefined") {
-      workerPath = OPENCODE_WORKER_PATH
-    }
+    const defaultWorker = new URL("./worker.ts", import.meta.url)
+    const workerPath =
+      typeof OPENCODE_WORKER_PATH !== "undefined" ? OPENCODE_WORKER_PATH : defaultWorker
     try {
       process.chdir(cwd)
     } catch (e) {
@@ -97,31 +97,64 @@ export const TuiThreadCommand = cmd({
         return undefined
       })()
 
-      const worker = new Worker(workerPath, {
-        env: Object.fromEntries(
-          Object.entries(process.env).filter((entry): entry is [string, string] => entry[1] !== undefined),
-        ),
-      })
-      worker.onerror = console.error
-      const client = Rpc.client<typeof rpc>(worker)
-      process.on("uncaughtException", (e) => {
-        console.error(e)
-      })
-      process.on("unhandledRejection", (e) => {
-        console.error(e)
-      })
-      const server = await client.call("server", {
-        port: args.port,
-        hostname: args.hostname,
-      })
+      const setup = await (async () => {
+        const env = Object.fromEntries(
+          Object.entries(process.env).filter(
+            (entry): entry is [string, string] => entry[1] !== undefined,
+          ),
+        )
+        const worker = await Promise.resolve()
+          .then(
+            () =>
+              new Worker(workerPath, {
+                env,
+              }),
+          )
+          .catch((error) => {
+            console.debug("opencode tui worker disabled", error)
+            return undefined
+          })
+        if (worker) {
+          worker.onerror = console.error
+          const client = Rpc.client<typeof rpc>(worker)
+          process.on("uncaughtException", (error) => {
+            console.error(error)
+          })
+          process.on("unhandledRejection", (error) => {
+            console.error(error)
+          })
+          const remote = await client.call("server", {
+            port: args.port,
+            hostname: args.hostname,
+          })
+          return {
+            url: remote.url,
+            stop: async () => {
+              await client.call("shutdown", undefined)
+              worker.terminate()
+            },
+          }
+        }
+        const inline = Server.listen({
+          port: args.port ?? 0,
+          hostname: args.hostname ?? "127.0.0.1",
+        })
+        return {
+          url: inline.url.toString(),
+          stop: async () => {
+            await Instance.disposeAll()
+            await inline.stop(true)
+          },
+        }
+      })()
       await tui({
-        url: server.url,
+        url: setup.url,
         sessionID,
         model: args.model,
         agent: args.agent,
         prompt,
         onExit: async () => {
-          await client.call("shutdown", undefined)
+          await setup.stop()
         },
       })
     })
