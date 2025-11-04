@@ -120,6 +120,7 @@ export function Session() {
         if (evt.name === "return") return "once"
         if (evt.name === "a") return "always"
         if (evt.name === "d") return "reject"
+        if (evt.name === "escape") return "reject"
         return
       })
       if (response) {
