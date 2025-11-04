@@ -759,6 +759,34 @@ export namespace Server {
         },
       )
       .get(
+        "/session/:id/diff",
+        describeRoute({
+          description: "Get the diff for this session",
+          operationId: "session.diff",
+          responses: {
+            200: {
+              description: "List of diffs",
+              content: {
+                "application/json": {
+                  schema: resolver(Snapshot.FileDiff.array()),
+                },
+              },
+            },
+            ...errors(400, 404),
+          },
+        }),
+        validator(
+          "param",
+          z.object({
+            id: z.string().meta({ description: "Session ID" }),
+          }),
+        ),
+        async (c) => {
+          const diff = await Session.diff(c.req.valid("param").id)
+          return c.json(diff)
+        },
+      )
+      .get(
         "/session/:id/message/:messageID",
         describeRoute({
           description: "Get a message from a session",
