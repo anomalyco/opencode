@@ -177,6 +177,16 @@ export const ruff: Info = {
   },
 }
 
+export const rlang: Info = {
+  name: "air",
+  command: ["air", "format", "$FILE"],
+  extensions: [".R"],
+  async enabled() {
+    return Bun.which("air") !== null
+  },
+}
+
+
 export const rubocop: Info = {
   name: "rubocop",
   command: ["rubocop", "--autocorrect", "$FILE"],
