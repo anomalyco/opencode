@@ -54,6 +54,12 @@ export function Autocomplete(props: {
 
     const val = props.input().getTextRange(store.index + 1, props.input().cursorOffset + 1)
 
+    // If the filter contains a space, hide the autocomplete
+    if (val.includes(" ")) {
+      hide()
+      return undefined
+    }
+
     return val
   })
 
@@ -373,7 +379,17 @@ export function Autocomplete(props: {
         return store.visible
       },
       onInput() {
-        if (store.visible && props.input().cursorOffset <= store.index) hide()
+        if (store.visible) {
+          if (props.input().cursorOffset <= store.index) {
+            hide()
+            return
+          }
+          // Check if a space was typed after the trigger character
+          const currentText = props.input().getTextRange(store.index + 1, props.input().cursorOffset + 1)
+          if (currentText.includes(" ")) {
+            hide()
+          }
+        }
       },
       onKeyDown(e: KeyEvent) {
         if (store.visible) {
