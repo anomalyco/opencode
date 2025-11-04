@@ -502,12 +502,21 @@ export default function ChatIndicator({ room, connectionState }: ChatIndicatorPr
               setActiveWidget({ gridIndex: i })
             }}
             style={{ 
-              border: "3px dashed rgba(255, 255, 255, 0.2)", 
+              border: "3px dashed transparent", 
               borderRadius: "20px", 
-              backgroundColor: "rgba(0, 0, 0, 0.1)",
+              backgroundColor: "transparent",
               cursor: "pointer",
-              pointerEvents: "auto"
-            }} 
+              pointerEvents: "auto",
+              transition: "border-color 0.2s, background-color 0.2s"
+            }}
+            onMouseEnter={(e) => {
+              e.currentTarget.style.border = "3px dashed rgba(255, 255, 255, 0.2)"
+              e.currentTarget.style.backgroundColor = "rgba(0, 0, 0, 0.1)"
+            }}
+            onMouseLeave={(e) => {
+              e.currentTarget.style.border = "3px dashed transparent"
+              e.currentTarget.style.backgroundColor = "transparent"
+            }}
           />
         ))}
       </div>
