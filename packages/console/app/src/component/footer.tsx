@@ -1,6 +1,7 @@
 import { createAsync } from "@solidjs/router"
 import { createMemo } from "solid-js"
 import { github } from "~/lib/github"
+import { config } from "~/config"
 
 export function Footer() {
   const githubData = createAsync(() => github())
@@ -10,13 +11,13 @@ export function Footer() {
           notation: "compact",
           compactDisplay: "short",
         }).format(githubData()!.stars!)
-      : "25K",
+      : config.github.starsFormatted.compact,
   )
 
   return (
     <footer data-component="footer">
       <div data-slot="cell">
-        <a href="https://github.com/sst/opencode" target="_blank">
+        <a href={config.github.repoUrl} target="_blank">
           GitHub <span>[{starCount()}]</span>
         </a>
       </div>
@@ -27,7 +28,7 @@ export function Footer() {
         <a href="/discord">Discord</a>
       </div>
       <div data-slot="cell">
-        <a href="https://x.com/opencode">X</a>
+        <a href={config.social.twitter}>X</a>
       </div>
     </footer>
   )

@@ -18,6 +18,7 @@ import { createMemo, Match, Show, Switch } from "solid-js"
 import { createStore } from "solid-js/store"
 import { github } from "~/lib/github"
 import { createEffect, onCleanup } from "solid-js"
+import { config } from "~/config"
 import "./header-context-menu.css"
 
 const isDarkMode = () => window.matchMedia("(prefers-color-scheme: dark)").matches
@@ -42,7 +43,7 @@ export function Header(props: { zen?: boolean }) {
           notation: "compact",
           compactDisplay: "short",
         }).format(githubData()?.stars!)
-      : "29K",
+      : config.github.starsFormatted.compact,
   )
 
   const [store, setStore] = createStore({
@@ -148,7 +149,7 @@ export function Header(props: { zen?: boolean }) {
       <nav data-component="nav-desktop">
         <ul>
           <li>
-            <a href="https://github.com/sst/opencode" target="_blank">
+            <a href={config.github.repoUrl} target="_blank">
               GitHub <span>[{starCount()}]</span>
             </a>
           </li>
@@ -222,7 +223,7 @@ export function Header(props: { zen?: boolean }) {
                   <A href="/">Home</A>
                 </li>
                 <li>
-                  <a href="https://github.com/sst/opencode" target="_blank">
+                  <a href={config.github.repoUrl} target="_blank">
                     GitHub <span>[{starCount()}]</span>
                   </a>
                 </li>
