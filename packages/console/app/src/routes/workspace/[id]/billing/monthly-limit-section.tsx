@@ -1,16 +1,10 @@
-import { json, query, action, useParams, createAsync, useSubmission } from "@solidjs/router"
+import { json, action, useParams, createAsync, useSubmission } from "@solidjs/router"
 import { createEffect, Show } from "solid-js"
 import { createStore } from "solid-js/store"
 import { withActor } from "~/context/auth.withActor"
 import { Billing } from "@opencode-ai/console-core/billing.js"
 import styles from "./monthly-limit-section.module.css"
-
-const getBillingInfo = query(async (workspaceID: string) => {
-  "use server"
-  return withActor(async () => {
-    return await Billing.get()
-  }, workspaceID)
-}, "billing.get")
+import { queryBillingInfo } from "../../common"
 
 const setMonthlyLimit = action(async (form: FormData) => {
   "use server"
@@ -28,7 +22,7 @@ const setMonthlyLimit = action(async (form: FormData) => {
           .catch((e) => ({ error: e.message as string })),
       workspaceID,
     ),
-    { revalidate: getBillingInfo.key },
+    { revalidate: queryBillingInfo.key },
   )
 }, "billing.setMonthlyLimit")
 
@@ -36,7 +30,7 @@ export function MonthlyLimitSection() {
   const params = useParams()
   const submission = useSubmission(setMonthlyLimit)
   const [store, setStore] = createStore({ show: false })
-  const balanceInfo = createAsync(() => getBillingInfo(params.id))
+  const billingInfo = createAsync(() => queryBillingInfo(params.id))
 
   let input: HTMLInputElement
 
@@ -73,8 +67,8 @@ export function MonthlyLimitSection() {
       <div data-slot="section-content">
         <div data-slot="balance">
           <div data-slot="amount">
-            {balanceInfo()?.monthlyLimit ? <span data-slot="currency">$</span> : null}
-            <span data-slot="value">{balanceInfo()?.monthlyLimit ?? "-"}</span>
+            {billingInfo()?.monthlyLimit ? <span data-slot="currency">$</span> : null}
+            <span data-slot="value">{billingInfo()?.monthlyLimit ?? "-"}</span>
           </div>
           <Show
             when={!store.show}
@@ -106,15 +100,19 @@ export function MonthlyLimitSection() {
             }
           >
             <button data-color="primary" onClick={() => show()}>
-              {balanceInfo()?.monthlyLimit ? "Edit Limit" : "Set Limit"}
+              {billingInfo()?.monthlyLimit ? "Edit Limit" : "Set Limit"}
             </button>
           </Show>
         </div>
-        <Show when={balanceInfo()?.monthlyLimit} fallback={<p data-slot="usage-status">No spending limit set.</p>}>
+        <Show
+          when={billingInfo()?.monthlyLimit}
+          fallback={<p data-slot="usage-status">No spending limit set.</p>}
+        >
           <p data-slot="usage-status">
-            Current usage for {new Date().toLocaleDateString("en-US", { month: "long", timeZone: "UTC" })} is $
+            Current usage for{" "}
+            {new Date().toLocaleDateString("en-US", { month: "long", timeZone: "UTC" })} is $
             {(() => {
-              const dateLastUsed = balanceInfo()?.timeMonthlyUsageUpdated
+              const dateLastUsed = billingInfo()?.timeMonthlyUsageUpdated
               if (!dateLastUsed) return "0"
 
               const current = new Date().toLocaleDateString("en-US", {
@@ -128,7 +126,7 @@ export function MonthlyLimitSection() {
                 timeZone: "UTC",
               })
               if (current !== lastUsed) return "0"
-              return ((balanceInfo()?.monthlyUsage ?? 0) / 100000000).toFixed(2)
+              return ((billingInfo()?.monthlyUsage ?? 0) / 100000000).toFixed(2)
             })()}
             .
           </p>
