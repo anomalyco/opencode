@@ -4,6 +4,10 @@ import TurndownService from "turndown"
 import DESCRIPTION from "./webfetch.txt"
 import { Config } from "../config/config"
 import { Permission } from "../permission"
+import { Provider } from "../provider/provider"
+import { Session } from "../session"
+import { Token } from "../util/token"
+import { SessionPrompt } from "../session/prompt"
 
 const MAX_RESPONSE_SIZE = 5 * 1024 * 1024 // 5MB
 const DEFAULT_TIMEOUT = 30 * 1000 // 30 seconds
@@ -48,13 +52,15 @@ export const WebFetchTool = Tool.define("webfetch", {
     let acceptHeader = "*/*"
     switch (params.format) {
       case "markdown":
-        acceptHeader = "text/markdown;q=1.0, text/x-markdown;q=0.9, text/plain;q=0.8, text/html;q=0.7, */*;q=0.1"
+        acceptHeader =
+          "text/markdown;q=1.0, text/x-markdown;q=0.9, text/plain;q=0.8, text/html;q=0.7, */*;q=0.1"
         break
       case "text":
         acceptHeader = "text/plain;q=1.0, text/markdown;q=0.9, text/html;q=0.8, */*;q=0.1"
         break
       case "html":
-        acceptHeader = "text/html;q=1.0, application/xhtml+xml;q=0.9, text/plain;q=0.8, text/markdown;q=0.7, */*;q=0.1"
+        acceptHeader =
+          "text/html;q=1.0, application/xhtml+xml;q=0.9, text/plain;q=0.8, text/markdown;q=0.7, */*;q=0.1"
         break
       default:
         acceptHeader =
@@ -88,56 +94,62 @@ export const WebFetchTool = Tool.define("webfetch", {
       throw new Error("Response too large (exceeds 5MB limit)")
     }
 
-    const content = new TextDecoder().decode(arrayBuffer)
+    let content = new TextDecoder().decode(arrayBuffer)
     const contentType = response.headers.get("content-type") || ""
 
     const title = `${params.url} (${contentType})`
 
-    // Handle content based on requested format and actual content type
+    let output = ""
     switch (params.format) {
       case "markdown":
         if (contentType.includes("text/html")) {
-          const markdown = convertHTMLToMarkdown(content)
-          return {
-            output: markdown,
-            title,
-            metadata: {},
-          }
+          output = convertHTMLToMarkdown(content)
+        } else {
+          output = content
         }
-        return {
-          output: content,
-          title,
-          metadata: {},
-        }
-
+        break
       case "text":
         if (contentType.includes("text/html")) {
-          const text = await extractTextFromHTML(content)
-          return {
-            output: text,
-            title,
-            metadata: {},
-          }
+          output = await extractTextFromHTML(content)
+        } else {
+          output = content
         }
-        return {
-          output: content,
-          title,
-          metadata: {},
-        }
-
+        break
       case "html":
-        return {
-          output: content,
-          title,
-          metadata: {},
-        }
-
+        output = content
+        break
       default:
-        return {
-          output: content,
-          title,
-          metadata: {},
+        output = content
+    }
+
+    if (ctx.extra?.providerID && ctx.extra?.modelID) {
+      const model = await Provider.getModel(ctx.extra.providerID, ctx.extra.modelID)
+      const messages = await Session.messages(ctx.sessionID)
+      const lastAssistant = messages.findLast((m) => m.info.role === "assistant")
+
+      if (lastAssistant?.info.role === "assistant") {
+        const currentTokens =
+          lastAssistant.info.tokens.input +
+          lastAssistant.info.tokens.cache.read +
+          lastAssistant.info.tokens.output
+        const contextLimit = model.info.limit.context
+        const outputReserve =
+          Math.min(model.info.limit.output, SessionPrompt.OUTPUT_TOKEN_MAX) ||
+          SessionPrompt.OUTPUT_TOKEN_MAX
+        const availableTokens = contextLimit - outputReserve - currentTokens
+
+        const outputTokens = Token.estimate(output)
+        if (outputTokens > availableTokens && availableTokens > 0) {
+          const targetLength = Math.floor((availableTokens / outputTokens) * output.length * 0.8)
+          output = output.slice(0, targetLength) + "\n\n[Content truncated due to context limit]"
         }
+      }
+    }
+
+    return {
+      output,
+      title,
+      metadata: {},
     }
   },
 })
@@ -158,7 +170,9 @@ async function extractTextFromHTML(html: string) {
     .on("*", {
       element(element) {
         // Reset skip flag when entering other elements
-        if (!["script", "style", "noscript", "iframe", "object", "embed"].includes(element.tagName)) {
+        if (
+          !["script", "style", "noscript", "iframe", "object", "embed"].includes(element.tagName)
+        ) {
           skipContent = false
         }
       },
