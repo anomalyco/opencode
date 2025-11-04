@@ -94,7 +94,7 @@ export const RunCommand = cmd({
   handler: async (args) => {
     let message = args.message.join(" ")
 
-    let fileParts: any[] = []
+    const fileParts: any[] = []
     if (args.file) {
       const files = Array.isArray(args.file) ? args.file : [args.file]
 
@@ -304,55 +304,54 @@ export const RunCommand = cmd({
       const server = Server.listen({ port: 0, hostname: "127.0.0.1" })
       const sdk = createOpencodeClient({ baseUrl: `http://${server.hostname}:${server.port}` })
 
-      try {
-        if (args.command) {
-          const exists = await Command.get(args.command)
-          if (!exists) {
-            UI.error(`Command "${args.command}" not found`)
-            process.exit(1)
-          }
-        }
-
-        const sessionID = await (async () => {
-          if (args.continue) {
-            const result = await sdk.session.list()
-            return result.data?.find((s) => !s.parentID)?.id
-          }
-          if (args.session) return args.session
-
-          const title =
-            args.title !== undefined
-              ? args.title === ""
-                ? message.slice(0, 50) + (message.length > 50 ? "..." : "")
-                : args.title
-              : undefined
-
-          const result = await sdk.session.create({ body: title ? { title } : {} })
-          return result.data?.id
-        })()
-
-        if (!sessionID) {
-          UI.error("Session not found")
+      if (args.command) {
+        const exists = await Command.get(args.command)
+        if (!exists) {
+          server.stop()
+          UI.error(`Command "${args.command}" not found`)
           process.exit(1)
         }
-
-        const cfgResult = await sdk.config.get()
-        if (cfgResult.data && (cfgResult.data.share === "auto" || Flag.OPENCODE_AUTO_SHARE || args.share)) {
-          const shareResult = await sdk.session.share({ path: { id: sessionID } }).catch((error) => {
-            if (error instanceof Error && error.message.includes("disabled")) {
-              UI.println(UI.Style.TEXT_DANGER_BOLD + "!  " + error.message)
-            }
-            return { error }
-          })
-          if (!shareResult.error) {
-            UI.println(UI.Style.TEXT_INFO_BOLD + "~  https://opencode.ai/s/" + sessionID.slice(-8))
-          }
-        }
-
-        await execute(sdk, sessionID)
-      } finally {
-        server.stop()
       }
+
+      const sessionID = await (async () => {
+        if (args.continue) {
+          const result = await sdk.session.list()
+          return result.data?.find((s) => !s.parentID)?.id
+        }
+        if (args.session) return args.session
+
+        const title =
+          args.title !== undefined
+            ? args.title === ""
+              ? message.slice(0, 50) + (message.length > 50 ? "..." : "")
+              : args.title
+            : undefined
+
+        const result = await sdk.session.create({ body: title ? { title } : {} })
+        return result.data?.id
+      })()
+
+      if (!sessionID) {
+        server.stop()
+        UI.error("Session not found")
+        process.exit(1)
+      }
+
+      const cfgResult = await sdk.config.get()
+      if (cfgResult.data && (cfgResult.data.share === "auto" || Flag.OPENCODE_AUTO_SHARE || args.share)) {
+        const shareResult = await sdk.session.share({ path: { id: sessionID } }).catch((error) => {
+          if (error instanceof Error && error.message.includes("disabled")) {
+            UI.println(UI.Style.TEXT_DANGER_BOLD + "!  " + error.message)
+          }
+          return { error }
+        })
+        if (!shareResult.error) {
+          UI.println(UI.Style.TEXT_INFO_BOLD + "~  https://opencode.ai/s/" + sessionID.slice(-8))
+        }
+      }
+
+      await execute(sdk, sessionID)
+      server.stop()
     })
   },
 })
