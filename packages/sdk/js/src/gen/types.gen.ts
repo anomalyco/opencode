@@ -163,7 +163,7 @@ export type KeybindsConfig = {
    */
   history_previous?: string
   /**
-   * Previous history item
+   * Next history item
    */
   history_next?: string
   /**
