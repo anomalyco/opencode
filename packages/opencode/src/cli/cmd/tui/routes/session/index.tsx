@@ -446,9 +446,9 @@ export function Session() {
       },
     },
     {
-      title: "Export session",
-      value: "session.export",
-      keybind: "session_export",
+      title: "Copy session transcript",
+      value: "session.copy",
+      keybind: "session_copy",
       category: "Session",
       onSelect: async (dialog) => {
         try {
@@ -482,7 +482,7 @@ export function Session() {
           await Clipboard.copy(transcript)
           toast.show({ message: "Session transcript copied to clipboard!", variant: "success" })
         } catch (error) {
-          toast.show({ message: "Failed to export session", variant: "error" })
+          toast.show({ message: "Failed to copy session transcript", variant: "error" })
         }
         dialog.clear()
       },
