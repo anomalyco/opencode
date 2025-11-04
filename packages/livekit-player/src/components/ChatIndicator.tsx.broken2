@@ -45,6 +45,43 @@ export default function ChatIndicator({ room, connectionState }: ChatIndicatorPr
   const cameraVideoRef = useRef<HTMLVideoElement>(null)
   const cameraCanvasRef = useRef<HTMLCanvasElement>(null)
   const [showCamera, setShowCamera] = useState(true)
+  const [isPaused, setIsPaused] = useState(false)
+
+  // HAL lens pause/resume handler
+  const handleLensClick = async () => {
+    if (!room || connectionState !== ConnectionState.Connected) return
+    
+    const newPausedState = !isPaused
+    setIsPaused(newPausedState)
+    
+    try {
+      // Pause/resume microphone
+      await room.localParticipant.setMicrophoneEnabled(!newPausedState)
+      
+      // Mute/unmute all remote audio tracks
+      room.remoteParticipants.forEach((participant) => {
+        participant.audioTracks.forEach((publication) => {
+          if (publication.track) {
+            if (newPausedState) {
+              publication.track.muted = true
+            } else {
+              publication.track.muted = false
+            }
+          }
+        })
+      
+      // Reset audio bands to zero when paused
+      if (newPausedState) {
+        agentBandsRef.current = [0, 0, 0, 0]
+        userBandsRef.current = [0, 0, 0, 0]
+      }
+      })
+      
+      console.log(newPausedState ? "⏸️ HAL paused" : "▶️ HAL resumed")
+    } catch (err) {
+      console.error("Failed to toggle HAL pause state:", err)
+    }
+  }
 
 
   // Resize handlers
@@ -615,7 +652,7 @@ export default function ChatIndicator({ room, connectionState }: ChatIndicatorPr
       <div className="chat-indicator" style={{ transform: "scale(0.6)" }}>
       {/* PURPLE - Agent Audio with HAL 9000 Eye Overlay */}
       <div className="status-container">
-        <div className="blob-container">
+        <div className="blob-container" onClick={handleLensClick} style={{ cursor: "pointer", filter: isPaused ? "grayscale(1)" : "none", transition: "filter 0.3s ease" }}>
           <div style={{ position: "absolute", top: "50%", left: "50%", transform: "translate(-50%, -50%) scale(1)", width: "400px", height: "400px", pointerEvents: "none", opacity: 0.6, filter: "drop-shadow(rgba(255, 0, 0, 0.6) 0px 0px 0px)", transition: "opacity 0.1s, transform 0.1s, filter 0.1s" }}>
             <svg xmlns="http://www.w3.org/2000/svg" xmlnsXlink="http://www.w3.org/1999/xlink" viewBox="0 0 562.5 562.5" width="100%" height="100%"><defs><linearGradient id="linearGradient2781"><stop id="stop2782" offset="0" style={{ stopColor: "rgb(252, 255, 0)", stopOpacity: 1 }} /><stop id="stop2784" offset="1" style={{ stopColor: "rgb(255, 0, 0)", stopOpacity: 1 }} /></linearGradient><linearGradient id="linearGradient1530"><stop id="stop1531" offset="0" style={{ stopColor: "rgb(255, 0, 0)", stopOpacity: 1 }} /><stop id="stop1534" offset="0.5" style={{ stopColor: "rgb(238, 0, 0)", stopOpacity: 1 }} /><stop id="stop4709" offset="0.75" style={{ stopColor: "rgb(164, 0, 0)", stopOpacity: 1 }} /><stop id="stop1532" offset="1" style={{ stopColor: "rgb(0, 0, 0)", stopOpacity: 1 }} /></linearGradient><radialGradient gradientUnits="userSpaceOnUse" xlinkHref="#linearGradient1530" id="radialGradient2175" fy="441.98581" fx="279.27597" r="218.70837" cy="441.98581" cx="279.27597" /><radialGradient gradientUnits="userSpaceOnUse" xlinkHref="#linearGradient2781" id="radialGradient2176" fy="450.62323" fx="279.27597" r="37.428738" cy="450.62323" cx="279.27597" /></defs><g id="g3882" transform="matrix(0.999995,0.000000,0.000000,1.000000,-366.8852,-202.1756)"><g id="g1285" transform="matrix(0.706473,0.000000,0.000000,0.706473,392.0851,234.7421)"><path id="path908" transform="matrix(0.871134,0.000000,0.000000,0.871134,104.5141,-37.87046)" d="M 555.67282 441.98581 A 276.39685 276.39685 0 1 1  2.8791199,441.98581 A 276.39685 276.39685 0 1 1  555.67282 441.98581 z" style={{ fill: "url(#radialGradient2175)", fillOpacity: 1, fillRule: "evenodd", stroke: "none", strokeWidth: 0, strokeLinecap: "butt", strokeLinejoin: "round", strokeMiterlimit: 4, strokeOpacity: 1 }} /><path id="path2158" transform="matrix(0.871134,0.000000,0.000000,0.871134,104.5141,-45.39481)" d="M 316.70471 450.62323 A 37.428738 37.428738 0 1 1  241.84723,450.62323 A 37.428738 37.428738 0 1 1  316.70471 450.62323 z" style={{ fill: "url(#radialGradient2176)", fillOpacity: 0.75, fillRule: "evenodd", stroke: "none", strokeWidth: "1pt", strokeLinecap: "butt", strokeLinejoin: "miter", strokeOpacity: 1 }} /></g></g></svg>
           </div>

@@ -127,3 +127,47 @@ Agents can delegate to other agents:
 - **Logging**: Use `Log.create({ service: "name" })` pattern
 - **Storage**: Use `Storage` namespace for persistence
 - **API Client**: Go TUI communicates with TypeScript server via stainless SDK. When adding/modifying server endpoints in `packages/opencode/src/server/server.ts`, ask the user to generate a new client SDK to proceed with client-side changes.
+
+## Critical Lessons: Z-Index and Stacking Context (Nov 4, 2025)
+
+### Problem
+Widgets rendering above HAL lens despite lens having CSS z-index values set. Visual stacking was backwards.
+
+### Root Cause
+**Z-index on child elements is useless if parent container doesn't establish stacking context.**
+
+Structure was:
+```jsx
+<>
+  <div style={{zIndex: 1}}>Widget Grid</div>
+  <div style={{zIndex: 40-50}}>Widgets</div>
+  <div className="chat-indicator"> {/* NO Z-INDEX! */}
+    <div className="status-container"> {/* z-index in CSS */}
+      HAL Lens
+    </div>
+  </div>
+</>
+```
+
+Widgets had inline z-index as direct children of fragment. Lens nested inside `.chat-indicator` which had **no z-index**, so it wasn't in a stacking context.
+
+### Solution
+1. Add `z-index: 100000` to `.chat-indicator` parent container
+2. Add `pointer-events: none` to `.chat-indicator` (full-screen, blocks clicks)
+3. Add `pointer-events: auto` to `.status-container` (re-enable for lens)
+4. Camera feed gets `zIndex: 100001` to be above lens
+
+### Critical Debugging Pattern
+**When z-index doesn't work:**
+1. Check parent element has z-index set
+2. Check parent has `position: relative/absolute/fixed` 
+3. Verify entire parent chain establishes stacking context
+4. Look at DOM siblings vs nested elements
+5. Use: `grep -n "zIndex\|z-index" *.tsx *.css` to see all at once
+
+### Key Rule
+**Parent must establish stacking context for child z-index to matter**
+- Parent needs: `position` + `z-index`
+- Inline styles work, but parent MUST have z-index too
+- Full-screen high z-index containers need `pointer-events: none`
+
