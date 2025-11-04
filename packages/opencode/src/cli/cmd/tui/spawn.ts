@@ -3,6 +3,7 @@ import { Instance } from "@/project/instance"
 import path from "path"
 import { Server } from "@/server/server"
 import { upgrade } from "@/cli/upgrade"
+import { Installation } from "@/installation"
 
 export const TuiSpawnCommand = cmd({
   command: "spawn [project]",
@@ -41,7 +42,16 @@ export const TuiSpawnCommand = cmd({
       )
       cwd = new URL("../../../../", import.meta.url).pathname
     } else cmd.push(process.execPath)
-    cmd.push("attach", server.url.toString(), "--dir", args.project ? path.resolve(args.project) : process.cwd())
+    cmd.push(
+      "attach",
+      server.url.toString(),
+      "--dir",
+      args.project
+        ? path.resolve(args.project)
+        : Installation.isLocal()
+          ? path.resolve(process.cwd(), "../..")
+          : process.cwd(),
+    )
     const proc = Bun.spawn({
       cmd,
       cwd,

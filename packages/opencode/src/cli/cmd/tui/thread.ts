@@ -7,6 +7,7 @@ import { Session } from "@/session"
 import { bootstrap } from "@/cli/bootstrap"
 import path from "path"
 import { UI } from "@/cli/ui"
+import { Installation } from "@/installation"
 
 declare global {
   const OPENCODE_WORKER_PATH: string
@@ -64,7 +65,11 @@ export const TuiThreadCommand = cmd({
 
     // Resolve relative paths against PWD to preserve behavior when using --cwd flag
     const baseCwd = process.env.PWD ?? process.cwd()
-    const cwd = args.project ? path.resolve(baseCwd, args.project) : process.cwd()
+    const cwd = args.project
+      ? path.resolve(baseCwd, args.project)
+      : Installation.isLocal()
+        ? path.resolve(process.cwd(), "../..")
+        : process.cwd()
     let workerPath: string | URL = new URL("./worker.ts", import.meta.url)
 
     if (typeof OPENCODE_WORKER_PATH !== "undefined") {
