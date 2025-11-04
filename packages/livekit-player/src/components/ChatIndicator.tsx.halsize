@@ -1,0 +1,474 @@
+import { useEffect, useState, useRef } from 'react'
+import { Room, RoomEvent, ConnectionState, RemoteParticipant, ConnectionQuality, RemoteAudioTrack, Track } from 'livekit-client'
+import { Signal, SignalHigh, SignalMedium, SignalLow, SignalZero, Users } from 'lucide-react'
+import './ChatIndicator.css'
+
+type AgentState = 'disconnected' | 'connecting' | 'listening' | 'speaking'
+
+interface ChatIndicatorProps {
+  room: Room
+  connectionState: ConnectionState
+}
+
+export default function ChatIndicator({ room, connectionState }: ChatIndicatorProps) {
+  const [agentState, setAgentState] = useState<AgentState>('disconnected')
+  const [participantCount, setParticipantCount] = useState(0)
+  const [connectionQuality, setConnectionQuality] = useState<ConnectionQuality>(ConnectionQuality.Excellent)
+  const [, forceUpdate] = useState(0)
+  
+  // Agent (remote) audio bands - PURPLE
+  const agentBandsRef = useRef<number[]>([0, 0, 0, 0])
+  const agentAudioContextRef = useRef<AudioContext | null>(null)
+  const agentAnimationFrameRef = useRef<number>()
+  
+  // User (local mic) audio bands - GREEN
+  const userBandsRef = useRef<number[]>([0, 0, 0, 0])
+  const userAudioContextRef = useRef<AudioContext | null>(null)
+  const userAnimationFrameRef = useRef<number>()
+  
+  const renderAnimationFrameRef = useRef<number>()
+
+  // Camera refs
+  const cameraVideoRef = useRef<HTMLVideoElement>(null)
+  const cameraCanvasRef = useRef<HTMLCanvasElement>(null)
+  const [showCamera, setShowCamera] = useState(true)
+
+  // Force re-renders for animation
+  useEffect(() => {
+    const animate = () => {
+      forceUpdate(n => n + 1)
+      renderAnimationFrameRef.current = requestAnimationFrame(animate)
+    }
+    animate()
+    
+    return () => {
+      if (renderAnimationFrameRef.current) {
+        cancelAnimationFrame(renderAnimationFrameRef.current)
+      }
+    }
+  }, [])
+
+  // Camera setup
+  useEffect(() => {
+    if (!showCamera || connectionState !== ConnectionState.Connected) return
+    
+    let animationId: number
+    let stream: MediaStream | null = null
+    
+    navigator.mediaDevices.getUserMedia({ 
+      video: { 
+        width: { ideal: 1280 }, 
+        height: { ideal: 720 },
+        facingMode: "user"
+      } 
+    })
+      .then(mediaStream => {
+        stream = mediaStream
+        const video = cameraVideoRef.current
+        const canvas = cameraCanvasRef.current
+        if (!video || !canvas) return
+        
+        const ctx = canvas.getContext('2d')
+        if (!ctx) return
+        
+        video.srcObject = stream
+        video.play()
+        
+        const drawFrame = () => {
+          if (video.readyState === video.HAVE_ENOUGH_DATA) {
+            const size = 400
+            const radius = size / 2
+            
+            ctx.clearRect(0, 0, size, size)
+            ctx.save()
+            
+            // Circular mask
+            ctx.beginPath()
+            ctx.arc(radius, radius, radius * 0.85, 0, Math.PI * 2)
+            ctx.closePath()
+            ctx.clip()
+            
+            // Get video dimensions and center crop
+            const vw = video.videoWidth
+            const vh = video.videoHeight
+            const cropSize = Math.min(vw, vh)
+            const cropX = (vw - cropSize) / 2
+            const cropY = (vh - cropSize) / 2
+            
+            // Mirror horizontally
+            ctx.translate(size, 0)
+            ctx.scale(-1, 1)
+            
+            // Draw video
+            ctx.drawImage(video, cropX, cropY, cropSize, cropSize, 0, 0, size, size)
+            
+            ctx.restore()
+          }
+          animationId = requestAnimationFrame(drawFrame)
+        }
+        
+        drawFrame()
+      })
+      .catch(err => console.error('[Camera] Error:', err))
+    
+    return () => {
+      if (animationId) cancelAnimationFrame(animationId)
+      if (stream) stream.getTracks().forEach(track => track.stop())
+    }
+  }, [showCamera, connectionState])
+
+  // Setup local microphone audio monitoring - GREEN
+  useEffect(() => {
+    if (connectionState !== ConnectionState.Connected) {
+      return
+    }
+    
+    // Get local microphone audio
+    navigator.mediaDevices.getUserMedia({ audio: true })
+      .then(stream => {
+        console.log('🎤 Got user microphone access')
+        
+        // Clean up old context
+        if (userAudioContextRef.current) {
+          userAudioContextRef.current.close()
+        }
+        if (userAnimationFrameRef.current) {
+          cancelAnimationFrame(userAnimationFrameRef.current)
+        }
+        
+        const audioContext = new AudioContext()
+        const analyser = audioContext.createAnalyser()
+        const source = audioContext.createMediaStreamSource(stream)
+        
+        analyser.fftSize = 512
+        analyser.smoothingTimeConstant = 0.6
+        source.connect(analyser)
+        
+        userAudioContextRef.current = audioContext
+        
+        const dataArray = new Uint8Array(analyser.frequencyBinCount)
+        
+        const analyze = () => {
+          analyser.getByteFrequencyData(dataArray)
+          
+          const bandSize = Math.floor(dataArray.length / 4)
+          const bands: number[] = []
+          
+          for (let i = 0; i < 4; i++) {
+            const start = i * bandSize
+            const end = start + bandSize
+            const bandData = dataArray.slice(start, end)
+            const average = bandData.reduce((a, b) => a + b, 0) / bandData.length
+            bands.push(average / 255)
+          }
+          
+          userBandsRef.current = bands
+          
+          userAnimationFrameRef.current = requestAnimationFrame(analyze)
+        }
+        
+        analyze()
+      })
+      .catch(err => {
+        console.error('Failed to get microphone access:', err)
+      })
+    
+    return () => {
+      if (userAnimationFrameRef.current) {
+        cancelAnimationFrame(userAnimationFrameRef.current)
+      }
+      if (userAudioContextRef.current) {
+        userAudioContextRef.current.close()
+      }
+    }
+  }, [connectionState])
+
+  // Setup agent audio monitoring - PURPLE
+  useEffect(() => {
+    if (connectionState === ConnectionState.Disconnected) {
+      setAgentState('disconnected')
+      return
+    }
+    
+    if (connectionState === ConnectionState.Connecting || connectionState === ConnectionState.Reconnecting) {
+      setAgentState('connecting')
+      return
+    }
+    
+    if (connectionState !== ConnectionState.Connected || !room) {
+      return
+    }
+    
+    setAgentState('speaking')
+    
+    const setupAgentAudio = (track: Track) => {
+      console.log('🎧 Setting up agent audio monitoring', track.sid)
+      
+      const audioTrack = track as RemoteAudioTrack
+      const mediaStreamTrack = audioTrack.mediaStreamTrack
+      
+      if (!mediaStreamTrack) {
+        console.warn('⚠️ No mediaStreamTrack available')
+        return
+      }
+      
+      // Clean up old context
+      if (agentAudioContextRef.current) {
+        agentAudioContextRef.current.close()
+      }
+      if (agentAnimationFrameRef.current) {
+        cancelAnimationFrame(agentAnimationFrameRef.current)
+      }
+      
+      const audioContext = new AudioContext()
+      const analyser = audioContext.createAnalyser()
+      const stream = new MediaStream([mediaStreamTrack])
+      const source = audioContext.createMediaStreamSource(stream)
+      
+      analyser.fftSize = 512
+      analyser.smoothingTimeConstant = 0.6
+      source.connect(analyser)
+      
+      agentAudioContextRef.current = audioContext
+      
+      const dataArray = new Uint8Array(analyser.frequencyBinCount)
+      
+      const analyze = () => {
+        analyser.getByteFrequencyData(dataArray)
+        
+        const bandSize = Math.floor(dataArray.length / 4)
+        const bands: number[] = []
+        
+        for (let i = 0; i < 4; i++) {
+          const start = i * bandSize
+          const end = start + bandSize
+          const bandData = dataArray.slice(start, end)
+          const average = bandData.reduce((a, b) => a + b, 0) / bandData.length
+          bands.push(average / 255)
+        }
+        
+        agentBandsRef.current = bands
+        
+        agentAnimationFrameRef.current = requestAnimationFrame(analyze)
+      }
+      
+      analyze()
+      console.log('✅ Agent audio monitoring started')
+    }
+    
+    const handleTrackSubscribed = (track: Track, publication: any, participant: RemoteParticipant) => {
+      console.log('📥 Track subscribed:', track.kind, track.sid)
+      if (track.kind !== Track.Kind.Audio) return
+      setupAgentAudio(track)
+    }
+    
+    // Check for existing remote audio tracks
+    room.remoteParticipants.forEach((participant) => {
+      console.log('👤 Checking participant:', participant.identity)
+      participant.trackPublications.forEach((publication) => {
+        if (publication.track && publication.track.kind === Track.Kind.Audio) {
+          console.log('🔊 Found existing audio track')
+          setupAgentAudio(publication.track)
+        }
+      })
+    })
+    
+    room.on(RoomEvent.TrackSubscribed, handleTrackSubscribed)
+    
+    return () => {
+      room.off(RoomEvent.TrackSubscribed, handleTrackSubscribed)
+      if (agentAnimationFrameRef.current) {
+        cancelAnimationFrame(agentAnimationFrameRef.current)
+      }
+      if (agentAudioContextRef.current) {
+        agentAudioContextRef.current.close()
+      }
+    }
+  }, [room, connectionState])
+
+  // Update participant count
+  useEffect(() => {
+    if (connectionState === ConnectionState.Connected && room?.remoteParticipants) {
+      const count = Array.from(room.remoteParticipants.values()).length + 1
+      setParticipantCount(count)
+    }
+  }, [room, connectionState])
+
+  // Agent (purple) calculations
+  const agentBands = agentBandsRef.current
+  const agentAvgIntensity = agentBands.reduce((a, b) => a + b, 0) / agentBands.length
+  const agentBaseRadius = 50
+  const agentRadiusPulse = Math.pow(agentAvgIntensity, 0.5) * 18
+  const agentRadius = agentBaseRadius + agentRadiusPulse
+
+  // User (green) calculations
+  const userBands = userBandsRef.current
+  const userAvgIntensity = userBands.reduce((a, b) => a + b, 0) / userBands.length
+  const userBaseRadius = 50
+  const userRadiusPulse = Math.pow(userAvgIntensity, 0.5) * 18
+  const userRadius = userBaseRadius + userRadiusPulse
+
+  const getOrbPosition = (index: number, bandLevel: number) => {
+    if (bandLevel < 0.005) {
+      return { x: 100, y: 100, scale: 1 }
+    }
+    
+    const intensity = Math.pow(bandLevel, 0.3) * 60
+    const baseAngle = (index / 4) * Math.PI * 2
+    const angleVariation = bandLevel * 8
+    const angle = baseAngle + Math.sin(Date.now() / 500 + index) * angleVariation
+    
+    return {
+      x: 100 + Math.cos(angle) * intensity,
+      y: 100 + Math.sin(angle) * intensity,
+      scale: 1 + bandLevel * 0.6
+    }
+  }
+
+  // Agent orb positions
+  const agentOrb1 = getOrbPosition(0, agentBands[0] || 0)
+  const agentOrb2 = getOrbPosition(1, agentBands[1] || 0)
+  const agentOrb3 = getOrbPosition(2, agentBands[2] || 0)
+  const agentOrb4 = getOrbPosition(3, agentBands[3] || 0)
+
+  // User orb positions
+  const userOrb1 = getOrbPosition(0, userBands[0] || 0)
+  const userOrb2 = getOrbPosition(1, userBands[1] || 0)
+  const userOrb3 = getOrbPosition(2, userBands[2] || 0)
+  const userOrb4 = getOrbPosition(3, userBands[3] || 0)
+
+  const getQualityIcon = () => {
+    switch (connectionQuality) {
+      case ConnectionQuality.Excellent: return <SignalHigh size={14} />
+      case ConnectionQuality.Good: return <SignalMedium size={14} />
+      case ConnectionQuality.Poor: return <SignalLow size={14} />
+      case ConnectionQuality.Lost: return <SignalZero size={14} />
+      default: return <Signal size={14} />
+    }
+  }
+
+  const getQualityColor = () => {
+    switch (connectionQuality) {
+      case ConnectionQuality.Excellent: return '#3b82f6'
+      case ConnectionQuality.Good: return '#fbbf24'
+      case ConnectionQuality.Poor: return '#fb7185'
+      case ConnectionQuality.Lost: return '#666'
+      default: return '#888'
+    }
+  }
+
+  return (
+    <div className="chat-indicator">
+      {/* PURPLE - Agent Audio */}
+      <div className="status-container">
+        <div className="blob-container">
+          <svg viewBox="0 0 200 200" xmlns="http://www.w3.org/2000/svg" className="blob-svg">
+            <defs>
+              <filter id="goo-agent">
+                <feGaussianBlur in="SourceGraphic" stdDeviation="10" result="blur" />
+                <feColorMatrix in="blur" mode="matrix" values="1 0 0 0 0  0 1 0 0 0  0 0 1 0 0  0 0 0 18 -8" result="goo" />
+                <feBlend in="SourceGraphic" in2="goo" />
+              </filter>
+              
+              <filter id="blur-tight">
+                <feGaussianBlur in="SourceGraphic" stdDeviation="8" />
+              </filter>
+              
+              <radialGradient id="glass-purple" cx="50%" cy="50%">
+                <stop offset="0%" stopColor="#a78bfa" stopOpacity="0.3" />
+                <stop offset="50%" stopColor="#a78bfa" stopOpacity="0.4" />
+                <stop offset="100%" stopColor="#7c3aed" stopOpacity="0.2" />
+              </radialGradient>
+            </defs>
+            
+            <g filter="url(#goo-agent)">
+              {/* Orb glow halos - drawn first so they're behind */}
+              <circle cx={agentOrb1.x} cy={agentOrb1.y} r="40" fill="#a78bfa" opacity={0.2 * (agentBands[0] || 0)} filter="url(#blur-tight)" />
+              <circle cx={agentOrb2.x} cy={agentOrb2.y} r="35" fill="#a78bfa" opacity={0.2 * (agentBands[1] || 0)} filter="url(#blur-tight)" />
+              <circle cx={agentOrb3.x} cy={agentOrb3.y} r="30" fill="#a78bfa" opacity={0.2 * (agentBands[2] || 0)} filter="url(#blur-tight)" />
+              <circle cx={agentOrb4.x} cy={agentOrb4.y} r="25" fill="#a78bfa" opacity={0.2 * (agentBands[3] || 0)} filter="url(#blur-tight)" />
+              
+              <circle className="blob-main" cx="100" cy="100" r={agentRadius} fill="url(#glass-purple)" />
+              <circle className="blob-orb" cx={agentOrb1.x} cy={agentOrb1.y} r="25" fill="url(#glass-purple)" style={{ transform: `scale(${agentOrb1.scale})`, transformOrigin: '100px 100px' }} />
+              <circle className="blob-orb" cx={agentOrb2.x} cy={agentOrb2.y} r="20" fill="url(#glass-purple)" style={{ transform: `scale(${agentOrb2.scale})`, transformOrigin: '100px 100px' }} />
+              <circle className="blob-orb" cx={agentOrb3.x} cy={agentOrb3.y} r="18" fill="url(#glass-purple)" style={{ transform: `scale(${agentOrb3.scale})`, transformOrigin: '100px 100px' }} />
+              <circle className="blob-orb" cx={agentOrb4.x} cy={agentOrb4.y} r="15" fill="url(#glass-purple)" style={{ transform: `scale(${agentOrb4.scale})`, transformOrigin: '100px 100px' }} />
+              <circle cx="100" cy="100" r="20" fill="#a78bfa" opacity="0.6" filter="url(#blur-tight)" />
+            </g>
+          </svg>
+          <div className="blob-glow" style={{ backgroundColor: '#a78bfa' }} />
+        </div>
+      </div>
+
+      {/* BLUE - User Microphone */}
+      <div className="status-container">
+        <div className="blob-container">
+          <svg viewBox="0 0 200 200" xmlns="http://www.w3.org/2000/svg" className="blob-svg">
+            <defs>
+              <filter id="goo-user">
+                <feGaussianBlur in="SourceGraphic" stdDeviation="10" result="blur" />
+                <feColorMatrix in="blur" mode="matrix" values="1 0 0 0 0  0 1 0 0 0  0 0 1 0 0  0 0 0 18 -8" result="goo" />
+                <feBlend in="SourceGraphic" in2="goo" />
+              </filter>
+              
+              <radialGradient id="glass-blue" cx="50%" cy="50%">
+                <stop offset="0%" stopColor="#3b82f6" stopOpacity="0.5" />
+                <stop offset="50%" stopColor="#3b82f6" stopOpacity="0.6" />
+                <stop offset="100%" stopColor="#1d4ed8" stopOpacity="0.4" />
+              </radialGradient>
+            </defs>
+            
+            
+            <g filter="url(#goo-user)">
+              {/* Blue orb glow halos - drawn first so they're behind */}
+              <circle cx={userOrb1.x} cy={userOrb1.y} r="40" fill="#3b82f6" opacity={0.2 * (userBands[0] || 0)} filter="url(#blur-tight)" />
+              <circle cx={userOrb2.x} cy={userOrb2.y} r="35" fill="#3b82f6" opacity={0.2 * (userBands[1] || 0)} filter="url(#blur-tight)" />
+              <circle cx={userOrb3.x} cy={userOrb3.y} r="30" fill="#3b82f6" opacity={0.2 * (userBands[2] || 0)} filter="url(#blur-tight)" />
+              <circle cx={userOrb4.x} cy={userOrb4.y} r="25" fill="#3b82f6" opacity={0.2 * (userBands[3] || 0)} filter="url(#blur-tight)" />
+              
+              <circle className="blob-main" cx="100" cy="100" r={userRadius} fill="url(#glass-blue)" />
+              <circle className="blob-orb" cx={userOrb1.x} cy={userOrb1.y} r="25" fill="url(#glass-blue)" style={{ transform: `scale(${userOrb1.scale})`, transformOrigin: '100px 100px' }} />
+              <circle className="blob-orb" cx={userOrb2.x} cy={userOrb2.y} r="20" fill="url(#glass-blue)" style={{ transform: `scale(${userOrb2.scale})`, transformOrigin: '100px 100px' }} />
+              <circle className="blob-orb" cx={userOrb3.x} cy={userOrb3.y} r="18" fill="url(#glass-blue)" style={{ transform: `scale(${userOrb3.scale})`, transformOrigin: '100px 100px' }} />
+              <circle className="blob-orb" cx={userOrb4.x} cy={userOrb4.y} r="15" fill="url(#glass-blue)" style={{ transform: `scale(${userOrb4.scale})`, transformOrigin: '100px 100px' }} />
+              <circle cx="100" cy="100" r="20" fill="#3b82f6" opacity="0.6" filter="url(#blur-tight)" />
+            </g>
+          </svg>
+          <div className="blob-glow" style={{ backgroundColor: '#3b82f6' }} />
+        </div>
+      </div>
+
+
+      {/* Camera feed - outside all blob layers */}
+      {showCamera && (
+        <>
+          <video 
+            ref={cameraVideoRef} 
+            autoPlay 
+            playsInline 
+            muted 
+            style={{ display: 'none' }} 
+          />
+          <canvas
+            ref={cameraCanvasRef}
+            width={400}
+            height={400}
+            style={{
+              position: 'absolute',
+              top: '50%',
+              left: '50%',
+              transform: 'translate(-50%, -50%)',
+              width: '300px',
+              height: '300px',
+              opacity: 0.3,
+              pointerEvents: 'none',
+              zIndex: 100,
+              filter: 'grayscale(1) contrast(1.3) brightness(0.8)',
+              mixBlendMode: 'overlay'
+            }}
+          />
+        </>
+      )}
+    </div>
+  )
+}
