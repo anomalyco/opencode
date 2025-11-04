@@ -88,13 +88,18 @@ export const TuiThreadCommand = cmd({
         return undefined
       })()
 
-      const worker = new Worker("./src/cli/cmd/tui/worker.ts", {
-        env: Object.fromEntries(
-          Object.entries(process.env).filter(
-            (entry): entry is [string, string] => entry[1] !== undefined,
+      const worker = new Worker(
+        typeof OPENCODE_VERSION !== "undefined"
+          ? "./src/cli/cmd/tui/worker.ts"
+          : new URL("./worker.ts", import.meta.url),
+        {
+          env: Object.fromEntries(
+            Object.entries(process.env).filter(
+              (entry): entry is [string, string] => entry[1] !== undefined,
+            ),
           ),
-        ),
-      })
+        },
+      )
       worker.onerror = console.error
       const client = Rpc.client<typeof rpc>(worker)
       process.on("uncaughtException", (e) => {
