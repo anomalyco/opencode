@@ -124,9 +124,9 @@ async function aggregateSessionStats(days?: number, projectFilter?: string): Pro
     costPerDay: 0,
   }
 
-  if (filteredSessions.length > 100) {
+  if (filteredSessions.length > 1000) {
     console.log(
-      `⚠️  Large dataset detected (${filteredSessions.length} sessions). This may take a while...`,
+      `Large dataset detected (${filteredSessions.length} sessions). This may take a while...`,
     )
   }
 
