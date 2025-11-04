@@ -45,21 +45,21 @@ for (const [os, arch] of targets) {
   await $`npm pack ${opentui}@${pkg.dependencies["@opentui/core"]}`.cwd(
     path.join(dir, "../../node_modules"),
   )
-  const opentuiGlob = new Glob(`${opentui.replace("@opentui/", "opentui-")}-*.tgz`)
-  const opentuiTarballs = Array.from(
-    opentuiGlob.scanSync({ cwd: path.join(dir, "../../node_modules") }),
-  )
-  if (opentuiTarballs.length === 0) throw new Error(`No tarball found for ${opentui}`)
-  const opentuiTarball = path.join(dir, "../../node_modules", opentuiTarballs[0])
-  await $`cd ${opentuiDir} && tar -xzf ${opentuiTarball} --strip-components=1`
+  const opentuiPattern = `${opentui.replace("@opentui/", "opentui-")}-${pkg.dependencies["@opentui/core"]}.tgz`
+  await $`tar -xf ../../node_modules/${opentuiPattern} -C ../../node_modules/${opentui} --strip-components=1`
 
   const watcher = `@parcel/watcher-${os === "windows" ? "win32" : os}-${arch.replace("-baseline", "")}${os === "linux" ? "-glibc" : ""}`
   const watcherDir = path.join(dir, "../../node_modules", watcher)
   await $`mkdir -p ${watcherDir}`
   await $`npm pack ${watcher}`.cwd(path.join(dir, "../../node_modules")).quiet()
-  const watcherGlob = new Glob(`${watcher.replace("@parcel/", "parcel-")}-*.tgz`)
-  const watcherTarballs = Array.from(
-    watcherGlob.scanSync({ cwd: path.join(dir, "../../node_modules") }),
+  const watcherFiles = fs
+    .readdirSync(path.join(dir, "../../node_modules"))
+    .filter((f) => f.startsWith(watcher.replace("@parcel/", "parcel-")) && f.endsWith(".tgz"))
+  const watcherTarball = watcherFiles.sort().reverse()[0]
+  await $`tar -xf ../../node_modules/${watcherTarball} -C ../../node_modules/${watcher} --strip-components=1`
+
+  const parserWorker = fs.realpathSync(
+    path.resolve(dir, "./node_modules/@opentui/core/parser.worker.js"),
   )
   if (watcherTarballs.length === 0) throw new Error(`No tarball found for ${watcher}`)
   const watcherTarball = path.join(dir, "../../node_modules", watcherTarballs[0])

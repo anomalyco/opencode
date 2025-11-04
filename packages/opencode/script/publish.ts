@@ -36,7 +36,7 @@ await Bun.file(`./dist/${pkg.name}/package.json`).write(
   ),
 )
 for (const [name] of Object.entries(binaries)) {
-  await $`cd dist/${name} && chmod 777 -R . && bun publish --access public --tag ${Script.channel}`
+  await $`cd dist/${name} && chmod -R 777 . && bun publish --access public --tag ${Script.channel}`
 }
 await $`cd ./dist/${pkg.name} && bun publish --access public --tag ${Script.channel}`
 
