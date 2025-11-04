@@ -15,8 +15,8 @@ import { MessageV2 } from "./message-v2"
 import { Instance } from "../project/instance"
 import { SessionPrompt } from "./prompt"
 import { fn } from "@/util/fn"
-import { Snapshot } from "@/snapshot"
 import { Command } from "../command"
+import { Snapshot } from "@/snapshot"
 
 export namespace Session {
   const log = Log.create({ service: "session" })
@@ -42,7 +42,9 @@ export namespace Session {
       parentID: Identifier.schema("session").optional(),
       summary: z
         .object({
-          diffs: Snapshot.FileDiff.array(),
+          additions: z.number(),
+          deletions: z.number(),
+          diffs: Snapshot.FileDiff.array().optional(),
         })
         .optional(),
       share: z
@@ -257,6 +259,11 @@ export namespace Session {
     })
     return result
   }
+
+  export const diff = fn(Identifier.schema("session"), async (sessionID) => {
+    const diffs = await Storage.read<Snapshot.FileDiff[]>(["session_diff", sessionID])
+    return diffs ?? []
+  })
 
   export const messages = fn(Identifier.schema("session"), async (sessionID) => {
     const result = [] as MessageV2.WithParts[]
