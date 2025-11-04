@@ -24,37 +24,36 @@ async function cleanupPathEntries(installDir: string) {
   ]
 
   for (const configFile of configFiles) {
-    try {
-      const content = await fs.readFile(configFile, "utf-8")
+    await fs
+      .readFile(configFile, "utf-8")
+      .then((content) => {
+        // Remove lines that add opencode to PATH
+        const lines = content.split("\n")
+        const filteredLines = lines.reduce(
+          (acc, line, index) => {
+            const prevLine = index > 0 ? lines[index - 1] : ""
+            const isPathLine =
+              prevLine.trim() === "# opencode" &&
+              (line.includes(installDir) || line.includes("fish_add_path"))
+            const isCommentLine = line.trim() === "# opencode"
 
-      // Remove lines that add opencode to PATH
-      const lines = content.split("\n")
-      const filteredLines = []
-      let skipNext = false
+            if (!isPathLine && !isCommentLine) {
+              acc.push(line)
+            }
+            return acc
+          },
+          [] as string[],
+        )
 
-      for (const line of lines) {
-        // Skip comment line and the PATH export
-        if (line.trim() === "# opencode") {
-          skipNext = true
-          continue
+        if (filteredLines.length !== lines.length) {
+          return fs
+            .writeFile(configFile, filteredLines.join("\n"))
+            .then(() => prompts.log.success(`Cleaned up PATH entry from ${configFile}`))
         }
-
-        if (skipNext && (line.includes(installDir) || line.includes("fish_add_path"))) {
-          skipNext = false
-          continue
-        }
-
-        skipNext = false
-        filteredLines.push(line)
-      }
-
-      if (filteredLines.length !== lines.length) {
-        await fs.writeFile(configFile, filteredLines.join("\n"))
-        prompts.log.success(`Cleaned up PATH entry from ${configFile}`)
-      }
-    } catch {
-      // File doesn't exist or can't be read, skip
-    }
+      })
+      .catch(() => {
+        // File doesn't exist or can't be read, skip
+      })
   }
 }
 
@@ -100,75 +99,97 @@ export const UninstallCommand = {
     const spinner = prompts.spinner()
     spinner.start("Uninstalling OpenCode binary...")
 
-    try {
-      let cmd
-      switch (method) {
-        case "curl":
-          // For curl installs, binary is in $HOME/.opencode/bin
-          const installDir = `${process.env.HOME}/.opencode/bin`
-          const binFile = `${installDir}/opencode`
+    const uninstallBinary = async () => {
+      if (method === "curl") {
+        // For curl installs, binary is in $HOME/.opencode/bin
+        const installDir = `${process.env.HOME}/.opencode/bin`
+        const binFile = `${installDir}/opencode`
 
-          try {
-            await fs.access(binFile)
-            await fs.unlink(binFile)
-            prompts.log.success(`Removed binary from ${binFile}`)
-
-            // Also try to clean up PATH entries from shell config files
-            await cleanupPathEntries(installDir)
-          } catch (error) {
+        return fs
+          .access(binFile)
+          .then(() => fs.unlink(binFile))
+          .then(() => prompts.log.success(`Removed binary from ${binFile}`))
+          .then(() => cleanupPathEntries(installDir))
+          .catch(() => {
             prompts.log.warn(
               `Could not find OpenCode binary at ${binFile}. It may have been removed already.`,
             )
-          }
-          break
-
-        case "npm":
-          cmd = $`npm uninstall -g opencode-ai`
-          break
-
-        case "pnpm":
-          cmd = $`pnpm uninstall -g opencode-ai`
-          break
-
-        case "bun":
-          cmd = $`bun remove -g opencode-ai`
-          break
-
-        case "brew": {
-          // Check which formula is installed
-          const tapFormula = await $`brew list --formula sst/tap/opencode`.throws(false).text()
-          const formula = tapFormula.includes("opencode") ? "sst/tap/opencode" : "opencode"
-          cmd = $`brew uninstall ${formula}`.env({
-            HOMEBREW_NO_AUTO_UPDATE: "1",
           })
-          break
-        }
-
-        case "unknown":
-          prompts.log.warn(
-            `Could not detect installation method. Binary location: ${process.execPath}`,
-          )
-          prompts.log.info("You may need to uninstall manually using your package manager.")
-          break
       }
 
-      if (cmd) {
-        const result = await cmd.quiet().throws(false)
-        if (result.exitCode !== 0) {
-          spinner.stop("Failed to uninstall binary", 1)
-          prompts.log.error(result.stderr.toString("utf8"))
-        } else {
-          spinner.stop("Binary uninstalled")
-        }
-      } else {
-        spinner.stop("Binary removal completed")
+      if (method === "npm") {
+        return $`npm uninstall -g opencode-ai`
+          .quiet()
+          .throws(false)
+          .then((result) => {
+            if (result.exitCode !== 0) {
+              spinner.stop("Failed to uninstall binary", 1)
+              prompts.log.error(result.stderr.toString("utf8"))
+            }
+          })
       }
-    } catch (error) {
-      spinner.stop("Failed to uninstall binary", 1)
-      if (error instanceof Error) {
-        prompts.log.error(error.message)
+
+      if (method === "pnpm") {
+        return $`pnpm uninstall -g opencode-ai`
+          .quiet()
+          .throws(false)
+          .then((result) => {
+            if (result.exitCode !== 0) {
+              spinner.stop("Failed to uninstall binary", 1)
+              prompts.log.error(result.stderr.toString("utf8"))
+            }
+          })
+      }
+
+      if (method === "bun") {
+        return $`bun remove -g opencode-ai`
+          .quiet()
+          .throws(false)
+          .then((result) => {
+            if (result.exitCode !== 0) {
+              spinner.stop("Failed to uninstall binary", 1)
+              prompts.log.error(result.stderr.toString("utf8"))
+            }
+          })
+      }
+
+      if (method === "brew") {
+        return $`brew list --formula sst/tap/opencode`
+          .throws(false)
+          .text()
+          .then((tapFormula) => {
+            const formula = tapFormula.includes("opencode") ? "sst/tap/opencode" : "opencode"
+            return $`brew uninstall ${formula}`
+              .env({
+                HOMEBREW_NO_AUTO_UPDATE: "1",
+              })
+              .quiet()
+              .throws(false)
+          })
+          .then((result) => {
+            if (result.exitCode !== 0) {
+              spinner.stop("Failed to uninstall binary", 1)
+              prompts.log.error(result.stderr.toString("utf8"))
+            }
+          })
+      }
+
+      if (method === "unknown") {
+        prompts.log.warn(
+          `Could not detect installation method. Binary location: ${process.execPath}`,
+        )
+        prompts.log.info("You may need to uninstall manually using your package manager.")
       }
     }
+
+    await uninstallBinary()
+      .then(() => spinner.stop("Binary uninstalled"))
+      .catch((error) => {
+        spinner.stop("Failed to uninstall binary", 1)
+        if (error instanceof Error) {
+          prompts.log.error(error.message)
+        }
+      })
 
     // Clean up data directories
     if (!args.keepData) {
