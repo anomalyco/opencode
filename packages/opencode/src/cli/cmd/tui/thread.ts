@@ -8,6 +8,10 @@ import { bootstrap } from "@/cli/bootstrap"
 import path from "path"
 import { UI } from "@/cli/ui"
 
+declare global {
+  const OPENCODE_WORKER_PATH: string
+}
+
 export const TuiThreadCommand = cmd({
   command: "$0 [project]",
   describe: "start opencode tui",
@@ -58,13 +62,21 @@ export const TuiThreadCommand = cmd({
       return piped ? piped + "\n" + args.prompt : args.prompt
     })()
 
-    const cwd = args.project ? path.resolve(args.project) : process.cwd()
+    // Resolve relative paths against PWD to preserve behavior when using --cwd flag
+    const baseCwd = process.env.PWD ?? process.cwd()
+    const cwd = args.project ? path.resolve(baseCwd, args.project) : process.cwd()
+    let workerPath: string | URL = new URL("./worker.ts", import.meta.url)
+
+    if (typeof OPENCODE_WORKER_PATH !== "undefined") {
+      workerPath = OPENCODE_WORKER_PATH
+    }
     try {
       process.chdir(cwd)
     } catch (e) {
       UI.error("Failed to change directory to " + cwd)
       return
     }
+
     await bootstrap(cwd, async () => {
       upgrade()
 
@@ -88,7 +100,7 @@ export const TuiThreadCommand = cmd({
         return undefined
       })()
 
-      const worker = new Worker("./src/cli/cmd/tui/worker.ts", {
+      const worker = new Worker(workerPath, {
         env: Object.fromEntries(
           Object.entries(process.env).filter(
             (entry): entry is [string, string] => entry[1] !== undefined,
