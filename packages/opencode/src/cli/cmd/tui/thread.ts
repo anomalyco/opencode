@@ -52,6 +52,12 @@ export const TuiThreadCommand = cmd({
         default: "127.0.0.1",
       }),
   handler: async (args) => {
+    const prompt = await (async () => {
+      const piped = !process.stdin.isTTY ? await Bun.stdin.text() : undefined
+      if (!args.prompt) return piped
+      return piped ? piped + "\n" + args.prompt : args.prompt
+    })()
+
     const cwd = args.project ? path.resolve(args.project) : process.cwd()
     try {
       process.chdir(cwd)
@@ -106,7 +112,7 @@ export const TuiThreadCommand = cmd({
         sessionID,
         model: args.model,
         agent: args.agent,
-        prompt: args.prompt,
+        prompt,
         onExit: async () => {
           await client.call("shutdown", undefined)
         },
