@@ -246,7 +246,7 @@ export const AuthLoginCommand = cmd({
               const value = await prompts.text({
                 message: prompt.message,
                 placeholder: prompt.placeholder,
-                validate: prompt.validate,
+                validate: prompt.validate ? (v) => prompt.validate!(v ?? "") : undefined,
               })
               if (prompts.isCancel(value)) throw new UI.CancelledError()
               inputs[prompt.key] = value
@@ -263,7 +263,7 @@ export const AuthLoginCommand = cmd({
             await Auth.set(saveProvider ?? provider, {
               type: auth_type,
               ...authData,
-            })
+            } as any)
             prompts.log.success("Login successful")
           }
           prompts.outro("Done")
