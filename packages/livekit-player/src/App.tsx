@@ -2,7 +2,6 @@ import { useEffect, useState, useRef } from 'react'
 import { Room, RoomEvent, ConnectionState, RoomOptions, RemoteTrackPublication, RemoteParticipant, Track, DisconnectReason } from 'livekit-client'
 import ChatIndicator from './components/ChatIndicator'
 import { getEnvConfig } from './utils/config'
-import CloseButton from './components/CloseButton'
 import TitleBar from './components/TitleBar'
 import { generateToken } from './utils/token'
 
@@ -309,7 +308,6 @@ function App() {
 
   return (
     <>
-      <CloseButton />
       <ChatIndicator room={room} connectionState={connectionState} />
     </>
   )
