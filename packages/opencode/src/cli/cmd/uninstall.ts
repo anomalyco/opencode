@@ -51,9 +51,7 @@ async function cleanupPathEntries(installDir: string) {
             .then(() => prompts.log.success(`Cleaned up PATH entry from ${configFile}`))
         }
       })
-      .catch(() => {
-        // File doesn't exist or can't be read, skip
-      })
+      .catch(() => undefined)
   }
 }
 
@@ -110,11 +108,11 @@ export const UninstallCommand = {
           .then(() => fs.unlink(binFile))
           .then(() => prompts.log.success(`Removed binary from ${binFile}`))
           .then(() => cleanupPathEntries(installDir))
-          .catch(() => {
+          .catch(() =>
             prompts.log.warn(
               `Could not find OpenCode binary at ${binFile}. It may have been removed already.`,
-            )
-          })
+            ),
+          )
       }
 
       if (method === "npm") {

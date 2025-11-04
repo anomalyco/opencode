@@ -59,19 +59,14 @@ opencode uninstall
 ```
 
 This will:
-- Remove the OpenCode binary using your package manager
+- Automatically detect your installation method (curl, npm, pnpm, bun, brew)
+- Remove the OpenCode binary
 - Delete all data directories (sessions, cache, config, state)
 
 To keep your user data (sessions, config) while removing the binary:
 
 ```bash
 opencode uninstall --keep-data
-```
-
-To manually specify the installation method:
-
-```bash
-opencode uninstall --method npm
 ```
 
 ### Documentation
