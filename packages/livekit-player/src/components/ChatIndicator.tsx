@@ -394,7 +394,7 @@ export default function ChatIndicator({ room, connectionState }: ChatIndicatorPr
   const halOpacity = 0.6 + (agentAvgIntensity * 0.3)
 
   return (
-    <div className="chat-indicator">
+    <div className="chat-indicator" style={{ transform: "scale(0.6)" }}>
       {/* PURPLE - Agent Audio with HAL 9000 Eye Overlay */}
       <div className="status-container">
         <div className="blob-container">
@@ -584,7 +584,7 @@ export default function ChatIndicator({ room, connectionState }: ChatIndicatorPr
             </svg>
           </div>
           
-          <div className="blob-glow" style={{ background: 'radial-gradient(circle, #a78bfa 0%, transparent 15%)', display: showGlow ? 'block' : 'none' }} />
+          <div className="blob-glow" style={{ background: 'radial-gradient(circle, #a78bfa 0%, transparent 25%)', display: showGlow ? 'block' : 'none' }} />
         </div>
       </div>
 
@@ -594,7 +594,7 @@ export default function ChatIndicator({ room, connectionState }: ChatIndicatorPr
           <svg viewBox="0 0 200 200" xmlns="http://www.w3.org/2000/svg" className="blob-svg">
             <defs>
               <filter id="goo-user">
-                <feBlend in="SourceGraphic" in2="goo" />
+                
                 <feGaussianBlur in="SourceGraphic" stdDeviation="3" result="blur" />                
               </filter>
               
@@ -621,14 +621,25 @@ export default function ChatIndicator({ room, connectionState }: ChatIndicatorPr
               <circle cx="100" cy="100" r="20" fill="#60a5fa" opacity="0.6" filter="url(#blur-tight)" />
             </g>
           </svg>
-          <div className="blob-glow" style={{ background: 'radial-gradient(circle, #60a5fa 0%, transparent 15%)', display: showGlow ? 'block' : 'none' }} />
+          <div className="blob-glow" style={{ background: 'radial-gradient(circle, #60a5fa 0%, transparent 25%)', display: showGlow ? 'block' : 'none' }} />
         </div>
       </div>
 
 
       {/* Camera feed */}
       {showCamera && (
-        <>
+        <div
+          style={{
+            position: 'absolute',
+            top: '50%',
+            left: '50%',
+            transform: 'translate(-50%, -50%) scale(0.7)', // Adjust scale here (e.g., 0.5, 1.5, 2)
+            width: '200px',
+            height: '190px',
+            pointerEvents: 'none',
+            zIndex: 200,
+          }}
+        >
           <video 
             ref={cameraVideoRef} 
             autoPlay 
@@ -641,20 +652,14 @@ export default function ChatIndicator({ room, connectionState }: ChatIndicatorPr
             width={400}
             height={400}
             style={{
-              position: 'absolute',
-              top: '50%',
-              left: '50%',
-              transform: 'translate(-50%, -50%)',
-              width: '200px',
-              height: '190px',
-              opacity: 0.7,
-              pointerEvents: 'none',              
-              zIndex: 200,
-              filter: 'grayscale(1) contrast(1.3) brightness(0.8) blur(1px)',
+              width: '100%',
+              height: '100%',
+              opacity: 0.3,
+              filter: 'grayscale(1) contrast(1.8) brightness(0.9) blur(1px)',
               mixBlendMode: 'overlay'
             }}
           />
-        </>
+        </div>
       )}
     </div>
   )
