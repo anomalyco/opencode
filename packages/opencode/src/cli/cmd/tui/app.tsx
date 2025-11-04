@@ -1,8 +1,8 @@
 import { render, useKeyboard, useRenderer, useTerminalDimensions } from "@opentui/solid"
 import { Clipboard } from "@tui/util/clipboard"
-import { TextAttributes } from "@opentui/core"
+import { TextAttributes, clearEnvCache } from "@opentui/core"
 import { RouteProvider, useRoute, type Route } from "@tui/context/route"
-import { Switch, Match, createEffect, untrack, ErrorBoundary, createSignal } from "solid-js"
+import { Switch, Match, createEffect, untrack, ErrorBoundary, createSignal, onCleanup } from "solid-js"
 import { Installation } from "@/installation"
 import { Global } from "@/global"
 import { DialogProvider, useDialog } from "@tui/ui/dialog"
@@ -28,6 +28,9 @@ import type { SessionRoute } from "./context/route"
 import { Session as SessionApi } from "@/session"
 import { TuiEvent } from "./event"
 import { KVProvider, useKV } from "./context/kv"
+import { bufferToAscii, type AsciiBuffer } from "./ascii"
+
+let asciiModeGlobal = false
 
 async function getTerminalBackgroundColor(): Promise<"dark" | "light"> {
   // can't set raw mode if not a TTY
@@ -100,6 +103,27 @@ export function tui(input: {
   // promise to prevent immediate exit
   return new Promise<void>(async (resolve) => {
     const mode = await getTerminalBackgroundColor()
+    const asciiEnv = process.env.OPENCODE_TUI_ASCII?.toLowerCase()
+    const asciiExplicit =
+      asciiEnv === "1" || asciiEnv === "true"
+        ? true
+        : asciiEnv === "0" || asciiEnv === "false"
+          ? false
+          : undefined
+    const asciiAuto = asciiExplicit !== false && asciiExplicit !== true && !!process.env.TMUX
+    const asciiRequested = asciiExplicit ?? asciiAuto
+    const asciiSupported = asciiRequested && process.stdout.isTTY === true
+    asciiModeGlobal = !!asciiSupported
+    if (asciiModeGlobal) {
+      process.env.OTUI_NO_NATIVE_RENDER = "1"
+    } else {
+      delete process.env.OTUI_NO_NATIVE_RENDER
+    }
+    const disableAltScreenEnv =
+      process.env.OPENCODE_TUI_NO_ALT_SCREEN?.toLowerCase() === "1" ||
+      process.env.OPENCODE_TUI_NO_ALT_SCREEN?.toLowerCase() === "true"
+    const disableAltScreen = asciiModeGlobal || disableAltScreenEnv
+    clearEnvCache()
 
     const routeData: Route | undefined = input.sessionID
       ? {
@@ -158,6 +182,8 @@ export function tui(input: {
         gatherStats: false,
         exitOnCtrlC: false,
         useKittyKeyboard: true,
+        useAlternateScreen: !disableAltScreen,
+        useConsole: asciiModeGlobal ? false : !disableAltScreen,
       },
     )
   })
@@ -168,6 +194,26 @@ function App() {
   const dimensions = useTerminalDimensions()
   const renderer = useRenderer()
   renderer.disableStdoutInterception()
+  const asciiMode = asciiModeGlobal
+  if (asciiMode) {
+    renderer.useConsole = false
+  }
+  createEffect(() => {
+    if (!asciiMode) return
+    let previous = ""
+    const tick = async (_delta: number) => {
+      if ((renderer as any)._isDestroyed) return
+      const buffer = (renderer as any).currentRenderBuffer as AsciiBuffer | undefined
+      if (!buffer) return
+      const frame = bufferToAscii(buffer)
+      if (frame === previous) return
+      previous = frame
+      process.stdout.write("\x1b[H\x1b[2J\x1b[H")
+      process.stdout.write(frame)
+    }
+    renderer.setFrameCallback(tick)
+    onCleanup(() => renderer.removeFrameCallback(tick))
+  })
   const dialog = useDialog()
   const local = useLocal()
   const kv = useKV()
