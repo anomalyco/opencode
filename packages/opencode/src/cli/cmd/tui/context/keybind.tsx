@@ -73,6 +73,14 @@ export const { use: useKeybind, provider: KeybindProvider } = createSimpleContex
         return store.leader
       },
       parse(evt: ParsedKey): Keybind.Info {
+        if (evt.name === "\x1F")
+          return {
+            ctrl: true,
+            name: "_",
+            shift: false,
+            leader: false,
+            meta: false,
+          }
         return {
           ctrl: evt.ctrl,
           name: evt.name,

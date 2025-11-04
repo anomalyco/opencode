@@ -12,7 +12,7 @@ import {
 } from "solid-js"
 import { Dynamic } from "solid-js/web"
 import path from "path"
-import { useRouteData } from "@tui/context/route"
+import { useRoute, useRouteData } from "@tui/context/route"
 import { useSync } from "@tui/context/sync"
 import { SplitBorder } from "@tui/component/border"
 import { useTheme } from "@tui/context/theme"
@@ -64,7 +64,6 @@ import { LANGUAGE_EXTENSIONS } from "@/lsp/language"
 import parsers from "../../../../../../parsers-config.ts"
 import { Clipboard } from "../../util/clipboard"
 import { Toast, useToast } from "../../ui/toast"
-import { DialogSessionRename } from "../../component/dialog-session-rename"
 import { useKV } from "../../context/kv.tsx"
 
 addDefaultParsers(parsers.parsers)
@@ -82,6 +81,7 @@ function use() {
 
 export function Session() {
   const route = useRouteData("session")
+  const { navigate } = useRoute()
   const sync = useSync()
   const kv = useKV()
   const { theme } = useTheme()
@@ -110,12 +110,6 @@ export function Session() {
   let scroll: ScrollBoxRenderable
   let prompt: PromptRef
   const keybind = useKeybind()
-
-  createEffect(() => {
-    dialog.allClosedEvent.listen(() => {
-      prompt.focus()
-    })
-  })
 
   useKeyboard((evt) => {
     if (dialog.stack.length > 0) return
@@ -155,6 +149,23 @@ export function Session() {
   })
 
   const local = useLocal()
+
+  function moveChild(direction: number) {
+    const parentID = session()?.parentID ?? session()?.id
+    let children = sync.data.session
+      .filter((x) => x.parentID === parentID || x.id === parentID)
+      .toSorted((b, a) => a.id.localeCompare(b.id))
+    if (children.length === 1) return
+    let next = children.findIndex((x) => x.id === session()?.id) + direction
+    if (next >= children.length) next = 0
+    if (next < 0) next = children.length - 1
+    if (children[next]) {
+      navigate({
+        type: "session",
+        sessionID: children[next].id,
+      })
+    }
+  }
 
   const command = useCommandDialog()
   command.register(() => [
@@ -389,12 +400,71 @@ export function Session() {
       },
     },
     {
-      title: "Rename session",
-      value: "session.rename",
-      keybind: "session_rename",
+      title: "Copy last assistant message",
+      value: "messages.copy",
+      keybind: "messages_copy",
       category: "Session",
       onSelect: (dialog) => {
-        dialog.replace(() => <DialogSessionRename session={route.sessionID} />)
+        const lastAssistantMessage = messages().findLast((msg) => msg.role === "assistant")
+        if (!lastAssistantMessage) {
+          toast.show({ message: "No assistant messages found", variant: "error" })
+          dialog.clear()
+          return
+        }
+
+        const parts = sync.data.part[lastAssistantMessage.id] ?? []
+        const textParts = parts.filter((part) => part.type === "text")
+        if (textParts.length === 0) {
+          toast.show({ message: "No text parts found in last assistant message", variant: "error" })
+          dialog.clear()
+          return
+        }
+
+        const text = textParts
+          .map((part) => part.text)
+          .join("\n")
+          .trim()
+        if (!text) {
+          toast.show({
+            message: "No text content found in last assistant message",
+            variant: "error",
+          })
+          dialog.clear()
+          return
+        }
+
+        console.log(text)
+        const base64 = Buffer.from(text).toString("base64")
+        const osc52 = `\x1b]52;c;${base64}\x07`
+        const finalOsc52 = process.env["TMUX"] ? `\x1bPtmux;\x1b${osc52}\x1b\\` : osc52
+        /* @ts-expect-error */
+        renderer.writeOut(finalOsc52)
+        Clipboard.copy(text)
+          .then(() => toast.show({ message: "Message copied to clipboard!", variant: "success" }))
+          .catch(() => toast.show({ message: "Failed to copy to clipboard", variant: "error" }))
+        dialog.clear()
+      },
+    },
+    {
+      title: "Next child session",
+      value: "session.child.next",
+      keybind: "session_child_cycle",
+      category: "Session",
+      disabled: true,
+      onSelect: (dialog) => {
+        moveChild(1)
+        dialog.clear()
+      },
+    },
+    {
+      title: "Previous child session",
+      value: "session.child.previous",
+      keybind: "session_child_cycle_reverse",
+      category: "Session",
+      disabled: true,
+      onSelect: (dialog) => {
+        moveChild(-1)
+        dialog.clear()
       },
     },
   ])
@@ -410,22 +480,26 @@ export function Session() {
       const diffText = s.revert?.diff || ""
       if (!diffText) return []
 
-      const patches = parsePatch(diffText)
-      return patches.map((patch) => {
-        const filename = patch.newFileName || patch.oldFileName || "unknown"
-        const cleanFilename = filename.replace(/^[ab]\//, "")
-        return {
-          filename: cleanFilename,
-          additions: patch.hunks.reduce(
-            (sum, hunk) => sum + hunk.lines.filter((line) => line.startsWith("+")).length,
-            0,
-          ),
-          deletions: patch.hunks.reduce(
-            (sum, hunk) => sum + hunk.lines.filter((line) => line.startsWith("-")).length,
-            0,
-          ),
-        }
-      })
+      try {
+        const patches = parsePatch(diffText)
+        return patches.map((patch) => {
+          const filename = patch.newFileName || patch.oldFileName || "unknown"
+          const cleanFilename = filename.replace(/^[ab]\//, "")
+          return {
+            filename: cleanFilename,
+            additions: patch.hunks.reduce(
+              (sum, hunk) => sum + hunk.lines.filter((line) => line.startsWith("+")).length,
+              0,
+            ),
+            deletions: patch.hunks.reduce(
+              (sum, hunk) => sum + hunk.lines.filter((line) => line.startsWith("-")).length,
+              0,
+            ),
+          }
+        })
+      } catch (error) {
+        return []
+      }
     })()
 
     return {
@@ -458,6 +532,34 @@ export function Session() {
       >
         <box flexGrow={1} gap={1}>
           <Show when={session()}>
+            <Show when={session().parentID}>
+              <box
+                backgroundColor={theme.backgroundPanel}
+                justifyContent="space-between"
+                flexDirection="row"
+                paddingTop={1}
+                paddingBottom={1}
+                flexShrink={0}
+                paddingLeft={2}
+                paddingRight={2}
+              >
+                <text fg={theme.text}>
+                  Previous{" "}
+                  <span style={{ fg: theme.textMuted }}>
+                    {keybind.print("session_child_cycle_reverse")}
+                  </span>
+                </text>
+                <text fg={theme.text}>
+                  <b>Viewing subagent session</b>
+                </text>
+                <text fg={theme.text}>
+                  <span style={{ fg: theme.textMuted }}>
+                    {keybind.print("session_child_cycle")}
+                  </span>{" "}
+                  Next
+                </text>
+              </box>
+            </Show>
             <Show when={!sidebarVisible()}>
               <Header />
             </Show>
@@ -817,7 +919,7 @@ function ToolPart(props: { part: ToolPart; message: AssistantMessage }) {
     const render = ToolRegistry.render(props.part.tool) ?? GenericTool
 
     const metadata = props.part.state.status === "pending" ? {} : (props.part.state.metadata ?? {})
-    const input = props.part.state.input
+    const input = props.part.state.input ?? {}
     const container = ToolRegistry.container(props.part.tool)
     const permissions = sync.data.permission[props.message.sessionID] ?? []
     const permissionIndex = permissions.findIndex((x) => x.callID === props.part.callID)
@@ -921,16 +1023,14 @@ function GenericTool(props: ToolProps<any>) {
   )
 }
 
+type ToolRegistration<T extends Tool.Info = any> = {
+  name: string
+  container: "inline" | "block"
+  render?: Component<ToolProps<T>>
+}
 const ToolRegistry = (() => {
-  const state: Record<
-    string,
-    { name: string; container: "inline" | "block"; render?: Component<ToolProps<any>> }
-  > = {}
-  function register<T extends Tool.Info>(input: {
-    name: string
-    container: "inline" | "block"
-    render?: Component<ToolProps<T>>
-  }) {
+  const state: Record<string, ToolRegistration> = {}
+  function register<T extends Tool.Info>(input: ToolRegistration<T>) {
     state[input.name] = input
     return input
   }
@@ -1094,10 +1194,16 @@ ToolRegistry.register<typeof TaskTool>({
   container: "block",
   render(props) {
     const { theme } = useTheme()
+    const keybind = useKeybind()
+
     return (
       <>
-        <ToolTitle icon="%" fallback="Delegating..." when={props.input.description}>
-          Task {props.input.description}
+        <ToolTitle
+          icon="%"
+          fallback="Delegating..."
+          when={props.input.subagent_type ?? props.input.description}
+        >
+          Task [{props.input.subagent_type ?? "unknown"}] {props.input.description}
         </ToolTitle>
         <Show when={props.metadata.summary?.length}>
           <box>
@@ -1110,6 +1216,10 @@ ToolRegistry.register<typeof TaskTool>({
             </For>
           </box>
         </Show>
+        <text fg={theme.text}>
+          {keybind.print("session_child_cycle")}, {keybind.print("session_child_cycle_reverse")}
+          <span style={{ fg: theme.textMuted }}> to navigate between subagent sessions</span>
+        </text>
       </>
     )
   },
@@ -1139,58 +1249,63 @@ ToolRegistry.register<typeof EditTool>({
     const diff = createMemo(() => {
       const diff = props.metadata.diff ?? props.permission["diff"]
       if (!diff) return null
-      const patches = parsePatch(diff)
-      if (patches.length === 0) return null
 
-      const patch = patches[0]
-      const oldLines: string[] = []
-      const newLines: string[] = []
+      try {
+        const patches = parsePatch(diff)
+        if (patches.length === 0) return null
 
-      for (const hunk of patch.hunks) {
-        let i = 0
-        while (i < hunk.lines.length) {
-          const line = hunk.lines[i]
+        const patch = patches[0]
+        const oldLines: string[] = []
+        const newLines: string[] = []
 
-          if (line.startsWith("-")) {
-            const removedLines: string[] = []
-            while (i < hunk.lines.length && hunk.lines[i].startsWith("-")) {
-              removedLines.push("- " + hunk.lines[i].slice(1))
+        for (const hunk of patch.hunks) {
+          let i = 0
+          while (i < hunk.lines.length) {
+            const line = hunk.lines[i]
+
+            if (line.startsWith("-")) {
+              const removedLines: string[] = []
+              while (i < hunk.lines.length && hunk.lines[i].startsWith("-")) {
+                removedLines.push("- " + hunk.lines[i].slice(1))
+                i++
+              }
+
+              const addedLines: string[] = []
+              while (i < hunk.lines.length && hunk.lines[i].startsWith("+")) {
+                addedLines.push("+ " + hunk.lines[i].slice(1))
+                i++
+              }
+
+              const maxLen = Math.max(removedLines.length, addedLines.length)
+              for (let j = 0; j < maxLen; j++) {
+                oldLines.push(removedLines[j] ?? "")
+                newLines.push(addedLines[j] ?? "")
+              }
+            } else if (line.startsWith("+")) {
+              const addedLines: string[] = []
+              while (i < hunk.lines.length && hunk.lines[i].startsWith("+")) {
+                addedLines.push("+ " + hunk.lines[i].slice(1))
+                i++
+              }
+
+              for (const added of addedLines) {
+                oldLines.push("")
+                newLines.push(added)
+              }
+            } else {
+              oldLines.push("  " + line.slice(1))
+              newLines.push("  " + line.slice(1))
               i++
             }
-
-            const addedLines: string[] = []
-            while (i < hunk.lines.length && hunk.lines[i].startsWith("+")) {
-              addedLines.push("+ " + hunk.lines[i].slice(1))
-              i++
-            }
-
-            const maxLen = Math.max(removedLines.length, addedLines.length)
-            for (let j = 0; j < maxLen; j++) {
-              oldLines.push(removedLines[j] ?? "")
-              newLines.push(addedLines[j] ?? "")
-            }
-          } else if (line.startsWith("+")) {
-            const addedLines: string[] = []
-            while (i < hunk.lines.length && hunk.lines[i].startsWith("+")) {
-              addedLines.push("+ " + hunk.lines[i].slice(1))
-              i++
-            }
-
-            for (const added of addedLines) {
-              oldLines.push("")
-              newLines.push(added)
-            }
-          } else {
-            oldLines.push("  " + line.slice(1))
-            newLines.push("  " + line.slice(1))
-            i++
           }
         }
-      }
 
-      return {
-        oldContent: oldLines.join("\n"),
-        newContent: newLines.join("\n"),
+        return {
+          oldContent: oldLines.join("\n"),
+          newContent: newLines.join("\n"),
+        }
+      } catch (error) {
+        return null
       }
     })
 

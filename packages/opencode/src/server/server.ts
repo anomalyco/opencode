@@ -10,6 +10,7 @@ import {
 import { Hono } from "hono"
 import { cors } from "hono/cors"
 import { stream, streamSSE } from "hono/streaming"
+import { proxy } from "hono/proxy"
 import { Session } from "../session"
 import z from "zod"
 import { Provider } from "../provider/provider"
@@ -758,6 +759,34 @@ export namespace Server {
         },
       )
       .get(
+        "/session/:id/diff",
+        describeRoute({
+          description: "Get the diff for this session",
+          operationId: "session.diff",
+          responses: {
+            200: {
+              description: "List of diffs",
+              content: {
+                "application/json": {
+                  schema: resolver(Snapshot.FileDiff.array()),
+                },
+              },
+            },
+            ...errors(400, 404),
+          },
+        }),
+        validator(
+          "param",
+          z.object({
+            id: z.string().meta({ description: "Session ID" }),
+          }),
+        ),
+        async (c) => {
+          const diff = await Session.diff(c.req.valid("param").id)
+          return c.json(diff)
+        },
+      )
+      .get(
         "/session/:id/message/:messageID",
         describeRoute({
           description: "Get a message from a session",
@@ -1106,13 +1135,16 @@ export namespace Server {
           "query",
           z.object({
             query: z.string(),
+            dirs: z.union([z.literal("true"), z.literal("false")]).optional(),
           }),
         ),
         async (c) => {
           const query = c.req.valid("query").query
+          const dirs = c.req.valid("query").dirs
           const results = await File.search({
             query,
             limit: 10,
+            dirs: dirs !== "false",
           })
           return c.json(results)
         },
@@ -1693,7 +1725,15 @@ export namespace Server {
             })
           })
         },
-      ),
+      )
+      .all("/*", async (c) => {
+        return proxy(`https://desktop.dev.opencode.ai${c.req.path}`, {
+          ...c.req,
+          headers: {
+            host: "desktop.dev.opencode.ai",
+          },
+        })
+      }),
   )
 
   export async function openapi() {

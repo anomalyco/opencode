@@ -1,5 +1,4 @@
-import { Format } from "../format"
-
+import { ZenData } from "@opencode-ai/console-core/model.js"
 import {
   fromAnthropicChunk,
   fromAnthropicRequest,
@@ -26,7 +25,7 @@ import {
 } from "./openai-compatible"
 
 export type ProviderHelper = {
-  format: Format
+  format: ZenData.Format
   modifyUrl: (providerApi: string) => string
   modifyHeaders: (headers: Headers, body: Record<string, any>, apiKey: string) => void
   modifyBody: (body: Record<string, any>) => Record<string, any>
@@ -158,7 +157,7 @@ export interface CommonChunk {
   }
 }
 
-export function createBodyConverter(from: Format, to: Format) {
+export function createBodyConverter(from: ZenData.Format, to: ZenData.Format) {
   return (body: any): any => {
     if (from === to) return body
 
@@ -173,7 +172,7 @@ export function createBodyConverter(from: Format, to: Format) {
   }
 }
 
-export function createStreamPartConverter(from: Format, to: Format) {
+export function createStreamPartConverter(from: ZenData.Format, to: ZenData.Format) {
   return (part: any): any => {
     if (from === to) return part
 
@@ -191,7 +190,7 @@ export function createStreamPartConverter(from: Format, to: Format) {
   }
 }
 
-export function createResponseConverter(from: Format, to: Format) {
+export function createResponseConverter(from: ZenData.Format, to: ZenData.Format) {
   return (response: any): any => {
     if (from === to) return response
 
