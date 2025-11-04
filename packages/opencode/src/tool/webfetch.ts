@@ -125,14 +125,17 @@ export const WebFetchTool = Tool.define("webfetch", {
     if (ctx.extra?.providerID && ctx.extra?.modelID) {
       const model = await Provider.getModel(ctx.extra.providerID, ctx.extra.modelID)
       const messages = await Session.messages(ctx.sessionID)
-      const lastAssistant = messages.findLast((m) => m.info.role === "assistant")
 
-      if (lastAssistant?.info.role === "assistant") {
-        const currentTokens =
-          lastAssistant.info.tokens.input +
-          lastAssistant.info.tokens.cache.read +
-          lastAssistant.info.tokens.output
-        const contextLimit = model.info.limit.context
+      let currentTokens = 0
+      for (const msg of messages) {
+        if (msg.info.role === "assistant") {
+          currentTokens +=
+            msg.info.tokens.input + msg.info.tokens.cache.read + msg.info.tokens.output
+        }
+      }
+
+      const contextLimit = model.info.limit.context
+      if (contextLimit > 0) {
         const outputReserve =
           Math.min(model.info.limit.output, SessionPrompt.OUTPUT_TOKEN_MAX) ||
           SessionPrompt.OUTPUT_TOKEN_MAX
