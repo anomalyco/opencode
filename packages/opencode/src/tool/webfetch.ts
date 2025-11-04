@@ -141,7 +141,10 @@ export const WebFetchTool = Tool.define("webfetch", {
         const outputTokens = Token.estimate(output)
         if (outputTokens > availableTokens && availableTokens > 0) {
           const targetLength = Math.floor((availableTokens / outputTokens) * output.length * 0.8)
-          output = output.slice(0, targetLength) + "\n\n[Content truncated due to context limit]"
+          const truncatedTokens = Token.estimate(output.slice(0, targetLength))
+          output =
+            output.slice(0, targetLength) +
+            `\n\n[Content truncated: Original size was ~${outputTokens} tokens, reduced to ~${truncatedTokens} tokens due to context limit. Available context: ${availableTokens} tokens. The above content is approximately ${Math.round((targetLength / output.length) * 100)}% of the full page.]`
         }
       }
     }
