@@ -60,7 +60,6 @@ export default function ChatIndicator({ room, connectionState }: ChatIndicatorPr
       startHeight: size.height
     })
   }
-
   useEffect(() => {
     if (!resizing || !activeWidget) return
 
@@ -70,6 +69,9 @@ export default function ChatIndicator({ room, connectionState }: ChatIndicatorPr
       
       let newWidth = resizing.startWidth
       let newHeight = resizing.startHeight
+      let newGridIndex = activeWidget.gridIndex
+
+      const cols = Math.floor(window.innerWidth / 160)
 
       if (resizing.handle === 'right') {
         const gridDelta = Math.round(deltaX / 160)
@@ -79,15 +81,39 @@ export default function ChatIndicator({ room, connectionState }: ChatIndicatorPr
         newHeight = Math.max(1, resizing.startHeight + gridDelta)
       } else if (resizing.handle === 'left') {
         const gridDelta = Math.round(deltaX / 160)
-        newWidth = Math.max(1, resizing.startWidth - gridDelta)
+        if (gridDelta !== 0) {
+          newWidth = Math.max(1, resizing.startWidth - gridDelta)
+          // Move gridIndex left by gridDelta
+          const currentX = activeWidget.gridIndex % cols
+          const currentY = Math.floor(activeWidget.gridIndex / cols)
+          const newX = Math.max(0, currentX + gridDelta)
+          newGridIndex = newX + currentY * cols
+        }
       } else if (resizing.handle === 'top') {
         const gridDelta = Math.round(deltaY / 160)
-        newHeight = Math.max(1, resizing.startHeight - gridDelta)
+        if (gridDelta !== 0) {
+          newHeight = Math.max(1, resizing.startHeight - gridDelta)
+          // Move gridIndex up by gridDelta rows
+          const currentX = activeWidget.gridIndex % cols
+          const currentY = Math.floor(activeWidget.gridIndex / cols)
+          const newY = Math.max(0, currentY + gridDelta)
+          newGridIndex = currentX + newY * cols
+        }
       }
 
-      const newSizes = { ...widgetSizes, [activeWidget.gridIndex]: { width: newWidth, height: newHeight } }
-      setWidgetSizes(newSizes)
-      localStorage.setItem('widget-sizes', JSON.stringify(newSizes))
+      // If gridIndex changed, need to move the widget
+      if (newGridIndex !== activeWidget.gridIndex) {
+        const oldSizes = { ...widgetSizes }
+        delete oldSizes[activeWidget.gridIndex]
+        oldSizes[newGridIndex] = { width: newWidth, height: newHeight }
+        setWidgetSizes(oldSizes)
+        setActiveWidget({ gridIndex: newGridIndex })
+        localStorage.setItem('widget-sizes', JSON.stringify(oldSizes))
+      } else {
+        const newSizes = { ...widgetSizes, [activeWidget.gridIndex]: { width: newWidth, height: newHeight } }
+        setWidgetSizes(newSizes)
+        localStorage.setItem('widget-sizes', JSON.stringify(newSizes))
+      }
     }
 
     const handleMouseUp = () => {
@@ -561,34 +587,6 @@ export default function ChatIndicator({ room, connectionState }: ChatIndicatorPr
                   style={{
                     position: "absolute",
                     bottom: "-5px",
-                    left: "50%",
-                    transform: "translateX(-50%)",
-                    width: "60px",
-                    height: "10px",
-                    background: "rgba(59, 130, 246, 0.6)",
-                    borderRadius: "5px",
-                    cursor: "ns-resize"
-                  }}
-                />
-                <div
-                  onMouseDown={(e) => handleResizeStart(e, 'left')}
-                  style={{
-                    position: "absolute",
-                    left: "-5px",
-                    top: "50%",
-                    transform: "translateY(-50%)",
-                    width: "10px",
-                    height: "60px",
-                    background: "rgba(59, 130, 246, 0.6)",
-                    borderRadius: "5px",
-                    cursor: "ew-resize"
-                  }}
-                />
-                <div
-                  onMouseDown={(e) => handleResizeStart(e, 'top')}
-                  style={{
-                    position: "absolute",
-                    top: "-5px",
                     left: "50%",
                     transform: "translateX(-50%)",
                     width: "60px",

@@ -336,14 +336,31 @@ export function Sidebar(props: { sessionID: string; onToggle: () => void }) {
     const last = messages().findLast(
       (x) => x.role === "assistant" && x.tokens.output > 0,
     ) as AssistantMessage
-    if (!last) return { tokens: 0, tokenLimit: 0, tokensFormatted: "0", percentage: 0 }
+    if (!last)
+      return {
+        tokens: 0,
+        tokenLimit: 0,
+        tokensFormatted: "0",
+        percentage: 0,
+        systemTokens: 0,
+        assistantTokens: 0,
+        userTokens: 0,
+        toolTokens: 0,
+      }
 
-    const total =
-      last.tokens.input +
-      last.tokens.output +
-      last.tokens.reasoning +
-      last.tokens.cache.read +
-      last.tokens.cache.write
+    // System prompt (cache write tokens - this is the initial system context)
+    const systemTokens = last.tokens.cache.write
+
+    // Assistant tokens (output from model)
+    const assistantTokens = last.tokens.output + last.tokens.reasoning
+
+    // User tokens (input excluding cache, since cache is system)
+    const userTokens = last.tokens.input - last.tokens.cache.read
+
+    // Tool tokens (cache read - these are tool definitions/results)
+    const toolTokens = last.tokens.cache.read
+
+    const total = systemTokens + assistantTokens + userTokens + toolTokens
     const model = sync.data.provider.find((x) => x.id === last.providerID)?.models[last.modelID]
     const tokenLimit = model?.limit.context || 0
 
@@ -352,6 +369,10 @@ export function Sidebar(props: { sessionID: string; onToggle: () => void }) {
       tokenLimit,
       tokensFormatted: total.toLocaleString(),
       percentage: tokenLimit ? Math.round((total / tokenLimit) * 100) : 0,
+      systemTokens,
+      assistantTokens,
+      userTokens,
+      toolTokens,
     }
   })
 
@@ -398,7 +419,12 @@ export function Sidebar(props: { sessionID: string; onToggle: () => void }) {
           <ContextUsageBar
             currentTokens={context().tokens}
             tokenLimit={context().tokenLimit}
+            systemTokens={context().systemTokens}
+            assistantTokens={context().assistantTokens}
+            userTokens={context().userTokens}
+            toolTokens={context().toolTokens}
             agentColor={local.agent.color("assistant")}
+            systemColor={theme.textMuted}
             assistantColor={theme.primary}
             toolColor={theme.accent}
             userColor={theme.secondary}
