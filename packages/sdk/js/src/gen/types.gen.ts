@@ -163,9 +163,17 @@ export type KeybindsConfig = {
    */
   history_previous?: string
   /**
-   * Previous history item
+   * Next history item
    */
   history_next?: string
+  /**
+   * Next child session
+   */
+  session_child_cycle?: string
+  /**
+   * Previous child session
+   */
+  session_child_cycle_reverse?: string
 }
 
 export type AgentConfig = {
@@ -519,7 +527,9 @@ export type Session = {
   directory: string
   parentID?: string
   summary?: {
-    diffs: Array<FileDiff>
+    additions: number
+    deletions: number
+    diffs?: Array<FileDiff>
   }
   share?: {
     url: string
@@ -1070,6 +1080,12 @@ export type LspStatus = {
   status: "connected" | "error"
 }
 
+export type FormatterStatus = {
+  name: string
+  extensions: Array<string>
+  enabled: boolean
+}
+
 export type EventTuiPromptAppend = {
   type: "tui.prompt.append"
   properties: {
@@ -1248,6 +1264,16 @@ export type EventTodoUpdated = {
   }
 }
 
+export type EventCommandExecuted = {
+  type: "command.executed"
+  properties: {
+    name: string
+    sessionID: string
+    arguments: string
+    messageID: string
+  }
+}
+
 export type EventSessionIdle = {
   type: "session.idle"
   properties: {
@@ -1310,6 +1336,7 @@ export type Event =
   | EventFileEdited
   | EventFileWatcherUpdated
   | EventTodoUpdated
+  | EventCommandExecuted
   | EventSessionIdle
   | EventSessionCreated
   | EventSessionUpdated
@@ -1857,6 +1884,9 @@ export type SessionShareResponse = SessionShareResponses[keyof SessionShareRespo
 export type SessionDiffData = {
   body?: never
   path: {
+    /**
+     * Session ID
+     */
     id: string
   }
   query?: {
@@ -1866,9 +1896,22 @@ export type SessionDiffData = {
   url: "/session/{id}/diff"
 }
 
+export type SessionDiffErrors = {
+  /**
+   * Bad request
+   */
+  400: BadRequestError
+  /**
+   * Not found
+   */
+  404: NotFoundError
+}
+
+export type SessionDiffError = SessionDiffErrors[keyof SessionDiffErrors]
+
 export type SessionDiffResponses = {
   /**
-   * Successfully retrieved diff
+   * List of diffs
    */
   200: Array<FileDiff>
 }
@@ -2321,6 +2364,7 @@ export type FindFilesData = {
   query: {
     directory?: string
     query: string
+    dirs?: "true" | "false"
   }
   url: "/find/file"
 }
@@ -2510,6 +2554,24 @@ export type LspStatusResponses = {
 }
 
 export type LspStatusResponse = LspStatusResponses[keyof LspStatusResponses]
+
+export type FormatterStatusData = {
+  body?: never
+  path?: never
+  query?: {
+    directory?: string
+  }
+  url: "/formatter"
+}
+
+export type FormatterStatusResponses = {
+  /**
+   * Formatter status
+   */
+  200: Array<FormatterStatus>
+}
+
+export type FormatterStatusResponse = FormatterStatusResponses[keyof FormatterStatusResponses]
 
 export type TuiAppendPromptData = {
   body?: {

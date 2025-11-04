@@ -1,5 +1,5 @@
-import { Prompt, type PromptRef } from "@tui/component/prompt"
-import { createEffect, createMemo, Match, Show, Switch, type ParentProps } from "solid-js"
+import { Prompt } from "@tui/component/prompt"
+import { createMemo, Match, Show, Switch, type ParentProps } from "solid-js"
 import { useTheme } from "@tui/context/theme"
 import { useKeybind } from "../context/keybind"
 import type { KeybindsConfig } from "@opencode-ai/sdk"
@@ -7,27 +7,18 @@ import { Logo } from "../component/logo"
 import { Locale } from "@/util/locale"
 import { useSync } from "../context/sync"
 import { Toast } from "../ui/toast"
-import { useDialog } from "../ui/dialog"
 
 export function Home() {
   const sync = useSync()
   const { theme } = useTheme()
-  const dialog = useDialog()
   const mcpError = createMemo(() => {
     return Object.values(sync.data.mcp).some((x) => x.status === "failed")
-  })
-  let promptRef: PromptRef | undefined = undefined
-
-  createEffect(() => {
-    dialog.allClosedEvent.listen(() => {
-      promptRef?.focus()
-    })
   })
 
   const Hint = (
     <Show when={Object.keys(sync.data.mcp).length > 0}>
       <box flexShrink={0} flexDirection="row" gap={1}>
-        <text>
+        <text fg={theme.text}>
           <Switch>
             <Match when={mcpError()}>
               <span style={{ fg: theme.error }}>•</span> mcp errors{" "}
@@ -64,7 +55,7 @@ export function Home() {
         <HelpRow keybind="agent_cycle">Switch agent</HelpRow>
       </box>
       <box width="100%" maxWidth={75} zIndex={1000} paddingTop={1}>
-        <Prompt hint={Hint} ref={(r) => (promptRef = r)} />
+        <Prompt hint={Hint} />
       </box>
       <Toast />
     </box>
@@ -76,7 +67,7 @@ function HelpRow(props: ParentProps<{ keybind: keyof KeybindsConfig }>) {
   const { theme } = useTheme()
   return (
     <box flexDirection="row" justifyContent="space-between" width="100%">
-      <text>{props.children}</text>
+      <text fg={theme.text}>{props.children}</text>
       <text fg={theme.primary}>{keybind.print(props.keybind)}</text>
     </box>
   )

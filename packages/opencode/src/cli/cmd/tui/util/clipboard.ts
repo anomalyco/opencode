@@ -30,13 +30,13 @@ export namespace Clipboard {
     }
 
     if (os === "linux") {
-      const wayland = await $`wl-paste -t image/png`.nothrow().text()
-      if (wayland) {
-        return { data: Buffer.from(wayland).toString("base64url"), mime: "image/png" }
+      const wayland = await $`wl-paste -t image/png`.nothrow().arrayBuffer()
+      if (wayland && wayland.byteLength > 0) {
+        return { data: Buffer.from(wayland).toString("base64"), mime: "image/png" }
       }
-      const x11 = await $`xclip -selection clipboard -t image/png -o`.nothrow().text()
-      if (x11) {
-        return { data: Buffer.from(x11).toString("base64url"), mime: "image/png" }
+      const x11 = await $`xclip -selection clipboard -t image/png -o`.nothrow().arrayBuffer()
+      if (x11 && x11.byteLength > 0) {
+        return { data: Buffer.from(x11).toString("base64"), mime: "image/png" }
       }
     }
 
@@ -47,7 +47,7 @@ export namespace Clipboard {
       if (base64) {
         const imageBuffer = Buffer.from(base64.trim(), "base64")
         if (imageBuffer.length > 0) {
-          return { data: imageBuffer.toString("base64url"), mime: "image/png" }
+          return { data: imageBuffer.toString("base64"), mime: "image/png" }
         }
       }
     }
@@ -61,7 +61,7 @@ export namespace Clipboard {
   const getCopyMethod = lazy(() => {
     const os = platform()
 
-    if (os === "darwin") {
+    if (os === "darwin" && Bun.which("oascript")) {
       console.log("clipboard: using osascript")
       return async (text: string) => {
         const escaped = text.replace(/\\/g, "\\\\").replace(/"/g, '\\"')
@@ -70,7 +70,7 @@ export namespace Clipboard {
     }
 
     if (os === "linux") {
-      if (process.env["WAYLAND_DISPLAY"]) {
+      if (process.env["WAYLAND_DISPLAY"] && Bun.which("wl-copy")) {
         console.log("clipboard: using wl-copy")
         return async (text: string) => {
           const proc = Bun.spawn(["wl-copy"], { stdin: "pipe", stdout: "ignore", stderr: "ignore" })

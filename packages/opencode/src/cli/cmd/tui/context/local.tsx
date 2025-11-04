@@ -8,10 +8,12 @@ import { Global } from "@/global"
 import { iife } from "@/util/iife"
 import { createSimpleContext } from "./helper"
 import { useToast } from "../ui/toast"
+import { createEventBus } from "@solid-primitives/event-bus"
+import { Provider } from "@/provider/provider"
 
 export const { use: useLocal, provider: LocalProvider } = createSimpleContext({
   name: "Local",
-  init: (props: { initialModel?: string; initialAgent?: string }) => {
+  init: (props: { initialModel?: string; initialAgent?: string; initialPrompt?: string }) => {
     const sync = useSync()
     const toast = useToast()
 
@@ -37,7 +39,7 @@ export const { use: useLocal, provider: LocalProvider } = createSimpleContext({
           agent.set(props.initialAgent)
         }
         if (props.initialModel) {
-          const [providerID, modelID] = props.initialModel.split("/")
+          const { providerID, modelID } = Provider.parseModel(props.initialModel)
           if (!providerID || !modelID)
             return toast.show({
               variant: "warning",
@@ -148,8 +150,18 @@ export const { use: useLocal, provider: LocalProvider } = createSimpleContext({
         })
 
       const fallbackModel = createMemo(() => {
+        if (props.initialModel) {
+          const { providerID, modelID } = Provider.parseModel(props.initialModel)
+          if (isModelValid({ providerID, modelID })) {
+            return {
+              providerID,
+              modelID,
+            }
+          }
+        }
+
         if (sync.data.config.model) {
-          const [providerID, modelID] = sync.data.config.model.split("/")
+          const { providerID, modelID } = Provider.parseModel(sync.data.config.model)
           if (isModelValid({ providerID, modelID })) {
             return {
               providerID,
@@ -239,9 +251,18 @@ export const { use: useLocal, provider: LocalProvider } = createSimpleContext({
       }
     })
 
+    const setInitialPrompt = createEventBus<string>()
+
+    onMount(() => {
+      if (props.initialPrompt) setInitialPrompt.emit(props.initialPrompt)
+    })
+
     const result = {
       model,
       agent,
+      get setInitialPrompt() {
+        return setInitialPrompt
+      },
     }
     return result
   },

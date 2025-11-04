@@ -10,6 +10,7 @@ import type {
   Permission,
   LspStatus,
   McpStatus,
+  FormatterStatus,
 } from "@opencode-ai/sdk"
 import { createStore, produce, reconcile } from "solid-js/store"
 import { useSDK } from "@tui/context/sdk"
@@ -42,6 +43,7 @@ export const { use: useSync, provider: SyncProvider } = createSimpleContext({
       mcp: {
         [key: string]: McpStatus
       }
+      formatter: FormatterStatus[]
     }>({
       config: {},
       ready: false,
@@ -55,6 +57,7 @@ export const { use: useSync, provider: SyncProvider } = createSimpleContext({
       part: {},
       lsp: [],
       mcp: {},
+      formatter: [],
     })
 
     const sdk = useSDK()
@@ -220,6 +223,7 @@ export const { use: useSync, provider: SyncProvider } = createSimpleContext({
       sdk.client.command.list().then((x) => setStore("command", x.data ?? [])),
       sdk.client.lsp.status().then((x) => setStore("lsp", x.data!)),
       sdk.client.mcp.status().then((x) => setStore("mcp", x.data!)),
+      sdk.client.formatter.status().then((x) => setStore("formatter", x.data!)),
     ])
 
     const result = {

@@ -10,6 +10,7 @@
 @import "../components/button.css" layer(components);
 @import "../components/card.css" layer(components);
 @import "../components/checkbox.css" layer(components);
+@import "../components/code.css" layer(components);
 @import "../components/diff.css" layer(components);
 @import "../components/diff-changes.css" layer(components);
 @import "../components/collapsible.css" layer(components);

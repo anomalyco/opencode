@@ -5,6 +5,10 @@ import { LSP } from "../lsp"
 import { FileWatcher } from "../file/watcher"
 import { File } from "../file"
 import { Flag } from "../flag/flag"
+import { Project } from "./project"
+import { Bus } from "../bus"
+import { Command } from "../command"
+import { Instance } from "./instance"
 
 export async function InstanceBootstrap() {
   if (Flag.OPENCODE_EXPERIMENTAL_NO_BOOTSTRAP) return
@@ -14,4 +18,10 @@ export async function InstanceBootstrap() {
   await LSP.init()
   FileWatcher.init()
   File.init()
+
+  Bus.subscribe(Command.Event.Executed, async (payload) => {
+    if (payload.properties.name === Command.Default.INIT) {
+      await Project.setInitialized(Instance.project.id)
+    }
+  })
 }

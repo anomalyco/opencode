@@ -18,6 +18,7 @@ export type AutocompleteRef = {
 
 export type AutocompleteOption = {
   display: string
+  aliases?: string[]
   disabled?: boolean
   description?: string
   onSelect?: () => void
@@ -48,12 +49,17 @@ export function Autocomplete(props: {
   })
   const filter = createMemo(() => {
     if (!store.visible) return
-    return props.value.substring(store.index + 1).split(" ")[0]
+    // Track props.value to make memo reactive to text changes
+    props.value // <- there surely is a better way to do this, like making .input() reactive
+
+    const val = props.input().getTextRange(store.index + 1, props.input().cursorOffset + 1)
+
+    return val
   })
 
   function insertPart(text: string, part: PromptInfo["parts"][number]) {
     const input = props.input()
-    const currentCursorOffset = input.visualCursor.offset
+    const currentCursorOffset = input.cursorOffset
 
     const charAfterCursor = props.value.at(currentCursorOffset)
     const needsSpace = charAfterCursor !== " "
@@ -69,7 +75,7 @@ export function Autocomplete(props: {
 
     const virtualText = "@" + text
     const extmarkStart = store.index
-    const extmarkEnd = extmarkStart + virtualText.length
+    const extmarkEnd = extmarkStart + Bun.stringWidth(virtualText)
 
     const styleId =
       part.type === "file"
@@ -198,7 +204,10 @@ export function Autocomplete(props: {
         {
           display: "/undo",
           description: "undo the last message",
-          onSelect: () => command.trigger("session.undo"),
+          onSelect: () => {
+            hide()
+            command.trigger("session.undo")
+          },
         },
         {
           display: "/redo",
@@ -207,6 +216,7 @@ export function Autocomplete(props: {
         },
         {
           display: "/compact",
+          aliases: ["/summarize"],
           description: "compact the session",
           onSelect: () => command.trigger("session.compact"),
         },
@@ -227,11 +237,17 @@ export function Autocomplete(props: {
           description: "rename session",
           onSelect: () => command.trigger("session.rename"),
         },
+        {
+          display: "/timeline",
+          description: "jump to message",
+          onSelect: () => command.trigger("session.timeline"),
+        },
       )
     }
     results.push(
       {
         display: "/new",
+        aliases: ["/clear"],
         description: "create a new session",
         onSelect: () => command.trigger("session.new"),
       },
@@ -247,11 +263,13 @@ export function Autocomplete(props: {
       },
       {
         display: "/session",
+        aliases: ["/resume", "/continue"],
         description: "list sessions",
         onSelect: () => command.trigger("session.list"),
       },
       {
         display: "/status",
+        aliases: ["/mcp"],
         description: "show status",
         onSelect: () => command.trigger("opencode.status"),
       },
@@ -275,6 +293,12 @@ export function Autocomplete(props: {
         description: "show all commands",
         onSelect: () => command.show(),
       },
+      {
+        display: "/exit",
+        aliases: ["/quit", "/q"],
+        description: "exit the app",
+        onSelect: () => command.trigger("app.exit"),
+      },
     )
     const max = firstBy(results, [(x) => x.display.length, "desc"])?.display.length
     if (!max) return results
@@ -293,7 +317,7 @@ export function Autocomplete(props: {
     const currentFilter = filter()
     if (!currentFilter) return mixed.slice(0, 10)
     const result = fuzzysort.go(currentFilter, mixed, {
-      keys: ["display", "description"],
+      keys: ["display", "description", (obj) => obj.aliases?.join(" ") ?? ""],
       limit: 10,
     })
     return result.map((arr) => arr.obj)
@@ -324,7 +348,7 @@ export function Autocomplete(props: {
     command.keybinds(false)
     setStore({
       visible: mode,
-      index: props.input().visualCursor.offset,
+      index: props.input().cursorOffset,
       position: {
         x: props.anchor().x,
         y: props.anchor().y,
@@ -348,8 +372,8 @@ export function Autocomplete(props: {
       get visible() {
         return store.visible
       },
-      onInput(value: string) {
-        if (store.visible && value.length <= store.index) hide()
+      onInput() {
+        if (store.visible && props.input().cursorOffset <= store.index) hide()
       },
       onKeyDown(e: KeyEvent) {
         if (store.visible) {
@@ -361,20 +385,20 @@ export function Autocomplete(props: {
         }
         if (!store.visible) {
           if (e.name === "@") {
-            const cursorOffset = props.input().visualCursor.offset
+            const cursorOffset = props.input().cursorOffset
             const charBeforeCursor =
-              cursorOffset === 0 ? undefined : props.value.at(cursorOffset - 1)
-            if (
-              charBeforeCursor === " " ||
-              charBeforeCursor === "\n" ||
-              charBeforeCursor === undefined
-            ) {
-              show("@")
-            }
+              cursorOffset === 0
+                ? undefined
+                : props.input().getTextRange(cursorOffset - 1, cursorOffset)
+            const canTrigger =
+              charBeforeCursor === undefined ||
+              charBeforeCursor === "" ||
+              /\s/.test(charBeforeCursor)
+            if (canTrigger) show("@")
           }
 
           if (e.name === "/") {
-            if (props.input().visualCursor.offset === 0) show("/")
+            if (props.input().cursorOffset === 0) show("/")
           }
         }
       },

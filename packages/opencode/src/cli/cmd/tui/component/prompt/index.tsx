@@ -9,9 +9,9 @@ import {
   dim,
   fg,
 } from "@opentui/core"
-import { createEffect, createMemo, Match, Switch, type JSX, onMount } from "solid-js"
+import { createEffect, createMemo, Match, Switch, type JSX, onMount, batch } from "solid-js"
 import { useLocal } from "@tui/context/local"
-import { SyntaxTheme, useTheme } from "@tui/context/theme"
+import { useTheme } from "@tui/context/theme"
 import { SplitBorder } from "@tui/component/border"
 import { useSDK } from "@tui/context/sdk"
 import { useRoute } from "@tui/context/route"
@@ -60,7 +60,7 @@ export function Prompt(props: PromptProps) {
   const history = usePromptHistory()
   const command = useCommandDialog()
   const renderer = useRenderer()
-  const { theme } = useTheme()
+  const { theme, syntax } = useTheme()
 
   const textareaKeybindings = createMemo(() => {
     const newlineBindings = keybind.all.input_newline || []
@@ -86,9 +86,9 @@ export function Prompt(props: PromptProps) {
     ]
   })
 
-  const fileStyleId = SyntaxTheme.getStyleId("extmark.file")!
-  const agentStyleId = SyntaxTheme.getStyleId("extmark.agent")!
-  const pasteStyleId = SyntaxTheme.getStyleId("extmark.paste")!
+  const fileStyleId = syntax().getStyleId("extmark.file")!
+  const agentStyleId = syntax().getStyleId("extmark.agent")!
+  const pasteStyleId = syntax().getStyleId("extmark.paste")!
   let promptPartTypeId: number
 
   command.register(() => {
@@ -115,15 +115,11 @@ export function Prompt(props: PromptProps) {
       {
         title: "Clear prompt",
         value: "prompt.clear",
-        disabled: true,
         category: "Prompt",
+        disabled: true,
         onSelect: (dialog) => {
           input.extmarks.clear()
-          setStore("prompt", {
-            input: "",
-            parts: [],
-          })
-          setStore("extmarkToPartIndex", new Map())
+          input.clear()
           dialog.clear()
         },
       },
@@ -134,6 +130,7 @@ export function Prompt(props: PromptProps) {
         keybind: "input_submit",
         category: "Prompt",
         onSelect: (dialog) => {
+          if (!input.focused) return
           submit()
           dialog.clear()
         },
@@ -155,16 +152,27 @@ export function Prompt(props: PromptProps) {
           }
         },
       },
+      {
+        title: "Interrupt session",
+        value: "session.interrupt",
+        keybind: "session_interrupt",
+        category: "Session",
+        disabled: true,
+        onSelect: (dialog) => {
+          if (!props.sessionID) return
+          sdk.client.session.abort({
+            path: {
+              id: props.sessionID,
+            },
+          })
+          dialog.clear()
+        },
+      },
     ]
   })
 
   sdk.event.on(TuiEvent.PromptAppend.type, (evt) => {
-    setStore(
-      "prompt",
-      produce((draft) => {
-        draft.input += evt.properties.text
-      }),
-    )
+    input.insertText(evt.properties.text)
   })
 
   createEffect(() => {
@@ -187,6 +195,16 @@ export function Prompt(props: PromptProps) {
 
   createEffect(() => {
     input.focus()
+  })
+
+  local.setInitialPrompt.listen((initialPrompt) => {
+    batch(() => {
+      setStore("prompt", {
+        input: initialPrompt,
+        parts: [],
+      })
+      input.insertText(initialPrompt)
+    })
   })
 
   onMount(() => {
@@ -576,8 +594,12 @@ export function Prompt(props: PromptProps) {
                     return
                   }
 
-                  if (e.name === "up" && input.visualCursor.visualRow === 0) input.cursorOffset = 0
-                  if (e.name === "down" && input.visualCursor.visualRow === input.height - 1)
+                  if (keybind.match("history_previous", e) && input.visualCursor.visualRow === 0)
+                    input.cursorOffset = 0
+                  if (
+                    keybind.match("history_next", e) &&
+                    input.visualCursor.visualRow === input.height - 1
+                  )
                     input.cursorOffset = input.plainText.length
                 }
                 if (!autocomplete.visible) {
@@ -606,14 +628,16 @@ export function Prompt(props: PromptProps) {
 
                 // trim ' from the beginning and end of the pasted content. just
                 // ' and nothing else
-                const filepath = pastedContent.replace(/^'+|'+$/g, "")
+                const filepath = pastedContent.replace(/^'+|'+$/g, "").replace(/\\ /g, " ")
+                console.log(pastedContent, filepath)
                 try {
                   const file = Bun.file(filepath)
                   if (file.type.startsWith("image/")) {
+                    event.preventDefault()
                     const content = await file
                       .arrayBuffer()
                       .then((buffer) => Buffer.from(buffer).toString("base64"))
-                      .catch(() => {})
+                      .catch(console.error)
                     if (content) {
                       await pasteImage({
                         filename: file.name,
@@ -626,7 +650,7 @@ export function Prompt(props: PromptProps) {
                 } catch {}
 
                 const lineCount = (pastedContent.match(/\n/g)?.length ?? 0) + 1
-                if (lineCount >= 5) {
+                if (lineCount >= 5 && !sync.data.config.experimental?.disable_paste_summary) {
                   event.preventDefault()
                   const currentOffset = input.visualCursor.offset
                   const virtualText = `[Pasted ~${lineCount} lines]`
@@ -670,7 +694,7 @@ export function Prompt(props: PromptProps) {
               onMouseDown={(r: MouseEvent) => r.target?.focus()}
               focusedBackgroundColor={theme.backgroundElement}
               cursorColor={theme.primary}
-              syntaxStyle={SyntaxTheme}
+              syntaxStyle={syntax()}
             />
           </box>
           <box
@@ -681,7 +705,7 @@ export function Prompt(props: PromptProps) {
           ></box>
         </box>
         <box flexDirection="row" justifyContent="space-between">
-          <text flexShrink={0} wrapMode="none">
+          <text flexShrink={0} wrapMode="none" fg={theme.text}>
             <span style={{ fg: theme.textMuted }}>{local.model.parsed().provider}</span>{" "}
             <span style={{ bold: true }}>{local.model.parsed().model}</span>
           </text>
@@ -691,15 +715,16 @@ export function Prompt(props: PromptProps) {
             </Match>
             <Match when={status() === "working"}>
               <box flexDirection="row" gap={1}>
-                <text>
+                <text fg={theme.text}>
                   esc <span style={{ fg: theme.textMuted }}>interrupt</span>
                 </text>
               </box>
             </Match>
             <Match when={props.hint}>{props.hint!}</Match>
             <Match when={true}>
-              <text>
-                ctrl+p <span style={{ fg: theme.textMuted }}>commands</span>
+              <text fg={theme.text}>
+                {keybind.print("command_list")}{" "}
+                <span style={{ fg: theme.textMuted }}>commands</span>
               </text>
             </Match>
           </Switch>

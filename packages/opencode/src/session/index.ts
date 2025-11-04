@@ -2,8 +2,6 @@ import { Decimal } from "decimal.js"
 import z from "zod"
 import { type LanguageModelUsage, type ProviderMetadata } from "ai"
 
-import PROMPT_INITIALIZE from "../session/prompt/initialize.txt"
-
 import { Bus } from "../bus"
 import { Config } from "../config/config"
 import { Flag } from "../flag/flag"
@@ -14,10 +12,10 @@ import { Share } from "../share/share"
 import { Storage } from "../storage/storage"
 import { Log } from "../util/log"
 import { MessageV2 } from "./message-v2"
-import { Project } from "../project/project"
 import { Instance } from "../project/instance"
 import { SessionPrompt } from "./prompt"
 import { fn } from "@/util/fn"
+import { Command } from "../command"
 import { Snapshot } from "@/snapshot"
 
 export namespace Session {
@@ -44,7 +42,9 @@ export namespace Session {
       parentID: Identifier.schema("session").optional(),
       summary: z
         .object({
-          diffs: Snapshot.FileDiff.array(),
+          additions: z.number(),
+          deletions: z.number(),
+          diffs: Snapshot.FileDiff.array().optional(),
         })
         .optional(),
       share: z
@@ -164,7 +164,12 @@ export namespace Session {
     })
   })
 
-  export async function createNext(input: { id?: string; title?: string; parentID?: string; directory: string }) {
+  export async function createNext(input: {
+    id?: string
+    title?: string
+    parentID?: string
+    directory: string
+  }) {
     const result: Info = {
       id: Identifier.descending("session", input.id),
       version: Installation.VERSION,
@@ -254,6 +259,11 @@ export namespace Session {
     })
     return result
   }
+
+  export const diff = fn(Identifier.schema("session"), async (sessionID) => {
+    const diffs = await Storage.read<Snapshot.FileDiff[]>(["session_diff", sessionID])
+    return diffs ?? []
+  })
 
   export const messages = fn(Identifier.schema("session"), async (sessionID) => {
     const result = [] as MessageV2.WithParts[]
@@ -402,7 +412,9 @@ export namespace Session {
           .add(new Decimal(tokens.input).mul(input.model.cost?.input ?? 0).div(1_000_000))
           .add(new Decimal(tokens.output).mul(input.model.cost?.output ?? 0).div(1_000_000))
           .add(new Decimal(tokens.cache.read).mul(input.model.cost?.cache_read ?? 0).div(1_000_000))
-          .add(new Decimal(tokens.cache.write).mul(input.model.cost?.cache_write ?? 0).div(1_000_000))
+          .add(
+            new Decimal(tokens.cache.write).mul(input.model.cost?.cache_write ?? 0).div(1_000_000),
+          )
           .toNumber(),
         tokens,
       }
@@ -423,22 +435,13 @@ export namespace Session {
       messageID: Identifier.schema("message"),
     }),
     async (input) => {
-      await SessionPrompt.prompt({
+      await SessionPrompt.command({
         sessionID: input.sessionID,
         messageID: input.messageID,
-        model: {
-          providerID: input.providerID,
-          modelID: input.modelID,
-        },
-        parts: [
-          {
-            id: Identifier.ascending("part"),
-            type: "text",
-            text: PROMPT_INITIALIZE.replace("${path}", Instance.worktree),
-          },
-        ],
+        model: input.providerID + "/" + input.modelID,
+        command: Command.Default.INIT,
+        arguments: "",
       })
-      await Project.setInitialized(Instance.project.id)
     },
   )
 }

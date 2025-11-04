@@ -5,6 +5,10 @@
 
 declare module "sst" {
   export interface Resource {
+    "ADMIN_SECRET": {
+      "type": "sst.sst.Secret"
+      "value": string
+    }
     "AUTH_API_URL": {
       "type": "sst.sst.Linkable"
       "value": string
@@ -91,7 +95,11 @@ declare module "sst" {
       "type": "sst.cloudflare.Astro"
       "url": string
     }
-    "ZEN_MODELS": {
+    "ZEN_MODELS1": {
+      "type": "sst.sst.Secret"
+      "value": string
+    }
+    "ZEN_MODELS2": {
       "type": "sst.sst.Secret"
       "value": string
     }
