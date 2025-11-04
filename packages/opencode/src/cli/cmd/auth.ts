@@ -156,9 +156,36 @@ export const AuthLoginCommand = cmd({
           index = parseInt(method)
         }
         const method = plugin.auth.methods[index]
+
+        // Handle prompts for all auth types
+        await new Promise((resolve) => setTimeout(resolve, 10))
+        const inputs: Record<string, string> = {}
+        if (method.prompts) {
+          for (const prompt of method.prompts) {
+            if (prompt.condition && !prompt.condition(inputs)) {
+              continue
+            }
+            if (prompt.type === "select") {
+              const value = await prompts.select({
+                message: prompt.message,
+                options: prompt.options,
+              })
+              if (prompts.isCancel(value)) throw new UI.CancelledError()
+              inputs[prompt.key] = value
+            } else {
+              const value = await prompts.text({
+                message: prompt.message,
+                placeholder: prompt.placeholder,
+                validate: prompt.validate ? (v) => prompt.validate!(v ?? "") : undefined,
+              })
+              if (prompts.isCancel(value)) throw new UI.CancelledError()
+              inputs[prompt.key] = value
+            }
+          }
+        }
+
         if (method.type === "oauth") {
-          await new Promise((resolve) => setTimeout(resolve, 10))
-          const authorize = await method.authorize()
+          const authorize = await method.authorize(inputs)
 
           if (authorize.url) {
             prompts.log.info("Go to: " + authorize.url)
@@ -228,46 +255,23 @@ export const AuthLoginCommand = cmd({
           return
         }
 
-        if (method.type === "custom") {
-          await new Promise((resolve) => setTimeout(resolve, 10))
-          const inputs: Record<string, string> = {}
-          for (const prompt of method.prompts) {
-            if (prompt.condition && !prompt.condition(inputs)) {
-              continue
+        if (method.type === "api") {
+          if (method.authorize) {
+            const result = await method.authorize(inputs)
+            if (result.type === "failed") {
+              prompts.log.error("Failed to authorize")
             }
-            if (prompt.type === "select") {
-              const value = await prompts.select({
-                message: prompt.message,
-                options: prompt.options,
+            if (result.type === "success") {
+              const saveProvider = result.provider ?? provider
+              await Auth.set(saveProvider, {
+                type: "api",
+                key: result.key,
               })
-              if (prompts.isCancel(value)) throw new UI.CancelledError()
-              inputs[prompt.key] = value
-            } else {
-              const value = await prompts.text({
-                message: prompt.message,
-                placeholder: prompt.placeholder,
-                validate: prompt.validate ? (v) => prompt.validate!(v ?? "") : undefined,
-              })
-              if (prompts.isCancel(value)) throw new UI.CancelledError()
-              inputs[prompt.key] = value
+              prompts.log.success("Login successful")
             }
+            prompts.outro("Done")
+            return
           }
-
-          const result = await method.authorize(inputs)
-
-          if (result.type === "failed") {
-            prompts.log.error("Failed to authorize")
-          }
-          if (result.type === "success") {
-            const { type: _, auth_type, provider: saveProvider, ...authData } = result
-            await Auth.set(saveProvider ?? provider, {
-              type: auth_type,
-              ...authData,
-            } as any)
-            prompts.log.success("Login successful")
-          }
-          prompts.outro("Done")
-          return
         }
       }
 

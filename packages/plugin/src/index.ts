@@ -39,7 +39,28 @@ export interface Hooks {
       | {
           type: "oauth"
           label: string
-          authorize(): Promise<
+          prompts?: Array<
+            | {
+                type: "text"
+                key: string
+                message: string
+                placeholder?: string
+                validate?: (value: string) => string | undefined
+                condition?: (inputs: Record<string, string>) => boolean
+              }
+            | {
+                type: "select"
+                key: string
+                message: string
+                options: Array<{
+                  label: string
+                  value: string
+                  hint?: string
+                }>
+                condition?: (inputs: Record<string, string>) => boolean
+              }
+          >
+          authorize(inputs?: Record<string, string>): Promise<
             { url: string; instructions: string } & (
               | {
                   method: "auto"
@@ -83,9 +104,9 @@ export interface Hooks {
           >
         }
       | {
-          type: "custom"
+          type: "api"
           label: string
-          prompts: Array<
+          prompts?: Array<
             | {
                 type: "text"
                 key: string
@@ -106,19 +127,17 @@ export interface Hooks {
                 condition?: (inputs: Record<string, string>) => boolean
               }
           >
-          authorize(inputs: Record<string, string>): Promise<
+          authorize?(inputs?: Record<string, string>): Promise<
             | {
                 type: "success"
-                auth_type: "oauth" | "api" | "wellknown"
+                key: string
                 provider?: string
-                [key: string]: any
               }
             | {
                 type: "failed"
               }
           >
         }
-      | { type: "api"; label: string }
     )[]
   }
   /**
