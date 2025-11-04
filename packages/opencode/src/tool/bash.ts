@@ -146,8 +146,6 @@ export const BashTool = Tool.define("bash", {
       cwd: Instance.directory,
       env: {
         ...process.env,
-        AGENT: "1",
-        OPENCODE: "1",
       },
       stdio: ["ignore", "pipe", "pipe"],
       detached: process.platform !== "win32",

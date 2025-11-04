@@ -49,36 +49,4 @@ describe("tool.bash", () => {
       },
     })
   })
-
-  test("provides OPENCODE environment variable", async () => {
-    await Instance.provide({
-      directory: projectRoot,
-      fn: async () => {
-        const result = await bash.execute(
-          {
-            command: "echo $OPENCODE",
-            description: "Echo OPENCODE env variable",
-          },
-          ctx,
-        )
-        expect(result.metadata.output).toBe("1\n")
-      },
-    })
-  })
-
-  test("provides AGENT environment variable", async () => {
-    await Instance.provide({
-      directory: projectRoot,
-      fn: async () => {
-        const result = await bash.execute(
-          {
-            command: "echo $AGENT",
-            description: "Echo AGENT env variable",
-          },
-          ctx,
-        )
-        expect(result.metadata.output).toBe("1\n")
-      },
-    })
-  })
 })

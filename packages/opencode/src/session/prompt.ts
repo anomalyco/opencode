@@ -1475,8 +1475,6 @@ export namespace SessionPrompt {
       stdio: ["ignore", "pipe", "pipe"],
       env: {
         ...process.env,
-        AGENT: "1",
-        OPENCODE: "1",
         TERM: "dumb",
       },
     })
