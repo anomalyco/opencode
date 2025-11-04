@@ -31,6 +31,10 @@ export default function ChatIndicator({ room, connectionState }: ChatIndicatorPr
   
   const renderAnimationFrameRef = useRef<number>()
 
+
+  // Widget overlay state
+  const [activeWidget, setActiveWidget] = useState<{gridIndex: number} | null>(null)
+
   // Camera refs
   const cameraVideoRef = useRef<HTMLVideoElement>(null)
   const cameraCanvasRef = useRef<HTMLCanvasElement>(null)
@@ -396,11 +400,59 @@ export default function ChatIndicator({ room, connectionState }: ChatIndicatorPr
   return (
     <>
       {/* Widget Grid - OUTSIDE scaled container to fill full window */}
-      <div style={{ position: "absolute", inset: "0px", display: "grid", gridTemplateColumns: "repeat(auto-fill, 150px)", gridAutoRows: "150px", gap: "10px", pointerEvents: "none", zIndex: 1 }}>
+      <div style={{ position: "absolute", inset: "0px", display: "grid", gridTemplateColumns: "repeat(auto-fill, 150px)", gridAutoRows: "150px", gap: "10px", zIndex: 1 }}>
         {Array.from({ length: 50 }).map((_, i) => (
-          <div key={i} style={{ border: "3px dashed rgba(255, 255, 255, 0.2)", borderRadius: "20px", backgroundColor: "rgba(0, 0, 0, 0.1)" }} />
+          <div 
+            key={i} 
+            onClick={() => setActiveWidget({ gridIndex: i })}
+            style={{ 
+              border: "3px dashed rgba(255, 255, 255, 0.2)", 
+              borderRadius: "20px", 
+              backgroundColor: "rgba(0, 0, 0, 0.1)",
+              cursor: "pointer",
+              pointerEvents: "auto"
+            }} 
+          />
         ))}
       </div>
+
+      {/* Active widget overlay - NO BACKDROP FILTER */}
+      {activeWidget && (
+        <div
+          style={{
+            position: "absolute",
+            left: `${(activeWidget.gridIndex % Math.floor(window.innerWidth / 160)) * 160}px`,
+            top: `${Math.floor(activeWidget.gridIndex / Math.floor(window.innerWidth / 160)) * 160}px`,
+            width: "150px",
+            height: "150px",
+            background: "rgba(59, 130, 246, 0.4)",
+            border: "2px solid rgba(59, 130, 246, 0.8)",
+            borderRadius: "20px",
+            pointerEvents: "auto",
+            zIndex: 50
+          }}
+          onClick={(e) => e.stopPropagation()}
+        >
+          <button
+            onClick={() => setActiveWidget(null)}
+            style={{
+              position: "absolute",
+              top: "10px",
+              right: "10px",
+              background: "rgba(239, 68, 68, 0.8)",
+              border: "none",
+              borderRadius: "50%",
+              width: "30px",
+              height: "30px",
+              cursor: "pointer",
+              color: "white",
+              fontSize: "18px"
+            }}
+          >
+            ×
+          </button>
+        </div>
+      )}
 
       <div className="chat-indicator" style={{ transform: "scale(0.6)" }}>
       {/* PURPLE - Agent Audio with HAL 9000 Eye Overlay */}
