@@ -75,6 +75,8 @@ export namespace Session {
         .object({
           depth: z.number(), // How deep in task hierarchy (0 = root)
           status: z.enum(["active", "paused", "completed", "failed"]),
+          rootAgent: z.string().optional(), // Original agent (e.g., "orchestrator")
+          currentAgent: z.string().optional(), // Current agent after mode switches
           pausedMode: z.string().optional(), // Mode to resume when child completes
           pausedAt: z.number().optional(),
           completedAt: z.number().optional(),

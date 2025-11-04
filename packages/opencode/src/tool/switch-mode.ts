@@ -3,7 +3,6 @@ import { Tool } from "./tool"
 import DESCRIPTION from "./switch-mode.txt"
 import { Agent } from "../agent/agent"
 import { Session } from "../session"
-import { TaskHierarchy } from "../session/task-hierarchy"
 import { Log } from "../util/log"
 
 const log = Log.create({ service: "switch-mode-tool" })
@@ -57,9 +56,14 @@ export const SwitchModeTool = Tool.define("switch_mode", {
       )
     }
 
-    // 2. Get current session and mode
-    const session = await Session.get(sessionID)
-    const currentMode = session.orchestration?.pausedMode || "general" // Default if no orchestration state
+    // 2. Get current mode from context (passed from SessionPrompt)
+    // The agent executing this tool is the current mode
+    const currentMode = ctx.agent || "general"
+
+    log.info("current mode determined", {
+      currentMode,
+      ctxAgent: ctx.agent,
+    })
 
     // 3. Check if already in requested mode
     if (currentMode === mode_slug) {
@@ -100,8 +104,23 @@ export const SwitchModeTool = Tool.define("switch_mode", {
       })
     }
 
-    // 7. Preserve current state and pause session
-    await TaskHierarchy.pauseSession(sessionID, currentMode)
+    // 7. Update orchestration state with agent tracking
+    await Session.update(sessionID, (draft) => {
+      if (!draft.orchestration) {
+        draft.orchestration = {
+          depth: 0,
+          status: "active",
+          rootAgent: currentMode,
+          currentAgent: mode_slug,
+        }
+      } else {
+        // Preserve root agent, update current agent
+        if (!draft.orchestration.rootAgent) {
+          draft.orchestration.rootAgent = currentMode
+        }
+        draft.orchestration.currentAgent = mode_slug
+      }
+    })
 
     log.info("mode switch completed", {
       sessionID,

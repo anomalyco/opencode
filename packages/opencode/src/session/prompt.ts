@@ -452,7 +452,22 @@ export namespace SessionPrompt {
         item.callback(result)
       }
       state().queued.delete(input.sessionID)
-      SessionCompaction.prune(input)
+
+      // Calculate context usage and only prune if at 70%+
+      if (result.info.role === "assistant") {
+        const contextLimit = model.info.limit.context
+        if (contextLimit > 0) {
+          const count =
+            result.info.tokens.input + result.info.tokens.cache.read + result.info.tokens.output
+          const output =
+            Math.min(model.info.limit.output, SessionPrompt.OUTPUT_TOKEN_MAX) ||
+            SessionPrompt.OUTPUT_TOKEN_MAX
+          const usable = contextLimit - output
+          const contextUsage = count / usable
+          SessionCompaction.prune({ sessionID: input.sessionID, contextUsage })
+        }
+      }
+
       return result
     }
   }
@@ -1011,6 +1026,25 @@ export namespace SessionPrompt {
         sessionID: input.sessionID,
       }
       await Session.updateMessage(msg)
+
+      // Update orchestration state with current agent for UI tracking
+      await Session.update(input.sessionID, (draft) => {
+        if (!draft.orchestration) {
+          draft.orchestration = {
+            depth: 0,
+            status: "active",
+            rootAgent: input.agent,
+            currentAgent: input.agent,
+          }
+        } else {
+          // Preserve root agent, update current agent
+          if (!draft.orchestration.rootAgent) {
+            draft.orchestration.rootAgent = input.agent
+          }
+          draft.orchestration.currentAgent = input.agent
+        }
+      })
+
       return msg
     }
 

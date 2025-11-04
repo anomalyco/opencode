@@ -12,12 +12,14 @@ import { useToast } from "../../ui/toast"
 import { useSDK } from "../../context/sdk"
 import { useDialog } from "../../ui/dialog"
 import { DialogSelect, type DialogSelectOption } from "../../ui/dialog-select"
+import { useRoute } from "../../context/route"
 import { $ } from "bun"
 type TabType = "files" | "todos" | "tools"
 
 export function Sidebar(props: { sessionID: string; onToggle: () => void }) {
   const sync = useSync()
   const { theme } = useTheme()
+  const { navigate } = useRoute()
   const local = useLocal()
   const renderer = useRenderer()
   const toast = useToast()
@@ -85,6 +87,7 @@ export function Sidebar(props: { sessionID: string; onToggle: () => void }) {
   const [committedFiles, setCommittedFiles] = createSignal<Set<string>>(new Set())
   const [projectFavorites, setProjectFavorites] = createSignal<Set<string>>(new Set())
   const [globalFavorites, setGlobalFavorites] = createSignal<Set<string>>(new Set())
+  const [childSessions, setChildSessions] = createSignal<any[]>([])
   const session = createMemo(() => sync.session.get(props.sessionID)!)
   const todo = createMemo(() => sync.data.todo[props.sessionID] ?? [])
   const messages = createMemo(() => sync.data.message[props.sessionID] ?? [])
@@ -105,6 +108,30 @@ export function Sidebar(props: { sessionID: string; onToggle: () => void }) {
 
   // Load favorites on mount
   loadFavorites()
+
+  // Load child sessions (subagents)
+  const loadChildSessions = async () => {
+    try {
+      const response = await fetch(`${sdk.url}/session/${props.sessionID}/children`)
+      if (response.ok) {
+        const children = await response.json()
+        setChildSessions(children)
+      }
+    } catch (error) {
+      console.error("Failed to load child sessions", error)
+    }
+  }
+
+  // Poll for child sessions every 2 seconds
+  let childSessionInterval: NodeJS.Timeout
+  onMount(() => {
+    loadChildSessions()
+    childSessionInterval = setInterval(loadChildSessions, 2000)
+  })
+
+  onCleanup(() => {
+    if (childSessionInterval) clearInterval(childSessionInterval)
+  })
 
   // Get favorite level for a tool
   const getFavoriteLevel = (toolId: string): "none" | "project" | "global" => {
@@ -223,11 +250,11 @@ export function Sidebar(props: { sessionID: string; onToggle: () => void }) {
     return diffs.filter((d) => !committedFiles().has(d.file))
   })
 
-  // Add keyboard shortcuts for tab switching
+  // Add keyboard shortcuts for tab switching (ctrl+1/2/3)
   useKeyboard((evt) => {
-    if (evt.name === "1") handleTabChange("tools")
-    if (evt.name === "2") handleTabChange("todos")
-    if (evt.name === "3") handleTabChange("files")
+    if (evt.ctrl && evt.name === "1") handleTabChange("tools")
+    if (evt.ctrl && evt.name === "2") handleTabChange("todos")
+    if (evt.ctrl && evt.name === "3") handleTabChange("files")
   })
 
   // Track tools used in this session
@@ -334,9 +361,9 @@ export function Sidebar(props: { sessionID: string; onToggle: () => void }) {
 
   const context = createMemo(() => {
     const last = messages().findLast(
-      (x) => x.role === "assistant" && x.tokens.output > 0,
+      (x) => x.role === "assistant" && x.tokens?.output > 0,
     ) as AssistantMessage
-    if (!last)
+    if (!last || !last.tokens)
       return {
         tokens: 0,
         tokenLimit: 0,
@@ -349,16 +376,16 @@ export function Sidebar(props: { sessionID: string; onToggle: () => void }) {
       }
 
     // System prompt (cache write tokens - this is the initial system context)
-    const systemTokens = last.tokens.cache.write
+    const systemTokens = last.tokens.cache?.write || 0
 
     // Assistant tokens (output from model)
-    const assistantTokens = last.tokens.output + last.tokens.reasoning
+    const assistantTokens = (last.tokens.output || 0) + (last.tokens.reasoning || 0)
 
     // User tokens (input excluding cache, since cache is system)
-    const userTokens = last.tokens.input - last.tokens.cache.read
+    const userTokens = Math.max(0, (last.tokens.input || 0) - (last.tokens.cache?.read || 0))
 
     // Tool tokens (cache read - these are tool definitions/results)
-    const toolTokens = last.tokens.cache.read
+    const toolTokens = last.tokens.cache?.read || 0
 
     const total = systemTokens + assistantTokens + userTokens + toolTokens
     const model = sync.data.provider.find((x) => x.id === last.providerID)?.models[last.modelID]
@@ -762,6 +789,48 @@ export function Sidebar(props: { sessionID: string; onToggle: () => void }) {
               </Show>
             </box>
           </Show>
+        </Show>
+
+        {/* Subagents Section - Always visible below tabs */}
+        <Show when={childSessions().length > 0}>
+          <box marginTop={1}>
+            <text attributes={TextAttributes.BOLD} fg={theme.accent}>
+              Subagents ({childSessions().length})
+            </text>
+            <For each={childSessions()}>
+              {(child) => {
+                const status = child.orchestration?.status || "unknown"
+                const statusColor =
+                  status === "active"
+                    ? theme.success
+                    : status === "completed"
+                      ? theme.textMuted
+                      : status === "paused"
+                        ? theme.warning
+                        : theme.error
+                const titleShort =
+                  child.title.length > 35 ? child.title.substring(0, 32) + "..." : child.title
+                return (
+                  <box
+                    flexDirection="row"
+                    gap={1}
+                    onMouseUp={() => {
+                      if (renderer.getSelection()?.getSelectedText()) return
+                      navigate({
+                        type: "session",
+                        sessionID: child.id,
+                      })
+                    }}
+                  >
+                    <text flexShrink={0} fg={statusColor}>
+                      •
+                    </text>
+                    <text fg={theme.text}>{titleShort}</text>
+                  </box>
+                )
+              }}
+            </For>
+          </box>
         </Show>
       </box>
     </Show>

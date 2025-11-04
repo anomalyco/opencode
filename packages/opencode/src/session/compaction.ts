@@ -1,4 +1,10 @@
-import { streamText, type ModelMessage, LoadAPIKeyError, type StreamTextResult, type Tool as AITool } from "ai"
+import {
+  streamText,
+  type ModelMessage,
+  LoadAPIKeyError,
+  type StreamTextResult,
+  type Tool as AITool,
+} from "ai"
 import { Session } from "."
 import { Identifier } from "../id/id"
 import { Instance } from "../project/instance"
@@ -30,31 +36,51 @@ export namespace SessionCompaction {
     ),
   }
 
-  export function isOverflow(input: { tokens: MessageV2.Assistant["tokens"]; model: ModelsDev.Model }) {
-    if (Flag.OPENCODE_DISABLE_AUTOCOMPACT) return false
+  export function isOverflow(input: {
+    tokens: MessageV2.Assistant["tokens"]
+    model: ModelsDev.Model
+  }) {
+    // Check if context usage is at 70% or higher
     const context = input.model.limit.context
     if (context === 0) return false
     const count = input.tokens.input + input.tokens.cache.read + input.tokens.output
-    const output = Math.min(input.model.limit.output, SessionPrompt.OUTPUT_TOKEN_MAX) || SessionPrompt.OUTPUT_TOKEN_MAX
+    const output =
+      Math.min(input.model.limit.output, SessionPrompt.OUTPUT_TOKEN_MAX) ||
+      SessionPrompt.OUTPUT_TOKEN_MAX
     const usable = context - output
-    return count > usable
+    const threshold = usable * 0.7 // 70% threshold
+    return count > threshold
   }
 
   export const PRUNE_MINIMUM = 20_000
   export const PRUNE_PROTECT = 40_000
   const MAX_RETRIES = 10
 
-  // goes backwards through parts until there are 40_000 tokens worth of tool
-  // calls. then erases output of previous tool calls. idea is to throw away old
-  // tool calls that are no longer relevant.
-  export async function prune(input: { sessionID: string }) {
-    if (Flag.OPENCODE_DISABLE_PRUNE) return
-    log.info("pruning")
+  // Only prune oldest tool calls with code changes when context is at 70%+
+  // This prevents aggressive pruning after every call
+  export async function prune(input: { sessionID: string; contextUsage?: number }) {
+    // Only prune if context usage provided and is at 70% or higher
+    if (!input.contextUsage || input.contextUsage < 0.7) {
+      return
+    }
+
+    log.info("pruning at high context usage", { contextUsage: input.contextUsage })
     const msgs = await Session.messages(input.sessionID)
     let total = 0
     let pruned = 0
     const toPrune = []
     let turns = 0
+
+    // Tool names that involve code/file changes
+    const codeChangingTools = new Set([
+      "edit",
+      "cc_edit",
+      "write",
+      "cc_write",
+      "bash",
+      "cc_bash",
+      "patch",
+    ])
 
     loop: for (let msgIndex = msgs.length - 1; msgIndex >= 0; msgIndex--) {
       const msg = msgs[msgIndex]
@@ -66,6 +92,8 @@ export namespace SessionCompaction {
         if (part.type === "tool")
           if (part.state.status === "completed") {
             if (part.state.time.compacted) break loop
+            // Only prune tool calls that involve code changes
+            if (!codeChangingTools.has(part.tool)) continue
             const estimate = Token.estimate(part.state.output)
             total += estimate
             if (total > PRUNE_PROTECT) {
@@ -87,9 +115,15 @@ export namespace SessionCompaction {
     }
   }
 
-  export async function run(input: { sessionID: string; providerID: string; modelID: string; signal?: AbortSignal }) {
+  export async function run(input: {
+    sessionID: string
+    providerID: string
+    modelID: string
+    signal?: AbortSignal
+  }) {
     if (!input.signal) SessionLock.assertUnlocked(input.sessionID)
-    await using lock = input.signal === undefined ? SessionLock.acquire({ sessionID: input.sessionID }) : undefined
+    await using lock =
+      input.signal === undefined ? SessionLock.acquire({ sessionID: input.sessionID }) : undefined
     const signal = input.signal ?? lock!.signal
 
     await Session.update(input.sessionID, (draft) => {
@@ -150,7 +184,11 @@ export namespace SessionCompaction {
         // set to 0, we handle loop
         maxRetries: 0,
         model: model.language,
-        providerOptions: ProviderTransform.providerOptions(model.npm, model.providerID, model.info.options),
+        providerOptions: ProviderTransform.providerOptions(
+          model.npm,
+          model.providerID,
+          model.info.options,
+        ),
         headers: model.info.headers,
         abortSignal: signal,
         onError(error) {
@@ -230,7 +268,11 @@ export namespace SessionCompaction {
           error: e,
         })
         const error = MessageV2.fromError(e, { providerID: input.providerID })
-        if (retries.count < retries.max && MessageV2.APIError.isInstance(error) && error.data.isRetryable) {
+        if (
+          retries.count < retries.max &&
+          MessageV2.APIError.isInstance(error) &&
+          error.data.isRetryable
+        ) {
           shouldRetry = true
           await Session.updatePart({
             id: Identifier.ascending("part"),

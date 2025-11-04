@@ -519,7 +519,25 @@ function App() {
           >
             <span style={{ bold: true, underline: true }}>
               {" "}
-              {local.agent.current().name.toUpperCase()}
+              {(() => {
+                const currentRoute = route.data
+                const session =
+                  currentRoute?.type === "session"
+                    ? sync.data.session.find(
+                        (s: any) => s.id === (currentRoute as SessionRoute).sessionID,
+                      )
+                    : undefined
+                const rootAgent = (session as any)?.orchestration?.rootAgent
+                const currentAgent = (session as any)?.orchestration?.currentAgent
+
+                // If switched (currentAgent differs from rootAgent), show hierarchy
+                if (currentAgent && rootAgent && currentAgent !== rootAgent) {
+                  return `${currentAgent.toUpperCase()} › ${rootAgent.toUpperCase()}`
+                }
+
+                // Otherwise show current agent from local state
+                return local.agent.current().name.toUpperCase()
+              })()}
             </span>
             <span> AGENT </span>
           </text>

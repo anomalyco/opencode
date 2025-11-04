@@ -246,6 +246,16 @@ export function Session() {
   useKeyboard((evt) => {
     if (dialog.stack.length > 0) return
 
+    // ESC to go back to parent session when in a subagent
+    const parentID = session()?.parentID
+    if (evt.name === "escape" && parentID) {
+      navigate({
+        type: "session",
+        sessionID: parentID,
+      })
+      return
+    }
+
     // Sidebar toggle shortcuts
     if (evt.ctrl || evt.meta) {
       if (evt.name === "[") {
@@ -1094,7 +1104,7 @@ function AssistantMessage(props: { message: AssistantMessage; parts: Part[]; las
           borderColor={theme.backgroundElement}
         >
           <text fg={local.agent.color(props.message.mode)}>
-            {Locale.titlecase(props.message.mode)}
+            [{props.message.mode.toUpperCase()}]
           </text>
           <Shimmer text={`${props.message.modelID}`} color={theme.text} />
         </box>
@@ -1108,7 +1118,7 @@ function AssistantMessage(props: { message: AssistantMessage; parts: Part[]; las
         <box paddingLeft={3}>
           <text marginTop={1}>
             <span style={{ fg: local.agent.color(props.message.mode) }}>
-              {Locale.titlecase(props.message.mode)}
+              [{props.message.mode.toUpperCase()}]
             </span>{" "}
             <span style={{ fg: theme.textMuted }}>{props.message.modelID}</span>
           </text>
@@ -1453,6 +1463,8 @@ ToolRegistry.register<typeof TaskTool>({
   render(props) {
     const { theme } = useTheme()
     const keybind = useKeybind()
+    const { navigate } = useRoute()
+    const renderer = useRenderer()
 
     return (
       <>
@@ -1473,6 +1485,23 @@ ToolRegistry.register<typeof TaskTool>({
               )}
             </For>
           </box>
+        </Show>
+        <Show when={props.metadata.sessionId}>
+          {(sessionId) => (
+            <text
+              fg={theme.accent}
+              attributes={1}
+              onMouseUp={() => {
+                if (renderer.getSelection()?.getSelectedText()) return
+                navigate({
+                  type: "session",
+                  sessionID: sessionId(),
+                })
+              }}
+            >
+              → Click to view subagent session
+            </text>
+          )}
         </Show>
         <text fg={theme.text}>
           {keybind.print("session_child_cycle")}, {keybind.print("session_child_cycle_reverse")}

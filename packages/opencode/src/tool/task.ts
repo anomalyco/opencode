@@ -9,8 +9,11 @@ import { Agent } from "../agent/agent"
 import { SessionLock } from "../session/lock"
 import { SessionPrompt } from "../session/prompt"
 import { TaskHierarchy } from "../session/task-hierarchy"
+import { Parallel } from "../parallel"
+import { Log } from "../util/log"
 
 export const TaskTool = Tool.define("task", async () => {
+  const log = Log.create({ service: "task-tool" })
   const agents = await Agent.list().then((x) => x.filter((a) => a.mode !== "primary"))
   const description = DESCRIPTION.replace(
     "{agents}",
@@ -27,90 +30,153 @@ export const TaskTool = Tool.define("task", async () => {
       description: z.string().describe("A short (3-5 words) description of the task"),
       prompt: z.string().describe("The task for the agent to perform"),
       subagent_type: z.string().describe("The type of specialized agent to use for this task"),
+      parallel: z
+        .boolean()
+        .optional()
+        .describe(
+          "Run subtask in isolated git worktree for parallel execution (requires git repository)",
+        ),
     }),
     async execute(params, ctx) {
       const agent = await Agent.get(params.subagent_type)
       if (!agent)
         throw new Error(`Unknown agent type: ${params.subagent_type} is not a valid agent type`)
 
-      // Create subtask using hierarchy system for proper state management
-      const childSessionID = await TaskHierarchy.createSubtask(
-        ctx.sessionID,
-        agent.name,
-        params.description + ` (@${agent.name} subagent)`,
-      )
+      // Setup parallel worktree if requested
+      let parallelResult: Parallel.Result | undefined
+      const originalCwd = process.cwd()
 
-      const session = await Session.get(childSessionID)
-      const msg = await Session.getMessage({ sessionID: ctx.sessionID, messageID: ctx.messageID })
-      if (msg.info.role !== "assistant") throw new Error("Not an assistant message")
+      if (params.parallel) {
+        try {
+          const isGitRepo = await Parallel.validateGitRepo(originalCwd)
+          if (!isGitRepo) {
+            log.warn("parallel mode requested but not in git repo", { cwd: originalCwd })
+          } else {
+            parallelResult = await Parallel.setup({
+              enabled: true,
+              prompt: params.description,
+              workspace: originalCwd,
+            })
+            process.chdir(parallelResult.worktreePath)
+            log.info("parallel worktree created", {
+              branch: parallelResult.branchName,
+              path: parallelResult.worktreePath,
+            })
+          }
+        } catch (error) {
+          log.error("parallel setup failed, continuing without isolation", {
+            error: error instanceof Error ? error.message : String(error),
+          })
+        }
+      }
 
-      ctx.metadata({
-        title: params.description,
-        metadata: {
-          sessionId: session.id,
-        },
-      })
+      try {
+        // Create subtask using hierarchy system for proper state management
+        const childSessionID = await TaskHierarchy.createSubtask(
+          ctx.sessionID,
+          agent.name,
+          params.description + ` (@${agent.name} subagent)`,
+        )
 
-      const messageID = Identifier.ascending("message")
-      const parts: Record<string, MessageV2.ToolPart> = {}
-      const unsub = Bus.subscribe(MessageV2.Event.PartUpdated, async (evt) => {
-        if (evt.properties.part.sessionID !== session.id) return
-        if (evt.properties.part.messageID === messageID) return
-        if (evt.properties.part.type !== "tool") return
-        parts[evt.properties.part.id] = evt.properties.part
+        const session = await Session.get(childSessionID)
+        const msg = await Session.getMessage({ sessionID: ctx.sessionID, messageID: ctx.messageID })
+        if (msg.info.role !== "assistant") throw new Error("Not an assistant message")
+
         ctx.metadata({
           title: params.description,
           metadata: {
-            summary: Object.values(parts).sort((a, b) => a.id?.localeCompare(b.id)),
             sessionId: session.id,
+            parallel: params.parallel,
+            branch: parallelResult?.branchName,
           },
         })
-      })
 
-      const model = agent.model ?? {
-        modelID: msg.info.modelID,
-        providerID: msg.info.providerID,
-      }
+        const messageID = Identifier.ascending("message")
+        const parts: Record<string, MessageV2.ToolPart> = {}
+        const unsub = Bus.subscribe(MessageV2.Event.PartUpdated, async (evt) => {
+          if (evt.properties.part.sessionID !== session.id) return
+          if (evt.properties.part.messageID === messageID) return
+          if (evt.properties.part.type !== "tool") return
+          parts[evt.properties.part.id] = evt.properties.part
+          ctx.metadata({
+            title: params.description,
+            metadata: {
+              summary: Object.values(parts).sort((a, b) => a.id?.localeCompare(b.id)),
+              sessionId: session.id,
+              parallel: params.parallel,
+              branch: parallelResult?.branchName,
+            },
+          })
+        })
 
-      ctx.abort.addEventListener("abort", () => {
-        SessionLock.abort(session.id)
-      })
-      const result = await SessionPrompt.prompt({
-        messageID,
-        sessionID: session.id,
-        model: {
-          modelID: model.modelID,
-          providerID: model.providerID,
-        },
-        agent: agent.name,
-        tools: {
-          todowrite: false,
-          todoread: false,
-          task: false,
-          ...agent.tools,
-        },
-        parts: [
-          {
-            id: Identifier.ascending("part"),
-            type: "text",
-            text: params.prompt,
+        const model = agent.model ?? {
+          modelID: msg.info.modelID,
+          providerID: msg.info.providerID,
+        }
+
+        ctx.abort.addEventListener("abort", () => {
+          SessionLock.abort(session.id)
+        })
+
+        const result = await SessionPrompt.prompt({
+          messageID,
+          sessionID: session.id,
+          model: {
+            modelID: model.modelID,
+            providerID: model.providerID,
           },
-        ],
-      })
-      unsub()
-      let all
-      all = await Session.messages(session.id)
-      all = all.filter((x) => x.info.role === "assistant")
-      all = all.flatMap(
-        (msg) => msg.parts.filter((x: any) => x.type === "tool") as MessageV2.ToolPart[],
-      )
-      return {
-        title: params.description,
-        metadata: {
-          summary: all,
-          sessionId: session.id,
-        },
-        output: (result.parts.findLast((x: any) => x.type === "text") as any)?.text ?? "",
+          agent: agent.name,
+          tools: {
+            todowrite: false,
+            todoread: false,
+            task: false,
+            ...agent.tools,
+          },
+          parts: [
+            {
+              id: Identifier.ascending("part"),
+              type: "text",
+              text: params.prompt,
+            },
+          ],
+        })
+        unsub()
+
+        let all
+        all = await Session.messages(session.id)
+        all = all.filter((x) => x.info.role === "assistant")
+        all = all.flatMap(
+          (msg) => msg.parts.filter((x: any) => x.type === "tool") as MessageV2.ToolPart[],
+        )
+
+        // Teardown parallel worktree if it was setup
+        if (parallelResult) {
+          try {
+            await Parallel.teardown(parallelResult, true)
+            process.chdir(originalCwd)
+            log.info("parallel worktree cleaned up", { branch: parallelResult.branchName })
+          } catch (error) {
+            log.error("parallel teardown failed", {
+              error: error instanceof Error ? error.message : String(error),
+            })
+          }
+        }
+
+        return {
+          title: params.description,
+          metadata: {
+            summary: all,
+            sessionId: session.id,
+            parallel: params.parallel,
+            branch: parallelResult?.branchName,
+          },
+          output: (result.parts.findLast((x: any) => x.type === "text") as any)?.text ?? "",
+        }
+      } finally {
+        // Ensure we always restore original directory
+        if (parallelResult && process.cwd() !== originalCwd) {
+          process.chdir(originalCwd)
+        }
       }
     },
   }
