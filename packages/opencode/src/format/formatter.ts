@@ -177,6 +177,21 @@ export const ruff: Info = {
   },
 }
 
+export const uvformat: Info = {
+  name: "uv format",
+  command: ["uv", "format", "--", "$FILE"],
+  extensions: [".py", ".pyi"],
+  async enabled() {
+    if (await ruff.enabled()) return false
+    if (Bun.which("uv") !== null) {
+      const proc = Bun.spawn(["uv", "format", "--help"], { stderr: "pipe", stdout: "pipe" })
+      const code = await proc.exited
+      return code === 0
+    }
+    return false
+  },
+}
+
 export const rubocop: Info = {
   name: "rubocop",
   command: ["rubocop", "--autocorrect", "$FILE"],
