@@ -12,6 +12,8 @@
   will-change: transform;
   backface-visibility: hidden;
   perspective: 1000px;
+  z-index: 100000;
+  pointer-events: none;
 }
 
 .status-container {
@@ -30,15 +32,16 @@
   overflow: visible !important;
   width: auto;
   height: auto;
+  pointer-events: auto;
 }
 
 .status-container:nth-child(1) {
-  z-index: 2;
+  z-index: 100000;
   transform: translate(calc(-51% + 11px), -51%) translateZ(0);
 }
 
 .status-container:nth-child(2) {
-  z-index: 1;
+  z-index: 99999;
   transform: translate(calc(-49% + 11px), -49%) translateZ(0);
 }
 

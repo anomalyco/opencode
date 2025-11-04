@@ -855,7 +855,7 @@ export default function ChatIndicator({ room, connectionState }: ChatIndicatorPr
             width: '200px',
             height: '190px',
             pointerEvents: 'none',
-            zIndex: 200,
+            zIndex: 100001,
           }}
         >
           <video 
