@@ -175,8 +175,9 @@ export const AuthLoginCommand = cmd({
               spinner.stop("Failed to authorize", 1)
             }
             if (result.type === "success") {
+              const saveProvider = result.provider ?? provider
               if ("refresh" in result) {
-                await Auth.set(provider, {
+                await Auth.set(saveProvider, {
                   type: "oauth",
                   refresh: result.refresh,
                   access: result.access,
@@ -184,7 +185,7 @@ export const AuthLoginCommand = cmd({
                 })
               }
               if ("key" in result) {
-                await Auth.set(provider, {
+                await Auth.set(saveProvider, {
                   type: "api",
                   key: result.key,
                 })
@@ -204,8 +205,9 @@ export const AuthLoginCommand = cmd({
               prompts.log.error("Failed to authorize")
             }
             if (result.type === "success") {
+              const saveProvider = result.provider ?? provider
               if ("refresh" in result) {
-                await Auth.set(provider, {
+                await Auth.set(saveProvider, {
                   type: "oauth",
                   refresh: result.refresh,
                   access: result.access,
@@ -213,7 +215,7 @@ export const AuthLoginCommand = cmd({
                 })
               }
               if ("key" in result) {
-                await Auth.set(provider, {
+                await Auth.set(saveProvider, {
                   type: "api",
                   key: result.key,
                 })
@@ -230,13 +232,25 @@ export const AuthLoginCommand = cmd({
           await new Promise((resolve) => setTimeout(resolve, 10))
           const inputs: Record<string, string> = {}
           for (const prompt of method.prompts) {
-            const value = await prompts.text({
-              message: prompt.message,
-              placeholder: prompt.placeholder,
-              validate: prompt.validate,
-            })
-            if (prompts.isCancel(value)) throw new UI.CancelledError()
-            inputs[prompt.key] = value
+            if (prompt.condition && !prompt.condition(inputs)) {
+              continue
+            }
+            if (prompt.type === "select") {
+              const value = await prompts.select({
+                message: prompt.message,
+                options: prompt.options,
+              })
+              if (prompts.isCancel(value)) throw new UI.CancelledError()
+              inputs[prompt.key] = value
+            } else {
+              const value = await prompts.text({
+                message: prompt.message,
+                placeholder: prompt.placeholder,
+                validate: prompt.validate,
+              })
+              if (prompts.isCancel(value)) throw new UI.CancelledError()
+              inputs[prompt.key] = value
+            }
           }
 
           const result = await method.authorize(inputs)
@@ -245,8 +259,8 @@ export const AuthLoginCommand = cmd({
             prompts.log.error("Failed to authorize")
           }
           if (result.type === "success") {
-            const { type: _, auth_type, ...authData } = result
-            await Auth.set(provider, {
+            const { type: _, auth_type, provider: saveProvider, ...authData } = result
+            await Auth.set(saveProvider ?? provider, {
               type: auth_type,
               ...authData,
             })

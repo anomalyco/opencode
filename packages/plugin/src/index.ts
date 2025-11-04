@@ -46,6 +46,7 @@ export interface Hooks {
                   callback(): Promise<
                     | ({
                         type: "success"
+                        provider?: string
                       } & (
                         | {
                             refresh: string
@@ -64,6 +65,7 @@ export interface Hooks {
                   callback(code: string): Promise<
                     | ({
                         type: "success"
+                        provider?: string
                       } & (
                         | {
                             refresh: string
@@ -83,16 +85,32 @@ export interface Hooks {
       | {
           type: "custom"
           label: string
-          prompts: Array<{
-            key: string
-            message: string
-            placeholder?: string
-            validate?: (value: string) => string | undefined
-          }>
+          prompts: Array<
+            | {
+                type: "text"
+                key: string
+                message: string
+                placeholder?: string
+                validate?: (value: string) => string | undefined
+                condition?: (inputs: Record<string, string>) => boolean
+              }
+            | {
+                type: "select"
+                key: string
+                message: string
+                options: Array<{
+                  label: string
+                  value: string
+                  hint?: string
+                }>
+                condition?: (inputs: Record<string, string>) => boolean
+              }
+          >
           authorize(inputs: Record<string, string>): Promise<
             | {
                 type: "success"
                 auth_type: "oauth" | "api" | "wellknown"
+                provider?: string
                 [key: string]: any
               }
             | {

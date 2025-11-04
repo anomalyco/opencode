@@ -390,14 +390,44 @@ export namespace Provider {
       if (!plugin.auth) continue
       const providerID = plugin.auth.provider
       if (disabled.has(providerID)) continue
+
+      // For github-copilot plugin, check if auth exists for either github-copilot or github-copilot-enterprise
+      let hasAuth = false
       const auth = await Auth.get(providerID)
-      if (!auth) continue
+      if (auth) hasAuth = true
+
+      // Special handling for github-copilot: also check for enterprise auth
+      if (providerID === "github-copilot" && !hasAuth) {
+        const enterpriseAuth = await Auth.get("github-copilot-enterprise")
+        if (enterpriseAuth) hasAuth = true
+      }
+
+      if (!hasAuth) continue
       if (!plugin.auth.loader) continue
-      const options = await plugin.auth.loader(
-        () => Auth.get(providerID) as any,
-        database[plugin.auth.provider],
-      )
-      mergeProvider(plugin.auth.provider, options ?? {}, "custom")
+
+      // Load for the main provider if auth exists
+      if (auth) {
+        const options = await plugin.auth.loader(
+          () => Auth.get(providerID) as any,
+          database[plugin.auth.provider],
+        )
+        mergeProvider(plugin.auth.provider, options ?? {}, "custom")
+      }
+
+      // If this is github-copilot plugin, also register for github-copilot-enterprise if auth exists
+      if (providerID === "github-copilot") {
+        const enterpriseProviderID = "github-copilot-enterprise"
+        if (!disabled.has(enterpriseProviderID)) {
+          const enterpriseAuth = await Auth.get(enterpriseProviderID)
+          if (enterpriseAuth) {
+            const enterpriseOptions = await plugin.auth.loader(
+              () => Auth.get(enterpriseProviderID) as any,
+              database[enterpriseProviderID],
+            )
+            mergeProvider(enterpriseProviderID, enterpriseOptions ?? {}, "custom")
+          }
+        }
+      }
     }
 
     // load config
