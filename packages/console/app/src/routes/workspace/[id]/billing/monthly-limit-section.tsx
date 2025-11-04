@@ -62,7 +62,7 @@ export function MonthlyLimitSection() {
     <section class={styles.root}>
       <div data-slot="section-title">
         <h2>Monthly Limit</h2>
-        <p>Set a monthly spending limit for your account.</p>
+        <p>Set a monthly usage limit for your account.</p>
       </div>
       <div data-slot="section-content">
         <div data-slot="balance">
@@ -106,7 +106,7 @@ export function MonthlyLimitSection() {
         </div>
         <Show
           when={billingInfo()?.monthlyLimit}
-          fallback={<p data-slot="usage-status">No spending limit set.</p>}
+          fallback={<p data-slot="usage-status">No usage limit set.</p>}
         >
           <p data-slot="usage-status">
             Current usage for{" "}
