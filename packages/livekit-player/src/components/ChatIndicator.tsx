@@ -533,7 +533,7 @@ export default function ChatIndicator({ room, connectionState }: ChatIndicatorPr
             key={gridIndex}
             onClick={(e) => {
               e.stopPropagation()
-              setActiveWidget({ gridIndex })
+              setActiveWidget(activeWidget?.gridIndex === gridIndex ? null : { gridIndex })
             }}
             style={{
               position: "absolute",
