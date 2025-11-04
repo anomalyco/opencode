@@ -52,6 +52,12 @@ export const TuiThreadCommand = cmd({
         default: "127.0.0.1",
       }),
   handler: async (args) => {
+    const prompt = await (async () => {
+      const piped = !process.stdin.isTTY ? await Bun.stdin.text() : undefined
+      if (!args.prompt) return piped
+      return piped ? piped + "\n" + args.prompt : args.prompt
+    })()
+
     const cwd = args.project ? path.resolve(args.project) : process.cwd()
     try {
       process.chdir(cwd)
@@ -82,7 +88,13 @@ export const TuiThreadCommand = cmd({
         return undefined
       })()
 
-      const worker = new Worker("./src/cli/cmd/tui/worker.ts")
+      const worker = new Worker("./src/cli/cmd/tui/worker.ts", {
+        env: Object.fromEntries(
+          Object.entries(process.env).filter(
+            (entry): entry is [string, string] => entry[1] !== undefined,
+          ),
+        ),
+      })
       worker.onerror = console.error
       const client = Rpc.client<typeof rpc>(worker)
       process.on("uncaughtException", (e) => {
@@ -100,7 +112,7 @@ export const TuiThreadCommand = cmd({
         sessionID,
         model: args.model,
         agent: args.agent,
-        prompt: args.prompt,
+        prompt,
         onExit: async () => {
           await client.call("shutdown", undefined)
         },

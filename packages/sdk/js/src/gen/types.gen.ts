@@ -2346,7 +2346,7 @@ export type FindFilesData = {
   query: {
     directory?: string
     query: string
-    dirs?: boolean
+    dirs?: "true" | "false"
   }
   url: "/find/file"
 }

@@ -61,7 +61,13 @@ export const auth = new sst.cloudflare.Worker("AuthApi", {
   domain: `auth.${domain}`,
   handler: "packages/console/function/src/auth.ts",
   url: true,
-  link: [database, authStorage, GITHUB_CLIENT_ID_CONSOLE, GITHUB_CLIENT_SECRET_CONSOLE, GOOGLE_CLIENT_ID],
+  link: [
+    database,
+    authStorage,
+    GITHUB_CLIENT_ID_CONSOLE,
+    GITHUB_CLIENT_SECRET_CONSOLE,
+    GOOGLE_CLIENT_ID,
+  ],
 })
 
 ////////////////
@@ -97,7 +103,8 @@ export const stripeWebhook = new stripe.WebhookEndpoint("StripeWebhookEndpoint",
   ],
 })
 
-const ZEN_MODELS = new sst.Secret("ZEN_MODELS")
+const ZEN_MODELS1 = new sst.Secret("ZEN_MODELS1")
+const ZEN_MODELS2 = new sst.Secret("ZEN_MODELS2")
 const STRIPE_SECRET_KEY = new sst.Secret("STRIPE_SECRET_KEY")
 const AUTH_API_URL = new sst.Linkable("AUTH_API_URL", {
   properties: { value: auth.url.apply((url) => url!) },
@@ -130,7 +137,8 @@ new sst.cloudflare.x.SolidStart("Console", {
     AUTH_API_URL,
     STRIPE_WEBHOOK_SECRET,
     STRIPE_SECRET_KEY,
-    ZEN_MODELS,
+    ZEN_MODELS1,
+    ZEN_MODELS2,
     EMAILOCTOPUS_API_KEY,
     AWS_SES_ACCESS_KEY_ID,
     AWS_SES_SECRET_ACCESS_KEY,

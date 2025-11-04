@@ -1106,7 +1106,7 @@ export namespace Server {
           "query",
           z.object({
             query: z.string(),
-            dirs: z.boolean().optional(),
+            dirs: z.union([z.literal("true"), z.literal("false")]).optional(),
           }),
         ),
         async (c) => {
@@ -1115,7 +1115,7 @@ export namespace Server {
           const results = await File.search({
             query,
             limit: 10,
-            dirs,
+            dirs: dirs !== "false",
           })
           return c.json(results)
         },

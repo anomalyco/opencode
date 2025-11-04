@@ -30,6 +30,9 @@ import { TuiEvent } from "./event"
 import { KVProvider, useKV } from "./context/kv"
 
 async function getTerminalBackgroundColor(): Promise<"dark" | "light"> {
+  // can't set raw mode if not a TTY
+  if (!process.stdin.isTTY) return "dark"
+
   return new Promise((resolve) => {
     let timeout: NodeJS.Timeout
 
@@ -177,6 +180,7 @@ function App() {
   const exit = useExit()
 
   useKeyboard(async (evt) => {
+    if (!Installation.isLocal()) return
     if (evt.meta && evt.name === "t") {
       renderer.toggleDebugOverlay()
       return
