@@ -150,6 +150,16 @@ export const { use: useLocal, provider: LocalProvider } = createSimpleContext({
         })
 
       const fallbackModel = createMemo(() => {
+        if (props.initialModel) {
+          const { providerID, modelID } = Provider.parseModel(props.initialModel)
+          if (isModelValid({ providerID, modelID })) {
+            return {
+              providerID,
+              modelID,
+            }
+          }
+        }
+
         if (sync.data.config.model) {
           const { providerID, modelID } = Provider.parseModel(sync.data.config.model)
           if (isModelValid({ providerID, modelID })) {
