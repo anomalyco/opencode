@@ -94,7 +94,10 @@ export interface Hooks {
     input: { model: Model; provider: Provider; message: UserMessage },
     output: { temperature: number; topP: number; options: Record<string, any> },
   ) => Promise<void>
-  "permission.ask"?: (input: Permission, output: { status: "ask" | "deny" | "allow" }) => Promise<void>
+  "permission.ask"?: (
+    input: Permission,
+    output: { status: "ask" | "deny" | "allow" },
+  ) => Promise<void>
   "tool.execute.before"?: (
     input: { tool: string; sessionID: string; callID: string },
     output: { args: any },
@@ -105,6 +108,18 @@ export interface Hooks {
       title: string
       output: string
       metadata: any
+    },
+  ) => Promise<void>
+  /**
+   * Called when agent completes its work (after returning result)
+   * Set output.continue to continue working with a new prompt
+   */
+  "agent.complete"?: (
+    input: { sessionID: string; agent: string; messageID: string },
+    output: {
+      message: UserMessage
+      continue?: boolean
+      prompt?: string | undefined
     },
   ) => Promise<void>
 }

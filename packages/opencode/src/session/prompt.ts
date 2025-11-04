@@ -145,6 +145,45 @@ export namespace SessionPrompt {
   })
   export type PromptInput = z.infer<typeof PromptInput>
   export async function prompt(input: PromptInput): Promise<MessageV2.WithParts> {
+    const result = await promptInner(input)
+
+    // Check if plugin wants to continue after lock is released
+    const pluginResult = await Plugin.trigger(
+      "agent.complete",
+      {
+        sessionID: input.sessionID,
+        agent: input.agent ?? "build",
+        messageID: result.info.id,
+      },
+      {
+        message: result,
+        continue: false,
+        prompt: undefined,
+      },
+    )
+
+    if (pluginResult.continue && pluginResult.prompt) {
+      log.info("plugin requested continue", {
+        sessionID: input.sessionID,
+        prompt: pluginResult.prompt,
+      })
+      // Plugin wants to continue - call prompt again with new message
+      return prompt({
+        sessionID: input.sessionID,
+        parts: [
+          {
+            id: Identifier.ascending("part"),
+            type: "text",
+            text: pluginResult.prompt,
+          },
+        ],
+      })
+    }
+
+    return result
+  }
+
+  async function promptInner(input: PromptInput): Promise<MessageV2.WithParts> {
     const l = log.clone().tag("session", input.sessionID)
     l.info("prompt")
 
@@ -423,6 +462,7 @@ export namespace SessionPrompt {
       }
       state().queued.delete(input.sessionID)
       SessionCompaction.prune(input)
+
       return result
     }
   }
