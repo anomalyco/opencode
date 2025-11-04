@@ -156,10 +156,11 @@ export function Prompt(props: PromptProps) {
         title: "Interrupt session",
         value: "session.interrupt",
         keybind: "session_interrupt",
+        disabled: status() !== "working",
         category: "Session",
-        disabled: true,
         onSelect: (dialog) => {
           if (!props.sessionID) return
+          if (autocomplete.visible) return
           sdk.client.session.abort({
             path: {
               id: props.sessionID,
@@ -601,16 +602,6 @@ export function Prompt(props: PromptProps) {
                     input.visualCursor.visualRow === input.height - 1
                   )
                     input.cursorOffset = input.plainText.length
-                }
-                if (!autocomplete.visible) {
-                  if (keybind.match("session_interrupt", e) && props.sessionID) {
-                    sdk.client.session.abort({
-                      path: {
-                        id: props.sessionID,
-                      },
-                    })
-                    return
-                  }
                 }
               }}
               onSubmit={submit}
