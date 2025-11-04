@@ -394,7 +394,15 @@ export default function ChatIndicator({ room, connectionState }: ChatIndicatorPr
   const halOpacity = 0.6 + (agentAvgIntensity * 0.3)
 
   return (
-    <div className="chat-indicator" style={{ transform: "scale(0.6)" }}>
+    <>
+      {/* Widget Grid - OUTSIDE scaled container to fill full window */}
+      <div style={{ position: "absolute", inset: "0px", display: "grid", gridTemplateColumns: "repeat(auto-fill, 150px)", gridAutoRows: "150px", gap: "10px", pointerEvents: "none", zIndex: 1 }}>
+        {Array.from({ length: 50 }).map((_, i) => (
+          <div key={i} style={{ border: "3px dashed rgba(255, 255, 255, 0.2)", borderRadius: "20px", backgroundColor: "rgba(0, 0, 0, 0.1)" }} />
+        ))}
+      </div>
+
+      <div className="chat-indicator" style={{ transform: "scale(0.6)" }}>
       {/* PURPLE - Agent Audio with HAL 9000 Eye Overlay */}
       <div className="status-container">
         <div className="blob-container">
@@ -661,6 +669,8 @@ export default function ChatIndicator({ room, connectionState }: ChatIndicatorPr
           />
         </div>
       )}
+
     </div>
+  </>
   )
 }
