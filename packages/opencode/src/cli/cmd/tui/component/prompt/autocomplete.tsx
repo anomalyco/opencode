@@ -204,7 +204,10 @@ export function Autocomplete(props: {
         {
           display: "/undo",
           description: "undo the last message",
-          onSelect: () => command.trigger("session.undo"),
+          onSelect: () => {
+            hide()
+            command.trigger("session.undo")
+          },
         },
         {
           display: "/redo",
