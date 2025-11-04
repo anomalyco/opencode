@@ -551,30 +551,6 @@ export default function ChatIndicator({ room, connectionState }: ChatIndicatorPr
           >
             {isActive && (
               <>
-                <button
-                  onClick={(e) => {
-                    e.stopPropagation()
-                    const newSizes = { ...widgetSizes }
-                    delete newSizes[gridIndex]
-                    setWidgetSizes(newSizes)
-                    setActiveWidget(null)
-                  }}
-                  style={{
-                    position: "absolute",
-                    top: "10px",
-                    right: "10px",
-                    background: "rgba(239, 68, 68, 0.8)",
-                    border: "none",
-                    borderRadius: "50%",
-                    width: "30px",
-                    height: "30px",
-                    cursor: "pointer",
-                    color: "white",
-                    fontSize: "18px"
-                  }}
-                >
-                  ×
-                </button>
 
                 {/* Resize handles - only on active widget */}
                 <div
