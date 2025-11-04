@@ -204,11 +204,13 @@ export const AuthLoginCommand = cmd({
             if (result.type === "success") {
               const saveProvider = result.provider ?? provider
               if ("refresh" in result) {
+                const { type: _, provider: __, refresh, access, expires, ...extraFields } = result
                 await Auth.set(saveProvider, {
                   type: "oauth",
-                  refresh: result.refresh,
-                  access: result.access,
-                  expires: result.expires,
+                  refresh,
+                  access,
+                  expires,
+                  ...extraFields,
                 })
               }
               if ("key" in result) {
@@ -234,11 +236,13 @@ export const AuthLoginCommand = cmd({
             if (result.type === "success") {
               const saveProvider = result.provider ?? provider
               if ("refresh" in result) {
+                const { type: _, provider: __, refresh, access, expires, ...extraFields } = result
                 await Auth.set(saveProvider, {
                   type: "oauth",
-                  refresh: result.refresh,
-                  access: result.access,
-                  expires: result.expires,
+                  refresh,
+                  access,
+                  expires,
+                  ...extraFields,
                 })
               }
               if ("key" in result) {

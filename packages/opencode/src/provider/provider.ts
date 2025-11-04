@@ -500,7 +500,8 @@ export namespace Provider {
           : installedPath
       const mod = await import(modPath)
       if (options["timeout"] !== undefined && options["timeout"] !== null) {
-        // Only override fetch if user explicitly sets timeout
+        // Preserve custom fetch if it exists, wrap it with timeout logic
+        const customFetch = options["fetch"]
         options["fetch"] = async (input: any, init?: BunFetchRequestInit) => {
           const { signal, ...rest } = init ?? {}
 
@@ -510,7 +511,8 @@ export namespace Provider {
 
           const combined = signals.length > 1 ? AbortSignal.any(signals) : signals[0]
 
-          return fetch(input, {
+          const fetchFn = customFetch ?? fetch
+          return fetchFn(input, {
             ...rest,
             signal: combined,
             // @ts-ignore see here: https://github.com/oven-sh/bun/issues/16682
