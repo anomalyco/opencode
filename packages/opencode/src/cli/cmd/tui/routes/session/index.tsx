@@ -446,6 +446,48 @@ export function Session() {
       },
     },
     {
+      title: "Export session",
+      value: "session.export",
+      keybind: "session_export",
+      category: "Session",
+      onSelect: async (dialog) => {
+        try {
+          // Format session transcript as markdown
+          const sessionData = session()
+          const sessionMessages = messages()
+
+          let transcript = `# ${sessionData.title}\n\n`
+          transcript += `**Session ID:** ${sessionData.id}\n`
+          transcript += `**Created:** ${new Date(sessionData.time.created).toLocaleString()}\n`
+          transcript += `**Updated:** ${new Date(sessionData.time.updated).toLocaleString()}\n\n`
+          transcript += `---\n\n`
+
+          for (const msg of sessionMessages) {
+            const parts = sync.data.part[msg.id] ?? []
+            const role = msg.role === "user" ? "User" : "Assistant"
+            transcript += `## ${role}\n\n`
+
+            for (const part of parts) {
+              if (part.type === "text" && !part.synthetic) {
+                transcript += `${part.text}\n\n`
+              } else if (part.type === "tool") {
+                transcript += `\`\`\`\nTool: ${part.tool}\n\`\`\`\n\n`
+              }
+            }
+
+            transcript += `---\n\n`
+          }
+
+          // Copy to clipboard
+          await Clipboard.copy(transcript)
+          toast.show({ message: "Session transcript copied to clipboard!", variant: "success" })
+        } catch (error) {
+          toast.show({ message: "Failed to export session", variant: "error" })
+        }
+        dialog.clear()
+      },
+    },
+    {
       title: "Next child session",
       value: "session.child.next",
       keybind: "session_child_cycle",
