@@ -144,6 +144,9 @@ export const BashTool = Tool.define("bash", {
     const proc = spawn(params.command, {
       shell: true,
       cwd: Instance.directory,
+      env: {
+        ...process.env,
+      },
       stdio: ["ignore", "pipe", "pipe"],
       detached: process.platform !== "win32",
     })
