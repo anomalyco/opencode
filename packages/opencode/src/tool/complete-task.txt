@@ -1,0 +1,49 @@
+Mark the current subtask as complete and return results to the parent task.
+
+## When to Use
+
+Use this tool when you have finished your assigned subtask and need to:
+
+- Report completion back to the parent orchestrator
+- Pass results or findings to the parent task
+- Resume the parent task's execution
+- Exit the current subtask context
+
+## Completion Flow
+
+1. **Summarize Work**: Provide a brief summary of what was accomplished
+2. **Document Results**: Include detailed results, findings, or outputs
+3. **Mark Complete**: System marks subtask as completed
+4. **Resume Parent**: Parent task automatically resumes
+5. **Result Available**: Parent receives your results and can continue orchestration
+
+## Important Notes
+
+- Only use this tool when in a subtask (not root task)
+- Parent task will receive your results automatically
+- Once completed, you cannot continue work in this subtask
+- Be thorough in your result documentation - parent relies on this info
+
+## Result Format
+
+Provide two pieces of information:
+
+- **Summary**: Brief one-line description of completion (e.g., "Implemented user authentication")
+- **Result**: Detailed results, code snippets, findings, or any information the parent needs
+
+## Example Usage
+
+```
+After implementing a feature in general mode as a subtask:
+
+Summary: "User authentication system implemented with JWT tokens"
+
+Result: "Created the following components:
+- /src/auth/jwt.ts - JWT token generation and validation
+- /src/auth/middleware.ts - Express middleware for auth
+- /src/routes/auth.ts - Login and registration endpoints
+- Tests pass: 15/15 auth tests passing
+- Ready for integration with frontend"
+```
+
+The parent orchestrator receives this information and can continue with next steps.

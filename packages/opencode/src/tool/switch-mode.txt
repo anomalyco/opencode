@@ -1,0 +1,36 @@
+Switch to a different specialized agent mode for specific types of work.
+
+## When to Use
+
+Use this tool to transition between specialized agents when different expertise is needed:
+
+- Switch to `architect` mode for system design and planning (read-only, markdown editing only)
+- Switch to `plan` mode for implementation planning without making changes
+- Switch to `general` mode for full implementation capabilities
+- Switch back to `orchestrator` mode after completing specialized work
+
+## Mode Switching Flow
+
+1. **Request Mode Switch**: Specify the target mode and reason for switching
+2. **Validation**: System validates the mode exists and transition is allowed  
+3. **State Preservation**: Current session state is saved for resumption
+4. **Mode Activation**: New mode is activated with its specific tools and restrictions
+5. **Work Completion**: Complete work in new mode
+6. **Return**: Switch back to original mode when done
+
+## Important Notes
+
+- Mode switching requires user approval for security
+- Parent mode is automatically preserved and can be resumed later
+- Each mode has different tool access and capabilities
+- File type restrictions apply (e.g., architect mode can only edit markdown)
+
+## Example Usage
+
+```
+When orchestrating a complex feature:
+1. Start in orchestrator mode
+2. Switch to plan mode to design architecture
+3. Switch to general mode to implement
+4. Switch back to orchestrator to coordinate next steps
+```

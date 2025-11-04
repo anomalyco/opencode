@@ -32,6 +32,19 @@ export namespace Agent {
       prompt: z.string().optional(),
       tools: z.record(z.string(), z.boolean()),
       options: z.record(z.string(), z.any()),
+      // NEW: Kilo Code-style orchestration features (all optional for backward compatibility)
+      roleDefinition: z.string().optional(),
+      fileTypeRestrictions: z.array(z.string()).optional(),
+      canSwitchFrom: z.array(z.string()).optional(),
+      requiresApproval: z.boolean().optional(),
+      capabilities: z
+        .object({
+          canCreateSubtasks: z.boolean(),
+          canSwitchModes: z.boolean(),
+          canModifyFiles: z.boolean(),
+          canExecuteCommands: z.boolean(),
+        })
+        .optional(),
     })
     .meta({
       ref: "Agent",

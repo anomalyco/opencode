@@ -17,6 +17,8 @@ import { KbQueryTool } from "./kb-query"
 import { KbManageTool } from "./kb-manage"
 import { LspDiagnosticTool } from "./lsp-diagnostics"
 import { LspHoverTool } from "./lsp-hover"
+import { SwitchModeTool } from "./switch-mode"
+import { CompleteTaskTool } from "./complete-task"
 import { ClaudeCodeBashTool } from "./cc-bash"
 import { ClaudeCodeEditTool } from "./cc-edit"
 import { ClaudeCodeReadTool } from "./cc-read"
@@ -179,6 +181,8 @@ export namespace ToolRegistry {
       TodoWriteTool,
       TodoReadTool,
       TaskTool,
+      SwitchModeTool,
+      CompleteTaskTool,
       AddDirTool,
       KbIngestTool,
       KbSearchTool,

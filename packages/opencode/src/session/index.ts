@@ -70,6 +70,17 @@ export namespace Session {
           diff: z.string().optional(),
         })
         .optional(),
+      // NEW: Orchestration state (all optional for backward compatibility)
+      orchestration: z
+        .object({
+          depth: z.number(), // How deep in task hierarchy (0 = root)
+          status: z.enum(["active", "paused", "completed", "failed"]),
+          pausedMode: z.string().optional(), // Mode to resume when child completes
+          pausedAt: z.number().optional(),
+          completedAt: z.number().optional(),
+          result: z.string().optional(), // Result summary from subtask
+        })
+        .optional(),
     })
     .meta({
       ref: "Session",
