@@ -125,31 +125,71 @@ export const PromptInput: Component<PromptInputProps> = (props) => {
   const parseFromDOM = (): ContentPart[] => {
     const newParts: ContentPart[] = []
     let position = 0
-    editorRef.childNodes.forEach((node) => {
+
+    const visitNode = (node: Node) => {
       if (node.nodeType === Node.TEXT_NODE) {
         if (node.textContent) {
           const content = node.textContent
-          newParts.push({ type: "text", content, start: position, end: position + content.length })
-          position += content.length
-        }
-      } else if (node.nodeType === Node.ELEMENT_NODE && (node as HTMLElement).dataset.type) {
-        switch ((node as HTMLElement).dataset.type) {
-          case "file":
-            const content = node.textContent!
-            newParts.push({
-              type: "file",
-              path: (node as HTMLElement).dataset.path!,
-              content,
-              start: position,
-              end: position + content.length,
-            })
+          const last = newParts[newParts.length - 1]
+          if (last && last.type === "text") {
+            newParts[newParts.length - 1] = {
+              type: "text",
+              content: last.content + content,
+              start: last.start,
+              end: last.end + content.length,
+            }
             position += content.length
-            break
-          default:
-            break
+          } else {
+            newParts.push({ type: "text", content, start: position, end: position + content.length })
+            position += content.length
+          }
+        }
+      } else if (node.nodeType === Node.ELEMENT_NODE) {
+        const element = node as HTMLElement
+        if (element.dataset.type === "file") {
+          const content = node.textContent!
+          newParts.push({
+            type: "file",
+            path: element.dataset.path!,
+            content,
+            start: position,
+            end: position + content.length,
+          })
+          position += content.length
+        } else if (element.tagName === "BR") {
+          const last = newParts[newParts.length - 1]
+          if (last && last.type === "text") {
+            newParts[newParts.length - 1] = {
+              type: "text",
+              content: last.content + "\n",
+              start: last.start,
+              end: last.end + 1,
+            }
+          } else {
+            newParts.push({ type: "text", content: "\n", start: position, end: position + 1 })
+          }
+          position += 1
+        } else {
+          element.childNodes.forEach(visitNode)
+          if (element.tagName === "DIV" && element.nextSibling) {
+            const last = newParts[newParts.length - 1]
+            if (last && last.type === "text") {
+              newParts[newParts.length - 1] = {
+                type: "text",
+                content: last.content + "\n",
+                start: last.start,
+                end: last.end + 1,
+              }
+            } else {
+              newParts.push({ type: "text", content: "\n", start: position, end: position + 1 })
+            }
+            position += 1
+          }
         }
       }
-    })
+    }
+
+    editorRef.childNodes.forEach(visitNode)
     if (newParts.length === 0) newParts.push(...defaultParts)
     return newParts
   }

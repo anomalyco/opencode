@@ -382,12 +382,14 @@ export function Autocomplete(props: {
         if (!store.visible) {
           if (e.name === "@") {
             const cursorOffset = props.input().visualCursor.offset
+            const atStartOfLine = props.input().logicalCursor.col === 0
             const charBeforeCursor =
               cursorOffset === 0
                 ? undefined
                 : props.input().getTextRange(cursorOffset - 1, cursorOffset)
 
             if (
+              atStartOfLine ||
               charBeforeCursor === " " ||
               charBeforeCursor === "\n" ||
               charBeforeCursor === undefined
