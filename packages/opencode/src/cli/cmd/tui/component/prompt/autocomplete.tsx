@@ -52,14 +52,15 @@ export function Autocomplete(props: {
     // Track props.value to make memo reactive to text changes
     props.value // <- there surely is a better way to do this, like making .input() reactive
 
-    const val = props.input().getTextRange(store.index + 1, props.input().visualCursor.offset + 1)
-
-    return val
+    const start = store.index + 1
+    const end = props.input().cursorOffset
+    if (end <= start) return ""
+    return props.input().getTextRange(start, end)
   })
 
   function insertPart(text: string, part: PromptInfo["parts"][number]) {
     const input = props.input()
-    const currentCursorOffset = input.visualCursor.offset
+    const currentCursorOffset = input.cursorOffset
 
     const charAfterCursor = props.value.at(currentCursorOffset)
     const needsSpace = charAfterCursor !== " "
@@ -344,7 +345,7 @@ export function Autocomplete(props: {
     command.keybinds(false)
     setStore({
       visible: mode,
-      index: props.input().visualCursor.offset,
+      index: props.input().cursorOffset,
       position: {
         x: props.anchor().x,
         y: props.anchor().y,
@@ -368,8 +369,8 @@ export function Autocomplete(props: {
       get visible() {
         return store.visible
       },
-      onInput(value: string) {
-        if (store.visible && Bun.stringWidth(value) <= store.index) hide()
+      onInput(_value: string) {
+        if (store.visible && props.input().cursorOffset <= store.index) hide()
       },
       onKeyDown(e: KeyEvent) {
         if (store.visible) {
@@ -381,11 +382,12 @@ export function Autocomplete(props: {
         }
         if (!store.visible) {
           if (e.name === "@") {
-            const cursorOffset = props.input().visualCursor.offset
+            const cursorOffset = props.input().cursorOffset
             const charBeforeCursor =
               cursorOffset === 0
                 ? undefined
-                : props.input().getTextRange(cursorOffset - 1, cursorOffset)
+                : props.value.at(cursorOffset - 1) ??
+                  props.input().getTextRange(cursorOffset - 1, cursorOffset)
 
             if (
               charBeforeCursor === " " ||
@@ -397,7 +399,7 @@ export function Autocomplete(props: {
           }
 
           if (e.name === "/") {
-            if (props.input().visualCursor.offset === 0) show("/")
+            if (props.input().cursorOffset === 0) show("/")
           }
         }
       },
