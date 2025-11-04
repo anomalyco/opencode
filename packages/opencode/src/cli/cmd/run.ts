@@ -16,6 +16,7 @@ import { SessionPrompt } from "../../session/prompt"
 import { EOL } from "os"
 import { Permission } from "@/permission"
 import { select } from "@clack/prompts"
+import { createOpencodeClient } from "@opencode-ai/sdk"
 
 const TOOL: Record<string, [string, string]> = {
   todowrite: ["Todo", UI.Style.TEXT_WARNING_BOLD],
@@ -84,6 +85,10 @@ export const RunCommand = cmd({
         type: "string",
         describe: "title for the session (uses truncated prompt if no value provided)",
       })
+      .option("attach", {
+        type: "string",
+        describe: "attach to a running opencode server (e.g., http://localhost:4096)",
+      })
   },
   handler: async (args) => {
     let message = args.message.join(" ")
@@ -122,6 +127,10 @@ export const RunCommand = cmd({
     if (message.trim().length === 0 && !args.command) {
       UI.error("You must provide a message or a command")
       process.exit(1)
+    }
+
+    if (args.attach) {
+      return await runAttached()
     }
 
     await bootstrap(process.cwd(), async () => {
@@ -335,5 +344,224 @@ export const RunCommand = cmd({
       })()
       if (errorMsg) process.exit(1)
     })
+
+    async function runAttached() {
+      if (!args.attach) return
+
+      const sdk = createOpencodeClient({
+        baseUrl: args.attach,
+      })
+
+      const agentName = args.agent || "build"
+      const modelName = args.model
+
+      const sessionID = await (async () => {
+        if (args.continue) {
+          const result = await sdk.session.list()
+          if (result.data) {
+            const parentSession = result.data.find((s) => !s.parentID)
+            return parentSession?.id
+          }
+          return undefined
+        }
+        if (args.session) return args.session
+
+        const title = (() => {
+          if (args.title !== undefined) {
+            if (args.title === "") {
+              return message.slice(0, 50) + (message.length > 50 ? "..." : "")
+            }
+            return args.title
+          }
+          return undefined
+        })()
+
+        const result = await sdk.session.create({
+          body: title ? { title } : {},
+        })
+        return result.data?.id
+      })()
+
+      if (!sessionID) {
+        UI.error("Session not found")
+        process.exit(1)
+      }
+
+      const cfgResult = await sdk.config.get()
+      const cfg = cfgResult.data
+      if (cfg && (cfg.share === "auto" || Flag.OPENCODE_AUTO_SHARE || args.share)) {
+        try {
+          await sdk.session.share({ path: { id: sessionID } })
+          UI.println(UI.Style.TEXT_INFO_BOLD + "~  https://opencode.ai/s/" + sessionID.slice(-8))
+        } catch (error) {
+          if (error instanceof Error && error.message.includes("disabled")) {
+            UI.println(UI.Style.TEXT_DANGER_BOLD + "!  " + error.message)
+          } else {
+            throw error
+          }
+        }
+      }
+
+      function printEvent(color: string, type: string, title: string) {
+        UI.println(
+          color + `|`,
+          UI.Style.TEXT_NORMAL + UI.Style.TEXT_DIM + ` ${type.padEnd(7, " ")}`,
+          "",
+          UI.Style.TEXT_NORMAL + title,
+        )
+      }
+
+      function outputJsonEvent(type: string, data: any) {
+        if (args.format === "json") {
+          const jsonEvent = {
+            type,
+            timestamp: Date.now(),
+            sessionID,
+            ...data,
+          }
+          process.stdout.write(JSON.stringify(jsonEvent) + EOL)
+          return true
+        }
+        return false
+      }
+
+      const events = await sdk.event.subscribe()
+      let errorMsg: string | undefined
+      let isSessionComplete = false
+
+      const eventProcessor = (async () => {
+        for await (const event of events.stream) {
+          if (event.type === "message.part.updated") {
+            const part = event.properties.part
+            if (part.sessionID !== sessionID) continue
+
+            if (part.type === "tool" && part.state.status === "completed") {
+              if (outputJsonEvent("tool_use", { part })) continue
+              const [tool, color] = TOOL[part.tool] ?? [part.tool, UI.Style.TEXT_INFO_BOLD]
+              const title =
+                part.state.title ||
+                (Object.keys(part.state.input).length > 0
+                  ? JSON.stringify(part.state.input)
+                  : "Unknown")
+
+              printEvent(color, tool, title)
+
+              if (part.tool === "bash" && part.state.output && part.state.output.trim()) {
+                UI.println()
+                UI.println(part.state.output)
+              }
+            }
+
+            if (part.type === "step-start") {
+              if (outputJsonEvent("step_start", { part })) continue
+            }
+
+            if (part.type === "step-finish") {
+              if (outputJsonEvent("step_finish", { part })) continue
+            }
+
+            if (part.type === "text") {
+              const text = part.text
+              const isPiped = !process.stdout.isTTY
+
+              if (part.time?.end) {
+                if (outputJsonEvent("text", { part })) continue
+                if (!isPiped) UI.println()
+                process.stdout.write((isPiped ? text : UI.markdown(text)) + EOL)
+                if (!isPiped) UI.println()
+              }
+            }
+          }
+
+          if (event.type === "session.error") {
+            const props = event.properties
+            if (props.sessionID !== sessionID) continue
+            const error = props.error
+            if (!error) continue
+            let err = String(error.name)
+
+            if ("data" in error && error.data && "message" in error.data) {
+              err = String(error.data.message)
+            }
+            errorMsg = errorMsg ? errorMsg + EOL + err : err
+
+            if (outputJsonEvent("error", { error })) continue
+            UI.error(err)
+          }
+
+          if (event.type === "session.idle") {
+            if (event.properties.sessionID === sessionID) {
+              isSessionComplete = true
+              break
+            }
+          }
+
+          if (event.type === "permission.updated") {
+            const permission = event.properties
+            if (permission.sessionID !== sessionID) continue
+            const permMessage = `Permission required to run: ${permission.title}`
+
+            const result = await select({
+              message: permMessage,
+              options: [
+                { value: "once", label: "Allow once" },
+                { value: "always", label: "Always allow" },
+                { value: "reject", label: "Reject" },
+              ],
+              initialValue: "once",
+            }).catch(() => "reject")
+            const response = (result.toString().includes("cancel") ? "reject" : result) as
+              | "once"
+              | "always"
+              | "reject"
+
+            await sdk.postSessionIdPermissionsPermissionId({
+              path: {
+                id: sessionID,
+                permissionID: permission.id,
+              },
+              body: { response },
+            })
+          }
+        }
+      })()
+
+      if (args.command) {
+        await sdk.session.command({
+          path: { id: sessionID },
+          body: {
+            agent: agentName,
+            model: modelName,
+            command: args.command,
+            arguments: message,
+          },
+        })
+      } else {
+        const modelParam = modelName
+          ? (() => {
+              const [providerID, modelID] = modelName.split("/")
+              return { providerID, modelID }
+            })()
+          : undefined
+
+        await sdk.session.prompt({
+          path: { id: sessionID },
+          body: {
+            agent: agentName,
+            model: modelParam,
+            parts: [
+              ...fileParts,
+              {
+                type: "text",
+                text: message,
+              },
+            ],
+          },
+        })
+      }
+
+      await eventProcessor
+      if (errorMsg) process.exit(1)
+    }
   },
 })
