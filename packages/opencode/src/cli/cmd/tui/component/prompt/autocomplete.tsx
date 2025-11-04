@@ -266,6 +266,7 @@ export function Autocomplete(props: {
       },
       {
         display: "/status",
+        aliases: ["/mcp"],
         description: "show status",
         onSelect: () => command.trigger("opencode.status"),
       },

@@ -1081,7 +1081,8 @@ export default function Home() {
                     </svg>
                   </div>
                   <span>
-                    <figure>Fig 2.</figure> <strong>230</strong> Contributors
+                    <figure>Fig 2.</figure> <strong>{config.stats.contributors}</strong>{" "}
+                    Contributors
                   </span>
                 </div>
 
@@ -1129,7 +1130,8 @@ export default function Home() {
                     </svg>
                   </div>
                   <span>
-                    <figure>Fig 3.</figure> <strong>250K</strong> Monthly Devs
+                    <figure>Fig 3.</figure> <strong>{config.stats.monthlyUsers}</strong> Monthly
+                    Devs
                   </span>
                 </div>
               </div>

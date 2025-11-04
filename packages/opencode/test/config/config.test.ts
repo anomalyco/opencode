@@ -4,6 +4,7 @@ import { Instance } from "../../src/project/instance"
 import { tmpdir } from "../fixture/fixture"
 import path from "path"
 import fs from "fs/promises"
+import { pathToFileURL } from "url"
 
 test("loads config with defaults when no files exist", async () => {
   await using tmp = await tmpdir()
@@ -347,6 +348,62 @@ test("gets config directories", async () => {
     fn: async () => {
       const dirs = await Config.directories()
       expect(dirs.length).toBeGreaterThanOrEqual(1)
+    },
+  })
+})
+
+test("resolves scoped npm plugins in config", async () => {
+  await using tmp = await tmpdir({
+    init: async (dir) => {
+      const pluginDir = path.join(dir, "node_modules", "@scope", "plugin")
+      await fs.mkdir(pluginDir, { recursive: true })
+
+      await Bun.write(
+        path.join(dir, "package.json"),
+        JSON.stringify({ name: "config-fixture", version: "1.0.0", type: "module" }, null, 2),
+      )
+
+      await Bun.write(
+        path.join(pluginDir, "package.json"),
+        JSON.stringify(
+          {
+            name: "@scope/plugin",
+            version: "1.0.0",
+            type: "module",
+            main: "./index.js",
+          },
+          null,
+          2,
+        ),
+      )
+
+      await Bun.write(path.join(pluginDir, "index.js"), "export default {}\n")
+
+      await Bun.write(
+        path.join(dir, "opencode.json"),
+        JSON.stringify(
+          { $schema: "https://opencode.ai/config.json", plugin: ["@scope/plugin"] },
+          null,
+          2,
+        ),
+      )
+    },
+  })
+
+  await Instance.provide({
+    directory: tmp.path,
+    fn: async () => {
+      const config = await Config.get()
+      const pluginEntries = config.plugin ?? []
+
+      const baseUrl = pathToFileURL(path.join(tmp.path, "opencode.json")).href
+      const expected = import.meta.resolve("@scope/plugin", baseUrl)
+
+      expect(pluginEntries.includes(expected)).toBe(true)
+
+      const scopedEntry = pluginEntries.find((entry) => entry === expected)
+      expect(scopedEntry).toBeDefined()
+      expect(scopedEntry?.includes("/node_modules/@scope/plugin/")).toBe(true)
     },
   })
 })
