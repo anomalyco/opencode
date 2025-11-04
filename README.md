@@ -50,6 +50,30 @@ OPENCODE_INSTALL_DIR=/usr/local/bin curl -fsSL https://opencode.ai/install | bas
 XDG_BIN_DIR=$HOME/.local/bin curl -fsSL https://opencode.ai/install | bash
 ```
 
+### Uninstall
+
+To uninstall OpenCode and clean up all related files:
+
+```bash
+opencode uninstall
+```
+
+This will:
+- Remove the OpenCode binary using your package manager
+- Delete all data directories (sessions, cache, config, state)
+
+To keep your user data (sessions, config) while removing the binary:
+
+```bash
+opencode uninstall --keep-data
+```
+
+To manually specify the installation method:
+
+```bash
+opencode uninstall --method npm
+```
+
 ### Documentation
 
 For more info on how to configure OpenCode [**head over to our docs**](https://opencode.ai/docs).
