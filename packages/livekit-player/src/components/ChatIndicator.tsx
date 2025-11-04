@@ -511,6 +511,9 @@ export default function ChatIndicator({ room, connectionState }: ChatIndicatorPr
                 <button
                   onClick={(e) => {
                     e.stopPropagation()
+                    const newSizes = { ...widgetSizes }
+                    delete newSizes[gridIndex]
+                    setWidgetSizes(newSizes)
                     setActiveWidget(null)
                   }}
                   style={{
