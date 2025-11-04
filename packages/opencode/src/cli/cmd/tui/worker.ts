@@ -1,3 +1,6 @@
+// Setup tiktoken WASM path BEFORE any other imports
+import "@/util/tiktoken-setup"
+
 import { Installation } from "@/installation"
 import { Server } from "@/server/server"
 import { Log } from "@/util/log"

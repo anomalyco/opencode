@@ -49,7 +49,7 @@ function detectPlatformAndArch() {
 
 function findBinary() {
   const { platform, arch } = detectPlatformAndArch()
-  const packageName = `opencode-${platform}-${arch}`
+  const packageName = `codesurf-ai-${platform}-${arch}`
   const binary = platform === "windows" ? "opencode.exe" : "opencode"
 
   try {
@@ -77,11 +77,12 @@ async function regenerateWindowsCmdWrappers() {
 
     // npm_config_global is string | undefined
     // if it exists, the value is true
-    const isGlobal = process.env.npm_config_global === "true" || pkgPath.includes(path.join("npm", "node_modules"))
+    const isGlobal =
+      process.env.npm_config_global === "true" || pkgPath.includes(path.join("npm", "node_modules"))
 
     // The npm rebuild command does 2 things - Execute lifecycle scripts and rebuild bin links
     // We want to skip lifecycle scripts to avoid infinite loops, so we use --ignore-scripts
-    const cmd = `npm rebuild opencode-ai --ignore-scripts${isGlobal ? " -g" : ""}`
+    const cmd = `npm rebuild codesurf-ai --ignore-scripts${isGlobal ? " -g" : ""}`
     const opts = {
       stdio: "inherit",
       shell: true,
@@ -93,7 +94,9 @@ async function regenerateWindowsCmdWrappers() {
     console.log("Successfully rebuilt npm bin links")
   } catch (error) {
     console.error("Error rebuilding npm links:", error.message)
-    console.error("npm rebuild failed. You may need to manually run: npm rebuild opencode-ai --ignore-scripts")
+    console.error(
+      "npm rebuild failed. You may need to manually run: npm rebuild codesurf-ai --ignore-scripts",
+    )
   }
 }
 

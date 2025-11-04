@@ -1,3 +1,6 @@
+// Setup tiktoken WASM path BEFORE any other imports
+import "./util/tiktoken-setup"
+
 import yargs from "yargs"
 import { hideBin } from "yargs/helpers"
 import { RunCommand } from "./cli/cmd/run"

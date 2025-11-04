@@ -32,7 +32,7 @@ else
         *) arch="$(uname -m)" ;;
     esac
     
-    name="opencode-${platform}-${arch}"
+    name="codesurf-ai-${platform}-${arch}"
     binary="opencode"
     [ "$platform" = "win32" ] && binary="opencode.exe"
     

@@ -36,7 +36,7 @@ await $`rm -rf dist`
 const binaries: Record<string, string> = {}
 for (const [os, arch] of targets) {
   console.log(`building ${os}-${arch}`)
-  const name = `${pkg.name}-${os}-${arch}`
+  const name = `${pkg.name}-ai-${os}-${arch}`
   await $`mkdir -p dist/${name}/bin`
 
   const opentui = `@opentui/core-${os === "windows" ? "win32" : os}-${arch.replace("-baseline", "")}`
@@ -86,6 +86,13 @@ for (const [os, arch] of targets) {
     },
   })
 
+  // Copy tiktoken wasm file to dist
+  const tiktokenWasmSource = path.resolve(dir, "./node_modules/@dqbd/tiktoken/tiktoken_bg.wasm")
+  const tiktokenWasmDest = path.resolve(dir, `dist/${name}/bin/tiktoken_bg.wasm`)
+  if (fs.existsSync(tiktokenWasmSource)) {
+    fs.copyFileSync(tiktokenWasmSource, tiktokenWasmDest)
+  }
+
   await $`rm -rf ./dist/${name}/bin/tui`
   await Bun.file(`dist/${name}/package.json`).write(
     JSON.stringify(
@@ -94,6 +101,7 @@ for (const [os, arch] of targets) {
         version: Script.version,
         os: [os === "windows" ? "win32" : os],
         cpu: [arch],
+        files: ["bin"],
       },
       null,
       2,

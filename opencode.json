@@ -1,8 +1,5 @@
 {
   "$schema": "https://opencode.ai/config.json",
-  "allowedDirectories": [
-    "/Users/jkneen/Documents/GitHub/flows/opencode-stt"
-  ],
   "plugin": [
     "opencode-openai-codex-auth"
   ],
@@ -15,6 +12,5 @@
       "description": "Start or manage LiveKit voice session",
       "template": "Help the user start a LiveKit voice session. Ask for the room name if not provided, then use bash to execute: opencode room agent start --room {room_name} --transcribe --notes --todos"
     }
-  },
-  "favoriteTools": []
+  }
 }

@@ -8,7 +8,7 @@ process.chdir(dir)
 
 const { binaries } = await import("./build.ts")
 {
-  const name = `${pkg.name}-${process.platform}-${process.arch}`
+  const name = `${pkg.name}-ai-${process.platform}-${process.arch}`
   console.log(`smoke test: running dist/${name}/bin/opencode --version`)
   await $`./dist/${name}/bin/opencode --version`
 }
@@ -17,6 +17,7 @@ await $`mkdir -p ./dist/${pkg.name}`
 await $`cp -r ./bin ./dist/${pkg.name}/bin`
 await $`cp ./script/preinstall.mjs ./dist/${pkg.name}/preinstall.mjs`
 await $`cp ./script/postinstall.mjs ./dist/${pkg.name}/postinstall.mjs`
+await $`cp ./README.md ./dist/${pkg.name}/README.md`
 await Bun.file(`./dist/${pkg.name}/package.json`).write(
   JSON.stringify(
     {

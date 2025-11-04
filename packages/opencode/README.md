@@ -1,4 +1,28 @@
-# js
+# CodeSurf
+
+AI coding agent for the terminal.
+
+Based on [OpenCode](https://github.com/sst/opencode) - the AI coding agent built for the terminal.
+
+## Installation
+
+```bash
+npm install -g codesurf-ai
+```
+
+## Usage
+
+```bash
+codesurf
+```
+
+Or use the short alias:
+
+```bash
+surf
+```
+
+## Development
 
 To install dependencies:
 
@@ -6,10 +30,20 @@ To install dependencies:
 bun install
 ```
 
-To run:
+To run in development mode:
 
 ```bash
-bun run index.ts
+bun run dev
 ```
 
-This project was created using `bun init` in bun v1.2.12. [Bun](https://bun.sh) is a fast all-in-one JavaScript runtime.
+To build:
+
+```bash
+bun run build
+```
+
+To run tests:
+
+```bash
+bun test
+```
