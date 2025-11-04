@@ -62,7 +62,8 @@ const cli = yargs(hideBin(process.argv))
       })(),
     })
 
-    process.env["OPENCODE"] = "1"
+    process.env.AGENT = "1"
+    process.env.OPENCODE = "1"
 
     Log.Default.info("opencode", {
       version: Installation.VERSION,
