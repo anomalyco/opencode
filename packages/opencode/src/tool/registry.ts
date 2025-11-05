@@ -3,7 +3,6 @@ import { EditTool } from "./edit"
 import { GlobTool } from "./glob"
 import { GrepTool } from "./grep"
 import { ListTool } from "./ls"
-import { PatchTool } from "./patch"
 import { ReadTool } from "./read"
 import { TaskTool } from "./task"
 import { TodoWriteTool, TodoReadTool } from "./todo"
@@ -82,7 +81,6 @@ export namespace ToolRegistry {
       GlobTool,
       GrepTool,
       ListTool,
-      PatchTool,
       ReadTool,
       WriteTool,
       TodoWriteTool,
@@ -113,11 +111,9 @@ export namespace ToolRegistry {
     agent: Agent.Info,
   ): Promise<Record<string, boolean>> {
     const result: Record<string, boolean> = {}
-    result["patch"] = false
 
     if (agent.permission.edit === "deny") {
       result["edit"] = false
-      result["patch"] = false
       result["write"] = false
     }
     if (agent.permission.bash["*"] === "deny" && Object.keys(agent.permission.bash).length === 1) {
