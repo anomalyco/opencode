@@ -16,7 +16,9 @@ const port = import.meta.env.VITE_OPENCODE_SERVER_PORT ?? "4096"
 
 const url =
   new URLSearchParams(document.location.search).get("url") ||
-  (location.hostname.includes("opencode.ai") ? `http://${host}:${port}` : "/")
+  (location.hostname.includes("opencode.ai") || location.hostname.includes("localhost")
+    ? `http://${host}:${port}`
+    : "/")
 
 const root = document.getElementById("root")
 if (import.meta.env.DEV && !(root instanceof HTMLElement)) {
