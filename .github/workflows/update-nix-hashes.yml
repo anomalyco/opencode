@@ -1,0 +1,61 @@
+name: update nix hashes
+
+permissions:
+  contents: write
+
+on:
+  workflow_dispatch:
+
+jobs:
+  verify:
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+        with:
+          token: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Setup Nix
+        uses: DeterminateSystems/nix-installer-action@v20
+
+      - name: Set up QEMU
+        uses: docker/setup-qemu-action@v3
+
+      - name: Configure git
+        run: |
+          git config --global user.email "opencode@sst.dev"
+          git config --global user.name "opencode"
+
+      - name: Update build output hashes
+        run: |
+          set -euo pipefail
+          script/update-nix-hashes
+
+      - name: Verification build (x86_64-linux)
+        run: |
+          echo "Running final verification build for x86_64-linux..."
+          nix build .#packages.x86_64-linux.default --system x86_64-linux -L
+          echo "x86_64-linux build successful."
+
+      - name: Verification build (aarch64-linux)
+        run: |
+          echo "Running final verification build for aarch64-linux..."
+          nix build .#packages.aarch64-linux.default --system aarch64-linux -L
+          echo "aarch64-linux build successful."
+
+      - name: Commit flake.nix changes
+        run: |
+          set -euo pipefail
+
+          if git diff --quiet flake.nix; then
+            echo "No changes to flake.nix. Hash is already up to date."
+            exit 0
+          fi
+
+          VERSION=$(jq -r '.version' packages/opencode/package.json)
+          git add flake.nix
+          git commit -m "nix: update output hashes for v$VERSION"
+
+          git pull --rebase origin dev
+          git push origin HEAD:dev

@@ -1,0 +1,92 @@
+#!/usr/bin/env bash
+
+set -euo pipefail
+
+FILE=${FILE:-flake.nix}
+SYSTEM=${SYSTEM:-x86_64-linux}
+TARGET="packages.${SYSTEM}.default"
+DUMMY="sha256-AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA="
+MODELS_URL=${MODELS_URL:-https://models.dev/api.json}
+export DUMMY
+
+cleanup() {
+  if [ -n "${JSON_OUTPUT:-}" ] && [ -f "$JSON_OUTPUT" ]; then
+    rm -f "$JSON_OUTPUT"
+  fi
+  if [ -n "${BUILD_LOG:-}" ] && [ -f "$BUILD_LOG" ]; then
+    rm -f "$BUILD_LOG"
+  fi
+}
+
+trap cleanup EXIT
+
+echo "Setting dummy node_modules outputHash..."
+perl -0pi -e 's/(node_modules = stdenvNoCC\.mkDerivation\s*\{.*?outputHash = ")sha256-[^"]+(";\n)/${1}$ENV{DUMMY}${2}/s' "$FILE"
+
+if ! grep -q "$DUMMY" "$FILE"; then
+  echo "Failed to set dummy hash placeholder"
+  exit 1
+fi
+
+echo "Refreshing models-dev hash..."
+MODELS_HASH=$(nix store prefetch-file "$MODELS_URL" --json | jq -r '.hash // empty')
+
+if [ -z "$MODELS_HASH" ]; then
+  echo "Failed to prefetch models-dev hash"
+  exit 1
+fi
+
+current_models_hash="$(perl -0ne 'print $1 if /modelsDev\s*=\s*forEachSystem\s*\(.*?hash\s*=\s*"(sha256-[^"]+)"/s' "$FILE")"
+
+if [ "$MODELS_HASH" != "$current_models_hash" ]; then
+  export MODELS_HASH
+  perl -0pi -e 's/(modelsDev\s*=\s*forEachSystem\s*\(.*?hash\s*=\s*")sha256-[^"]+(")/${1}$ENV{MODELS_HASH}${2}/s' "$FILE"
+  if ! grep -q "$MODELS_HASH" "$FILE"; then
+    echo "Failed to update models-dev hash"
+    exit 1
+  fi
+  echo "models-dev hash updated: $MODELS_HASH"
+fi
+
+if [ "$MODELS_HASH" = "$current_models_hash" ]; then
+  echo "models-dev hash already up to date: $MODELS_HASH"
+fi
+
+JSON_OUTPUT=$(mktemp)
+BUILD_LOG=$(mktemp)
+
+echo "Building ${TARGET} to discover correct node_modules outputHash..."
+if nix build ".#${TARGET}" --system "$SYSTEM" --no-link --json >"$JSON_OUTPUT" 2>"$BUILD_LOG"; then
+  echo "Build succeeded while dummy hash was set; aborting"
+  exit 1
+fi
+
+CORRECT_HASH="$(jq -r '
+  map(
+    select(.error.actualHash? != null)
+    | .error.actualHash
+  )
+  | map(select(. != env.DUMMY))
+  | .[0] // ""
+' "$JSON_OUTPUT")"
+
+if [ -z "$CORRECT_HASH" ]; then
+  CORRECT_HASH="$(grep -o 'sha256-[A-Za-z0-9+/=]\+' "$BUILD_LOG" | grep -v "$DUMMY" | head -n1 || true)"
+fi
+
+if [ -z "$CORRECT_HASH" ]; then
+  echo "Failed to extract node_modules hash"
+  tail -100 "$BUILD_LOG" || true
+  exit 1
+fi
+
+export CORRECT_HASH
+
+perl -0pi -e 's/(node_modules = stdenvNoCC\.mkDerivation\s*\{.*?outputHash = ")sha256-[^"]+(";\n)/${1}$ENV{CORRECT_HASH}${2}/s' "$FILE"
+
+if ! grep -q "$CORRECT_HASH" "$FILE"; then
+  echo "Failed to update flake with new hash"
+  exit 1
+fi
+
+echo "node_modules hash updated: $CORRECT_HASH"

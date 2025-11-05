@@ -15,13 +15,43 @@
         "aarch64-linux"
         "x86_64-linux"
       ];
-      forEachSystem = nixpkgs.lib.genAttrs systems;
+      lib = nixpkgs.lib;
+      forEachSystem = lib.genAttrs systems;
+      pkgsFor = system: nixpkgs.legacyPackages.${system};
+      packageJson = builtins.fromJSON (builtins.readFile ./packages/opencode/package.json);
+      bunTarget = {
+        "aarch64-linux" = "bun-linux-arm64";
+        "x86_64-linux" = "bun-linux-x64";
+      };
+      modelsDev = forEachSystem (
+        system:
+        let
+          pkgs = pkgsFor system;
+        in
+        pkgs.stdenvNoCC.mkDerivation {
+          pname = "models-dev";
+          version = "unstable";
+
+          src = pkgs.fetchurl {
+            url = "https://models.dev/api.json";
+            hash = "sha256-xQ1FjLTz8g4YbgZZ97j8FrYeuZd9aDUtLB67I23RQDQ=";
+          };
+
+          dontUnpack = true;
+          dontBuild = true;
+
+          installPhase = ''
+            mkdir -p $out/dist
+            cp $src $out/dist/_api.json
+          '';
+        }
+      );
     in
     {
       devShells = forEachSystem (
         system:
         let
-          pkgs = import nixpkgs { inherit system; };
+          pkgs = pkgsFor system;
         in
         {
           default = pkgs.mkShell {
@@ -39,30 +69,7 @@
       packages = forEachSystem (
         system:
         let
-          pkgs = import nixpkgs { inherit system; };
-          packageJson = builtins.fromJSON (builtins.readFile ./packages/opencode/package.json);
-          bun-target = {
-            "aarch64-linux" = "bun-linux-arm64";
-            "x86_64-linux" = "bun-linux-x64";
-          };
-
-          models-dev = pkgs.stdenvNoCC.mkDerivation {
-            pname = "models-dev";
-            version = "unstable";
-
-            src = pkgs.fetchurl {
-              url = "https://models.dev/api.json";
-              hash = "sha256-xQ1FjLTz8g4YbgZZ97j8FrYeuZd9aDUtLB67I23RQDQ=";
-            };
-
-            dontUnpack = true;
-            dontBuild = true;
-
-            installPhase = ''
-              mkdir -p $out/dist
-              cp $src $out/dist/_api.json
-            '';
-          };
+          pkgs = pkgsFor system;
         in
         {
           default = pkgs.callPackage (
@@ -209,7 +216,7 @@ PY
                 runHook postConfigure
               '';
 
-              env.MODELS_DEV_API_JSON = "${models-dev}/dist/_api.json";
+              env.MODELS_DEV_API_JSON = "${modelsDev.${system}}/dist/_api.json";
 
               buildPhase = ''
                 runHook preBuild
@@ -234,7 +241,6 @@ PY
                   throw new Error("BUN_COMPILE_TARGET not set")
                 }
 
-                // Change to package directory like the original build script does
                 process.chdir(packageDir)
 
                 const result = await Bun.build({
@@ -298,7 +304,7 @@ PY
                 substituteInPlace bun-build.ts \
                   --replace '@VERSION@' "${finalAttrs.version}"
 
-                export BUN_COMPILE_TARGET=${bun-target.${stdenvNoCC.hostPlatform.system}}
+                export BUN_COMPILE_TARGET=${bunTarget.${stdenvNoCC.hostPlatform.system}}
                 bun --bun bun-build.ts
 
                 runHook postBuild
@@ -355,7 +361,7 @@ PY
       apps = forEachSystem (
         system:
         let
-          pkgs = import nixpkgs { inherit system; };
+          pkgs = pkgsFor system;
         in
         {
           opencode-dev = {
