@@ -417,16 +417,6 @@ export namespace ACP {
           description: "compact the session",
         })
 
-      setTimeout(() => {
-        this.connection.sessionUpdate({
-          sessionId,
-          update: {
-            sessionUpdate: "available_commands_update",
-            availableCommands,
-          },
-        })
-      }, 0)
-
       const availableModes = (await Agents.list())
         .filter((agent) => agent.mode !== "subagent")
         .map((agent) => ({
@@ -466,6 +456,16 @@ export namespace ACP {
           await MCP.add(key, mcp)
         }),
       )
+
+      setTimeout(() => {
+        this.connection.sessionUpdate({
+          sessionId,
+          update: {
+            sessionUpdate: "available_commands_update",
+            availableCommands,
+          },
+        })
+      }, 0)
 
       return {
         sessionId,
