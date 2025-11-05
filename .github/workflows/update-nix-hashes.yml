@@ -29,6 +29,8 @@ jobs:
           git config --global user.name "opencode"
 
       - name: Update build output hashes
+        env:
+          SYSTEMS: "aarch64-linux x86_64-linux"
         run: |
           set -euo pipefail
           nix/scripts/update-hashes
@@ -49,13 +51,13 @@ jobs:
         run: |
           set -euo pipefail
 
-          if git diff --quiet flake.nix nix/node-modules.nix nix/models-dev.nix; then
+          if git diff --quiet flake.nix nix/node-modules.nix nix/node-modules-hashes.json nix/models-dev.nix; then
             echo "No changes to tracked Nix files. Hashes are already up to date."
             exit 0
           fi
 
           VERSION=$(jq -r '.version' packages/opencode/package.json)
-          git add flake.nix nix/node-modules.nix nix/models-dev.nix
+          git add flake.nix nix/node-modules.nix nix/node-modules-hashes.json nix/models-dev.nix
           git commit -m "nix: update hashes for v$VERSION"
 
           git pull --rebase origin ${GITHUB_REF_NAME}

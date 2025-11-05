@@ -24,6 +24,7 @@
         "x86_64-linux" = "bun-linux-x64";
       };
       scripts = ./nix/scripts;
+      nodeModulesHashes = builtins.fromJSON (builtins.readFile ./nix/node-modules-hashes.json);
       modelsDev = forEachSystem (
         system:
         let
@@ -55,7 +56,7 @@
         system:
         let
           pkgs = pkgsFor system;
-          mkNodeModules = pkgs.callPackage ./nix/node-modules.nix { };
+          mkNodeModules = pkgs.callPackage ./nix/node-modules.nix { hashes = nodeModulesHashes; };
           mkPackage = pkgs.callPackage ./nix/opencode.nix { };
         in
         {
@@ -78,13 +79,16 @@
         {
           opencode-dev = {
             type = "app";
-            program = pkgs.writeShellApplication {
+            meta = {
+                description = "Nix devshell shell for OpenCode";
+                runtimeInputs = [ pkgs.bun ];
+              };
+            program = "${pkgs.writeShellApplication {
               name = "opencode-dev";
-              runtimeInputs = [ pkgs.bun ];
               text = ''
                 exec bun run dev "$@"
               '';
-            };
+            }}/bin/opencode-dev";
           };
         }
       );

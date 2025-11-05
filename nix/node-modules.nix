@@ -1,4 +1,4 @@
-{ lib, stdenvNoCC, bun, cacert, curl }:
+{ hashes, lib, stdenvNoCC, bun, cacert, curl }:
 args:
 stdenvNoCC.mkDerivation {
   pname = "opencode-node_modules";
@@ -99,5 +99,5 @@ EOF
 
   outputHashAlgo = "sha256";
   outputHashMode = "recursive";
-  outputHash = "sha256-eIHqmHsGAlBMrjbitwDQ6tMT+CZZIC9TGwNinQBksx8=";
+  outputHash = hashes.${stdenvNoCC.hostPlatform.system};
 }
