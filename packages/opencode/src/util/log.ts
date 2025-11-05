@@ -4,7 +4,7 @@ import { Global } from "../global"
 import z from "zod"
 
 export namespace Log {
-  export const Level = z.enum(["DEBUG", "INFO", "WARN", "ERROR"]).openapi({ ref: "LogLevel", description: "Log level" })
+  export const Level = z.enum(["DEBUG", "INFO", "WARN", "ERROR"]).meta({ ref: "LogLevel", description: "Log level" })
   export type Level = z.infer<typeof Level>
 
   const levelPriority: Record<Level, number> = {

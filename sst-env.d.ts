@@ -5,12 +5,20 @@
 
 declare module "sst" {
   export interface Resource {
-    "ANTHROPIC_API_KEY": {
+    "ADMIN_SECRET": {
       "type": "sst.sst.Secret"
       "value": string
     }
     "AUTH_API_URL": {
       "type": "sst.sst.Linkable"
+      "value": string
+    }
+    "AWS_SES_ACCESS_KEY_ID": {
+      "type": "sst.sst.Secret"
+      "value": string
+    }
+    "AWS_SES_SECRET_ACCESS_KEY": {
+      "type": "sst.sst.Secret"
       "value": string
     }
     "Api": {
@@ -23,10 +31,6 @@ declare module "sst" {
     }
     "AuthStorage": {
       "type": "sst.cloudflare.Kv"
-    }
-    "BASETEN_API_KEY": {
-      "type": "sst.sst.Secret"
-      "value": string
     }
     "Bucket": {
       "name": string
@@ -43,6 +47,14 @@ declare module "sst" {
       "port": number
       "type": "sst.sst.Linkable"
       "username": string
+    }
+    "Desktop": {
+      "type": "sst.cloudflare.StaticSite"
+      "url": string
+    }
+    "EMAILOCTOPUS_API_KEY": {
+      "type": "sst.sst.Secret"
+      "value": string
     }
     "GITHUB_APP_ID": {
       "type": "sst.sst.Secret"
@@ -64,6 +76,13 @@ declare module "sst" {
       "type": "sst.sst.Secret"
       "value": string
     }
+    "HONEYCOMB_API_KEY": {
+      "type": "sst.sst.Secret"
+      "value": string
+    }
+    "LogProcessor": {
+      "type": "sst.cloudflare.Worker"
+    }
     "STRIPE_SECRET_KEY": {
       "type": "sst.sst.Secret"
       "value": string
@@ -76,7 +95,11 @@ declare module "sst" {
       "type": "sst.cloudflare.Astro"
       "url": string
     }
-    "XAI_API_KEY": {
+    "ZEN_MODELS1": {
+      "type": "sst.sst.Secret"
+      "value": string
+    }
+    "ZEN_MODELS2": {
       "type": "sst.sst.Secret"
       "value": string
     }

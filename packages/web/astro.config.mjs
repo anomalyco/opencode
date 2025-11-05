@@ -65,7 +65,7 @@ export default defineConfig({
         "providers",
         "enterprise",
         "troubleshooting",
-
+        "1-0",
         {
           label: "Usage",
           items: ["tui", "cli", "ide", "zen", "share", "github", "gitlab"],
@@ -74,6 +74,7 @@ export default defineConfig({
         {
           label: "Configure",
           items: [
+            "tools",
             "rules",
             "agents",
             "models",
@@ -84,6 +85,8 @@ export default defineConfig({
             "permissions",
             "lsp",
             "mcp-servers",
+            "acp",
+            "custom-tools",
           ],
         },
 

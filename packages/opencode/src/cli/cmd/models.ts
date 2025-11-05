@@ -6,14 +6,17 @@ export const ModelsCommand = cmd({
   command: "models",
   describe: "list all available models",
   handler: async () => {
-    await Instance.provide(process.cwd(), async () => {
-      const providers = await Provider.list()
+    await Instance.provide({
+      directory: process.cwd(),
+      async fn() {
+        const providers = await Provider.list()
 
-      for (const [providerID, provider] of Object.entries(providers)) {
-        for (const modelID of Object.keys(provider.info.models)) {
-          console.log(`${providerID}/${modelID}`)
+        for (const [providerID, provider] of Object.entries(providers)) {
+          for (const modelID of Object.keys(provider.info.models)) {
+            console.log(`${providerID}/${modelID}`)
+          }
         }
-      }
+      },
     })
   },
 })

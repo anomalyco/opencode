@@ -6,6 +6,7 @@ import (
 	"context"
 	"net/http"
 	"net/url"
+	"slices"
 
 	"github.com/sst/opencode-sdk-go/internal/apijson"
 	"github.com/sst/opencode-sdk-go/internal/apiquery"
@@ -35,7 +36,7 @@ func NewProjectService(opts ...option.RequestOption) (r *ProjectService) {
 
 // List all projects
 func (r *ProjectService) List(ctx context.Context, query ProjectListParams, opts ...option.RequestOption) (res *[]Project, err error) {
-	opts = append(r.Options[:], opts...)
+	opts = slices.Concat(r.Options, opts)
 	path := "project"
 	err = requestconfig.ExecuteNewRequest(ctx, http.MethodGet, path, query, &res, opts...)
 	return
@@ -43,7 +44,7 @@ func (r *ProjectService) List(ctx context.Context, query ProjectListParams, opts
 
 // Get the current project
 func (r *ProjectService) Current(ctx context.Context, query ProjectCurrentParams, opts ...option.RequestOption) (res *Project, err error) {
-	opts = append(r.Options[:], opts...)
+	opts = slices.Concat(r.Options, opts)
 	path := "project/current"
 	err = requestconfig.ExecuteNewRequest(ctx, http.MethodGet, path, query, &res, opts...)
 	return

@@ -1,0 +1,5 @@
+Your job is to generate a summary of what happened in this conversation and why.
+
+Keep the results to 2-3 sentences.
+
+Output the message summary now:

@@ -37,11 +37,7 @@ function getStatusText(status: [Status, string?]): string {
   }
 }
 
-export default function Share(props: {
-  id: string
-  api: string
-  info: Session.Info
-}) {
+export default function Share(props: { id: string; api: string; info: Session.Info }) {
   let lastScrollY = 0
   let hasScrolledToAnchor = false
   let scrollTimeout: number | undefined
@@ -67,7 +63,8 @@ export default function Share(props: {
         created: props.info.time.created,
         updated: props.info.time.updated,
       },
-    }, messages: {}
+    },
+    messages: {},
   })
   const messages = createMemo(() => Object.values(store.messages).toSorted((a, b) => a.id?.localeCompare(b.id)))
   const [connectionStatus, setConnectionStatus] = createSignal<[Status, string?]>(["disconnected", "Disconnected"])
@@ -413,7 +410,11 @@ export default function Share(props: {
                     </li>
                     <li>
                       <span data-element-label>Output Tokens</span>
-                      {data().tokens.output ? <span>{data().tokens.output}</span> : <span data-placeholder>&mdash;</span>}
+                      {data().tokens.output ? (
+                        <span>{data().tokens.output}</span>
+                      ) : (
+                        <span data-placeholder>&mdash;</span>
+                      )}
                     </li>
                     <li>
                       <span data-element-label>Reasoning Tokens</span>

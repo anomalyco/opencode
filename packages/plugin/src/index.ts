@@ -10,7 +10,11 @@ import type {
   Auth,
   Config,
 } from "@opencode-ai/sdk"
+
 import type { BunShell } from "./shell"
+import { type ToolDefinition } from "./tool"
+
+export * from "./tool"
 
 export type PluginInput = {
   client: ReturnType<typeof createOpencodeClient>
@@ -19,11 +23,15 @@ export type PluginInput = {
   worktree: string
   $: BunShell
 }
+
 export type Plugin = (input: PluginInput) => Promise<Hooks>
 
 export interface Hooks {
   event?: (input: { event: Event }) => Promise<void>
   config?: (input: Config) => Promise<void>
+  tool?: {
+    [key: string]: ToolDefinition
+  }
   auth?: {
     provider: string
     loader?: (auth: () => Promise<Auth>, provider: Provider) => Promise<Record<string, any>>
@@ -31,13 +39,35 @@ export interface Hooks {
       | {
           type: "oauth"
           label: string
-          authorize(): Promise<
+          prompts?: Array<
+            | {
+                type: "text"
+                key: string
+                message: string
+                placeholder?: string
+                validate?: (value: string) => string | undefined
+                condition?: (inputs: Record<string, string>) => boolean
+              }
+            | {
+                type: "select"
+                key: string
+                message: string
+                options: Array<{
+                  label: string
+                  value: string
+                  hint?: string
+                }>
+                condition?: (inputs: Record<string, string>) => boolean
+              }
+          >
+          authorize(inputs?: Record<string, string>): Promise<
             { url: string; instructions: string } & (
               | {
                   method: "auto"
                   callback(): Promise<
                     | ({
                         type: "success"
+                        provider?: string
                       } & (
                         | {
                             refresh: string
@@ -56,6 +86,7 @@ export interface Hooks {
                   callback(code: string): Promise<
                     | ({
                         type: "success"
+                        provider?: string
                       } & (
                         | {
                             refresh: string
@@ -72,7 +103,41 @@ export interface Hooks {
             )
           >
         }
-      | { type: "api"; label: string }
+      | {
+          type: "api"
+          label: string
+          prompts?: Array<
+            | {
+                type: "text"
+                key: string
+                message: string
+                placeholder?: string
+                validate?: (value: string) => string | undefined
+                condition?: (inputs: Record<string, string>) => boolean
+              }
+            | {
+                type: "select"
+                key: string
+                message: string
+                options: Array<{
+                  label: string
+                  value: string
+                  hint?: string
+                }>
+                condition?: (inputs: Record<string, string>) => boolean
+              }
+          >
+          authorize?(inputs?: Record<string, string>): Promise<
+            | {
+                type: "success"
+                key: string
+                provider?: string
+              }
+            | {
+                type: "failed"
+              }
+          >
+        }
     )[]
   }
   /**

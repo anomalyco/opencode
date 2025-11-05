@@ -1,13 +1,38 @@
+import { Log } from "@/util/log"
 import { Context } from "../util/context"
 import { Project } from "./project"
 import { State } from "./state"
 
-const context = Context.create<{ directory: string; worktree: string; project: Project.Info }>("path")
+interface Context {
+  directory: string
+  worktree: string
+  project: Project.Info
+}
+const context = Context.create<Context>("instance")
+const cache = new Map<string, Context>()
 
 export const Instance = {
-  async provide<R>(directory: string, cb: () => R): Promise<R> {
-    const project = await Project.fromDirectory(directory)
-    return context.provide({ directory, worktree: project.worktree, project }, cb)
+  async provide<R>(input: {
+    directory: string
+    init?: () => Promise<any>
+    fn: () => R
+  }): Promise<R> {
+    let existing = cache.get(input.directory)
+    if (!existing) {
+      const project = await Project.fromDirectory(input.directory)
+      existing = {
+        directory: input.directory,
+        worktree: project.worktree,
+        project,
+      }
+    }
+    return context.provide(existing, async () => {
+      if (!cache.has(input.directory)) {
+        cache.set(input.directory, existing)
+        await input.init?.()
+      }
+      return input.fn()
+    })
   },
   get directory() {
     return context.use().directory
@@ -22,6 +47,15 @@ export const Instance = {
     return State.create(() => Instance.directory, init, dispose)
   },
   async dispose() {
+    Log.Default.info("disposing instance", { directory: Instance.directory })
     await State.dispose(Instance.directory)
+  },
+  async disposeAll() {
+    for (const [_key, value] of cache) {
+      await context.provide(value, async () => {
+        await Instance.dispose()
+      })
+    }
+    cache.clear()
   },
 }

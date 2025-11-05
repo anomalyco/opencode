@@ -10,19 +10,12 @@ export function ContentError(props: Props) {
   const overflow = createOverflow()
 
   return (
-    <div
-      class={style.root}
-      data-expanded={expanded() || props.expand === true ? true : undefined}
-    >
+    <div class={style.root} data-expanded={expanded() || props.expand === true ? true : undefined}>
       <div data-section="content" ref={overflow.ref}>
         {props.children}
       </div>
       {((!props.expand && overflow.status) || expanded()) && (
-        <button
-          type="button"
-          data-element-button-text
-          onClick={() => setExpanded((e) => !e)}
-        >
+        <button type="button" data-element-button-text onClick={() => setExpanded((e) => !e)}>
           {expanded() ? "Show less" : "Show more"}
         </button>
       )}

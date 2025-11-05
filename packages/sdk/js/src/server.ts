@@ -51,7 +51,7 @@ export async function createOpencodeServer(options?: ServerOptions) {
             throw new Error(`Failed to parse server url from output: ${line}`)
           }
           clearTimeout(id)
-          resolve(match[1])
+          resolve(match[1]!)
           return
         }
       }
@@ -105,7 +105,7 @@ export function createOpencodeTui(options?: TuiOptions) {
 
   const proc = spawn(`opencode`, args, {
     signal: options?.signal,
-    stdio: 'inherit',
+    stdio: "inherit",
     env: {
       ...process.env,
       OPENCODE_CONFIG_CONTENT: JSON.stringify(options?.config ?? {}),

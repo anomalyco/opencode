@@ -1,7 +1,7 @@
 import { Global } from "../global"
 import { Log } from "../util/log"
 import path from "path"
-import { z } from "zod"
+import z from "zod"
 import { data } from "./models-macro" with { type: "macro" }
 import { Installation } from "../installation"
 
@@ -28,9 +28,19 @@ export namespace ModelsDev {
         context: z.number(),
         output: z.number(),
       }),
-      options: z.record(z.any()),
+      modalities: z
+        .object({
+          input: z.array(z.enum(["text", "audio", "image", "video", "pdf"])),
+          output: z.array(z.enum(["text", "audio", "image", "video", "pdf"])),
+        })
+        .optional(),
+      experimental: z.boolean().optional(),
+      status: z.enum(["alpha", "beta", "deprecated"]).optional(),
+      options: z.record(z.string(), z.any()),
+      headers: z.record(z.string(), z.string()).optional(),
+      provider: z.object({ npm: z.string() }).optional(),
     })
-    .openapi({
+    .meta({
       ref: "Model",
     })
   export type Model = z.infer<typeof Model>
@@ -42,9 +52,9 @@ export namespace ModelsDev {
       env: z.array(z.string()),
       id: z.string(),
       npm: z.string().optional(),
-      models: z.record(Model),
+      models: z.record(z.string(), Model),
     })
-    .openapi({
+    .meta({
       ref: "Provider",
     })
 
@@ -68,6 +78,7 @@ export namespace ModelsDev {
       headers: {
         "User-Agent": Installation.USER_AGENT,
       },
+      signal: AbortSignal.timeout(10 * 1000),
     }).catch((e) => {
       log.error("Failed to fetch models.dev", {
         error: e,

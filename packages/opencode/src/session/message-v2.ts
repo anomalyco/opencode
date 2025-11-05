@@ -2,13 +2,14 @@ import z from "zod"
 import { Bus } from "../bus"
 import { NamedError } from "../util/error"
 import { Message } from "./message"
-import { convertToModelMessages, type ModelMessage, type UIMessage } from "ai"
+import { APICallError, convertToModelMessages, LoadAPIKeyError, type ModelMessage, type UIMessage } from "ai"
 import { Identifier } from "../id/id"
 import { LSP } from "../lsp"
+import { Snapshot } from "@/snapshot"
 
 export namespace MessageV2 {
   export const OutputLengthError = NamedError.create("MessageOutputLengthError", z.object({}))
-  export const AbortedError = NamedError.create("MessageAbortedError", z.object({}))
+  export const AbortedError = NamedError.create("MessageAbortedError", z.object({ message: z.string() }))
   export const AuthError = NamedError.create(
     "ProviderAuthError",
     z.object({
@@ -16,70 +17,17 @@ export namespace MessageV2 {
       message: z.string(),
     }),
   )
-
-  export const ToolStatePending = z
-    .object({
-      status: z.literal("pending"),
-    })
-    .openapi({
-      ref: "ToolStatePending",
-    })
-
-  export type ToolStatePending = z.infer<typeof ToolStatePending>
-
-  export const ToolStateRunning = z
-    .object({
-      status: z.literal("running"),
-      input: z.any(),
-      title: z.string().optional(),
-      metadata: z.record(z.any()).optional(),
-      time: z.object({
-        start: z.number(),
-      }),
-    })
-    .openapi({
-      ref: "ToolStateRunning",
-    })
-  export type ToolStateRunning = z.infer<typeof ToolStateRunning>
-
-  export const ToolStateCompleted = z
-    .object({
-      status: z.literal("completed"),
-      input: z.record(z.any()),
-      output: z.string(),
-      title: z.string(),
-      metadata: z.record(z.any()),
-      time: z.object({
-        start: z.number(),
-        end: z.number(),
-      }),
-    })
-    .openapi({
-      ref: "ToolStateCompleted",
-    })
-  export type ToolStateCompleted = z.infer<typeof ToolStateCompleted>
-
-  export const ToolStateError = z
-    .object({
-      status: z.literal("error"),
-      input: z.record(z.any()),
-      error: z.string(),
-      metadata: z.record(z.any()).optional(),
-      time: z.object({
-        start: z.number(),
-        end: z.number(),
-      }),
-    })
-    .openapi({
-      ref: "ToolStateError",
-    })
-  export type ToolStateError = z.infer<typeof ToolStateError>
-
-  export const ToolState = z
-    .discriminatedUnion("status", [ToolStatePending, ToolStateRunning, ToolStateCompleted, ToolStateError])
-    .openapi({
-      ref: "ToolState",
-    })
+  export const APIError = NamedError.create(
+    "APIError",
+    z.object({
+      message: z.string(),
+      statusCode: z.number().optional(),
+      isRetryable: z.boolean(),
+      responseHeaders: z.record(z.string(), z.string()).optional(),
+      responseBody: z.string().optional(),
+    }),
+  )
+  export type APIError = z.infer<typeof APIError.Schema>
 
   const PartBase = z.object({
     id: z.string(),
@@ -90,7 +38,7 @@ export namespace MessageV2 {
   export const SnapshotPart = PartBase.extend({
     type: z.literal("snapshot"),
     snapshot: z.string(),
-  }).openapi({
+  }).meta({
     ref: "SnapshotPart",
   })
   export type SnapshotPart = z.infer<typeof SnapshotPart>
@@ -99,7 +47,7 @@ export namespace MessageV2 {
     type: z.literal("patch"),
     hash: z.string(),
     files: z.string().array(),
-  }).openapi({
+  }).meta({
     ref: "PatchPart",
   })
   export type PatchPart = z.infer<typeof PatchPart>
@@ -114,7 +62,8 @@ export namespace MessageV2 {
         end: z.number().optional(),
       })
       .optional(),
-  }).openapi({
+    metadata: z.record(z.string(), z.any()).optional(),
+  }).meta({
     ref: "TextPart",
   })
   export type TextPart = z.infer<typeof TextPart>
@@ -122,25 +71,15 @@ export namespace MessageV2 {
   export const ReasoningPart = PartBase.extend({
     type: z.literal("reasoning"),
     text: z.string(),
-    metadata: z.record(z.any()).optional(),
+    metadata: z.record(z.string(), z.any()).optional(),
     time: z.object({
       start: z.number(),
       end: z.number().optional(),
     }),
-  }).openapi({
+  }).meta({
     ref: "ReasoningPart",
   })
   export type ReasoningPart = z.infer<typeof ReasoningPart>
-
-  export const ToolPart = PartBase.extend({
-    type: z.literal("tool"),
-    callID: z.string(),
-    tool: z.string(),
-    state: ToolState,
-  }).openapi({
-    ref: "ToolPart",
-  })
-  export type ToolPart = z.infer<typeof ToolPart>
 
   const FilePartSourceBase = z.object({
     text: z
@@ -149,7 +88,7 @@ export namespace MessageV2 {
         start: z.number().int(),
         end: z.number().int(),
       })
-      .openapi({
+      .meta({
         ref: "FilePartSourceText",
       }),
   })
@@ -157,7 +96,7 @@ export namespace MessageV2 {
   export const FileSource = FilePartSourceBase.extend({
     type: z.literal("file"),
     path: z.string(),
-  }).openapi({
+  }).meta({
     ref: "FileSource",
   })
 
@@ -167,11 +106,11 @@ export namespace MessageV2 {
     range: LSP.Range,
     name: z.string(),
     kind: z.number().int(),
-  }).openapi({
+  }).meta({
     ref: "SymbolSource",
   })
 
-  export const FilePartSource = z.discriminatedUnion("type", [FileSource, SymbolSource]).openapi({
+  export const FilePartSource = z.discriminatedUnion("type", [FileSource, SymbolSource]).meta({
     ref: "FilePartSource",
   })
 
@@ -181,7 +120,7 @@ export namespace MessageV2 {
     filename: z.string().optional(),
     url: z.string(),
     source: FilePartSource.optional(),
-  }).openapi({
+  }).meta({
     ref: "FilePart",
   })
   export type FilePart = z.infer<typeof FilePart>
@@ -196,20 +135,35 @@ export namespace MessageV2 {
         end: z.number().int(),
       })
       .optional(),
-  }).openapi({
+  }).meta({
     ref: "AgentPart",
   })
   export type AgentPart = z.infer<typeof AgentPart>
 
+  export const RetryPart = PartBase.extend({
+    type: z.literal("retry"),
+    attempt: z.number(),
+    error: APIError.Schema,
+    time: z.object({
+      created: z.number(),
+    }),
+  }).meta({
+    ref: "RetryPart",
+  })
+  export type RetryPart = z.infer<typeof RetryPart>
+
   export const StepStartPart = PartBase.extend({
     type: z.literal("step-start"),
-  }).openapi({
+    snapshot: z.string().optional(),
+  }).meta({
     ref: "StepStartPart",
   })
   export type StepStartPart = z.infer<typeof StepStartPart>
 
   export const StepFinishPart = PartBase.extend({
     type: z.literal("step-finish"),
+    reason: z.string(),
+    snapshot: z.string().optional(),
     cost: z.number(),
     tokens: z.object({
       input: z.number(),
@@ -220,10 +174,89 @@ export namespace MessageV2 {
         write: z.number(),
       }),
     }),
-  }).openapi({
+  }).meta({
     ref: "StepFinishPart",
   })
   export type StepFinishPart = z.infer<typeof StepFinishPart>
+
+  export const ToolStatePending = z
+    .object({
+      status: z.literal("pending"),
+      input: z.record(z.string(), z.any()),
+      raw: z.string(),
+    })
+    .meta({
+      ref: "ToolStatePending",
+    })
+
+  export type ToolStatePending = z.infer<typeof ToolStatePending>
+
+  export const ToolStateRunning = z
+    .object({
+      status: z.literal("running"),
+      input: z.record(z.string(), z.any()),
+      title: z.string().optional(),
+      metadata: z.record(z.string(), z.any()).optional(),
+      time: z.object({
+        start: z.number(),
+      }),
+    })
+    .meta({
+      ref: "ToolStateRunning",
+    })
+  export type ToolStateRunning = z.infer<typeof ToolStateRunning>
+
+  export const ToolStateCompleted = z
+    .object({
+      status: z.literal("completed"),
+      input: z.record(z.string(), z.any()),
+      output: z.string(),
+      title: z.string(),
+      metadata: z.record(z.string(), z.any()),
+      time: z.object({
+        start: z.number(),
+        end: z.number(),
+        compacted: z.number().optional(),
+      }),
+      attachments: FilePart.array().optional(),
+    })
+    .meta({
+      ref: "ToolStateCompleted",
+    })
+  export type ToolStateCompleted = z.infer<typeof ToolStateCompleted>
+
+  export const ToolStateError = z
+    .object({
+      status: z.literal("error"),
+      input: z.record(z.string(), z.any()),
+      error: z.string(),
+      metadata: z.record(z.string(), z.any()).optional(),
+      time: z.object({
+        start: z.number(),
+        end: z.number(),
+      }),
+    })
+    .meta({
+      ref: "ToolStateError",
+    })
+  export type ToolStateError = z.infer<typeof ToolStateError>
+
+  export const ToolState = z
+    .discriminatedUnion("status", [ToolStatePending, ToolStateRunning, ToolStateCompleted, ToolStateError])
+    .meta({
+      ref: "ToolState",
+    })
+
+  export const ToolPart = PartBase.extend({
+    type: z.literal("tool"),
+    callID: z.string(),
+    tool: z.string(),
+    state: ToolState,
+    metadata: z.record(z.string(), z.any()).optional(),
+  }).meta({
+    ref: "ToolPart",
+  })
+  export type ToolPart = z.infer<typeof ToolPart>
 
   const Base = z.object({
     id: z.string(),
@@ -235,7 +268,14 @@ export namespace MessageV2 {
     time: z.object({
       created: z.number(),
     }),
-  }).openapi({
+    summary: z
+      .object({
+        title: z.string().optional(),
+        body: z.string().optional(),
+        diffs: Snapshot.FileDiff.array(),
+      })
+      .optional(),
+  }).meta({
     ref: "UserMessage",
   })
   export type User = z.infer<typeof User>
@@ -251,8 +291,9 @@ export namespace MessageV2 {
       SnapshotPart,
       PatchPart,
       AgentPart,
+      RetryPart,
     ])
-    .openapi({
+    .meta({
       ref: "Part",
     })
   export type Part = z.infer<typeof Part>
@@ -269,9 +310,11 @@ export namespace MessageV2 {
         NamedError.Unknown.Schema,
         OutputLengthError.Schema,
         AbortedError.Schema,
+        APIError.Schema,
       ])
       .optional(),
     system: z.string().array(),
+    parentID: z.string(),
     modelID: z.string(),
     providerID: z.string(),
     mode: z.string(),
@@ -290,12 +333,12 @@ export namespace MessageV2 {
         write: z.number(),
       }),
     }),
-  }).openapi({
+  }).meta({
     ref: "AssistantMessage",
   })
   export type Assistant = z.infer<typeof Assistant>
 
-  export const Info = z.discriminatedUnion("role", [User, Assistant]).openapi({
+  export const Info = z.discriminatedUnion("role", [User, Assistant]).meta({
     ref: "Message",
   })
   export type Info = z.infer<typeof Info>
@@ -318,6 +361,7 @@ export namespace MessageV2 {
       "message.part.updated",
       z.object({
         part: Part,
+        delta: z.string().optional(),
       }),
     ),
     PartRemoved: Bus.event(
@@ -330,10 +374,17 @@ export namespace MessageV2 {
     ),
   }
 
+  export const WithParts = z.object({
+    info: Info,
+    parts: z.array(Part),
+  })
+  export type WithParts = z.infer<typeof WithParts>
+
   export function fromV1(v1: Message.Info) {
     if (v1.role === "assistant") {
       const info: Assistant = {
         id: v1.id,
+        parentID: "",
         sessionID: v1.metadata.sessionID,
         role: "assistant",
         time: {
@@ -384,6 +435,8 @@ export namespace MessageV2 {
                 if (part.toolInvocation.state === "partial-call") {
                   return {
                     status: "pending",
+                    input: {},
+                    raw: "",
                   }
                 }
 
@@ -487,8 +540,8 @@ export namespace MessageV2 {
                   text: part.text,
                 },
               ]
-            // text/plain files are converted into text parts, ignore them
-            if (part.type === "file" && part.mime !== "text/plain")
+            // text/plain and directory files are converted into text parts, ignore them
+            if (part.type === "file" && part.mime !== "text/plain" && part.mime !== "application/x-directory")
               return [
                 {
                   type: "file",
@@ -512,6 +565,7 @@ export namespace MessageV2 {
                 {
                   type: "text",
                   text: part.text,
+                  providerMetadata: part.metadata,
                 },
               ]
             if (part.type === "step-start")
@@ -521,16 +575,36 @@ export namespace MessageV2 {
                 },
               ]
             if (part.type === "tool") {
-              if (part.state.status === "completed")
+              if (part.state.status === "completed") {
+                if (part.state.attachments?.length) {
+                  result.push({
+                    id: Identifier.ascending("message"),
+                    role: "user",
+                    parts: [
+                      {
+                        type: "text",
+                        text: `Tool ${part.tool} returned an attachment:`,
+                      },
+                      ...part.state.attachments.map((attachment) => ({
+                        type: "file" as const,
+                        url: attachment.url,
+                        mediaType: attachment.mime,
+                        filename: attachment.filename,
+                      })),
+                    ],
+                  })
+                }
                 return [
                   {
                     type: ("tool-" + part.tool) as `tool-${string}`,
                     state: "output-available",
                     toolCallId: part.callID,
                     input: part.state.input,
-                    output: part.state.output,
+                    output: part.state.time.compacted ? "[Old tool result content cleared]" : part.state.output,
+                    callProviderMetadata: part.metadata,
                   },
                 ]
+              }
               if (part.state.status === "error")
                 return [
                   {
@@ -539,8 +613,18 @@ export namespace MessageV2 {
                     toolCallId: part.callID,
                     input: part.state.input,
                     errorText: part.state.error,
+                    callProviderMetadata: part.metadata,
                   },
                 ]
+            }
+            if (part.type === "reasoning") {
+              return [
+                {
+                  type: "reasoning",
+                  text: part.text,
+                  providerMetadata: part.metadata,
+                },
+              ]
             }
 
             return []
@@ -550,5 +634,48 @@ export namespace MessageV2 {
     }
 
     return convertToModelMessages(result)
+  }
+
+  export function filterCompacted(msgs: { info: MessageV2.Info; parts: MessageV2.Part[] }[]) {
+    const i = msgs.findLastIndex((m) => m.info.role === "assistant" && !!m.info.summary)
+    if (i === -1) return msgs.slice()
+    return msgs.slice(i)
+  }
+
+  export function fromError(e: unknown, ctx: { providerID: string }) {
+    switch (true) {
+      case e instanceof DOMException && e.name === "AbortError":
+        return new MessageV2.AbortedError(
+          { message: e.message },
+          {
+            cause: e,
+          },
+        ).toObject()
+      case MessageV2.OutputLengthError.isInstance(e):
+        return e
+      case LoadAPIKeyError.isInstance(e):
+        return new MessageV2.AuthError(
+          {
+            providerID: ctx.providerID,
+            message: e.message,
+          },
+          { cause: e },
+        ).toObject()
+      case APICallError.isInstance(e):
+        return new MessageV2.APIError(
+          {
+            message: e.message,
+            statusCode: e.statusCode,
+            isRetryable: e.isRetryable,
+            responseHeaders: e.responseHeaders,
+            responseBody: e.responseBody,
+          },
+          { cause: e },
+        ).toObject()
+      case e instanceof Error:
+        return new NamedError.Unknown({ message: e.toString() }, { cause: e }).toObject()
+      default:
+        return new NamedError.Unknown({ message: JSON.stringify(e) }, { cause: e })
+    }
   }
 }

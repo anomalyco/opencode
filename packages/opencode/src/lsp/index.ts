@@ -2,13 +2,18 @@ import { Log } from "../util/log"
 import { LSPClient } from "./client"
 import path from "path"
 import { LSPServer } from "./server"
-import { z } from "zod"
+import z from "zod"
 import { Config } from "../config/config"
 import { spawn } from "child_process"
 import { Instance } from "../project/instance"
+import { Bus } from "../bus"
 
 export namespace LSP {
   const log = Log.create({ service: "lsp" })
+
+  export const Event = {
+    Updated: Bus.event("lsp.updated", z.object({})),
+  }
 
   export const Range = z
     .object({
@@ -21,7 +26,7 @@ export namespace LSP {
         character: z.number(),
       }),
     })
-    .openapi({
+    .meta({
       ref: "Range",
     })
   export type Range = z.infer<typeof Range>
@@ -35,7 +40,7 @@ export namespace LSP {
         range: Range,
       }),
     })
-    .openapi({
+    .meta({
       ref: "Symbol",
     })
   export type Symbol = z.infer<typeof Symbol>
@@ -48,7 +53,7 @@ export namespace LSP {
       range: Range,
       selectionRange: Range,
     })
-    .openapi({
+    .meta({
       ref: "DocumentSymbol",
     })
   export type DocumentSymbol = z.infer<typeof DocumentSymbol>
@@ -72,7 +77,7 @@ export namespace LSP {
           ...existing,
           id: name,
           root: existing?.root ?? (async () => Instance.directory),
-          extensions: item.extensions ?? existing.extensions,
+          extensions: item.extensions ?? existing?.extensions ?? [],
           spawn: async (root) => {
             return {
               process: spawn(item.command[0], item.command.slice(1), {
@@ -101,9 +106,7 @@ export namespace LSP {
       }
     },
     async (state) => {
-      for (const client of state.clients) {
-        await client.shutdown()
-      }
+      await Promise.all(state.clients.map((client) => client.shutdown()))
     },
   )
 
@@ -111,9 +114,36 @@ export namespace LSP {
     return state()
   }
 
+  export const Status = z
+    .object({
+      id: z.string(),
+      name: z.string(),
+      root: z.string(),
+      status: z.union([z.literal("connected"), z.literal("error")]),
+    })
+    .meta({
+      ref: "LSPStatus",
+    })
+  export type Status = z.infer<typeof Status>
+
+  export async function status() {
+    return state().then((x) => {
+      const result: Status[] = []
+      for (const client of x.clients) {
+        result.push({
+          id: client.serverID,
+          name: x.servers[client.serverID].id,
+          root: path.relative(Instance.directory, client.root),
+          status: "connected",
+        })
+      }
+      return result
+    })
+  }
+
   async function getClients(file: string) {
     const s = await state()
-    const extension = path.parse(file).ext
+    const extension = path.parse(file).ext || file
     const result: LSPClient.Info[] = []
     for (const server of Object.values(s.servers)) {
       if (server.extensions.length && !server.extensions.includes(extension)) continue
@@ -126,12 +156,22 @@ export namespace LSP {
         result.push(match)
         continue
       }
-      const handle = await server.spawn(root).catch((err) => {
-        s.broken.add(root + server.id)
-        log.error(`Failed to spawn LSP server ${server.id}`, { error: err })
-        return undefined
-      })
+      const handle = await server
+        .spawn(root)
+        .then((h) => {
+          if (h === undefined) {
+            s.broken.add(root + server.id)
+          }
+          return h
+        })
+        .catch((err) => {
+          s.broken.add(root + server.id)
+          log.error(`Failed to spawn LSP server ${server.id}`, { error: err })
+          return undefined
+        })
       if (!handle) continue
+      log.info("spawned lsp server", { serverID: server.id })
+
       const client = await LSPClient.create({
         serverID: server.id,
         server: handle,
@@ -139,12 +179,15 @@ export namespace LSP {
       }).catch((err) => {
         s.broken.add(root + server.id)
         handle.process.kill()
-        log.error(`Failed to initialize LSP client ${server.id}`, { error: err })
+        log.error(`Failed to initialize LSP client ${server.id}`, {
+          error: err,
+        })
         return undefined
       })
       if (!client) continue
       s.clients.push(client)
       result.push(client)
+      Bus.publish(Event.Updated, {})
     }
     return result
   }
@@ -153,9 +196,14 @@ export namespace LSP {
     const clients = await getClients(input)
     await run(async (client) => {
       if (!clients.includes(client)) return
-      const wait = waitForDiagnostics ? client.waitForDiagnostics({ path: input }) : Promise.resolve()
+
+      const wait = waitForDiagnostics
+        ? client.waitForDiagnostics({ path: input })
+        : Promise.resolve()
       await client.notify.open({ path: input })
       return wait
+    }).catch((err) => {
+      log.error("failed to touch file", { err, file: input })
     })
   }
 

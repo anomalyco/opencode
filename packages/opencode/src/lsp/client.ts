@@ -39,8 +39,8 @@ export namespace LSPClient {
     l.info("starting client")
 
     const connection = createMessageConnection(
-      new StreamMessageReader(input.server.process.stdout),
-      new StreamMessageWriter(input.server.process.stdin),
+      new StreamMessageReader(input.server.process.stdout as any),
+      new StreamMessageWriter(input.server.process.stdin as any),
     )
 
     const diagnostics = new Map<string, Diagnostic[]>()
@@ -139,7 +139,10 @@ export namespace LSPClient {
           if (version !== undefined) {
             const next = version + 1
             files[input.path] = next
-            log.info("textDocument/didChange", { path: input.path, version: next })
+            log.info("textDocument/didChange", {
+              path: input.path,
+              version: next,
+            })
             await connection.sendNotification("textDocument/didChange", {
               textDocument: {
                 uri: `file://` + input.path,

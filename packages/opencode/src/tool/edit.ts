@@ -3,11 +3,11 @@
 // https://github.com/google-gemini/gemini-cli/blob/main/packages/core/src/utils/editCorrector.ts
 // https://github.com/cline/cline/blob/main/evals/diff-edits/diff-apply/diff-06-26-25.ts
 
-import { z } from "zod"
+import z from "zod"
 import * as path from "path"
 import { Tool } from "./tool"
 import { LSP } from "../lsp"
-import { createTwoFilesPatch } from "diff"
+import { createTwoFilesPatch, diffLines } from "diff"
 import { Permission } from "../permission"
 import DESCRIPTION from "./edit.txt"
 import { File } from "../file"
@@ -16,6 +16,7 @@ import { FileTime } from "../file/time"
 import { Filesystem } from "../util/filesystem"
 import { Instance } from "../project/instance"
 import { Agent } from "../agent/agent"
+import { Snapshot } from "@/snapshot"
 
 export const EditTool = Tool.define("edit", {
   description: DESCRIPTION,
@@ -82,7 +83,6 @@ export const EditTool = Tool.define("edit", {
           sessionID: ctx.sessionID,
           messageID: ctx.messageID,
           callID: ctx.callID,
-          pattern: filePath,
           title: "Edit this file: " + filePath,
           metadata: {
             filePath,
@@ -107,20 +107,31 @@ export const EditTool = Tool.define("edit", {
     for (const [file, issues] of Object.entries(diagnostics)) {
       if (issues.length === 0) continue
       if (file === filePath) {
-        output += `\nThis file has errors, please fix\n<file_diagnostics>\n${issues.map(LSP.Diagnostic.pretty).join("\n")}\n</file_diagnostics>\n`
+        output += `\nThis file has errors, please fix\n<file_diagnostics>\n${issues
+          .filter((item) => item.severity === 1)
+          .map(LSP.Diagnostic.pretty)
+          .join("\n")}\n</file_diagnostics>\n`
         continue
       }
-      output += `\n<project_diagnostics>\n${file}\n${issues
-        // TODO: may want to make more leniant for eslint
-        .filter((item) => item.severity === 1)
-        .map(LSP.Diagnostic.pretty)
-        .join("\n")}\n</project_diagnostics>\n`
+    }
+
+    const filediff: Snapshot.FileDiff = {
+      file: filePath,
+      before: contentOld,
+      after: contentNew,
+      additions: 0,
+      deletions: 0,
+    }
+    for (const change of diffLines(contentOld, contentNew)) {
+      if (change.added) filediff.additions += change.count || 0
+      if (change.removed) filediff.deletions += change.count || 0
     }
 
     return {
       metadata: {
         diagnostics,
         diff,
+        filediff,
       },
       title: `${path.relative(Instance.worktree, filePath)}`,
       output,
@@ -553,7 +564,7 @@ export const ContextAwareReplacer: Replacer = function* (content, find) {
   }
 }
 
-function trimDiff(diff: string): string {
+export function trimDiff(diff: string): string {
   const lines = diff.split("\n")
   const contentLines = lines.filter(
     (line) =>
@@ -594,6 +605,8 @@ export function replace(content: string, oldString: string, newString: string, r
     throw new Error("oldString and newString must be different")
   }
 
+  let notFound = true
+
   for (const replacer of [
     SimpleReplacer,
     LineTrimmedReplacer,
@@ -601,13 +614,14 @@ export function replace(content: string, oldString: string, newString: string, r
     WhitespaceNormalizedReplacer,
     IndentationFlexibleReplacer,
     EscapeNormalizedReplacer,
-    // TrimmedBoundaryReplacer,
-    // ContextAwareReplacer,
-    // MultiOccurrenceReplacer,
+    TrimmedBoundaryReplacer,
+    ContextAwareReplacer,
+    MultiOccurrenceReplacer,
   ]) {
     for (const search of replacer(content, oldString)) {
       const index = content.indexOf(search)
       if (index === -1) continue
+      notFound = false
       if (replaceAll) {
         return content.replaceAll(search, newString)
       }
@@ -616,5 +630,11 @@ export function replace(content: string, oldString: string, newString: string, r
       return content.substring(0, index) + newString + content.substring(index + search.length)
     }
   }
-  throw new Error("oldString not found in content or was found multiple times")
+
+  if (notFound) {
+    throw new Error("oldString not found in content")
+  }
+  throw new Error(
+    "Found multiple matches for oldString. Provide more surrounding lines in oldString to identify the correct match.",
+  )
 }

@@ -74,32 +74,34 @@ export const AuthLoginCommand = cmd({
       type: "string",
     }),
   async handler(args) {
-    await Instance.provide(process.cwd(), async () => {
-      UI.empty()
-      prompts.intro("Add credential")
-      if (args.url) {
-        const wellknown = await fetch(`${args.url}/.well-known/opencode`).then((x) => x.json())
-        prompts.log.info(`Running \`${wellknown.auth.command.join(" ")}\``)
-        const proc = Bun.spawn({
-          cmd: wellknown.auth.command,
-          stdout: "pipe",
-        })
-        const exit = await proc.exited
-        if (exit !== 0) {
-          prompts.log.error("Failed")
+    await Instance.provide({
+      directory: process.cwd(),
+      async fn() {
+        UI.empty()
+        prompts.intro("Add credential")
+        if (args.url) {
+          const wellknown = await fetch(`${args.url}/.well-known/opencode`).then((x) => x.json() as any)
+          prompts.log.info(`Running \`${wellknown.auth.command.join(" ")}\``)
+          const proc = Bun.spawn({
+            cmd: wellknown.auth.command,
+            stdout: "pipe",
+          })
+          const exit = await proc.exited
+          if (exit !== 0) {
+            prompts.log.error("Failed")
+            prompts.outro("Done")
+            return
+          }
+          const token = await new Response(proc.stdout).text()
+          await Auth.set(args.url, {
+            type: "wellknown",
+            key: wellknown.auth.env,
+            token: token.trim(),
+          })
+          prompts.log.success("Logged into " + args.url)
           prompts.outro("Done")
           return
         }
-        const token = await new Response(proc.stdout).text()
-        await Auth.set(args.url, {
-          type: "wellknown",
-          key: wellknown.auth.env,
-          token: token.trim(),
-        })
-        prompts.log.success("Logged into " + args.url)
-        prompts.outro("Done")
-        return
-      }
       await ModelsDev.refresh().catch(() => {})
       const providers = await ModelsDev.get()
       const priority: Record<string, number> = {
@@ -154,9 +156,36 @@ export const AuthLoginCommand = cmd({
           index = parseInt(method)
         }
         const method = plugin.auth.methods[index]
+
+        // Handle prompts for all auth types
+        await new Promise((resolve) => setTimeout(resolve, 10))
+        const inputs: Record<string, string> = {}
+        if (method.prompts) {
+          for (const prompt of method.prompts) {
+            if (prompt.condition && !prompt.condition(inputs)) {
+              continue
+            }
+            if (prompt.type === "select") {
+              const value = await prompts.select({
+                message: prompt.message,
+                options: prompt.options,
+              })
+              if (prompts.isCancel(value)) throw new UI.CancelledError()
+              inputs[prompt.key] = value
+            } else {
+              const value = await prompts.text({
+                message: prompt.message,
+                placeholder: prompt.placeholder,
+                validate: prompt.validate ? (v) => prompt.validate!(v ?? "") : undefined,
+              })
+              if (prompts.isCancel(value)) throw new UI.CancelledError()
+              inputs[prompt.key] = value
+            }
+          }
+        }
+
         if (method.type === "oauth") {
-          await new Promise((resolve) => setTimeout(resolve, 10))
-          const authorize = await method.authorize()
+          const authorize = await method.authorize(inputs)
 
           if (authorize.url) {
             prompts.log.info("Go to: " + authorize.url)
@@ -173,16 +202,19 @@ export const AuthLoginCommand = cmd({
               spinner.stop("Failed to authorize", 1)
             }
             if (result.type === "success") {
+              const saveProvider = result.provider ?? provider
               if ("refresh" in result) {
-                await Auth.set(provider, {
+                const { type: _, provider: __, refresh, access, expires, ...extraFields } = result
+                await Auth.set(saveProvider, {
                   type: "oauth",
-                  refresh: result.refresh,
-                  access: result.access,
-                  expires: result.expires,
+                  refresh,
+                  access,
+                  expires,
+                  ...extraFields,
                 })
               }
               if ("key" in result) {
-                await Auth.set(provider, {
+                await Auth.set(saveProvider, {
                   type: "api",
                   key: result.key,
                 })
@@ -202,16 +234,19 @@ export const AuthLoginCommand = cmd({
               prompts.log.error("Failed to authorize")
             }
             if (result.type === "success") {
+              const saveProvider = result.provider ?? provider
               if ("refresh" in result) {
-                await Auth.set(provider, {
+                const { type: _, provider: __, refresh, access, expires, ...extraFields } = result
+                await Auth.set(saveProvider, {
                   type: "oauth",
-                  refresh: result.refresh,
-                  access: result.access,
-                  expires: result.expires,
+                  refresh,
+                  access,
+                  expires,
+                  ...extraFields,
                 })
               }
               if ("key" in result) {
-                await Auth.set(provider, {
+                await Auth.set(saveProvider, {
                   type: "api",
                   key: result.key,
                 })
@@ -219,8 +254,28 @@ export const AuthLoginCommand = cmd({
               prompts.log.success("Login successful")
             }
           }
+
           prompts.outro("Done")
           return
+        }
+
+        if (method.type === "api") {
+          if (method.authorize) {
+            const result = await method.authorize(inputs)
+            if (result.type === "failed") {
+              prompts.log.error("Failed to authorize")
+            }
+            if (result.type === "success") {
+              const saveProvider = result.provider ?? provider
+              await Auth.set(saveProvider, {
+                type: "api",
+                key: result.key,
+              })
+              prompts.log.success("Login successful")
+            }
+            prompts.outro("Done")
+            return
+          }
         }
       }
 
@@ -264,6 +319,7 @@ export const AuthLoginCommand = cmd({
       })
 
       prompts.outro("Done")
+      },
     })
   },
 })

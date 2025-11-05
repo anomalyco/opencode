@@ -1,0 +1,18 @@
+{
+  "$schema": "https://json.schemastore.org/package.json",
+  "name": "@opencode-ai/console-resource",
+  "dependencies": {
+    "@cloudflare/workers-types": "catalog:"
+  },
+  "exports": {
+    ".": {
+      "production": {
+        "import": "./resource.cloudflare.ts"
+      },
+      "import": "./resource.node.ts"
+    }
+  },
+  "devDependencies": {
+    "@tsconfig/node22": "22.0.2"
+  }
+}

@@ -137,7 +137,11 @@ export default new Hono<{ Bindings: Env }>()
     return c.json({})
   })
   .post("/share_delete_admin", async (c) => {
-    const id = c.env.SYNC_SERVER.idFromName("oVF8Rsiv")
+    const body = await c.req.json<{ sessionShortName: string; adminSecret: string }>()
+    const sessionShortName = body.sessionShortName
+    const adminSecret = body.adminSecret
+    if (adminSecret !== Resource.ADMIN_SECRET.value) throw new Error("Invalid admin secret")
+    const id = c.env.SYNC_SERVER.idFromName(sessionShortName)
     const stub = c.env.SYNC_SERVER.get(id)
     await stub.clear()
     return c.json({})
@@ -234,10 +238,16 @@ export default new Hono<{ Bindings: Env }>()
 
     // Lookup installation
     const octokit = new Octokit({ auth: appAuth.token })
-    const { data: installation } = await octokit.apps.getRepoInstallation({ owner, repo })
+    const { data: installation } = await octokit.apps.getRepoInstallation({
+      owner,
+      repo,
+    })
 
     // Get installation token
-    const installationAuth = await auth({ type: "installation", installationId: installation.id })
+    const installationAuth = await auth({
+      type: "installation",
+      installationId: installation.id,
+    })
 
     return c.json({ token: installationAuth.token })
   })
@@ -270,10 +280,16 @@ export default new Hono<{ Bindings: Env }>()
 
       // Lookup installation
       const appClient = new Octokit({ auth: appAuth.token })
-      const { data: installation } = await appClient.apps.getRepoInstallation({ owner, repo })
+      const { data: installation } = await appClient.apps.getRepoInstallation({
+        owner,
+        repo,
+      })
 
       // Get installation token
-      const installationAuth = await auth({ type: "installation", installationId: installation.id })
+      const installationAuth = await auth({
+        type: "installation",
+        installationId: installation.id,
+      })
 
       return c.json({ token: installationAuth.token })
     } catch (e: any) {

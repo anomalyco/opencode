@@ -1,4 +1,4 @@
-import type { Hooks, Plugin as PluginInstance } from "@opencode-ai/plugin"
+import type { Hooks, PluginInput, Plugin as PluginInstance } from "@opencode-ai/plugin"
 import { Config } from "../config/config"
 import { Bus } from "../bus"
 import { Log } from "../util/log"
@@ -14,11 +14,12 @@ export namespace Plugin {
   const state = Instance.state(async () => {
     const client = createOpencodeClient({
       baseUrl: "http://localhost:4096",
-      fetch: async (...args) => Server.App.fetch(...args),
+      // @ts-ignore - fetch type incompatibility
+      fetch: async (...args) => Server.App().fetch(...args),
     })
     const config = await Config.get()
     const hooks = []
-    const input = {
+    const input: PluginInput = {
       client,
       project: Instance.project,
       worktree: Instance.worktree,
@@ -27,14 +28,16 @@ export namespace Plugin {
     }
     const plugins = [...(config.plugin ?? [])]
     if (!Flag.OPENCODE_DISABLE_DEFAULT_PLUGINS) {
-      plugins.push("opencode-copilot-auth@0.0.2")
+      plugins.push("opencode-copilot-auth@0.0.4")
       plugins.push("opencode-anthropic-auth@0.0.2")
     }
     for (let plugin of plugins) {
       log.info("loading plugin", { path: plugin })
       if (!plugin.startsWith("file://")) {
-        const [pkg, version] = plugin.split("@")
-        plugin = await BunProc.install(pkg, version ?? "latest")
+        const lastAtIndex = plugin.lastIndexOf("@")
+        const pkg = lastAtIndex > 0 ? plugin.substring(0, lastAtIndex) : plugin
+        const version = lastAtIndex > 0 ? plugin.substring(lastAtIndex + 1) : "latest"
+        plugin = await BunProc.install(pkg, version)
       }
       const mod = await import(plugin)
       for (const [_name, fn] of Object.entries<PluginInstance>(mod)) {
@@ -50,7 +53,7 @@ export namespace Plugin {
   })
 
   export async function trigger<
-    Name extends Exclude<keyof Required<Hooks>, "auth" | "event">,
+    Name extends Exclude<keyof Required<Hooks>, "auth" | "event" | "tool">,
     Input = Parameters<Required<Hooks>[Name]>[0],
     Output = Parameters<Required<Hooks>[Name]>[1],
   >(name: Name, input: Input, output: Output): Promise<Output> {
