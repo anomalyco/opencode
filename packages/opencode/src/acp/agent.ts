@@ -2,6 +2,7 @@ import {
   type Agent as ACPAgent,
   type AgentSideConnection,
   type AuthenticateRequest,
+  type AuthMethod,
   type CancelNotification,
   type InitializeRequest,
   type InitializeResponse,
@@ -305,6 +306,23 @@ export namespace ACP {
 
     async initialize(params: InitializeRequest): Promise<InitializeResponse> {
       log.info("initialize", { protocolVersion: params.protocolVersion })
+
+      const authMethod: AuthMethod = {
+        description: "Run `opencode auth login` in the terminal",
+        name: "Login with opencode",
+        id: "opencode-login",
+      }
+
+      // If client supports terminal-auth capability, use that instead.
+      if (params.clientCapabilities?._meta?.["terminal-auth"] === true) {
+        authMethod._meta = {
+          "terminal-auth": {
+            command: "opencode",
+            args: ["auth", "login"],
+            label: "OpenCode Login",
+          },
+        }
+      }
 
       return {
         protocolVersion: 1,
