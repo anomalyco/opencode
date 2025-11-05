@@ -161,6 +161,7 @@ export function Prompt(props: PromptProps) {
         onSelect: (dialog) => {
           if (!props.sessionID) return
           if (autocomplete.visible) return
+          if (!input.focused) return
           sdk.client.session.abort({
             path: {
               id: props.sessionID,
