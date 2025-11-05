@@ -31,7 +31,7 @@ jobs:
       - name: Update build output hashes
         run: |
           set -euo pipefail
-          script/nix/update-hashes
+          nix/scripts/update-hashes
 
       - name: Verification build (x86_64-linux)
         run: |
@@ -45,18 +45,18 @@ jobs:
           nix build .#packages.aarch64-linux.default --system aarch64-linux -L
           echo "aarch64-linux build successful."
 
-      - name: Commit flake.nix changes
+      - name: Commit Nix hash changes
         run: |
           set -euo pipefail
 
-          if git diff --quiet flake.nix; then
-            echo "No changes to flake.nix. Hash is already up to date."
+          if git diff --quiet flake.nix nix/node-modules.nix nix/models-dev.nix; then
+            echo "No changes to tracked Nix files. Hashes are already up to date."
             exit 0
           fi
 
           VERSION=$(jq -r '.version' packages/opencode/package.json)
-          git add flake.nix
-          git commit -m "nix: update output hashes for v$VERSION"
+          git add flake.nix nix/node-modules.nix nix/models-dev.nix
+          git commit -m "nix: update hashes for v$VERSION"
 
           git pull --rebase origin ${GITHUB_REF_NAME}
           git push origin HEAD:${GITHUB_REF_NAME}

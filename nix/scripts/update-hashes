@@ -2,11 +2,12 @@
 
 set -euo pipefail
 
-FILE=${FILE:-flake.nix}
 SYSTEM=${SYSTEM:-x86_64-linux}
 TARGET="packages.${SYSTEM}.default"
 DUMMY="sha256-AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA="
 MODELS_URL=${MODELS_URL:-https://models.dev/api.json}
+MODULES_FILE=${MODULES_FILE:-nix/node-modules.nix}
+MODELS_FILE=${MODELS_FILE:-nix/models-dev.nix}
 export DUMMY
 
 cleanup() {
@@ -21,9 +22,9 @@ cleanup() {
 trap cleanup EXIT
 
 echo "Setting dummy node_modules outputHash..."
-perl -0pi -e 's/(node_modules\s*=\s*(?:let.*?in\s*)?stdenvNoCC\.mkDerivation\s*\{.*?outputHash = ")sha256-[^"]+(";\n)/${1}$ENV{DUMMY}${2}/s' "$FILE"
+perl -0pi -e 's/(outputHash\s*=\s*")sha256-[^"]+(";\n)/${1}$ENV{DUMMY}${2}/' "$MODULES_FILE"
 
-if ! grep -q "$DUMMY" "$FILE"; then
+if ! grep -q "$DUMMY" "$MODULES_FILE"; then
   echo "Failed to set dummy hash placeholder"
   exit 1
 fi
@@ -36,12 +37,12 @@ if [ -z "$MODELS_HASH" ]; then
   exit 1
 fi
 
-current_models_hash="$(perl -0ne 'print $1 if /modelsDev\s*=\s*forEachSystem\s*\(.*?hash\s*=\s*"(sha256-[^"]+)"/s' "$FILE")"
+current_models_hash="$(perl -0ne 'print $1 if /hash\s*=\s*"(sha256-[^"]+)";/' "$MODELS_FILE")"
 
 if [ "$MODELS_HASH" != "$current_models_hash" ]; then
   export MODELS_HASH
-  perl -0pi -e 's/(modelsDev\s*=\s*forEachSystem\s*\(.*?hash\s*=\s*")sha256-[^"]+(")/${1}$ENV{MODELS_HASH}${2}/s' "$FILE"
-  if ! grep -q "$MODELS_HASH" "$FILE"; then
+  perl -0pi -e 's/(hash\s*=\s*")sha256-[^"]+(")/${1}$ENV{MODELS_HASH}${2}/' "$MODELS_FILE"
+  if ! grep -q "$MODELS_HASH" "$MODELS_FILE"; then
     echo "Failed to update models-dev hash"
     exit 1
   fi
@@ -82,9 +83,9 @@ fi
 
 export CORRECT_HASH
 
-perl -0pi -e 's/(node_modules\s*=\s*(?:let.*?in\s*)?stdenvNoCC\.mkDerivation\s*\{.*?outputHash = ")sha256-[^"]+(";\n)/${1}$ENV{CORRECT_HASH}${2}/s' "$FILE"
+perl -0pi -e 's/(outputHash\s*=\s*")sha256-[^"]+(";\n)/${1}$ENV{CORRECT_HASH}${2}/' "$MODULES_FILE"
 
-if ! grep -q "$CORRECT_HASH" "$FILE"; then
+if ! grep -q "$CORRECT_HASH" "$MODULES_FILE"; then
   echo "Failed to update flake with new hash"
   exit 1
 fi

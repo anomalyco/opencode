@@ -37,4 +37,6 @@ const lines = names.map((name) => {
   return `${name}\t${ver}\t${shaHit[1]}`
 })
 
-await Bun.write(Bun.stdout, lines.join("\n"))
+if (lines.length > 0) {
+  await Bun.write(Bun.stdout, lines.join("\n") + "\n")
+}
