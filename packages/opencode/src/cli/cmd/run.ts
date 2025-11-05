@@ -81,6 +81,10 @@ export const RunCommand = cmd({
         type: "string",
         describe: "attach to a running opencode server (e.g., http://localhost:4096)",
       })
+      .option("port", {
+        type: "number",
+        describe: "port for the local server (defaults to random port if no value provided)",
+      })
   },
   handler: async (args) => {
     let message = args.message.join(" ")
@@ -292,7 +296,7 @@ export const RunCommand = cmd({
     }
 
     await bootstrap(process.cwd(), async () => {
-      const server = Server.listen({ port: 0, hostname: "127.0.0.1" })
+      const server = Server.listen({ port: args.port ?? 0, hostname: "127.0.0.1" })
       const sdk = createOpencodeClient({ baseUrl: `http://${server.hostname}:${server.port}` })
 
       if (args.command) {
