@@ -137,7 +137,12 @@ export const { use: useSync, provider: SyncProvider } = createSimpleContext({
           }
           const result = Binary.search(messages, event.properties.info.id, (m) => m.id)
           if (result.found) {
-            setStore("message", event.properties.info.sessionID, result.index, reconcile(event.properties.info))
+            setStore(
+              "message",
+              event.properties.info.sessionID,
+              result.index,
+              reconcile(event.properties.info),
+            )
             break
           }
           setStore(
@@ -171,7 +176,12 @@ export const { use: useSync, provider: SyncProvider } = createSimpleContext({
           }
           const result = Binary.search(parts, event.properties.part.id, (p) => p.id)
           if (result.found) {
-            setStore("part", event.properties.part.messageID, result.index, reconcile(event.properties.part))
+            setStore(
+              "part",
+              event.properties.part.messageID,
+              result.index,
+              reconcile(event.properties.part),
+            )
             break
           }
           setStore(
@@ -249,11 +259,13 @@ export const { use: useSync, provider: SyncProvider } = createSimpleContext({
           return last.time.completed ? "idle" : "working"
         },
         async sync(sessionID: string) {
+          const now = Date.now()
           const [session, messages, todo] = await Promise.all([
             sdk.client.session.get({ path: { id: sessionID }, throwOnError: true }),
             sdk.client.session.messages({ path: { id: sessionID } }),
             sdk.client.session.todo({ path: { id: sessionID } }),
           ])
+          console.log("fetched in " + (Date.now() - now), sessionID)
           setStore(
             produce((draft) => {
               const match = Binary.search(draft.session, sessionID, (s) => s.id)
@@ -266,6 +278,7 @@ export const { use: useSync, provider: SyncProvider } = createSimpleContext({
               }
             }),
           )
+          console.log("synced in " + (Date.now() - now), sessionID)
         },
       },
     }

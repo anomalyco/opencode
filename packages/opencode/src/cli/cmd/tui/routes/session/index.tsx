@@ -104,7 +104,15 @@ export function Session() {
   const sidebarVisible = createMemo(() => sidebar() === "show" || (sidebar() === "auto" && wide()))
   const contentWidth = createMemo(() => dimensions().width - (sidebarVisible() ? 42 : 0) - 4)
 
-  createEffect(() => sync.session.sync(route.sessionID))
+  createEffect(() => {
+    sync.session.sync(route.sessionID).catch(() => {
+      toast.show({
+        message: `Session not found: ${route.sessionID}`,
+        variant: "error",
+      })
+      return navigate({ type: "home" })
+    })
+  })
 
   const toast = useToast()
 

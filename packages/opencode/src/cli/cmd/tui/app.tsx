@@ -7,7 +7,7 @@ import { Installation } from "@/installation"
 import { Global } from "@/global"
 import { DialogProvider, useDialog } from "@tui/ui/dialog"
 import { SDKProvider, useSDK } from "@tui/context/sdk"
-import { SyncProvider, useSync } from "@tui/context/sync"
+import { SyncProvider } from "@tui/context/sync"
 import { LocalProvider, useLocal } from "@tui/context/local"
 import { DialogModel } from "@tui/component/dialog-model"
 import { DialogStatus } from "@tui/component/dialog-status"
@@ -24,7 +24,6 @@ import { PromptHistoryProvider } from "./component/prompt/history"
 import { DialogAlert } from "./ui/dialog-alert"
 import { ToastProvider, useToast } from "./ui/toast"
 import { ExitProvider, useExit } from "./context/exit"
-import type { SessionRoute } from "./context/route"
 import { Session as SessionApi } from "@/session"
 import { TuiEvent } from "./event"
 import { KVProvider, useKV } from "./context/kv"
@@ -173,9 +172,7 @@ function App() {
   const kv = useKV()
   const command = useCommandDialog()
   const { event } = useSDK()
-  const sync = useSync()
   const toast = useToast()
-  const [sessionExists, setSessionExists] = createSignal(false)
   const { theme, mode, setMode } = useTheme()
   const exit = useExit()
 
@@ -189,21 +186,6 @@ function App() {
     if (evt.meta && evt.name === "d") {
       renderer.console.toggle()
       return
-    }
-  })
-
-  // Make sure session is valid, otherwise redirect to home
-  createEffect(async () => {
-    if (route.data.type === "session") {
-      const data = route.data as SessionRoute
-      await sync.session.sync(data.sessionID).catch(() => {
-        toast.show({
-          message: `Session not found: ${data.sessionID}`,
-          variant: "error",
-        })
-        return route.navigate({ type: "home" })
-      })
-      setSessionExists(true)
     }
   })
 
@@ -413,7 +395,7 @@ function App() {
           <Match when={route.data.type === "home"}>
             <Home />
           </Match>
-          <Match when={route.data.type === "session" && sessionExists()}>
+          <Match when={route.data.type === "session"}>
             <Session />
           </Match>
         </Switch>
