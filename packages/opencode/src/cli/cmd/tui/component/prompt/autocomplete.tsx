@@ -54,6 +54,12 @@ export function Autocomplete(props: {
 
     const val = props.input().getTextRange(store.index + 1, props.input().cursorOffset + 1)
 
+    // If the filter contains a space, hide the autocomplete
+    if (val.includes(" ")) {
+      hide()
+      return undefined
+    }
+
     return val
   })
 
@@ -158,7 +164,6 @@ export function Autocomplete(props: {
   )
 
   const agents = createMemo(() => {
-    if (store.index !== 0) return []
     const agents = sync.data.agent
     return agents
       .filter((agent) => !agent.builtIn && agent.mode !== "primary")
@@ -236,6 +241,16 @@ export function Autocomplete(props: {
           display: "/rename",
           description: "rename session",
           onSelect: () => command.trigger("session.rename"),
+        },
+        {
+          display: "/copy",
+          description: "copy session transcript to clipboard",
+          onSelect: () => command.trigger("session.copy"),
+        },
+        {
+          display: "/export",
+          description: "export session transcript to file",
+          onSelect: () => command.trigger("session.export"),
         },
         {
           display: "/timeline",
@@ -373,15 +388,47 @@ export function Autocomplete(props: {
         return store.visible
       },
       onInput() {
-        if (store.visible && props.input().cursorOffset <= store.index) hide()
+        if (store.visible) {
+          if (props.input().cursorOffset <= store.index) {
+            hide()
+            return
+          }
+          // Check if a space was typed after the trigger character
+          const currentText = props
+            .input()
+            .getTextRange(store.index + 1, props.input().cursorOffset + 1)
+          if (currentText.includes(" ")) {
+            hide()
+          }
+        }
       },
       onKeyDown(e: KeyEvent) {
         if (store.visible) {
-          if (e.name === "up") move(-1)
-          if (e.name === "down") move(1)
-          if (e.name === "escape") hide()
-          if (e.name === "return" || e.name === "tab") select()
-          if (["up", "down", "return", "tab", "escape"].includes(e.name)) e.preventDefault()
+          const name = e.name?.toLowerCase()
+          const ctrlOnly = e.ctrl && !e.meta && !e.shift
+          const isNavUp = name === "up" || (ctrlOnly && name === "p")
+          const isNavDown = name === "down" || (ctrlOnly && name === "n")
+
+          if (isNavUp) {
+            move(-1)
+            e.preventDefault()
+            return
+          }
+          if (isNavDown) {
+            move(1)
+            e.preventDefault()
+            return
+          }
+          if (name === "escape") {
+            hide()
+            e.preventDefault()
+            return
+          }
+          if (name === "return" || name === "tab") {
+            select()
+            e.preventDefault()
+            return
+          }
         }
         if (!store.visible) {
           if (e.name === "@") {

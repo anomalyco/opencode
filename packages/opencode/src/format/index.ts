@@ -69,6 +69,7 @@ export namespace Format {
       log.info("checking", { name: item.name, ext })
       if (!item.extensions.includes(ext)) continue
       if (!(await isEnabled(item))) continue
+      log.info("enabled", { name: item.name, ext })
       result.push(item)
     }
     return result
