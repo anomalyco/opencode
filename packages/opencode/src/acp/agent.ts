@@ -1,4 +1,5 @@
 import {
+  RequestError,
   type Agent as ACPAgent,
   type AgentSideConnection,
   type AuthenticateRequest,
@@ -35,6 +36,7 @@ import type { Config } from "@/config/config"
 import { MCP } from "@/mcp"
 import { Todo } from "@/session/todo"
 import { z } from "zod"
+import { LoadAPIKeyError } from "ai"
 
 export namespace ACP {
   const log = Log.create({ service: "acp-agent" })
@@ -356,21 +358,31 @@ export namespace ACP {
     }
 
     async newSession(params: NewSessionRequest) {
-      const model = await defaultModel(this.config)
-      const session = await this.sessionManager.create(params.cwd, params.mcpServers, model)
+      try {
+        const model = await defaultModel(this.config)
+        const session = await this.sessionManager.create(params.cwd, params.mcpServers, model)
 
-      log.info("creating_session", { mcpServers: params.mcpServers.length })
-      const load = await this.loadSession({
-        cwd: params.cwd,
-        mcpServers: params.mcpServers,
-        sessionId: session.id,
-      })
+        log.info("creating_session", { mcpServers: params.mcpServers.length })
+        const load = await this.loadSession({
+          cwd: params.cwd,
+          mcpServers: params.mcpServers,
+          sessionId: session.id,
+        })
 
-      return {
-        sessionId: session.id,
-        models: load.models,
-        modes: load.modes,
-        _meta: {},
+        return {
+          sessionId: session.id,
+          models: load.models,
+          modes: load.modes,
+          _meta: {},
+        }
+      } catch (e) {
+        const error = MessageV2.fromError(e, {
+          providerID: this.config.defaultModel?.providerID ?? "unknown",
+        })
+        if (LoadAPIKeyError.isInstance(error)) {
+          throw RequestError.authRequired()
+        }
+        throw e
       }
     }
 
