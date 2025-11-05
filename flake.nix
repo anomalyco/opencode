@@ -34,7 +34,7 @@
 
           src = pkgs.fetchurl {
             url = "https://models.dev/api.json";
-            hash = "sha256-xQ1FjLTz8g4YbgZZ97j8FrYeuZd9aDUtLB67I23RQDQ=";
+            hash = "sha256-Dff3OWJ7pD7LfVbZZ0Gf/QA65uw4ft14mdfBun0qDBg=";
           };
 
           dontUnpack = true;
@@ -86,7 +86,11 @@
 
               src = ./.;
 
-              node_modules = stdenvNoCC.mkDerivation {
+              node_modules =
+                let
+                  canonicalizeScript = ./script/nix/canonicalize-node-modules.ts;
+                in
+                stdenvNoCC.mkDerivation {
                 pname = "opencode-node_modules";
                 inherit (finalAttrs) version src;
 
@@ -183,6 +187,8 @@ PY
 
                   rm -f optional-packages.txt optional-metadata.txt
 
+                  bun --bun ${canonicalizeScript}
+
                   runHook postBuild
                 '';
 
@@ -202,7 +208,7 @@ PY
 
                 outputHashAlgo = "sha256";
                 outputHashMode = "recursive";
-                outputHash = "sha256-S77NbdzNuHALDapU3Qr/lGPwvHCvyGxr+nyVEO9zeBg=";
+                outputHash = "sha256-s/UTz8BTYDOZpF9P6nZr0b7fNOS7Nv7hUfpihJgsSqE=";
               };
 
               nativeBuildInputs = [

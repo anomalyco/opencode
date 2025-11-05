@@ -15,6 +15,7 @@ jobs:
         uses: actions/checkout@v4
         with:
           token: ${{ secrets.GITHUB_TOKEN }}
+          fetch-depth: 0
 
       - name: Setup Nix
         uses: DeterminateSystems/nix-installer-action@v20
@@ -30,7 +31,7 @@ jobs:
       - name: Update build output hashes
         run: |
           set -euo pipefail
-          script/update-nix-hashes
+          script/nix/update-hashes
 
       - name: Verification build (x86_64-linux)
         run: |
@@ -57,5 +58,5 @@ jobs:
           git add flake.nix
           git commit -m "nix: update output hashes for v$VERSION"
 
-          git pull --rebase origin dev
-          git push origin HEAD:dev
+          git pull --rebase origin ${GITHUB_REF_NAME}
+          git push origin HEAD:${GITHUB_REF_NAME}

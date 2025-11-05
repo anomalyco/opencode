@@ -21,7 +21,7 @@ cleanup() {
 trap cleanup EXIT
 
 echo "Setting dummy node_modules outputHash..."
-perl -0pi -e 's/(node_modules = stdenvNoCC\.mkDerivation\s*\{.*?outputHash = ")sha256-[^"]+(";\n)/${1}$ENV{DUMMY}${2}/s' "$FILE"
+perl -0pi -e 's/(node_modules\s*=\s*(?:let.*?in\s*)?stdenvNoCC\.mkDerivation\s*\{.*?outputHash = ")sha256-[^"]+(";\n)/${1}$ENV{DUMMY}${2}/s' "$FILE"
 
 if ! grep -q "$DUMMY" "$FILE"; then
   echo "Failed to set dummy hash placeholder"
@@ -82,7 +82,7 @@ fi
 
 export CORRECT_HASH
 
-perl -0pi -e 's/(node_modules = stdenvNoCC\.mkDerivation\s*\{.*?outputHash = ")sha256-[^"]+(";\n)/${1}$ENV{CORRECT_HASH}${2}/s' "$FILE"
+perl -0pi -e 's/(node_modules\s*=\s*(?:let.*?in\s*)?stdenvNoCC\.mkDerivation\s*\{.*?outputHash = ")sha256-[^"]+(";\n)/${1}$ENV{CORRECT_HASH}${2}/s' "$FILE"
 
 if ! grep -q "$CORRECT_HASH" "$FILE"; then
   echo "Failed to update flake with new hash"
