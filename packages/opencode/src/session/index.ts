@@ -44,6 +44,7 @@ export namespace Session {
         .object({
           additions: z.number(),
           deletions: z.number(),
+          files: z.number(),
           diffs: Snapshot.FileDiff.array().optional(),
         })
         .optional(),

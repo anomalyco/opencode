@@ -47,6 +47,7 @@ export namespace SessionSummary {
       draft.summary = {
         additions: diffs.reduce((sum, x) => sum + x.additions, 0),
         deletions: diffs.reduce((sum, x) => sum + x.deletions, 0),
+        files: diffs.length,
       }
     })
     await Storage.write(["session_diff", input.sessionID], diffs)
