@@ -72,7 +72,7 @@ export const PromptInput: Component<PromptInputProps> = (props) => {
   })
 
   const { flat, active, onInput, onKeyDown, refetch } = useFilteredList<string>({
-    items: local.file.search,
+    items: local.file.searchFilesAndDirectories,
     key: (x) => x,
     onSelect: (path) => {
       if (!path) return
@@ -307,27 +307,29 @@ export const PromptInput: Component<PromptInputProps> = (props) => {
     <div class="relative size-full _max-h-[320px] flex flex-col gap-3">
       <Show when={store.popoverIsOpen}>
         <div class="absolute inset-x-0 -top-3 -translate-y-full origin-bottom-left max-h-[252px] min-h-10 overflow-y-auto flex flex-col p-2 pb-0 rounded-2xl border border-border-base bg-surface-raised-stronger-non-alpha shadow-md">
-          <For each={flat()}>
-            {(i) => (
-              <div
-                classList={{
-                  "w-full flex items-center justify-between rounded-md": true,
-                  "bg-surface-raised-base-hover": active() === i,
-                }}
-              >
-                <div class="flex items-center gap-x-2 grow min-w-0">
-                  <FileIcon node={{ path: i, type: "file" }} class="shrink-0 size-4" />
-                  <div class="flex items-center text-14-regular">
-                    <span class="text-text-weak whitespace-nowrap overflow-hidden overflow-ellipsis truncate min-w-0">
-                      {getDirectory(i)}
-                    </span>
-                    <span class="text-text-strong whitespace-nowrap">{getFilename(i)}</span>
+          <Show when={flat().length > 0} fallback={<div class="text-text-weak px-2">No matching files</div>}>
+            <For each={flat()}>
+              {(i) => (
+                <div
+                  classList={{
+                    "w-full flex items-center justify-between rounded-md": true,
+                    "bg-surface-raised-base-hover": active() === i,
+                  }}
+                >
+                  <div class="flex items-center gap-x-2 grow min-w-0">
+                    <FileIcon node={{ path: i, type: "file" }} class="shrink-0 size-4" />
+                    <div class="flex items-center text-14-regular">
+                      <span class="text-text-weak whitespace-nowrap overflow-hidden overflow-ellipsis truncate min-w-0">
+                        {getDirectory(i)}
+                      </span>
+                      <span class="text-text-strong whitespace-nowrap">{getFilename(i)}</span>
+                    </div>
                   </div>
+                  <div class="flex items-center gap-x-1 text-text-muted/40 shrink-0"></div>
                 </div>
-                <div class="flex items-center gap-x-1 text-text-muted/40 shrink-0"></div>
-              </div>
-            )}
-          </For>
+              )}
+            </For>
+          </Show>
         </div>
       </Show>
       <form

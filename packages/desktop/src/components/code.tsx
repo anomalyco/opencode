@@ -90,7 +90,7 @@ export function Code(props: Props) {
     let ticking = false
     const onScroll = () => {
       if (!container) return
-      if (ctx.file.active()?.path !== local.path) return
+      // if (ctx.file.active()?.path !== local.path) return
       if (ticking) return
       ticking = true
       requestAnimationFrame(() => {
@@ -102,7 +102,7 @@ export function Code(props: Props) {
     const onSelectionChange = () => {
       if (!container) return
       if (isProgrammaticSelection) return
-      if (ctx.file.active()?.path !== local.path) return
+      // if (ctx.file.active()?.path !== local.path) return
       const d = getSelectionInContainer(container)
       if (!d) return
       const p = ctx.file.node(local.path)?.selection
@@ -112,7 +112,7 @@ export function Code(props: Props) {
 
     const MOD = typeof navigator === "object" && /(Mac|iPod|iPhone|iPad)/.test(navigator.platform) ? "Meta" : "Control"
     const onKeyDown = (e: KeyboardEvent) => {
-      if (ctx.file.active()?.path !== local.path) return
+      // if (ctx.file.active()?.path !== local.path) return
       const ae = document.activeElement as HTMLElement | undefined
       const tag = (ae?.tagName || "").toLowerCase()
       const inputFocused = !!ae && (tag === "input" || tag === "textarea" || ae.isContentEditable)
@@ -155,7 +155,7 @@ export function Code(props: Props) {
   createEffect(() => {
     const content = html()
     if (!container || !content) return
-    if (ctx.file.active()?.path !== local.path) return
+    // if (ctx.file.active()?.path !== local.path) return
     const codeEl = container.querySelector("code") as HTMLElement | undefined
     if (!codeEl) return
     const target = ctx.file.node(local.path)?.selection

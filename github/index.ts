@@ -152,6 +152,9 @@ try {
     return session.id.slice(-8)
   })()
   console.log("opencode session", session.id)
+  if (shareId) {
+    console.log("Share link:", `${useShareUrl()}/s/${shareId}`)
+  }
 
   // Handle 3 cases
   // 1. Issue

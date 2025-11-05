@@ -30,6 +30,9 @@ import { TuiEvent } from "./event"
 import { KVProvider, useKV } from "./context/kv"
 
 async function getTerminalBackgroundColor(): Promise<"dark" | "light"> {
+  // can't set raw mode if not a TTY
+  if (!process.stdin.isTTY) return "dark"
+
   return new Promise((resolve) => {
     let timeout: NodeJS.Timeout
 
@@ -177,6 +180,7 @@ function App() {
   const exit = useExit()
 
   useKeyboard(async (evt) => {
+    if (!Installation.isLocal()) return
     if (evt.meta && evt.name === "t") {
       renderer.toggleDebugOverlay()
       return
@@ -354,12 +358,34 @@ function App() {
 
   event.on(SessionApi.Event.Deleted.type, (evt) => {
     if (route.data.type === "session" && route.data.sessionID === evt.properties.info.id) {
+      dialog.clear()
       route.navigate({ type: "home" })
       toast.show({
         variant: "info",
         message: "The current session was deleted",
       })
     }
+  })
+
+  event.on(SessionApi.Event.Error.type, (evt) => {
+    const error = evt.properties.error
+    const message = (() => {
+      if (!error) return "An error occured"
+
+      if (typeof error === "object") {
+        const data = error.data
+        if ("message" in data && typeof data.message === "string") {
+          return data.message
+        }
+      }
+      return String(error)
+    })()
+
+    toast.show({
+      variant: "error",
+      message,
+      duration: 5000,
+    })
   })
 
   return (

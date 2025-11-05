@@ -473,7 +473,7 @@ export namespace Config {
         .default("shift+return,ctrl+j")
         .describe("Insert newline in input"),
       history_previous: z.string().optional().default("up").describe("Previous history item"),
-      history_next: z.string().optional().default("down").describe("Previous history item"),
+      history_next: z.string().optional().default("down").describe("Next history item"),
       session_child_cycle: z
         .string()
         .optional()
@@ -574,6 +574,7 @@ export namespace Config {
                 .object({
                   apiKey: z.string().optional(),
                   baseURL: z.string().optional(),
+                  enterpriseUrl: z.string().optional().describe("GitHub Enterprise URL for copilot authentication"),
                   timeout: z
                     .union([
                       z
