@@ -56,7 +56,8 @@ jobs:
               exit 1
             fi
             echo "models-dev hash updated: $MODELS_HASH"
-          else
+          fi
+          if [ "$MODELS_HASH" = "$current_models_hash" ]; then
             echo "models-dev hash already up to date: $MODELS_HASH"
           fi
 

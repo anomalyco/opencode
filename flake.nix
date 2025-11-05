@@ -90,7 +90,7 @@
                     "SOCKS_SERVER"
                   ];
 
-                nativeBuildInputs = [ bun ];
+                nativeBuildInputs = [ bun pkgs.cacert pkgs.curl pkgs.python3 ];
 
                 dontConfigure = true;
 
@@ -102,6 +102,80 @@
                     --frozen-lockfile \
                     --ignore-scripts \
                     --no-progress
+
+                  cat > optional-packages.txt <<'EOF'
+@parcel/watcher-linux-arm64-glibc
+@opentui/core-linux-arm64
+EOF
+
+                  python3 <<'PY' > optional-metadata.txt
+import pathlib
+import re
+import sys
+
+lock = pathlib.Path("bun.lock").read_text()
+targets = [line.strip() for line in pathlib.Path("optional-packages.txt").read_text().splitlines() if line.strip()]
+
+for name in targets:
+    version_pattern = rf'"{re.escape(name)}": "([^"]+)"'
+    version_match = re.search(version_pattern, lock)
+    if not version_match:
+        print(f"missing-version\t{name}")
+        sys.exit(1)
+    version = version_match.group(1)
+    sha_pattern = rf'"{re.escape(name)}@{re.escape(version)}"[^\n]*"(sha512-[^"]+)"'
+    sha_match = re.search(sha_pattern, lock)
+    if not sha_match:
+        print(f"missing-sha\t{name}\t{version}")
+        sys.exit(1)
+    print(f"{name}\t{version}\t{sha_match.group(1)}")
+PY
+
+                  while IFS=$'\t' read -r name version sha; do
+                    [ -z "$name" ] && continue
+                    scope="''${name%%/*}"
+                    remainder="''${name#*/}"
+                    if [ "$scope" = "$name" ]; then
+                      scope=""
+                      remainder="$name"
+                    fi
+
+                    base="''${remainder##*/}"
+                    encoded_scope="''${scope//@/%40}"
+
+                    url="https://registry.npmjs.org/''${remainder}/-/''${base}-''${version}.tgz"
+                    dest="node_modules/''${remainder}"
+                    if [ -n "$scope" ]; then
+                      url="https://registry.npmjs.org/''${encoded_scope}/''${remainder}/-/''${base}-''${version}.tgz"
+                      dest="node_modules/''${scope}/''${remainder}"
+                    fi
+
+                    tmp=$(mktemp)
+                    curl --fail --location --silent --show-error --tlsv1.2 "$url" -o "$tmp"
+                    python3 - "$tmp" "$sha" <<'PY'
+import base64
+import hashlib
+import pathlib
+import sys
+
+path = pathlib.Path(sys.argv[1])
+expected = sys.argv[2]
+data = path.read_bytes()
+digest = base64.b64encode(hashlib.sha512(data).digest()).decode()
+if expected.startswith('sha512-'):
+    expected = expected.split('-', 1)[1]
+if digest != expected:
+    print(f"hash mismatch: expected {expected}, got {digest}", file=sys.stderr)
+    sys.exit(1)
+PY
+
+                    mkdir -p "$dest"
+                    tar -xzf "$tmp" -C "$dest" --strip-components=1 package
+                    rm -f "$tmp"
+                  done < optional-metadata.txt
+
+                  rm -f optional-packages.txt optional-metadata.txt
+
                   runHook postBuild
                 '';
 
@@ -140,28 +214,12 @@
               buildPhase = ''
                 runHook preBuild
 
-                cat > tsconfig.build.json <<'EOF'
-                {
-                  "compilerOptions": {
-                    "jsx": "preserve",
-                    "jsxImportSource": "@opentui/solid",
-                    "allowImportingTsExtensions": true,
-                    "baseUrl": ".",
-                    "paths": {
-                      "@/*": ["./packages/opencode/src/*"],
-                      "@tui/*": ["./packages/opencode/src/cli/cmd/tui/*"]
-                    }
-                  }
-                }
-                EOF
-
                 cat > bun-build.ts <<'EOF'
                 import solidPlugin from "./packages/opencode/node_modules/@opentui/solid/scripts/solid-plugin"
                 import path from "path"
                 import fs from "fs"
 
                 const version = "@VERSION@"
-                const channel = "@CHANNEL@"
                 const repoRoot = process.cwd()
                 const packageDir = path.join(repoRoot, "packages/opencode")
 
@@ -188,7 +246,7 @@
                   define: {
                     OPENCODE_VERSION: `'@VERSION@'`,
                     OTUI_TREE_SITTER_WORKER_PATH: "/$bunfs/root/" + path.relative(dir, parserWorker).replace(/\\/g, "/"),
-                    OPENCODE_CHANNEL: `'@CHANNEL@'`,
+                    OPENCODE_CHANNEL: "'latest'",
                   },
                   compile: {
                     target,
@@ -238,8 +296,7 @@
                 EOF
 
                 substituteInPlace bun-build.ts \
-                  --replace '@VERSION@' "${finalAttrs.version}" \
-                  --replace '@CHANNEL@' "latest"
+                  --replace '@VERSION@' "${finalAttrs.version}"
 
                 export BUN_COMPILE_TARGET=${bun-target.${stdenvNoCC.hostPlatform.system}}
                 bun --bun bun-build.ts
