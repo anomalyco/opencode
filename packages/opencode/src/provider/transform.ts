@@ -40,7 +40,8 @@ export namespace ProviderTransform {
     }
 
     for (const msg of unique([...system, ...final])) {
-      const shouldUseContentOptions = providerID !== "anthropic" && Array.isArray(msg.content) && msg.content.length > 0
+      const shouldUseContentOptions =
+        providerID !== "anthropic" && Array.isArray(msg.content) && msg.content.length > 0
 
       if (shouldUseContentOptions) {
         const lastContent = msg.content[msg.content.length - 1]
@@ -72,7 +73,7 @@ export namespace ProviderTransform {
               .replace(/[^a-zA-Z0-9]/g, "") // Remove non-alphanumeric characters
               .substring(0, 9) // Take first 9 characters
               .padEnd(9, "0") // Pad with zeros if less than 9 characters
-            
+
             return {
               ...part,
               toolCallId: normalizedId,
@@ -87,24 +88,23 @@ export namespace ProviderTransform {
 
   function fixMistralMessageSequence(msgs: ModelMessage[]): ModelMessage[] {
     const result: ModelMessage[] = []
-    
+
     for (let i = 0; i < msgs.length; i++) {
       const currentMsg = msgs[i]
       const nextMsg = msgs[i + 1]
-      
+
       result.push(currentMsg)
-      
+
       // Check if tool message is followed by user message (invalid for Mistral)
       if (currentMsg.role === "tool" && nextMsg?.role === "user") {
         // Insert an assistant message to process the tool result
         result.push({
           role: "assistant",
           content: "I'll continue with your request based on the tool results.",
-          toolInvocations: [],
         })
       }
     }
-    
+
     return result
   }
 
@@ -134,7 +134,11 @@ export namespace ProviderTransform {
     return undefined
   }
 
-  export function options(providerID: string, modelID: string, sessionID: string): Record<string, any> | undefined {
+  export function options(
+    providerID: string,
+    modelID: string,
+    sessionID: string,
+  ): Record<string, any> | undefined {
     const result: Record<string, any> = {}
 
     if (providerID === "openai") {
@@ -159,7 +163,11 @@ export namespace ProviderTransform {
     return result
   }
 
-  export function providerOptions(npm: string | undefined, providerID: string, options: { [x: string]: any }) {
+  export function providerOptions(
+    npm: string | undefined,
+    providerID: string,
+    options: { [x: string]: any },
+  ) {
     switch (npm) {
       case "@ai-sdk/openai":
       case "@ai-sdk/azure":
@@ -192,7 +200,8 @@ export namespace ProviderTransform {
 
     if (providerID === "anthropic") {
       const thinking = options?.["thinking"]
-      const budgetTokens = typeof thinking?.["budgetTokens"] === "number" ? thinking["budgetTokens"] : 0
+      const budgetTokens =
+        typeof thinking?.["budgetTokens"] === "number" ? thinking["budgetTokens"] : 0
       const enabled = thinking?.["type"] === "enabled"
       if (enabled && budgetTokens > 0) {
         // Return text tokens so that text + thinking <= model cap, preferring 32k text when possible.
