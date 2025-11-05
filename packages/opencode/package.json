@@ -43,7 +43,7 @@
   "dependencies": {
     "@actions/core": "1.11.1",
     "@actions/github": "6.0.1",
-    "@agentclientprotocol/sdk": "0.4.9",
+    "@agentclientprotocol/sdk": "0.5.1",
     "@clack/prompts": "1.0.0-alpha.1",
     "@hono/standard-validator": "0.1.5",
     "@hono/zod-validator": "catalog:",
@@ -57,8 +57,8 @@
     "@opentui/core": "0.1.33",
     "@opentui/solid": "0.1.33",
     "@parcel/watcher": "2.5.1",
-    "@solid-primitives/event-bus": "1.1.2",
     "@pierre/precision-diffs": "catalog:",
+    "@solid-primitives/event-bus": "1.1.2",
     "@standard-schema/spec": "1.0.0",
     "@zip.js/zip.js": "2.7.62",
     "ai": "catalog:",

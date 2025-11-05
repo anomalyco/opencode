@@ -77,7 +77,15 @@ export namespace MCP {
       }
     },
     async (state) => {
-      await Promise.all(Object.values(state.clients).map((client) => client.close()))
+      await Promise.all(
+        Object.values(state.clients).map((client) =>
+          client.close().catch((error) => {
+            log.error("Failed to close MCP client", {
+              error,
+            })
+          }),
+        ),
+      )
     },
   )
 
@@ -201,7 +209,15 @@ export namespace MCP {
 
     const result = await withTimeout(mcpClient.tools(), mcp.timeout ?? 5000).catch(() => {})
     if (!result) {
-      await mcpClient.close()
+      await mcpClient.close().catch((error) => {
+        log.error("Failed to close MCP client", {
+          error,
+        })
+      })
+      status = {
+        status: "failed",
+        error: "Failed to get tools",
+      }
       return {
         mcpClient: undefined,
         status: {

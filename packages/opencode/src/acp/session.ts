@@ -6,13 +6,18 @@ import type { ACPSessionState } from "./types"
 export class ACPSessionManager {
   private sessions = new Map<string, ACPSessionState>()
 
-  async create(cwd: string, mcpServers: McpServer[], model?: ACPSessionState["model"]): Promise<ACPSessionState> {
+  async create(
+    cwd: string,
+    mcpServers: McpServer[],
+    model?: ACPSessionState["model"],
+  ): Promise<ACPSessionState> {
     const session = await Session.create({ title: `ACP Session ${crypto.randomUUID()}` })
     const sessionId = session.id
     const resolvedModel = model ?? (await Provider.defaultModel())
 
     const state: ACPSessionState = {
       id: sessionId,
+      parentId: session.parentID,
       cwd,
       mcpServers,
       createdAt: new Date(),

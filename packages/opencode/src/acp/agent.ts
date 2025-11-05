@@ -1,9 +1,12 @@
 import {
+  RequestError,
   type Agent as ACPAgent,
   type AgentSideConnection,
   type AuthenticateRequest,
+  type AuthMethod,
   type CancelNotification,
   type InitializeRequest,
+  type InitializeResponse,
   type LoadSessionRequest,
   type NewSessionRequest,
   type PermissionOption,
@@ -33,6 +36,7 @@ import type { Config } from "@/config/config"
 import { MCP } from "@/mcp"
 import { Todo } from "@/session/todo"
 import { z } from "zod"
+import { LoadAPIKeyError } from "ai"
 
 export namespace ACP {
   const log = Log.create({ service: "acp-agent" })
@@ -302,8 +306,25 @@ export namespace ACP {
       })
     }
 
-    async initialize(params: InitializeRequest) {
+    async initialize(params: InitializeRequest): Promise<InitializeResponse> {
       log.info("initialize", { protocolVersion: params.protocolVersion })
+
+      const authMethod: AuthMethod = {
+        description: "Run `opencode auth login` in the terminal",
+        name: "Login with opencode",
+        id: "opencode-login",
+      }
+
+      // If client supports terminal-auth capability, use that instead.
+      if (params.clientCapabilities?._meta?.["terminal-auth"] === true) {
+        authMethod._meta = {
+          "terminal-auth": {
+            command: "opencode",
+            args: ["auth", "login"],
+            label: "OpenCode Login",
+          },
+        }
+      }
 
       return {
         protocolVersion: 1,
@@ -325,10 +346,9 @@ export namespace ACP {
             id: "opencode-login",
           },
         ],
-        _meta: {
-          opencode: {
-            version: Installation.VERSION,
-          },
+        agentInfo: {
+          name: "OpenCode",
+          version: Installation.VERSION,
         },
       }
     }
@@ -338,21 +358,31 @@ export namespace ACP {
     }
 
     async newSession(params: NewSessionRequest) {
-      const model = await defaultModel(this.config)
-      const session = await this.sessionManager.create(params.cwd, params.mcpServers, model)
+      try {
+        const model = await defaultModel(this.config)
+        const session = await this.sessionManager.create(params.cwd, params.mcpServers, model)
 
-      log.info("creating_session", { mcpServers: params.mcpServers.length })
-      const load = await this.loadSession({
-        cwd: params.cwd,
-        mcpServers: params.mcpServers,
-        sessionId: session.id,
-      })
+        log.info("creating_session", { mcpServers: params.mcpServers.length })
+        const load = await this.loadSession({
+          cwd: params.cwd,
+          mcpServers: params.mcpServers,
+          sessionId: session.id,
+        })
 
-      return {
-        sessionId: session.id,
-        models: load.models,
-        modes: load.modes,
-        _meta: {},
+        return {
+          sessionId: session.id,
+          models: load.models,
+          modes: load.modes,
+          _meta: {},
+        }
+      } catch (e) {
+        const error = MessageV2.fromError(e, {
+          providerID: this.config.defaultModel?.providerID ?? "unknown",
+        })
+        if (LoadAPIKeyError.isInstance(error)) {
+          throw RequestError.authRequired()
+        }
+        throw e
       }
     }
 
@@ -386,16 +416,6 @@ export namespace ACP {
           name: "compact",
           description: "compact the session",
         })
-
-      setTimeout(() => {
-        this.connection.sessionUpdate({
-          sessionId,
-          update: {
-            sessionUpdate: "available_commands_update",
-            availableCommands,
-          },
-        })
-      }, 0)
 
       const availableModes = (await Agents.list())
         .filter((agent) => agent.mode !== "subagent")
@@ -436,6 +456,16 @@ export namespace ACP {
           await MCP.add(key, mcp)
         }),
       )
+
+      setTimeout(() => {
+        this.connection.sessionUpdate({
+          sessionId,
+          update: {
+            sessionUpdate: "available_commands_update",
+            availableCommands,
+          },
+        })
+      }, 0)
 
       return {
         sessionId,
