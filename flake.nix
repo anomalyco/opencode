@@ -40,6 +40,7 @@
         system:
         let
           pkgs = import nixpkgs { inherit system; };
+          packageJson = builtins.fromJSON (builtins.readFile ./packages/opencode/package.json);
           bun-target = {
             "aarch64-linux" = "bun-linux-arm64";
             "x86_64-linux" = "bun-linux-x64";
@@ -74,7 +75,7 @@
             }:
             stdenvNoCC.mkDerivation (finalAttrs: {
               pname = "opencode";
-              version = "1.0.23";
+              version = packageJson.version;
 
               src = ./.;
 
