@@ -1,0 +1,15 @@
+{
+  "name": "@opencode-example/plugin-jsx-component",
+  "version": "0.0.1",
+  "private": true,
+  "type": "module",
+  "exports": {
+    ".": "./index.tsx"
+  },
+  "dependencies": {
+    "solid-js": "^1.9.3"
+  },
+  "devDependencies": {
+    "@opencode-ai/plugin": "workspace:*"
+  }
+}

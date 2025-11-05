@@ -1,0 +1,13 @@
+{
+  "name": "@opencode-ai/plugin-sidebar-ui",
+  "version": "1.0.0",
+  "description": "Core sidebar UI components for OpenCode",
+  "type": "module",
+  "main": "index.ts",
+  "keywords": [
+    "opencode",
+    "plugin",
+    "ui",
+    "sidebar"
+  ]
+}

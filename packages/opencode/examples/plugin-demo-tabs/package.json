@@ -1,0 +1,14 @@
+{
+  "name": "@opencode-ai/plugin-demo-tabs",
+  "version": "1.0.0",
+  "description": "Demo tabbed interface plugin for OpenCode",
+  "type": "module",
+  "main": "index.ts",
+  "keywords": [
+    "opencode",
+    "plugin",
+    "ui",
+    "demo",
+    "tabs"
+  ]
+}

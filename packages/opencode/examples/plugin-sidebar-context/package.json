@@ -1,0 +1,17 @@
+{
+  "name": "@opencode-ai/plugin-sidebar-context",
+  "version": "0.0.1",
+  "description": "Context panel plugin - Proof of concept for reimplementing sidebar sections with the plugin system",
+  "main": "dist/index.js",
+  "type": "module",
+  "scripts": {
+    "build": "bun run build.ts"
+  },
+  "keywords": [
+    "opencode",
+    "plugin",
+    "ui",
+    "sidebar",
+    "context"
+  ]
+}

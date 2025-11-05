@@ -7,16 +7,21 @@ import type {
   StatusItemDefinition,
   CommandDefinition,
   UIHooks,
+  UISubscriptions,
 } from "./types"
 import { Plugin } from "../plugin"
 import { Instance } from "../project/instance"
 import { Log } from "../util/log"
+import { Bus } from "../bus"
+import { Server } from "../server/server"
+import { createOpencodeClient } from "@opencode-ai/sdk"
 
 export namespace UIRegistry {
   const log = Log.create({ service: "ui-registry" })
 
   interface UIExtension {
     pluginId: string
+    plugin: any // Store reference to plugin for event handling
     sidebars: SidebarDefinition[]
     panels: PanelDefinition[]
     tabs: TabDefinition[]
@@ -24,60 +29,91 @@ export namespace UIRegistry {
     keybinds: KeybindDefinition[]
     statusItems: StatusItemDefinition[]
     commands: CommandDefinition[]
+    subscriptions?: UISubscriptions
   }
 
   const state = Instance.state(async () => {
     const extensions: UIExtension[] = []
+    const appFetch = Server.App().fetch as any
+    const client = createOpencodeClient({
+      baseUrl: "http://localhost:4096",
+      fetch: appFetch,
+    })
 
     const plugins = await Plugin.list()
-    log.info("[DEBUG] Plugin.list() returned", { count: plugins.length, plugins })
     for (const plugin of plugins) {
-      log.info("[DEBUG] Checking plugin for ui.register hook", {
-        plugin,
-        hasUiRegister: !!(plugin as any)["ui.register"],
-        hooks: Object.keys(plugin),
-      })
       const uiRegister = (plugin as any)["ui.register"] as UIHooks["ui.register"]
       if (!uiRegister) continue
 
-      const output = {
-        sidebars: [],
-        panels: [],
-        tabs: [],
-        widgets: [],
-        keybinds: [],
-        statusItems: [],
-        commands: [],
-      }
+      const output: {
+        sidebars?: SidebarDefinition[]
+        panels?: PanelDefinition[]
+        tabs?: TabDefinition[]
+        widgets?: WidgetDefinition[]
+        keybinds?: KeybindDefinition[]
+        statusItems?: StatusItemDefinition[]
+        commands?: CommandDefinition[]
+        subscriptions?: UISubscriptions
+      } = {}
 
       try {
         await uiRegister(
           {
             platform: "tui",
             version: "1.0.0",
+            client,
           },
           output,
         )
 
         extensions.push({
           pluginId: "unknown", // TODO: get plugin ID from plugin system
-          ...output,
+          plugin, // Store plugin reference for event handling
+          sidebars: output.sidebars || [],
+          panels: output.panels || [],
+          tabs: output.tabs || [],
+          widgets: output.widgets || [],
+          keybinds: output.keybinds || [],
+          statusItems: output.statusItems || [],
+          commands: output.commands || [],
+          subscriptions: output.subscriptions,
         })
 
         log.info("registered UI extensions", {
-          sidebars: output.sidebars.length,
-          tabs: output.tabs.length,
-          panels: output.panels.length,
-          widgets: output.widgets.length,
-          keybinds: output.keybinds.length,
+          sidebars: output.sidebars?.length || 0,
+          tabs: output.tabs?.length || 0,
+          panels: output.panels?.length || 0,
+          widgets: output.widgets?.length || 0,
+          keybinds: output.keybinds?.length || 0,
+          subscriptions: output.subscriptions,
         })
+
+        // Subscribe to events if plugin declared subscriptions
+        if (output.subscriptions?.events) {
+          for (const eventType of output.subscriptions.events) {
+            Bus.subscribeAll(async (event) => {
+              if (event.type === eventType) {
+                await handlePluginEvent(plugin, event)
+              }
+            })
+          }
+        }
       } catch (error) {
         log.error("failed to register UI extensions", { error })
       }
     }
 
-    return { extensions }
+    return { extensions, client }
   })
+
+  async function handlePluginEvent(plugin: any, event: any) {
+    const uiEvent = (plugin as any)["ui.event"] as UIHooks["ui.event"]
+    if (!uiEvent) return
+
+    // TODO: Trigger refresh for components that need it
+    // This would notify plugin-component.tsx to re-render
+    log.info("plugin event triggered", { event: event.type })
+  }
 
   export async function getSidebars(): Promise<SidebarDefinition[]> {
     const { extensions } = await state()
@@ -149,31 +185,55 @@ export namespace UIRegistry {
     componentId: string,
     context: Record<string, any>,
   ): Promise<{
-    content: string
-    type: "text" | "markdown" | "ansi" | "html"
+    content?: string
+    component?: any
+    type: "text" | "markdown" | "ansi" | "html" | "component"
     error?: string
   }> {
+    const { client } = await state()
     const plugins = await Plugin.list()
+    log.info("rendering component", { componentId, pluginCount: plugins.length })
+
     for (const plugin of plugins) {
       const uiRender = (plugin as any)["ui.render"] as UIHooks["ui.render"]
       if (!uiRender) continue
 
       const output: {
         content?: string
-        type?: "text" | "markdown" | "ansi" | "html"
+        component?: any
+        type?: "text" | "markdown" | "ansi" | "html" | "component"
         props?: Record<string, any>
         hidden?: boolean
         error?: string
       } = {}
 
       try {
+        log.info("calling ui.render", { componentId })
         await uiRender(
           {
             componentId,
-            context,
+            context: {
+              ...context,
+              client,
+            },
           },
           output,
         )
+
+        log.info("ui.render result", {
+          componentId,
+          hasComponent: !!output.component,
+          hasContent: !!output.content,
+          type: output.type,
+        })
+
+        if (output.component) {
+          return {
+            component: output.component,
+            type: "component",
+            error: output.error,
+          }
+        }
 
         if (output.content) {
           return {
@@ -192,6 +252,7 @@ export namespace UIRegistry {
       }
     }
 
+    log.warn("component not found", { componentId })
     return {
       content: `Component "${componentId}" not found`,
       type: "text",

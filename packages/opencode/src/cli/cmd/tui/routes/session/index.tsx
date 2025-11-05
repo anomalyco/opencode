@@ -352,13 +352,15 @@ export function Session() {
       keybind: "session_compact",
       category: "Session",
       onSelect: (dialog) => {
+        const currentModel = local.model.current()
+        if (!currentModel) return
         sdk.client.session.summarize({
           path: {
             id: route.sessionID,
           },
           body: {
-            modelID: local.model.current().modelID,
-            providerID: local.model.current().providerID,
+            modelID: currentModel.modelID,
+            providerID: currentModel.providerID,
           },
         })
         dialog.clear()

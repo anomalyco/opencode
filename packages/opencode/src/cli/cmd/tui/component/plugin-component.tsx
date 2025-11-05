@@ -1,7 +1,8 @@
-import { createResource, createSignal, Show, Match, Switch } from "solid-js"
+import { createSignal, Show, onMount, type Component } from "solid-js"
 import { useTheme } from "../context/theme"
-import { useUIExtensions } from "../context/ui-extensions"
+import { useSDK } from "../context/sdk"
 import { TextAttributes } from "@opentui/core"
+import { Plugin } from "@/plugin"
 
 export interface PluginComponentProps {
   componentId: string
@@ -11,69 +12,84 @@ export interface PluginComponentProps {
 
 export function PluginComponent(props: PluginComponentProps) {
   const { theme } = useTheme()
-  const uiExtensions = useUIExtensions()
-  const [refreshCounter] = createSignal(0)
+  const sdk = useSDK()
+  const [ComponentFn, setComponentFn] = createSignal<Component<any> | null>(null)
+  const [error, setError] = createSignal<string | null>(null)
+  const [loading, setLoading] = createSignal(true)
 
-  const [rendered] = createResource(
-    () => ({ id: props.componentId, context: props.context, refresh: refreshCounter() }),
-    async (args) => {
-      const result = await uiExtensions.renderComponent(args.id, args.context ?? {})
-      return result
-    },
-  )
+  async function loadComponent() {
+    setLoading(true)
+    setError(null)
+    try {
+      console.log("[PluginComponent] Loading component:", props.componentId)
+      const plugins = await Plugin.list()
+      console.log("[PluginComponent] Found", plugins.length, "plugins")
+
+      for (const plugin of plugins) {
+        const uiRender = (plugin as any)["ui.render"]
+        if (!uiRender) continue
+
+        const output: any = {}
+        const renderInput = {
+          componentId: props.componentId,
+          context: {
+            ...props.context,
+            client: sdk.client,
+          },
+        }
+        console.log("[PluginComponent] Calling ui.render with:", {
+          componentId: renderInput.componentId,
+          contextKeys: Object.keys(renderInput.context),
+        })
+        await uiRender(renderInput, output)
+
+        if (output.component) {
+          // Store the component as a function that returns JSX
+          // This way it will be called within the render tree
+          console.log("[PluginComponent] ✓ Loaded component for:", props.componentId)
+          setComponentFn(() => output.component)
+          setLoading(false)
+          return
+        }
+      }
+
+      console.error("[PluginComponent] ✗ No plugin found for:", props.componentId)
+      setError(`No plugin can render component: ${props.componentId}`)
+    } catch (err) {
+      console.error("[PluginComponent] Error loading plugin:", err)
+      setError(err instanceof Error ? err.message : String(err))
+    } finally {
+      setLoading(false)
+    }
+  }
+
+  onMount(() => {
+    loadComponent()
+  })
 
   return (
-    <Switch>
-      <Match when={rendered.loading}>
+    <Show
+      when={!loading()}
+      fallback={
         <text fg={theme.textMuted} attributes={TextAttributes.ITALIC}>
-          Loading...
+          {props.fallback || "Loading..."}
         </text>
-      </Match>
-      <Match when={rendered.error}>
-        <text fg={theme.error}>
-          Error: {rendered.error instanceof Error ? rendered.error.message : String(rendered.error)}
-        </text>
-      </Match>
-      <Match when={rendered()?.error}>
-        <text fg={theme.error}>{rendered()!.error}</text>
-      </Match>
-      <Match when={rendered()}>
-        {(data) => (
-          <Switch>
-            <Match when={data().type === "text"}>
-              <text fg={theme.text} wrapMode="word">
-                {data().content}
-              </text>
-            </Match>
-            <Match when={data().type === "markdown"}>
-              {/* For MVP, render markdown as plain text */}
-              {/* TODO: Add markdown parsing/rendering if needed */}
-              <text fg={theme.text} wrapMode="word">
-                {data().content}
-              </text>
-            </Match>
-            <Match when={data().type === "ansi"}>
-              {/* OpenTUI should handle ANSI escape codes automatically */}
-              <text fg={theme.text} wrapMode="word">
-                {data().content}
-              </text>
-            </Match>
-            <Match when={data().type === "html"}>
-              {/* HTML not supported in TUI, show fallback */}
-              <text fg={theme.textMuted} attributes={TextAttributes.ITALIC}>
-                HTML content not supported in TUI
-              </text>
-            </Match>
-          </Switch>
-        )}
-      </Match>
-      <Match when={!rendered()}>
-        <Show when={props.fallback} fallback={null}>
-          <text fg={theme.textMuted} attributes={TextAttributes.ITALIC}>
-            {props.fallback}
-          </text>
+      }
+    >
+      <Show when={!error()} fallback={<text fg={theme.error}>{error()}</text>}>
+        <Show when={ComponentFn()} fallback={<text fg={theme.textMuted}>No component</text>}>
+          {(() => {
+            try {
+              console.log("[PluginComponent] Rendering component for:", props.componentId)
+              const Component = ComponentFn()!
+              return <Component />
+            } catch (err) {
+              console.error("[PluginComponent] Render error:", err)
+              return <text fg={theme.error}>Render error: {String(err)}</text>
+            }
+          })()}
         </Show>
-      </Match>
-    </Switch>
+      </Show>
+    </Show>
   )
 }

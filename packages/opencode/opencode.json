@@ -1,0 +1,21 @@
+{
+  "$schema": "https://opencode.ai/config.json",
+  "plugin": [
+    "file:///Users/jkneen/Documents/GitHub/flows/opencode-stt/packages/opencode/examples/plugin-test-minimal/index.tsx",
+    "file:///Users/jkneen/Documents/GitHub/flows/opencode-stt/packages/opencode/examples/plugin-sidebar-context/index.tsx",
+    "file:///Users/jkneen/Documents/GitHub/flows/opencode-stt/packages/opencode/examples/plugin-sidebar-tabs/index.tsx",
+    "file:///Users/jkneen/Documents/GitHub/flows/opencode-stt/packages/opencode/examples/plugin-sidebar-subagents/index.tsx"
+  ],
+  "favoriteTools": [
+    "cc_computer_use",
+    "bash",
+    "grep",
+    "task",
+    "list",
+    "write",
+    "cc_bash",
+    "cc_edit",
+    "read",
+    "todowrite"
+  ]
+}

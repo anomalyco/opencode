@@ -15,6 +15,7 @@
     "surf": "./bin/surf"
   },
   "exports": {
+    "./plugin-ui": "./src/plugin-ui/index.ts",
     "./*": "./src/*.ts"
   },
   "devDependencies": {

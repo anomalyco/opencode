@@ -21,20 +21,26 @@ export const PanelSchema = z.object({
   label: z.string(),
   icon: z.string().optional(),
   area: z.enum(["top", "bottom", "left", "right"]),
+  position: z.enum(["top", "bottom"]).optional(),
   collapsible: z.boolean().optional(),
 })
 
 export const WidgetSchema = z.object({
   id: z.string(),
   label: z.string(),
-  position: z.object({
-    x: z.number(),
-    y: z.number(),
-  }),
-  size: z.object({
-    width: z.number(),
-    height: z.number(),
-  }),
+  sidebarPosition: z.enum(["top", "bottom", "inline"]).optional(),
+  position: z
+    .object({
+      x: z.number(),
+      y: z.number(),
+    })
+    .optional(),
+  size: z
+    .object({
+      width: z.number(),
+      height: z.number(),
+    })
+    .optional(),
 })
 
 export const KeybindSchema = z.object({

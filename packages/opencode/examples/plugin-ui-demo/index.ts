@@ -34,8 +34,6 @@ export const ExampleUIPlugin: Plugin = async (_ctx) => {
         commands?: CommandDefinition[]
       },
     ) => {
-      console.log(`[ExampleUIPlugin] Registering for platform: ${input.platform}`)
-
       // Register a widget in the sidebar
       output.widgets = [
         {
@@ -107,8 +105,6 @@ export const ExampleUIPlugin: Plugin = async (_ctx) => {
     ) => {
       const { componentId, context } = input
 
-      console.log(`[ExampleUIPlugin] Rendering component: ${componentId}`)
-
       // Store session ID for reference
       if (context.sessionID) {
         lastSessionId = context.sessionID
@@ -169,8 +165,6 @@ Counter value: ${counter}
     ) => {
       const { componentId, action } = input
 
-      console.log(`[ExampleUIPlugin] Action: ${action} on ${componentId}`)
-
       switch (action) {
         case "increment":
           counter++
@@ -196,7 +190,7 @@ Counter value: ${counter}
     event: async (input) => {
       // Example: Increment counter on certain events
       if (input.event.type === "session.created") {
-        console.log("[ExampleUIPlugin] New session created")
+        // Session created
       }
     },
   }

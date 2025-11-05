@@ -1636,7 +1636,6 @@ export namespace Server {
           },
         }),
         async (c) => {
-          console.log("[Server] /ui/extensions endpoint called")
           const result = {
             sidebars: await UIRegistry.getSidebars(),
             tabs: await UIRegistry.getTabs(),
@@ -1646,7 +1645,6 @@ export namespace Server {
             statusItems: await UIRegistry.getStatusItems(),
             commands: await UIRegistry.getCommands(),
           }
-          console.log("[Server] /ui/extensions result:", JSON.stringify(result, null, 2))
           return c.json(result)
         },
       )

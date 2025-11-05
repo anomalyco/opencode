@@ -2,7 +2,16 @@ import { render, useKeyboard, useRenderer, useTerminalDimensions } from "@opentu
 import { Clipboard } from "@tui/util/clipboard"
 import { TextAttributes } from "@opentui/core"
 import { RouteProvider, useRoute, type Route } from "@tui/context/route"
-import { Switch, Match, createEffect, untrack, ErrorBoundary, createSignal } from "solid-js"
+import {
+  Switch,
+  Match,
+  createEffect,
+  untrack,
+  ErrorBoundary,
+  createSignal,
+  For,
+  Show,
+} from "solid-js"
 import { Installation } from "@/installation"
 import { Global } from "@/global"
 import { DialogProvider, useDialog } from "@tui/ui/dialog"
@@ -34,7 +43,8 @@ import { Session as SessionApi } from "@/session"
 import { TuiEvent } from "./event"
 import { KVProvider, useKV } from "./context/kv"
 import { LiveKitProvider } from "./context/livekit"
-import { UIExtensionsProvider } from "./context/ui-extensions"
+import { UIExtensionsProvider, useUIExtensions } from "./context/ui-extensions"
+import { PluginComponent } from "./component/plugin-component"
 
 async function getTerminalBackgroundColor(): Promise<"dark" | "light"> {
   // can't set raw mode if not a TTY
@@ -134,43 +144,26 @@ export function tui(input: {
                   <RouteProvider data={routeData}>
                     <SDKProvider url={input.url}>
                       <SyncProvider>
-                        <ThemeProvider mode={mode}>
-                          <LocalProvider
-                            initialModel={input.model}
-                            initialAgent={input.agent}
-                            initialPrompt={input.prompt}
-                          >
-                            <KeybindProvider>
-                              <DialogProvider>
-                                <CommandProvider>
-                                  <LiveKitProvider>
-                                    <PromptHistoryProvider>
-                                      <App />
-                                    </PromptHistoryProvider>
-                                  </LiveKitProvider>
-                                </CommandProvider>
-                              </DialogProvider>
-                            </KeybindProvider>
-                          </LocalProvider>
-                        </ThemeProvider>
                         <UIExtensionsProvider>
-                          <ThemeProvider mode={mode}>
-                            <LocalProvider
-                              initialModel={input.model}
-                              initialAgent={input.agent}
-                              initialPrompt={input.prompt}
-                            >
-                              <KeybindProvider>
+                          <KeybindProvider>
+                            <ThemeProvider mode={mode}>
+                              <LocalProvider
+                                initialModel={input.model}
+                                initialAgent={input.agent}
+                                initialPrompt={input.prompt}
+                              >
                                 <DialogProvider>
                                   <CommandProvider>
-                                    <PromptHistoryProvider>
-                                      <App />
-                                    </PromptHistoryProvider>
+                                    <LiveKitProvider>
+                                      <PromptHistoryProvider>
+                                        <App />
+                                      </PromptHistoryProvider>
+                                    </LiveKitProvider>
                                   </CommandProvider>
                                 </DialogProvider>
-                              </KeybindProvider>
-                            </LocalProvider>
-                          </ThemeProvider>
+                              </LocalProvider>
+                            </ThemeProvider>
+                          </KeybindProvider>
                         </UIExtensionsProvider>
                       </SyncProvider>
                     </SDKProvider>
@@ -206,6 +199,7 @@ function App() {
   const [sessionExists, setSessionExists] = createSignal(false)
   const { theme, mode, setMode } = useTheme()
   const exit = useExit()
+  const uiExtensions = useUIExtensions()
 
   useKeyboard(async (evt) => {
     if (!Installation.isLocal()) return
@@ -404,7 +398,9 @@ function App() {
   ])
 
   createEffect(() => {
-    const providerID = local.model.current().providerID
+    const currentModel = local.model.current()
+    if (!currentModel) return
+    const providerID = currentModel.providerID
     if (providerID === "openrouter" && !kv.get("openrouter_warning", false)) {
       untrack(() => {
         DialogAlert.show(
@@ -483,6 +479,11 @@ function App() {
     >
       <box flexDirection="column" flexGrow={1}>
         <Switch>
+          <Match when={!sync.ready}>
+            <box flexDirection="column" alignItems="center" justifyContent="center" flexGrow={1}>
+              <text fg={theme.textMuted}>Loading configuration...</text>
+            </box>
+          </Match>
           <Match when={route.data.type === "home"}>
             <Home />
           </Match>
@@ -514,22 +515,31 @@ function App() {
           <box paddingLeft={1} paddingRight={1}>
             <text fg={theme.textMuted}>{process.cwd().replace(Global.Path.home, "~")}</text>
           </box>
+          <Show when={uiExtensions.extensions()?.statusItems}>
+            <For each={uiExtensions.extensions()?.statusItems ?? []}>
+              {(statusItem) => (
+                <box paddingLeft={1} paddingRight={1}>
+                  <PluginComponent componentId={statusItem.id} context={{}} />
+                </box>
+              )}
+            </For>
+          </Show>
         </box>
         <box flexDirection="row" flexShrink={0}>
           <text fg={theme.textMuted} paddingRight={1}>
             tab
           </text>
           <text
-            fg={local.agent.color(local.agent.current().name)}
+            fg={local.agent.color(local.agent.current()?.name ?? "")}
             onMouseUp={() => {
               if (renderer.getSelection()?.getSelectedText()) return
               dialog.replace(() => <DialogAgent />)
             }}
           >
-            {""}
+            {""}
           </text>
           <text
-            bg={local.agent.color(local.agent.current().name)}
+            bg={local.agent.color(local.agent.current()?.name ?? "")}
             fg={theme.background}
             wrapMode={undefined}
             onMouseUp={() => {
@@ -556,7 +566,8 @@ function App() {
                 }
 
                 // Otherwise show current agent from local state
-                return local.agent.current().name.toUpperCase()
+                const agent = local.agent.current()
+                return agent?.name.toUpperCase() ?? "LOADING"
               })()}
             </span>
             <span> AGENT </span>

@@ -102,9 +102,12 @@ export const TuiThreadCommand = cmd({
 
       const worker = new Worker(workerPath, {
         env: Object.fromEntries(
-          Object.entries(process.env).filter(
-            (entry): entry is [string, string] => entry[1] !== undefined,
-          ),
+          Object.entries(process.env)
+            .filter(
+              (entry): entry is [string, string] =>
+                entry[1] !== undefined && typeof entry[1] === "string",
+            )
+            .map(([key, value]) => [key, String(value)]),
         ),
       })
       worker.onerror = console.error

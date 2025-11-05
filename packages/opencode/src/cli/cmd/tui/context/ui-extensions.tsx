@@ -27,17 +27,27 @@ export const { use: useUIExtensions, provider: UIExtensionsProvider } = createSi
     const sdk = useSDK()
     const [refreshCounter, setRefreshCounter] = createSignal(0)
 
+    // Map of componentId -> Set of callback functions
+    const componentRefreshCallbacks = new Map<string, Set<() => void>>()
+
+    // Map of componentId -> plugin instance (loaded from server)
+    const pluginRegistry = new Map<string, any>()
+
     const [extensions] = createResource(refreshCounter, async (): Promise<UIExtensions> => {
       try {
-        // Debug: Log SDK client structure
-        console.log("[UIExtensions] SDK client:", Object.keys(sdk.client))
-        console.log("[UIExtensions] SDK client.ui:", sdk.client.ui)
-        console.log("[UIExtensions] SDK client.ui.extensions:", (sdk.client as any).ui?.extensions)
-
         // Call the SDK to fetch UI extensions from plugins
         const result = await (sdk.client as any).ui.extensions()
-        console.log("[UIExtensions] Received result:", result)
-        return result
+        return (
+          result?.data ?? {
+            sidebars: [],
+            tabs: [],
+            panels: [],
+            widgets: [],
+            keybinds: [],
+            statusItems: [],
+            commands: [],
+          }
+        )
       } catch (error) {
         console.error("[UIExtensions] Failed to fetch UI extensions:", error)
         return {
@@ -56,20 +66,56 @@ export const { use: useUIExtensions, provider: UIExtensionsProvider } = createSi
       componentId: string,
       context: Record<string, any> = {},
     ): Promise<{
-      content: string
-      type: "text" | "markdown" | "ansi" | "html"
+      content?: string
+      component?: any
+      type: "text" | "markdown" | "ansi" | "html" | "component"
       error?: string
     }> {
       try {
-        const result = await (sdk.client as any).ui.render(componentId, { context })
-        return result
+        const result = await (sdk.client as any).ui.render({
+          path: { componentId },
+          body: { context },
+        })
+        return result?.data ?? result
       } catch (error) {
-        console.error(`Failed to render component ${componentId}:`, error)
+        console.error(`[UIExtensions] Failed to render component ${componentId}:`, error)
         return {
           content: `Error rendering ${componentId}`,
           type: "text",
           error: error instanceof Error ? error.message : String(error),
         }
+      }
+    }
+
+    function registerPlugin(componentId: string, plugin: any) {
+      pluginRegistry.set(componentId, plugin)
+    }
+
+    function getPlugin(componentId: string): any | undefined {
+      return pluginRegistry.get(componentId)
+    }
+
+    function subscribeToComponentRefresh(componentId: string, callback: () => void): () => void {
+      if (!componentRefreshCallbacks.has(componentId)) {
+        componentRefreshCallbacks.set(componentId, new Set())
+      }
+      componentRefreshCallbacks.get(componentId)!.add(callback)
+
+      return () => {
+        const callbacks = componentRefreshCallbacks.get(componentId)
+        if (callbacks) {
+          callbacks.delete(callback)
+          if (callbacks.size === 0) {
+            componentRefreshCallbacks.delete(componentId)
+          }
+        }
+      }
+    }
+
+    function triggerComponentRefresh(componentId: string) {
+      const callbacks = componentRefreshCallbacks.get(componentId)
+      if (callbacks) {
+        callbacks.forEach((cb) => cb())
       }
     }
 
@@ -80,6 +126,10 @@ export const { use: useUIExtensions, provider: UIExtensionsProvider } = createSi
     return {
       extensions,
       renderComponent,
+      subscribeToComponentRefresh,
+      triggerComponentRefresh,
+      registerPlugin,
+      getPlugin,
       refresh,
     }
   },

@@ -312,8 +312,3 @@ Track:
 
 MIT - Allows commercial use while maintaining attribution
 
----
-
-**Built with ❤️ for OpenCode**
-
-This plugin showcases the power of OpenCode's plugin system and demonstrates a path to monetization through premium features.

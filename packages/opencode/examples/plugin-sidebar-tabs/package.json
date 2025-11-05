@@ -1,0 +1,17 @@
+{
+  "name": "@opencode-ai/plugin-sidebar-tabs",
+  "version": "0.0.1",
+  "description": "Sidebar tabs plugin - Tools, Todos, Files tabs as plugins",
+  "main": "dist/index.js",
+  "type": "module",
+  "scripts": {
+    "build": "bun run build.ts"
+  },
+  "keywords": [
+    "opencode",
+    "plugin",
+    "ui",
+    "sidebar",
+    "tabs"
+  ]
+}

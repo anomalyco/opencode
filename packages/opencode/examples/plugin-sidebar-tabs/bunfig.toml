@@ -1,0 +1,4 @@
+[build]
+[build.jsx]
+runtime = "automatic"
+importSource = "solid-js"

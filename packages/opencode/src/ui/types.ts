@@ -21,14 +21,16 @@ export interface PanelDefinition {
   label: string
   icon?: string
   area: "top" | "bottom" | "left" | "right"
+  position?: "top" | "bottom" // Where in the sidebar to render
   collapsible?: boolean
 }
 
 export interface WidgetDefinition {
   id: string
   label: string
-  position: { x: number; y: number }
-  size: { width: number; height: number }
+  sidebarPosition?: "top" | "bottom" | "inline" // Where in sidebar to render
+  position?: { x: number; y: number } // For floating widgets
+  size?: { width: number; height: number }
 }
 
 export interface KeybindDefinition {
@@ -50,15 +52,33 @@ export interface CommandDefinition {
   description?: string
 }
 
+// Subscription configuration for UI plugins
+export interface UISubscriptions {
+  /**
+   * Bus events to subscribe to (e.g., ["session.updated", "todo.updated"])
+   */
+  events?: string[]
+  /**
+   * Subscribe to session data changes
+   */
+  session?: boolean
+  /**
+   * Subscribe to sync data updates
+   */
+  sync?: boolean
+}
+
 // UI Plugin Hook Extensions
 export interface UIHooks {
   /**
    * Register UI extensions (sidebars, tabs, panels, keybinds)
+   * Plugins declare what data/events they need via subscriptions
    */
   "ui.register"?: (
     input: {
       platform: "tui" | "desktop"
       version: string
+      client: any // OpencodeClient - plugins get SDK access
     },
     output: {
       sidebars?: SidebarDefinition[]
@@ -68,10 +88,12 @@ export interface UIHooks {
       keybinds?: KeybindDefinition[]
       statusItems?: StatusItemDefinition[]
       commands?: CommandDefinition[]
+      subscriptions?: UISubscriptions
     },
   ) => Promise<void>
   /**
-   * Render UI component content
+   * Render UI component content - Can return either text or JSX component
+   * Plugins can fetch data via client as needed
    */
   "ui.render"?: (
     input: {
@@ -81,12 +103,14 @@ export interface UIHooks {
         theme?: "dark" | "light"
         width?: number
         height?: number
+        client: any // OpencodeClient for data fetching
         [key: string]: any
       }
     },
     output: {
       content?: string
-      type?: "text" | "markdown" | "ansi" | "html"
+      component?: any // JSX Element
+      type?: "text" | "markdown" | "ansi" | "html" | "component"
       props?: Record<string, any>
       hidden?: boolean
       error?: string
@@ -104,6 +128,22 @@ export interface UIHooks {
     output: {
       result?: any
       error?: string
+    },
+  ) => Promise<void>
+  /**
+   * Handle subscribed events
+   * Called when events the plugin subscribed to are fired
+   */
+  "ui.event"?: (
+    input: {
+      componentId: string
+      event: {
+        type: string
+        properties: any
+      }
+    },
+    output: {
+      refresh?: boolean // Should component re-render?
     },
   ) => Promise<void>
 }

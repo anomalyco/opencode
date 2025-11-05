@@ -89,7 +89,6 @@ export function Sidebar(props: { sessionID: string; onToggle: () => void }) {
   const [committedFiles, setCommittedFiles] = createSignal<Set<string>>(new Set())
   const [projectFavorites, setProjectFavorites] = createSignal<Set<string>>(new Set())
   const [globalFavorites, setGlobalFavorites] = createSignal<Set<string>>(new Set())
-  const [childSessions, setChildSessions] = createSignal<any[]>([])
   const uiExtensions = useUIExtensions()
   const session = createMemo(() => sync.session.get(props.sessionID)!)
   const todo = createMemo(() => sync.data.todo[props.sessionID] ?? [])
@@ -111,30 +110,6 @@ export function Sidebar(props: { sessionID: string; onToggle: () => void }) {
 
   // Load favorites on mount
   loadFavorites()
-
-  // Load child sessions (subagents)
-  const loadChildSessions = async () => {
-    try {
-      const response = await fetch(`${sdk.url}/session/${props.sessionID}/children`)
-      if (response.ok) {
-        const children = await response.json()
-        setChildSessions(children)
-      }
-    } catch (error) {
-      console.error("Failed to load child sessions", error)
-    }
-  }
-
-  // Poll for child sessions every 2 seconds
-  let childSessionInterval: NodeJS.Timeout
-  onMount(() => {
-    loadChildSessions()
-    childSessionInterval = setInterval(loadChildSessions, 2000)
-  })
-
-  onCleanup(() => {
-    if (childSessionInterval) clearInterval(childSessionInterval)
-  })
 
   // Get favorite level for a tool
   const getFavoriteLevel = (toolId: string): "none" | "project" | "global" => {
@@ -296,10 +271,7 @@ export function Sidebar(props: { sessionID: string; onToggle: () => void }) {
 
   // Get star icon based on favorite level
   const getStarIcon = (toolId: string): string => {
-    const level = getFavoriteLevel(toolId)
-    if (level === "global") return "★" // Gold star (will be colored)
-    if (level === "project") return "★" // Solid star
-    return "☆" // Outline star
+    return "⭑" // Same star for all levels, color distinguishes them
   }
 
   async function handleCommit() {
@@ -454,451 +426,46 @@ export function Sidebar(props: { sessionID: string; onToggle: () => void }) {
           <text fg={theme.text} attributes={TextAttributes.BOLD}>
             Context
           </text>
-          <ContextUsageBar
-            currentTokens={context().tokens}
-            tokenLimit={context().tokenLimit}
-            systemTokens={context().systemTokens}
-            assistantTokens={context().assistantTokens}
-            userTokens={context().userTokens}
-            toolTokens={context().toolTokens}
-            agentColor={local.agent.color("assistant")}
-            systemColor={theme.textMuted}
-            assistantColor={theme.primary}
-            toolColor={theme.accent}
-            userColor={theme.secondary}
-            backgroundColor={theme.backgroundPanel}
-            width={40}
+          <PluginComponent
+            componentId="context-panel"
+            context={{ sessionID: props.sessionID, messages, sync: sync.data }}
           />
-          <text fg={theme.textMuted}>{context().tokensFormatted} tokens</text>
-          <text fg={theme.textMuted}>{context().percentage}% used</text>
-          <text fg={theme.textMuted}>{cost()} spent</text>
         </box>
 
-        {/* Tab Navigation */}
-        <box flexDirection="row" gap={2}>
-          <text
-            style={{
-              fg: activeTab() === "tools" ? theme.accent : theme.textMuted,
-              attributes: activeTab() === "tools" ? TextAttributes.BOLD : undefined,
-            }}
-            onMouseUp={() => handleTabChange("tools")}
-          >
-            {activeTab() === "tools" ? "●" : "○"} Tools(
-            {toolsUsed().length + Object.keys(sync.data.mcp).length + sync.data.lsp.length})
-          </text>
-          <text
-            style={{
-              fg: activeTab() === "todos" ? theme.accent : theme.textMuted,
-              attributes: activeTab() === "todos" ? TextAttributes.BOLD : undefined,
-            }}
-            onMouseUp={() => handleTabChange("todos")}
-          >
-            {activeTab() === "todos" ? "●" : "○"} Todos({todo().length})
-          </text>
-          <text
-            style={{
-              fg: activeTab() === "files" ? theme.accent : theme.textMuted,
-              attributes: activeTab() === "files" ? TextAttributes.BOLD : undefined,
-            }}
-            onMouseUp={() => handleTabChange("files")}
-          >
-            {activeTab() === "files" ? "●" : "○"} Files({session().summary?.diffs?.length || 0})
-          </text>
-        </box>
+        {/* Tabs - Plugin UI */}
+        <PluginComponent
+          componentId="sidebar-tabs"
+          context={{
+            sessionID: props.sessionID,
+            theme,
+            renderer,
+            sdk,
+            toast,
+            dialog,
+            navigate,
+            sync: sync.data,
+            session,
+            todo,
+            toolsUsed,
+            projectFavorites,
+            globalFavorites,
+            setProjectFavorites,
+            setGlobalFavorites,
+            uiExtensions,
+          }}
+        />
 
-        {/* Tab Content */}
-        <Show when={activeTab() === "tools"}>
-          <Show when={toolsUsed().length > 0}>
-            <box marginTop={0}>
-              <text attributes={TextAttributes.BOLD}>Tools Used</text>
-              <For each={toolsUsed()}>
-                {([toolName, count]) => {
-                  const isClaudeCode = toolName.startsWith("cc_")
-                  const level = createMemo(() => getFavoriteLevel(toolName))
-                  return (
-                    <box flexDirection="row" gap={1} justifyContent="space-between">
-                      <box flexDirection="row" gap={1}>
-                        <text
-                          fg={
-                            level() === "global"
-                              ? "#FFD700"
-                              : level() === "project"
-                                ? theme.accent
-                                : theme.textMuted
-                          }
-                          onMouseUp={() => {
-                            if (renderer.getSelection()?.getSelectedText()) return
-                            cycleFavorite(toolName)
-                          }}
-                        >
-                          {getStarIcon(toolName)}
-                        </text>
-                        <text
-                          fg={isClaudeCode ? theme.accent : theme.text}
-                          onMouseUp={() => {
-                            if (renderer.getSelection()?.getSelectedText()) return
-                            cycleFavorite(toolName)
-                          }}
-                        >
-                          {toolName}
-                        </text>
-                      </box>
-                      <text fg={theme.textMuted}>×{count}</text>
-                    </box>
-                  )
-                }}
-              </For>
-            </box>
-          </Show>
-          <Show when={toolsUsed().length === 0}>
-            <box marginTop={0}>
-              <text fg={theme.textMuted}>
-                <i>No tools used yet. Favorites will appear here when used.</i>
-              </text>
-            </box>
-          </Show>
-          <Show when={sync.data.lsp.length > 0}>
-            <box marginTop={0}>
-              <text attributes={TextAttributes.BOLD}>LSP</text>
-              <For each={sync.data.lsp}>
-                {(item) => (
-                  <box flexDirection="row" gap={1}>
-                    <text
-                      flexShrink={0}
-                      style={{
-                        fg: {
-                          connected: theme.success,
-                          error: theme.error,
-                        }[item.status],
-                      }}
-                    >
-                      •
-                    </text>
-                    <text fg={theme.textMuted}>
-                      {item.id} {item.root}
-                    </text>
-                  </box>
-                )}
-              </For>
-            </box>
-          </Show>
-          <Show when={Object.keys(sync.data.mcp).length > 0}>
-            <box marginTop={0}>
-              <text attributes={TextAttributes.BOLD}>MCP</text>
-              <For each={Object.entries(sync.data.mcp)}>
-                {([key, item]) => (
-                  <box flexDirection="column">
-                    <box flexDirection="row" gap={1}>
-                      <text
-                        flexShrink={0}
-                        style={{
-                          fg: {
-                            connected: theme.success,
-                            failed: theme.error,
-                            disabled: theme.textMuted,
-                          }[item.status],
-                        }}
-                      >
-                        •
-                      </text>
-                      <text
-                        wrapMode="word"
-                        fg={theme.accent}
-                        attributes={TextAttributes.BOLD}
-                        onMouseUp={() => {
-                          if (renderer.getSelection()?.getSelectedText()) return
-                          toggleMcpServer(key)
-                        }}
-                      >
-                        {expandedMcpServers().has(key) ? "▼" : "▶"} {key}
-                      </text>
-                      <text fg={theme.textMuted}>
-                        <Switch>
-                          <Match when={item.status === "connected"}>Connected</Match>
-                          <Match when={item.status === "failed" && item}>
-                            {(val) => <i>{val().error}</i>}
-                          </Match>
-                          <Match when={item.status === "disabled"}>Disabled</Match>
-                        </Switch>
-                      </text>
-                    </box>
-                    <Show when={expandedMcpServers().has(key) && mcpTools()[key]}>
-                      <box marginLeft={3} flexDirection="column">
-                        <For each={Object.entries(mcpTools()[key] || {})}>
-                          {([toolName]) => {
-                            const level = createMemo(() => getFavoriteLevel(toolName))
-                            return (
-                              <box flexDirection="row" gap={1}>
-                                <text
-                                  fg={
-                                    level() === "global"
-                                      ? "#FFD700"
-                                      : level() === "project"
-                                        ? theme.accent
-                                        : theme.textMuted
-                                  }
-                                  onMouseUp={() => {
-                                    if (renderer.getSelection()?.getSelectedText()) return
-                                    cycleFavorite(toolName)
-                                  }}
-                                >
-                                  {getStarIcon(toolName)}
-                                </text>
-                                <text
-                                  fg={theme.textMuted}
-                                  onMouseUp={() => {
-                                    if (renderer.getSelection()?.getSelectedText()) return
-                                    cycleFavorite(toolName)
-                                  }}
-                                >
-                                  {toolName}
-                                </text>
-                              </box>
-                            )
-                          }}
-                        </For>
-                      </box>
-                    </Show>
-                  </box>
-                )}
-              </For>
-            </box>
-          </Show>
-        </Show>
-
-        <Show when={activeTab() === "todos"}>
-          <Show when={todo().length > 0}>
-            <box marginTop={0}>
-              <text attributes={TextAttributes.BOLD}>Todo</text>
-              <For each={todo()}>
-                {(todo) => (
-                  <text
-                    style={{ fg: todo.status === "in_progress" ? theme.success : theme.textMuted }}
-                  >
-                    [{todo.status === "completed" ? "✓" : " "}] {todo.content}
-                  </text>
-                )}
-              </For>
-            </box>
-          </Show>
-        </Show>
-
-        <Show when={activeTab() === "files"}>
-          <Show when={session().summary?.diffs}>
-            <box marginTop={0} flexDirection="column">
-              <box flexDirection="row" justifyContent="space-between">
-                <text attributes={TextAttributes.BOLD}>Session Files</text>
-                <Show when={uncommittedFiles().length > 0}>
-                  <text
-                    fg={theme.accent}
-                    onMouseUp={() => {
-                      if (renderer.getSelection()?.getSelectedText()) return
-                      const uncommitted = uncommittedFiles()
-                      if (selectedFiles().size === uncommitted.length) {
-                        setSelectedFiles(new Set<string>())
-                      } else {
-                        setSelectedFiles(new Set<string>(uncommitted.map((d) => d.file)))
-                      }
-                    }}
-                  >
-                    {selectedFiles().size === uncommittedFiles().length ? "Desel All" : "Sel All"}
-                  </text>
-                </Show>
-              </box>
-              <For each={session().summary?.diffs || []}>
-                {(item) => {
-                  const file = createMemo(() => {
-                    const splits = item.file.split(path.sep).filter(Boolean)
-                    const last = splits.at(-1)!
-                    const rest = splits.slice(0, -1).join(path.sep)
-                    return Locale.truncateMiddle(rest, 30 - last.length) + "/" + last
-                  })
-                  const isCommitted = createMemo(() => committedFiles().has(item.file))
-                  const isSelected = createMemo(() => selectedFiles().has(item.file))
-                  return (
-                    <box
-                      flexDirection="row"
-                      gap={1}
-                      justifyContent="space-between"
-                      onMouseUp={() => {
-                        if (renderer.getSelection()?.getSelectedText()) return
-                        if (isCommitted()) return
-                        setSelectedFiles((prev) => {
-                          const newFiles = new Set(prev)
-                          if (prev.has(item.file)) {
-                            newFiles.delete(item.file)
-                          } else {
-                            newFiles.add(item.file)
-                          }
-                          return newFiles
-                        })
-                      }}
-                    >
-                      <text
-                        fg={
-                          isCommitted()
-                            ? theme.success
-                            : isSelected()
-                              ? theme.accent
-                              : theme.textMuted
-                        }
-                      >
-                        {isCommitted() ? "[✓]" : isSelected() ? "[✓]" : "[ ]"} {file()}
-                      </text>
-                      <box flexDirection="row" gap={1} flexShrink={0}>
-                        <Show when={item.additions}>
-                          <text fg={theme.diffAdded}>+{item.additions}</text>
-                        </Show>
-                        <Show when={item.deletions}>
-                          <text fg={theme.diffRemoved}>-{item.deletions}</text>
-                        </Show>
-                      </box>
-                    </box>
-                  )
-                }}
-              </For>
-              <Show when={uncommittedFiles().length > 0}>
-                <box marginTop={1}>
-                  <text fg={theme.textMuted}>
-                    {commitMessage() || "Click Auto or type message"}
-                  </text>
-                </box>
-                <box flexDirection="row" gap={2}>
-                  <text
-                    fg={
-                      selectedFiles().size > 0 && !isCommitting() ? theme.success : theme.textMuted
-                    }
-                    onMouseUp={() => {
-                      if (selectedFiles().size === 0 || isCommitting()) return
-                      const count = selectedFiles().size
-                      setCommitMessage(`Update ${count} file${count > 1 ? "s" : ""}`)
-                    }}
-                  >
-                    [Auto]
-                  </text>
-                  <text
-                    fg={
-                      selectedFiles().size > 0 && commitMessage() && !isCommitting()
-                        ? theme.success
-                        : theme.textMuted
-                    }
-                    onMouseUp={() => {
-                      if (!isCommitting()) handleCommit()
-                    }}
-                  >
-                    {isCommitting() ? "[Committing...]" : "[Commit]"}
-                  </text>
-                </box>
-                <text fg={theme.textMuted}>{selectedFiles().size} selected</text>
-              </Show>
-              <Show
-                when={
-                  uncommittedFiles().length === 0 && (session().summary?.diffs?.length || 0) > 0
-                }
-              >
-                <text fg={theme.success}>All files committed ✓</text>
-              </Show>
-            </box>
-          </Show>
-        </Show>
-
-        {/* Subagents Section - Always visible below tabs */}
-        <Show when={childSessions().length > 0}>
-          <box marginTop={1}>
-            <text attributes={TextAttributes.BOLD} fg={theme.accent}>
-              Subagents ({childSessions().length})
-            </text>
-            <For each={childSessions()}>
-              {(child) => {
-                const status = child.orchestration?.status || "unknown"
-                const statusColor =
-                  status === "active"
-                    ? theme.success
-                    : status === "completed"
-                      ? theme.textMuted
-                      : status === "paused"
-                        ? theme.warning
-                        : theme.error
-                const titleShort =
-                  child.title.length > 35 ? child.title.substring(0, 32) + "..." : child.title
-                return (
-                  <box
-                    flexDirection="row"
-                    gap={1}
-                    onMouseUp={() => {
-                      if (renderer.getSelection()?.getSelectedText()) return
-                      navigate({
-                        type: "session",
-                        sessionID: child.id,
-                      })
-                    }}
-                  >
-                    <text flexShrink={0} fg={statusColor}>
-                      •
-                    </text>
-                    <text fg={theme.text}>{titleShort}</text>
-                  </box>
-                )
-              }}
-            </For>
-          </box>
-        </Show>
-        <Show when={todo().length > 0}>
-          <box>
-            <text fg={theme.text}>
-              <b>Todo</b>
-            </text>
-            <For each={todo()}>
-              {(todo) => (
-                <text
-                  style={{ fg: todo.status === "in_progress" ? theme.success : theme.textMuted }}
-                >
-                  [{todo.status === "completed" ? "✓" : " "}] {todo.content}
-                </text>
-              )}
-            </For>
-          </box>
-        </Show>
-        <Show when={(uiExtensions.extensions()?.widgets ?? []).length > 0}>
-          <box>
-            <text fg={theme.text}>
-              <b>Widgets</b>
-            </text>
-            <For each={uiExtensions.extensions()?.widgets ?? []}>
-              {(widget) => (
-                <box>
-                  <text fg={theme.textMuted}>
-                    <b>{widget.label}</b>
-                  </text>
-                  <PluginComponent
-                    componentId={widget.id}
-                    context={{ sessionID: props.sessionID }}
-                  />
-                </box>
-              )}
-            </For>
-          </box>
-        </Show>
-        <Show when={(uiExtensions.extensions()?.panels ?? []).length > 0}>
-          <box>
-            <text fg={theme.text}>
-              <b>Panels</b>
-            </text>
-            <For each={uiExtensions.extensions()?.panels ?? []}>
-              {(panel) => (
-                <box>
-                  <text fg={theme.textMuted}>
-                    <b>{panel.label}</b>
-                  </text>
-                  <PluginComponent
-                    componentId={panel.id}
-                    context={{ sessionID: props.sessionID }}
-                  />
-                </box>
-              )}
-            </For>
-          </box>
-        </Show>
+        {/* Subagents Plugin */}
+        <PluginComponent
+          componentId="subagents-panel"
+          context={{
+            sessionID: props.sessionID,
+            theme,
+            renderer,
+            sdk,
+            navigate,
+          }}
+        />
       </box>
     </Show>
   )

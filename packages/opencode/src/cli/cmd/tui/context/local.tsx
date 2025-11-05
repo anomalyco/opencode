@@ -54,6 +54,7 @@ export const { use: useLocal, provider: LocalProvider } = createSimpleContext({
     // Automatically update model when agent changes
     createEffect(() => {
       const value = agent.current()
+      if (!value) return
       if (value.model) {
         if (isModelValid(value.model))
           model.set({
@@ -74,7 +75,7 @@ export const { use: useLocal, provider: LocalProvider } = createSimpleContext({
       const [agentStore, setAgentStore] = createStore<{
         current: string
       }>({
-        current: agents()[0].name,
+        current: agents()[0]?.name ?? "",
       })
       const { theme } = useTheme()
       const colors = createMemo(() => [
@@ -90,7 +91,7 @@ export const { use: useLocal, provider: LocalProvider } = createSimpleContext({
           return agents()
         },
         current() {
-          return agents().find((x) => x.name === agentStore.current)!
+          return agents().find((x) => x.name === agentStore.current) ?? agents()[0]
         },
         set(name: string) {
           if (!agents().some((x) => x.name === name))
@@ -176,7 +177,9 @@ export const { use: useLocal, provider: LocalProvider } = createSimpleContext({
           }
         }
         const provider = sync.data.provider[0]
+        if (!provider) return undefined
         const model = Object.values(provider.models)[0]
+        if (!model) return undefined
         return {
           providerID: provider.id,
           modelID: model.id,
@@ -185,6 +188,7 @@ export const { use: useLocal, provider: LocalProvider } = createSimpleContext({
 
       const currentModel = createMemo(() => {
         const a = agent.current()
+        if (!a) return fallbackModel()
         return getFirstValidModel(
           () => modelStore.model[a.name],
           () => a.model,
@@ -202,11 +206,13 @@ export const { use: useLocal, provider: LocalProvider } = createSimpleContext({
         },
         parsed: createMemo(() => {
           const value = currentModel()
-          const provider = sync.data.provider.find((x) => x.id === value.providerID)!
+          if (!value) return undefined
+          const provider = sync.data.provider.find((x) => x.id === value.providerID)
+          if (!provider) return undefined
           const model = provider.models[value.modelID]
           return {
             provider: provider.name ?? value.providerID,
-            model: model.name ?? value.modelID,
+            model: model?.name ?? value.modelID,
           }
         }),
         cycle(direction: 1 | -1) {
@@ -222,7 +228,9 @@ export const { use: useLocal, provider: LocalProvider } = createSimpleContext({
           if (next >= recent.length) next = 0
           const val = recent[next]
           if (!val) return
-          setModelStore("model", agent.current().name, { ...val })
+          const currentAgent = agent.current()
+          if (!currentAgent) return
+          setModelStore("model", currentAgent.name, { ...val })
         },
         set(model: { providerID: string; modelID: string }, options?: { recent?: boolean }) {
           batch(() => {
@@ -234,7 +242,9 @@ export const { use: useLocal, provider: LocalProvider } = createSimpleContext({
               })
               return
             }
-            setModelStore("model", agent.current().name, model)
+            const currentAgent = agent.current()
+            if (!currentAgent) return
+            setModelStore("model", currentAgent.name, model)
             if (options?.recent) {
               const uniq = uniqueBy([model, ...modelStore.recent], (x) => x.providerID + x.modelID)
               if (uniq.length > 5) uniq.pop()

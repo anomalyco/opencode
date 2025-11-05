@@ -61,11 +61,8 @@ for (const [os, arch] of targets) {
   const parserWorker = fs.realpathSync(
     path.resolve(dir, "./node_modules/@opentui/core/parser.worker.js"),
   )
-  if (watcherTarballs.length === 0) throw new Error(`No tarball found for ${watcher}`)
-  const watcherTarball = path.join(dir, "../../node_modules", watcherTarballs[0])
-  await $`cd ${watcherDir} && tar -xzf ${watcherTarball} --strip-components=1`
+  const workerPath = "./src/cli/cmd/tui/worker.ts"
 
-  const parserWorker = fs.realpathSync(path.resolve(dir, "./node_modules/@opentui/core/parser.worker.js"))
   await Bun.build({
     conditions: ["browser"],
     tsconfig: "./tsconfig.json",
@@ -74,7 +71,9 @@ for (const [os, arch] of targets) {
     compile: {
       target: `bun-${os}-${arch}` as any,
       outfile: `dist/${name}/bin/codesurf`,
-      execArgv: [`--user-agent=codesurf/${Script.version}`, `--env-file=""`, `--`],
+      execArgv: [`--user-agent=codesurf/${Script.version}`, `--env-file=""`, `--`].filter(
+        (arg): arg is string => typeof arg === "string",
+      ),
       windows: {},
     },
     entrypoints: ["./src/index.ts", parserWorker, workerPath],

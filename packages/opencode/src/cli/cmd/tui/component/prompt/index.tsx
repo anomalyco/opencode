@@ -325,6 +325,9 @@ export function Prompt(props: PromptProps) {
     if (props.disabled) return
     if (autocomplete.visible) return
     if (!store.prompt.input) return
+    const currentModel = local.model.current()
+    const currentAgent = local.agent.current()
+    if (!currentModel || !currentAgent) return
     const sessionID = props.sessionID
       ? props.sessionID
       : await (async () => {
@@ -361,7 +364,7 @@ export function Prompt(props: PromptProps) {
           id: sessionID,
         },
         body: {
-          agent: local.agent.current().name,
+          agent: currentAgent.name,
           command: inputText,
         },
       })
@@ -391,8 +394,8 @@ export function Prompt(props: PromptProps) {
         body: {
           command: commandName,
           arguments: args.join(" "),
-          agent: local.agent.current().name,
-          model: `${local.model.current().providerID}/${local.model.current().modelID}`,
+          agent: currentAgent.name,
+          model: `${currentModel.providerID}/${currentModel.modelID}`,
           messageID,
         },
       })
@@ -402,10 +405,10 @@ export function Prompt(props: PromptProps) {
           id: sessionID,
         },
         body: {
-          ...local.model.current(),
+          ...currentModel,
           messageID,
-          agent: local.agent.current().name,
-          model: local.model.current(),
+          agent: currentAgent.name,
+          model: currentModel,
           parts: [
             {
               id: Identifier.ascending("part"),
@@ -732,10 +735,18 @@ export function Prompt(props: PromptProps) {
               dialog.replace(() => <DialogModel />)
             }}
           >
-            <span style={{ fg: theme.textMuted }}>{local.model.parsed().provider}</span>{" "}
-            <span style={{ bold: true, fg: theme.primary, underline: true }}>
-              {local.model.parsed().model}
-            </span>
+            {(() => {
+              const parsed = local.model.parsed()
+              if (!parsed) return <span style={{ fg: theme.textMuted }}>Loading...</span>
+              return (
+                <>
+                  <span style={{ fg: theme.textMuted }}>{parsed.provider}</span>{" "}
+                  <span style={{ bold: true, fg: theme.primary, underline: true }}>
+                    {parsed.model}
+                  </span>
+                </>
+              )
+            })()}
           </text>
           <Switch>
             <Match when={status() === "compacting"}>
