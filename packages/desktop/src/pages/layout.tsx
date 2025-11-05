@@ -1,5 +1,5 @@
 import { Button, Tooltip, DiffChanges } from "@opencode-ai/ui"
-import { createMemo, ParentProps } from "solid-js"
+import { createMemo, ParentProps, Show } from "solid-js"
 import { getFilename } from "@/utils"
 import { DateTime } from "luxon"
 import { useSync } from "@/context/sync"
@@ -25,8 +25,6 @@ export default function Layout(props: ParentProps) {
             </A>
             <VList data={sync.data.session} class="no-scrollbar">
               {(session) => {
-                const diffs = createMemo(() => session.summary?.diffs ?? [])
-                const filesChanged = createMemo(() => diffs().length)
                 const updated = createMemo(() => DateTime.fromMillis(session.time.updated))
                 return (
                   <A
@@ -57,8 +55,8 @@ export default function Layout(props: ParentProps) {
                           </span>
                         </div>
                         <div class="flex justify-between items-center self-stretch">
-                          <span class="text-12-regular text-text-weak">{`${filesChanged() || "No"} file${filesChanged() !== 1 ? "s" : ""} changed`}</span>
-                          <DiffChanges diff={diffs()} />
+                          <span class="text-12-regular text-text-weak">{`${session.summary?.files || "No"} file${session.summary?.files !== 1 ? "s" : ""} changed`}</span>
+                          <Show when={session.summary}>{(summary) => <DiffChanges changes={summary()} />}</Show>
                         </div>
                       </div>
                     </Tooltip>
