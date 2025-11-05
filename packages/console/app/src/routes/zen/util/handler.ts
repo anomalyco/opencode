@@ -281,6 +281,7 @@ export async function handler(
             monthlyLimit: BillingTable.monthlyLimit,
             monthlyUsage: BillingTable.monthlyUsage,
             timeMonthlyUsageUpdated: BillingTable.timeMonthlyUsageUpdated,
+            reloadTrigger: BillingTable.reloadTrigger,
           },
           user: {
             id: UserTable.id,
@@ -532,7 +533,10 @@ export async function handler(
           and(
             eq(BillingTable.workspaceID, authInfo.workspaceID),
             eq(BillingTable.reload, true),
-            lt(BillingTable.balance, centsToMicroCents(Billing.CHARGE_THRESHOLD)),
+            lt(
+              BillingTable.balance,
+              centsToMicroCents((authInfo.billing.reloadTrigger ?? Billing.RELOAD_TRIGGER) * 100),
+            ),
             or(
               isNull(BillingTable.timeReloadLockedTill),
               lt(BillingTable.timeReloadLockedTill, sql`now()`),

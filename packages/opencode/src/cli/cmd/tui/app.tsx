@@ -358,12 +358,34 @@ function App() {
 
   event.on(SessionApi.Event.Deleted.type, (evt) => {
     if (route.data.type === "session" && route.data.sessionID === evt.properties.info.id) {
+      dialog.clear()
       route.navigate({ type: "home" })
       toast.show({
         variant: "info",
         message: "The current session was deleted",
       })
     }
+  })
+
+  event.on(SessionApi.Event.Error.type, (evt) => {
+    const error = evt.properties.error
+    const message = (() => {
+      if (!error) return "An error occured"
+
+      if (typeof error === "object") {
+        const data = error.data
+        if ("message" in data && typeof data.message === "string") {
+          return data.message
+        }
+      }
+      return String(error)
+    })()
+
+    toast.show({
+      variant: "error",
+      message,
+      duration: 5000,
+    })
   })
 
   return (

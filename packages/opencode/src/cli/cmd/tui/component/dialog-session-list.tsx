@@ -72,7 +72,7 @@ export function DialogSessionList() {
                 },
               })
               setToDelete(undefined)
-              dialog.clear()
+              // dialog.clear()
               return
             }
             setToDelete(option.value)

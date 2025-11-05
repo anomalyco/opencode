@@ -11,6 +11,7 @@ import { SystemPrompt } from "./system"
 import { Log } from "@/util/log"
 import path from "path"
 import { Instance } from "@/project/instance"
+import { Storage } from "@/storage/storage"
 
 export namespace SessionSummary {
   const log = Log.create({ service: "session.summary" })
@@ -44,9 +45,11 @@ export namespace SessionSummary {
     )
     await Session.update(input.sessionID, (draft) => {
       draft.summary = {
-        diffs,
+        additions: diffs.reduce((sum, x) => sum + x.additions, 0),
+        deletions: diffs.reduce((sum, x) => sum + x.deletions, 0),
       }
     })
+    await Storage.write(["session_diff", input.sessionID], diffs)
   }
 
   async function summarizeMessage(input: { messageID: string; messages: MessageV2.WithParts[] }) {

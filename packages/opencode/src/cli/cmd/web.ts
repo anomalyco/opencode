@@ -26,12 +26,15 @@ export const WebCommand = cmd({
       port,
       hostname,
     })
-    const url = `https://desktop.dev.opencode.ai?url=${server.url}`
     UI.empty()
     UI.println(UI.logo("  "))
     UI.empty()
-    UI.println(UI.Style.TEXT_INFO_BOLD + "  Web interface:    ", UI.Style.TEXT_NORMAL, url)
-    open(url).catch(() => {})
+    UI.println(
+      UI.Style.TEXT_INFO_BOLD + "  Web interface:    ",
+      UI.Style.TEXT_NORMAL,
+      server.url.toString(),
+    )
+    open(server.url.toString()).catch(() => {})
     await new Promise(() => {})
     await server.stop()
   },
