@@ -2,6 +2,7 @@ import type { McpServer } from "@agentclientprotocol/sdk"
 
 export interface ACPSessionState {
   id: string
+  parentId?: string
   cwd: string
   mcpServers: McpServer[]
   createdAt: Date

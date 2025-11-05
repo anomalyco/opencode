@@ -164,7 +164,6 @@ export function Autocomplete(props: {
   )
 
   const agents = createMemo(() => {
-    if (store.index !== 0) return []
     const agents = sync.data.agent
     return agents
       .filter((agent) => !agent.builtIn && agent.mode !== "primary")
@@ -242,6 +241,16 @@ export function Autocomplete(props: {
           display: "/rename",
           description: "rename session",
           onSelect: () => command.trigger("session.rename"),
+        },
+        {
+          display: "/copy",
+          description: "copy session transcript to clipboard",
+          onSelect: () => command.trigger("session.copy"),
+        },
+        {
+          display: "/export",
+          description: "export session transcript to file",
+          onSelect: () => command.trigger("session.export"),
         },
         {
           display: "/timeline",
@@ -385,7 +394,9 @@ export function Autocomplete(props: {
             return
           }
           // Check if a space was typed after the trigger character
-          const currentText = props.input().getTextRange(store.index + 1, props.input().cursorOffset + 1)
+          const currentText = props
+            .input()
+            .getTextRange(store.index + 1, props.input().cursorOffset + 1)
           if (currentText.includes(" ")) {
             hide()
           }
