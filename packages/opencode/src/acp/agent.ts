@@ -48,6 +48,13 @@ export namespace ACP {
 
     constructor(connection: AgentSideConnection, config: ACPConfig = {}) {
       this.connection = connection
+      if (!config.defaultModel) {
+        // default to big pickle
+        config.defaultModel = {
+          providerID: "opencode",
+          modelID: "big-pickle",
+        }
+      }
       this.config = config
       this.setupEventSubscriptions()
     }
