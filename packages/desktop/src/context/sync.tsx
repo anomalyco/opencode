@@ -1,16 +1,4 @@
-import type {
-  Message,
-  Agent,
-  Provider,
-  Session,
-  Part,
-  Config,
-  Path,
-  File,
-  FileNode,
-  Project,
-  Command,
-} from "@opencode-ai/sdk"
+import type { Message, Agent, Provider, Session, Part, Config, Path, File, FileNode, Project } from "@opencode-ai/sdk"
 import { createStore, produce, reconcile } from "solid-js/store"
 import { createMemo } from "solid-js"
 import { Binary } from "@/utils/binary"
