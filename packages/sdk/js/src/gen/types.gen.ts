@@ -533,6 +533,7 @@ export type Session = {
   summary?: {
     additions: number
     deletions: number
+    files: number
     diffs?: Array<FileDiff>
   }
   share?: {
