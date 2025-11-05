@@ -1300,6 +1300,14 @@ export type EventSessionDeleted = {
   }
 }
 
+export type EventSessionDiff = {
+  type: "session.diff"
+  properties: {
+    sessionID: string
+    diff: Array<FileDiff>
+  }
+}
+
 export type EventSessionError = {
   type: "session.error"
   properties: {
@@ -1346,6 +1354,7 @@ export type Event =
   | EventSessionCreated
   | EventSessionUpdated
   | EventSessionDeleted
+  | EventSessionDiff
   | EventSessionError
   | EventTuiPromptAppend
   | EventTuiCommandExecute
