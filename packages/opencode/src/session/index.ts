@@ -81,6 +81,16 @@ export namespace Session {
           pausedAt: z.number().optional(),
           completedAt: z.number().optional(),
           result: z.string().optional(), // Result summary from subtask
+          subtaskResults: z
+            .array(
+              z.object({
+                sessionID: z.string(),
+                summary: z.string(),
+                result: z.string(),
+                completedAt: z.number(),
+              }),
+            )
+            .optional(), // Results from completed subtasks
         })
         .optional(),
     })

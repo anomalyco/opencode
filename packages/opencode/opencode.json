@@ -16,6 +16,7 @@
     "cc_bash",
     "cc_edit",
     "read",
-    "todowrite"
+    "todowrite",
+    "switch_mode"
   ]
 }

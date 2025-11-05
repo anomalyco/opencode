@@ -122,10 +122,29 @@ export namespace TaskHierarchy {
       }
     })
 
-    // Resume parent
+    // Resume parent and restore paused mode if it exists
     await Session.update(child.parentID, (draft) => {
       if (draft.orchestration) {
         draft.orchestration.status = "active" as TaskStatus
+        // CRITICAL FIX: Restore the paused mode when resuming from subtask
+        if (draft.orchestration.pausedMode) {
+          draft.orchestration.currentAgent = draft.orchestration.pausedMode
+          log.info("restored parent mode", {
+            parentID: child.parentID,
+            restoredMode: draft.orchestration.pausedMode,
+          })
+          draft.orchestration.pausedMode = undefined
+        }
+        // ENHANCEMENT: Store subtask result in parent for programmatic access
+        if (!draft.orchestration.subtaskResults) {
+          draft.orchestration.subtaskResults = []
+        }
+        draft.orchestration.subtaskResults.push({
+          sessionID: childSessionID,
+          summary: result.substring(0, 200), // First 200 chars as summary
+          result,
+          completedAt: Date.now(),
+        })
       }
     })
 
@@ -168,10 +187,19 @@ export namespace TaskHierarchy {
       }
     })
 
-    // Resume parent (it will handle the failure)
+    // Resume parent (it will handle the failure) and restore paused mode
     await Session.update(child.parentID, (draft) => {
       if (draft.orchestration) {
         draft.orchestration.status = "active" as TaskStatus
+        // CRITICAL FIX: Restore the paused mode when resuming after failure
+        if (draft.orchestration.pausedMode) {
+          draft.orchestration.currentAgent = draft.orchestration.pausedMode
+          log.info("restored parent mode after failure", {
+            parentID: child.parentID,
+            restoredMode: draft.orchestration.pausedMode,
+          })
+          draft.orchestration.pausedMode = undefined
+        }
       }
     })
   }
