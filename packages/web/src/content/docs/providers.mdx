@@ -934,9 +934,9 @@ You can use any OpenAI-compatible provider with opencode. Most modern AI provide
 
 ##### Example
 
-Here's an example setting the `apiKey` and `headers` options.
+Here's an example setting the `apiKey`, `headers`, and model `limit` options.
 
-```json title="opencode.json" {9,11}
+```json title="opencode.json" {9,11,17-20}
 {
   "$schema": "https://opencode.ai/config.json",
   "provider": {
@@ -952,7 +952,11 @@ Here's an example setting the `apiKey` and `headers` options.
       },
       "models": {
         "my-model-name": {
-          "name": "My Model Display Name"
+          "name": "My Model Display Name",
+          "limit": {
+            "context": 200000,
+            "output": 65536
+          }
         }
       }
     }
@@ -960,28 +964,14 @@ Here's an example setting the `apiKey` and `headers` options.
 }
 ```
 
-We are setting the `apiKey` using the `env` variable syntax, [learn more](/docs/config#env-vars).
+Configuration details:
 
-You can also set model limits to enable context tracking and auto-compaction.
+- **apiKey**: Set using `env` variable syntax, [learn more](/docs/config#env-vars).
+- **headers**: Custom headers sent with each request.
+- **limit.context**: Maximum input tokens the model accepts.
+- **limit.output**: Maximum tokens the model can generate.
 
-```json title="opencode.json" {4-7}
-"models": {
-  "my-model-name": {
-    "name": "My Model Display Name",
-    "limit": {
-      "context": 200000,
-      "output": 65536
-    }
-  }
-}
-```
-
-The `limit` fields control context management:
-
-- **context**: Maximum input tokens the model accepts.
-- **output**: Maximum tokens the model can generate.
-
-These values display session context percentage and trigger auto-compaction. Standard providers pull these from models.dev automatically.
+The `limit` fields display session context percentage and trigger auto-compaction. Standard providers pull these from models.dev automatically.
 
 ---
 
