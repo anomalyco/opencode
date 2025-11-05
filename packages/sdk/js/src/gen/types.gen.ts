@@ -143,10 +143,6 @@ export type KeybindsConfig = {
    */
   agent_list?: string
   /**
-   * Manage agents
-   */
-  agent_manage?: string
-  /**
    * Next agent
    */
   agent_cycle?: string
@@ -182,18 +178,6 @@ export type KeybindsConfig = {
    * Next history item
    */
   history_next?: string
-  /**
-   * List and manage memories
-   */
-  memory_list?: string
-  /**
-   * Manage MCP servers
-   */
-  mcp_manage?: string
-  /**
-   * Manage skills
-   */
-  skill_manage?: string
   /**
    * Next child session
    */
@@ -659,6 +643,16 @@ export type Session = {
     partID?: string
     snapshot?: string
     diff?: string
+  }
+  orchestration?: {
+    depth: number
+    status: "active" | "paused" | "completed" | "failed"
+    rootAgent?: string
+    currentAgent?: string
+    pausedMode?: string
+    pausedAt?: number
+    completedAt?: number
+    result?: string
   }
 }
 
@@ -1168,6 +1162,16 @@ export type Agent = {
   }
   options: {
     [key: string]: unknown
+  }
+  roleDefinition?: string
+  fileTypeRestrictions?: Array<string>
+  canSwitchFrom?: Array<string>
+  requiresApproval?: boolean
+  capabilities?: {
+    canCreateSubtasks: boolean
+    canSwitchModes: boolean
+    canModifyFiles: boolean
+    canExecuteCommands: boolean
   }
 }
 

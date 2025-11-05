@@ -285,13 +285,26 @@ export namespace Session {
     return result
   }
 
-  export const messages = fn(Identifier.schema("session"), async (sessionID) => {
-    // Check cache first
-    const session = await get(sessionID)
-    const cached = messageCache.get(sessionID)
-    if (cached && cached.timestamp >= session.time.updated) {
-      return cached.messages
-    }
+  export const messages = fn(
+    z.union([
+      Identifier.schema("session"),
+      z.object({
+        sessionID: Identifier.schema("session"),
+        limit: z.number().optional(),
+        offset: z.number().optional(),
+      }),
+    ]),
+    async (input) => {
+      const sessionID = typeof input === "string" ? input : input.sessionID
+      const limit = typeof input === "string" ? undefined : input.limit
+      const offset = typeof input === "string" ? undefined : input.offset
+
+      // Check cache first
+      const session = await get(sessionID)
+      const cached = messageCache.get(sessionID)
+      if (cached && cached.timestamp >= session.time.updated && !limit && !offset) {
+        return cached.messages
+      }
 
       const paths = await Storage.list(["message", sessionID])
 
