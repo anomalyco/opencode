@@ -467,7 +467,7 @@ export namespace LSPServer {
           return
         }
 
-        const release = await releaseResponse.json()
+        const release = (await releaseResponse.json()) as any
 
         const platform = process.platform
         const arch = process.arch
@@ -669,12 +669,7 @@ export namespace LSPServer {
       for (const entry of entries) {
         if (!entry.isDirectory()) continue
         if (!entry.name.startsWith("clangd_")) continue
-        const candidate = path.join(
-          Global.Path.bin,
-          entry.name,
-          "bin",
-          "clangd" + ext,
-        )
+        const candidate = path.join(Global.Path.bin, entry.name, "bin", "clangd" + ext)
         if (await Bun.file(candidate).exists()) {
           return {
             process: spawn(candidate, args, {
@@ -764,12 +759,7 @@ export namespace LSPServer {
       }
       await fs.rm(archive, { force: true })
 
-      const bin = path.join(
-        Global.Path.bin,
-        "clangd_" + tag,
-        "bin",
-        "clangd" + ext,
-      )
+      const bin = path.join(Global.Path.bin, "clangd_" + tag, "bin", "clangd" + ext)
       if (!(await Bun.file(bin).exists())) {
         log.error("Failed to extract clangd binary")
         return

@@ -18,7 +18,6 @@ import {
   createStreamPartConverter,
   createResponseConverter,
 } from "./provider/provider"
-import { Format } from "./format"
 import { anthropicHelper } from "./provider/anthropic"
 import { openaiHelper } from "./provider/openai"
 import { oaCompatHelper } from "./provider/openai-compatible"
@@ -29,7 +28,7 @@ type Model = ZenData["models"][string]
 export async function handler(
   input: APIEvent,
   opts: {
-    format: Format
+    format: ZenData.Format
     parseApiKey: (headers: Headers) => string | undefined
   },
 ) {
@@ -239,21 +238,23 @@ export async function handler(
       .filter((provider) => !provider.disabled)
       .flatMap((provider) => Array<typeof provider>(provider.weight ?? 1).fill(provider))
 
-    // Use last character of IP address to select a provider
-    const lastChar = ip.charCodeAt(ip.length - 1) || 0
-    const index = lastChar % providers.length
-    const provider = providers[index]
+    // Use the last 2 characters of IP address to select a provider
+    const lastChars = ip.slice(-2)
+    const index = parseInt(lastChars, 16) % providers.length
+    const provider = providers[index || 0]
 
     if (!(provider.id in zenData.providers)) {
       throw new ModelError(`Provider ${provider.id} not supported`)
     }
 
+    const format = zenData.providers[provider.id].format
+
     return {
       ...provider,
       ...zenData.providers[provider.id],
-      ...(provider.id === "anthropic"
+      ...(format === "anthropic"
         ? anthropicHelper
-        : provider.id === "openai"
+        : format === "openai"
           ? openaiHelper
           : oaCompatHelper),
     }
@@ -280,6 +281,7 @@ export async function handler(
             monthlyLimit: BillingTable.monthlyLimit,
             monthlyUsage: BillingTable.monthlyUsage,
             timeMonthlyUsageUpdated: BillingTable.timeMonthlyUsageUpdated,
+            reloadTrigger: BillingTable.reloadTrigger,
           },
           user: {
             id: UserTable.id,
@@ -531,7 +533,10 @@ export async function handler(
           and(
             eq(BillingTable.workspaceID, authInfo.workspaceID),
             eq(BillingTable.reload, true),
-            lt(BillingTable.balance, centsToMicroCents(Billing.CHARGE_THRESHOLD)),
+            lt(
+              BillingTable.balance,
+              centsToMicroCents((authInfo.billing.reloadTrigger ?? Billing.RELOAD_TRIGGER) * 100),
+            ),
             or(
               isNull(BillingTable.timeReloadLockedTill),
               lt(BillingTable.timeReloadLockedTill, sql`now()`),

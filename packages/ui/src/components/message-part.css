@@ -33,7 +33,7 @@
   gap: 8px;
 
   [data-slot="tool-error-icon"] {
-    color: var(--icon-critical-active);
+    color: var(--icon-critical-base);
     margin-top: 4px;
   }
 
@@ -50,13 +50,13 @@
     font-weight: var(--font-weight-medium);
     line-height: var(--line-height-large);
     letter-spacing: var(--letter-spacing-normal);
-    color: var(--ember-light-11);
-    text-transform: capitalize;
+    color: var(--text-on-critical-base);
     white-space: nowrap;
   }
 
-  /* [data-slot="tool-error-message"] { */
-  /* } */
+  [data-slot="tool-error-message"] {
+    color: var(--text-on-critical-weak);
+  }
 }
 
 [data-component="tool-output"] {

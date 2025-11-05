@@ -238,10 +238,16 @@ export default new Hono<{ Bindings: Env }>()
 
     // Lookup installation
     const octokit = new Octokit({ auth: appAuth.token })
-    const { data: installation } = await octokit.apps.getRepoInstallation({ owner, repo })
+    const { data: installation } = await octokit.apps.getRepoInstallation({
+      owner,
+      repo,
+    })
 
     // Get installation token
-    const installationAuth = await auth({ type: "installation", installationId: installation.id })
+    const installationAuth = await auth({
+      type: "installation",
+      installationId: installation.id,
+    })
 
     return c.json({ token: installationAuth.token })
   })
@@ -274,10 +280,16 @@ export default new Hono<{ Bindings: Env }>()
 
       // Lookup installation
       const appClient = new Octokit({ auth: appAuth.token })
-      const { data: installation } = await appClient.apps.getRepoInstallation({ owner, repo })
+      const { data: installation } = await appClient.apps.getRepoInstallation({
+        owner,
+        repo,
+      })
 
       // Get installation token
-      const installationAuth = await auth({ type: "installation", installationId: installation.id })
+      const installationAuth = await auth({
+        type: "installation",
+        installationId: installation.id,
+      })
 
       return c.json({ token: installationAuth.token })
     } catch (e: any) {

@@ -28,8 +28,6 @@ import { Storage } from "@/storage/storage"
 import { Command } from "@/command"
 import { Agent as Agents } from "@/agent/agent"
 import { Permission } from "@/permission"
-import { Session } from "@/session"
-import { Identifier } from "@/id/id"
 import { SessionCompaction } from "@/session/compaction"
 import type { Config } from "@/config/config"
 import { MCP } from "@/mcp"
@@ -89,7 +87,11 @@ export namespace ACP {
             })
           if (!res) return
           if (res.outcome.outcome !== "selected") {
-            Permission.respond({ sessionID: permission.sessionID, permissionID: permission.id, response: "reject" })
+            Permission.respond({
+              sessionID: permission.sessionID,
+              permissionID: permission.id,
+              response: "reject",
+            })
             return
           }
           Permission.respond({
@@ -111,9 +113,11 @@ export namespace ACP {
         const acpSession = this.sessionManager.get(part.sessionID)
         if (!acpSession) return
 
-        const message = await Storage.read<MessageV2.Info>(["message", part.sessionID, part.messageID]).catch(
-          () => undefined,
-        )
+        const message = await Storage.read<MessageV2.Info>([
+          "message",
+          part.sessionID,
+          part.messageID,
+        ]).catch(() => undefined)
         if (!message || message.role !== "assistant") return
 
         if (part.type === "tool") {
@@ -192,7 +196,9 @@ export namespace ACP {
                         sessionUpdate: "plan",
                         entries: parsedTodos.data.map((todo) => {
                           const status: PlanEntry["status"] =
-                            todo.status === "cancelled" ? "completed" : (todo.status as PlanEntry["status"])
+                            todo.status === "cancelled"
+                              ? "completed"
+                              : (todo.status as PlanEntry["status"])
                           return {
                             priority: "medium",
                             status,
@@ -375,11 +381,6 @@ export namespace ACP {
         description: command.description ?? "",
       }))
       const names = new Set(availableCommands.map((c) => c.name))
-      if (!names.has("init"))
-        availableCommands.push({
-          name: "init",
-          description: "create/update a AGENTS.md",
-        })
       if (!names.has("compact"))
         availableCommands.push({
           name: "compact",
@@ -404,7 +405,8 @@ export namespace ACP {
           description: agent.description,
         }))
 
-      const currentModeId = availableModes.find((m) => m.name === "build")?.id ?? availableModes[0].id
+      const currentModeId =
+        availableModes.find((m) => m.name === "build")?.id ?? availableModes[0].id
 
       const mcpServers: Record<string, Config.Mcp> = {}
       for (const server of params.mcpServers) {
@@ -585,14 +587,6 @@ export namespace ACP {
       }
 
       switch (cmd.name) {
-        case "init":
-          await Session.initialize({
-            sessionID,
-            messageID: Identifier.ascending("message"),
-            providerID: model.providerID,
-            modelID: model.modelID,
-          })
-          break
         case "compact":
           await SessionCompaction.run({
             sessionID,
@@ -665,7 +659,9 @@ export namespace ACP {
 
   function parseUri(
     uri: string,
-  ): { type: "file"; url: string; filename: string; mime: string } | { type: "text"; text: string } {
+  ):
+    | { type: "file"; url: string; filename: string; mime: string }
+    | { type: "text"; text: string } {
     try {
       if (uri.startsWith("file://")) {
         const path = uri.slice(7)

@@ -5,6 +5,8 @@ runs:
   steps:
     - name: Setup Bun
       uses: oven-sh/setup-bun@v2
+      with:
+        bun-version-file: package.json
 
     - name: Cache ~/.bun
       id: cache-bun

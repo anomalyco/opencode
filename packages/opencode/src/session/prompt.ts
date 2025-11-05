@@ -51,6 +51,7 @@ import { $, fileURLToPath } from "bun"
 import { ConfigMarkdown } from "../config/markdown"
 import { SessionSummary } from "./summary"
 import { Config } from "@/config/config"
+import { NamedError } from "@/util/error"
 
 export namespace SessionPrompt {
   const log = Log.create({ service: "session.prompt" })
@@ -735,17 +736,8 @@ export namespace SessionPrompt {
                   }
                 }
                 const args = { filePath: filepath, offset, limit }
-                const result = await ReadTool.init().then((t) =>
-                  t.execute(args, {
-                    sessionID: input.sessionID,
-                    abort: new AbortController().signal,
-                    agent: input.agent!,
-                    messageID: info.id,
-                    extra: { bypassCwdCheck: true },
-                    metadata: async () => {},
-                  }),
-                )
-                return [
+
+                const pieces: MessageV2.Part[] = [
                   {
                     id: Identifier.ascending("part"),
                     messageID: info.id,
@@ -754,21 +746,55 @@ export namespace SessionPrompt {
                     synthetic: true,
                     text: `Called the Read tool with the following input: ${JSON.stringify(args)}`,
                   },
-                  {
-                    id: Identifier.ascending("part"),
-                    messageID: info.id,
-                    sessionID: input.sessionID,
-                    type: "text",
-                    synthetic: true,
-                    text: result.output,
-                  },
-                  {
-                    ...part,
-                    id: part.id ?? Identifier.ascending("part"),
-                    messageID: info.id,
-                    sessionID: input.sessionID,
-                  },
                 ]
+
+                await ReadTool.init()
+                  .then(async (t) => {
+                    const result = await t.execute(args, {
+                      sessionID: input.sessionID,
+                      abort: new AbortController().signal,
+                      agent: input.agent!,
+                      messageID: info.id,
+                      extra: { bypassCwdCheck: true },
+                      metadata: async () => {},
+                    })
+                    pieces.push(
+                      {
+                        id: Identifier.ascending("part"),
+                        messageID: info.id,
+                        sessionID: input.sessionID,
+                        type: "text",
+                        synthetic: true,
+                        text: result.output,
+                      },
+                      {
+                        ...part,
+                        id: part.id ?? Identifier.ascending("part"),
+                        messageID: info.id,
+                        sessionID: input.sessionID,
+                      },
+                    )
+                  })
+                  .catch((error) => {
+                    log.error("failed to read file", { error })
+                    const message = error instanceof Error ? error.message : error.toString()
+                    Bus.publish(Session.Event.Error, {
+                      sessionID: input.sessionID,
+                      error: new NamedError.Unknown({
+                        message,
+                      }).toObject(),
+                    })
+                    pieces.push({
+                      id: Identifier.ascending("part"),
+                      messageID: info.id,
+                      sessionID: input.sessionID,
+                      type: "text",
+                      synthetic: true,
+                      text: `Read tool failed to read ${filepath} with the following error: ${message}`,
+                    })
+                  })
+
+                return pieces
               }
 
               if (part.mime === "application/x-directory") {
@@ -1054,6 +1080,8 @@ export namespace SessionPrompt {
                   callID: value.id,
                   state: {
                     status: "pending",
+                    input: {},
+                    raw: "",
                   },
                 })
                 toolcalls[value.id] = part as MessageV2.ToolPart
@@ -1302,16 +1330,16 @@ export namespace SessionPrompt {
             part.state.status !== "completed" &&
             part.state.status !== "error"
           ) {
-            Session.updatePart({
+            await Session.updatePart({
               ...part,
               state: {
+                ...part.state,
                 status: "error",
                 error: "Tool execution aborted",
                 time: {
                   start: Date.now(),
                   end: Date.now(),
                 },
-                input: {},
               },
             })
           }
@@ -1591,6 +1619,7 @@ export namespace SessionPrompt {
       let index = 0
       template = template.replace(bashRegex, () => results[index++])
     }
+    template = template.trim()
 
     const parts = [
       {
@@ -1655,6 +1684,8 @@ export namespace SessionPrompt {
     })()
 
     const agent = await Agent.get(agentName)
+    let result: MessageV2.WithParts
+
     if ((agent.mode === "subagent" && command.subtask !== false) || command.subtask === true) {
       using abort = lock(input.sessionID)
 
@@ -1730,7 +1761,7 @@ export namespace SessionPrompt {
       }
       await Session.updatePart(toolPart)
 
-      const result = await TaskTool.init().then((t) =>
+      const taskResult = await TaskTool.init().then((t) =>
         t.execute(args, {
           sessionID: input.sessionID,
           abort: abort.signal,
@@ -1758,22 +1789,31 @@ export namespace SessionPrompt {
           },
           input: toolPart.state.input,
           title: "",
-          metadata: result.metadata,
-          output: result.output,
+          metadata: taskResult.metadata,
+          output: taskResult.output,
         }
         await Session.updatePart(toolPart)
       }
 
-      return { info: assistantMsg, parts: [toolPart] }
+      result = { info: assistantMsg, parts: [toolPart] }
+    } else {
+      result = await prompt({
+        sessionID: input.sessionID,
+        messageID: input.messageID,
+        model,
+        agent: agentName,
+        parts,
+      })
     }
 
-    return prompt({
+    Bus.publish(Command.Event.Executed, {
+      name: input.command,
       sessionID: input.sessionID,
-      messageID: input.messageID,
-      model,
-      agent: agentName,
-      parts,
+      arguments: input.arguments,
+      messageID: result.info.id,
     })
+
+    return result
   }
 
   async function ensureTitle(input: {
@@ -1815,6 +1855,12 @@ export namespace SessionPrompt {
             content: x,
           }),
         ),
+        {
+          role: "user" as const,
+          content: `
+              The following is the text to summarize:
+            `,
+        },
         ...MessageV2.toModelMessage([
           {
             info: {

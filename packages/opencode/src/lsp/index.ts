@@ -6,9 +6,14 @@ import z from "zod"
 import { Config } from "../config/config"
 import { spawn } from "child_process"
 import { Instance } from "../project/instance"
+import { Bus } from "../bus"
 
 export namespace LSP {
   const log = Log.create({ service: "lsp" })
+
+  export const Event = {
+    Updated: Bus.event("lsp.updated", z.object({})),
+  }
 
   export const Range = z
     .object({
@@ -110,6 +115,33 @@ export namespace LSP {
     return state()
   }
 
+  export const Status = z
+    .object({
+      id: z.string(),
+      name: z.string(),
+      root: z.string(),
+      status: z.union([z.literal("connected"), z.literal("error")]),
+    })
+    .meta({
+      ref: "LSPStatus",
+    })
+  export type Status = z.infer<typeof Status>
+
+  export async function status() {
+    return state().then((x) => {
+      const result: Status[] = []
+      for (const client of x.clients) {
+        result.push({
+          id: client.serverID,
+          name: x.servers[client.serverID].id,
+          root: path.relative(Instance.directory, client.root),
+          status: "connected",
+        })
+      }
+      return result
+    })
+  }
+
   async function getClients(file: string) {
     const s = await state()
     const extension = path.parse(file).ext || file
@@ -126,8 +158,7 @@ export namespace LSP {
         continue
       }
 
-      const spawnKey = root + server.id
-      let spawnPromise = s.spawning.get(spawnKey)
+      let spawnPromise = s.spawning.get(root + server.id)
 
       if (!spawnPromise) {
         spawnPromise = (async () => {
@@ -162,15 +193,16 @@ export namespace LSP {
           return client
         })()
 
-        s.spawning.set(spawnKey, spawnPromise)
+        s.spawning.set(root + server.id, spawnPromise)
         spawnPromise.finally(() => {
-          s.spawning.delete(spawnKey)
+          s.spawning.delete(root + server.id)
         })
       }
 
       const client = await spawnPromise
       if (client) {
         result.push(client)
+        Bus.publish(Event.Updated, {})
       }
     }
     return result

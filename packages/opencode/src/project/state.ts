@@ -9,7 +9,11 @@ export namespace State {
   const log = Log.create({ service: "state" })
   const recordsByKey = new Map<string, Map<any, Entry>>()
 
-  export function create<S>(root: () => string, init: () => S, dispose?: (state: Awaited<S>) => Promise<void>) {
+  export function create<S>(
+    root: () => string,
+    init: () => S,
+    dispose?: (state: Awaited<S>) => Promise<void>,
+  ) {
     return () => {
       const key = root()
       let entries = recordsByKey.get(key)
@@ -57,9 +61,8 @@ export namespace State {
 
       tasks.push(task)
     }
-
+    entries.delete(key)
     await Promise.all(tasks)
-
     disposalFinished = true
     log.info("state disposal completed", { key })
   }

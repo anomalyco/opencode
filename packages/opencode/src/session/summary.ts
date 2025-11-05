@@ -6,10 +6,12 @@ import { generateText, type ModelMessage } from "ai"
 import { MessageV2 } from "./message-v2"
 import { Identifier } from "@/id/id"
 import { Snapshot } from "@/snapshot"
-
 import { ProviderTransform } from "@/provider/transform"
 import { SystemPrompt } from "./system"
 import { Log } from "@/util/log"
+import path from "path"
+import { Instance } from "@/project/instance"
+import { Storage } from "@/storage/storage"
 
 export namespace SessionSummary {
   const log = Log.create({ service: "session.summary" })
@@ -33,16 +35,21 @@ export namespace SessionSummary {
       input.messages
         .flatMap((x) => x.parts)
         .filter((x) => x.type === "patch")
-        .flatMap((x) => x.files),
+        .flatMap((x) => x.files)
+        .map((x) => path.relative(Instance.worktree, x)),
     )
     const diffs = await computeDiff({ messages: input.messages }).then((x) =>
-      x.filter((x) => files.has(x.file)),
+      x.filter((x) => {
+        return files.has(x.file)
+      }),
     )
     await Session.update(input.sessionID, (draft) => {
       draft.summary = {
-        diffs,
+        additions: diffs.reduce((sum, x) => sum + x.additions, 0),
+        deletions: diffs.reduce((sum, x) => sum + x.deletions, 0),
       }
     })
+    await Storage.write(["session_diff", input.sessionID], diffs)
   }
 
   async function summarizeMessage(input: { messageID: string; messages: MessageV2.WithParts[] }) {
@@ -81,10 +88,15 @@ export namespace SessionSummary {
           ),
           {
             role: "user" as const,
-            content: textPart?.text ?? "",
+            content: `
+              The following is the text to summarize:
+              <text>
+              ${textPart?.text ?? ""}
+              </text>
+            `,
           },
         ],
-        headers:small.info.headers,
+        headers: small.info.headers,
         model: small.language,
       })
       log.info("title", { title: result.text })
@@ -117,9 +129,9 @@ export namespace SessionSummary {
             `,
             },
           ],
-          headers: small.info.headers
-        })
-        summary = result.text
+          headers: small.info.headers,
+        }).catch(() => {})
+        if (result) summary = result.text
       }
       userMsg.summary.body = summary
       log.info("body", { body: summary })
