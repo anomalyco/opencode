@@ -52,6 +52,13 @@ export interface CommandDefinition {
   description?: string
 }
 
+export interface MessageWidgetDefinition {
+  id: string
+  pattern: RegExp
+  extractConfig?: (match: RegExpMatchArray) => any
+  systemPrompt?: string // Instructions for the model on how to use this widget
+}
+
 // Subscription configuration for UI plugins
 export interface UISubscriptions {
   /**
@@ -88,6 +95,7 @@ export interface UIHooks {
       keybinds?: KeybindDefinition[]
       statusItems?: StatusItemDefinition[]
       commands?: CommandDefinition[]
+      messageWidgets?: MessageWidgetDefinition[]
       subscriptions?: UISubscriptions
     },
   ) => Promise<void>

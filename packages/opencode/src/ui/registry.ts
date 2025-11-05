@@ -6,6 +6,7 @@ import type {
   KeybindDefinition,
   StatusItemDefinition,
   CommandDefinition,
+  MessageWidgetDefinition,
   UIHooks,
   UISubscriptions,
 } from "./types"
@@ -29,6 +30,7 @@ export namespace UIRegistry {
     keybinds: KeybindDefinition[]
     statusItems: StatusItemDefinition[]
     commands: CommandDefinition[]
+    messageWidgets: MessageWidgetDefinition[]
     subscriptions?: UISubscriptions
   }
 
@@ -53,6 +55,7 @@ export namespace UIRegistry {
         keybinds?: KeybindDefinition[]
         statusItems?: StatusItemDefinition[]
         commands?: CommandDefinition[]
+        messageWidgets?: MessageWidgetDefinition[]
         subscriptions?: UISubscriptions
       } = {}
 
@@ -76,6 +79,7 @@ export namespace UIRegistry {
           keybinds: output.keybinds || [],
           statusItems: output.statusItems || [],
           commands: output.commands || [],
+          messageWidgets: output.messageWidgets || [],
           subscriptions: output.subscriptions,
         })
 
@@ -85,6 +89,7 @@ export namespace UIRegistry {
           panels: output.panels?.length || 0,
           widgets: output.widgets?.length || 0,
           keybinds: output.keybinds?.length || 0,
+          messageWidgets: output.messageWidgets?.length || 0,
           subscriptions: output.subscriptions,
         })
 
@@ -149,6 +154,24 @@ export namespace UIRegistry {
   export async function getCommands(): Promise<CommandDefinition[]> {
     const { extensions } = await state()
     return extensions.flatMap((e) => e.commands)
+  }
+
+  export async function getMessageWidgets(): Promise<MessageWidgetDefinition[]> {
+    const { extensions } = await state()
+    return extensions.flatMap((e) => e.messageWidgets)
+  }
+
+  export async function getMessageWidgetSystemPrompts(): Promise<string[]> {
+    const { extensions } = await state()
+    const prompts: string[] = []
+    for (const ext of extensions) {
+      for (const widget of ext.messageWidgets) {
+        if (widget.systemPrompt) {
+          prompts.push(widget.systemPrompt)
+        }
+      }
+    }
+    return prompts
   }
 
   export async function getComponent(

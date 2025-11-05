@@ -2,6 +2,7 @@ import { Ripgrep } from "../file/ripgrep"
 import { Global } from "../global"
 import { Filesystem } from "../util/filesystem"
 import { Config } from "../config/config"
+import { UIRegistry } from "../ui/registry"
 
 import { Instance } from "../project/instance"
 import path from "path"
@@ -140,6 +141,17 @@ export namespace SystemPrompt {
         return [PROMPT_ANTHROPIC_SPOOF.trim(), PROMPT_TITLE]
       default:
         return [PROMPT_TITLE]
+    }
+  }
+
+  export async function plugins() {
+    try {
+      const { UIRegistry } = await import("../ui/registry")
+      const prompts = await UIRegistry.getMessageWidgetSystemPrompts()
+      return prompts
+    } catch (error) {
+      // Silently fail if UI registry not available
+      return []
     }
   }
 }

@@ -1,0 +1,13 @@
+{
+  "name": "@opencode/plugin-steering-questions",
+  "version": "0.0.1",
+  "type": "module",
+  "main": "./index.tsx",
+  "scripts": {
+    "build": "bun run build.ts"
+  },
+  "devDependencies": {
+    "@opentui/solid": "workspace:*",
+    "solid-js": "^1.9.3"
+  }
+}

@@ -536,7 +536,7 @@ function App() {
               dialog.replace(() => <DialogAgent />)
             }}
           >
-            {""}
+            ◀
           </text>
           <text
             bg={local.agent.color(local.agent.current()?.name ?? "")}
@@ -562,7 +562,7 @@ function App() {
 
                 // If switched (currentAgent differs from rootAgent), show hierarchy
                 if (currentAgent && rootAgent && currentAgent !== rootAgent) {
-                  return `${currentAgent.toUpperCase()} › ${rootAgent.toUpperCase()}`
+                  return `${currentAgent.toUpperCase()} ▸ ${rootAgent.toUpperCase()}`
                 }
 
                 // Otherwise show current agent from local state

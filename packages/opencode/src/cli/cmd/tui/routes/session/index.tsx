@@ -70,6 +70,8 @@ import { Toast, useToast } from "../../ui/toast"
 import { DialogLiveKit } from "../../component/dialog-livekit"
 import { useKV } from "../../context/kv.tsx"
 import { useLiveKit } from "../../context/livekit"
+import { MessageWidgets } from "@/ui/message-widgets"
+import { PluginComponent } from "../../component/plugin-component"
 
 addDefaultParsers(parsers.parsers)
 
@@ -1063,9 +1065,35 @@ function UserMessage(props: {
 function AssistantMessage(props: { message: AssistantMessage; parts: Part[]; last: boolean }) {
   const local = useLocal()
   const { theme } = useTheme()
+
+  // Filter out duplicate parts to avoid double rendering during streaming
+  // Keep only ONE text part (the longest/most complete one)
+  const uniqueParts = createMemo(() => {
+    const result: Part[] = []
+    let longestTextPart: any = null
+
+    for (const part of props.parts) {
+      if (part.type === "text") {
+        // Keep only the longest text part (most complete)
+        if (!longestTextPart || (part as any).text.length > longestTextPart.text.length) {
+          longestTextPart = part
+        }
+      } else {
+        // Keep all non-text parts
+        result.push(part)
+      }
+    }
+
+    if (longestTextPart) {
+      result.unshift(longestTextPart) // Add text part at the beginning
+    }
+
+    return result
+  })
+
   return (
     <>
-      <For each={props.parts}>
+      <For each={uniqueParts()}>
         {(part) => {
           const component = createMemo(() => PART_MAPPING[part.type as keyof typeof PART_MAPPING])
           return (
@@ -1163,17 +1191,77 @@ function ReasoningPart(props: { part: ReasoningPart; message: AssistantMessage }
 
 function TextPart(props: { part: TextPart; message: AssistantMessage }) {
   const ctx = use()
-  const { syntax } = useTheme()
+  const { syntax, theme } = useTheme()
+  const sdk = useSDK()
+  const [segments, setSegments] = createSignal<
+    Awaited<ReturnType<typeof MessageWidgets.splitText>>
+  >([])
+
+  // Generate a stable ID based on content hash
+  const partId = createMemo(() => {
+    const text = props.part.text
+    return `text-${text.substring(0, 50).replace(/\s/g, "")}-${text.length}`
+  })
+
+  createEffect(() => {
+    const text = props.part.text.trim()
+    // Allow incomplete widgets for progressive rendering during streaming
+    const isStreaming = !props.message.time.completed
+    MessageWidgets.splitText(text, { allowIncomplete: isStreaming }).then((result) => {
+      setSegments(result)
+    })
+  })
+
   return (
     <Show when={props.part.text.trim()}>
-      <box id={"text-" + props.part.id} paddingLeft={3} marginTop={1} flexShrink={0}>
-        <code
-          filetype="markdown"
-          drawUnstyledText={false}
-          syntaxStyle={syntax()}
-          content={props.part.text.trim()}
-          conceal={ctx.conceal()}
-        />
+      <box id={partId()} paddingLeft={3} marginTop={1} flexShrink={0} flexDirection="column">
+        <For each={segments()}>
+          {(segment) => (
+            <Switch>
+              <Match when={segment.type === "text"}>
+                <code
+                  filetype="markdown"
+                  drawUnstyledText={false}
+                  syntaxStyle={syntax()}
+                  content={(segment as any).content}
+                  conceal={ctx.conceal()}
+                />
+              </Match>
+              <Match when={segment.type === "widget"}>
+                <PluginComponent
+                  componentId={(segment as any).widgetId}
+                  context={{
+                    config: (segment as any).config,
+                    theme: theme,
+                    sessionID: props.message.sessionID,
+                    onSubmit: (answers: any) => {
+                      // Format answers as a message
+                      const answerText = answers
+                        .map((a: any) => {
+                          const answer = Array.isArray(a.answer) ? a.answer.join(", ") : a.answer
+                          return `**${a.questionId}**: ${answer}`
+                        })
+                        .join("\n")
+
+                      // Send answers back to the session as a user message
+                      sdk.client.session.prompt({
+                        path: { id: props.message.sessionID },
+                        body: {
+                          parts: [
+                            {
+                              type: "text",
+                              text: `Steering question answers:\n\n${answerText}`,
+                            },
+                          ],
+                        },
+                      })
+                    },
+                  }}
+                />
+              </Match>
+            </Switch>
+          )}
+        </For>
       </box>
     </Show>
   )
