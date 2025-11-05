@@ -1171,7 +1171,7 @@ ToolRegistry.register<typeof BashTool>({
   name: "bash",
   container: "block",
   render(props) {
-    const output = createMemo(() => Bun.stripANSI(props.metadata.output?.trim() ?? ""))
+    const output = createMemo(() => props.metadata.output?.trim() ?? "")
     const { theme } = useTheme()
     return (
       <>

@@ -2,7 +2,6 @@ import type { Argv } from "yargs"
 import { Session } from "../../session"
 import { cmd } from "./cmd"
 import { bootstrap } from "../bootstrap"
-import { UI } from "../ui"
 import { Storage } from "../../storage/storage"
 import { Instance } from "../../project/instance"
 import { EOL } from "os"
@@ -19,19 +18,18 @@ export const ImportCommand = cmd({
   },
   handler: async (args) => {
     await bootstrap(process.cwd(), async () => {
-      const file = Bun.file(args.file as string)
-      const exists = await file.exists()
-      if (!exists) {
-        UI.error(`File not found: ${args.file}`)
-        process.exit(1)
-      }
-
-      const exportData = (await file.json()) as {
+      const file = Bun.file(args.file)
+      const exportData = (await file.json().catch(() => {})) as {
         info: Session.Info
         messages: Array<{
           info: any
           parts: any[]
         }>
+      }
+      if (!exportData) {
+        process.stdout.write(`File not found: ${args.file}`)
+        process.stdout.write(EOL)
+        return
       }
 
       await Storage.write(["session", Instance.project.id, exportData.info.id], exportData.info)
