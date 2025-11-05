@@ -34,6 +34,7 @@ import { Session as SessionApi } from "@/session"
 import { TuiEvent } from "./event"
 import { KVProvider, useKV } from "./context/kv"
 import { LiveKitProvider } from "./context/livekit"
+import { UIExtensionsProvider } from "./context/ui-extensions"
 
 async function getTerminalBackgroundColor(): Promise<"dark" | "light"> {
   // can't set raw mode if not a TTY
@@ -152,6 +153,25 @@ export function tui(input: {
                             </KeybindProvider>
                           </LocalProvider>
                         </ThemeProvider>
+                        <UIExtensionsProvider>
+                          <ThemeProvider mode={mode}>
+                            <LocalProvider
+                              initialModel={input.model}
+                              initialAgent={input.agent}
+                              initialPrompt={input.prompt}
+                            >
+                              <KeybindProvider>
+                                <DialogProvider>
+                                  <CommandProvider>
+                                    <PromptHistoryProvider>
+                                      <App />
+                                    </PromptHistoryProvider>
+                                  </CommandProvider>
+                                </DialogProvider>
+                              </KeybindProvider>
+                            </LocalProvider>
+                          </ThemeProvider>
+                        </UIExtensionsProvider>
                       </SyncProvider>
                     </SDKProvider>
                   </RouteProvider>

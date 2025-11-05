@@ -167,21 +167,6 @@ resources:
       executeCommand: post /tui/execute-command
       showToast: post /tui/show-toast
 
-  ui:
-    models:
-      sidebarDefinition: SidebarDefinition
-      tabDefinition: TabDefinition
-      panelDefinition: PanelDefinition
-      widgetDefinition: WidgetDefinition
-      keybindDefinition: KeybindDefinition
-      statusItemDefinition: StatusItemDefinition
-      commandDefinition: CommandDefinition
-      uiExtensions: UIExtensions
-      componentRender: ComponentRender
-    methods:
-      extensions: get /ui/extensions
-      render: post /ui/render/{componentId}
-
 settings:
   disable_mock_tests: true
   license: MIT

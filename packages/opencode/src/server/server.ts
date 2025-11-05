@@ -47,6 +47,8 @@ import type { ContentfulStatusCode } from "hono/utils/http-status"
 import { TuiEvent } from "@/cli/cmd/tui/event"
 import { Snapshot } from "@/snapshot"
 import { SessionSummary } from "@/session/summary"
+import { UIRegistry } from "../ui/registry"
+import { UIExtensionsSchema, UIRenderRequestSchema, UIRenderResponseSchema } from "../ui/schema"
 
 const ERRORS = {
   400: {
@@ -1615,6 +1617,73 @@ export namespace Server {
         }),
         async (c) => {
           return c.json(await Format.status())
+        },
+      )
+      .get(
+        "/ui/extensions",
+        describeRoute({
+          description: "Get all registered UI extensions from plugins",
+          operationId: "ui.extensions",
+          responses: {
+            200: {
+              description: "UI extensions",
+              content: {
+                "application/json": {
+                  schema: resolver(UIExtensionsSchema),
+                },
+              },
+            },
+          },
+        }),
+        async (c) => {
+          console.log("[Server] /ui/extensions endpoint called")
+          const result = {
+            sidebars: await UIRegistry.getSidebars(),
+            tabs: await UIRegistry.getTabs(),
+            panels: await UIRegistry.getPanels(),
+            widgets: await UIRegistry.getWidgets(),
+            keybinds: await UIRegistry.getKeybinds(),
+            statusItems: await UIRegistry.getStatusItems(),
+            commands: await UIRegistry.getCommands(),
+          }
+          console.log("[Server] /ui/extensions result:", JSON.stringify(result, null, 2))
+          return c.json(result)
+        },
+      )
+      .post(
+        "/ui/render/:componentId",
+        describeRoute({
+          description: "Render a specific UI component by ID",
+          operationId: "ui.render",
+          responses: {
+            200: {
+              description: "Rendered component content",
+              content: {
+                "application/json": {
+                  schema: resolver(UIRenderResponseSchema),
+                },
+              },
+            },
+            ...errors(400, 404),
+          },
+        }),
+        validator(
+          "param",
+          z.object({
+            componentId: z.string().meta({ description: "UI component ID" }),
+          }),
+        ),
+        validator(
+          "json",
+          z.object({
+            context: z.record(z.string(), z.any()).optional(),
+          }),
+        ),
+        async (c) => {
+          const { componentId } = c.req.valid("param")
+          const { context = {} } = c.req.valid("json")
+          const result = await UIRegistry.renderComponent(componentId, context)
+          return c.json(result)
         },
       )
       .post(

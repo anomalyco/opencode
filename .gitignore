@@ -15,3 +15,16 @@ dist
 .opencode/raid.db-wal
 .opencode/raid.db-shm
 .opencode/raid.db
+**/.serena
+.serena/
+/packages/desktop/src-tauri
+/packages/livekit-player/src-tauri
+packages/opencode/.opencode/raid.db
+packages/opencode/.opencode/raid.db-shm
+packages/opencode/.opencode/raid.db-wal
+packages/opencode/.opencode/rules/README.md
+packages/opencode/.opencode/rules/security-review.json
+packages/opencode/.opencode/rules/typescript-style.json
+packages/opencode/.opencode/workflows/bugfix-workflow.json
+packages/opencode/.opencode/workflows/feature-implementation.json
+packages/opencode/.opencode/workflows/README.md
