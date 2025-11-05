@@ -1,0 +1,22 @@
+{
+  "name": "@opencode/example-ui-plugin",
+  "version": "0.1.0",
+  "description": "Example UI plugin demonstrating OpenCode's UI extension system",
+  "type": "module",
+  "main": "./index.ts",
+  "exports": {
+    ".": "./index.ts"
+  },
+  "keywords": [
+    "opencode",
+    "plugin",
+    "ui",
+    "example"
+  ],
+  "dependencies": {
+    "@opencode-ai/plugin": "workspace:*"
+  },
+  "devDependencies": {
+    "typescript": "^5.0.0"
+  }
+}

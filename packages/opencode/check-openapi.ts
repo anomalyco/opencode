@@ -1,0 +1,7 @@
+const data = await Bun.file("../sdk/stainless/openapi.json").json()
+const paths = Object.keys(data.paths || {})
+console.log(`Total paths: ${paths.length}`)
+console.log(`\nUI paths:`)
+paths.filter((p) => p.includes("ui")).forEach((p) => console.log(`  ${p}`))
+console.log(`\nSample paths:`)
+paths.slice(0, 10).forEach((p) => console.log(`  ${p}`))

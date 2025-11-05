@@ -1,5 +1,6 @@
 import { createMemo } from "solid-js"
 import { useSync } from "@tui/context/sync"
+import { useUIExtensions } from "./ui-extensions"
 import { Keybind } from "@/util/keybind"
 import { pipe, mapValues } from "remeda"
 import type { KeybindsConfig } from "@opencode-ai/sdk"
@@ -12,11 +13,16 @@ export const { use: useKeybind, provider: KeybindProvider } = createSimpleContex
   name: "Keybind",
   init: () => {
     const sync = useSync()
+    const uiExtensions = useUIExtensions()
     const keybinds = createMemo(() => {
       return pipe(
         sync.data.config.keybinds ?? {},
         mapValues((value) => Keybind.parse(value)),
       )
+    })
+    const pluginKeybinds = createMemo(() => {
+      const ext = uiExtensions.extensions()
+      return ext?.keybinds ?? []
     })
     const [store, setStore] = createStore({
       leader: false,
@@ -63,6 +69,15 @@ export const { use: useKeybind, provider: KeybindProvider } = createSimpleContex
           leader(false)
         })
       }
+
+      // Check plugin keybinds
+      const matched = result.matchPluginKeybind(evt)
+      if (matched) {
+        evt.preventDefault()
+        // Plugin keybind matched - command will be handled by command system
+        // The command ID from the keybind definition is already available
+        leader(false)
+      }
     })
 
     const result = {
@@ -71,6 +86,9 @@ export const { use: useKeybind, provider: KeybindProvider } = createSimpleContex
       },
       get leader() {
         return store.leader
+      },
+      get pluginKeybinds() {
+        return pluginKeybinds()
       },
       parse(evt: ParsedKey): Keybind.Info {
         if (evt.name === "\x1F")
@@ -98,6 +116,18 @@ export const { use: useKeybind, provider: KeybindProvider } = createSimpleContex
             return true
           }
         }
+      },
+      matchPluginKeybind(evt: ParsedKey) {
+        const parsed: Keybind.Info = result.parse(evt)
+        for (const keybind of pluginKeybinds()) {
+          const keybindInfo = Keybind.parse(keybind.keys)
+          for (const key of keybindInfo) {
+            if (Keybind.match(key, parsed)) {
+              return keybind
+            }
+          }
+        }
+        return null
       },
       print(key: keyof KeybindsConfig) {
         const first = keybinds()[key]?.at(0)

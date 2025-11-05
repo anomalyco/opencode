@@ -2578,6 +2578,118 @@ export type FormatterStatusResponses = {
 
 export type FormatterStatusResponse = FormatterStatusResponses[keyof FormatterStatusResponses]
 
+export type UiExtensionsData = {
+  body?: never
+  path?: never
+  query?: {
+    directory?: string
+  }
+  url: "/ui/extensions"
+}
+
+export type UiExtensionsResponses = {
+  /**
+   * UI extensions
+   */
+  200: {
+    sidebars: Array<{
+      id: string
+      label: string
+      icon?: string
+      position: "left" | "right"
+      defaultOpen?: boolean
+      keybind?: string
+    }>
+    tabs: Array<{
+      id: string
+      label: string
+      icon?: string
+      parent: string
+    }>
+    panels: Array<{
+      id: string
+      label: string
+      icon?: string
+      area: "top" | "bottom" | "left" | "right"
+      collapsible?: boolean
+    }>
+    widgets: Array<{
+      id: string
+      label: string
+      position: {
+        x: number
+        y: number
+      }
+      size: {
+        width: number
+        height: number
+      }
+    }>
+    keybinds: Array<{
+      id: string
+      keys: string
+      command: string
+      when?: string
+    }>
+    statusItems: Array<{
+      id: string
+      priority: number
+      alignment: "left" | "right"
+    }>
+    commands: Array<{
+      id: string
+      label: string
+      description?: string
+    }>
+  }
+}
+
+export type UiExtensionsResponse = UiExtensionsResponses[keyof UiExtensionsResponses]
+
+export type UiRenderData = {
+  body?: {
+    context?: {
+      [key: string]: unknown
+    }
+  }
+  path: {
+    /**
+     * UI component ID
+     */
+    componentId: string
+  }
+  query?: {
+    directory?: string
+  }
+  url: "/ui/render/{componentId}"
+}
+
+export type UiRenderErrors = {
+  /**
+   * Bad request
+   */
+  400: BadRequestError
+  /**
+   * Not found
+   */
+  404: NotFoundError
+}
+
+export type UiRenderError = UiRenderErrors[keyof UiRenderErrors]
+
+export type UiRenderResponses = {
+  /**
+   * Rendered component content
+   */
+  200: {
+    content: string
+    type: "text" | "markdown" | "ansi" | "html"
+    error?: string
+  }
+}
+
+export type UiRenderResponse = UiRenderResponses[keyof UiRenderResponses]
+
 export type TuiAppendPromptData = {
   body?: {
     text: string

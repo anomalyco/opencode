@@ -1,6 +1,8 @@
 import { useSync } from "@tui/context/sync"
 import { createMemo, For, Show, Switch, Match } from "solid-js"
 import { useTheme } from "../../context/theme"
+import { useUIExtensions } from "../../context/ui-extensions"
+import { PluginComponent } from "../../component/plugin-component"
 import { Locale } from "@/util/locale"
 import path from "path"
 import type { AssistantMessage } from "@opencode-ai/sdk"
@@ -8,9 +10,18 @@ import type { AssistantMessage } from "@opencode-ai/sdk"
 export function Sidebar(props: { sessionID: string }) {
   const sync = useSync()
   const { theme } = useTheme()
+  const uiExtensions = useUIExtensions()
   const session = createMemo(() => sync.session.get(props.sessionID)!)
   const todo = createMemo(() => sync.data.todo[props.sessionID] ?? [])
   const messages = createMemo(() => sync.data.message[props.sessionID] ?? [])
+
+  // Debug: Log UI extensions data
+  createMemo(() => {
+    const extensions = uiExtensions.extensions()
+    console.log("[Sidebar] UI Extensions:", extensions)
+    console.log("[Sidebar] Widgets:", extensions?.widgets)
+    console.log("[Sidebar] Panels:", extensions?.panels)
+  })
 
   const cost = createMemo(() => {
     const total = messages().reduce((sum, x) => sum + (x.role === "assistant" ? x.cost : 0), 0)
@@ -165,6 +176,46 @@ export function Sidebar(props: { sessionID: string }) {
                 >
                   [{todo.status === "completed" ? "✓" : " "}] {todo.content}
                 </text>
+              )}
+            </For>
+          </box>
+        </Show>
+        <Show when={(uiExtensions.extensions()?.widgets ?? []).length > 0}>
+          <box>
+            <text fg={theme.text}>
+              <b>Widgets</b>
+            </text>
+            <For each={uiExtensions.extensions()?.widgets ?? []}>
+              {(widget) => (
+                <box>
+                  <text fg={theme.textMuted}>
+                    <b>{widget.label}</b>
+                  </text>
+                  <PluginComponent
+                    componentId={widget.id}
+                    context={{ sessionID: props.sessionID }}
+                  />
+                </box>
+              )}
+            </For>
+          </box>
+        </Show>
+        <Show when={(uiExtensions.extensions()?.panels ?? []).length > 0}>
+          <box>
+            <text fg={theme.text}>
+              <b>Panels</b>
+            </text>
+            <For each={uiExtensions.extensions()?.panels ?? []}>
+              {(panel) => (
+                <box>
+                  <text fg={theme.textMuted}>
+                    <b>{panel.label}</b>
+                  </text>
+                  <PluginComponent
+                    componentId={panel.id}
+                    context={{ sessionID: props.sessionID }}
+                  />
+                </box>
               )}
             </For>
           </box>

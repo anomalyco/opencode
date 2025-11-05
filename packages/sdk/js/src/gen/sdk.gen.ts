@@ -110,6 +110,11 @@ import type {
   LspStatusResponses,
   FormatterStatusData,
   FormatterStatusResponses,
+  UiExtensionsData,
+  UiExtensionsResponses,
+  UiRenderData,
+  UiRenderResponses,
+  UiRenderErrors,
   TuiAppendPromptData,
   TuiAppendPromptResponses,
   TuiAppendPromptErrors,
@@ -794,6 +799,36 @@ class Formatter extends _HeyApiClient {
   }
 }
 
+class Ui extends _HeyApiClient {
+  /**
+   * Get all registered UI extensions from plugins
+   */
+  public extensions<ThrowOnError extends boolean = false>(
+    options?: Options<UiExtensionsData, ThrowOnError>,
+  ) {
+    return (options?.client ?? this._client).get<UiExtensionsResponses, unknown, ThrowOnError>({
+      url: "/ui/extensions",
+      ...options,
+    })
+  }
+
+  /**
+   * Render a specific UI component by ID
+   */
+  public render<ThrowOnError extends boolean = false>(
+    options: Options<UiRenderData, ThrowOnError>,
+  ) {
+    return (options.client ?? this._client).post<UiRenderResponses, UiRenderErrors, ThrowOnError>({
+      url: "/ui/render/{componentId}",
+      ...options,
+      headers: {
+        "Content-Type": "application/json",
+        ...options.headers,
+      },
+    })
+  }
+}
+
 class Control extends _HeyApiClient {
   /**
    * Get the next TUI request from the queue
@@ -1045,6 +1080,7 @@ export class OpencodeClient extends _HeyApiClient {
   mcp = new Mcp({ client: this._client })
   lsp = new Lsp({ client: this._client })
   formatter = new Formatter({ client: this._client })
+  ui = new Ui({ client: this._client })
   tui = new Tui({ client: this._client })
   auth = new Auth({ client: this._client })
   event = new Event({ client: this._client })
