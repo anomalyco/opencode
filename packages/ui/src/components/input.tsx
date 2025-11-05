@@ -4,7 +4,7 @@ import type { ComponentProps } from "solid-js"
 
 export interface InputProps
   extends ComponentProps<typeof Kobalte.Input>,
-    Pick<ComponentProps<typeof Kobalte>, "value" | "onChange" | "onKeyDown"> {
+    Partial<Pick<ComponentProps<typeof Kobalte>, "value" | "onChange" | "onKeyDown">> {
   label?: string
   hideLabel?: boolean
   description?: string
