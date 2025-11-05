@@ -89,6 +89,8 @@
               node_modules =
                 let
                   canonicalizeScript = ./script/nix/canonicalize-node-modules.ts;
+                  optionalMetadataScript = ./script/nix/optional-metadata.ts;
+                  verifyShaScript = ./script/nix/verify-sha.ts;
                 in
                 stdenvNoCC.mkDerivation {
                 pname = "opencode-node_modules";
@@ -101,7 +103,7 @@
                     "SOCKS_SERVER"
                   ];
 
-                nativeBuildInputs = [ bun pkgs.cacert pkgs.curl pkgs.python3 ];
+                nativeBuildInputs = [ bun pkgs.cacert pkgs.curl ];
 
                 dontConfigure = true;
 
@@ -119,28 +121,7 @@
 @opentui/core-linux-arm64
 EOF
 
-                  python3 <<'PY' > optional-metadata.txt
-import pathlib
-import re
-import sys
-
-lock = pathlib.Path("bun.lock").read_text()
-targets = [line.strip() for line in pathlib.Path("optional-packages.txt").read_text().splitlines() if line.strip()]
-
-for name in targets:
-    version_pattern = rf'"{re.escape(name)}": "([^"]+)"'
-    version_match = re.search(version_pattern, lock)
-    if not version_match:
-        print(f"missing-version\t{name}")
-        sys.exit(1)
-    version = version_match.group(1)
-    sha_pattern = rf'"{re.escape(name)}@{re.escape(version)}"[^\n]*"(sha512-[^"]+)"'
-    sha_match = re.search(sha_pattern, lock)
-    if not sha_match:
-        print(f"missing-sha\t{name}\t{version}")
-        sys.exit(1)
-    print(f"{name}\t{version}\t{sha_match.group(1)}")
-PY
+                  bun --bun ${optionalMetadataScript} optional-packages.txt > optional-metadata.txt
 
                   while IFS=$'\t' read -r name version sha; do
                     [ -z "$name" ] && continue
@@ -163,22 +144,7 @@ PY
 
                     tmp=$(mktemp)
                     curl --fail --location --silent --show-error --tlsv1.2 "$url" -o "$tmp"
-                    python3 - "$tmp" "$sha" <<'PY'
-import base64
-import hashlib
-import pathlib
-import sys
-
-path = pathlib.Path(sys.argv[1])
-expected = sys.argv[2]
-data = path.read_bytes()
-digest = base64.b64encode(hashlib.sha512(data).digest()).decode()
-if expected.startswith('sha512-'):
-    expected = expected.split('-', 1)[1]
-if digest != expected:
-    print(f"hash mismatch: expected {expected}, got {digest}", file=sys.stderr)
-    sys.exit(1)
-PY
+                    bun --bun ${verifyShaScript} "$tmp" "$sha"
 
                     mkdir -p "$dest"
                     tar -xzf "$tmp" -C "$dest" --strip-components=1 package
