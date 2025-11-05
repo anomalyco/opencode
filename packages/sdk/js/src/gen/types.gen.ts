@@ -1253,14 +1253,6 @@ export type EventFileEdited = {
   }
 }
 
-export type EventFileWatcherUpdated = {
-  type: "file.watcher.updated"
-  properties: {
-    file: string
-    event: "add" | "change" | "unlink"
-  }
-}
-
 export type EventTodoUpdated = {
   type: "todo.updated"
   properties: {
@@ -1327,6 +1319,14 @@ export type EventServerConnected = {
   }
 }
 
+export type EventFileWatcherUpdated = {
+  type: "file.watcher.updated"
+  properties: {
+    file: string
+    event: "add" | "change" | "unlink"
+  }
+}
+
 export type Event =
   | EventInstallationUpdated
   | EventLspClientDiagnostics
@@ -1339,7 +1339,6 @@ export type Event =
   | EventPermissionUpdated
   | EventPermissionReplied
   | EventFileEdited
-  | EventFileWatcherUpdated
   | EventTodoUpdated
   | EventCommandExecuted
   | EventSessionIdle
@@ -1351,6 +1350,7 @@ export type Event =
   | EventTuiCommandExecute
   | EventTuiToastShow
   | EventServerConnected
+  | EventFileWatcherUpdated
 
 export type ProjectListData = {
   body?: never
