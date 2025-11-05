@@ -346,13 +346,7 @@ export namespace ACP {
             image: true,
           },
         },
-        authMethods: [
-          {
-            description: "Run `opencode auth login` in the terminal",
-            name: "Login with opencode",
-            id: "opencode-login",
-          },
-        ],
+        authMethods: [authMethod],
         agentInfo: {
           name: "OpenCode",
           version: Installation.VERSION,
