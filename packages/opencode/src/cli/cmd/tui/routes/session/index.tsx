@@ -59,6 +59,7 @@ import type { PromptInfo } from "../../component/prompt/history"
 import { iife } from "@/util/iife"
 import { DialogConfirm } from "@tui/ui/dialog-confirm"
 import { DialogTimeline } from "./dialog-timeline"
+import { DialogPermission } from "./dialog-permission"
 import { Sidebar } from "./sidebar"
 import { LANGUAGE_EXTENSIONS } from "@/lsp/language"
 import parsers from "../../../../../../parsers-config.ts"
@@ -146,6 +147,19 @@ export function Session() {
           },
         })
       }
+    }
+  })
+
+  // Auto-manage permission modal based on pending permissions
+  createEffect(() => {
+    const perms = permissions()
+    if (perms.length > 0 && dialog.stack.length === 0) {
+      toBottom()
+      dialog.replace(() => (
+        <DialogPermission permissions={perms} sessionID={route.sessionID} />
+      ))
+    } else if (perms.length === 0 && dialog.stack.length > 0) {
+      dialog.clear()
     }
   })
 
