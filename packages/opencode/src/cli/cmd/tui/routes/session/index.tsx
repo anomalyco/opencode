@@ -5,6 +5,7 @@ import {
   createSignal,
   For,
   Match,
+  on,
   Show,
   Switch,
   useContext,
@@ -161,6 +162,9 @@ export function Session() {
     if (old !== session()?.revert?.messageID) toBottom()
     return session()?.revert?.messageID
   })
+
+  // snap to bottom when session changes
+  createEffect(on(() => route.sessionID, toBottom))
 
   const local = useLocal()
 
