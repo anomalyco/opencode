@@ -303,10 +303,11 @@ export function Session() {
   }
 
   // snap to bottom when revert position changes
-  createEffect((old) => {
-    if (old !== session()?.revert?.messageID) toBottom()
-    return session()?.revert?.messageID
-  })
+  // DISABLED: Don't auto-scroll to bottom on session load
+  // createEffect((old) => {
+  //   if (old !== session()?.revert?.messageID) toBottom()
+  //   return session()?.revert?.messageID
+  // })
 
   const local = useLocal()
 
@@ -951,6 +952,7 @@ export function Session() {
                 onSubmit={() => {
                   toBottom()
                 }}
+                onScrollToBottom={toBottom}
                 sessionID={route.sessionID}
               />
             </box>

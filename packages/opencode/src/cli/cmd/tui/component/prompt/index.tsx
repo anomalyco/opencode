@@ -38,6 +38,7 @@ export type PromptProps = {
   ref?: (ref: PromptRef) => void
   hint?: JSX.Element
   showPlaceholder?: boolean
+  onScrollToBottom?: () => void
 }
 
 export type PromptRef = {
@@ -783,10 +784,23 @@ export function Prompt(props: PromptProps) {
             </Match>
             <Match when={props.hint}>{props.hint!}</Match>
             <Match when={true}>
-              <text fg={theme.text}>
-                {keybind.print("command_list")}{" "}
-                <span style={{ fg: theme.textMuted }}>commands</span>
-              </text>
+              <box flexDirection="row" gap={2}>
+                <text fg={theme.text}>
+                  {keybind.print("command_list")}{" "}
+                  <span style={{ fg: theme.textMuted }}>commands</span>
+                </text>
+                {props.onScrollToBottom && (
+                  <text
+                    fg={theme.accent}
+                    onMouseUp={() => {
+                      if (renderer.getSelection()?.getSelectedText()) return
+                      props.onScrollToBottom?.()
+                    }}
+                  >
+                    Latest ↓
+                  </text>
+                )}
+              </box>
             </Match>
           </Switch>
         </box>

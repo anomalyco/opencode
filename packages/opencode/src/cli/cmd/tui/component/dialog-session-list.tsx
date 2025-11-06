@@ -17,28 +17,56 @@ export function DialogSessionList() {
   const sdk = useSDK()
 
   const [toDelete, setToDelete] = createSignal<string>()
+  const [displayLimit, setDisplayLimit] = createSignal(20)
 
   const deleteKeybind = "ctrl+d"
 
-  const options = createMemo(() => {
-    const today = new Date().toDateString()
+  const allSessions = createMemo(() => {
     return sync.data.session
       .filter((x) => x.parentID === undefined)
-      .map((x) => {
-        const date = new Date(x.time.updated)
-        let category = date.toDateString()
-        if (category === today) {
-          category = "Today"
-        }
-        const isDeleting = toDelete() === x.id
-        return {
-          title: isDeleting ? `Press ${deleteKeybind} again to confirm` : x.title,
-          bg: isDeleting ? theme.error : undefined,
-          value: x.id,
-          category,
-          footer: Locale.time(x.time.updated),
-        }
+      .filter((x) => {
+        // Filter out sessions with garbage titles
+        const title = x.title.toLowerCase()
+        return !title.includes("clarifying") && 
+               !title.includes("parsing") && 
+               !title.includes("invalid input") &&
+               !title.includes("discussing adsad") &&
+               !title.startsWith("new session -")
       })
+      .sort((a, b) => b.time.updated - a.time.updated) // Sort by most recent first
+  })
+
+  const options = createMemo(() => {
+    const today = new Date().toDateString()
+    const sessions = allSessions().slice(0, displayLimit())
+    const hasMore = allSessions().length > displayLimit()
+    
+    const opts = sessions.map((x) => {
+      const date = new Date(x.time.updated)
+      let category = date.toDateString()
+      if (category === today) {
+        category = "Today"
+      }
+      const isDeleting = toDelete() === x.id
+      return {
+        title: isDeleting ? `Press ${deleteKeybind} again to confirm` : x.title,
+        bg: isDeleting ? theme.error : undefined,
+        value: x.id,
+        category,
+        footer: Locale.time(x.time.updated),
+      }
+    })
+
+    if (hasMore) {
+      opts.push({
+        title: `Load more... (${allSessions().length - displayLimit()} remaining)`,
+        value: "__load_more__",
+        category: "",
+        footer: "",
+      })
+    }
+
+    return opts
   })
 
   onMount(() => {
@@ -54,6 +82,10 @@ export function DialogSessionList() {
         setToDelete(undefined)
       }}
       onSelect={(option) => {
+        if (option.value === "__load_more__") {
+          setDisplayLimit((prev) => prev + 20)
+          return
+        }
         route.navigate({
           type: "session",
           sessionID: option.value,
