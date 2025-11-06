@@ -89,19 +89,6 @@ export namespace Config {
     }
     await Promise.allSettled(promises)
 
-    // Load Claude agents from ~/.claude/agents if it exists
-    const claudeAgentDir = path.join(os.homedir(), ".claude", "agents")
-    try {
-      const stat = await fs.stat(claudeAgentDir)
-      if (stat.isDirectory()) {
-        const agents = await loadClaudeAgents(claudeAgentDir)
-        result.agent = mergeDeep(result.agent, agents)
-        log.debug("loaded Claude agents", { path: claudeAgentDir })
-      }
-    } catch (err) {
-      // Directory doesn't exist, skip loading Claude agents
-    }
-
     // Migrate deprecated mode field to agent field
     for (const [name, mode] of Object.entries(result.mode)) {
       result.agent = mergeDeep(result.agent ?? {}, {
@@ -287,59 +274,6 @@ export namespace Config {
           mode: "primary" as const,
         }
         continue
-      }
-    }
-    return result
-  }
-
-  const CLAUDE_AGENT_GLOB = new Bun.Glob("*.md")
-  async function loadClaudeAgents(dir: string) {
-    const result: Record<string, Agent> = {}
-
-    // Define Claude agent format schema inline to avoid circular dependency
-    const ClaudeFormat = z.object({
-      name: z.string(),
-      description: z.string(),
-      model: z.string().optional(),
-      color: z.string().optional(),
-    })
-
-    for await (const item of CLAUDE_AGENT_GLOB.scan({
-      absolute: true,
-      followSymlinks: true,
-      cwd: dir,
-    })) {
-      try {
-        const content = await Bun.file(item).text()
-        const md = matter(content)
-        if (!md.data) {
-          continue
-        }
-
-        // Parse Claude format
-        const parsed = ClaudeFormat.safeParse(md.data)
-        if (!parsed.success) {
-          continue
-        }
-
-        const agentName = parsed.data.name.toLowerCase().replace(/\s+/g, "-")
-
-        // Convert to OpenCode agent format
-        const config = {
-          name: agentName,
-          description: parsed.data.description,
-          model: parsed.data.model,
-          prompt: md.content.trim(),
-          mode: "primary" as const,
-        }
-
-        const agentParsed = Agent.safeParse(config)
-        if (agentParsed.success) {
-          result[agentName] = agentParsed.data
-          log.debug("loaded Claude agent", { name: agentName, file: item })
-        }
-      } catch (err) {
-        log.warn("failed to load Claude agent", { file: item, error: err })
       }
     }
     return result

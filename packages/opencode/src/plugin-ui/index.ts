@@ -32,3 +32,5 @@
 export * from "./canvas"
 export { renderXML, signals } from "./xml-runtime"
 export type { RenderContext, RenderHandle, Accessor, Setter } from "./xml-runtime"
+export { createStore, createPersistedStore } from "./store"
+export type { Store } from "./store"

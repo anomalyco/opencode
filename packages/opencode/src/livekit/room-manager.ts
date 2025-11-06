@@ -66,12 +66,13 @@ export class RoomManager {
       const token = await this.generateToken(options)
 
       this.room = new Room()
-      this.setupEventListeners()
 
       await this.room.connect(this.config.serverUrl, token, {
         autoSubscribe: options.autoSubscribe ?? true,
         dynacast: options.dynacast ?? true,
       })
+
+      this.setupEventListeners()
     } catch (error) {
       throw this.createError("Failed to connect to LiveKit room", "CONNECT_FAILED", error)
     }

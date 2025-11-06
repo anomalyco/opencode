@@ -57,8 +57,14 @@
     "turbo": "2.5.6"
   },
   "dependencies": {
+    "@dqbd/tiktoken": "1.0.22",
     "@opencode-ai/script": "workspace:*",
-    "@opencode-ai/sdk": "workspace:*"
+    "@opencode-ai/sdk": "workspace:*",
+    "gray-matter": "4.0.3",
+    "livekit-server-sdk": "2.14.0",
+    "openai": "6.8.1",
+    "ulid": "3.0.1",
+    "yaml": "2.8.1"
   },
   "repository": {
     "type": "git",

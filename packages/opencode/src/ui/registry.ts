@@ -286,6 +286,54 @@ export namespace UIRegistry {
     }
   }
 
+  export async function triggerAction(
+    componentId: string,
+    action: string,
+    payload?: any,
+  ): Promise<{
+    result?: any
+    error?: string
+  }> {
+    const plugins = await Plugin.list()
+    log.info("triggering action", { componentId, action })
+
+    for (const plugin of plugins) {
+      const uiAction = (plugin as any)["ui.action"] as UIHooks["ui.action"]
+      if (!uiAction) continue
+
+      const output: {
+        result?: any
+        error?: string
+      } = {}
+
+      try {
+        await uiAction(
+          {
+            componentId,
+            action,
+            payload,
+          },
+          output,
+        )
+
+        if (output.result !== undefined || output.error !== undefined) {
+          log.info("action handled", { componentId, action, hasResult: !!output.result })
+          return output
+        }
+      } catch (error) {
+        log.error("failed to trigger action", { componentId, action, error })
+        return {
+          error: error instanceof Error ? error.message : String(error),
+        }
+      }
+    }
+
+    log.warn("no plugin handled action", { componentId, action })
+    return {
+      error: `No plugin handled action "${action}" for component "${componentId}"`,
+    }
+  }
+
   export async function refresh() {
     // Trigger re-evaluation by accessing state
     const { extensions } = await state()

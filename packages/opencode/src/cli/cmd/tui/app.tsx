@@ -28,8 +28,8 @@ import { DialogAgentManager } from "@tui/component/dialog-agent-manager"
 import { DialogSessionList } from "@tui/component/dialog-session-list"
 import { DialogMemoryList } from "@tui/component/dialog-memory-list"
 import { DialogMCPManager } from "@tui/component/dialog-mcp-manager"
-import { DialogSkillManager } from "@tui/component/dialog-skill-manager"
-import { DialogKbManager } from "@tui/component/dialog-kb-manager"
+// import { DialogSkillManager } from "@tui/component/dialog-skill-manager" // DISABLED: migrated to plugin
+// import { DialogKbManager } from "@tui/component/dialog-kb-manager" // DISABLED: raid module removed
 import { KeybindProvider } from "@tui/context/keybind"
 import { ThemeProvider, useTheme } from "@tui/context/theme"
 import { Home } from "@tui/routes/home"
@@ -371,24 +371,26 @@ function App() {
         dialog.replace(() => <DialogMCPManager />)
       },
     },
-    {
-      title: "Skill manager",
-      value: "skill.manage",
-      keybind: "skill_manage",
-      category: "System",
-      onSelect: () => {
-        dialog.replace(() => <DialogSkillManager />)
-      },
-    },
-    {
-      title: "Knowledge Base manager",
-      value: "kb.manage",
-      keybind: "kb_manage" as any,
-      category: "System",
-      onSelect: () => {
-        dialog.replace(() => <DialogKbManager />)
-      },
-    },
+    // DISABLED: migrated to plugin
+    // {
+    //   title: "Skill manager",
+    //   value: "skill.manage",
+    //   keybind: "skill_manage",
+    //   category: "System",
+    //   onSelect: () => {
+    //     dialog.replace(() => <DialogSkillManager />)
+    //   },
+    // },
+    // DISABLED: raid module removed
+    // {
+    //   title: "Knowledge Base manager",
+    //   value: "kb.manage",
+    //   keybind: "kb_manage" as any,
+    //   category: "System",
+    //   onSelect: () => {
+    //     dialog.replace(() => <DialogKbManager />)
+    //   },
+    // },
     {
       title: "Exit the app",
       value: "app.exit",

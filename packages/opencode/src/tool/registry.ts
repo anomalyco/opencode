@@ -11,10 +11,6 @@ import { WebFetchTool } from "./webfetch"
 import { WriteTool } from "./write"
 import { InvalidTool } from "./invalid"
 import { AddDirTool } from "./add-dir"
-import { KbIngestTool } from "./kb-ingest"
-import { KbSearchTool } from "./kb-search"
-import { KbQueryTool } from "./kb-query"
-import { KbManageTool } from "./kb-manage"
 import { LspDiagnosticTool } from "./lsp-diagnostics"
 import { LspHoverTool } from "./lsp-hover"
 import { SwitchModeTool } from "./switch-mode"
@@ -184,10 +180,6 @@ export namespace ToolRegistry {
       SwitchModeTool,
       CompleteTaskTool,
       AddDirTool,
-      KbIngestTool,
-      KbSearchTool,
-      KbQueryTool,
-      KbManageTool,
       LspDiagnosticTool,
       LspHoverTool,
       ...ccTools,

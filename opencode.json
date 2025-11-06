@@ -1,7 +1,12 @@
 {
   "$schema": "https://opencode.ai/config.json",
   "plugin": [
-    "opencode-openai-codex-auth"
+    "opencode-openai-codex-auth",
+    "file:///Users/jkneen/Documents/GitHub/flows/opencode-stt/.opencode/plugin/raid-knowledge-base.ts",
+    "file:///Users/jkneen/Documents/GitHub/flows/opencode-stt/.opencode/plugin/skills-system.ts",
+    "file:///Users/jkneen/Documents/GitHub/flows/opencode-stt/.opencode/plugin/claude-agents-loader.ts",
+    "file:///Users/jkneen/Documents/GitHub/flows/opencode-stt/.opencode/plugin/custom-tools.ts",
+    "file:///Users/jkneen/Documents/GitHub/flows/opencode-stt/.opencode/plugin/interactive-todo-example.ts"
   ],
   "command": {
     "add_dir": {

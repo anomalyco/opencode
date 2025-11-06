@@ -1685,6 +1685,48 @@ export namespace Server {
         },
       )
       .post(
+        "/ui/action/:componentId",
+        describeRoute({
+          description: "Trigger an action on a UI component",
+          operationId: "ui.action",
+          responses: {
+            200: {
+              description: "Action result",
+              content: {
+                "application/json": {
+                  schema: resolver(
+                    z.object({
+                      result: z.any().optional(),
+                      error: z.string().optional(),
+                    }),
+                  ),
+                },
+              },
+            },
+            ...errors(400, 404),
+          },
+        }),
+        validator(
+          "param",
+          z.object({
+            componentId: z.string().meta({ description: "UI component ID" }),
+          }),
+        ),
+        validator(
+          "json",
+          z.object({
+            action: z.string().meta({ description: "Action name" }),
+            payload: z.any().optional().meta({ description: "Action payload" }),
+          }),
+        ),
+        async (c) => {
+          const { componentId } = c.req.valid("param")
+          const { action, payload } = c.req.valid("json")
+          const result = await UIRegistry.triggerAction(componentId, action, payload)
+          return c.json(result)
+        },
+      )
+      .post(
         "/tui/append-prompt",
         describeRoute({
           description: "Append prompt to the TUI",
