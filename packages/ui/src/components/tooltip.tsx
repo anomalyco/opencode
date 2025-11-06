@@ -29,7 +29,7 @@ export function Tooltip(props: TooltipProps) {
   })
 
   return (
-    <KobalteTooltip forceMount {...others} open={open()} onOpenChange={setOpen} gutter={4}>
+    <KobalteTooltip forceMount gutter={4} {...others} open={open()} onOpenChange={setOpen}>
       <KobalteTooltip.Trigger as={"div"} data-component="tooltip-trigger" class={local.class}>
         {c()}
       </KobalteTooltip.Trigger>

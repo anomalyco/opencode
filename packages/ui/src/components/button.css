@@ -74,14 +74,15 @@
   }
 
   &[data-size="normal"] {
+    height: 24px;
     padding: 0 6px;
     &[data-icon] {
-      padding: 0 6px 0 4px;
+      padding: 0 8px 0 6px;
     }
 
     font-size: var(--font-size-small);
     line-height: var(--line-height-large);
-    gap: calc(var(--spacing) * 0.5);
+    gap: 6px;
   }
 
   &[data-size="large"] {

@@ -13,6 +13,7 @@ import {
   Code,
   Tooltip,
   ProgressCircle,
+  Button,
 } from "@opencode-ai/ui"
 import { FileIcon } from "@/ui"
 import { MessageProgress } from "@/components/message-progress"
@@ -221,9 +222,9 @@ export default function Page() {
             </Switch>
             <IconButton
               icon="close"
-              class="mt-0.5 opacity-0 text-text-muted/60 group-data-[selected]/tab:opacity-100
-                       group-data-[selected]/tab:text-text group-data-[selected]/tab:hover:bg-border-subtle
-                       hover:opacity-100 group-hover/tab:opacity-100"
+              class="mt-0.5 opacity-0 group-data-[selected]/tab:opacity-100
+                     hover:bg-transparent
+                     hover:opacity-100 group-hover/tab:opacity-100"
               variant="ghost"
               onClick={() => props.onTabClose(props.tab)}
             />
@@ -289,56 +290,101 @@ export default function Page() {
                   <div class="text-14-regular text-text-weak text-left w-7">{session.usage.context() ?? 0}%</div>
                 </Tooltip>
               </Tabs.Trigger>
-              {/* <Tabs.Trigger value="review">Review</Tabs.Trigger> */}
+              <Show when={local.layout.review.state() === "tab" && session.diffs().length}>
+                <Tabs.Trigger value="review" class="flex gap-3 items-center group/tab pr-1">
+                  <Show when={session.diffs()}>
+                    <DiffChanges changes={session.diffs()} variant="bars" />
+                  </Show>
+                  <div class="flex items-center gap-1.5">
+                    <div>Review</div>
+                    <Show when={session.info()?.summary?.files}>
+                      <div class="text-12-medium text-text-strong h-4 px-2 flex flex-col items-center justify-center rounded-full bg-surface-base">
+                        {session.info()?.summary?.files ?? 0}
+                      </div>
+                    </Show>
+                    <IconButton
+                      icon="close"
+                      class="mt-0.5 -ml-1 opacity-0 group-data-[selected]/tab:opacity-100
+                             hover:bg-transparent hover:opacity-100 group-hover/tab:opacity-100"
+                      variant="ghost"
+                      onClick={local.layout.review.close}
+                    />
+                  </div>
+                </Tabs.Trigger>
+              </Show>
               <SortableProvider ids={session.layout.tabs.opened ?? []}>
                 <For each={session.layout.tabs.opened ?? []}>
                   {(tab) => <SortableTab tab={tab} onTabClick={handleTabClick} onTabClose={session.layout.closeTab} />}
                 </For>
               </SortableProvider>
               <div class="bg-background-base h-full flex items-center justify-center border-b border-border-weak-base px-3">
-                <IconButton
-                  icon="plus-small"
-                  variant="ghost"
-                  iconSize="large"
-                  onClick={() => setStore("fileSelectOpen", true)}
-                />
+                <Tooltip value="Open file" class="flex items-center">
+                  <IconButton
+                    icon="plus-small"
+                    variant="ghost"
+                    iconSize="large"
+                    onClick={() => setStore("fileSelectOpen", true)}
+                  />
+                </Tooltip>
               </div>
             </Tabs.List>
           </div>
           <Tabs.Content value="chat" class="@container select-text flex flex-col flex-1 min-h-0 overflow-y-hidden">
-            <div class="relative px-6 pt-12 max-w-2xl w-full mx-auto flex flex-col flex-1 min-h-0">
-              <Show
-                when={session.id}
-                fallback={
-                  <div class="flex flex-col pb-45 justify-end items-start gap-4 flex-[1_0_0] self-stretch">
-                    <div class="text-20-medium text-text-weaker">New session</div>
-                    <div class="flex justify-center items-center gap-3">
-                      <Icon name="folder" size="small" />
-                      <div class="text-12-medium text-text-weak">
-                        {getDirectory(sync.data.path.directory)}
-                        <span class="text-text-strong">{getFilename(sync.data.path.directory)}</span>
-                      </div>
-                    </div>
-                    <div class="flex justify-center items-center gap-3">
-                      <Icon name="pencil-line" size="small" />
-                      <div class="text-12-medium text-text-weak">
-                        Last modified&nbsp;
-                        <span class="text-text-strong">
-                          {DateTime.fromMillis(sync.data.project.time.created).toRelative()}
-                        </span>
-                      </div>
+            <Show
+              when={session.id}
+              fallback={
+                <div class="size-full max-w-2xl mx-auto flex flex-col pb-45 px-6 justify-end items-start gap-4 flex-[1_0_0] self-stretch">
+                  <div class="text-20-medium text-text-weaker">New session</div>
+                  <div class="flex justify-center items-center gap-3">
+                    <Icon name="folder" size="small" />
+                    <div class="text-12-medium text-text-weak">
+                      {getDirectory(sync.data.path.directory)}
+                      <span class="text-text-strong">{getFilename(sync.data.path.directory)}</span>
                     </div>
                   </div>
-                }
-              >
-                {(_) => {
-                  return (
-                    <div class="pt-3 flex flex-col flex-1 min-h-0">
-                      <div class="flex-1 min-h-0">
+                  <div class="flex justify-center items-center gap-3">
+                    <Icon name="pencil-line" size="small" />
+                    <div class="text-12-medium text-text-weak">
+                      Last modified&nbsp;
+                      <span class="text-text-strong">
+                        {DateTime.fromMillis(sync.data.project.time.created).toRelative()}
+                      </span>
+                    </div>
+                  </div>
+                </div>
+              }
+            >
+              {(_) => {
+                return (
+                  <div
+                    classList={{
+                      "w-full grid flex-1 _gap-6 min-h-0": true,
+                      "grid-cols-2": local.layout.review.state() === "open",
+                      "max-w-2xl mx-auto": local.layout.review.state() !== "open",
+                    }}
+                  >
+                    <div class="relative px-6 py-2 w-full flex flex-col gap-6 flex-1 min-h-0">
+                      <div class="h-8 flex shrink-0 self-stretch items-center justify-end">
+                        <Show when={local.layout.review.state() === "closed" && session.diffs().length}>
+                          <Button icon="layout-right" onClick={local.layout.review.open}>
+                            Review
+                          </Button>
+                        </Show>
+                      </div>
+                      <div
+                        classList={{
+                          "flex-1 min-h-0": true,
+                          "flex items-start justify-start": local.layout.review.state() === "open",
+                        }}
+                      >
                         <Show when={session.messages.user().length > 1}>
                           <ul
                             role="list"
-                            class="absolute right-full mr-8 hidden w-60 shrink-0 @7xl:flex flex-col items-start gap-1"
+                            classList={{
+                              "mr-8 shrink-0 flex flex-col items-start": true,
+                              "absolute right-full w-60 @7xl:gap-2": local.layout.review.state() !== "open",
+                              "": local.layout.review.state() === "open",
+                            }}
                           >
                             <For each={session.messages.user()}>
                               {(message) => {
@@ -351,11 +397,43 @@ export default function Page() {
                                 const error = createMemo(() => assistantMessages().find((m) => m?.error)?.error)
                                 const working = createMemo(() => !message.summary?.body && !error())
 
+                                const handleClick = () => session.messages.setActive(message.id)
+
                                 return (
-                                  <li class="group/li flex items-center self-stretch">
+                                  <li
+                                    classList={{
+                                      "group/li flex items-center self-stretch justify-end": true,
+                                      "@7xl:justify-start": local.layout.review.state() !== "open",
+                                    }}
+                                  >
+                                    <Tooltip
+                                      placement="right"
+                                      gutter={8}
+                                      value={
+                                        <div class="flex items-center gap-2">
+                                          <DiffChanges changes={message.summary?.diffs ?? []} variant="bars" />
+                                          {message.summary?.title}
+                                        </div>
+                                      }
+                                    >
+                                      <button
+                                        data-active={session.messages.active()?.id === message.id}
+                                        onClick={handleClick}
+                                        classList={{
+                                          "group/tick flex items-center justify-start h-2 w-8 -mr-3": true,
+                                          "data-[active=true]:[&>div]:bg-icon-strong-base data-[active=true]:[&>div]:w-full": true,
+                                          "@7xl:hidden": local.layout.review.state() !== "open",
+                                        }}
+                                      >
+                                        <div class="h-px w-5 bg-icon-base group-hover/tick:w-full group-hover/tick:bg-icon-strong-base" />
+                                      </button>
+                                    </Tooltip>
                                     <button
-                                      class="flex items-center self-stretch w-full gap-x-2 py-1 cursor-default"
-                                      onClick={() => session.messages.setActive(message.id)}
+                                      classList={{
+                                        "hidden items-center self-stretch w-full gap-x-2 cursor-default": true,
+                                        "@7xl:flex": local.layout.review.state() !== "open",
+                                      }}
+                                      onClick={handleClick}
                                     >
                                       <Switch>
                                         <Match when={working()}>
@@ -383,7 +461,7 @@ export default function Page() {
                             </For>
                           </ul>
                         </Show>
-                        <div ref={messageScrollElement} class="grow min-w-0 h-full overflow-y-auto no-scrollbar">
+                        <div ref={messageScrollElement} class="grow w-full min-w-0 h-full overflow-y-auto no-scrollbar">
                           <For each={session.messages.user()}>
                             {(message) => {
                               const isActive = createMemo(() => session.messages.active()?.id === message.id)
@@ -423,7 +501,7 @@ export default function Page() {
                                     class="flex flex-col items-start self-stretch gap-8 pb-50"
                                   >
                                     {/* Title */}
-                                    <div class="py-2 flex flex-col items-start gap-2 self-stretch sticky top-0 bg-background-stronger z-10">
+                                    <div class="flex flex-col items-start gap-2 self-stretch sticky top-0 bg-background-stronger z-10 pb-1">
                                       <div class="w-full text-14-medium text-text-strong">
                                         <Show
                                           when={titled()}
@@ -441,7 +519,7 @@ export default function Page() {
                                         </Show>
                                       </div>
                                     </div>
-                                    <div class="-mt-8">
+                                    <div class="-mt-9">
                                       <Message message={message} parts={parts()} />
                                     </div>
                                     {/* Summary */}
@@ -496,7 +574,7 @@ export default function Page() {
                                                     </div>
                                                   </Accordion.Trigger>
                                                 </Accordion.Header>
-                                                <Accordion.Content class="max-h-[300px] overflow-y-auto no-scrollbar">
+                                                <Accordion.Content class="max-h-[360px] overflow-y-auto no-scrollbar">
                                                   <Diff
                                                     before={{
                                                       name: diff.file!,
@@ -569,12 +647,135 @@ export default function Page() {
                         </div>
                       </div>
                     </div>
-                  )
-                }}
-              </Show>
-            </div>
+                    <Show when={local.layout.review.state() === "open"}>
+                      <div
+                        classList={{
+                          "relative px-6 py-2 w-full flex flex-col gap-6 flex-1 min-h-0 border-l border-border-weak-base": true,
+                        }}
+                      >
+                        <div class="h-8 w-full flex items-center justify-between shrink-0 self-stretch">
+                          <div class="flex items-center gap-x-3">
+                            <Tooltip value="Close">
+                              <IconButton icon="align-right" variant="ghost" onClick={local.layout.review.close} />
+                            </Tooltip>
+                            <Tooltip value="Open in tab">
+                              <IconButton
+                                icon="expand"
+                                variant="ghost"
+                                onClick={() => {
+                                  local.layout.review.tab()
+                                  session.layout.setActiveTab("review")
+                                }}
+                              />
+                            </Tooltip>
+                          </div>
+                        </div>
+                        <div class="text-14-medium text-text-strong">All changes</div>
+                        <div class="h-full pb-40 overflow-y-auto no-scrollbar">
+                          <Accordion class="w-full" multiple>
+                            <For each={session.diffs()}>
+                              {(diff) => (
+                                <Accordion.Item value={diff.file} defaultOpen>
+                                  <Accordion.Header>
+                                    <Accordion.Trigger>
+                                      <div class="flex items-center justify-between w-full gap-5">
+                                        <div class="grow flex items-center gap-5 min-w-0">
+                                          <FileIcon node={{ path: diff.file, type: "file" }} class="shrink-0 size-4" />
+                                          <div class="flex grow min-w-0">
+                                            <Show when={diff.file.includes("/")}>
+                                              <span class="text-text-base truncate-start">
+                                                {getDirectory(diff.file)}&lrm;
+                                              </span>
+                                            </Show>
+                                            <span class="text-text-strong shrink-0">{getFilename(diff.file)}</span>
+                                          </div>
+                                        </div>
+                                        <div class="shrink-0 flex gap-4 items-center justify-end">
+                                          <DiffChanges changes={diff} />
+                                          <Icon name="chevron-grabber-vertical" size="small" />
+                                        </div>
+                                      </div>
+                                    </Accordion.Trigger>
+                                  </Accordion.Header>
+                                  <Accordion.Content>
+                                    <Diff
+                                      before={{
+                                        name: diff.file!,
+                                        contents: diff.before!,
+                                      }}
+                                      after={{
+                                        name: diff.file!,
+                                        contents: diff.after!,
+                                      }}
+                                    />
+                                  </Accordion.Content>
+                                </Accordion.Item>
+                              )}
+                            </For>
+                          </Accordion>
+                        </div>
+                      </div>
+                    </Show>
+                  </div>
+                )
+              }}
+            </Show>
           </Tabs.Content>
-          {/* <Tabs.Content value="review" class="select-text"></Tabs.Content> */}
+          <Show when={local.layout.review.state() === "tab" && session.diffs().length}>
+            <Tabs.Content value="review" class="select-text">
+              <div
+                classList={{
+                  "relative px-6 py-2 w-full flex flex-col gap-6 flex-1 min-h-0": true,
+                }}
+              >
+                <div class="h-8 w-full flex items-center justify-between shrink-0 self-stretch">
+                  <div class="flex items-center gap-x-3"></div>
+                </div>
+                <div class="text-14-medium text-text-strong">All changes</div>
+                <div class="h-full pb-40 overflow-y-auto no-scrollbar">
+                  <Accordion class="w-full" multiple>
+                    <For each={session.diffs()}>
+                      {(diff) => (
+                        <Accordion.Item value={diff.file} defaultOpen>
+                          <Accordion.Header>
+                            <Accordion.Trigger>
+                              <div class="flex items-center justify-between w-full gap-5">
+                                <div class="grow flex items-center gap-5 min-w-0">
+                                  <FileIcon node={{ path: diff.file, type: "file" }} class="shrink-0 size-4" />
+                                  <div class="flex grow min-w-0">
+                                    <Show when={diff.file.includes("/")}>
+                                      <span class="text-text-base truncate-start">{getDirectory(diff.file)}&lrm;</span>
+                                    </Show>
+                                    <span class="text-text-strong shrink-0">{getFilename(diff.file)}</span>
+                                  </div>
+                                </div>
+                                <div class="shrink-0 flex gap-4 items-center justify-end">
+                                  <DiffChanges changes={diff} />
+                                  <Icon name="chevron-grabber-vertical" size="small" />
+                                </div>
+                              </div>
+                            </Accordion.Trigger>
+                          </Accordion.Header>
+                          <Accordion.Content>
+                            <Diff
+                              before={{
+                                name: diff.file!,
+                                contents: diff.before!,
+                              }}
+                              after={{
+                                name: diff.file!,
+                                contents: diff.after!,
+                              }}
+                            />
+                          </Accordion.Content>
+                        </Accordion.Item>
+                      )}
+                    </For>
+                  </Accordion>
+                </div>
+              </div>
+            </Tabs.Content>
+          </Show>
           <For each={session.layout.tabs.opened}>
             {(tab) => {
               const [file] = createResource(
