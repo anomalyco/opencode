@@ -350,8 +350,10 @@ export function Autocomplete(props: {
     hide()
   }
 
+  let suspendId: string | undefined
+
   function show(mode: "@" | "/") {
-    command.keybinds(false)
+    suspendId = command.keybinds(false, "autocomplete")
     setStore({
       visible: mode,
       index: props.input().cursorOffset,
@@ -369,7 +371,10 @@ export function Autocomplete(props: {
       const cursor = props.input().logicalCursor
       props.input().deleteRange(0, 0, cursor.row, cursor.col)
     }
-    command.keybinds(true)
+    if (suspendId) {
+      command.keybinds(true, suspendId)
+      suspendId = undefined
+    }
     setStore("visible", false)
   }
 
@@ -385,7 +390,9 @@ export function Autocomplete(props: {
             return
           }
           // Check if a space was typed after the trigger character
-          const currentText = props.input().getTextRange(store.index + 1, props.input().cursorOffset + 1)
+          const currentText = props
+            .input()
+            .getTextRange(store.index + 1, props.input().cursorOffset + 1)
           if (currentText.includes(" ")) {
             hide()
           }

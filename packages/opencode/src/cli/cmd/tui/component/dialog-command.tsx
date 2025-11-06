@@ -22,13 +22,13 @@ export type CommandOption = DialogSelectOption & {
 
 function init() {
   const [registrations, setRegistrations] = createSignal<Accessor<CommandOption[]>[]>([])
-  const [suspendCount, setSuspendCount] = createSignal(0)
+  const [suspendSources, setSuspendSources] = createSignal<Set<string>>(new Set())
   const dialog = useDialog()
   const keybind = useKeybind()
   const options = createMemo(() => {
     return registrations().flatMap((x) => x())
   })
-  const suspended = () => suspendCount() > 0
+  const suspended = () => suspendSources().size > 0
 
   useKeyboard((evt) => {
     if (suspended()) return
@@ -41,6 +41,7 @@ function init() {
     }
   })
 
+  let suspendId = 0
   const result = {
     trigger(name: string, source?: "prompt") {
       for (const option of options()) {
@@ -50,8 +51,18 @@ function init() {
         }
       }
     },
-    keybinds(enabled: boolean) {
-      setSuspendCount((count) => count + (enabled ? -1 : 1))
+    keybinds(enabled: boolean, source?: string) {
+      const id = source ?? `suspend-${suspendId++}`
+      setSuspendSources((sources) => {
+        const newSources = new Set(sources)
+        if (enabled) {
+          newSources.delete(id)
+        } else {
+          newSources.add(id)
+        }
+        return newSources
+      })
+      return id
     },
     suspended,
     show() {

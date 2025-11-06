@@ -37,7 +37,7 @@ export const { use: useLocal, provider: LocalProvider } = createSimpleContext({
     const sync = useSync()
 
     function isModelValid(model: ModelKey) {
-      const provider = (Array.isArray(sync.data.provider) ? sync.data.provider : []).find((x) => x.id === model.providerID)
+      const provider = sync.data.provider.find((x) => x.id === model.providerID)
       return !!provider?.models[model.modelID]
     }
 
@@ -52,7 +52,6 @@ export const { use: useLocal, provider: LocalProvider } = createSimpleContext({
     // Automatically update model when agent changes
     createEffect(() => {
       const value = agent.current()
-      if (!value) return
       if (value.model) {
         if (isModelValid(value.model))
           model.set({
@@ -78,7 +77,7 @@ export const { use: useLocal, provider: LocalProvider } = createSimpleContext({
       return {
         list,
         current() {
-          return list().find((x) => x.name === store.current)
+          return list().find((x) => x.name === store.current)!
         },
         set(name: string | undefined) {
           setStore("current", name ?? list()[0]?.name ?? "")
@@ -114,7 +113,7 @@ export const { use: useLocal, provider: LocalProvider } = createSimpleContext({
       })
 
       const list = createMemo(() =>
-        (Array.isArray(sync.data.provider) ? sync.data.provider : []).flatMap((p) => Object.values(p.models).map((m) => ({ ...m, provider: p }) as LocalModel)),
+        sync.data.provider.flatMap((p) => Object.values(p.models).map((m) => ({ ...m, provider: p }) as LocalModel)),
       )
       const find = (key: ModelKey) => list().find((m) => m.id === key?.modelID && m.provider.id === key.providerID)
 
@@ -134,14 +133,8 @@ export const { use: useLocal, provider: LocalProvider } = createSimpleContext({
             return item
           }
         }
-        const provider = (Array.isArray(sync.data.provider) ? sync.data.provider : [])[0]
-        if (!provider || !provider.models) {
-          return { providerID: "", modelID: "" }
-        }
+        const provider = sync.data.provider[0]
         const model = Object.values(provider.models)[0]
-        if (!model) {
-          return { providerID: "", modelID: "" }
-        }
         return {
           providerID: provider.id,
           modelID: model.id,
@@ -150,12 +143,11 @@ export const { use: useLocal, provider: LocalProvider } = createSimpleContext({
 
       const currentModel = createMemo(() => {
         const a = agent.current()
-        if (!a) return undefined
         const key = getFirstValidModel(
           () => store.model[a.name],
           () => a.model,
           fallbackModel,
-        )
+        )!
         return find(key)
       })
 
@@ -189,7 +181,7 @@ export const { use: useLocal, provider: LocalProvider } = createSimpleContext({
         cycle,
         set(model: ModelKey | undefined, options?: { recent?: boolean }) {
           batch(() => {
-            setStore("model", agent.current()?.name ?? "", model ?? fallbackModel())
+            setStore("model", agent.current().name, model ?? fallbackModel())
             if (options?.recent && model) {
               const uniq = uniqueBy([model, ...store.recent], (x) => x.providerID + x.modelID)
               if (uniq.length > 5) uniq.pop()
@@ -206,7 +198,7 @@ export const { use: useLocal, provider: LocalProvider } = createSimpleContext({
         // opened: string[]
         // active?: string
       }>({
-        node: Object.fromEntries((Array.isArray(sync.data.node) ? sync.data.node : []).map((x) => [x.path, x])),
+        node: Object.fromEntries(sync.data.node.map((x) => [x.path, x])),
         // opened: [],
       })
 
@@ -215,7 +207,7 @@ export const { use: useLocal, provider: LocalProvider } = createSimpleContext({
       //   return store.node[store.active]
       // })
       // const opened = createMemo(() => store.opened.map((x) => store.node[x]))
-      const changeset = createMemo(() => new Set((Array.isArray(sync.data.changes) ? sync.data.changes : []).map((f) => f.path)))
+      const changeset = createMemo(() => new Set(sync.data.changes.map((f) => f.path)))
       const changes = createMemo(() => Array.from(changeset()).sort((a, b) => a.localeCompare(b)))
 
       // createEffect((prev: FileStatus[]) => {

@@ -366,31 +366,6 @@ export namespace Session {
     return result
   })
 
-  // Lazy load: load only recent messages initially for faster session switching
-  export const messagesRecent = fn(
-    z.object({
-      sessionID: Identifier.schema("session"),
-      count: z.number().default(50),
-    }),
-    async (input) => {
-      const paths = await Storage.list(["message", input.sessionID])
-      // Take the most recent N messages
-      const recentPaths = paths.slice(-input.count)
-
-      // Load messages in parallel using batch read
-      const infos = await Storage.readMany<MessageV2.Info>(recentPaths)
-      const result = await Promise.all(
-        infos.map(async (info) => {
-          const parts = await getParts(info.id)
-          return { info, parts }
-        }),
-      )
-      result.sort((a, b) => (a.info.id > b.info.id ? 1 : -1))
-
-      return result
-    },
-  )
-
   export async function* list() {
     const project = Instance.project
     for (const item of await Storage.list(["session", project.id])) {

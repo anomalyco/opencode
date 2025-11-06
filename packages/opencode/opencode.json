@@ -18,6 +18,7 @@
     "cc_edit",
     "read",
     "todowrite",
-    "switch_mode"
+    "switch_mode",
+    "add_directory"
   ]
 }

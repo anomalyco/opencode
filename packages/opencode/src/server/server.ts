@@ -862,11 +862,11 @@ export namespace Server {
       .get(
         "/session/:id/message/recent",
         describeRoute({
-          description: "Get recent messages for a session (optimized for faster loading)",
+          description: "Get all messages for a session",
           operationId: "session.messages.recent",
           responses: {
             200: {
-              description: "List of recent messages",
+              description: "List of all messages",
               content: {
                 "application/json": {
                   schema: resolver(MessageV2.WithParts.array()),
@@ -882,19 +882,9 @@ export namespace Server {
             id: z.string().meta({ description: "Session ID" }),
           }),
         ),
-        validator(
-          "query",
-          z.object({
-            count: z.coerce
-              .number()
-              .default(50)
-              .meta({ description: "Number of recent messages to return" }),
-          }),
-        ),
         async (c) => {
           const { id } = c.req.valid("param")
-          const { count } = c.req.valid("query")
-          const messages = await Session.messagesRecent({ sessionID: id, count })
+          const messages = await Session.messages(id)
           return c.json(messages)
         },
       )
