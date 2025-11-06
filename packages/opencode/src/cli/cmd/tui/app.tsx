@@ -16,7 +16,7 @@ import { Installation } from "@/installation"
 import { Global } from "@/global"
 import { DialogProvider, useDialog } from "@tui/ui/dialog"
 import { SDKProvider, useSDK } from "@tui/context/sdk"
-import { SyncProvider } from "@tui/context/sync"
+import { SyncProvider, useSync } from "@tui/context/sync"
 import { LocalProvider, useLocal } from "@tui/context/local"
 import { DialogModel } from "@tui/component/dialog-model"
 import { DialogStatus } from "@tui/component/dialog-status"
@@ -189,6 +189,7 @@ function App() {
   const renderer = useRenderer()
   renderer.disableStdoutInterception()
   const dialog = useDialog()
+  const sync = useSync()
   const local = useLocal()
   const kv = useKV()
   const command = useCommandDialog()
