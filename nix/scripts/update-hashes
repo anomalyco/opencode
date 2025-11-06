@@ -6,7 +6,10 @@ DUMMY="sha256-AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA="
 MODELS_URL=${MODELS_URL:-https://models.dev/api.json}
 DEFAULT_HASH_FILE=${MODULES_HASH_FILE:-nix/hashes.json}
 HASH_FILE=${HASH_FILE:-$DEFAULT_HASH_FILE}
+OPTIONAL_FILE=${OPTIONAL_PACKAGES_FILE:-nix/optional-packages.txt}
 export DUMMY
+export NIX_KEEP_OUTPUTS=1
+export NIX_KEEP_DERIVATIONS=1
 
 if [ -z "${SYSTEMS:-}" ]; then
   SYSTEMS="$(nix eval --json .#packages | jq -r 'keys[]')"
@@ -18,11 +21,11 @@ if [ -z "$SYSTEMS" ]; then
 fi
 
 if [ ! -f "$HASH_FILE" ]; then
-  # Keep structure stable so optional metadata survives repeated runs.
   cat <<'EOF' >"$HASH_FILE"
 {
   "models": {},
-  "nodeModules": {}
+  "nodeModules": {},
+  "optional": {}
 }
 EOF
 fi
@@ -57,6 +60,39 @@ cleanup() {
 
 trap cleanup EXIT
 
+update_optional() {
+  if [ ! -f "$OPTIONAL_FILE" ]; then
+    echo "optional package list missing at $OPTIONAL_FILE" >&2
+    return 1
+  fi
+  local meta tmp name ver sha
+  if command -v bun >/dev/null 2>&1; then
+    meta="$(bun --bun nix/scripts/optional-metadata.ts "$OPTIONAL_FILE")" || return 1
+  fi
+  if [ -z "${meta:-}" ] && command -v nix >/dev/null 2>&1; then
+    meta="$(nix shell --quiet nixpkgs#bun -c bun --bun nix/scripts/optional-metadata.ts "$OPTIONAL_FILE")" || return 1
+  fi
+  if [ -z "${meta:-}" ]; then
+    echo "bun unavailable; skipping optional metadata refresh" >&2
+    return 0
+  fi
+  while IFS=$'\t' read -r name ver sha; do
+    [ -n "$name" ] || continue
+    tmp=$(mktemp)
+    jq \
+      --arg name "$name" \
+      --arg ver "$ver" \
+      --arg sha "$sha" \
+      '.optional[$name] = { version: $ver, sha512: $sha }' \
+      "$HASH_FILE" >"$tmp"
+    mv "$tmp" "$HASH_FILE"
+  done <<EOF
+$meta
+EOF
+}
+
+update_optional
+
 write_node_modules_hash() {
   local value="$1"
   local temp
@@ -75,7 +111,7 @@ for SYSTEM in $SYSTEMS; do
   BUILD_LOG=$(mktemp)
 
   echo "Building ${TARGET} to discover correct node_modules outputHash..."
-  if nix build ".#${TARGET}" --system "$SYSTEM" --no-link --json >"$JSON_OUTPUT" 2>"$BUILD_LOG"; then
+  if nix build ".#${TARGET}" --system "$SYSTEM" --no-link --json --rebuild >"$JSON_OUTPUT" 2>"$BUILD_LOG"; then
     echo "Build succeeded while dummy hash was set; aborting"
     exit 1
   fi
@@ -90,13 +126,20 @@ for SYSTEM in $SYSTEMS; do
   ' "$JSON_OUTPUT")"
 
   if [ -z "$CORRECT_HASH" ]; then
-    CORRECT_HASH="$(grep -o 'sha256-[A-Za-z0-9+/=]\+' "$BUILD_LOG" | grep -v "$DUMMY" | head -n1 || true)"
-  fi
-
-  if [ -z "$CORRECT_HASH" ]; then
     echo "Failed to extract node_modules hash for ${SYSTEM}"
     tail -100 "$BUILD_LOG" || true
-    exit 1
+    STORE_PATH="$(jq -r '
+      map(select(.outputs.node_modules? != null))
+      | map(select(.outputs.node_modules != env.DUMMY))
+      | map(select(.outputs.node_modules != ""))
+      | .[0].outputs.node_modules // ""
+    ' "$JSON_OUTPUT")"
+    if [ -n "$STORE_PATH" ] && [ -e "$STORE_PATH" ]; then
+      CORRECT_HASH="$(nix hash-path --sri "$STORE_PATH" || true)"
+    fi
+    if [ -z "$CORRECT_HASH" ]; then
+      exit 1
+    fi
   fi
 
   write_node_modules_hash "$CORRECT_HASH"

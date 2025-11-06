@@ -39,19 +39,18 @@ const lines: string[] = []
 for (const name of names) {
   const safe = mask(name)
   const verMatch = doc.match(new RegExp(`"${safe}": "([^"]+)"`))
-  const stored = optional[name] ?? {}
-  const ver = stored.version ?? verMatch?.[1]
+  const store = optional[name] ?? {}
+  const ver = verMatch?.[1] ?? store.version
   if (!ver) {
     console.error(`missing-version\t${name}`)
     process.exit(1)
   }
-  if (stored.version && verMatch && stored.version !== verMatch[1]) {
-    console.error(`version-mismatch\t${name}\t${stored.version}\t${verMatch[1]}`)
-    process.exit(1)
+  if (store.version && verMatch && store.version !== verMatch[1]) {
+    console.warn(`version-mismatch\t${name}\t${store.version}\t${verMatch[1]}`)
   }
   const verSafe = mask(ver)
   const shaHit = doc.match(new RegExp(`"${safe}@${verSafe}"[^\\n]*"(sha512-[^"]+)"`))
-  const sha = stored.sha512 ?? stored.sha ?? shaHit?.[1]
+  const sha = shaHit?.[1] ?? store.sha512 ?? store.sha
   if (!sha) {
     console.error(`missing-sha\t${name}\t${ver}`)
     process.exit(1)

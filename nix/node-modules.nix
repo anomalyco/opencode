@@ -1,4 +1,4 @@
-{ hash, lib, stdenvNoCC, bun, cacert, curl }:
+{ optionalPackagesFile, hash, lib, stdenvNoCC, bun, cacert, curl }:
 args:
 stdenvNoCC.mkDerivation {
   pname = "opencode-node_modules";
@@ -25,10 +25,7 @@ stdenvNoCC.mkDerivation {
       --ignore-scripts \
       --no-progress
 
-    cat > optional-packages.txt <<'EOF'
-@parcel/watcher-linux-arm64-glibc
-@opentui/core-linux-arm64
-EOF
+    cp ${optionalPackagesFile} optional-packages.txt
 
     bun --bun ${args.optionalMetadataScript} optional-packages.txt > optional-metadata.txt
 

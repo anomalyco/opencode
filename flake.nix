@@ -56,7 +56,10 @@
         system:
         let
           pkgs = pkgsFor system;
-          mkNodeModules = pkgs.callPackage ./nix/node-modules.nix { hash = hashes.nodeModules.${system}; };
+          mkNodeModules = pkgs.callPackage ./nix/node-modules.nix {
+            hash = hashes.nodeModules.${system};
+            optionalPackagesFile = ./nix/optional-packages.txt;
+          };
           mkPackage = pkgs.callPackage ./nix/opencode.nix { };
         in
         {
