@@ -522,8 +522,8 @@ export namespace SessionPrompt {
     modelID: string
     providerID: string
     tools?: Record<string, boolean>
-    processor: Processor
     acpTools?: ACPTools
+    processor: Processor
   }) {
     const tools: Record<string, AITool> = {}
     const enabledTools = pipe(
