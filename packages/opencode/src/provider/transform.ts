@@ -3,21 +3,78 @@ import { unique } from "remeda"
 import type { JSONSchema } from "zod/v4/core"
 
 export namespace ProviderTransform {
-  function normalizeToolCallIds(msgs: ModelMessage[]): ModelMessage[] {
-    return msgs.map((msg) => {
-      if ((msg.role === "assistant" || msg.role === "tool") && Array.isArray(msg.content)) {
-        msg.content = msg.content.map((part) => {
-          if ((part.type === "tool-call" || part.type === "tool-result") && "toolCallId" in part) {
-            return {
-              ...part,
-              toolCallId: part.toolCallId.replace(/[^a-zA-Z0-9_-]/g, "_"),
+  function normalizeMessages(
+    msgs: ModelMessage[],
+    providerID: string,
+    modelID: string,
+  ): ModelMessage[] {
+    if (modelID.includes("claude")) {
+      msgs = msgs.map((msg) => {
+        if ((msg.role === "assistant" || msg.role === "tool") && Array.isArray(msg.content)) {
+          msg.content = msg.content.map((part) => {
+            if (
+              (part.type === "tool-call" || part.type === "tool-result") &&
+              "toolCallId" in part
+            ) {
+              return {
+                ...part,
+                toolCallId: part.toolCallId.replace(/[^a-zA-Z0-9_-]/g, "_"),
+              }
             }
-          }
-          return part
-        })
+            return part
+          })
+        }
+        return msg
+      })
+    }
+    if (providerID === "mistral" || modelID.toLowerCase().includes("mistral")) {
+      const result: ModelMessage[] = []
+      for (let i = 0; i < msgs.length; i++) {
+        const msg = msgs[i]
+        const prevMsg = msgs[i - 1]
+        const nextMsg = msgs[i + 1]
+
+        // Normalize tool call IDs
+        if ((msg.role === "assistant" || msg.role === "tool") && Array.isArray(msg.content)) {
+          msg.content = msg.content.map((part) => {
+            if (
+              (part.type === "tool-call" || part.type === "tool-result") &&
+              "toolCallId" in part
+            ) {
+              // Mistral requires alphanumeric tool call IDs with exactly 9 characters
+              const normalizedId = part.toolCallId
+                .replace(/[^a-zA-Z0-9]/g, "") // Remove non-alphanumeric characters
+                .substring(0, 9) // Take first 9 characters
+                .padEnd(9, "0") // Pad with zeros if less than 9 characters
+
+              return {
+                ...part,
+                toolCallId: normalizedId,
+              }
+            }
+            return part
+          })
+        }
+
+        result.push(msg)
+
+        // Fix message sequence: tool messages cannot be followed by user messages
+        if (msg.role === "tool" && nextMsg?.role === "user") {
+          result.push({
+            role: "assistant",
+            content: [
+              {
+                type: "text",
+                text: "Done.",
+              },
+            ],
+          })
+        }
       }
-      return msg
-    })
+      return result
+    }
+
+    return msgs
   }
 
   function applyCaching(msgs: ModelMessage[], providerID: string): ModelMessage[] {
@@ -63,61 +120,10 @@ export namespace ProviderTransform {
     return msgs
   }
 
-  function normalizeMistralToolCallIds(msgs: ModelMessage[]): ModelMessage[] {
-    return msgs.map((msg) => {
-      if ((msg.role === "assistant" || msg.role === "tool") && Array.isArray(msg.content)) {
-        msg.content = msg.content.map((part) => {
-          if ((part.type === "tool-call" || part.type === "tool-result") && "toolCallId" in part) {
-            // Mistral requires alphanumeric tool call IDs with exactly 9 characters
-            const normalizedId = part.toolCallId
-              .replace(/[^a-zA-Z0-9]/g, "") // Remove non-alphanumeric characters
-              .substring(0, 9) // Take first 9 characters
-              .padEnd(9, "0") // Pad with zeros if less than 9 characters
-
-            return {
-              ...part,
-              toolCallId: normalizedId,
-            }
-          }
-          return part
-        })
-      }
-      return msg
-    })
-  }
-
-  function fixMistralMessageSequence(msgs: ModelMessage[]): ModelMessage[] {
-    const result: ModelMessage[] = []
-
-    for (let i = 0; i < msgs.length; i++) {
-      const currentMsg = msgs[i]
-      const nextMsg = msgs[i + 1]
-
-      result.push(currentMsg)
-
-      // Check if tool message is followed by user message (invalid for Mistral)
-      if (currentMsg.role === "tool" && nextMsg?.role === "user") {
-        // Insert an assistant message to process the tool result
-        result.push({
-          role: "assistant",
-          content: "I'll continue with your request based on the tool results.",
-        })
-      }
-    }
-
-    return result
-  }
-
   export function message(msgs: ModelMessage[], providerID: string, modelID: string) {
-    if (modelID.includes("claude")) {
-      msgs = normalizeToolCallIds(msgs)
-    }
+    msgs = normalizeMessages(msgs, providerID, modelID)
     if (providerID === "anthropic" || modelID.includes("anthropic") || modelID.includes("claude")) {
       msgs = applyCaching(msgs, providerID)
-    }
-    if (providerID === "mistral" || providerID.toLowerCase().includes("mistral")) {
-      msgs = normalizeMistralToolCallIds(msgs)
-      msgs = fixMistralMessageSequence(msgs)
     }
 
     return msgs
