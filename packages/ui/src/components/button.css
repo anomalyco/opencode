@@ -62,15 +62,13 @@
     color: var(--text-strong);
 
     &:hover:not(:disabled) {
-      background-color: var(--surface-hover);
+      background-color: var(--button-ghost-hover);
     }
     &:active:not(:disabled) {
-      border-color: var(--border-active);
-      background-color: var(--surface-active);
+      background-color: var(--button-ghost-hover-2);
     }
     &:focus:not(:disabled) {
-      border-color: var(--border-focus);
-      background-color: var(--surface-focus);
+      background-color: var(--button-ghost-hover);
     }
   }
 

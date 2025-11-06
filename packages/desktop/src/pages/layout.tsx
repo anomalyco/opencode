@@ -3,7 +3,6 @@ import { createMemo, For, ParentProps, Show } from "solid-js"
 import { getFilename } from "@/utils"
 import { DateTime } from "luxon"
 import { useSync } from "@/context/sync"
-import { VList } from "virtua/solid"
 import { A, useParams } from "@solidjs/router"
 
 export default function Layout(props: ParentProps) {
@@ -19,11 +18,9 @@ export default function Layout(props: ParentProps) {
             <span class="text-14-regular overflow-hidden text-ellipsis">{getFilename(sync.data.path.directory)}</span>
           </div>
           <div class="flex flex-col items-start gap-4 self-stretch flex-1 py-4 px-3 overflow-hidden">
-            <A href="/session" class="w-full">
-              <Button class="w-full" size="large" icon="edit-small-2">
-                New Session
-              </Button>
-            </A>
+            <Button as={A} href="/session" class="w-full" size="large" icon="edit-small-2">
+              New Session
+            </Button>
             <div class="w-full h-full overflow-y-auto no-scrollbar flex flex-col flex-1">
               <nav class="w-full">
                 <For each={sync.data.session}>
