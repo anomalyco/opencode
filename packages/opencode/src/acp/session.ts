@@ -10,6 +10,7 @@ export class ACPSessionManager {
     cwd: string,
     mcpServers: McpServer[],
     model?: ACPSessionState["model"],
+    hasACPTools?: boolean,
   ): Promise<ACPSessionState> {
     const session = await Session.create({ title: `ACP Session ${crypto.randomUUID()}` })
     const sessionId = session.id
@@ -22,6 +23,7 @@ export class ACPSessionManager {
       mcpServers,
       createdAt: new Date(),
       model: resolvedModel,
+      hasACPTools,
     }
 
     this.sessions.set(sessionId, state)

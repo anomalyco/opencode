@@ -5,6 +5,7 @@ import {
   type AuthenticateRequest,
   type AuthMethod,
   type CancelNotification,
+  type ClientCapabilities,
   type InitializeRequest,
   type InitializeResponse,
   type LoadSessionRequest,
@@ -12,11 +13,15 @@ import {
   type PermissionOption,
   type PlanEntry,
   type PromptRequest,
+  type ReadTextFileRequest,
+  type ReadTextFileResponse,
   type SetSessionModelRequest,
   type SetSessionModeRequest,
   type SetSessionModeResponse,
   type ToolCallContent,
   type ToolKind,
+  type WriteTextFileRequest,
+  type WriteTextFileResponse,
 } from "@agentclientprotocol/sdk"
 import { Log } from "../util/log"
 import { ACPSessionManager } from "./session"
@@ -37,6 +42,8 @@ import { MCP } from "@/mcp"
 import { Todo } from "@/session/todo"
 import { z } from "zod"
 import { LoadAPIKeyError } from "ai"
+import { createACPTools } from "./tools"
+import { ToolRegistry } from "../tool/registry"
 
 export namespace ACP {
   const log = Log.create({ service: "acp-agent" })
@@ -45,6 +52,7 @@ export namespace ACP {
     private sessionManager = new ACPSessionManager()
     private connection: AgentSideConnection
     private config: ACPConfig
+    private clientCapabilities?: ClientCapabilities
 
     constructor(connection: AgentSideConnection, config: ACPConfig = {}) {
       this.connection = connection
@@ -315,6 +323,7 @@ export namespace ACP {
 
     async initialize(params: InitializeRequest): Promise<InitializeResponse> {
       log.info("initialize", { protocolVersion: params.protocolVersion })
+      this.clientCapabilities = params.clientCapabilities
 
       const authMethod: AuthMethod = {
         description: "Run `opencode auth login` in the terminal",
@@ -361,9 +370,18 @@ export namespace ACP {
     async newSession(params: NewSessionRequest) {
       try {
         const model = await defaultModel(this.config)
-        const session = await this.sessionManager.create(params.cwd, params.mcpServers, model)
+        const hasACPTools = !!this.clientCapabilities?.fs?.writeTextFile
+        const session = await this.sessionManager.create(
+          params.cwd,
+          params.mcpServers,
+          model,
+          hasACPTools,
+        )
 
-        log.info("creating_session", { mcpServers: params.mcpServers.length })
+        log.info("creating_session", {
+          mcpServers: params.mcpServers.length,
+          hasACPTools,
+        })
         const load = await this.loadSession({
           cwd: params.cwd,
           mcpServers: params.mcpServers,
@@ -449,6 +467,14 @@ export namespace ACP {
               return acc
             }, {}),
           }
+        }
+      }
+
+      if (this.clientCapabilities?.fs?.writeTextFile) {
+        log.info("Client has writeTextFile capability, registering ACP tools")
+        const acpTools = createACPTools(this, sessionId)
+        for (const tool of acpTools) {
+          await ToolRegistry.register(tool)
         }
       }
 
@@ -593,6 +619,13 @@ export namespace ACP {
       }
 
       if (!cmd) {
+        const tools = acpSession.hasACPTools
+          ? {
+              edit: false,
+              write: false,
+              read: false,
+            }
+          : undefined
         await SessionPrompt.prompt({
           sessionID,
           model: {
@@ -601,6 +634,7 @@ export namespace ACP {
           },
           parts,
           agent,
+          tools,
         })
         return done
       }
@@ -632,6 +666,16 @@ export namespace ACP {
 
     async cancel(params: CancelNotification) {
       SessionLock.abort(params.sessionId)
+    }
+
+    async readTextFile(params: ReadTextFileRequest): Promise<ReadTextFileResponse> {
+      log.debug("readTextFile", { path: params.path, sessionId: params.sessionId })
+      return await this.connection.readTextFile(params)
+    }
+
+    async writeTextFile(params: WriteTextFileRequest): Promise<WriteTextFileResponse> {
+      log.debug("writeTextFile", { path: params.path, sessionId: params.sessionId })
+      return await this.connection.writeTextFile(params)
     }
   }
 

@@ -29,6 +29,13 @@ The implementation follows a clean separation of concerns:
   - Sets up JSON-RPC over stdio using the official library
   - Manages graceful shutdown on SIGTERM/SIGINT
   - Provides Instance context for the agent
+  
+- **`tools.ts`** - ACP-aware tools for client file operation delegation
+  - Provides `acp_read`, `acp_edit`, and `acp_write` tools
+  - These tools delegate file operations to the ACP client (e.g., Zed)
+  - Registered automatically when client has `writeTextFile` capability
+  - Enables proper edit accumulation and undo/redo in supporting clients
+
 
 - **`types.ts`** - Type definitions for internal use
 
