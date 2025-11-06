@@ -103,6 +103,13 @@ export namespace Session {
         info: Info,
       }),
     ),
+    Diff: Bus.event(
+      "session.diff",
+      z.object({
+        sessionID: z.string(),
+        diff: Snapshot.FileDiff.array(),
+      }),
+    ),
     Error: Bus.event(
       "session.error",
       z.object({

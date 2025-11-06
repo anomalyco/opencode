@@ -1011,6 +1011,7 @@ function TextPart(props: { part: TextPart; message: AssistantMessage }) {
         <code
           filetype="markdown"
           drawUnstyledText={false}
+          streaming={true}
           syntaxStyle={syntax()}
           content={props.part.text.trim()}
           conceal={ctx.conceal()}
@@ -1171,7 +1172,7 @@ ToolRegistry.register<typeof BashTool>({
   name: "bash",
   container: "block",
   render(props) {
-    const output = createMemo(() => Bun.stripANSI(props.metadata.output?.trim() ?? ""))
+    const output = createMemo(() => props.metadata.output?.trim() ?? "")
     const { theme } = useTheme()
     return (
       <>

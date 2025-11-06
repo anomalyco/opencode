@@ -8,6 +8,7 @@ import {
   t,
   dim,
   fg,
+  type KeyBinding,
 } from "@opentui/core"
 import { createEffect, createMemo, Match, Switch, type JSX, onMount, batch } from "solid-js"
 import { useLocal } from "@tui/context/local"
@@ -84,7 +85,7 @@ export function Prompt(props: PromptProps) {
         shift: binding.shift || undefined,
         action: "submit" as const,
       })),
-    ]
+    ] satisfies KeyBinding[]
   })
 
   const fileStyleId = syntax().getStyleId("extmark.file")!

@@ -362,7 +362,7 @@ export default function Page() {
                                           <Spinner class="text-text-base shrink-0 w-[18px] aspect-square" />
                                         </Match>
                                         <Match when={true}>
-                                          <DiffChanges diff={message.summary?.diffs ?? []} variant="bars" />
+                                          <DiffChanges changes={message.summary?.diffs ?? []} variant="bars" />
                                         </Match>
                                       </Switch>
                                       <div
@@ -490,13 +490,13 @@ export default function Page() {
                                                         </div>
                                                       </div>
                                                       <div class="shrink-0 flex gap-4 items-center justify-end">
-                                                        <DiffChanges diff={diff} />
+                                                        <DiffChanges changes={diff} />
                                                         <Icon name="chevron-grabber-vertical" size="small" />
                                                       </div>
                                                     </div>
                                                   </Accordion.Trigger>
                                                 </Accordion.Header>
-                                                <Accordion.Content>
+                                                <Accordion.Content class="max-h-[300px] overflow-y-auto no-scrollbar">
                                                   <Diff
                                                     before={{
                                                       name: diff.file!,

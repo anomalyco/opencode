@@ -9,6 +9,7 @@ export function Sidebar(props: { sessionID: string }) {
   const sync = useSync()
   const { theme } = useTheme()
   const session = createMemo(() => sync.session.get(props.sessionID)!)
+  const diff = createMemo(() => sync.data.session_diff[props.sessionID] ?? [])
   const todo = createMemo(() => sync.data.todo[props.sessionID] ?? [])
   const messages = createMemo(() => sync.data.message[props.sessionID] ?? [])
 
@@ -122,12 +123,12 @@ export function Sidebar(props: { sessionID: string }) {
               </For>
             </box>
           </Show>
-          <Show when={session().summary?.diffs}>
+          <Show when={diff().length > 0}>
             <box>
               <text fg={theme.text}>
                 <b>Modified Files</b>
               </text>
-              <For each={session().summary?.diffs || []}>
+              <For each={diff() || []}>
                 {(item) => {
                   const file = createMemo(() => {
                     const splits = item.file.split(path.sep).filter(Boolean)
