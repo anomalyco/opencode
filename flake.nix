@@ -14,6 +14,8 @@
       systems = [
         "aarch64-linux"
         "x86_64-linux"
+        "aarch64-darwin"
+        "x86_64-darwin"
       ];
       lib = nixpkgs.lib;
       forEachSystem = lib.genAttrs systems;
@@ -22,6 +24,8 @@
       bunTarget = {
         "aarch64-linux" = "bun-linux-arm64";
         "x86_64-linux" = "bun-linux-x64";
+        "aarch64-darwin" = "bun-darwin-arm64";
+        "x86_64-darwin" = "bun-darwin-x64";
       };
       scripts = ./nix/scripts;
       hashes = builtins.fromJSON (builtins.readFile ./nix/hashes.json);
