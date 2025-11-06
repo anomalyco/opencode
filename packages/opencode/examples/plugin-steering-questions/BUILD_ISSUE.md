@@ -44,8 +44,29 @@ bun -e "import('./dist/index.js').then(m => console.log('✅ Works')).catch(e =>
 ```
 
 ## For Production
-If you need a built version for production:
-1. Investigate why jsxDEV import isn't being resolved
-2. Consider bundling solid-js entirely (removes externals)
-3. Or switch to a different build tool that handles JSX better
-4. Current workaround: ship source .tsx files with the package
+
+### ⚠️ VERIFICATION NEEDED
+Loading source `.tsx` files works in **development** (running with `bun dev`). 
+
+**Assumption**: It should also work in **production** because:
+- Bun compiled executables embed the Bun runtime
+- Traditional `.ts` plugins work in production
+- `tsconfig.json` sets `jsxImportSource: "@opentui/solid"`
+- Sidebar UI plugins use the same `.tsx` pattern
+
+**TODO: Test this assumption**
+```bash
+# Build production binary
+bun run build
+
+# Run with steering plugin
+./dist/codesurf-ai-darwin-arm64/bin/codesurf
+# Then test if steering questions render
+```
+
+### If Production Fails
+If `.tsx` loading doesn't work in compiled executables:
+1. Pre-compile plugins during OpenCode build process
+2. Bundle plugins into the main executable
+3. Fix the jsxDEV import issue in plugin builds
+4. Ship compiled `.js` versions alongside source
