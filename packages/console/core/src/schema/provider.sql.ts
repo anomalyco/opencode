@@ -10,5 +10,8 @@ export const ProviderTable = mysqlTable(
     provider: varchar("provider", { length: 64 }).notNull(),
     credentials: text("credentials").notNull(),
   },
-  (table) => [...workspaceIndexes(table), uniqueIndex("workspace_provider").on(table.workspaceID, table.provider)],
+  (table) => [
+    ...workspaceIndexes(table),
+    uniqueIndex("workspace_provider").on(table.workspaceID, table.provider),
+  ],
 )

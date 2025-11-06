@@ -20,7 +20,7 @@ export namespace Patch {
     workdir?: string
   }
 
-  export type Hunk = 
+  export type Hunk =
     | { type: "add"; path: string; contents: string }
     | { type: "delete"; path: string }
     | { type: "update"; path: string; move_path?: string; chunks: UpdateFileChunk[] }
@@ -71,60 +71,66 @@ export namespace Patch {
   }
 
   // Parser implementation
-  function parsePatchHeader(lines: string[], startIdx: number): { filePath: string; movePath?: string; nextIdx: number } | null {
+  function parsePatchHeader(
+    lines: string[],
+    startIdx: number,
+  ): { filePath: string; movePath?: string; nextIdx: number } | null {
     const line = lines[startIdx]
-    
+
     if (line.startsWith("*** Add File:")) {
       const filePath = line.split(":", 2)[1]?.trim()
       return filePath ? { filePath, nextIdx: startIdx + 1 } : null
     }
-    
+
     if (line.startsWith("*** Delete File:")) {
       const filePath = line.split(":", 2)[1]?.trim()
       return filePath ? { filePath, nextIdx: startIdx + 1 } : null
     }
-    
+
     if (line.startsWith("*** Update File:")) {
       const filePath = line.split(":", 2)[1]?.trim()
       let movePath: string | undefined
       let nextIdx = startIdx + 1
-      
+
       // Check for move directive
       if (nextIdx < lines.length && lines[nextIdx].startsWith("*** Move to:")) {
         movePath = lines[nextIdx].split(":", 2)[1]?.trim()
         nextIdx++
       }
-      
+
       return filePath ? { filePath, movePath, nextIdx } : null
     }
-    
+
     return null
   }
 
-  function parseUpdateFileChunks(lines: string[], startIdx: number): { chunks: UpdateFileChunk[]; nextIdx: number } {
+  function parseUpdateFileChunks(
+    lines: string[],
+    startIdx: number,
+  ): { chunks: UpdateFileChunk[]; nextIdx: number } {
     const chunks: UpdateFileChunk[] = []
     let i = startIdx
-    
+
     while (i < lines.length && !lines[i].startsWith("***")) {
       if (lines[i].startsWith("@@")) {
         // Parse context line
         const contextLine = lines[i].substring(2).trim()
         i++
-        
+
         const oldLines: string[] = []
         const newLines: string[] = []
         let isEndOfFile = false
-        
+
         // Parse change lines
         while (i < lines.length && !lines[i].startsWith("@@") && !lines[i].startsWith("***")) {
           const changeLine = lines[i]
-          
+
           if (changeLine === "*** End of File") {
             isEndOfFile = true
             i++
             break
           }
-          
+
           if (changeLine.startsWith(" ")) {
             // Keep line - appears in both old and new
             const content = changeLine.substring(1)
@@ -137,10 +143,10 @@ export namespace Patch {
             // Add line - only in new
             newLines.push(changeLine.substring(1))
           }
-          
+
           i++
         }
-        
+
         chunks.push({
           old_lines: oldLines,
           new_lines: newLines,
@@ -151,26 +157,29 @@ export namespace Patch {
         i++
       }
     }
-    
+
     return { chunks, nextIdx: i }
   }
 
-  function parseAddFileContent(lines: string[], startIdx: number): { content: string; nextIdx: number } {
+  function parseAddFileContent(
+    lines: string[],
+    startIdx: number,
+  ): { content: string; nextIdx: number } {
     let content = ""
     let i = startIdx
-    
+
     while (i < lines.length && !lines[i].startsWith("***")) {
       if (lines[i].startsWith("+")) {
         content += lines[i].substring(1) + "\n"
       }
       i++
     }
-    
+
     // Remove trailing newline
     if (content.endsWith("\n")) {
       content = content.slice(0, -1)
     }
-    
+
     return { content, nextIdx: i }
   }
 
@@ -178,28 +187,28 @@ export namespace Patch {
     const lines = patchText.split("\n")
     const hunks: Hunk[] = []
     let i = 0
-    
+
     // Look for Begin/End patch markers
     const beginMarker = "*** Begin Patch"
     const endMarker = "*** End Patch"
-    
-    const beginIdx = lines.findIndex(line => line.trim() === beginMarker)
-    const endIdx = lines.findIndex(line => line.trim() === endMarker)
-    
+
+    const beginIdx = lines.findIndex((line) => line.trim() === beginMarker)
+    const endIdx = lines.findIndex((line) => line.trim() === endMarker)
+
     if (beginIdx === -1 || endIdx === -1 || beginIdx >= endIdx) {
       throw new Error("Invalid patch format: missing Begin/End markers")
     }
-    
+
     // Parse content between markers
     i = beginIdx + 1
-    
+
     while (i < endIdx) {
       const header = parsePatchHeader(lines, i)
       if (!header) {
         i++
         continue
       }
-      
+
       if (lines[i].startsWith("*** Add File:")) {
         const { content, nextIdx } = parseAddFileContent(lines, header.nextIdx)
         hunks.push({
@@ -227,18 +236,19 @@ export namespace Patch {
         i++
       }
     }
-    
+
     return { hunks }
   }
 
   // Apply patch functionality
-  export function maybeParseApplyPatch(argv: string[]): 
+  export function maybeParseApplyPatch(
+    argv: string[],
+  ):
     | { type: MaybeApplyPatch.Body; args: ApplyPatchArgs }
     | { type: MaybeApplyPatch.PatchParseError; error: Error }
     | { type: MaybeApplyPatch.NotApplyPatch } {
-    
     const APPLY_PATCH_COMMANDS = ["apply_patch", "applypatch"]
-    
+
     // Direct invocation: apply_patch <patch>
     if (argv.length === 2 && APPLY_PATCH_COMMANDS.includes(argv[0])) {
       try {
@@ -257,13 +267,13 @@ export namespace Patch {
         }
       }
     }
-    
+
     // Bash heredoc form: bash -lc 'apply_patch <<"EOF" ...'
     if (argv.length === 3 && argv[0] === "bash" && argv[1] === "-lc") {
       // Simple extraction - in real implementation would need proper bash parsing
       const script = argv[2]
       const heredocMatch = script.match(/apply_patch\s*<<['"](\w+)['"]\s*\n([\s\S]*?)\n\1/)
-      
+
       if (heredocMatch) {
         const patchContent = heredocMatch[2]
         try {
@@ -283,7 +293,7 @@ export namespace Patch {
         }
       }
     }
-    
+
     return { type: MaybeApplyPatch.NotApplyPatch }
   }
 
@@ -293,7 +303,10 @@ export namespace Patch {
     content: string
   }
 
-  export function deriveNewContentsFromChunks(filePath: string, chunks: UpdateFileChunk[]): ApplyPatchFileUpdate {
+  export function deriveNewContentsFromChunks(
+    filePath: string,
+    chunks: UpdateFileChunk[],
+  ): ApplyPatchFileUpdate {
     // Read original file content
     let originalContent: string
     try {
@@ -301,37 +314,41 @@ export namespace Patch {
     } catch (error) {
       throw new Error(`Failed to read file ${filePath}: ${error}`)
     }
-    
+
     let originalLines = originalContent.split("\n")
-    
+
     // Drop trailing empty element for consistent line counting
     if (originalLines.length > 0 && originalLines[originalLines.length - 1] === "") {
       originalLines.pop()
     }
-    
+
     const replacements = computeReplacements(originalLines, filePath, chunks)
     let newLines = applyReplacements(originalLines, replacements)
-    
+
     // Ensure trailing newline
     if (newLines.length === 0 || newLines[newLines.length - 1] !== "") {
       newLines.push("")
     }
-    
+
     const newContent = newLines.join("\n")
-    
+
     // Generate unified diff
     const unifiedDiff = generateUnifiedDiff(originalContent, newContent)
-    
+
     return {
       unified_diff: unifiedDiff,
       content: newContent,
     }
   }
 
-  function computeReplacements(originalLines: string[], filePath: string, chunks: UpdateFileChunk[]): Array<[number, number, string[]]> {
+  function computeReplacements(
+    originalLines: string[],
+    filePath: string,
+    chunks: UpdateFileChunk[],
+  ): Array<[number, number, string[]]> {
     const replacements: Array<[number, number, string[]]> = []
     let lineIndex = 0
-    
+
     for (const chunk of chunks) {
       // Handle context-based seeking
       if (chunk.change_context) {
@@ -341,21 +358,22 @@ export namespace Patch {
         }
         lineIndex = contextIdx + 1
       }
-      
+
       // Handle pure addition (no old lines)
       if (chunk.old_lines.length === 0) {
-        const insertionIdx = originalLines.length > 0 && originalLines[originalLines.length - 1] === "" 
-          ? originalLines.length - 1 
-          : originalLines.length
+        const insertionIdx =
+          originalLines.length > 0 && originalLines[originalLines.length - 1] === ""
+            ? originalLines.length - 1
+            : originalLines.length
         replacements.push([insertionIdx, 0, chunk.new_lines])
         continue
       }
-      
+
       // Try to match old lines in the file
       let pattern = chunk.old_lines
       let newSlice = chunk.new_lines
       let found = seekSequence(originalLines, pattern, lineIndex)
-      
+
       // Retry without trailing empty line if not found
       if (found === -1 && pattern.length > 0 && pattern[pattern.length - 1] === "") {
         pattern = pattern.slice(0, -1)
@@ -364,79 +382,82 @@ export namespace Patch {
         }
         found = seekSequence(originalLines, pattern, lineIndex)
       }
-      
+
       if (found !== -1) {
         replacements.push([found, pattern.length, newSlice])
         lineIndex = found + pattern.length
       } else {
         throw new Error(
-          `Failed to find expected lines in ${filePath}:\n${chunk.old_lines.join("\n")}`
+          `Failed to find expected lines in ${filePath}:\n${chunk.old_lines.join("\n")}`,
         )
       }
     }
-    
+
     // Sort replacements by index to apply in order
     replacements.sort((a, b) => a[0] - b[0])
-    
+
     return replacements
   }
 
-  function applyReplacements(lines: string[], replacements: Array<[number, number, string[]]>): string[] {
+  function applyReplacements(
+    lines: string[],
+    replacements: Array<[number, number, string[]]>,
+  ): string[] {
     // Apply replacements in reverse order to avoid index shifting
     const result = [...lines]
-    
+
     for (let i = replacements.length - 1; i >= 0; i--) {
       const [startIdx, oldLen, newSegment] = replacements[i]
-      
+
       // Remove old lines
       result.splice(startIdx, oldLen)
-      
+
       // Insert new lines
       for (let j = 0; j < newSegment.length; j++) {
         result.splice(startIdx + j, 0, newSegment[j])
       }
     }
-    
+
     return result
   }
 
   function seekSequence(lines: string[], pattern: string[], startIndex: number): number {
     if (pattern.length === 0) return -1
-    
+
     // Simple substring search implementation
     for (let i = startIndex; i <= lines.length - pattern.length; i++) {
       let matches = true
-      
+
       for (let j = 0; j < pattern.length; j++) {
         if (lines[i + j] !== pattern[j]) {
           matches = false
           break
         }
       }
-      
+
       if (matches) {
         return i
       }
     }
-    
+
     return -1
   }
 
   function generateUnifiedDiff(oldContent: string, newContent: string): string {
     const oldLines = oldContent.split("\n")
     const newLines = newContent.split("\n")
-    
+
     // Simple diff generation - in a real implementation you'd use a proper diff algorithm
     let diff = "@@ -1 +1 @@\n"
-    
+
     // Find changes (simplified approach)
     const maxLen = Math.max(oldLines.length, newLines.length)
     let hasChanges = false
-    
+
     for (let i = 0; i < maxLen; i++) {
       const oldLine = oldLines[i] || ""
       const newLine = newLines[i] || ""
-      
+
       if (oldLine !== newLine) {
         if (oldLine) diff += `-${oldLine}\n`
         if (newLine) diff += `+${newLine}\n`
@@ -445,7 +466,7 @@ export namespace Patch {
         diff += ` ${oldLine}\n`
       }
     }
-    
+
     return hasChanges ? diff : ""
   }
 
@@ -454,11 +475,11 @@ export namespace Patch {
     if (hunks.length === 0) {
       throw new Error("No files were modified.")
     }
-    
+
     const added: string[] = []
     const modified: string[] = []
     const deleted: string[] = []
-    
+
     for (const hunk of hunks) {
       switch (hunk.type) {
         case "add":
@@ -467,28 +488,28 @@ export namespace Patch {
           if (addDir !== "." && addDir !== "/") {
             await fs.mkdir(addDir, { recursive: true })
           }
-          
+
           await fs.writeFile(hunk.path, hunk.contents, "utf-8")
           added.push(hunk.path)
           log.info(`Added file: ${hunk.path}`)
           break
-          
+
         case "delete":
           await fs.unlink(hunk.path)
           deleted.push(hunk.path)
           log.info(`Deleted file: ${hunk.path}`)
           break
-          
+
         case "update":
           const fileUpdate = deriveNewContentsFromChunks(hunk.path, hunk.chunks)
-          
+
           if (hunk.move_path) {
             // Handle file move
             const moveDir = path.dirname(hunk.move_path)
             if (moveDir !== "." && moveDir !== "/") {
               await fs.mkdir(moveDir, { recursive: true })
             }
-            
+
             await fs.writeFile(hunk.move_path, fileUpdate.content, "utf-8")
             await fs.unlink(hunk.path)
             modified.push(hunk.move_path)
@@ -502,7 +523,7 @@ export namespace Patch {
           break
       }
     }
-    
+
     return { added, modified, deleted }
   }
 
@@ -513,7 +534,10 @@ export namespace Patch {
   }
 
   // Async version of maybeParseApplyPatchVerified
-  export async function maybeParseApplyPatchVerified(argv: string[], cwd: string): Promise<
+  export async function maybeParseApplyPatchVerified(
+    argv: string[],
+    cwd: string,
+  ): Promise<
     | { type: MaybeApplyPatchVerified.Body; action: ApplyPatchAction }
     | { type: MaybeApplyPatchVerified.CorrectnessError; error: Error }
     | { type: MaybeApplyPatchVerified.NotApplyPatch }
@@ -530,18 +554,21 @@ export namespace Patch {
         // Not a patch, continue
       }
     }
-    
+
     const result = maybeParseApplyPatch(argv)
-    
+
     switch (result.type) {
       case MaybeApplyPatch.Body:
         const { args } = result
         const effectiveCwd = args.workdir ? path.resolve(cwd, args.workdir) : cwd
         const changes = new Map<string, ApplyPatchFileChange>()
-        
+
         for (const hunk of args.hunks) {
-          const resolvedPath = path.resolve(effectiveCwd, hunk.type === "update" && hunk.move_path ? hunk.move_path : hunk.path)
-          
+          const resolvedPath = path.resolve(
+            effectiveCwd,
+            hunk.type === "update" && hunk.move_path ? hunk.move_path : hunk.path,
+          )
+
           switch (hunk.type) {
             case "add":
               changes.set(resolvedPath, {
@@ -549,7 +576,7 @@ export namespace Patch {
                 content: hunk.contents,
               })
               break
-              
+
             case "delete":
               // For delete, we need to read the current content
               const deletePath = path.resolve(effectiveCwd, hunk.path)
@@ -566,7 +593,7 @@ export namespace Patch {
                 }
               }
               break
-              
+
             case "update":
               const updatePath = path.resolve(effectiveCwd, hunk.path)
               try {
@@ -574,7 +601,9 @@ export namespace Patch {
                 changes.set(resolvedPath, {
                   type: "update",
                   unified_diff: fileUpdate.unified_diff,
-                  move_path: hunk.move_path ? path.resolve(effectiveCwd, hunk.move_path) : undefined,
+                  move_path: hunk.move_path
+                    ? path.resolve(effectiveCwd, hunk.move_path)
+                    : undefined,
                   new_content: fileUpdate.content,
                 })
               } catch (error) {
@@ -586,7 +615,7 @@ export namespace Patch {
               break
           }
         }
-        
+
         return {
           type: MaybeApplyPatchVerified.Body,
           action: {
@@ -595,13 +624,13 @@ export namespace Patch {
             cwd: effectiveCwd,
           },
         }
-        
+
       case MaybeApplyPatch.PatchParseError:
         return {
           type: MaybeApplyPatchVerified.CorrectnessError,
           error: result.error,
         }
-        
+
       case MaybeApplyPatch.NotApplyPatch:
         return { type: MaybeApplyPatchVerified.NotApplyPatch }
     }

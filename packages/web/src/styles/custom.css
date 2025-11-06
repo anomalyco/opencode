@@ -30,8 +30,6 @@
   --sl-color-divider: var(--sl-color-gray-5);
 }
 
-
-
 body {
   color: var(--color-text) !important;
   font-size: 14px !important;
@@ -60,7 +58,6 @@ body {
     --color-border-weak: hsl(0, 4%, 23%);
 
     --color-icon: hsl(10, 3%, 43%);
-
   }
 }
 
@@ -145,7 +142,7 @@ a[aria-current="page"] {
   font-weight: 600 !important;
 }
 
-ul.top-level a[aria-current="page"] > span  {
+ul.top-level a[aria-current="page"] > span {
   color: var(--color-text-strong) !important;
 }
 
@@ -162,7 +159,6 @@ ul.top-level a[aria-current="page"] > span  {
   color: var(--color-text-strong) !important;
   font-weight: 600 !important;
 }
-
 
 .top-level li a {
   border-radius: 0;
@@ -221,13 +217,16 @@ site-search > button span {
   }
 }
 
-
-
 site-search > button > kbd {
   font-size: 14px !important;
 }
 
-h1 a, h2 a, h3 a, h4 a, h5 a, h6 a {
+h1 a,
+h2 a,
+h3 a,
+h4 a,
+h5 a,
+h6 a {
   color: var(--color-text-strong) !important;
 }
 
@@ -263,7 +262,8 @@ strong {
   font-weight: 500 !important;
 }
 
-ul, ol {
+ul,
+ol {
   list-style: none !important;
   padding: 0 !important;
 }
@@ -280,7 +280,8 @@ ul, ol {
   color: var(--color-text-strong) !important;
 }
 
-body > .page > header, :root[data-has-sidebar] body > .page > header {
+body > .page > header,
+:root[data-has-sidebar] body > .page > header {
   background: var(--color-background) !important;
   padding: 24px !important;
 }
@@ -303,7 +304,6 @@ body > .page > header, :root[data-has-sidebar] body > .page > header {
   max-width: 100% !important;
 }
 
-
 nav.sidebar .sl-container ul li a,
 div.right-sidebar .sl-container ul li a {
   padding: 4px 24px !important;
@@ -317,7 +317,7 @@ div.right-sidebar .sl-container ul li a:hover {
   background: var(--color-background-weak);
 
   @media (prefers-color-scheme: dark) {
-    background: var(--color-background-weak)
+    background: var(--color-background-weak);
   }
 }
 
@@ -326,13 +326,11 @@ div.right-sidebar .sl-container ul li ul li {
   padding: 4px 12px 0 12px !important;
 }
 
-
 nav.sidebar .sl-container ul li a[aria-current="true"],
 div.right-sidebar .sl-container ul li a[aria-current="true"] {
   color: var(--color-text-strong) !important;
   opacity: 100%;
 }
-
 
 h2#starlight__on-this-page {
   font-size: 14px !important;
@@ -375,7 +373,6 @@ nav.sidebar ul.top-level > li > details > summary .group-label > span {
 .expressive-code {
   margin: 0.75rem 0 3rem 0 !important;
   border-radius: 6px;
-
 }
 
 .expressive-code figure {
@@ -385,8 +382,6 @@ nav.sidebar ul.top-level > li > details > summary .group-label > span {
 .expressive-code .frame {
   box-shadow: none;
 }
-
-
 
 @media (prefers-color-scheme: dark) {
   .shiki,

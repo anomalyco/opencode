@@ -80,6 +80,7 @@ export const { use: useSession, provider: SessionProvider } = createSimpleContex
     const model = createMemo(() =>
       last() ? sync.data.provider.find((x) => x.id === last().providerID)?.models[last().modelID] : undefined,
     )
+    const diffs = createMemo(() => (props.sessionId ? (sync.data.session_diff[props.sessionId] ?? []) : []))
 
     const tokens = createMemo(() => {
       if (!last()) return
@@ -98,6 +99,7 @@ export const { use: useSession, provider: SessionProvider } = createSimpleContex
       id: props.sessionId,
       info,
       working,
+      diffs,
       prompt: {
         current: createMemo(() => store.prompt),
         cursor: createMemo(() => store.cursorPosition),
@@ -139,8 +141,10 @@ export const { use: useSession, provider: SessionProvider } = createSimpleContex
           if (tab.startsWith("file://")) {
             await local.file.open(tab.replace("file://", ""))
           }
-          if (!store.tabs.opened.includes(tab)) {
-            setStore("tabs", "opened", [...store.tabs.opened, tab])
+          if (tab !== "review") {
+            if (!store.tabs.opened.includes(tab)) {
+              setStore("tabs", "opened", [...store.tabs.opened, tab])
+            }
           }
           setStore("tabs", "active", tab)
         },

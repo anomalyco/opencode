@@ -6,7 +6,7 @@ export const GenerateCommand = {
   handler: async () => {
     const specs = await Server.openapi()
     const json = JSON.stringify(specs, null, 2)
-    
+
     // Wait for stdout to finish writing before process.exit() is called
     await new Promise<void>((resolve, reject) => {
       process.stdout.write(json, (err) => {

@@ -53,7 +53,9 @@ export function DialogConfirm(props: DialogConfirmProps) {
                 dialog.clear()
               }}
             >
-              <text fg={key === store.active ? theme.background : theme.textMuted}>{Locale.titlecase(key)}</text>
+              <text fg={key === store.active ? theme.background : theme.textMuted}>
+                {Locale.titlecase(key)}
+              </text>
             </box>
           )}
         </For>

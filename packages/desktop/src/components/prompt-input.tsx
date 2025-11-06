@@ -338,6 +338,7 @@ export const PromptInput: Component<PromptInputProps> = (props) => {
       // session.layout.copyTabs("", session.id)
     }
     session.layout.setActiveTab(undefined)
+    session.messages.setActive(undefined)
     const toAbsolutePath = (path: string) => (path.startsWith("/") ? path : sync.absolute(path))
 
     const attachments = session.prompt.current().filter((part) => part.type === "file")

@@ -23,7 +23,7 @@ export namespace SessionSummary {
       messageID: z.string(),
     }),
     async (input) => {
-      const all = await Session.messages(input.sessionID)
+      const all = await Session.messages({ sessionID: input.sessionID })
       await Promise.all([
         summarizeSession({ sessionID: input.sessionID, messages: all }),
         summarizeMessage({ messageID: input.messageID, messages: all }),
@@ -151,7 +151,7 @@ export namespace SessionSummary {
       messageID: Identifier.schema("message").optional(),
     }),
     async (input) => {
-      let all = await Session.messages(input.sessionID)
+      let all = await Session.messages({ sessionID: input.sessionID })
       if (input.messageID)
         all = all.filter(
           (x) =>
