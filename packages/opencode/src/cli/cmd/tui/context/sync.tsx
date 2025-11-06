@@ -159,6 +159,7 @@ export const { use: useSync, provider: SyncProvider } = createSimpleContext({
             event.properties.info.sessionID,
             produce((draft) => {
               draft.splice(result.index, 0, event.properties.info)
+              if (draft.length > 100) draft.shift()
             }),
           )
           break
@@ -272,7 +273,7 @@ export const { use: useSync, provider: SyncProvider } = createSimpleContext({
           console.log("syncing", sessionID)
           const [session, messages, todo, diff] = await Promise.all([
             sdk.client.session.get({ path: { id: sessionID }, throwOnError: true }),
-            sdk.client.session.messages({ path: { id: sessionID } }),
+            sdk.client.session.messages({ path: { id: sessionID }, query: { limit: 100 } }),
             sdk.client.session.todo({ path: { id: sessionID } }),
             sdk.client.session.diff({ path: { id: sessionID } }),
           ])

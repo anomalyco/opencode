@@ -67,7 +67,7 @@ export const ExportCommand = cmd({
 
       try {
         const sessionInfo = await Session.get(sessionID!)
-        const messages = await Session.messages(sessionID!)
+        const messages = await Session.messages({ sessionID: sessionID! })
 
         const exportData = {
           info: sessionInfo,

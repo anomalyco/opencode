@@ -55,7 +55,7 @@ export namespace SessionCompaction {
   export async function prune(input: { sessionID: string }) {
     if (Flag.OPENCODE_DISABLE_PRUNE) return
     log.info("pruning")
-    const msgs = await Session.messages(input.sessionID)
+    const msgs = await Session.messages({ sessionID: input.sessionID })
     let total = 0
     let pruned = 0
     const toPrune = []
@@ -111,7 +111,7 @@ export namespace SessionCompaction {
         draft.time.compacting = undefined
       })
     })
-    const toSummarize = await Session.messages(input.sessionID).then(MessageV2.filterCompacted)
+    const toSummarize = await Session.messages({ sessionID: input.sessionID }).then(MessageV2.filterCompacted)
     const model = await Provider.getModel(input.providerID, input.modelID)
     const system = [
       ...SystemPrompt.summarize(model.providerID),
