@@ -176,19 +176,6 @@ function App() {
   const { theme, mode, setMode } = useTheme()
   const exit = useExit()
 
-  useKeyboard(async (evt) => {
-    if (!Installation.isLocal()) return
-    if (evt.meta && evt.name === "t") {
-      renderer.toggleDebugOverlay()
-      return
-    }
-
-    if (evt.meta && evt.name === "d") {
-      renderer.console.toggle()
-      return
-    }
-  })
-
   createEffect(() => {
     console.log(JSON.stringify(route.data))
   })
@@ -309,6 +296,22 @@ function App() {
       value: "app.exit",
       onSelect: exit,
       category: "System",
+    },
+    {
+      title: "Toggle debug panel",
+      value: "app.debug",
+      onSelect: (dialog) => {
+        renderer.toggleDebugOverlay()
+        dialog.clear()
+      },
+    },
+    {
+      title: "Toggle console",
+      value: "app.fps",
+      onSelect: (dialog) => {
+        renderer.console.toggle()
+        dialog.clear()
+      },
     },
   ])
 
