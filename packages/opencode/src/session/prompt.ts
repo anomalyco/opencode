@@ -434,7 +434,9 @@ export namespace SessionPrompt {
     providerID: string
     signal: AbortSignal
   }) {
-    let msgs = await Session.messages({ sessionID: input.sessionID }).then(MessageV2.filterCompacted)
+    let msgs = await Session.messages({ sessionID: input.sessionID }).then(
+      MessageV2.filterCompacted,
+    )
     const lastAssistant = msgs.findLast((msg) => msg.info.role === "assistant")
     if (
       lastAssistant?.info.role === "assistant" &&
