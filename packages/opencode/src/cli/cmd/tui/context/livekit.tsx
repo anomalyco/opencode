@@ -7,7 +7,14 @@ import {
   type ParentComponent,
 } from "solid-js"
 import type { RoomManager } from "@/livekit/room-manager"
-import type { LiveKitConfig } from "../component/dialog-livekit"
+
+// Local interface for connection config (combines server config + room name)
+interface LiveKitConfig {
+  url: string
+  apiKey: string
+  apiSecret: string
+  roomName: string
+}
 
 interface LiveKitContextValue {
   roomName: () => string | undefined

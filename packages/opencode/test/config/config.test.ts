@@ -389,6 +389,23 @@ test("resolves scoped npm plugins in config", async () => {
       )
     },
   })
+  await Instance.provide({
+    directory: tmp.path,
+    fn: async () => {
+      const config = await Config.get()
+      const pluginEntries = config.plugin ?? []
+
+      const baseUrl = pathToFileURL(path.join(tmp.path, "opencode.json")).href
+      const expected = import.meta.resolve("@scope/plugin", baseUrl)
+
+      expect(pluginEntries.includes(expected)).toBe(true)
+
+      const scopedEntry = pluginEntries.find((entry) => entry === expected)
+      expect(scopedEntry).toBeDefined()
+      expect(scopedEntry?.includes("/node_modules/@scope/plugin/")).toBe(true)
+    },
+  })
+})
 
 test("handles anthropic configuration with all features", async () => {
   await using tmp = await tmpdir({
@@ -421,16 +438,6 @@ test("handles anthropic configuration with all features", async () => {
     directory: tmp.path,
     fn: async () => {
       const config = await Config.get()
-      const pluginEntries = config.plugin ?? []
-
-      const baseUrl = pathToFileURL(path.join(tmp.path, "opencode.json")).href
-      const expected = import.meta.resolve("@scope/plugin", baseUrl)
-
-      expect(pluginEntries.includes(expected)).toBe(true)
-
-      const scopedEntry = pluginEntries.find((entry) => entry === expected)
-      expect(scopedEntry).toBeDefined()
-      expect(scopedEntry?.includes("/node_modules/@scope/plugin/")).toBe(true)
       expect(config.anthropic?.promptCaching).toBe(true)
       expect(config.anthropic?.contextEditing).toBe(true)
       expect(config.anthropic?.extendedThinking).toBe(true)

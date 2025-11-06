@@ -16,6 +16,7 @@ export function LeftSidebar(props: {
   const renderer = useRenderer()
 
   const [displayLimit, setDisplayLimit] = createSignal(20)
+  const [expandedCategories, setExpandedCategories] = createSignal<Set<string>>(new Set(['Today']))
 
   const allSessions = createMemo(() => {
     return sync.data.session
@@ -30,6 +31,43 @@ export function LeftSidebar(props: {
       })
       .sort((a, b) => b.time.updated - a.time.updated)
   })
+
+  // Group sessions by date
+  const sessionsByCategory = createMemo(() => {
+    const grouped = new Map<string, any[]>()
+    const today = new Date()
+    
+    allSessions().forEach(session => {
+      const sessionDate = new Date(session.time.updated)
+      const isToday = sessionDate.toDateString() === today.toDateString()
+      const category = isToday ? 'Today' : sessionDate.toLocaleDateString()
+      
+      if (!grouped.has(category)) {
+        grouped.set(category, [])
+      }
+      grouped.get(category)!.push(session)
+    })
+    
+    return grouped
+  })
+
+  // Get all categories for UI
+  const allCategories = createMemo(() => {
+    return Array.from(sessionsByCategory().keys())
+  })
+
+  // Toggle category expansion
+  const toggleCategory = (category: string) => {
+    setExpandedCategories(prev => {
+      const newSet = new Set(prev)
+      if (newSet.has(category)) {
+        newSet.delete(category)
+      } else {
+        newSet.add(category)
+      }
+      return newSet
+    })
+  }
 
   const sessions = createMemo(() => allSessions().slice(0, displayLimit()))
   const hasMore = createMemo(() => allSessions().length > displayLimit())
@@ -54,40 +92,49 @@ export function LeftSidebar(props: {
         </box>
 
         <box overflow="hidden">
-          <text wrapMode="none" attributes={TextAttributes.BOLD}>
-            All Sessions
-          </text>
-          <For each={sessions()}>
-            {(session) => (
-              <text
-                fg={session.id === props.sessionID ? theme.accent : theme.text}
-                attributes={session.id === props.sessionID ? TextAttributes.BOLD : undefined}
-                wrapMode="none"
-                height={1}
-                onMouseUp={() => {
-                  if (renderer.getSelection()?.getSelectedText()) return
-                  if (session.id === props.sessionID) return
-                  props.onSelect(session.id)
-                }}
-              >
-                {session.id === props.sessionID ? "▶ " : "  "}
-                {Locale.truncate(Locale.stripMarkdown(session.title), 39)}
-              </text>
-            )}
+          <For each={allCategories()}>
+            {(category) => {
+              const isExpanded = () => expandedCategories().has(category)
+              const categorySessions = () => sessionsByCategory().get(category) || []
+              
+              return (
+                <>
+                  <text
+                    fg={theme.textMuted}
+                    attributes={TextAttributes.BOLD}
+                    wrapMode="none"
+                    height={1}
+                    onMouseUp={() => {
+                      if (renderer.getSelection()?.getSelectedText()) return
+                      toggleCategory(category)
+                    }}
+                  >
+                    {isExpanded() ? '▼' : '▶'} {category} ({categorySessions().length})
+                  </text>
+                  <Show when={isExpanded()}>
+                    <For each={categorySessions()}>
+                      {(session) => (
+                        <text
+                          fg={session.id === props.sessionID ? theme.accent : theme.text}
+                          attributes={session.id === props.sessionID ? TextAttributes.BOLD : undefined}
+                          wrapMode="none"
+                          height={1}
+                          onMouseUp={() => {
+                            if (renderer.getSelection()?.getSelectedText()) return
+                            if (session.id === props.sessionID) return
+                            props.onSelect(session.id)
+                          }}
+                        >
+                          {session.id === props.sessionID ? "  ▶ " : "    "}
+                          {Locale.truncate(Locale.stripMarkdown(session.title), 37)}
+                        </text>
+                      )}
+                    </For>
+                  </Show>
+                </>
+              )
+            }}
           </For>
-          <Show when={hasMore()}>
-            <text
-              fg={theme.textMuted}
-              wrapMode="none"
-              height={1}
-              onMouseUp={() => {
-                if (renderer.getSelection()?.getSelectedText()) return
-                setDisplayLimit((prev) => prev + 20)
-              }}
-            >
-              Load more... ({allSessions().length - displayLimit()} remaining)
-            </text>
-          </Show>
         </box>
 
         <box marginTop={1}>

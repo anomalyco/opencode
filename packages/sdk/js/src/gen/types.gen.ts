@@ -654,6 +654,12 @@ export type Session = {
     pausedAt?: number
     completedAt?: number
     result?: string
+    subtaskResults?: Array<{
+      sessionID: string
+      summary: string
+      result: string
+      completedAt: number
+    }>
   }
 }
 
@@ -2283,10 +2289,6 @@ export type SessionMessagesApiRecentData = {
   }
   query?: {
     directory?: string
-    /**
-     * Number of recent messages to return
-     */
-    count?: number
   }
   url: "/session/{id}/message/recent"
 }
@@ -2307,7 +2309,7 @@ export type SessionMessagesApiRecentError =
 
 export type SessionMessagesApiRecentResponses = {
   /**
-   * List of recent messages
+   * List of all messages
    */
   200: Array<{
     info: Message
@@ -2950,16 +2952,18 @@ export type UiExtensionsResponses = {
       label: string
       icon?: string
       area: "top" | "bottom" | "left" | "right"
+      position?: "top" | "bottom"
       collapsible?: boolean
     }>
     widgets: Array<{
       id: string
       label: string
-      position: {
+      sidebarPosition?: "top" | "bottom" | "inline"
+      position?: {
         x: number
         y: number
       }
-      size: {
+      size?: {
         width: number
         height: number
       }
@@ -3028,6 +3032,54 @@ export type UiRenderResponses = {
 }
 
 export type UiRenderResponse = UiRenderResponses[keyof UiRenderResponses]
+
+export type UiActionData = {
+  body?: {
+    /**
+     * Action name
+     */
+    action: string
+    /**
+     * Action payload
+     */
+    payload?: unknown
+  }
+  path: {
+    /**
+     * UI component ID
+     */
+    componentId: string
+  }
+  query?: {
+    directory?: string
+  }
+  url: "/ui/action/{componentId}"
+}
+
+export type UiActionErrors = {
+  /**
+   * Bad request
+   */
+  400: BadRequestError
+  /**
+   * Not found
+   */
+  404: NotFoundError
+}
+
+export type UiActionError = UiActionErrors[keyof UiActionErrors]
+
+export type UiActionResponses = {
+  /**
+   * Action result
+   */
+  200: {
+    result?: unknown
+    error?: string
+  }
+}
+
+export type UiActionResponse = UiActionResponses[keyof UiActionResponses]
 
 export type TuiAppendPromptData = {
   body?: {

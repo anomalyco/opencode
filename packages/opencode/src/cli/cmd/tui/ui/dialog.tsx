@@ -52,21 +52,35 @@ function init() {
   })
 
   useKeyboard((evt) => {
-    // Dialog is open - intercept ALL keypresses
-    if (store.stack.length > 0) {
-      // ESC or Ctrl+C to close dialog
-      if (evt.name === "escape" || (evt.ctrl && evt.name === "c")) {
-        const current = store.stack.at(-1)
-        if (!current) return
-        current.onClose?.()
-        setStore("stack", store.stack.slice(0, -1))
-        evt.preventDefault()
-        refocus()
-        return
-      }
-      // Block all other keys from propagating to underlying components
+    if (store.stack.length === 0) return
+
+    const current = store.stack.at(-1)
+    if (!current) return
+
+    const active = renderer.currentFocusedRenderable
+
+    // ESC or Ctrl+C to close dialog
+    if (evt.name === "escape" || (evt.ctrl && evt.name === "c")) {
+      current.onClose?.()
+      setStore("stack", store.stack.slice(0, -1))
       evt.preventDefault()
+      refocus()
+      return
     }
+
+    // Allow normal typing keys to pass through to dialog inputs
+    if (evt.name === "return") return
+    if (evt.name === "backspace") return
+    if (evt.sequence && evt.sequence.length === 1) return
+
+    // Block other special keys from propagating
+    evt.preventDefault()
+
+    // Forward keypress to active input if available
+    if (!active || active.isDestroyed) return
+    if (typeof active.emit !== "function") return
+
+    active.emit("keypress", evt)
   })
 
   const renderer = useRenderer()

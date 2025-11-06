@@ -26,8 +26,6 @@ import { CommandProvider, useCommandDialog } from "@tui/component/dialog-command
 import { DialogAgent } from "@tui/component/dialog-agent"
 import { DialogAgentManager } from "@tui/component/dialog-agent-manager"
 import { DialogSessionList } from "@tui/component/dialog-session-list"
-import { DialogMemoryList } from "@tui/component/dialog-memory-list"
-import { DialogMCPManager } from "@tui/component/dialog-mcp-manager"
 // import { DialogSkillManager } from "@tui/component/dialog-skill-manager" // DISABLED: migrated to plugin
 // import { DialogKbManager } from "@tui/component/dialog-kb-manager" // DISABLED: raid module removed
 import { KeybindProvider } from "@tui/context/keybind"
@@ -315,15 +313,6 @@ function App() {
       category: "System",
     },
 
-    {
-      title: "MCP manager",
-      value: "mcp.manage",
-      keybind: "mcp_manage",
-      category: "System",
-      onSelect: () => {
-        dialog.replace(() => <DialogMCPManager />)
-      },
-    },
     // DISABLED: migrated to plugin
     // {
     //   title: "Skill manager",

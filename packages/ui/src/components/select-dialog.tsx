@@ -59,18 +59,17 @@ export function SelectDialog<T>(props: SelectDialogProps<T>) {
     closeButton.click()
   }
 
-  const handleKey = (e: KeyboardEvent) => {
-    setStore("mouseActive", false)
-    if (e.key === "Escape") return
-
-    if (e.key === "Enter") {
-      e.preventDefault()
-      const selected = flat().find((x) => others.key(x) === active())
-      if (selected) handleSelect(selected)
-    } else {
-      onKeyDown(e)
-    }
-  }
+   const handleKey = (e: KeyboardEvent) => {
+     setStore("mouseActive", false)
+     if (e.key === "Escape") return
+     if (e.key === "Enter") {
+       e.preventDefault()
+       const selected = flat().find((x) => others.key(x) === active())
+       if (selected) handleSelect(selected)
+       return
+     }
+     onKeyDown(e)
+   }
 
   const handleOpenChange = (open: boolean) => {
     if (!open) clear()
@@ -86,14 +85,14 @@ export function SelectDialog<T>(props: SelectDialogProps<T>) {
       <div data-component="select-dialog-input">
         <div data-slot="input-container">
           <Icon data-slot="icon" name="magnifying-glass" />
-          <Input
-            data-slot="input"
-            type="text"
-            value={filter()}
-            onChange={(value) => handleInput(value)}
-            onKeyDown={handleKey}
-            placeholder={others.placeholder}
-            autofocus
+           <Input
+             data-slot="input"
+             type="text"
+             value={filter()}
+              onInput={(e) => handleInput(e.currentTarget.value)}
+             onKeyDown={handleKey}
+             placeholder={others.placeholder}
+             autofocus
             spellcheck={false}
             autocorrect="off"
             autocomplete="off"

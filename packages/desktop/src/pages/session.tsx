@@ -73,10 +73,35 @@ export default function Page() {
   })
 
   const handleKeyDown = (event: KeyboardEvent) => {
+    const active = document.activeElement as HTMLElement | null
     if (event.getModifierState(MOD) && event.shiftKey && event.key.toLowerCase() === "p") {
       event.preventDefault()
       return
     }
+    if (event.getModifierState(MOD) && event.key.toLowerCase() === "p") {
+      event.preventDefault()
+      setStore("fileSelectOpen", true)
+      return
+    }
+
+    const focused = active === inputRef
+    if (focused) {
+      if (event.key === "Escape") {
+        inputRef?.blur()
+      }
+      return
+    }
+
+    if (active?.closest('[data-component="dialog"]')) return
+    if (active?.isContentEditable) return
+    const tag = active?.tagName?.toLowerCase()
+    if (tag === "input" || tag === "textarea" || tag === "select") return
+
+    if (event.key.length === 1 && event.key !== "Unidentified" && !(event.ctrlKey || event.metaKey)) {
+      inputRef?.focus()
+    }
+  }
+
     if (event.getModifierState(MOD) && event.key.toLowerCase() === "p") {
       event.preventDefault()
       setStore("fileSelectOpen", true)

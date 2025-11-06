@@ -67,9 +67,7 @@ import { LANGUAGE_EXTENSIONS } from "@/lsp/language"
 import parsers from "../../../../../../parsers-config.ts"
 import { Clipboard } from "../../util/clipboard"
 import { Toast, useToast } from "../../ui/toast"
-import { DialogLiveKit } from "../../component/dialog-livekit"
 import { useKV } from "../../context/kv.tsx"
-import { useLiveKit } from "../../context/livekit"
 import { MessageWidgets } from "@/ui/message-widgets"
 import { PluginComponent } from "../../component/plugin-component"
 import stripAnsi from "strip-ansi"
@@ -648,33 +646,6 @@ export function Session() {
       },
     },
 
-    {
-      title: "Start LiveKit Voice Session",
-      value: "livekit.connect",
-      keybind: "livekit_connect" as any,
-      category: "Voice",
-      onSelect: (dialog) => {
-        // Get LiveKit context only when needed to avoid reactive re-renders
-        const livekit = useLiveKit()
-
-        dialog.replace(() => (
-          <DialogLiveKit
-            onConnect={async (config) => {
-              try {
-                await livekit.connect(config)
-                dialog.clear()
-              } catch (error) {
-                console.error("Failed to connect to LiveKit:", error)
-                // TODO: Show error dialog
-              }
-            }}
-            onCancel={() => {
-              dialog.clear()
-            }}
-          />
-        ))
-      },
-    },
     {
       title: "Next child session",
       value: "session.child.next",

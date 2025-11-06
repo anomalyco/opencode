@@ -34,7 +34,25 @@ export function useFilteredList<T>(props: FilteredListProps<T>) {
           if (!props.filterKeys && Array.isArray(x) && x.every((e) => typeof e === "string")) {
             return fuzzysort.go(needle, x).map((x) => x.target) as T[]
           }
-          return fuzzysort.go(needle, x, { keys: props.filterKeys! }).map((x) => x.obj)
+          // Prepare items for fuzzysort with flattened nested properties
+          const prepared = x.map((item: any, index: number) => {
+            const flatItem: any = { __original: item, __index: index }
+            props.filterKeys!.forEach(key => {
+              if (key.includes('.')) {
+                // Handle nested properties like "provider.name"
+                const parts = key.split('.')
+                let value = item
+                for (const part of parts) {
+                  value = value?.[part]
+                }
+                flatItem[key] = value
+              } else {
+                flatItem[key] = item[key]
+              }
+            })
+            return flatItem
+          })
+          return fuzzysort.go(needle, prepared, { keys: props.filterKeys! }).map((x) => x.obj.__original)
         },
         groupBy((x) => (props.groupBy ? props.groupBy(x) : "")),
         entries(),

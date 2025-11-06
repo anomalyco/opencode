@@ -132,6 +132,9 @@ import type {
   UiRenderData,
   UiRenderResponses,
   UiRenderErrors,
+  UiActionData,
+  UiActionResponses,
+  UiActionErrors,
   TuiAppendPromptData,
   TuiAppendPromptResponses,
   TuiAppendPromptErrors,
@@ -352,7 +355,7 @@ class Path extends _HeyApiClient {
 
 class MessagesApi extends _HeyApiClient {
   /**
-   * Get recent messages for a session (optimized for faster loading)
+   * Get all messages for a session
    */
   public recent<ThrowOnError extends boolean = false>(
     options: Options<SessionMessagesApiRecentData, ThrowOnError>,
@@ -955,6 +958,22 @@ class Ui extends _HeyApiClient {
   ) {
     return (options.client ?? this._client).post<UiRenderResponses, UiRenderErrors, ThrowOnError>({
       url: "/ui/render/{componentId}",
+      ...options,
+      headers: {
+        "Content-Type": "application/json",
+        ...options.headers,
+      },
+    })
+  }
+
+  /**
+   * Trigger an action on a UI component
+   */
+  public action<ThrowOnError extends boolean = false>(
+    options: Options<UiActionData, ThrowOnError>,
+  ) {
+    return (options.client ?? this._client).post<UiActionResponses, UiActionErrors, ThrowOnError>({
+      url: "/ui/action/{componentId}",
       ...options,
       headers: {
         "Content-Type": "application/json",
