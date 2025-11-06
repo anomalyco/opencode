@@ -18,6 +18,7 @@ if [ -z "$SYSTEMS" ]; then
 fi
 
 if [ ! -f "$HASH_FILE" ]; then
+  # Keep structure stable so optional metadata survives repeated runs.
   cat <<'EOF' >"$HASH_FILE"
 {
   "models": {},
