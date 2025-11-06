@@ -615,6 +615,24 @@ export type EventTuiPromptAppend = {
   type: "tui.prompt.append"
   properties: {
     text: string
+    parts: Array<
+      | {
+          type: "agent"
+          name: string
+          source?: {
+            value: string
+            start: number
+            end: number
+          }
+        }
+      | {
+          type: "file"
+          mime: string
+          filename?: string
+          url: string
+          source?: FilePartSource
+        }
+    >
   }
 }
 

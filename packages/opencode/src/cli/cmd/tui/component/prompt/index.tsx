@@ -120,7 +120,33 @@ export function Prompt(props: PromptProps) {
 
   event.on(TuiEvent.PromptAppend.type, (evt) => {
     if (!input || input.isDestroyed) return
+    const oldLength = input.plainText.length
     input.insertText(evt.properties.text)
+
+    if (evt.properties.parts.length > 0) {
+      for (const part of evt.properties.parts) {
+        const extmarkId =
+          part.source &&
+          input.extmarks.create({
+            start: oldLength + (part.type === "file" ? part.source.text.start : part.source.start),
+            end: oldLength + (part.type === "file" ? part.source.text.end : part.source.end),
+            virtual: true,
+            styleId: part.type === "agent" ? agentStyleId : fileStyleId,
+            typeId: promptPartTypeId,
+          })
+
+        setStore(
+          produce((draft) => {
+            const partIndex = draft.prompt.parts.length
+            draft.prompt.parts.push(part)
+            if (extmarkId !== undefined) {
+              draft.extmarkToPartIndex.set(extmarkId, partIndex)
+            }
+          }),
+        )
+      }
+    }
+
     setTimeout(() => {
       // setTimeout is a workaround and needs to be addressed properly
       if (!input || input.isDestroyed) return

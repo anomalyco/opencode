@@ -1,10 +1,22 @@
 import { BusEvent } from "@/bus/bus-event"
 import { Bus } from "@/bus"
 import { SessionID } from "@/session/schema"
+import { MessageV2 } from "@/session/message-v2"
 import z from "zod"
 
 export const TuiEvent = {
-  PromptAppend: BusEvent.define("tui.prompt.append", z.object({ text: z.string() })),
+  PromptAppend: BusEvent.define(
+    "tui.prompt.append",
+    z.object({
+      text: z.string(),
+      parts: z.array(
+        z.union([
+          MessageV2.AgentPart.omit({ id: true, sessionID: true, messageID: true }),
+          MessageV2.FilePart.omit({ id: true, sessionID: true, messageID: true }),
+        ]),
+      ),
+    }),
+  ),
   CommandExecute: BusEvent.define(
     "tui.command.execute",
     z.object({

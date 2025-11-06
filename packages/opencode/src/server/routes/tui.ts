@@ -3,6 +3,7 @@ import { describeRoute, validator, resolver } from "hono-openapi"
 import z from "zod"
 import { Bus } from "../../bus"
 import { Session } from "../../session"
+import { SessionPrompt } from "../../session/prompt"
 import { TuiEvent } from "@/cli/cmd/tui/event"
 import { AsyncQueue } from "../../util/queue"
 import { errors } from "../error"
@@ -95,9 +96,15 @@ export const TuiRoutes = lazy(() =>
           ...errors(400),
         },
       }),
-      validator("json", TuiEvent.PromptAppend.properties),
+      validator("json", z.object({ text: z.string() })),
       async (c) => {
-        await Bus.publish(TuiEvent.PromptAppend, c.req.valid("json"))
+        const { text } = c.req.valid("json")
+        await Bus.publish(TuiEvent.PromptAppend, {
+          text,
+          parts: (await SessionPrompt.resolvePromptParts(text)).filter(
+            (part) => part.type === "agent" || part.type === "file",
+          ),
+        })
         return c.json(true)
       },
     )
