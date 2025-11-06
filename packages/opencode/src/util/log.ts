@@ -52,7 +52,7 @@ export namespace Log {
   export function file() {
     return logpath
   }
-  let write = process.stderr.write
+  let write = (msg: any) => Bun.stderr.write(msg)
 
   export async function init(options: Options) {
     if (options.level) level = options.level
@@ -68,7 +68,6 @@ export namespace Log {
     write = (msg: any) => {
       writer.write(msg)
       writer.flush()
-      return true
     }
   }
 
