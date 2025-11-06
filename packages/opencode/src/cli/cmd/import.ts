@@ -18,13 +18,15 @@ export const ImportCommand = cmd({
   },
   handler: async (args) => {
     await bootstrap(process.cwd(), async () => {
-      let exportData: {
-        info: Session.Info
-        messages: Array<{
-          info: any
-          parts: any[]
-        }>
-      } | undefined
+      let exportData:
+        | {
+            info: Session.Info
+            messages: Array<{
+              info: any
+              parts: any[]
+            }>
+          }
+        | undefined
 
       const isUrl = args.file.startsWith("http://") || args.file.startsWith("https://")
 
