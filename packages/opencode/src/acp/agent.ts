@@ -359,15 +359,24 @@ export namespace ACP {
     }
 
     async newSession(params: NewSessionRequest) {
-      const model = await defaultModel(this.config)
-      const session = await this.sessionManager.create(params.cwd, params.mcpServers, model)
+      try {
+        const model = await defaultModel(this.config)
+        const session = await this.sessionManager.create(params.cwd, params.mcpServers, model)
 
-      log.info("creating_session", { mcpServers: params.mcpServers.length })
-      const load = await this.loadSession({
-        cwd: params.cwd,
-        mcpServers: params.mcpServers,
-        sessionId: session.id,
-      }).catch((e) => {
+        log.info("creating_session", { mcpServers: params.mcpServers.length })
+        const load = await this.loadSession({
+          cwd: params.cwd,
+          mcpServers: params.mcpServers,
+          sessionId: session.id,
+        })
+
+        return {
+          sessionId: session.id,
+          models: load.models,
+          modes: load.modes,
+          _meta: {},
+        }
+      } catch (e) {
         const error = MessageV2.fromError(e, {
           providerID: this.config.defaultModel?.providerID ?? "unknown",
         })
@@ -375,13 +384,6 @@ export namespace ACP {
           throw RequestError.authRequired()
         }
         throw e
-      })
-
-      return {
-        sessionId: session.id,
-        models: load.models,
-        modes: load.modes,
-        _meta: {},
       }
     }
 
@@ -685,18 +687,17 @@ export namespace ACP {
     if (configured) return configured
 
     // Fallback to user config if not provided in ACP config
-    const userConfig = await Config.get()
-      .catch((error) => {
-        log.error("failed to load user config for default model", { error })
-        return undefined
-      })
-    
-    if (userConfig?.model) {
-      const parsed = Provider.parseModel(userConfig.model)
-      return {
-        providerID: parsed.providerID,
-        modelID: parsed.modelID,
+    try {
+      const userConfig = await Config.get()
+      if (userConfig.model) {
+        const parsed = Provider.parseModel(userConfig.model)
+        return {
+          providerID: parsed.providerID,
+          modelID: parsed.modelID,
+        }
       }
+    } catch (error) {
+      log.debug("failed to load user config for default model", { error })
     }
 
     return Provider.defaultModel()
