@@ -99,7 +99,7 @@ export function LeftSidebar(props: {
               props.onSwitch()
             }}
           >
-            Switch Session
+            New Session
           </text>
         </box>
       </box>

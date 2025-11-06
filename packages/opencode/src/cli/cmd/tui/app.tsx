@@ -174,7 +174,6 @@ export function tui(input: {
         )
       },
       {
-        targetFps: 60,
         gatherStats: false,
         exitOnCtrlC: false,
         useKittyKeyboard: true,
@@ -261,15 +260,7 @@ function App() {
         dialog.replace(() => <DialogAgent />)
       },
     },
-    {
-      title: "Manage agents",
-      value: "agent.manage",
-      keybind: "agent_manage",
-      category: "Agent",
-      onSelect: () => {
-        dialog.replace(() => <DialogAgentManager />)
-      },
-    },
+
     {
       title: "Agent cycle",
       value: "agent.cycle",
@@ -323,15 +314,7 @@ function App() {
       },
       category: "System",
     },
-    {
-      title: "Memory manager",
-      value: "memory.list",
-      keybind: "memory_list",
-      category: "System",
-      onSelect: () => {
-        dialog.replace(() => <DialogMemoryList />)
-      },
-    },
+
     {
       title: "MCP manager",
       value: "mcp.manage",

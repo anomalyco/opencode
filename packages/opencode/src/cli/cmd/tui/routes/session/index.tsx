@@ -647,43 +647,7 @@ export function Session() {
         dialog.clear()
       },
     },
-    {
-      title: "Switch to Files tab",
-      value: "session.sidebar.tab.files",
-      keybind: "sidebar_tab_files" as any,
-      category: "Session",
-      onSelect: (dialog) => {
-        // Trigger tab switch via event or direct call
-        dialog.clear()
-      },
-    },
-    {
-      title: "Switch to Todos tab",
-      value: "session.sidebar.tab.todos",
-      keybind: "sidebar_tab_todos" as any,
-      category: "Session",
-      onSelect: (dialog) => {
-        dialog.clear()
-      },
-    },
-    {
-      title: "Switch to LSP tab",
-      value: "session.sidebar.tab.lsp",
-      keybind: "sidebar_tab_lsp" as any,
-      category: "Session",
-      onSelect: (dialog) => {
-        dialog.clear()
-      },
-    },
-    {
-      title: "Switch to MCP tab",
-      value: "session.sidebar.tab.mcp",
-      keybind: "sidebar_tab_mcp" as any,
-      category: "Session",
-      onSelect: (dialog) => {
-        dialog.clear()
-      },
-    },
+
     {
       title: "Start LiveKit Voice Session",
       value: "livekit.connect",

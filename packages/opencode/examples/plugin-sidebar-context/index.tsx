@@ -149,7 +149,7 @@ export const ContextPanelPlugin = async () => {
                 <text fg="#6b7280">{systemBar()}</text>
                 <text fg="#3b82f6">{assistantBar()}</text>
                 <text fg="#10b981">{toolBar()}</text>
-                <text fg="#8b5cf6">{userBar()}</text>
+                <text fg="#f5a742">{userBar()}</text>
               </box>
 
               <text fg="#6b7280" marginTop={1}>
@@ -169,7 +169,7 @@ export const ContextPanelPlugin = async () => {
                   <text fg="#10b981">█ tools</text>
                 </box>
                 <box flexDirection="row" gap={1}>
-                  <text fg="#8b5cf6">█ user</text>
+                  <text fg="#f5a742">█ user</text>
                 </box>
               </box>
             </box>

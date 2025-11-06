@@ -59,11 +59,11 @@ export function ContextBar(props: ContextBarProps) {
       }
     }
 
-    // User tokens - purple
+    // User tokens - orange (theme accent)
     if (props.userTokens) {
       const userCount = Math.round((props.userTokens / props.tokenLimit) * barWidth)
       if (userCount > 0) {
-        segments.push({ char: "█", color: "#8b5cf6", count: userCount })
+        segments.push({ char: "█", color: "#f5a742", count: userCount })
       }
     }
 
