@@ -139,19 +139,14 @@ for SYSTEM in $SYSTEMS; do
     echo "Failed to find 'got:' line in build log; attempting alternative hash extraction..."
 
     # When a FOD has the wrong hash, modern Nix refuses to build at all with:
-    # "some outputs ... are not valid, so checking is not possible"
-    #
-    # Solution: Use nix-build (legacy) with the derivation path and --check disabled,
-    # which will actually build it and produce a "hash mismatch" error.
+    # "some outputs ... are not valid, so checking is not possible", so we use nix-build (legacy)
+    # with the derivation path and --check disabled, which will actually build and produce a hash mismatch.
 
     echo "Using nix-build to force derivation build and capture hash mismatch..."
     TMP_MODULES_LOG=$(mktemp)
 
-    # Use nix-build with the derivation path directly
-    # --no-build-output suppresses some output, -K keeps failed builds
     BUILD_OUT=$(nix-build "$DRV_PATH" --no-out-link --keep-failed --system "$SYSTEM" 2>&1 | tee "$TMP_MODULES_LOG" || true)
 
-    # Check if build succeeded (hash was correct)
     if echo "$BUILD_OUT" | grep -q "^/nix/store/"; then
       # Build succeeded - hash the output
       BUILD_PATH=$(echo "$BUILD_OUT" | grep "^/nix/store/" | head -n1)
@@ -164,22 +159,13 @@ for SYSTEM in $SYSTEMS; do
       fi
     else
       # Build failed - extract hash from error message
-      # Format: "error: hash mismatch in fixed-output derivation '/nix/store/...':
-      #   specified: sha256-...
-      #      got:    sha256-..."
+      # Not sure if there's a way around this other than parsing the human-readable log:
       CORRECT_HASH="$(grep -A1 'hash mismatch' "$TMP_MODULES_LOG" | grep 'got:' | awk '{print $2}' | sed 's/:/-/' || true)"
 
       if [ -z "$CORRECT_HASH" ]; then
-        # Try alternate format without the 'hash mismatch' context
-        CORRECT_HASH="$(grep 'got:' "$TMP_MODULES_LOG" | awk '{print $2}' | head -n1 || true)"
-      fi
-
-      if [ -z "$CORRECT_HASH" ]; then
         # Try to find kept output
-        # Look for "note: keeping build directory '/...'" or similar
         KEPT_LINE=$(grep -E "(keeping|kept).*build" "$TMP_MODULES_LOG" | head -n1 || true)
         if [ -n "$KEPT_LINE" ]; then
-          # Extract path - format might be "note: keeping build directory '/tmp/nix-build-...'"
           KEPT_DIR=$(echo "$KEPT_LINE" | grep -oE "'/[^']+'" | tr -d "'" | head -n1)
 
           if [ -z "$KEPT_DIR" ]; then
@@ -188,7 +174,6 @@ for SYSTEM in $SYSTEMS; do
           fi
 
           if [ -d "$KEPT_DIR" ]; then
-            # Look for the output subdirectory
             if [ -d "$KEPT_DIR/output" ]; then
               KEPT_OUT="$KEPT_DIR/output"
             elif [ -d "$KEPT_DIR" ]; then

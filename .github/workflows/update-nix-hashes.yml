@@ -5,6 +5,16 @@ permissions:
 
 on:
   workflow_dispatch:
+  push:
+    paths:
+      - 'bun.lock'
+      - 'package.json'
+      - 'packages/*/package.json'
+  pull_request:
+    paths:
+      - 'bun.lock'
+      - 'package.json'
+      - 'packages/*/package.json'
 
 jobs:
   verify:
@@ -103,9 +113,21 @@ jobs:
             exit 0
           fi
 
+          # Prevent infinite loop: check if the last commit was a hash update
+          LAST_COMMIT_MSG=$(git log -1 --pretty=%B)
+          if echo "$LAST_COMMIT_MSG" | grep -q "^nix: update hashes"; then
+            echo "Last commit was already a hash update. Skipping to prevent loop."
+            exit 0
+          fi
+
           VERSION=$(jq -r '.version' packages/opencode/package.json)
           git add flake.nix nix/node-modules.nix nix/hashes.json nix/models-dev.nix
-          git commit -m "nix: update hashes for v$VERSION"
+          git commit -m "nix: update hashes for v$VERSION" -m "[skip ci]"
 
-          git pull --rebase origin ${GITHUB_REF_NAME}
-          git push origin HEAD:${GITHUB_REF_NAME}
+          # For PRs, push to the head branch; for push events, push to current branch
+          if [ "${{ github.event_name }}" = "pull_request" ]; then
+            git push origin HEAD:${{ github.head_ref }}
+          else
+            git pull --rebase origin ${GITHUB_REF_NAME}
+            git push origin HEAD:${GITHUB_REF_NAME}
+          fi
