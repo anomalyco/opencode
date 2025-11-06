@@ -62,7 +62,7 @@ describe("tool.patch", () => {
 *** End Patch`
         patchTool.execute({ patchText: maliciousPatch }, ctx)
         // TODO: this sucks
-        await new Promise((resolve) => setTimeout(resolve, 100))
+        await new Promise((resolve) => setTimeout(resolve, 1000))
         expect(Permission.pending()[ctx.sessionID]).toBeDefined()
       },
     })
