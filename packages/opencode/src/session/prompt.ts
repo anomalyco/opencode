@@ -961,7 +961,6 @@ export namespace SessionPrompt {
         id: Identifier.ascending("message"),
         parentID,
         role: "assistant",
-        system: input.system,
         mode: input.agent,
         path: {
           cwd: Instance.directory,
@@ -1412,7 +1411,6 @@ export namespace SessionPrompt {
       id: Identifier.ascending("message"),
       sessionID: input.sessionID,
       parentID: userMsg.id,
-      system: [],
       mode: input.agent,
       cost: 0,
       path: {
@@ -1709,7 +1707,6 @@ export namespace SessionPrompt {
         id: Identifier.ascending("message"),
         sessionID: input.sessionID,
         parentID: userMsg.id,
-        system: [],
         mode: agentName,
         cost: 0,
         path: {

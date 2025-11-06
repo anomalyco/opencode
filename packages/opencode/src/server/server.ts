@@ -755,7 +755,7 @@ export namespace Server {
         ),
         async (c) => {
           const messages = await Session.messages(c.req.valid("param").id)
-          return c.json(messages)
+          return c.json(messages.slice(-100))
         },
       )
       .get(

@@ -20,8 +20,14 @@ export namespace Key {
           email: AuthTable.subject,
         })
         .from(KeyTable)
-        .innerJoin(UserTable, and(eq(KeyTable.userID, UserTable.id), eq(KeyTable.workspaceID, UserTable.workspaceID)))
-        .innerJoin(AuthTable, and(eq(UserTable.accountID, AuthTable.accountID), eq(AuthTable.provider, "email")))
+        .innerJoin(
+          UserTable,
+          and(eq(KeyTable.userID, UserTable.id), eq(KeyTable.workspaceID, UserTable.workspaceID)),
+        )
+        .innerJoin(
+          AuthTable,
+          and(eq(UserTable.accountID, AuthTable.accountID), eq(AuthTable.provider, "email")),
+        )
         .where(
           and(
             ...[

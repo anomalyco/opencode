@@ -1,4 +1,4 @@
-import { streamText, type ModelMessage, LoadAPIKeyError, type StreamTextResult, type Tool as AITool } from "ai"
+import { streamText, type ModelMessage, type StreamTextResult, type Tool as AITool } from "ai"
 import { Session } from "."
 import { Identifier } from "../id/id"
 import { Instance } from "../project/instance"
@@ -30,12 +30,17 @@ export namespace SessionCompaction {
     ),
   }
 
-  export function isOverflow(input: { tokens: MessageV2.Assistant["tokens"]; model: ModelsDev.Model }) {
+  export function isOverflow(input: {
+    tokens: MessageV2.Assistant["tokens"]
+    model: ModelsDev.Model
+  }) {
     if (Flag.OPENCODE_DISABLE_AUTOCOMPACT) return false
     const context = input.model.limit.context
     if (context === 0) return false
     const count = input.tokens.input + input.tokens.cache.read + input.tokens.output
-    const output = Math.min(input.model.limit.output, SessionPrompt.OUTPUT_TOKEN_MAX) || SessionPrompt.OUTPUT_TOKEN_MAX
+    const output =
+      Math.min(input.model.limit.output, SessionPrompt.OUTPUT_TOKEN_MAX) ||
+      SessionPrompt.OUTPUT_TOKEN_MAX
     const usable = context - output
     return count > usable
   }
@@ -87,9 +92,15 @@ export namespace SessionCompaction {
     }
   }
 
-  export async function run(input: { sessionID: string; providerID: string; modelID: string; signal?: AbortSignal }) {
+  export async function run(input: {
+    sessionID: string
+    providerID: string
+    modelID: string
+    signal?: AbortSignal
+  }) {
     if (!input.signal) SessionLock.assertUnlocked(input.sessionID)
-    await using lock = input.signal === undefined ? SessionLock.acquire({ sessionID: input.sessionID }) : undefined
+    await using lock =
+      input.signal === undefined ? SessionLock.acquire({ sessionID: input.sessionID }) : undefined
     const signal = input.signal ?? lock!.signal
 
     await Session.update(input.sessionID, (draft) => {
@@ -113,7 +124,6 @@ export namespace SessionCompaction {
       role: "assistant",
       parentID: toSummarize.findLast((m) => m.info.role === "user")?.info.id!,
       sessionID: input.sessionID,
-      system,
       mode: "build",
       path: {
         cwd: Instance.directory,
@@ -150,7 +160,11 @@ export namespace SessionCompaction {
         // set to 0, we handle loop
         maxRetries: 0,
         model: model.language,
-        providerOptions: ProviderTransform.providerOptions(model.npm, model.providerID, model.info.options),
+        providerOptions: ProviderTransform.providerOptions(
+          model.npm,
+          model.providerID,
+          model.info.options,
+        ),
         headers: model.info.headers,
         abortSignal: signal,
         onError(error) {
@@ -230,7 +244,11 @@ export namespace SessionCompaction {
           error: e,
         })
         const error = MessageV2.fromError(e, { providerID: input.providerID })
-        if (retries.count < retries.max && MessageV2.APIError.isInstance(error) && error.data.isRetryable) {
+        if (
+          retries.count < retries.max &&
+          MessageV2.APIError.isInstance(error) &&
+          error.data.isRetryable
+        ) {
           shouldRetry = true
           await Session.updatePart({
             id: Identifier.ascending("part"),

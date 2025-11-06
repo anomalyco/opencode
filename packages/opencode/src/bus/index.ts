@@ -19,7 +19,10 @@ export namespace Bus {
 
   const registry = new Map<string, EventDefinition>()
 
-  export function event<Type extends string, Properties extends ZodType>(type: Type, properties: Properties) {
+  export function event<Type extends string, Properties extends ZodType>(
+    type: Type,
+    properties: Properties,
+  ) {
     const result = {
       type,
       properties,
@@ -70,7 +73,10 @@ export namespace Bus {
 
   export function subscribe<Definition extends EventDefinition>(
     def: Definition,
-    callback: (event: { type: Definition["type"]; properties: z.infer<Definition["properties"]> }) => void,
+    callback: (event: {
+      type: Definition["type"]
+      properties: z.infer<Definition["properties"]>
+    }) => void,
   ) {
     return raw(def.type, callback)
   }

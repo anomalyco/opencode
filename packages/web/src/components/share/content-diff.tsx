@@ -124,7 +124,9 @@ export function ContentDiff(props: Props) {
       // Collect consecutive modified/removed/added rows
       while (
         i < currentRows.length &&
-        (currentRows[i].type === "modified" || currentRows[i].type === "removed" || currentRows[i].type === "added")
+        (currentRows[i].type === "modified" ||
+          currentRows[i].type === "removed" ||
+          currentRows[i].type === "added")
       ) {
         const row = currentRows[i]
         if (row.left && (row.type === "removed" || row.type === "modified")) {
@@ -162,10 +164,16 @@ export function ContentDiff(props: Props) {
       <div data-component="desktop">
         {rows().map((r) => (
           <div data-component="diff-row" data-type={r.type}>
-            <div data-slot="before" data-diff-type={r.type === "removed" || r.type === "modified" ? "removed" : ""}>
+            <div
+              data-slot="before"
+              data-diff-type={r.type === "removed" || r.type === "modified" ? "removed" : ""}
+            >
               <ContentCode code={r.left} flush lang={props.lang} />
             </div>
-            <div data-slot="after" data-diff-type={r.type === "added" || r.type === "modified" ? "added" : ""}>
+            <div
+              data-slot="after"
+              data-diff-type={r.type === "added" || r.type === "modified" ? "added" : ""}
+            >
               <ContentCode code={r.right} lang={props.lang} flush />
             </div>
           </div>
@@ -176,7 +184,11 @@ export function ContentDiff(props: Props) {
         {mobileRows().map((block) => (
           <div data-component="diff-block" data-type={block.type}>
             {block.lines.map((line) => (
-              <div data-diff-type={block.type === "removed" ? "removed" : block.type === "added" ? "added" : ""}>
+              <div
+                data-diff-type={
+                  block.type === "removed" ? "removed" : block.type === "added" ? "added" : ""
+                }
+              >
                 <ContentCode code={line} lang={props.lang} flush />
               </div>
             ))}

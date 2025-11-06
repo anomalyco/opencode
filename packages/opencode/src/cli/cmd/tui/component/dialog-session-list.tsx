@@ -20,8 +20,8 @@ export function DialogSessionList() {
 
   const deleteKeybind = "ctrl+d"
 
-  const currentSessionID = createMemo(() => 
-    route.data.type === "session" ? route.data.sessionID : undefined
+  const currentSessionID = createMemo(() =>
+    route.data.type === "session" ? route.data.sessionID : undefined,
   )
 
   const options = createMemo(() => {
