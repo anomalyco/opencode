@@ -16,6 +16,7 @@ import { Log } from "../util/log"
 import { Bus } from "../bus"
 import { Server } from "../server/server"
 import { createOpencodeClient } from "@opencode-ai/sdk"
+import { getCoreWidgetSystemPrompts } from "./renderers"
 
 export namespace UIRegistry {
   const log = Log.create({ service: "ui-registry" })
@@ -167,6 +168,11 @@ export namespace UIRegistry {
   export async function getMessageWidgetSystemPrompts(): Promise<string[]> {
     const { extensions } = await state()
     const prompts: string[] = []
+    
+    // Add core widget system prompts
+    prompts.push(...getCoreWidgetSystemPrompts())
+    
+    // Add plugin widget system prompts
     for (const ext of extensions) {
       for (const widget of ext.messageWidgets) {
         if (widget.systemPrompt) {

@@ -69,6 +69,13 @@ export interface SteeringAnswer {
 export const SteeringQuestionsPlugin = async () => {
   return {
     "ui.register": async (_input: any, output: any) => {
+      // DEBUG: Write to file to confirm this is being called
+      try {
+        const fs = await import("fs/promises");
+        await fs.appendFile("/tmp/steering-plugin-debug.log", `[${new Date().toISOString()}] ui.register called\n`);
+      } catch {}
+      
+      
       // This plugin doesn't register sidebar widgets, it embeds in message list
       output.messageWidgets = [
         {

@@ -1,5 +1,6 @@
 import { UIRegistry } from "./registry"
 import { Log } from "../util/log"
+import { getCoreMessageWidgets } from "./renderers"
 
 export namespace MessageWidgets {
   const log = Log.create({ service: "message-widgets" })
@@ -23,7 +24,10 @@ export namespace MessageWidgets {
     text: string,
     options?: { allowIncomplete?: boolean },
   ): Promise<DetectedWidget[]> {
-    const widgets = await UIRegistry.getMessageWidgets()
+    // Combine core widgets with plugin widgets
+    const coreWidgets = getCoreMessageWidgets()
+    const pluginWidgets = await UIRegistry.getMessageWidgets()
+    const widgets = [...coreWidgets, ...pluginWidgets]
     const detected: DetectedWidget[] = []
 
     for (const widget of widgets) {

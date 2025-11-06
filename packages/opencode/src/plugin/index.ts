@@ -67,6 +67,11 @@ export namespace Plugin {
           plugin,
           error: error instanceof Error ? error.message : String(error),
         })
+        // DEBUG: Also write to file
+        try {
+          const fs = await import("fs/promises")
+          await fs.appendFile("/tmp/plugin-errors.log", `[${new Date().toISOString()}] Failed to load ${plugin}: ${error instanceof Error ? error.message : String(error)}\n`)
+        } catch {}
       }
     }
 
