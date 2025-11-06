@@ -110,6 +110,7 @@ export default defineConfig({
   ],
   redirects: {
     "/discord": "https://discord.gg/opencode",
+    "/desktop-feedback": "https://discord.gg/h5TNnkFVNy",
   },
 })
 

@@ -126,7 +126,7 @@ const Demo: Component = () => {
         <Tooltip value="This is a right tooltip" placement="right">
           <Button variant="secondary">Right Tooltip</Button>
         </Tooltip>
-        <Tooltip value={() => `Dynamic tooltip: ${new Date().toLocaleTimeString()}`} placement="top">
+        <Tooltip value={`Dynamic tooltip: ${new Date().toLocaleTimeString()}`} placement="top">
           <Button variant="primary">Dynamic Tooltip</Button>
         </Tooltip>
       </section>
@@ -141,7 +141,9 @@ const Demo: Component = () => {
         <Input
           placeholder="Enter text..."
           value={inputValue()}
-          onInput={(e: InputEvent & { currentTarget: HTMLInputElement }) => setInputValue(e.currentTarget.value)}
+          onInput={(e: InputEvent & { currentTarget: HTMLInputElement }) =>
+            setInputValue(e.currentTarget.value)
+          }
         />
         <Input placeholder="Disabled input" disabled />
         <Input type="password" placeholder="Password input" />
@@ -158,8 +160,15 @@ const Demo: Component = () => {
           checked={checked()}
           onChange={setChecked}
         />
-        <Checkbox label="With description" description="This is a helpful description for the checkbox" />
-        <Checkbox label="Indeterminate state" description="Useful for nested checkbox lists" indeterminate />
+        <Checkbox
+          label="With description"
+          description="This is a helpful description for the checkbox"
+        />
+        <Checkbox
+          label="Indeterminate state"
+          description="Useful for nested checkbox lists"
+          indeterminate
+        />
         <Checkbox
           label="I agree to the Terms and Conditions"
           description="You must agree to continue"
@@ -190,8 +199,17 @@ const Demo: Component = () => {
         <Button onClick={() => setDialogOpen(true)}>Open Dialog</Button>
         <Dialog open={dialogOpen()} onOpenChange={setDialogOpen}>
           <Dialog.Title>Example Dialog</Dialog.Title>
-          <Dialog.Description>This is an example dialog with a title and description.</Dialog.Description>
-          <div style={{ "margin-top": "16px", display: "flex", gap: "8px", "justify-content": "flex-end" }}>
+          <Dialog.Description>
+            This is an example dialog with a title and description.
+          </Dialog.Description>
+          <div
+            style={{
+              "margin-top": "16px",
+              display: "flex",
+              gap: "8px",
+              "justify-content": "flex-end",
+            }}
+          >
             <Button variant="ghost" onClick={() => setDialogOpen(false)}>
               Cancel
             </Button>
@@ -249,7 +267,10 @@ const Demo: Component = () => {
             </Accordion.Header>
             <Accordion.Content>
               <div style={{ padding: "16px" }}>
-                <p>Kobalte is a UI toolkit for building accessible web apps and design systems with SolidJS.</p>
+                <p>
+                  Kobalte is a UI toolkit for building accessible web apps and design systems with
+                  SolidJS.
+                </p>
               </div>
             </Accordion.Content>
           </Accordion.Item>
