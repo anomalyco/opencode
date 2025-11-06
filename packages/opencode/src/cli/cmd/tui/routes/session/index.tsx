@@ -115,6 +115,18 @@ export function Session() {
     })
   })
 
+  createEffect(() => {
+    route.sessionID
+    const checkAndScroll = () => {
+      if (scroll && messages().length > 0) {
+        toBottom()
+      } else {
+        setTimeout(checkAndScroll, 50)
+      }
+    }
+    checkAndScroll()
+  })
+
   const toast = useToast()
 
   const sdk = useSDK()
