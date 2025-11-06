@@ -543,6 +543,7 @@ export const PromptInput: Component<PromptInputProps> = (props) => {
               disabled={!session.prompt.dirty() && !session.working()}
               icon={session.working() ? "stop" : "arrow-up"}
               variant="primary"
+              class="rounded-full"
             />
           </Tooltip>
         </div>

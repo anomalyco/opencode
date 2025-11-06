@@ -7,6 +7,7 @@
   border-radius: 6px;
   text-decoration: none;
   user-select: none;
+  cursor: default;
   outline: none;
 
   &[data-variant="primary"] {
@@ -93,11 +94,12 @@
 
     gap: 8px;
 
+    /* text-12-medium */
     font-family: var(--font-family-sans);
-    font-size: var(--font-size-base);
+    font-size: var(--font-size-small);
     font-style: normal;
     font-weight: var(--font-weight-medium);
-    line-height: var(--line-height-large); /* 171.429% */
+    line-height: var(--line-height-large); /* 166.667% */
     letter-spacing: var(--letter-spacing-normal);
   }
 
