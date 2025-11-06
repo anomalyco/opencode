@@ -36,23 +36,8 @@ export const WriteTool = Tool.define("write", {
       })
     }
 
-    const sessionManager = ACPSessionManager.getManagerForSession(ctx.sessionID)
-    const acpAgent = sessionManager?.get(ctx.sessionID)?.acpAgent
-    let exists = false
-    if (acpAgent) {
-      try {
-        await acpAgent.readTextFile({
-          sessionId: ctx.sessionID,
-          path: filepath,
-        })
-        exists = true
-      } catch {
-        exists = false
-      }
-    } else {
-      const file = Bun.file(filepath)
-      exists = await file.exists()
-    }
+    const file = Bun.file(filepath)
+    const exists = await file.exists()
 
     if (exists) await FileTime.assert(ctx.sessionID, filepath)
 
@@ -71,6 +56,8 @@ export const WriteTool = Tool.define("write", {
         },
       })
 
+    const sessionManager = ACPSessionManager.getManagerForSession(ctx.sessionID)
+    const acpAgent = sessionManager?.get(ctx.sessionID)?.acpAgent
     if (acpAgent) {
       await acpAgent.writeTextFile({
         sessionId: ctx.sessionID,

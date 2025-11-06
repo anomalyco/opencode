@@ -91,21 +91,17 @@ export const EditTool = Tool.define("edit", {
         return
       }
 
+      const file = Bun.file(filePath)
+      const stats = await file.stat().catch(() => {})
+      if (!stats) throw new Error(`File ${filePath} not found`)
+      if (stats.isDirectory()) throw new Error(`Path is a directory, not a file: ${filePath}`)
       if (acpAgent) {
-        try {
-          const result = await acpAgent.readTextFile({
-            sessionId: ctx.sessionID,
-            path: filePath,
-          })
-          contentOld = result.content
-        } catch {
-          throw new Error(`File ${filePath} not found`)
-        }
+        const result = await acpAgent.readTextFile({
+          sessionId: ctx.sessionID,
+          path: filePath,
+        })
+        contentOld = result.content
       } else {
-        const file = Bun.file(filePath)
-        const stats = await file.stat().catch(() => {})
-        if (!stats) throw new Error(`File ${filePath} not found`)
-        if (stats.isDirectory()) throw new Error(`Path is a directory, not a file: ${filePath}`)
         contentOld = await file.text()
       }
 
