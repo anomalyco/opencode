@@ -1,16 +1,25 @@
 {
   "$schema": "https://opencode.ai/config.json",
+  "theme": "fulcrum",
+  "model": "xai/grok-4-fast",
   "plugin": ["opencode-openai-codex-auth"],
+  "provider": {
+    "xai": {
+      "options": {
+        "apiKey": "{env:XAI_API_KEY}"
+      }
+    }
+  },
   "mcp": {
-    "weather": {
+    "aws-ccapi": {
       "type": "local",
-      "command": ["bun", "x", "@h1deya/mcp-server-weather"]
-    },
-    "context7": {
-      "type": "remote",
-      "url": "https://mcp.context7.com/mcp",
-      "headers": {
-        "CONTEXT7_API_KEY": "{env:CONTEXT7_API_KEY}"
+      "command": ["uvx", "awslabs.ccapi-mcp-server@latest"],
+      "environment": {
+        "DEFAULT_TAGS": "enabled",
+        "SECURITY_SCANNING": "enabled",
+        "FASTMCP_LOG_LEVEL": "ERROR",
+        "AWS_ACCESS_KEY_ID": "{env:AWS_ACCESS_KEY_ID}",
+        "AWS_SECRET_ACCESS_KEY": "{env:AWS_SECRET_ACCESS_KEY}"
       }
     }
   }
