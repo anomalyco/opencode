@@ -77,6 +77,7 @@
     "partial-json": "0.1.7",
     "remeda": "catalog:",
     "solid-js": "catalog:",
+    "strip-ansi": "7.1.2",
     "tree-sitter-bash": "0.25.0",
     "turndown": "7.2.0",
     "ulid": "catalog:",

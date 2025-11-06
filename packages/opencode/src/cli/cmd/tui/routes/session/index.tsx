@@ -68,6 +68,7 @@ import { useKV } from "../../context/kv.tsx"
 import { Editor } from "../../util/editor"
 import { Global } from "@/global"
 import fs from "fs/promises"
+import stripAnsi from "strip-ansi"
 
 addDefaultParsers(parsers.parsers)
 
@@ -1172,7 +1173,7 @@ ToolRegistry.register<typeof BashTool>({
   name: "bash",
   container: "block",
   render(props) {
-    const output = createMemo(() => props.metadata.output?.trim() ?? "")
+    const output = createMemo(() => stripAnsi(props.metadata.output?.trim() ?? ""))
     const { theme } = useTheme()
     return (
       <>
