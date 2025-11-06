@@ -1,4 +1,5 @@
 import type { McpServer } from "@agentclientprotocol/sdk"
+import type { ACP } from "./agent"
 
 export interface ACPSessionState {
   id: string
@@ -11,7 +12,7 @@ export interface ACPSessionState {
     modelID: string
   }
   modeId?: string
-  hasACPTools?: boolean
+  acpAgent?: ACP.Agent
 }
 
 export interface ACPConfig {

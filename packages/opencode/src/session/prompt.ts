@@ -110,7 +110,6 @@ export namespace SessionPrompt {
     noReply: z.boolean().optional(),
     system: z.string().optional(),
     tools: z.record(z.string(), z.boolean()).optional(),
-    acpAgent: z.custom<ACP.Agent>().optional(),
     parts: z.array(
       z.discriminatedUnion("type", [
         MessageV2.TextPart.omit({
@@ -194,7 +193,6 @@ export namespace SessionPrompt {
       agent: agent.name,
       system,
       abort: abort.signal,
-      acpAgent: input.acpAgent,
     })
 
     const tools = await resolveTools({
@@ -204,7 +202,6 @@ export namespace SessionPrompt {
       providerID: model.providerID,
       tools: input.tools,
       processor,
-      acpAgent: input.acpAgent,
     })
 
     const params = await Plugin.trigger(
@@ -522,7 +519,6 @@ export namespace SessionPrompt {
     providerID: string
     tools?: Record<string, boolean>
     processor: Processor
-    acpAgent?: ACP.Agent
   }) {
     const tools: Record<string, AITool> = {}
     const enabledTools = pipe(
@@ -561,7 +557,6 @@ export namespace SessionPrompt {
             extra: {
               modelID: input.modelID,
               providerID: input.providerID,
-              acpAgent: input.acpAgent,
             },
             agent: input.agent.name,
             metadata: async (val) => {
@@ -957,7 +952,6 @@ export namespace SessionPrompt {
     system: string[]
     agent: string
     abort: AbortSignal
-    acpAgent?: ACP.Agent
   }) {
     const toolcalls: Record<string, MessageV2.ToolPart> = {}
     let snapshot: string | undefined

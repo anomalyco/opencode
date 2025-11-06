@@ -10,7 +10,7 @@ import { FileTime } from "../file/time"
 import { Filesystem } from "../util/filesystem"
 import { Instance } from "../project/instance"
 import { Agent } from "../agent/agent"
-import type { ACP } from "../acp/agent"
+import { ACPSessionManager } from "../acp/session"
 
 export const WriteTool = Tool.define("write", {
   description: DESCRIPTION,
@@ -36,7 +36,8 @@ export const WriteTool = Tool.define("write", {
       })
     }
 
-    const acpAgent = ctx.extra?.["acpAgent"] as ACP.Agent | undefined
+    const sessionManager = ACPSessionManager.getManagerForSession(ctx.sessionID)
+    const acpAgent = sessionManager?.get(ctx.sessionID)?.acpAgent
     let exists = false
     if (acpAgent) {
       try {

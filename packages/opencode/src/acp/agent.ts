@@ -369,11 +369,12 @@ export namespace ACP {
       try {
         const model = await defaultModel(this.config)
         const hasACPTools = !!this.clientCapabilities?.fs?.writeTextFile
+        const acpAgent = hasACPTools ? this : undefined
         const session = await this.sessionManager.create(
           params.cwd,
           params.mcpServers,
           model,
-          hasACPTools,
+          acpAgent,
         )
 
         log.info("creating_session", {
@@ -617,7 +618,6 @@ export namespace ACP {
           },
           parts,
           agent,
-          acpAgent: acpSession.hasACPTools ? this : undefined,
         })
         return done
       }

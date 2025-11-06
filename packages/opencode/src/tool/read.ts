@@ -10,7 +10,7 @@ import { Instance } from "../project/instance"
 import { Provider } from "../provider/provider"
 import { Identifier } from "../id/id"
 import { Permission } from "../permission"
-import type { ACP } from "../acp/agent"
+import { ACPSessionManager } from "../acp/session"
 
 const DEFAULT_READ_LIMIT = 2000
 const MAX_LINE_LENGTH = 2000
@@ -103,7 +103,8 @@ export const ReadTool = Tool.define("read", {
     const isBinary = await isBinaryFile(filepath, file)
     if (isBinary) throw new Error(`Cannot read binary file: ${filepath}`)
 
-    const acpAgent = ctx.extra?.["acpAgent"] as ACP.Agent | undefined
+    const sessionManager = ACPSessionManager.getManagerForSession(ctx.sessionID)
+    const acpAgent = sessionManager?.get(ctx.sessionID)?.acpAgent
     const limit = params.limit ?? DEFAULT_READ_LIMIT
     const offset = params.offset || 0
     const text = acpAgent

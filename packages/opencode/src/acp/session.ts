@@ -2,15 +2,21 @@ import type { McpServer } from "@agentclientprotocol/sdk"
 import { Session } from "../session"
 import { Provider } from "../provider/provider"
 import type { ACPSessionState } from "./types"
+import type { ACP } from "./agent"
 
 export class ACPSessionManager {
+  private static registry = new Map<string, ACPSessionManager>()
   private sessions = new Map<string, ACPSessionState>()
+
+  static getManagerForSession(sessionId: string): ACPSessionManager | undefined {
+    return ACPSessionManager.registry.get(sessionId)
+  }
 
   async create(
     cwd: string,
     mcpServers: McpServer[],
     model?: ACPSessionState["model"],
-    hasACPTools?: boolean,
+    acpAgent?: ACP.Agent,
   ): Promise<ACPSessionState> {
     const session = await Session.create({ title: `ACP Session ${crypto.randomUUID()}` })
     const sessionId = session.id
@@ -23,10 +29,11 @@ export class ACPSessionManager {
       mcpServers,
       createdAt: new Date(),
       model: resolvedModel,
-      hasACPTools,
+      acpAgent,
     }
 
     this.sessions.set(sessionId, state)
+    ACPSessionManager.registry.set(sessionId, this)
     return state
   }
 
@@ -40,6 +47,7 @@ export class ACPSessionManager {
 
     await Session.remove(sessionId).catch(() => {})
     this.sessions.delete(sessionId)
+    ACPSessionManager.registry.delete(sessionId)
   }
 
   has(sessionId: string) {
