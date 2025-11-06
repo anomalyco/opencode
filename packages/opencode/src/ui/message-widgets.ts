@@ -24,6 +24,19 @@ export namespace MessageWidgets {
     options?: { allowIncomplete?: boolean },
   ): Promise<DetectedWidget[]> {
     const widgets = await UIRegistry.getMessageWidgets()
+    const hasTag = text.includes("<steering-question")
+    
+    try {
+      await Bun.write("/tmp/opencode-widget-debug.log", `[${new Date().toISOString()}] detect() START: widgets=${widgets.length}, hasTag=${hasTag}, textLen=${text.length}, patterns=${JSON.stringify(widgets.map(w => w.id))}\n`, { flags: "a" })
+    } catch (e) {
+      console.error("Failed to write log:", e)
+    }
+    
+    if (hasTag && widgets.length === 0) {
+      try {
+        await Bun.write("/tmp/opencode-widget-debug.log", `[${new Date().toISOString()}] ERROR: Tag found but NO WIDGETS REGISTERED!\n`, { flags: "a" })
+      } catch (e) {}
+    }
     const detected: DetectedWidget[] = []
 
     for (const widget of widgets) {

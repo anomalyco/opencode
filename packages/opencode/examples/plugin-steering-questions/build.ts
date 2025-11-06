@@ -16,7 +16,12 @@ const result = await build({
   format: "esm",
   minify: false,
   sourcemap: "external",
-  external: ["@opencode-ai/sdk"],
+  external: [
+    "@opencode-ai/sdk",
+    "@opentui/solid",
+    "@opentui/core",
+    // Bundle plugin-ui and solid-js so dist file is standalone
+  ],
   naming: {
     entry: "[dir]/[name].js",
   },

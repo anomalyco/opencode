@@ -387,6 +387,28 @@ export function Prompt(props: PromptProps) {
         return
       }
 
+      // Handle special /widget_test command to test widget rendering
+      if (commandName === "widget_test") {
+        sdk.client.session.prompt({
+          path: { id: sessionID },
+          body: {
+            parts: [{
+              type: "text",
+              text: `Testing widget rendering:\n\n<steering-question id="test-widget">\n{\n  "title": "Widget Test",\n  "questions": [\n    {\n      "id": "test-q",\n      "label": "Does this render as a form?",\n      "type": "single-choice",\n      "options": ["Yes", "No"],\n      "required": true\n    }\n  ]\n}\n</steering-question>\n\nIf you see a form above, widgets work. If you see raw JSON, they don't.`
+            }]
+          }
+        })
+        input.extmarks.clear()
+        setStore("prompt", {
+          input: "",
+          parts: [],
+        })
+        setStore("extmarkToPartIndex", new Map())
+        props.onSubmit?.()
+        input.clear()
+        return
+      }
+
       sdk.client.session.command({
         path: {
           id: sessionID,

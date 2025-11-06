@@ -43,8 +43,11 @@ export namespace UIRegistry {
     })
 
     const plugins = await Plugin.list()
+    await Bun.write("/tmp/opencode-widget-debug.log", `[${new Date().toISOString()}] UIRegistry: ${plugins.length} plugins loaded\n`, { flags: "a" }).catch(() => {})
+    
     for (const plugin of plugins) {
       const uiRegister = (plugin as any)["ui.register"] as UIHooks["ui.register"]
+      await Bun.write("/tmp/opencode-widget-debug.log", `[${new Date().toISOString()}] Plugin has ui.register: ${!!uiRegister}\n`, { flags: "a" }).catch(() => {})
       if (!uiRegister) continue
 
       const output: {
@@ -69,6 +72,8 @@ export namespace UIRegistry {
           output,
         )
 
+        await Bun.write("/tmp/opencode-widget-debug.log", `[${new Date().toISOString()}] Plugin registered messageWidgets: ${output.messageWidgets?.length || 0}\n`, { flags: "a" }).catch(() => {})
+        
         extensions.push({
           pluginId: "unknown", // TODO: get plugin ID from plugin system
           plugin, // Store plugin reference for event handling

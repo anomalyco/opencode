@@ -1205,9 +1205,31 @@ function TextPart(props: { part: TextPart; message: AssistantMessage }) {
 
   createEffect(() => {
     const text = props.part.text.trim()
+    
+    // WIDGET TEST: If text contains "widget_test", inject a sidebar widget for testing
+    if (text.includes("widget_test")) {
+      setSegments([
+        { type: "text", content: "Testing sidebar widget in message stream:\n\n" },
+        { 
+          type: "widget", 
+          widgetId: "context-panel",
+          config: {},
+          match: [] as any,
+          streaming: false
+        },
+        { type: "text", content: "\n\nIf you see the context panel above, message widgets work!" }
+      ])
+      return
+    }
+    
     // Allow incomplete widgets for progressive rendering during streaming
     const isStreaming = !props.message.time.completed
     MessageWidgets.splitText(text, { allowIncomplete: isStreaming }).then((result) => {
+      const widgetCount = result.filter((s) => s.type === "widget").length
+      const hasTag = text.includes("<steering-question")
+      if (hasTag || widgetCount > 0) {
+        Bun.write("/tmp/opencode-widget-debug.log", `[${new Date().toISOString()}] TextPart segments: ${result.length}, widgets: ${widgetCount}, has tag: ${hasTag}, text length: ${text.length}\n`, { flags: "a" })
+      }
       setSegments(result)
     })
   })
