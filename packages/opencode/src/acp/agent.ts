@@ -685,7 +685,7 @@ export namespace ACP {
   async function defaultModel(config: ACPConfig) {
     const configured = config.defaultModel
     if (configured) return configured
-    
+
     // Fallback to user config if not provided in ACP config
     try {
       const userConfig = await Config.get()
@@ -699,7 +699,7 @@ export namespace ACP {
     } catch (error) {
       log.debug("failed to load user config for default model", { error })
     }
-    
+
     return Provider.defaultModel()
   }
 
