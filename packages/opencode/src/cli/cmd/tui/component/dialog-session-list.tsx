@@ -20,6 +20,10 @@ export function DialogSessionList() {
 
   const deleteKeybind = "ctrl+d"
 
+  const currentSessionID = createMemo(() => 
+    route.data.type === "session" ? route.data.sessionID : undefined
+  )
+
   const options = createMemo(() => {
     const today = new Date().toDateString()
     return sync.data.session
@@ -50,6 +54,7 @@ export function DialogSessionList() {
       title="Sessions"
       options={options()}
       limit={50}
+      current={currentSessionID()}
       onMove={() => {
         setToDelete(undefined)
       }}
