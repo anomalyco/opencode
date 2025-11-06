@@ -24,13 +24,13 @@
         "x86_64-linux" = "bun-linux-x64";
       };
       scripts = ./nix/scripts;
-      nodeModulesHashes = builtins.fromJSON (builtins.readFile ./nix/node-modules-hashes.json);
+      hashes = builtins.fromJSON (builtins.readFile ./nix/hashes.json);
       modelsDev = forEachSystem (
         system:
         let
           pkgs = pkgsFor system;
         in
-        pkgs.callPackage ./nix/models-dev.nix { }
+        pkgs.callPackage ./nix/models-dev.nix { hash = hashes.models.dev; }
       );
     in
     {
@@ -56,7 +56,7 @@
         system:
         let
           pkgs = pkgsFor system;
-          mkNodeModules = pkgs.callPackage ./nix/node-modules.nix { hashes = nodeModulesHashes; };
+          mkNodeModules = pkgs.callPackage ./nix/node-modules.nix { hash = hashes.nodeModules.${system}; };
           mkPackage = pkgs.callPackage ./nix/opencode.nix { };
         in
         {

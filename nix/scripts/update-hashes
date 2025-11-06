@@ -4,8 +4,8 @@ set -euo pipefail
 
 DUMMY="sha256-AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA="
 MODELS_URL=${MODELS_URL:-https://models.dev/api.json}
-MODELS_FILE=${MODELS_FILE:-nix/models-dev.nix}
-HASH_FILE=${MODULES_HASH_FILE:-nix/node-modules-hashes.json}
+DEFAULT_HASH_FILE=${MODULES_HASH_FILE:-nix/hashes.json}
+HASH_FILE=${HASH_FILE:-$DEFAULT_HASH_FILE}
 export DUMMY
 
 if [ -z "${SYSTEMS:-}" ]; then
@@ -18,7 +18,12 @@ if [ -z "$SYSTEMS" ]; then
 fi
 
 if [ ! -f "$HASH_FILE" ]; then
-  echo "{}" >"$HASH_FILE"
+  cat <<'EOF' >"$HASH_FILE"
+{
+  "models": {},
+  "nodeModules": {}
+}
+EOF
 fi
 
 echo "Refreshing models-dev hash..."
@@ -29,19 +34,14 @@ if [ -z "$MODELS_HASH" ]; then
   exit 1
 fi
 
-current_models_hash="$(perl -0ne 'print $1 if /hash\s*=\s*"(sha256-[^"]+)";/' "$MODELS_FILE")"
+current_models_hash="$(jq -r '.models.dev // empty' "$HASH_FILE")"
 
 if [ "$MODELS_HASH" != "$current_models_hash" ]; then
-  export MODELS_HASH
-  perl -0pi -e 's/(hash\s*=\s*")sha256-[^"]+(")/${1}$ENV{MODELS_HASH}${2}/' "$MODELS_FILE"
-  if ! grep -q "$MODELS_HASH" "$MODELS_FILE"; then
-    echo "Failed to update models-dev hash"
-    exit 1
-  fi
+  tmp=$(mktemp)
+  jq --arg value "$MODELS_HASH" '.models.dev = $value' "$HASH_FILE" >"$tmp"
+  mv "$tmp" "$HASH_FILE"
   echo "models-dev hash updated: $MODELS_HASH"
-fi
-
-if [ "$MODELS_HASH" = "$current_models_hash" ]; then
+else
   echo "models-dev hash already up to date: $MODELS_HASH"
 fi
 
@@ -56,11 +56,11 @@ cleanup() {
 
 trap cleanup EXIT
 
-write_hash() {
+write_node_modules_hash() {
   local value="$1"
   local temp
   temp=$(mktemp)
-  jq --arg system "$SYSTEM" --arg value "$value" '.[$system] = $value' "$HASH_FILE" >"$temp"
+  jq --arg system "$SYSTEM" --arg value "$value" '.nodeModules[$system] = $value' "$HASH_FILE" >"$temp"
   mv "$temp" "$HASH_FILE"
 }
 
@@ -68,7 +68,7 @@ for SYSTEM in $SYSTEMS; do
   TARGET="packages.${SYSTEM}.default"
 
   echo "Setting dummy node_modules outputHash for ${SYSTEM}..."
-  write_hash "$DUMMY"
+  write_node_modules_hash "$DUMMY"
 
   JSON_OUTPUT=$(mktemp)
   BUILD_LOG=$(mktemp)
@@ -98,9 +98,9 @@ for SYSTEM in $SYSTEMS; do
     exit 1
   fi
 
-  write_hash "$CORRECT_HASH"
+  write_node_modules_hash "$CORRECT_HASH"
 
-  if ! jq -e --arg system "$SYSTEM" --arg hash "$CORRECT_HASH" '.[ $system ] == $hash' "$HASH_FILE" >/dev/null; then
+  if ! jq -e --arg system "$SYSTEM" --arg hash "$CORRECT_HASH" '.nodeModules[$system] == $hash' "$HASH_FILE" >/dev/null; then
     echo "Failed to persist node_modules hash for ${SYSTEM}"
     exit 1
   fi
