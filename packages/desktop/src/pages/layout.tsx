@@ -16,7 +16,7 @@ export default function Layout(props: ParentProps) {
       <div class="h-[calc(100vh-0rem)] flex">
         <div
           classList={{
-            "@container w-16 pb-4 shrink-0 bg-background-weak": true,
+            "@container w-14 pb-4 shrink-0 bg-background-weak": true,
             "flex flex-col items-start self-stretch justify-between": true,
             "border-r border-border-weak-base": true,
             "w-70": local.layout.sidebar.opened(),
