@@ -52,7 +52,7 @@
     "@tsconfig/bun": "catalog:",
     "husky": "9.1.7",
     "prettier": "3.6.2",
-    "sst": "3.17.19",
+    "sst": "3.17.22",
     "turbo": "2.5.6"
   },
   "dependencies": {
