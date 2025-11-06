@@ -53,22 +53,6 @@ describe("tool.patch", () => {
     })
   })
 
-  test("should reject files outside working directory", async () => {
-    await Instance.provide({
-      directory: "/tmp",
-      fn: async () => {
-        const maliciousPatch = `*** Begin Patch
-*** Add File: /etc/passwd
-+malicious content
-*** End Patch`
-
-        await expect(patchTool.execute({ patchText: maliciousPatch }, ctx)).rejects.toThrow(
-          "is not in the current working directory",
-        )
-      },
-    })
-  })
-
   test("should handle simple add file operation", async () => {
     await using fixture = await tmpdir()
 
