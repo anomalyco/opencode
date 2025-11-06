@@ -139,7 +139,7 @@ export function Sidebar(props: { sessionID: string; onToggle: () => void }) {
     }
   }
 
-  // Poll for session diffs and child sessions every 2 seconds
+  // Poll for session diffs and child sessions every 5 seconds
   let updateInterval: NodeJS.Timeout
   onMount(() => {
     loadSessionDiffs()
@@ -147,7 +147,7 @@ export function Sidebar(props: { sessionID: string; onToggle: () => void }) {
     updateInterval = setInterval(() => {
       loadSessionDiffs()
       loadChildSessions()
-    }, 2000)
+    }, 5000)
   })
 
   onCleanup(() => {
@@ -163,24 +163,18 @@ export function Sidebar(props: { sessionID: string; onToggle: () => void }) {
 
   // Cycle through favorite states: none → project → global → none
   const cycleFavorite = async (toolId: string) => {
-    console.log("[Sidebar] Cycling favorite for tool:", toolId)
-    const requestBody = { toolId }
-    console.log("[Sidebar] Request body:", JSON.stringify(requestBody))
     try {
       const response = await fetch(`${sdk.url}/favorite-tools/cycle`, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify(requestBody),
+        body: JSON.stringify({ toolId }),
       })
-      console.log("[Sidebar] Cycle response status:", response.status, "ok:", response.ok)
 
       const responseText = await response.text()
-      console.log("[Sidebar] Response text:", responseText)
 
       let result: { toolId: string; level: "none" | "project" | "global" }
       try {
         result = JSON.parse(responseText)
-        console.log("[Sidebar] Parsed response:", result)
       } catch (e) {
         console.error("[Sidebar] Failed to parse response:", e)
         throw new Error(`Invalid JSON response: ${responseText}`)
@@ -188,7 +182,6 @@ export function Sidebar(props: { sessionID: string; onToggle: () => void }) {
 
       if (response.ok) {
         const level = result.level
-        console.log("[Sidebar] New favorite level:", level)
 
         // Update local state
         setProjectFavorites((prev) => {
@@ -371,13 +364,13 @@ export function Sidebar(props: { sessionID: string; onToggle: () => void }) {
     setExpandedMcpServers(newExpanded)
   }
 
-  // Debug: Log UI extensions data
-  createMemo(() => {
-    const extensions = uiExtensions.extensions()
-    console.log("[Sidebar] UI Extensions:", extensions)
-    console.log("[Sidebar] Widgets:", extensions?.widgets)
-    console.log("[Sidebar] Panels:", extensions?.panels)
-  })
+  // Debug: Log UI extensions data (commented out to reduce logging)
+  // createMemo(() => {
+  //   const extensions = uiExtensions.extensions()
+  //   console.log("[Sidebar] UI Extensions:", extensions)
+  //   console.log("[Sidebar] Widgets:", extensions?.widgets)
+  //   console.log("[Sidebar] Panels:", extensions?.panels)
+  // })
 
   const cost = createMemo(() => {
     const total = messages().reduce((sum, x) => sum + (x.role === "assistant" ? x.cost : 0), 0)
@@ -492,34 +485,36 @@ export function Sidebar(props: { sessionID: string; onToggle: () => void }) {
         </box>
 
         {/* Tab Navigation */}
-        <box flexDirection="row" gap={2}>
+        <box flexDirection="row" gap={0} bg={theme.backgroundPanel} width={40}>
           <text
             style={{
-              fg: activeTab() === "tools" ? theme.accent : theme.textMuted,
+              fg: activeTab() === "tools" ? theme.text : theme.textMuted,
+              bg: activeTab() === "tools" ? theme.accent : theme.backgroundPanel,
               attributes: activeTab() === "tools" ? TextAttributes.BOLD : undefined,
             }}
             onMouseUp={() => handleTabChange("tools")}
           >
-            {activeTab() === "tools" ? "●" : "○"} Tools(
-            {toolsUsed().length + Object.keys(sync.data.mcp).length + sync.data.lsp.length})
+            {" "}{activeTab() === "tools" ? "●" : "○"} Tools({toolsUsed().length + Object.keys(sync.data.mcp).length + sync.data.lsp.length}){" "}
           </text>
           <text
             style={{
-              fg: activeTab() === "todos" ? theme.accent : theme.textMuted,
+              fg: activeTab() === "todos" ? theme.text : theme.textMuted,
+              bg: activeTab() === "todos" ? theme.accent : theme.backgroundPanel,
               attributes: activeTab() === "todos" ? TextAttributes.BOLD : undefined,
             }}
             onMouseUp={() => handleTabChange("todos")}
           >
-            {activeTab() === "todos" ? "●" : "○"} Todos({todo().length})
+            {" "}{activeTab() === "todos" ? "●" : "○"} Todos({todo().length}){" "}
           </text>
           <text
             style={{
-              fg: activeTab() === "files" ? theme.accent : theme.textMuted,
+              fg: activeTab() === "files" ? theme.text : theme.textMuted,
+              bg: activeTab() === "files" ? theme.accent : theme.backgroundPanel,
               attributes: activeTab() === "files" ? TextAttributes.BOLD : undefined,
             }}
             onMouseUp={() => handleTabChange("files")}
           >
-            {activeTab() === "files" ? "●" : "○"} Files({sessionDiffs().length})
+            {" "}{activeTab() === "files" ? "●" : "○"} Files({sessionDiffs().length}){" "}
           </text>
         </box>
 
@@ -720,7 +715,7 @@ export function Sidebar(props: { sessionID: string; onToggle: () => void }) {
                       justifyContent="space-between"
                     >
                       <text
-                        fg={isCommitted() ? theme.success : theme.text}
+                        fg={theme.textMuted}
                       >
                         {isCommitted() ? "[✓]" : "[ ]"} {file()}
                       </text>
