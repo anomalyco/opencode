@@ -32,7 +32,7 @@ import { Command } from "@/command"
 import { Agent as Agents } from "@/agent/agent"
 import { Permission } from "@/permission"
 import { SessionCompaction } from "@/session/compaction"
-import type { Config } from "@/config/config"
+import { Config } from "@/config/config"
 import { MCP } from "@/mcp"
 import { Todo } from "@/session/todo"
 import { z } from "zod"
@@ -685,6 +685,21 @@ export namespace ACP {
   async function defaultModel(config: ACPConfig) {
     const configured = config.defaultModel
     if (configured) return configured
+    
+    // Fallback to user config if not provided in ACP config
+    try {
+      const userConfig = await Config.get()
+      if (userConfig.model) {
+        const parsed = Provider.parseModel(userConfig.model)
+        return {
+          providerID: parsed.providerID,
+          modelID: parsed.modelID,
+        }
+      }
+    } catch (error) {
+      log.debug("failed to load user config for default model", { error })
+    }
+    
     return Provider.defaultModel()
   }
 
