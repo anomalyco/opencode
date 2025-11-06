@@ -10,6 +10,7 @@ import { Instance } from "../project/instance"
 import { Provider } from "../provider/provider"
 import { Identifier } from "../id/id"
 import { Permission } from "../permission"
+import type { ACPTools } from "../acp/types"
 
 const DEFAULT_READ_LIMIT = 2000
 const MAX_LINE_LENGTH = 2000
@@ -104,8 +105,22 @@ export const ReadTool = Tool.define("read", {
 
     const limit = params.limit ?? DEFAULT_READ_LIMIT
     const offset = params.offset || 0
-    const lines = await file.text().then((text) => text.split("\n"))
-    const raw = lines.slice(offset, offset + limit).map((line) => {
+    const acpTools = ctx.extra?.["acpTools"] as ACPTools | undefined
+    let lines: string[]
+    if (acpTools?.readTextFile) {
+      const result = await acpTools.readTextFile({
+        sessionId: ctx.sessionID,
+        path: filepath,
+        line: offset,
+        limit,
+      })
+      lines = result.content.split("\n")
+    } else {
+      const allLines = (await file.text()).split("\n")
+      lines = allLines.slice(offset, offset + limit)
+    }
+
+    const raw = lines.map((line) => {
       return line.length > MAX_LINE_LENGTH ? line.substring(0, MAX_LINE_LENGTH) + "..." : line
     })
     const content = raw.map((line, index) => {

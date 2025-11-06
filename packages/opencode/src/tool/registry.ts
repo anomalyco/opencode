@@ -73,8 +73,7 @@ export namespace ToolRegistry {
 
   async function all(): Promise<Tool.Info[]> {
     const custom = await state().then((x) => x.custom)
-    const customIds = new Set(custom.map((t) => t.id))
-    const nativeTools = [
+    return [
       InvalidTool,
       BashTool,
       EditTool,
@@ -87,8 +86,8 @@ export namespace ToolRegistry {
       TodoWriteTool,
       TodoReadTool,
       TaskTool,
-    ].filter((tool) => !customIds.has(tool.id))
-    return [...nativeTools, ...custom]
+      ...custom,
+    ]
   }
 
   export async function ids() {

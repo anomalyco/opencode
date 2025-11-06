@@ -1,4 +1,3 @@
-// ACP Agent implementation for handling Agent Communication Protocol sessions and interactions
 import {
   RequestError,
   type Agent as ACPAgent,
@@ -26,7 +25,7 @@ import {
 } from "@agentclientprotocol/sdk"
 import { Log } from "../util/log"
 import { ACPSessionManager } from "./session"
-import type { ACPConfig } from "./types"
+import type { ACPConfig, ACPTools } from "./types"
 import { Provider } from "../provider/provider"
 import { SessionPrompt } from "../session/prompt"
 import { Installation } from "@/installation"
@@ -43,10 +42,6 @@ import { MCP } from "@/mcp"
 import { Todo } from "@/session/todo"
 import { z } from "zod"
 import { LoadAPIKeyError } from "ai"
-import { ToolRegistry } from "@/tool/registry"
-import { createACPReadTool } from "@/tool/acp-read"
-import { createACPWriteTool } from "@/tool/acp-write"
-import { createACPEditTool } from "@/tool/acp-edit"
 
 export namespace ACP {
   const log = Log.create({ service: "acp-agent" })
@@ -373,21 +368,10 @@ export namespace ACP {
     async newSession(params: NewSessionRequest) {
       try {
         const model = await defaultModel(this.config)
-        const clientSupportsRead = !!this.clientCapabilities?.fs?.readTextFile
-        const clientSupportsWrite = !!this.clientCapabilities?.fs?.writeTextFile
         const session = await this.sessionManager.create(params.cwd, params.mcpServers, model)
-        if (clientSupportsRead) {
-          await ToolRegistry.register(createACPReadTool(this))
-        }
-        if (clientSupportsWrite) {
-          await ToolRegistry.register(createACPWriteTool(this))
-          await ToolRegistry.register(createACPEditTool(this))
-        }
 
         log.info("creating_session", {
           mcpServers: params.mcpServers.length,
-          clientSupportsRead,
-          clientSupportsWrite,
         })
         const load = await this.loadSession({
           cwd: params.cwd,
@@ -618,6 +602,14 @@ export namespace ACP {
       }
 
       if (!cmd) {
+        const { readTextFile, writeTextFile } = this.clientCapabilities?.fs ?? {}
+        const acpTools: ACPTools | undefined =
+          readTextFile || writeTextFile
+            ? {
+                ...(readTextFile && { readTextFile: (params) => this.readTextFile(params) }),
+                ...(writeTextFile && { writeTextFile: (params) => this.writeTextFile(params) }),
+              }
+            : undefined
         await SessionPrompt.prompt({
           sessionID,
           model: {
@@ -626,6 +618,7 @@ export namespace ACP {
           },
           parts,
           agent,
+          acpTools,
         })
         return done
       }

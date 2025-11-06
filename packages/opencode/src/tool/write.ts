@@ -10,6 +10,7 @@ import { FileTime } from "../file/time"
 import { Filesystem } from "../util/filesystem"
 import { Instance } from "../project/instance"
 import { Agent } from "../agent/agent"
+import type { ACPTools } from "../acp/types"
 
 export const WriteTool = Tool.define("write", {
   description: DESCRIPTION,
@@ -40,6 +41,7 @@ export const WriteTool = Tool.define("write", {
     if (exists) await FileTime.assert(ctx.sessionID, filepath)
 
     const agent = await Agent.get(ctx.agent)
+    const acpTools = ctx.extra?.["acpTools"] as ACPTools | undefined
     if (agent.permission.edit === "ask")
       await Permission.ask({
         type: "write",
@@ -54,7 +56,16 @@ export const WriteTool = Tool.define("write", {
         },
       })
 
-    await Bun.write(filepath, params.content)
+    if (acpTools?.writeTextFile) {
+      await acpTools.writeTextFile({
+        sessionId: ctx.sessionID,
+        path: filepath,
+        content: params.content,
+      })
+    } else {
+      await Bun.write(filepath, params.content)
+    }
+
     await Bus.publish(File.Event.Edited, {
       file: filepath,
     })
