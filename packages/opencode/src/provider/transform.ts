@@ -34,7 +34,6 @@ export namespace ProviderTransform {
         const prevMsg = msgs[i - 1]
         const nextMsg = msgs[i + 1]
 
-        // Normalize tool call IDs
         if ((msg.role === "assistant" || msg.role === "tool") && Array.isArray(msg.content)) {
           msg.content = msg.content.map((part) => {
             if (
