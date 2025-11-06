@@ -434,7 +434,9 @@ export namespace SessionPrompt {
     providerID: string
     signal: AbortSignal
   }) {
-    let msgs = await Session.messages(input.sessionID).then(MessageV2.filterCompacted)
+    let msgs = await Session.messages({ sessionID: input.sessionID }).then(
+      MessageV2.filterCompacted,
+    )
     const lastAssistant = msgs.findLast((msg) => msg.info.role === "assistant")
     if (
       lastAssistant?.info.role === "assistant" &&
@@ -961,7 +963,6 @@ export namespace SessionPrompt {
         id: Identifier.ascending("message"),
         parentID,
         role: "assistant",
-        system: input.system,
         mode: input.agent,
         path: {
           cwd: Instance.directory,
@@ -1022,9 +1023,6 @@ export namespace SessionPrompt {
 
           for await (const value of stream.fullStream) {
             input.abort.throwIfAborted()
-            log.info("part", {
-              type: value.type,
-            })
             switch (value.type) {
               case "start":
                 break
@@ -1415,7 +1413,6 @@ export namespace SessionPrompt {
       id: Identifier.ascending("message"),
       sessionID: input.sessionID,
       parentID: userMsg.id,
-      system: [],
       mode: input.agent,
       cost: 0,
       path: {
@@ -1712,7 +1709,6 @@ export namespace SessionPrompt {
         id: Identifier.ascending("message"),
         sessionID: input.sessionID,
         parentID: userMsg.id,
-        system: [],
         mode: agentName,
         cost: 0,
         path: {

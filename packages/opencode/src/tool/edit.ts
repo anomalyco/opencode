@@ -23,8 +23,13 @@ export const EditTool = Tool.define("edit", {
   parameters: z.object({
     filePath: z.string().describe("The absolute path to the file to modify"),
     oldString: z.string().describe("The text to replace"),
-    newString: z.string().describe("The text to replace it with (must be different from oldString)"),
-    replaceAll: z.boolean().optional().describe("Replace all occurrences of oldString (default false)"),
+    newString: z
+      .string()
+      .describe("The text to replace it with (must be different from oldString)"),
+    replaceAll: z
+      .boolean()
+      .optional()
+      .describe("Replace all occurrences of oldString (default false)"),
   }),
   async execute(params, ctx) {
     if (!params.filePath) {
@@ -35,9 +40,23 @@ export const EditTool = Tool.define("edit", {
       throw new Error("oldString and newString must be different")
     }
 
-    const filePath = path.isAbsolute(params.filePath) ? params.filePath : path.join(Instance.directory, params.filePath)
+    const filePath = path.isAbsolute(params.filePath)
+      ? params.filePath
+      : path.join(Instance.directory, params.filePath)
     if (!Filesystem.contains(Instance.directory, filePath)) {
-      throw new Error(`File ${filePath} is not in the current working directory`)
+      const parentDir = path.dirname(filePath)
+      await Permission.ask({
+        type: "external-directory",
+        pattern: parentDir,
+        sessionID: ctx.sessionID,
+        messageID: ctx.messageID,
+        callID: ctx.callID,
+        title: `Edit file outside working directory: ${filePath}`,
+        metadata: {
+          filepath: filePath,
+          parentDir,
+        },
+      })
     }
 
     const agent = await Agent.get(ctx.agent)
@@ -160,7 +179,11 @@ function levenshtein(a: string, b: string): number {
   for (let i = 1; i <= a.length; i++) {
     for (let j = 1; j <= b.length; j++) {
       const cost = a[i - 1] === b[j - 1] ? 0 : 1
-      matrix[i][j] = Math.min(matrix[i - 1][j] + 1, matrix[i][j - 1] + 1, matrix[i - 1][j - 1] + cost)
+      matrix[i][j] = Math.min(
+        matrix[i - 1][j] + 1,
+        matrix[i][j - 1] + 1,
+        matrix[i - 1][j - 1] + cost,
+      )
     }
   }
   return matrix[a.length][b.length]
@@ -362,7 +385,9 @@ export const WhitespaceNormalizedReplacer: Replacer = function* (content, find) 
         // Find the actual substring in the original line that matches
         const words = find.trim().split(/\s+/)
         if (words.length > 0) {
-          const pattern = words.map((word) => word.replace(/[.*+?^${}()|[\]\\]/g, "\\$&")).join("\\s+")
+          const pattern = words
+            .map((word) => word.replace(/[.*+?^${}()|[\]\\]/g, "\\$&"))
+            .join("\\s+")
           try {
             const regex = new RegExp(pattern)
             const match = line.match(regex)
@@ -600,7 +625,12 @@ export function trimDiff(diff: string): string {
   return trimmedLines.join("\n")
 }
 
-export function replace(content: string, oldString: string, newString: string, replaceAll = false): string {
+export function replace(
+  content: string,
+  oldString: string,
+  newString: string,
+  replaceAll = false,
+): string {
   if (oldString === newString) {
     throw new Error("oldString and newString must be different")
   }

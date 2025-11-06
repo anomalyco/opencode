@@ -154,6 +154,7 @@ export function Diff<T>(props: DiffProps<T>) {
       ...others,
     })
 
+    container.innerHTML = ""
     instance.render({
       oldFile: local.before,
       newFile: local.after,

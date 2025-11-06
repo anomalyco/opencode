@@ -17,13 +17,11 @@ export const { use: useRoute, provider: RouteProvider } = createSimpleContext({
   init: (props: { data?: Route }) => {
     const [store, setStore] = createStore<Route>(
       props.data ??
-      (
-        process.env["OPENCODE_ROUTE"]
+        (process.env["OPENCODE_ROUTE"]
           ? JSON.parse(process.env["OPENCODE_ROUTE"])
           : {
-            type: "home",
-          }
-      ),
+              type: "home",
+            }),
     )
 
     return {

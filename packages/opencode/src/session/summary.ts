@@ -12,6 +12,7 @@ import { Log } from "@/util/log"
 import path from "path"
 import { Instance } from "@/project/instance"
 import { Storage } from "@/storage/storage"
+import { Bus } from "@/bus"
 
 export namespace SessionSummary {
   const log = Log.create({ service: "session.summary" })
@@ -22,7 +23,7 @@ export namespace SessionSummary {
       messageID: z.string(),
     }),
     async (input) => {
-      const all = await Session.messages(input.sessionID)
+      const all = await Session.messages({ sessionID: input.sessionID })
       await Promise.all([
         summarizeSession({ sessionID: input.sessionID, messages: all }),
         summarizeMessage({ messageID: input.messageID, messages: all }),
@@ -47,9 +48,14 @@ export namespace SessionSummary {
       draft.summary = {
         additions: diffs.reduce((sum, x) => sum + x.additions, 0),
         deletions: diffs.reduce((sum, x) => sum + x.deletions, 0),
+        files: diffs.length,
       }
     })
     await Storage.write(["session_diff", input.sessionID], diffs)
+    Bus.publish(Session.Event.Diff, {
+      sessionID: input.sessionID,
+      diff: diffs,
+    })
   }
 
   async function summarizeMessage(input: { messageID: string; messages: MessageV2.WithParts[] }) {
@@ -145,7 +151,7 @@ export namespace SessionSummary {
       messageID: Identifier.schema("message").optional(),
     }),
     async (input) => {
-      let all = await Session.messages(input.sessionID)
+      let all = await Session.messages({ sessionID: input.sessionID })
       if (input.messageID)
         all = all.filter(
           (x) =>

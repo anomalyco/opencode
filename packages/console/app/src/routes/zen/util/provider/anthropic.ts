@@ -98,7 +98,10 @@ export function fromAnthropicRequest(body: any): CommonRequest {
       typeof (src as any).media_type === "string" &&
       typeof (src as any).data === "string"
     )
-      return { type: "image_url", image_url: { url: `data:${(src as any).media_type};base64,${(src as any).data}` } }
+      return {
+        type: "image_url",
+        image_url: { url: `data:${(src as any).media_type};base64,${(src as any).data}` },
+      }
     return undefined
   }
 
@@ -120,12 +123,15 @@ export function fromAnthropicRequest(body: any): CommonRequest {
         if ((p as any).type === "tool_result") {
           const id = (p as any).tool_use_id
           const content =
-            typeof (p as any).content === "string" ? (p as any).content : JSON.stringify((p as any).content)
+            typeof (p as any).content === "string"
+              ? (p as any).content
+              : JSON.stringify((p as any).content)
           msgs.push({ role: "tool", tool_call_id: id, content })
         }
       }
       if (partsOut.length > 0) {
-        if (partsOut.length === 1 && partsOut[0].type === "text") msgs.push({ role: "user", content: partsOut[0].text })
+        if (partsOut.length === 1 && partsOut[0].type === "text")
+          msgs.push({ role: "user", content: partsOut[0].text })
         else msgs.push({ role: "user", content: partsOut })
       }
       continue
@@ -137,7 +143,8 @@ export function fromAnthropicRequest(body: any): CommonRequest {
       const tcs: any[] = []
       for (const p of partsIn) {
         if (!p || !(p as any).type) continue
-        if ((p as any).type === "text" && typeof (p as any).text === "string") texts.push((p as any).text)
+        if ((p as any).type === "text" && typeof (p as any).text === "string")
+          texts.push((p as any).text)
         if ((p as any).type === "tool_use") {
           const name = (p as any).name
           const id = (p as any).id
@@ -165,7 +172,11 @@ export function fromAnthropicRequest(body: any): CommonRequest {
         .filter((t: any) => t && typeof t === "object" && "input_schema" in t)
         .map((t: any) => ({
           type: "function",
-          function: { name: (t as any).name, description: (t as any).description, parameters: (t as any).input_schema },
+          function: {
+            name: (t as any).name,
+            description: (t as any).description,
+            parameters: (t as any).input_schema,
+          },
         }))
     : undefined
 
@@ -203,7 +214,9 @@ export function fromAnthropicRequest(body: any): CommonRequest {
 export function toAnthropicRequest(body: CommonRequest) {
   if (!body || typeof body !== "object") return body
 
-  const sysIn = Array.isArray(body.messages) ? body.messages.filter((m: any) => m && m.role === "system") : []
+  const sysIn = Array.isArray(body.messages)
+    ? body.messages.filter((m: any) => m && m.role === "system")
+    : []
   let ccCount = 0
   const cc = () => {
     ccCount++
@@ -354,7 +367,9 @@ export function fromAnthropicResponse(resp: any): CommonResponse {
 
   const idIn = (resp as any).id
   const id =
-    typeof idIn === "string" ? idIn.replace(/^msg_/, "chatcmpl_") : `chatcmpl_${Math.random().toString(36).slice(2)}`
+    typeof idIn === "string"
+      ? idIn.replace(/^msg_/, "chatcmpl_")
+      : `chatcmpl_${Math.random().toString(36).slice(2)}`
   const model = (resp as any).model
 
   const blocks: any[] = Array.isArray((resp as any).content) ? (resp as any).content : []
@@ -397,7 +412,9 @@ export function fromAnthropicResponse(resp: any): CommonResponse {
     const ct = typeof (u as any).output_tokens === "number" ? (u as any).output_tokens : undefined
     const total = pt != null && ct != null ? pt + ct : undefined
     const cached =
-      typeof (u as any).cache_read_input_tokens === "number" ? (u as any).cache_read_input_tokens : undefined
+      typeof (u as any).cache_read_input_tokens === "number"
+        ? (u as any).cache_read_input_tokens
+        : undefined
     const details = cached != null ? { cached_tokens: cached } : undefined
     return {
       prompt_tokens: pt,
@@ -452,7 +469,12 @@ export function toAnthropicResponse(resp: CommonResponse) {
         } catch {
           input = (tc as any).function.arguments
         }
-        content.push({ type: "tool_use", id: (tc as any).id, name: (tc as any).function.name, input })
+        content.push({
+          type: "tool_use",
+          id: (tc as any).id,
+          name: (tc as any).function.name,
+          input,
+        })
       }
     }
   }
@@ -511,13 +533,22 @@ export function fromAnthropicChunk(chunk: string): CommonChunk | string {
   if (json.type === "content_block_start") {
     const cb = json.content_block
     if (cb?.type === "text") {
-      out.choices.push({ index: json.index ?? 0, delta: { role: "assistant", content: "" }, finish_reason: null })
+      out.choices.push({
+        index: json.index ?? 0,
+        delta: { role: "assistant", content: "" },
+        finish_reason: null,
+      })
     } else if (cb?.type === "tool_use") {
       out.choices.push({
         index: json.index ?? 0,
         delta: {
           tool_calls: [
-            { index: json.index ?? 0, id: cb.id, type: "function", function: { name: cb.name, arguments: "" } },
+            {
+              index: json.index ?? 0,
+              id: cb.id,
+              type: "function",
+              function: { name: cb.name, arguments: "" },
+            },
           ],
         },
         finish_reason: null,
@@ -532,7 +563,9 @@ export function fromAnthropicChunk(chunk: string): CommonChunk | string {
     } else if (d?.type === "input_json_delta") {
       out.choices.push({
         index: json.index ?? 0,
-        delta: { tool_calls: [{ index: json.index ?? 0, function: { arguments: d.partial_json } }] },
+        delta: {
+          tool_calls: [{ index: json.index ?? 0, function: { arguments: d.partial_json } }],
+        },
         finish_reason: null,
       })
     }
@@ -558,7 +591,9 @@ export function fromAnthropicChunk(chunk: string): CommonChunk | string {
       prompt_tokens: u.input_tokens,
       completion_tokens: u.output_tokens,
       total_tokens: (u.input_tokens || 0) + (u.output_tokens || 0),
-      ...(u.cache_read_input_tokens ? { prompt_tokens_details: { cached_tokens: u.cache_read_input_tokens } } : {}),
+      ...(u.cache_read_input_tokens
+        ? { prompt_tokens_details: { cached_tokens: u.cache_read_input_tokens } }
+        : {}),
     }
   }
 

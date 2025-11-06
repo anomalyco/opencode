@@ -5,6 +5,7 @@ import {
   createSignal,
   For,
   Match,
+  on,
   Show,
   Switch,
   useContext,
@@ -68,6 +69,7 @@ import { useKV } from "../../context/kv.tsx"
 import { Editor } from "../../util/editor"
 import { Global } from "@/global"
 import fs from "fs/promises"
+import stripAnsi from "strip-ansi"
 
 addDefaultParsers(parsers.parsers)
 
@@ -104,7 +106,16 @@ export function Session() {
   const sidebarVisible = createMemo(() => sidebar() === "show" || (sidebar() === "auto" && wide()))
   const contentWidth = createMemo(() => dimensions().width - (sidebarVisible() ? 42 : 0) - 4)
 
-  createEffect(() => sync.session.sync(route.sessionID))
+  createEffect(async () => {
+    await sync.session.sync(route.sessionID).catch(() => {
+      toast.show({
+        message: `Session not found: ${route.sessionID}`,
+        variant: "error",
+      })
+      return navigate({ type: "home" })
+    })
+    scroll.scrollBy(100_000)
+  })
 
   const toast = useToast()
 
@@ -151,6 +162,9 @@ export function Session() {
     if (old !== session()?.revert?.messageID) toBottom()
     return session()?.revert?.messageID
   })
+
+  // snap to bottom when session changes
+  createEffect(on(() => route.sessionID, toBottom))
 
   const local = useLocal()
 
@@ -668,7 +682,12 @@ export function Session() {
             </Show>
             <scrollbox
               ref={(r) => (scroll = r)}
-              scrollbarOptions={{ visible: false }}
+              scrollbarOptions={{
+                trackOptions: {
+                  backgroundColor: theme.backgroundElement,
+                  foregroundColor: theme.border,
+                },
+              }}
               stickyScroll={true}
               stickyStart="bottom"
               flexGrow={1}
@@ -1003,6 +1022,7 @@ function TextPart(props: { part: TextPart; message: AssistantMessage }) {
         <code
           filetype="markdown"
           drawUnstyledText={false}
+          streaming={true}
           syntaxStyle={syntax()}
           content={props.part.text.trim()}
           conceal={ctx.conceal()}
@@ -1163,7 +1183,7 @@ ToolRegistry.register<typeof BashTool>({
   name: "bash",
   container: "block",
   render(props) {
-    const output = createMemo(() => Bun.stripANSI(props.metadata.output?.trim() ?? ""))
+    const output = createMemo(() => stripAnsi(props.metadata.output?.trim() ?? ""))
     const { theme } = useTheme()
     return (
       <>

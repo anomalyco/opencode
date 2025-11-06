@@ -5,6 +5,7 @@ import type { FileContent, FileNode, Model, Provider, File as FileStatus } from 
 import { createSimpleContext } from "./helper"
 import { useSDK } from "./sdk"
 import { useSync } from "./sync"
+import { makePersisted } from "@solid-primitives/storage"
 
 export type LocalFile = FileNode &
   Partial<{
@@ -195,18 +196,10 @@ export const { use: useLocal, provider: LocalProvider } = createSimpleContext({
     const file = (() => {
       const [store, setStore] = createStore<{
         node: Record<string, LocalFile>
-        // opened: string[]
-        // active?: string
       }>({
         node: Object.fromEntries(sync.data.node.map((x) => [x.path, x])),
-        // opened: [],
       })
 
-      // const active = createMemo(() => {
-      //   if (!store.active) return undefined
-      //   return store.node[store.active]
-      // })
-      // const opened = createMemo(() => store.opened.map((x) => store.node[x]))
       const changeset = createMemo(() => new Set(sync.data.changes.map((f) => f.path)))
       const changes = createMemo(() => Array.from(changeset()).sort((a, b) => a.localeCompare(b)))
 
@@ -247,18 +240,18 @@ export const { use: useLocal, provider: LocalProvider } = createSimpleContext({
         return false
       }
 
-      const resetNode = (path: string) => {
-        setStore("node", path, {
-          loaded: undefined,
-          pinned: undefined,
-          content: undefined,
-          selection: undefined,
-          scrollTop: undefined,
-          folded: undefined,
-          view: undefined,
-          selectedChange: undefined,
-        })
-      }
+      // const resetNode = (path: string) => {
+      //   setStore("node", path, {
+      //     loaded: undefined,
+      //     pinned: undefined,
+      //     content: undefined,
+      //     selection: undefined,
+      //     scrollTop: undefined,
+      //     folded: undefined,
+      //     view: undefined,
+      //     selectedChange: undefined,
+      //   })
+      // }
 
       const relative = (path: string) => path.replace(sync.data.path.directory + "/", "")
 
@@ -333,31 +326,21 @@ export const { use: useLocal, provider: LocalProvider } = createSimpleContext({
       sdk.event.listen((e) => {
         const event = e.details
         switch (event.type) {
-          case "message.part.updated":
-            const part = event.properties.part
-            if (part.type === "tool" && part.state.status === "completed") {
-              switch (part.tool) {
-                case "read":
-                  break
-                case "edit":
-                  // load(part.state.input["filePath"] as string)
-                  break
-                default:
-                  break
-              }
-            }
-            break
           case "file.watcher.updated":
-            // setTimeout(sync.load.changes, 1000)
-            // const relativePath = relative(event.properties.file)
-            // if (relativePath.startsWith(".git/")) return
-            // load(relativePath)
+            const relativePath = relative(event.properties.file)
+            if (relativePath.startsWith(".git/")) return
+            load(relativePath)
             break
         }
       })
 
       return {
-        node: (path: string) => store.node[path],
+        node: async (path: string) => {
+          if (!store.node[path]) {
+            await init(path)
+          }
+          return store.node[path]
+        },
         update: (path: string, node: LocalFile) => setStore("node", path, reconcile(node)),
         open,
         load,
@@ -417,121 +400,6 @@ export const { use: useLocal, provider: LocalProvider } = createSimpleContext({
         searchFiles,
         searchFilesAndDirectories,
         relative,
-        // active,
-        // opened,
-        // close(path: string) {
-        //   setStore("opened", (opened) => opened.filter((x) => x !== path))
-        //   if (store.active === path) {
-        //     const index = store.opened.findIndex((f) => f === path)
-        //     const previous = store.opened[Math.max(0, index - 1)]
-        //     setStore("active", previous)
-        //   }
-        //   resetNode(path)
-        // },
-        // move(path: string, to: number) {
-        //   const index = store.opened.findIndex((f) => f === path)
-        //   if (index === -1) return
-        //   setStore(
-        //     "opened",
-        //     produce((opened) => {
-        //       opened.splice(to, 0, opened.splice(index, 1)[0])
-        //     }),
-        //   )
-        //   setStore("node", path, "pinned", true)
-        // },
-      }
-    })()
-
-    const session = (() => {
-      const [store, setStore] = createStore<{
-        active?: string
-        tabs: Record<
-          string,
-          {
-            active?: string
-            opened: string[]
-          }
-        >
-      }>({
-        tabs: {
-          "": {
-            opened: [],
-          },
-        },
-      })
-
-      const active = createMemo(() => {
-        if (!store.active) return undefined
-        return sync.session.get(store.active)
-      })
-
-      createEffect(() => {
-        if (!store.active) return
-        sync.session.sync(store.active)
-
-        if (!store.tabs[store.active]) {
-          setStore("tabs", store.active, {
-            opened: [],
-          })
-        }
-      })
-
-      const tabs = createMemo(() => store.tabs[store.active ?? ""])
-
-      return {
-        active,
-        setActive(sessionId: string | undefined) {
-          setStore("active", sessionId)
-        },
-        clearActive() {
-          setStore("active", undefined)
-        },
-        tabs,
-        copyTabs(from: string, to: string) {
-          setStore("tabs", to, {
-            opened: store.tabs[from]?.opened ?? [],
-          })
-        },
-        setActiveTab(tab: string | undefined) {
-          setStore("tabs", store.active ?? "", "active", tab)
-        },
-        async open(tab: string) {
-          if (tab !== "chat") {
-            await file.open(tab)
-          }
-          if (!tabs()?.opened?.includes(tab)) {
-            setStore("tabs", store.active ?? "", "opened", [...(tabs()?.opened ?? []), tab])
-          }
-          setStore("tabs", store.active ?? "", "active", tab)
-        },
-        close(tab: string) {
-          batch(() => {
-            if (!tabs()) return
-            setStore("tabs", store.active ?? "", {
-              active: tabs()!.active,
-              opened: tabs()!.opened.filter((x) => x !== tab),
-            })
-            if (tabs()!.active === tab) {
-              const index = tabs()!.opened.findIndex((f) => f === tab)
-              const previous = tabs()!.opened[Math.max(0, index - 1)]
-              setStore("tabs", store.active ?? "", "active", previous)
-            }
-          })
-        },
-        move(tab: string, to: number) {
-          if (!tabs()) return
-          const index = tabs()!.opened.findIndex((f) => f === tab)
-          if (index === -1) return
-          setStore(
-            "tabs",
-            store.active ?? "",
-            "opened",
-            produce((opened) => {
-              opened.splice(to, 0, opened.splice(index, 1)[0])
-            }),
-          )
-          // setStore("node", path, "pinned", true)
-        },
       }
     })()
 
@@ -589,12 +457,60 @@ export const { use: useLocal, provider: LocalProvider } = createSimpleContext({
       }
     })()
 
+    const layout = (() => {
+      const [store, setStore] = makePersisted(
+        createStore({
+          sidebar: {
+            opened: true,
+            width: 240,
+          },
+          review: {
+            state: "closed" as "open" | "closed" | "tab",
+          },
+        }),
+        {
+          name: "default-layout",
+        },
+      )
+
+      return {
+        sidebar: {
+          opened: createMemo(() => store.sidebar.opened),
+          open() {
+            setStore("sidebar", "opened", true)
+          },
+          close() {
+            setStore("sidebar", "opened", false)
+          },
+          toggle() {
+            setStore("sidebar", "opened", (x) => !x)
+          },
+          width: createMemo(() => store.sidebar.width),
+          resize(width: number) {
+            setStore("sidebar", "width", width)
+          },
+        },
+        review: {
+          state: createMemo(() => store.review?.state ?? "closed"),
+          open() {
+            setStore("review", "state", "open")
+          },
+          close() {
+            setStore("review", "state", "closed")
+          },
+          tab() {
+            setStore("review", "state", "tab")
+          },
+        },
+      }
+    })()
+
     const result = {
       model,
       agent,
       file,
-      session,
       context,
+      layout,
     }
     return result
   },

@@ -13,7 +13,9 @@ function apiError(headers?: Record<string, string>): MessageV2.APIError {
 describe("session.retry.getRetryDelayInMs", () => {
   test("doubles delay on each attempt when headers missing", () => {
     const error = apiError()
-    const delays = Array.from({ length: 7 }, (_, index) => SessionRetry.getRetryDelayInMs(error, index + 1))
+    const delays = Array.from({ length: 7 }, (_, index) =>
+      SessionRetry.getRetryDelayInMs(error, index + 1),
+    )
     expect(delays).toStrictEqual([2000, 4000, 8000, 16000, 32000, 64000, 128000])
   })
 

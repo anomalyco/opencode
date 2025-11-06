@@ -21,15 +21,16 @@ export function SelectDialog<T>(props: SelectDialogProps<T>) {
     mouseActive: false,
   })
 
-  const { filter, grouped, flat, reset, clear, active, setActive, onKeyDown, onInput } = useFilteredList<T>({
-    items: others.items,
-    key: others.key,
-    filterKeys: others.filterKeys,
-    current: others.current,
-    groupBy: others.groupBy,
-    sortBy: others.sortBy,
-    sortGroupsBy: others.sortGroupsBy,
-  })
+  const { filter, grouped, flat, reset, clear, active, setActive, onKeyDown, onInput } =
+    useFilteredList<T>({
+      items: others.items,
+      key: others.key,
+      filterKeys: others.filterKeys,
+      current: others.current,
+      groupBy: others.groupBy,
+      sortBy: others.sortBy,
+      sortGroupsBy: others.sortGroupsBy,
+    })
 
   createEffect(() => {
     filter()
@@ -117,7 +118,8 @@ export function SelectDialog<T>(props: SelectDialogProps<T>) {
           fallback={
             <div data-slot="empty-state">
               <div data-slot="message">
-                {props.emptyMessage ?? "No search results"} for <span data-slot="filter">&quot;{filter()}&quot;</span>
+                {props.emptyMessage ?? "No search results"} for{" "}
+                <span data-slot="filter">&quot;{filter()}&quot;</span>
               </div>
             </div>
           }

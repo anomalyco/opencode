@@ -24,9 +24,12 @@ test("allStructured matches command sequences", () => {
     "git status*": "allow",
   }
   expect(Wildcard.allStructured({ head: "git", tail: ["status", "--short"] }, rules)).toBe("allow")
-  expect(Wildcard.allStructured({ head: "npm", tail: ["run", "build", "--watch"] }, { "npm run *": "allow" })).toBe(
-    "allow",
-  )
+  expect(
+    Wildcard.allStructured(
+      { head: "npm", tail: ["run", "build", "--watch"] },
+      { "npm run *": "allow" },
+    ),
+  ).toBe("allow")
   expect(Wildcard.allStructured({ head: "ls", tail: ["-la"] }, rules)).toBeUndefined()
 })
 
@@ -51,5 +54,7 @@ test("allStructured handles sed flags", () => {
   expect(Wildcard.allStructured({ head: "sed", tail: ["-i", "file"] }, rules)).toBe("ask")
   expect(Wildcard.allStructured({ head: "sed", tail: ["-i.bak", "file"] }, rules)).toBe("ask")
   expect(Wildcard.allStructured({ head: "sed", tail: ["-n", "1p", "file"] }, rules)).toBe("allow")
-  expect(Wildcard.allStructured({ head: "sed", tail: ["-i", "-n", "/./p", "myfile.txt"] }, rules)).toBe("ask")
+  expect(
+    Wildcard.allStructured({ head: "sed", tail: ["-i", "-n", "/./p", "myfile.txt"] }, rules),
+  ).toBe("ask")
 })

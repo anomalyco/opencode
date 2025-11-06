@@ -16,6 +16,7 @@ import { createStore, produce, reconcile } from "solid-js/store"
 import { useSDK } from "@tui/context/sdk"
 import { Binary } from "@/util/binary"
 import { createSimpleContext } from "./helper"
+import type { Snapshot } from "@/snapshot"
 
 export const { use: useSync, provider: SyncProvider } = createSimpleContext({
   name: "Sync",
@@ -30,6 +31,9 @@ export const { use: useSync, provider: SyncProvider } = createSimpleContext({
       }
       config: Config
       session: Session[]
+      session_diff: {
+        [sessionID: string]: Snapshot.FileDiff[]
+      }
       todo: {
         [sessionID: string]: Todo[]
       }
@@ -52,6 +56,7 @@ export const { use: useSync, provider: SyncProvider } = createSimpleContext({
       command: [],
       provider: [],
       session: [],
+      session_diff: {},
       todo: {},
       message: {},
       part: {},
@@ -104,6 +109,10 @@ export const { use: useSync, provider: SyncProvider } = createSimpleContext({
           setStore("todo", event.properties.sessionID, event.properties.todos)
           break
 
+        case "session.diff":
+          setStore("session_diff", event.properties.sessionID, event.properties.diff)
+          break
+
         case "session.deleted": {
           const result = Binary.search(store.session, event.properties.info.id, (s) => s.id)
           if (result.found) {
@@ -137,7 +146,12 @@ export const { use: useSync, provider: SyncProvider } = createSimpleContext({
           }
           const result = Binary.search(messages, event.properties.info.id, (m) => m.id)
           if (result.found) {
-            setStore("message", event.properties.info.sessionID, result.index, reconcile(event.properties.info))
+            setStore(
+              "message",
+              event.properties.info.sessionID,
+              result.index,
+              reconcile(event.properties.info),
+            )
             break
           }
           setStore(
@@ -145,6 +159,7 @@ export const { use: useSync, provider: SyncProvider } = createSimpleContext({
             event.properties.info.sessionID,
             produce((draft) => {
               draft.splice(result.index, 0, event.properties.info)
+              if (draft.length > 100) draft.shift()
             }),
           )
           break
@@ -171,7 +186,12 @@ export const { use: useSync, provider: SyncProvider } = createSimpleContext({
           }
           const result = Binary.search(parts, event.properties.part.id, (p) => p.id)
           if (result.found) {
-            setStore("part", event.properties.part.messageID, result.index, reconcile(event.properties.part))
+            setStore(
+              "part",
+              event.properties.part.messageID,
+              result.index,
+              reconcile(event.properties.part),
+            )
             break
           }
           setStore(
@@ -249,11 +269,15 @@ export const { use: useSync, provider: SyncProvider } = createSimpleContext({
           return last.time.completed ? "idle" : "working"
         },
         async sync(sessionID: string) {
-          const [session, messages, todo] = await Promise.all([
+          const now = Date.now()
+          console.log("syncing", sessionID)
+          const [session, messages, todo, diff] = await Promise.all([
             sdk.client.session.get({ path: { id: sessionID }, throwOnError: true }),
-            sdk.client.session.messages({ path: { id: sessionID } }),
+            sdk.client.session.messages({ path: { id: sessionID }, query: { limit: 100 } }),
             sdk.client.session.todo({ path: { id: sessionID } }),
+            sdk.client.session.diff({ path: { id: sessionID } }),
           ])
+          console.log("fetched in " + (Date.now() - now), sessionID)
           setStore(
             produce((draft) => {
               const match = Binary.search(draft.session, sessionID, (s) => s.id)
@@ -264,8 +288,10 @@ export const { use: useSync, provider: SyncProvider } = createSimpleContext({
               for (const message of messages.data!) {
                 draft.part[message.info.id] = message.parts
               }
+              draft.session_diff[sessionID] = diff.data ?? []
             }),
           )
+          console.log("synced in " + (Date.now() - now), sessionID)
         },
       },
     }
