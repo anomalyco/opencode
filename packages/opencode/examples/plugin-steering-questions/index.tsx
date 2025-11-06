@@ -42,7 +42,7 @@
 
 /** @jsxImportSource @opentui/solid */
 
-import { createSignal, For, Show, createMemo } from "../../src/plugin-ui"
+import { createSignal, Show, createMemo } from "../../src/plugin-ui"
 import { TextAttributes } from "../../src/plugin-ui"
 
 export interface SteeringQuestion {
@@ -278,7 +278,7 @@ The user will see an interactive widget with clickable options. After they submi
               paddingTop={1}
               paddingBottom={1}
               paddingLeft={2}
-              marginTop={1}
+              marginTop={0}
               backgroundColor={theme?.backgroundPanel || "#1a1a1a"}
               borderColor={submitted() ? theme?.success || "#00ff00" : theme?.accent || "#0088ff"}
               flexShrink={0}
@@ -295,81 +295,73 @@ The user will see an interactive widget with clickable options. After they submi
               <Show when={!submitted()}>
                 {/* Questions */}
                 <box flexDirection="column" gap={1} marginTop={1}>
-                  <For each={questionConfig.questions}>
-                    {(question) => (
-                      <box flexDirection="column" gap={0}>
-                        <text fg={theme?.text || "#ffffff"}>
-                          {question.label}
-                          <Show when={question.required !== false}>
-                            <span style={{ fg: theme?.error || "#ff0000" }}> *</span>
-                          </Show>
-                        </text>
-
-                        {/* Single Choice */}
-                        <Show when={question.type === "single-choice" && question.options}>
-                          <box flexDirection="row" gap={2} marginTop={0} flexWrap="wrap">
-                            <For each={question.options}>
-                              {(option) => {
-                                const isSelected = createMemo(
-                                  () => answers()[question.id] === option,
-                                )
-                                return (
-                                  <text
-                                    fg={
-                                      isSelected()
-                                        ? theme?.accent || "#0088ff"
-                                        : theme?.textMuted || "#808080"
-                                    }
-                                    onMouseUp={() => handleSingleChoice(question.id, option)}
-                                  >
-                                    {isSelected() ? "◉" : "○"} {option}
-                                  </text>
-                                )
-                              }}
-                            </For>
-                          </box>
+                  {questionConfig.questions.map((question) => (
+                    <box flexDirection="column" gap={0}>
+                      <text fg={theme?.text || "#ffffff"}>
+                        {question.label}
+                        <Show when={question.required !== false}>
+                          <span style={{ fg: theme?.error || "#ff0000" }}> *</span>
                         </Show>
+                      </text>
 
-                        {/* Multi Choice */}
-                        <Show when={question.type === "multi-choice" && question.options}>
-                          <box flexDirection="row" gap={2} marginTop={0} flexWrap="wrap">
-                            <For each={question.options}>
-                              {(option) => {
-                                const isSelected = createMemo(() => {
-                                  const current = answers()[question.id]
-                                  return Array.isArray(current) && current.includes(option)
-                                })
-                                return (
-                                  <text
-                                    fg={
-                                      isSelected()
-                                        ? theme?.accent || "#0088ff"
-                                        : theme?.textMuted || "#808080"
-                                    }
-                                    onMouseUp={() => handleMultiChoice(question.id, option)}
-                                  >
-                                    {isSelected() ? "☑" : "☐"} {option}
-                                  </text>
-                                )
-                              }}
-                            </For>
-                          </box>
-                        </Show>
+                      {/* Single Choice */}
+                      <Show when={question.type === "single-choice" && question.options}>
+                        <box flexDirection="row" gap={2} marginTop={0} flexWrap="wrap">
+                          {question.options?.map((option) => {
+                            const isSelected = createMemo(() => answers()[question.id] === option)
+                            return (
+                              <text
+                                fg={
+                                  isSelected()
+                                    ? theme?.accent || "#0088ff"
+                                    : theme?.textMuted || "#808080"
+                                }
+                                onMouseUp={() => handleSingleChoice(question.id, option)}
+                              >
+                                {isSelected() ? "◉" : "○"} {option}
+                              </text>
+                            )
+                          })}
+                        </box>
+                      </Show>
 
-                        {/* Text Input (display value, note: actual input would need prompt integration) */}
-                        <Show when={question.type === "text"}>
-                          <box marginTop={0}>
-                            <text fg={theme?.textMuted || "#808080"}>
-                              {answers()[question.id]
-                                ? `> ${answers()[question.id]}`
-                                : `${question.placeholder || "Click to enter text..."}`}
-                            </text>
-                            {/* Note: In real implementation, clicking would trigger a dialog or prompt */}
-                          </box>
-                        </Show>
-                      </box>
-                    )}
-                  </For>
+                      {/* Multi Choice */}
+                      <Show when={question.type === "multi-choice" && question.options}>
+                        <box flexDirection="row" gap={2} marginTop={0} flexWrap="wrap">
+                          {question.options?.map((option) => {
+                            const isSelected = createMemo(() => {
+                              const current = answers()[question.id]
+                              return Array.isArray(current) && current.includes(option)
+                            })
+                            return (
+                              <text
+                                fg={
+                                  isSelected()
+                                    ? theme?.accent || "#0088ff"
+                                    : theme?.textMuted || "#808080"
+                                }
+                                onMouseUp={() => handleMultiChoice(question.id, option)}
+                              >
+                                {isSelected() ? "☑" : "☐"} {option}
+                              </text>
+                            )
+                          })}
+                        </box>
+                      </Show>
+
+                      {/* Text Input (display value, note: actual input would need prompt integration) */}
+                      <Show when={question.type === "text"}>
+                        <box marginTop={0}>
+                          <text fg={theme?.textMuted || "#808080"}>
+                            {answers()[question.id]
+                              ? `> ${answers()[question.id]}`
+                              : `${question.placeholder || "Click to enter text..."}`}
+                          </text>
+                          {/* Note: In real implementation, clicking would trigger a dialog or prompt */}
+                        </box>
+                      </Show>
+                    </box>
+                  ))}
                 </box>
 
                 {/* Submit Button */}
@@ -400,20 +392,18 @@ The user will see an interactive widget with clickable options. After they submi
                   <text fg={theme?.success || "#00ff00"} attributes={TextAttributes.BOLD}>
                     ✓ Answers Submitted
                   </text>
-                  <For each={questionConfig.questions}>
-                    {(question) => {
-                      const answer = answers()[question.id]
-                      if (!answer) return null
-                      return (
-                        <box flexDirection="row" gap={1} marginTop={0}>
-                          <text fg={theme?.textMuted || "#808080"}>{question.label}:</text>
-                          <text fg={theme?.text || "#ffffff"}>
-                            {Array.isArray(answer) ? answer.join(", ") : answer}
-                          </text>
-                        </box>
-                      )
-                    }}
-                  </For>
+                  {questionConfig.questions.map((question) => {
+                    const answer = answers()[question.id]
+                    if (!answer) return null
+                    return (
+                      <box flexDirection="row" gap={1} marginTop={0}>
+                        <text fg={theme?.textMuted || "#808080"}>{question.label}:</text>
+                        <text fg={theme?.text || "#ffffff"}>
+                          {Array.isArray(answer) ? answer.join(", ") : answer}
+                        </text>
+                      </box>
+                    )
+                  })}
                 </box>
               </Show>
             </box>
