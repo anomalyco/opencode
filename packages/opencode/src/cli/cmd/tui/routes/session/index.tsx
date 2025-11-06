@@ -680,10 +680,7 @@ export function Session() {
               scrollbarOptions={{
                 trackOptions: {
                   backgroundColor: theme.backgroundElement,
-                  foregroundColor: theme.primary,
-                },
-                arrowOptions: {
-                  foregroundColor: theme.primary,
+                  foregroundColor: theme.border,
                 },
               }}
               stickyScroll={true}
