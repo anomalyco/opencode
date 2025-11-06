@@ -259,6 +259,7 @@ export namespace SessionPrompt {
             log.error("stream error", {
               error,
             })
+            throw error
           },
           async experimental_repairToolCall(input) {
             const lower = input.toolCall.toolName.toLowerCase()
