@@ -1011,6 +1011,7 @@ function TextPart(props: { part: TextPart; message: AssistantMessage }) {
         <code
           filetype="markdown"
           drawUnstyledText={false}
+          streaming={true}
           syntaxStyle={syntax()}
           content={props.part.text.trim()}
           conceal={ctx.conceal()}
