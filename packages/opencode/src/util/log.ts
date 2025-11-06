@@ -65,9 +65,10 @@ export namespace Log {
     const logfile = Bun.file(logpath)
     await fs.truncate(logpath).catch(() => {})
     const writer = logfile.writer()
-    write = (msg: any) => {
-      writer.write(msg)
+    write = async (msg: any) => {
+      const num = writer.write(msg)
       writer.flush()
+      return num
     }
   }
 
