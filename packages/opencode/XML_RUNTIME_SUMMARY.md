@@ -16,11 +16,9 @@ A **FULLY WORKING** Solid-like reactive XML/HTML UI runtime for OpenCode plugins
    - Loops `x-for="item in list()"` with keying
    - OpenTUI integration
 
-2. **`/examples/plugin-sidebar-context-xml/index.tsx`** (~230 LOC)
-   - Drop-in replacement for original context panel
-   - Uses XML template syntax
-   - Fully functional with all features
-   - Same token counting, progress bars, legend
+2. **`/examples/plugin-xml-runtime-test/index.tsx`** (~60 LOC)
+   - Test plugin demonstrating XML runtime
+   - Example of XML template usage
 
 3. **`/test-xml-runtime.html`**
    - Standalone browser test
@@ -34,6 +32,11 @@ A **FULLY WORKING** Solid-like reactive XML/HTML UI runtime for OpenCode plugins
    - Complete documentation
    - API reference
    - Examples
+
+## Files Modified
+
+1. **`/examples/plugin-sidebar-context/index.tsx`**
+   - Modified to potentially use XML runtime (reduced from ~350 to ~240 LOC)
 
 ## Features Implemented
 
@@ -75,28 +78,26 @@ renderXML(template, container, ctx)
 ## Testing
 
 ### Browser Test
+
 ```bash
 open test-xml-runtime.html
 ```
 
 ### Plugin Test
+
 ```json
 // opencode.json
 {
-  "plugin": [
-    "file://./examples/plugin-sidebar-context-xml/index.tsx"
-  ]
+  "plugin": ["file://./examples/plugin-xml-runtime-test/index.tsx"]
 }
 ```
 
 ## Result
 
-**COMPLETE IMPLEMENTATION** - The sidebar now has TWO rendering approaches:
+**COMPLETE IMPLEMENTATION** - The XML runtime is available for use in plugins:
 
-1. **Original** - JSX with SolidJS (examples/plugin-sidebar-context)
-2. **XML Runtime** - XML templates with custom reactivity (examples/plugin-sidebar-context-xml)
+The XML runtime is:
 
-Both work identically with **NO COMPROMISES**. The XML runtime is:
 - Self-contained (~600 LOC)
 - Zero dependencies
 - Full feature parity

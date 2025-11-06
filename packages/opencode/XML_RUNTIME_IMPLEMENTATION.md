@@ -105,17 +105,13 @@ const ctx = signals(["name", "count"], { name: "World", count: 0 })
 - OpenTUI element creation
 - Full TypeScript types
 
-### 2. `/examples/plugin-sidebar-context-xml/index.tsx`
+### 2. `/examples/plugin-xml-runtime-test/index.tsx`
 
-**Working Plugin Using XML Runtime**
+**Test Plugin Using XML Runtime**
 
-- Replaces original context panel plugin
-- Same functionality, XML template syntax
-- Progress bars with reactive calculations
-- Token display with formatting
-- Legend with color coding
-- Auto-refresh every 2s
-- Full context calculation logic
+- Example plugin demonstrating XML runtime usage
+- Shows basic XML template syntax
+- Simple reactive state examples
 
 ### 3. `/test-xml-runtime.html`
 
