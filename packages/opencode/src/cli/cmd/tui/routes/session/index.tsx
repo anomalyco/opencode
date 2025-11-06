@@ -65,6 +65,10 @@ import parsers from "../../../../../../parsers-config.ts"
 import { Clipboard } from "../../util/clipboard"
 import { Toast, useToast } from "../../ui/toast"
 import { useKV } from "../../context/kv.tsx"
+import { Editor } from "../../util/editor"
+import { Global } from "@/global"
+import fs from "fs/promises"
+import stripAnsi from "strip-ansi"
 
 addDefaultParsers(parsers.parsers)
 
@@ -101,7 +105,15 @@ export function Session() {
   const sidebarVisible = createMemo(() => sidebar() === "show" || (sidebar() === "auto" && wide()))
   const contentWidth = createMemo(() => dimensions().width - (sidebarVisible() ? 42 : 0) - 4)
 
-  createEffect(() => sync.session.sync(route.sessionID))
+  createEffect(() => {
+    sync.session.sync(route.sessionID).catch(() => {
+      toast.show({
+        message: `Session not found: ${route.sessionID}`,
+        variant: "error",
+      })
+      return navigate({ type: "home" })
+    })
+  })
 
   const toast = useToast()
 
@@ -120,6 +132,7 @@ export function Session() {
         if (evt.name === "return") return "once"
         if (evt.name === "a") return "always"
         if (evt.name === "d") return "reject"
+        if (evt.name === "escape") return "reject"
         return
       })
       if (response) {
@@ -446,6 +459,105 @@ export function Session() {
       },
     },
     {
+      title: "Copy session transcript",
+      value: "session.copy",
+      keybind: "session_copy",
+      category: "Session",
+      onSelect: async (dialog) => {
+        try {
+          // Format session transcript as markdown
+          const sessionData = session()
+          const sessionMessages = messages()
+
+          let transcript = `# ${sessionData.title}\n\n`
+          transcript += `**Session ID:** ${sessionData.id}\n`
+          transcript += `**Created:** ${new Date(sessionData.time.created).toLocaleString()}\n`
+          transcript += `**Updated:** ${new Date(sessionData.time.updated).toLocaleString()}\n\n`
+          transcript += `---\n\n`
+
+          for (const msg of sessionMessages) {
+            const parts = sync.data.part[msg.id] ?? []
+            const role = msg.role === "user" ? "User" : "Assistant"
+            transcript += `## ${role}\n\n`
+
+            for (const part of parts) {
+              if (part.type === "text" && !part.synthetic) {
+                transcript += `${part.text}\n\n`
+              } else if (part.type === "tool") {
+                transcript += `\`\`\`\nTool: ${part.tool}\n\`\`\`\n\n`
+              }
+            }
+
+            transcript += `---\n\n`
+          }
+
+          // Copy to clipboard
+          await Clipboard.copy(transcript)
+          toast.show({ message: "Session transcript copied to clipboard!", variant: "success" })
+        } catch (error) {
+          toast.show({ message: "Failed to copy session transcript", variant: "error" })
+        }
+        dialog.clear()
+      },
+    },
+    {
+      title: "Export session transcript to file",
+      value: "session.export",
+      keybind: "session_export",
+      category: "Session",
+      onSelect: async (dialog) => {
+        try {
+          // Format session transcript as markdown
+          const sessionData = session()
+          const sessionMessages = messages()
+
+          let transcript = `# ${sessionData.title}\n\n`
+          transcript += `**Session ID:** ${sessionData.id}\n`
+          transcript += `**Created:** ${new Date(sessionData.time.created).toLocaleString()}\n`
+          transcript += `**Updated:** ${new Date(sessionData.time.updated).toLocaleString()}\n\n`
+          transcript += `---\n\n`
+
+          for (const msg of sessionMessages) {
+            const parts = sync.data.part[msg.id] ?? []
+            const role = msg.role === "user" ? "User" : "Assistant"
+            transcript += `## ${role}\n\n`
+
+            for (const part of parts) {
+              if (part.type === "text" && !part.synthetic) {
+                transcript += `${part.text}\n\n`
+              } else if (part.type === "tool") {
+                transcript += `\`\`\`\nTool: ${part.tool}\n\`\`\`\n\n`
+              }
+            }
+
+            transcript += `---\n\n`
+          }
+
+          // Save to file in data directory
+          const exportDir = path.join(Global.Path.data, "exports")
+          await fs.mkdir(exportDir, { recursive: true })
+
+          const timestamp = new Date().toISOString().replace(/[:.]/g, "-")
+          const filename = `session-${sessionData.id.slice(0, 8)}-${timestamp}.md`
+          const filepath = path.join(exportDir, filename)
+
+          await Bun.write(filepath, transcript)
+
+          // Open with EDITOR if available
+          const result = await Editor.open({ value: transcript, renderer })
+          if (result !== undefined) {
+            // User edited the file, save the changes
+            await Bun.write(filepath, result)
+          }
+
+          toast.show({ message: `Session exported to ${filename}`, variant: "success" })
+        } catch (error) {
+          toast.show({ message: "Failed to export session", variant: "error" })
+        }
+        dialog.clear()
+      },
+    },
+    {
       title: "Next child session",
       value: "session.child.next",
       keybind: "session_child_cycle",
@@ -565,7 +677,12 @@ export function Session() {
             </Show>
             <scrollbox
               ref={(r) => (scroll = r)}
-              scrollbarOptions={{ visible: false }}
+              scrollbarOptions={{
+                trackOptions: {
+                  backgroundColor: theme.backgroundElement,
+                  foregroundColor: theme.border,
+                },
+              }}
               stickyScroll={true}
               stickyStart="bottom"
               flexGrow={1}
@@ -900,6 +1017,7 @@ function TextPart(props: { part: TextPart; message: AssistantMessage }) {
         <code
           filetype="markdown"
           drawUnstyledText={false}
+          streaming={true}
           syntaxStyle={syntax()}
           content={props.part.text.trim()}
           conceal={ctx.conceal()}
@@ -1060,7 +1178,7 @@ ToolRegistry.register<typeof BashTool>({
   name: "bash",
   container: "block",
   render(props) {
-    const output = createMemo(() => Bun.stripANSI(props.metadata.output?.trim() ?? ""))
+    const output = createMemo(() => stripAnsi(props.metadata.output?.trim() ?? ""))
     const { theme } = useTheme()
     return (
       <>

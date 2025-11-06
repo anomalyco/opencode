@@ -44,6 +44,7 @@ export namespace Session {
         .object({
           additions: z.number(),
           deletions: z.number(),
+          files: z.number(),
           diffs: Snapshot.FileDiff.array().optional(),
         })
         .optional(),
@@ -100,6 +101,13 @@ export namespace Session {
       "session.deleted",
       z.object({
         info: Info,
+      }),
+    ),
+    Diff: Bus.event(
+      "session.diff",
+      z.object({
+        sessionID: z.string(),
+        diff: Snapshot.FileDiff.array(),
       }),
     ),
     Error: Bus.event(

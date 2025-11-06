@@ -14,7 +14,11 @@ export const AuthCommand = cmd({
   command: "auth",
   describe: "manage credentials",
   builder: (yargs) =>
-    yargs.command(AuthLoginCommand).command(AuthLogoutCommand).command(AuthListCommand).demandCommand(),
+    yargs
+      .command(AuthLoginCommand)
+      .command(AuthLogoutCommand)
+      .command(AuthListCommand)
+      .demandCommand(),
   async handler() {},
 })
 
@@ -60,7 +64,9 @@ export const AuthListCommand = cmd({
         prompts.log.info(`${provider} ${UI.Style.TEXT_DIM}${envVar}`)
       }
 
-      prompts.outro(`${activeEnvVars.length} environment variable` + (activeEnvVars.length === 1 ? "" : "s"))
+      prompts.outro(
+        `${activeEnvVars.length} environment variable` + (activeEnvVars.length === 1 ? "" : "s"),
+      )
     }
   },
 })
@@ -80,7 +86,9 @@ export const AuthLoginCommand = cmd({
         UI.empty()
         prompts.intro("Add credential")
         if (args.url) {
-          const wellknown = await fetch(`${args.url}/.well-known/opencode`).then((x) => x.json() as any)
+          const wellknown = await fetch(`${args.url}/.well-known/opencode`).then(
+            (x) => x.json() as any,
+          )
           prompts.log.info(`Running \`${wellknown.auth.command.join(" ")}\``)
           const proc = Bun.spawn({
             cmd: wellknown.auth.command,
@@ -156,9 +164,36 @@ export const AuthLoginCommand = cmd({
             index = parseInt(method)
           }
           const method = plugin.auth.methods[index]
+
+          // Handle prompts for all auth types
+          await new Promise((resolve) => setTimeout(resolve, 10))
+          const inputs: Record<string, string> = {}
+          if (method.prompts) {
+            for (const prompt of method.prompts) {
+              if (prompt.condition && !prompt.condition(inputs)) {
+                continue
+              }
+              if (prompt.type === "select") {
+                const value = await prompts.select({
+                  message: prompt.message,
+                  options: prompt.options,
+                })
+                if (prompts.isCancel(value)) throw new UI.CancelledError()
+                inputs[prompt.key] = value
+              } else {
+                const value = await prompts.text({
+                  message: prompt.message,
+                  placeholder: prompt.placeholder,
+                  validate: prompt.validate ? (v) => prompt.validate!(v ?? "") : undefined,
+                })
+                if (prompts.isCancel(value)) throw new UI.CancelledError()
+                inputs[prompt.key] = value
+              }
+            }
+          }
+
           if (method.type === "oauth") {
-            await new Promise((resolve) => setTimeout(resolve, 10))
-            const authorize = await method.authorize()
+            const authorize = await method.authorize(inputs)
 
             if (authorize.url) {
               prompts.log.info("Go to: " + authorize.url)
@@ -175,17 +210,28 @@ export const AuthLoginCommand = cmd({
                 spinner.stop("Failed to authorize", 1)
               }
               if (result.type === "success") {
+                const saveProvider = result.provider ?? provider
                 if ("refresh" in result) {
-                  await Auth.set(provider, {
+                  const {
+                    type: _,
+                    provider: __,
+                    refresh,
+                    access,
+                    expires,
+                    has1MContext,
+                    ...extraFields
+                  } = result
+                  await Auth.set(saveProvider, {
                     type: "oauth",
-                    refresh: result.refresh,
-                    access: result.access,
-                    expires: result.expires,
-                    ...(result.has1MContext && { has1MContext: result.has1MContext }),
+                    refresh,
+                    access,
+                    expires,
+                    has1MContext,
+                    ...extraFields,
                   })
                 }
                 if ("key" in result) {
-                  await Auth.set(provider, {
+                  await Auth.set(saveProvider, {
                     type: "api",
                     key: result.key,
                   })
@@ -205,17 +251,28 @@ export const AuthLoginCommand = cmd({
                 prompts.log.error("Failed to authorize")
               }
               if (result.type === "success") {
+                const saveProvider = result.provider ?? provider
                 if ("refresh" in result) {
-                  await Auth.set(provider, {
+                  const {
+                    type: _,
+                    provider: __,
+                    refresh,
+                    access,
+                    expires,
+                    has1MContext,
+                    ...extraFields
+                  } = result
+                  await Auth.set(saveProvider, {
                     type: "oauth",
-                    refresh: result.refresh,
-                    access: result.access,
-                    expires: result.expires,
-                    ...(result.has1MContext && { has1MContext: result.has1MContext }),
+                    refresh,
+                    access,
+                    expires,
+                    has1MContext,
+                    ...extraFields,
                   })
                 }
                 if ("key" in result) {
-                  await Auth.set(provider, {
+                  await Auth.set(saveProvider, {
                     type: "api",
                     key: result.key,
                   })
@@ -223,15 +280,36 @@ export const AuthLoginCommand = cmd({
                 prompts.log.success("Login successful")
               }
             }
+
             prompts.outro("Done")
             return
+          }
+
+          if (method.type === "api") {
+            if (method.authorize) {
+              const result = await method.authorize(inputs)
+              if (result.type === "failed") {
+                prompts.log.error("Failed to authorize")
+              }
+              if (result.type === "success") {
+                const saveProvider = result.provider ?? provider
+                await Auth.set(saveProvider, {
+                  type: "api",
+                  key: result.key,
+                })
+                prompts.log.success("Login successful")
+              }
+              prompts.outro("Done")
+              return
+            }
           }
         }
 
         if (provider === "other") {
           provider = await prompts.text({
             message: "Enter provider id",
-            validate: (x) => (x && x.match(/^[0-9a-z-]+$/) ? undefined : "a-z, 0-9 and hyphens only"),
+            validate: (x) =>
+              x && x.match(/^[0-9a-z-]+$/) ? undefined : "a-z, 0-9 and hyphens only",
           })
           if (prompts.isCancel(provider)) throw new UI.CancelledError()
           provider = provider.replace(/^@ai-sdk\//, "")
@@ -244,14 +322,6 @@ export const AuthLoginCommand = cmd({
         if (provider === "amazon-bedrock") {
           prompts.log.info(
             "Amazon bedrock can be configured with standard AWS environment variables like AWS_BEARER_TOKEN_BEDROCK, AWS_PROFILE or AWS_ACCESS_KEY_ID",
-          )
-          prompts.outro("Done")
-          return
-        }
-
-        if (provider === "google-vertex") {
-          prompts.log.info(
-            "Google Cloud Vertex AI uses Application Default Credentials. Set GOOGLE_APPLICATION_CREDENTIALS or run 'gcloud auth application-default login'. Optionally set GOOGLE_CLOUD_PROJECT and GOOGLE_CLOUD_LOCATION (or VERTEX_LOCATION)",
           )
           prompts.outro("Done")
           return

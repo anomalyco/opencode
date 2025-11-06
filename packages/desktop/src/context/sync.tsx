@@ -1,16 +1,4 @@
-import type {
-  Message,
-  Agent,
-  Provider,
-  Session,
-  Part,
-  Config,
-  Path,
-  File,
-  FileNode,
-  Project,
-  Command,
-} from "@opencode-ai/sdk"
+import type { Message, Agent, Provider, Session, Part, Config, Path, File, FileNode, Project } from "@opencode-ai/sdk"
 import { createStore, produce, reconcile } from "solid-js/store"
 import { createMemo } from "solid-js"
 import { Binary } from "@/utils/binary"
@@ -28,6 +16,8 @@ export const { use: useSync, provider: SyncProvider } = createSimpleContext({
       config: Config
       path: Path
       session: Session[]
+      limit: number
+      more: boolean
       message: {
         [sessionID: string]: Message[]
       }
@@ -44,6 +34,8 @@ export const { use: useSync, provider: SyncProvider } = createSimpleContext({
       agent: [],
       provider: [],
       session: [],
+      limit: 10,
+      more: false,
       message: {},
       part: {},
       node: [],
@@ -118,12 +110,14 @@ export const { use: useSync, provider: SyncProvider } = createSimpleContext({
       path: () => sdk.client.path.get().then((x) => setStore("path", x.data!)),
       agent: () => sdk.client.app.agents().then((x) => setStore("agent", x.data ?? [])),
       session: () =>
-        sdk.client.session.list().then((x) =>
-          setStore(
-            "session",
-            (x.data ?? []).slice().sort((a, b) => a.id.localeCompare(b.id)),
-          ),
-        ),
+        sdk.client.session.list().then((x) => {
+          const sessions = (x.data ?? [])
+            .slice()
+            .sort((a, b) => a.id.localeCompare(b.id))
+            .slice(0, store.limit)
+          setStore("session", sessions)
+          setStore("more", sessions.length === store.limit)
+        }),
       config: () => sdk.client.config.get().then((x) => setStore("config", x.data!)),
       changes: () => sdk.client.file.status().then((x) => setStore("changes", x.data!)),
       node: () => sdk.client.file.list({ query: { path: "/" } }).then((x) => setStore("node", x.data!)),
@@ -195,6 +189,10 @@ export const { use: useSync, provider: SyncProvider } = createSimpleContext({
               }
             }),
           )
+        },
+        fetch: async (count = 10) => {
+          setStore("limit", (x) => x + count)
+          await load.session()
         },
       },
       load,

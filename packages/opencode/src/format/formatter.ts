@@ -1,3 +1,4 @@
+import { readableStreamToText } from "bun"
 import { BunProc } from "../bun"
 import { Instance } from "../project/instance"
 import { Filesystem } from "../util/filesystem"
@@ -131,7 +132,21 @@ export const zig: Info = {
 export const clang: Info = {
   name: "clang-format",
   command: ["clang-format", "-i", "$FILE"],
-  extensions: [".c", ".cc", ".cpp", ".cxx", ".c++", ".h", ".hh", ".hpp", ".hxx", ".h++", ".ino", ".C", ".H"],
+  extensions: [
+    ".c",
+    ".cc",
+    ".cpp",
+    ".cxx",
+    ".c++",
+    ".h",
+    ".hh",
+    ".hpp",
+    ".hxx",
+    ".h++",
+    ".ino",
+    ".C",
+    ".H",
+  ],
   async enabled() {
     const items = await Filesystem.findUp(".clang-format", Instance.directory, Instance.worktree)
     return items.length > 0
@@ -172,6 +187,48 @@ export const ruff: Info = {
         const content = await Bun.file(found[0]).text()
         if (content.includes("ruff")) return true
       }
+    }
+    return false
+  },
+}
+
+export const rlang: Info = {
+  name: "air",
+  command: ["air", "format", "$FILE"],
+  extensions: [".R"],
+  async enabled() {
+    const airPath = Bun.which("air")
+    if (airPath == null) return false
+
+    try {
+      const proc = Bun.spawn(["air", "--help"], {
+        stdout: "pipe",
+        stderr: "pipe",
+      })
+      await proc.exited
+      const output = await readableStreamToText(proc.stdout)
+
+      // Check for "Air: An R language server and formatter"
+      const firstLine = output.split("\n")[0]
+      const hasR = firstLine.includes("R language")
+      const hasFormatter = firstLine.includes("formatter")
+      return hasR && hasFormatter
+    } catch (error) {
+      return false
+    }
+  },
+}
+
+export const uvformat: Info = {
+  name: "uv format",
+  command: ["uv", "format", "--", "$FILE"],
+  extensions: [".py", ".pyi"],
+  async enabled() {
+    if (await ruff.enabled()) return false
+    if (Bun.which("uv") !== null) {
+      const proc = Bun.spawn(["uv", "format", "--help"], { stderr: "pipe", stdout: "pipe" })
+      const code = await proc.exited
+      return code === 0
     }
     return false
   },
