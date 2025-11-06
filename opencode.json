@@ -16,10 +16,8 @@
       "command": ["uvx", "awslabs.ccapi-mcp-server@latest"],
       "environment": {
         "DEFAULT_TAGS": "enabled",
-        "SECURITY_SCANNING": "enabled",
-        "FASTMCP_LOG_LEVEL": "ERROR",
-        "AWS_ACCESS_KEY_ID": "{env:AWS_ACCESS_KEY_ID}",
-        "AWS_SECRET_ACCESS_KEY": "{env:AWS_SECRET_ACCESS_KEY}"
+        "SECURITY_SCANNING": "disabled",
+        "FASTMCP_LOG_LEVEL": "ERROR"
       }
     }
   }
