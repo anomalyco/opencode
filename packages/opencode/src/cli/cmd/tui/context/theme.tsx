@@ -8,6 +8,7 @@ import catppuccin from "./theme/catppuccin.json" with { type: "json" }
 import cobalt2 from "./theme/cobalt2.json" with { type: "json" }
 import dracula from "./theme/dracula.json" with { type: "json" }
 import everforest from "./theme/everforest.json" with { type: "json" }
+import flexoki from "./theme/flexoki.json" with { type: "json" }
 import github from "./theme/github.json" with { type: "json" }
 import gruvbox from "./theme/gruvbox.json" with { type: "json" }
 import kanagawa from "./theme/kanagawa.json" with { type: "json" }
@@ -100,6 +101,7 @@ export const THEMES: Record<string, ThemeJson> = {
   cobalt2,
   dracula,
   everforest,
+  flexoki,
   github,
   gruvbox,
   kanagawa,
