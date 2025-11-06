@@ -368,7 +368,9 @@ export namespace ACP {
     async newSession(params: NewSessionRequest) {
       try {
         const model = await defaultModel(this.config)
-        const hasACPTools = !!this.clientCapabilities?.fs?.writeTextFile
+        const hasACPTools =
+          !!this.clientCapabilities?.fs?.readTextFile &&
+          !!this.clientCapabilities?.fs?.writeTextFile
         const acpAgent = hasACPTools ? this : undefined
         const session = await this.sessionManager.create(
           params.cwd,
