@@ -1,6 +1,6 @@
-import { Button, Icon, IconButton, Select, SelectDialog } from "@opencode-ai/ui"
+import { Button, Icon, IconButton, Select, SelectDialog, Tooltip } from "@opencode-ai/ui"
 import { useFilteredList } from "@opencode-ai/ui/hooks"
-import { createEffect, on, Component, Show, For, onMount, onCleanup } from "solid-js"
+import { createEffect, on, Component, Show, For, onMount, onCleanup, Switch, Match } from "solid-js"
 import { createStore } from "solid-js/store"
 import { FileIcon } from "@/ui"
 import { getDirectory, getFilename } from "@/utils"
@@ -519,12 +519,32 @@ export const PromptInput: Component<PromptInputProps> = (props) => {
               )}
             </SelectDialog>
           </div>
-          <IconButton
-            type="submit"
-            disabled={!session.prompt.dirty() && !session.working()}
-            icon={session.working() ? "stop" : "arrow-up"}
-            variant="primary"
-          />
+          <Tooltip
+            placement="top"
+            value={
+              <Switch>
+                <Match when={session.working()}>
+                  <div class="flex items-center gap-2">
+                    <span>Stop</span>
+                    <span class="text-icon-base text-12-medium text-[10px]!">ESC</span>
+                  </div>
+                </Match>
+                <Match when={true}>
+                  <div class="flex items-center gap-2">
+                    <span>Send</span>
+                    <Icon name="enter" size="small" class="text-icon-base" />
+                  </div>
+                </Match>
+              </Switch>
+            }
+          >
+            <IconButton
+              type="submit"
+              disabled={!session.prompt.dirty() && !session.working()}
+              icon={session.working() ? "stop" : "arrow-up"}
+              variant="primary"
+            />
+          </Tooltip>
         </div>
       </form>
     </div>

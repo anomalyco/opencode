@@ -151,6 +151,7 @@ const newIcons = {
   "square-arrow-top-right": `<path d="M7.91675 2.9165H2.91675V17.0832H17.0834V12.0832M12.0834 2.9165H17.0834V7.9165M9.58342 10.4165L16.6667 3.33317" stroke="currentColor" stroke-linecap="square"/>`,
   "circle-ban-sign": `<path d="M15.3675 4.63087L4.55742 15.441M17.9163 9.9987C17.9163 14.371 14.3719 17.9154 9.99967 17.9154C7.81355 17.9154 5.83438 17.0293 4.40175 15.5966C2.96911 14.164 2.08301 12.1848 2.08301 9.9987C2.08301 5.62644 5.62742 2.08203 9.99967 2.08203C12.1858 2.08203 14.165 2.96813 15.5976 4.40077C17.0302 5.8334 17.9163 7.81257 17.9163 9.9987Z" stroke="currentColor" stroke-linecap="round"/>`,
   stop: `<rect x="6" y="6" width="8" height="8" fill="currentColor"/>`,
+  enter: `<path d="M5.83333 15.8334L2.5 12.5L5.83333 9.16671M3.33333 12.5H17.9167V4.58337H10" stroke="currentColor" stroke-linecap="square"/>`,
 }
 
 export interface IconProps extends ComponentProps<"svg"> {
