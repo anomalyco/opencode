@@ -539,7 +539,8 @@ export function Prompt(props: PromptProps) {
                 syncExtmarksWithPromptParts()
               }}
               keyBindings={textareaKeybindings()}
-              onKeyDown={async (e: KeyEvent) => {
+              // TODO: fix this any
+              onKeyDown={async (e: any) => {
                 if (props.disabled) {
                   e.preventDefault()
                   return
