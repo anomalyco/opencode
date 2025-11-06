@@ -9,7 +9,7 @@ export namespace ProviderTransform {
     modelID: string,
   ): ModelMessage[] {
     if (modelID.includes("claude")) {
-      msgs = msgs.map((msg) => {
+      return msgs.map((msg) => {
         if ((msg.role === "assistant" || msg.role === "tool") && Array.isArray(msg.content)) {
           msg.content = msg.content.map((part) => {
             if (
