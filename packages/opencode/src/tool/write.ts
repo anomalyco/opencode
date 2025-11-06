@@ -10,7 +10,6 @@ import { FileTime } from "../file/time"
 import { Filesystem } from "../util/filesystem"
 import { Instance } from "../project/instance"
 import { Agent } from "../agent/agent"
-import { ACPSessionManager } from "../acp/session"
 
 export const WriteTool = Tool.define("write", {
   description: DESCRIPTION,
@@ -55,18 +54,7 @@ export const WriteTool = Tool.define("write", {
         },
       })
 
-    const sessionManager = ACPSessionManager.getManagerForSession(ctx.sessionID)
-    const acpAgent = sessionManager?.get(ctx.sessionID)?.acpAgent
-    if (acpAgent) {
-      await acpAgent.writeTextFile({
-        sessionId: ctx.sessionID,
-        path: filepath,
-        content: params.content,
-      })
-    } else {
-      await Bun.write(filepath, params.content)
-    }
-
+    await Bun.write(filepath, params.content)
     await Bus.publish(File.Event.Edited, {
       file: filepath,
     })

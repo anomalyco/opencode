@@ -10,7 +10,6 @@ import { Instance } from "../project/instance"
 import { Provider } from "../provider/provider"
 import { Identifier } from "../id/id"
 import { Permission } from "../permission"
-import { ACPSessionManager } from "../acp/session"
 
 const DEFAULT_READ_LIMIT = 2000
 const MAX_LINE_LENGTH = 2000
@@ -103,22 +102,9 @@ export const ReadTool = Tool.define("read", {
     const isBinary = await isBinaryFile(filepath, file)
     if (isBinary) throw new Error(`Cannot read binary file: ${filepath}`)
 
-    const sessionManager = ACPSessionManager.getManagerForSession(ctx.sessionID)
-    const acpAgent = sessionManager?.get(ctx.sessionID)?.acpAgent
     const limit = params.limit ?? DEFAULT_READ_LIMIT
     const offset = params.offset || 0
-    const text = acpAgent
-      ? (
-          await acpAgent.readTextFile({
-            sessionId: ctx.sessionID,
-            path: filepath,
-            line: offset,
-            limit,
-          })
-        ).content
-      : await file.text()
-
-    const lines = text.split("\n")
+    const lines = await file.text().then((text) => text.split("\n"))
     const raw = lines.slice(offset, offset + limit).map((line) => {
       return line.length > MAX_LINE_LENGTH ? line.substring(0, MAX_LINE_LENGTH) + "..." : line
     })
