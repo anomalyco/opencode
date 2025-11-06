@@ -3,7 +3,7 @@
     "dev": "sha256-Dff3OWJ7pD7LfVbZZ0Gf/QA65uw4ft14mdfBun0qDBg="
   },
   "nodeModules": {
-    "aarch64-linux": "sha256-e4NmkdKlx8Rlwi1u+GYrzzh93xvZ4jbHdzAl4OLnHtQ=",
+    "aarch64-linux": "sha256-h/XhGcla9THbbqP3tTjyaN4jw/SdaGJ3vUXRy0jlo8E=",
     "x86_64-linux": "sha256-8goN/fR8mjiJj/ZzfgP4ES2sW2Ljoyl+SNthqNj6Dr8="
   },
   "optional": {
@@ -12,8 +12,8 @@
       "sha512": "sha512-LrGp+f02yU3BN9A+DGuY3v3bmnFUggAITBGriZHUREfNEzZh/GO06FF5u2kx8x+GBEUYfyTGamol4j3m9ANe8w=="
     },
     "@opentui/core-linux-arm64": {
-      "version": "0.1.33",
-      "sha512": "sha512-bBc1EdkVxsLBtqGjXM2BYpBJLa57ogcrSADSZbc5cQkPu0muSGzUwBbVnVZJUjWEfk6n5jcd4dDmLezVoQga0A=="
+      "version": "0.1.36",
+      "sha512": "sha512-ATR+vdtraZEC/gHR1mQa/NYPlqFNBpsnnJAGepQmcxm85VceLYM701QaaIgNAwyYXiP6RQN1ZCv06MD1Ph1m4w=="
     }
   }
 }
