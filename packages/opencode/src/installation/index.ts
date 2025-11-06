@@ -132,6 +132,7 @@ export namespace Installation {
         const formula = await getBrewFormula()
         cmd = $`brew install ${formula}`.env({
           HOMEBREW_NO_AUTO_UPDATE: "1",
+          ...process.env,
         })
         break
       }

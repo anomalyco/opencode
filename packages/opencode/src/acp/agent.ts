@@ -44,6 +44,13 @@ export namespace ACP {
 
     constructor(connection: AgentSideConnection, config: ACPConfig = {}) {
       this.connection = connection
+      if (!config.defaultModel) {
+        // default to big pickle
+        config.defaultModel = {
+          providerID: "opencode",
+          modelID: "big-pickle",
+        }
+      }
       this.config = config
       this.setupEventSubscriptions()
     }
@@ -318,17 +325,10 @@ export namespace ACP {
             image: true,
           },
         },
-        authMethods: [
-          {
-            description: "Run `opencode auth login` in the terminal",
-            name: "Login with opencode",
-            id: "opencode-login",
-          },
-        ],
-        _meta: {
-          opencode: {
-            version: Installation.VERSION,
-          },
+        authMethods: [authMethod],
+        agentInfo: {
+          name: "OpenCode",
+          version: Installation.VERSION,
         },
       }
     }

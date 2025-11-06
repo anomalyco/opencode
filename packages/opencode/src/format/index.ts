@@ -91,6 +91,7 @@ export namespace Format {
 
   export function init() {
     log.info("init")
+    return
     Bus.subscribe(File.Event.Edited, async (payload) => {
       const file = payload.properties.file
       log.info("formatting", { file })

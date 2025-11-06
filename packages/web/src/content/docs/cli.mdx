@@ -184,6 +184,16 @@ This is useful for scripting, automation, or when you want a quick answer withou
 opencode run Explain the use of context in Go
 ```
 
+You can also attach to a running `opencode serve` instance to avoid MCP server cold boot times on every run:
+
+```bash
+# Start a headless server in one terminal
+opencode serve
+
+# In another terminal, run commands that attach to it
+opencode run --attach http://localhost:4096 "Explain async/await in JavaScript"
+```
+
 #### Flags
 
 | Flag         | Short | Description                                                        |
@@ -197,6 +207,8 @@ opencode run Explain the use of context in Go
 | `--file`     | `-f`  | File(s) to attach to message                                       |
 | `--format`   |       | Format: default (formatted) or json (raw JSON events)              |
 | `--title`    |       | Title for the session (uses truncated prompt if no value provided) |
+| `--attach`   |       | Attach to a running opencode server (e.g., http://localhost:4096)  |
+| `--port`     |       | Port for the local server (defaults to random port)                |
 
 ---
 

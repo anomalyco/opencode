@@ -1,42 +1,19 @@
-import { Button, Icon, IconButton, Select, SelectDialog } from "@opencode-ai/ui"
+import { Button, Icon, IconButton, Select, SelectDialog, Tooltip } from "@opencode-ai/ui"
 import { useFilteredList } from "@opencode-ai/ui/hooks"
-import { createEffect, on, Component, createMemo, Show, For, onMount, onCleanup, createSignal } from "solid-js"
+import { createEffect, on, Component, Show, For, onMount, onCleanup, createSignal, Switch, Match } from "solid-js"
 import { createStore } from "solid-js/store"
 import { FileIcon } from "@/ui"
 import { getDirectory, getFilename } from "@/utils"
 import { createFocusSignal } from "@solid-primitives/active-element"
-import { TextSelection, useLocal } from "@/context/local"
+import { useLocal } from "@/context/local"
 import { DateTime } from "luxon"
+import { ContentPart, DEFAULT_PROMPT, isPromptEqual, Prompt, useSession } from "@/context/session"
+import { useSDK } from "@/context/sdk"
+import { useNavigate } from "@solidjs/router"
+import { useSync } from "@/context/sync"
 import { createSpeechRecognition } from "@/utils/speech"
 
-interface PartBase {
-  content: string
-  start: number
-  end: number
-}
-
-export interface TextPart extends PartBase {
-  type: "text"
-}
-
-export interface FileAttachmentPart extends PartBase {
-  type: "file"
-  path: string
-  selection?: TextSelection
-}
-
-export interface ImageAttachmentPart extends PartBase {
-  type: "image"
-  id: string        // unique ID for tracking
-  path: string      // original filename
-  data: string      // base64 encoded image data
-  index: number     // display number [image #N]
-}
-
-export type ContentPart = TextPart | FileAttachmentPart | ImageAttachmentPart
-
 interface PromptInputProps {
-  onSubmit: (parts: ContentPart[]) => void
   class?: string
   ref?: (el: HTMLDivElement) => void
 }
@@ -64,19 +41,24 @@ const ImagePreview: Component<{ image: ImageAttachmentPart, onRemove: () => void
 }
 
 export const PromptInput: Component<PromptInputProps> = (props) => {
+  const navigate = useNavigate()
+  const sdk = useSDK()
+  const sync = useSync()
   const local = useLocal()
+  const session = useSession()
   let editorRef!: HTMLDivElement
 
-  const defaultParts = [{ type: "text", content: "", start: 0, end: 0 } as const]
   const [store, setStore] = createStore<{
-    contentParts: ContentPart[]
     popoverIsOpen: boolean
   }>({
-    contentParts: defaultParts,
     popoverIsOpen: false,
   })
 
-  const isEmpty = createMemo(() => isEqual(store.contentParts, defaultParts))
+  createEffect(() => {
+    session.id
+    editorRef.focus()
+  })
+
   const isFocused = createFocusSignal(() => editorRef)
 
   // Image upload state
@@ -186,14 +168,16 @@ export const PromptInput: Component<PromptInputProps> = (props) => {
     }
   })
 
+  const handleFileSelect = (path: string | undefined) => {
+    if (!path) return
+    addPart({ type: "file", path, content: "@" + getFilename(path), start: 0, end: 0 })
+    setStore("popoverIsOpen", false)
+  }
+
   const { flat, active, onInput, onKeyDown, refetch } = useFilteredList<string>({
     items: local.file.searchFilesAndDirectories,
     key: (x) => x,
-    onSelect: (path) => {
-      if (!path) return
-      addPart({ type: "file", path, content: "@" + getFilename(path), start: 0, end: 0 })
-      setStore("popoverIsOpen", false)
-    },
+    onSelect: handleFileSelect,
   })
 
   createEffect(() => {
@@ -203,10 +187,10 @@ export const PromptInput: Component<PromptInputProps> = (props) => {
 
   createEffect(
     on(
-      () => store.contentParts,
+      () => session.prompt.current(),
       (currentParts) => {
         const domParts = parseFromDOM()
-        if (isEqual(currentParts, domParts)) return
+        if (isPromptEqual(currentParts, domParts)) return
 
         const selection = window.getSelection()
         let cursorPosition: number | null = null
@@ -237,8 +221,18 @@ export const PromptInput: Component<PromptInputProps> = (props) => {
     ),
   )
 
-  const parseFromDOM = (): ContentPart[] => {
-    const newParts: ContentPart[] = []
+  createEffect(
+    on(
+      () => session.prompt.cursor(),
+      (cursor) => {
+        if (cursor === undefined) return
+        queueMicrotask(() => setCursorPosition(editorRef, cursor))
+      },
+    ),
+  )
+
+  const parseFromDOM = (): Prompt => {
+    const newParts: Prompt = []
     let position = 0
     editorRef.childNodes.forEach((node) => {
       if (node.nodeType === Node.TEXT_NODE) {
@@ -265,7 +259,7 @@ export const PromptInput: Component<PromptInputProps> = (props) => {
         }
       }
     })
-    if (newParts.length === 0) newParts.push(...defaultParts)
+    if (newParts.length === 0) newParts.push(...DEFAULT_PROMPT)
     return newParts
   }
 
@@ -282,12 +276,15 @@ export const PromptInput: Component<PromptInputProps> = (props) => {
       setStore("popoverIsOpen", false)
     }
 
-    setStore("contentParts", rawParts)
+    session.prompt.set(rawParts, cursorPosition)
   }
 
   const addPart = (part: ContentPart) => {
     const cursorPosition = getCursorPosition(editorRef)
-    const rawText = store.contentParts.map((p) => p.content).join("")
+    const rawText = session.prompt
+      .current()
+      .map((p) => p.content)
+      .join("")
     const textBeforeCursor = rawText.substring(0, cursorPosition)
     const atMatch = textBeforeCursor.match(/@(\S*)$/)
 
@@ -313,7 +310,7 @@ export const PromptInput: Component<PromptInputProps> = (props) => {
       parts: nextParts,
       inserted,
       cursorPositionAfter,
-    } = store.contentParts.reduce(
+    } = session.prompt.current().reduce(
       (acc, item) => {
         if (acc.inserted) {
           acc.parts.push({ ...item, start: acc.runningIndex, end: acc.runningIndex + item.content.length })
@@ -372,7 +369,7 @@ export const PromptInput: Component<PromptInputProps> = (props) => {
     )
 
     if (!inserted) {
-      const baseParts = store.contentParts.filter((item) => !(item.type === "text" && item.content === ""))
+      const baseParts = session.prompt.current().filter((item) => !(item.type === "text" && item.content === ""))
       const runningIndex = baseParts.reduce((sum, p) => sum + p.content.length, 0)
       const appendedAcc = { parts: [...baseParts] as ContentPart[], runningIndex }
       if (part.type === "text") {
@@ -385,19 +382,26 @@ export const PromptInput: Component<PromptInputProps> = (props) => {
           end: appendedAcc.runningIndex + part.content.length,
         })
       }
-      const next = appendedAcc.parts.length > 0 ? appendedAcc.parts : defaultParts
-      setStore("contentParts", next)
-      setStore("popoverIsOpen", false)
+      const next = appendedAcc.parts.length > 0 ? appendedAcc.parts : DEFAULT_PROMPT
       const nextCursor = rawText.length + part.content.length
+      session.prompt.set(next, nextCursor)
+      setStore("popoverIsOpen", false)
       queueMicrotask(() => setCursorPosition(editorRef, nextCursor))
       return
     }
 
-    setStore("contentParts", nextParts)
+    session.prompt.set(nextParts, cursorPositionAfter)
     setStore("popoverIsOpen", false)
 
     queueMicrotask(() => setCursorPosition(editorRef, cursorPositionAfter))
   }
+
+  const abort = () =>
+    sdk.client.session.abort({
+      path: {
+        id: session.id!,
+      },
+    })
 
   const handleKeyDown = (event: KeyboardEvent) => {
     if (store.popoverIsOpen && (event.key === "ArrowUp" || event.key === "ArrowDown" || event.key === "Enter")) {
@@ -408,39 +412,27 @@ export const PromptInput: Component<PromptInputProps> = (props) => {
     if (event.key === "Enter" && !event.shiftKey) {
       handleSubmit(event)
     }
+    if (event.key === "Escape") {
+      if (store.popoverIsOpen) {
+        setStore("popoverIsOpen", false)
+      } else if (session.working()) {
+        abort()
+      }
+    }
   }
 
-  const handleSubmit = (event: Event) => {
+  const handleSubmit = async (event: Event) => {
     event.preventDefault()
-    if (store.contentParts.length > 0) {
-      const parts = [...store.contentParts]
-      const images = uploadedImages()
-      
-      // Extract all [image #N] references from the text
-      const textContent = parts.map(p => p.content).join(' ')
-      const imageRefs = textContent.match(/\[image #(\d+)\]/g) || []
-      const referencedIndexes = new Set(
-        imageRefs.map(ref => parseInt(ref.match(/\d+/)?.[0] || '0'))
-      )
-      
-      // Only include images that are actually referenced in the text
-      const referencedImages: ImageAttachmentPart[] = []
-      images.forEach((image, index) => {
-        if (referencedIndexes.has(index)) {
-          referencedImages.push(image)
-        }
-      })
-      
-      // Combine text parts with referenced images
-      const allParts = [...parts, ...referencedImages]
-      
-      props.onSubmit(allParts)
-      
-      // Clear everything
-      setStore("contentParts", defaultParts)
-      setUploadedImages(new Map())
-      setImageCounter(0)
-    }
+    if (!session.prompt.dirty() || session.working()) return
+    
+    const prompt = session.prompt.current()
+    
+    // Extract image parts from the prompt
+    const imageParts = Array.from(uploadedImages().values())
+    
+    await session.send(prompt, imageParts)
+    session.prompt.reset()
+    setUploadedImages(new Map())
   }
 
   return (
@@ -450,11 +442,12 @@ export const PromptInput: Component<PromptInputProps> = (props) => {
           <Show when={flat().length > 0} fallback={<div class="text-text-weak px-2">No matching files</div>}>
             <For each={flat()}>
               {(i) => (
-                <div
+                <button
                   classList={{
                     "w-full flex items-center justify-between rounded-md": true,
                     "bg-surface-raised-base-hover": active() === i,
                   }}
+                  onClick={() => handleFileSelect(i)}
                 >
                   <div class="flex items-center gap-x-2 grow min-w-0">
                     <FileIcon node={{ path: i, type: "file" }} class="shrink-0 size-4" />
@@ -466,7 +459,7 @@ export const PromptInput: Component<PromptInputProps> = (props) => {
                     </div>
                   </div>
                   <div class="flex items-center gap-x-1 text-text-muted/40 shrink-0"></div>
-                </div>
+                </button>
               )}
             </For>
           </Show>
@@ -513,7 +506,7 @@ export const PromptInput: Component<PromptInputProps> = (props) => {
               "ring-offset-2": isDragging()
             }}
           />
-          <Show when={isEmpty()}>
+          <Show when={!session.prompt.dirty()}>
             <div class="absolute top-0 left-0 p-3 text-14-regular text-text-weak pointer-events-none">
               Plan and build anything
             </div>
@@ -591,7 +584,33 @@ export const PromptInput: Component<PromptInputProps> = (props) => {
               )}
             </SelectDialog>
           </div>
-          <IconButton type="submit" disabled={isEmpty()} icon="arrow-up" variant="primary" />
+          <Tooltip
+            placement="top"
+            value={
+              <Switch>
+                <Match when={session.working()}>
+                  <div class="flex items-center gap-2">
+                    <span>Stop</span>
+                    <span class="text-icon-base text-12-medium text-[10px]!">ESC</span>
+                  </div>
+                </Match>
+                <Match when={true}>
+                  <div class="flex items-center gap-2">
+                    <span>Send</span>
+                    <Icon name="enter" size="small" class="text-icon-base" />
+                  </div>
+                </Match>
+              </Switch>
+            }
+          >
+            <IconButton
+              type="submit"
+              disabled={!session.prompt.dirty() && !session.working()}
+              icon={session.working() ? "stop" : "arrow-up"}
+              variant="primary"
+              class="rounded-full"
+            />
+          </Tooltip>
         </div>
       </form>
     </div>
@@ -608,9 +627,6 @@ function isEqual(arrA: ContentPart[], arrB: ContentPart[]): boolean {
       return false
     }
     if (partA.type === "file" && partA.path !== (partB as FileAttachmentPart).path) {
-      return false
-    }
-    if (partA.type === "image" && partA.data !== (partB as ImageAttachmentPart).data) {
       return false
     }
   }

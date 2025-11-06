@@ -326,7 +326,12 @@ function Option(props: {
   return (
     <>
       <box flexGrow={1} flexDirection="row">
-        <text
+        <Show when={props.current && !props.active}>
+        <text flexShrink={0} fg={theme.primary} marginRight={0.5}>
+          ●
+        </text>
+      </Show>
+      <text
           fg={props.active ? theme.background : props.current ? theme.primary : theme.text}
           attributes={props.active ? TextAttributes.BOLD : undefined}
           overflow="hidden"

@@ -93,6 +93,7 @@ export function Sidebar(props: { sessionID: string; onToggle: () => void }) {
   const [sessionDiffs, setSessionDiffs] = createSignal<any[]>([])
   const uiExtensions = useUIExtensions()
   const session = createMemo(() => sync.session.get(props.sessionID)!)
+  const diff = createMemo(() => sync.data.session_diff[props.sessionID] ?? [])
   const todo = createMemo(() => sync.data.todo[props.sessionID] ?? [])
   const messages = createMemo(() => sync.data.message[props.sessionID] ?? [])
 

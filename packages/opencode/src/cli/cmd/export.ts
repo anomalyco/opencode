@@ -18,10 +18,13 @@ export const ExportCommand = cmd({
   handler: async (args) => {
     await bootstrap(process.cwd(), async () => {
       let sessionID = args.sessionID
+      process.stderr.write(`Exporting session: ${sessionID ?? "latest"}`)
 
       if (!sessionID) {
         UI.empty()
-        prompts.intro("Export session")
+        prompts.intro("Export session", {
+          output: process.stderr,
+        })
 
         const sessions = []
         for await (const session of Session.list()) {
@@ -29,8 +32,12 @@ export const ExportCommand = cmd({
         }
 
         if (sessions.length === 0) {
-          prompts.log.error("No sessions found")
-          prompts.outro("Done")
+          prompts.log.error("No sessions found", {
+            output: process.stderr,
+          })
+          prompts.outro("Done", {
+            output: process.stderr,
+          })
           return
         }
 
@@ -44,6 +51,7 @@ export const ExportCommand = cmd({
             value: session.id,
             hint: `${new Date(session.time.updated).toLocaleString()} • ${session.id.slice(-8)}`,
           })),
+          output: process.stderr,
         })
 
         if (prompts.isCancel(selectedSession)) {
@@ -52,7 +60,9 @@ export const ExportCommand = cmd({
 
         sessionID = selectedSession as string
 
-        prompts.outro("Exporting session...")
+        prompts.outro("Exporting session...", {
+          output: process.stderr,
+        })
       }
 
       try {

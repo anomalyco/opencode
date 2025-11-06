@@ -7,7 +7,7 @@
   overflow: clip;
 
   [data-slot="list"] {
-    height: 40px;
+    height: 48px;
     width: 100%;
     position: relative;
     display: flex;
@@ -39,7 +39,7 @@
   [data-slot="trigger"] {
     position: relative;
     height: 100%;
-    padding: 8px 24px;
+    padding: 14px 24px;
     display: flex;
     align-items: center;
     color: var(--text-base);

@@ -364,7 +364,7 @@ ToolRegistry.register({
             </div>
             <div data-slot="actions">
               <Show when={props.metadata.filediff}>
-                <DiffChanges diff={props.metadata.filediff} />
+                <DiffChanges changes={props.metadata.filediff} />
               </Show>
             </div>
           </div>

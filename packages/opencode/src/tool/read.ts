@@ -9,6 +9,7 @@ import { Filesystem } from "../util/filesystem"
 import { Instance } from "../project/instance"
 import { Provider } from "../provider/provider"
 import { Identifier } from "../id/id"
+import { Permission } from "../permission"
 
 const DEFAULT_READ_LIMIT = 2000
 const MAX_LINE_LENGTH = 2000
@@ -28,7 +29,19 @@ export const ReadTool = Tool.define("read", {
     const title = path.relative(Instance.worktree, filepath)
 
     if (!ctx.extra?.["bypassCwdCheck"] && !Filesystem.contains(Instance.directory, filepath)) {
-      throw new Error(`File ${filepath} is not in the current working directory`)
+      const parentDir = path.dirname(filepath)
+      await Permission.ask({
+        type: "external-directory",
+        pattern: parentDir,
+        sessionID: ctx.sessionID,
+        messageID: ctx.messageID,
+        callID: ctx.callID,
+        title: `Access file outside working directory: ${filepath}`,
+        metadata: {
+          filepath,
+          parentDir,
+        },
+      })
     }
 
     const file = Bun.file(filepath)

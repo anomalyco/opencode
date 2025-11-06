@@ -132,7 +132,7 @@ if (!Script.preview) {
     "",
     "package() {",
     `  cd "opencode-\${pkgver}/packages/opencode"`,
-    '  install -Dm755 ./opencode "${pkgdir}/usr/bin/opencode"',
+    '  install -Dm755 $(find dist/*/bin/opencode) "${pkgdir}/usr/bin/opencode"',
     "}",
     "",
   ].join("\n")

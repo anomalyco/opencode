@@ -72,6 +72,7 @@ import { useKV } from "../../context/kv.tsx"
 import { useLiveKit } from "../../context/livekit"
 import { MessageWidgets } from "@/ui/message-widgets"
 import { PluginComponent } from "../../component/plugin-component"
+import stripAnsi from "strip-ansi"
 
 addDefaultParsers(parsers.parsers)
 
@@ -234,7 +235,15 @@ export function Session() {
     return dimensions().width - leftWidth - rightWidth - 4
   })
 
-  createEffect(() => sync.session.sync(route.sessionID))
+  createEffect(() => {
+    sync.session.sync(route.sessionID).catch(() => {
+      toast.show({
+        message: `Session not found: ${route.sessionID}`,
+        variant: "error",
+      })
+      return navigate({ type: "home" })
+    })
+  })
 
   const toast = useToast()
 
@@ -836,7 +845,12 @@ export function Session() {
             </Show>
             <scrollbox
               ref={(r) => (scroll = r)}
-              scrollbarOptions={{ visible: false }}
+              scrollbarOptions={{
+                trackOptions: {
+                  backgroundColor: theme.backgroundElement,
+                  foregroundColor: theme.border,
+                },
+              }}
               stickyScroll={true}
               stickyStart="bottom"
               flexGrow={1}
@@ -1246,7 +1260,8 @@ function TextPart(props: { part: TextPart; message: AssistantMessage }) {
                 <code
                   filetype="markdown"
                   drawUnstyledText={false}
-                  syntaxStyle={syntax()}
+                  streaming={true}
+          syntaxStyle={syntax()}
                   content={(segment as any).content}
                   conceal={ctx.conceal()}
                 />
@@ -1452,7 +1467,7 @@ ToolRegistry.register<typeof BashTool>({
   name: "bash",
   container: "block",
   render(props) {
-    const output = createMemo(() => Bun.stripANSI(props.metadata.output?.trim() ?? ""))
+    const output = createMemo(() => stripAnsi(props.metadata.output?.trim() ?? ""))
     const { theme } = useTheme()
     return (
       <>

@@ -1093,9 +1093,6 @@ export namespace SessionPrompt {
 
           for await (const value of stream.fullStream) {
             input.abort.throwIfAborted()
-            log.info("part", {
-              type: value.type,
-            })
             switch (value.type) {
               case "start":
                 break

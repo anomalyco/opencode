@@ -626,6 +626,7 @@ export type Session = {
   summary?: {
     additions: number
     deletions: number
+    files: number
     diffs?: Array<FileDiff>
   }
   share?: {
@@ -1377,14 +1378,6 @@ export type EventFileEdited = {
   }
 }
 
-export type EventFileWatcherUpdated = {
-  type: "file.watcher.updated"
-  properties: {
-    file: string
-    event: "add" | "change" | "unlink"
-  }
-}
-
 export type EventTodoUpdated = {
   type: "todo.updated"
   properties: {
@@ -1431,6 +1424,14 @@ export type EventSessionDeleted = {
   }
 }
 
+export type EventSessionDiff = {
+  type: "session.diff"
+  properties: {
+    sessionID: string
+    diff: Array<FileDiff>
+  }
+}
+
 export type EventSessionError = {
   type: "session.error"
   properties: {
@@ -1451,6 +1452,14 @@ export type EventServerConnected = {
   }
 }
 
+export type EventFileWatcherUpdated = {
+  type: "file.watcher.updated"
+  properties: {
+    file: string
+    event: "add" | "change" | "unlink"
+  }
+}
+
 export type Event =
   | EventInstallationUpdated
   | EventLspClientDiagnostics
@@ -1463,18 +1472,19 @@ export type Event =
   | EventPermissionUpdated
   | EventPermissionReplied
   | EventFileEdited
-  | EventFileWatcherUpdated
   | EventTodoUpdated
   | EventCommandExecuted
   | EventSessionIdle
   | EventSessionCreated
   | EventSessionUpdated
   | EventSessionDeleted
+  | EventSessionDiff
   | EventSessionError
   | EventTuiPromptAppend
   | EventTuiCommandExecute
   | EventTuiToastShow
   | EventServerConnected
+  | EventFileWatcherUpdated
 
 export type ProjectListData = {
   body?: never
