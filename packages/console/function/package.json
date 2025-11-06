@@ -1,6 +1,6 @@
 {
   "name": "@opencode-ai/console-function",
-  "version": "1.0.36",
+  "version": "1.0.37",
   "$schema": "https://json.schemastore.org/package.json",
   "private": true,
   "type": "module",
