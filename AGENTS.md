@@ -21,27 +21,27 @@
 
 json
 {
-    "recipient_name": "multi_tool_use.parallel",
-    "parameters": {
-        "tool_uses": [
-            {
-                "recipient_name": "functions.read",
-                "parameters": {
-                    "filePath": "path/to/file.tsx"
-                }
-            },
-            {
-                "recipient_name": "functions.read",
-                "parameters": {
-                    "filePath": "path/to/file.ts"
-                }
-            },
-            {
-                "recipient_name": "functions.read",
-                "parameters": {
-                    "filePath": "path/to/file.md"
-                }
-            }
-        ]
-    }
+"recipient_name": "multi_tool_use.parallel",
+"parameters": {
+"tool_uses": [
+{
+"recipient_name": "functions.read",
+"parameters": {
+"filePath": "path/to/file.tsx"
+}
+},
+{
+"recipient_name": "functions.read",
+"parameters": {
+"filePath": "path/to/file.ts"
+}
+},
+{
+"recipient_name": "functions.read",
+"parameters": {
+"filePath": "path/to/file.md"
+}
+}
+]
+}
 }

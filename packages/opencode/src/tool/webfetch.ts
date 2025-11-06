@@ -48,13 +48,15 @@ export const WebFetchTool = Tool.define("webfetch", {
     let acceptHeader = "*/*"
     switch (params.format) {
       case "markdown":
-        acceptHeader = "text/markdown;q=1.0, text/x-markdown;q=0.9, text/plain;q=0.8, text/html;q=0.7, */*;q=0.1"
+        acceptHeader =
+          "text/markdown;q=1.0, text/x-markdown;q=0.9, text/plain;q=0.8, text/html;q=0.7, */*;q=0.1"
         break
       case "text":
         acceptHeader = "text/plain;q=1.0, text/markdown;q=0.9, text/html;q=0.8, */*;q=0.1"
         break
       case "html":
-        acceptHeader = "text/html;q=1.0, application/xhtml+xml;q=0.9, text/plain;q=0.8, text/markdown;q=0.7, */*;q=0.1"
+        acceptHeader =
+          "text/html;q=1.0, application/xhtml+xml;q=0.9, text/plain;q=0.8, text/markdown;q=0.7, */*;q=0.1"
         break
       default:
         acceptHeader =
@@ -158,7 +160,9 @@ async function extractTextFromHTML(html: string) {
     .on("*", {
       element(element) {
         // Reset skip flag when entering other elements
-        if (!["script", "style", "noscript", "iframe", "object", "embed"].includes(element.tagName)) {
+        if (
+          !["script", "style", "noscript", "iframe", "object", "embed"].includes(element.tagName)
+        ) {
           skipContent = false
         }
       },

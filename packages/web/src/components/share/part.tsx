@@ -1,6 +1,15 @@
 import map from "lang-map"
 import { DateTime } from "luxon"
-import { For, Show, Match, Switch, type JSX, createMemo, createSignal, type ParentProps } from "solid-js"
+import {
+  For,
+  Show,
+  Match,
+  Switch,
+  type JSX,
+  createMemo,
+  createSignal,
+  type ParentProps,
+} from "solid-js"
 import {
   IconHashtag,
   IconSparkles,
@@ -19,7 +28,14 @@ import {
   IconMagnifyingGlass,
   IconDocumentMagnifyingGlass,
 } from "../icons"
-import { IconMeta, IconRobot, IconOpenAI, IconGemini, IconAnthropic, IconBrain } from "../icons/custom"
+import {
+  IconMeta,
+  IconRobot,
+  IconOpenAI,
+  IconGemini,
+  IconAnthropic,
+  IconBrain,
+} from "../icons/custom"
 import { ContentCode } from "./content-code"
 import { ContentDiff } from "./content-diff"
 import { ContentText } from "./content-text"
@@ -79,7 +95,11 @@ export function Part(props: PartProps) {
                 <IconPaperClip width={18} height={18} />
               </Match>
               <Match
-                when={props.part.type === "step-start" && props.message.role === "assistant" && props.message.modelID}
+                when={
+                  props.part.type === "step-start" &&
+                  props.message.role === "assistant" &&
+                  props.message.modelID
+                }
               >
                 {(model) => <ProviderIcon model={model()} size={18} />}
               </Match>
@@ -147,7 +167,9 @@ export function Part(props: PartProps) {
                   DateTime.DATETIME_FULL_WITH_SECONDS,
                 )}
               >
-                {DateTime.fromMillis(props.message.time.completed).toLocaleString(DateTime.DATETIME_MED)}
+                {DateTime.fromMillis(props.message.time.completed).toLocaleString(
+                  DateTime.DATETIME_MED,
+                )}
               </Footer>
             )}
           </div>
@@ -343,7 +365,10 @@ function getShikiLang(filename: string) {
   return type ? (overrides[type] ?? type) : "plaintext"
 }
 
-function getDiagnostics(diagnosticsByFile: Record<string, Diagnostic[]>, currentFile: string): JSX.Element[] {
+function getDiagnostics(
+  diagnosticsByFile: Record<string, Diagnostic[]>,
+  currentFile: string,
+): JSX.Element[] {
   const result: JSX.Element[] = []
 
   if (diagnosticsByFile === undefined || diagnosticsByFile[currentFile] === undefined) return result
@@ -397,7 +422,9 @@ export function TodoWriteTool(props: ToolProps) {
     completed: 2,
   }
   const todos = createMemo(() =>
-    ((props.state.input?.todos ?? []) as Todo[]).slice().sort((a, b) => priority[a.status] - priority[b.status]),
+    ((props.state.input?.todos ?? []) as Todo[])
+      .slice()
+      .sort((a, b) => priority[a.status] - priority[b.status]),
   )
   const starting = () => todos().every((t: Todo) => t.status === "pending")
   const finished = () => todos().every((t: Todo) => t.status === "completed")
@@ -439,13 +466,23 @@ export function GrepTool(props: ToolProps) {
         <Switch>
           <Match when={props.state.metadata?.matches && props.state.metadata?.matches > 0}>
             <ResultsButton
-              showCopy={props.state.metadata?.matches === 1 ? "1 match" : `${props.state.metadata?.matches} matches`}
+              showCopy={
+                props.state.metadata?.matches === 1
+                  ? "1 match"
+                  : `${props.state.metadata?.matches} matches`
+              }
             >
               <ContentText expand compact text={props.state.output} />
             </ResultsButton>
           </Match>
           <Match when={props.state.output}>
-            <ContentText expand compact text={props.state.output} data-size="sm" data-color="dimmed" />
+            <ContentText
+              expand
+              compact
+              text={props.state.output}
+              data-size="sm"
+              data-color="dimmed"
+            />
           </Match>
         </Switch>
       </div>
@@ -505,7 +542,9 @@ export function WebFetchTool(props: ToolProps) {
 }
 
 export function ReadTool(props: ToolProps) {
-  const filePath = createMemo(() => stripWorkingDirectory(props.state.input?.filePath, props.message.path.cwd))
+  const filePath = createMemo(() =>
+    stripWorkingDirectory(props.state.input?.filePath, props.message.path.cwd),
+  )
 
   return (
     <>
@@ -522,7 +561,10 @@ export function ReadTool(props: ToolProps) {
           </Match>
           <Match when={typeof props.state.metadata?.preview === "string"}>
             <ResultsButton showCopy="Show preview" hideCopy="Hide preview">
-              <ContentCode lang={getShikiLang(filePath() || "")} code={props.state.metadata?.preview} />
+              <ContentCode
+                lang={getShikiLang(filePath() || "")}
+                code={props.state.metadata?.preview}
+              />
             </ResultsButton>
           </Match>
           <Match when={typeof props.state.metadata?.preview !== "string" && props.state.output}>
@@ -537,8 +579,12 @@ export function ReadTool(props: ToolProps) {
 }
 
 export function WriteTool(props: ToolProps) {
-  const filePath = createMemo(() => stripWorkingDirectory(props.state.input?.filePath, props.message.path.cwd))
-  const diagnostics = createMemo(() => getDiagnostics(props.state.metadata?.diagnostics, props.state.input.filePath))
+  const filePath = createMemo(() =>
+    stripWorkingDirectory(props.state.input?.filePath, props.message.path.cwd),
+  )
+  const diagnostics = createMemo(() =>
+    getDiagnostics(props.state.metadata?.diagnostics, props.state.input.filePath),
+  )
 
   return (
     <>
@@ -558,7 +604,10 @@ export function WriteTool(props: ToolProps) {
           </Match>
           <Match when={props.state.input?.content}>
             <ResultsButton showCopy="Show contents" hideCopy="Hide contents">
-              <ContentCode lang={getShikiLang(filePath() || "")} code={props.state.input?.content} />
+              <ContentCode
+                lang={getShikiLang(filePath() || "")}
+                code={props.state.input?.content}
+              />
             </ResultsButton>
           </Match>
         </Switch>
@@ -568,8 +617,12 @@ export function WriteTool(props: ToolProps) {
 }
 
 export function EditTool(props: ToolProps) {
-  const filePath = createMemo(() => stripWorkingDirectory(props.state.input.filePath, props.message.path.cwd))
-  const diagnostics = createMemo(() => getDiagnostics(props.state.metadata?.diagnostics, props.state.input.filePath))
+  const filePath = createMemo(() =>
+    stripWorkingDirectory(props.state.input.filePath, props.message.path.cwd),
+  )
+  const diagnostics = createMemo(() =>
+    getDiagnostics(props.state.metadata?.diagnostics, props.state.input.filePath),
+  )
 
   return (
     <>
@@ -586,7 +639,10 @@ export function EditTool(props: ToolProps) {
           </Match>
           <Match when={props.state.metadata?.diff}>
             <div data-component="diff">
-              <ContentDiff diff={props.state.metadata?.diff} lang={getShikiLang(filePath() || "")} />
+              <ContentDiff
+                diff={props.state.metadata?.diff}
+                lang={getShikiLang(filePath() || "")}
+              />
             </div>
           </Match>
         </Switch>
@@ -619,7 +675,11 @@ export function GlobTool(props: ToolProps) {
         <Match when={props.state.metadata?.count && props.state.metadata?.count > 0}>
           <div data-component="tool-result">
             <ResultsButton
-              showCopy={props.state.metadata?.count === 1 ? "1 result" : `${props.state.metadata?.count} results`}
+              showCopy={
+                props.state.metadata?.count === 1
+                  ? "1 result"
+                  : `${props.state.metadata?.count} results`
+              }
             >
               <ContentText expand compact text={props.state.output} />
             </ResultsButton>
@@ -642,7 +702,12 @@ function ResultsButton(props: ResultsButtonProps) {
 
   return (
     <>
-      <button type="button" data-component="button-text" data-more onClick={() => setShow((e) => !e)}>
+      <button
+        type="button"
+        data-component="button-text"
+        data-more
+        onClick={() => setShow((e) => !e)}
+      >
         <span>{show() ? props.hideCopy || "Hide results" : props.showCopy || "Show results"}</span>
         <span data-slot="icon">
           <Show when={show()} fallback={<IconChevronRight width={11} height={11} />}>
@@ -668,7 +733,11 @@ function Footer(props: ParentProps<{ title: string }>) {
 }
 
 function ToolFooter(props: { time: number }) {
-  return props.time > MIN_DURATION && <Footer title={`${props.time}ms`}>{formatDuration(props.time)}</Footer>
+  return (
+    props.time > MIN_DURATION && (
+      <Footer title={`${props.time}ms`}>{formatDuration(props.time)}</Footer>
+    )
+  )
 }
 
 function TaskTool(props: ToolProps) {
@@ -709,7 +778,13 @@ export function FallbackTool(props: ToolProps) {
         <Match when={props.state.output}>
           <div data-component="tool-result">
             <ResultsButton>
-              <ContentText expand compact text={props.state.output} data-size="sm" data-color="dimmed" />
+              <ContentText
+                expand
+                compact
+                text={props.state.output}
+                data-size="sm"
+                data-color="dimmed"
+              />
             </ResultsButton>
           </div>
         </Match>

@@ -28,13 +28,17 @@ export async function createOpencodeServer(options?: ServerOptions) {
     options ?? {},
   )
 
-  const proc = spawn(`opencode`, [`serve`, `--hostname=${options.hostname}`, `--port=${options.port}`], {
-    signal: options.signal,
-    env: {
-      ...process.env,
-      OPENCODE_CONFIG_CONTENT: JSON.stringify(options.config ?? {}),
+  const proc = spawn(
+    `opencode`,
+    [`serve`, `--hostname=${options.hostname}`, `--port=${options.port}`],
+    {
+      signal: options.signal,
+      env: {
+        ...process.env,
+        OPENCODE_CONFIG_CONTENT: JSON.stringify(options.config ?? {}),
+      },
     },
-  })
+  )
 
   const url = await new Promise<string>((resolve, reject) => {
     const id = setTimeout(() => {

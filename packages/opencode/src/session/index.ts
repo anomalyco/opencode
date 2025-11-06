@@ -144,7 +144,7 @@ export namespace Session {
       const session = await createNext({
         directory: Instance.directory,
       })
-      const msgs = await messages(input.sessionID)
+      const msgs = await messages({ sessionID: input.sessionID })
       for (const msg of msgs) {
         if (input.messageID && msg.info.id >= input.messageID) break
         const cloned = await updateMessage({
@@ -237,7 +237,7 @@ export namespace Session {
     })
     await Storage.write(["share", id], share)
     await Share.sync("session/info/" + id, session)
-    for (const msg of await messages(id)) {
+    for (const msg of await messages({ sessionID: id })) {
       await Share.sync("session/message/" + id + "/" + msg.info.id, msg.info)
       for (const part of msg.parts) {
         await Share.sync("session/part/" + id + "/" + msg.info.id + "/" + part.id, part)
@@ -273,18 +273,26 @@ export namespace Session {
     return diffs ?? []
   })
 
-  export const messages = fn(Identifier.schema("session"), async (sessionID) => {
-    const result = [] as MessageV2.WithParts[]
-    for (const p of await Storage.list(["message", sessionID])) {
-      const read = await Storage.read<MessageV2.Info>(p)
-      result.push({
-        info: read,
-        parts: await getParts(read.id),
-      })
-    }
-    result.sort((a, b) => (a.info.id > b.info.id ? 1 : -1))
-    return result
-  })
+  export const messages = fn(
+    z.object({
+      sessionID: Identifier.schema("session"),
+      limit: z.number().optional(),
+    }),
+    async (input) => {
+      const result = [] as MessageV2.WithParts[]
+      const list = (await Array.fromAsync(await Storage.list(["message", input.sessionID])))
+        .toSorted((a, b) => a.at(-1)!.localeCompare(b.at(-1)!))
+        .slice(-1 * (input.limit ?? 1_000_000))
+      for (const p of list) {
+        const read = await Storage.read<MessageV2.Info>(p)
+        result.push({
+          info: read,
+          parts: await getParts(read.id),
+        })
+      }
+      return result
+    },
+  )
 
   export const getMessage = fn(
     z.object({

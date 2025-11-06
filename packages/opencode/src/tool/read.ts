@@ -18,7 +18,10 @@ export const ReadTool = Tool.define("read", {
   description: DESCRIPTION,
   parameters: z.object({
     filePath: z.string().describe("The path to the file to read"),
-    offset: z.coerce.number().describe("The line number to start reading from (0-based)").optional(),
+    offset: z.coerce
+      .number()
+      .describe("The line number to start reading from (0-based)")
+      .optional(),
     limit: z.coerce.number().describe("The number of lines to read (defaults to 2000)").optional(),
   }),
   async execute(params, ctx) {
@@ -53,13 +56,16 @@ export const ReadTool = Tool.define("read", {
       const suggestions = dirEntries
         .filter(
           (entry) =>
-            entry.toLowerCase().includes(base.toLowerCase()) || base.toLowerCase().includes(entry.toLowerCase()),
+            entry.toLowerCase().includes(base.toLowerCase()) ||
+            base.toLowerCase().includes(entry.toLowerCase()),
         )
         .map((entry) => path.join(dir, entry))
         .slice(0, 3)
 
       if (suggestions.length > 0) {
-        throw new Error(`File not found: ${filepath}\n\nDid you mean one of these?\n${suggestions.join("\n")}`)
+        throw new Error(
+          `File not found: ${filepath}\n\nDid you mean one of these?\n${suggestions.join("\n")}`,
+        )
       }
 
       throw new Error(`File not found: ${filepath}`)

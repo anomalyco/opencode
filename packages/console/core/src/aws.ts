@@ -24,37 +24,40 @@ export namespace AWS {
       body: z.string(),
     }),
     async (input) => {
-      const res = await createClient().fetch("https://email.us-east-1.amazonaws.com/v2/email/outbound-emails", {
-        method: "POST",
-        headers: {
-          "X-Amz-Target": "SES.SendEmail",
-          "Content-Type": "application/json",
-        },
-        body: JSON.stringify({
-          FromEmailAddress: `OpenCode Zen <contact@anoma.ly>`,
-          Destination: {
-            ToAddresses: [input.to],
+      const res = await createClient().fetch(
+        "https://email.us-east-1.amazonaws.com/v2/email/outbound-emails",
+        {
+          method: "POST",
+          headers: {
+            "X-Amz-Target": "SES.SendEmail",
+            "Content-Type": "application/json",
           },
-          Content: {
-            Simple: {
-              Subject: {
-                Charset: "UTF-8",
-                Data: input.subject,
-              },
-              Body: {
-                Text: {
+          body: JSON.stringify({
+            FromEmailAddress: `OpenCode Zen <contact@anoma.ly>`,
+            Destination: {
+              ToAddresses: [input.to],
+            },
+            Content: {
+              Simple: {
+                Subject: {
                   Charset: "UTF-8",
-                  Data: input.body,
+                  Data: input.subject,
                 },
-                Html: {
-                  Charset: "UTF-8",
-                  Data: input.body,
+                Body: {
+                  Text: {
+                    Charset: "UTF-8",
+                    Data: input.body,
+                  },
+                  Html: {
+                    Charset: "UTF-8",
+                    Data: input.body,
+                  },
                 },
               },
             },
-          },
-        }),
-      })
+          }),
+        },
+      )
       if (!res.ok) {
         throw new Error(`Failed to send email: ${res.statusText}`)
       }

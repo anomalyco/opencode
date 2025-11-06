@@ -49,7 +49,11 @@ export namespace Identifier {
     return result
   }
 
-  export function create(prefix: keyof typeof prefixes, descending: boolean, timestamp?: number): string {
+  export function create(
+    prefix: keyof typeof prefixes,
+    descending: boolean,
+    timestamp?: number,
+  ): string {
     const currentTimestamp = timestamp ?? Date.now()
 
     if (currentTimestamp !== lastTimestamp) {
