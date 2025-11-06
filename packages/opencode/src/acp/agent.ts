@@ -685,11 +685,12 @@ export namespace ACP {
     if (configured) return configured
 
     // Fallback to user config if not provided in ACP config
-    const userConfig = await Config.get().catch((error) => {
-      log.error("failed to load user config for default model", { error })
-      return undefined
-    })
-
+    const userConfig = await Config.get()
+      .catch((error) => {
+        log.error("failed to load user config for default model", { error })
+        return undefined
+      })
+    
     if (userConfig?.model) {
       const parsed = Provider.parseModel(userConfig.model)
       return {
