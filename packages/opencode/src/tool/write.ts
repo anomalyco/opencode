@@ -38,7 +38,6 @@ export const WriteTool = Tool.define("write", {
 
     const file = Bun.file(filepath)
     const exists = await file.exists()
-
     if (exists) await FileTime.assert(ctx.sessionID, filepath)
 
     const agent = await Agent.get(ctx.agent)

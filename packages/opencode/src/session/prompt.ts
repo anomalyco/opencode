@@ -9,7 +9,6 @@ import { SessionRevert } from "./revert"
 import { Session } from "."
 import { Agent } from "../agent/agent"
 import { Provider } from "../provider/provider"
-import type { ACP } from "../acp/agent"
 import {
   generateText,
   streamText,
