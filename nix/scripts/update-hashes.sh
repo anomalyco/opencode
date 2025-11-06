@@ -122,78 +122,53 @@ for SYSTEM in $SYSTEMS; do
   BUILD_LOG=$(mktemp)
   JSON_OUTPUT=$(mktemp)
 
-  echo "Building ${TARGET} to discover correct node_modules outputHash..."
-  if nix build ".#${TARGET}" --system "$SYSTEM" --no-link --rebuild -L --log-format raw --keep-failed --json 2>&1 | tee "$BUILD_LOG" >"$JSON_OUTPUT"; then
-    echo "Build succeeded while dummy hash was set; aborting"
-    exit 1
-  fi
+  echo "Building node_modules for ${SYSTEM} to discover correct outputHash..."
+  # Try to use nix-store --realise to force the build even with wrong hash
+  echo "Attempting to realize derivation: ${DRV_PATH}"
+  REALISE_OUT=$(nix-store --realise "$DRV_PATH" --keep-failed 2>&1 | tee "$BUILD_LOG" || true)
 
-  CORRECT_HASH="$(grep -E 'got:\s+sha256-[A-Za-z0-9+/=]+' "$BUILD_LOG" | awk '{print $2}' | head -n1 || true)"
+  # Check if build succeeded (shouldn't with dummy hash)
+  if echo "$REALISE_OUT" | grep -q "^/nix/store/" && [ -d "$(echo "$REALISE_OUT" | grep "^/nix/store/" | head -n1)" ]; then
+    BUILD_PATH=$(echo "$REALISE_OUT" | grep "^/nix/store/" | head -n1)
+    echo "Build succeeded unexpectedly, hashing output: $BUILD_PATH"
+    CORRECT_HASH=$(nix hash path --sri "$BUILD_PATH" 2>/dev/null || true)
+  else
+    # Extract hash from error message
+    CORRECT_HASH="$(grep -E 'got:\s+sha256-[A-Za-z0-9+/=]+' "$BUILD_LOG" | awk '{print $2}' | head -n1 || true)"
 
-  if [ -z "$CORRECT_HASH" ]; then
-    echo "Attempting to read nix log for ${DRV_PATH}..."
-    CORRECT_HASH="$(nix log "$DRV_PATH" 2>/dev/null | grep -E 'got:\s+sha256-[A-Za-z0-9+/=]+' | awk '{print $2}' | head -n1 || true)"
-  fi
+    if [ -z "$CORRECT_HASH" ]; then
+      # Try alternate format: "hash mismatch ... got: sha256:..."
+      CORRECT_HASH="$(grep -A2 'hash mismatch' "$BUILD_LOG" | grep 'got:' | awk '{print $2}' | sed 's/sha256:/sha256-/' || true)"
+    fi
 
-  if [ -z "$CORRECT_HASH" ]; then
-    echo "Failed to find 'got:' line in build log; attempting alternative hash extraction..."
+    if [ -z "$CORRECT_HASH" ]; then
+      # Try to find and hash the kept failed build
+      echo "Searching for kept failed build directory..."
+      KEPT_DIR=$(grep -oE "build directory.*'[^']+'" "$BUILD_LOG" | grep -oE "'/[^']+'" | tr -d "'" | head -n1)
 
-    # When a FOD has the wrong hash, modern Nix refuses to build at all with:
-    # "some outputs ... are not valid, so checking is not possible", so we use nix-build (legacy)
-    # with the derivation path and --check disabled, which will actually build and produce a hash mismatch.
-
-    echo "Using nix-build to force derivation build and capture hash mismatch..."
-    TMP_MODULES_LOG=$(mktemp)
-
-    BUILD_OUT=$(nix-build "$DRV_PATH" --no-out-link --keep-failed --system "$SYSTEM" 2>&1 | tee "$TMP_MODULES_LOG" || true)
-
-    if echo "$BUILD_OUT" | grep -q "^/nix/store/"; then
-      # Build succeeded - hash the output
-      BUILD_PATH=$(echo "$BUILD_OUT" | grep "^/nix/store/" | head -n1)
-      if [ -d "$BUILD_PATH" ]; then
-        echo "Build succeeded with current hash, verifying output at: $BUILD_PATH"
-        CORRECT_HASH=$(nix hash path --sri "$BUILD_PATH" 2>/dev/null || true)
-        if [ -n "$CORRECT_HASH" ]; then
-          echo "Hash verified from successful build: $CORRECT_HASH"
-        fi
+      if [ -z "$KEPT_DIR" ]; then
+        # Alternative pattern for kept build
+        KEPT_DIR=$(grep -oE '/nix/var/nix/builds/[^ ]+' "$BUILD_LOG" | head -n1)
       fi
-    else
-      # Build failed - extract hash from error message
-      # Not sure if there's a way around this other than parsing the human-readable log:
-      CORRECT_HASH="$(grep -A1 'hash mismatch' "$TMP_MODULES_LOG" | grep 'got:' | awk '{print $2}' | sed 's/:/-/' || true)"
 
-      if [ -z "$CORRECT_HASH" ]; then
-        # Try to find kept output
-        KEPT_LINE=$(grep -E "(keeping|kept).*build" "$TMP_MODULES_LOG" | head -n1 || true)
-        if [ -n "$KEPT_LINE" ]; then
-          KEPT_DIR=$(echo "$KEPT_LINE" | grep -oE "'/[^']+'" | tr -d "'" | head -n1)
+      if [ -n "$KEPT_DIR" ] && [ -d "$KEPT_DIR" ]; then
+        echo "Found kept build directory: $KEPT_DIR"
+        # The output should be in a subdirectory
+        if [ -d "$KEPT_DIR/build" ]; then
+          HASH_PATH="$KEPT_DIR/build"
+        else
+          HASH_PATH="$KEPT_DIR"
+        fi
 
-          if [ -z "$KEPT_DIR" ]; then
-            # Try without quotes
-            KEPT_DIR=$(echo "$KEPT_LINE" | grep -oE '/tmp/nix-build-[^ ]+|/nix/var/nix/builds/[^ ]+' | head -n1)
-          fi
+        echo "Attempting to hash: $HASH_PATH"
+        ls -la "$HASH_PATH" || true
 
-          if [ -d "$KEPT_DIR" ]; then
-            if [ -d "$KEPT_DIR/output" ]; then
-              KEPT_OUT="$KEPT_DIR/output"
-            elif [ -d "$KEPT_DIR" ]; then
-              KEPT_OUT="$KEPT_DIR"
-            fi
-
-            if [ -n "$KEPT_OUT" ]; then
-              echo "Found kept build at: $KEPT_OUT"
-              CORRECT_HASH=$(nix hash path --sri "$KEPT_OUT" 2>/dev/null || true)
-
-              if [ -n "$CORRECT_HASH" ]; then
-                echo "Extracted hash from kept output: $CORRECT_HASH"
-              fi
-            fi
-          fi
+        if [ -d "$HASH_PATH/node_modules" ]; then
+          CORRECT_HASH=$(nix hash path --sri "$HASH_PATH" 2>/dev/null || true)
+          echo "Computed hash from kept build: $CORRECT_HASH"
         fi
       fi
     fi
-
-    rm -f "$TMP_MODULES_LOG"
   fi
 
   if [ -z "$CORRECT_HASH" ]; then
