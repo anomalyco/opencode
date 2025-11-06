@@ -683,6 +683,7 @@ export function Session() {
             <scrollbox
               ref={(r) => (scroll = r)}
               scrollbarOptions={{
+                paddingLeft: 2,
                 trackOptions: {
                   backgroundColor: theme.backgroundElement,
                   foregroundColor: theme.border,
