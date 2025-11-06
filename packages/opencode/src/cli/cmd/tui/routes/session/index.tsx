@@ -677,7 +677,15 @@ export function Session() {
             </Show>
             <scrollbox
               ref={(r) => (scroll = r)}
-              scrollbarOptions={{ visible: false }}
+              scrollbarOptions={{
+                trackOptions: {
+                  backgroundColor: theme.backgroundElement,
+                  foregroundColor: theme.primary,
+                },
+                arrowOptions: {
+                  foregroundColor: theme.primary,
+                },
+              }}
               stickyScroll={true}
               stickyStart="bottom"
               flexGrow={1}

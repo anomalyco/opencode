@@ -299,6 +299,7 @@ function App() {
     },
     {
       title: "Toggle debug panel",
+      category: "System",
       value: "app.debug",
       onSelect: (dialog) => {
         renderer.toggleDebugOverlay()
@@ -307,6 +308,7 @@ function App() {
     },
     {
       title: "Toggle console",
+      category: "System",
       value: "app.fps",
       onSelect: (dialog) => {
         renderer.console.toggle()
