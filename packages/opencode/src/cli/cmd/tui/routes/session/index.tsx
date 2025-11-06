@@ -5,6 +5,7 @@ import {
   createSignal,
   For,
   Match,
+  on,
   Show,
   Switch,
   useContext,
@@ -115,18 +116,6 @@ export function Session() {
     })
   })
 
-  createEffect(() => {
-    route.sessionID
-    const checkAndScroll = () => {
-      if (scroll && messages().length > 0) {
-        toBottom()
-      } else {
-        setTimeout(checkAndScroll, 50)
-      }
-    }
-    checkAndScroll()
-  })
-
   const toast = useToast()
 
   const sdk = useSDK()
@@ -172,6 +161,9 @@ export function Session() {
     if (old !== session()?.revert?.messageID) toBottom()
     return session()?.revert?.messageID
   })
+
+  // snap to bottom when session changes
+  createEffect(on(() => route.sessionID, toBottom))
 
   const local = useLocal()
 
