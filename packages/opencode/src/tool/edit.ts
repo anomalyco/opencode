@@ -17,6 +17,7 @@ import { Filesystem } from "../util/filesystem"
 import { Instance } from "../project/instance"
 import { Agent } from "../agent/agent"
 import { Snapshot } from "@/snapshot"
+import type { ACP } from "../acp/agent"
 
 export const EditTool = Tool.define("edit", {
   description: DESCRIPTION,
@@ -53,6 +54,7 @@ export const EditTool = Tool.define("edit", {
     }
 
     const agent = await Agent.get(ctx.agent)
+    const acpAgent = ctx.extra?.["acpAgent"] as ACP.Agent | undefined
     let diff = ""
     let contentOld = ""
     let contentNew = ""
@@ -73,19 +75,40 @@ export const EditTool = Tool.define("edit", {
             },
           })
         }
-        await Bun.write(filePath, params.newString)
+        if (acpAgent) {
+          await acpAgent.writeTextFile({
+            sessionId: ctx.sessionID,
+            path: filePath,
+            content: params.newString,
+          })
+        } else {
+          await Bun.write(filePath, params.newString)
+        }
         await Bus.publish(File.Event.Edited, {
           file: filePath,
         })
         return
       }
 
-      const file = Bun.file(filePath)
-      const stats = await file.stat().catch(() => {})
-      if (!stats) throw new Error(`File ${filePath} not found`)
-      if (stats.isDirectory()) throw new Error(`Path is a directory, not a file: ${filePath}`)
+      if (acpAgent) {
+        try {
+          const result = await acpAgent.readTextFile({
+            sessionId: ctx.sessionID,
+            path: filePath,
+          })
+          contentOld = result.content
+        } catch {
+          throw new Error(`File ${filePath} not found`)
+        }
+      } else {
+        const file = Bun.file(filePath)
+        const stats = await file.stat().catch(() => {})
+        if (!stats) throw new Error(`File ${filePath} not found`)
+        if (stats.isDirectory()) throw new Error(`Path is a directory, not a file: ${filePath}`)
+        contentOld = await file.text()
+      }
+
       await FileTime.assert(ctx.sessionID, filePath)
-      contentOld = await file.text()
       contentNew = replace(contentOld, params.oldString, params.newString, params.replaceAll)
 
       diff = trimDiff(createTwoFilesPatch(filePath, filePath, contentOld, contentNew))
@@ -103,11 +126,28 @@ export const EditTool = Tool.define("edit", {
         })
       }
 
-      await file.write(contentNew)
+      if (acpAgent) {
+        await acpAgent.writeTextFile({
+          sessionId: ctx.sessionID,
+          path: filePath,
+          content: contentNew,
+        })
+      } else {
+        await Bun.write(filePath, contentNew)
+      }
       await Bus.publish(File.Event.Edited, {
         file: filePath,
       })
-      contentNew = await file.text()
+      if (acpAgent) {
+        const result = await acpAgent.readTextFile({
+          sessionId: ctx.sessionID,
+          path: filePath,
+        })
+        contentNew = result.content
+      } else {
+        const file = Bun.file(filePath)
+        contentNew = await file.text()
+      }
       diff = trimDiff(createTwoFilesPatch(filePath, filePath, contentOld, contentNew))
     })()
 

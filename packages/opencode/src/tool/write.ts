@@ -10,6 +10,7 @@ import { FileTime } from "../file/time"
 import { Filesystem } from "../util/filesystem"
 import { Instance } from "../project/instance"
 import { Agent } from "../agent/agent"
+import type { ACP } from "../acp/agent"
 
 export const WriteTool = Tool.define("write", {
   description: DESCRIPTION,
@@ -35,8 +36,23 @@ export const WriteTool = Tool.define("write", {
       })
     }
 
-    const file = Bun.file(filepath)
-    const exists = await file.exists()
+    const acpAgent = ctx.extra?.["acpAgent"] as ACP.Agent | undefined
+    let exists = false
+    if (acpAgent) {
+      try {
+        await acpAgent.readTextFile({
+          sessionId: ctx.sessionID,
+          path: filepath,
+        })
+        exists = true
+      } catch {
+        exists = false
+      }
+    } else {
+      const file = Bun.file(filepath)
+      exists = await file.exists()
+    }
+
     if (exists) await FileTime.assert(ctx.sessionID, filepath)
 
     const agent = await Agent.get(ctx.agent)
@@ -54,7 +70,16 @@ export const WriteTool = Tool.define("write", {
         },
       })
 
-    await Bun.write(filepath, params.content)
+    if (acpAgent) {
+      await acpAgent.writeTextFile({
+        sessionId: ctx.sessionID,
+        path: filepath,
+        content: params.content,
+      })
+    } else {
+      await Bun.write(filepath, params.content)
+    }
+
     await Bus.publish(File.Event.Edited, {
       file: filepath,
     })

@@ -42,8 +42,6 @@ import { MCP } from "@/mcp"
 import { Todo } from "@/session/todo"
 import { z } from "zod"
 import { LoadAPIKeyError } from "ai"
-import { createACPTools } from "./tools"
-import { ToolRegistry } from "../tool/registry"
 
 export namespace ACP {
   const log = Log.create({ service: "acp-agent" })
@@ -470,14 +468,6 @@ export namespace ACP {
         }
       }
 
-      if (this.clientCapabilities?.fs?.writeTextFile) {
-        log.info("Client has writeTextFile capability, registering ACP tools")
-        const acpTools = createACPTools(this, sessionId)
-        for (const tool of acpTools) {
-          await ToolRegistry.register(tool)
-        }
-      }
-
       await Promise.all(
         Object.entries(mcpServers).map(async ([key, mcp]) => {
           await MCP.add(key, mcp)
@@ -619,13 +609,6 @@ export namespace ACP {
       }
 
       if (!cmd) {
-        const tools = acpSession.hasACPTools
-          ? {
-              edit: false,
-              write: false,
-              read: false,
-            }
-          : undefined
         await SessionPrompt.prompt({
           sessionID,
           model: {
@@ -634,7 +617,7 @@ export namespace ACP {
           },
           parts,
           agent,
-          tools,
+          acpAgent: acpSession.hasACPTools ? this : undefined,
         })
         return done
       }
