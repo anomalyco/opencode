@@ -1,4 +1,4 @@
-name: update nix hashes
+name: Update Nix Hashes
 
 permissions:
   contents: write
@@ -28,6 +28,37 @@ jobs:
           git config --global user.email "opencode@sst.dev"
           git config --global user.name "opencode"
 
+      - name: Preflight build (x86_64-linux)
+        id: preflight_x86
+        continue-on-error: true
+        run: |
+          echo "Verifying existing hashes for x86_64-linux..."
+          nix build .#packages.x86_64-linux.default --system x86_64-linux -L
+          echo "x86_64-linux preflight build successful."
+
+      - name: Preflight build (aarch64-linux)
+        id: preflight_aarch64
+        continue-on-error: true
+        run: |
+          echo "Verifying existing hashes for aarch64-linux..."
+          nix build .#packages.aarch64-linux.default --system aarch64-linux -L
+          echo "aarch64-linux preflight build successful."
+
+      - name: Summarize preflight status
+        id: preflight_status
+        run: |
+          set -e
+          if [ "${PRE_X86}" = "failure" ] || [ "${PRE_ARM}" = "failure" ]; then
+            echo "Preflight detected stale hashes."
+            echo "failed=true" >> "$GITHUB_OUTPUT"
+          else
+            echo "Preflight builds passed."
+            echo "failed=false" >> "$GITHUB_OUTPUT"
+          fi
+        env:
+          PRE_X86: ${{ steps.preflight_x86.outcome }}
+          PRE_ARM: ${{ steps.preflight_aarch64.outcome }}
+
       - name: Update build output hashes
         env:
           SYSTEMS: "aarch64-linux x86_64-linux"
@@ -35,15 +66,31 @@ jobs:
           set -euo pipefail
           nix/scripts/update-hashes
 
-      - name: Verification build (x86_64-linux)
+      - name: Detect hash changes
+        id: hash_change
         run: |
-          echo "Running final verification build for x86_64-linux..."
+          set -euo pipefail
+          if git diff --quiet nix/hashes.json; then
+            echo "changed=false" >> "$GITHUB_OUTPUT"
+            echo "No hash changes detected."
+          else
+            echo "changed=true" >> "$GITHUB_OUTPUT"
+            echo "Hashes updated; running post-update verification."
+          fi
+
+      - name: Verification build (x86_64-linux)
+        if: steps.hash_change.outputs.changed == 'true'
+          || steps.preflight_status.outputs.failed == 'true'
+        run: |
+          echo "Running post-update verification build for x86_64-linux..."
           nix build .#packages.x86_64-linux.default --system x86_64-linux -L
           echo "x86_64-linux build successful."
 
       - name: Verification build (aarch64-linux)
+        if: steps.hash_change.outputs.changed == 'true'
+          || steps.preflight_status.outputs.failed == 'true'
         run: |
-          echo "Running final verification build for aarch64-linux..."
+          echo "Running post-update verification build for aarch64-linux..."
           nix build .#packages.aarch64-linux.default --system aarch64-linux -L
           echo "aarch64-linux build successful."
 
