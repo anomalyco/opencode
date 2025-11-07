@@ -34,7 +34,9 @@ describe("LSPClient interop", () => {
         }),
     })
 
-    await client.connection.sendNotification("test/trigger", { method: "workspace/workspaceFolders" })
+    await client.connection.sendNotification("test/trigger", {
+      method: "workspace/workspaceFolders",
+    })
 
     await new Promise((r) => setTimeout(r, 100))
 
@@ -56,7 +58,9 @@ describe("LSPClient interop", () => {
         }),
     })
 
-    await client.connection.sendNotification("test/trigger", { method: "client/registerCapability" })
+    await client.connection.sendNotification("test/trigger", {
+      method: "client/registerCapability",
+    })
 
     await new Promise((r) => setTimeout(r, 100))
 
@@ -78,7 +82,9 @@ describe("LSPClient interop", () => {
         }),
     })
 
-    await client.connection.sendNotification("test/trigger", { method: "client/unregisterCapability" })
+    await client.connection.sendNotification("test/trigger", {
+      method: "client/unregisterCapability",
+    })
 
     await new Promise((r) => setTimeout(r, 100))
 
