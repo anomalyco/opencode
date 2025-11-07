@@ -41,6 +41,18 @@ import { LoadAPIKeyError } from "ai"
 export namespace ACP {
   const log = Log.create({ service: "acp-agent" })
 
+  export async function init() {
+    const model = await defaultModel({})
+    return {
+      create: (connection: AgentSideConnection, config: ACPConfig) => {
+        if (!config.defaultModel) {
+          config.defaultModel = model
+        }
+        return new Agent(connection, config)
+      },
+    }
+  }
+
   export class Agent implements ACPAgent {
     private sessionManager = new ACPSessionManager()
     private connection: AgentSideConnection
@@ -48,13 +60,6 @@ export namespace ACP {
 
     constructor(connection: AgentSideConnection, config: ACPConfig = {}) {
       this.connection = connection
-      if (!config.defaultModel) {
-        // default to big pickle
-        config.defaultModel = {
-          providerID: "opencode",
-          modelID: "big-pickle",
-        }
-      }
       this.config = config
       this.setupEventSubscriptions()
     }
@@ -686,21 +691,21 @@ export namespace ACP {
     const configured = config.defaultModel
     if (configured) return configured
 
-    // Fallback to user config if not provided in ACP config
-    try {
-      const userConfig = await Config.get()
-      if (userConfig.model) {
-        const parsed = Provider.parseModel(userConfig.model)
+    const model = await Config.get()
+      .then((cfg) => {
+        if (!cfg.model) return undefined
+        const parsed = Provider.parseModel(cfg.model)
         return {
           providerID: parsed.providerID,
           modelID: parsed.modelID,
         }
-      }
-    } catch (error) {
-      log.debug("failed to load user config for default model", { error })
-    }
+      })
+      .catch((error) => {
+        log.error("failed to load user config for default model", { error })
+        return undefined
+      })
 
-    return Provider.defaultModel()
+    return model ?? Provider.defaultModel()
   }
 
   function parseUri(

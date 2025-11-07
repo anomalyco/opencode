@@ -3,8 +3,6 @@ import { bootstrap } from "../bootstrap"
 import { cmd } from "./cmd"
 import { AgentSideConnection, ndJsonStream } from "@agentclientprotocol/sdk"
 import { ACP } from "@/acp/agent"
-import { Config } from "@/config/config"
-import { Provider } from "@/provider/provider"
 
 const log = Log.create({ service: "acp-command" })
 
@@ -52,18 +50,10 @@ export const AcpCommand = cmd({
       })
 
       const stream = ndJsonStream(input, output)
+      const agent = await ACP.init()
 
-      new AgentSideConnection(async (conn) => {
-        const config = await Config.get()
-        let defaultModel
-        if (config.model) {
-          const parsed = Provider.parseModel(config.model)
-          defaultModel = {
-            providerID: parsed.providerID,
-            modelID: parsed.modelID,
-          }
-        }
-        return new ACP.Agent(conn, { defaultModel })
+      new AgentSideConnection((conn) => {
+        return agent.create(conn, {})
       }, stream)
 
       log.info("setup connection")
