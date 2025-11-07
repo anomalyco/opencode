@@ -1,5 +1,9 @@
 { optionalPackagesFile, hash, lib, stdenvNoCC, bun, cacert, curl }:
 args:
+let
+  sourceDateEpoch =
+    if args ? sourceDateEpoch then args.sourceDateEpoch else 1;
+in
 stdenvNoCC.mkDerivation {
   pname = "opencode-node_modules";
   version = args.version;
@@ -20,6 +24,7 @@ stdenvNoCC.mkDerivation {
     runHook preBuild
     export HOME=$(mktemp -d)
     export BUN_INSTALL_CACHE_DIR=$(mktemp -d)
+    export SOURCE_DATE_EPOCH=${toString sourceDateEpoch}
     bun install \
       --frozen-lockfile \
       --ignore-scripts \
@@ -76,6 +81,7 @@ stdenvNoCC.mkDerivation {
     rm -f optional-packages.txt optional-metadata.txt
 
     bun --bun ${args.canonicalizeScript}
+    bun --bun ${args.normalizeScript}
 
     runHook postBuild
   '';
