@@ -1,7 +1,7 @@
 import { render, useKeyboard, useRenderer, useTerminalDimensions } from "@opentui/solid"
 import { Clipboard } from "@tui/util/clipboard"
 import { TextAttributes } from "@opentui/core"
-import { RouteProvider, useRoute, type Route } from "@tui/context/route"
+import { RouteProvider, useRoute, type Route, type SessionRoute } from "@tui/context/route"
 import {
   Switch,
   Match,
@@ -172,6 +172,7 @@ export function tui(input: {
         )
       },
       {
+        targetFps: 60,
         gatherStats: false,
         exitOnCtrlC: false,
         useKittyKeyboard: true,

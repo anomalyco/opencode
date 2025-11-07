@@ -486,16 +486,17 @@ export function Session() {
   createEffect(on(() => route.sessionID, toBottom))
 
   // Auto-scroll during streaming when new content arrives
-  createEffect(() => {
-    const msgs = messages()
-    const lastMsg = msgs[msgs.length - 1]
-    if (lastMsg && lastMsg.role === "assistant" && !lastMsg.time.completed) {
-      // Message is streaming, scroll to bottom
-      requestAnimationFrame(() => {
-        if (scroll) toBottom()
-      })
-    }
-  })
+  // DISABLED: This causes flickering by triggering toBottom() at 60 FPS
+  // createEffect(() => {
+  //   const msgs = messages()
+  //   const lastMsg = msgs[msgs.length - 1]
+  //   if (lastMsg && lastMsg.role === "assistant" && !lastMsg.time.completed) {
+  //     // Message is streaming, scroll to bottom
+  //     requestAnimationFrame(() => {
+  //       if (scroll) toBottom()
+  //     })
+  //   }
+  // })
 
   const local = useLocal()
 
@@ -975,7 +976,7 @@ export function Session() {
                 stickyStart="bottom"
                 height="100%"
               >
-              <For each={messages()}>
+              <For each={messages()} fallback={<box />}>
                 {(message, index) => (
                   <Switch>
                     <Match when={message.id === revert()?.messageID}>
@@ -1316,6 +1317,8 @@ function TextPart(props: { part: TextPart; message: AssistantMessage }) {
     return `text-${text.substring(0, 50).replace(/\s/g, "")}-${text.length}`
   })
 
+  const isStreaming = createMemo(() => !props.message.time.completed)
+
   createEffect(on(
     () => [props.part.text, props.message.time.completed] as const,
     ([text, completed]) => {
@@ -1376,7 +1379,7 @@ function TextPart(props: { part: TextPart; message: AssistantMessage }) {
                 <code
                   filetype="markdown"
                   drawUnstyledText={false}
-                  streaming={!props.message.time.completed}
+                  streaming={isStreaming()}
                   syntaxStyle={untrack(syntax)}
                   content={(segment as any).content}
                   conceal={untrack(ctx.conceal)}
