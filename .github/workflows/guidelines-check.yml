@@ -1,6 +1,6 @@
 name: Guidelines Check
 
-on:
+on: {}
   # Disabled - uncomment to re-enable
   # pull_request_target:
   #   types: [opened, synchronize]
