@@ -161,7 +161,9 @@ export namespace Ripgrep {
       }
       if (config.extension === "zip") {
         if (config.extension === "zip") {
-          const zipFileReader = new ZipReader(new BlobReader(new Blob([await Bun.file(archivePath).arrayBuffer()])))
+          const zipFileReader = new ZipReader(
+            new BlobReader(new Blob([await Bun.file(archivePath).arrayBuffer()])),
+          )
           const entries = await zipFileReader.getEntries()
           let rgEntry: any
           for (const entry of entries) {
@@ -354,7 +356,12 @@ export namespace Ripgrep {
     return lines.join("\n")
   }
 
-  export async function search(input: { cwd: string; pattern: string; glob?: string[]; limit?: number }) {
+  export async function search(input: {
+    cwd: string
+    pattern: string
+    glob?: string[]
+    limit?: number
+  }) {
     const args = [`${await filepath()}`, "--json", "--hidden", "--glob='!.git/*'"]
 
     if (input.glob) {

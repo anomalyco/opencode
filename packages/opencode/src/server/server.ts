@@ -753,8 +753,18 @@ export namespace Server {
             id: z.string().meta({ description: "Session ID" }),
           }),
         ),
+        validator(
+          "query",
+          z.object({
+            limit: z.coerce.number().optional(),
+          }),
+        ),
         async (c) => {
-          const messages = await Session.messages(c.req.valid("param").id)
+          const query = c.req.valid("query")
+          const messages = await Session.messages({
+            sessionID: c.req.valid("param").id,
+            limit: query.limit,
+          })
           return c.json(messages)
         },
       )

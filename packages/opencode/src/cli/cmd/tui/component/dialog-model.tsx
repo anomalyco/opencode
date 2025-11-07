@@ -52,7 +52,11 @@ export function DialogModel() {
               description: provider.name,
               category: provider.name,
             })),
-            filter((x) => Boolean(ref()?.filter) || !local.model.recent().find((y) => isDeepEqual(y, x.value))),
+            filter(
+              (x) =>
+                Boolean(ref()?.filter) ||
+                !local.model.recent().find((y) => isDeepEqual(y, x.value)),
+            ),
           ),
         ),
       ),

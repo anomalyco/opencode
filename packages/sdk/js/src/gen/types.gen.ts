@@ -650,7 +650,6 @@ export type AssistantMessage = {
     | MessageOutputLengthError
     | MessageAbortedError
     | ApiError
-  system: Array<string>
   parentID: string
   modelID: string
   providerID: string
@@ -1982,6 +1981,7 @@ export type SessionMessagesData = {
   }
   query?: {
     directory?: string
+    limit?: number
   }
   url: "/session/{id}/message"
 }

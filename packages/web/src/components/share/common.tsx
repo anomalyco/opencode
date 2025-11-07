@@ -10,7 +10,12 @@ export function AnchorIcon(props: AnchorProps) {
   const [copied, setCopied] = createSignal(false)
 
   return (
-    <div {...rest} data-element-anchor title="Link to this message" data-status={copied() ? "copied" : ""}>
+    <div
+      {...rest}
+      data-element-anchor
+      title="Link to this message"
+      data-status={copied() ? "copied" : ""}
+    >
       <a
         href={`#${local.id}`}
         onClick={(e) => {

@@ -32,7 +32,7 @@ import { Command } from "@/command"
 import { Agent as Agents } from "@/agent/agent"
 import { Permission } from "@/permission"
 import { SessionCompaction } from "@/session/compaction"
-import type { Config } from "@/config/config"
+import { Config } from "@/config/config"
 import { MCP } from "@/mcp"
 import { Todo } from "@/session/todo"
 import { z } from "zod"
@@ -41,6 +41,18 @@ import { LoadAPIKeyError } from "ai"
 export namespace ACP {
   const log = Log.create({ service: "acp-agent" })
 
+  export async function init() {
+    const model = await defaultModel({})
+    return {
+      create: (connection: AgentSideConnection, config: ACPConfig) => {
+        if (!config.defaultModel) {
+          config.defaultModel = model
+        }
+        return new Agent(connection, config)
+      },
+    }
+  }
+
   export class Agent implements ACPAgent {
     private sessionManager = new ACPSessionManager()
     private connection: AgentSideConnection
@@ -48,13 +60,6 @@ export namespace ACP {
 
     constructor(connection: AgentSideConnection, config: ACPConfig = {}) {
       this.connection = connection
-      if (!config.defaultModel) {
-        // default to big pickle
-        config.defaultModel = {
-          providerID: "opencode",
-          modelID: "big-pickle",
-        }
-      }
       this.config = config
       this.setupEventSubscriptions()
     }
@@ -685,7 +690,22 @@ export namespace ACP {
   async function defaultModel(config: ACPConfig) {
     const configured = config.defaultModel
     if (configured) return configured
-    return Provider.defaultModel()
+
+    const model = await Config.get()
+      .then((cfg) => {
+        if (!cfg.model) return undefined
+        const parsed = Provider.parseModel(cfg.model)
+        return {
+          providerID: parsed.providerID,
+          modelID: parsed.modelID,
+        }
+      })
+      .catch((error) => {
+        log.error("failed to load user config for default model", { error })
+        return undefined
+      })
+
+    return model ?? { providerID: "opencode", modelID: "big-pickle" }
   }
 
   function parseUri(

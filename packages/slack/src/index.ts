@@ -19,7 +19,10 @@ const opencode = await createOpencode({
 })
 console.log("✅ Opencode server ready")
 
-const sessions = new Map<string, { client: any; server: any; sessionId: string; channel: string; thread: string }>()
+const sessions = new Map<
+  string,
+  { client: any; server: any; sessionId: string; channel: string; thread: string }
+>()
 ;(async () => {
   const events = await opencode.client.event.subscribe()
   for await (const event of events.stream) {
@@ -81,7 +84,10 @@ app.message(async ({ message, say }) => {
 
     if (createResult.error) {
       console.error("❌ Failed to create session:", createResult.error)
-      await say({ text: "Sorry, I had trouble creating a session. Please try again.", thread_ts: thread })
+      await say({
+        text: "Sorry, I had trouble creating a session. Please try again.",
+        thread_ts: thread,
+      })
       return
     }
 
@@ -108,7 +114,10 @@ app.message(async ({ message, say }) => {
 
   if (result.error) {
     console.error("❌ Failed to send message:", result.error)
-    await say({ text: "Sorry, I had trouble processing your message. Please try again.", thread_ts: thread })
+    await say({
+      text: "Sorry, I had trouble processing your message. Please try again.",
+      thread_ts: thread,
+    })
     return
   }
 

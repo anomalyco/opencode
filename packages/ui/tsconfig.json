@@ -13,16 +13,9 @@
     "module": "ESNext",
     "moduleResolution": "bundler",
     "noEmit": true,
-    "lib": [
-      "es2022",
-      "dom",
-      "dom.iterable"
-    ],
+    "lib": ["es2022", "dom", "dom.iterable"],
     // Type Checking & Safety
     "strict": true,
-    "types": [
-      "vite/client",
-      "bun"
-    ]
+    "types": ["vite/client", "bun"]
   }
 }

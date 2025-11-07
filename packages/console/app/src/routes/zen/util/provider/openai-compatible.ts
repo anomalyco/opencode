@@ -57,7 +57,8 @@ export const oaCompatHelper = {
     const inputTokens = usage.prompt_tokens ?? 0
     const outputTokens = usage.completion_tokens ?? 0
     const reasoningTokens = usage.completion_tokens_details?.reasoning_tokens ?? undefined
-    const cacheReadTokens = usage.cached_tokens ?? usage.prompt_tokens_details?.cached_tokens ?? undefined
+    const cacheReadTokens =
+      usage.cached_tokens ?? usage.prompt_tokens_details?.cached_tokens ?? undefined
     return {
       inputTokens: inputTokens - (cacheReadTokens ?? 0),
       outputTokens,
@@ -79,7 +80,8 @@ export function fromOaCompatibleRequest(body: any): CommonRequest {
     if (!m || !m.role) continue
 
     if (m.role === "system") {
-      if (typeof m.content === "string" && m.content.length > 0) msgsOut.push({ role: "system", content: m.content })
+      if (typeof m.content === "string" && m.content.length > 0)
+        msgsOut.push({ role: "system", content: m.content })
       continue
     }
 
@@ -90,10 +92,12 @@ export function fromOaCompatibleRequest(body: any): CommonRequest {
         const parts: any[] = []
         for (const p of m.content) {
           if (!p || !p.type) continue
-          if (p.type === "text" && typeof p.text === "string") parts.push({ type: "text", text: p.text })
+          if (p.type === "text" && typeof p.text === "string")
+            parts.push({ type: "text", text: p.text })
           if (p.type === "image_url") parts.push({ type: "image_url", image_url: p.image_url })
         }
-        if (parts.length === 1 && parts[0].type === "text") msgsOut.push({ role: "user", content: parts[0].text })
+        if (parts.length === 1 && parts[0].type === "text")
+          msgsOut.push({ role: "user", content: parts[0].text })
         else if (parts.length > 0) msgsOut.push({ role: "user", content: parts })
       }
       continue
@@ -137,7 +141,8 @@ export function toOaCompatibleRequest(body: CommonRequest) {
     if (p.type === "image_url" && p.image_url) return { type: "image_url", image_url: p.image_url }
     const s = (p as any).source
     if (!s || typeof s !== "object") return undefined
-    if (s.type === "url" && typeof s.url === "string") return { type: "image_url", image_url: { url: s.url } }
+    if (s.type === "url" && typeof s.url === "string")
+      return { type: "image_url", image_url: { url: s.url } }
     if (s.type === "base64" && typeof s.media_type === "string" && typeof s.data === "string")
       return { type: "image_url", image_url: { url: `data:${s.media_type};base64,${s.data}` } }
     return undefined
@@ -147,7 +152,8 @@ export function toOaCompatibleRequest(body: CommonRequest) {
     if (!m || !m.role) continue
 
     if (m.role === "system") {
-      if (typeof m.content === "string" && m.content.length > 0) msgsOut.push({ role: "system", content: m.content })
+      if (typeof m.content === "string" && m.content.length > 0)
+        msgsOut.push({ role: "system", content: m.content })
       continue
     }
 
@@ -160,11 +166,13 @@ export function toOaCompatibleRequest(body: CommonRequest) {
         const parts: any[] = []
         for (const p of m.content) {
           if (!p || !p.type) continue
-          if (p.type === "text" && typeof p.text === "string") parts.push({ type: "text", text: p.text })
+          if (p.type === "text" && typeof p.text === "string")
+            parts.push({ type: "text", text: p.text })
           const ip = toImg(p)
           if (ip) parts.push(ip)
         }
-        if (parts.length === 1 && parts[0].type === "text") msgsOut.push({ role: "user", content: parts[0].text })
+        if (parts.length === 1 && parts[0].type === "text")
+          msgsOut.push({ role: "user", content: parts[0].text })
         else if (parts.length > 0) msgsOut.push({ role: "user", content: parts })
       }
       continue
@@ -317,7 +325,9 @@ export function toOaCompatibleResponse(resp: CommonResponse) {
 
   const idIn = (resp as any).id
   const id =
-    typeof idIn === "string" ? idIn.replace(/^msg_/, "chatcmpl_") : `chatcmpl_${Math.random().toString(36).slice(2)}`
+    typeof idIn === "string"
+      ? idIn.replace(/^msg_/, "chatcmpl_")
+      : `chatcmpl_${Math.random().toString(36).slice(2)}`
   const model = (resp as any).model
 
   const blocks: any[] = Array.isArray((resp as any).content) ? (resp as any).content : []
@@ -359,7 +369,8 @@ export function toOaCompatibleResponse(resp: CommonResponse) {
     const pt = typeof u.input_tokens === "number" ? u.input_tokens : undefined
     const ct = typeof u.output_tokens === "number" ? u.output_tokens : undefined
     const total = pt != null && ct != null ? pt + ct : undefined
-    const cached = typeof u.cache_read_input_tokens === "number" ? u.cache_read_input_tokens : undefined
+    const cached =
+      typeof u.cache_read_input_tokens === "number" ? u.cache_read_input_tokens : undefined
     const details = cached != null ? { cached_tokens: cached } : undefined
     return {
       prompt_tokens: pt,
@@ -532,7 +543,9 @@ export function toOaCompatibleChunk(chunk: CommonChunk): string {
       total_tokens: chunk.usage.total_tokens,
       ...(chunk.usage.prompt_tokens_details?.cached_tokens
         ? {
-            prompt_tokens_details: { cached_tokens: chunk.usage.prompt_tokens_details.cached_tokens },
+            prompt_tokens_details: {
+              cached_tokens: chunk.usage.prompt_tokens_details.cached_tokens,
+            },
           }
         : {}),
     }

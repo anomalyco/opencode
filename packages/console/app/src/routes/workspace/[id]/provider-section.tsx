@@ -22,7 +22,9 @@ const removeProvider = action(async (form: FormData) => {
   if (!provider) return { error: "Provider is required" }
   const workspaceID = form.get("workspaceID")?.toString()
   if (!workspaceID) return { error: "Workspace ID is required" }
-  return json(await withActor(() => Provider.remove({ provider }), workspaceID), { revalidate: listProviders.key })
+  return json(await withActor(() => Provider.remove({ provider }), workspaceID), {
+    revalidate: listProviders.key,
+  })
 }, "provider.remove")
 
 const saveProvider = action(async (form: FormData) => {
@@ -53,7 +55,10 @@ const listProviders = query(async (workspaceID: string) => {
 function ProviderRow(props: { provider: Provider }) {
   const params = useParams()
   const providers = createAsync(() => listProviders(params.id))
-  const saveSubmission = useSubmission(saveProvider, ([fd]) => fd.get("provider")?.toString() === props.provider.key)
+  const saveSubmission = useSubmission(
+    saveProvider,
+    ([fd]) => fd.get("provider")?.toString() === props.provider.key,
+  )
   const removeSubmission = useSubmission(
     removeProvider,
     ([fd]) => fd.get("provider")?.toString() === props.provider.key,
@@ -89,9 +94,16 @@ function ProviderRow(props: { provider: Provider }) {
       <td data-slot="provider-key">
         <Show
           when={store.editing}
-          fallback={<span>{providerData() ? maskCredentials(providerData()!.credentials) : "-"}</span>}
+          fallback={
+            <span>{providerData() ? maskCredentials(providerData()!.credentials) : "-"}</span>
+          }
         >
-          <form id={`provider-form-${props.provider.key}`} action={saveProvider} method="post" data-slot="edit-form">
+          <form
+            id={`provider-form-${props.provider.key}`}
+            action={saveProvider}
+            method="post"
+            data-slot="edit-form"
+          >
             <div data-slot="input-wrapper">
               <input
                 ref={(r) => (input = r)}

@@ -56,22 +56,17 @@
     0 6px 8px -4px rgba(19, 16, 16, 0.12), 0 4px 3px -2px rgba(19, 16, 16, 0.12),
     0 1px 2px -1px rgba(19, 16, 16, 0.12);
   --shadow-xs-border:
-    0 0 0 1px var(--border-base, rgba(11, 6, 0, 0.20)),
-    0 1px 2px -1px rgba(19, 16, 16, 0.04),
-    0 1px 2px 0 rgba(19, 16, 16, 0.06),
-    0 1px 3px 0 rgba(19, 16, 16, 0.08);
+    0 0 0 1px var(--border-base, rgba(11, 6, 0, 0.2)), 0 1px 2px -1px rgba(19, 16, 16, 0.04),
+    0 1px 2px 0 rgba(19, 16, 16, 0.06), 0 1px 3px 0 rgba(19, 16, 16, 0.08);
   --shadow-xs-border-select:
     0 0 0 3px var(--border-weak-selected, rgba(1, 103, 255, 0.29)),
     0 0 0 1px var(--border-selected, rgba(0, 74, 255, 0.99)), 0 1px 2px -1px rgba(19, 16, 16, 0.25),
     0 1px 2px 0 rgba(19, 16, 16, 0.08), 0 1px 3px 0 rgba(19, 16, 16, 0.12);
   --shadow-xs-border-focus:
-    0 0 0 1px var(--border-base, rgba(11, 6, 0, 0.20)),
-    0 1px 2px -1px rgba(19, 16, 16, 0.25),
-    0 1px 2px 0 rgba(19, 16, 16, 0.08),
-    0 1px 3px 0 rgba(19, 16, 16, 0.12),
-    0 0 0 2px var(--background-weak, #F1F0F0),
+    0 0 0 1px var(--border-base, rgba(11, 6, 0, 0.2)), 0 1px 2px -1px rgba(19, 16, 16, 0.25),
+    0 1px 2px 0 rgba(19, 16, 16, 0.08), 0 1px 3px 0 rgba(19, 16, 16, 0.12),
+    0 0 0 2px var(--background-weak, #f1f0f0),
     0 0 0 3px var(--border-selected, rgba(0, 74, 255, 0.99));
-
 
   --text-mix-blend-mode: multiply;
 }
@@ -413,7 +408,7 @@
     --text-on-brand-weaker: var(--smoke-dark-alpha-8);
     --text-on-brand-strong: var(--smoke-dark-alpha-12);
     --button-secondary-base: var(--smoke-dark-4);
-    --button-secondary-hover: #2A2727;
+    --button-secondary-hover: #2a2727;
     --border-base: var(--smoke-dark-alpha-7);
     --border-hover: var(--smoke-dark-alpha-8);
     --border-active: var(--smoke-dark-alpha-9);
