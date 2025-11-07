@@ -171,7 +171,8 @@ export namespace Server {
       .patch(
         "/config",
         describeRoute({
-          description: "Update config",
+          description:
+            "Update config. Use ?scope=global to update global config (~/.config/opencode/opencode.jsonc) or ?scope=project (default) to update project config.",
           operationId: "config.update",
           responses: {
             200: {
@@ -185,10 +186,17 @@ export namespace Server {
             ...errors(400),
           },
         }),
+        validator(
+          "query",
+          z.object({
+            scope: z.enum(["global", "project"]).optional().default("project"),
+          }),
+        ),
         validator("json", Config.Info),
         async (c) => {
           const config = c.req.valid("json")
-          await Config.update(config)
+          const { scope } = c.req.valid("query")
+          await Config.update(config, scope)
           return c.json(config)
         },
       )
