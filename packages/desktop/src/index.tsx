@@ -3,7 +3,7 @@ import "@/index.css"
 import { render } from "solid-js/web"
 import { Router, Route } from "@solidjs/router"
 import { MetaProvider } from "@solidjs/meta"
-import { Fonts, ShikiProvider, MarkedProvider } from "@opencode-ai/ui"
+import { Fonts, MarkedProvider } from "@opencode-ai/ui"
 import { SDKProvider } from "./context/sdk"
 import { SyncProvider } from "./context/sync"
 import { LocalProvider } from "./context/local"
@@ -29,24 +29,22 @@ if (import.meta.env.DEV && !(root instanceof HTMLElement)) {
 
 render(
   () => (
-    <ShikiProvider>
-      <MarkedProvider>
-        <SDKProvider url={url}>
-          <SyncProvider>
-            <LocalProvider>
-              <MetaProvider>
-                <Fonts />
-                <Router root={Layout}>
-                  <Route path={["/", "/session"]} component={SessionLayout}>
-                    <Route path="/:id?" component={Session} />
-                  </Route>
-                </Router>
-              </MetaProvider>
-            </LocalProvider>
-          </SyncProvider>
-        </SDKProvider>
-      </MarkedProvider>
-    </ShikiProvider>
+    <MarkedProvider>
+      <SDKProvider url={url}>
+        <SyncProvider>
+          <LocalProvider>
+            <MetaProvider>
+              <Fonts />
+              <Router root={Layout}>
+                <Route path={["/", "/session"]} component={SessionLayout}>
+                  <Route path="/:id?" component={Session} />
+                </Route>
+              </Router>
+            </MetaProvider>
+          </LocalProvider>
+        </SyncProvider>
+      </SDKProvider>
+    </MarkedProvider>
   ),
   root!,
 )

@@ -24,5 +24,4 @@ export * from "./tooltip"
 export * from "./typewriter"
 
 export * from "../context/helper"
-export * from "../context/shiki"
 export * from "../context/marked"
