@@ -108,7 +108,7 @@ export const add = tool({
     b: tool.schema.number().describe("Second number"),
   },
   async execute(args) {
-    return (args.a * args.b).toString()
+    return (args.a + args.b).toString()
   },
 })
 
