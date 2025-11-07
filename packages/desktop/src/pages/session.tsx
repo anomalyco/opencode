@@ -829,6 +829,15 @@ export default function Page() {
           </Show>
         </DragOverlay>
       </DragDropProvider>
+      <Show when={session.layout.tabs.active}>
+        <div class="absolute inset-x-0 px-6 max-w-2xl flex flex-col justify-center items-center z-50 mx-auto bottom-8">
+          <PromptInput
+            ref={(el) => {
+              inputRef = el
+            }}
+          />
+        </div>
+      </Show>
       <div class="hidden shrink-0 w-56 p-2 h-full overflow-y-auto">
         {/* <FileTree path="" onFileClick={ handleTabClick} /> */}
       </div>
