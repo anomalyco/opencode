@@ -9,7 +9,6 @@
   ],
   "favoriteTools": [
     "cc_computer_use",
-    "bash",
     "grep",
     "task",
     "list",
@@ -17,7 +16,6 @@
     "cc_bash",
     "cc_edit",
     "read",
-    "todowrite",
     "switch_mode",
     "add_directory"
   ]

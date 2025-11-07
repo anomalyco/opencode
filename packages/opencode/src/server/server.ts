@@ -42,6 +42,7 @@ import { lazy } from "../util/lazy"
 import { Todo } from "../session/todo"
 import { InstanceBootstrap } from "../project/bootstrap"
 import { MCP } from "../mcp"
+import { Plugin } from "../plugin"
 import { Storage } from "../storage/storage"
 import type { ContentfulStatusCode } from "hono/utils/http-status"
 import { TuiEvent } from "@/cli/cmd/tui/event"
@@ -496,6 +497,42 @@ export namespace Server {
         },
       )
       .post(
+        "/session/:id/todo",
+        describeRoute({
+          description: "Update the todo list for a session",
+          operationId: "session.todo.update",
+          responses: {
+            200: {
+              description: "Updated todo list",
+              content: {
+                "application/json": {
+                  schema: resolver(Todo.Info.array()),
+                },
+              },
+            },
+            ...errors(400, 404),
+          },
+        }),
+        validator(
+          "param",
+          z.object({
+            id: z.string().meta({ description: "Session ID" }),
+          }),
+        ),
+        validator(
+          "json",
+          z.object({
+            todos: Todo.Info.array(),
+          }),
+        ),
+        async (c) => {
+          const sessionID = c.req.valid("param").id
+          const { todos } = c.req.valid("json")
+          await Todo.update({ sessionID, todos })
+          return c.json(todos)
+        },
+      )
+      .post(
         "/session",
         describeRoute({
           description: "Create a new session",
@@ -842,49 +879,15 @@ export namespace Server {
         validator(
           "query",
           z.object({
-            limit: z.coerce
-              .number()
-              .optional()
-              .meta({ description: "Maximum number of messages to return" }),
-            offset: z.coerce
-              .number()
-              .optional()
-              .meta({ description: "Number of messages to skip" }),
+            limit: z.coerce.number(),
           }),
         ),
         async (c) => {
-          const { id } = c.req.valid("param")
-          const { limit, offset } = c.req.valid("query")
-          const messages = await Session.messages({ sessionID: id, limit, offset })
-          return c.json(messages)
-        },
-      )
-      .get(
-        "/session/:id/message/recent",
-        describeRoute({
-          description: "Get all messages for a session",
-          operationId: "session.messages.recent",
-          responses: {
-            200: {
-              description: "List of all messages",
-              content: {
-                "application/json": {
-                  schema: resolver(MessageV2.WithParts.array()),
-                },
-              },
-            },
-            ...errors(400, 404),
-          },
-        }),
-        validator(
-          "param",
-          z.object({
-            id: z.string().meta({ description: "Session ID" }),
-          }),
-        ),
-        async (c) => {
-          const { id } = c.req.valid("param")
-          const messages = await Session.messages(id)
+          const query = c.req.valid("query")
+          const messages = await Session.messages({
+            sessionID: c.req.valid("param").id,
+            limit: query.limit,
+          })
           return c.json(messages)
         },
       )
@@ -1607,6 +1610,30 @@ export namespace Server {
         }),
         async (c) => {
           return c.json(await Format.status())
+        },
+      )
+      .get(
+        "/plugins",
+        describeRoute({
+          description: "Get loaded plugins status",
+          operationId: "plugins.status",
+          responses: {
+            200: {
+              description: "Loaded plugins",
+              content: {
+                "application/json": {
+                  schema: resolver(z.array(z.object({
+                    name: z.string(),
+                    path: z.string(),
+                    status: z.literal("loaded")
+                  }))),
+                },
+              },
+            },
+          },
+        }),
+        async (c) => {
+          return c.json(await Plugin.status())
         },
       )
       .get(

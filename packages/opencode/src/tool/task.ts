@@ -46,37 +46,40 @@ export const TaskTool = Tool.define("task", async () => {
       let parallelResult: Parallel.Result | undefined
       const originalCwd = process.cwd()
 
-      if (params.parallel) {
-        try {
-          const isGitRepo = await Parallel.validateGitRepo(originalCwd)
-          if (!isGitRepo) {
-            log.warn("parallel mode requested but not in git repo", { cwd: originalCwd })
-          } else {
-            parallelResult = await Parallel.setup({
-              enabled: true,
-              prompt: params.description,
-              workspace: originalCwd,
-            })
-            process.chdir(parallelResult.worktreePath)
-            log.info("parallel worktree created", {
-              branch: parallelResult.branchName,
-              path: parallelResult.worktreePath,
-            })
-          }
-        } catch (error) {
-          log.error("parallel setup failed, continuing without isolation", {
-            error: error instanceof Error ? error.message : String(error),
-          })
-        }
-      }
-
       try {
         // Create subtask using hierarchy system for proper state management
+        // NOTE: Create the subtask BEFORE changing directories for parallel mode
+        // This ensures Instance context is still valid for session creation
         const childSessionID = await TaskHierarchy.createSubtask(
           ctx.sessionID,
           agent.name,
           params.description + ` (@${agent.name} subagent)`,
         )
+
+        // Setup parallel worktree AFTER creating the subtask
+        if (params.parallel) {
+          try {
+            const isGitRepo = await Parallel.validateGitRepo(originalCwd)
+            if (!isGitRepo) {
+              log.warn("parallel mode requested but not in git repo", { cwd: originalCwd })
+            } else {
+              parallelResult = await Parallel.setup({
+                enabled: true,
+                prompt: params.description,
+                workspace: originalCwd,
+              })
+              process.chdir(parallelResult.worktreePath)
+              log.info("parallel worktree created", {
+                branch: parallelResult.branchName,
+                path: parallelResult.worktreePath,
+              })
+            }
+          } catch (error) {
+            log.error("parallel setup failed, continuing without isolation", {
+              error: error instanceof Error ? error.message : String(error),
+            })
+          }
+        }
 
         const session = await Session.get(childSessionID)
         const msg = await Session.getMessage({ sessionID: ctx.sessionID, messageID: ctx.messageID })
@@ -143,7 +146,7 @@ export const TaskTool = Tool.define("task", async () => {
         unsub()
 
         let all
-        all = await Session.messages(session.id)
+        all = await Session.messages({ sessionID: session.id })
         all = all.filter((x) => x.info.role === "assistant")
         all = all.flatMap(
           (msg) => msg.parts.filter((x: any) => x.type === "tool") as MessageV2.ToolPart[],

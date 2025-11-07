@@ -121,9 +121,12 @@ export const ClaudeCodeComputerUseTool = Tool.define("cc_computer_use", {
           const [x, y] = params.coordinate
 
           if (platform === "darwin") {
-            await $`cliclick m:${x},${y}`.quiet()
+            // Use easing factor to make cursor movement visible and natural-looking
+            // -e 50 adds smooth animation, -w 50 adds 50ms delay after movement
+            await $`cliclick -e 50 -w 50 m:${x},${y}`.quiet()
           } else if (platform === "linux") {
             await $`xdotool mousemove ${x} ${y}`.quiet()
+            await Bun.sleep(100)
           } else {
             throw new Error(`Platform ${platform} not supported`)
           }
@@ -137,8 +140,11 @@ export const ClaudeCodeComputerUseTool = Tool.define("cc_computer_use", {
 
         case "left_click": {
           if (platform === "darwin") {
+            // Wait for any cursor animation to settle before clicking
+            await Bun.sleep(200)
             await $`cliclick c:.`.quiet()
           } else if (platform === "linux") {
+            await Bun.sleep(200)
             await $`xdotool click 1`.quiet()
           } else {
             throw new Error(`Platform ${platform} not supported`)

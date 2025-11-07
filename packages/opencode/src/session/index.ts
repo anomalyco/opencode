@@ -24,9 +24,6 @@ export namespace Session {
   const parentTitlePrefix = "New session - "
   const childTitlePrefix = "Child session - "
 
-  // In-memory cache for messages to speed up session switching
-  const messageCache = new Map<string, { timestamp: number; messages: MessageV2.WithParts[] }>()
-
   function createDefaultTitle(isChild = false) {
     return (isChild ? childTitlePrefix : parentTitlePrefix) + new Date().toISOString()
   }
@@ -69,29 +66,6 @@ export namespace Session {
           partID: z.string().optional(),
           snapshot: z.string().optional(),
           diff: z.string().optional(),
-        })
-        .optional(),
-      // NEW: Orchestration state (all optional for backward compatibility)
-      orchestration: z
-        .object({
-          depth: z.number(), // How deep in task hierarchy (0 = root)
-          status: z.enum(["active", "paused", "completed", "failed"]),
-          rootAgent: z.string().optional(), // Original agent (e.g., "orchestrator")
-          currentAgent: z.string().optional(), // Current agent after mode switches
-          pausedMode: z.string().optional(), // Mode to resume when child completes
-          pausedAt: z.number().optional(),
-          completedAt: z.number().optional(),
-          result: z.string().optional(), // Result summary from subtask
-          subtaskResults: z
-            .array(
-              z.object({
-                sessionID: z.string(),
-                summary: z.string(),
-                result: z.string(),
-                completedAt: z.number(),
-              }),
-            )
-            .optional(), // Results from completed subtasks
         })
         .optional(),
     })
@@ -170,7 +144,7 @@ export namespace Session {
       const session = await createNext({
         directory: Instance.directory,
       })
-      const msgs = await messages(input.sessionID)
+      const msgs = await messages({ sessionID: input.sessionID })
       for (const msg of msgs) {
         if (input.messageID && msg.info.id >= input.messageID) break
         const cloned = await updateMessage({
@@ -232,15 +206,6 @@ export namespace Session {
         .catch(() => {
           // Silently ignore sharing errors during session creation
         })
-    // Initialize allowed directories from config
-    if (cfg.allowedDirectories && cfg.allowedDirectories.length > 0) {
-      for (const dir of cfg.allowedDirectories) {
-        await AllowedDirectories.add({
-          sessionID: result.id,
-          directory: dir,
-        })
-      }
-    }
     Bus.publish(Event.Updated, {
       info: result,
     })
@@ -272,7 +237,7 @@ export namespace Session {
     })
     await Storage.write(["share", id], share)
     await Share.sync("session/info/" + id, session)
-    for (const msg of await messages(id)) {
+    for (const msg of await messages({ sessionID: id })) {
       await Share.sync("session/message/" + id + "/" + msg.info.id, msg.info)
       for (const part of msg.parts) {
         await Share.sync("session/part/" + id + "/" + msg.info.id + "/" + part.id, part)
@@ -303,52 +268,34 @@ export namespace Session {
     return result
   }
 
+  export const diff = fn(Identifier.schema("session"), async (sessionID) => {
+    const diffs = await Storage.read<Snapshot.FileDiff[]>(["session_diff", sessionID])
+    return diffs ?? []
+  })
+
+  export const messageStream = fn(Identifier.schema("session"), async function* (sessionID) {
+    const list = await Array.fromAsync(await Storage.list(["message", sessionID]))
+    for (let i = list.length - 1; i >= 0; i--) {
+      const read = await Storage.read<MessageV2.Info>(list[i])
+      yield {
+        info: read,
+        parts: await getParts(read.id),
+      }
+    }
+  })
+
   export const messages = fn(
-    z.union([
-      Identifier.schema("session"),
-      z.object({
-        sessionID: Identifier.schema("session"),
-        limit: z.number().optional(),
-        offset: z.number().optional(),
-      }),
-    ]),
+    z.object({
+      sessionID: Identifier.schema("session"),
+      limit: z.number().optional(),
+    }),
     async (input) => {
-      const sessionID = typeof input === "string" ? input : input.sessionID
-      const limit = typeof input === "string" ? undefined : input.limit
-      const offset = typeof input === "string" ? undefined : input.offset
-
-      // Check cache first
-      const session = await get(sessionID)
-      const cached = messageCache.get(sessionID)
-      if (cached && cached.timestamp >= session.time.updated && !limit && !offset) {
-        return cached.messages
+      const result = [] as MessageV2.WithParts[]
+      for await (const msg of messageStream(input.sessionID)) {
+        if (input.limit && result.length >= input.limit) break
+        result.push(msg)
       }
-
-      const paths = await Storage.list(["message", sessionID])
-
-      // Apply pagination if specified
-      let paginatedPaths = paths
-      if (limit !== undefined || offset !== undefined) {
-        const start = offset ?? 0
-        const end = limit !== undefined ? start + limit : paths.length
-        paginatedPaths = paths.slice(start, end)
-      }
-
-      // Load messages in parallel using batch read
-      const infos = await Storage.readMany<MessageV2.Info>(paginatedPaths)
-      const result = await Promise.all(
-        infos.map(async (info) => {
-          const parts = await getParts(info.id)
-          return { info, parts }
-        }),
-      )
-      result.sort((a, b) => (a.info.id > b.info.id ? 1 : -1))
-
-      // Update cache only for full loads
-      if (!limit && !offset) {
-        messageCache.set(sessionID, { timestamp: Date.now(), messages: result })
-      }
-
+      result.reverse()
       return result
     },
   )
@@ -367,9 +314,11 @@ export namespace Session {
   )
 
   export const getParts = fn(Identifier.schema("message"), async (messageID) => {
-    const items = await Storage.list(["part", messageID])
-    // Load all parts in parallel using batch read
-    const result = await Storage.readMany<MessageV2.Part>(items)
+    const result = [] as MessageV2.Part[]
+    for (const item of await Storage.list(["part", messageID])) {
+      const read = await Storage.read<MessageV2.Part>(item)
+      result.push(read)
+    }
     result.sort((a, b) => (a.id > b.id ? 1 : -1))
     return result
   })
@@ -417,8 +366,6 @@ export namespace Session {
 
   export const updateMessage = fn(MessageV2.Info, async (msg) => {
     await Storage.write(["message", msg.sessionID, msg.id], msg)
-    // Invalidate cache when message is updated
-    messageCache.delete(msg.sessionID)
     Bus.publish(MessageV2.Event.Updated, {
       info: msg,
     })
@@ -432,8 +379,6 @@ export namespace Session {
     }),
     async (input) => {
       await Storage.remove(["message", input.sessionID, input.messageID])
-      // Invalidate cache when message is removed
-      messageCache.delete(input.sessionID)
       Bus.publish(MessageV2.Event.Removed, {
         sessionID: input.sessionID,
         messageID: input.messageID,
@@ -458,8 +403,6 @@ export namespace Session {
     const part = "delta" in input ? input.part : input
     const delta = "delta" in input ? input.delta : undefined
     await Storage.write(["part", part.messageID, part.id], part)
-    // Invalidate cache when part is updated
-    messageCache.delete(part.sessionID)
     Bus.publish(MessageV2.Event.PartUpdated, {
       part,
       delta,
@@ -499,33 +442,6 @@ export namespace Session {
       }
     },
   )
-
-  export namespace AllowedDirectories {
-    const dirs: Record<string, Set<string>> = {}
-
-    export async function add(input: { sessionID: string; directory: string }) {
-      if (!dirs[input.sessionID]) {
-        dirs[input.sessionID] = new Set()
-      }
-      dirs[input.sessionID].add(input.directory)
-      log.info("added allowed directory", {
-        sessionID: input.sessionID,
-        directory: input.directory,
-      })
-    }
-
-    export function get(sessionID: string): string[] {
-      return Array.from(dirs[sessionID] ?? new Set())
-    }
-
-    export function has(sessionID: string, directory: string): boolean {
-      return dirs[sessionID]?.has(directory) ?? false
-    }
-
-    export function clear(sessionID: string) {
-      delete dirs[sessionID]
-    }
-  }
 
   export class BusyError extends Error {
     constructor(public readonly sessionID: string) {

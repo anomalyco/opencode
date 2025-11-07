@@ -43,15 +43,24 @@ export function NewUserSection() {
         <div data-component="feature-grid">
           <div data-slot="feature">
             <h3>Tested & Verified Models</h3>
-            <p>We've benchmarked and tested models specifically for coding agents to ensure the best performance.</p>
+            <p>
+              We've benchmarked and tested models specifically for coding agents to ensure the best
+              performance.
+            </p>
           </div>
           <div data-slot="feature">
             <h3>Highest Quality</h3>
-            <p>Access models configured for optimal performance - no downgrades or routing to cheaper providers.</p>
+            <p>
+              Access models configured for optimal performance - no downgrades or routing to cheaper
+              providers.
+            </p>
           </div>
           <div data-slot="feature">
             <h3>No Lock-in</h3>
-            <p>Use Zen with any coding agent, and continue using other providers with opencode whenever you want.</p>
+            <p>
+              Use Zen with any coding agent, and continue using other providers with opencode
+              whenever you want.
+            </p>
           </div>
         </div>
 

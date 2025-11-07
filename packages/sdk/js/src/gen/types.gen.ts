@@ -759,7 +759,6 @@ export type AssistantMessage = {
     | MessageOutputLengthError
     | MessageAbortedError
     | ApiError
-  system: Array<string>
   parentID: string
   modelID: string
   providerID: string

@@ -19,12 +19,23 @@ const result = z.toJSONSchema(Config.Info, {
     const schema = ctx.jsonSchema
 
     // Preserve strictness: set additionalProperties: false for objects
-    if (schema && typeof schema === "object" && schema.type === "object" && schema.additionalProperties === undefined) {
+    if (
+      schema &&
+      typeof schema === "object" &&
+      schema.type === "object" &&
+      schema.additionalProperties === undefined
+    ) {
       schema.additionalProperties = false
     }
 
     // Add examples and default descriptions for string fields with defaults
-    if (schema && typeof schema === "object" && "type" in schema && schema.type === "string" && schema?.default) {
+    if (
+      schema &&
+      typeof schema === "object" &&
+      "type" in schema &&
+      schema.type === "string" &&
+      schema?.default
+    ) {
       if (!schema.examples) {
         schema.examples = [schema.default]
       }

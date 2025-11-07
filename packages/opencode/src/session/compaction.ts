@@ -1,10 +1,4 @@
-import {
-  streamText,
-  type ModelMessage,
-  LoadAPIKeyError,
-  type StreamTextResult,
-  type Tool as AITool,
-} from "ai"
+import { streamText, type ModelMessage, type StreamTextResult, type Tool as AITool } from "ai"
 import { Session } from "."
 import { Identifier } from "../id/id"
 import { Instance } from "../project/instance"
@@ -40,7 +34,7 @@ export namespace SessionCompaction {
     tokens: MessageV2.Assistant["tokens"]
     model: ModelsDev.Model
   }) {
-    // Check if context usage is at 70% or higher
+    if (Flag.OPENCODE_DISABLE_AUTOCOMPACT) return false
     const context = input.model.limit.context
     if (context === 0) return false
     const count = input.tokens.input + input.tokens.cache.read + input.tokens.output
@@ -48,39 +42,24 @@ export namespace SessionCompaction {
       Math.min(input.model.limit.output, SessionPrompt.OUTPUT_TOKEN_MAX) ||
       SessionPrompt.OUTPUT_TOKEN_MAX
     const usable = context - output
-    const threshold = usable * 0.7 // 70% threshold
-    return count > threshold
+    return count > usable
   }
 
   export const PRUNE_MINIMUM = 20_000
   export const PRUNE_PROTECT = 40_000
   const MAX_RETRIES = 10
 
-  // Only prune oldest tool calls with code changes when context is at 70%+
-  // This prevents aggressive pruning after every call
-  export async function prune(input: { sessionID: string; contextUsage?: number }) {
-    // Only prune if context usage provided and is at 70% or higher
-    if (!input.contextUsage || input.contextUsage < 0.7) {
-      return
-    }
-
-    log.info("pruning at high context usage", { contextUsage: input.contextUsage })
-    const msgs = await Session.messages(input.sessionID)
+  // goes backwards through parts until there are 40_000 tokens worth of tool
+  // calls. then erases output of previous tool calls. idea is to throw away old
+  // tool calls that are no longer relevant.
+  export async function prune(input: { sessionID: string }) {
+    if (Flag.OPENCODE_DISABLE_PRUNE) return
+    log.info("pruning")
+    const msgs = await Session.messages({ sessionID: input.sessionID })
     let total = 0
     let pruned = 0
     const toPrune = []
     let turns = 0
-
-    // Tool names that involve code/file changes
-    const codeChangingTools = new Set([
-      "edit",
-      "cc_edit",
-      "write",
-      "cc_write",
-      "bash",
-      "cc_bash",
-      "patch",
-    ])
 
     loop: for (let msgIndex = msgs.length - 1; msgIndex >= 0; msgIndex--) {
       const msg = msgs[msgIndex]
@@ -92,8 +71,6 @@ export namespace SessionCompaction {
         if (part.type === "tool")
           if (part.state.status === "completed") {
             if (part.state.time.compacted) break loop
-            // Only prune tool calls that involve code changes
-            if (!codeChangingTools.has(part.tool)) continue
             const estimate = Token.estimate(part.state.output)
             total += estimate
             if (total > PRUNE_PROTECT) {
@@ -134,7 +111,7 @@ export namespace SessionCompaction {
         draft.time.compacting = undefined
       })
     })
-    const toSummarize = await Session.messages(input.sessionID).then(MessageV2.filterCompacted)
+    const toSummarize = await MessageV2.filterCompacted(Session.messageStream(input.sessionID))
     const model = await Provider.getModel(input.providerID, input.modelID)
     const system = [
       ...SystemPrompt.summarize(model.providerID),
@@ -147,7 +124,6 @@ export namespace SessionCompaction {
       role: "assistant",
       parentID: toSummarize.findLast((m) => m.info.role === "user")?.info.id!,
       sessionID: input.sessionID,
-      system,
       mode: "build",
       path: {
         cwd: Instance.directory,

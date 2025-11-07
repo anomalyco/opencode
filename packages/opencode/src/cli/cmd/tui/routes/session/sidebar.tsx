@@ -14,6 +14,7 @@ import { useToast } from "../../ui/toast"
 import { useSDK } from "../../context/sdk"
 import { useDialog } from "../../ui/dialog"
 import { DialogSelect, type DialogSelectOption } from "../../ui/dialog-select"
+import { DialogPrompt } from "../../ui/dialog-prompt"
 import { useRoute } from "../../context/route"
 import { $ } from "bun"
 type TabType = "files" | "todos" | "tools"
@@ -91,6 +92,8 @@ export function Sidebar(props: { sessionID: string; onToggle: () => void }) {
   const [globalFavorites, setGlobalFavorites] = createSignal<Set<string>>(new Set())
   const [childSessions, setChildSessions] = createSignal<any[]>([])
   const [sessionDiffs, setSessionDiffs] = createSignal<any[]>([])
+  const [isAddingTodo, setIsAddingTodo] = createSignal(false)
+
   const uiExtensions = useUIExtensions()
   const session = createMemo(() => sync.session.get(props.sessionID)!)
   const diff = createMemo(() => sync.data.session_diff[props.sessionID] ?? [])
@@ -365,6 +368,39 @@ export function Sidebar(props: { sessionID: string; onToggle: () => void }) {
     setExpandedMcpServers(newExpanded)
   }
 
+  async function handleAddTodo() {
+    if (isAddingTodo()) return
+    
+    const content = await DialogPrompt.show(dialog, "Add Todo", "")
+    if (!content || !content.trim()) return
+    
+    setIsAddingTodo(true)
+    try {
+      const currentTodos = todo()
+      const newTodo = {
+        id: Date.now().toString(),
+        content: content.trim(),
+        status: "pending",
+        priority: "medium"
+      }
+      
+      const response = await fetch(`${sdk.url}/session/${props.sessionID}/todo`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ todos: [...currentTodos, newTodo] })
+      })
+      
+      if (response.ok) {
+        toast.show({ variant: "info", message: "Todo added" })
+      }
+    } catch (error) {
+      console.error("Failed to add todo:", error)
+      toast.show({ variant: "error", message: "Failed to add todo" })
+    } finally {
+      setIsAddingTodo(false)
+    }
+  }
+
   // Debug: Log UI extensions data (commented out to reduce logging)
   // createMemo(() => {
   //   const extensions = uiExtensions.extensions()
@@ -486,21 +522,21 @@ export function Sidebar(props: { sessionID: string; onToggle: () => void }) {
         </box>
 
         {/* Tab Navigation */}
-        <box flexDirection="row" gap={0} bg={theme.backgroundPanel} width={40}>
+        <box flexDirection="row" gap={0} width={40}>
           <text
             style={{
               fg: activeTab() === "tools" ? theme.text : theme.textMuted,
-              bg: activeTab() === "tools" ? theme.accent : theme.backgroundPanel,
+              bg: theme.backgroundPanel,
               attributes: activeTab() === "tools" ? TextAttributes.BOLD : undefined,
             }}
             onMouseUp={() => handleTabChange("tools")}
           >
-            {" "}{activeTab() === "tools" ? "●" : "○"} Tools({toolsUsed().length + Object.keys(sync.data.mcp).length + sync.data.lsp.length}){" "}
+            {" "}{activeTab() === "tools" ? "●" : "○"} Tools({toolsUsed().length + Object.keys(sync.data.mcp).length + sync.data.lsp.length + sync.data.plugin.length}){" "}
           </text>
           <text
             style={{
               fg: activeTab() === "todos" ? theme.text : theme.textMuted,
-              bg: activeTab() === "todos" ? theme.accent : theme.backgroundPanel,
+              bg: theme.backgroundPanel,
               attributes: activeTab() === "todos" ? TextAttributes.BOLD : undefined,
             }}
             onMouseUp={() => handleTabChange("todos")}
@@ -510,7 +546,7 @@ export function Sidebar(props: { sessionID: string; onToggle: () => void }) {
           <text
             style={{
               fg: activeTab() === "files" ? theme.text : theme.textMuted,
-              bg: activeTab() === "files" ? theme.accent : theme.backgroundPanel,
+              bg: theme.backgroundPanel,
               attributes: activeTab() === "files" ? TextAttributes.BOLD : undefined,
             }}
             onMouseUp={() => handleTabChange("files")}
@@ -677,12 +713,27 @@ export function Sidebar(props: { sessionID: string; onToggle: () => void }) {
               </For>
             </box>
           </Show>
+          <Show when={sync.data.plugin.length > 0}>
+            <box marginTop={0}>
+              <text attributes={TextAttributes.BOLD}>Plugins</text>
+              <For each={sync.data.plugin}>
+                {(plugin) => (
+                  <box flexDirection="row" gap={1}>
+                    <text flexShrink={0} fg={theme.success}>
+                      •
+                    </text>
+                    <text fg={theme.text}>{plugin.name}</text>
+                  </box>
+                )}
+              </For>
+            </box>
+          </Show>
         </Show>
 
         <Show when={activeTab() === "todos"}>
-          <Show when={todo().length > 0}>
-            <box marginTop={0}>
-              <text attributes={TextAttributes.BOLD}>Todo</text>
+          <box marginTop={0}>
+            <text attributes={TextAttributes.BOLD}>Todo</text>
+            <Show when={todo().length > 0}>
               <For each={todo()}>
                 {(todo) => (
                   <text
@@ -692,8 +743,20 @@ export function Sidebar(props: { sessionID: string; onToggle: () => void }) {
                   </text>
                 )}
               </For>
+            </Show>
+            <box marginTop={1}>
+              <text
+                fg={theme.accent}
+                attributes={TextAttributes.BOLD}
+                onMouseUp={() => {
+                  if (renderer.getSelection()?.getSelectedText()) return
+                  handleAddTodo()
+                }}
+              >
+                + Add Todo
+              </text>
             </box>
-          </Show>
+          </box>
         </Show>
 
         <Show when={activeTab() === "files"}>
@@ -718,7 +781,7 @@ export function Sidebar(props: { sessionID: string; onToggle: () => void }) {
                       <text
                         fg={theme.textMuted}
                       >
-                        {isCommitted() ? "[✓]" : "[ ]"} {file()}
+                        {file()}
                       </text>
                       <box flexDirection="row" gap={1} flexShrink={0}>
                         <Show when={item.additions}>

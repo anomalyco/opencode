@@ -9,7 +9,14 @@ export interface CheckboxProps extends ParentProps<ComponentProps<typeof Kobalte
 }
 
 export function Checkbox(props: CheckboxProps) {
-  const [local, others] = splitProps(props, ["children", "class", "label", "hideLabel", "description", "icon"])
+  const [local, others] = splitProps(props, [
+    "children",
+    "class",
+    "label",
+    "hideLabel",
+    "description",
+    "icon",
+  ])
   const resolved = children(() => local.children)
   return (
     <Kobalte {...others} data-component="checkbox">
@@ -35,7 +42,9 @@ export function Checkbox(props: CheckboxProps) {
           </Kobalte.Label>
         </Show>
         <Show when={local.description}>
-          <Kobalte.Description data-slot="checkbox-description">{local.description}</Kobalte.Description>
+          <Kobalte.Description data-slot="checkbox-description">
+            {local.description}
+          </Kobalte.Description>
         </Show>
         <Kobalte.ErrorMessage data-slot="checkbox-error" />
       </div>

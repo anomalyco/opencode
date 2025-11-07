@@ -3,7 +3,6 @@ import {
   BoxRenderable,
   TextareaRenderable,
   MouseEvent,
-  KeyEvent,
   PasteEvent,
   t,
   dim,

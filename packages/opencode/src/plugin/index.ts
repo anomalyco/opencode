@@ -7,6 +7,7 @@ import { Server } from "../server/server"
 import { BunProc } from "../bun"
 import { Instance } from "../project/instance"
 import { Flag } from "../flag/flag"
+import z from "zod"
 
 export namespace Plugin {
   const log = Log.create({ service: "plugin" })
@@ -127,5 +128,31 @@ export namespace Plugin {
         }
       })
     }
+  }
+
+  export async function status() {
+    const config = await Config.get()
+    const plugins = [...(config.plugin ?? [])]
+    
+    // Only return actual plugins from .opencode/plugin directories, not auth packages
+    return plugins
+      .filter(plugin => plugin.startsWith("file://"))
+      .map(plugin => {
+        // Remove file:// prefix and get path parts
+        const pathWithoutPrefix = plugin.replace("file://", "")
+        const parts = pathWithoutPrefix.split("/")
+        const filename = parts[parts.length - 1]?.replace(/\.(js|ts|tsx)$/, "") || ""
+        
+        // If filename is "index", use the parent directory name instead
+        const name = filename === "index" 
+          ? parts[parts.length - 2] || filename
+          : filename
+        
+        return {
+          name,
+          path: plugin,
+          status: "loaded" as const
+        }
+      })
   }
 }

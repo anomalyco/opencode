@@ -211,7 +211,6 @@ export function Autocomplete(props: {
           display: "/undo",
           description: "undo the last message",
           onSelect: () => {
-            hide()
             command.trigger("session.undo")
           },
         },
@@ -367,7 +366,7 @@ export function Autocomplete(props: {
 
   function hide() {
     const text = props.input().plainText
-    if (store.visible === "/" && !text.endsWith(" ")) {
+    if (store.visible === "/" && !text.endsWith(" ") && text.startsWith("/")) {
       const cursor = props.input().logicalCursor
       props.input().deleteRange(0, 0, cursor.row, cursor.col)
     }

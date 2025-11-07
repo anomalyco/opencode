@@ -2,7 +2,6 @@ import { cmd } from "@/cli/cmd/cmd"
 import { tui } from "./app"
 import { Rpc } from "@/util/rpc"
 import { type rpc } from "./worker"
-import { upgrade } from "@/cli/upgrade"
 import { Session } from "@/session"
 import { bootstrap } from "@/cli/bootstrap"
 import path from "path"
@@ -78,8 +77,6 @@ export const TuiThreadCommand = cmd({
     }
 
     await bootstrap(cwd, async () => {
-      upgrade()
-
       const sessionID = await (async () => {
         if (args.continue) {
           const it = Session.list()

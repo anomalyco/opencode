@@ -47,23 +47,10 @@ export namespace ToolRegistry {
         followSymlinks: true,
         dot: true,
       })) {
-        try {
-          const namespace = path.basename(match, path.extname(match))
-          const mod = await import(match)
-          for (const [id, def] of Object.entries<ToolDefinition>(mod)) {
-            if (!validateToolDefinition(id, def)) {
-              log.warn("skipping invalid tool definition", { id, file: match })
-              continue
-            }
-            const toolId = id === "default" ? namespace : `${namespace}_${id}`
-            custom.push(fromPlugin(toolId, def))
-            log.info("loaded custom tool", { id: toolId, file: match })
-          }
-        } catch (error) {
-          log.error("failed to load custom tool", {
-            file: match,
-            error: error instanceof Error ? error.message : String(error),
-          })
+        const namespace = path.basename(match, path.extname(match))
+        const mod = await import(match)
+        for (const [id, def] of Object.entries<ToolDefinition>(mod)) {
+          custom.push(fromPlugin(id === "default" ? namespace : `${namespace}_${id}`, def))
         }
       }
     }

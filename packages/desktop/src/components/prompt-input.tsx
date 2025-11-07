@@ -410,6 +410,7 @@ export const PromptInput: Component<PromptInputProps> = (props) => {
       return
     }
     if (event.key === "Enter" && !event.shiftKey) {
+      event.preventDefault()
       handleSubmit(event)
     }
     if (event.key === "Escape") {
@@ -423,16 +424,103 @@ export const PromptInput: Component<PromptInputProps> = (props) => {
 
   const handleSubmit = async (event: Event) => {
     event.preventDefault()
-    if (!session.prompt.dirty() || session.working()) return
-    
-    const prompt = session.prompt.current()
-    
-    // Extract image parts from the prompt
-    const imageParts = Array.from(uploadedImages().values())
-    
-    await session.send(prompt, imageParts)
-    session.prompt.reset()
+    const text = session.prompt
+      .current()
+      .map((part) => part.content)
+      .join("")
+    if (text.trim().length === 0) {
+      if (session.working()) abort()
+      return
+    }
+
+    let existing = session.info()
+    if (!existing) {
+      const created = await sdk.client.session.create()
+      existing = created.data ?? undefined
+    }
+    if (!existing) return
+
+    navigate(`/session/${existing.id}`)
+    if (!session.id) {
+      // session.layout.setOpenedTabs(
+      // session.layout.copyTabs("", session.id)
+    }
+    session.layout.setActiveTab(undefined)
+    session.messages.setActive(undefined)
+    const toAbsolutePath = (path: string) => (path.startsWith("/") ? path : sync.absolute(path))
+
+    const attachments = session.prompt.current().filter((part) => part.type === "file")
+
+    // const activeFile = local.context.active()
+    // if (activeFile) {
+    //   registerAttachment(
+    //     activeFile.path,
+    //     activeFile.selection,
+    //     activeFile.name ?? formatAttachmentLabel(activeFile.path, activeFile.selection),
+    //   )
+    // }
+
+    // for (const contextFile of local.context.all()) {
+    //   registerAttachment(
+    //     contextFile.path,
+    //     contextFile.selection,
+    //     formatAttachmentLabel(contextFile.path, contextFile.selection),
+    //   )
+    // }
+
+    const attachmentParts = attachments.map((attachment) => {
+      const absolute = toAbsolutePath(attachment.path)
+      const query = attachment.selection
+        ? `?start=${attachment.selection.startLine}&end=${attachment.selection.endLine}`
+        : ""
+      return {
+        type: "file" as const,
+        mime: "text/plain",
+        url: `file://${absolute}${query}`,
+        filename: getFilename(attachment.path),
+        source: {
+          type: "file" as const,
+          text: {
+            value: attachment.content,
+            start: attachment.start,
+            end: attachment.end,
+          },
+          path: absolute,
+        },
+      }
+    })
+
+    // Extract image parts from uploadedImages
+    const imageParts = Array.from(uploadedImages().values()).map((image) => ({
+      type: "image" as const,
+      source: {
+        type: "base64" as const,
+        media_type: image.mimeType,
+        data: image.base64Data,
+      },
+    }))
+
+    session.prompt.set(DEFAULT_PROMPT, 0)
     setUploadedImages(new Map())
+
+    await sdk.client.session.prompt({
+      path: { id: existing.id },
+      body: {
+        agent: local.agent.current()!.name,
+        model: {
+          modelID: local.model.current()!.id,
+          providerID: local.model.current()!.provider.id,
+        },
+        parts: [
+          {
+            type: "text",
+            text,
+          },
+          ...attachmentParts,
+          ...imageParts,
+        ],
+      },
+    })
   }
 
   return (

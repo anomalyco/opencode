@@ -6,6 +6,7 @@ import {
   createSignal,
   For,
   Match,
+  on,
   Show,
   Switch,
   useContext,
@@ -233,16 +234,6 @@ export function Session() {
     return dimensions().width - leftWidth - rightWidth - 4
   })
 
-  createEffect(() => {
-    sync.session.sync(route.sessionID).catch(() => {
-      toast.show({
-        message: `Session not found: ${route.sessionID}`,
-        variant: "error",
-      })
-      return navigate({ type: "home" })
-    })
-  })
-
   const toast = useToast()
 
   const sdk = useSDK()
@@ -250,6 +241,17 @@ export function Session() {
   let scroll: ScrollBoxRenderable
   let prompt: PromptRef
   const keybind = useKeybind()
+
+  // Sync session data when session changes
+  createEffect(async () => {
+    await sync.session.sync(route.sessionID).catch(() => {
+      toast.show({
+        message: `Session not found: ${route.sessionID}`,
+        variant: "error",
+      })
+      return navigate({ type: "home" })
+    })
+  })
 
   useKeyboard((evt) => {
     if (dialog.stack.length > 0) return
@@ -304,17 +306,33 @@ export function Session() {
   })
 
   function toBottom() {
-    setTimeout(() => {
-      scroll.scrollTo(scroll.scrollHeight)
-    }, 50)
+    if (!scroll) return
+    
+    // IMPORTANT: Scroll in chunks to force viewport recalculation.
+    // Jumping directly with scrollBy(100000) breaks the scrollbox's virtual rendering,
+    // causing messages to appear blank. Chunked scrolling mimics manual scrolling and
+    // keeps the viewport rendering correctly.
+    const scrollInChunks = (remaining: number) => {
+      if (!scroll || remaining <= 0) return
+      
+      const chunkSize = 50
+      scroll.scrollBy(chunkSize)
+      
+      if (remaining > chunkSize) {
+        setTimeout(() => scrollInChunks(remaining - chunkSize), 10)
+      }
+    }
+    
+    const target = scroll.scrollHeight - scroll.y
+    scrollInChunks(target)
   }
 
-  // snap to bottom when revert position changes
-  // DISABLED: Don't auto-scroll to bottom on session load
-  // createEffect((old) => {
-  //   if (old !== session()?.revert?.messageID) toBottom()
-  //   return session()?.revert?.messageID
-  // })
+  // Auto-scroll to bottom when session changes
+  createEffect(on(() => route.sessionID, () => {
+    setTimeout(() => {
+      if (scroll) toBottom()
+    }, 200)
+  }))
 
   const local = useLocal()
 
@@ -781,6 +799,7 @@ export function Session() {
             <scrollbox
               ref={(r) => (scroll = r)}
               scrollbarOptions={{
+                paddingLeft: 2,
                 trackOptions: {
                   backgroundColor: theme.backgroundElement,
                   foregroundColor: theme.border,
@@ -1016,35 +1035,9 @@ function UserMessage(props: {
 function AssistantMessage(props: { message: AssistantMessage; parts: Part[]; last: boolean }) {
   const local = useLocal()
   const { theme } = useTheme()
-
-  // Filter out duplicate parts to avoid double rendering during streaming
-  // Keep only ONE text part (the longest/most complete one)
-  const uniqueParts = createMemo(() => {
-    const result: Part[] = []
-    let longestTextPart: any = null
-
-    for (const part of props.parts) {
-      if (part.type === "text") {
-        // Keep only the longest text part (most complete)
-        if (!longestTextPart || (part as any).text.length > longestTextPart.text.length) {
-          longestTextPart = part
-        }
-      } else {
-        // Keep all non-text parts
-        result.push(part)
-      }
-    }
-
-    if (longestTextPart) {
-      result.unshift(longestTextPart) // Add text part at the beginning
-    }
-
-    return result
-  })
-
   return (
     <>
-      <For each={uniqueParts()}>
+      <For each={props.parts}>
         {(part) => {
           const component = createMemo(() => PART_MAPPING[part.type as keyof typeof PART_MAPPING])
           return (
@@ -1085,7 +1078,7 @@ function AssistantMessage(props: { message: AssistantMessage; parts: Part[]; las
           borderColor={theme.backgroundElement}
         >
           <text fg={local.agent.color(props.message.mode)}>
-            [{props.message.mode.toUpperCase()}]
+            {Locale.titlecase(props.message.mode)}
           </text>
           <Shimmer text={`${props.message.modelID}`} color={theme.text} />
         </box>
@@ -1099,7 +1092,7 @@ function AssistantMessage(props: { message: AssistantMessage; parts: Part[]; las
         <box paddingLeft={3}>
           <text marginTop={1}>
             <span style={{ fg: local.agent.color(props.message.mode) }}>
-              [{props.message.mode.toUpperCase()}]
+              {Locale.titlecase(props.message.mode)}
             </span>{" "}
             <span style={{ fg: theme.textMuted }}>{props.message.modelID}</span>
           </text>

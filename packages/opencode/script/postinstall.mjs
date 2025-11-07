@@ -95,7 +95,7 @@ async function regenerateWindowsCmdWrappers() {
   } catch (error) {
     console.error("Error rebuilding npm links:", error.message)
     console.error(
-      "npm rebuild failed. You may need to manually run: npm rebuild codesurf-ai --ignore-scripts",
+      "npm rebuild failed. You may need to manually run: npm rebuild opencode-ai --ignore-scripts",
     )
   }
 }

@@ -74,6 +74,21 @@ export const SubagentsPlugin = async () => {
                     const titleShort =
                       child.title.length > 35 ? child.title.substring(0, 32) + "..." : child.title
 
+                    const handleClose = async (e: any) => {
+                      e.stopPropagation?.()
+                      try {
+                        const response = await fetch(`${sdk.url}/session/${child.id}/abort`, {
+                          method: "POST",
+                        })
+                        if (response.ok) {
+                          // Reload child sessions after aborting
+                          await loadChildSessions()
+                        }
+                      } catch (error) {
+                        console.error("[SubagentsPanel] Failed to abort session:", error)
+                      }
+                    }
+
                     return (
                       <box
                         flexDirection="row"
@@ -89,7 +104,17 @@ export const SubagentsPlugin = async () => {
                         <text flexShrink={0} fg={statusColor}>
                           ●
                         </text>
-                        <text fg={theme.text}>{titleShort}</text>
+                        <text fg={theme.text} flexGrow={1}>
+                          {titleShort}
+                        </text>
+                        <text
+                          flexShrink={0}
+                          fg={theme.textMuted}
+                          onMouseUp={handleClose}
+                          marginLeft={1}
+                        >
+                          ✕
+                        </text>
                       </box>
                     )
                   }}

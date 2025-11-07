@@ -80,7 +80,7 @@ export default function Layout(props: ParentProps) {
                   }}
                 </For>
               </nav>
-              <Show when={sync.data.more}>
+              <Show when={sync.session.more()}>
                 <button
                   class="shrink-0 self-start p-3 text-12-medium text-text-weak hover:text-text-strong"
                   onClick={() => sync.session.fetch()}
@@ -95,7 +95,7 @@ export default function Layout(props: ParentProps) {
               as={"a"}
               href="https://opencode.ai/desktop-feedback"
               target="_blank"
-              class="hidden @[4rem]:flex w-full gap-2 text-12-medium text-text-base stroke-[1.5px]"
+              class="hidden @[4rem]:flex w-full text-12-medium text-text-base stroke-[1.5px]"
               variant="ghost"
               icon="speech-bubble"
             >

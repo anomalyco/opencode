@@ -1,6 +1,7 @@
 import { createMemo, For, Match, Show, Switch } from "solid-js"
 
 export function DiffChanges(props: {
+  class?: string
   changes: { additions: number; deletions: number } | { additions: number; deletions: number }[]
   variant?: "default" | "bars"
 }) {
@@ -92,7 +93,11 @@ export function DiffChanges(props: {
 
   return (
     <Show when={variant() === "default" ? total() > 0 : true}>
-      <div data-component="diff-changes" data-variant={variant()}>
+      <div
+        data-component="diff-changes"
+        data-variant={variant()}
+        classList={{ [props.class ?? ""]: true }}
+      >
         <Switch>
           <Match when={variant() === "bars"}>
             <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 18 12" fill="none">

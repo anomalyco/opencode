@@ -48,6 +48,11 @@ export const { use: useSync, provider: SyncProvider } = createSimpleContext({
         [key: string]: McpStatus
       }
       formatter: FormatterStatus[]
+      plugin: Array<{
+        name: string
+        path: string
+        status: "loaded"
+      }>
     }>({
       config: {},
       ready: false,
@@ -63,6 +68,7 @@ export const { use: useSync, provider: SyncProvider } = createSimpleContext({
       lsp: [],
       mcp: {},
       formatter: [],
+      plugin: [],
     })
 
     const sdk = useSDK()
@@ -159,6 +165,7 @@ export const { use: useSync, provider: SyncProvider } = createSimpleContext({
             event.properties.info.sessionID,
             produce((draft) => {
               draft.splice(result.index, 0, event.properties.info)
+              // Removed: if (draft.length > 100) draft.shift()
             }),
           )
           break
@@ -244,6 +251,7 @@ export const { use: useSync, provider: SyncProvider } = createSimpleContext({
       sdk.client.lsp.status().then((x) => setStore("lsp", x.data!)),
       sdk.client.mcp.status().then((x) => setStore("mcp", x.data!)),
       sdk.client.formatter.status().then((x) => setStore("formatter", x.data!)),
+      fetch(`${sdk.url}/plugins`).then((r) => r.json()).then((x) => setStore("plugin", x ?? [])),
     ])
 
     const result = {
@@ -270,9 +278,11 @@ export const { use: useSync, provider: SyncProvider } = createSimpleContext({
         },
         async sync(sessionID: string) {
           const now = Date.now()
+          if (store.message[sessionID]) return
+          console.log("syncing", sessionID)
           const [session, messages, todo, diff] = await Promise.all([
             sdk.client.session.get({ path: { id: sessionID }, throwOnError: true }),
-            sdk.client.session.messages({ path: { id: sessionID } }),
+            sdk.client.session.messages({ path: { id: sessionID }, query: { limit: 100 } }),
             sdk.client.session.todo({ path: { id: sessionID } }),
             sdk.client.session.diff({ path: { id: sessionID } }),
           ])

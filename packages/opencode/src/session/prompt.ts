@@ -170,14 +170,7 @@ export namespace SessionPrompt {
         state().queued.set(input.sessionID, queue)
       })
     }
-    // CRITICAL FIX: Check session orchestration state for current agent after mode switches
-    const agentName = input.agent ?? session.orchestration?.currentAgent ?? "build"
-    l.info("resolved agent", {
-      input: input.agent,
-      orchestration: session.orchestration?.currentAgent,
-      final: agentName,
-    })
-    const agent = await Agent.get(agentName)
+    const agent = await Agent.get(input.agent ?? "build")
     const model = await resolveModel({
       agent,
       model: input.model,
@@ -261,57 +254,6 @@ export namespace SessionPrompt {
       await using _ = defer(async () => {
         await processor.end()
       })
-
-      // Build messages array and allow plugins to modify it
-      // Extract user message text for plugin consumption (safely)
-      const userText = msgs
-        .filter((m) => m?.info?.role === "user")
-        .flatMap((m) => {
-          if (!m.parts || !Array.isArray(m.parts)) return []
-          return m.parts
-            .filter((p) => p?.type === "text")
-            .map((p: any) => p?.text || "")
-            .filter(Boolean)
-        })
-        .join("\n")
-
-      const messages = await Plugin.trigger(
-        "chat.messages",
-        {
-          model: model.info,
-          provider: await Provider.getProvider(model.providerID),
-          userMessage: userMsg,
-          userText,
-          agent: input.agent,
-          conversationDepth: msgs.length,
-        },
-        {
-          messages: [
-            ...system.map(
-              (x): ModelMessage => ({
-                role: "system",
-                content: x,
-              }),
-            ),
-            ...MessageV2.toModelMessage(
-              msgs.filter((m) => {
-                if (m.info.role !== "assistant" || m.info.error === undefined) {
-                  return true
-                }
-                if (
-                  MessageV2.AbortedError.isInstance(m.info.error) &&
-                  m.parts.some((part) => part.type !== "step-start" && part.type !== "reasoning")
-                ) {
-                  return true
-                }
-
-                return false
-              }),
-            ),
-          ],
-        },
-      ).then((x) => x.messages)
-
       const doStream = () =>
         streamText({
           onError(error) {
@@ -367,7 +309,29 @@ export namespace SessionPrompt {
           stopWhen: stepCountIs(1),
           temperature: params.temperature,
           topP: params.topP,
-          messages: messages,
+          messages: [
+            ...system.map(
+              (x): ModelMessage => ({
+                role: "system",
+                content: x,
+              }),
+            ),
+            ...MessageV2.toModelMessage(
+              msgs.filter((m) => {
+                if (m.info.role !== "assistant" || m.info.error === undefined) {
+                  return true
+                }
+                if (
+                  MessageV2.AbortedError.isInstance(m.info.error) &&
+                  m.parts.some((part) => part.type !== "step-start" && part.type !== "reasoning")
+                ) {
+                  return true
+                }
+
+                return false
+              }),
+            ),
+          ],
           tools: model.info.tool_call === false ? undefined : tools,
           model: wrapLanguageModel({
             model: model.language,
@@ -459,22 +423,7 @@ export namespace SessionPrompt {
         item.callback(result)
       }
       state().queued.delete(input.sessionID)
-
-      // Calculate context usage and only prune if at 70%+
-      if (result.info.role === "assistant") {
-        const contextLimit = model.info.limit.context
-        if (contextLimit > 0) {
-          const count =
-            result.info.tokens.input + result.info.tokens.cache.read + result.info.tokens.output
-          const output =
-            Math.min(model.info.limit.output, SessionPrompt.OUTPUT_TOKEN_MAX) ||
-            SessionPrompt.OUTPUT_TOKEN_MAX
-          const usable = contextLimit - output
-          const contextUsage = count / usable
-          SessionCompaction.prune({ sessionID: input.sessionID, contextUsage })
-        }
-      }
-
+      SessionCompaction.prune(input)
       return result
     }
   }
@@ -485,7 +434,7 @@ export namespace SessionPrompt {
     providerID: string
     signal: AbortSignal
   }) {
-    let msgs = await Session.messages(input.sessionID).then(MessageV2.filterCompacted)
+    let msgs = await MessageV2.filterCompacted(Session.messageStream(input.sessionID))
     const lastAssistant = msgs.findLast((msg) => msg.info.role === "assistant")
     if (
       lastAssistant?.info.role === "assistant" &&
@@ -556,7 +505,6 @@ export namespace SessionPrompt {
     )
     system.push(...(await SystemPrompt.environment()))
     system.push(...(await SystemPrompt.custom()))
-    system.push(...(await SystemPrompt.plugins()))
     // max 2 system prompt messages for caching purposes
     const [first, ...rest] = system
     system = [first, rest.join("\n")]
@@ -1013,7 +961,6 @@ export namespace SessionPrompt {
         id: Identifier.ascending("message"),
         parentID,
         role: "assistant",
-        system: input.system,
         mode: input.agent,
         path: {
           cwd: Instance.directory,
@@ -1034,25 +981,6 @@ export namespace SessionPrompt {
         sessionID: input.sessionID,
       }
       await Session.updateMessage(msg)
-
-      // Update orchestration state with current agent for UI tracking
-      await Session.update(input.sessionID, (draft) => {
-        if (!draft.orchestration) {
-          draft.orchestration = {
-            depth: 0,
-            status: "active",
-            rootAgent: input.agent,
-            currentAgent: input.agent,
-          }
-        } else {
-          // Preserve root agent, update current agent
-          if (!draft.orchestration.rootAgent) {
-            draft.orchestration.rootAgent = input.agent
-          }
-          draft.orchestration.currentAgent = input.agent
-        }
-      })
-
       return msg
     }
 
@@ -1483,7 +1411,6 @@ export namespace SessionPrompt {
       id: Identifier.ascending("message"),
       sessionID: input.sessionID,
       parentID: userMsg.id,
-      system: [],
       mode: input.agent,
       cost: 0,
       path: {
@@ -1523,7 +1450,7 @@ export namespace SessionPrompt {
     }
     await Session.updatePart(part)
     const shell = process.env["SHELL"] ?? "bash"
-    const shellName = path.basename(shell).replace(/\.(exe|cmd|bat)$/i, "")
+    const shellName = path.basename(shell)
 
     const invocations: Record<string, { args: string[] }> = {
       nu: {
@@ -1780,7 +1707,6 @@ export namespace SessionPrompt {
         id: Identifier.ascending("message"),
         sessionID: input.sessionID,
         parentID: userMsg.id,
-        system: [],
         mode: agentName,
         cost: 0,
         path: {
