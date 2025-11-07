@@ -83,6 +83,14 @@ for (const file of pkgjsons) {
   console.log("updated:", file)
   await Bun.file(file).write(pkg)
 }
+
+const extensionToml = new URL("../packages/extensions/zed/extension.toml", import.meta.url).pathname
+let toml = await Bun.file(extensionToml).text()
+toml = toml.replace(/^version = "[^"]+"/m, `version = "${Script.version}"`)
+toml = toml.replaceAll(/releases\/v[^/]+\//g, `releases/v${Script.version}/`)
+console.log("updated:", extensionToml)
+await Bun.file(extensionToml).write(toml)
+
 await $`bun install`
 
 console.log("\n=== opencode ===\n")
