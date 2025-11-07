@@ -174,10 +174,8 @@ export const PromptInput: Component<PromptInputProps> = (props) => {
 
   const addPart = (part: ContentPart) => {
     const cursorPosition = getCursorPosition(editorRef)
-    const rawText = session.prompt
-      .current()
-      .map((p) => p.content)
-      .join("")
+    const prompt = session.prompt.current()
+    const rawText = prompt.map((p) => p.content).join("")
     const textBeforeCursor = rawText.substring(0, cursorPosition)
     const atMatch = textBeforeCursor.match(/@(\S*)$/)
 
@@ -203,7 +201,7 @@ export const PromptInput: Component<PromptInputProps> = (props) => {
       parts: nextParts,
       inserted,
       cursorPositionAfter,
-    } = session.prompt.current().reduce(
+    } = prompt.reduce(
       (acc, item) => {
         if (acc.inserted) {
           acc.parts.push({ ...item, start: acc.runningIndex, end: acc.runningIndex + item.content.length })
@@ -262,7 +260,7 @@ export const PromptInput: Component<PromptInputProps> = (props) => {
     )
 
     if (!inserted) {
-      const baseParts = session.prompt.current().filter((item) => !(item.type === "text" && item.content === ""))
+      const baseParts = prompt.filter((item) => !(item.type === "text" && item.content === ""))
       const runningIndex = baseParts.reduce((sum, p) => sum + p.content.length, 0)
       const appendedAcc = { parts: [...baseParts] as ContentPart[], runningIndex }
       if (part.type === "text") {
@@ -316,10 +314,8 @@ export const PromptInput: Component<PromptInputProps> = (props) => {
 
   const handleSubmit = async (event: Event) => {
     event.preventDefault()
-    const text = session.prompt
-      .current()
-      .map((part) => part.content)
-      .join("")
+    const prompt = session.prompt.current()
+    const text = prompt.map((part) => part.content).join("")
     if (text.trim().length === 0) {
       if (session.working()) abort()
       return
@@ -329,19 +325,17 @@ export const PromptInput: Component<PromptInputProps> = (props) => {
     if (!existing) {
       const created = await sdk.client.session.create()
       existing = created.data ?? undefined
+      if (existing) navigate(`/session/${existing.id}`)
     }
     if (!existing) return
 
-    navigate(`/session/${existing.id}`)
-    if (!session.id) {
-      // session.layout.setOpenedTabs(
-      // session.layout.copyTabs("", session.id)
-    }
-    session.layout.setActiveTab(undefined)
-    session.messages.setActive(undefined)
-    const toAbsolutePath = (path: string) => (path.startsWith("/") ? path : sync.absolute(path))
+    // if (!session.id) {
+    // session.layout.setOpenedTabs(
+    // session.layout.copyTabs("", session.id)
+    // }
 
-    const attachments = session.prompt.current().filter((part) => part.type === "file")
+    const toAbsolutePath = (path: string) => (path.startsWith("/") ? path : sync.absolute(path))
+    const attachments = prompt.filter((part) => part.type === "file")
 
     // const activeFile = local.context.active()
     // if (activeFile) {
@@ -382,9 +376,11 @@ export const PromptInput: Component<PromptInputProps> = (props) => {
       }
     })
 
+    session.layout.setActiveTab(undefined)
+    session.messages.setActive(undefined)
     session.prompt.set(DEFAULT_PROMPT, 0)
 
-    await sdk.client.session.prompt({
+    sdk.client.session.prompt({
       path: { id: existing.id },
       body: {
         agent: local.agent.current()!.name,
