@@ -153,22 +153,22 @@ export const { use: useSession, provider: SessionProvider } = createSimpleContex
             setStore(
               "tabs",
               "opened",
-              store.tabs.opened.filter((x) => x !== tab),
+              store.tabs.opened.filter((x: string) => x !== tab),
             )
             if (store.tabs.active === tab) {
-              const index = store.tabs.opened.findIndex((f) => f === tab)
+              const index = store.tabs.opened.findIndex((f: string) => f === tab)
               const previous = store.tabs.opened[Math.max(0, index - 1)]
               setStore("tabs", "active", previous)
             }
           })
         },
         moveTab(tab: string, to: number) {
-          const index = store.tabs.opened.findIndex((f) => f === tab)
+          const index = store.tabs.opened.findIndex((f: string) => f === tab)
           if (index === -1) return
           setStore(
             "tabs",
             "opened",
-            produce((opened) => {
+            produce((opened: string[]) => {
               opened.splice(to, 0, opened.splice(index, 1)[0])
             }),
           )

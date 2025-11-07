@@ -483,7 +483,7 @@ export const { use: useLocal, provider: LocalProvider } = createSimpleContext({
             setStore("sidebar", "opened", false)
           },
           toggle() {
-            setStore("sidebar", "opened", (x) => !x)
+            setStore("sidebar", "opened", (x: boolean) => !x)
           },
           width: createMemo(() => store.sidebar.width),
           resize(width: number) {

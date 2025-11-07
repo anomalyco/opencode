@@ -7,7 +7,7 @@ import { getDirectory, getFilename } from "@/utils"
 import { createFocusSignal } from "@solid-primitives/active-element"
 import { useLocal } from "@/context/local"
 import { DateTime } from "luxon"
-import { ContentPart, DEFAULT_PROMPT, isPromptEqual, Prompt, useSession } from "@/context/session"
+import { ContentPart, DEFAULT_PROMPT, FileAttachmentPart, isPromptEqual, Prompt, useSession } from "@/context/session"
 import { useSDK } from "@/context/sdk"
 import { useNavigate } from "@solidjs/router"
 import { useSync } from "@/context/sync"
@@ -92,7 +92,7 @@ export const PromptInput: Component<PromptInputProps> = (props) => {
         }
 
         editorRef.innerHTML = ""
-        currentParts.forEach((part) => {
+        currentParts.forEach((part: ContentPart) => {
           if (part.type === "text") {
             editorRef.appendChild(document.createTextNode(part.content))
           } else if (part.type === "file") {
@@ -175,7 +175,7 @@ export const PromptInput: Component<PromptInputProps> = (props) => {
   const addPart = (part: ContentPart) => {
     const cursorPosition = getCursorPosition(editorRef)
     const prompt = session.prompt.current()
-    const rawText = prompt.map((p) => p.content).join("")
+    const rawText = prompt.map((p: ContentPart) => p.content).join("")
     const textBeforeCursor = rawText.substring(0, cursorPosition)
     const atMatch = textBeforeCursor.match(/@(\S*)$/)
 
@@ -202,7 +202,7 @@ export const PromptInput: Component<PromptInputProps> = (props) => {
       inserted,
       cursorPositionAfter,
     } = prompt.reduce(
-      (acc, item) => {
+      (acc: { parts: ContentPart[]; runningIndex: number; inserted: boolean; cursorPositionAfter: number }, item: ContentPart) => {
         if (acc.inserted) {
           acc.parts.push({ ...item, start: acc.runningIndex, end: acc.runningIndex + item.content.length })
           acc.runningIndex += item.content.length
@@ -260,8 +260,8 @@ export const PromptInput: Component<PromptInputProps> = (props) => {
     )
 
     if (!inserted) {
-      const baseParts = prompt.filter((item) => !(item.type === "text" && item.content === ""))
-      const runningIndex = baseParts.reduce((sum, p) => sum + p.content.length, 0)
+      const baseParts = prompt.filter((item: ContentPart) => !(item.type === "text" && item.content === ""))
+      const runningIndex = baseParts.reduce((sum: number, p: ContentPart) => sum + p.content.length, 0)
       const appendedAcc = { parts: [...baseParts] as ContentPart[], runningIndex }
       if (part.type === "text") {
         pushText(appendedAcc, part.content)
@@ -315,7 +315,7 @@ export const PromptInput: Component<PromptInputProps> = (props) => {
   const handleSubmit = async (event: Event) => {
     event.preventDefault()
     const prompt = session.prompt.current()
-    const text = prompt.map((part) => part.content).join("")
+    const text = prompt.map((part: ContentPart) => part.content).join("")
     if (text.trim().length === 0) {
       if (session.working()) abort()
       return
@@ -335,7 +335,7 @@ export const PromptInput: Component<PromptInputProps> = (props) => {
     // }
 
     const toAbsolutePath = (path: string) => (path.startsWith("/") ? path : sync.absolute(path))
-    const attachments = prompt.filter((part) => part.type === "file")
+    const attachments = prompt.filter((part: ContentPart) => part.type === "file")
 
     // const activeFile = local.context.active()
     // if (activeFile) {
@@ -354,16 +354,17 @@ export const PromptInput: Component<PromptInputProps> = (props) => {
     //   )
     // }
 
-    const attachmentParts = attachments.map((attachment) => {
-      const absolute = toAbsolutePath(attachment.path)
-      const query = attachment.selection
-        ? `?start=${attachment.selection.startLine}&end=${attachment.selection.endLine}`
+    const attachmentParts = attachments.map((attachment: ContentPart) => {
+      const fileAttachment = attachment as FileAttachmentPart
+      const absolute = toAbsolutePath(fileAttachment.path)
+      const query = fileAttachment.selection
+        ? `?start=${fileAttachment.selection.startLine}&end=${fileAttachment.selection.endLine}`
         : ""
       return {
         type: "file" as const,
         mime: "text/plain",
         url: `file://${absolute}${query}`,
-        filename: getFilename(attachment.path),
+        filename: getFilename(fileAttachment.path),
         source: {
           type: "file" as const,
           text: {
