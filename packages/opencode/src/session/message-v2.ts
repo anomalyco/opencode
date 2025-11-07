@@ -655,10 +655,14 @@ export namespace MessageV2 {
     return convertToModelMessages(result)
   }
 
-  export function filterCompacted(msgs: { info: MessageV2.Info; parts: MessageV2.Part[] }[]) {
-    const i = msgs.findLastIndex((m) => m.info.role === "assistant" && !!m.info.summary)
-    if (i === -1) return msgs.slice()
-    return msgs.slice(i)
+  export async function filterCompacted(stream: AsyncIterable<MessageV2.WithParts>) {
+    const result = [] as MessageV2.WithParts[]
+    for await (const msg of stream) {
+      result.push(msg)
+      if (msg.info.role === "assistant" && msg.info.summary === true) break
+    }
+    result.reverse()
+    return result
   }
 
   export function fromError(e: unknown, ctx: { providerID: string }) {

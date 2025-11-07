@@ -273,6 +273,17 @@ export namespace Session {
     return diffs ?? []
   })
 
+  export const messageStream = fn(Identifier.schema("session"), async function* (sessionID) {
+    const list = await Array.fromAsync(await Storage.list(["message", sessionID]))
+    for (let i = list.length - 1; i >= 0; i--) {
+      const read = await Storage.read<MessageV2.Info>(list[i])
+      yield {
+        info: read,
+        parts: await getParts(read.id),
+      }
+    }
+  })
+
   export const messages = fn(
     z.object({
       sessionID: Identifier.schema("session"),
@@ -280,16 +291,11 @@ export namespace Session {
     }),
     async (input) => {
       const result = [] as MessageV2.WithParts[]
-      const list = (await Array.fromAsync(await Storage.list(["message", input.sessionID])))
-        .toSorted((a, b) => a.at(-1)!.localeCompare(b.at(-1)!))
-        .slice(-1 * (input.limit ?? 1_000_000))
-      for (const p of list) {
-        const read = await Storage.read<MessageV2.Info>(p)
-        result.push({
-          info: read,
-          parts: await getParts(read.id),
-        })
+      for await (const msg of messageStream(input.sessionID)) {
+        if (input.limit && result.length >= input.limit) break
+        result.push(msg)
       }
+      result.reverse()
       return result
     },
   )

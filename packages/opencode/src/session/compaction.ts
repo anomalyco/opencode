@@ -111,9 +111,7 @@ export namespace SessionCompaction {
         draft.time.compacting = undefined
       })
     })
-    const toSummarize = await Session.messages({ sessionID: input.sessionID }).then(
-      MessageV2.filterCompacted,
-    )
+    const toSummarize = await MessageV2.filterCompacted(Session.messageStream(input.sessionID))
     const model = await Provider.getModel(input.providerID, input.modelID)
     const system = [
       ...SystemPrompt.summarize(model.providerID),

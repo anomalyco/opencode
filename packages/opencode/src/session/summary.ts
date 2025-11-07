@@ -151,17 +151,7 @@ export namespace SessionSummary {
       messageID: Identifier.schema("message").optional(),
     }),
     async (input) => {
-      let all = await Session.messages({ sessionID: input.sessionID })
-      if (input.messageID)
-        all = all.filter(
-          (x) =>
-            x.info.id === input.messageID ||
-            (x.info.role === "assistant" && x.info.parentID === input.messageID),
-        )
-
-      return computeDiff({
-        messages: all,
-      })
+      return Storage.read<Snapshot.FileDiff[]>(["session_diff", input.sessionID]) ?? []
     },
   )
 

@@ -270,6 +270,7 @@ export const { use: useSync, provider: SyncProvider } = createSimpleContext({
         },
         async sync(sessionID: string) {
           const now = Date.now()
+          if (store.message[sessionID]) return
           console.log("syncing", sessionID)
           const [session, messages, todo, diff] = await Promise.all([
             sdk.client.session.get({ path: { id: sessionID }, throwOnError: true }),

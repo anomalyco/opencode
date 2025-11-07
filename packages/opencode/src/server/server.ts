@@ -756,7 +756,7 @@ export namespace Server {
         validator(
           "query",
           z.object({
-            limit: z.coerce.number().optional(),
+            limit: z.coerce.number(),
           }),
         ),
         async (c) => {
