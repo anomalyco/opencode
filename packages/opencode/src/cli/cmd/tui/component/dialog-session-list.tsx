@@ -2,7 +2,7 @@ import { useDialog } from "@tui/ui/dialog"
 import { DialogSelect } from "@tui/ui/dialog-select"
 import { useRoute } from "@tui/context/route"
 import { useSync } from "@tui/context/sync"
-import { createMemo, createSignal, onMount } from "solid-js"
+import { createEffect, createMemo, createSignal, onMount } from "solid-js"
 import { Locale } from "@/util/locale"
 import { Keybind } from "@/util/keybind"
 import { useTheme } from "../context/theme"
@@ -43,6 +43,10 @@ export function DialogSessionList() {
           footer: Locale.time(x.time.updated),
         }
       })
+  })
+
+  createEffect(() => {
+    console.log("session count", sync.data.session.length)
   })
 
   onMount(() => {
