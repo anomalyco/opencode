@@ -28,6 +28,7 @@ import type {
   UserMessage,
   TextPart,
   ReasoningPart,
+  Session as SessionType,
 } from "@opencode-ai/sdk"
 import { useLocal } from "@tui/context/local"
 import { Locale } from "@/util/locale"
@@ -86,6 +87,80 @@ function use() {
   return ctx
 }
 
+function SessionTabs(props: {
+  sessions: SessionType[]
+  currentSessionID: string
+  onSelect: (sessionID: string) => void
+  onClose: (sessionID: string) => void
+}) {
+  const { theme } = useTheme()
+  const renderer = useRenderer()
+
+  const truncateTitle = (title: string, maxLength: number = 12) => {
+    if (title.length <= maxLength) return title
+    return title.slice(0, maxLength - 3) + "..."
+  }
+
+  return (
+    <box
+      flexDirection="row"
+      gap={0}
+      backgroundColor={theme.backgroundPanel}
+      paddingLeft={2}
+      paddingTop={1}
+      paddingBottom={1}
+      flexShrink={0}
+    >
+      <For each={props.sessions}>
+        {(session) => {
+          const isActive = () => session.id === props.currentSessionID
+          const [hover, setHover] = createSignal(false)
+
+          return (
+            <box
+              flexDirection="row"
+              gap={1}
+              paddingLeft={2}
+              paddingRight={2}
+              paddingTop={0}
+              paddingBottom={0}
+              backgroundColor={isActive() ? theme.background : theme.backgroundPanel}
+              renderBefore={function() {
+                const el = this as BoxRenderable
+                el.on("mouseenter", () => setHover(true))
+                el.on("mouseleave", () => setHover(false))
+              }}
+            >
+              <box
+                onMouseUp={(evt) => {
+                  if (renderer.getSelection()?.getSelectedText()) return
+                  props.onSelect(session.id)
+                }}
+              >
+                <text
+                  fg={isActive() ? theme.text : theme.textMuted}
+                >
+                  {isActive() ? <b>{truncateTitle(session.title || "Session")}</b> : truncateTitle(session.title || "Session")}
+                </text>
+              </box>
+              <Show when={hover() || isActive()}>
+                <box
+                  onMouseUp={(evt) => {
+                    if (renderer.getSelection()?.getSelectedText()) return
+                    props.onClose(session.id)
+                  }}
+                >
+                  <text fg={theme.textMuted}> ×</text>
+                </box>
+              </Show>
+            </box>
+          )
+        }}
+      </For>
+    </box>
+  )
+}
+
 export function Session() {
   const route = useRouteData("session")
   const router = useRoute()
@@ -94,6 +169,23 @@ export function Session() {
   const kv = useKV()
   const { theme } = useTheme()
   const session = createMemo(() => sync.session.get(route.sessionID)!)
+
+  // Track open session tabs
+  const [openTabs, setOpenTabs] = createSignal<string[]>(
+    kv.get("openTabs", [])
+  )
+
+  // Add current session to open tabs ONLY if it has messages (is active)
+  createEffect(() => {
+    const currentID = route.sessionID
+    const hasMessages = sync.data.message[currentID]?.length > 0
+    
+    if (hasMessages && !openTabs().includes(currentID)) {
+      const newTabs = [...openTabs(), currentID]
+      setOpenTabs(newTabs)
+      kv.set("openTabs", newTabs)
+    }
+  })
 
   // Keep previous messages while loading to prevent flashing
   const [cachedMessages, setCachedMessages] = createSignal<(typeof sync.data.message)[string]>(
@@ -227,6 +319,50 @@ export function Session() {
       dialog.replace(() => <m.DialogSessionList />)
     })
   }
+
+  const handleCloseSession = async (sessionID: string) => {
+    const tabs = openTabs()
+    
+    if (tabs.length === 1) {
+      // Last tab, create new session
+      handleNewSession()
+      // Remove from tabs
+      setOpenTabs([])
+      kv.set("openTabs", [])
+      return
+    }
+    
+    // Switch to a different tab if closing current session (BEFORE removing from tabs)
+    if (sessionID === route.sessionID) {
+      const currentIndex = tabs.findIndex((id) => id === sessionID)
+      const nextTab = tabs[currentIndex + 1] || tabs[currentIndex - 1]
+      if (nextTab) {
+        selectSession(nextTab)
+      }
+    }
+    
+    // Remove from open tabs
+    const newTabs = tabs.filter((id) => id !== sessionID)
+    setOpenTabs(newTabs)
+    kv.set("openTabs", newTabs)
+    
+    // Delete the session
+    await sdk.client.session.delete({
+      path: {
+        id: sessionID,
+      },
+    })
+  }
+
+  const activeSessions = createMemo(() => {
+    const tabs = openTabs()
+    return sync.data.session
+      .filter((x) => tabs.includes(x.id))
+      .sort((a, b) => {
+        // Sort by tab order (order they were opened)
+        return tabs.indexOf(a.id) - tabs.indexOf(b.id)
+      })
+  })
 
   const contentWidth = createMemo(() => {
     const leftWidth = leftSidebarVisible() ? 30 : 0
@@ -795,6 +931,14 @@ export function Session() {
             </Show>
             <Show when={!sidebarVisible() && !leftSidebarVisible()}>
               <Header />
+            </Show>
+            <Show when={activeSessions().length > 1}>
+              <SessionTabs
+                sessions={activeSessions()}
+                currentSessionID={route.sessionID}
+                onSelect={selectSession}
+                onClose={handleCloseSession}
+              />
             </Show>
             <scrollbox
               ref={(r) => (scroll = r)}
