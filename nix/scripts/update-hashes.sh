@@ -6,7 +6,23 @@ DUMMY="sha256-AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA="
 MODELS_URL=${MODELS_URL:-https://models.dev/api.json}
 DEFAULT_HASH_FILE=${MODULES_HASH_FILE:-nix/hashes.json}
 HASH_FILE=${HASH_FILE:-$DEFAULT_HASH_FILE}
-OPTIONAL_FILE=${OPTIONAL_PACKAGES_FILE:-nix/optional-packages.txt}
+OPTIONAL_PACKAGES_DIR=${OPTIONAL_PACKAGES_DIR:-nix/optional-packages}
+OPTIONAL_FILE=${OPTIONAL_PACKAGES_FILE:-}
+OPTIONAL_AGGREGATE=""
+
+if [ -z "$OPTIONAL_FILE" ] && [ -d "$OPTIONAL_PACKAGES_DIR" ]; then
+  OPTIONAL_AGGREGATE=$(mktemp)
+  find "$OPTIONAL_PACKAGES_DIR" -maxdepth 1 -type f -name '*.txt' | sort | while read -r file; do
+    [ -n "$file" ] || continue
+    cat "$file"
+    echo
+  done | sed 's/#.*$//' | sed '/^[[:space:]]*$/d' | sort -u >"$OPTIONAL_AGGREGATE"
+  OPTIONAL_FILE="$OPTIONAL_AGGREGATE"
+fi
+
+if [ -z "$OPTIONAL_FILE" ]; then
+  OPTIONAL_FILE="nix/optional-packages.txt"
+fi
 export DUMMY
 export NIX_KEEP_OUTPUTS=1
 export NIX_KEEP_DERIVATIONS=1
@@ -58,6 +74,9 @@ cleanup() {
   fi
   if [ -n "${TMP_EXPR:-}" ] && [ -f "$TMP_EXPR" ]; then
     rm -f "$TMP_EXPR"
+  fi
+  if [ -n "$OPTIONAL_AGGREGATE" ] && [ -f "$OPTIONAL_AGGREGATE" ]; then
+    rm -f "$OPTIONAL_AGGREGATE"
   fi
 }
 

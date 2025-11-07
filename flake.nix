@@ -29,6 +29,12 @@
       };
       scripts = ./nix/scripts;
       hashes = builtins.fromJSON (builtins.readFile ./nix/hashes.json);
+      optionalPackagesFiles = {
+        "aarch64-linux" = ./nix/optional-packages/aarch64-linux.txt;
+        "x86_64-linux" = ./nix/optional-packages/x86_64-linux.txt;
+        "aarch64-darwin" = ./nix/optional-packages/aarch64-darwin.txt;
+        "x86_64-darwin" = ./nix/optional-packages/x86_64-darwin.txt;
+      };
       modelsDev = forEachSystem (
         system:
         let
@@ -62,7 +68,7 @@
           pkgs = pkgsFor system;
           mkNodeModules = pkgs.callPackage ./nix/node-modules.nix {
             hash = hashes.nodeModules.${system};
-            optionalPackagesFile = ./nix/optional-packages.txt;
+            optionalPackagesFile = optionalPackagesFiles.${system};
           };
           mkPackage = pkgs.callPackage ./nix/opencode.nix { };
         in

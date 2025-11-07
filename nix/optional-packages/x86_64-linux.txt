@@ -1,0 +1,2 @@
+@parcel/watcher-linux-x64-glibc
+@opentui/core-linux-x64
