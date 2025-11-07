@@ -880,11 +880,23 @@ export namespace Config {
   }
 
   export async function update(config: Info, scope: "global" | "project" = "project") {
-    // Determine target filepath based on scope
-    const filepath =
+    const candidates = [
       scope === "global"
         ? path.join(Global.Path.config, "opencode.jsonc")
-        : path.join(Instance.directory, "opencode.jsonc")
+        : path.join(Instance.directory, "opencode.jsonc"),
+      scope === "global"
+        ? path.join(Global.Path.config, "opencode.json")
+        : path.join(Instance.directory, "opencode.json"),
+    ]
+
+    let filepath = candidates[0]
+    for (const candidate of candidates) {
+      const exists = await Bun.file(candidate).exists()
+      if (exists) {
+        filepath = candidate
+        break
+      }
+    }
 
     // Ensure directory exists for global config
     if (scope === "global") {
@@ -912,11 +924,9 @@ export namespace Config {
       }
     }
 
-    // Load existing config and merge
     const existing = await loadFile(filepath)
     const merged = mergeDeep(existing, config)
 
-    // Validate merged config
     const validation = Info.safeParse(merged)
     if (!validation.success) {
       throw new ValidationError(
