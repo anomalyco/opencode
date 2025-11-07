@@ -107,10 +107,9 @@ function SessionTabs(props: {
       gap={2}
       backgroundColor={theme.backgroundPanel}
       paddingLeft={2}
-      paddingTop={1}
-      paddingBottom={1}
+      paddingRight={2}
       flexShrink={0}
-      height={3}
+      height={1}
     >
       <For each={props.sessions}>
         {(session) => {
@@ -127,12 +126,22 @@ function SessionTabs(props: {
               }}
               onMouseUp={(evt) => {
                 if (renderer.getSelection()?.getSelectedText()) return
-                const target = (evt as any).target
-                if (target?.textContent?.includes('×')) {
-                  props.onClose(session.id)
-                } else {
-                  props.onSelect(session.id)
+                const target = evt.target as any
+                const text = target?.textContent || ""
+                if (text.includes('×')) {
+                  const clickX = (evt as any).x
+                  const elLeft = target?.left || 0
+                  const elWidth = target?.width || text.length
+                  const xIndex = text.lastIndexOf('×')
+                  const relativeClick = clickX - elLeft
+                  const xPosition = (xIndex / text.length) * elWidth
+                  
+                  if (relativeClick >= xPosition) {
+                    props.onClose(session.id)
+                    return
+                  }
                 }
+                props.onSelect(session.id)
               }}
             >
               {isActive() ? "● " : "○ "}
@@ -1614,6 +1623,7 @@ ToolRegistry.register<typeof ReadTool>({
   name: "read",
   container: "inline",
   render(props) {
+    const { theme } = useTheme()
     const icon = createMemo(() => props.collapsed ? "▶" : "▼")
     return (
       <>
@@ -1621,6 +1631,11 @@ ToolRegistry.register<typeof ReadTool>({
           <ToolBadge>Read</ToolBadge> {normalizePath(props.input.filePath!)}{" "}
           {input(props.input, ["filePath"])}
         </ToolTitle>
+        <Show when={!props.collapsed && props.output}>
+          <box paddingLeft={3}>
+            <text fg={theme.textMuted}>{props.output}</text>
+          </box>
+        </Show>
       </>
     )
   },
