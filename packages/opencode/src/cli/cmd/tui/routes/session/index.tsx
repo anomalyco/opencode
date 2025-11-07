@@ -104,12 +104,13 @@ function SessionTabs(props: {
   return (
     <box
       flexDirection="row"
-      gap={0}
+      gap={2}
       backgroundColor={theme.backgroundPanel}
       paddingLeft={2}
       paddingTop={1}
       paddingBottom={1}
       flexShrink={0}
+      height={3}
     >
       <For each={props.sessions}>
         {(session) => {
@@ -117,43 +118,27 @@ function SessionTabs(props: {
           const [hover, setHover] = createSignal(false)
 
           return (
-            <box
-              flexDirection="row"
-              gap={1}
-              paddingLeft={2}
-              paddingRight={2}
-              paddingTop={0}
-              paddingBottom={0}
-              backgroundColor={isActive() ? theme.background : theme.backgroundPanel}
+            <text
+              fg={isActive() ? theme.text : theme.textMuted}
               renderBefore={function() {
-                const el = this as BoxRenderable
+                const el = this as any
                 el.on("mouseenter", () => setHover(true))
                 el.on("mouseleave", () => setHover(false))
               }}
-            >
-              <box
-                onMouseUp={(evt) => {
-                  if (renderer.getSelection()?.getSelectedText()) return
+              onMouseUp={(evt) => {
+                if (renderer.getSelection()?.getSelectedText()) return
+                const target = (evt as any).target
+                if (target?.textContent?.includes('×')) {
+                  props.onClose(session.id)
+                } else {
                   props.onSelect(session.id)
-                }}
-              >
-                <text
-                  fg={isActive() ? theme.text : theme.textMuted}
-                >
-                  {isActive() ? <b>{truncateTitle(session.title || "Session")}</b> : truncateTitle(session.title || "Session")}
-                </text>
-              </box>
-              <Show when={hover() || isActive()}>
-                <box
-                  onMouseUp={(evt) => {
-                    if (renderer.getSelection()?.getSelectedText()) return
-                    props.onClose(session.id)
-                  }}
-                >
-                  <text fg={theme.textMuted}> ×</text>
-                </box>
-              </Show>
-            </box>
+                }
+              }}
+            >
+              {isActive() ? "● " : "○ "}
+              {isActive() ? <b>{truncateTitle(session.title || "Session")}</b> : truncateTitle(session.title || "Session")}
+              {(hover() || isActive()) && " ×"}
+            </text>
           )
         }}
       </For>
@@ -890,6 +875,8 @@ export function Session() {
             onToggle={toggleLeftSidebar}
             onSelect={selectSession}
             onSwitch={handleSwitchSession}
+            openTabs={openTabs()}
+            onClose={handleCloseSession}
           />
         </Show>
 

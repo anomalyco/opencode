@@ -10,6 +10,8 @@ export function LeftSidebar(props: {
   onToggle: () => void
   onSelect: (sessionID: string) => void
   onSwitch: () => void
+  openTabs: string[]
+  onClose: (sessionID: string) => void
 }) {
   const sync = useSync()
   const { theme } = useTheme()
@@ -111,26 +113,41 @@ export function LeftSidebar(props: {
                   >
                     {isExpanded() ? '▼' : '▶'} {category} ({categorySessions().length})
                   </text>
-                  <Show when={isExpanded()}>
-                    <For each={categorySessions()}>
-                      {(session) => (
-                        <text
-                          fg={session.id === props.sessionID ? theme.accent : theme.text}
-                          attributes={session.id === props.sessionID ? TextAttributes.BOLD : undefined}
-                          wrapMode="none"
-                          height={1}
-                          onMouseUp={() => {
-                            if (renderer.getSelection()?.getSelectedText()) return
-                            if (session.id === props.sessionID) return
-                            props.onSelect(session.id)
-                          }}
-                        >
-                          {session.id === props.sessionID ? "  ▶ " : "    "}
-                          {Locale.truncate(Locale.stripMarkdown(session.title), 37)}
-                        </text>
-                      )}
-                    </For>
-                  </Show>
+                    <Show when={isExpanded()}>
+                      <For each={categorySessions()}>
+                        {(session) => {
+                          const [hover, setHover] = createSignal(false)
+                          const isOpen = () => props.openTabs.includes(session.id)
+                          
+                          return (
+                            <text
+                              fg={session.id === props.sessionID ? theme.accent : theme.text}
+                              attributes={session.id === props.sessionID ? TextAttributes.BOLD : undefined}
+                              wrapMode="none"
+                              height={1}
+                              renderBefore={function() {
+                                const el = this as any
+                                el.on("mouseenter", () => setHover(true))
+                                el.on("mouseleave", () => setHover(false))
+                              }}
+                              onMouseUp={(evt) => {
+                                if (renderer.getSelection()?.getSelectedText()) return
+                                const target = (evt as any).target
+                                if (target?.textContent?.includes('×')) {
+                                  props.onClose(session.id)
+                                } else if (session.id !== props.sessionID) {
+                                  props.onSelect(session.id)
+                                }
+                              }}
+                            >
+                              {session.id === props.sessionID ? "  ▶ " : "    "}
+                              {Locale.truncate(Locale.stripMarkdown(session.title), isOpen() && hover() ? 33 : 37)}
+                              {isOpen() && hover() && " ×"}
+                            </text>
+                          )
+                        }}
+                      </For>
+                    </Show>
                 </>
               )
             }}
