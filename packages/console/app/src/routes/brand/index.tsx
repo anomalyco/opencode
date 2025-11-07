@@ -1,6 +1,7 @@
 import "./index.css"
-import { Title, Meta } from "@solidjs/meta"
+import { Title, Meta, Link } from "@solidjs/meta"
 import { Header } from "~/component/header"
+import { config } from "~/config"
 import { Footer } from "~/component/footer"
 import { Legal } from "~/component/legal"
 import previewLogoLight from "../../asset/brand/preview-opencode-logo-light.png"
@@ -53,13 +54,14 @@ export default function Brand() {
   return (
     <main data-page="enterprise">
       <Title>OpenCode | Brand</Title>
+      <Link rel="canonical" href={`${config.baseUrl}/brand`} />
       <Meta name="description" content="OpenCode brand guidelines" />
       <div data-component="container">
         <Header />
 
         <div data-component="content">
           <section data-component="brand-content">
-            <h2>Brand guidelines</h2>
+            <h1>Brand guidelines</h1>
             <p>Resources and assets to help you work with the OpenCode brand.</p>
             <button
               data-component="download-button"

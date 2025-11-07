@@ -1,6 +1,7 @@
 import "./index.css"
-import { Title, Meta } from "@solidjs/meta"
+import { Title, Meta, Link } from "@solidjs/meta"
 import { createSignal, Show } from "solid-js"
+import { config } from "~/config"
 import { Header } from "~/component/header"
 import { Footer } from "~/component/footer"
 import { Legal } from "~/component/legal"
@@ -54,6 +55,7 @@ export default function Enterprise() {
   return (
     <main data-page="enterprise">
       <Title>OpenCode | Enterprise solutions for your organisation</Title>
+      <Link rel="canonical" href={`${config.baseUrl}/enterprise`} />
       <Meta name="description" content="Contact OpenCode for enterprise solutions" />
       <div data-component="container">
         <Header />
@@ -62,7 +64,7 @@ export default function Enterprise() {
           <section data-component="enterprise-content">
             <div data-component="enterprise-columns">
               <div data-component="enterprise-column-1">
-                <h2>Your code is yours</h2>
+                <h1>Your code is yours</h1>
                 <p>
                   OpenCode operates securely inside your organization with no data or context stored
                   and no licensing restrictions or ownership claims. Start a trial with your team,

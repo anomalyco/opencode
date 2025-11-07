@@ -47,6 +47,7 @@ export default function Home() {
         value="public, max-age=1, s-maxage=3600, stale-while-revalidate=86400"
       />
       <Title>OpenCode | The AI coding agent built for the terminal</Title>
+      <Link rel="canonical" href={config.baseUrl} />
       <Link rel="icon" type="image/svg+xml" href="/favicon.svg" />
       <Meta property="og:image" content="/social-share.png" />
       <Meta name="twitter:image" content="/social-share.png" />
