@@ -1979,9 +1979,9 @@ export type SessionMessagesData = {
      */
     id: string
   }
-  query: {
+  query?: {
     directory?: string
-    limit: number
+    limit?: number
   }
   url: "/session/{id}/message"
 }
