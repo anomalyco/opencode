@@ -43,6 +43,7 @@ export function DialogSessionList() {
           footer: Locale.time(x.time.updated),
         }
       })
+      .slice(0, 150)
   })
 
   createEffect(() => {
@@ -57,7 +58,6 @@ export function DialogSessionList() {
     <DialogSelect
       title="Sessions"
       options={options()}
-      limit={50}
       current={currentSessionID()}
       onMove={() => {
         setToDelete(undefined)

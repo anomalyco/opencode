@@ -23,7 +23,6 @@ export interface DialogSelectProps<T> {
     title: string
     onTrigger: (option: DialogSelectOption<T>) => void
   }[]
-  limit?: number
   current?: T
 }
 
@@ -58,7 +57,6 @@ export function DialogSelect<T>(props: DialogSelectProps<T>) {
     const result = pipe(
       props.options,
       filter((x) => x.disabled !== true),
-      take(props.limit ?? Infinity),
       (x) =>
         !needle ? x : fuzzysort.go(needle, x, { keys: ["title", "category"] }).map((x) => x.obj),
     )
