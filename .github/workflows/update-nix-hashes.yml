@@ -10,11 +10,15 @@ on:
       - 'bun.lock'
       - 'package.json'
       - 'packages/*/package.json'
+      - 'nix/optional-packages/**'
+      - 'nix/scripts/optional-metadata.ts'
   pull_request:
     paths:
       - 'bun.lock'
       - 'package.json'
       - 'packages/*/package.json'
+      - 'nix/optional-packages/**'
+      - 'nix/scripts/optional-metadata.ts'
 
 jobs:
   verify:

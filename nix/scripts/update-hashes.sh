@@ -143,37 +143,32 @@ for SYSTEM in $SYSTEMS; do
   JSON_OUTPUT=$(mktemp)
 
   echo "Building node_modules for ${SYSTEM} to discover correct outputHash..."
-  # Try to use nix-store --realise to force the build even with wrong hash
   echo "Attempting to realize derivation: ${DRV_PATH}"
   REALISE_OUT=$(nix-store --realise "$DRV_PATH" --keep-failed 2>&1 | tee "$BUILD_LOG" || true)
 
-  # Check if build succeeded (shouldn't with dummy hash)
-  if echo "$REALISE_OUT" | grep -q "^/nix/store/" && [ -d "$(echo "$REALISE_OUT" | grep "^/nix/store/" | head -n1)" ]; then
-    BUILD_PATH=$(echo "$REALISE_OUT" | grep "^/nix/store/" | head -n1)
-    echo "Build succeeded unexpectedly, hashing output: $BUILD_PATH"
+  BUILD_PATH=$(echo "$REALISE_OUT" | grep "^/nix/store/" | head -n1 || true)
+  if [ -n "$BUILD_PATH" ] && [ -d "$BUILD_PATH" ]; then
+    echo "Realized node_modules output: $BUILD_PATH"
     CORRECT_HASH=$(nix hash path --sri "$BUILD_PATH" 2>/dev/null || true)
-  else
-    # Extract hash from error message
+  fi
+
+  if [ -z "$CORRECT_HASH" ]; then
     CORRECT_HASH="$(grep -E 'got:\s+sha256-[A-Za-z0-9+/=]+' "$BUILD_LOG" | awk '{print $2}' | head -n1 || true)"
 
     if [ -z "$CORRECT_HASH" ]; then
-      # Try alternate format: "hash mismatch ... got: sha256:..."
       CORRECT_HASH="$(grep -A2 'hash mismatch' "$BUILD_LOG" | grep 'got:' | awk '{print $2}' | sed 's/sha256:/sha256-/' || true)"
     fi
 
     if [ -z "$CORRECT_HASH" ]; then
-      # Try to find and hash the kept failed build
       echo "Searching for kept failed build directory..."
       KEPT_DIR=$(grep -oE "build directory.*'[^']+'" "$BUILD_LOG" | grep -oE "'/[^']+'" | tr -d "'" | head -n1)
 
       if [ -z "$KEPT_DIR" ]; then
-        # Alternative pattern for kept build
         KEPT_DIR=$(grep -oE '/nix/var/nix/builds/[^ ]+' "$BUILD_LOG" | head -n1)
       fi
 
       if [ -n "$KEPT_DIR" ] && [ -d "$KEPT_DIR" ]; then
         echo "Found kept build directory: $KEPT_DIR"
-        # The output should be in a subdirectory
         if [ -d "$KEPT_DIR/build" ]; then
           HASH_PATH="$KEPT_DIR/build"
         else
@@ -212,8 +207,8 @@ for SYSTEM in $SYSTEMS; do
 done
 
 write_metadata() {
-  local tmp ts ref commit run_url
-  ts="$(date -u +%Y-%m-%dT%H:%M:%SZ)"
+  local tmp stamp ref trigger commit run_url
+  stamp="$(date -u +%Y-%m-%dT%H:%M:%SZ)"
   ref="${HASH_SOURCE_REF:-${GITHUB_REF_NAME:-}}"
   if [ -z "$ref" ] && command -v git >/dev/null 2>&1; then
     ref="$(git rev-parse --abbrev-ref HEAD 2>/dev/null || true)"
@@ -224,12 +219,19 @@ write_metadata() {
   if [ -z "$ref" ]; then
     ref="unknown"
   fi
-  commit="${HASH_SOURCE_COMMIT:-${GITHUB_SHA:-}}"
+  trigger="${HASH_TRIGGER_COMMIT:-${GITHUB_SHA:-}}"
+  if [ -z "$trigger" ] && command -v git >/dev/null 2>&1; then
+    trigger="$(git rev-parse HEAD 2>/dev/null || true)"
+  fi
+  if [ -z "$trigger" ]; then
+    trigger="unknown"
+  fi
+  commit="${HASH_UPDATE_COMMIT:-}"
   if [ -z "$commit" ] && command -v git >/dev/null 2>&1; then
     commit="$(git rev-parse HEAD 2>/dev/null || true)"
   fi
   if [ -z "$commit" ]; then
-    commit="unknown"
+    commit="$trigger"
   fi
   run_url="${HASH_SOURCE_RUN:-}"
   if [ -z "$run_url" ] && [ -n "${GITHUB_SERVER_URL:-}" ] && [ -n "${GITHUB_REPOSITORY:-}" ] && [ -n "${GITHUB_RUN_ID:-}" ]; then
@@ -238,13 +240,15 @@ write_metadata() {
   tmp=$(mktemp)
   jq \
     --arg ref "$ref" \
-    --arg sha "$commit" \
-    --arg ts "$ts" \
+    --arg trigger "$trigger" \
+    --arg commit "$commit" \
     '
-      .metadata = (.metadata // {}) |
-      .metadata.updatedAt = $ts |
-      .metadata.sourceRef = $ref |
-      .metadata.sourceCommit = $sha
+      .metadata = {
+        stamp: $stamp,
+        ref: $ref,
+        trigger: $trigger,
+        commit: $commit
+      }
     ' \
     "$HASH_FILE" >"$tmp"
   mv "$tmp" "$HASH_FILE"

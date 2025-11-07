@@ -68,13 +68,21 @@ jobs:
             echo "nix/hashes.json missing in release commit"
             exit 1
           fi
-          source_commit=$(jq -r '.metadata.sourceCommit // empty' nix/hashes.json)
-          if [ -z "$source_commit" ]; then
-            echo "metadata.sourceCommit missing; rerun nix workflow"
+          trigger_commit=$(jq -r '.metadata.trigger // empty' nix/hashes.json)
+          if [ -z "$trigger_commit" ]; then
+            echo "metadata.trigger missing; rerun nix workflow"
             exit 1
           fi
-          if ! git cat-file -e "${source_commit}^{commit}" >/dev/null 2>&1; then
-            echo "metadata.sourceCommit ${source_commit} not found in repo history"
+          if ! git cat-file -e "${trigger_commit}^{commit}" >/dev/null 2>&1; then
+            echo "metadata trigger ${trigger_commit} not found in repo history"
+            exit 1
+          fi
+          hash_commit=$(jq -r '.metadata.commit // empty' nix/hashes.json)
+          if [ -z "$hash_commit" ]; then
+            hash_commit="$trigger_commit"
+          fi
+          if ! git cat-file -e "${hash_commit}^{commit}" >/dev/null 2>&1; then
+            echo "metadata commit ${hash_commit} not found in repo history"
             exit 1
           fi
           mapfile -t package_files < <(git ls-files 'packages/*/package.json')
@@ -91,7 +99,7 @@ jobs:
           release_commit=$(git rev-parse HEAD)
           diff_out=""
           if [ "${#paths[@]}" -gt 0 ]; then
-            diff_out=$(git diff --name-only "${source_commit}..${release_commit}" -- "${paths[@]}" || true)
+            diff_out=$(git diff --name-only "${trigger_commit}..${release_commit}" -- "${paths[@]}" || true)
           fi
           if [ -n "${diff_out:-}" ]; then
             echo "Dependency files changed since last hash update:"
@@ -101,14 +109,16 @@ jobs:
               echo "diff<<EOF"
               printf '%s\n' "$diff_out"
               echo "EOF"
-              echo "source_commit=${source_commit}"
+              echo "trigger_commit=${trigger_commit}"
+              echo "hash_commit=${hash_commit}"
               echo "release_commit=${release_commit}"
             } >> "$GITHUB_OUTPUT"
             exit 1
           fi
           {
             echo "outdated=false"
-            echo "source_commit=${source_commit}"
+            echo "trigger_commit=${trigger_commit}"
+            echo "hash_commit=${hash_commit}"
             echo "release_commit=${release_commit}"
           } >> "$GITHUB_OUTPUT"
 
@@ -122,10 +132,11 @@ jobs:
             echo "- branch: ${{ steps.pending.outputs.branch }}"
             echo "- pending-hash-run: ${{ steps.pending.outputs.pending }}"
             echo "- dependency-changes: ${{ steps.coverage.outputs.outdated }}"
+            echo "- hash-trigger: ${{ steps.coverage.outputs.trigger_commit }}"
+            echo "- hash-commit: ${{ steps.coverage.outputs.hash_commit }}"
           } >> "$GITHUB_STEP_SUMMARY"
           if [ "${{ steps.coverage.outputs.outdated }}" = "true" ]; then
             {
-              echo "- last-hash-commit: ${{ steps.coverage.outputs.source_commit }}"
               echo "- release-commit: ${{ steps.coverage.outputs.release_commit }}"
               echo ""
               echo "#### Files requiring hash refresh"
