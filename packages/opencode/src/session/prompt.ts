@@ -362,7 +362,9 @@ export namespace SessionPrompt {
       })
       if (result.shouldRetry) {
         for (let retry = 1; retry < maxRetries; retry++) {
-          const lastRetryPart = result.parts.findLast((p): p is MessageV2.RetryPart => p.type === "retry")
+          const lastRetryPart = result.parts.findLast(
+            (p): p is MessageV2.RetryPart => p.type === "retry",
+          )
 
           if (lastRetryPart) {
             const delayMs = SessionRetry.getRetryDelayInMs(lastRetryPart.error, retry)
