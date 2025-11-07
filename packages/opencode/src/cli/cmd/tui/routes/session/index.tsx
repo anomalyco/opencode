@@ -60,6 +60,7 @@ import type { PromptInfo } from "../../component/prompt/history"
 import { iife } from "@/util/iife"
 import { DialogConfirm } from "@tui/ui/dialog-confirm"
 import { DialogTimeline } from "./dialog-timeline"
+import { DialogSessionRename } from "../../component/dialog-session-rename"
 import { Sidebar } from "./sidebar"
 import { LANGUAGE_EXTENSIONS } from "@/lsp/language"
 import parsers from "../../../../../../parsers-config.ts"
@@ -191,6 +192,15 @@ export function Session() {
 
   const command = useCommandDialog()
   command.register(() => [
+    {
+      title: "Rename session",
+      value: "session.rename",
+      keybind: "session_rename",
+      category: "Session",
+      onSelect: (dialog) => {
+        dialog.replace(() => <DialogSessionRename session={route.sessionID} />)
+      },
+    },
     {
       title: "Jump to message",
       value: "session.timeline",
