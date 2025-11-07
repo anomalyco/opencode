@@ -358,12 +358,12 @@ export default function Page() {
                 return (
                   <div
                     classList={{
-                      "w-full grid flex-1 _gap-6 min-h-0": true,
+                      "w-full grid flex-1 min-h-0": true,
                       "grid-cols-2": local.layout.review.state() === "open",
                       "max-w-2xl mx-auto": local.layout.review.state() !== "open",
                     }}
                   >
-                    <div class="relative px-6 py-2 w-full flex flex-col gap-6 flex-1 min-h-0">
+                    <div class="relative px-6 py-2 w-full flex flex-col gap-6 flex-1 min-h-0 max-w-2xl mx-auto">
                       <div class="h-8 flex shrink-0 self-stretch items-center justify-end">
                         <Show when={local.layout.review.state() === "closed" && session.diffs().length}>
                           <Button icon="layout-right" onClick={local.layout.review.open}>
@@ -373,7 +373,7 @@ export default function Page() {
                       </div>
                       <div
                         classList={{
-                          "flex-1 min-h-0": true,
+                          "flex-1 min-h-0 pb-20": true,
                           "flex items-start justify-start": local.layout.review.state() === "open",
                         }}
                       >
@@ -382,7 +382,7 @@ export default function Page() {
                             role="list"
                             classList={{
                               "mr-8 shrink-0 flex flex-col items-start": true,
-                              "absolute right-full w-60 @7xl:gap-2": local.layout.review.state() !== "open",
+                              "absolute right-full w-60 @7xl:gap-2": true, // local.layout.review.state() !== "open",
                               "": local.layout.review.state() === "open",
                             }}
                           >
@@ -498,7 +498,7 @@ export default function Page() {
                                 <Show when={isActive()}>
                                   <div
                                     data-message={message.id}
-                                    class="flex flex-col items-start self-stretch gap-8 pb-50"
+                                    class="flex flex-col items-start self-stretch gap-8 pb-20"
                                   >
                                     {/* Title */}
                                     <div class="flex flex-col items-start gap-2 self-stretch sticky top-0 bg-background-stronger z-10 pb-1">
@@ -644,6 +644,14 @@ export default function Page() {
                               )
                             }}
                           </For>
+                        </div>
+
+                        <div class="absolute inset-x-0 px-6 max-w-2xl flex flex-col justify-center items-center z-50 mx-auto bottom-8">
+                          <PromptInput
+                            ref={(el) => {
+                              inputRef = el
+                            }}
+                          />
                         </div>
                       </div>
                     </div>
@@ -826,13 +834,6 @@ export default function Page() {
           </Show>
         </DragOverlay>
       </DragDropProvider>
-      <div class="absolute inset-x-0 px-6 max-w-2xl flex flex-col justify-center items-center z-50 mx-auto bottom-8">
-        <PromptInput
-          ref={(el) => {
-            inputRef = el
-          }}
-        />
-      </div>
       <div class="hidden shrink-0 w-56 p-2 h-full overflow-y-auto">
         {/* <FileTree path="" onFileClick={ handleTabClick} /> */}
       </div>
