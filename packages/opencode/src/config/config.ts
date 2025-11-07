@@ -465,6 +465,7 @@ export namespace Config {
       agent_cycle_reverse: z.string().optional().default("shift+tab").describe("Previous agent"),
       input_clear: z.string().optional().default("ctrl+c").describe("Clear input field"),
       input_forward_delete: z.string().optional().default("ctrl+d").describe("Forward delete"),
+      input_delete_line_backward: z.string().optional().default("ctrl+u,meta+backspace").describe("Delete from cursor to beginning of line"),
       input_paste: z.string().optional().default("ctrl+v").describe("Paste from clipboard"),
       input_submit: z.string().optional().default("return").describe("Submit input"),
       input_newline: z

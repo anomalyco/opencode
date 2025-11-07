@@ -565,6 +565,21 @@ export function Prompt(props: PromptProps) {
                   e.preventDefault()
                   return
                 }
+                if (keybind.match("input_delete_line_backward", e) && store.prompt.input !== "") {
+                  const text = input.plainText
+                  const cursorOffset = input.cursorOffset
+
+                  let lineStart = cursorOffset
+                  while (lineStart > 0 && text[lineStart - 1] !== '\n') {
+                    lineStart--
+                  }
+
+                  const newText = text.slice(0, lineStart) + text.slice(cursorOffset)
+                  input.setText(newText)
+                  input.cursorOffset = lineStart
+                  e.preventDefault()
+                  return
+                }
                 if (keybind.match("app_exit", e)) {
                   await exit()
                   return

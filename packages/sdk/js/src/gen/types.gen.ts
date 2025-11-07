@@ -147,6 +147,10 @@ export type KeybindsConfig = {
    */
   input_forward_delete?: string
   /**
+   * Delete from cursor to beginning of line
+   */
+  input_delete_line_backward?: string
+  /**
    * Paste from clipboard
    */
   input_paste?: string
