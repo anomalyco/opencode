@@ -104,12 +104,19 @@ function SessionTabs(props: {
   return (
     <box
       flexDirection="row"
-      gap={2}
+      gap={0}
       backgroundColor={theme.backgroundPanel}
       paddingLeft={2}
-      paddingRight={2}
+      paddingTop={1}
+      paddingBottom={1}
       flexShrink={0}
-      height={1}
+      style={{ zIndex: 1000 }}
+      renderBefore={function() {
+        const el = this as any
+        el.enableMouse?.()
+        el.style = el.style || {}
+        el.style.zIndex = 1000
+      }}
     >
       <For each={props.sessions}>
         {(session) => {
@@ -117,37 +124,43 @@ function SessionTabs(props: {
           const [hover, setHover] = createSignal(false)
 
           return (
-            <text
-              fg={isActive() ? theme.text : theme.textMuted}
+            <box
+              flexDirection="row"
+              gap={1}
+              paddingLeft={2}
+              paddingRight={2}
+              paddingTop={0}
+              paddingBottom={0}
+              backgroundColor={isActive() ? theme.background : theme.backgroundPanel}
               renderBefore={function() {
-                const el = this as any
+                const el = this as BoxRenderable
                 el.on("mouseenter", () => setHover(true))
                 el.on("mouseleave", () => setHover(false))
               }}
-              onMouseUp={(evt) => {
-                if (renderer.getSelection()?.getSelectedText()) return
-                const target = evt.target as any
-                const text = target?.textContent || ""
-                if (text.includes('×')) {
-                  const clickX = (evt as any).x
-                  const elLeft = target?.left || 0
-                  const elWidth = target?.width || text.length
-                  const xIndex = text.lastIndexOf('×')
-                  const relativeClick = clickX - elLeft
-                  const xPosition = (xIndex / text.length) * elWidth
-                  
-                  if (relativeClick >= xPosition) {
-                    props.onClose(session.id)
-                    return
-                  }
-                }
-                props.onSelect(session.id)
-              }}
             >
-              {isActive() ? "● " : "○ "}
-              {isActive() ? <b>{truncateTitle(session.title || "Session")}</b> : truncateTitle(session.title || "Session")}
-              {(hover() || isActive()) && " ×"}
-            </text>
+              <box
+                onMouseUp={(evt) => {
+                  if (renderer.getSelection()?.getSelectedText()) return
+                  props.onSelect(session.id)
+                }}
+              >
+                <text
+                  fg={isActive() ? theme.text : theme.textMuted}
+                >
+                  {isActive() ? <b>{truncateTitle(session.title || "Session")}</b> : truncateTitle(session.title || "Session")}
+                </text>
+              </box>
+              <Show when={hover() || isActive()}>
+                <box
+                  onMouseUp={(evt) => {
+                    if (renderer.getSelection()?.getSelectedText()) return
+                    props.onClose(session.id)
+                  }}
+                >
+                  <text fg={theme.textMuted}> ×</text>
+                </box>
+              </Show>
+            </box>
           )
         }}
       </For>
@@ -936,19 +949,20 @@ export function Session() {
                 onClose={handleCloseSession}
               />
             </Show>
-            <scrollbox
-              ref={(r) => (scroll = r)}
-              scrollbarOptions={{
-                paddingLeft: 2,
-                trackOptions: {
-                  backgroundColor: theme.backgroundElement,
-                  foregroundColor: theme.border,
-                },
-              }}
-              stickyScroll={true}
-              stickyStart="bottom"
-              flexGrow={1}
-            >
+            <box flexGrow={1} flexShrink={1}>
+              <scrollbox
+                ref={(r) => (scroll = r)}
+                scrollbarOptions={{
+                  paddingLeft: 2,
+                  trackOptions: {
+                    backgroundColor: theme.backgroundElement,
+                    foregroundColor: theme.border,
+                  },
+                }}
+                stickyScroll={true}
+                stickyStart="bottom"
+                height="100%"
+              >
               <For each={messages()}>
                 {(message, index) => (
                   <Switch>
@@ -1053,6 +1067,7 @@ export function Session() {
                 )}
               </For>
             </scrollbox>
+            </box>
             <box flexShrink={0}>
               <Prompt
                 ref={(r) => (prompt = r)}
