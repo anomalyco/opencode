@@ -143,6 +143,7 @@ export const AuthLoginCommand = cmd({
               label: "Other",
             },
           ],
+          output: process.stderr,
         })
 
         if (prompts.isCancel(provider)) throw new UI.CancelledError()
@@ -159,6 +160,7 @@ export const AuthLoginCommand = cmd({
                   value: index.toString(),
                 })),
               ],
+              output: process.stderr,
             })
             if (prompts.isCancel(method)) throw new UI.CancelledError()
             index = parseInt(method)
@@ -177,6 +179,7 @@ export const AuthLoginCommand = cmd({
                 const value = await prompts.select({
                   message: prompt.message,
                   options: prompt.options,
+                  output: process.stderr,
                 })
                 if (prompts.isCancel(value)) throw new UI.CancelledError()
                 inputs[prompt.key] = value
@@ -185,6 +188,7 @@ export const AuthLoginCommand = cmd({
                   message: prompt.message,
                   placeholder: prompt.placeholder,
                   validate: prompt.validate ? (v) => prompt.validate!(v ?? "") : undefined,
+                  output: process.stderr,
                 })
                 if (prompts.isCancel(value)) throw new UI.CancelledError()
                 inputs[prompt.key] = value
@@ -203,7 +207,9 @@ export const AuthLoginCommand = cmd({
               if (authorize.instructions) {
                 prompts.log.info(authorize.instructions)
               }
-              const spinner = prompts.spinner()
+              const spinner = prompts.spinner({
+                output: process.stderr,
+              })
               spinner.start("Waiting for authorization...")
               const result = await authorize.callback()
               if (result.type === "failed") {
@@ -235,6 +241,7 @@ export const AuthLoginCommand = cmd({
               const code = await prompts.text({
                 message: "Paste the authorization code here: ",
                 validate: (x) => (x && x.length > 0 ? undefined : "Required"),
+                output: process.stderr,
               })
               if (prompts.isCancel(code)) throw new UI.CancelledError()
               const result = await authorize.callback(code)
@@ -292,6 +299,7 @@ export const AuthLoginCommand = cmd({
             message: "Enter provider id",
             validate: (x) =>
               x && x.match(/^[0-9a-z-]+$/) ? undefined : "a-z, 0-9 and hyphens only",
+            output: process.stderr,
           })
           if (prompts.isCancel(provider)) throw new UI.CancelledError()
           provider = provider.replace(/^@ai-sdk\//, "")
@@ -320,6 +328,7 @@ export const AuthLoginCommand = cmd({
         const key = await prompts.password({
           message: "Enter your API key",
           validate: (x) => (x && x.length > 0 ? undefined : "Required"),
+          output: process.stderr,
         })
         if (prompts.isCancel(key)) throw new UI.CancelledError()
         await Auth.set(provider, {
@@ -351,6 +360,7 @@ export const AuthLogoutCommand = cmd({
         label: (database[key]?.name || key) + UI.Style.TEXT_DIM + " (" + value.type + ")",
         value: key,
       })),
+      output: process.stderr,
     })
     if (prompts.isCancel(providerID)) throw new UI.CancelledError()
     await Auth.remove(providerID)
