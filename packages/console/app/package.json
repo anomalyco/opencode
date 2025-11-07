@@ -5,7 +5,7 @@
     "typecheck": "tsgo --noEmit",
     "dev": "vinxi dev --host 0.0.0.0",
     "dev:remote": "VITE_AUTH_URL=https://auth.dev.opencode.ai bun sst shell --stage=dev bun dev",
-    "build": "vinxi build && ../../opencode/script/schema.ts ./.output/public/config.json",
+    "build": "./script/generate-sitemap.ts && vinxi build && ../../opencode/script/schema.ts ./.output/public/config.json",
     "start": "vinxi start",
     "version": "1.0.44"
   },
