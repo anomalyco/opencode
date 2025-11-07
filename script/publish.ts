@@ -87,7 +87,7 @@ for (const file of pkgjsons) {
 const extensionToml = new URL("../packages/extensions/zed/extension.toml", import.meta.url).pathname
 let toml = await Bun.file(extensionToml).text()
 toml = toml.replace(/^version = "[^"]+"/m, `version = "${Script.version}"`)
-toml = toml.replaceAll(/releases\/v[^/]+\//g, `releases/v${Script.version}/`)
+toml = toml.replaceAll(/releases\/download\/v[^/]+\//g, `releases/download/v${Script.version}/`)
 console.log("updated:", extensionToml)
 await Bun.file(extensionToml).write(toml)
 
