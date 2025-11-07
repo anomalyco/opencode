@@ -208,6 +208,18 @@ export namespace Provider {
         },
       }
     },
+    google: async () => {
+      const apiKey =
+        process.env["GOOGLE_GENERATIVE_AI_API_KEY"] ??
+        process.env["GOOGLE_AI_API_KEY"] ??
+        process.env["GEMINI_API_KEY"] ??
+        process.env["GOOGLE_API_KEY"]
+
+      return {
+        autoload: Boolean(apiKey),
+        options: apiKey ? { apiKey } : {},
+      }
+    },
   }
 
   const state = Instance.state(async () => {
