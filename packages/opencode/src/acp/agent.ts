@@ -705,7 +705,7 @@ export namespace ACP {
         return undefined
       })
 
-    return model ?? Provider.defaultModel()
+    return model ?? { providerID: "opencode", modelID: "big-pickle" }
   }
 
   function parseUri(
