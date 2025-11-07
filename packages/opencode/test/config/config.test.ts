@@ -411,30 +411,30 @@ test("resolves scoped npm plugins in config", async () => {
 test("updates global config and writes to global directory", async () => {
   await using tmp = await tmpdir()
   const globalConfigPath = path.join(tmp.path, ".config", "opencode")
-  
+
   // Mock Global.Path.config to use our temp directory
   const originalGlobalPath = await import("../../src/global")
-  
+
   await Instance.provide({
     directory: tmp.path,
     fn: async () => {
       // Create a minimal test by directly creating the directory
       await fs.mkdir(globalConfigPath, { recursive: true })
-      
+
       const newConfig = { model: "global/model" }
       // We need to temporarily override the Global.Path.config
       const configModule = await import("../../src/config/config")
       const globalModule = await import("../../src/global")
-      
+
       // Backup original
       const originalConfig = globalModule.Global.Path.config
-      
+
       try {
         // @ts-ignore - Override for testing
         globalModule.Global.Path.config = globalConfigPath
-        
+
         await configModule.Config.update(newConfig as any, "global")
-        
+
         const writtenConfig = JSON.parse(
           await Bun.file(path.join(globalConfigPath, "opencode.jsonc")).text(),
         )
@@ -474,7 +474,7 @@ test("merges config updates with existing config", async () => {
       )
     },
   })
-  
+
   await Instance.provide({
     directory: tmp.path,
     fn: async () => {
@@ -495,7 +495,7 @@ test("validates config after merge", async () => {
     fn: async () => {
       // This should fail validation
       const invalidConfig = { invalid_field: "should_not_work" }
-      
+
       try {
         await Config.update(invalidConfig as any)
         expect(false).toBe(true) // Should not reach here
@@ -517,17 +517,16 @@ test("creates backup and rolls back on write failure", async () => {
       )
     },
   })
-  
+
   await Instance.provide({
     directory: tmp.path,
     fn: async () => {
-      
       // Simulate a write failure by making the directory read-only
       // This is platform-dependent and might not work on all systems
       // For now, we'll just verify the backup mechanism exists
       const newConfig = { model: "new/model" }
       await Config.update(newConfig as any)
-      
+
       // Verify backup file was cleaned up on success
       const backupExists = await Bun.file(path.join(tmp.path, "opencode.jsonc.backup")).exists()
       expect(backupExists).toBe(false)

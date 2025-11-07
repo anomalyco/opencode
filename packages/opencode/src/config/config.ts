@@ -941,7 +941,7 @@ export namespace Config {
         const originalText = originalExists ? await Bun.file(filepath).text() : ""
         const updatedText = JSON.stringify(merged, null, 2)
         await Bun.write(filepath, updatedText)
-       }
+      }
 
       // Clean up backup on success
       if (originalExists) {
@@ -955,7 +955,7 @@ export namespace Config {
     } catch (err) {
       // Rollback on failure
       if (originalExists) {
-        const backupExists = await Bun.file(backupPath).exists();
+        const backupExists = await Bun.file(backupPath).exists()
         if (backupExists) {
           await Bun.write(filepath, await Bun.file(backupPath).text()).catch(() => {})
           await fs.unlink(backupPath).catch(() => {})

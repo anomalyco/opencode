@@ -7,16 +7,19 @@ The PATCH `/config` API endpoint has been completely revamped to support both gl
 ## Key Changes
 
 ### 1. Scope Support
+
 - **New Parameter**: `?scope=global|project` (defaults to `project`)
 - **Global Config**: Updates `~/.config/opencode/opencode.jsonc`
 - **Project Config**: Updates `<project>/opencode.jsonc`
 
 ### 2. File Format Migration
+
 - **From**: `config.json`
 - **To**: `opencode.jsonc` (JSON with Comments support)
 - **Backward Compatible**: Existing functionality preserved
 
 ### 3. Enhanced Safety Features
+
 - **Permission Validation**: Checks write access before attempting updates
 - **Config Validation**: Validates merged config against schema
 - **Backup & Rollback**: Automatic backup creation and restore on failure
@@ -25,6 +28,7 @@ The PATCH `/config` API endpoint has been completely revamped to support both gl
 ## API Usage
 
 ### Update Project Config (Default)
+
 ```bash
 PATCH /config
 Content-Type: application/json
@@ -36,6 +40,7 @@ Content-Type: application/json
 ```
 
 ### Update Global Config
+
 ```bash
 PATCH /config?scope=global
 Content-Type: application/json
@@ -47,6 +52,7 @@ Content-Type: application/json
 ```
 
 ### Explicit Project Scope
+
 ```bash
 PATCH /config?scope=project
 Content-Type: application/json
@@ -59,10 +65,11 @@ Content-Type: application/json
 ## Response Format
 
 ### Success (200)
+
 ```json
 {
   "model": "anthropic/claude-3-sonnet",
-  "username": "myuser",
+  "username": "myuser"
   // ... other merged config properties
 }
 ```
@@ -70,6 +77,7 @@ Content-Type: application/json
 ### Error Responses
 
 #### Permission Error (400)
+
 ```json
 {
   "name": "ConfigUpdateError",
@@ -79,15 +87,17 @@ Content-Type: application/json
 ```
 
 #### Validation Error (400)
+
 ```json
 {
-  "name": "ConfigValidationError", 
+  "name": "ConfigValidationError",
   "message": "Invalid config after merge: Invalid field 'invalid_field'",
   "path": "/path/to/config.jsonc"
 }
 ```
 
 #### Write Error (400)
+
 ```json
 {
   "name": "ConfigUpdateError",
@@ -101,18 +111,18 @@ Content-Type: application/json
 ### Core Function Changes
 
 #### Config.update() Signature
+
 ```typescript
-export async function update(
-  config: Info, 
-  scope: "global" | "project" = "project"
-): Promise<void>
+export async function update(config: Info, scope: "global" | "project" = "project"): Promise<void>
 ```
 
 #### File Path Resolution
+
 ```typescript
-const filepath = scope === "global"
-  ? path.join(Global.Path.config, "opencode.jsonc")
-  : path.join(Instance.directory, "opencode.jsonc")
+const filepath =
+  scope === "global"
+    ? path.join(Global.Path.config, "opencode.jsonc")
+    : path.join(Instance.directory, "opencode.jsonc")
 ```
 
 ### Safety Mechanisms
@@ -133,26 +143,28 @@ export const UpdateError = NamedError.create(
   z.object({
     message: z.string(),
     path: z.string().optional(),
-  })
+  }),
 )
 
 export const ValidationError = NamedError.create(
-  "ConfigValidationError", 
+  "ConfigValidationError",
   z.object({
     message: z.string(),
     path: z.string(),
-  })
+  }),
 )
 ```
 
 ## Testing
 
 ### Test Coverage
+
 - ✅ 21 tests passing
 - ✅ 6 new tests added for new functionality
 - ✅ All existing tests updated and passing
 
 ### Test Categories
+
 1. **Basic Update Tests**: Project and global config updates
 2. **Merge Tests**: Config merging with existing settings
 3. **Validation Tests**: Invalid config rejection
@@ -162,15 +174,18 @@ export const ValidationError = NamedError.create(
 ## Migration Guide
 
 ### For API Users
+
 - **No Breaking Changes**: Existing calls continue to work (default to project scope)
 - **Optional Enhancement**: Add `?scope=global` for global config updates
 
 ### For SDK Users
+
 - **New Parameter**: `update(config, scope?)` where scope is optional
 - **Default Behavior**: Unchanged (project scope)
 - **New Capability**: Can now update global config
 
 ### For Client Applications
+
 - **TUI/Desktop**: Can add scope selection UI
 - **CLI**: Can add `--global` flag for global updates
 - **Web**: Can add scope dropdown in config interface
@@ -178,11 +193,13 @@ export const ValidationError = NamedError.create(
 ## File Locations
 
 ### Global Config
+
 - **Path**: `~/.config/opencode/opencode.jsonc`
 - **Created**: Automatically if doesn't exist
 - **Permissions**: Requires write access to `~/.config/opencode/`
 
 ### Project Config
+
 - **Path**: `<project-root>/opencode.jsonc` (or `opencode.json`)
 - **Search Order**: `opencode.jsonc` → `opencode.json`
 - **Fallback**: Creates `opencode.jsonc` if neither exists
@@ -211,6 +228,7 @@ export const ValidationError = NamedError.create(
 ## Future Enhancements
 
 ### Potential Improvements
+
 1. **JSONC Comment Preservation**: Currently writes formatted JSON, could preserve comments
 2. **Config Locking**: File locking for concurrent access safety
 3. **Config History**: Version history for config changes
@@ -218,6 +236,7 @@ export const ValidationError = NamedError.create(
 5. **Bulk Updates**: Update multiple config sections atomically
 
 ### Integration Points
+
 1. **SDK Updates**: Update all SDKs to support scope parameter
 2. **Client Updates**: Add scope selection to TUI/desktop clients
 3. **Documentation**: Update API docs and user guides
@@ -228,24 +247,28 @@ export const ValidationError = NamedError.create(
 ### Common Issues
 
 #### Permission Denied
+
 ```bash
 Error: No write permission for global config directory
 Solution: Check permissions on ~/.config/opencode/
 ```
 
 #### Invalid Config
+
 ```bash
 Error: Invalid config after merge
 Solution: Validate config against schema before sending
 ```
 
 #### Disk Space
+
 ```bash
 Error: Failed to write config: ENOSPC
 Solution: Free up disk space and retry
 ```
 
 ### Debug Tips
+
 1. **Check Scope**: Verify you're using correct scope parameter
 2. **File Permissions**: Ensure write access to target directory
 3. **Config Validation**: Test config against schema locally
@@ -254,6 +277,7 @@ Solution: Free up disk space and retry
 ## Support
 
 For issues or questions about the config API updates:
+
 1. Check existing tests for usage examples
 2. Review error messages for specific guidance
 3. Consult the implementation in `packages/opencode/src/config/config.ts`
