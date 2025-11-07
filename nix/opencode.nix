@@ -37,6 +37,8 @@ stdenvNoCC.mkDerivation (finalAttrs: {
   '';
 
   env.MODELS_DEV_API_JSON = args.modelsDev;
+  env.OPENCODE_VERSION = args.version;
+  env.OPENCODE_CHANNEL = "stable";
 
   buildPhase = ''
     runHook preBuild
