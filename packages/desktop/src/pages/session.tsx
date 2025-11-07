@@ -736,7 +736,7 @@ export default function Page() {
                   "relative px-6 py-2 w-full flex flex-col gap-6 flex-1 min-h-0": true,
                 }}
               >
-                <div class="h-8 w-full flex items-center justify-between shrink-0 self-stretch sticky top-0 bg-background-strong z-100">
+                <div class="h-8 w-full flex items-center justify-between shrink-0 self-stretch sticky top-0 bg-background-stronger z-100">
                   <div class="flex items-center gap-x-3"></div>
                 </div>
                 <div class="text-14-medium text-text-strong">All changes</div>
@@ -766,6 +766,7 @@ export default function Page() {
                           </Accordion.Header>
                           <Accordion.Content>
                             <Diff
+                              diffStyle="split"
                               before={{
                                 name: diff.file!,
                                 contents: diff.before!,
