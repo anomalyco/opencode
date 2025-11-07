@@ -202,7 +202,10 @@ export const PromptInput: Component<PromptInputProps> = (props) => {
       inserted,
       cursorPositionAfter,
     } = prompt.reduce(
-      (acc: { parts: ContentPart[]; runningIndex: number; inserted: boolean; cursorPositionAfter: number }, item: ContentPart) => {
+      (
+        acc: { parts: ContentPart[]; runningIndex: number; inserted: boolean; cursorPositionAfter: number },
+        item: ContentPart,
+      ) => {
         if (acc.inserted) {
           acc.parts.push({ ...item, start: acc.runningIndex, end: acc.runningIndex + item.content.length })
           acc.runningIndex += item.content.length
