@@ -1173,9 +1173,8 @@ function TextPart(props: { part: TextPart; message: AssistantMessage }) {
       const hasTag = text.includes("<steering-question")
       if (hasTag || widgetCount > 0) {
         Bun.write(
-          "/tmp/opencode-widget-debug.log",
+          Bun.file("/tmp/opencode-widget-debug.log"),
           `[${new Date().toISOString()}] TextPart segments: ${result.length}, widgets: ${widgetCount}, has tag: ${hasTag}, text length: ${text.length}\n`,
-          { flags: "a" },
         )
       }
       setSegments(result)
@@ -1267,98 +1266,109 @@ function TextPart(props: { part: TextPart; message: AssistantMessage }) {
 function ToolPart(props: { part: ToolPart; message: AssistantMessage }) {
   const { theme } = useTheme()
   const sync = useSync()
+  const renderer = useRenderer()
   const [margin, setMargin] = createSignal(0)
-  const component = createMemo(() => {
-    const render = ToolRegistry.render(props.part.tool) ?? GenericTool
+  const [collapsed, setCollapsed] = createSignal(true)
+  
+  const render = ToolRegistry.render(props.part.tool) ?? GenericTool
+  const metadata = props.part.state.status === "pending" ? {} : (props.part.state.metadata ?? {})
+  const input = props.part.state.input ?? {}
+  const container = ToolRegistry.container(props.part.tool)
+  const permissions = sync.data.permission[props.message.sessionID] ?? []
+  const permissionIndex = permissions.findIndex((x) => x.callID === props.part.callID)
+  const permission = permissions[permissionIndex]
 
-    const metadata = props.part.state.status === "pending" ? {} : (props.part.state.metadata ?? {})
-    const input = props.part.state.input ?? {}
-    const container = ToolRegistry.container(props.part.tool)
-    const permissions = sync.data.permission[props.message.sessionID] ?? []
-    const permissionIndex = permissions.findIndex((x) => x.callID === props.part.callID)
-    const permission = permissions[permissionIndex]
+  const style: BoxProps =
+    container === "block" || permission
+      ? {
+          border: permissionIndex === 0 ? (["left", "right"] as const) : (["left"] as const),
+          paddingTop: 1,
+          paddingBottom: 1,
+          paddingLeft: 2,
+          marginTop: 1,
+          gap: 1,
+          backgroundColor: theme.backgroundPanel,
+          customBorderChars: SplitBorder.customBorderChars,
+          borderColor: permissionIndex === 0 ? theme.warning : theme.background,
+        }
+      : {
+          paddingLeft: 3,
+        }
 
-    const style: BoxProps =
-      container === "block" || permission
-        ? {
-            border: permissionIndex === 0 ? (["left", "right"] as const) : (["left"] as const),
-            paddingTop: 1,
-            paddingBottom: 1,
-            paddingLeft: 2,
-            marginTop: 1,
-            gap: 1,
-            backgroundColor: theme.backgroundPanel,
-            customBorderChars: SplitBorder.customBorderChars,
-            borderColor: permissionIndex === 0 ? theme.warning : theme.background,
-          }
-        : {
-            paddingLeft: 3,
-          }
-
-    return (
-      <box
-        marginTop={margin()}
-        {...style}
-        renderBefore={function () {
-          const el = this as BoxRenderable
-          const parent = el.parent
-          if (!parent) {
-            return
-          }
-          if (el.height > 1) {
-            setMargin(1)
-            return
-          }
-          const children = parent.getChildren()
-          const index = children.indexOf(el)
-          const previous = children[index - 1]
-          if (!previous) {
-            setMargin(0)
-            return
-          }
-          if (previous.height > 1 || previous.id.startsWith("text-")) {
-            setMargin(1)
-            return
-          }
-        }}
-      >
-        <Dynamic
-          component={render}
-          input={input}
-          tool={props.part.tool}
-          metadata={metadata}
-          permission={permission?.metadata ?? {}}
-          output={props.part.state.status === "completed" ? props.part.state.output : undefined}
-        />
-        {props.part.state.status === "error" && (
-          <box paddingLeft={2}>
-            <text fg={theme.error}>{props.part.state.error.replace("Error: ", "")}</text>
+  return (
+    <box
+      marginTop={margin()}
+      {...style}
+      renderBefore={function () {
+        const el = this as BoxRenderable
+        const parent = el.parent
+        if (!parent) {
+          return
+        }
+        if (el.height > 1) {
+          setMargin(1)
+          return
+        }
+        const children = parent.getChildren()
+        const index = children.indexOf(el)
+        const previous = children[index - 1]
+        if (!previous) {
+          setMargin(0)
+          return
+        }
+        if (previous.height > 1 || previous.id.startsWith("text-")) {
+          setMargin(1)
+          return
+        }
+      }}
+    >
+      {createMemo(() => {
+        const RenderComponent = render
+        const isCollapsed = collapsed()
+        console.log('[ToolPart] Rendering tool, collapsed:', isCollapsed)
+        return (
+          <RenderComponent
+            input={input}
+            tool={props.part.tool}
+            metadata={metadata}
+            permission={permission?.metadata ?? {}}
+            output={props.part.state.status === "completed" ? props.part.state.output : undefined}
+            collapsed={isCollapsed}
+            onToggle={() => {
+              if (renderer.getSelection()?.getSelectedText()) return
+              console.log('[ToolPart] Toggle clicked, collapsed was:', collapsed())
+              setCollapsed(!collapsed())
+              console.log('[ToolPart] Toggle clicked, collapsed now:', !collapsed())
+            }}
+          />
+        )
+      })()}
+      {props.part.state.status === "error" && (
+        <box paddingLeft={2}>
+          <text fg={theme.error}>{props.part.state.error.replace("Error: ", "")}</text>
+        </box>
+      )}
+      {permission && (
+        <box gap={1}>
+          <text fg={theme.text}>Permission required to run this tool:</text>
+          <box flexDirection="row" gap={2}>
+            <text>
+              <b>enter</b>
+              <span style={{ fg: theme.textMuted }}> accept</span>
+            </text>
+            <text>
+              <b>a</b>
+              <span style={{ fg: theme.textMuted }}> accept always</span>
+            </text>
+            <text>
+              <b>d</b>
+              <span style={{ fg: theme.textMuted }}> deny</span>
+            </text>
           </box>
-        )}
-        {permission && (
-          <box gap={1}>
-            <text fg={theme.text}>Permission required to run this tool:</text>
-            <box flexDirection="row" gap={2}>
-              <text>
-                <b>enter</b>
-                <span style={{ fg: theme.textMuted }}> accept</span>
-              </text>
-              <text>
-                <b>a</b>
-                <span style={{ fg: theme.textMuted }}> accept always</span>
-              </text>
-              <text>
-                <b>d</b>
-                <span style={{ fg: theme.textMuted }}> deny</span>
-              </text>
-            </box>
-          </box>
-        )}
-      </box>
-    )
-  })
-
-  return <Show when={component()}>{component()}</Show>
+        </box>
+      )}
+    </box>
+  )
 }
 
 type ToolProps<T extends Tool.Info> = {
@@ -1367,12 +1377,26 @@ type ToolProps<T extends Tool.Info> = {
   permission: Record<string, any>
   tool: string
   output?: string
+  collapsed?: boolean
+  onToggle?: () => void
 }
 function GenericTool(props: ToolProps<any>) {
+  const icon = createMemo(() => props.collapsed ? "▶" : "▼")
+  const { theme, syntax } = useTheme()
+  console.log('[GenericTool]', props.tool, 'collapsed:', props.collapsed, 'onToggle:', !!props.onToggle)
   return (
-    <ToolTitle icon="⚙" fallback="Writing command..." when={true}>
-      <ToolBadge>{props.tool}</ToolBadge> {input(props.input)}
-    </ToolTitle>
+    <>
+      <ToolTitle icon={icon()} fallback="Writing command..." when={true} onToggle={props.onToggle}>
+        <ToolBadge>{props.tool}</ToolBadge> {input(props.input)}
+      </ToolTitle>
+      <Show when={!props.collapsed}>
+        <Show when={props.output}>
+          <box>
+            <text fg={theme.text}>{props.output}</text>
+          </box>
+        </Show>
+      </Show>
+    </>
   )
 }
 
@@ -1408,14 +1432,23 @@ function ToolBadge(props: { children: string }) {
   )
 }
 
-function ToolTitle(props: { fallback: string; when: any; icon: string; children: JSX.Element }) {
+function ToolTitle(props: { fallback: string; when: any; icon: string; children: JSX.Element; onToggle?: () => void }) {
   const { theme } = useTheme()
+  const renderer = useRenderer()
   return (
-    <text paddingLeft={3} fg={props.when ? theme.textMuted : theme.text}>
-      <Show fallback={<>~ {props.fallback}</>} when={props.when}>
-        <span style={{ bold: true }}>{props.icon}</span> {props.children}
-      </Show>
-    </text>
+    <box
+      onMouseUp={(evt) => {
+        if (renderer.getSelection()?.getSelectedText()) return
+        console.log('[ToolTitle] Clicked, onToggle exists:', !!props.onToggle)
+        props.onToggle?.()
+      }}
+    >
+      <text fg={props.when ? theme.textMuted : theme.text}>
+        <Show fallback={<>~ {props.fallback}</>} when={props.when}>
+          <span style={{ bold: true }}>{props.icon}</span> {props.children}
+        </Show>
+      </text>
+    </box>
   )
 }
 
@@ -1425,18 +1458,21 @@ ToolRegistry.register<typeof BashTool>({
   render(props) {
     const output = createMemo(() => stripAnsi(props.metadata.output?.trim() ?? ""))
     const { theme } = useTheme()
+    const icon = createMemo(() => props.collapsed ? "▶" : "▼")
     return (
       <>
-        <ToolTitle icon="#" fallback="Writing command..." when={props.input.command}>
+        <ToolTitle icon={icon()} fallback="Writing command..." when={props.input.command} onToggle={props.onToggle}>
           <ToolBadge>Bash</ToolBadge> {props.input.description || "Shell"}
         </ToolTitle>
-        <Show when={props.input.command}>
-          <text fg={theme.text}>$ {props.input.command}</text>
-        </Show>
-        <Show when={output()}>
-          <box>
-            <text fg={theme.text}>{output()}</text>
-          </box>
+        <Show when={!props.collapsed}>
+          <Show when={props.input.command}>
+            <text fg={theme.text}>$ {props.input.command}</text>
+          </Show>
+          <Show when={output()}>
+            <box>
+              <text fg={theme.text}>{output()}</text>
+            </box>
+          </Show>
         </Show>
       </>
     )
@@ -1447,9 +1483,10 @@ ToolRegistry.register<typeof ReadTool>({
   name: "read",
   container: "inline",
   render(props) {
+    const icon = createMemo(() => props.collapsed ? "▶" : "▼")
     return (
       <>
-        <ToolTitle icon="→" fallback="Reading file..." when={props.input.filePath}>
+        <ToolTitle icon={icon()} fallback="Reading file..." when={props.input.filePath} onToggle={props.onToggle}>
           <ToolBadge>Read</ToolBadge> {normalizePath(props.input.filePath!)}{" "}
           {input(props.input, ["filePath"])}
         </ToolTitle>
@@ -1479,25 +1516,30 @@ ToolRegistry.register<typeof WriteTool>({
         .map((x) => x.toString().padStart(pad, " "))
     })
 
+    const icon = createMemo(() => props.collapsed ? "▶" : "▼")
+    console.log('[WriteTool] collapsed:', props.collapsed)
+
     return (
       <>
-        <ToolTitle icon="←" fallback="Preparing write..." when={props.input.filePath}>
+        <ToolTitle icon={icon()} fallback="Preparing write..." when={props.input.filePath} onToggle={props.onToggle}>
           <ToolBadge>Write</ToolBadge> {props.input.filePath}
         </ToolTitle>
-        <box flexDirection="row">
-          <box flexShrink={0}>
-            <For each={numbers()}>
-              {(value) => <text style={{ fg: theme.textMuted }}>{value}</text>}
-            </For>
+        <Show when={!props.collapsed}>
+          <box flexDirection="row">
+            <box flexShrink={0}>
+              <For each={numbers()}>
+                {(value) => <text style={{ fg: theme.textMuted }}>{value}</text>}
+              </For>
+            </box>
+            <box paddingLeft={1} flexGrow={1}>
+              <code
+                filetype={filetype(props.input.filePath!)}
+                syntaxStyle={syntax()}
+                content={code()}
+              />
+            </box>
           </box>
-          <box paddingLeft={1} flexGrow={1}>
-            <code
-              filetype={filetype(props.input.filePath!)}
-              syntaxStyle={syntax()}
-              content={code()}
-            />
-          </box>
-        </box>
+        </Show>
       </>
     )
   },
@@ -1507,9 +1549,10 @@ ToolRegistry.register<typeof GlobTool>({
   name: "glob",
   container: "inline",
   render(props) {
+    const icon = createMemo(() => props.collapsed ? "▶" : "▼")
     return (
       <>
-        <ToolTitle icon="✱" fallback="Finding files..." when={props.input.pattern}>
+        <ToolTitle icon={icon()} fallback="Finding files..." when={props.input.pattern} onToggle={props.onToggle}>
           <ToolBadge>Glob</ToolBadge> "{props.input.pattern}"{" "}
           <Show when={props.input.path}>in {normalizePath(props.input.path)} </Show>
           <Show when={props.metadata.count}>({props.metadata.count} matches)</Show>
@@ -1523,8 +1566,9 @@ ToolRegistry.register<typeof GrepTool>({
   name: "grep",
   container: "inline",
   render(props) {
+    const icon = createMemo(() => props.collapsed ? "▶" : "▼")
     return (
-      <ToolTitle icon="✱" fallback="Searching content..." when={props.input.pattern}>
+      <ToolTitle icon={icon()} fallback="Searching content..." when={props.input.pattern} onToggle={props.onToggle}>
         <ToolBadge>Grep</ToolBadge> "{props.input.pattern}"{" "}
         <Show when={props.input.path}>in {normalizePath(props.input.path)} </Show>
         <Show when={props.metadata.matches}>({props.metadata.matches} matches)</Show>
@@ -1543,9 +1587,10 @@ ToolRegistry.register<typeof ListTool>({
       }
       return ""
     })
+    const icon = createMemo(() => props.collapsed ? "▶" : "▼")
     return (
       <>
-        <ToolTitle icon="→" fallback="Listing directory..." when={props.input.path !== undefined}>
+        <ToolTitle icon={icon()} fallback="Listing directory..." when={props.input.path !== undefined} onToggle={props.onToggle}>
           <ToolBadge>List</ToolBadge> {dir()}
         </ToolTitle>
       </>
@@ -1700,35 +1745,38 @@ ToolRegistry.register<typeof EditTool>({
     })
 
     const ft = createMemo(() => filetype(props.input.filePath))
+    const icon = createMemo(() => props.collapsed ? "▶" : "▼")
 
     return (
       <>
-        <ToolTitle icon="←" fallback="Preparing edit..." when={props.input.filePath}>
+        <ToolTitle icon={icon()} fallback="Preparing edit..." when={props.input.filePath} onToggle={props.onToggle}>
           <ToolBadge>Edit</ToolBadge> {normalizePath(props.input.filePath!)}{" "}
           {input({
             replaceAll: props.input.replaceAll,
           })}
         </ToolTitle>
-        <Switch>
-          <Match when={props.permission["diff"]}>
-            <text fg={theme.text}>{props.permission["diff"]?.trim()}</text>
-          </Match>
-          <Match when={diff() && style() === "split"}>
-            <box paddingLeft={1} flexDirection="row" gap={2}>
-              <box flexGrow={1} flexBasis={0}>
-                <code filetype={ft()} syntaxStyle={syntax()} content={diff()!.oldContent} />
+        <Show when={!props.collapsed}>
+          <Switch>
+            <Match when={props.permission["diff"]}>
+              <text fg={theme.text}>{props.permission["diff"]?.trim()}</text>
+            </Match>
+            <Match when={diff() && style() === "split"}>
+              <box paddingLeft={1} flexDirection="row" gap={2}>
+                <box flexGrow={1} flexBasis={0}>
+                  <code filetype={ft()} syntaxStyle={syntax()} content={diff()!.oldContent} />
+                </box>
+                <box flexGrow={1} flexBasis={0}>
+                  <code filetype={ft()} syntaxStyle={syntax()} content={diff()!.newContent} />
+                </box>
               </box>
-              <box flexGrow={1} flexBasis={0}>
-                <code filetype={ft()} syntaxStyle={syntax()} content={diff()!.newContent} />
+            </Match>
+            <Match when={code()}>
+              <box paddingLeft={1}>
+                <code filetype={ft()} syntaxStyle={syntax()} content={code()} />
               </box>
-            </box>
-          </Match>
-          <Match when={code()}>
-            <box paddingLeft={1}>
-              <code filetype={ft()} syntaxStyle={syntax()} content={code()} />
-            </box>
-          </Match>
-        </Switch>
+            </Match>
+          </Switch>
+        </Show>
       </>
     )
   },
@@ -1771,6 +1819,49 @@ ToolRegistry.register<typeof TodoWriteTool>({
       </box>
     )
   },
+})
+
+// Register cc_* (Anthropic-native) tools to use same renderers as standard tools
+ToolRegistry.register({
+  name: "cc_bash",
+  container: "block",
+  render: ToolRegistry.render("bash"),
+})
+
+ToolRegistry.register({
+  name: "cc_read",
+  container: "inline",
+  render: ToolRegistry.render("read"),
+})
+
+ToolRegistry.register({
+  name: "cc_write",
+  container: "block",
+  render: ToolRegistry.render("write"),
+})
+
+ToolRegistry.register({
+  name: "cc_edit",
+  container: "block",
+  render: ToolRegistry.render("edit"),
+})
+
+ToolRegistry.register({
+  name: "cc_list",
+  container: "inline",
+  render: ToolRegistry.render("list"),
+})
+
+ToolRegistry.register({
+  name: "cc_glob",
+  container: "inline",
+  render: ToolRegistry.render("glob"),
+})
+
+ToolRegistry.register({
+  name: "cc_grep",
+  container: "inline",
+  render: ToolRegistry.render("grep"),
 })
 
 function normalizePath(input?: string) {
