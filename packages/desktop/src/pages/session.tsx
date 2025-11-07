@@ -791,14 +791,14 @@ export default function Page() {
                 },
               )
               return (
-                <Tabs.Content value={tab} class="select-text">
+                <Tabs.Content value={tab} class="select-text mt-3">
                   <Switch>
                     <Match when={file()}>
                       {(f) => (
                         <Code
                           file={{ name: f().path, contents: f().content?.content ?? "" }}
                           overflow="scroll"
-                          class="pt-3 pb-40"
+                          class="pb-40"
                         />
                       )}
                     </Match>
