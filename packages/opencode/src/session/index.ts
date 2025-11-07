@@ -466,4 +466,24 @@ export namespace Session {
       })
     },
   )
+
+  export namespace AllowedDirectories {
+    const directories = new Map<string, string[]>()
+
+    export function get(sessionID: string): string[] {
+      return directories.get(sessionID) ?? []
+    }
+
+    export async function add(input: { sessionID: string; directory: string }) {
+      const current = get(input.sessionID)
+      if (!current.includes(input.directory)) {
+        current.push(input.directory)
+        directories.set(input.sessionID, current)
+      }
+    }
+
+    export function clear(sessionID: string) {
+      directories.delete(sessionID)
+    }
+  }
 }

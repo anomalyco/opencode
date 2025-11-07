@@ -15,8 +15,8 @@
     "write",
     "cc_bash",
     "cc_edit",
-    "read",
     "switch_mode",
-    "add_directory"
+    "add_directory",
+    "ripgrep"
   ]
 }

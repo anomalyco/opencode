@@ -233,8 +233,10 @@ export function Session() {
 
   const permissions = createMemo(() => sync.data.permission[route.sessionID] ?? [])
 
-  const pending = createMemo(() => {
-    return messages().findLast((x) => x.role === "assistant" && !x.time?.completed)?.id
+  const pending = createMemo((prev) => {
+    const current = messages().findLast((x) => x.role === "assistant" && !x.time?.completed)?.id
+    // Keep previous value if current is undefined to prevent flickering
+    return current !== undefined ? current : prev
   })
 
   const dimensions = useTerminalDimensions()
@@ -482,6 +484,18 @@ export function Session() {
 
   // snap to bottom when session changes
   createEffect(on(() => route.sessionID, toBottom))
+
+  // Auto-scroll during streaming when new content arrives
+  createEffect(() => {
+    const msgs = messages()
+    const lastMsg = msgs[msgs.length - 1]
+    if (lastMsg && lastMsg.role === "assistant" && !lastMsg.time.completed) {
+      // Message is streaming, scroll to bottom
+      requestAnimationFrame(() => {
+        if (scroll) toBottom()
+      })
+    }
+  })
 
   const local = useLocal()
 
@@ -957,7 +971,7 @@ export function Session() {
                     foregroundColor: theme.border,
                   },
                 }}
-                stickyScroll={true}
+                stickyScroll={false}
                 stickyStart="bottom"
                 height="100%"
               >
@@ -1115,7 +1129,7 @@ function UserMessage(props: {
   const { theme } = useTheme()
   const [hover, setHover] = createSignal(false)
   const queued = createMemo(() => props.pending && props.message.id > props.pending)
-  const color = createMemo(() => (queued() ? theme.accent : theme.secondary))
+  const color = createMemo(() => (untrack(queued) ? untrack(() => theme.accent) : untrack(() => theme.secondary)))
 
   return (
     <Show when={text()}>
@@ -1293,6 +1307,8 @@ function TextPart(props: { part: TextPart; message: AssistantMessage }) {
   const [segments, setSegments] = createSignal<
     Awaited<ReturnType<typeof MessageWidgets.splitText>>
   >([])
+  const [processed, setProcessed] = createSignal(false)
+  const [lastText, setLastText] = createSignal("")
 
   // Generate a stable ID based on content hash
   const partId = createMemo(() => {
@@ -1300,39 +1316,55 @@ function TextPart(props: { part: TextPart; message: AssistantMessage }) {
     return `text-${text.substring(0, 50).replace(/\s/g, "")}-${text.length}`
   })
 
-  createEffect(() => {
-    const text = props.part.text.trim()
+  createEffect(on(
+    () => [props.part.text, props.message.time.completed] as const,
+    ([text, completed]) => {
+      const trimmedText = String(text || "").trim()
 
-    // WIDGET TEST: If text contains "widget_test", inject a sidebar widget for testing
-    if (text.includes("widget_test")) {
-      setSegments([
-        { type: "text", content: "Testing sidebar widget in message stream:\n\n" },
-        {
-          type: "widget",
-          widgetId: "context-panel",
-          config: {},
-          match: [] as any,
-          streaming: false,
-        },
-        { type: "text", content: "\n\nIf you see the context panel above, message widgets work!" },
-      ])
-      return
-    }
-
-    // Allow incomplete widgets for progressive rendering during streaming
-    const isStreaming = !props.message.time.completed
-    MessageWidgets.splitText(text, { allowIncomplete: isStreaming }).then((result) => {
-      const widgetCount = result.filter((s) => s.type === "widget").length
-      const hasTag = text.includes("<steering-question")
-      if (hasTag || widgetCount > 0) {
-        Bun.write(
-          Bun.file("/tmp/opencode-widget-debug.log"),
-          `[${new Date().toISOString()}] TextPart segments: ${result.length}, widgets: ${widgetCount}, has tag: ${hasTag}, text length: ${text.length}\n`,
-        )
+      // During streaming, just show raw text without widget parsing to avoid flicker
+      if (!completed) {
+        setSegments([{ type: "text", content: trimmedText }])
+        setProcessed(false)
+        return
       }
-      setSegments(result)
-    })
-  })
+
+      // If already processed and complete, don't re-process
+      if (processed() && completed) {
+        return
+      }
+
+      // WIDGET TEST: If text contains "widget_test", inject a sidebar widget for testing
+      if (trimmedText.includes("widget_test")) {
+        setSegments([
+          { type: "text", content: "Testing sidebar widget in message stream:\n\n" },
+          {
+            type: "widget",
+            widgetId: "context-panel",
+            config: {},
+            match: [] as any,
+            streaming: false,
+          },
+          { type: "text", content: "\n\nIf you see the context panel above, message widgets work!" },
+        ])
+        setProcessed(true)
+        return
+      }
+
+      // Only parse widgets when message is complete
+      MessageWidgets.splitText(trimmedText, { allowIncomplete: false }).then((result) => {
+        const widgetCount = result.filter((s) => s.type === "widget").length
+        const hasTag = trimmedText.includes("<steering-question")
+        if (hasTag || widgetCount > 0) {
+          Bun.write(
+            Bun.file("/tmp/opencode-widget-debug.log"),
+            `[${new Date().toISOString()}] TextPart segments: ${result.length}, widgets: ${widgetCount}, has tag: ${hasTag}, text length: ${trimmedText.length}\n`,
+          )
+        }
+        setSegments(result)
+        setProcessed(true)
+      })
+    },
+  ))
 
   return (
     <Show when={props.part.text.trim()}>
@@ -1344,10 +1376,10 @@ function TextPart(props: { part: TextPart; message: AssistantMessage }) {
                 <code
                   filetype="markdown"
                   drawUnstyledText={false}
-                  streaming={true}
-                  syntaxStyle={syntax()}
+                  streaming={!props.message.time.completed}
+                  syntaxStyle={untrack(syntax)}
                   content={(segment as any).content}
-                  conceal={ctx.conceal()}
+                  conceal={untrack(ctx.conceal)}
                 />
               </Match>
               <Match when={segment.type === "widget"}>

@@ -165,7 +165,7 @@ export const { use: useSync, provider: SyncProvider } = createSimpleContext({
             event.properties.info.sessionID,
             produce((draft) => {
               draft.splice(result.index, 0, event.properties.info)
-              // Removed: if (draft.length > 100) draft.shift()
+              if (draft.length > 100) draft.shift()
             }),
           )
           break
