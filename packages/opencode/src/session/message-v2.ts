@@ -540,11 +540,17 @@ export namespace MessageV2 {
   ): ModelMessage[] {
     const result: UIMessage[] = []
 
+    const pushIfNonEmpty = (msg: UIMessage) => {
+      if (msg.parts.length > 0) {
+        result.push(msg)
+      }
+    }
+
     for (const msg of input) {
       if (msg.parts.length === 0) continue
 
       if (msg.info.role === "user") {
-        result.push({
+        pushIfNonEmpty({
           id: msg.info.id,
           role: "user",
           parts: msg.parts.flatMap((part): UIMessage["parts"] => {
@@ -575,7 +581,7 @@ export namespace MessageV2 {
       }
 
       if (msg.info.role === "assistant") {
-        result.push({
+        pushIfNonEmpty({
           id: msg.info.id,
           role: "assistant",
           parts: msg.parts.flatMap((part): UIMessage["parts"] => {
