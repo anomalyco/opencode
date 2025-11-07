@@ -45,7 +45,7 @@ export default function Home() {
             <div data-slot="hero-copy">
               <img data-slot="zen logo light" src={zenLogoLight} alt="zen logo light" />
               <img data-slot="zen logo dark" src={zenLogoDark} alt="zen logo dark" />
-              <strong>Reliable optimized models for coding agents</strong>
+              <h1>Reliable optimized models for coding agents</h1>
               <p>
                 Zen gives you access to a curated set of AI models that OpenCode has tested and
                 benchmarked specifically for coding agents. No need to worry about inconsistent
