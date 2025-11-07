@@ -827,7 +827,7 @@ export namespace Server {
         ),
         async (c) => {
           const params = c.req.valid("param")
-          const message = await Session.getMessage({
+          const message = await MessageV2.get({
             sessionID: params.id,
             messageID: params.messageID,
           })

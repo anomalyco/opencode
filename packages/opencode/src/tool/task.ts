@@ -35,7 +35,7 @@ export const TaskTool = Tool.define("task", async () => {
         parentID: ctx.sessionID,
         title: params.description + ` (@${agent.name} subagent)`,
       })
-      const msg = await Session.getMessage({ sessionID: ctx.sessionID, messageID: ctx.messageID })
+      const msg = await MessageV2.get({ sessionID: ctx.sessionID, messageID: ctx.messageID })
       if (msg.info.role !== "assistant") throw new Error("Not an assistant message")
 
       ctx.metadata({

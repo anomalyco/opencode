@@ -111,7 +111,7 @@ export namespace SessionCompaction {
         draft.time.compacting = undefined
       })
     })
-    const toSummarize = await MessageV2.filterCompacted(Session.messageStream(input.sessionID))
+    const toSummarize = await MessageV2.filterCompacted(MessageV2.stream(input.sessionID))
     const model = await Provider.getModel(input.providerID, input.modelID)
     const system = [
       ...SystemPrompt.summarize(model.providerID),
@@ -270,7 +270,7 @@ export namespace SessionCompaction {
         }
       }
 
-      const parts = await Session.getParts(msg.id)
+      const parts = await MessageV2.parts(msg.id)
       return {
         info: msg,
         parts,
@@ -287,7 +287,7 @@ export namespace SessionCompaction {
     })
     if (result.shouldRetry) {
       for (let retry = 1; retry < maxRetries; retry++) {
-        const lastRetryPart = result.parts.findLast((p) => p.type === "retry")
+        const lastRetryPart = result.parts.findLast((p): p is MessageV2.RetryPart => p.type === "retry")
 
         if (lastRetryPart) {
           const delayMs = SessionRetry.getRetryDelayInMs(lastRetryPart.error, retry)
@@ -336,7 +336,7 @@ export namespace SessionCompaction {
     if (
       !msg.error ||
       (MessageV2.AbortedError.isInstance(msg.error) &&
-        result.parts.some((part) => part.type === "text" && part.text.length > 0))
+        result.parts.some((part): part is MessageV2.TextPart => part.type === "text" && part.text.length > 0))
     ) {
       msg.summary = true
       Bus.publish(Event.Compacted, {

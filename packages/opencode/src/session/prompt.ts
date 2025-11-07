@@ -362,7 +362,7 @@ export namespace SessionPrompt {
       })
       if (result.shouldRetry) {
         for (let retry = 1; retry < maxRetries; retry++) {
-          const lastRetryPart = result.parts.findLast((p) => p.type === "retry")
+          const lastRetryPart = result.parts.findLast((p): p is MessageV2.RetryPart => p.type === "retry")
 
           if (lastRetryPart) {
             const delayMs = SessionRetry.getRetryDelayInMs(lastRetryPart.error, retry)
@@ -434,7 +434,7 @@ export namespace SessionPrompt {
     providerID: string
     signal: AbortSignal
   }) {
-    let msgs = await MessageV2.filterCompacted(Session.messageStream(input.sessionID))
+    let msgs = await MessageV2.filterCompacted(MessageV2.stream(input.sessionID))
     const lastAssistant = msgs.findLast((msg) => msg.info.role === "assistant")
     if (
       lastAssistant?.info.role === "assistant" &&
@@ -1106,7 +1106,7 @@ export namespace SessionPrompt {
                   })
                   toolcalls[value.toolCallId] = part as MessageV2.ToolPart
 
-                  const parts = await Session.getParts(assistantMsg.id)
+                  const parts = await MessageV2.parts(assistantMsg.id)
                   const lastThree = parts.slice(-DOOM_LOOP_THRESHOLD)
                   if (
                     lastThree.length === DOOM_LOOP_THRESHOLD &&
@@ -1319,7 +1319,7 @@ export namespace SessionPrompt {
             })
           }
         }
-        const p = await Session.getParts(assistantMsg.id)
+        const p = await MessageV2.parts(assistantMsg.id)
         for (const part of p) {
           if (
             part.type === "tool" &&
