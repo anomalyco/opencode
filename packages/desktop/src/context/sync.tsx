@@ -192,6 +192,13 @@ export const { use: useSync, provider: SyncProvider } = createSimpleContext({
             sdk.client.session.todo({ path: { id: sessionID } }),
             sdk.client.session.diff({ path: { id: sessionID } }),
           ])
+          
+          // Handle case where session doesn't exist or API returns error
+          if (!messages.data || !session.data) {
+            console.warn(`Session ${sessionID} not found or invalid, skipping sync`)
+            return
+          }
+          
           setStore(
             produce((draft) => {
               const match = Binary.search(draft.session, sessionID, (s) => s.id)

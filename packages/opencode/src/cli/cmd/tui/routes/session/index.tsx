@@ -107,8 +107,8 @@ function SessionTabs(props: {
       gap={0}
       backgroundColor={theme.backgroundPanel}
       paddingLeft={2}
-      paddingTop={1}
-      paddingBottom={1}
+      paddingTop={0}
+      paddingBottom={0}
       flexShrink={0}
       style={{ zIndex: 1000 }}
       renderBefore={function() {
@@ -123,43 +123,46 @@ function SessionTabs(props: {
           const isActive = () => session.id === props.currentSessionID
           const [hover, setHover] = createSignal(false)
 
+          const title = truncateTitle(session.title || "Session")
+          const xChar = (hover() || isActive()) ? " ×" : ""
+          const fullWidth = title.length + xChar.length
+          const topBar = "▄".repeat(fullWidth)
+          const bottomBar = "▀".repeat(fullWidth)
+          const textColor = isActive() ? theme.text : theme.textMuted
+          const borderColor = theme.background
+          const tabBgColor = isActive() ? theme.background : theme.backgroundPanel
+          
           return (
             <box
-              flexDirection="row"
-              gap={1}
+              flexDirection="column"
               paddingLeft={2}
               paddingRight={2}
-              paddingTop={0}
-              paddingBottom={0}
-              backgroundColor={isActive() ? theme.background : theme.backgroundPanel}
+              backgroundColor={tabBgColor}
               renderBefore={function() {
                 const el = this as BoxRenderable
                 el.on("mouseenter", () => setHover(true))
                 el.on("mouseleave", () => setHover(false))
               }}
-            >
-              <box
-                onMouseUp={(evt) => {
-                  if (renderer.getSelection()?.getSelectedText()) return
+              onMouseUp={(evt) => {
+                if (renderer.getSelection()?.getSelectedText()) return
+                const target = (evt as any).target
+                if (target?.textContent?.includes('×')) {
+                  props.onClose(session.id)
+                } else {
                   props.onSelect(session.id)
-                }}
-              >
-                <text
-                  fg={isActive() ? theme.text : theme.textMuted}
-                >
-                  {isActive() ? <b>{truncateTitle(session.title || "Session")}</b> : truncateTitle(session.title || "Session")}
+                }
+              }}
+            >
+              <text style={{ fg: borderColor, bg: tabBgColor }}>{topBar}</text>
+              <box flexDirection="row" backgroundColor={tabBgColor}>
+                <text fg={textColor}>
+                  {isActive() ? <b>{title}</b> : title}
                 </text>
-              </box>
-              <Show when={hover() || isActive()}>
-                <box
-                  onMouseUp={(evt) => {
-                    if (renderer.getSelection()?.getSelectedText()) return
-                    props.onClose(session.id)
-                  }}
-                >
+                <Show when={hover() || isActive()}>
                   <text fg={theme.textMuted}> ×</text>
-                </box>
-              </Show>
+                </Show>
+              </box>
+              <text style={{ fg: borderColor, bg: tabBgColor }}>{bottomBar}</text>
             </box>
           )
         }}
@@ -940,14 +943,6 @@ export function Session() {
             </Show>
             <Show when={!sidebarVisible() && !leftSidebarVisible()}>
               <Header />
-            </Show>
-            <Show when={activeSessions().length > 1}>
-              <SessionTabs
-                sessions={activeSessions()}
-                currentSessionID={route.sessionID}
-                onSelect={selectSession}
-                onClose={handleCloseSession}
-              />
             </Show>
             <box flexGrow={1} flexShrink={1}>
               <scrollbox

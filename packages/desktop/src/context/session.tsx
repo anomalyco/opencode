@@ -35,7 +35,9 @@ export const { use: useSession, provider: SessionProvider } = createSimpleContex
 
     createEffect(() => {
       if (!props.sessionId) return
-      sync.session.sync(props.sessionId)
+      sync.session.sync(props.sessionId).catch((err) => {
+        console.warn(`Failed to sync session ${props.sessionId}:`, err)
+      })
     })
 
     const info = createMemo(() => (props.sessionId ? sync.session.get(props.sessionId) : undefined))
