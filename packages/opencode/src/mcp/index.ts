@@ -92,13 +92,28 @@ export namespace MCP {
   export async function add(name: string, mcp: Config.Mcp) {
     const s = await state()
     const result = await create(name, mcp)
-    if (!result) return
+    if (!result) {
+      const status = {
+        status: "failed" as const,
+        error: "unknown error",
+      }
+      s.status[name] = status
+      return {
+        status,
+      }
+    }
     if (!result.mcpClient) {
       s.status[name] = result.status
-      return
+      return {
+        status: s.status,
+      }
     }
     s.clients[name] = result.mcpClient
     s.status[name] = result.status
+
+    return {
+      status: s.status,
+    }
   }
 
   async function create(key: string, mcp: Config.Mcp) {
@@ -207,8 +222,12 @@ export namespace MCP {
       }
     }
 
-    const result = await withTimeout(mcpClient.tools(), mcp.timeout ?? 5000).catch(() => {})
+    const result = await withTimeout(mcpClient.tools(), mcp.timeout ?? 5000).catch((err) => {
+      log.error("create() failed to get tools from client", { key, error: err })
+      return undefined
+    })
     if (!result) {
+      log.info("create() tools() returned nothing, closing client", { key })
       await mcpClient.close().catch((error) => {
         log.error("Failed to close MCP client", {
           error,
@@ -227,6 +246,7 @@ export namespace MCP {
       }
     }
 
+    log.info("create() successfully created client", { key, toolCount: Object.keys(result).length })
     return {
       mcpClient,
       status,
@@ -238,13 +258,18 @@ export namespace MCP {
   }
 
   export async function clients() {
-    return state().then((state) => state.clients)
+    const s = await state()
+    log.info("clients() called", { clientCount: Object.keys(s.clients).length })
+    return s.clients
   }
 
   export async function tools() {
     const result: Record<string, Tool> = {}
     const s = await state()
-    for (const [clientName, client] of Object.entries(await clients())) {
+    log.info("tools() called", { clientCount: Object.keys(s.clients).length })
+    const clientsSnapshot = await clients()
+    for (const [clientName, client] of Object.entries(clientsSnapshot)) {
+      log.info("tools() fetching tools for client", { clientName })
       const tools = await client.tools().catch((e) => {
         log.error("failed to get tools", { clientName, error: e.message })
         const failedStatus = {
@@ -255,14 +280,17 @@ export namespace MCP {
         delete s.clients[clientName]
       })
       if (!tools) {
+        log.info("tools() no tools returned for client", { clientName })
         continue
       }
+      log.info("tools() got tools for client", { clientName, toolCount: Object.keys(tools).length })
       for (const [toolName, tool] of Object.entries(tools)) {
         const sanitizedClientName = clientName.replace(/[^a-zA-Z0-9_-]/g, "_")
         const sanitizedToolName = toolName.replace(/[^a-zA-Z0-9_-]/g, "_")
         result[sanitizedClientName + "_" + sanitizedToolName] = tool
       }
     }
+    log.info("tools() final result", { toolCount: Object.keys(result).length })
     return result
   }
 }

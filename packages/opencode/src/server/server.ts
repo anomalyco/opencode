@@ -1359,6 +1359,36 @@ export namespace Server {
           return c.json(await MCP.status())
         },
       )
+      .post(
+        "/mcp",
+        describeRoute({
+          description: "Add MCP server dynamically",
+          operationId: "mcp.add",
+          responses: {
+            200: {
+              description: "MCP server added successfully",
+              content: {
+                "application/json": {
+                  schema: resolver(z.record(z.string(), MCP.Status)),
+                },
+              },
+            },
+            ...errors(400),
+          },
+        }),
+        validator(
+          "json",
+          z.object({
+            name: z.string(),
+            config: Config.Mcp,
+          }),
+        ),
+        async (c) => {
+          const { name, config } = c.req.valid("json")
+          const result = await MCP.add(name, config)
+          return c.json(result.status)
+        },
+      )
       .get(
         "/lsp",
         describeRoute({

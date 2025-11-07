@@ -1979,9 +1979,9 @@ export type SessionMessagesData = {
      */
     id: string
   }
-  query?: {
+  query: {
     directory?: string
-    limit?: number
+    limit: number
   }
   url: "/session/{id}/message"
 }
@@ -2551,6 +2551,38 @@ export type McpStatusResponses = {
 }
 
 export type McpStatusResponse = McpStatusResponses[keyof McpStatusResponses]
+
+export type McpAddData = {
+  body?: {
+    name: string
+    config: McpLocalConfig | McpRemoteConfig
+  }
+  path?: never
+  query?: {
+    directory?: string
+  }
+  url: "/mcp"
+}
+
+export type McpAddErrors = {
+  /**
+   * Bad request
+   */
+  400: BadRequestError
+}
+
+export type McpAddError = McpAddErrors[keyof McpAddErrors]
+
+export type McpAddResponses = {
+  /**
+   * MCP server added successfully
+   */
+  200: {
+    [key: string]: McpStatus
+  }
+}
+
+export type McpAddResponse = McpAddResponses[keyof McpAddResponses]
 
 export type LspStatusData = {
   body?: never

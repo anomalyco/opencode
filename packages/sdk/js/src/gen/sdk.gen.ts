@@ -106,6 +106,9 @@ import type {
   AppAgentsResponses,
   McpStatusData,
   McpStatusResponses,
+  McpAddData,
+  McpAddResponses,
+  McpAddErrors,
   LspStatusData,
   LspStatusResponses,
   FormatterStatusData,
@@ -762,6 +765,20 @@ class Mcp extends _HeyApiClient {
     return (options?.client ?? this._client).get<McpStatusResponses, unknown, ThrowOnError>({
       url: "/mcp",
       ...options,
+    })
+  }
+
+  /**
+   * Add MCP server dynamically
+   */
+  public add<ThrowOnError extends boolean = false>(options?: Options<McpAddData, ThrowOnError>) {
+    return (options?.client ?? this._client).post<McpAddResponses, McpAddErrors, ThrowOnError>({
+      url: "/mcp",
+      ...options,
+      headers: {
+        "Content-Type": "application/json",
+        ...options?.headers,
+      },
     })
   }
 }
