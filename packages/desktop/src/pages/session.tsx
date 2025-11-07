@@ -498,7 +498,7 @@ export default function Page() {
                                 <Show when={isActive()}>
                                   <div
                                     data-message={message.id}
-                                    class="flex flex-col items-start self-stretch gap-8 pb-50"
+                                    class="flex flex-col items-start self-stretch gap-8 pb-20"
                                   >
                                     {/* Title */}
                                     <div class="flex flex-col items-start gap-2 self-stretch sticky top-0 bg-background-stronger z-10 pb-1">
@@ -644,6 +644,14 @@ export default function Page() {
                               )
                             }}
                           </For>
+                        </div>
+
+                        <div class="absolute inset-x-0 px-6 max-w-2xl flex flex-col justify-center items-center z-50 mx-auto bottom-8">
+                          <PromptInput
+                            ref={(el) => {
+                              inputRef = el
+                            }}
+                          />
                         </div>
                       </div>
                     </div>
@@ -826,13 +834,6 @@ export default function Page() {
           </Show>
         </DragOverlay>
       </DragDropProvider>
-      <div class="absolute inset-x-0 px-6 max-w-2xl flex flex-col justify-center items-center z-50 mx-auto bottom-8">
-        <PromptInput
-          ref={(el) => {
-            inputRef = el
-          }}
-        />
-      </div>
       <div class="hidden shrink-0 w-56 p-2 h-full overflow-y-auto">
         {/* <FileTree path="" onFileClick={ handleTabClick} /> */}
       </div>

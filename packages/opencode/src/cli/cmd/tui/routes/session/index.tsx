@@ -480,6 +480,9 @@ export function Session() {
     }, 200)
   }))
 
+  // snap to bottom when session changes
+  createEffect(on(() => route.sessionID, toBottom))
+
   const local = useLocal()
 
   function moveChild(direction: number) {
