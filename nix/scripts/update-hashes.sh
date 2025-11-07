@@ -41,7 +41,8 @@ if [ ! -f "$HASH_FILE" ]; then
 {
   "models": {},
   "nodeModules": {},
-  "optional": {}
+  "optional": {},
+  "metadata": {}
 }
 EOF
 fi
@@ -209,3 +210,50 @@ for SYSTEM in $SYSTEMS; do
   rm -f "$BUILD_LOG"
   unset BUILD_LOG
 done
+
+write_metadata() {
+  local tmp ts ref commit run_url
+  ts="$(date -u +%Y-%m-%dT%H:%M:%SZ)"
+  ref="${HASH_SOURCE_REF:-${GITHUB_REF_NAME:-}}"
+  if [ -z "$ref" ] && command -v git >/dev/null 2>&1; then
+    ref="$(git rev-parse --abbrev-ref HEAD 2>/dev/null || true)"
+    if [ "$ref" = "HEAD" ]; then
+      ref="$(git rev-parse --short HEAD 2>/dev/null || true)"
+    fi
+  fi
+  if [ -z "$ref" ]; then
+    ref="unknown"
+  fi
+  commit="${HASH_SOURCE_COMMIT:-${GITHUB_SHA:-}}"
+  if [ -z "$commit" ] && command -v git >/dev/null 2>&1; then
+    commit="$(git rev-parse HEAD 2>/dev/null || true)"
+  fi
+  if [ -z "$commit" ]; then
+    commit="unknown"
+  fi
+  run_url="${HASH_SOURCE_RUN:-}"
+  if [ -z "$run_url" ] && [ -n "${GITHUB_SERVER_URL:-}" ] && [ -n "${GITHUB_REPOSITORY:-}" ] && [ -n "${GITHUB_RUN_ID:-}" ]; then
+    run_url="${GITHUB_SERVER_URL}/${GITHUB_REPOSITORY}/actions/runs/${GITHUB_RUN_ID}"
+  fi
+  tmp=$(mktemp)
+  jq \
+    --arg ref "$ref" \
+    --arg sha "$commit" \
+    --arg ts "$ts" \
+    '
+      .metadata = (.metadata // {}) |
+      .metadata.updatedAt = $ts |
+      .metadata.sourceRef = $ref |
+      .metadata.sourceCommit = $sha
+    ' \
+    "$HASH_FILE" >"$tmp"
+  mv "$tmp" "$HASH_FILE"
+  if [ -n "$run_url" ]; then
+    tmp=$(mktemp)
+    jq --arg run "$run_url" '.metadata.workflowRun = $run' "$HASH_FILE" >"$tmp"
+    mv "$tmp" "$HASH_FILE"
+  fi
+  echo "metadata updated: ref=${ref} commit=${commit}"
+}
+
+write_metadata

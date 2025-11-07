@@ -152,11 +152,78 @@ jobs:
           echo "Final merged hashes.json:"
           cat "$BASE_HASH"
 
+      - name: Derive commit metadata
+        id: commit_meta
+        run: |
+          set -euo pipefail
+          EVENT="$GITHUB_EVENT_NAME"
+          LABEL="$GITHUB_REF_NAME"
+          SUMMARY="Hashes refreshed for $LABEL"
+          TAG_NAME=""
+          PR_NUMBER=""
+          if [ -f "$GITHUB_EVENT_PATH" ]; then
+            TAG_NAME="$(jq -r '.release.tag_name // empty' "$GITHUB_EVENT_PATH" 2>/dev/null || true)"
+            PR_NUMBER="$(jq -r '.number // empty' "$GITHUB_EVENT_PATH" 2>/dev/null || true)"
+          fi
+          case "$EVENT" in
+            release)
+              LABEL="release:${GITHUB_REF_NAME}"
+              if [ -n "$TAG_NAME" ]; then
+                LABEL="release:${TAG_NAME}"
+              fi
+              SUMMARY="Hashes refreshed for ${LABEL}"
+              ;;
+            pull_request)
+              LABEL="pr:${GITHUB_REF_NAME}"
+              if [ -n "$PR_NUMBER" ]; then
+                LABEL="pr:${PR_NUMBER}"
+              fi
+              SUMMARY="Hashes refreshed for ${LABEL}"
+              ;;
+            workflow_dispatch)
+              LABEL="manual:${GITHUB_REF_NAME}"
+              SUMMARY="Manual hash refresh for ${LABEL}"
+              ;;
+            *)
+              LABEL="branch:${GITHUB_REF_NAME}"
+              SUMMARY="Hashes refreshed for ${LABEL}"
+              ;;
+          esac
+          MESSAGE="nix: update hashes (${LABEL})"
+          {
+            echo "message=$MESSAGE"
+            echo "label=$LABEL"
+            echo "summary=$SUMMARY"
+          } >> "$GITHUB_OUTPUT"
+
       - name: Commit Nix hash changes
+        env:
+          COMMIT_MESSAGE: ${{ steps.commit_meta.outputs.message }}
+          UPDATE_LABEL: ${{ steps.commit_meta.outputs.label }}
+          UPDATE_SUMMARY: ${{ steps.commit_meta.outputs.summary }}
         run: |
           set -euo pipefail
 
+          summarize() {
+            local status="$1"
+            {
+              echo "### Nix Hash Update"
+              echo ""
+              echo "- context: ${UPDATE_LABEL}"
+              echo "- ref: ${GITHUB_REF_NAME}"
+              echo "- status: ${status}"
+            } >> "$GITHUB_STEP_SUMMARY"
+            if [ -n "${UPDATE_SUMMARY:-}" ]; then
+              echo "- note: ${UPDATE_SUMMARY}" >> "$GITHUB_STEP_SUMMARY"
+            fi
+            if [ -n "${GITHUB_SERVER_URL:-}" ] && [ -n "${GITHUB_REPOSITORY:-}" ] && [ -n "${GITHUB_RUN_ID:-}" ]; then
+              echo "- run: ${GITHUB_SERVER_URL}/${GITHUB_REPOSITORY}/actions/runs/${GITHUB_RUN_ID}" >> "$GITHUB_STEP_SUMMARY"
+            fi
+            echo "" >> "$GITHUB_STEP_SUMMARY"
+          }
+
           if git diff --quiet flake.nix nix/node-modules.nix nix/hashes.json nix/models-dev.nix; then
+            summarize "no changes"
             echo "No changes to tracked Nix files. Hashes are already up to date."
             exit 0
           fi
@@ -164,13 +231,13 @@ jobs:
           # Prevent infinite loop: check if the last commit was a hash update
           LAST_COMMIT_MSG=$(git log -1 --pretty=%B)
           if echo "$LAST_COMMIT_MSG" | grep -q "^nix: update hashes"; then
+            summarize "skipped (recent hash update)"
             echo "Last commit was already a hash update. Skipping to prevent loop."
             exit 0
           fi
 
-          VERSION=$(jq -r '.version' packages/opencode/package.json)
           git add flake.nix nix/node-modules.nix nix/hashes.json nix/models-dev.nix
-          git commit -m "nix: update hashes for v$VERSION"
+          git commit -m "$COMMIT_MESSAGE"
 
           # For PRs, push to the head branch; for push events, push to current branch
           if [ "${{ github.event_name }}" = "pull_request" ]; then
@@ -179,3 +246,5 @@ jobs:
             git pull --rebase origin ${GITHUB_REF_NAME}
             git push origin HEAD:${GITHUB_REF_NAME}
           fi
+
+          summarize "committed $(git rev-parse --short HEAD)"
