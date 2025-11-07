@@ -35,6 +35,19 @@ export namespace Config {
       }
     }
 
+    const opencodeDirectories = await Array.fromAsync(
+      Filesystem.up({
+        targets: [".opencode"],
+        start: Instance.directory,
+        stop: Instance.worktree,
+      }),
+    )
+    for (const dir of opencodeDirectories.toReversed()) {
+      for (const file of ["opencode.jsonc", "opencode.json"]) {
+        result = mergeDeep(result, await loadFile(path.join(dir, file)))
+      }
+    }
+
     // Override with custom config if provided
     if (Flag.OPENCODE_CONFIG) {
       result = mergeDeep(result, await loadFile(Flag.OPENCODE_CONFIG))
