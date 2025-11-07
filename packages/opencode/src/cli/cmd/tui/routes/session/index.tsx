@@ -1156,30 +1156,34 @@ function TextPart(props: { part: TextPart; message: AssistantMessage }) {
 
   createEffect(() => {
     const text = props.part.text.trim()
-    
+
     // WIDGET TEST: If text contains "widget_test", inject a sidebar widget for testing
     if (text.includes("widget_test")) {
       setSegments([
         { type: "text", content: "Testing sidebar widget in message stream:\n\n" },
-        { 
-          type: "widget", 
+        {
+          type: "widget",
           widgetId: "context-panel",
           config: {},
           match: [] as any,
-          streaming: false
+          streaming: false,
         },
-        { type: "text", content: "\n\nIf you see the context panel above, message widgets work!" }
+        { type: "text", content: "\n\nIf you see the context panel above, message widgets work!" },
       ])
       return
     }
-    
+
     // Allow incomplete widgets for progressive rendering during streaming
     const isStreaming = !props.message.time.completed
     MessageWidgets.splitText(text, { allowIncomplete: isStreaming }).then((result) => {
       const widgetCount = result.filter((s) => s.type === "widget").length
       const hasTag = text.includes("<steering-question")
       if (hasTag || widgetCount > 0) {
-        Bun.write("/tmp/opencode-widget-debug.log", `[${new Date().toISOString()}] TextPart segments: ${result.length}, widgets: ${widgetCount}, has tag: ${hasTag}, text length: ${text.length}\n`, { flags: "a" })
+        Bun.write(
+          "/tmp/opencode-widget-debug.log",
+          `[${new Date().toISOString()}] TextPart segments: ${result.length}, widgets: ${widgetCount}, has tag: ${hasTag}, text length: ${text.length}\n`,
+          { flags: "a" },
+        )
       }
       setSegments(result)
     })
@@ -1196,7 +1200,7 @@ function TextPart(props: { part: TextPart; message: AssistantMessage }) {
                   filetype="markdown"
                   drawUnstyledText={false}
                   streaming={true}
-          syntaxStyle={syntax()}
+                  syntaxStyle={syntax()}
                   content={(segment as any).content}
                   conceal={ctx.conceal()}
                 />
@@ -1208,23 +1212,47 @@ function TextPart(props: { part: TextPart; message: AssistantMessage }) {
                     config: (segment as any).config,
                     theme: theme,
                     sessionID: props.message.sessionID,
-                    onSubmit: (answers: any) => {
-                      // Format answers as a message
-                      const answerText = answers
-                        .map((a: any) => {
-                          const answer = Array.isArray(a.answer) ? a.answer.join(", ") : a.answer
-                          return `**${a.questionId}**: ${answer}`
-                        })
-                        .join("\n")
+                    onSubmit: (data: any) => {
+                      // Handle both steering questions and forms
+                      let answerText = ""
 
-                      // Send answers back to the session as a user message
+                      if ((segment as any).widgetId === "steering-question") {
+                        // Steering question format: array of { questionId, answer }
+                        answerText = data
+                          .map((a: any) => {
+                            const answer = Array.isArray(a.answer) ? a.answer.join(", ") : a.answer
+                            return `**${a.questionId}**: ${answer}`
+                          })
+                          .join("\n")
+                        answerText = `Steering question answers:\n\n${answerText}`
+                      } else if ((segment as any).widgetId === "form") {
+                        // Form format: array of { fieldId, value }
+                        answerText = data
+                          .map((f: any) => {
+                            const value = Array.isArray(f.value)
+                              ? f.value.join(", ")
+                              : typeof f.value === "boolean"
+                                ? f.value
+                                  ? "Yes"
+                                  : "No"
+                                : f.value
+                            return `**${f.fieldId}**: ${value}`
+                          })
+                          .join("\n")
+                        answerText = `Form submission:\n\n${answerText}`
+                      } else {
+                        // Generic widget - just stringify
+                        answerText = JSON.stringify(data, null, 2)
+                      }
+
+                      // Send data back to the session as a user message
                       sdk.client.session.prompt({
                         path: { id: props.message.sessionID },
                         body: {
                           parts: [
                             {
                               type: "text",
-                              text: `Steering question answers:\n\n${answerText}`,
+                              text: answerText,
                             },
                           ],
                         },

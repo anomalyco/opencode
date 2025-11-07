@@ -1,15 +1,13 @@
 /**
  * Core Message Widget Configurations
- * 
+ *
  * Built-in widget patterns and system prompts
  * Rendering is handled by the existing plugin system
  */
 
 import type { MessageWidgetDefinition } from "../types"
-import {
-  STEERING_QUESTIONS_PATTERN,
-  STEERING_QUESTIONS_SYSTEM_PROMPT,
-} from "./steering-questions"
+import { STEERING_QUESTIONS_PATTERN, STEERING_QUESTIONS_SYSTEM_PROMPT } from "./steering-questions"
+import { FORMS_PATTERN, FORMS_SYSTEM_PROMPT } from "./forms"
 
 /**
  * Core built-in message widget definitions
@@ -20,6 +18,11 @@ export const CORE_MESSAGE_WIDGETS: MessageWidgetDefinition[] = [
     id: "steering-question",
     pattern: STEERING_QUESTIONS_PATTERN,
     systemPrompt: STEERING_QUESTIONS_SYSTEM_PROMPT,
+  },
+  {
+    id: "form",
+    pattern: FORMS_PATTERN,
+    systemPrompt: FORMS_SYSTEM_PROMPT,
   },
 ]
 

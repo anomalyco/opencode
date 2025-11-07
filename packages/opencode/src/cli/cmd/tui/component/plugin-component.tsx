@@ -4,6 +4,8 @@ import { useSDK } from "../context/sdk"
 import { TextAttributes } from "@opentui/core"
 import { Plugin } from "@/plugin"
 import { getCoreWidget } from "@/ui/renderers"
+import { useDialog } from "../ui/dialog"
+import { DialogPrompt } from "../ui/dialog-prompt"
 
 export interface PluginComponentProps {
   componentId: string
@@ -18,6 +20,9 @@ export interface PluginComponentProps {
 function getCoreRenderer(componentId: string, context: Record<string, any>): Component<any> | null {
   if (componentId === "steering-question") {
     return () => <SteeringQuestionWidget config={context.config} onSubmit={context.onSubmit} />
+  }
+  if (componentId === "form") {
+    return () => <FormWidget config={context.config} onSubmit={context.onSubmit} />
   }
   return null
 }
@@ -37,7 +42,7 @@ function SteeringQuestionWidget(props: { config: any; onSubmit?: (answers: any) 
       title: config.title || "Question",
       description: config.description || "",
       questions: Array.isArray(config.questions) ? config.questions : [],
-      submitLabel: config.submitLabel || "Submit Answers"
+      submitLabel: config.submitLabel || "Submit Answers",
     }
   })
 
@@ -74,14 +79,16 @@ function SteeringQuestionWidget(props: { config: any; onSubmit?: (answers: any) 
     const questions = questionConfig().questions
     if (!Array.isArray(questions)) return
 
-    const formattedAnswers = questions.map((q: any) => ({
-      questionId: q.id,
-      answer: answers()[q.id] || (q.type === "multi-choice" ? [] : ""),
-    })).filter((a: any) => {
-      if (typeof a.answer === "string") return a.answer.length > 0
-      if (Array.isArray(a.answer)) return a.answer.length > 0
-      return false
-    })
+    const formattedAnswers = questions
+      .map((q: any) => ({
+        questionId: q.id,
+        answer: answers()[q.id] || (q.type === "multi-choice" ? [] : ""),
+      }))
+      .filter((a: any) => {
+        if (typeof a.answer === "string") return a.answer.length > 0
+        if (Array.isArray(a.answer)) return a.answer.length > 0
+        return false
+      })
 
     if (props.onSubmit) {
       props.onSubmit(formattedAnswers)
@@ -104,7 +111,7 @@ function SteeringQuestionWidget(props: { config: any; onSubmit?: (answers: any) 
       <text attributes={TextAttributes.BOLD} fg={theme.text || "#ffffff"}>
         {questionConfig().title}
       </text>
-      
+
       <Show when={questionConfig().description}>
         <text fg={theme.textMuted || "#808080"}>{questionConfig().description}</text>
       </Show>
@@ -129,7 +136,11 @@ function SteeringQuestionWidget(props: { config: any; onSubmit?: (answers: any) 
                         const isSelected = createMemo(() => answers()[question.id] === option)
                         return (
                           <text
-                            fg={isSelected() ? theme.accent || "#0088ff" : theme.textMuted || "#808080"}
+                            fg={
+                              isSelected()
+                                ? theme.accent || "#0088ff"
+                                : theme.textMuted || "#808080"
+                            }
                             onMouseUp={() => handleSingleChoice(question.id, option)}
                           >
                             {isSelected() ? "◉" : "○"} {option}
@@ -151,7 +162,11 @@ function SteeringQuestionWidget(props: { config: any; onSubmit?: (answers: any) 
                         })
                         return (
                           <text
-                            fg={isSelected() ? theme.accent || "#0088ff" : theme.textMuted || "#808080"}
+                            fg={
+                              isSelected()
+                                ? theme.accent || "#0088ff"
+                                : theme.textMuted || "#808080"
+                            }
                             onMouseUp={() => handleMultiChoice(question.id, option)}
                           >
                             {isSelected() ? "☑" : "☐"} {option}
@@ -166,7 +181,9 @@ function SteeringQuestionWidget(props: { config: any; onSubmit?: (answers: any) 
                 <Show when={question.type === "text"}>
                   <box marginTop={0}>
                     <text fg={theme.textMuted || "#808080"}>
-                      {answers()[question.id] ? `> ${answers()[question.id]}` : `${question.placeholder || "Click to enter text..."}`}
+                      {answers()[question.id]
+                        ? `> ${answers()[question.id]}`
+                        : `${question.placeholder || "Click to enter text..."}`}
                     </text>
                   </box>
                 </Show>
@@ -177,13 +194,21 @@ function SteeringQuestionWidget(props: { config: any; onSubmit?: (answers: any) 
 
         <box marginTop={1}>
           <text
-            fg={allRequiredAnswered() ? (hoveredSubmit() ? theme.success || "#00ff00" : theme.accent || "#0088ff") : theme.textMuted || "#808080"}
+            fg={
+              allRequiredAnswered()
+                ? hoveredSubmit()
+                  ? theme.success || "#00ff00"
+                  : theme.accent || "#0088ff"
+                : theme.textMuted || "#808080"
+            }
             attributes={allRequiredAnswered() ? TextAttributes.BOLD : undefined}
             onMouseOver={() => setHoveredSubmit(true)}
             onMouseOut={() => setHoveredSubmit(false)}
             onMouseUp={handleSubmit}
           >
-            {allRequiredAnswered() ? `▶ ${questionConfig().submitLabel || "Submit Answers"}` : `○ ${questionConfig().submitLabel || "Submit Answers"} (complete required fields)`}
+            {allRequiredAnswered()
+              ? `▶ ${questionConfig().submitLabel || "Submit Answers"}`
+              : `○ ${questionConfig().submitLabel || "Submit Answers"} (complete required fields)`}
           </text>
         </box>
       </Show>
@@ -192,6 +217,287 @@ function SteeringQuestionWidget(props: { config: any; onSubmit?: (answers: any) 
         <box flexDirection="column" gap={0} marginTop={1}>
           <text fg={theme.success || "#00ff00"} attributes={TextAttributes.BOLD}>
             ✓ Answers submitted
+          </text>
+          <text fg={theme.textMuted || "#808080"}>Waiting for response...</text>
+        </box>
+      </Show>
+    </box>
+  )
+}
+
+/**
+ * Built-in Form Widget Component
+ */
+function FormWidget(props: { config: any; onSubmit?: (values: any) => void }) {
+  const { theme } = useTheme()
+  const dialog = useDialog()
+  const [values, setValues] = createSignal<Record<string, any>>({})
+  const [submitted, setSubmitted] = createSignal(false)
+  const [hoveredSubmit, setHoveredSubmit] = createSignal(false)
+
+  const formConfig = createMemo(() => {
+    const config = props.config || {}
+    return {
+      title: config.title || "Form",
+      description: config.description || "",
+      fields: Array.isArray(config.fields) ? config.fields : [],
+      submitLabel: config.submitLabel || "Submit",
+    }
+  })
+
+  const allRequiredFilled = createMemo(() => {
+    const fields = formConfig().fields
+    if (!Array.isArray(fields)) return false
+    const required = fields.filter((f: any) => f.required !== false && f.type !== "label")
+    return required.every((f: any) => {
+      const value = values()[f.id]
+      if (value === undefined || value === null) return false
+      if (typeof value === "string") return value.trim().length > 0
+      if (typeof value === "number") return !isNaN(value)
+      if (Array.isArray(value)) return value.length > 0
+      return true
+    })
+  })
+
+  const handleRadio = (fieldId: string, option: string) => {
+    setValues((prev) => ({ ...prev, [fieldId]: option }))
+  }
+
+  const handleCheckboxMulti = (fieldId: string, option: string) => {
+    setValues((prev) => {
+      const current = (prev[fieldId] || []) as string[]
+      const updated = current.includes(option)
+        ? current.filter((o: string) => o !== option)
+        : [...current, option]
+      return { ...prev, [fieldId]: updated }
+    })
+  }
+
+  const handleCheckboxSingle = (fieldId: string) => {
+    setValues((prev) => ({ ...prev, [fieldId]: !prev[fieldId] }))
+  }
+
+  const handleDropdown = (fieldId: string, option: string) => {
+    setValues((prev) => ({ ...prev, [fieldId]: option }))
+  }
+
+  const handleTextInput = async (field: any) => {
+    const currentValue = values()[field.id] || field.defaultValue || ""
+    const result = await DialogPrompt.show(dialog, field.label || "Enter value", String(currentValue))
+    if (result !== null) {
+      if (field.type === "number") {
+        const num = parseFloat(result)
+        if (!isNaN(num)) {
+          setValues((prev) => ({ ...prev, [field.id]: num }))
+        }
+      } else {
+        setValues((prev) => ({ ...prev, [field.id]: result }))
+      }
+    }
+  }
+
+  const handleSubmit = () => {
+    if (!allRequiredFilled()) return
+    setSubmitted(true)
+
+    const fields = formConfig().fields
+    if (!Array.isArray(fields)) return
+
+    const formattedValues = fields
+      .filter((f: any) => f.type !== "label" && f.id)
+      .map((f: any) => ({
+        fieldId: f.id,
+        value:
+          values()[f.id] ??
+          (f.type === "checkbox" && f.options ? [] : f.type === "checkbox" ? false : ""),
+      }))
+      .filter((v: any) => {
+        if (typeof v.value === "string") return v.value.length > 0
+        if (Array.isArray(v.value)) return v.value.length > 0
+        return v.value !== null && v.value !== undefined
+      })
+
+    if (props.onSubmit) {
+      props.onSubmit(formattedValues)
+    }
+  }
+
+  return (
+    <box
+      flexDirection="column"
+      gap={1}
+      border={["left"]}
+      paddingTop={1}
+      paddingBottom={1}
+      paddingLeft={2}
+      marginTop={0}
+      backgroundColor={theme.backgroundPanel || "#1a1a1a"}
+      borderColor={submitted() ? theme.success || "#00ff00" : theme.accent || "#0088ff"}
+      flexShrink={0}
+    >
+      <text attributes={TextAttributes.BOLD} fg={theme.text || "#ffffff"}>
+        {formConfig().title}
+      </text>
+
+      <Show when={formConfig().description}>
+        <text fg={theme.textMuted || "#808080"}>{formConfig().description}</text>
+      </Show>
+
+      <Show when={!submitted()}>
+        <box flexDirection="column" gap={1} marginTop={1}>
+          <For each={formConfig().fields}>
+            {(field: any) => (
+              <box flexDirection="column" gap={0}>
+                <Show when={field.type === "label"}>
+                  <text fg={theme.text || "#ffffff"} attributes={TextAttributes.BOLD}>
+                    {field.content}
+                  </text>
+                </Show>
+
+                <Show when={field.type !== "label" && field.label}>
+                  <text fg={theme.text || "#ffffff"}>
+                    {field.label}
+                    <Show when={field.required !== false}>
+                      <span style={{ fg: theme.error || "#ff0000" }}> *</span>
+                    </Show>
+                  </text>
+                </Show>
+
+                <Show when={field.type === "radio" && field.options}>
+                  <box flexDirection="row" gap={2} marginTop={0} flexWrap="wrap">
+                    <For each={field.options}>
+                      {(option: string) => {
+                        const isSelected = createMemo(() => values()[field.id] === option)
+                        return (
+                          <text
+                            fg={
+                              isSelected()
+                                ? theme.accent || "#0088ff"
+                                : theme.textMuted || "#808080"
+                            }
+                            onMouseUp={() => handleRadio(field.id, option)}
+                          >
+                            {isSelected() ? "◉" : "○"} {option}
+                          </text>
+                        )
+                      }}
+                    </For>
+                  </box>
+                </Show>
+
+                <Show when={field.type === "checkbox" && field.options}>
+                  <box flexDirection="row" gap={2} marginTop={0} flexWrap="wrap">
+                    <For each={field.options}>
+                      {(option: string) => {
+                        const isSelected = createMemo(() => {
+                          const current = values()[field.id]
+                          return Array.isArray(current) && current.includes(option)
+                        })
+                        return (
+                          <text
+                            fg={
+                              isSelected()
+                                ? theme.accent || "#0088ff"
+                                : theme.textMuted || "#808080"
+                            }
+                            onMouseUp={() => handleCheckboxMulti(field.id, option)}
+                          >
+                            {isSelected() ? "☑" : "☐"} {option}
+                          </text>
+                        )
+                      }}
+                    </For>
+                  </box>
+                </Show>
+
+                <Show when={field.type === "checkbox" && !field.options}>
+                  <box marginTop={0}>
+                    <text
+                      fg={
+                        values()[field.id]
+                          ? theme.accent || "#0088ff"
+                          : theme.textMuted || "#808080"
+                      }
+                      onMouseUp={() => handleCheckboxSingle(field.id)}
+                    >
+                      {values()[field.id] ? "☑" : "☐"}{" "}
+                      {values()[field.id] ? "Enabled" : "Disabled"}
+                    </text>
+                  </box>
+                </Show>
+
+                <Show when={field.type === "dropdown" && field.options}>
+                  <box flexDirection="row" gap={2} marginTop={0} flexWrap="wrap">
+                    <For each={field.options}>
+                      {(option: string) => {
+                        const isSelected = createMemo(() => values()[field.id] === option)
+                        return (
+                          <text
+                            fg={
+                              isSelected()
+                                ? theme.accent || "#0088ff"
+                                : theme.textMuted || "#808080"
+                            }
+                            onMouseUp={() => handleDropdown(field.id, option)}
+                          >
+                            {isSelected() ? "◉" : "○"} {option}
+                          </text>
+                        )
+                      }}
+                    </For>
+                  </box>
+                </Show>
+
+                <Show
+                  when={
+                    field.type === "text" || field.type === "textarea" || field.type === "number"
+                  }
+                >
+                  <box marginTop={0}>
+                    <text
+                      fg={
+                        values()[field.id]
+                          ? theme.accent || "#0088ff"
+                          : theme.textMuted || "#808080"
+                      }
+                      onMouseUp={() => handleTextInput(field)}
+                    >
+                      {values()[field.id]
+                        ? `> ${values()[field.id]}`
+                        : `${field.placeholder || "Click to enter..."}`}
+                    </text>
+                  </box>
+                </Show>
+              </box>
+            )}
+          </For>
+        </box>
+
+        <box marginTop={1}>
+          <text
+            fg={
+              allRequiredFilled()
+                ? hoveredSubmit()
+                  ? theme.success || "#00ff00"
+                  : theme.accent || "#0088ff"
+                : theme.textMuted || "#808080"
+            }
+            attributes={allRequiredFilled() ? TextAttributes.BOLD : undefined}
+            onMouseOver={() => setHoveredSubmit(true)}
+            onMouseOut={() => setHoveredSubmit(false)}
+            onMouseUp={handleSubmit}
+          >
+            {allRequiredFilled()
+              ? `▶ ${formConfig().submitLabel}`
+              : `○ ${formConfig().submitLabel} (complete required fields)`}
+          </text>
+        </box>
+      </Show>
+
+      <Show when={submitted()}>
+        <box flexDirection="column" gap={0} marginTop={1}>
+          <text fg={theme.success || "#00ff00"} attributes={TextAttributes.BOLD}>
+            ✓ Form submitted
           </text>
           <text fg={theme.textMuted || "#808080"}>Waiting for response...</text>
         </box>
@@ -244,7 +550,10 @@ export function PluginComponent(props: PluginComponentProps) {
       }
 
       // Try core built-in renderers as fallback
-      console.log("[PluginComponent] No plugin found, checking core renderers for:", props.componentId)
+      console.log(
+        "[PluginComponent] No plugin found, checking core renderers for:",
+        props.componentId,
+      )
       const coreWidget = getCoreWidget(props.componentId)
       if (coreWidget) {
         console.log("[PluginComponent] ✓ Using core renderer for:", props.componentId)
