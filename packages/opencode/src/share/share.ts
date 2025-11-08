@@ -50,10 +50,7 @@ export namespace Share {
       await sync("session/info/" + evt.properties.info.id, evt.properties.info)
     })
     Bus.subscribe(MessageV2.Event.Updated, async (evt) => {
-      await sync(
-        "session/message/" + evt.properties.info.sessionID + "/" + evt.properties.info.id,
-        evt.properties.info,
-      )
+      await sync("session/message/" + evt.properties.info.sessionID + "/" + evt.properties.info.id, evt.properties.info)
     })
     Bus.subscribe(MessageV2.Event.PartUpdated, async (evt) => {
       await sync(
@@ -70,9 +67,7 @@ export namespace Share {
 
   export const URL =
     process.env["OPENCODE_API"] ??
-    (Installation.isPreview() || Installation.isLocal()
-      ? "https://api.dev.opencode.ai"
-      : "https://api.opencode.ai")
+    (Installation.isPreview() || Installation.isLocal() ? "https://api.dev.opencode.ai" : "https://api.opencode.ai")
 
   export async function create(sessionID: string) {
     return fetch(`${URL}/share_create`, {

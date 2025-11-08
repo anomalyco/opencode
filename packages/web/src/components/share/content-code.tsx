@@ -26,11 +26,7 @@ export function ContentCode(props: Props) {
   )
   return (
     <Suspense>
-      <div
-        innerHTML={html()}
-        class={style.root}
-        data-flush={props.flush === true ? true : undefined}
-      />
+      <div innerHTML={html()} class={style.root} data-flush={props.flush === true ? true : undefined} />
     </Suspense>
   )
 }

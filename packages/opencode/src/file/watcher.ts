@@ -51,10 +51,8 @@ export namespace FileWatcher {
           for (const evt of evts) {
             log.info("event", evt)
             if (evt.type === "create") Bus.publish(Event.Updated, { file: evt.path, event: "add" })
-            if (evt.type === "update")
-              Bus.publish(Event.Updated, { file: evt.path, event: "change" })
-            if (evt.type === "delete")
-              Bus.publish(Event.Updated, { file: evt.path, event: "unlink" })
+            if (evt.type === "update") Bus.publish(Event.Updated, { file: evt.path, event: "change" })
+            if (evt.type === "delete") Bus.publish(Event.Updated, { file: evt.path, event: "unlink" })
           }
         },
         {

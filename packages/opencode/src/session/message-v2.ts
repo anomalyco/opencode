@@ -2,13 +2,7 @@ import z from "zod"
 import { Bus } from "../bus"
 import { NamedError } from "../util/error"
 import { Message } from "./message"
-import {
-  APICallError,
-  convertToModelMessages,
-  LoadAPIKeyError,
-  type ModelMessage,
-  type UIMessage,
-} from "ai"
+import { APICallError, convertToModelMessages, LoadAPIKeyError, type ModelMessage, type UIMessage } from "ai"
 import { Identifier } from "../id/id"
 import { LSP } from "../lsp"
 import { Snapshot } from "@/snapshot"
@@ -17,10 +11,7 @@ import { Storage } from "@/storage/storage"
 
 export namespace MessageV2 {
   export const OutputLengthError = NamedError.create("MessageOutputLengthError", z.object({}))
-  export const AbortedError = NamedError.create(
-    "MessageAbortedError",
-    z.object({ message: z.string() }),
-  )
+  export const AbortedError = NamedError.create("MessageAbortedError", z.object({ message: z.string() }))
   export const AuthError = NamedError.create(
     "ProviderAuthError",
     z.object({
@@ -253,12 +244,7 @@ export namespace MessageV2 {
   export type ToolStateError = z.infer<typeof ToolStateError>
 
   export const ToolState = z
-    .discriminatedUnion("status", [
-      ToolStatePending,
-      ToolStateRunning,
-      ToolStateCompleted,
-      ToolStateError,
-    ])
+    .discriminatedUnion("status", [ToolStatePending, ToolStateRunning, ToolStateCompleted, ToolStateError])
     .meta({
       ref: "ToolState",
     })
@@ -454,8 +440,7 @@ export namespace MessageV2 {
                   }
                 }
 
-                const { title, time, ...metadata } =
-                  v1.metadata.tool[part.toolInvocation.toolCallId] ?? {}
+                const { title, time, ...metadata } = v1.metadata.tool[part.toolInvocation.toolCallId] ?? {}
                 if (part.toolInvocation.state === "call") {
                   return {
                     status: "running",
@@ -556,11 +541,7 @@ export namespace MessageV2 {
                 },
               ]
             // text/plain and directory files are converted into text parts, ignore them
-            if (
-              part.type === "file" &&
-              part.mime !== "text/plain" &&
-              part.mime !== "application/x-directory"
-            )
+            if (part.type === "file" && part.mime !== "text/plain" && part.mime !== "application/x-directory")
               return [
                 {
                   type: "file",
@@ -619,9 +600,7 @@ export namespace MessageV2 {
                     state: "output-available",
                     toolCallId: part.callID,
                     input: part.state.input,
-                    output: part.state.time.compacted
-                      ? "[Old tool result content cleared]"
-                      : part.state.output,
+                    output: part.state.time.compacted ? "[Old tool result content cleared]" : part.state.output,
                     callProviderMetadata: part.metadata,
                   },
                 ]

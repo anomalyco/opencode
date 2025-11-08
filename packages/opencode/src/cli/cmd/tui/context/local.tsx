@@ -22,9 +22,7 @@ export const { use: useLocal, provider: LocalProvider } = createSimpleContext({
       return !!provider?.models[model.modelID]
     }
 
-    function getFirstValidModel(
-      ...modelFns: (() => { providerID: string; modelID: string } | undefined)[]
-    ) {
+    function getFirstValidModel(...modelFns: (() => { providerID: string; modelID: string } | undefined)[]) {
       for (const modelFn of modelFns) {
         const model = modelFn()
         if (!model) continue
@@ -213,9 +211,7 @@ export const { use: useLocal, provider: LocalProvider } = createSimpleContext({
           const current = currentModel()
           if (!current) return
           const recent = modelStore.recent
-          const index = recent.findIndex(
-            (x) => x.providerID === current.providerID && x.modelID === current.modelID,
-          )
+          const index = recent.findIndex((x) => x.providerID === current.providerID && x.modelID === current.modelID)
           if (index === -1) return
           let next = index + direction
           if (next < 0) next = recent.length - 1

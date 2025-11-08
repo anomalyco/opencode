@@ -13,8 +13,7 @@ describe("ide", () => {
 
   test("should detect Visual Studio Code", () => {
     process.env["TERM_PROGRAM"] = "vscode"
-    process.env["GIT_ASKPASS"] =
-      "/path/to/Visual Studio Code.app/Contents/Resources/app/extensions/git/dist/askpass.sh"
+    process.env["GIT_ASKPASS"] = "/path/to/Visual Studio Code.app/Contents/Resources/app/extensions/git/dist/askpass.sh"
 
     expect(Ide.ide()).toBe("Visual Studio Code")
   })
@@ -29,24 +28,21 @@ describe("ide", () => {
 
   test("should detect Cursor", () => {
     process.env["TERM_PROGRAM"] = "vscode"
-    process.env["GIT_ASKPASS"] =
-      "/path/to/Cursor.app/Contents/Resources/app/extensions/git/dist/askpass.sh"
+    process.env["GIT_ASKPASS"] = "/path/to/Cursor.app/Contents/Resources/app/extensions/git/dist/askpass.sh"
 
     expect(Ide.ide()).toBe("Cursor")
   })
 
   test("should detect VSCodium", () => {
     process.env["TERM_PROGRAM"] = "vscode"
-    process.env["GIT_ASKPASS"] =
-      "/path/to/VSCodium.app/Contents/Resources/app/extensions/git/dist/askpass.sh"
+    process.env["GIT_ASKPASS"] = "/path/to/VSCodium.app/Contents/Resources/app/extensions/git/dist/askpass.sh"
 
     expect(Ide.ide()).toBe("VSCodium")
   })
 
   test("should detect Windsurf", () => {
     process.env["TERM_PROGRAM"] = "vscode"
-    process.env["GIT_ASKPASS"] =
-      "/path/to/Windsurf.app/Contents/Resources/app/extensions/git/dist/askpass.sh"
+    process.env["GIT_ASKPASS"] = "/path/to/Windsurf.app/Contents/Resources/app/extensions/git/dist/askpass.sh"
 
     expect(Ide.ide()).toBe("Windsurf")
   })

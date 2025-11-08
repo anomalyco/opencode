@@ -2,11 +2,7 @@ import { createEffect, Show, type ValidComponent } from "solid-js"
 import { createStore } from "solid-js/store"
 import { Dynamic } from "solid-js/web"
 
-export const Typewriter = <T extends ValidComponent = "p">(props: {
-  text?: string
-  class?: string
-  as?: T
-}) => {
+export const Typewriter = <T extends ValidComponent = "p">(props: { text?: string; class?: string; as?: T }) => {
   const [store, setStore] = createStore({
     typing: false,
     displayed: "",

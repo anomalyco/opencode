@@ -13,11 +13,7 @@ import { ModelTable } from "@opencode-ai/console-core/schema/model.sql.js"
 import { ProviderTable } from "@opencode-ai/console-core/schema/provider.sql.js"
 import { logger } from "./logger"
 import { AuthError, CreditsError, MonthlyLimitError, UserLimitError, ModelError } from "./error"
-import {
-  createBodyConverter,
-  createStreamPartConverter,
-  createResponseConverter,
-} from "./provider/provider"
+import { createBodyConverter, createStreamPartConverter, createResponseConverter } from "./provider/provider"
 import { anthropicHelper } from "./provider/anthropic"
 import { openaiHelper } from "./provider/openai"
 import { oaCompatHelper } from "./provider/openai-compatible"
@@ -46,11 +42,7 @@ export async function handler(
     })
     const zenData = ZenData.list()
     const modelInfo = validateModel(zenData, body.model)
-    const providerInfo = selectProvider(
-      zenData,
-      modelInfo,
-      input.request.headers.get("x-real-ip") ?? "",
-    )
+    const providerInfo = selectProvider(zenData, modelInfo, input.request.headers.get("x-real-ip") ?? "")
     const authInfo = await authenticate(modelInfo, providerInfo)
     validateBilling(modelInfo, authInfo)
     validateModelSettings(authInfo)
@@ -229,11 +221,7 @@ export async function handler(
     return { id: modelId, ...modelData }
   }
 
-  function selectProvider(
-    zenData: ZenData,
-    model: Awaited<ReturnType<typeof validateModel>>,
-    ip: string,
-  ) {
+  function selectProvider(zenData: ZenData, model: Awaited<ReturnType<typeof validateModel>>, ip: string) {
     const providers = model.providers
       .filter((provider) => !provider.disabled)
       .flatMap((provider) => Array<typeof provider>(provider.weight ?? 1).fill(provider))
@@ -252,11 +240,7 @@ export async function handler(
     return {
       ...provider,
       ...zenData.providers[provider.id],
-      ...(format === "anthropic"
-        ? anthropicHelper
-        : format === "openai"
-          ? openaiHelper
-          : oaCompatHelper),
+      ...(format === "anthropic" ? anthropicHelper : format === "openai" ? openaiHelper : oaCompatHelper),
     }
   }
 
@@ -297,20 +281,11 @@ export async function handler(
         .from(KeyTable)
         .innerJoin(WorkspaceTable, eq(WorkspaceTable.id, KeyTable.workspaceID))
         .innerJoin(BillingTable, eq(BillingTable.workspaceID, KeyTable.workspaceID))
-        .innerJoin(
-          UserTable,
-          and(eq(UserTable.workspaceID, KeyTable.workspaceID), eq(UserTable.id, KeyTable.userID)),
-        )
-        .leftJoin(
-          ModelTable,
-          and(eq(ModelTable.workspaceID, KeyTable.workspaceID), eq(ModelTable.model, model.id)),
-        )
+        .innerJoin(UserTable, and(eq(UserTable.workspaceID, KeyTable.workspaceID), eq(UserTable.id, KeyTable.userID)))
+        .leftJoin(ModelTable, and(eq(ModelTable.workspaceID, KeyTable.workspaceID), eq(ModelTable.model, model.id)))
         .leftJoin(
           ProviderTable,
-          and(
-            eq(ProviderTable.workspaceID, KeyTable.workspaceID),
-            eq(ProviderTable.provider, providerInfo.id),
-          ),
+          and(eq(ProviderTable.workspaceID, KeyTable.workspaceID), eq(ProviderTable.provider, providerInfo.id)),
         )
         .where(and(eq(KeyTable.key, apiKey), isNull(KeyTable.timeDeleted)))
         .then((rows) => rows[0]),
@@ -401,19 +376,12 @@ export async function handler(
     providerInfo: Awaited<ReturnType<typeof selectProvider>>,
     usage: any,
   ) {
-    const {
-      inputTokens,
-      outputTokens,
-      reasoningTokens,
-      cacheReadTokens,
-      cacheWrite5mTokens,
-      cacheWrite1hTokens,
-    } = providerInfo.normalizeUsage(usage)
+    const { inputTokens, outputTokens, reasoningTokens, cacheReadTokens, cacheWrite5mTokens, cacheWrite1hTokens } =
+      providerInfo.normalizeUsage(usage)
 
     const modelCost =
       modelInfo.cost200K &&
-      inputTokens + (cacheReadTokens ?? 0) + (cacheWrite5mTokens ?? 0) + (cacheWrite1hTokens ?? 0) >
-        200_000
+      inputTokens + (cacheReadTokens ?? 0) + (cacheWrite5mTokens ?? 0) + (cacheWrite1hTokens ?? 0) > 200_000
         ? modelInfo.cost200K
         : modelInfo.cost
 
@@ -464,8 +432,7 @@ export async function handler(
 
     if (!authInfo) return
 
-    const cost =
-      authInfo.isFree || authInfo.provider?.credentials ? 0 : centsToMicroCents(totalCostInCent)
+    const cost = authInfo.isFree || authInfo.provider?.credentials ? 0 : centsToMicroCents(totalCostInCent)
     await Database.transaction(async (tx) => {
       await tx.insert(UsageTable).values({
         workspaceID: authInfo.workspaceID,
@@ -505,9 +472,7 @@ export async function handler(
             `,
           timeMonthlyUsageUpdated: sql`now()`,
         })
-        .where(
-          and(eq(UserTable.workspaceID, authInfo.workspaceID), eq(UserTable.id, authInfo.user.id)),
-        )
+        .where(and(eq(UserTable.workspaceID, authInfo.workspaceID), eq(UserTable.id, authInfo.user.id)))
     })
 
     await Database.use((tx) =>
@@ -537,10 +502,7 @@ export async function handler(
               BillingTable.balance,
               centsToMicroCents((authInfo.billing.reloadTrigger ?? Billing.RELOAD_TRIGGER) * 100),
             ),
-            or(
-              isNull(BillingTable.timeReloadLockedTill),
-              lt(BillingTable.timeReloadLockedTill, sql`now()`),
-            ),
+            or(isNull(BillingTable.timeReloadLockedTill), lt(BillingTable.timeReloadLockedTill, sql`now()`)),
           ),
         ),
     )

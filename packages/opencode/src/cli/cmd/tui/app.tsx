@@ -115,11 +115,7 @@ export function tui(input: {
     render(
       () => {
         return (
-          <ErrorBoundary
-            fallback={(error, reset) => (
-              <ErrorComponent error={error} reset={reset} onExit={onExit} />
-            )}
-          >
+          <ErrorBoundary fallback={(error, reset) => <ErrorComponent error={error} reset={reset} onExit={onExit} />}>
             <ExitProvider onExit={onExit}>
               <KVProvider>
                 <ToastProvider>
@@ -413,12 +409,7 @@ function App() {
         flexShrink={0}
       >
         <box flexDirection="row">
-          <box
-            flexDirection="row"
-            backgroundColor={theme.backgroundElement}
-            paddingLeft={1}
-            paddingRight={1}
-          >
+          <box flexDirection="row" backgroundColor={theme.backgroundElement} paddingLeft={1} paddingRight={1}>
             <text fg={theme.textMuted}>open</text>
             <text fg={theme.text} attributes={TextAttributes.BOLD}>
               code{" "}
@@ -434,11 +425,7 @@ function App() {
             tab
           </text>
           <text fg={local.agent.color(local.agent.current().name)}>{""}</text>
-          <text
-            bg={local.agent.color(local.agent.current().name)}
-            fg={theme.background}
-            wrapMode={undefined}
-          >
+          <text bg={local.agent.color(local.agent.current().name)} fg={theme.background} wrapMode={undefined}>
             <span style={{ bold: true }}> {local.agent.current().name.toUpperCase()}</span>
             <span> AGENT </span>
           </text>

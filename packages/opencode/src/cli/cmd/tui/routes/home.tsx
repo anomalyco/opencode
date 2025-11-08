@@ -26,11 +26,7 @@ export function Home() {
             </Match>
             <Match when={true}>
               <span style={{ fg: theme.success }}>•</span>{" "}
-              {Locale.pluralize(
-                Object.values(sync.data.mcp).length,
-                "{} mcp server",
-                "{} mcp servers",
-              )}
+              {Locale.pluralize(Object.values(sync.data.mcp).length, "{} mcp server", "{} mcp servers")}
             </Match>
           </Switch>
         </text>
@@ -39,14 +35,7 @@ export function Home() {
   )
 
   return (
-    <box
-      flexGrow={1}
-      justifyContent="center"
-      alignItems="center"
-      paddingLeft={2}
-      paddingRight={2}
-      gap={1}
-    >
+    <box flexGrow={1} justifyContent="center" alignItems="center" paddingLeft={2} paddingRight={2} gap={1}>
       <Logo />
       <box width={39}>
         <HelpRow keybind="command_list">Commands</HelpRow>

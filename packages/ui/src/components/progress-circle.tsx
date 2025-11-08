@@ -7,13 +7,7 @@ export interface ProgressCircleProps extends Pick<ComponentProps<"svg">, "class"
 }
 
 export function ProgressCircle(props: ProgressCircleProps) {
-  const [split, rest] = splitProps(props, [
-    "percentage",
-    "size",
-    "strokeWidth",
-    "class",
-    "classList",
-  ])
+  const [split, rest] = splitProps(props, ["percentage", "size", "strokeWidth", "class", "classList"])
 
   const size = () => split.size || 16
   const strokeWidth = () => split.strokeWidth || 3
@@ -42,13 +36,7 @@ export function ProgressCircle(props: ProgressCircleProps) {
         [split.class ?? ""]: !!split.class,
       }}
     >
-      <circle
-        cx={center}
-        cy={center}
-        r={radius()}
-        data-slot="background"
-        stroke-width={strokeWidth()}
-      />
+      <circle cx={center} cy={center} r={radius()} data-slot="background" stroke-width={strokeWidth()} />
       <circle
         cx={center}
         cy={center}

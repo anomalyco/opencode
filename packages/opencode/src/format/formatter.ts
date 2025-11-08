@@ -132,21 +132,7 @@ export const zig: Info = {
 export const clang: Info = {
   name: "clang-format",
   command: ["clang-format", "-i", "$FILE"],
-  extensions: [
-    ".c",
-    ".cc",
-    ".cpp",
-    ".cxx",
-    ".c++",
-    ".h",
-    ".hh",
-    ".hpp",
-    ".hxx",
-    ".h++",
-    ".ino",
-    ".C",
-    ".H",
-  ],
+  extensions: [".c", ".cc", ".cpp", ".cxx", ".c++", ".h", ".hh", ".hpp", ".hxx", ".h++", ".ino", ".C", ".H"],
   async enabled() {
     const items = await Filesystem.findUp(".clang-format", Instance.directory, Instance.worktree)
     return items.length > 0

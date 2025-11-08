@@ -39,12 +39,7 @@ export namespace Lock {
     }
 
     // Clean up empty locks
-    if (
-      lock.readers === 0 &&
-      !lock.writer &&
-      lock.waitingReaders.length === 0 &&
-      lock.waitingWriters.length === 0
-    ) {
+    if (lock.readers === 0 && !lock.writer && lock.waitingReaders.length === 0 && lock.waitingWriters.length === 0) {
       locks.delete(key)
     }
   }
