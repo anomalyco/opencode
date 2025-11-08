@@ -10,8 +10,4 @@ export namespace ACPToolRegistry {
   export function get(sessionID: string): ACPTools | undefined {
     return registry.get(sessionID)
   }
-
-  export function remove(sessionID: string) {
-    registry.delete(sessionID)
-  }
 }
