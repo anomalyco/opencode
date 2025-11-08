@@ -24,6 +24,10 @@ import { TuiSpawnCommand } from "./cli/cmd/tui/spawn"
 import { AcpCommand } from "./cli/cmd/acp"
 import { EOL } from "os"
 import { WebCommand } from "./cli/cmd/web"
+import { CompletionCommand } from "./cli/cmd/completion"
+import { SetupCommand } from "./cli/cmd/setup"
+import { AliasCommand } from "./cli/cmd/alias"
+import { PluginsCommand } from "./cli/cmd/plugins"
 
 process.on("unhandledRejection", (e) => {
   Log.Default.error("rejection", {
@@ -90,13 +94,58 @@ const cli = yargs(hideBin(process.argv))
   .command(ExportCommand)
   .command(ImportCommand)
   .command(GithubCommand)
+  .command(CompletionCommand)
+  .command(SetupCommand)
+  .command(AliasCommand)
+  .command(PluginsCommand)
   .fail((msg) => {
-    if (
+    // Enhanced error handling with suggestions
+    if (msg.startsWith("Unknown command:")) {
+      const unknownCmd = msg.split(":")[1]?.trim()
+      if (unknownCmd) {
+        const { Suggestions } = require("./cli/suggestions")
+        const { RichUI } = require("./cli/rich-ui")
+
+        UI.println()
+        UI.error(`Unknown command: '${unknownCmd}'`)
+        UI.println()
+
+        // Check for common typo
+        const typoCorrection = Suggestions.checkCommonTypo(unknownCmd)
+        if (typoCorrection) {
+          UI.println(UI.Style.TEXT_INFO_BOLD + RichUI.Icons.info + " " + UI.Style.TEXT_NORMAL + `Did you mean '${UI.Style.TEXT_HIGHLIGHT}${typoCorrection}${UI.Style.TEXT_NORMAL}'?`)
+          UI.println()
+          UI.println("Run: " + UI.Style.TEXT_HIGHLIGHT + `opencode ${typoCorrection} --help` + UI.Style.TEXT_NORMAL)
+        } else {
+          // Find similar commands
+          const similar = Suggestions.findSimilarCommands(unknownCmd)
+          if (similar.length > 0) {
+            UI.println(UI.Style.TEXT_INFO + "Did you mean one of these?" + UI.Style.TEXT_NORMAL)
+            similar.forEach((cmd) => {
+              UI.println("  " + UI.Style.TEXT_HIGHLIGHT + "opencode " + cmd + UI.Style.TEXT_NORMAL)
+            })
+          }
+        }
+
+        // Check if trying to use another CLI tool
+        const otherCli = Suggestions.detectOtherCli(unknownCmd)
+        if (otherCli) {
+          UI.println()
+          UI.println(UI.Style.TEXT_WARNING + RichUI.Icons.warning + " " + UI.Style.TEXT_NORMAL + otherCli)
+        }
+
+        UI.println()
+        UI.println("Run " + UI.Style.TEXT_HIGHLIGHT + "opencode --help" + UI.Style.TEXT_NORMAL + " to see all available commands")
+        UI.println()
+      }
+    } else if (
       msg.startsWith("Unknown argument") ||
       msg.startsWith("Not enough non-option arguments") ||
       msg.startsWith("Invalid values:")
     ) {
       cli.showHelp("log")
+    } else {
+      UI.error(msg)
     }
     process.exit(1)
   })
