@@ -22,8 +22,7 @@ export function createRateLimiter(model: string, limit: number | undefined, ip: 
       prevRate = prevValue ? parseInt(prevValue) : 0
       currRate = currValue ? parseInt(currValue) : 0
       logger.debug(`rate limit ${model} prev/curr: ${prevRate}/${currRate}`)
-      if (prevRate + currRate >= limit)
-        throw new RateLimitError(`Rate limit exceeded. Please try again later.`)
+      if (prevRate + currRate >= limit) throw new RateLimitError(`Rate limit exceeded. Please try again later.`)
     },
   }
 }

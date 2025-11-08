@@ -139,10 +139,7 @@ new sst.cloudflare.x.SolidStart("Console", {
     AWS_SES_SECRET_ACCESS_KEY,
     ...($dev
       ? [
-          new sst.Secret(
-            "CLOUDFLARE_DEFAULT_ACCOUNT_ID",
-            process.env.CLOUDFLARE_DEFAULT_ACCOUNT_ID!,
-          ),
+          new sst.Secret("CLOUDFLARE_DEFAULT_ACCOUNT_ID", process.env.CLOUDFLARE_DEFAULT_ACCOUNT_ID!),
           new sst.Secret("CLOUDFLARE_API_TOKEN", process.env.CLOUDFLARE_API_TOKEN!),
         ]
       : []),

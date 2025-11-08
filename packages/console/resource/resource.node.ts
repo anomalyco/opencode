@@ -1,8 +1,4 @@
-import type {
-  KVNamespaceListOptions,
-  KVNamespaceListResult,
-  KVNamespacePutOptions,
-} from "@cloudflare/workers-types"
+import type { KVNamespaceListOptions, KVNamespaceListResult, KVNamespacePutOptions } from "@cloudflare/workers-types"
 import { Resource as ResourceBase } from "sst"
 import Cloudflare from "cloudflare"
 
@@ -27,9 +23,7 @@ export const Resource = new Proxy(
                 keys: Array.isArray(k) ? k : [k],
                 account_id: accountId,
               })
-              .then((result) =>
-                isMulti ? new Map(Object.entries(result?.values ?? {})) : result?.values?.[k],
-              )
+              .then((result) => (isMulti ? new Map(Object.entries(result?.values ?? {})) : result?.values?.[k]))
           },
           put: (k: string, v: string, opts?: KVNamespacePutOptions) =>
             client.kv.namespaces.values.update(namespaceId, k, {
