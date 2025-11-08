@@ -28,6 +28,7 @@ import { CompletionCommand } from "./cli/cmd/completion"
 import { SetupCommand } from "./cli/cmd/setup"
 import { AliasCommand } from "./cli/cmd/alias"
 import { PluginsCommand } from "./cli/cmd/plugins"
+import { OpenRouterCommand } from "./cli/cmd/openrouter"
 
 process.on("unhandledRejection", (e) => {
   Log.Default.error("rejection", {
@@ -98,6 +99,7 @@ const cli = yargs(hideBin(process.argv))
   .command(SetupCommand)
   .command(AliasCommand)
   .command(PluginsCommand)
+  .command(OpenRouterCommand)
   .fail((msg) => {
     // Enhanced error handling with suggestions
     if (msg.startsWith("Unknown command:")) {

@@ -164,13 +164,20 @@ export namespace Provider {
         },
       }
     },
-    openrouter: async () => {
+    openrouter: async (input) => {
+      const { OpenRouter } = await import("./openrouter")
+
+      // Add OpenRouter models to the provider's model catalog
+      for (const [key, model] of Object.entries(OpenRouter.MODELS)) {
+        input.models[key] = model
+      }
+
       return {
-        autoload: false,
+        autoload: true, // Enable by default since OpenRouter has free models
         options: {
           headers: {
             "HTTP-Referer": "https://opencode.ai/",
-            "X-Title": "opencode",
+            "X-Title": "OpenCode CLI",
           },
         },
       }
