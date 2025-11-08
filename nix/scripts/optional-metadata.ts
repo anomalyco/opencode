@@ -13,16 +13,18 @@ const text = await Bun.file(file).text()
 const hashesPath = path.join(root, "nix/hashes.json")
 let optional: Record<string, { version?: string; sha512?: string; sha?: string }> = {}
 
-try {
-  // Pre-seeded metadata keeps optional bundles reproducible without network calls.
-  const data = await Bun.file(hashesPath).text()
-  const parsed = JSON.parse(data ?? "{}")
+const hashesData = await Bun.file(hashesPath)
+  .text()
+  .catch((error) => {
+    console.warn(`missing-hashes\t${hashesPath}\t${(error as Error).message}`)
+    return ""
+  })
+
+if (hashesData?.trim()) {
+  const parsed = JSON.parse(hashesData)
   if (parsed && typeof parsed.optional === "object" && parsed.optional !== null) {
     optional = parsed.optional as typeof optional
   }
-} catch (error) {
-  console.error(`missing-hashes\t${hashesPath}\t${(error as Error).message}`)
-  process.exit(1)
 }
 
 const names = text

@@ -96,7 +96,8 @@ jobs:
         id: hash_change
         run: |
           set -euo pipefail
-          if git diff --quiet nix/hashes.json; then
+          STATUS="$(git status --short -- nix/hashes.json || true)"
+          if [ -z "$STATUS" ]; then
             echo "changed=false" >> "$GITHUB_OUTPUT"
             echo "No hash changes detected."
           else
@@ -140,11 +141,30 @@ jobs:
         with:
           path: hash-artifacts
 
+      - name: Sync branch state
+        env:
+          TARGET_BRANCH: ${{ github.head_ref || github.ref_name }}
+        run: |
+          set -euo pipefail
+          BRANCH="${TARGET_BRANCH:-${GITHUB_REF_NAME}}"
+          git fetch origin "$BRANCH"
+          if git show-ref --verify --quiet "refs/heads/$BRANCH"; then
+            git checkout "$BRANCH"
+          else
+            git checkout -b "$BRANCH"
+          fi
+          git reset --hard "origin/$BRANCH"
+
       - name: Merge hash files
+        id: merge_hashes
         run: |
           set -euo pipefail
 
           BASE_HASH="nix/hashes.json"
+          if [ ! -f "$BASE_HASH" ]; then
+            mkdir -p "$(dirname "$BASE_HASH")"
+            jq -n '{nodeModules: {}, optional: {}, metadata: {}}' > "$BASE_HASH"
+          fi
           for system in x86_64-linux aarch64-linux aarch64-darwin x86_64-darwin; do
             if [ -f "hash-artifacts/hashes-${system}/hashes.json" ]; then
               echo "Merging ${system} hashes..."
@@ -162,6 +182,15 @@ jobs:
 
           echo "Final merged hashes.json:"
           cat "$BASE_HASH"
+
+          DUMMY="sha256-AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA="
+          HAS_NODE=$(jq --arg dummy "$DUMMY" '[ (.nodeModules // {})[] | select(. != $dummy) ] | length' "$BASE_HASH")
+          HAS_OPTIONAL=$(jq '(.optional // {}) | length' "$BASE_HASH")
+          if [ "$HAS_NODE" -gt 0 ] || [ "$HAS_OPTIONAL" -gt 0 ]; then
+            echo "has_data=true" >> "$GITHUB_OUTPUT"
+          else
+            echo "has_data=false" >> "$GITHUB_OUTPUT"
+          fi
 
       - name: Derive commit metadata
         id: commit_meta
@@ -201,17 +230,23 @@ jobs:
               ;;
           esac
           MESSAGE="nix: update hashes (${LABEL})"
+          if [ "${HAS_HASH_DATA}" != "true" ]; then
+            MESSAGE="nix: bootstrap hashes (${LABEL})"
+          fi
           {
             echo "message=$MESSAGE"
             echo "label=$LABEL"
             echo "summary=$SUMMARY"
           } >> "$GITHUB_OUTPUT"
+        env:
+          HAS_HASH_DATA: ${{ steps.merge_hashes.outputs.has_data }}
 
       - name: Commit Nix hash changes
         env:
           COMMIT_MESSAGE: ${{ steps.commit_meta.outputs.message }}
           UPDATE_LABEL: ${{ steps.commit_meta.outputs.label }}
           UPDATE_SUMMARY: ${{ steps.commit_meta.outputs.summary }}
+          TARGET_BRANCH: ${{ github.head_ref || github.ref_name }}
         run: |
           set -euo pipefail
 
@@ -233,7 +268,9 @@ jobs:
             echo "" >> "$GITHUB_STEP_SUMMARY"
           }
 
-          if git diff --quiet flake.nix nix/node-modules.nix nix/hashes.json; then
+          FILES=(flake.nix nix/node-modules.nix nix/hashes.json)
+          STATUS="$(git status --short -- "${FILES[@]}" || true)"
+          if [ -z "$STATUS" ]; then
             summarize "no changes"
             echo "No changes to tracked Nix files. Hashes are already up to date."
             exit 0
@@ -250,12 +287,7 @@ jobs:
           git add flake.nix nix/node-modules.nix nix/hashes.json
           git commit -m "$COMMIT_MESSAGE"
 
-          # For PRs, push to the head branch; for push events, push to current branch
-          if [ "${{ github.event_name }}" = "pull_request" ]; then
-            git push origin HEAD:${{ github.head_ref }}
-          else
-            git pull --rebase origin ${GITHUB_REF_NAME}
-            git push origin HEAD:${GITHUB_REF_NAME}
-          fi
+          BRANCH="${TARGET_BRANCH:-${GITHUB_REF_NAME}}"
+          git push origin HEAD:"$BRANCH"
 
           summarize "committed $(git rev-parse --short HEAD)"

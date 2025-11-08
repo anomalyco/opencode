@@ -28,7 +28,21 @@
         "x86_64-darwin" = "bun-darwin-x64";
       };
       scripts = ./nix/scripts;
-      hashes = builtins.fromJSON (builtins.readFile ./nix/hashes.json);
+      dummyHash = "sha256-AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA=";
+      defaultNodeModules = builtins.listToAttrs (
+        map (system: {
+          name = system;
+          value = dummyHash;
+        }) systems
+      );
+      hashesFile = "${./nix}/hashes.json";
+      hashesData =
+        if builtins.pathExists hashesFile then builtins.fromJSON (builtins.readFile hashesFile) else { };
+      hashes = {
+        nodeModules = defaultNodeModules // (hashesData.nodeModules or { });
+        optional = hashesData.optional or { };
+        metadata = hashesData.metadata or { };
+      };
       optionalPackagesFiles = {
         "aarch64-linux" = ./nix/optional-packages/aarch64-linux.txt;
         "x86_64-linux" = ./nix/optional-packages/x86_64-linux.txt;

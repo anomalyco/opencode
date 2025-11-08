@@ -22,6 +22,23 @@ fi
 if [ -z "$OPTIONAL_FILE" ]; then
   OPTIONAL_FILE="nix/optional-packages.txt"
 fi
+
+if [ ! -f "$HASH_FILE" ]; then
+  cat <<'EOF' >"$HASH_FILE"
+{
+  "nodeModules": {},
+  "optional": {},
+  "metadata": {}
+}
+EOF
+fi
+
+if git rev-parse --is-inside-work-tree >/dev/null 2>&1; then
+  if ! git ls-files --error-unmatch "$HASH_FILE" >/dev/null 2>&1; then
+    git add -N "$HASH_FILE" >/dev/null 2>&1 || true
+  fi
+fi
+
 export DUMMY
 export NIX_KEEP_OUTPUTS=1
 export NIX_KEEP_DERIVATIONS=1
@@ -33,16 +50,6 @@ fi
 if [ -z "$SYSTEMS" ]; then
   echo "No target systems detected for hash update"
   exit 1
-fi
-
-if [ ! -f "$HASH_FILE" ]; then
-  cat <<'EOF' >"$HASH_FILE"
-{
-  "nodeModules": {},
-  "optional": {},
-  "metadata": {}
-}
-EOF
 fi
 
 cleanup() {
@@ -219,6 +226,7 @@ write_metadata() {
   fi
   tmp=$(mktemp)
   jq \
+    --arg stamp "$stamp" \
     --arg ref "$ref" \
     --arg trigger "$trigger" \
     --arg commit "$commit" \
