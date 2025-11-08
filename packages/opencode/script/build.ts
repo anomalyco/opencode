@@ -5,11 +5,15 @@ import path from "path"
 import fs from "fs"
 import { $ } from "bun"
 import { fileURLToPath } from "url"
+import { loadBundleMeta, ensureBundle } from "./bundle-utils"
 
 const __filename = fileURLToPath(import.meta.url)
 const __dirname = path.dirname(__filename)
 const dir = path.resolve(__dirname, "..")
 const modulesDir = path.join(dir, "../../node_modules")
+const repoRoot = path.join(dir, "..", "..")
+const hashesPath = path.join(repoRoot, "nix/hashes.json")
+const bundleMeta = await loadBundleMeta(hashesPath)
 
 process.chdir(dir)
 
@@ -32,23 +36,6 @@ const targets = singleFlag
   ? allTargets.filter(([os, arch]) => os === process.platform && arch === process.arch)
   : allTargets
 
-async function bundleReady(name: string) {
-  const marker = Bun.file(path.join(modulesDir, name, "package.json"))
-  return marker.exists()
-}
-
-async function ensureBundle(name: string, spec?: string) {
-  if (await bundleReady(name)) {
-    return
-  }
-  const target = path.join(modulesDir, name)
-  const tweak = name.replace(/^@/, "").replace(/\//g, "-")
-  await $`mkdir -p ${target}`
-  const pack = spec ?? name
-  await $`npm pack ${pack}`.cwd(modulesDir)
-  await $`tar -xf ${tweak}-*.tgz -C ${target} --strip-components=1`.cwd(modulesDir)
-}
-
 await $`rm -rf dist`
 
 const binaries: Record<string, string> = {}
@@ -58,10 +45,19 @@ for (const [os, arch] of targets) {
   await $`mkdir -p dist/${name}/bin`
 
   const opentui = `@opentui/core-${os === "windows" ? "win32" : os}-${arch.replace("-baseline", "")}`
-  await ensureBundle(opentui, `${opentui}@${pkg.dependencies["@opentui/core"]}`)
+  await ensureBundle({
+    name: opentui,
+    modulesDir,
+    metadata: bundleMeta,
+    spec: `${opentui}@${pkg.dependencies["@opentui/core"]}`,
+  })
 
   const watcher = `@parcel/watcher-${os === "windows" ? "win32" : os}-${arch.replace("-baseline", "")}${os === "linux" ? "-glibc" : ""}`
-  await ensureBundle(watcher)
+  await ensureBundle({
+    name: watcher,
+    modulesDir,
+    metadata: bundleMeta,
+  })
 
   const parserWorker = fs.realpathSync(path.resolve(dir, "./node_modules/@opentui/core/parser.worker.js"))
   const workerPath = "./src/cli/cmd/tui/worker.ts"
