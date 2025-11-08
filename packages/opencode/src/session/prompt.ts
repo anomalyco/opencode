@@ -671,18 +671,61 @@ export namespace SessionPrompt {
           result,
         )
 
-        const output = result.content
-          .filter((x: any) => x.type === "text")
-          .map((x: any) => x.text)
-          .join("\n\n")
+        const textParts: string[] = []
+        const attachments: MessageV2.FilePart[] = []
+
+        for (const item of result.content) {
+          if (item.type === "text") {
+            textParts.push(item.text)
+          } else if (item.type === "image") {
+            attachments.push({
+              id: Identifier.ascending("part"),
+              sessionID: input.sessionID,
+              messageID: input.processor.message.id,
+              type: "file",
+              mime: item.mimeType,
+              url: `data:${item.mimeType};base64,${item.data}`,
+            })
+          }
+          // Add support for other types if needed
+        }
 
         return {
           title: "",
           metadata: result.metadata ?? {},
-          output,
+          output: textParts.join("\n\n"),
+          attachments,
+          content: result.content, // directly return content to preserve ordering when outputting to model
         }
       }
       item.toModelOutput = (result) => {
+        const hasNonTextContent = result.content.some((item: any) => item.type !== "text")
+        if (hasNonTextContent) {
+          const contentItems = result.content
+            .map((item: any) => {
+              if (item.type === "text") {
+                return {
+                  type: "text",
+                  text: item.text,
+                }
+              }
+              if (item.type === "image") {
+                return {
+                  type: "media",
+                  data: item.data,
+                  mediaType: item.mimeType,
+                }
+              }
+              // Add support for other types if needed
+              return null
+            })
+            .filter(Boolean)
+          return {
+            type: "content",
+            value: contentItems,
+          }
+        }
+
         return {
           type: "text",
           value: result.output,
