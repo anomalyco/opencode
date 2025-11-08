@@ -6,8 +6,7 @@ import { cmd } from "../cmd"
 
 export const RipgrepCommand = cmd({
   command: "rg",
-  builder: (yargs) =>
-    yargs.command(TreeCommand).command(FilesCommand).command(SearchCommand).demandCommand(),
+  builder: (yargs) => yargs.command(TreeCommand).command(FilesCommand).command(SearchCommand).demandCommand(),
   async handler() {},
 })
 
@@ -19,9 +18,7 @@ const TreeCommand = cmd({
     }),
   async handler(args) {
     await bootstrap(process.cwd(), async () => {
-      process.stdout.write(
-        (await Ripgrep.tree({ cwd: Instance.directory, limit: args.limit })) + EOL,
-      )
+      process.stdout.write((await Ripgrep.tree({ cwd: Instance.directory, limit: args.limit })) + EOL)
     })
   },
 })

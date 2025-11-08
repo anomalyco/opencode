@@ -5,10 +5,7 @@ import { Client } from "@planetscale/database"
 
 import { MySqlTransaction, type MySqlTransactionConfig } from "drizzle-orm/mysql-core"
 import type { ExtractTablesWithRelations } from "drizzle-orm"
-import type {
-  PlanetScalePreparedQueryHKT,
-  PlanetscaleQueryResultHKT,
-} from "drizzle-orm/planetscale-serverless"
+import type { PlanetScalePreparedQueryHKT, PlanetscaleQueryResultHKT } from "drizzle-orm/planetscale-serverless"
 import { Context } from "../context"
 import { memo } from "../util/memo"
 
@@ -70,10 +67,7 @@ export namespace Database {
     }
   }
 
-  export async function transaction<T>(
-    callback: (tx: TxOrDb) => Promise<T>,
-    config?: MySqlTransactionConfig,
-  ) {
+  export async function transaction<T>(callback: (tx: TxOrDb) => Promise<T>, config?: MySqlTransactionConfig) {
     try {
       const { tx } = TransactionContext.use()
       return callback(tx)

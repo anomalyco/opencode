@@ -138,9 +138,7 @@ export const RunCommand = cmd({
 
       const outputJsonEvent = (type: string, data: any) => {
         if (args.format === "json") {
-          process.stdout.write(
-            JSON.stringify({ type, timestamp: Date.now(), sessionID, ...data }) + EOL,
-          )
+          process.stdout.write(JSON.stringify({ type, timestamp: Date.now(), sessionID, ...data }) + EOL)
           return true
         }
         return false
@@ -160,9 +158,7 @@ export const RunCommand = cmd({
               const [tool, color] = TOOL[part.tool] ?? [part.tool, UI.Style.TEXT_INFO_BOLD]
               const title =
                 part.state.title ||
-                (Object.keys(part.state.input).length > 0
-                  ? JSON.stringify(part.state.input)
-                  : "Unknown")
+                (Object.keys(part.state.input).length > 0 ? JSON.stringify(part.state.input) : "Unknown")
               printEvent(color, tool, title)
               if (part.tool === "bash" && part.state.output?.trim()) {
                 UI.println()
@@ -215,10 +211,7 @@ export const RunCommand = cmd({
               ],
               initialValue: "once",
             }).catch(() => "reject")
-            const response = (result.toString().includes("cancel") ? "reject" : result) as
-              | "once"
-              | "always"
-              | "reject"
+            const response = (result.toString().includes("cancel") ? "reject" : result) as "once" | "always" | "reject"
             await sdk.postSessionIdPermissionsPermissionId({
               path: { id: sessionID, permissionID: permission.id },
               body: { response },
@@ -280,10 +273,7 @@ export const RunCommand = cmd({
       }
 
       const cfgResult = await sdk.config.get()
-      if (
-        cfgResult.data &&
-        (cfgResult.data.share === "auto" || Flag.OPENCODE_AUTO_SHARE || args.share)
-      ) {
+      if (cfgResult.data && (cfgResult.data.share === "auto" || Flag.OPENCODE_AUTO_SHARE || args.share)) {
         const shareResult = await sdk.session.share({ path: { id: sessionID } }).catch((error) => {
           if (error instanceof Error && error.message.includes("disabled")) {
             UI.println(UI.Style.TEXT_DANGER_BOLD + "!  " + error.message)
@@ -336,10 +326,7 @@ export const RunCommand = cmd({
       }
 
       const cfgResult = await sdk.config.get()
-      if (
-        cfgResult.data &&
-        (cfgResult.data.share === "auto" || Flag.OPENCODE_AUTO_SHARE || args.share)
-      ) {
+      if (cfgResult.data && (cfgResult.data.share === "auto" || Flag.OPENCODE_AUTO_SHARE || args.share)) {
         const shareResult = await sdk.session.share({ path: { id: sessionID } }).catch((error) => {
           if (error instanceof Error && error.message.includes("disabled")) {
             UI.println(UI.Style.TEXT_DANGER_BOLD + "!  " + error.message)

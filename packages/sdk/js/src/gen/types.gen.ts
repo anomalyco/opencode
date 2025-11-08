@@ -644,12 +644,7 @@ export type AssistantMessage = {
     created: number
     completed?: number
   }
-  error?:
-    | ProviderAuthError
-    | UnknownError
-    | MessageOutputLengthError
-    | MessageAbortedError
-    | ApiError
+  error?: ProviderAuthError | UnknownError | MessageOutputLengthError | MessageAbortedError | ApiError
   parentID: string
   modelID: string
   providerID: string
@@ -1311,12 +1306,7 @@ export type EventSessionError = {
   type: "session.error"
   properties: {
     sessionID?: string
-    error?:
-      | ProviderAuthError
-      | UnknownError
-      | MessageOutputLengthError
-      | MessageAbortedError
-      | ApiError
+    error?: ProviderAuthError | UnknownError | MessageOutputLengthError | MessageAbortedError | ApiError
   }
 }
 
@@ -2552,6 +2542,38 @@ export type McpStatusResponses = {
 
 export type McpStatusResponse = McpStatusResponses[keyof McpStatusResponses]
 
+export type McpAddData = {
+  body?: {
+    name: string
+    config: McpLocalConfig | McpRemoteConfig
+  }
+  path?: never
+  query?: {
+    directory?: string
+  }
+  url: "/mcp"
+}
+
+export type McpAddErrors = {
+  /**
+   * Bad request
+   */
+  400: BadRequestError
+}
+
+export type McpAddError = McpAddErrors[keyof McpAddErrors]
+
+export type McpAddResponses = {
+  /**
+   * MCP server added successfully
+   */
+  200: {
+    [key: string]: McpStatus
+  }
+}
+
+export type McpAddResponse = McpAddResponses[keyof McpAddResponses]
+
 export type LspStatusData = {
   body?: never
   path?: never
@@ -2844,8 +2866,7 @@ export type TuiControlResponseResponses = {
   200: boolean
 }
 
-export type TuiControlResponseResponse =
-  TuiControlResponseResponses[keyof TuiControlResponseResponses]
+export type TuiControlResponseResponse = TuiControlResponseResponses[keyof TuiControlResponseResponses]
 
 export type AuthSetData = {
   body?: Auth

@@ -61,13 +61,7 @@ export const auth = new sst.cloudflare.Worker("AuthApi", {
   domain: `auth.${domain}`,
   handler: "packages/console/function/src/auth.ts",
   url: true,
-  link: [
-    database,
-    authStorage,
-    GITHUB_CLIENT_ID_CONSOLE,
-    GITHUB_CLIENT_SECRET_CONSOLE,
-    GOOGLE_CLIENT_ID,
-  ],
+  link: [database, authStorage, GITHUB_CLIENT_ID_CONSOLE, GITHUB_CLIENT_SECRET_CONSOLE, GOOGLE_CLIENT_ID],
 })
 
 ////////////////

@@ -9,8 +9,5 @@ export const ModelTable = mysqlTable(
     ...timestamps,
     model: varchar("model", { length: 64 }).notNull(),
   },
-  (table) => [
-    ...workspaceIndexes(table),
-    uniqueIndex("model_workspace_model").on(table.workspaceID, table.model),
-  ],
+  (table) => [...workspaceIndexes(table), uniqueIndex("model_workspace_model").on(table.workspaceID, table.model)],
 )

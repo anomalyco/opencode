@@ -11,9 +11,7 @@ export namespace Provider {
       tx
         .select()
         .from(ProviderTable)
-        .where(
-          and(eq(ProviderTable.workspaceID, Actor.workspace()), isNull(ProviderTable.timeDeleted)),
-        ),
+        .where(and(eq(ProviderTable.workspaceID, Actor.workspace()), isNull(ProviderTable.timeDeleted))),
     ),
   )
 
@@ -52,12 +50,7 @@ export namespace Provider {
       return Database.transaction((tx) =>
         tx
           .delete(ProviderTable)
-          .where(
-            and(
-              eq(ProviderTable.provider, provider),
-              eq(ProviderTable.workspaceID, Actor.workspace()),
-            ),
-          ),
+          .where(and(eq(ProviderTable.provider, provider), eq(ProviderTable.workspaceID, Actor.workspace()))),
       )
     },
   )

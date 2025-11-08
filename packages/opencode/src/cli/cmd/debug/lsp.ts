@@ -7,11 +7,7 @@ import { EOL } from "os"
 export const LSPCommand = cmd({
   command: "lsp",
   builder: (yargs) =>
-    yargs
-      .command(DiagnosticsCommand)
-      .command(SymbolsCommand)
-      .command(DocumentSymbolsCommand)
-      .demandCommand(),
+    yargs.command(DiagnosticsCommand).command(SymbolsCommand).command(DocumentSymbolsCommand).demandCommand(),
   async handler() {},
 })
 

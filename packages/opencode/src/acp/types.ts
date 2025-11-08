@@ -1,23 +1,12 @@
-import type {
-  McpServer,
-  ReadTextFileRequest,
-  ReadTextFileResponse,
-  WriteTextFileRequest,
-  WriteTextFileResponse,
-} from "@agentclientprotocol/sdk"
-
-export interface ACPTools {
-  readTextFile?(params: ReadTextFileRequest): Promise<ReadTextFileResponse>
-  writeTextFile?(params: WriteTextFileRequest): Promise<WriteTextFileResponse>
-}
+import type { McpServer } from "@agentclientprotocol/sdk"
+import type { OpencodeClient } from "@opencode-ai/sdk"
 
 export interface ACPSessionState {
   id: string
-  parentId?: string
   cwd: string
   mcpServers: McpServer[]
   createdAt: Date
-  model: {
+  model?: {
     providerID: string
     modelID: string
   }
@@ -25,6 +14,7 @@ export interface ACPSessionState {
 }
 
 export interface ACPConfig {
+  sdk: OpencodeClient
   defaultModel?: {
     providerID: string
     modelID: string
