@@ -31,7 +31,7 @@ export function Dialog(
         onMouseUp={async (e) => {
           e.stopPropagation()
         }}
-        width={props.size === "large" ? 80 : 60}
+        width={Math.min(props.size === "large" ? 80 : 60, dimensions().width - 2)}
         maxWidth={dimensions().width - 2}
         backgroundColor={theme.backgroundPanel}
         fg={theme.text}

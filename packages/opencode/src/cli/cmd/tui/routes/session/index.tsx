@@ -103,8 +103,16 @@ export function Session() {
   const [conceal, setConceal] = createSignal(true)
 
   const wide = createMemo(() => dimensions().width > 120)
-  const sidebarVisible = createMemo(() => sidebar() === "show" || (sidebar() === "auto" && wide()))
-  const contentWidth = createMemo(() => dimensions().width - (sidebarVisible() ? 42 : 0) - 4)
+  // Auto-hide sidebar if terminal too narrow (minimum 50 chars needed for sidebar + content)
+  const sidebarVisible = createMemo(() => {
+    if (dimensions().width < 50) return false
+    return sidebar() === "show" || (sidebar() === "auto" && wide())
+  })
+  // Ensure content width never goes negative - minimum 20 chars for usable content
+  const contentWidth = createMemo(() => {
+    const width = dimensions().width - (sidebarVisible() ? 42 : 0) - 4
+    return Math.max(20, width)
+  })
 
   createEffect(() => {
     sync.session.sync(route.sessionID).catch(() => {

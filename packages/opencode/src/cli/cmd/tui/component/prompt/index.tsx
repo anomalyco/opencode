@@ -10,7 +10,7 @@ import {
   fg,
   type KeyBinding,
 } from "@opentui/core"
-import { createEffect, createMemo, Match, Switch, type JSX, onMount, batch } from "solid-js"
+import { createEffect, createMemo, Match, Show, Switch, type JSX, onMount, batch } from "solid-js"
 import { useLocal } from "@tui/context/local"
 import { useTheme } from "@tui/context/theme"
 import { SplitBorder } from "@tui/component/border"
@@ -23,13 +23,14 @@ import { useKeybind } from "@tui/context/keybind"
 import { usePromptHistory, type PromptInfo } from "./history"
 import { type AutocompleteRef, Autocomplete } from "./autocomplete"
 import { useCommandDialog } from "../dialog-command"
-import { useRenderer } from "@opentui/solid"
+import { useRenderer, useTerminalDimensions } from "@opentui/solid"
 import { Editor } from "@tui/util/editor"
 import { useExit } from "../../context/exit"
 import { Clipboard } from "../../util/clipboard"
 import type { FilePart } from "@opencode-ai/sdk"
 import { TuiEvent } from "../../event"
 import { iife } from "@/util/iife"
+import { Locale } from "@/util/locale"
 
 export type PromptProps = {
   sessionID?: string
@@ -63,6 +64,44 @@ export function Prompt(props: PromptProps) {
   const command = useCommandDialog()
   const renderer = useRenderer()
   const { theme, syntax } = useTheme()
+  const dimensions = useTerminalDimensions()
+
+  // Responsive layout for bottom bar
+  const bottomBarLayout = createMemo(() => {
+    const width = dimensions().width
+    const modelText = `${local.model.parsed().provider} ${local.model.parsed().model}`
+
+    // Very narrow: hide model, show minimal hint
+    if (width < 35) {
+      return { hideModel: true, modelMaxWidth: 0, hideHint: false }
+    }
+
+    // Narrow: truncate model, show hint
+    if (width < 50) {
+      return { hideModel: false, modelMaxWidth: Math.max(10, width - 20), hideHint: false }
+    }
+
+    // Normal: show everything
+    return { hideModel: false, modelMaxWidth: undefined, hideHint: false }
+  })
+
+  const modelDisplay = createMemo(() => {
+    const provider = local.model.parsed().provider
+    const model = local.model.parsed().model
+    const fullText = `${provider} ${model}`
+    const maxWidth = bottomBarLayout().modelMaxWidth
+
+    if (!maxWidth) return { provider, model }
+
+    // Truncate the model name if needed
+    const truncated = Locale.truncateMiddle(fullText, maxWidth)
+    // Split back into provider and model for styling
+    const parts = truncated.split(" ")
+    if (parts.length === 1) {
+      return { provider: "", model: parts[0] }
+    }
+    return { provider: parts[0], model: parts.slice(1).join(" ") }
+  })
 
   const textareaKeybindings = createMemo(() => {
     const newlineBindings = keybind.all.input_newline || []
@@ -709,17 +748,21 @@ export function Prompt(props: PromptProps) {
             alignItems="center"
           ></box>
         </box>
-        <box flexDirection="row" justifyContent="space-between">
-          <text flexShrink={0} wrapMode="none" fg={theme.text}>
-            <span style={{ fg: theme.textMuted }}>{local.model.parsed().provider}</span>{" "}
-            <span style={{ bold: true }}>{local.model.parsed().model}</span>
-          </text>
+        <box flexDirection="row" justifyContent="space-between" gap={1}>
+          <Show when={!bottomBarLayout().hideModel}>
+            <text flexShrink={1} wrapMode="none" fg={theme.text}>
+              <Show when={modelDisplay().provider}>
+                <span style={{ fg: theme.textMuted }}>{modelDisplay().provider}</span>{" "}
+              </Show>
+              <span style={{ bold: true }}>{modelDisplay().model}</span>
+            </text>
+          </Show>
           <Switch>
             <Match when={status() === "compacting"}>
-              <text fg={theme.textMuted}>compacting...</text>
+              <text flexShrink={0} fg={theme.textMuted}>compacting...</text>
             </Match>
             <Match when={status() === "working"}>
-              <box flexDirection="row" gap={1}>
+              <box flexDirection="row" gap={1} flexShrink={0}>
                 <text fg={theme.text}>
                   esc <span style={{ fg: theme.textMuted }}>interrupt</span>
                 </text>
@@ -727,7 +770,7 @@ export function Prompt(props: PromptProps) {
             </Match>
             <Match when={props.hint}>{props.hint!}</Match>
             <Match when={true}>
-              <text fg={theme.text}>
+              <text flexShrink={0} fg={theme.text}>
                 {keybind.print("command_list")}{" "}
                 <span style={{ fg: theme.textMuted }}>commands</span>
               </text>
