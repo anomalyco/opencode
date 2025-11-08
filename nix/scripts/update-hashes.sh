@@ -3,7 +3,6 @@
 set -euo pipefail
 
 DUMMY="sha256-AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA="
-MODELS_URL=${MODELS_URL:-https://models.dev/api.json}
 DEFAULT_HASH_FILE=${MODULES_HASH_FILE:-nix/hashes.json}
 HASH_FILE=${HASH_FILE:-$DEFAULT_HASH_FILE}
 OPTIONAL_PACKAGES_DIR=${OPTIONAL_PACKAGES_DIR:-nix/optional-packages}
@@ -39,31 +38,11 @@ fi
 if [ ! -f "$HASH_FILE" ]; then
   cat <<'EOF' >"$HASH_FILE"
 {
-  "models": {},
   "nodeModules": {},
   "optional": {},
   "metadata": {}
 }
 EOF
-fi
-
-echo "Refreshing models-dev hash..."
-MODELS_HASH=$(nix store prefetch-file "$MODELS_URL" --json | jq -r '.hash // empty')
-
-if [ -z "$MODELS_HASH" ]; then
-  echo "Failed to prefetch models-dev hash"
-  exit 1
-fi
-
-current_models_hash="$(jq -r '.models.dev // empty' "$HASH_FILE")"
-
-if [ "$MODELS_HASH" != "$current_models_hash" ]; then
-  tmp=$(mktemp)
-  jq --arg value "$MODELS_HASH" '.models.dev = $value' "$HASH_FILE" >"$tmp"
-  mv "$tmp" "$HASH_FILE"
-  echo "models-dev hash updated: $MODELS_HASH"
-else
-  echo "models-dev hash already up to date: $MODELS_HASH"
 fi
 
 cleanup() {
@@ -127,6 +106,7 @@ write_node_modules_hash() {
 for SYSTEM in $SYSTEMS; do
   TARGET="packages.${SYSTEM}.default"
   MODULES_ATTR=".#packages.${SYSTEM}.default.node_modules"
+  CORRECT_HASH=""
 
   echo "Removing cached node_modules output for ${SYSTEM} (if present)..."
   PREV_PATH="$(nix path-info "$MODULES_ATTR" --system "$SYSTEM" 2>/dev/null || true)"

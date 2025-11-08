@@ -1,7 +1,4 @@
 {
-  "models": {
-    "dev": "sha256-Dff3OWJ7pD7LfVbZZ0Gf/QA65uw4ft14mdfBun0qDBg="
-  },
   "nodeModules": {
     "aarch64-linux": "sha256-h/XhGcla9THbbqP3tTjyaN4jw/SdaGJ3vUXRy0jlo8E=",
     "x86_64-linux": "sha256-8goN/fR8mjiJj/ZzfgP4ES2sW2Ljoyl+SNthqNj6Dr8="

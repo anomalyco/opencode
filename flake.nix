@@ -40,7 +40,7 @@
         let
           pkgs = pkgsFor system;
         in
-        pkgs.callPackage ./nix/models-dev.nix { hash = hashes.models.dev; }
+        pkgs."models-dev"
       );
     in
     {

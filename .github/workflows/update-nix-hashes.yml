@@ -226,7 +226,7 @@ jobs:
             echo "" >> "$GITHUB_STEP_SUMMARY"
           }
 
-          if git diff --quiet flake.nix nix/node-modules.nix nix/hashes.json nix/models-dev.nix; then
+          if git diff --quiet flake.nix nix/node-modules.nix nix/hashes.json; then
             summarize "no changes"
             echo "No changes to tracked Nix files. Hashes are already up to date."
             exit 0
@@ -240,7 +240,7 @@ jobs:
             exit 0
           fi
 
-          git add flake.nix nix/node-modules.nix nix/hashes.json nix/models-dev.nix
+          git add flake.nix nix/node-modules.nix nix/hashes.json
           git commit -m "$COMMIT_MESSAGE"
 
           # For PRs, push to the head branch; for push events, push to current branch
