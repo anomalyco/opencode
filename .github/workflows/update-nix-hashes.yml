@@ -276,14 +276,6 @@ jobs:
             exit 0
           fi
 
-          # Prevent infinite loop: check if the last commit was a hash update
-          LAST_COMMIT_MSG=$(git log -1 --pretty=%B)
-          if echo "$LAST_COMMIT_MSG" | grep -q "^nix: update hashes"; then
-            summarize "skipped (recent hash update)"
-            echo "Last commit was already a hash update. Skipping to prevent loop."
-            exit 0
-          fi
-
           git add flake.nix nix/node-modules.nix nix/hashes.json
           git commit -m "$COMMIT_MESSAGE"
 
