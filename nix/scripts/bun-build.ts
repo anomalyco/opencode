@@ -18,6 +18,29 @@ if (!target) {
 
 process.chdir(pkg)
 
+const manifestName = "opencode-assets.manifest"
+const manifestPath = path.join(pkg, manifestName)
+
+const readTrackedAssets = () => {
+  if (!fs.existsSync(manifestPath)) return []
+  return fs
+    .readFileSync(manifestPath, "utf8")
+    .split("\n")
+    .map((line) => line.trim())
+    .filter((line) => line.length > 0)
+}
+
+const removeTrackedAssets = () => {
+  for (const file of readTrackedAssets()) {
+    const targetPath = path.join(pkg, file)
+    if (fs.existsSync(targetPath)) {
+      fs.rmSync(targetPath, { force: true })
+    }
+  }
+}
+
+removeTrackedAssets()
+
 const result = await Bun.build({
   conditions: ["browser"],
   tsconfig: "./tsconfig.json",
@@ -44,6 +67,19 @@ if (!result.success) {
   }
   throw new Error("Compilation failed")
 }
+
+const assetOutputs = result.outputs?.filter((item) => item.kind === "asset") ?? []
+const trackedAssets: string[] = []
+for (const asset of assetOutputs) {
+  const file = path.basename(asset.path)
+  const dest = path.join(pkg, file)
+  await Bun.write(dest, Bun.file(asset.path))
+  trackedAssets.push(file)
+}
+await Bun.write(
+  manifestPath,
+  trackedAssets.length > 0 ? trackedAssets.join("\n") + "\n" : "",
+)
 
 const bundle = await Bun.build({
   entrypoints: [worker],

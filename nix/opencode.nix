@@ -73,6 +73,16 @@ stdenvNoCC.mkDerivation (finalAttrs: {
 
     install -Dm755 opencode $out/bin/opencode
     install -Dm644 opencode-worker.js $out/bin/opencode-worker.js
+    if [ -f opencode-assets.manifest ]; then
+      while IFS= read -r asset; do
+        [ -z "$asset" ] && continue
+        if [ ! -f "$asset" ]; then
+          echo "ERROR: referenced asset \"$asset\" missing"
+          exit 1
+        fi
+        install -Dm644 "$asset" "$out/bin/$(basename "$asset")"
+      done < opencode-assets.manifest
+    fi
     runHook postInstall
   '';
 
