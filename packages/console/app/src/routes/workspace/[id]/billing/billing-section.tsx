@@ -34,9 +34,16 @@ export function BillingSection() {
   const sessionSubmission = useSubmission(createSessionUrl)
   const [store, setStore] = createStore({
     showAddBalanceForm: false,
-    addBalanceAmount: "",
+    addBalanceAmount: billingInfo()?.reloadAmount.toString() ?? "",
     checkoutRedirecting: false,
     sessionRedirecting: false,
+  })
+
+  createEffect(() => {
+    const info = billingInfo()
+    if (info) {
+      setStore("addBalanceAmount", info.reloadAmount.toString())
+    }
   })
   const balance = createMemo(() => formatBalance(billingInfo()?.balance ?? 0))
 
@@ -67,7 +74,6 @@ export function BillingSection() {
     }
     setStore({
       showAddBalanceForm: true,
-      addBalanceAmount: billingInfo()!.reloadAmount.toString(),
     })
   }
 
