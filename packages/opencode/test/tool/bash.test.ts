@@ -43,8 +43,9 @@ describe("tool.bash", () => {
       fn: async () => {
         // If OPENCODE_DISALLOW_OUTSIDE_CWD is set, it will throw
         // If not set, it will try to call Permission.ask which may fail with a different error
-        const isDisallowed = process.env.OPENCODE_DISALLOW_OUTSIDE_CWD === "true" || process.env.OPENCODE_DISALLOW_OUTSIDE_CWD === "1"
-        
+        const isDisallowed =
+          process.env.OPENCODE_DISALLOW_OUTSIDE_CWD === "true" || process.env.OPENCODE_DISALLOW_OUTSIDE_CWD === "1"
+
         if (isDisallowed) {
           await expect(
             bash.execute(
