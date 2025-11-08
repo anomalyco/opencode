@@ -92,33 +92,3 @@ for (const line of rewrites.slice(0, 20)) {
 if (rewrites.length > 20) {
   console.log("  ...")
 }
-
-// NOTE: Current .bun/node_modules rewriting seems to be working fine for now.
-// Could uncomment below in case of emergencies to force ALL workspace
-// node_modules to point through .bun/node_modules (untested).
-/*
-async function rewriteWorkspaceLinks() {
-  const workspaces = await readdir(root)
-  for (const ws of workspaces) {
-    const wsModules = join(root, ws, "node_modules")
-    try {
-      const stat = await lstat(wsModules)
-      if (!stat.isDirectory()) continue
-      const entries = await readdir(wsModules)
-      for (const entry of entries) {
-        const linkPath = join(wsModules, entry)
-        const linkStat = await lstat(linkPath)
-        if (!linkStat.isSymbolicLink()) continue
-        const canonical = join(linkRoot, entry)
-        try {
-          await lstat(canonical)
-          const relTarget = relative(join(wsModules), canonical)
-          await rm(linkPath, { recursive: true, force: true })
-          await symlink(relTarget, linkPath)
-        } catch {}
-      }
-    } catch {}
-  }
-}
-await rewriteWorkspaceLinks()
-*/
