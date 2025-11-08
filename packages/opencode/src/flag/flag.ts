@@ -21,4 +21,9 @@ export namespace Flag {
     const value = process.env[key]?.toLowerCase()
     return value === "true" || value === "1"
   }
+
+  // Dynamic getter to support CLI flag (evaluated at runtime)
+  export function OPENCODE_DISALLOW_OUTSIDE_CWD() {
+    return truthy("OPENCODE_DISALLOW_OUTSIDE_CWD")
+  }
 }

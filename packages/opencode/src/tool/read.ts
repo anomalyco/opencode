@@ -10,6 +10,7 @@ import { Instance } from "../project/instance"
 import { Provider } from "../provider/provider"
 import { Identifier } from "../id/id"
 import { Permission } from "../permission"
+import { Flag } from "../flag/flag"
 
 const DEFAULT_READ_LIMIT = 2000
 const MAX_LINE_LENGTH = 2000
@@ -29,6 +30,9 @@ export const ReadTool = Tool.define("read", {
     const title = path.relative(Instance.worktree, filepath)
 
     if (!ctx.extra?.["bypassCwdCheck"] && !Filesystem.contains(Instance.directory, filepath)) {
+      if (Flag.OPENCODE_DISALLOW_OUTSIDE_CWD()) {
+        throw new Error(`File ${filepath} is not in the current working directory`)
+      }
       const parentDir = path.dirname(filepath)
       await Permission.ask({
         type: "external-directory",
