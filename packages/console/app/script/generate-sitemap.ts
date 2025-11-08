@@ -43,13 +43,13 @@ async function getDocsRoutes(): Promise<SitemapEntry[]> {
 
   try {
     const files = await readdir(DOCS_DIR)
-    
+
     for (const file of files) {
       if (!file.endsWith(".mdx")) continue
-      
+
       const slug = file.replace(".mdx", "")
       const path = slug === "index" ? "/docs/" : `/docs/${slug}`
-      
+
       routes.push({
         url: `${BASE_URL}${path}`,
         priority: slug === "index" ? 0.9 : 0.7,
@@ -70,7 +70,7 @@ function generateSitemapXML(entries: SitemapEntry[]): string {
     <loc>${entry.url}</loc>
     <changefreq>${entry.changefreq}</changefreq>
     <priority>${entry.priority}</priority>
-  </url>`
+  </url>`,
     )
     .join("\n")
 
@@ -85,18 +85,18 @@ async function main() {
 
   const mainRoutes = await getMainRoutes()
   const docsRoutes = await getDocsRoutes()
-  
+
   const allRoutes = [...mainRoutes, ...docsRoutes]
-  
+
   console.log(`Found ${mainRoutes.length} main routes`)
   console.log(`Found ${docsRoutes.length} docs routes`)
   console.log(`Total: ${allRoutes.length} routes`)
 
   const xml = generateSitemapXML(allRoutes)
-  
+
   const outputPath = join(PUBLIC_DIR, "sitemap.xml")
   await writeFile(outputPath, xml, "utf-8")
-  
+
   console.log(`✓ Sitemap generated at ${outputPath}`)
 }
 
