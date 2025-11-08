@@ -106,6 +106,7 @@ const AUTH_API_URL = new sst.Linkable("AUTH_API_URL", {
 const STRIPE_WEBHOOK_SECRET = new sst.Linkable("STRIPE_WEBHOOK_SECRET", {
   properties: { value: stripeWebhook.secret },
 })
+const gatewayKv = new sst.cloudflare.Kv("GatewayKv")
 
 ////////////////
 // CONSOLE
@@ -136,6 +137,16 @@ new sst.cloudflare.x.SolidStart("Console", {
     EMAILOCTOPUS_API_KEY,
     AWS_SES_ACCESS_KEY_ID,
     AWS_SES_SECRET_ACCESS_KEY,
+    ...($dev
+      ? [
+          new sst.Secret(
+            "CLOUDFLARE_DEFAULT_ACCOUNT_ID",
+            process.env.CLOUDFLARE_DEFAULT_ACCOUNT_ID!,
+          ),
+          new sst.Secret("CLOUDFLARE_API_TOKEN", process.env.CLOUDFLARE_API_TOKEN!),
+        ]
+      : []),
+    gatewayKv,
   ],
   environment: {
     //VITE_DOCS_URL: web.url.apply((url) => url!),
