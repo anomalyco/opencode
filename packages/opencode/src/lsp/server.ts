@@ -9,6 +9,7 @@ import fs from "fs/promises"
 import { Filesystem } from "../util/filesystem"
 import { Instance } from "../project/instance"
 import { Flag } from "../flag/flag"
+import { VueIntegration } from "./integrations/vue"
 
 export namespace LSPServer {
   const log = Log.create({ service: "lsp.server" })
@@ -86,10 +87,11 @@ export namespace LSPServer {
       ["package-lock.json", "bun.lockb", "bun.lock", "pnpm-lock.yaml", "yarn.lock"],
       ["deno.json", "deno.jsonc"],
     ),
-    extensions: [".ts", ".tsx", ".js", ".jsx", ".mjs", ".cjs", ".mts", ".cts"],
+    extensions: [".ts", ".tsx", ".js", ".jsx", ".mjs", ".cjs", ".mts", ".cts", ".vue"],
     async spawn(root) {
       const tsserver = await Bun.resolve("typescript/lib/tsserver.js", Instance.directory).catch(() => {})
       if (!tsserver) return
+
       const proc = spawn(BunProc.which(), ["x", "typescript-language-server", "--stdio"], {
         cwd: root,
         env: {
@@ -97,13 +99,21 @@ export namespace LSPServer {
           BUN_BE_BUN: "1",
         },
       })
+
+      let initialization: Record<string, any> = {
+        tsserver: {
+          path: tsserver,
+        },
+      }
+
+      const hasVueFiles = await VueIntegration.hasVueFiles(root)
+      if (hasVueFiles) {
+        initialization = await VueIntegration.createVueEnabledTypeScriptConfig(root)
+      }
+
       return {
         process: proc,
-        initialization: {
-          tsserver: {
-            path: tsserver,
-          },
-        },
+        initialization,
       }
     },
   }

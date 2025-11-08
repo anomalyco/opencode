@@ -7,6 +7,7 @@ import { Config } from "../config/config"
 import { spawn } from "child_process"
 import { Instance } from "../project/instance"
 import { Bus } from "../bus"
+import { VueIntegration } from "./integrations/vue"
 
 export namespace LSP {
   const log = Log.create({ service: "lsp" })
@@ -189,6 +190,11 @@ export namespace LSP {
       result.push(client)
       Bus.publish(Event.Updated, {})
     }
+
+    if (path.parse(file).ext === ".vue") {
+      await VueIntegration.setupVueTypeScriptBridge(s.clients, result, state)
+    }
+
     return result
   }
 
