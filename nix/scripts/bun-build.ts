@@ -39,6 +39,15 @@ const removeTrackedAssets = () => {
   }
 }
 
+const trackedAssets = new Set<string>()
+
+const addAsset = async (assetPath: string) => {
+  const file = path.basename(assetPath)
+  const dest = path.join(pkg, file)
+  await Bun.write(dest, Bun.file(assetPath))
+  trackedAssets.add(file)
+}
+
 removeTrackedAssets()
 
 const result = await Bun.build({
@@ -69,17 +78,9 @@ if (!result.success) {
 }
 
 const assetOutputs = result.outputs?.filter((item) => item.kind === "asset") ?? []
-const trackedAssets: string[] = []
 for (const asset of assetOutputs) {
-  const file = path.basename(asset.path)
-  const dest = path.join(pkg, file)
-  await Bun.write(dest, Bun.file(asset.path))
-  trackedAssets.push(file)
+  await addAsset(asset.path)
 }
-await Bun.write(
-  manifestPath,
-  trackedAssets.length > 0 ? trackedAssets.join("\n") + "\n" : "",
-)
 
 const bundle = await Bun.build({
   entrypoints: [worker],
@@ -98,6 +99,11 @@ if (!bundle.success) {
   throw new Error("Worker compilation failed")
 }
 
+const workerAssetOutputs = bundle.outputs?.filter((item) => item.kind === "asset") ?? []
+for (const asset of workerAssetOutputs) {
+  await addAsset(asset.path)
+}
+
 const output = bundle.outputs.find((item) => item.kind === "entry-point")
 if (!output) {
   throw new Error("Worker build produced no entry-point output")
@@ -107,5 +113,8 @@ const dest = path.join(pkg, "opencode-worker.js")
 const src = output.path
 await Bun.write(dest, Bun.file(src))
 fs.rmSync(path.dirname(src), { recursive: true, force: true })
+
+const assetList = Array.from(trackedAssets)
+await Bun.write(manifestPath, assetList.length > 0 ? assetList.join("\n") + "\n" : "")
 
 console.log("Build successful!")

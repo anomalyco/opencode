@@ -1,0 +1,51 @@
+{
+  "nodeModules": {
+    "x86_64-linux": "sha256-gwFZjTKos3pr5GE3T6+wJT0lQ3cjSO5GahwiOfMArBc=",
+    "aarch64-linux": "sha256-2mytvbm1D1UkVTEfv0oJD+kmkuDVX87cdbe1azZSYqg=",
+    "aarch64-darwin": "sha256-pIDGFHTLSOt3svygdD+YgRqgy/PdFp+PaAPm5c03+cw=",
+    "x86_64-darwin": "sha256-Mic3Lle8XOc3cS0O2Ll7X1pcLbUuDjb9rcfnYI9ceSU="
+  },
+  "optional": {
+    "@opentui/core-darwin-arm64": {
+      "version": "0.1.39",
+      "sha512": "sha512-tDUdNdzGeylkDWTiDIy/CalM/9nIeDwMZGN0Q6FLqABnAplwBhdIH2w/gInAcMaTyagm7Qk88p398Wbnxa9uyg=="
+    },
+    "@opentui/core-darwin-x64": {
+      "version": "0.1.39",
+      "sha512": "sha512-dWXXNUpdi3ndd+6WotQezsO7g54MLSc/6DmYcl0p7fZrQFct8fX0c9ny/S0xAusNHgBGVS5j5FWE75Mx79301Q=="
+    },
+    "@opentui/core-linux-arm64": {
+      "version": "0.1.39",
+      "sha512": "sha512-ookQbxLjsg51iwGb6/KTxCfiVRtE9lSE2OVFLLYork8iVzxg81jX29Uoxe1knZ8FjOJ0+VqTzex2IqQH6mjJlw=="
+    },
+    "@opentui/core-linux-x64": {
+      "version": "0.1.39",
+      "sha512": "sha512-CeXVNa3hB7gTYKYoZAuMtxWMIXn2rPhmXLkHKpEvXvDRjODFDk8wN1AIVnT5tfncXbWNa5z35BhmqewpGkl4oQ=="
+    },
+    "@opentui/core-win32-x64": {
+      "version": "0.1.39",
+      "sha512": "sha512-lLXeQUBg6Wlenauwd+xaBD+0HT4YIcONeZUTHA+Gyd/rqVhxId97rhhzFikp3bBTvNJlYAscJI3yIF2JvRiFNQ=="
+    },
+    "@parcel/watcher-darwin-arm64": {
+      "version": "2.5.1",
+      "sha512": "sha512-eAzPv5osDmZyBhou8PoF4i6RQXAfeKL9tjb3QzYuccXFMQU0ruIc/POh30ePnaOyD1UXdlKguHBmsTs53tVoPw=="
+    },
+    "@parcel/watcher-darwin-x64": {
+      "version": "2.5.1",
+      "sha512": "sha512-1ZXDthrnNmwv10A0/3AJNZ9JGlzrF82i3gNQcWOzd7nJ8aj+ILyW1MTxVk35Db0u91oD5Nlk9MBiujMlwmeXZg=="
+    },
+    "@parcel/watcher-linux-arm64-glibc": {
+      "version": "2.5.1",
+      "sha512": "sha512-LrGp+f02yU3BN9A+DGuY3v3bmnFUggAITBGriZHUREfNEzZh/GO06FF5u2kx8x+GBEUYfyTGamol4j3m9ANe8w=="
+    },
+    "@parcel/watcher-linux-x64-glibc": {
+      "version": "2.5.1",
+      "sha512": "sha512-GcESn8NZySmfwlTsIur+49yDqSny2IhPeZfXunQi48DMugKeZ7uy1FX83pO0X22sHntJ4Ub+9k34XQCX+oHt2A=="
+    },
+    "@parcel/watcher-win32-x64": {
+      "version": "2.5.1",
+      "sha512": "sha512-9lHBdJITeNR++EvSQVUcaZoWupyHfXe1jZvGZ06O/5MflPcuPLtEphScIBL+AiCWBO46tDSHzWyD0uDmmZqsgA=="
+    }
+  },
+  "metadata": {}
+}
