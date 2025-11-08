@@ -39,7 +39,6 @@ import { ExitProvider, useExit } from "./context/exit"
 import { Session as SessionApi } from "@/session"
 import { TuiEvent } from "./event"
 import { KVProvider, useKV } from "./context/kv"
-import { LiveKitProvider } from "./context/livekit"
 import { UIExtensionsProvider, useUIExtensions } from "./context/ui-extensions"
 import { PluginComponent } from "./component/plugin-component"
 
@@ -151,11 +150,9 @@ export function tui(input: {
                               >
                                 <DialogProvider>
                                   <CommandProvider>
-                                    <LiveKitProvider>
-                                      <PromptHistoryProvider>
-                                        <App />
-                                      </PromptHistoryProvider>
-                                    </LiveKitProvider>
+                                    <PromptHistoryProvider>
+                                      <App />
+                                    </PromptHistoryProvider>
                                   </CommandProvider>
                                 </DialogProvider>
                               </LocalProvider>

@@ -26,7 +26,6 @@ import { TuiThreadCommand } from "./cli/cmd/tui/thread"
 import { TuiSpawnCommand } from "./cli/cmd/tui/spawn"
 import { AcpCommand } from "./cli/cmd/acp"
 import { MemoryCommand } from "./cli/cmd/memory"
-import { RoomCommand } from "./cli/cmd/room"
 import { EOL } from "os"
 import { WebCommand } from "./cli/cmd/web"
 
@@ -99,7 +98,6 @@ const cli = yargs(hideBin(process.argv))
   .command(ImportCommand)
   .command(GithubCommand)
   .command(MemoryCommand)
-  .command(RoomCommand)
   .fail((msg) => {
     if (
       msg.startsWith("Unknown argument") ||
