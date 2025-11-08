@@ -81,7 +81,6 @@ stdenvNoCC.mkDerivation {
     rm -f optional-packages.txt optional-metadata.txt
 
     bun --bun ${args.canonicalizeScript}
-    bun --bun ${args.normalizeScript}
 
     runHook postBuild
   '';
