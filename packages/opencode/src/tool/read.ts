@@ -10,7 +10,7 @@ import { Instance } from "../project/instance"
 import { Provider } from "../provider/provider"
 import { Identifier } from "../id/id"
 import { Permission } from "../permission"
-import type { ACPTools } from "../acp/types"
+import { ACPToolRegistry } from "@/acp/registry"
 
 const DEFAULT_READ_LIMIT = 2000
 const MAX_LINE_LENGTH = 2000
@@ -105,7 +105,7 @@ export const ReadTool = Tool.define("read", {
 
     const limit = params.limit ?? DEFAULT_READ_LIMIT
     const offset = params.offset || 0
-    const acpTools = ctx.extra?.["acpTools"] as ACPTools | undefined
+    const acpTools = ACPToolRegistry.get(ctx.sessionID)
     let lines: string[]
     if (acpTools?.readTextFile) {
       const result = await acpTools.readTextFile({

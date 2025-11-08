@@ -17,7 +17,7 @@ import { Filesystem } from "../util/filesystem"
 import { Instance } from "../project/instance"
 import { Agent } from "../agent/agent"
 import { Snapshot } from "@/snapshot"
-import type { ACPTools } from "../acp/types"
+import { ACPToolRegistry } from "@/acp/registry"
 
 export const EditTool = Tool.define("edit", {
   description: DESCRIPTION,
@@ -54,7 +54,7 @@ export const EditTool = Tool.define("edit", {
     }
 
     const agent = await Agent.get(ctx.agent)
-    const acpTools = ctx.extra?.["acpTools"] as ACPTools | undefined
+    const acpTools = ACPToolRegistry.get(ctx.sessionID)
     let diff = ""
     let contentOld = ""
     let contentNew = ""

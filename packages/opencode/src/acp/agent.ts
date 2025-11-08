@@ -30,11 +30,12 @@ import { Provider } from "../provider/provider"
 import { Installation } from "@/installation"
 import { MessageV2 } from "@/session/message-v2"
 import { Config } from "@/config/config"
-import { MCP } from "@/mcp"
 import { Todo } from "@/session/todo"
 import { z } from "zod"
 import { LoadAPIKeyError } from "ai"
 import type { OpencodeClient } from "@opencode-ai/sdk"
+import type { ACPTools } from "./types"
+import { ACPToolRegistry } from "./registry"
 
 export namespace ACP {
   const log = Log.create({ service: "acp-agent" })
@@ -56,12 +57,22 @@ export namespace ACP {
     private config: ACPConfig
     private sdk: OpencodeClient
     private sessionManager
+    private clientCapabilities?: ClientCapabilities
 
     constructor(connection: AgentSideConnection, config: ACPConfig) {
       this.connection = connection
       this.config = config
       this.sdk = config.sdk
       this.sessionManager = new ACPSessionManager(this.sdk)
+    }
+
+    private registerACPTools(sessionID: string) {
+      const { readTextFile, writeTextFile } = this.clientCapabilities?.fs ?? {}
+      const acpTools: ACPTools = {
+        ...(readTextFile && { readTextFile: (params) => this.readTextFile(params) }),
+        ...(writeTextFile && { writeTextFile: (params) => this.writeTextFile(params) }),
+      }
+      ACPToolRegistry.set(sessionID, acpTools)
     }
 
     private setupEventSubscriptions(session: ACPSessionState) {
@@ -403,6 +414,7 @@ export namespace ACP {
         })
 
         this.setupEventSubscriptions(state)
+        this.registerACPTools(sessionId)
 
         return {
           sessionId,

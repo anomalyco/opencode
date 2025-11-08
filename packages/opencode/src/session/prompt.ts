@@ -9,7 +9,6 @@ import { SessionRevert } from "./revert"
 import { Session } from "."
 import { Agent } from "../agent/agent"
 import { Provider } from "../provider/provider"
-import type { ACPTools } from "../acp/types"
 import {
   generateText,
   streamText,
@@ -110,7 +109,6 @@ export namespace SessionPrompt {
     noReply: z.boolean().optional(),
     system: z.string().optional(),
     tools: z.record(z.string(), z.boolean()).optional(),
-    acpTools: z.custom<ACPTools>().optional(),
     parts: z.array(
       z.discriminatedUnion("type", [
         MessageV2.TextPart.omit({
@@ -202,7 +200,6 @@ export namespace SessionPrompt {
       modelID: model.modelID,
       providerID: model.providerID,
       tools: input.tools,
-      acpTools: input.acpTools,
       processor,
     })
 
@@ -512,7 +509,6 @@ export namespace SessionPrompt {
     modelID: string
     providerID: string
     tools?: Record<string, boolean>
-    acpTools?: ACPTools
     processor: Processor
   }) {
     const tools: Record<string, AITool> = {}
@@ -548,7 +544,6 @@ export namespace SessionPrompt {
             extra: {
               modelID: input.modelID,
               providerID: input.providerID,
-              acpTools: input.acpTools,
             },
             agent: input.agent.name,
             metadata: async (val) => {

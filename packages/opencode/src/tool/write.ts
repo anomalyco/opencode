@@ -10,7 +10,7 @@ import { FileTime } from "../file/time"
 import { Filesystem } from "../util/filesystem"
 import { Instance } from "../project/instance"
 import { Agent } from "../agent/agent"
-import type { ACPTools } from "../acp/types"
+import { ACPToolRegistry } from "@/acp/registry"
 
 export const WriteTool = Tool.define("write", {
   description: DESCRIPTION,
@@ -41,7 +41,7 @@ export const WriteTool = Tool.define("write", {
     if (exists) await FileTime.assert(ctx.sessionID, filepath)
 
     const agent = await Agent.get(ctx.agent)
-    const acpTools = ctx.extra?.["acpTools"] as ACPTools | undefined
+    const acpTools = ACPToolRegistry.get(ctx.sessionID)
     if (agent.permission.edit === "ask")
       await Permission.ask({
         type: "write",
