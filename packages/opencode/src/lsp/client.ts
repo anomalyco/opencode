@@ -1,9 +1,5 @@
 import path from "path"
-import {
-  createMessageConnection,
-  StreamMessageReader,
-  StreamMessageWriter,
-} from "vscode-jsonrpc/node"
+import { createMessageConnection, StreamMessageReader, StreamMessageWriter } from "vscode-jsonrpc/node"
 import type { Diagnostic as VSCodeDiagnostic } from "vscode-languageserver-types"
 import { Log } from "../util/log"
 import { LANGUAGE_EXTENSIONS } from "./language"
@@ -38,11 +34,7 @@ export namespace LSPClient {
     ),
   }
 
-  export async function create(input: {
-    serverID: string
-    server: LSPServer.Handle
-    root: string
-  }) {
+  export async function create(input: { serverID: string; server: LSPServer.Handle; root: string }) {
     const l = log.clone().tag("serverID", input.serverID)
     l.info("starting client")
 
@@ -145,9 +137,7 @@ export namespace LSPClient {
       },
       notify: {
         async open(input: { path: string }) {
-          input.path = path.isAbsolute(input.path)
-            ? input.path
-            : path.resolve(Instance.directory, input.path)
+          input.path = path.isAbsolute(input.path) ? input.path : path.resolve(Instance.directory, input.path)
           const file = Bun.file(input.path)
           const text = await file.text()
           const extension = path.extname(input.path)
@@ -189,18 +179,13 @@ export namespace LSPClient {
         return diagnostics
       },
       async waitForDiagnostics(input: { path: string }) {
-        input.path = path.isAbsolute(input.path)
-          ? input.path
-          : path.resolve(Instance.directory, input.path)
+        input.path = path.isAbsolute(input.path) ? input.path : path.resolve(Instance.directory, input.path)
         log.info("waiting for diagnostics", input)
         let unsub: () => void
         return await withTimeout(
           new Promise<void>((resolve) => {
             unsub = Bus.subscribe(Event.Diagnostics, (event) => {
-              if (
-                event.properties.path === input.path &&
-                event.properties.serverID === result.serverID
-              ) {
+              if (event.properties.path === input.path && event.properties.serverID === result.serverID) {
                 log.info("got diagnostics", input)
                 unsub?.()
                 resolve()
