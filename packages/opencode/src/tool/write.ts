@@ -21,7 +21,7 @@ export const WriteTool = Tool.define("write", {
   async execute(params, ctx) {
     const filepath = path.isAbsolute(params.filePath) ? params.filePath : path.join(Instance.directory, params.filePath)
     if (!Filesystem.contains(Instance.directory, filepath)) {
-      if (Flag.OPENCODE_DISALLOW_OUTSIDE_CWD) {
+      if (Flag.OPENCODE_DISALLOW_OUTSIDE_CWD()) {
         throw new Error(`File ${filepath} is not in the current working directory`)
       }
       const parentDir = path.dirname(filepath)

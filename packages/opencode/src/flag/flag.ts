@@ -11,7 +11,6 @@ export namespace Flag {
   export const OPENCODE_ENABLE_EXPERIMENTAL_MODELS = truthy("OPENCODE_ENABLE_EXPERIMENTAL_MODELS")
   export const OPENCODE_DISABLE_AUTOCOMPACT = truthy("OPENCODE_DISABLE_AUTOCOMPACT")
   export const OPENCODE_FAKE_VCS = process.env["OPENCODE_FAKE_VCS"]
-  export const OPENCODE_DISALLOW_OUTSIDE_CWD = truthy("OPENCODE_DISALLOW_OUTSIDE_CWD")
 
   // Experimental
   export const OPENCODE_EXPERIMENTAL_WATCHER = truthy("OPENCODE_EXPERIMENTAL_WATCHER")
@@ -21,5 +20,10 @@ export namespace Flag {
   function truthy(key: string) {
     const value = process.env[key]?.toLowerCase()
     return value === "true" || value === "1"
+  }
+
+  // Dynamic getter to support CLI flag (evaluated at runtime)
+  export function OPENCODE_DISALLOW_OUTSIDE_CWD() {
+    return truthy("OPENCODE_DISALLOW_OUTSIDE_CWD")
   }
 }

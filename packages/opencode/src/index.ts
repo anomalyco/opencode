@@ -52,6 +52,10 @@ const cli = yargs(hideBin(process.argv))
     type: "string",
     choices: ["DEBUG", "INFO", "WARN", "ERROR"],
   })
+  .option("disallow-outside-cwd", {
+    describe: "disallow operations outside the current working directory",
+    type: "boolean",
+  })
   .middleware(async (opts) => {
     await Log.init({
       print: process.argv.includes("--print-logs"),
@@ -65,6 +69,11 @@ const cli = yargs(hideBin(process.argv))
 
     process.env.AGENT = "1"
     process.env.OPENCODE = "1"
+
+    // Set environment variable if CLI flag is provided
+    if (opts.disallowOutsideCwd) {
+      process.env.OPENCODE_DISALLOW_OUTSIDE_CWD = "true"
+    }
 
     Log.Default.info("opencode", {
       version: Installation.VERSION,

@@ -30,7 +30,7 @@ export const ReadTool = Tool.define("read", {
     const title = path.relative(Instance.worktree, filepath)
 
     if (!ctx.extra?.["bypassCwdCheck"] && !Filesystem.contains(Instance.directory, filepath)) {
-      if (Flag.OPENCODE_DISALLOW_OUTSIDE_CWD) {
+      if (Flag.OPENCODE_DISALLOW_OUTSIDE_CWD()) {
         throw new Error(`File ${filepath} is not in the current working directory`)
       }
       const parentDir = path.dirname(filepath)
