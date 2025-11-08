@@ -46,9 +46,5 @@
     "solid-list": "catalog:",
     "tailwindcss": "catalog:",
     "virtua": "catalog:"
-  },
-  "prettier": {
-    "semi": false,
-    "printWidth": 120
   }
 }
