@@ -5,7 +5,6 @@ import {
   createSignal,
   For,
   Match,
-  on,
   Show,
   Switch,
   useContext,
@@ -47,7 +46,7 @@ import type { PromptInfo } from "../../component/prompt/history"
 import { iife } from "@/util/iife"
 import { DialogConfirm } from "@tui/ui/dialog-confirm"
 import { DialogTimeline } from "./dialog-timeline"
-import { DialogSessionRename } from "../../component/dialog-session-rename"
+import { DialogPermission } from "./dialog-permission"
 import { Sidebar } from "./sidebar"
 import { LANGUAGE_EXTENSIONS } from "@/lsp/language"
 import parsers from "../../../../../../parsers-config.ts"
@@ -91,22 +90,25 @@ export function Session() {
   const [conceal, setConceal] = createSignal(true)
 
   const wide = createMemo(() => dimensions().width > 120)
-  const sidebarVisible = createMemo(() => sidebar() === "show" || (sidebar() === "auto" && wide()))
-  const contentWidth = createMemo(() => dimensions().width - (sidebarVisible() ? 42 : 0) - 4)
+  // Auto-hide sidebar if terminal too narrow (minimum 50 chars needed for sidebar + content)
+  const sidebarVisible = createMemo(() => {
+    if (dimensions().width < 50) return false
+    return sidebar() === "show" || (sidebar() === "auto" && wide())
+  })
+  // Ensure content width never goes negative - minimum 20 chars for usable content
+  const contentWidth = createMemo(() => {
+    const width = dimensions().width - (sidebarVisible() ? 42 : 0) - 4
+    return Math.max(20, width)
+  })
 
-  createEffect(async () => {
-    await sync.session
-      .sync(route.sessionID)
-      .then(() => {
-        scroll.scrollBy(100_000)
+  createEffect(() => {
+    sync.session.sync(route.sessionID).catch(() => {
+      toast.show({
+        message: `Session not found: ${route.sessionID}`,
+        variant: "error",
       })
-      .catch(() => {
-        toast.show({
-          message: `Session not found: ${route.sessionID}`,
-          variant: "error",
-        })
-        return navigate({ type: "home" })
-      })
+      return navigate({ type: "home" })
+    })
   })
 
   const toast = useToast()
@@ -143,6 +145,17 @@ export function Session() {
     }
   })
 
+  // Auto-manage permission modal based on pending permissions
+  createEffect(() => {
+    const perms = permissions()
+    if (perms.length > 0 && dialog.stack.length === 0) {
+      toBottom()
+      dialog.replace(() => <DialogPermission permissions={perms} sessionID={route.sessionID} />)
+    } else if (perms.length === 0 && dialog.stack.length > 0) {
+      dialog.clear()
+    }
+  })
+
   function toBottom() {
     setTimeout(() => {
       scroll.scrollTo(scroll.scrollHeight)
@@ -154,9 +167,6 @@ export function Session() {
     if (old !== session()?.revert?.messageID) toBottom()
     return session()?.revert?.messageID
   })
-
-  // snap to bottom when session changes
-  createEffect(on(() => route.sessionID, toBottom))
 
   const local = useLocal()
 
@@ -179,15 +189,6 @@ export function Session() {
 
   const command = useCommandDialog()
   command.register(() => [
-    {
-      title: "Rename session",
-      value: "session.rename",
-      keybind: "session_rename",
-      category: "Session",
-      onSelect: (dialog) => {
-        dialog.replace(() => <DialogSessionRename session={route.sessionID} />)
-      },
-    },
     {
       title: "Jump to message",
       value: "session.timeline",
@@ -671,8 +672,6 @@ export function Session() {
             <scrollbox
               ref={(r) => (scroll = r)}
               scrollbarOptions={{
-                paddingLeft: 2,
-                visible: false,
                 trackOptions: {
                   backgroundColor: theme.backgroundElement,
                   foregroundColor: theme.border,
