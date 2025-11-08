@@ -233,14 +233,34 @@ export const BashTool = Tool.define("bash", async () => {
         },
       })
 
-      const append = (chunk: Buffer) => {
-        output += chunk.toString()
+      const METADATA_INTERVAL_MS = 200
+      let metadataTimer: ReturnType<typeof setTimeout> | undefined
+      let pendingMetadata = false
+
+      const flushMetadata = () => {
+        if (!pendingMetadata) return
+        pendingMetadata = false
         ctx.metadata({
           metadata: {
             output,
             description: params.description,
           },
         })
+      }
+
+      const scheduleMetadata = () => {
+        if (metadataTimer) return
+        metadataTimer = setTimeout(() => {
+          metadataTimer = undefined
+          flushMetadata()
+          if (pendingMetadata) scheduleMetadata()
+        }, METADATA_INTERVAL_MS)
+      }
+
+      const append = (chunk: Buffer) => {
+        output += chunk.toString()
+        pendingMetadata = true
+        scheduleMetadata()
       }
 
       proc.stdout?.on("data", append)
@@ -309,12 +329,18 @@ export const BashTool = Tool.define("bash", async () => {
           resolve()
         })
 
-        proc.once("error", (error) => {
-          exited = true
-          cleanup()
-          reject(error)
-        })
+      proc.once("error", (error) => {
+        exited = true
+        cleanup()
+        reject(error)
       })
+    })
+
+      if (metadataTimer) {
+        clearTimeout(metadataTimer)
+        metadataTimer = undefined
+      }
+      flushMetadata()
 
       if (output.length > MAX_OUTPUT_LENGTH) {
         output = output.slice(0, MAX_OUTPUT_LENGTH)
