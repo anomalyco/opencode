@@ -3,13 +3,14 @@ import {
   BoxRenderable,
   TextareaRenderable,
   MouseEvent,
+  KeyEvent,
   PasteEvent,
   t,
   dim,
   fg,
   type KeyBinding,
 } from "@opentui/core"
-import { createEffect, createMemo, Match, Switch, type JSX, onMount, batch } from "solid-js"
+import { createEffect, createMemo, Match, Show, Switch, type JSX, onMount, batch } from "solid-js"
 import { useLocal } from "@tui/context/local"
 import { useTheme } from "@tui/context/theme"
 import { SplitBorder } from "@tui/component/border"
@@ -22,13 +23,14 @@ import { useKeybind } from "@tui/context/keybind"
 import { usePromptHistory, type PromptInfo } from "./history"
 import { type AutocompleteRef, Autocomplete } from "./autocomplete"
 import { useCommandDialog } from "../dialog-command"
-import { useRenderer } from "@opentui/solid"
+import { useRenderer, useTerminalDimensions } from "@opentui/solid"
 import { Editor } from "@tui/util/editor"
 import { useExit } from "../../context/exit"
 import { Clipboard } from "../../util/clipboard"
 import type { FilePart } from "@opencode-ai/sdk"
 import { TuiEvent } from "../../event"
 import { iife } from "@/util/iife"
+import { Locale } from "@/util/locale"
 
 export type PromptProps = {
   sessionID?: string
@@ -62,6 +64,44 @@ export function Prompt(props: PromptProps) {
   const command = useCommandDialog()
   const renderer = useRenderer()
   const { theme, syntax } = useTheme()
+  const dimensions = useTerminalDimensions()
+
+  // Responsive layout for bottom bar
+  const bottomBarLayout = createMemo(() => {
+    const width = dimensions().width
+    const modelText = `${local.model.parsed().provider} ${local.model.parsed().model}`
+
+    // Very narrow: hide model, show minimal hint
+    if (width < 35) {
+      return { hideModel: true, modelMaxWidth: 0, hideHint: false }
+    }
+
+    // Narrow: truncate model, show hint
+    if (width < 50) {
+      return { hideModel: false, modelMaxWidth: Math.max(10, width - 20), hideHint: false }
+    }
+
+    // Normal: show everything
+    return { hideModel: false, modelMaxWidth: undefined, hideHint: false }
+  })
+
+  const modelDisplay = createMemo(() => {
+    const provider = local.model.parsed().provider
+    const model = local.model.parsed().model
+    const fullText = `${provider} ${model}`
+    const maxWidth = bottomBarLayout().modelMaxWidth
+
+    if (!maxWidth) return { provider, model }
+
+    // Truncate the model name if needed
+    const truncated = Locale.truncateMiddle(fullText, maxWidth)
+    // Split back into provider and model for styling
+    const parts = truncated.split(" ")
+    if (parts.length === 1) {
+      return { provider: "", model: parts[0] }
+    }
+    return { provider: parts[0], model: parts.slice(1).join(" ") }
+  })
 
   const textareaKeybindings = createMemo(() => {
     const newlineBindings = keybind.all.input_newline || []
@@ -334,7 +374,9 @@ export function Prompt(props: PromptProps) {
 
     // Expand pasted text inline before submitting
     const allExtmarks = input.extmarks.getAllForTypeId(promptPartTypeId)
-    const sortedExtmarks = allExtmarks.sort((a: { start: number }, b: { start: number }) => b.start - a.start)
+    const sortedExtmarks = allExtmarks.sort(
+      (a: { start: number }, b: { start: number }) => b.start - a.start,
+    )
 
     for (const extmark of sortedExtmarks) {
       const partIndex = store.extmarkToPartIndex.get(extmark.id)
@@ -497,15 +539,28 @@ export function Prompt(props: PromptProps) {
         <box
           flexDirection="row"
           {...SplitBorder}
-          borderColor={keybind.leader ? theme.accent : store.mode === "shell" ? theme.secondary : theme.border}
+          borderColor={
+            keybind.leader ? theme.accent : store.mode === "shell" ? theme.secondary : theme.border
+          }
           justifyContent="space-evenly"
         >
-          <box backgroundColor={theme.backgroundElement} width={3} height="100%" alignItems="center" paddingTop={1}>
+          <box
+            backgroundColor={theme.backgroundElement}
+            width={3}
+            height="100%"
+            alignItems="center"
+            paddingTop={1}
+          >
             <text attributes={TextAttributes.BOLD} fg={theme.primary}>
               {store.mode === "normal" ? ">" : "!"}
             </text>
           </box>
-          <box paddingTop={1} paddingBottom={1} backgroundColor={theme.backgroundElement} flexGrow={1}>
+          <box
+            paddingTop={1}
+            paddingBottom={1}
+            backgroundColor={theme.backgroundElement}
+            flexGrow={1}
+          >
             <textarea
               placeholder={
                 props.showPlaceholder
@@ -560,7 +615,10 @@ export function Prompt(props: PromptProps) {
                   return
                 }
                 if (store.mode === "shell") {
-                  if ((e.name === "backspace" && input.visualCursor.offset === 0) || e.name === "escape") {
+                  if (
+                    (e.name === "backspace" && input.visualCursor.offset === 0) ||
+                    e.name === "escape"
+                  ) {
                     setStore("mode", "normal")
                     e.preventDefault()
                     return
@@ -570,7 +628,8 @@ export function Prompt(props: PromptProps) {
                 if (!autocomplete.visible) {
                   if (
                     (keybind.match("history_previous", e) && input.cursorOffset === 0) ||
-                    (keybind.match("history_next", e) && input.cursorOffset === input.plainText.length)
+                    (keybind.match("history_next", e) &&
+                      input.cursorOffset === input.plainText.length)
                   ) {
                     const direction = keybind.match("history_previous", e) ? -1 : 1
                     const item = history.move(direction, input.plainText)
@@ -586,8 +645,12 @@ export function Prompt(props: PromptProps) {
                     return
                   }
 
-                  if (keybind.match("history_previous", e) && input.visualCursor.visualRow === 0) input.cursorOffset = 0
-                  if (keybind.match("history_next", e) && input.visualCursor.visualRow === input.height - 1)
+                  if (keybind.match("history_previous", e) && input.visualCursor.visualRow === 0)
+                    input.cursorOffset = 0
+                  if (
+                    keybind.match("history_next", e) &&
+                    input.visualCursor.visualRow === input.height - 1
+                  )
                     input.cursorOffset = input.plainText.length
                 }
               }}
@@ -678,19 +741,28 @@ export function Prompt(props: PromptProps) {
               syntaxStyle={syntax()}
             />
           </box>
-          <box backgroundColor={theme.backgroundElement} width={1} justifyContent="center" alignItems="center"></box>
+          <box
+            backgroundColor={theme.backgroundElement}
+            width={1}
+            justifyContent="center"
+            alignItems="center"
+          ></box>
         </box>
-        <box flexDirection="row" justifyContent="space-between">
-          <text flexShrink={0} wrapMode="none" fg={theme.text}>
-            <span style={{ fg: theme.textMuted }}>{local.model.parsed().provider}</span>{" "}
-            <span style={{ bold: true }}>{local.model.parsed().model}</span>
-          </text>
+        <box flexDirection="row" justifyContent="space-between" gap={1}>
+          <Show when={!bottomBarLayout().hideModel}>
+            <text flexShrink={1} wrapMode="none" fg={theme.text}>
+              <Show when={modelDisplay().provider}>
+                <span style={{ fg: theme.textMuted }}>{modelDisplay().provider}</span>{" "}
+              </Show>
+              <span style={{ bold: true }}>{modelDisplay().model}</span>
+            </text>
+          </Show>
           <Switch>
             <Match when={status() === "compacting"}>
-              <text fg={theme.textMuted}>compacting...</text>
+              <text flexShrink={0} fg={theme.textMuted}>compacting...</text>
             </Match>
             <Match when={status() === "working"}>
-              <box flexDirection="row" gap={1}>
+              <box flexDirection="row" gap={1} flexShrink={0}>
                 <text fg={theme.text}>
                   esc <span style={{ fg: theme.textMuted }}>interrupt</span>
                 </text>
@@ -698,8 +770,9 @@ export function Prompt(props: PromptProps) {
             </Match>
             <Match when={props.hint}>{props.hint!}</Match>
             <Match when={true}>
-              <text fg={theme.text}>
-                {keybind.print("command_list")} <span style={{ fg: theme.textMuted }}>commands</span>
+              <text flexShrink={0} fg={theme.text}>
+                {keybind.print("command_list")}{" "}
+                <span style={{ fg: theme.textMuted }}>commands</span>
               </text>
             </Match>
           </Switch>
