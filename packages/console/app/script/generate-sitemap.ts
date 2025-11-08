@@ -1,12 +1,14 @@
 #!/usr/bin/env bun
-import { readdir } from "fs/promises"
-import { join } from "path"
-import { config } from "../src/config.ts"
+import { readdir, writeFile } from "fs/promises"
+import { join, dirname } from "path"
+import { fileURLToPath } from "url"
+import { config } from "../src/config.js"
 
+const __dirname = dirname(fileURLToPath(import.meta.url))
 const BASE_URL = config.baseUrl
-const PUBLIC_DIR = join(import.meta.dir, "../public")
-const ROUTES_DIR = join(import.meta.dir, "../src/routes")
-const DOCS_DIR = join(import.meta.dir, "../../../web/src/content/docs")
+const PUBLIC_DIR = join(__dirname, "../public")
+const ROUTES_DIR = join(__dirname, "../src/routes")
+const DOCS_DIR = join(__dirname, "../../../web/src/content/docs")
 
 interface SitemapEntry {
   url: string
@@ -93,7 +95,7 @@ async function main() {
   const xml = generateSitemapXML(allRoutes)
   
   const outputPath = join(PUBLIC_DIR, "sitemap.xml")
-  await Bun.write(outputPath, xml)
+  await writeFile(outputPath, xml, "utf-8")
   
   console.log(`✓ Sitemap generated at ${outputPath}`)
 }
