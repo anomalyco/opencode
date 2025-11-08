@@ -21,7 +21,15 @@ on:
       - 'nix/scripts/optional-metadata.ts'
 
 jobs:
+  cancel-previous:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: styfle/cancel-workflow-action@0.12.1
+        with:
+          access_token: ${{ github.token }}
+
   verify:
+    needs: cancel-previous
     strategy:
       fail-fast: false
       matrix:
@@ -143,8 +151,7 @@ jobs:
               # Deep merge: preserve all keys in nested objects
               jq --arg sys "$system" \
                 --slurpfile new "hash-artifacts/hashes-${system}/hashes.json" \
-                '.models = ($new[0].models // .models) |
-                 .nodeModules[$sys] = $new[0].nodeModules[$sys] |
+                '.nodeModules[$sys] = $new[0].nodeModules[$sys] |
                  .optional = (.optional + $new[0].optional)' \
                 "$BASE_HASH" > /tmp/merged.json
               mv /tmp/merged.json "$BASE_HASH"
