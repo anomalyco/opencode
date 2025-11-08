@@ -1,4 +1,5 @@
 import z from "zod"
+import path from "path"
 import { spawn } from "child_process"
 import { Tool } from "./tool"
 import DESCRIPTION from "./bash.txt"
@@ -11,6 +12,7 @@ import { $ } from "bun"
 import { Filesystem } from "@/util/filesystem"
 import { Wildcard } from "@/util/wildcard"
 import { Permission } from "@/permission"
+import { Flag } from "@/flag/flag"
 
 const MAX_OUTPUT_LENGTH = 30_000
 const DEFAULT_TIMEOUT = 1 * 60 * 1000
@@ -90,9 +92,25 @@ export const BashTool = Tool.define("bash", {
             .then((x) => x.trim())
           log.info("resolved path", { arg, resolved })
           if (resolved && !Filesystem.contains(Instance.directory, resolved)) {
-            throw new Error(
-              `This command references paths outside of ${Instance.directory} so it is not allowed to be executed.`,
-            )
+            if (Flag.OPENCODE_DISALLOW_OUTSIDE_CWD) {
+              throw new Error(
+                `This command references paths outside of ${Instance.directory} so it is not allowed to be executed.`,
+              )
+            }
+            const parentDir = path.dirname(resolved)
+            await Permission.ask({
+              type: "external-directory",
+              pattern: parentDir,
+              sessionID: ctx.sessionID,
+              messageID: ctx.messageID,
+              callID: ctx.callID,
+              title: `Execute command with path outside working directory: ${params.command}`,
+              metadata: {
+                command: params.command,
+                path: resolved,
+                parentDir,
+              },
+            })
           }
         }
       }

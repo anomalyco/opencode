@@ -17,6 +17,7 @@ import { Filesystem } from "../util/filesystem"
 import { Instance } from "../project/instance"
 import { Agent } from "../agent/agent"
 import { Snapshot } from "@/snapshot"
+import { Flag } from "../flag/flag"
 
 export const EditTool = Tool.define("edit", {
   description: DESCRIPTION,
@@ -37,6 +38,9 @@ export const EditTool = Tool.define("edit", {
 
     const filePath = path.isAbsolute(params.filePath) ? params.filePath : path.join(Instance.directory, params.filePath)
     if (!Filesystem.contains(Instance.directory, filePath)) {
+      if (Flag.OPENCODE_DISALLOW_OUTSIDE_CWD) {
+        throw new Error(`File ${filePath} is not in the current working directory`)
+      }
       const parentDir = path.dirname(filePath)
       await Permission.ask({
         type: "external-directory",
