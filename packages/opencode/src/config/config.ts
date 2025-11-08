@@ -35,19 +35,6 @@ export namespace Config {
       }
     }
 
-    const opencodeDirectories = await Array.fromAsync(
-      Filesystem.up({
-        targets: [".opencode"],
-        start: Instance.directory,
-        stop: Instance.worktree,
-      }),
-    )
-    for (const dir of opencodeDirectories.toReversed()) {
-      for (const file of ["opencode.jsonc", "opencode.json"]) {
-        result = mergeDeep(result, await loadFile(path.join(dir, file)))
-      }
-    }
-
     // Override with custom config if provided
     if (Flag.OPENCODE_CONFIG) {
       result = mergeDeep(result, await loadFile(Flag.OPENCODE_CONFIG))
@@ -93,6 +80,15 @@ export namespace Config {
     const promises: Promise<void>[] = []
     for (const dir of directories) {
       await assertValid(dir)
+
+      for (const file of ["opencode.jsonc", "opencode.json"]) {
+        result = mergeDeep(result, await loadFile(path.join(dir, file)))
+        // to satisy the type checker
+        result.agent ??= {}
+        result.mode ??= {}
+        result.plugin ??= []
+      }
+
       promises.push(installDependencies(dir))
       result.command = mergeDeep(result.command ?? {}, await loadCommand(dir))
       result.agent = mergeDeep(result.agent, await loadAgent(dir))
