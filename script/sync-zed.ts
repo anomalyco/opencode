@@ -74,6 +74,10 @@ async function main() {
   const versionRegex = new RegExp(`(\\[${EXTENSION_NAME}\\]\\s+(?:.*\\s*)?)version = "[^"]+"`)
   const updatedToml = extensionsToml.replace(versionRegex, `$1version = "${cleanVersion}"`)
 
+  if (updatedToml === extensionsToml) {
+    throw new Error(`Failed to update version in extensions.toml - pattern not found`)
+  }
+
   await Bun.write(extensionsTomlPath, updatedToml)
   await $`git add extensions.toml`
 
