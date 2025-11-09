@@ -2,12 +2,9 @@ import { cmd } from "@/cli/cmd/cmd"
 import { tui } from "./app"
 import { Rpc } from "@/util/rpc"
 import { type rpc } from "./worker"
-import { Session } from "@/session"
-import { bootstrap } from "@/cli/bootstrap"
 import path from "path"
 import { UI } from "@/cli/ui"
-import { Server } from "@/server/server"
-import { Instance } from "@/project/instance"
+import { iife } from "@/util/iife"
 
 declare global {
   const OPENCODE_WORKER_PATH: string
@@ -34,8 +31,8 @@ export const TuiThreadCommand = cmd({
       })
       .option("session", {
         alias: ["s"],
-        describe: "session id to continue",
         type: "string",
+        describe: "session id to continue",
       })
       .option("prompt", {
         alias: ["p"],
@@ -57,12 +54,6 @@ export const TuiThreadCommand = cmd({
         default: "127.0.0.1",
       }),
   handler: async (args) => {
-    const prompt = await (async () => {
-      const piped = !process.stdin.isTTY ? await Bun.stdin.text() : undefined
-      if (!args.prompt) return piped
-      return piped ? piped + "\n" + args.prompt : args.prompt
-    })()
-
     // Resolve relative paths against PWD to preserve behavior when using --cwd flag
     const baseCwd = process.env.PWD ?? process.cwd()
     const cwd = args.project ? path.resolve(baseCwd, args.project) : process.cwd()
@@ -83,87 +74,39 @@ export const TuiThreadCommand = cmd({
       return
     }
 
-    await bootstrap(cwd, async () => {
-      const sessionID = await (async () => {
-        if (args.continue) {
-          const it = Session.list()
-          try {
-            for await (const s of it) {
-              if (s.parentID === undefined) {
-                return s.id
-              }
-            }
-            return
-          } finally {
-            await it.return()
-          }
-        }
-        if (args.session) {
-          return args.session
-        }
-        return undefined
-      })()
-
-      const setup = await (async () => {
-        const env = Object.fromEntries(
-          Object.entries(process.env).filter(
-            (entry): entry is [string, string] => entry[1] !== undefined,
-          ),
-        )
-        const worker = await Promise.resolve()
-          .then(
-            () =>
-              new Worker(workerPath, {
-                env,
-              }),
-          )
-          .catch((error) => {
-            console.debug("opencode tui worker disabled", error)
-            return undefined
-          })
-        if (worker) {
-          worker.onerror = console.error
-          const client = Rpc.client<typeof rpc>(worker)
-          process.on("uncaughtException", (error) => {
-            console.error(error)
-          })
-          process.on("unhandledRejection", (error) => {
-            console.error(error)
-          })
-          const remote = await client.call("server", {
-            port: args.port,
-            hostname: args.hostname,
-          })
-          return {
-            url: remote.url,
-            stop: async () => {
-              await client.call("shutdown", undefined)
-              worker.terminate()
-            },
-          }
-        }
-        const inline = Server.listen({
-          port: args.port ?? 0,
-          hostname: args.hostname ?? "127.0.0.1",
-        })
-        return {
-          url: inline.url.toString(),
-          stop: async () => {
-            await Instance.disposeAll()
-            await inline.stop(true)
-          },
-        }
-      })()
-      await tui({
-        url: setup.url,
-        sessionID,
-        model: args.model,
+    const worker = new Worker(workerPath, {
+      env: Object.fromEntries(
+        Object.entries(process.env).filter((entry): entry is [string, string] => entry[1] !== undefined),
+      ),
+    })
+    worker.onerror = console.error
+    const client = Rpc.client<typeof rpc>(worker)
+    process.on("uncaughtException", (e) => {
+      console.error(e)
+    })
+    process.on("unhandledRejection", (e) => {
+      console.error(e)
+    })
+    const server = await client.call("server", {
+      port: args.port,
+      hostname: args.hostname,
+    })
+    const prompt = await iife(async () => {
+      const piped = !process.stdin.isTTY ? await Bun.stdin.text() : undefined
+      if (!args.prompt) return piped
+      return piped ? piped + "\n" + args.prompt : args.prompt
+    })
+    await tui({
+      url: server.url,
+      args: {
+        continue: args.continue,
+        sessionID: args.session,
         agent: args.agent,
         prompt,
-        onExit: async () => {
-          await setup.stop()
-        },
-      })
+      },
+      onExit: async () => {
+        await client.call("shutdown", undefined)
+      },
     })
   },
 })

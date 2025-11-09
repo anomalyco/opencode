@@ -200,16 +200,6 @@ export function Prompt(props: PromptProps) {
     input.focus()
   })
 
-  local.setInitialPrompt.listen((initialPrompt) => {
-    batch(() => {
-      setStore("prompt", {
-        input: initialPrompt,
-        parts: [],
-      })
-      input.insertText(initialPrompt)
-    })
-  })
-
   onMount(() => {
     promptPartTypeId = input.extmarks.registerType("prompt-part")
   })

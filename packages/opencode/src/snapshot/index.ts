@@ -143,15 +143,16 @@ export namespace Snapshot {
   export async function diffFull(from: string, to: string): Promise<FileDiff[]> {
     const git = gitdir()
     const result: FileDiff[] = []
-    for await (const line of $`git --git-dir=${git} diff --numstat ${from} ${to} -- .`
+    for await (const line of $`git --git-dir=${git} diff --no-renames --numstat ${from} ${to} -- .`
       .quiet()
       .cwd(Instance.directory)
       .nothrow()
       .lines()) {
       if (!line) continue
       const [additions, deletions, file] = line.split("\t")
-      const before = await $`git --git-dir=${git} show ${from}:${file}`.quiet().nothrow().text()
-      const after = await $`git --git-dir=${git} show ${to}:${file}`.quiet().nothrow().text()
+      const isBinaryFile = additions === "-" && deletions === "-"
+      const before = isBinaryFile ? "" : await $`git --git-dir=${git} show ${from}:${file}`.quiet().nothrow().text()
+      const after = isBinaryFile ? "" : await $`git --git-dir=${git} show ${to}:${file}`.quiet().nothrow().text()
       result.push({
         file,
         before,

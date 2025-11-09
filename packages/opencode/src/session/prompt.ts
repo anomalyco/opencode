@@ -206,6 +206,8 @@ export namespace SessionPrompt {
     const params = await Plugin.trigger(
       "chat.params",
       {
+        sessionID: input.sessionID,
+        agent: agent.name,
         model: model.info,
         provider: await Provider.getProvider(model.providerID),
         message: userMsg,
@@ -882,7 +884,12 @@ export namespace SessionPrompt {
 
     await Plugin.trigger(
       "chat.message",
-      {},
+      {
+        sessionID: input.sessionID,
+        agent: input.agent,
+        model: input.model,
+        messageID: input.messageID,
+      },
       {
         message: info,
         parts,

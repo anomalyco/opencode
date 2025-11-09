@@ -196,7 +196,7 @@ export const { use: useTheme, provider: ThemeProvider } = createSimpleContext({
 function generateSystem(colors: TerminalColors, mode: "dark" | "light"): ThemeJson {
   const bg = RGBA.fromHex(colors.defaultBackground ?? colors.palette[0]!)
   const fg = RGBA.fromHex(colors.defaultForeground ?? colors.palette[7]!)
-  const palette = colors.palette.map((x) => RGBA.fromHex(x!))
+  const palette = colors.palette.filter((x) => x !== null).map((x) => RGBA.fromHex(x))
   const isDark = mode == "dark"
 
   // Generate gray scale based on terminal background
