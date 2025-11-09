@@ -59,6 +59,7 @@ opencode uninstall
 ```
 
 This will:
+
 - Automatically detect your installation method (curl, npm, pnpm, bun, brew)
 - Remove the OpenCode binary
 - Delete all data directories (sessions, cache, config, state)

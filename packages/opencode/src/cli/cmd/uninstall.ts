@@ -29,21 +29,17 @@ async function cleanupPathEntries(installDir: string) {
       .then((content) => {
         // Remove lines that add opencode to PATH
         const lines = content.split("\n")
-        const filteredLines = lines.reduce(
-          (acc, line, index) => {
-            const prevLine = index > 0 ? lines[index - 1] : ""
-            const isPathLine =
-              prevLine.trim() === "# opencode" &&
-              (line.includes(installDir) || line.includes("fish_add_path"))
-            const isCommentLine = line.trim() === "# opencode"
+        const filteredLines = lines.reduce((acc, line, index) => {
+          const prevLine = index > 0 ? lines[index - 1] : ""
+          const isPathLine =
+            prevLine.trim() === "# opencode" && (line.includes(installDir) || line.includes("fish_add_path"))
+          const isCommentLine = line.trim() === "# opencode"
 
-            if (!isPathLine && !isCommentLine) {
-              acc.push(line)
-            }
-            return acc
-          },
-          [] as string[],
-        )
+          if (!isPathLine && !isCommentLine) {
+            acc.push(line)
+          }
+          return acc
+        }, [] as string[])
 
         if (filteredLines.length !== lines.length) {
           return fs
@@ -109,9 +105,7 @@ export const UninstallCommand = {
           .then(() => prompts.log.success(`Removed binary from ${binFile}`))
           .then(() => cleanupPathEntries(installDir))
           .catch(() =>
-            prompts.log.warn(
-              `Could not find OpenCode binary at ${binFile}. It may have been removed already.`,
-            ),
+            prompts.log.warn(`Could not find OpenCode binary at ${binFile}. It may have been removed already.`),
           )
       }
 
@@ -173,9 +167,7 @@ export const UninstallCommand = {
       }
 
       if (method === "unknown") {
-        prompts.log.warn(
-          `Could not detect installation method. Binary location: ${process.execPath}`,
-        )
+        prompts.log.warn(`Could not detect installation method. Binary location: ${process.execPath}`)
         prompts.log.info("You may need to uninstall manually using your package manager.")
       }
     }
@@ -219,17 +211,8 @@ export const UninstallCommand = {
 
     UI.empty()
     prompts.outro("OpenCode has been uninstalled")
-    UI.println(
-      UI.Style.TEXT_DIM +
-        "Thank you for using OpenCode! Join our community:",
-    )
-    UI.println(
-      UI.Style.TEXT_DIM +
-        "  Discord: https://discord.gg/opencode",
-    )
-    UI.println(
-      UI.Style.TEXT_DIM +
-        "  GitHub: https://github.com/sst/opencode",
-    )
+    UI.println(UI.Style.TEXT_DIM + "Thank you for using OpenCode! Join our community:")
+    UI.println(UI.Style.TEXT_DIM + "  Discord: https://discord.gg/opencode")
+    UI.println(UI.Style.TEXT_DIM + "  GitHub: https://github.com/sst/opencode")
   },
 }
