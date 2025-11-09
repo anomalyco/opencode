@@ -19,20 +19,26 @@ function main() {
   const packageJsonPath = path.join(__dirname, "package.json")
   const packageJson = JSON.parse(fs.readFileSync(packageJsonPath, "utf8"))
 
-  // Modify bin to point to .cmd file on Windows
+  // Modify bin to point to .cmd files on Windows
   packageJson.bin = {
-    opencode: "./bin/opencode.cmd",
+    codesurf: "./bin/codesurf.cmd",
+    surf: "./bin/surf.cmd",
   }
 
   // Write it back
   fs.writeFileSync(packageJsonPath, JSON.stringify(packageJson, null, 2))
-  console.log("Updated package.json bin to use opencode.cmd")
+  console.log("Updated package.json bin to use codesurf.cmd and surf.cmd")
 
-  // Now you can also remove the Unix script if you want
-  const unixScript = path.join(__dirname, "bin", "opencode")
-  if (fs.existsSync(unixScript)) {
-    console.log("Removing Unix shell script")
-    fs.unlinkSync(unixScript)
+  // Remove Unix scripts if they exist
+  const codeSurfUnix = path.join(__dirname, "bin", "codesurf")
+  const surfUnix = path.join(__dirname, "bin", "surf")
+  if (fs.existsSync(codeSurfUnix)) {
+    console.log("Removing Unix codesurf script")
+    fs.unlinkSync(codeSurfUnix)
+  }
+  if (fs.existsSync(surfUnix)) {
+    console.log("Removing Unix surf script")
+    fs.unlinkSync(surfUnix)
   }
 }
 

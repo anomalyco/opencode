@@ -24,7 +24,7 @@ if "%PROCESSOR_ARCHITECTURE%"=="AMD64" (
     set "arch=x64"
 )
 
-set "name=codesurf-!platform!-!arch!"
+set "name=opencode-ai-!platform!-!arch!"
 set "binary=codesurf.exe"
 
 rem Search for the binary starting from script location

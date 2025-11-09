@@ -9,8 +9,8 @@ process.chdir(dir)
 const { binaries } = await import("./build.ts")
 {
   const name = `${pkg.name}-ai-${process.platform}-${process.arch}`
-  console.log(`smoke test: running dist/${name}/bin/opencode --version`)
-  await $`./dist/${name}/bin/opencode --version`
+  console.log(`smoke test: running dist/${name}/bin/codesurf --version`)
+  await $`./dist/${name}/bin/codesurf --version`
 }
 
 await $`mkdir -p ./dist/${pkg.name}`
@@ -23,7 +23,8 @@ await Bun.file(`./dist/${pkg.name}/package.json`).write(
     {
       name: pkg.name + "-ai",
       bin: {
-        [pkg.name]: `./bin/${pkg.name}`,
+        codesurf: "./bin/codesurf",
+        surf: "./bin/surf",
       },
       scripts: {
         preinstall: "bun ./preinstall.mjs || node ./preinstall.mjs",

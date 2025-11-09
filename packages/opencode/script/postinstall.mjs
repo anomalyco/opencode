@@ -49,8 +49,8 @@ function detectPlatformAndArch() {
 
 function findBinary() {
   const { platform, arch } = detectPlatformAndArch()
-  const packageName = `codesurf-ai-${platform}-${arch}`
-  const binary = platform === "windows" ? "opencode.exe" : "opencode"
+  const packageName = `opencode-ai-${platform}-${arch}`
+  const binary = platform === "windows" ? "codesurf.exe" : "codesurf"
 
   try {
     // Use require.resolve to find the package
@@ -81,7 +81,7 @@ async function regenerateWindowsCmdWrappers() {
 
     // The npm rebuild command does 2 things - Execute lifecycle scripts and rebuild bin links
     // We want to skip lifecycle scripts to avoid infinite loops, so we use --ignore-scripts
-    const cmd = `npm rebuild codesurf-ai --ignore-scripts${isGlobal ? " -g" : ""}`
+    const cmd = `npm rebuild opencode-ai --ignore-scripts${isGlobal ? " -g" : ""}`
     const opts = {
       stdio: "inherit",
       shell: true,
@@ -111,18 +111,24 @@ async function main() {
     }
 
     const binaryPath = findBinary()
-    const binScript = path.join(__dirname, "bin", "opencode")
+    const codeSurfScript = path.join(__dirname, "bin", "codesurf")
+    const surfScript = path.join(__dirname, "bin", "surf")
 
-    // Remove existing bin script if it exists
-    if (fs.existsSync(binScript)) {
-      fs.unlinkSync(binScript)
+    // Remove existing bin scripts if they exist
+    if (fs.existsSync(codeSurfScript)) {
+      fs.unlinkSync(codeSurfScript)
+    }
+    if (fs.existsSync(surfScript)) {
+      fs.unlinkSync(surfScript)
     }
 
-    // Create symlink to the actual binary
-    fs.symlinkSync(binaryPath, binScript)
-    console.log(`opencode binary symlinked: ${binScript} -> ${binaryPath}`)
+    // Create symlinks to the actual binary
+    fs.symlinkSync(binaryPath, codeSurfScript)
+    fs.symlinkSync(binaryPath, surfScript)
+    console.log(`codesurf binary symlinked: ${codeSurfScript} -> ${binaryPath}`)
+    console.log(`surf binary symlinked: ${surfScript} -> ${binaryPath}`)
   } catch (error) {
-    console.error("Failed to create opencode binary symlink:", error.message)
+    console.error("Failed to create codesurf binary symlinks:", error.message)
     process.exit(1)
   }
 }

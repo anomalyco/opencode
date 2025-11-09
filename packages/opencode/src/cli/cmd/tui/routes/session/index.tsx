@@ -1162,21 +1162,130 @@ function UserMessage(props: {
   )
 }
 
+function GroupedToolParts(props: { parts: ToolPart[]; allParts: Part[]; message: AssistantMessage }) {
+  const { theme } = useTheme()
+  const renderer = useRenderer()
+  const sync = useSync()
+  const [collapsed, setCollapsed] = createSignal(true)
+
+  // Track permissions for auto-expand behavior
+  const [hadPermission, setHadPermission] = createSignal(false)
+
+  // Count tools by type and track first appearance order
+  const toolCounts = createMemo(() => {
+    const counts = new Map<string, number>()
+    const firstAppearance = new Map<string, number>()
+
+    for (let i = 0; i < props.parts.length; i++) {
+      const name = props.parts[i].tool.toUpperCase()
+      counts.set(name, (counts.get(name) || 0) + 1)
+      if (!firstAppearance.has(name)) {
+        firstAppearance.set(name, i)
+      }
+    }
+
+    // Sort by first appearance
+    return new Map(
+      Array.from(counts.entries()).sort((a, b) => {
+        return (firstAppearance.get(a[0]) ?? 0) - (firstAppearance.get(b[0]) ?? 0)
+      }),
+    )
+  })
+
+  // Get the last tool's description
+  const lastDescription = createMemo(() => {
+    const lastTool = props.parts[props.parts.length - 1]
+    return lastTool?.state.input?.description || ""
+  })
+
+  // Check if any tool in the group has a pending permission
+  const hasPermission = createMemo(() => {
+    const permissions = sync.data.permission[props.message.sessionID] ?? []
+    return props.parts.some((part) => permissions.some((p) => p.callID === part.callID))
+  })
+
+  // Auto-expand when any permission appears, auto-collapse when all resolved
+  createEffect(() => {
+    const currentHasPermission = hasPermission()
+
+    if (currentHasPermission) {
+      // At least one permission exists - expand to show approval forms
+      setCollapsed(false)
+      setHadPermission(true)
+    } else if (hadPermission()) {
+      // Permissions were there but now all gone (approved/denied) - collapse back
+      setCollapsed(true)
+    }
+  })
+
+  return (
+    <box paddingLeft={3} marginTop={1}>
+      <box
+        flexDirection="row"
+        gap={1}
+        onMouseUp={() => {
+          if (renderer.getSelection()?.getSelectedText()) return
+          setCollapsed(!collapsed())
+        }}
+      >
+        <text>{collapsed() ? "▶" : "▼"}</text>
+        <For each={Array.from(toolCounts().entries())}>
+          {([name, count]) => (
+            <text>
+              <span style={{ bg: theme.textMuted, fg: theme.background, bold: true }}>
+                {" "}
+                {name}
+                {count > 1 ? `(${count})` : ""}{" "}
+              </span>
+            </text>
+          )}
+        </For>
+        <text fg={theme.textMuted}>{lastDescription()}</text>
+      </box>
+
+      <Show when={!collapsed()}>
+        <box paddingLeft={2} marginTop={1} gap={1}>
+          <For each={props.allParts}>
+            {(part) => {
+              const component = createMemo(() => PART_MAPPING[part.type as keyof typeof PART_MAPPING])
+              return (
+                <Show when={component()}>
+                  <Dynamic component={component()} part={part as any} message={props.message} />
+                </Show>
+              )
+            }}
+          </For>
+        </box>
+      </Show>
+    </box>
+  )
+}
+
 function AssistantMessage(props: { message: AssistantMessage; parts: Part[]; last: boolean }) {
   const local = useLocal()
   const { theme } = useTheme()
+
+  // Check if message has any tools - if so, group ALL tools together
+  const hasTools = createMemo(() => props.parts.some((p) => p.type === "tool"))
+  const allTools = createMemo(() => props.parts.filter((p) => p.type === "tool") as ToolPart[])
+
   return (
     <>
-      <For each={props.parts}>
-        {(part) => {
-          const component = createMemo(() => PART_MAPPING[part.type as keyof typeof PART_MAPPING])
-          return (
-            <Show when={component()}>
-              <Dynamic component={component()} part={part as any} message={props.message} />
-            </Show>
-          )
-        }}
-      </For>
+      <Show when={hasTools() && allTools().length > 1}>
+        <GroupedToolParts parts={allTools()} allParts={props.parts} message={props.message} />
+      </Show>
+      <Show when={!hasTools() || allTools().length <= 1}>
+        <For each={props.parts}>
+          {(part) => {
+            const component = createMemo(() => PART_MAPPING[part.type as keyof typeof PART_MAPPING])
+            return (
+              <Show when={component()}>
+                <Dynamic component={component()} part={part as any} message={props.message} />
+              </Show>
+            )
+          }}
+        </For>
+      </Show>
       <Show when={props.message.error}>
         <box
           border={["left"]}
