@@ -56,4 +56,22 @@ export namespace SessionRetry {
 
     return delay
   }
+
+  export function getBoundedDelay(input: {
+    error: MessageV2.APIError
+    attempt: number
+    startTime: number
+    maxDuration?: number
+  }) {
+    const elapsed = Date.now() - input.startTime
+    const maxDuration = input.maxDuration ?? RETRY_MAX_DELAY
+    const remaining = maxDuration - elapsed
+
+    if (remaining <= 0) return undefined
+
+    const delay = getRetryDelayInMs(input.error, input.attempt)
+    if (!delay) return undefined
+
+    return Math.min(delay, remaining)
+  }
 }

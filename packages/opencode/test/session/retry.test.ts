@@ -64,3 +64,109 @@ describe("session.retry.getRetryDelayInMs", () => {
     expect(SessionRetry.getRetryDelayInMs(longError, 1)).toBeUndefined()
   })
 })
+
+describe("session.retry.getBoundedDelay", () => {
+  test("returns full delay when under time budget", () => {
+    const error = apiError()
+    const startTime = Date.now()
+    const delay = SessionRetry.getBoundedDelay({
+      error,
+      attempt: 1,
+      startTime,
+    })
+    expect(delay).toBe(2000)
+  })
+
+  test("returns remaining time when delay exceeds budget", () => {
+    const error = apiError()
+    const startTime = Date.now() - 598_000 // 598 seconds elapsed, 2 seconds remaining
+    const delay = SessionRetry.getBoundedDelay({
+      error,
+      attempt: 1,
+      startTime,
+    })
+    expect(delay).toBeGreaterThanOrEqual(1900)
+    expect(delay).toBeLessThanOrEqual(2100)
+  })
+
+  test("returns undefined when time budget exhausted", () => {
+    const error = apiError()
+    const startTime = Date.now() - 600_000 // exactly 10 minutes elapsed
+    const delay = SessionRetry.getBoundedDelay({
+      error,
+      attempt: 1,
+      startTime,
+    })
+    expect(delay).toBeUndefined()
+  })
+
+  test("returns undefined when time budget exceeded", () => {
+    const error = apiError()
+    const startTime = Date.now() - 700_000 // 11+ minutes elapsed
+    const delay = SessionRetry.getBoundedDelay({
+      error,
+      attempt: 1,
+      startTime,
+    })
+    expect(delay).toBeUndefined()
+  })
+
+  test("respects custom maxDuration", () => {
+    const error = apiError()
+    const startTime = Date.now() - 58_000 // 58 seconds elapsed
+    const delay = SessionRetry.getBoundedDelay({
+      error,
+      attempt: 1,
+      startTime,
+      maxDuration: 60_000, // 1 minute max
+    })
+    expect(delay).toBeGreaterThanOrEqual(1900)
+    expect(delay).toBeLessThanOrEqual(2100)
+  })
+
+  test("caps exponential backoff to remaining time", () => {
+    const error = apiError()
+    const startTime = Date.now() - 595_000 // 595 seconds elapsed, 5 seconds remaining
+    const delay = SessionRetry.getBoundedDelay({
+      error,
+      attempt: 5, // would normally be 32 seconds
+      startTime,
+    })
+    expect(delay).toBeGreaterThanOrEqual(4900)
+    expect(delay).toBeLessThanOrEqual(5100)
+  })
+
+  test("respects server retry-after within budget", () => {
+    const error = apiError({ "retry-after": "30" })
+    const startTime = Date.now() - 550_000 // 550 seconds elapsed, 50 seconds remaining
+    const delay = SessionRetry.getBoundedDelay({
+      error,
+      attempt: 1,
+      startTime,
+    })
+    expect(delay).toBe(30000)
+  })
+
+  test("caps server retry-after to remaining time", () => {
+    const error = apiError({ "retry-after": "30" })
+    const startTime = Date.now() - 590_000 // 590 seconds elapsed, 10 seconds remaining
+    const delay = SessionRetry.getBoundedDelay({
+      error,
+      attempt: 1,
+      startTime,
+    })
+    expect(delay).toBeGreaterThanOrEqual(9900)
+    expect(delay).toBeLessThanOrEqual(10100)
+  })
+
+  test("returns undefined when getRetryDelayInMs returns undefined", () => {
+    const error = apiError()
+    const startTime = Date.now()
+    const delay = SessionRetry.getBoundedDelay({
+      error,
+      attempt: 10, // exceeds RETRY_MAX_DELAY
+      startTime,
+    })
+    expect(delay).toBeUndefined()
+  })
+})
