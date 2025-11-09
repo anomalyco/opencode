@@ -2,16 +2,7 @@ import { render, useKeyboard, useRenderer, useTerminalDimensions } from "@opentu
 import { Clipboard } from "@tui/util/clipboard"
 import { TextAttributes } from "@opentui/core"
 import { RouteProvider, useRoute, type Route, type SessionRoute } from "@tui/context/route"
-import {
-  Switch,
-  Match,
-  createEffect,
-  untrack,
-  ErrorBoundary,
-  createSignal,
-  For,
-  Show,
-} from "solid-js"
+import { Switch, Match, createEffect, untrack, ErrorBoundary, createSignal, For, Show } from "solid-js"
 import { Installation } from "@/installation"
 import { Global } from "@/global"
 import { DialogProvider, useDialog } from "@tui/ui/dialog"
@@ -41,6 +32,7 @@ import { TuiEvent } from "./event"
 import { KVProvider, useKV } from "./context/kv"
 import { UIExtensionsProvider, useUIExtensions } from "./context/ui-extensions"
 import { PluginComponent } from "./component/plugin-component"
+import { ArgsProvider } from "./context/args"
 
 async function getTerminalBackgroundColor(): Promise<"dark" | "light"> {
   // can't set raw mode if not a TTY
@@ -129,37 +121,40 @@ export function tui(input: {
     render(
       () => {
         return (
-          <ErrorBoundary
-            fallback={(error, reset) => (
-              <ErrorComponent error={error} reset={reset} onExit={onExit} />
-            )}
-          >
+          <ErrorBoundary fallback={(error, reset) => <ErrorComponent error={error} reset={reset} onExit={onExit} />}>
             <ExitProvider onExit={onExit}>
               <KVProvider>
                 <ToastProvider>
                   <RouteProvider data={routeData}>
                     <SDKProvider url={input.url}>
-                      <SyncProvider>
-                        <UIExtensionsProvider>
-                          <KeybindProvider>
-                            <ThemeProvider mode={mode}>
-                              <LocalProvider
-                                initialModel={input.model}
-                                initialAgent={input.agent}
-                                initialPrompt={input.prompt}
-                              >
-                                <DialogProvider>
-                                  <CommandProvider>
-                                    <PromptHistoryProvider>
-                                      <App />
-                                    </PromptHistoryProvider>
-                                  </CommandProvider>
-                                </DialogProvider>
-                              </LocalProvider>
-                            </ThemeProvider>
-                          </KeybindProvider>
-                        </UIExtensionsProvider>
-                      </SyncProvider>
+                      <ArgsProvider
+                        model={input.model}
+                        agent={input.agent}
+                        prompt={input.prompt}
+                        sessionID={input.sessionID}
+                      >
+                        <SyncProvider>
+                          <UIExtensionsProvider>
+                            <KeybindProvider>
+                              <ThemeProvider mode={mode}>
+                                <LocalProvider
+                                  initialModel={input.model}
+                                  initialAgent={input.agent}
+                                  initialPrompt={input.prompt}
+                                >
+                                  <DialogProvider>
+                                    <CommandProvider>
+                                      <PromptHistoryProvider>
+                                        <App />
+                                      </PromptHistoryProvider>
+                                    </CommandProvider>
+                                  </DialogProvider>
+                                </LocalProvider>
+                              </ThemeProvider>
+                            </KeybindProvider>
+                          </UIExtensionsProvider>
+                        </SyncProvider>
+                      </ArgsProvider>
                     </SDKProvider>
                   </RouteProvider>
                 </ToastProvider>
@@ -460,12 +455,7 @@ function App() {
         flexShrink={0}
       >
         <box flexDirection="row">
-          <box
-            flexDirection="row"
-            backgroundColor={theme.backgroundElement}
-            paddingLeft={1}
-            paddingRight={1}
-          >
+          <box flexDirection="row" backgroundColor={theme.backgroundElement} paddingLeft={1} paddingRight={1}>
             <text fg={theme.textMuted}>code</text>
             <text fg={theme.text} attributes={TextAttributes.BOLD}>
               surf{" "}
@@ -513,9 +503,7 @@ function App() {
                 const currentRoute = route.data
                 const session =
                   currentRoute?.type === "session"
-                    ? sync.data.session.find(
-                        (s: any) => s.id === (currentRoute as SessionRoute).sessionID,
-                      )
+                    ? sync.data.session.find((s: any) => s.id === (currentRoute as SessionRoute).sessionID)
                     : undefined
                 const rootAgent = (session as any)?.orchestration?.rootAgent
                 const currentAgent = (session as any)?.orchestration?.currentAgent
