@@ -203,16 +203,6 @@ export function Prompt(props: PromptProps) {
     input.focus()
   })
 
-  local.setInitialPrompt.listen((initialPrompt) => {
-    batch(() => {
-      setStore("prompt", {
-        input: initialPrompt,
-        parts: [],
-      })
-      input.insertText(initialPrompt)
-    })
-  })
-
   onMount(() => {
     promptPartTypeId = input.extmarks.registerType("prompt-part")
   })
@@ -340,9 +330,7 @@ export function Prompt(props: PromptProps) {
 
     // Expand pasted text inline before submitting
     const allExtmarks = input.extmarks.getAllForTypeId(promptPartTypeId)
-    const sortedExtmarks = allExtmarks.sort(
-      (a: { start: number }, b: { start: number }) => b.start - a.start,
-    )
+    const sortedExtmarks = allExtmarks.sort((a: { start: number }, b: { start: number }) => b.start - a.start)
 
     for (const extmark of sortedExtmarks) {
       const partIndex = store.extmarkToPartIndex.get(extmark.id)
@@ -393,11 +381,13 @@ export function Prompt(props: PromptProps) {
         sdk.client.session.prompt({
           path: { id: sessionID },
           body: {
-            parts: [{
-              type: "text",
-              text: `Testing widget rendering:\n\n<steering-question id="test-widget">\n{\n  "title": "Widget Test",\n  "questions": [\n    {\n      "id": "test-q",\n      "label": "Does this render as a form?",\n      "type": "single-choice",\n      "options": ["Yes", "No"],\n      "required": true\n    }\n  ]\n}\n</steering-question>\n\nIf you see a form above, widgets work. If you see raw JSON, they don't.`
-            }]
-          }
+            parts: [
+              {
+                type: "text",
+                text: `Testing widget rendering:\n\n<steering-question id="test-widget">\n{\n  "title": "Widget Test",\n  "questions": [\n    {\n      "id": "test-q",\n      "label": "Does this render as a form?",\n      "type": "single-choice",\n      "options": ["Yes", "No"],\n      "required": true\n    }\n  ]\n}\n</steering-question>\n\nIf you see a form above, widgets work. If you see raw JSON, they don't.`,
+              },
+            ],
+          },
         })
         input.extmarks.clear()
         setStore("prompt", {
@@ -536,28 +526,15 @@ export function Prompt(props: PromptProps) {
         <box
           flexDirection="row"
           {...SplitBorder}
-          borderColor={
-            keybind.leader ? theme.accent : store.mode === "shell" ? theme.secondary : theme.border
-          }
+          borderColor={keybind.leader ? theme.accent : store.mode === "shell" ? theme.secondary : theme.border}
           justifyContent="space-evenly"
         >
-          <box
-            backgroundColor={theme.backgroundElement}
-            width={3}
-            height="100%"
-            alignItems="center"
-            paddingTop={1}
-          >
+          <box backgroundColor={theme.backgroundElement} width={3} height="100%" alignItems="center" paddingTop={1}>
             <text attributes={TextAttributes.BOLD} fg={theme.primary}>
               {store.mode === "normal" ? ">" : "!"}
             </text>
           </box>
-          <box
-            paddingTop={1}
-            paddingBottom={1}
-            backgroundColor={theme.backgroundElement}
-            flexGrow={1}
-          >
+          <box paddingTop={1} paddingBottom={1} backgroundColor={theme.backgroundElement} flexGrow={1}>
             <textarea
               placeholder={
                 props.showPlaceholder
@@ -619,10 +596,7 @@ export function Prompt(props: PromptProps) {
                   return
                 }
                 if (store.mode === "shell") {
-                  if (
-                    (e.name === "backspace" && input.visualCursor.offset === 0) ||
-                    e.name === "escape"
-                  ) {
+                  if ((e.name === "backspace" && input.visualCursor.offset === 0) || e.name === "escape") {
                     setStore("mode", "normal")
                     e.preventDefault()
                     return
@@ -632,8 +606,7 @@ export function Prompt(props: PromptProps) {
                 if (!autocomplete.visible) {
                   if (
                     (keybind.match("history_previous", e) && input.cursorOffset === 0) ||
-                    (keybind.match("history_next", e) &&
-                      input.cursorOffset === input.plainText.length)
+                    (keybind.match("history_next", e) && input.cursorOffset === input.plainText.length)
                   ) {
                     const direction = keybind.match("history_previous", e) ? -1 : 1
                     const item = history.move(direction, input.plainText)
@@ -649,12 +622,8 @@ export function Prompt(props: PromptProps) {
                     return
                   }
 
-                  if (keybind.match("history_previous", e) && input.visualCursor.visualRow === 0)
-                    input.cursorOffset = 0
-                  if (
-                    keybind.match("history_next", e) &&
-                    input.visualCursor.visualRow === input.height - 1
-                  )
+                  if (keybind.match("history_previous", e) && input.visualCursor.visualRow === 0) input.cursorOffset = 0
+                  if (keybind.match("history_next", e) && input.visualCursor.visualRow === input.height - 1)
                     input.cursorOffset = input.plainText.length
                 }
               }}
@@ -745,12 +714,7 @@ export function Prompt(props: PromptProps) {
               syntaxStyle={syntax()}
             />
           </box>
-          <box
-            backgroundColor={theme.backgroundElement}
-            width={1}
-            justifyContent="center"
-            alignItems="center"
-          ></box>
+          <box backgroundColor={theme.backgroundElement} width={1} justifyContent="center" alignItems="center"></box>
         </box>
         <box flexDirection="row" justifyContent="space-between">
           <text
@@ -768,9 +732,7 @@ export function Prompt(props: PromptProps) {
               return (
                 <>
                   <span style={{ fg: theme.textMuted }}>{parsed.provider}</span>{" "}
-                  <span style={{ bold: true, fg: theme.primary, underline: true }}>
-                    {parsed.model}
-                  </span>
+                  <span style={{ bold: true, fg: theme.primary, underline: true }}>{parsed.model}</span>
                 </>
               )
             })()}
@@ -790,8 +752,7 @@ export function Prompt(props: PromptProps) {
             <Match when={true}>
               <box flexDirection="row" gap={2}>
                 <text fg={theme.text}>
-                  {keybind.print("command_list")}{" "}
-                  <span style={{ fg: theme.textMuted }}>commands</span>
+                  {keybind.print("command_list")} <span style={{ fg: theme.textMuted }}>commands</span>
                 </text>
                 {props.onScrollToBottom && (
                   <text
