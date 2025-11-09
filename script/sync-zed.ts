@@ -85,6 +85,24 @@ async function main() {
   await $`git commit -m ${commitMessage}`
   console.log(`✅ Changes committed`)
 
+  // Delete any existing branches for opencode updates
+  console.log(`🔍 Checking for existing branches...`)
+  const branches = await $`git ls-remote --heads https://x-access-token:${token}@github.com/${FORK_REPO}.git`.text()
+  const branchPattern = `refs/heads/update-${EXTENSION_NAME}-`
+  const oldBranches = branches
+    .split("\n")
+    .filter((line) => line.includes(branchPattern))
+    .map((line) => line.split("refs/heads/")[1])
+    .filter(Boolean)
+
+  if (oldBranches.length > 0) {
+    console.log(`🗑️  Found ${oldBranches.length} old branch(es), deleting...`)
+    for (const branch of oldBranches) {
+      await $`git push https://x-access-token:${token}@github.com/${FORK_REPO}.git --delete ${branch}`
+      console.log(`✅ Deleted branch ${branch}`)
+    }
+  }
+
   console.log(`🚀 Pushing to fork...`)
   await $`git push https://x-access-token:${token}@github.com/${FORK_REPO}.git ${branchName}`
 
