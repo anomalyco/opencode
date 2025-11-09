@@ -7,7 +7,7 @@ export namespace ContextFilter {
    * Filters parent session context based on agent context configuration
    */
   export function filter(
-    messages: MessageV2.Info[],
+    messages: MessageV2.WithParts[],
     config: Config.ContextFilter | undefined,
   ): MessageV2.Part[] {
     // Default to "none" mode if no config provided
@@ -34,9 +34,11 @@ export namespace ContextFilter {
    * Convert messages to parts with no filtering
    */
   function convertMessagesToParts(
-    messages: MessageV2.Info[],
+    messages: MessageV2.WithParts[],
     config: Config.ContextFilter,
   ): MessageV2.Part[] {
+    if (!config) return []
+    
     let filtered = messages
 
     // Apply max messages limit
@@ -62,7 +64,9 @@ export namespace ContextFilter {
   /**
    * Create a compact summary of the session
    */
-  function createSummary(messages: MessageV2.Info[], config: Config.ContextFilter): MessageV2.Part[] {
+  function createSummary(messages: MessageV2.WithParts[], config: Config.ContextFilter): MessageV2.Part[] {
+    if (!config) return []
+    
     const parts: MessageV2.Part[] = []
 
     // Count tool invocations
@@ -72,12 +76,12 @@ export namespace ContextFilter {
     let assistantMessages = 0
 
     for (const msg of messages) {
-      if (msg.role === "user") userMessages++
-      if (msg.role === "assistant") assistantMessages++
+      if (msg.info.role === "user") userMessages++
+      if (msg.info.role === "assistant") assistantMessages++
 
       for (const part of msg.parts) {
         if (part.type === "tool" && part.state.status === "completed") {
-          const toolName = (part as MessageV2.ToolPart).name
+          const toolName = (part as MessageV2.ToolPart).tool
           toolCounts[toolName] = (toolCounts[toolName] || 0) + 1
 
           // Track file changes
@@ -116,8 +120,8 @@ export namespace ContextFilter {
     // Create a synthetic text part with the summary
     const summaryPart: MessageV2.TextPart = {
       id: Identifier.ascending("part"),
-      sessionID: messages[0]?.sessionID || "",
-      messageID: messages[0]?.id || "",
+      sessionID: messages[0]?.info.sessionID || "",
+      messageID: messages[0]?.info.id || "",
       type: "text",
       text: summaryLines.join("\n"),
       synthetic: true,
@@ -130,7 +134,9 @@ export namespace ContextFilter {
   /**
    * Selectively filter messages based on configuration
    */
-  function filterSelective(messages: MessageV2.Info[], config: Config.ContextFilter): MessageV2.Part[] {
+  function filterSelective(messages: MessageV2.WithParts[], config: Config.ContextFilter): MessageV2.Part[] {
+    if (!config) return []
+    
     const parts: MessageV2.Part[] = []
 
     // Apply message limit first
@@ -141,7 +147,7 @@ export namespace ContextFilter {
 
     for (const msg of filtered) {
       // Filter by message type if specified
-      if (config.includeMessageTypes && !config.includeMessageTypes.includes(msg.role as any)) {
+      if (config.includeMessageTypes && !config.includeMessageTypes.includes(msg.info.role as any)) {
         continue
       }
 
@@ -157,7 +163,7 @@ export namespace ContextFilter {
           const toolPart = part as MessageV2.ToolPart
           if (
             config.includeToolResults &&
-            config.includeToolResults.includes(toolPart.name) &&
+            config.includeToolResults.includes(toolPart.tool) &&
             toolPart.state.status === "completed"
           ) {
             parts.push(part)

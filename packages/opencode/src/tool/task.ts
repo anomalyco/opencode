@@ -68,16 +68,21 @@ export const TaskTool = Tool.define("task", async () => {
       })
 
       // Gather parent session context if agent has context config
-      const contextParts: MessageV2.Part[] = []
+      const contextParts: any[] = []
       if (agent.context && agent.context.mode !== "none") {
         const parentMessages = await Session.messages({ sessionID: ctx.sessionID })
         const filteredContext = ContextFilter.filter(parentMessages, agent.context)
         
+        // Filter to only allowed part types (text, file, agent) for prompt input
+        const allowedParts = filteredContext.filter((part) =>
+          part.type === "text" || part.type === "file" || part.type === "agent"
+        )
+        
         // DEBUG: Log context filtering results
         const estimatedTokens = Math.round(
-          filteredContext.reduce((sum, part) => {
+          allowedParts.reduce((sum, part) => {
             if (part.type === 'text') return sum + ((part as any).text.length / 4)
-            if (part.type === 'tool') return sum + 100
+            if (part.type === 'file') return sum + 100
             return sum + 50
           }, 0)
         )
@@ -86,12 +91,12 @@ export const TaskTool = Tool.define("task", async () => {
         console.log('  Agent:', agent.name)
         console.log('  Mode:', agent.context.mode)
         console.log('  Original messages:', parentMessages.length)
-        console.log('  Filtered parts:', filteredContext.length)
+        console.log('  Filtered parts:', allowedParts.length)
         console.log('  Estimated tokens:', estimatedTokens)
         console.log('  Config:', JSON.stringify(agent.context, null, 2))
         console.log('')
         
-        contextParts.push(...filteredContext)
+        contextParts.push(...allowedParts)
       } else {
         console.log('\n🔍 [CONTEXT FILTER DEBUG]')
         console.log('  Agent:', agent.name)

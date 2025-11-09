@@ -8,19 +8,18 @@ describe("ContextFilter", () => {
   function createMessage(
     role: "user" | "assistant",
     parts: MessageV2.Part[],
-  ): MessageV2.Info {
+  ): MessageV2.WithParts {
     return {
-      id: Identifier.ascending("message"),
-      sessionID: Identifier.ascending("session"),
-      role,
-      modelID: "test-model",
-      providerID: "test-provider",
-      time: {
-        created: Date.now(),
-        updated: Date.now(),
-      },
+      info: {
+        id: Identifier.ascending("message"),
+        sessionID: Identifier.ascending("session"),
+        role,
+        time: {
+          created: Date.now(),
+        },
+      } as MessageV2.Info,
       parts,
-    } as MessageV2.Info
+    }
   }
 
   // Helper to create a text part
@@ -36,7 +35,7 @@ describe("ContextFilter", () => {
 
   // Helper to create a tool part
   function createToolPart(
-    name: string,
+    tool: string,
     output: string,
     input: Record<string, any> = {},
   ): MessageV2.ToolPart {
@@ -45,12 +44,13 @@ describe("ContextFilter", () => {
       sessionID: Identifier.ascending("session"),
       messageID: Identifier.ascending("message"),
       type: "tool",
-      name,
+      callID: "call-" + Math.random(),
+      tool,
       state: {
         status: "completed",
         input,
         output,
-        title: name,
+        title: tool,
         metadata: {},
         time: {
           start: Date.now(),
@@ -178,8 +178,8 @@ describe("ContextFilter", () => {
       })
 
       expect(result.length).toBe(2)
-      expect((result[0] as MessageV2.ToolPart).name).toBe("read")
-      expect((result[1] as MessageV2.ToolPart).name).toBe("edit")
+      expect((result[0] as MessageV2.ToolPart).tool).toBe("read")
+      expect((result[1] as MessageV2.ToolPart).tool).toBe("edit")
     })
 
     test("combines message type and tool filters", () => {
