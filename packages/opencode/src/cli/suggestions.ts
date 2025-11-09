@@ -25,6 +25,10 @@ export namespace Suggestions {
     "generate",
     "thread",
     "completion",
+    "setup",
+    "alias",
+    "plugins",
+    "openrouter",
   ]
 
   const SUB_COMMANDS: Record<string, string[]> = {
