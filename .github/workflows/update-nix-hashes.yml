@@ -233,8 +233,9 @@ jobs:
           if [ "${HAS_HASH_DATA}" != "true" ]; then
             MESSAGE="nix: bootstrap hashes (${LABEL})"
           fi
+          BODY="[skip ci]"
           {
-            echo "message=$MESSAGE"
+            echo "message=$MESSAGE"$'\n'"$BODY"
             echo "label=$LABEL"
             echo "summary=$SUMMARY"
           } >> "$GITHUB_OUTPUT"
