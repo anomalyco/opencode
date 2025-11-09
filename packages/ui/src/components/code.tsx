@@ -11,20 +11,21 @@ export type CodeProps<T = {}> = FileOptions<T> & {
 export function Code<T>(props: CodeProps<T>) {
   let container!: HTMLDivElement
   const [local, others] = splitProps(props, ["file", "class", "classList", "annotations"])
-  const file = () => local.file
 
   createEffect(() => {
     const instance = new File<T>({
-      theme: { dark: "oc-1-dark", light: "oc-1-light" }, // or any Shiki theme
+      theme: "OpenCode",
       overflow: "wrap", // or 'scroll'
       themeType: "system", // 'system', 'light', or 'dark'
+      disableFileHeader: true,
       disableLineNumbers: false, // optional
       // lang: 'typescript', // optional - auto-detected from filename if not provided
       ...others,
     })
 
+    container.innerHTML = ""
     instance.render({
-      file: file(),
+      file: local.file,
       lineAnnotations: local.annotations,
       containerWrapper: container,
     })

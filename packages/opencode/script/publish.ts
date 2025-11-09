@@ -55,18 +55,10 @@ if (!Script.preview) {
   }
 
   // Calculate SHA values
-  const arm64Sha = await $`sha256sum ./dist/opencode-linux-arm64.zip | cut -d' ' -f1`
-    .text()
-    .then((x) => x.trim())
-  const x64Sha = await $`sha256sum ./dist/opencode-linux-x64.zip | cut -d' ' -f1`
-    .text()
-    .then((x) => x.trim())
-  const macX64Sha = await $`sha256sum ./dist/opencode-darwin-x64.zip | cut -d' ' -f1`
-    .text()
-    .then((x) => x.trim())
-  const macArm64Sha = await $`sha256sum ./dist/opencode-darwin-arm64.zip | cut -d' ' -f1`
-    .text()
-    .then((x) => x.trim())
+  const arm64Sha = await $`sha256sum ./dist/opencode-linux-arm64.zip | cut -d' ' -f1`.text().then((x) => x.trim())
+  const x64Sha = await $`sha256sum ./dist/opencode-linux-x64.zip | cut -d' ' -f1`.text().then((x) => x.trim())
+  const macX64Sha = await $`sha256sum ./dist/opencode-darwin-x64.zip | cut -d' ' -f1`.text().then((x) => x.trim())
+  const macArm64Sha = await $`sha256sum ./dist/opencode-darwin-arm64.zip | cut -d' ' -f1`.text().then((x) => x.trim())
 
   const [pkgver, _subver = ""] = Script.version.split(/(-.*)/, 2)
 
@@ -131,7 +123,7 @@ if (!Script.preview) {
     "",
     "package() {",
     `  cd "opencode-\${pkgver}/packages/opencode"`,
-    '  install -Dm755 ./opencode "${pkgdir}/usr/bin/opencode"',
+    '  install -Dm755 $(find dist/*/bin/opencode) "${pkgdir}/usr/bin/opencode"',
     "}",
     "",
   ].join("\n")

@@ -301,6 +301,42 @@ Or if you already have an API key, you can select **Manually enter API Key** and
 
 ---
 
+### Deep Infra
+
+1. Head over to the [Deep Infra dashboard](https://deepinfra.com/dash), create an account, and generate an API key.
+
+2. Run `opencode auth login` and select **Deep Infra**.
+
+   ```bash
+   $ opencode auth login
+
+   ┌  Add credential
+   │
+   ◆  Select provider
+   │  ● Deep Infra
+   │  ...
+   └
+   ```
+
+3. Enter your Deep Infra API key.
+
+   ```bash
+   $ opencode auth login
+
+   ┌  Add credential
+   │
+   ◇  Select provider
+   │  Deep Infra
+   │
+   ◇  Enter your API key
+   │  _
+   └
+   ```
+
+4. Run the `/models` command to select a model.
+
+---
+
 ### Fireworks AI
 
 1. Head over to the [Fireworks AI console](https://app.fireworks.ai/), create an account, and click **Create API Key**.
@@ -481,7 +517,6 @@ To use Google Vertex AI with OpenCode:
    ```
 
 4. Run the `/models` command to select a model like _Kimi-K2-Instruct_ or _GLM-4.6_.
-
 
 ---
 
@@ -935,9 +970,9 @@ You can use any OpenAI-compatible provider with opencode. Most modern AI provide
 
 ##### Example
 
-Here's an example setting the `apiKey` and `headers` options.
+Here's an example setting the `apiKey`, `headers`, and model `limit` options.
 
-```json title="opencode.json" {9,11}
+```json title="opencode.json" {9,11,17-20}
 {
   "$schema": "https://opencode.ai/config.json",
   "provider": {
@@ -953,7 +988,11 @@ Here's an example setting the `apiKey` and `headers` options.
       },
       "models": {
         "my-model-name": {
-          "name": "My Model Display Name"
+          "name": "My Model Display Name",
+          "limit": {
+            "context": 200000,
+            "output": 65536
+          }
         }
       }
     }
@@ -961,7 +1000,14 @@ Here's an example setting the `apiKey` and `headers` options.
 }
 ```
 
-We are setting the `apiKey` using the `env` variable syntax, [learn more](/docs/config#env-vars).
+Configuration details:
+
+- **apiKey**: Set using `env` variable syntax, [learn more](/docs/config#env-vars).
+- **headers**: Custom headers sent with each request.
+- **limit.context**: Maximum input tokens the model accepts.
+- **limit.output**: Maximum tokens the model can generate.
+
+The `limit` fields allow OpenCode to understand how much context you have left. Standard providers pull these from models.dev automatically.
 
 ---
 

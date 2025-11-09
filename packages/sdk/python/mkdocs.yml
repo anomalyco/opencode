@@ -3,7 +3,7 @@ site_description: Official Python SDK for the Opencode API
 site_url: https://opencode.ai
 repo_url: https://github.com/sst/opencode
 repo_name: sst/opencode
-edit_uri: ''
+edit_uri: ""
 theme:
   name: material
   features:

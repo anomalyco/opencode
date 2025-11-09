@@ -16,12 +16,13 @@ import { createStore, produce, reconcile } from "solid-js/store"
 import { useSDK } from "@tui/context/sdk"
 import { Binary } from "@/util/binary"
 import { createSimpleContext } from "./helper"
+import type { Snapshot } from "@/snapshot"
 
 export const { use: useSync, provider: SyncProvider } = createSimpleContext({
   name: "Sync",
   init: () => {
     const [store, setStore] = createStore<{
-      ready: boolean
+      status: "loading" | "partial" | "complete"
       provider: Provider[]
       agent: Agent[]
       command: Command[]
@@ -30,6 +31,9 @@ export const { use: useSync, provider: SyncProvider } = createSimpleContext({
       }
       config: Config
       session: Session[]
+      session_diff: {
+        [sessionID: string]: Snapshot.FileDiff[]
+      }
       todo: {
         [sessionID: string]: Todo[]
       }
@@ -46,12 +50,13 @@ export const { use: useSync, provider: SyncProvider } = createSimpleContext({
       formatter: FormatterStatus[]
     }>({
       config: {},
-      ready: false,
+      status: "loading",
       agent: [],
       permission: {},
       command: [],
       provider: [],
       session: [],
+      session_diff: {},
       todo: {},
       message: {},
       part: {},
@@ -104,6 +109,10 @@ export const { use: useSync, provider: SyncProvider } = createSimpleContext({
           setStore("todo", event.properties.sessionID, event.properties.todos)
           break
 
+        case "session.diff":
+          setStore("session_diff", event.properties.sessionID, event.properties.diff)
+          break
+
         case "session.deleted": {
           const result = Binary.search(store.session, event.properties.info.id, (s) => s.id)
           if (result.found) {
@@ -145,6 +154,7 @@ export const { use: useSync, provider: SyncProvider } = createSimpleContext({
             event.properties.info.sessionID,
             produce((draft) => {
               draft.splice(result.index, 0, event.properties.info)
+              if (draft.length > 100) draft.shift()
             }),
           )
           break
@@ -210,27 +220,33 @@ export const { use: useSync, provider: SyncProvider } = createSimpleContext({
       sdk.client.config.providers().then((x) => setStore("provider", x.data!.providers)),
       sdk.client.app.agents().then((x) => setStore("agent", x.data ?? [])),
       sdk.client.config.get().then((x) => setStore("config", x.data!)),
-    ]).then(() => setStore("ready", true))
-
-    // non-blocking
-    Promise.all([
-      sdk.client.session.list().then((x) =>
-        setStore(
-          "session",
-          (x.data ?? []).toSorted((a, b) => a.id.localeCompare(b.id)),
+    ]).then(() => {
+      setStore("status", "partial")
+      // non-blocking
+      Promise.all([
+        sdk.client.session.list().then((x) =>
+          setStore(
+            "session",
+            (x.data ?? []).toSorted((a, b) => a.id.localeCompare(b.id)),
+          ),
         ),
-      ),
-      sdk.client.command.list().then((x) => setStore("command", x.data ?? [])),
-      sdk.client.lsp.status().then((x) => setStore("lsp", x.data!)),
-      sdk.client.mcp.status().then((x) => setStore("mcp", x.data!)),
-      sdk.client.formatter.status().then((x) => setStore("formatter", x.data!)),
-    ])
+        sdk.client.command.list().then((x) => setStore("command", x.data ?? [])),
+        sdk.client.lsp.status().then((x) => setStore("lsp", x.data!)),
+        sdk.client.mcp.status().then((x) => setStore("mcp", x.data!)),
+        sdk.client.formatter.status().then((x) => setStore("formatter", x.data!)),
+      ]).then(() => {
+        setStore("status", "complete")
+      })
+    })
 
     const result = {
       data: store,
       set: setStore,
+      get status() {
+        return store.status
+      },
       get ready() {
-        return store.ready
+        return store.status !== "loading"
       },
       session: {
         get(sessionID: string) {
@@ -249,11 +265,16 @@ export const { use: useSync, provider: SyncProvider } = createSimpleContext({
           return last.time.completed ? "idle" : "working"
         },
         async sync(sessionID: string) {
-          const [session, messages, todo] = await Promise.all([
+          if (store.message[sessionID]) return
+          const now = Date.now()
+          console.log("syncing", sessionID)
+          const [session, messages, todo, diff] = await Promise.all([
             sdk.client.session.get({ path: { id: sessionID }, throwOnError: true }),
-            sdk.client.session.messages({ path: { id: sessionID } }),
+            sdk.client.session.messages({ path: { id: sessionID }, query: { limit: 100 } }),
             sdk.client.session.todo({ path: { id: sessionID } }),
+            sdk.client.session.diff({ path: { id: sessionID } }),
           ])
+          console.log("fetched in " + (Date.now() - now), sessionID)
           setStore(
             produce((draft) => {
               const match = Binary.search(draft.session, sessionID, (s) => s.id)
@@ -264,8 +285,10 @@ export const { use: useSync, provider: SyncProvider } = createSimpleContext({
               for (const message of messages.data!) {
                 draft.part[message.info.id] = message.parts
               }
+              draft.session_diff[sessionID] = diff.data ?? []
             }),
           )
+          console.log("synced in " + (Date.now() - now), sessionID)
         },
       },
     }

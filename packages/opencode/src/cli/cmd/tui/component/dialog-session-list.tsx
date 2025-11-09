@@ -2,7 +2,7 @@ import { useDialog } from "@tui/ui/dialog"
 import { DialogSelect } from "@tui/ui/dialog-select"
 import { useRoute } from "@tui/context/route"
 import { useSync } from "@tui/context/sync"
-import { createMemo, createSignal, onMount } from "solid-js"
+import { createEffect, createMemo, createSignal, onMount } from "solid-js"
 import { Locale } from "@/util/locale"
 import { Keybind } from "@/util/keybind"
 import { useTheme } from "../context/theme"
@@ -19,6 +19,8 @@ export function DialogSessionList() {
   const [toDelete, setToDelete] = createSignal<string>()
 
   const deleteKeybind = "ctrl+d"
+
+  const currentSessionID = createMemo(() => (route.data.type === "session" ? route.data.sessionID : undefined))
 
   const options = createMemo(() => {
     const today = new Date().toDateString()
@@ -39,6 +41,11 @@ export function DialogSessionList() {
           footer: Locale.time(x.time.updated),
         }
       })
+      .slice(0, 150)
+  })
+
+  createEffect(() => {
+    console.log("session count", sync.data.session.length)
   })
 
   onMount(() => {
@@ -49,7 +56,7 @@ export function DialogSessionList() {
     <DialogSelect
       title="Sessions"
       options={options()}
-      limit={50}
+      current={currentSessionID()}
       onMove={() => {
         setToDelete(undefined)
       }}

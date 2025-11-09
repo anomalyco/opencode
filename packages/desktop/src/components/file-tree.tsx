@@ -77,7 +77,7 @@ export default function FileTree(props: {
                 <Collapsible
                   class="w-full"
                   forceMount={false}
-                  open={local.file.node(node.path)?.expanded}
+                  // open={local.file.node(node.path)?.expanded}
                   onOpenChange={(open) => (open ? local.file.expand(node.path) : local.file.collapse(node.path))}
                 >
                   <Collapsible.Trigger>
@@ -85,7 +85,7 @@ export default function FileTree(props: {
                       <Collapsible.Arrow class="text-text-muted/60 ml-1" />
                       <FileIcon
                         node={node}
-                        expanded={local.file.node(node.path).expanded}
+                        // expanded={local.file.node(node.path).expanded}
                         class="text-text-muted/60 -ml-1"
                       />
                     </Node>

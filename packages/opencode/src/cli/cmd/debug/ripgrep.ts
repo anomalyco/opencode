@@ -18,7 +18,7 @@ const TreeCommand = cmd({
     }),
   async handler(args) {
     await bootstrap(process.cwd(), async () => {
-      process.stdout.write(await Ripgrep.tree({ cwd: Instance.directory, limit: args.limit }) + EOL)
+      process.stdout.write((await Ripgrep.tree({ cwd: Instance.directory, limit: args.limit })) + EOL)
     })
   },
 })

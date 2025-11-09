@@ -479,7 +479,7 @@ body {
       border-bottom: 1px solid var(--color-border-weak);
     }
 
-    strong {
+    h1 {
       font-size: 28px;
       color: var(--color-text-strong);
       font-weight: 500;

@@ -20,8 +20,8 @@ jobs:
             const title = issue.title;
             const description = issue.body || '';
 
-            // Check for web/desktop keywords
-            const webPattern = /\b(web|desktop)\b/i;
+            // Check for "opencode web" keyword
+            const webPattern = /(opencode web)/i;
             const isWebRelated = webPattern.test(title) || webPattern.test(description);
 
             // Check for version patterns like v1.0.x or 1.0.x

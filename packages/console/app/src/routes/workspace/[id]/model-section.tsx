@@ -5,15 +5,7 @@ import { withActor } from "~/context/auth.withActor"
 import { ZenData } from "@opencode-ai/console-core/model.js"
 import styles from "./model-section.module.css"
 import { querySessionInfo } from "../common"
-import {
-  IconAlibaba,
-  IconAnthropic,
-  IconMoonshotAI,
-  IconOpenAI,
-  IconStealth,
-  IconXai,
-  IconZai,
-} from "~/component/icon"
+import { IconAlibaba, IconAnthropic, IconMoonshotAI, IconOpenAI, IconStealth, IconXai, IconZai } from "~/component/icon"
 
 const getModelLab = (modelId: string) => {
   if (modelId.startsWith("claude")) return "Anthropic"
@@ -31,6 +23,7 @@ const getModelsInfo = query(async (workspaceID: string) => {
     return {
       all: Object.entries(ZenData.list().models)
         .filter(([id, _model]) => !["claude-3-5-haiku", "minimax-m2"].includes(id))
+        .filter(([id, _model]) => !id.startsWith("an-"))
         .sort(([_idA, modelA], [_idB, modelB]) => modelA.name.localeCompare(modelB.name))
         .map(([id, model]) => ({ id, name: model.name })),
       disabled: await Model.listDisabled(),
@@ -75,8 +68,7 @@ export function ModelSection() {
       <div data-slot="section-title">
         <h2>Models</h2>
         <p>
-          Manage which models workspace members can access.{" "}
-          <a href="/docs/zen#pricing ">Learn more</a>.
+          Manage which models workspace members can access. <a href="/docs/zen#pricing ">Learn more</a>.
         </p>
       </div>
       <div data-slot="models-list">

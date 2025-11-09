@@ -17,6 +17,9 @@ export const AttachCommand = cmd({
       }),
   handler: async (args) => {
     if (args.dir) process.chdir(args.dir)
-    await tui(args)
+    await tui({
+      url: args.url,
+      args: {},
+    })
   },
 })

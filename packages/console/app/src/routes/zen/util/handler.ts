@@ -12,18 +12,14 @@ import { UserTable } from "@opencode-ai/console-core/schema/user.sql.js"
 import { ModelTable } from "@opencode-ai/console-core/schema/model.sql.js"
 import { ProviderTable } from "@opencode-ai/console-core/schema/provider.sql.js"
 import { logger } from "./logger"
-import { AuthError, CreditsError, MonthlyLimitError, UserLimitError, ModelError } from "./error"
-import {
-  createBodyConverter,
-  createStreamPartConverter,
-  createResponseConverter,
-} from "./provider/provider"
+import { AuthError, CreditsError, MonthlyLimitError, UserLimitError, ModelError, RateLimitError } from "./error"
+import { createBodyConverter, createStreamPartConverter, createResponseConverter } from "./provider/provider"
 import { anthropicHelper } from "./provider/anthropic"
 import { openaiHelper } from "./provider/openai"
 import { oaCompatHelper } from "./provider/openai-compatible"
+import { createRateLimiter } from "./rateLimiter"
 
 type ZenData = Awaited<ReturnType<typeof ZenData.list>>
-type Model = ZenData["models"][string]
 
 export async function handler(
   input: APIEvent,
@@ -32,6 +28,10 @@ export async function handler(
     parseApiKey: (headers: Headers) => string | undefined
   },
 ) {
+  type AuthInfo = Awaited<ReturnType<typeof authenticate>>
+  type ModelInfo = Awaited<ReturnType<typeof validateModel>>
+  type ProviderInfo = Awaited<ReturnType<typeof selectProvider>>
+
   const FREE_WORKSPACES = [
     "wrk_01K46JDFR0E75SG2Q8K172KF3Y", // frank
     "wrk_01K6W1A3VE0KMNVSCQT43BG2SX", // opencode bench
@@ -39,6 +39,7 @@ export async function handler(
 
   try {
     const body = await input.request.json()
+    const ip = input.request.headers.get("x-real-ip") ?? ""
     logger.metric({
       is_tream: !!body.stream,
       session: input.request.headers.get("x-opencode-session"),
@@ -46,13 +47,11 @@ export async function handler(
     })
     const zenData = ZenData.list()
     const modelInfo = validateModel(zenData, body.model)
-    const providerInfo = selectProvider(
-      zenData,
-      modelInfo,
-      input.request.headers.get("x-real-ip") ?? "",
-    )
+    const providerInfo = selectProvider(zenData, modelInfo, ip)
     const authInfo = await authenticate(modelInfo, providerInfo)
-    validateBilling(modelInfo, authInfo)
+    const rateLimiter = createRateLimiter(modelInfo.id, modelInfo.rateLimit, ip)
+    await rateLimiter?.check()
+    validateBilling(authInfo, modelInfo)
     validateModelSettings(authInfo)
     updateProviderKey(authInfo, providerInfo)
     logger.metric({ provider: providerInfo.id })
@@ -67,7 +66,7 @@ export async function handler(
       }),
     )
     logger.debug("REQUEST URL: " + reqUrl)
-    logger.debug("REQUEST: " + reqBody)
+    logger.debug("REQUEST: " + reqBody.substring(0, 300) + "...")
     const res = await fetch(reqUrl, {
       method: "POST",
       headers: (() => {
@@ -92,9 +91,6 @@ export async function handler(
       }
     }
     logger.debug("STATUS: " + res.status + " " + res.statusText)
-    if (res.status === 400 || res.status === 503) {
-      logger.debug("RESPONSE: " + (await res.text()))
-    }
 
     // Handle non-streaming response
     if (!body.stream) {
@@ -103,6 +99,7 @@ export async function handler(
       const body = JSON.stringify(responseConverter(json))
       logger.metric({ response_length: body.length })
       logger.debug("RESPONSE: " + body)
+      await rateLimiter?.track()
       await trackUsage(authInfo, modelInfo, providerInfo, json.usage)
       await reload(authInfo)
       return new Response(body, {
@@ -131,6 +128,7 @@ export async function handler(
                   response_length: responseLength,
                   "timestamp.last_byte": Date.now(),
                 })
+                await rateLimiter?.track()
                 const usage = usageParser.retrieve()
                 if (usage) {
                   await trackUsage(authInfo, modelInfo, providerInfo, usage)
@@ -205,6 +203,15 @@ export async function handler(
         { status: 401 },
       )
 
+    if (error instanceof RateLimitError)
+      return new Response(
+        JSON.stringify({
+          type: "error",
+          error: { type: error.constructor.name, message: error.message },
+        }),
+        { status: 429 },
+      )
+
     return new Response(
       JSON.stringify({
         type: "error",
@@ -229,12 +236,8 @@ export async function handler(
     return { id: modelId, ...modelData }
   }
 
-  function selectProvider(
-    zenData: ZenData,
-    model: Awaited<ReturnType<typeof validateModel>>,
-    ip: string,
-  ) {
-    const providers = model.providers
+  function selectProvider(zenData: ZenData, modelInfo: ModelInfo, ip: string) {
+    const providers = modelInfo.providers
       .filter((provider) => !provider.disabled)
       .flatMap((provider) => Array<typeof provider>(provider.weight ?? 1).fill(provider))
 
@@ -247,26 +250,22 @@ export async function handler(
       throw new ModelError(`Provider ${provider.id} not supported`)
     }
 
-    const format = zenData.providers[provider.id].format
-
     return {
       ...provider,
       ...zenData.providers[provider.id],
-      ...(format === "anthropic"
-        ? anthropicHelper
-        : format === "openai"
-          ? openaiHelper
-          : oaCompatHelper),
+      ...(() => {
+        const format = zenData.providers[provider.id].format
+        if (format === "anthropic") return anthropicHelper
+        if (format === "openai") return openaiHelper
+        return oaCompatHelper
+      })(),
     }
   }
 
-  async function authenticate(
-    model: Awaited<ReturnType<typeof validateModel>>,
-    providerInfo: Awaited<ReturnType<typeof selectProvider>>,
-  ) {
+  async function authenticate(modelInfo: ModelInfo, providerInfo: ProviderInfo) {
     const apiKey = opts.parseApiKey(input.request.headers)
     if (!apiKey) {
-      if (model.allowAnonymous) return
+      if (modelInfo.allowAnonymous) return
       throw new AuthError("Missing API key.")
     }
 
@@ -281,6 +280,7 @@ export async function handler(
             monthlyLimit: BillingTable.monthlyLimit,
             monthlyUsage: BillingTable.monthlyUsage,
             timeMonthlyUsageUpdated: BillingTable.timeMonthlyUsageUpdated,
+            reloadTrigger: BillingTable.reloadTrigger,
           },
           user: {
             id: UserTable.id,
@@ -296,20 +296,11 @@ export async function handler(
         .from(KeyTable)
         .innerJoin(WorkspaceTable, eq(WorkspaceTable.id, KeyTable.workspaceID))
         .innerJoin(BillingTable, eq(BillingTable.workspaceID, KeyTable.workspaceID))
-        .innerJoin(
-          UserTable,
-          and(eq(UserTable.workspaceID, KeyTable.workspaceID), eq(UserTable.id, KeyTable.userID)),
-        )
-        .leftJoin(
-          ModelTable,
-          and(eq(ModelTable.workspaceID, KeyTable.workspaceID), eq(ModelTable.model, model.id)),
-        )
+        .innerJoin(UserTable, and(eq(UserTable.workspaceID, KeyTable.workspaceID), eq(UserTable.id, KeyTable.userID)))
+        .leftJoin(ModelTable, and(eq(ModelTable.workspaceID, KeyTable.workspaceID), eq(ModelTable.model, modelInfo.id)))
         .leftJoin(
           ProviderTable,
-          and(
-            eq(ProviderTable.workspaceID, KeyTable.workspaceID),
-            eq(ProviderTable.provider, providerInfo.id),
-          ),
+          and(eq(ProviderTable.workspaceID, KeyTable.workspaceID), eq(ProviderTable.provider, providerInfo.id)),
         )
         .where(and(eq(KeyTable.key, apiKey), isNull(KeyTable.timeDeleted)))
         .then((rows) => rows[0]),
@@ -332,11 +323,11 @@ export async function handler(
     }
   }
 
-  function validateBilling(model: Model, authInfo: Awaited<ReturnType<typeof authenticate>>) {
+  function validateBilling(authInfo: AuthInfo, modelInfo: ModelInfo) {
     if (!authInfo) return
     if (authInfo.provider?.credentials) return
     if (authInfo.isFree) return
-    if (model.allowAnonymous) return
+    if (modelInfo.allowAnonymous) return
 
     const billing = authInfo.billing
     if (!billing.paymentMethodID)
@@ -380,39 +371,24 @@ export async function handler(
     }
   }
 
-  function validateModelSettings(authInfo: Awaited<ReturnType<typeof authenticate>>) {
+  function validateModelSettings(authInfo: AuthInfo) {
     if (!authInfo) return
     if (authInfo.isDisabled) throw new ModelError("Model is disabled")
   }
 
-  function updateProviderKey(
-    authInfo: Awaited<ReturnType<typeof authenticate>>,
-    providerInfo: Awaited<ReturnType<typeof selectProvider>>,
-  ) {
+  function updateProviderKey(authInfo: AuthInfo, providerInfo: ProviderInfo) {
     if (!authInfo) return
     if (!authInfo.provider?.credentials) return
     providerInfo.apiKey = authInfo.provider.credentials
   }
 
-  async function trackUsage(
-    authInfo: Awaited<ReturnType<typeof authenticate>>,
-    modelInfo: ReturnType<typeof validateModel>,
-    providerInfo: Awaited<ReturnType<typeof selectProvider>>,
-    usage: any,
-  ) {
-    const {
-      inputTokens,
-      outputTokens,
-      reasoningTokens,
-      cacheReadTokens,
-      cacheWrite5mTokens,
-      cacheWrite1hTokens,
-    } = providerInfo.normalizeUsage(usage)
+  async function trackUsage(authInfo: AuthInfo, modelInfo: ModelInfo, providerInfo: ProviderInfo, usage: any) {
+    const { inputTokens, outputTokens, reasoningTokens, cacheReadTokens, cacheWrite5mTokens, cacheWrite1hTokens } =
+      providerInfo.normalizeUsage(usage)
 
     const modelCost =
       modelInfo.cost200K &&
-      inputTokens + (cacheReadTokens ?? 0) + (cacheWrite5mTokens ?? 0) + (cacheWrite1hTokens ?? 0) >
-        200_000
+      inputTokens + (cacheReadTokens ?? 0) + (cacheWrite5mTokens ?? 0) + (cacheWrite1hTokens ?? 0) > 200_000
         ? modelInfo.cost200K
         : modelInfo.cost
 
@@ -463,8 +439,7 @@ export async function handler(
 
     if (!authInfo) return
 
-    const cost =
-      authInfo.isFree || authInfo.provider?.credentials ? 0 : centsToMicroCents(totalCostInCent)
+    const cost = authInfo.isFree || authInfo.provider?.credentials ? 0 : centsToMicroCents(totalCostInCent)
     await Database.transaction(async (tx) => {
       await tx.insert(UsageTable).values({
         workspaceID: authInfo.workspaceID,
@@ -504,9 +479,7 @@ export async function handler(
             `,
           timeMonthlyUsageUpdated: sql`now()`,
         })
-        .where(
-          and(eq(UserTable.workspaceID, authInfo.workspaceID), eq(UserTable.id, authInfo.user.id)),
-        )
+        .where(and(eq(UserTable.workspaceID, authInfo.workspaceID), eq(UserTable.id, authInfo.user.id)))
     })
 
     await Database.use((tx) =>
@@ -517,7 +490,7 @@ export async function handler(
     )
   }
 
-  async function reload(authInfo: Awaited<ReturnType<typeof authenticate>>) {
+  async function reload(authInfo: AuthInfo) {
     if (!authInfo) return
     if (authInfo.isFree) return
     if (authInfo.provider?.credentials) return
@@ -532,11 +505,11 @@ export async function handler(
           and(
             eq(BillingTable.workspaceID, authInfo.workspaceID),
             eq(BillingTable.reload, true),
-            lt(BillingTable.balance, centsToMicroCents(Billing.CHARGE_THRESHOLD)),
-            or(
-              isNull(BillingTable.timeReloadLockedTill),
-              lt(BillingTable.timeReloadLockedTill, sql`now()`),
+            lt(
+              BillingTable.balance,
+              centsToMicroCents((authInfo.billing.reloadTrigger ?? Billing.RELOAD_TRIGGER) * 100),
             ),
+            or(isNull(BillingTable.timeReloadLockedTill), lt(BillingTable.timeReloadLockedTill, sql`now()`)),
           ),
         ),
     )
