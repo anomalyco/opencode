@@ -1479,7 +1479,11 @@ ToolRegistry.register<typeof TaskTool>({
           when={props.input.subagent_type ?? props.input.description}
           status={isRunning() ? "running" : undefined}
         >
-          Task [{props.input.subagent_type ?? "unknown"}] {props.input.description}{" "}
+          <span style={{ fg: theme.accent, bold: true }}>⚡ Task</span>
+          <span style={{ fg: theme.textMuted }}> [</span>
+          <span style={{ fg: theme.primary, bold: true }}>{props.input.subagent_type ?? "unknown"}</span>
+          <span style={{ fg: theme.textMuted }}>]</span>
+          <span style={{ fg: theme.text }}> {props.input.description}</span>{" "}
           <Show when={isRunning()}>
             <StreamingDots />
           </Show>
