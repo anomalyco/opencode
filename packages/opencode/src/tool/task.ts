@@ -48,11 +48,55 @@ export const TaskTool = Tool.define("task", async () => {
         if (evt.properties.part.messageID === messageID) return
         if (evt.properties.part.type !== "tool") return
         parts[evt.properties.part.id] = evt.properties.part
+
+        // Create enhanced summary with truncated inputs/outputs
+        const enhancedSummary = Object.values(parts)
+          .sort((a, b) => a.id?.localeCompare(b.id))
+          .map((part) => {
+            const truncate = (str: string, maxLen: number) =>
+              str.length > maxLen ? str.slice(0, maxLen) + "..." : str
+
+            let inputSummary = ""
+            let outputSummary = ""
+
+            // Extract key input parameters
+            if (part.state.status !== "pending") {
+              const inputs = part.state.input
+              const keyParams = Object.entries(inputs)
+                .filter(([key]) => !["description", "dangerouslyDisableSandbox", "offset", "limit", "timeout"].includes(key))
+                .map(([key, val]) => {
+                  if (typeof val === "string") return truncate(val, 80)
+                  if (typeof val === "number") return String(val)
+                  return truncate(JSON.stringify(val), 80)
+                })
+                .filter(val => val.length > 0)
+                .join(", ")
+              inputSummary = keyParams
+            }
+
+            // Extract output summary
+            if (part.state.status === "completed") {
+              outputSummary = truncate(part.state.output, 150)
+            } else if (part.state.status === "error") {
+              outputSummary = truncate(part.state.error, 150)
+            }
+
+            return {
+              id: part.id,
+              tool: part.tool,
+              status: part.state.status,
+              input: inputSummary,
+              output: outputSummary,
+              timestamp: part.state.status !== "pending" ? part.state.time.start : Date.now(),
+            }
+          })
+
         ctx.metadata({
           title: params.description,
           metadata: {
-            summary: Object.values(parts).sort((a, b) => a.id?.localeCompare(b.id)),
+            summary: enhancedSummary,
             sessionId: session.id,
+            status: "running",
           },
         })
       })
@@ -92,11 +136,49 @@ export const TaskTool = Tool.define("task", async () => {
       all = await Session.messages(session.id)
       all = all.filter((x) => x.info.role === "assistant")
       all = all.flatMap((msg) => msg.parts.filter((x: any) => x.type === "tool") as MessageV2.ToolPart[])
+
+      // Create final enhanced summary
+      const truncate = (str: string, maxLen: number) => (str.length > maxLen ? str.slice(0, maxLen) + "..." : str)
+      const finalSummary = all.map((part) => {
+        let inputSummary = ""
+        let outputSummary = ""
+
+        if (part.state.status !== "pending") {
+          const inputs = part.state.input
+          const keyParams = Object.entries(inputs)
+            .filter(([key]) => !["description", "dangerouslyDisableSandbox", "offset", "limit", "timeout"].includes(key))
+            .map(([key, val]) => {
+              if (typeof val === "string") return truncate(val, 80)
+              if (typeof val === "number") return String(val)
+              return truncate(JSON.stringify(val), 80)
+            })
+            .filter(val => val.length > 0)
+            .join(", ")
+          inputSummary = keyParams
+        }
+
+        if (part.state.status === "completed") {
+          outputSummary = truncate(part.state.output, 150)
+        } else if (part.state.status === "error") {
+          outputSummary = truncate(part.state.error, 150)
+        }
+
+        return {
+          id: part.id,
+          tool: part.tool,
+          status: part.state.status,
+          input: inputSummary,
+          output: outputSummary,
+          timestamp: part.state.status !== "pending" ? part.state.time.start : Date.now(),
+        }
+      })
+
       return {
         title: params.description,
         metadata: {
-          summary: all,
+          summary: finalSummary,
           sessionId: session.id,
+          status: "completed",
         },
         output: (result.parts.findLast((x: any) => x.type === "text") as any)?.text ?? "",
       }

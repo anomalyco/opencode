@@ -1426,7 +1426,31 @@ ToolRegistry.register<typeof TaskTool>({
   render(props) {
     const { theme } = useTheme()
     const keybind = useKeybind()
-    const isRunning = createMemo(() => !props.output && props.input.description)
+    const isRunning = createMemo(() => props.metadata.status === "running" || (!props.output && props.input.description))
+    const isCompleted = createMemo(() => props.metadata.status === "completed" || !!props.output)
+
+    // Separate tools by status for better organization
+    const toolsByStatus = createMemo(() => {
+      const summary = props.metadata.summary ?? []
+      return {
+        pending: summary.filter((t: any) => t.status === "pending"),
+        running: summary.filter((t: any) => t.status === "running"),
+        completed: summary.filter((t: any) => t.status === "completed"),
+        error: summary.filter((t: any) => t.status === "error"),
+      }
+    })
+
+    // Opacity for fade-out effect
+    const [opacity, setOpacity] = createSignal(1)
+
+    // Fade out after completion
+    createEffect(() => {
+      if (isCompleted() && !isRunning()) {
+        setTimeout(() => {
+          setOpacity(0.5)
+        }, 2500)
+      }
+    })
 
     return (
       <>
@@ -1440,45 +1464,106 @@ ToolRegistry.register<typeof TaskTool>({
           <Show when={isRunning()}>
             <StreamingDots />
           </Show>
-          <Show when={props.output}>
+          <Show when={isCompleted() && !isRunning()}>
             <SuccessCheckmark />
           </Show>
         </ToolTitle>
-        <Show when={isRunning()}>
+
+        <Show when={props.metadata.summary?.length}>
+          <box
+            paddingTop={1}
+            style={{
+              opacity: opacity(),
+              transition: "opacity 0.3s ease",
+            }}
+          >
+            {/* Scrollable container with max height */}
+            <box
+              border="single"
+              borderFg={theme.border}
+              paddingLeft={1}
+              paddingRight={1}
+              style={{ maxHeight: 10, overflowY: "scroll" }}
+            >
+              {/* Running tools section */}
+              <Show when={toolsByStatus().running.length > 0}>
+                <For each={toolsByStatus().running}>
+                  {(tool: any) => {
+                    const truncate = (str: string, maxLen: number) =>
+                      str.length > maxLen ? str.slice(0, maxLen) + "..." : str
+                    const displayText = tool.input ? `${tool.tool}: ${truncate(tool.input, 60)}` : tool.tool
+                    return (
+                      <text>
+                        <span style={{ fg: theme.accent }}>
+                          <PulsingDot />
+                        </span>{" "}
+                        <span style={{ fg: theme.primary, bold: true }}>{truncate(displayText, 80)}</span>
+                      </text>
+                    )
+                  }}
+                </For>
+              </Show>
+
+              {/* Completed tools section */}
+              <Show when={toolsByStatus().completed.length > 0}>
+                <For each={toolsByStatus().completed}>
+                  {(tool: any) => {
+                    const truncate = (str: string, maxLen: number) =>
+                      str.length > maxLen ? str.slice(0, maxLen) + "..." : str
+                    let displayText = tool.tool
+                    if (tool.input) displayText += `: ${truncate(tool.input, 40)}`
+                    if (tool.output) displayText += ` → ${truncate(tool.output, 40)}`
+                    return (
+                      <text>
+                        <span style={{ fg: theme.success }}>✓</span>{" "}
+                        <span style={{ fg: theme.text }}>{truncate(displayText, 100)}</span>
+                      </text>
+                    )
+                  }}
+                </For>
+              </Show>
+
+              {/* Error tools section */}
+              <Show when={toolsByStatus().error.length > 0}>
+                <For each={toolsByStatus().error}>
+                  {(tool: any) => {
+                    const truncate = (str: string, maxLen: number) =>
+                      str.length > maxLen ? str.slice(0, maxLen) + "..." : str
+                    let displayText = tool.tool
+                    if (tool.input) displayText += `: ${truncate(tool.input, 40)}`
+                    if (tool.output) displayText += ` → ${truncate(tool.output, 40)}`
+                    return (
+                      <text>
+                        <span style={{ fg: theme.error }}>✗</span>{" "}
+                        <span style={{ fg: theme.text }}>{truncate(displayText, 100)}</span>
+                      </text>
+                    )
+                  }}
+                </For>
+              </Show>
+
+              {/* Pending tools section - shown dimmed */}
+              <Show when={toolsByStatus().pending.length > 0 && isRunning()}>
+                <text fg={theme.textMuted} paddingTop={toolsByStatus().running.length > 0 ? 1 : 0}>
+                  Queued: {toolsByStatus().pending.length} tool{toolsByStatus().pending.length !== 1 ? "s" : ""}
+                </text>
+              </Show>
+            </box>
+          </box>
+        </Show>
+
+        <Show when={isRunning() && !props.metadata.summary?.length}>
           <box paddingTop={1}>
             <text>
               <ProgressBar indeterminate color={theme.primary} width={40} />
             </text>
             <text fg={theme.textMuted} paddingTop={1}>
-              <Spinner /> Subagent working...
+              <Spinner /> Subagent initializing...
             </text>
           </box>
         </Show>
-        <Show when={props.metadata.summary?.length}>
-          <box paddingTop={1}>
-            <For each={props.metadata.summary ?? []}>
-              {(task) => (
-                <text>
-                  <Show
-                    when={task.state.status === "completed"}
-                    fallback={
-                      <span style={{ fg: theme.accent }}>
-                        <PulsingDot />
-                      </span>
-                    }
-                  >
-                    <span style={{ fg: theme.success }}>✓</span>
-                  </Show>{" "}
-                  <span style={{ fg: theme.textMuted }}>{task.tool}</span>{" "}
-                  <span style={{ fg: theme.text }}>
-                    {task.state.status === "completed" ? task.state.title : "running..."}
-                  </span>
-                </text>
-              )}
-            </For>
-          </box>
-        </Show>
-        <text fg={theme.text} paddingTop={1}>
+
+        <text fg={theme.text} paddingTop={1} style={{ opacity: opacity() }}>
           {keybind.print("session_child_cycle")}, {keybind.print("session_child_cycle_reverse")}
           <span style={{ fg: theme.textMuted }}> to navigate between subagent sessions</span>
         </text>
