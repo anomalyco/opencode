@@ -30,7 +30,7 @@ export interface DialogSelectOption<T = any> {
   title: string
   value: T
   description?: string
-  footer?: string
+  footer?: JSX.Element | string
   category?: string
   disabled?: boolean
   bg?: RGBA
@@ -57,8 +57,7 @@ export function DialogSelect<T>(props: DialogSelectProps<T>) {
     const result = pipe(
       props.options,
       filter((x) => x.disabled !== true),
-      (x) =>
-        !needle ? x : fuzzysort.go(needle, x, { keys: ["title", "category"] }).map((x) => x.obj),
+      (x) => (!needle ? x : fuzzysort.go(needle, x, { keys: ["title", "category"] }).map((x) => x.obj)),
     )
     return result
   })
@@ -173,7 +172,6 @@ export function DialogSelect<T>(props: DialogSelectProps<T>) {
                 props.onFilter?.(e)
               })
             }}
-            onKeyDown={(e) => {}}
             focusedBackgroundColor={theme.backgroundPanel}
             cursorColor={theme.primary}
             focusedTextColor={theme.textMuted}
@@ -214,15 +212,11 @@ export function DialogSelect<T>(props: DialogSelectProps<T>) {
                         props.onSelect?.(option)
                       }}
                       onMouseOver={() => {
-                        const index = filtered().findIndex((x) =>
-                          isDeepEqual(x.value, option.value),
-                        )
+                        const index = filtered().findIndex((x) => isDeepEqual(x.value, option.value))
                         if (index === -1) return
                         moveTo(index)
                       }}
-                      backgroundColor={
-                        active() ? (option.bg ?? theme.primary) : RGBA.fromInts(0, 0, 0, 0)
-                      }
+                      backgroundColor={active() ? (option.bg ?? theme.primary) : RGBA.fromInts(0, 0, 0, 0)}
                       paddingLeft={1}
                       paddingRight={1}
                       gap={1}
@@ -230,9 +224,7 @@ export function DialogSelect<T>(props: DialogSelectProps<T>) {
                       <Option
                         title={option.title}
                         footer={option.footer}
-                        description={
-                          option.description !== category ? option.description : undefined
-                        }
+                        description={option.description !== category ? option.description : undefined}
                         active={active()}
                         current={isDeepEqual(option.value, props.current)}
                       />
@@ -248,9 +240,7 @@ export function DialogSelect<T>(props: DialogSelectProps<T>) {
         <For each={props.keybind ?? []}>
           {(item) => (
             <text>
-              <span style={{ fg: theme.text, attributes: TextAttributes.BOLD }}>
-                {Keybind.toString(item.keybind)}
-              </span>
+              <span style={{ fg: theme.text, attributes: TextAttributes.BOLD }}>{Keybind.toString(item.keybind)}</span>
               <span style={{ fg: theme.textMuted }}> {item.title}</span>
             </text>
           )}
@@ -265,7 +255,7 @@ function Option(props: {
   description?: string
   active?: boolean
   current?: boolean
-  footer?: string
+  footer?: JSX.Element | string
   onMouseOver?: () => void
 }) {
   const { theme } = useTheme()
@@ -284,10 +274,7 @@ function Option(props: {
         wrapMode="none"
       >
         {Locale.truncate(props.title, 62)}
-        <span style={{ fg: props.active ? theme.background : theme.textMuted }}>
-          {" "}
-          {props.description}
-        </span>
+        <span style={{ fg: props.active ? theme.background : theme.textMuted }}> {props.description}</span>
       </text>
       <Show when={props.footer}>
         <box flexShrink={0}>

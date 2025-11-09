@@ -89,10 +89,7 @@ export function PaymentSection() {
                       <td data-slot="payment-receipt">
                         <button
                           onClick={async () => {
-                            const receiptUrl = await downloadReceiptAction(
-                              params.id,
-                              payment.paymentID!,
-                            )
+                            const receiptUrl = await downloadReceiptAction(params.id, payment.paymentID!)
                             if (receiptUrl) {
                               window.open(receiptUrl, "_blank")
                             }

@@ -1,6 +1,6 @@
 {
   "name": "@opencode-ai/desktop",
-  "version": "1.0.44",
+  "version": "1.0.46",
   "description": "",
   "type": "module",
   "scripts": {
@@ -46,9 +46,5 @@
     "solid-list": "catalog:",
     "tailwindcss": "catalog:",
     "virtua": "catalog:"
-  },
-  "prettier": {
-    "semi": false,
-    "printWidth": 120
   }
 }

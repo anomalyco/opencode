@@ -51,9 +51,7 @@ export default function () {
                     disabled={checkoutSubmission.pending || store.checkoutRedirecting}
                     onClick={onClickCheckout}
                   >
-                    {checkoutSubmission.pending || store.checkoutRedirecting
-                      ? "Loading..."
-                      : "Enable billing"}
+                    {checkoutSubmission.pending || store.checkoutRedirecting ? "Loading..." : "Enable billing"}
                   </button>
                 }
               >

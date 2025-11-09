@@ -54,9 +54,7 @@ async function fetchNpmDownloads(packageName: string): Promise<number> {
     // Use a range from 2020 to current year + 5 years to ensure it works forever
     const currentYear = new Date().getFullYear()
     const endYear = currentYear + 5
-    const response = await fetch(
-      `https://api.npmjs.org/downloads/range/2020-01-01:${endYear}-12-31/${packageName}`,
-    )
+    const response = await fetch(`https://api.npmjs.org/downloads/range/2020-01-01:${endYear}-12-31/${packageName}`)
     if (!response.ok) {
       console.warn(`Failed to fetch npm downloads for ${packageName}: ${response.status}`)
       return 0
@@ -168,11 +166,7 @@ async function save(githubTotal: number, npmDownloads: number) {
         ? ` (${githubChange.toLocaleString()})`
         : " (+0)"
   const npmChangeStr =
-    npmChange > 0
-      ? ` (+${npmChange.toLocaleString()})`
-      : npmChange < 0
-        ? ` (${npmChange.toLocaleString()})`
-        : " (+0)"
+    npmChange > 0 ? ` (+${npmChange.toLocaleString()})` : npmChange < 0 ? ` (${npmChange.toLocaleString()})` : " (+0)"
   const totalChangeStr =
     totalChange > 0
       ? ` (+${totalChange.toLocaleString()})`
@@ -226,8 +220,6 @@ console.log(`  npm: ${npmDownloads.toLocaleString()}`)
 console.log("=".repeat(60))
 
 console.log("-".repeat(60))
-console.log(
-  `GitHub Total: ${githubTotal.toLocaleString()} downloads across ${releases.length} releases`,
-)
+console.log(`GitHub Total: ${githubTotal.toLocaleString()} downloads across ${releases.length} releases`)
 console.log(`npm Total: ${npmDownloads.toLocaleString()} downloads`)
 console.log(`Combined Total: ${totalDownloads.toLocaleString()} downloads`)

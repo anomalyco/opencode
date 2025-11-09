@@ -21,12 +21,7 @@ export function Input(props: InputProps) {
     "onKeyDown",
   ])
   return (
-    <Kobalte
-      data-component="input"
-      value={local.value}
-      onChange={local.onChange}
-      onKeyDown={local.onKeyDown}
-    >
+    <Kobalte data-component="input" value={local.value} onChange={local.onChange} onKeyDown={local.onKeyDown}>
       <Show when={local.label}>
         <Kobalte.Label data-slot="label" classList={{ "sr-only": local.hideLabel }}>
           {local.label}

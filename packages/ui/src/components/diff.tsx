@@ -23,13 +23,7 @@ export type DiffProps<T = {}> = FileDiffOptions<T> & {
 
 export function Diff<T>(props: DiffProps<T>) {
   let container!: HTMLDivElement
-  const [local, others] = splitProps(props, [
-    "before",
-    "after",
-    "class",
-    "classList",
-    "annotations",
-  ])
+  const [local, others] = splitProps(props, ["before", "after", "class", "classList", "annotations"])
 
   // const lineAnnotations: DiffLineAnnotation<ThreadMetadata>[] = [
   //   {
@@ -226,13 +220,7 @@ registerCustomTheme("OpenCode", () => {
         },
       },
       {
-        scope: [
-          "constant",
-          "entity.name.constant",
-          "variable.other.constant",
-          "variable.language",
-          "entity",
-        ],
+        scope: ["constant", "entity.name.constant", "variable.other.constant", "variable.language", "entity"],
         settings: {
           foreground: "var(--syntax-constant)",
         },
@@ -320,11 +308,7 @@ registerCustomTheme("OpenCode", () => {
         },
       },
       {
-        scope: [
-          "support.type.object.module",
-          "variable.other.object",
-          "support.type.property-name.css",
-        ],
+        scope: ["support.type.object.module", "variable.other.object", "support.type.property-name.css"],
         settings: {
           foreground: "var(--syntax-object)",
         },

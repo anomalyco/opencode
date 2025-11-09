@@ -24,6 +24,7 @@ export namespace ZenData {
     cost: ModelCostSchema,
     cost200K: ModelCostSchema.optional(),
     allowAnonymous: z.boolean().optional(),
+    rateLimit: z.number().optional(),
     providers: z.array(
       z.object({
         id: z.string(),
@@ -60,9 +61,7 @@ export namespace Model {
   export const enable = fn(z.object({ model: z.string() }), ({ model }) => {
     Actor.assertAdmin()
     return Database.use((db) =>
-      db
-        .delete(ModelTable)
-        .where(and(eq(ModelTable.workspaceID, Actor.workspace()), eq(ModelTable.model, model))),
+      db.delete(ModelTable).where(and(eq(ModelTable.workspaceID, Actor.workspace()), eq(ModelTable.model, model))),
     )
   })
 

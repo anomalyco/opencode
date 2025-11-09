@@ -85,10 +85,7 @@ export function WorkspacePicker() {
       <Dropdown trigger={currentWorkspace()} align="left">
         <For each={workspaces()}>
           {(workspace) => (
-            <DropdownItem
-              selected={workspace.id === params.id}
-              onClick={() => handleSelectWorkspace(workspace.id)}
-            >
+            <DropdownItem selected={workspace.id === params.id} onClick={() => handleSelectWorkspace(workspace.id)}>
               {workspace.name || workspace.slug}
             </DropdownItem>
           )}
@@ -98,11 +95,7 @@ export function WorkspacePicker() {
         </button>
       </Dropdown>
 
-      <Modal
-        open={store.showForm}
-        onClose={() => setStore("showForm", false)}
-        title="Create New Workspace"
-      >
+      <Modal open={store.showForm} onClose={() => setStore("showForm", false)} title="Create New Workspace">
         <form data-slot="create-form" action={createWorkspace} method="post">
           <div data-slot="create-input-group">
             <input

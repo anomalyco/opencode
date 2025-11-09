@@ -19,14 +19,7 @@ import { SplitBorder } from "@tui/component/border"
 import { useTheme } from "@tui/context/theme"
 import { BoxRenderable, ScrollBoxRenderable, addDefaultParsers } from "@opentui/core"
 import { Prompt, type PromptRef } from "@tui/component/prompt"
-import type {
-  AssistantMessage,
-  Part,
-  ToolPart,
-  UserMessage,
-  TextPart,
-  ReasoningPart,
-} from "@opencode-ai/sdk"
+import type { AssistantMessage, Part, ToolPart, UserMessage, TextPart, ReasoningPart } from "@opencode-ai/sdk"
 import { useLocal } from "@tui/context/local"
 import { Locale } from "@/util/locale"
 import type { Tool } from "@/tool/tool"
@@ -41,13 +34,7 @@ import type { EditTool } from "@/tool/edit"
 import type { PatchTool } from "@/tool/patch"
 import type { WebFetchTool } from "@/tool/webfetch"
 import type { TaskTool } from "@/tool/task"
-import {
-  useKeyboard,
-  useRenderer,
-  useTerminalDimensions,
-  type BoxProps,
-  type JSX,
-} from "@opentui/solid"
+import { useKeyboard, useRenderer, useTerminalDimensions, type BoxProps, type JSX } from "@opentui/solid"
 import { useSDK } from "@tui/context/sdk"
 import { useCommandDialog } from "@tui/component/dialog-command"
 import { Shimmer } from "@tui/ui/shimmer"
@@ -653,14 +640,7 @@ export function Session() {
         conceal,
       }}
     >
-      <box
-        flexDirection="row"
-        paddingBottom={1}
-        paddingTop={1}
-        paddingLeft={2}
-        paddingRight={2}
-        gap={2}
-      >
+      <box flexDirection="row" paddingBottom={1} paddingTop={1} paddingLeft={2} paddingRight={2} gap={2}>
         <box flexGrow={1} gap={1}>
           <Show when={session()}>
             <Show when={session().parentID}>
@@ -675,19 +655,13 @@ export function Session() {
                 paddingRight={2}
               >
                 <text fg={theme.text}>
-                  Previous{" "}
-                  <span style={{ fg: theme.textMuted }}>
-                    {keybind.print("session_child_cycle_reverse")}
-                  </span>
+                  Previous <span style={{ fg: theme.textMuted }}>{keybind.print("session_child_cycle_reverse")}</span>
                 </text>
                 <text fg={theme.text}>
                   <b>Viewing subagent session</b>
                 </text>
                 <text fg={theme.text}>
-                  <span style={{ fg: theme.textMuted }}>
-                    {keybind.print("session_child_cycle")}
-                  </span>{" "}
-                  Next
+                  <span style={{ fg: theme.textMuted }}>{keybind.print("session_child_cycle")}</span> Next
                 </text>
               </box>
             </Show>
@@ -743,18 +717,12 @@ export function Session() {
                               paddingTop={1}
                               paddingBottom={1}
                               paddingLeft={2}
-                              backgroundColor={
-                                hover() ? theme.backgroundElement : theme.backgroundPanel
-                              }
+                              backgroundColor={hover() ? theme.backgroundElement : theme.backgroundPanel}
                             >
+                              <text fg={theme.textMuted}>{revert()!.reverted.length} message reverted</text>
                               <text fg={theme.textMuted}>
-                                {revert()!.reverted.length} message reverted
-                              </text>
-                              <text fg={theme.textMuted}>
-                                <span style={{ fg: theme.text }}>
-                                  {keybind.print("messages_redo")}
-                                </span>{" "}
-                                or /redo to restore
+                                <span style={{ fg: theme.text }}>{keybind.print("messages_redo")}</span> or /redo to
+                                restore
                               </text>
                               <Show when={revert()!.diffFiles?.length}>
                                 <box marginTop={1}>
@@ -763,16 +731,10 @@ export function Session() {
                                       <text>
                                         {file.filename}
                                         <Show when={file.additions > 0}>
-                                          <span style={{ fg: theme.diffAdded }}>
-                                            {" "}
-                                            +{file.additions}
-                                          </span>
+                                          <span style={{ fg: theme.diffAdded }}> +{file.additions}</span>
                                         </Show>
                                         <Show when={file.deletions > 0}>
-                                          <span style={{ fg: theme.diffRemoved }}>
-                                            {" "}
-                                            -{file.deletions}
-                                          </span>
+                                          <span style={{ fg: theme.diffRemoved }}> -{file.deletions}</span>
                                         </Show>
                                       </text>
                                     )}
@@ -792,9 +754,7 @@ export function Session() {
                         index={index()}
                         onMouseUp={() => {
                           if (renderer.getSelection()?.getSelectedText()) return
-                          dialog.replace(() => (
-                            <DialogMessage messageID={message.id} sessionID={route.sessionID} />
-                          ))
+                          dialog.replace(() => <DialogMessage messageID={message.id} sessionID={route.sessionID} />)
                         }}
                         message={message as UserMessage}
                         parts={sync.data.part[message.id] ?? []}
@@ -850,9 +810,7 @@ function UserMessage(props: {
   index: number
   pending?: string
 }) {
-  const text = createMemo(
-    () => props.parts.flatMap((x) => (x.type === "text" && !x.synthetic ? [x] : []))[0],
-  )
+  const text = createMemo(() => props.parts.flatMap((x) => (x.type === "text" && !x.synthetic ? [x] : []))[0])
   const files = createMemo(() => props.parts.flatMap((x) => (x.type === "file" ? [x] : [])))
   const sync = useSync()
   const { theme } = useTheme()
@@ -893,14 +851,8 @@ function UserMessage(props: {
                 })
                 return (
                   <text fg={theme.text}>
-                    <span style={{ bg: bg(), fg: theme.background }}>
-                      {" "}
-                      {MIME_BADGE[file.mime] ?? file.mime}{" "}
-                    </span>
-                    <span style={{ bg: theme.backgroundElement, fg: theme.textMuted }}>
-                      {" "}
-                      {file.filename}{" "}
-                    </span>
+                    <span style={{ bg: bg(), fg: theme.background }}> {MIME_BADGE[file.mime] ?? file.mime} </span>
+                    <span style={{ bg: theme.backgroundElement, fg: theme.textMuted }}> {file.filename} </span>
                   </text>
                 )
               }}
@@ -911,16 +863,9 @@ function UserMessage(props: {
           {sync.data.config.username ?? "You"}{" "}
           <Show
             when={queued()}
-            fallback={
-              <span style={{ fg: theme.textMuted }}>
-                ({Locale.time(props.message.time.created)})
-              </span>
-            }
+            fallback={<span style={{ fg: theme.textMuted }}>({Locale.time(props.message.time.created)})</span>}
           >
-            <span style={{ bg: theme.accent, fg: theme.backgroundPanel, bold: true }}>
-              {" "}
-              QUEUED{" "}
-            </span>
+            <span style={{ bg: theme.accent, fg: theme.backgroundPanel, bold: true }}> QUEUED </span>
           </Show>
         </text>
       </box>
@@ -960,8 +905,7 @@ function AssistantMessage(props: { message: AssistantMessage; parts: Part[]; las
       <Show
         when={
           !props.message.time.completed ||
-          (props.last &&
-            props.parts.some((item) => item.type === "step-finish" && item.reason === "tool-calls"))
+          (props.last && props.parts.some((item) => item.type === "step-finish" && item.reason === "tool-calls"))
         }
       >
         <box
@@ -973,9 +917,7 @@ function AssistantMessage(props: { message: AssistantMessage; parts: Part[]; las
           customBorderChars={SplitBorder.customBorderChars}
           borderColor={theme.backgroundElement}
         >
-          <text fg={local.agent.color(props.message.mode)}>
-            {Locale.titlecase(props.message.mode)}
-          </text>
+          <text fg={local.agent.color(props.message.mode)}>{Locale.titlecase(props.message.mode)}</text>
           <Shimmer text={`${props.message.modelID}`} color={theme.text} />
         </box>
       </Show>
@@ -987,9 +929,7 @@ function AssistantMessage(props: { message: AssistantMessage; parts: Part[]; las
       >
         <box paddingLeft={3}>
           <text marginTop={1}>
-            <span style={{ fg: local.agent.color(props.message.mode) }}>
-              {Locale.titlecase(props.message.mode)}
-            </span>{" "}
+            <span style={{ fg: local.agent.color(props.message.mode) }}>{Locale.titlecase(props.message.mode)}</span>{" "}
             <span style={{ fg: theme.textMuted }}>{props.message.modelID}</span>
           </text>
         </box>
@@ -1016,12 +956,7 @@ function ReasoningPart(props: { part: ReasoningPart; message: AssistantMessage }
         customBorderChars={SplitBorder.customBorderChars}
         borderColor={theme.backgroundPanel}
       >
-        <box
-          paddingTop={1}
-          paddingBottom={1}
-          paddingLeft={2}
-          backgroundColor={theme.backgroundPanel}
-        >
+        <box paddingTop={1} paddingBottom={1} paddingLeft={2} backgroundColor={theme.backgroundPanel}>
           <text fg={theme.text}>{props.part.text.trim()}</text>
         </box>
       </box>
@@ -1261,16 +1196,10 @@ ToolRegistry.register<typeof WriteTool>({
         </ToolTitle>
         <box flexDirection="row">
           <box flexShrink={0}>
-            <For each={numbers()}>
-              {(value) => <text style={{ fg: theme.textMuted }}>{value}</text>}
-            </For>
+            <For each={numbers()}>{(value) => <text style={{ fg: theme.textMuted }}>{value}</text>}</For>
           </box>
           <box paddingLeft={1} flexGrow={1}>
-            <code
-              filetype={filetype(props.input.filePath!)}
-              syntaxStyle={syntax()}
-              content={code()}
-            />
+            <code filetype={filetype(props.input.filePath!)} syntaxStyle={syntax()} content={code()} />
           </box>
         </box>
       </>
@@ -1285,8 +1214,7 @@ ToolRegistry.register<typeof GlobTool>({
     return (
       <>
         <ToolTitle icon="✱" fallback="Finding files..." when={props.input.pattern}>
-          Glob "{props.input.pattern}"{" "}
-          <Show when={props.input.path}>in {normalizePath(props.input.path)} </Show>
+          Glob "{props.input.pattern}" <Show when={props.input.path}>in {normalizePath(props.input.path)} </Show>
           <Show when={props.metadata.count}>({props.metadata.count} matches)</Show>
         </ToolTitle>
       </>
@@ -1300,8 +1228,7 @@ ToolRegistry.register<typeof GrepTool>({
   render(props) {
     return (
       <ToolTitle icon="✱" fallback="Searching content..." when={props.input.pattern}>
-        Grep "{props.input.pattern}"{" "}
-        <Show when={props.input.path}>in {normalizePath(props.input.path)} </Show>
+        Grep "{props.input.pattern}" <Show when={props.input.path}>in {normalizePath(props.input.path)} </Show>
         <Show when={props.metadata.matches}>({props.metadata.matches} matches)</Show>
       </ToolTitle>
     )
@@ -1337,11 +1264,7 @@ ToolRegistry.register<typeof TaskTool>({
 
     return (
       <>
-        <ToolTitle
-          icon="%"
-          fallback="Delegating..."
-          when={props.input.subagent_type ?? props.input.description}
-        >
+        <ToolTitle icon="%" fallback="Delegating..." when={props.input.subagent_type ?? props.input.description}>
           Task [{props.input.subagent_type ?? "unknown"}] {props.input.description}
         </ToolTitle>
         <Show when={props.metadata.summary?.length}>

@@ -199,10 +199,8 @@ export namespace ACP {
 
                       if (kind === "edit") {
                         const input = part.state.input
-                        const filePath =
-                          typeof input["filePath"] === "string" ? input["filePath"] : ""
-                        const oldText =
-                          typeof input["oldString"] === "string" ? input["oldString"] : ""
+                        const filePath = typeof input["filePath"] === "string" ? input["filePath"] : ""
+                        const oldText = typeof input["oldString"] === "string" ? input["oldString"] : ""
                         const newText =
                           typeof input["newString"] === "string"
                             ? input["newString"]
@@ -218,9 +216,7 @@ export namespace ACP {
                       }
 
                       if (part.tool === "todowrite") {
-                        const parsedTodos = z
-                          .array(Todo.Info)
-                          .safeParse(JSON.parse(part.state.output))
+                        const parsedTodos = z.array(Todo.Info).safeParse(JSON.parse(part.state.output))
                         if (parsedTodos.success) {
                           await this.connection
                             .sessionUpdate({
@@ -229,9 +225,7 @@ export namespace ACP {
                                 sessionUpdate: "plan",
                                 entries: parsedTodos.data.map((todo) => {
                                   const status: PlanEntry["status"] =
-                                    todo.status === "cancelled"
-                                      ? "completed"
-                                      : (todo.status as PlanEntry["status"])
+                                    todo.status === "cancelled" ? "completed" : (todo.status as PlanEntry["status"])
                                   return {
                                     priority: "medium",
                                     status,
@@ -481,8 +475,7 @@ export namespace ACP {
           description: agent.description,
         }))
 
-      const currentModeId =
-        availableModes.find((m) => m.name === "build")?.id ?? availableModes[0].id
+      const currentModeId = availableModes.find((m) => m.name === "build")?.id ?? availableModes[0].id
 
       const mcpServers: Record<string, Config.Mcp> = {}
       for (const server of params.mcpServers) {
@@ -587,8 +580,7 @@ export namespace ACP {
       const agent = session.modeId ?? "build"
 
       const parts: Array<
-        | { type: "text"; text: string }
-        | { type: "file"; url: string; filename: string; mime: string }
+        { type: "text"; text: string } | { type: "file"; url: string; filename: string; mime: string }
       > = []
       for (const part of params.prompt) {
         switch (part.type) {
@@ -794,9 +786,7 @@ export namespace ACP {
 
   function parseUri(
     uri: string,
-  ):
-    | { type: "file"; url: string; filename: string; mime: string }
-    | { type: "text"; text: string } {
+  ): { type: "file"; url: string; filename: string; mime: string } | { type: "text"; text: string } {
     try {
       if (uri.startsWith("file://")) {
         const path = uri.slice(7)

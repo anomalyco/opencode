@@ -26,10 +26,7 @@ export namespace User {
           authEmail: AuthTable.subject,
         })
         .from(UserTable)
-        .leftJoin(
-          AuthTable,
-          and(eq(UserTable.accountID, AuthTable.accountID), eq(AuthTable.provider, "email")),
-        )
+        .leftJoin(AuthTable, and(eq(UserTable.accountID, AuthTable.accountID), eq(AuthTable.provider, "email")))
         .where(and(eq(UserTable.workspaceID, Actor.workspace()), isNull(UserTable.timeDeleted))),
     ),
   )
@@ -39,13 +36,7 @@ export namespace User {
       tx
         .select()
         .from(UserTable)
-        .where(
-          and(
-            eq(UserTable.workspaceID, Actor.workspace()),
-            eq(UserTable.id, id),
-            isNull(UserTable.timeDeleted),
-          ),
-        )
+        .where(and(eq(UserTable.workspaceID, Actor.workspace()), eq(UserTable.id, id), isNull(UserTable.timeDeleted)))
         .then((rows) => rows[0]),
     ),
   )
@@ -57,10 +48,7 @@ export namespace User {
           email: AuthTable.subject,
         })
         .from(UserTable)
-        .leftJoin(
-          AuthTable,
-          and(eq(UserTable.accountID, AuthTable.accountID), eq(AuthTable.provider, "email")),
-        )
+        .leftJoin(AuthTable, and(eq(UserTable.accountID, AuthTable.accountID), eq(AuthTable.provider, "email")))
         .where(and(eq(UserTable.workspaceID, Actor.workspace()), eq(UserTable.id, id)))
         .then((rows) => rows[0]?.email),
     ),
@@ -142,16 +130,10 @@ export namespace User {
               workspaceName: WorkspaceTable.name,
             })
             .from(UserTable)
-            .innerJoin(
-              AuthTable,
-              and(eq(UserTable.accountID, AuthTable.accountID), eq(AuthTable.provider, "email")),
-            )
+            .innerJoin(AuthTable, and(eq(UserTable.accountID, AuthTable.accountID), eq(AuthTable.provider, "email")))
             .innerJoin(WorkspaceTable, eq(WorkspaceTable.id, workspaceID))
             .where(
-              and(
-                eq(UserTable.workspaceID, workspaceID),
-                eq(UserTable.id, Actor.assert("user").properties.userID),
-              ),
+              and(eq(UserTable.workspaceID, workspaceID), eq(UserTable.id, Actor.assert("user").properties.userID)),
             )
             .then((rows) => rows[0]),
         )

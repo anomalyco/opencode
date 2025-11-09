@@ -8,10 +8,7 @@ import { readableStreamToText } from "bun"
 export namespace BunProc {
   const log = Log.create({ service: "bun" })
 
-  export async function run(
-    cmd: string[],
-    options?: Bun.SpawnOptions.OptionsObject<any, any, any>,
-  ) {
+  export async function run(cmd: string[], options?: Bun.SpawnOptions.OptionsObject<any, any, any>) {
     log.info("running", {
       cmd: [which(), ...cmd],
       ...options,

@@ -11,9 +11,7 @@ export const LspDiagnosticTool = Tool.define("lsp_diagnostics", {
     path: z.string().describe("The path to the file to get diagnostics."),
   }),
   execute: async (args) => {
-    const normalized = path.isAbsolute(args.path)
-      ? args.path
-      : path.join(Instance.directory, args.path)
+    const normalized = path.isAbsolute(args.path) ? args.path : path.join(Instance.directory, args.path)
     await LSP.touchFile(normalized, true)
     const diagnostics = await LSP.diagnostics()
     const file = diagnostics[normalized]

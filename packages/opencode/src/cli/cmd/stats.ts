@@ -68,9 +68,7 @@ async function getAllSessions(): Promise<Session.Info[]> {
     if (!project) continue
 
     const sessionKeys = await Storage.list(["session", project.id])
-    const projectSessions = await Promise.all(
-      sessionKeys.map((key) => Storage.read<Session.Info>(key)),
-    )
+    const projectSessions = await Promise.all(sessionKeys.map((key) => Storage.read<Session.Info>(key)))
 
     for (const session of projectSessions) {
       if (session) {
@@ -87,16 +85,12 @@ async function aggregateSessionStats(days?: number, projectFilter?: string): Pro
   const DAYS_IN_SECOND = 24 * 60 * 60 * 1000
   const cutoffTime = days ? Date.now() - days * DAYS_IN_SECOND : 0
 
-  let filteredSessions = days
-    ? sessions.filter((session) => session.time.updated >= cutoffTime)
-    : sessions
+  let filteredSessions = days ? sessions.filter((session) => session.time.updated >= cutoffTime) : sessions
 
   if (projectFilter !== undefined) {
     if (projectFilter === "") {
       const currentProject = await getCurrentProject()
-      filteredSessions = filteredSessions.filter(
-        (session) => session.projectID === currentProject.id,
-      )
+      filteredSessions = filteredSessions.filter((session) => session.projectID === currentProject.id)
     } else {
       filteredSessions = filteredSessions.filter((session) => session.projectID === projectFilter)
     }
@@ -125,9 +119,7 @@ async function aggregateSessionStats(days?: number, projectFilter?: string): Pro
   }
 
   if (filteredSessions.length > 1000) {
-    console.log(
-      `Large dataset detected (${filteredSessions.length} sessions). This may take a while...`,
-    )
+    console.log(`Large dataset detected (${filteredSessions.length} sessions). This may take a while...`)
   }
 
   if (filteredSessions.length === 0) {
@@ -262,8 +254,7 @@ export function displayStats(stats: SessionStats, toolLimit?: number) {
       const percentage = ((count / totalToolUsage) * 100).toFixed(1)
 
       const maxToolLength = 18
-      const truncatedTool =
-        tool.length > maxToolLength ? tool.substring(0, maxToolLength - 2) + ".." : tool
+      const truncatedTool = tool.length > maxToolLength ? tool.substring(0, maxToolLength - 2) + ".." : tool
       const toolName = truncatedTool.padEnd(maxToolLength)
 
       const content = ` ${toolName} ${bar.padEnd(20)} ${count.toString().padStart(3)} (${percentage.padStart(4)}%)`

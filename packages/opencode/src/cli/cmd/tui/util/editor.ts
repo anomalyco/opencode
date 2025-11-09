@@ -5,10 +5,7 @@ import { join } from "node:path"
 import { CliRenderer } from "@opentui/core"
 
 export namespace Editor {
-  export async function open(opts: {
-    value: string
-    renderer: CliRenderer
-  }): Promise<string | undefined> {
+  export async function open(opts: { value: string; renderer: CliRenderer }): Promise<string | undefined> {
     const editor = process.env["EDITOR"]
     if (!editor) return
 

@@ -135,10 +135,7 @@ const htmlTemplate = `
 `
 
 // Arrow functions
-const debounce = <T extends (...args: any[]) => any>(
-  func: T,
-  wait: number,
-): ((...args: Parameters<T>) => void) => {
+const debounce = <T extends (...args: any[]) => any>(func: T, wait: number): ((...args: Parameters<T>) => void) => {
   let timeout: NodeJS.Timeout
   return (...args: Parameters<T>) => {
     clearTimeout(timeout)
@@ -161,10 +158,7 @@ async function fetchUserData(userId: number): Promise<User> {
 }
 
 // React component with various patterns
-const ThemeProvider: FC<{ children: ReactNode; theme?: Theme }> = ({
-  children,
-  theme = "auto",
-}) => {
+const ThemeProvider: FC<{ children: ReactNode; theme?: Theme }> = ({ children, theme = "auto" }) => {
   const [currentTheme, setCurrentTheme] = useState<Theme>(theme)
   const [status, setStatus] = useState<Status>("pending")
 
