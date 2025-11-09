@@ -83,12 +83,7 @@ export function Autocomplete(props: {
     const extmarkStart = store.index
     const extmarkEnd = extmarkStart + Bun.stringWidth(virtualText)
 
-    const styleId =
-      part.type === "file"
-        ? props.fileStyleId
-        : part.type === "agent"
-          ? props.agentStyleId
-          : undefined
+    const styleId = part.type === "file" ? props.fileStyleId : part.type === "agent" ? props.agentStyleId : undefined
 
     const extmarkId = input.extmarks.create({
       start: extmarkStart,
@@ -186,9 +181,7 @@ export function Autocomplete(props: {
       )
   })
 
-  const session = createMemo(() =>
-    props.sessionID ? sync.session.get(props.sessionID) : undefined,
-  )
+  const session = createMemo(() => (props.sessionID ? sync.session.get(props.sessionID) : undefined))
   const commands = createMemo((): AutocompleteOption[] => {
     const results: AutocompleteOption[] = []
     const s = session()
@@ -315,9 +308,7 @@ export function Autocomplete(props: {
 
   const options = createMemo(() => {
     const mixed: AutocompleteOption[] = (
-      store.visible === "@"
-        ? [...agents(), ...(files.loading ? files.latest || [] : files())]
-        : [...commands()]
+      store.visible === "@" ? [...agents(), ...(files.loading ? files.latest || [] : files())] : [...commands()]
     ).filter((x) => x.disabled !== true)
     const currentFilter = filter()
     if (!currentFilter) return mixed.slice(0, 10)
@@ -389,9 +380,7 @@ export function Autocomplete(props: {
             return
           }
           // Check if a space was typed after the trigger character
-          const currentText = props
-            .input()
-            .getTextRange(store.index + 1, props.input().cursorOffset + 1)
+          const currentText = props.input().getTextRange(store.index + 1, props.input().cursorOffset + 1)
           if (currentText.includes(" ")) {
             hide()
           }
@@ -429,13 +418,8 @@ export function Autocomplete(props: {
           if (e.name === "@") {
             const cursorOffset = props.input().cursorOffset
             const charBeforeCursor =
-              cursorOffset === 0
-                ? undefined
-                : props.input().getTextRange(cursorOffset - 1, cursorOffset)
-            const canTrigger =
-              charBeforeCursor === undefined ||
-              charBeforeCursor === "" ||
-              /\s/.test(charBeforeCursor)
+              cursorOffset === 0 ? undefined : props.input().getTextRange(cursorOffset - 1, cursorOffset)
+            const canTrigger = charBeforeCursor === undefined || charBeforeCursor === "" || /\s/.test(charBeforeCursor)
             if (canTrigger) show("@")
           }
 
@@ -483,10 +467,7 @@ export function Autocomplete(props: {
                 {option.display}
               </text>
               <Show when={option.description}>
-                <text
-                  fg={index() === store.selected ? theme.background : theme.textMuted}
-                  wrapMode="none"
-                >
+                <text fg={index() === store.selected ? theme.background : theme.textMuted} wrapMode="none">
                   {option.description}
                 </text>
               </Show>

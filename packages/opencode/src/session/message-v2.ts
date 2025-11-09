@@ -2,23 +2,16 @@ import z from "zod"
 import { Bus } from "../bus"
 import { NamedError } from "../util/error"
 import { Message } from "./message"
-import {
-  APICallError,
-  convertToModelMessages,
-  LoadAPIKeyError,
-  type ModelMessage,
-  type UIMessage,
-} from "ai"
+import { APICallError, convertToModelMessages, LoadAPIKeyError, type ModelMessage, type UIMessage } from "ai"
 import { Identifier } from "../id/id"
 import { LSP } from "../lsp"
 import { Snapshot } from "@/snapshot"
+import { fn } from "@/util/fn"
+import { Storage } from "@/storage/storage"
 
 export namespace MessageV2 {
   export const OutputLengthError = NamedError.create("MessageOutputLengthError", z.object({}))
-  export const AbortedError = NamedError.create(
-    "MessageAbortedError",
-    z.object({ message: z.string() }),
-  )
+  export const AbortedError = NamedError.create("MessageAbortedError", z.object({ message: z.string() }))
   export const AuthError = NamedError.create(
     "ProviderAuthError",
     z.object({
@@ -251,12 +244,7 @@ export namespace MessageV2 {
   export type ToolStateError = z.infer<typeof ToolStateError>
 
   export const ToolState = z
-    .discriminatedUnion("status", [
-      ToolStatePending,
-      ToolStateRunning,
-      ToolStateCompleted,
-      ToolStateError,
-    ])
+    .discriminatedUnion("status", [ToolStatePending, ToolStateRunning, ToolStateCompleted, ToolStateError])
     .meta({
       ref: "ToolState",
     })
@@ -452,8 +440,7 @@ export namespace MessageV2 {
                   }
                 }
 
-                const { title, time, ...metadata } =
-                  v1.metadata.tool[part.toolInvocation.toolCallId] ?? {}
+                const { title, time, ...metadata } = v1.metadata.tool[part.toolInvocation.toolCallId] ?? {}
                 if (part.toolInvocation.state === "call") {
                   return {
                     status: "running",
@@ -554,11 +541,7 @@ export namespace MessageV2 {
                 },
               ]
             // text/plain and directory files are converted into text parts, ignore them
-            if (
-              part.type === "file" &&
-              part.mime !== "text/plain" &&
-              part.mime !== "application/x-directory"
-            )
+            if (part.type === "file" && part.mime !== "text/plain" && part.mime !== "application/x-directory")
               return [
                 {
                   type: "file",
@@ -617,9 +600,7 @@ export namespace MessageV2 {
                     state: "output-available",
                     toolCallId: part.callID,
                     input: part.state.input,
-                    output: part.state.time.compacted
-                      ? "[Old tool result content cleared]"
-                      : part.state.output,
+                    output: part.state.time.compacted ? "[Old tool result content cleared]" : part.state.output,
                     callProviderMetadata: part.metadata,
                   },
                 ]
@@ -654,6 +635,39 @@ export namespace MessageV2 {
 
     return convertToModelMessages(result)
   }
+
+  export const stream = fn(Identifier.schema("session"), async function* (sessionID) {
+    const list = await Array.fromAsync(await Storage.list(["message", sessionID]))
+    for (let i = list.length - 1; i >= 0; i--) {
+      yield await get({
+        sessionID,
+        messageID: list[i][2],
+      })
+    }
+  })
+
+  export const parts = fn(Identifier.schema("message"), async (messageID) => {
+    const result = [] as MessageV2.Part[]
+    for (const item of await Storage.list(["part", messageID])) {
+      const read = await Storage.read<MessageV2.Part>(item)
+      result.push(read)
+    }
+    result.sort((a, b) => (a.id > b.id ? 1 : -1))
+    return result
+  })
+
+  export const get = fn(
+    z.object({
+      sessionID: Identifier.schema("session"),
+      messageID: Identifier.schema("message"),
+    }),
+    async (input) => {
+      return {
+        info: await Storage.read<MessageV2.Info>(["message", input.sessionID, input.messageID]),
+        parts: await parts(input.messageID),
+      }
+    },
+  )
 
   export async function filterCompacted(stream: AsyncIterable<MessageV2.WithParts>) {
     const result = [] as MessageV2.WithParts[]

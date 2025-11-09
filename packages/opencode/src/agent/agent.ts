@@ -261,18 +261,7 @@ export namespace Agent {
           tools: {},
           builtIn: false,
         }
-      const {
-        name,
-        model,
-        prompt,
-        tools,
-        description,
-        temperature,
-        top_p,
-        mode,
-        permission,
-        ...extra
-      } = value
+      const { name, model, prompt, tools, description, temperature, top_p, mode, permission, ...extra } = value
       item.options = {
         ...item.options,
         ...extra,
@@ -357,10 +346,7 @@ export namespace Agent {
   }
 }
 
-function mergeAgentPermissions(
-  basePermission: any,
-  overridePermission: any,
-): Agent.Info["permission"] {
+function mergeAgentPermissions(basePermission: any, overridePermission: any): Agent.Info["permission"] {
   if (typeof basePermission.bash === "string") {
     basePermission.bash = {
       "*": basePermission.bash,

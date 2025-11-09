@@ -85,12 +85,7 @@ const updateMember = action(async (form: FormData) => {
   )
 }, "member.update")
 
-function MemberRow(props: {
-  member: any
-  workspaceID: string
-  actorID: string
-  actorRole: string
-}) {
+function MemberRow(props: { member: any; workspaceID: string; actorID: string; actorRole: string }) {
   const submission = useSubmission(updateMember)
   const isCurrentUser = () => props.actorID === props.member.id
   const isAdmin = () => props.actorRole === "admin"

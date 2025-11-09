@@ -143,12 +143,15 @@ export interface Hooks {
   /**
    * Called when a new message is received
    */
-  "chat.message"?: (input: {}, output: { message: UserMessage; parts: Part[] }) => Promise<void>
+  "chat.message"?: (
+    input: { sessionID: string; agent?: string; model?: { providerID: string; modelID: string; messageID?: string } },
+    output: { message: UserMessage; parts: Part[] },
+  ) => Promise<void>
   /**
    * Modify parameters sent to LLM
    */
   "chat.params"?: (
-    input: { model: Model; provider: Provider; message: UserMessage },
+    input: { sessionID: string; agent: string; model: Model; provider: Provider; message: UserMessage },
     output: { temperature: number; topP: number; options: Record<string, any> },
   ) => Promise<void>
   /**
@@ -156,7 +159,7 @@ export interface Hooks {
    * Allows plugins to add prefill messages, inject context, etc.
    */
   "chat.messages"?: (
-    input: { 
+    input: {
       model: Model
       provider: Provider
       userMessage: UserMessage
@@ -164,7 +167,7 @@ export interface Hooks {
       agent: string
       conversationDepth: number
     },
-    output: { 
+    output: {
       messages: Array<{ role: "system" | "user" | "assistant"; content: string | any[] }>
     },
   ) => Promise<void>

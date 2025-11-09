@@ -4,8 +4,7 @@ import { cmd } from "../cmd"
 
 export const SnapshotCommand = cmd({
   command: "snapshot",
-  builder: (yargs) =>
-    yargs.command(TrackCommand).command(PatchCommand).command(DiffCommand).demandCommand(),
+  builder: (yargs) => yargs.command(TrackCommand).command(PatchCommand).command(DiffCommand).demandCommand(),
   async handler() {},
 })
 

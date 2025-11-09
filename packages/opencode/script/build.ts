@@ -40,13 +40,9 @@ for (const [os, arch] of targets) {
   await $`mkdir -p dist/${name}/bin`
 
   const opentui = `@opentui/core-${os === "windows" ? "win32" : os}-${arch.replace("-baseline", "")}`
-  const opentuiDir = path.join(dir, "../../node_modules", opentui)
-  await $`mkdir -p ${opentuiDir}`
-  await $`npm pack ${opentui}@${pkg.dependencies["@opentui/core"]}`.cwd(
-    path.join(dir, "../../node_modules"),
-  )
-  const opentuiPattern = `${opentui.replace("@opentui/", "opentui-")}-${pkg.dependencies["@opentui/core"]}.tgz`
-  await $`tar -xf ../../node_modules/${opentuiPattern} -C ../../node_modules/${opentui} --strip-components=1`
+  await $`mkdir -p ../../node_modules/${opentui}`
+  await $`npm pack ${opentui}@${pkg.dependencies["@opentui/core"]}`.cwd(path.join(dir, "../../node_modules"))
+  await $`tar -xf ../../node_modules/${opentui.replace("@opentui/", "opentui-")}-*.tgz -C ../../node_modules/${opentui} --strip-components=1`
 
   const watcher = `@parcel/watcher-${os === "windows" ? "win32" : os}-${arch.replace("-baseline", "")}${os === "linux" ? "-glibc" : ""}`
   const watcherDir = path.join(dir, "../../node_modules", watcher)
@@ -58,9 +54,7 @@ for (const [os, arch] of targets) {
   const watcherTarball = watcherFiles.sort().reverse()[0]
   await $`tar -xf ../../node_modules/${watcherTarball} -C ../../node_modules/${watcher} --strip-components=1`
 
-  const parserWorker = fs.realpathSync(
-    path.resolve(dir, "./node_modules/@opentui/core/parser.worker.js"),
-  )
+  const parserWorker = fs.realpathSync(path.resolve(dir, "./node_modules/@opentui/core/parser.worker.js"))
   const workerPath = "./src/cli/cmd/tui/worker.ts"
 
   await Bun.build({

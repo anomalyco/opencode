@@ -381,11 +381,7 @@ test("resolves scoped npm plugins in config", async () => {
 
       await Bun.write(
         path.join(dir, "opencode.json"),
-        JSON.stringify(
-          { $schema: "https://opencode.ai/config.json", plugin: ["@scope/plugin"] },
-          null,
-          2,
-        ),
+        JSON.stringify({ $schema: "https://opencode.ai/config.json", plugin: ["@scope/plugin"] }, null, 2),
       )
     },
   })

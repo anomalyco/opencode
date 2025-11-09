@@ -18,22 +18,14 @@ interface PromptInputProps {
   ref?: (el: HTMLDivElement) => void
 }
 
-
 // Image Preview Component
-const ImagePreview: Component<{ image: ImageAttachmentPart, onRemove: () => void }> = (props) => {
+const ImagePreview: Component<{ image: ImageAttachmentPart; onRemove: () => void }> = (props) => {
   return (
     <div class="inline-flex items-center gap-2 px-2 py-1 bg-background-element rounded border border-border mr-2 mb-2">
-      <img 
-        src={props.image.data} 
-        alt={props.image.path}
-        class="w-10 h-10 object-cover rounded"
-      />
+      <img src={props.image.data} alt={props.image.path} class="w-10 h-10 object-cover rounded" />
       <span class="text-xs text-text font-mono">[image #{props.image.index}]</span>
       <span class="text-xs text-text-muted truncate max-w-24">{props.image.path}</span>
-      <button
-        onClick={props.onRemove}
-        class="text-text-muted hover:text-error transition-colors"
-      >
+      <button onClick={props.onRemove} class="text-text-muted hover:text-error transition-colors">
         <Icon name="close" class="size-3" />
       </button>
     </div>
@@ -72,8 +64,6 @@ export const PromptInput: Component<PromptInputProps> = (props) => {
     return `img_${Date.now()}_${count}`
   }
 
-
-
   // Speech recognition
   const speech = createSpeechRecognition({
     onFinal: (text) => {
@@ -107,17 +97,17 @@ export const PromptInput: Component<PromptInputProps> = (props) => {
     e.preventDefault()
     e.stopPropagation()
     setIsDragging(false)
-    
+
     const files = Array.from(e.dataTransfer?.files || [])
-    const imageFiles = files.filter(f => f.type.startsWith('image/'))
-    
+    const imageFiles = files.filter((f) => f.type.startsWith("image/"))
+
     for (const file of imageFiles) {
       const reader = new FileReader()
       reader.onload = (evt) => {
         const data = evt.target?.result as string
         const index = imageCounter() + 1
         const id = generateImageId()
-        
+
         const imagePart: ImageAttachmentPart = {
           type: "image",
           id,
@@ -126,10 +116,10 @@ export const PromptInput: Component<PromptInputProps> = (props) => {
           index,
           content: `[image #${index}]`,
           start: 0,
-          end: 0
+          end: 0,
         }
-        
-        setUploadedImages(prev => new Map(prev).set(index, imagePart))
+
+        setUploadedImages((prev) => new Map(prev).set(index, imagePart))
         addPart({ type: "text", content: `[image #${index}] `, start: 0, end: 0 })
       }
       reader.readAsDataURL(file)
@@ -137,13 +127,12 @@ export const PromptInput: Component<PromptInputProps> = (props) => {
   }
 
   const removeImage = (index: number) => {
-    setUploadedImages(prev => {
+    setUploadedImages((prev) => {
       const newMap = new Map(prev)
       newMap.delete(index)
       return newMap
     })
   }
-
 
   const handlePaste = (event: ClipboardEvent) => {
     event.preventDefault()
@@ -281,10 +270,8 @@ export const PromptInput: Component<PromptInputProps> = (props) => {
 
   const addPart = (part: ContentPart) => {
     const cursorPosition = getCursorPosition(editorRef)
-    const rawText = session.prompt
-      .current()
-      .map((p) => p.content)
-      .join("")
+    const prompt = session.prompt.current()
+    const rawText = prompt.map((p) => p.content).join("")
     const textBeforeCursor = rawText.substring(0, cursorPosition)
     const atMatch = textBeforeCursor.match(/@(\S*)$/)
 
@@ -310,7 +297,7 @@ export const PromptInput: Component<PromptInputProps> = (props) => {
       parts: nextParts,
       inserted,
       cursorPositionAfter,
-    } = session.prompt.current().reduce(
+    } = prompt.reduce(
       (acc, item) => {
         if (acc.inserted) {
           acc.parts.push({ ...item, start: acc.runningIndex, end: acc.runningIndex + item.content.length })
@@ -369,7 +356,7 @@ export const PromptInput: Component<PromptInputProps> = (props) => {
     )
 
     if (!inserted) {
-      const baseParts = session.prompt.current().filter((item) => !(item.type === "text" && item.content === ""))
+      const baseParts = prompt.filter((item) => !(item.type === "text" && item.content === ""))
       const runningIndex = baseParts.reduce((sum, p) => sum + p.content.length, 0)
       const appendedAcc = { parts: [...baseParts] as ContentPart[], runningIndex }
       if (part.type === "text") {
@@ -424,10 +411,8 @@ export const PromptInput: Component<PromptInputProps> = (props) => {
 
   const handleSubmit = async (event: Event) => {
     event.preventDefault()
-    const text = session.prompt
-      .current()
-      .map((part) => part.content)
-      .join("")
+    const prompt = session.prompt.current()
+    const text = prompt.map((part) => part.content).join("")
     if (text.trim().length === 0) {
       if (session.working()) abort()
       return
@@ -437,19 +422,17 @@ export const PromptInput: Component<PromptInputProps> = (props) => {
     if (!existing) {
       const created = await sdk.client.session.create()
       existing = created.data ?? undefined
+      if (existing) navigate(`/session/${existing.id}`)
     }
     if (!existing) return
 
-    navigate(`/session/${existing.id}`)
-    if (!session.id) {
-      // session.layout.setOpenedTabs(
-      // session.layout.copyTabs("", session.id)
-    }
-    session.layout.setActiveTab(undefined)
-    session.messages.setActive(undefined)
-    const toAbsolutePath = (path: string) => (path.startsWith("/") ? path : sync.absolute(path))
+    // if (!session.id) {
+    // session.layout.setOpenedTabs(
+    // session.layout.copyTabs("", session.id)
+    // }
 
-    const attachments = session.prompt.current().filter((part) => part.type === "file")
+    const toAbsolutePath = (path: string) => (path.startsWith("/") ? path : sync.absolute(path))
+    const attachments = prompt.filter((part) => part.type === "file")
 
     // const activeFile = local.context.active()
     // if (activeFile) {
@@ -500,10 +483,12 @@ export const PromptInput: Component<PromptInputProps> = (props) => {
       },
     }))
 
+    session.layout.setActiveTab(undefined)
+    session.messages.setActive(undefined)
     session.prompt.set(DEFAULT_PROMPT, 0)
     setUploadedImages(new Map())
 
-    await sdk.client.session.prompt({
+    sdk.client.session.prompt({
       path: { id: existing.id },
       body: {
         agent: local.agent.current()!.name,
@@ -566,12 +551,7 @@ export const PromptInput: Component<PromptInputProps> = (props) => {
           <Show when={uploadedImages().size > 0}>
             <div class="flex flex-wrap p-2 border-b border-border bg-background-weak">
               <For each={Array.from(uploadedImages().values())}>
-                {(image) => (
-                  <ImagePreview 
-                    image={image} 
-                    onRemove={() => removeImage(image.index)} 
-                  />
-                )}
+                {(image) => <ImagePreview image={image} onRemove={() => removeImage(image.index)} />}
               </For>
             </div>
           </Show>
@@ -591,7 +571,7 @@ export const PromptInput: Component<PromptInputProps> = (props) => {
               "w-full p-3 text-14-regular text-text-strong focus:outline-none whitespace-pre-wrap": true,
               "[&>[data-type=file]]:text-icon-info-active": true,
               "ring-2 ring-primary": isDragging(),
-              "ring-offset-2": isDragging()
+              "ring-offset-2": isDragging(),
             }}
           />
           <Show when={!session.prompt.dirty()}>

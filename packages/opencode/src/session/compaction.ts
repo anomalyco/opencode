@@ -30,17 +30,12 @@ export namespace SessionCompaction {
     ),
   }
 
-  export function isOverflow(input: {
-    tokens: MessageV2.Assistant["tokens"]
-    model: ModelsDev.Model
-  }) {
+  export function isOverflow(input: { tokens: MessageV2.Assistant["tokens"]; model: ModelsDev.Model }) {
     if (Flag.OPENCODE_DISABLE_AUTOCOMPACT) return false
     const context = input.model.limit.context
     if (context === 0) return false
     const count = input.tokens.input + input.tokens.cache.read + input.tokens.output
-    const output =
-      Math.min(input.model.limit.output, SessionPrompt.OUTPUT_TOKEN_MAX) ||
-      SessionPrompt.OUTPUT_TOKEN_MAX
+    const output = Math.min(input.model.limit.output, SessionPrompt.OUTPUT_TOKEN_MAX) || SessionPrompt.OUTPUT_TOKEN_MAX
     const usable = context - output
     return count > usable
   }
@@ -92,15 +87,9 @@ export namespace SessionCompaction {
     }
   }
 
-  export async function run(input: {
-    sessionID: string
-    providerID: string
-    modelID: string
-    signal?: AbortSignal
-  }) {
+  export async function run(input: { sessionID: string; providerID: string; modelID: string; signal?: AbortSignal }) {
     if (!input.signal) SessionLock.assertUnlocked(input.sessionID)
-    await using lock =
-      input.signal === undefined ? SessionLock.acquire({ sessionID: input.sessionID }) : undefined
+    await using lock = input.signal === undefined ? SessionLock.acquire({ sessionID: input.sessionID }) : undefined
     const signal = input.signal ?? lock!.signal
 
     await Session.update(input.sessionID, (draft) => {
@@ -111,7 +100,7 @@ export namespace SessionCompaction {
         draft.time.compacting = undefined
       })
     })
-    const toSummarize = await MessageV2.filterCompacted(Session.messageStream(input.sessionID))
+    const toSummarize = await MessageV2.filterCompacted(MessageV2.stream(input.sessionID))
     const model = await Provider.getModel(input.providerID, input.modelID)
     const system = [
       ...SystemPrompt.summarize(model.providerID),
@@ -160,11 +149,7 @@ export namespace SessionCompaction {
         // set to 0, we handle loop
         maxRetries: 0,
         model: model.language,
-        providerOptions: ProviderTransform.providerOptions(
-          model.npm,
-          model.providerID,
-          model.info.options,
-        ),
+        providerOptions: ProviderTransform.providerOptions(model.npm, model.providerID, model.info.options),
         headers: model.info.headers,
         abortSignal: signal,
         onError(error) {
@@ -244,11 +229,7 @@ export namespace SessionCompaction {
           error: e,
         })
         const error = MessageV2.fromError(e, { providerID: input.providerID })
-        if (
-          retries.count < retries.max &&
-          MessageV2.APIError.isInstance(error) &&
-          error.data.isRetryable
-        ) {
+        if (retries.count < retries.max && MessageV2.APIError.isInstance(error) && error.data.isRetryable) {
           shouldRetry = true
           await Session.updatePart({
             id: Identifier.ascending("part"),
@@ -270,7 +251,7 @@ export namespace SessionCompaction {
         }
       }
 
-      const parts = await Session.getParts(msg.id)
+      const parts = await MessageV2.parts(msg.id)
       return {
         info: msg,
         parts,
@@ -287,7 +268,7 @@ export namespace SessionCompaction {
     })
     if (result.shouldRetry) {
       for (let retry = 1; retry < maxRetries; retry++) {
-        const lastRetryPart = result.parts.findLast((p) => p.type === "retry")
+        const lastRetryPart = result.parts.findLast((p): p is MessageV2.RetryPart => p.type === "retry")
 
         if (lastRetryPart) {
           const delayMs = SessionRetry.getRetryDelayInMs(lastRetryPart.error, retry)
@@ -336,7 +317,7 @@ export namespace SessionCompaction {
     if (
       !msg.error ||
       (MessageV2.AbortedError.isInstance(msg.error) &&
-        result.parts.some((part) => part.type === "text" && part.text.length > 0))
+        result.parts.some((part): part is MessageV2.TextPart => part.type === "text" && part.text.length > 0))
     ) {
       msg.summary = true
       Bus.publish(Event.Compacted, {

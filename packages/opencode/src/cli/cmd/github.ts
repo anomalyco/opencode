@@ -189,9 +189,7 @@ export const GithubInstallCommand = cmd({
           async function getAppInfo() {
             const project = Instance.project
             if (project.vcs !== "git") {
-              prompts.log.error(
-                `Could not find git repository. Please run this command from a git repository.`,
-              )
+              prompts.log.error(`Could not find git repository. Please run this command from a git repository.`)
               throw new UI.CancelledError()
             }
 
@@ -204,13 +202,9 @@ export const GithubInstallCommand = cmd({
             // ie. git@github.com:sst/opencode
             // ie. ssh://git@github.com/sst/opencode.git
             // ie. ssh://git@github.com/sst/opencode
-            const parsed = info.match(
-              /^(?:(?:https?|ssh):\/\/)?(?:git@)?github\.com[:/]([^/]+)\/([^/.]+?)(?:\.git)?$/,
-            )
+            const parsed = info.match(/^(?:(?:https?|ssh):\/\/)?(?:git@)?github\.com[:/]([^/]+)\/([^/.]+?)(?:\.git)?$/)
             if (!parsed) {
-              prompts.log.error(
-                `Could not find git repository. Please run this command from a git repository.`,
-              )
+              prompts.log.error(`Could not find git repository. Please run this command from a git repository.`)
               throw new UI.CancelledError()
             }
             const [, owner, repo] = parsed
@@ -451,9 +445,7 @@ export const GithubRunCommand = cmd({
               const summary = await summarize(response)
               await pushToLocalBranch(summary)
             }
-            const hasShared = prData.comments.nodes.some((c) =>
-              c.body.includes(`${shareBaseUrl}/s/${shareId}`),
-            )
+            const hasShared = prData.comments.nodes.some((c) => c.body.includes(`${shareBaseUrl}/s/${shareId}`))
             await updateComment(`${response}${footer({ image: !hasShared })}`)
           }
           // Fork PR
@@ -465,9 +457,7 @@ export const GithubRunCommand = cmd({
               const summary = await summarize(response)
               await pushToForkBranch(summary, prData)
             }
-            const hasShared = prData.comments.nodes.some((c) =>
-              c.body.includes(`${shareBaseUrl}/s/${shareId}`),
-            )
+            const hasShared = prData.comments.nodes.some((c) => c.body.includes(`${shareBaseUrl}/s/${shareId}`))
             await updateComment(`${response}${footer({ image: !hasShared })}`)
           }
         }
@@ -557,12 +547,8 @@ export const GithubRunCommand = cmd({
         // ie. <img alt="Image" src="https://github.com/user-attachments/assets/xxxx" />
         // ie. [api.json](https://github.com/user-attachments/files/21433810/api.json)
         // ie. ![Image](https://github.com/user-attachments/assets/xxxx)
-        const mdMatches = prompt.matchAll(
-          /!?\[.*?\]\((https:\/\/github\.com\/user-attachments\/[^)]+)\)/gi,
-        )
-        const tagMatches = prompt.matchAll(
-          /<img .*?src="(https:\/\/github\.com\/user-attachments\/[^"]+)" \/>/gi,
-        )
+        const mdMatches = prompt.matchAll(/!?\[.*?\]\((https:\/\/github\.com\/user-attachments\/[^)]+)\)/gi)
+        const tagMatches = prompt.matchAll(/<img .*?src="(https:\/\/github\.com\/user-attachments\/[^"]+)" \/>/gi)
         const matches = [...mdMatches, ...tagMatches].sort((a, b) => a.index - b.index)
         console.log("Images", JSON.stringify(matches, null, 2))
 
@@ -587,10 +573,7 @@ export const GithubRunCommand = cmd({
 
           // Replace img tag with file path, ie. @image.png
           const replacement = `@${filename}`
-          prompt =
-            prompt.slice(0, start + offset) +
-            replacement +
-            prompt.slice(start + offset + tag.length)
+          prompt = prompt.slice(0, start + offset) + replacement + prompt.slice(start + offset + tag.length)
           offset += replacement.length - tag.length
 
           const contentType = res.headers.get("content-type")
@@ -873,8 +856,7 @@ Co-authored-by: ${actor} <${actor}@users.noreply.github.com>"`
           throw new Error(`Failed to check permissions for user ${actor}: ${error}`)
         }
 
-        if (!["admin", "write"].includes(permission))
-          throw new Error(`User ${actor} does not have write permissions`)
+        if (!["admin", "write"].includes(permission)) throw new Error(`User ${actor} does not have write permissions`)
       }
 
       async function createComment() {
@@ -922,9 +904,7 @@ Co-authored-by: ${actor} <${actor}@users.noreply.github.com>"`
 
           return `<a href="${shareBaseUrl}/s/${shareId}"><img width="200" alt="${titleAlt}" src="https://social-cards.sst.dev/opencode-share/${title64}.png?model=${providerID}/${modelID}&version=${session.version}&id=${shareId}" /></a>\n`
         })()
-        const shareUrl = shareId
-          ? `[opencode session](${shareBaseUrl}/s/${shareId})&nbsp;&nbsp;|&nbsp;&nbsp;`
-          : ""
+        const shareUrl = shareId ? `[opencode session](${shareBaseUrl}/s/${shareId})&nbsp;&nbsp;|&nbsp;&nbsp;` : ""
         return `\n\n${image}${shareUrl}[github run](${runUrl})`
       }
 
@@ -1100,13 +1080,9 @@ query($owner: String!, $repo: String!, $number: Int!) {
           })
           .map((c) => `- ${c.author.login} at ${c.createdAt}: ${c.body}`)
 
-        const files = (pr.files.nodes || []).map(
-          (f) => `- ${f.path} (${f.changeType}) +${f.additions}/-${f.deletions}`,
-        )
+        const files = (pr.files.nodes || []).map((f) => `- ${f.path} (${f.changeType}) +${f.additions}/-${f.deletions}`)
         const reviewData = (pr.reviews.nodes || []).map((r) => {
-          const comments = (r.comments.nodes || []).map(
-            (c) => `    - ${c.path}:${c.line ?? "?"}: ${c.body}`,
-          )
+          const comments = (r.comments.nodes || []).map((c) => `    - ${c.path}:${c.line ?? "?"}: ${c.body}`)
           return [
             `- ${r.author.login} at ${r.submittedAt}:`,
             `  - Review body: ${r.body}`,
@@ -1128,15 +1104,9 @@ query($owner: String!, $repo: String!, $number: Int!) {
           `Deletions: ${pr.deletions}`,
           `Total Commits: ${pr.commits.totalCount}`,
           `Changed Files: ${pr.files.nodes.length} files`,
-          ...(comments.length > 0
-            ? ["<pull_request_comments>", ...comments, "</pull_request_comments>"]
-            : []),
-          ...(files.length > 0
-            ? ["<pull_request_changed_files>", ...files, "</pull_request_changed_files>"]
-            : []),
-          ...(reviewData.length > 0
-            ? ["<pull_request_reviews>", ...reviewData, "</pull_request_reviews>"]
-            : []),
+          ...(comments.length > 0 ? ["<pull_request_comments>", ...comments, "</pull_request_comments>"] : []),
+          ...(files.length > 0 ? ["<pull_request_changed_files>", ...files, "</pull_request_changed_files>"] : []),
+          ...(reviewData.length > 0 ? ["<pull_request_reviews>", ...reviewData, "</pull_request_reviews>"] : []),
           "</pull_request>",
         ].join("\n")
       }

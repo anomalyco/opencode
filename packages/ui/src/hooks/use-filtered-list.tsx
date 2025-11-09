@@ -11,10 +11,7 @@ export interface FilteredListProps<T> {
   current?: T
   groupBy?: (x: T) => string
   sortBy?: (a: T, b: T) => number
-  sortGroupsBy?: (
-    a: { category: string; items: T[] },
-    b: { category: string; items: T[] },
-  ) => number
+  sortGroupsBy?: (a: { category: string; items: T[] }, b: { category: string; items: T[] }) => number
   onSelect?: (value: T | undefined) => void
 }
 
@@ -25,8 +22,7 @@ export function useFilteredList<T>(props: FilteredListProps<T>) {
     () => store.filter,
     async (filter) => {
       const needle = filter?.toLowerCase()
-      const all =
-        (typeof props.items === "function" ? await props.items(needle) : props.items) || []
+      const all = (typeof props.items === "function" ? await props.items(needle) : props.items) || []
       const result = pipe(
         all,
         (x) => {

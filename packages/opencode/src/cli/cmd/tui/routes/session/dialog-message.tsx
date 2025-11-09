@@ -7,9 +7,7 @@ import { useRoute } from "@tui/context/route"
 export function DialogMessage(props: { messageID: string; sessionID: string }) {
   const sync = useSync()
   const sdk = useSDK()
-  const message = createMemo(() =>
-    sync.data.message[props.sessionID]?.find((x) => x.id === props.messageID),
-  )
+  const message = createMemo(() => sync.data.message[props.sessionID]?.find((x) => x.id === props.messageID))
   const route = useRoute()
 
   return (

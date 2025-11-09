@@ -34,9 +34,16 @@ export function BillingSection() {
   const sessionSubmission = useSubmission(createSessionUrl)
   const [store, setStore] = createStore({
     showAddBalanceForm: false,
-    addBalanceAmount: "",
+    addBalanceAmount: billingInfo()?.reloadAmount.toString() ?? "",
     checkoutRedirecting: false,
     sessionRedirecting: false,
+  })
+
+  createEffect(() => {
+    const info = billingInfo()
+    if (info) {
+      setStore("addBalanceAmount", info.reloadAmount.toString())
+    }
   })
   const balance = createMemo(() => formatBalance(billingInfo()?.balance ?? 0))
 
@@ -67,7 +74,6 @@ export function BillingSection() {
     }
     setStore({
       showAddBalanceForm: true,
-      addBalanceAmount: billingInfo()!.reloadAmount.toString(),
     })
   }
 
@@ -133,8 +139,7 @@ export function BillingSection() {
       <div data-slot="section-title">
         <h2>Billing</h2>
         <p>
-          Manage payments methods. <a href="mailto:contact@anoma.ly">Contact us</a> if you have any
-          questions.
+          Manage payments methods. <a href="mailto:contact@anoma.ly">Contact us</a> if you have any questions.
         </p>
       </div>
       <div data-slot="section-content">
@@ -164,32 +169,20 @@ export function BillingSection() {
                         placeholder="Enter amount"
                       />
                       <div data-slot="form-actions">
-                        <button
-                          data-color="ghost"
-                          type="button"
-                          onClick={() => hideAddBalanceForm()}
-                        >
+                        <button data-color="ghost" type="button" onClick={() => hideAddBalanceForm()}>
                           Cancel
                         </button>
                         <button
                           data-color="primary"
                           type="button"
-                          disabled={
-                            !store.addBalanceAmount ||
-                            checkoutSubmission.pending ||
-                            store.checkoutRedirecting
-                          }
+                          disabled={!store.addBalanceAmount || checkoutSubmission.pending || store.checkoutRedirecting}
                           onClick={onClickCheckout}
                         >
-                          {checkoutSubmission.pending || store.checkoutRedirecting
-                            ? "Loading..."
-                            : "Add"}
+                          {checkoutSubmission.pending || store.checkoutRedirecting ? "Loading..." : "Add"}
                         </button>
                       </div>
                     </div>
-                    <Show
-                      when={checkoutSubmission.result && (checkoutSubmission.result as any).error}
-                    >
+                    <Show when={checkoutSubmission.result && (checkoutSubmission.result as any).error}>
                       {(err: any) => <div data-slot="form-error">{err()}</div>}
                     </Show>
                   </div>
@@ -210,10 +203,7 @@ export function BillingSection() {
                 <div data-slot="card-details">
                   <Switch>
                     <Match when={billingInfo()?.paymentMethodType === "card"}>
-                      <Show
-                        when={billingInfo()?.paymentMethodLast4}
-                        fallback={<span data-slot="number">----</span>}
-                      >
+                      <Show when={billingInfo()?.paymentMethodLast4} fallback={<span data-slot="number">----</span>}>
                         <span data-slot="secret">••••</span>
                         <span data-slot="number">{billingInfo()?.paymentMethodLast4}</span>
                       </Show>
@@ -241,9 +231,7 @@ export function BillingSection() {
             disabled={checkoutSubmission.pending || store.checkoutRedirecting}
             onClick={onClickCheckout}
           >
-            {checkoutSubmission.pending || store.checkoutRedirecting
-              ? "Loading..."
-              : "Enable Billing"}
+            {checkoutSubmission.pending || store.checkoutRedirecting ? "Loading..." : "Enable Billing"}
           </button>
         </Show>
       </div>

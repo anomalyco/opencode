@@ -77,8 +77,7 @@ async function regenerateWindowsCmdWrappers() {
 
     // npm_config_global is string | undefined
     // if it exists, the value is true
-    const isGlobal =
-      process.env.npm_config_global === "true" || pkgPath.includes(path.join("npm", "node_modules"))
+    const isGlobal = process.env.npm_config_global === "true" || pkgPath.includes(path.join("npm", "node_modules"))
 
     // The npm rebuild command does 2 things - Execute lifecycle scripts and rebuild bin links
     // We want to skip lifecycle scripts to avoid infinite loops, so we use --ignore-scripts
@@ -94,9 +93,7 @@ async function regenerateWindowsCmdWrappers() {
     console.log("Successfully rebuilt npm bin links")
   } catch (error) {
     console.error("Error rebuilding npm links:", error.message)
-    console.error(
-      "npm rebuild failed. You may need to manually run: npm rebuild opencode-ai --ignore-scripts",
-    )
+    console.error("npm rebuild failed. You may need to manually run: npm rebuild opencode-ai --ignore-scripts")
   }
 }
 

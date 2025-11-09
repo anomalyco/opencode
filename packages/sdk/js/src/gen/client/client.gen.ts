@@ -107,9 +107,7 @@ export const createClient = (config: Config = {}): Client => {
       }
 
       const parseAs =
-        (opts.parseAs === "auto"
-          ? getParseAs(response.headers.get("Content-Type"))
-          : opts.parseAs) ?? "json"
+        (opts.parseAs === "auto" ? getParseAs(response.headers.get("Content-Type")) : opts.parseAs) ?? "json"
 
       let data: any
       switch (parseAs) {

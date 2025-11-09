@@ -14,7 +14,7 @@ export function Code<T>(props: CodeProps<T>) {
 
   createEffect(() => {
     const instance = new File<T>({
-      theme: { dark: "oc-1-dark", light: "oc-1-light" }, // or any Shiki theme
+      theme: "OpenCode",
       overflow: "wrap", // or 'scroll'
       themeType: "system", // 'system', 'light', or 'dark'
       disableFileHeader: true,

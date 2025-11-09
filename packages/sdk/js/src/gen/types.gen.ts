@@ -35,18 +35,6 @@ export type KeybindsConfig = {
    */
   sidebar_toggle?: string
   /**
-   * Toggle left sidebar
-   */
-  sidebar_left_toggle?: string
-  /**
-   * Toggle right sidebar
-   */
-  sidebar_right_toggle?: string
-  /**
-   * Toggle both sidebars
-   */
-  sidebar_both_toggle?: string
-  /**
    * View status
    */
   status_view?: string
@@ -252,10 +240,6 @@ export type McpLocalConfig = {
    */
   enabled?: boolean
   /**
-   * List of tool names to disable from this MCP server
-   */
-  disabledTools?: Array<string>
-  /**
    * Timeout in ms for fetching tools from the MCP server. Defaults to 5000 (5 seconds) if not specified.
    */
   timeout?: number
@@ -274,10 +258,6 @@ export type McpRemoteConfig = {
    * Enable or disable the MCP server on startup
    */
   enabled?: boolean
-  /**
-   * List of tool names to disable from this MCP server
-   */
-  disabledTools?: Array<string>
   /**
    * Headers to send with the request
    */
@@ -510,79 +490,6 @@ export type Config = {
     chatMaxRetries?: number
     disable_paste_summary?: boolean
   }
-  /**
-   * Anthropic-specific feature flags and settings
-   */
-  anthropic?: {
-    /**
-     * Enable prompt caching to reduce costs and latency (default: true)
-     */
-    promptCaching?: boolean
-    /**
-     * Report cache savings in session usage stats (default: true)
-     */
-    reportCacheSavings?: boolean
-    /**
-     * Enable context editing for compact/compressing context (default: true)
-     */
-    contextEditing?: boolean
-    /**
-     * Enable extended thinking for complex reasoning tasks (default: true)
-     */
-    extendedThinking?: boolean
-    /**
-     * Enable citations feature for source attribution (default: true)
-     */
-    citations?: boolean
-    /**
-     * Enable token efficient tool use to reduce token consumption (default: true)
-     */
-    tokenEfficientToolUse?: boolean
-    /**
-     * Enable fine-grained tool streaming for better progress tracking (default: true)
-     */
-    fineGrainedToolStreaming?: boolean
-    /**
-     * Enable code execution tool for running code snippets (default: true)
-     */
-    codeExecutionTool?: boolean
-    /**
-     * Enable computer use tool for desktop automation (requires special setup) (default: false)
-     */
-    computerUseTool?: boolean
-    /**
-     * Enable text editor tool for file manipulation (default: true)
-     */
-    textEditorTool?: boolean
-    /**
-     * Enable web fetch tool for retrieving web content (default: true)
-     */
-    webFetchTool?: boolean
-    /**
-     * Enable web search tool for searching the internet (default: true)
-     */
-    webSearchTool?: boolean
-    /**
-     * Enable memory tool for persistent knowledge storage (default: true)
-     */
-    memoryTool?: boolean
-    /**
-     * Enable pre-fill assistant messages for guidance and role-playing (default: true)
-     */
-    prefillAssistantMessages?: boolean
-    /**
-     * Enable chaining long prompts for complex multi-step tasks (default: true)
-     */
-    chainLongPrompts?: boolean
-  }
-  /**
-   * Directories outside the project that agents can access
-   */
-  allowedDirectories?: Array<string>
-  /**
-   * List of favorite tool IDs that will be prioritized and shown at the top
-   */
-  favoriteTools?: Array<string>
 }
 
 export type BadRequestError = {
@@ -644,22 +551,6 @@ export type Session = {
     partID?: string
     snapshot?: string
     diff?: string
-  }
-  orchestration?: {
-    depth: number
-    status: "active" | "paused" | "completed" | "failed"
-    rootAgent?: string
-    currentAgent?: string
-    pausedMode?: string
-    pausedAt?: number
-    completedAt?: number
-    result?: string
-    subtaskResults?: Array<{
-      sessionID: string
-      summary: string
-      result: string
-      completedAt: number
-    }>
   }
 }
 
@@ -753,12 +644,7 @@ export type AssistantMessage = {
     created: number
     completed?: number
   }
-  error?:
-    | ProviderAuthError
-    | UnknownError
-    | MessageOutputLengthError
-    | MessageAbortedError
-    | ApiError
+  error?: ProviderAuthError | UnknownError | MessageOutputLengthError | MessageAbortedError | ApiError
   parentID: string
   modelID: string
   providerID: string
@@ -1169,16 +1055,6 @@ export type Agent = {
   options: {
     [key: string]: unknown
   }
-  roleDefinition?: string
-  fileTypeRestrictions?: Array<string>
-  canSwitchFrom?: Array<string>
-  requiresApproval?: boolean
-  capabilities?: {
-    canCreateSubtasks: boolean
-    canSwitchModes: boolean
-    canModifyFiles: boolean
-    canExecuteCommands: boolean
-  }
 }
 
 export type McpStatusConnected = {
@@ -1195,17 +1071,6 @@ export type McpStatusFailed = {
 }
 
 export type McpStatus = McpStatusConnected | McpStatusDisabled | McpStatusFailed
-
-export type McpDiscoveredServer = {
-  name: string
-  description: string
-  vendor: string
-  sourceUrl: string
-  homepage?: string
-  license?: string
-  runtime?: string
-  installCommand: string
-}
 
 export type LspStatus = {
   id: string
@@ -1441,12 +1306,7 @@ export type EventSessionError = {
   type: "session.error"
   properties: {
     sessionID?: string
-    error?:
-      | ProviderAuthError
-      | UnknownError
-      | MessageOutputLengthError
-      | MessageAbortedError
-      | ApiError
+    error?: ProviderAuthError | UnknownError | MessageOutputLengthError | MessageAbortedError | ApiError
   }
 }
 
@@ -1571,84 +1431,6 @@ export type ConfigUpdateResponses = {
 }
 
 export type ConfigUpdateResponse = ConfigUpdateResponses[keyof ConfigUpdateResponses]
-
-export type FavoriteToolsListData = {
-  body?: never
-  path?: never
-  query?: {
-    directory?: string
-  }
-  url: "/favorite-tools"
-}
-
-export type FavoriteToolsListResponses = {
-  /**
-   * Lists of project and global favorite tool IDs
-   */
-  200: {
-    project: Array<string>
-    global: Array<string>
-  }
-}
-
-export type FavoriteToolsListResponse = FavoriteToolsListResponses[keyof FavoriteToolsListResponses]
-
-export type FavoriteToolsCycleData = {
-  body?: {
-    toolId: string
-  }
-  path?: never
-  query?: {
-    directory?: string
-  }
-  url: "/favorite-tools/cycle"
-}
-
-export type FavoriteToolsCycleErrors = {
-  /**
-   * Bad request
-   */
-  400: BadRequestError
-}
-
-export type FavoriteToolsCycleError = FavoriteToolsCycleErrors[keyof FavoriteToolsCycleErrors]
-
-export type FavoriteToolsCycleResponses = {
-  /**
-   * Successfully cycled favorite status
-   */
-  200: {
-    toolId: string
-    level: "none" | "project" | "global"
-  }
-}
-
-export type FavoriteToolsCycleResponse =
-  FavoriteToolsCycleResponses[keyof FavoriteToolsCycleResponses]
-
-export type FavoriteToolsGetLevelData = {
-  body?: never
-  path: {
-    toolId: string
-  }
-  query?: {
-    directory?: string
-  }
-  url: "/favorite-tools/{toolId}/level"
-}
-
-export type FavoriteToolsGetLevelResponses = {
-  /**
-   * Favorite level for the tool
-   */
-  200: {
-    toolId: string
-    level: "none" | "project" | "global"
-  }
-}
-
-export type FavoriteToolsGetLevelResponse =
-  FavoriteToolsGetLevelResponses[keyof FavoriteToolsGetLevelResponses]
 
 export type ToolIdsData = {
   body?: never
@@ -2189,14 +1971,7 @@ export type SessionMessagesData = {
   }
   query?: {
     directory?: string
-    /**
-     * Maximum number of messages to return
-     */
     limit?: number
-    /**
-     * Number of messages to skip
-     */
-    offset?: number
   }
   url: "/session/{id}/message"
 }
@@ -2277,47 +2052,6 @@ export type SessionPromptResponses = {
 }
 
 export type SessionPromptResponse = SessionPromptResponses[keyof SessionPromptResponses]
-
-export type SessionMessagesApiRecentData = {
-  body?: never
-  path: {
-    /**
-     * Session ID
-     */
-    id: string
-  }
-  query?: {
-    directory?: string
-  }
-  url: "/session/{id}/message/recent"
-}
-
-export type SessionMessagesApiRecentErrors = {
-  /**
-   * Bad request
-   */
-  400: BadRequestError
-  /**
-   * Not found
-   */
-  404: NotFoundError
-}
-
-export type SessionMessagesApiRecentError =
-  SessionMessagesApiRecentErrors[keyof SessionMessagesApiRecentErrors]
-
-export type SessionMessagesApiRecentResponses = {
-  /**
-   * List of all messages
-   */
-  200: Array<{
-    info: Message
-    parts: Array<Part>
-  }>
-}
-
-export type SessionMessagesApiRecentResponse =
-  SessionMessagesApiRecentResponses[keyof SessionMessagesApiRecentResponses]
 
 export type SessionMessageData = {
   body?: never
@@ -2808,79 +2542,37 @@ export type McpStatusResponses = {
 
 export type McpStatusResponse = McpStatusResponses[keyof McpStatusResponses]
 
-export type McpDiscoverData = {
-  body?: never
+export type McpAddData = {
+  body?: {
+    name: string
+    config: McpLocalConfig | McpRemoteConfig
+  }
   path?: never
   query?: {
     directory?: string
   }
-  url: "/mcp/discover"
+  url: "/mcp"
 }
 
-export type McpDiscoverResponses = {
-  /**
-   * List of discoverable MCP servers
-   */
-  200: Array<McpDiscoveredServer>
-}
-
-export type McpDiscoverResponse = McpDiscoverResponses[keyof McpDiscoverResponses]
-
-export type McpServerToolsData = {
-  body?: never
-  path: {
-    serverName: string
-  }
-  query?: {
-    directory?: string
-  }
-  url: "/mcp/{serverName}/tools"
-}
-
-export type McpServerToolsResponses = {
-  /**
-   * MCP server tools
-   */
-  200: {
-    [key: string]: unknown
-  }
-}
-
-export type McpServerToolsResponse = McpServerToolsResponses[keyof McpServerToolsResponses]
-
-export type McpServerUpdateData = {
-  body?: {
-    enabled?: boolean
-    disabledTools?: Array<string>
-  }
-  path: {
-    serverName: string
-  }
-  query?: {
-    directory?: string
-  }
-  url: "/mcp/{serverName}"
-}
-
-export type McpServerUpdateErrors = {
+export type McpAddErrors = {
   /**
    * Bad request
    */
   400: BadRequestError
 }
 
-export type McpServerUpdateError = McpServerUpdateErrors[keyof McpServerUpdateErrors]
+export type McpAddError = McpAddErrors[keyof McpAddErrors]
 
-export type McpServerUpdateResponses = {
+export type McpAddResponses = {
   /**
-   * Successfully updated MCP server
+   * MCP server added successfully
    */
   200: {
-    success: boolean
+    [key: string]: McpStatus
   }
 }
 
-export type McpServerUpdateResponse = McpServerUpdateResponses[keyof McpServerUpdateResponses]
+export type McpAddResponse = McpAddResponses[keyof McpAddResponses]
 
 export type LspStatusData = {
   body?: never
@@ -2917,168 +2609,6 @@ export type FormatterStatusResponses = {
 }
 
 export type FormatterStatusResponse = FormatterStatusResponses[keyof FormatterStatusResponses]
-
-export type UiExtensionsData = {
-  body?: never
-  path?: never
-  query?: {
-    directory?: string
-  }
-  url: "/ui/extensions"
-}
-
-export type UiExtensionsResponses = {
-  /**
-   * UI extensions
-   */
-  200: {
-    sidebars: Array<{
-      id: string
-      label: string
-      icon?: string
-      position: "left" | "right"
-      defaultOpen?: boolean
-      keybind?: string
-    }>
-    tabs: Array<{
-      id: string
-      label: string
-      icon?: string
-      parent: string
-    }>
-    panels: Array<{
-      id: string
-      label: string
-      icon?: string
-      area: "top" | "bottom" | "left" | "right"
-      position?: "top" | "bottom"
-      collapsible?: boolean
-    }>
-    widgets: Array<{
-      id: string
-      label: string
-      sidebarPosition?: "top" | "bottom" | "inline"
-      position?: {
-        x: number
-        y: number
-      }
-      size?: {
-        width: number
-        height: number
-      }
-    }>
-    keybinds: Array<{
-      id: string
-      keys: string
-      command: string
-      when?: string
-    }>
-    statusItems: Array<{
-      id: string
-      priority: number
-      alignment: "left" | "right"
-    }>
-    commands: Array<{
-      id: string
-      label: string
-      description?: string
-    }>
-  }
-}
-
-export type UiExtensionsResponse = UiExtensionsResponses[keyof UiExtensionsResponses]
-
-export type UiRenderData = {
-  body?: {
-    context?: {
-      [key: string]: unknown
-    }
-  }
-  path: {
-    /**
-     * UI component ID
-     */
-    componentId: string
-  }
-  query?: {
-    directory?: string
-  }
-  url: "/ui/render/{componentId}"
-}
-
-export type UiRenderErrors = {
-  /**
-   * Bad request
-   */
-  400: BadRequestError
-  /**
-   * Not found
-   */
-  404: NotFoundError
-}
-
-export type UiRenderError = UiRenderErrors[keyof UiRenderErrors]
-
-export type UiRenderResponses = {
-  /**
-   * Rendered component content
-   */
-  200: {
-    content: string
-    type: "text" | "markdown" | "ansi" | "html"
-    error?: string
-  }
-}
-
-export type UiRenderResponse = UiRenderResponses[keyof UiRenderResponses]
-
-export type UiActionData = {
-  body?: {
-    /**
-     * Action name
-     */
-    action: string
-    /**
-     * Action payload
-     */
-    payload?: unknown
-  }
-  path: {
-    /**
-     * UI component ID
-     */
-    componentId: string
-  }
-  query?: {
-    directory?: string
-  }
-  url: "/ui/action/{componentId}"
-}
-
-export type UiActionErrors = {
-  /**
-   * Bad request
-   */
-  400: BadRequestError
-  /**
-   * Not found
-   */
-  404: NotFoundError
-}
-
-export type UiActionError = UiActionErrors[keyof UiActionErrors]
-
-export type UiActionResponses = {
-  /**
-   * Action result
-   */
-  200: {
-    result?: unknown
-    error?: string
-  }
-}
-
-export type UiActionResponse = UiActionResponses[keyof UiActionResponses]
 
 export type TuiAppendPromptData = {
   body?: {
@@ -3336,8 +2866,7 @@ export type TuiControlResponseResponses = {
   200: boolean
 }
 
-export type TuiControlResponseResponse =
-  TuiControlResponseResponses[keyof TuiControlResponseResponses]
+export type TuiControlResponseResponse = TuiControlResponseResponses[keyof TuiControlResponseResponses]
 
 export type AuthSetData = {
   body?: Auth

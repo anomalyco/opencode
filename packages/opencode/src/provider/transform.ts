@@ -3,19 +3,12 @@ import { unique } from "remeda"
 import type { JSONSchema } from "zod/v4/core"
 
 export namespace ProviderTransform {
-  function normalizeMessages(
-    msgs: ModelMessage[],
-    providerID: string,
-    modelID: string,
-  ): ModelMessage[] {
+  function normalizeMessages(msgs: ModelMessage[], providerID: string, modelID: string): ModelMessage[] {
     if (modelID.includes("claude")) {
       return msgs.map((msg) => {
         if ((msg.role === "assistant" || msg.role === "tool") && Array.isArray(msg.content)) {
           msg.content = msg.content.map((part) => {
-            if (
-              (part.type === "tool-call" || part.type === "tool-result") &&
-              "toolCallId" in part
-            ) {
+            if ((part.type === "tool-call" || part.type === "tool-result") && "toolCallId" in part) {
               return {
                 ...part,
                 toolCallId: part.toolCallId.replace(/[^a-zA-Z0-9_-]/g, "_"),
@@ -36,10 +29,7 @@ export namespace ProviderTransform {
 
         if ((msg.role === "assistant" || msg.role === "tool") && Array.isArray(msg.content)) {
           msg.content = msg.content.map((part) => {
-            if (
-              (part.type === "tool-call" || part.type === "tool-result") &&
-              "toolCallId" in part
-            ) {
+            if ((part.type === "tool-call" || part.type === "tool-result") && "toolCallId" in part) {
               // Mistral requires alphanumeric tool call IDs with exactly 9 characters
               const normalizedId = part.toolCallId
                 .replace(/[^a-zA-Z0-9]/g, "") // Remove non-alphanumeric characters
@@ -96,8 +86,7 @@ export namespace ProviderTransform {
     }
 
     for (const msg of unique([...system, ...final])) {
-      const shouldUseContentOptions =
-        providerID !== "anthropic" && Array.isArray(msg.content) && msg.content.length > 0
+      const shouldUseContentOptions = providerID !== "anthropic" && Array.isArray(msg.content) && msg.content.length > 0
 
       if (shouldUseContentOptions) {
         const lastContent = msg.content[msg.content.length - 1]
@@ -139,11 +128,7 @@ export namespace ProviderTransform {
     return undefined
   }
 
-  export function options(
-    providerID: string,
-    modelID: string,
-    sessionID: string,
-  ): Record<string, any> | undefined {
+  export function options(providerID: string, modelID: string, sessionID: string): Record<string, any> | undefined {
     const result: Record<string, any> = {}
 
     if (providerID === "openai") {
@@ -168,11 +153,7 @@ export namespace ProviderTransform {
     return result
   }
 
-  export function providerOptions(
-    npm: string | undefined,
-    providerID: string,
-    options: { [x: string]: any },
-  ) {
+  export function providerOptions(npm: string | undefined, providerID: string, options: { [x: string]: any }) {
     switch (npm) {
       case "@ai-sdk/openai":
       case "@ai-sdk/azure":
@@ -205,8 +186,7 @@ export namespace ProviderTransform {
 
     if (providerID === "anthropic") {
       const thinking = options?.["thinking"]
-      const budgetTokens =
-        typeof thinking?.["budgetTokens"] === "number" ? thinking["budgetTokens"] : 0
+      const budgetTokens = typeof thinking?.["budgetTokens"] === "number" ? thinking["budgetTokens"] : 0
       const enabled = thinking?.["type"] === "enabled"
       if (enabled && budgetTokens > 0) {
         // Return text tokens so that text + thinking <= model cap, preferring 32k text when possible.

@@ -29,6 +29,8 @@ class Repository<T> {
   }
 
   public find(id: number): T | undefined {
+    const x = undefined
+    type x = { foo: undefined }
     return this.items.find((item) => item.id === id)
   }
 
@@ -66,11 +68,74 @@ const sql = `
   AND created_at > '${new Date().toISOString()}'
 `
 
+// String source examples (CSS-in-JS, GraphQL, etc.)
+const styledComponent = css`
+  .container {
+    display: flex;
+    justify-content: center;
+    align-items: center;
+    background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+    padding: 2rem;
+    border-radius: 8px;
+    box-shadow: 0 4px 6px rgba(0, 0, 0, 0.1);
+
+    &:hover {
+      transform: translateY(-2px);
+      box-shadow: 0 8px 12px rgba(0, 0, 0, 0.15);
+    }
+
+    .title {
+      font-size: 1.5rem;
+      font-weight: bold;
+      color: white;
+      margin-bottom: 1rem;
+    }
+  }
+`
+
+const graphqlQuery = `
+  query GetUserProfile($userId: ID!) {
+    user(id: $userId) {
+      id
+      name
+      email
+      avatar
+      createdAt
+      posts {
+        id
+        title
+        content
+        publishedAt
+        comments {
+          id
+          author
+          content
+          createdAt
+        }
+      }
+    }
+  }
+`
+
+const htmlTemplate = `
+  <div class="user-card">
+    <img src="${user.avatar}" alt="${user.name}" class="avatar" />
+    <div class="user-info">
+      <h3>${user.name}</h3>
+      <p>${user.email}</p>
+      <span class="status ${user.active ? "active" : "inactive"}">
+        ${user.active ? "Active" : "Inactive"}
+      </span>
+    </div>
+    <div class="actions">
+      <button onclick="editUser(${user.id})">Edit</button>
+      <button onclick="deleteUser(${user.id})" class="danger">Delete</button>
+    </div>
+  </div>
+`
+
 // Arrow functions
-const debounce = <T extends (...args: any[]) => any>(
-  func: T,
-  wait: number,
-): ((...args: Parameters<T>) => void) => {
+const debounce = <T extends (...args: any[]) => any>(func: T, wait: number): ((...args: Parameters<T>) => void) => {
   let timeout: NodeJS.Timeout
   return (...args: Parameters<T>) => {
     clearTimeout(timeout)
@@ -93,10 +158,7 @@ async function fetchUserData(userId: number): Promise<User> {
 }
 
 // React component with various patterns
-const ThemeProvider: FC<{ children: ReactNode; theme?: Theme }> = ({
-  children,
-  theme = "auto",
-}) => {
+const ThemeProvider: FC<{ children: ReactNode; theme?: Theme }> = ({ children, theme = "auto" }) => {
   const [currentTheme, setCurrentTheme] = useState<Theme>(theme)
   const [status, setStatus] = useState<Status>("pending")
 

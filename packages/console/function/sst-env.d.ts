@@ -22,6 +22,14 @@ declare module "sst" {
       type: "sst.sst.Secret"
       value: string
     }
+    CLOUDFLARE_API_TOKEN: {
+      type: "sst.sst.Secret"
+      value: string
+    }
+    CLOUDFLARE_DEFAULT_ACCOUNT_ID: {
+      type: "sst.sst.Secret"
+      value: string
+    }
     Console: {
       type: "sst.cloudflare.SolidStart"
       url: string
@@ -96,6 +104,7 @@ declare module "sst" {
     AuthApi: cloudflare.Service
     AuthStorage: cloudflare.KVNamespace
     Bucket: cloudflare.R2Bucket
+    GatewayKv: cloudflare.KVNamespace
     LogProcessor: cloudflare.Service
   }
 }

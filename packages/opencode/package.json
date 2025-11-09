@@ -1,6 +1,6 @@
 {
   "$schema": "https://json.schemastore.org/package.json",
-  "version": "1.0.39",
+  "version": "1.0.51",
   "name": "opencode",
   "type": "module",
   "scripts": {
@@ -57,8 +57,8 @@
     "@opencode-ai/plugin": "workspace:*",
     "@opencode-ai/script": "workspace:*",
     "@opencode-ai/sdk": "workspace:*",
-    "@opentui/core": "0.0.0-20251106-788e97e4",
-    "@opentui/solid": "0.0.0-20251106-788e97e4",
+    "@opentui/core": "0.0.0-20251108-0c7899b1",
+    "@opentui/solid": "0.0.0-20251108-0c7899b1",
     "@parcel/watcher": "2.5.1",
     "@pierre/precision-diffs": "catalog:",
     "@solid-primitives/event-bus": "1.1.2",
