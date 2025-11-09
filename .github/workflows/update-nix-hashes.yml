@@ -235,7 +235,8 @@ jobs:
           fi
           BODY="[skip ci]"
           {
-            echo "message=$MESSAGE"$'\n'"$BODY"
+            echo "message=$MESSAGE"
+            echo "body=$BODY"
             echo "label=$LABEL"
             echo "summary=$SUMMARY"
           } >> "$GITHUB_OUTPUT"
