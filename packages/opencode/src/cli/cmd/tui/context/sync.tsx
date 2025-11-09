@@ -225,12 +225,16 @@ export const { use: useSync, provider: SyncProvider } = createSimpleContext({
       }
     })
 
+    const now = Date.now()
     // blocking
     Promise.all([
       sdk.client.config.providers().then((x) => setStore("provider", x.data!.providers)),
       sdk.client.app.agents().then((x) => setStore("agent", x.data ?? [])),
       sdk.client.config.get().then((x) => setStore("config", x.data!)),
-    ]).then(() => setStore("ready", true))
+    ]).then(() => {
+      console.log("loaded in " + (Date.now() - now))
+      setStore("ready", true)
+    })
 
     // non-blocking
     Promise.all([

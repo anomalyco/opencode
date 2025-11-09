@@ -2,6 +2,7 @@ import { Log } from "@/util/log"
 import { Context } from "../util/context"
 import { Project } from "./project"
 import { State } from "./state"
+import { iife } from "@/util/iife"
 
 interface Context {
   directory: string
@@ -9,7 +10,7 @@ interface Context {
   project: Project.Info
 }
 const context = Context.create<Context>("instance")
-const cache = new Map<string, Context>()
+const cache = new Map<string, Promise<Context>>()
 
 export const Instance = {
   async provide<R>(input: {
@@ -19,18 +20,22 @@ export const Instance = {
   }): Promise<R> {
     let existing = cache.get(input.directory)
     if (!existing) {
-      const project = await Project.fromDirectory(input.directory)
-      existing = {
-        directory: input.directory,
-        worktree: project.worktree,
-        project,
-      }
+      existing = iife(async () => {
+        const project = await Project.fromDirectory(input.directory)
+        const ctx = {
+          directory: input.directory,
+          worktree: project.worktree,
+          project,
+        }
+        await context.provide(ctx, async () => {
+          await input.init?.()
+        })
+        return ctx
+      })
+      cache.set(input.directory, existing)
     }
-    return context.provide(existing, async () => {
-      if (!cache.has(input.directory)) {
-        cache.set(input.directory, existing)
-        await input.init?.()
-      }
+    const ctx = await existing
+    return context.provide(ctx, async () => {
       return input.fn()
     })
   },
@@ -52,7 +57,7 @@ export const Instance = {
   },
   async disposeAll() {
     for (const [_key, value] of cache) {
-      await context.provide(value, async () => {
+      await context.provide(await value, async () => {
         await Instance.dispose()
       })
     }

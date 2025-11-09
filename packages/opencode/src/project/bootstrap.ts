@@ -9,9 +9,11 @@ import { Project } from "./project"
 import { Bus } from "../bus"
 import { Command } from "../command"
 import { Instance } from "./instance"
+import { Log } from "@/util/log"
 
 export async function InstanceBootstrap() {
   if (Flag.OPENCODE_EXPERIMENTAL_NO_BOOTSTRAP) return
+  Log.Default.info("bootstrapping", { directory: Instance.directory })
   await Plugin.init()
   Share.init()
   Format.init()

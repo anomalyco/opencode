@@ -1,5 +1,5 @@
 import { createStore } from "solid-js/store"
-import { batch, createEffect, createMemo, createSignal, onMount } from "solid-js"
+import { batch, createEffect, createMemo } from "solid-js"
 import { useSync } from "@tui/context/sync"
 import { useTheme } from "@tui/context/theme"
 import { uniqueBy } from "remeda"
@@ -8,12 +8,12 @@ import { Global } from "@/global"
 import { iife } from "@/util/iife"
 import { createSimpleContext } from "./helper"
 import { useToast } from "../ui/toast"
-import { createEventBus } from "@solid-primitives/event-bus"
 import { Provider } from "@/provider/provider"
+import { useArgs } from "./args"
 
 export const { use: useLocal, provider: LocalProvider } = createSimpleContext({
   name: "Local",
-  init: (props: { initialModel?: string; initialAgent?: string; initialPrompt?: string }) => {
+  init: () => {
     const sync = useSync()
     const toast = useToast()
 
@@ -31,25 +31,6 @@ export const { use: useLocal, provider: LocalProvider } = createSimpleContext({
         if (isModelValid(model)) return model
       }
     }
-
-    // Set initial model if provided
-    onMount(() => {
-      batch(() => {
-        if (props.initialAgent) {
-          agent.set(props.initialAgent)
-        }
-        if (props.initialModel) {
-          const { providerID, modelID } = Provider.parseModel(props.initialModel)
-          if (!providerID || !modelID)
-            return toast.show({
-              variant: "warning",
-              message: `Invalid model format: ${props.initialModel}`,
-              duration: 3000,
-            })
-          model.set({ providerID, modelID }, { recent: true })
-        }
-      })
-    })
 
     // Automatically update model when agent changes
     createEffect(() => {
@@ -149,9 +130,10 @@ export const { use: useLocal, provider: LocalProvider } = createSimpleContext({
           setModelStore("ready", true)
         })
 
+      const args = useArgs()
       const fallbackModel = createMemo(() => {
-        if (props.initialModel) {
-          const { providerID, modelID } = Provider.parseModel(props.initialModel)
+        if (args.model) {
+          const { providerID, modelID } = Provider.parseModel(args.model)
           if (isModelValid({ providerID, modelID })) {
             return {
               providerID,
@@ -251,18 +233,9 @@ export const { use: useLocal, provider: LocalProvider } = createSimpleContext({
       }
     })
 
-    const setInitialPrompt = createEventBus<string>()
-
-    onMount(() => {
-      if (props.initialPrompt) setInitialPrompt.emit(props.initialPrompt)
-    })
-
     const result = {
       model,
       agent,
-      get setInitialPrompt() {
-        return setInitialPrompt
-      },
     }
     return result
   },

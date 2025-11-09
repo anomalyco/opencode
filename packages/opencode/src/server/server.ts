@@ -114,12 +114,13 @@ export namespace Server {
             path: c.req.path,
           })
         }
-        const start = Date.now()
+        const timer = log.time("request", {
+          method: c.req.method,
+          path: c.req.path,
+        })
         await next()
         if (!skipLogging) {
-          log.info("response", {
-            duration: Date.now() - start,
-          })
+          timer.stop()
         }
       })
       .use(async (c, next) => {
@@ -1083,13 +1084,11 @@ export namespace Server {
           },
         }),
         async (c) => {
+          using _ = log.time("providers")
           const providers = await Provider.list().then((x) => mapValues(x, (item) => item.info))
           return c.json({
             providers: Object.values(providers),
-            default: mapValues(
-              providers,
-              (item) => Provider.sort(Object.values(item.models))[0].id,
-            ),
+            default: [],
           })
         },
       )
