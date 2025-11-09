@@ -50,6 +50,15 @@ import {
 import { useSDK } from "@tui/context/sdk"
 import { useCommandDialog } from "@tui/component/dialog-command"
 import { Shimmer } from "@tui/ui/shimmer"
+import {
+  Spinner,
+  PulsingDot,
+  ProgressBar,
+  StreamingDots,
+  SuccessCheckmark,
+  ErrorX,
+  PulsingBorder,
+} from "@tui/ui/tool-animations"
 import { useKeybind } from "@tui/context/keybind"
 import { Header } from "./header"
 import { parsePatch } from "diff"
@@ -1177,12 +1186,24 @@ const ToolRegistry = (() => {
   }
 })()
 
-function ToolTitle(props: { fallback: string; when: any; icon: string; children: JSX.Element }) {
+function ToolTitle(props: {
+  fallback: string
+  when: any
+  icon: string
+  status?: "pending" | "running" | "completed" | "error"
+  children: JSX.Element
+}) {
   const { theme } = useTheme()
   return (
     <text paddingLeft={3} fg={props.when ? theme.textMuted : theme.text}>
-      <Show fallback={<>~ {props.fallback}</>} when={props.when}>
-        <span style={{ bold: true }}>{props.icon}</span> {props.children}
+      <Show fallback={<><Spinner /> {props.fallback}</>} when={props.when}>
+        <Show
+          when={props.status === "running"}
+          fallback={<span style={{ bold: true }}>{props.icon}</span>}
+        >
+          <PulsingDot />
+        </Show>{" "}
+        {props.children}
       </Show>
     </text>
   )
@@ -1194,18 +1215,41 @@ ToolRegistry.register<typeof BashTool>({
   render(props) {
     const output = createMemo(() => stripAnsi(props.metadata.output?.trim() ?? ""))
     const { theme } = useTheme()
+    const isRunning = createMemo(() => !props.output && props.input.command)
     return (
       <>
-        <ToolTitle icon="#" fallback="Writing command..." when={props.input.command}>
+        <ToolTitle
+          icon="#"
+          fallback="Writing command..."
+          when={props.input.command}
+          status={isRunning() ? "running" : undefined}
+        >
           {props.input.description || "Shell"}
         </ToolTitle>
         <Show when={props.input.command}>
-          <text fg={theme.text}>$ {props.input.command}</text>
+          <text fg={theme.text}>
+            $ {props.input.command}{" "}
+            <Show when={isRunning()}>
+              <StreamingDots />
+            </Show>
+          </text>
+        </Show>
+        <Show when={isRunning()}>
+          <box paddingTop={1}>
+            <text>
+              <ProgressBar indeterminate color={theme.accent} width={40} />
+            </text>
+          </box>
         </Show>
         <Show when={output()}>
           <box>
             <text fg={theme.text}>{output()}</text>
           </box>
+        </Show>
+        <Show when={props.output}>
+          <text fg={theme.success}>
+            <SuccessCheckmark /> Command completed
+          </text>
         </Show>
       </>
     )
@@ -1216,10 +1260,22 @@ ToolRegistry.register<typeof ReadTool>({
   name: "read",
   container: "inline",
   render(props) {
+    const isRunning = createMemo(() => !props.output && props.input.filePath)
     return (
       <>
-        <ToolTitle icon="→" fallback="Reading file..." when={props.input.filePath}>
-          Read {normalizePath(props.input.filePath!)} {input(props.input, ["filePath"])}
+        <ToolTitle
+          icon="→"
+          fallback="Reading file..."
+          when={props.input.filePath}
+          status={isRunning() ? "running" : undefined}
+        >
+          Read {normalizePath(props.input.filePath!)} {input(props.input, ["filePath"])}{" "}
+          <Show when={isRunning()}>
+            <StreamingDots />
+          </Show>
+          <Show when={props.output}>
+            <SuccessCheckmark />
+          </Show>
         </ToolTitle>
       </>
     )
@@ -1247,11 +1303,31 @@ ToolRegistry.register<typeof WriteTool>({
         .map((x) => x.toString().padStart(pad, " "))
     })
 
+    const isRunning = createMemo(() => !props.output && props.input.filePath)
+
     return (
       <>
-        <ToolTitle icon="←" fallback="Preparing write..." when={props.input.filePath}>
-          Wrote {props.input.filePath}
+        <ToolTitle
+          icon="←"
+          fallback="Preparing write..."
+          when={props.input.filePath}
+          status={isRunning() ? "running" : undefined}
+        >
+          Wrote {props.input.filePath}{" "}
+          <Show when={isRunning()}>
+            <StreamingDots />
+          </Show>
+          <Show when={props.output}>
+            <SuccessCheckmark />
+          </Show>
         </ToolTitle>
+        <Show when={isRunning()}>
+          <box paddingTop={1}>
+            <text>
+              <ProgressBar indeterminate color={theme.success} width={40} />
+            </text>
+          </box>
+        </Show>
         <box flexDirection="row">
           <box flexShrink={0}>
             <For each={numbers()}>
@@ -1275,12 +1351,23 @@ ToolRegistry.register<typeof GlobTool>({
   name: "glob",
   container: "inline",
   render(props) {
+    const isRunning = createMemo(() => !props.output && props.input.pattern)
     return (
       <>
-        <ToolTitle icon="✱" fallback="Finding files..." when={props.input.pattern}>
+        <ToolTitle
+          icon="✱"
+          fallback="Finding files..."
+          when={props.input.pattern}
+          status={isRunning() ? "running" : undefined}
+        >
           Glob "{props.input.pattern}"{" "}
           <Show when={props.input.path}>in {normalizePath(props.input.path)} </Show>
-          <Show when={props.metadata.count}>({props.metadata.count} matches)</Show>
+          <Show when={props.metadata.count}>
+            ({props.metadata.count} matches) <SuccessCheckmark />
+          </Show>
+          <Show when={isRunning()}>
+            <StreamingDots />
+          </Show>
         </ToolTitle>
       </>
     )
@@ -1291,11 +1378,22 @@ ToolRegistry.register<typeof GrepTool>({
   name: "grep",
   container: "inline",
   render(props) {
+    const isRunning = createMemo(() => !props.output && props.input.pattern)
     return (
-      <ToolTitle icon="✱" fallback="Searching content..." when={props.input.pattern}>
+      <ToolTitle
+        icon="✱"
+        fallback="Searching content..."
+        when={props.input.pattern}
+        status={isRunning() ? "running" : undefined}
+      >
         Grep "{props.input.pattern}"{" "}
         <Show when={props.input.path}>in {normalizePath(props.input.path)} </Show>
-        <Show when={props.metadata.matches}>({props.metadata.matches} matches)</Show>
+        <Show when={props.metadata.matches}>
+          ({props.metadata.matches} matches) <SuccessCheckmark />
+        </Show>
+        <Show when={isRunning()}>
+          <StreamingDots />
+        </Show>
       </ToolTitle>
     )
   },
@@ -1327,6 +1425,7 @@ ToolRegistry.register<typeof TaskTool>({
   render(props) {
     const { theme } = useTheme()
     const keybind = useKeybind()
+    const isRunning = createMemo(() => !props.output && props.input.description)
 
     return (
       <>
@@ -1334,21 +1433,51 @@ ToolRegistry.register<typeof TaskTool>({
           icon="%"
           fallback="Delegating..."
           when={props.input.subagent_type ?? props.input.description}
+          status={isRunning() ? "running" : undefined}
         >
-          Task [{props.input.subagent_type ?? "unknown"}] {props.input.description}
+          Task [{props.input.subagent_type ?? "unknown"}] {props.input.description}{" "}
+          <Show when={isRunning()}>
+            <StreamingDots />
+          </Show>
+          <Show when={props.output}>
+            <SuccessCheckmark />
+          </Show>
         </ToolTitle>
+        <Show when={isRunning()}>
+          <box paddingTop={1}>
+            <text>
+              <ProgressBar indeterminate color={theme.primary} width={40} />
+            </text>
+            <text fg={theme.textMuted} paddingTop={1}>
+              <Spinner /> Subagent working...
+            </text>
+          </box>
+        </Show>
         <Show when={props.metadata.summary?.length}>
-          <box>
+          <box paddingTop={1}>
             <For each={props.metadata.summary ?? []}>
               {(task) => (
-                <text style={{ fg: theme.textMuted }}>
-                  ∟ {task.tool} {task.state.status === "completed" ? task.state.title : ""}
+                <text>
+                  <Show
+                    when={task.state.status === "completed"}
+                    fallback={
+                      <span style={{ fg: theme.accent }}>
+                        <PulsingDot />
+                      </span>
+                    }
+                  >
+                    <span style={{ fg: theme.success }}>✓</span>
+                  </Show>{" "}
+                  <span style={{ fg: theme.textMuted }}>{task.tool}</span>{" "}
+                  <span style={{ fg: theme.text }}>
+                    {task.state.status === "completed" ? task.state.title : "running..."}
+                  </span>
                 </text>
               )}
             </For>
           </box>
         </Show>
-        <text fg={theme.text}>
+        <text fg={theme.text} paddingTop={1}>
           {keybind.print("session_child_cycle")}, {keybind.print("session_child_cycle_reverse")}
           <span style={{ fg: theme.textMuted }}> to navigate between subagent sessions</span>
         </text>
@@ -1361,10 +1490,23 @@ ToolRegistry.register<typeof WebFetchTool>({
   name: "webfetch",
   container: "inline",
   render(props) {
+    const { theme } = useTheme()
+    const isRunning = createMemo(() => !props.output && (props.input as any).url)
+    const url = (props.input as any).url
+
     return (
-      <ToolTitle icon="%" fallback="Fetching from the web..." when={(props.input as any).url}>
-        WebFetch {(props.input as any).url}
-      </ToolTitle>
+      <>
+        <ToolTitle
+          icon="🌐"
+          fallback="Fetching from the web..."
+          when={url}
+          status={isRunning() ? "running" : undefined}
+        >
+          <Show when={isRunning()} fallback={<>WebFetch {url}</>}>
+            <PulsingDot /> WebFetch {url}
+          </Show>
+        </ToolTitle>
+      </>
     )
   },
 })
@@ -1448,15 +1590,34 @@ ToolRegistry.register<typeof EditTool>({
     })
 
     const ft = createMemo(() => filetype(props.input.filePath))
+    const isRunning = createMemo(() => !props.output && props.input.filePath)
 
     return (
       <>
-        <ToolTitle icon="←" fallback="Preparing edit..." when={props.input.filePath}>
+        <ToolTitle
+          icon="←"
+          fallback="Preparing edit..."
+          when={props.input.filePath}
+          status={isRunning() ? "running" : undefined}
+        >
           Edit {normalizePath(props.input.filePath!)}{" "}
           {input({
             replaceAll: props.input.replaceAll,
-          })}
+          })}{" "}
+          <Show when={isRunning()}>
+            <StreamingDots />
+          </Show>
+          <Show when={props.output}>
+            <SuccessCheckmark />
+          </Show>
         </ToolTitle>
+        <Show when={isRunning()}>
+          <box paddingTop={1}>
+            <text>
+              <ProgressBar indeterminate color={theme.warning} width={40} />
+            </text>
+          </box>
+        </Show>
         <Switch>
           <Match when={props.permission["diff"]}>
             <text fg={theme.text}>{props.permission["diff"]?.trim()}</text>
