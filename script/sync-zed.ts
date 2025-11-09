@@ -19,12 +19,10 @@ async function main() {
   const cleanVersion = version.replace(/^v/, "")
   console.log(`📦 Syncing Zed extension for version ${cleanVersion}`)
 
-  // Get the commit SHA for this version tag
   const commitSha = await $`git rev-parse ${version}`.text()
   const sha = commitSha.trim()
   console.log(`🔍 Found commit SHA: ${sha}`)
 
-  // Read the extension.toml from this commit to verify version
   const extensionToml = await $`git show ${version}:packages/extensions/zed/extension.toml`.text()
   const parsed = Bun.TOML.parse(extensionToml) as { version: string }
   const extensionVersion = parsed.version
@@ -55,7 +53,6 @@ async function main() {
   console.log(`🌿 Creating branch ${branchName}`)
   await $`git checkout -b ${branchName}`
 
-  // Update the submodule for opencode extension
   const submodulePath = `extensions/${EXTENSION_NAME}`
   console.log(`📌 Updating submodule to commit ${sha}`)
   await $`git submodule update --init ${submodulePath}`
@@ -65,12 +62,10 @@ async function main() {
   process.chdir(workDir)
   await $`git add ${submodulePath}`
 
-  // Update extensions.toml
   console.log(`📝 Updating extensions.toml`)
   const extensionsTomlPath = "extensions.toml"
   const extensionsToml = await Bun.file(extensionsTomlPath).text()
 
-  // Update version field for opencode extension
   const versionRegex = new RegExp(`(\\[${EXTENSION_NAME}\\]\\s+(?:.*\\s*)?)version = "[^"]+"`)
   const updatedToml = extensionsToml.replace(versionRegex, `$1version = "${cleanVersion}"`)
 
@@ -81,7 +76,6 @@ async function main() {
   await Bun.write(extensionsTomlPath, updatedToml)
   await $`git add extensions.toml`
 
-  // Commit changes
   const commitMessage = `Update ${EXTENSION_NAME} to v${cleanVersion}
 
 Release notes:
@@ -91,11 +85,9 @@ https://github.com/${OPENCODE_REPO}/releases/tag/v${cleanVersion}`
   await $`git commit -m ${commitMessage}`
   console.log(`✅ Changes committed`)
 
-  // Push to fork
   console.log(`🚀 Pushing to fork...`)
   await $`git push https://x-access-token:${token}@github.com/${FORK_REPO}.git ${branchName}`
 
-  // Create PR using gh CLI
   console.log(`📬 Creating pull request...`)
   const prUrl =
     await $`gh pr create --repo ${UPSTREAM_REPO} --base main --head ${FORK_REPO.split("/")[0]}:${branchName} --title "Update ${EXTENSION_NAME} to v${cleanVersion}" --body "Release notes:\n\nhttps://github.com/${OPENCODE_REPO}/releases/tag/v${cleanVersion}"`.text()
