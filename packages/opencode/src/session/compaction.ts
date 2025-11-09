@@ -272,6 +272,9 @@ export namespace SessionCompaction {
 
         if (lastRetryPart) {
           const delayMs = SessionRetry.getRetryDelayInMs(lastRetryPart.error, retry)
+          if (!delayMs) {
+            break
+          }
 
           log.info("retrying with backoff", {
             attempt: retry,

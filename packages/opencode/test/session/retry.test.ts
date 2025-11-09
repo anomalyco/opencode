@@ -27,11 +27,6 @@ describe("session.retry.getRetryDelayInMs", () => {
     expect(SessionRetry.getRetryDelayInMs(error, 3)).toBe(30000)
   })
 
-  test("falls back to exponential when server delay is long", () => {
-    const error = apiError({ "retry-after": "120" })
-    expect(SessionRetry.getRetryDelayInMs(error, 2)).toBe(4000)
-  })
-
   test("accepts http-date retry-after values", () => {
     const date = new Date(Date.now() + 20000).toUTCString()
     const error = apiError({ "retry-after": date })
@@ -43,5 +38,18 @@ describe("session.retry.getRetryDelayInMs", () => {
   test("ignores invalid retry hints", () => {
     const error = apiError({ "retry-after": "not-a-number" })
     expect(SessionRetry.getRetryDelayInMs(error, 1)).toBe(2000)
+  })
+
+  test("returns undefined when delay exceeds 10 minutes", () => {
+    const error = apiError()
+    expect(SessionRetry.getRetryDelayInMs(error, 10)).toBeUndefined()
+  })
+
+  test("returns undefined when retry-after exceeds 10 minutes", () => {
+    const error = apiError({ "retry-after": "50" })
+    expect(SessionRetry.getRetryDelayInMs(error, 1)).toBe(50000)
+
+    const longError = apiError({ "retry-after-ms": "700000" })
+    expect(SessionRetry.getRetryDelayInMs(longError, 1)).toBeUndefined()
   })
 })
