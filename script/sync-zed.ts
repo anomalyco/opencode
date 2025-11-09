@@ -39,6 +39,10 @@ async function main() {
   await $`git clone https://x-access-token:${token}@github.com/${FORK_REPO}.git ${workDir}`
   process.chdir(workDir)
 
+  // Configure git identity
+  await $`git config user.name "github-actions[bot]"`
+  await $`git config user.email "github-actions[bot]@users.noreply.github.com"`
+
   // Sync fork with upstream
   console.log(`🔄 Syncing fork with upstream...`)
   await $`git remote add upstream https://github.com/${UPSTREAM_REPO}.git`
