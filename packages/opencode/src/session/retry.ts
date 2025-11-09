@@ -38,12 +38,12 @@ export namespace SessionRetry {
           const parsedSeconds = Number.parseFloat(retryAfter)
           if (!Number.isNaN(parsedSeconds)) {
             // convert seconds to milliseconds
-            return parsedSeconds * 1000
-          } else {
-            const parsed = Date.parse(retryAfter) - Date.now()
-            if (!Number.isNaN(parsed)) {
-              return parsed
-            }
+            return Math.ceil(parsedSeconds * 1000)
+          }
+          // Try parsing as HTTP date format
+          const parsed = Date.parse(retryAfter) - Date.now()
+          if (!Number.isNaN(parsed) && parsed > 0) {
+            return Math.ceil(parsed)
           }
         }
       }

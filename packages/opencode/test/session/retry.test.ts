@@ -40,6 +40,17 @@ describe("session.retry.getRetryDelayInMs", () => {
     expect(SessionRetry.getRetryDelayInMs(error, 1)).toBe(2000)
   })
 
+  test("ignores malformed date retry hints", () => {
+    const error = apiError({ "retry-after": "Invalid Date String" })
+    expect(SessionRetry.getRetryDelayInMs(error, 1)).toBe(2000)
+  })
+
+  test("ignores past date retry hints", () => {
+    const pastDate = new Date(Date.now() - 5000).toUTCString()
+    const error = apiError({ "retry-after": pastDate })
+    expect(SessionRetry.getRetryDelayInMs(error, 1)).toBe(2000)
+  })
+
   test("returns undefined when delay exceeds 10 minutes", () => {
     const error = apiError()
     expect(SessionRetry.getRetryDelayInMs(error, 10)).toBeUndefined()
