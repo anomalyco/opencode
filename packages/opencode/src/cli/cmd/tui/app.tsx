@@ -510,12 +510,12 @@ function App() {
                     {(() => {
                       // If switched (currentAgent differs from rootAgent), show hierarchy
                       if (currentAgent && rootAgent && currentAgent !== rootAgent) {
-                        return `${rootAgent.toUpperCase()} > ${currentAgent.toUpperCase()}`
+                        return `${rootAgent.toUpperCase()} > ${currentAgent.toUpperCase()} `
                       }
 
                       // Otherwise show current agent from local state
                       const agent = local.agent.current()
-                      return agent?.name.toUpperCase() ?? "LOADING"
+                      return (agent?.name.toUpperCase() ?? "LOADING") + " "
                     })()}
                   </span>
                 </text>
