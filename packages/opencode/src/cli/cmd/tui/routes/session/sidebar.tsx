@@ -12,7 +12,7 @@ export function Sidebar(props: { sessionID: string }) {
   const diff = createMemo(() => sync.data.session_diff[props.sessionID] ?? [])
   const todo = createMemo(() => sync.data.todo[props.sessionID] ?? [])
   const messages = createMemo(() => sync.data.message[props.sessionID] ?? [])
-  
+
   const [mcpExpanded, setMcpExpanded] = createSignal(true)
   const [diffExpanded, setDiffExpanded] = createSignal(true)
   const [todoExpanded, setTodoExpanded] = createSignal(true)
@@ -60,14 +60,8 @@ export function Sidebar(props: { sessionID: string }) {
           </box>
           <Show when={Object.keys(sync.data.mcp).length > 0}>
             <box>
-              <box 
-                flexDirection="row" 
-                gap={1}
-                onMouseDown={() => setMcpExpanded(!mcpExpanded())}
-              >
-                <text fg={theme.text}>
-                  {mcpExpanded() ? "▼" : "▶"}
-                </text>
+              <box flexDirection="row" gap={1} onMouseDown={() => setMcpExpanded(!mcpExpanded())}>
+                <text fg={theme.text}>{mcpExpanded() ? "▼" : "▶"}</text>
                 <text fg={theme.text}>
                   <b>MCP</b>
                 </text>
@@ -106,14 +100,8 @@ export function Sidebar(props: { sessionID: string }) {
           </Show>
           <Show when={sync.data.lsp.length > 0}>
             <box>
-              <box 
-                flexDirection="row" 
-                gap={1}
-                onMouseDown={() => setLspExpanded(!lspExpanded())}
-              >
-                <text fg={theme.text}>
-                  {lspExpanded() ? "▼" : "▶"}
-                </text>
+              <box flexDirection="row" gap={1} onMouseDown={() => setLspExpanded(!lspExpanded())}>
+                <text fg={theme.text}>{lspExpanded() ? "▼" : "▶"}</text>
                 <text fg={theme.text}>
                   <b>LSP</b>
                 </text>
@@ -144,14 +132,8 @@ export function Sidebar(props: { sessionID: string }) {
           </Show>
           <Show when={diff().length > 0}>
             <box>
-              <box 
-                flexDirection="row" 
-                gap={1}
-                onMouseDown={() => setDiffExpanded(!diffExpanded())}
-              >
-                <text fg={theme.text}>
-                  {diffExpanded() ? "▼" : "▶"}
-                </text>
+              <box flexDirection="row" gap={1} onMouseDown={() => setDiffExpanded(!diffExpanded())}>
+                <text fg={theme.text}>{diffExpanded() ? "▼" : "▶"}</text>
                 <text fg={theme.text}>
                   <b>Modified Files</b>
                 </text>
@@ -187,14 +169,8 @@ export function Sidebar(props: { sessionID: string }) {
           </Show>
           <Show when={todo().length > 0}>
             <box>
-              <box 
-                flexDirection="row" 
-                gap={1}
-                onMouseDown={() => setTodoExpanded(!todoExpanded())}
-              >
-                <text fg={theme.text}>
-                  {todoExpanded() ? "▼" : "▶"}
-                </text>
+              <box flexDirection="row" gap={1} onMouseDown={() => setTodoExpanded(!todoExpanded())}>
+                <text fg={theme.text}>{todoExpanded() ? "▼" : "▶"}</text>
                 <text fg={theme.text}>
                   <b>Todo</b>
                 </text>
