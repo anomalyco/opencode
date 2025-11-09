@@ -66,7 +66,7 @@ async function main() {
   const extensionsTomlPath = "extensions.toml"
   const extensionsToml = await Bun.file(extensionsTomlPath).text()
 
-  const versionRegex = new RegExp(`(\\[${EXTENSION_NAME}\\]\\s+(?:.*\\s*)?)version = "[^"]+"`)
+  const versionRegex = new RegExp(`(\\[${EXTENSION_NAME}\\][\\s\\S]*?)version = "[^"]+"`)
   const updatedToml = extensionsToml.replace(versionRegex, `$1version = "${cleanVersion}"`)
 
   if (updatedToml === extensionsToml) {
