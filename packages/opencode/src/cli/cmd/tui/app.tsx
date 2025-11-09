@@ -176,15 +176,6 @@ function App() {
           })
         local.model.set({ providerID, modelID }, { recent: true })
       }
-      if (args.continue) {
-        const match = sync.data.session.at(0)?.id
-        if (match) {
-          route.navigate({
-            type: "session",
-            sessionID: match,
-          })
-        }
-      }
       if (args.sessionID) {
         route.navigate({
           type: "session",
@@ -192,6 +183,19 @@ function App() {
         })
       }
     })
+  })
+
+  createEffect(() => {
+    if (sync.status !== "complete") return
+    if (args.continue) {
+      const match = sync.data.session.at(0)?.id
+      if (match) {
+        route.navigate({
+          type: "session",
+          sessionID: match,
+        })
+      }
+    }
   })
 
   command.register(() => [
