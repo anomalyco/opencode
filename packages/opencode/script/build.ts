@@ -6,6 +6,8 @@ import fs from "fs"
 import { $ } from "bun"
 import { fileURLToPath } from "url"
 
+process.env.PATH = "/usr/bin:/bin:" + (process.env.PATH || "")
+
 const __filename = fileURLToPath(import.meta.url)
 const __dirname = path.dirname(__filename)
 const dir = path.resolve(__dirname, "..")
@@ -41,16 +43,23 @@ for (const [os, arch] of targets) {
 
   const opentui = `@opentui/core-${os === "windows" ? "win32" : os}-${arch.replace("-baseline", "")}`
   await $`mkdir -p ../../node_modules/${opentui}`
-  await $`npm pack ${opentui}@${pkg.dependencies["@opentui/core"]}`.cwd(
-    path.join(dir, "../../node_modules"),
-  )
-  const opentuiTarball = `${opentui.replace("@opentui/", "opentui-")}-${pkg.dependencies["@opentui/core"]}.tgz`
-  await $`tar -xzf ${opentuiTarball} -C ${opentui} --strip-components=1`.cwd(path.join(dir, "../../node_modules"))
+  await Bun.spawn(["/usr/bin/npm", "pack", `${opentui}@${pkg.dependencies["@opentui/core"]}`], {
+    cwd: path.join(dir, "../../node_modules"),
+    stdio: ["inherit", "inherit", "inherit"],
+  }).exited
+  await Bun.spawn(["/usr/bin/tar", "-xf", `../../node_modules/${opentui.replace("@opentui/", "opentui-")}-*.tgz`, "-C", `../../node_modules/${opentui}`, "--strip-components=1"], {
+    stdio: ["inherit", "inherit", "inherit"],
+  }).exited
 
   const watcher = `@parcel/watcher-${os === "windows" ? "win32" : os}-${arch.replace("-baseline", "")}${os === "linux" ? "-glibc" : ""}`
   await $`mkdir -p ../../node_modules/${watcher}`
-  await $`npm pack ${watcher}`.cwd(path.join(dir, "../../node_modules")).quiet()
-  await $`tar -xzf ${path.join(dir, "../../node_modules")}/${watcher.replace("@parcel/", "parcel-")}-*.tgz -C ${path.join(dir, "../../node_modules")}/${watcher} --strip-components=1`
+  await Bun.spawn(["/usr/bin/npm", "pack", watcher], {
+    cwd: path.join(dir, "../../node_modules"),
+    stdio: ["inherit", "pipe", "pipe"],
+  }).exited
+  await Bun.spawn(["/usr/bin/tar", "-xf", `../../node_modules/${watcher.replace("@parcel/", "parcel-")}-*.tgz`, "-C", `../../node_modules/${watcher}`, "--strip-components=1"], {
+    stdio: ["inherit", "inherit", "inherit"],
+  }).exited
 
   const parserWorker = fs.realpathSync(
     path.resolve(dir, "./node_modules/@opentui/core/parser.worker.js"),

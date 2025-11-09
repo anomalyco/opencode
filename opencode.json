@@ -1,6 +1,11 @@
 {
   "$schema": "https://opencode.ai/config.json",
   "plugin": ["opencode-openai-codex-auth"],
+  "permission": {
+    "bash": {
+      "git push *": "allow"
+    }
+  },
   "mcp": {
     "weather": {
       "type": "local",
