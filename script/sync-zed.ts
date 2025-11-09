@@ -80,11 +80,7 @@ async function main() {
   await Bun.write(extensionsTomlPath, updatedToml)
   await $`git add extensions.toml`
 
-  const commitMessage = `Update ${EXTENSION_NAME} to v${cleanVersion}
-
-Release notes:
-
-https://github.com/${OPENCODE_REPO}/releases/tag/v${cleanVersion}`
+  const commitMessage = `Update ${EXTENSION_NAME} to v${cleanVersion}`
 
   await $`git commit -m ${commitMessage}`
   console.log(`✅ Changes committed`)
