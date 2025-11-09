@@ -51,7 +51,7 @@ export namespace SessionRetry {
       return RETRY_INITIAL_DELAY * Math.pow(RETRY_BACKOFF_FACTOR, attempt - 1)
     })
 
-    // dont retry if 429 resets too far from now
+    // dont retry if wait is too far from now
     if (delay > RETRY_MAX_DELAY) return undefined
 
     return delay
