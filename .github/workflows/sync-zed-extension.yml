@@ -1,7 +1,10 @@
+name: "sync-zed-extension"
+
 on:
+  workflow_dispatch:
   push:
     tags:
-      - "v*"
+      - "v[0-9]+.*"
 
 jobs:
   zed:
