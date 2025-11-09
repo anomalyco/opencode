@@ -7,7 +7,7 @@ import { getDirectory, getFilename } from "@/utils"
 import { createFocusSignal } from "@solid-primitives/active-element"
 import { useLocal } from "@/context/local"
 import { DateTime } from "luxon"
-import { ContentPart, DEFAULT_PROMPT, isPromptEqual, Prompt, useSession } from "@/context/session"
+import { ContentPart, DEFAULT_PROMPT, FileAttachmentPart, ImageAttachmentPart, isPromptEqual, Prompt, TextPart, useSession } from "@/context/session"
 import { useSDK } from "@/context/sdk"
 import { useNavigate } from "@solidjs/router"
 import { useSync } from "@/context/sync"
@@ -473,15 +473,16 @@ export const PromptInput: Component<PromptInputProps> = (props) => {
       }
     })
 
+    // TODO: Image parts are not yet supported by the SDK
     // Extract image parts from uploadedImages
-    const imageParts = Array.from(uploadedImages().values()).map((image) => ({
-      type: "image" as const,
-      source: {
-        type: "base64" as const,
-        media_type: image.mimeType,
-        data: image.base64Data,
-      },
-    }))
+    // const imageParts = Array.from(uploadedImages().values()).map((image) => ({
+    //   type: "image" as const,
+    //   source: {
+    //     type: "base64" as const,
+    //     media_type: image.mimeType,
+    //     data: image.base64Data,
+    //   },
+    // }))
 
     session.layout.setActiveTab(undefined)
     session.messages.setActive(undefined)
@@ -502,7 +503,8 @@ export const PromptInput: Component<PromptInputProps> = (props) => {
             text,
           },
           ...attachmentParts,
-          ...imageParts,
+          // TODO: Add image parts when SDK supports them
+          // ...imageParts,
         ],
       },
     })
@@ -597,7 +599,7 @@ export const PromptInput: Component<PromptInputProps> = (props) => {
             </Show>
             <Select
               options={local.agent.list().map((agent) => agent.name)}
-              current={local.agent.current().name}
+              current={local.agent.current()?.name}
               onSelect={local.agent.set}
               class="capitalize"
               variant="ghost"

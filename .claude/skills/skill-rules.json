@@ -1,0 +1,41 @@
+{
+    "version": "1.0",
+    "description": "Skill activation triggers for Claude Code. Auto-generated for monorepo-pnpm structure.",
+    "skills": {
+    "skill-developer": {
+        "type": "domain",
+        "enforcement": "suggest",
+        "priority": "high",
+        "description": "Meta-skill for creating and managing Claude Code skills",
+        "promptTriggers": {
+            "keywords": [
+                "skill system",
+                "create skill",
+                "add skill",
+                "skill triggers",
+                "skill rules",
+                "hook system",
+                "skill development",
+                "skill-rules.json"
+            ],
+            "intentPatterns": [
+                "(how do|how does|explain).*?skill",
+                "(create|add|modify|build).*?skill",
+                "skill.*?(work|trigger|activate|system)"
+            ]
+        }
+    }
+},
+    "notes": {
+        "generated": "2025-11-09T13:23:16Z",
+        "structure": "monorepo-pnpm",
+        "enforcement_types": {
+            "suggest": "Skill suggestion appears but doesn't block execution",
+            "block": "Requires skill to be used before proceeding (guardrail)",
+            "warn": "Shows warning but allows proceeding"
+        },
+        "customization": {
+            "note": "This file was auto-generated. You can customize paths, keywords, and triggers as needed."
+        }
+    }
+}

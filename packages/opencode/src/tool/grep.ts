@@ -26,7 +26,17 @@ export const GrepTool = Tool.define("grep", {
     }
     args.push(searchPath)
 
-    const proc = Bun.spawn([rgPath, ...args], {
+    // Validate all arguments are strings
+    const cmd = [rgPath, ...args]
+    for (let i = 0; i < cmd.length; i++) {
+      if (typeof cmd[i] !== "string") {
+        throw new Error(
+          `Invalid command argument at index ${i}: expected string, got ${typeof cmd[i]}. Value: ${JSON.stringify(cmd[i])}`,
+        )
+      }
+    }
+
+    const proc = Bun.spawn(cmd, {
       stdout: "pipe",
       stderr: "pipe",
     })

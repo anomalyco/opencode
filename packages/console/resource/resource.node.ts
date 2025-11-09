@@ -23,7 +23,7 @@ export const Resource = new Proxy(
                 keys: Array.isArray(k) ? k : [k],
                 account_id: accountId,
               })
-              .then((result) => (isMulti ? new Map(Object.entries(result?.values ?? {})) : result?.values?.[k]))
+              .then((result: any) => (isMulti ? new Map(Object.entries(result?.values ?? {})) : result?.values?.[k]))
           },
           put: (k: string, v: string, opts?: KVNamespacePutOptions) =>
             client.kv.namespaces.values.update(namespaceId, k, {
@@ -43,7 +43,7 @@ export const Resource = new Proxy(
                 account_id: accountId,
                 prefix: opts?.prefix ?? undefined,
               })
-              .then((result) => {
+              .then((result: any) => {
                 return {
                   keys: result.result,
                   list_complete: true,

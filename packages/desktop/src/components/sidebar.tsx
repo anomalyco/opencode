@@ -1,7 +1,8 @@
 import { createMemo, createSignal, For, Show } from "solid-js"
 import { useSync } from "@/context/sync"
 import { useSDK } from "@/context/sdk"
-import { Button, Icon, Tabs, List, DiffChanges } from "@opencode-ai/ui"
+import { useLocal } from "@/context/local"
+import { Button, Icon, Tabs } from "@opencode-ai/ui"
 import { FileIcon } from "@/ui"
 import type { Session } from "@opencode-ai/sdk"
 
@@ -15,6 +16,7 @@ interface SidebarProps {
 export function Sidebar(props: SidebarProps) {
   const sync = useSync()
   const sdk = useSDK()
+  const local = useLocal()
   const [activeTab, setActiveTab] = createSignal<TabType>("mcp")
   const [selectedFiles, setSelectedFiles] = createSignal<Set<string>>(new Set())
   const [commitMessage, setCommitMessage] = createSignal("")
@@ -25,8 +27,9 @@ export function Sidebar(props: SidebarProps) {
   const todo = createMemo(() => sync.data.todo[props.sessionID] ?? [])
   const messages = createMemo(() => sync.data.message[props.sessionID] ?? [])
 
-  const mcpCount = createMemo(() => Object.keys(sync.data.mcp).length)
-  const lspCount = createMemo(() => sync.data.lsp.length)
+  // TODO: MCP/LSP data not yet available in sync store
+  const mcpCount = createMemo(() => 0)
+  const lspCount = createMemo(() => 0)
   const todoCount = createMemo(() => todo().length)
   const filesCount = createMemo(() => session().summary?.diffs?.length || 0)
 
@@ -40,9 +43,9 @@ export function Sidebar(props: SidebarProps) {
 
   const context = createMemo(() => {
     const last = messages().findLast(
-      (x) => x.role === "assistant" && x.tokens.output > 0,
+      (x) => x.role === "assistant" && "tokens" in x && x.tokens.output > 0,
     )
-    if (!last) return { tokens: 0, tokenLimit: 0, tokensFormatted: "0", percentage: 0 }
+    if (!last || last.role !== "assistant") return { tokens: 0, tokenLimit: 0, tokensFormatted: "0", percentage: 0 }
 
     const total =
       last.tokens.input +
@@ -70,7 +73,7 @@ export function Sidebar(props: SidebarProps) {
     {
       id: "todos" as TabType,
       label: `Todos (${todoCount()})`,
-      icon: "check-square",
+      icon: "checkmark-square",
     },
     {
       id: "files" as TabType,
@@ -94,7 +97,7 @@ export function Sidebar(props: SidebarProps) {
   const toggleSelectAll = () => {
     const diffs = session().summary?.diffs || []
     if (selectedFiles().size === diffs.length) {
-      setSelectedFiles(new Set())
+      setSelectedFiles(new Set<string>())
     } else {
       setSelectedFiles(new Set(diffs.map(d => d.file)))
     }
@@ -106,7 +109,7 @@ export function Sidebar(props: SidebarProps) {
     setIsGeneratingMessage(true)
     try {
       const files = Array.from(selectedFiles())
-      const diffs = session().summary?.diffs.filter(d => files.includes(d.file)) || []
+      const diffs = session()?.summary?.diffs?.filter(d => files.includes(d.file)) || []
       
       // Build a summary of changes
       const summary = diffs.map(d => {
@@ -134,33 +137,36 @@ export function Sidebar(props: SidebarProps) {
 
   const handleCommit = async () => {
     if (selectedFiles().size === 0 || !commitMessage()) return
-    
+
     setIsCommitting(true)
     try {
       const files = Array.from(selectedFiles())
-      
+      const sessionID = props.sessionID
+
       // Stage selected files
       for (const file of files) {
-        await sdk.client.bash.execute({
+        await sdk.client.session.shell({
+          path: { id: sessionID },
           body: {
+            agent: local.agent.current()!.name,
             command: `git add "${file}"`,
-            description: `Stage ${file}`,
           }
         })
       }
-      
+
       // Commit
-      await sdk.client.bash.execute({
+      await sdk.client.session.shell({
+        path: { id: sessionID },
         body: {
+          agent: local.agent.current()!.name,
           command: `git commit -m "${commitMessage().replace(/"/g, '\\"')}"`,
-          description: "Commit changes",
         }
       })
-      
+
       // Clear selections and message
-      setSelectedFiles(new Set())
+      setSelectedFiles(new Set<string>())
       setCommitMessage("")
-      
+
       // Refresh file status
       await sync.load.changes()
     } catch (error) {
@@ -202,7 +208,7 @@ export function Sidebar(props: SidebarProps) {
         </div>
 
         {/* Tabs */}
-        <Tabs.Root value={activeTab()} onChange={(v) => setActiveTab(v as TabType)} class="flex-1 flex flex-col min-h-0">
+        <Tabs value={activeTab()} onChange={(v: string) => setActiveTab(v as TabType)} class="flex-1 flex flex-col min-h-0">
           <div class="border-b border-border">
             <Tabs.List class="flex">
               <For each={tabs()}>
@@ -228,7 +234,7 @@ export function Sidebar(props: SidebarProps) {
             <Tabs.Content value="todos" class="p-4">
               {/* Todos content - keeping original */}
               <Show when={todoCount() > 0}>
-                <List class="space-y-2">
+                <div class="space-y-2">
                   <For each={todo()}>
                     {(todoItem) => (
                       <div class="p-2 rounded bg-background">
@@ -239,7 +245,7 @@ export function Sidebar(props: SidebarProps) {
                               : "border-border"
                           }`}>
                             {todoItem.status === "completed" && (
-                              <Icon name="check" class="size-3 text-white" />
+                              <Icon name="checkmark" class="size-3 text-white" />
                             )}
                           </div>
                           <div class="flex-1 text-sm text-text">
@@ -249,12 +255,12 @@ export function Sidebar(props: SidebarProps) {
                       </div>
                     )}
                   </For>
-                </List>
+                </div>
               </Show>
 
               <Show when={todoCount() === 0}>
                 <div class="text-center py-8 text-text-muted">
-                  <Icon name="check-square" class="size-8 mx-auto mb-2 opacity-50" />
+                  <Icon name="checkmark-square" class="size-8 mx-auto mb-2 opacity-50" />
                   <p class="text-sm">No todos</p>
                 </div>
               </Show>
@@ -279,7 +285,7 @@ export function Sidebar(props: SidebarProps) {
 
                   {/* Scrollable File List (max 20 files) */}
                   <div class="flex-1 overflow-y-auto px-4" style={{ "max-height": "400px" }}>
-                    <List class="space-y-1 py-2">
+                    <div class="space-y-1 py-2">
                       <For each={session().summary?.diffs || []}>
                         {(item) => (
                           <div 
@@ -293,7 +299,7 @@ export function Sidebar(props: SidebarProps) {
                                 : "border-border"
                             }`}>
                               {selectedFiles().has(item.file) && (
-                                <Icon name="check" class="size-3 text-white" />
+                                <Icon name="checkmark" class="size-3 text-white" />
                               )}
                             </div>
 
@@ -320,7 +326,7 @@ export function Sidebar(props: SidebarProps) {
                           </div>
                         )}
                       </For>
-                    </List>
+                    </div>
                   </div>
 
                   {/* Commit UI */}
@@ -337,7 +343,7 @@ export function Sidebar(props: SidebarProps) {
                         onClick={generateCommitMessage}
                         disabled={selectedFiles().size === 0 || isGeneratingMessage()}
                         variant="secondary"
-                        size="small"
+                        size="normal"
                         class="flex-1"
                       >
                         {isGeneratingMessage() ? "Generating..." : "Auto"}
@@ -346,7 +352,7 @@ export function Sidebar(props: SidebarProps) {
                         onClick={handleCommit}
                         disabled={selectedFiles().size === 0 || !commitMessage() || isCommitting()}
                         variant="primary"
-                        size="small"
+                        size="normal"
                         class="flex-1"
                       >
                         {isCommitting() ? "Committing..." : "Commit"}
@@ -367,7 +373,7 @@ export function Sidebar(props: SidebarProps) {
               </Show>
             </Tabs.Content>
           </div>
-        </Tabs.Root>
+        </Tabs>
       </div>
     </Show>
   )

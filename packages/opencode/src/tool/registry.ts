@@ -5,6 +5,7 @@ import { GrepTool } from "./grep"
 import { ListTool } from "./ls"
 import { ReadTool } from "./read"
 import { TaskTool } from "./task"
+import { AddTaskTool } from "./add-task"
 import { TodoWriteTool, TodoReadTool } from "./todo"
 import { WebFetchTool } from "./webfetch"
 import { WriteTool } from "./write"
@@ -162,6 +163,7 @@ export namespace ToolRegistry {
       TodoWriteTool,
       TodoReadTool,
       TaskTool,
+      AddTaskTool,
       SwitchModeTool,
       CompleteTaskTool,
       AddDirTool,

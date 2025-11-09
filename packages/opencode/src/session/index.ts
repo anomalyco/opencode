@@ -68,6 +68,27 @@ export namespace Session {
           diff: z.string().optional(),
         })
         .optional(),
+      orchestration: z
+        .object({
+          depth: z.number(),
+          status: z.enum(["active", "paused", "completed", "failed"]),
+          pausedMode: z.string().optional(),
+          pausedAt: z.number().optional(),
+          completedAt: z.number().optional(),
+          result: z.string().optional(),
+          currentAgent: z.string().optional(),
+          subtaskResults: z
+            .array(
+              z.object({
+                sessionID: z.string(),
+                summary: z.string(),
+                result: z.string(),
+                completedAt: z.number(),
+              }),
+            )
+            .optional(),
+        })
+        .optional(),
     })
     .meta({
       ref: "Session",
@@ -186,7 +207,8 @@ export namespace Session {
       },
     }
     log.info("created", result)
-    await Storage.write(["session", Instance.project.id, result.id], result)
+    const projectId = String(Instance.project.id)
+    await Storage.write(["session", projectId, result.id], result)
     Bus.publish(Event.Created, {
       info: result,
     })
@@ -208,7 +230,8 @@ export namespace Session {
   }
 
   export const get = fn(Identifier.schema("session"), async (id) => {
-    const read = await Storage.read<Info>(["session", Instance.project.id, id])
+    const projectId = String(Instance.project.id)
+    const read = await Storage.read<Info>(["session", projectId, id])
     return read as Info
   })
 
@@ -253,7 +276,12 @@ export namespace Session {
 
   export async function update(id: string, editor: (session: Info) => void) {
     const project = Instance.project
-    const result = await Storage.update<Info>(["session", project.id, id], (draft) => {
+    // Ensure project.id is a string
+    const projectId = typeof project.id === "string" ? project.id : String(project.id)
+    if (!projectId) {
+      throw new Error(`Invalid project ID: ${JSON.stringify(project.id)}`)
+    }
+    const result = await Storage.update<Info>(["session", projectId, id], (draft) => {
       editor(draft)
       draft.time.updated = Date.now()
     })
@@ -316,7 +344,8 @@ export namespace Session {
         }
         await Storage.remove(msg)
       }
-      await Storage.remove(["session", project.id, sessionID])
+      const projectId = String(project.id)
+      await Storage.remove(["session", projectId, sessionID])
       Bus.publish(Event.Deleted, {
         info: session,
       })

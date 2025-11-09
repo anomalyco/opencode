@@ -29,7 +29,7 @@ export const TuiSpawnCommand = cmd({
       hostname: "127.0.0.1",
     })
     const bin = process.execPath
-    const cmd = []
+    const cmd: string[] = []
     let cwd = process.cwd()
     if (bin.endsWith("bun")) {
       cmd.push(
@@ -41,7 +41,36 @@ export const TuiSpawnCommand = cmd({
       )
       cwd = new URL("../../../../", import.meta.url).pathname
     } else cmd.push(process.execPath)
-    cmd.push("attach", server.url.toString(), "--dir", args.project ? path.resolve(args.project) : process.cwd())
+
+    // Ensure all arguments are strings
+    const projectPath = args.project ? path.resolve(args.project) : process.cwd()
+    const serverUrl = server.url.toString()
+
+    if (typeof projectPath !== "string") {
+      console.error("ERROR: Invalid project path", { projectPath, type: typeof projectPath })
+      throw new Error(
+        `Invalid project path: expected string, got ${typeof projectPath}. Value: ${JSON.stringify(projectPath)}`,
+      )
+    }
+    if (typeof serverUrl !== "string") {
+      console.error("ERROR: Invalid server URL", { serverUrl, type: typeof serverUrl })
+      throw new Error(
+        `Invalid server URL: expected string, got ${typeof serverUrl}. Value: ${JSON.stringify(serverUrl)}`,
+      )
+    }
+
+    cmd.push("attach", serverUrl, "--dir", projectPath)
+
+    // Final validation of entire cmd array
+    console.log("TUI Spawn cmd array:", JSON.stringify(cmd))
+    for (let i = 0; i < cmd.length; i++) {
+      if (typeof cmd[i] !== "string") {
+        console.error(`ERROR: Invalid cmd[${i}]`, { value: cmd[i], type: typeof cmd[i] })
+        throw new Error(
+          `Invalid command argument at index ${i}: expected string, got ${typeof cmd[i]}. Value: ${JSON.stringify(cmd[i])}`,
+        )
+      }
+    }
     const proc = Bun.spawn({
       cmd,
       cwd,

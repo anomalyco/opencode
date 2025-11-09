@@ -1,0 +1,34 @@
+Use this tool to create a subagent task that will execute in the background. This is a streamlined way to delegate work to a specialized agent without cluttering the conversation.
+
+This tool creates a child session (subagent) that executes independently. The subagent will appear in the Subagents section of the sidebar.
+
+Available agents:
+{agents}
+
+## When to Use
+- When you need to delegate work to a specialized agent
+- When you want to run a task in the background
+- When creating subagents from user configuration
+
+## Parameters
+- description: A short (3-5 words) description of the task
+- prompt: The full task instructions for the subagent
+- subagent_type: The type of agent to use (e.g., "general")
+
+## Behavior
+- Creates a child session immediately
+- Sends the prompt to the subagent
+- Returns immediately without waiting for completion
+- Task continues in background
+- Shows as collapsed tool call in UI
+
+## Example
+```
+add_task(
+  description="Debug authentication issue",
+  prompt="Investigate why users can't log in. Check authentication endpoints and token validation.",
+  subagent_type="general"
+)
+```
+
+Use this instead of the task tool when you want a cleaner, non-blocking subagent creation.

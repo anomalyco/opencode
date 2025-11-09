@@ -99,8 +99,21 @@ export namespace Format {
       for (const item of await getFormatter(ext)) {
         log.info("running", { command: item.command })
         try {
+          // Ensure command is an array of strings
+          if (!Array.isArray(item.command)) {
+            log.error("invalid command format", { command: item.command })
+            continue
+          }
+
+          const cmd = item.command.map((x) => {
+            if (typeof x !== "string") {
+              throw new Error(`Invalid command element: expected string, got ${typeof x}`)
+            }
+            return x.replace("$FILE", file)
+          })
+
           const proc = Bun.spawn({
-            cmd: item.command.map((x) => x.replace("$FILE", file)),
+            cmd,
             cwd: Instance.directory,
             env: { ...process.env, ...item.environment },
             stdout: "ignore",

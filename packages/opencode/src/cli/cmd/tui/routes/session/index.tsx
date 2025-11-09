@@ -44,13 +44,7 @@ import type { EditTool } from "@/tool/edit"
 import type { PatchTool } from "@/tool/patch"
 import type { WebFetchTool } from "@/tool/webfetch"
 import type { TaskTool } from "@/tool/task"
-import {
-  useKeyboard,
-  useRenderer,
-  useTerminalDimensions,
-  type BoxProps,
-  type JSX,
-} from "@opentui/solid"
+import { useKeyboard, useRenderer, useTerminalDimensions, type BoxProps, type JSX } from "@opentui/solid"
 import { useSDK } from "@tui/context/sdk"
 import { useCommandDialog } from "@tui/component/dialog-command"
 import { Shimmer } from "@tui/ui/shimmer"
@@ -111,7 +105,7 @@ function SessionTabs(props: {
       paddingBottom={0}
       flexShrink={0}
       style={{ zIndex: 1000 }}
-      renderBefore={function() {
+      renderBefore={function () {
         const el = this as any
         el.enableMouse?.()
         el.style = el.style || {}
@@ -124,21 +118,21 @@ function SessionTabs(props: {
           const [hover, setHover] = createSignal(false)
 
           const title = truncateTitle(session.title || "Session")
-          const xChar = (hover() || isActive()) ? " ×" : ""
+          const xChar = hover() || isActive() ? " ×" : ""
           const fullWidth = title.length + xChar.length
           const topBar = "▄".repeat(fullWidth)
           const bottomBar = "▀".repeat(fullWidth)
           const textColor = isActive() ? theme.text : theme.textMuted
           const borderColor = theme.background
           const tabBgColor = isActive() ? theme.background : theme.backgroundPanel
-          
+
           return (
             <box
               flexDirection="column"
               paddingLeft={2}
               paddingRight={2}
               backgroundColor={tabBgColor}
-              renderBefore={function() {
+              renderBefore={function () {
                 const el = this as BoxRenderable
                 el.on("mouseenter", () => setHover(true))
                 el.on("mouseleave", () => setHover(false))
@@ -146,7 +140,7 @@ function SessionTabs(props: {
               onMouseUp={(evt) => {
                 if (renderer.getSelection()?.getSelectedText()) return
                 const target = (evt as any).target
-                if (target?.textContent?.includes('×')) {
+                if (target?.textContent?.includes("×")) {
                   props.onClose(session.id)
                 } else {
                   props.onSelect(session.id)
@@ -155,9 +149,7 @@ function SessionTabs(props: {
             >
               <text style={{ fg: borderColor, bg: tabBgColor }}>{topBar}</text>
               <box flexDirection="row" backgroundColor={tabBgColor}>
-                <text fg={textColor}>
-                  {isActive() ? <b>{title}</b> : title}
-                </text>
+                <text fg={textColor}>{isActive() ? <b>{title}</b> : title}</text>
                 <Show when={hover() || isActive()}>
                   <text fg={theme.textMuted}> ×</text>
                 </Show>
@@ -181,15 +173,13 @@ export function Session() {
   const session = createMemo(() => sync.session.get(route.sessionID)!)
 
   // Track open session tabs
-  const [openTabs, setOpenTabs] = createSignal<string[]>(
-    kv.get("openTabs", [])
-  )
+  const [openTabs, setOpenTabs] = createSignal<string[]>(kv.get("openTabs", []))
 
   // Add current session to open tabs ONLY if it has messages (is active)
   createEffect(() => {
     const currentID = route.sessionID
     const hasMessages = sync.data.message[currentID]?.length > 0
-    
+
     if (hasMessages && !openTabs().includes(currentID)) {
       const newTabs = [...openTabs(), currentID]
       setOpenTabs(newTabs)
@@ -233,7 +223,7 @@ export function Session() {
 
   const permissions = createMemo(() => sync.data.permission[route.sessionID] ?? [])
 
-  const pending = createMemo((prev) => {
+  const pending = createMemo<string | undefined>((prev) => {
     const current = messages().findLast((x) => x.role === "assistant" && !x.time?.completed)?.id
     // Keep previous value if current is undefined to prevent flickering
     return current !== undefined ? current : prev
@@ -241,36 +231,28 @@ export function Session() {
 
   const dimensions = useTerminalDimensions()
   const [sidebar, setSidebar] = createSignal<"show" | "hide" | "auto">(kv.get("sidebar", "auto"))
-  const [leftSidebar, setLeftSidebar] = createSignal<"show" | "hide" | "auto">(
-    kv.get("leftSidebar", "auto"),
-  )
-  const [rightSidebar, setRightSidebar] = createSignal<"show" | "hide" | "auto">(
-    kv.get("rightSidebar", "auto"),
-  )
+  const [leftSidebar, setLeftSidebar] = createSignal<"show" | "hide" | "auto">(kv.get("leftSidebar", "auto"))
+  const [rightSidebar, setRightSidebar] = createSignal<"show" | "hide" | "auto">(kv.get("rightSidebar", "auto"))
   const [conceal, setConceal] = createSignal(true)
+
+  // Detect if messages are currently streaming to disable sticky scroll
+  const isStreaming = createMemo(() => {
+    const msgs = messages()
+    const lastMsg = msgs[msgs.length - 1]
+    return lastMsg?.role === "assistant" && !lastMsg.time?.completed
+  })
 
   const wide = createMemo(() => dimensions().width > 120)
   const sidebarVisible = createMemo(() => sidebar() === "show" || (sidebar() === "auto" && wide()))
 
-  const leftSidebarVisible = createMemo(
-    () => leftSidebar() === "show" || (leftSidebar() === "auto" && wide()),
-  )
-  const rightSidebarVisible = createMemo(
-    () => rightSidebar() === "show" || (rightSidebar() === "auto" && wide()),
-  )
+  const leftSidebarVisible = createMemo(() => leftSidebar() === "show" || (leftSidebar() === "auto" && wide()))
+  const rightSidebarVisible = createMemo(() => rightSidebar() === "show" || (rightSidebar() === "auto" && wide()))
 
   const bothSidebarsCollapsed = createMemo(() => !leftSidebarVisible() && !rightSidebarVisible())
 
   const toggleLeftSidebar = () => {
     setLeftSidebar((prev) => {
-      const next =
-        prev === "auto"
-          ? leftSidebarVisible()
-            ? "hide"
-            : "show"
-          : prev === "show"
-            ? "hide"
-            : "show"
+      const next = prev === "auto" ? (leftSidebarVisible() ? "hide" : "show") : prev === "show" ? "hide" : "show"
       if (next === "show") kv.set("leftSidebar", "auto")
       if (next === "hide") kv.set("leftSidebar", "hide")
       return next
@@ -279,14 +261,7 @@ export function Session() {
 
   const toggleRightSidebar = () => {
     setRightSidebar((prev) => {
-      const next =
-        prev === "auto"
-          ? rightSidebarVisible()
-            ? "hide"
-            : "show"
-          : prev === "show"
-            ? "hide"
-            : "show"
+      const next = prev === "auto" ? (rightSidebarVisible() ? "hide" : "show") : prev === "show" ? "hide" : "show"
       if (next === "show") kv.set("rightSidebar", "auto")
       if (next === "hide") kv.set("rightSidebar", "hide")
       return next
@@ -334,7 +309,7 @@ export function Session() {
 
   const handleCloseSession = async (sessionID: string) => {
     const tabs = openTabs()
-    
+
     if (tabs.length === 1) {
       // Last tab, create new session
       handleNewSession()
@@ -343,7 +318,7 @@ export function Session() {
       kv.set("openTabs", [])
       return
     }
-    
+
     // Switch to a different tab if closing current session (BEFORE removing from tabs)
     if (sessionID === route.sessionID) {
       const currentIndex = tabs.findIndex((id) => id === sessionID)
@@ -352,12 +327,12 @@ export function Session() {
         selectSession(nextTab)
       }
     }
-    
+
     // Remove from open tabs
     const newTabs = tabs.filter((id) => id !== sessionID)
     setOpenTabs(newTabs)
     kv.set("openTabs", newTabs)
-    
+
     // Delete the session
     await sdk.client.session.delete({
       path: {
@@ -404,16 +379,6 @@ export function Session() {
   useKeyboard((evt) => {
     if (dialog.stack.length > 0) return
 
-    // ESC to go back to parent session when in a subagent
-    const parentID = session()?.parentID
-    if (evt.name === "escape" && parentID) {
-      navigate({
-        type: "session",
-        sessionID: parentID,
-      })
-      return
-    }
-
     // Sidebar toggle shortcuts
     if (evt.ctrl || evt.meta) {
       if (evt.name === "[") {
@@ -455,48 +420,57 @@ export function Session() {
 
   function toBottom() {
     if (!scroll) return
-    
+
     // IMPORTANT: Scroll in chunks to force viewport recalculation.
     // Jumping directly with scrollBy(100000) breaks the scrollbox's virtual rendering,
     // causing messages to appear blank. Chunked scrolling mimics manual scrolling and
     // keeps the viewport rendering correctly.
     const scrollInChunks = (remaining: number) => {
       if (!scroll || remaining <= 0) return
-      
+
       const chunkSize = 50
       scroll.scrollBy(chunkSize)
-      
+
       if (remaining > chunkSize) {
         setTimeout(() => scrollInChunks(remaining - chunkSize), 10)
       }
     }
-    
+
     const target = scroll.scrollHeight - scroll.y
     scrollInChunks(target)
   }
 
   // Auto-scroll to bottom when session changes
-  createEffect(on(() => route.sessionID, () => {
-    setTimeout(() => {
-      if (scroll) toBottom()
-    }, 200)
-  }))
+  createEffect(
+    on(
+      () => route.sessionID,
+      () => {
+        setTimeout(() => {
+          if (scroll) toBottom()
+        }, 200)
+      },
+    ),
+  )
 
   // snap to bottom when session changes
   createEffect(on(() => route.sessionID, toBottom))
 
   // Auto-scroll during streaming when new content arrives
-  // DISABLED: This causes flickering by triggering toBottom() at 60 FPS
-  // createEffect(() => {
-  //   const msgs = messages()
-  //   const lastMsg = msgs[msgs.length - 1]
-  //   if (lastMsg && lastMsg.role === "assistant" && !lastMsg.time.completed) {
-  //     // Message is streaming, scroll to bottom
-  //     requestAnimationFrame(() => {
-  //       if (scroll) toBottom()
-  //     })
-  //   }
-  // })
+  // Use throttled approach to avoid 60 FPS flickering
+  let scrollTimeout: NodeJS.Timeout | null = null
+  createEffect(() => {
+    const msgs = messages()
+    const lastMsg = msgs[msgs.length - 1]
+    if (lastMsg && lastMsg.role === "assistant" && !lastMsg.time.completed) {
+      // Throttle to max once per 200ms to avoid flickering
+      if (!scrollTimeout) {
+        scrollTimeout = setTimeout(() => {
+          if (scroll) toBottom()
+          scrollTimeout = null
+        }, 200)
+      }
+    }
+  })
 
   const local = useLocal()
 
@@ -903,14 +877,7 @@ export function Session() {
         conceal,
       }}
     >
-      <box
-        flexDirection="row"
-        paddingBottom={1}
-        paddingTop={1}
-        paddingLeft={2}
-        paddingRight={2}
-        gap={2}
-      >
+      <box flexDirection="row" paddingBottom={1} paddingTop={1} paddingLeft={2} paddingRight={2} gap={2}>
         {/* Left Sidebar */}
         <Show when={leftSidebarVisible()}>
           <LeftSidebar
@@ -942,20 +909,44 @@ export function Session() {
                 paddingLeft={2}
                 paddingRight={2}
               >
-                <text fg={theme.text}>
-                  Previous{" "}
-                  <span style={{ fg: theme.textMuted }}>
-                    {keybind.print("session_child_cycle_reverse")}
-                  </span>
-                </text>
+                <box flexDirection="row" gap={3}>
+                  <text
+                    fg={theme.accent}
+                    attributes={1}
+                    onMouseUp={() => {
+                      if (renderer.getSelection()?.getSelectedText()) return
+                      navigate({
+                        type: "session",
+                        sessionID: session().parentID!,
+                      })
+                    }}
+                  >
+                    ← Back to parent
+                  </text>
+                  <text
+                    fg={theme.accent}
+                    attributes={1}
+                    onMouseUp={() => {
+                      if (renderer.getSelection()?.getSelectedText()) return
+                      moveChild(-1)
+                    }}
+                  >
+                    ← Previous{" "}
+                    <span style={{ fg: theme.textMuted }}>{keybind.print("session_child_cycle_reverse")}</span>
+                  </text>
+                </box>
                 <text fg={theme.text}>
                   <b>Viewing subagent session</b>
                 </text>
-                <text fg={theme.text}>
-                  <span style={{ fg: theme.textMuted }}>
-                    {keybind.print("session_child_cycle")}
-                  </span>{" "}
-                  Next
+                <text
+                  fg={theme.accent}
+                  attributes={1}
+                  onMouseUp={() => {
+                    if (renderer.getSelection()?.getSelectedText()) return
+                    moveChild(1)
+                  }}
+                >
+                  <span style={{ fg: theme.textMuted }}>{keybind.print("session_child_cycle")}</span> Next →
                 </text>
               </box>
             </Show>
@@ -972,114 +963,100 @@ export function Session() {
                     foregroundColor: theme.border,
                   },
                 }}
-                stickyScroll={false}
+                stickyScroll={!isStreaming()}
                 stickyStart="bottom"
                 height="100%"
               >
-              <For each={messages()} fallback={<box />}>
-                {(message, index) => (
-                  <Switch>
-                    <Match when={message.id === revert()?.messageID}>
-                      {(function () {
-                        const command = useCommandDialog()
-                        const [hover, setHover] = createSignal(false)
-                        const dialog = useDialog()
+                <For each={messages()} fallback={<box />}>
+                  {(message, index) => (
+                    <Switch>
+                      <Match when={message.id === revert()?.messageID}>
+                        {(function () {
+                          const command = useCommandDialog()
+                          const [hover, setHover] = createSignal(false)
+                          const dialog = useDialog()
 
-                        const handleUnrevert = async () => {
-                          const confirmed = await DialogConfirm.show(
-                            dialog,
-                            "Confirm Redo",
-                            "Are you sure you want to restore the reverted messages?",
-                          )
-                          if (confirmed) {
-                            command.trigger("session.redo")
+                          const handleUnrevert = async () => {
+                            const confirmed = await DialogConfirm.show(
+                              dialog,
+                              "Confirm Redo",
+                              "Are you sure you want to restore the reverted messages?",
+                            )
+                            if (confirmed) {
+                              command.trigger("session.redo")
+                            }
                           }
-                        }
 
-                        return (
-                          <box
-                            onMouseOver={() => setHover(true)}
-                            onMouseOut={() => setHover(false)}
-                            onMouseUp={handleUnrevert}
-                            marginTop={1}
-                            flexShrink={0}
-                            border={["left"]}
-                            customBorderChars={SplitBorder.customBorderChars}
-                            borderColor={theme.backgroundPanel}
-                          >
+                          return (
                             <box
-                              paddingTop={1}
-                              paddingBottom={1}
-                              paddingLeft={2}
-                              backgroundColor={
-                                hover() ? theme.backgroundElement : theme.backgroundPanel
-                              }
+                              onMouseOver={() => setHover(true)}
+                              onMouseOut={() => setHover(false)}
+                              onMouseUp={handleUnrevert}
+                              marginTop={1}
+                              flexShrink={0}
+                              border={["left"]}
+                              customBorderChars={SplitBorder.customBorderChars}
+                              borderColor={theme.backgroundPanel}
                             >
-                              <text fg={theme.textMuted}>
-                                {revert()!.reverted.length} message reverted
-                              </text>
-                              <text fg={theme.textMuted}>
-                                <span style={{ fg: theme.text }}>
-                                  {keybind.print("messages_redo")}
-                                </span>{" "}
-                                or /redo to restore
-                              </text>
-                              <Show when={revert()!.diffFiles?.length}>
-                                <box marginTop={1}>
-                                  <For each={revert()!.diffFiles}>
-                                    {(file) => (
-                                      <text>
-                                        {file.filename}
-                                        <Show when={file.additions > 0}>
-                                          <span style={{ fg: theme.diffAdded }}>
-                                            {" "}
-                                            +{file.additions}
-                                          </span>
-                                        </Show>
-                                        <Show when={file.deletions > 0}>
-                                          <span style={{ fg: theme.diffRemoved }}>
-                                            {" "}
-                                            -{file.deletions}
-                                          </span>
-                                        </Show>
-                                      </text>
-                                    )}
-                                  </For>
-                                </box>
-                              </Show>
+                              <box
+                                paddingTop={1}
+                                paddingBottom={1}
+                                paddingLeft={2}
+                                backgroundColor={hover() ? theme.backgroundElement : theme.backgroundPanel}
+                              >
+                                <text fg={theme.textMuted}>{revert()!.reverted.length} message reverted</text>
+                                <text fg={theme.textMuted}>
+                                  <span style={{ fg: theme.text }}>{keybind.print("messages_redo")}</span> or /redo to
+                                  restore
+                                </text>
+                                <Show when={revert()!.diffFiles?.length}>
+                                  <box marginTop={1}>
+                                    <For each={revert()!.diffFiles}>
+                                      {(file) => (
+                                        <text>
+                                          {file.filename}
+                                          <Show when={file.additions > 0}>
+                                            <span style={{ fg: theme.diffAdded }}> +{file.additions}</span>
+                                          </Show>
+                                          <Show when={file.deletions > 0}>
+                                            <span style={{ fg: theme.diffRemoved }}> -{file.deletions}</span>
+                                          </Show>
+                                        </text>
+                                      )}
+                                    </For>
+                                  </box>
+                                </Show>
+                              </box>
                             </box>
-                          </box>
-                        )
-                      })()}
-                    </Match>
-                    <Match when={revert()?.messageID && message.id >= revert()!.messageID}>
-                      <></>
-                    </Match>
-                    <Match when={message.role === "user"}>
-                      <UserMessage
-                        index={index()}
-                        onMouseUp={() => {
-                          if (renderer.getSelection()?.getSelectedText()) return
-                          dialog.replace(() => (
-                            <DialogMessage messageID={message.id} sessionID={route.sessionID} />
-                          ))
-                        }}
-                        message={message as UserMessage}
-                        parts={sync.data.part[message.id] ?? []}
-                        pending={pending()}
-                      />
-                    </Match>
-                    <Match when={message.role === "assistant"}>
-                      <AssistantMessage
-                        last={index() === messages().length - 1}
-                        message={message as AssistantMessage}
-                        parts={sync.data.part[message.id] ?? []}
-                      />
-                    </Match>
-                  </Switch>
-                )}
-              </For>
-            </scrollbox>
+                          )
+                        })()}
+                      </Match>
+                      <Match when={revert()?.messageID && message.id >= revert()!.messageID}>
+                        <></>
+                      </Match>
+                      <Match when={message.role === "user"}>
+                        <UserMessage
+                          index={index()}
+                          onMouseUp={() => {
+                            if (renderer.getSelection()?.getSelectedText()) return
+                            dialog.replace(() => <DialogMessage messageID={message.id} sessionID={route.sessionID} />)
+                          }}
+                          message={message as UserMessage}
+                          parts={sync.data.part[message.id] ?? []}
+                          pending={pending()}
+                        />
+                      </Match>
+                      <Match when={message.role === "assistant"}>
+                        <AssistantMessage
+                          last={index() === messages().length - 1}
+                          message={message as AssistantMessage}
+                          parts={sync.data.part[message.id] ?? []}
+                        />
+                      </Match>
+                    </Switch>
+                  )}
+                </For>
+              </scrollbox>
             </box>
             <box flexShrink={0}>
               <Prompt
@@ -1122,9 +1099,7 @@ function UserMessage(props: {
   index: number
   pending?: string
 }) {
-  const text = createMemo(
-    () => props.parts.flatMap((x) => (x.type === "text" && !x.synthetic ? [x] : []))[0],
-  )
+  const text = createMemo(() => props.parts.flatMap((x) => (x.type === "text" && !x.synthetic ? [x] : []))[0])
   const files = createMemo(() => props.parts.flatMap((x) => (x.type === "file" ? [x] : [])))
   const sync = useSync()
   const { theme } = useTheme()
@@ -1165,14 +1140,8 @@ function UserMessage(props: {
                 })
                 return (
                   <text fg={theme.text}>
-                    <span style={{ bg: bg(), fg: theme.background }}>
-                      {" "}
-                      {MIME_BADGE[file.mime] ?? file.mime}{" "}
-                    </span>
-                    <span style={{ bg: theme.backgroundElement, fg: theme.textMuted }}>
-                      {" "}
-                      {file.filename}{" "}
-                    </span>
+                    <span style={{ bg: bg(), fg: theme.background }}> {MIME_BADGE[file.mime] ?? file.mime} </span>
+                    <span style={{ bg: theme.backgroundElement, fg: theme.textMuted }}> {file.filename} </span>
                   </text>
                 )
               }}
@@ -1183,16 +1152,9 @@ function UserMessage(props: {
           {sync.data.config.username ?? "You"}{" "}
           <Show
             when={queued()}
-            fallback={
-              <span style={{ fg: theme.textMuted }}>
-                ({Locale.time(props.message.time.created)})
-              </span>
-            }
+            fallback={<span style={{ fg: theme.textMuted }}>({Locale.time(props.message.time.created)})</span>}
           >
-            <span style={{ bg: theme.accent, fg: theme.backgroundPanel, bold: true }}>
-              {" "}
-              QUEUED{" "}
-            </span>
+            <span style={{ bg: theme.accent, fg: theme.backgroundPanel, bold: true }}> QUEUED </span>
           </Show>
         </text>
       </box>
@@ -1232,8 +1194,7 @@ function AssistantMessage(props: { message: AssistantMessage; parts: Part[]; las
       <Show
         when={
           !props.message.time.completed ||
-          (props.last &&
-            props.parts.some((item) => item.type === "step-finish" && item.reason === "tool-calls"))
+          (props.last && props.parts.some((item) => item.type === "step-finish" && item.reason === "tool-calls"))
         }
       >
         <box
@@ -1245,9 +1206,7 @@ function AssistantMessage(props: { message: AssistantMessage; parts: Part[]; las
           customBorderChars={SplitBorder.customBorderChars}
           borderColor={theme.backgroundElement}
         >
-          <text fg={local.agent.color(props.message.mode)}>
-            {Locale.titlecase(props.message.mode)}
-          </text>
+          <text fg={local.agent.color(props.message.mode)}>{Locale.titlecase(props.message.mode)}</text>
           <Shimmer text={`${props.message.modelID}`} color={theme.text} />
         </box>
       </Show>
@@ -1259,9 +1218,7 @@ function AssistantMessage(props: { message: AssistantMessage; parts: Part[]; las
       >
         <box paddingLeft={3}>
           <text marginTop={1}>
-            <span style={{ fg: local.agent.color(props.message.mode) }}>
-              {Locale.titlecase(props.message.mode)}
-            </span>{" "}
+            <span style={{ fg: local.agent.color(props.message.mode) }}>{Locale.titlecase(props.message.mode)}</span>{" "}
             <span style={{ fg: theme.textMuted }}>{props.message.modelID}</span>
           </text>
         </box>
@@ -1288,12 +1245,7 @@ function ReasoningPart(props: { part: ReasoningPart; message: AssistantMessage }
         customBorderChars={SplitBorder.customBorderChars}
         borderColor={theme.backgroundPanel}
       >
-        <box
-          paddingTop={1}
-          paddingBottom={1}
-          paddingLeft={2}
-          backgroundColor={theme.backgroundPanel}
-        >
+        <box paddingTop={1} paddingBottom={1} paddingLeft={2} backgroundColor={theme.backgroundPanel}>
           <text fg={theme.text}>{props.part.text.trim()}</text>
         </box>
       </box>
@@ -1305,9 +1257,7 @@ function TextPart(props: { part: TextPart; message: AssistantMessage }) {
   const ctx = use()
   const { syntax, theme } = useTheme()
   const sdk = useSDK()
-  const [segments, setSegments] = createSignal<
-    Awaited<ReturnType<typeof MessageWidgets.splitText>>
-  >([])
+  const [segments, setSegments] = createSignal<Awaited<ReturnType<typeof MessageWidgets.splitText>>>([])
   const [processed, setProcessed] = createSignal(false)
   const [lastText, setLastText] = createSignal("")
 
@@ -1319,55 +1269,69 @@ function TextPart(props: { part: TextPart; message: AssistantMessage }) {
 
   const isStreaming = createMemo(() => !props.message.time.completed)
 
-  createEffect(on(
-    () => [props.part.text, props.message.time.completed] as const,
-    ([text, completed]) => {
-      const trimmedText = String(text || "").trim()
+  // Use memo for streaming text to avoid rapid re-renders
+  const streamingText = createMemo(() => {
+    if (isStreaming()) {
+      return String(props.part.text || "").trim()
+    }
+    return ""
+  })
 
-      // During streaming, just show raw text without widget parsing to avoid flicker
-      if (!completed) {
-        setSegments([{ type: "text", content: trimmedText }])
-        setProcessed(false)
-        return
-      }
+  createEffect(
+    on(
+      () => [props.part.text, props.message.time.completed] as const,
+      ([text, completed]) => {
+        const trimmedText = String(text || "").trim()
 
-      // If already processed and complete, don't re-process
-      if (processed() && completed) {
-        return
-      }
-
-      // WIDGET TEST: If text contains "widget_test", inject a sidebar widget for testing
-      if (trimmedText.includes("widget_test")) {
-        setSegments([
-          { type: "text", content: "Testing sidebar widget in message stream:\n\n" },
-          {
-            type: "widget",
-            widgetId: "context-panel",
-            config: {},
-            match: [] as any,
-            streaming: false,
-          },
-          { type: "text", content: "\n\nIf you see the context panel above, message widgets work!" },
-        ])
-        setProcessed(true)
-        return
-      }
-
-      // Only parse widgets when message is complete
-      MessageWidgets.splitText(trimmedText, { allowIncomplete: false }).then((result) => {
-        const widgetCount = result.filter((s) => s.type === "widget").length
-        const hasTag = trimmedText.includes("<steering-question")
-        if (hasTag || widgetCount > 0) {
-          Bun.write(
-            Bun.file("/tmp/opencode-widget-debug.log"),
-            `[${new Date().toISOString()}] TextPart segments: ${result.length}, widgets: ${widgetCount}, has tag: ${hasTag}, text length: ${trimmedText.length}\n`,
-          )
+        // During streaming, minimize updates - just update lastText
+        if (!completed) {
+          setLastText(trimmedText)
+          if (segments().length === 0) {
+            // Initialize segments array only once
+            setSegments([{ type: "text", content: trimmedText }])
+          }
+          setProcessed(false)
+          return
         }
-        setSegments(result)
-        setProcessed(true)
-      })
-    },
-  ))
+
+        // If already processed and complete, don't re-process
+        if (processed() && completed) {
+          return
+        }
+
+        // WIDGET TEST: If text contains "widget_test", inject a sidebar widget for testing
+        if (trimmedText.includes("widget_test")) {
+          setSegments([
+            { type: "text", content: "Testing sidebar widget in message stream:\n\n" },
+            {
+              type: "widget",
+              widgetId: "context-panel",
+              config: {},
+              match: [] as any,
+              streaming: false,
+            },
+            { type: "text", content: "\n\nIf you see the context panel above, message widgets work!" },
+          ])
+          setProcessed(true)
+          return
+        }
+
+        // Only parse widgets when message is complete
+        MessageWidgets.splitText(trimmedText, { allowIncomplete: false }).then((result) => {
+          const widgetCount = result.filter((s) => s.type === "widget").length
+          const hasTag = trimmedText.includes("<steering-question")
+          if (hasTag || widgetCount > 0) {
+            Bun.write(
+              Bun.file("/tmp/opencode-widget-debug.log"),
+              `[${new Date().toISOString()}] TextPart segments: ${result.length}, widgets: ${widgetCount}, has tag: ${hasTag}, text length: ${trimmedText.length}\n`,
+            )
+          }
+          setSegments(result)
+          setProcessed(true)
+        })
+      },
+    ),
+  )
 
   return (
     <Show when={props.part.text.trim()}>
@@ -1381,7 +1345,7 @@ function TextPart(props: { part: TextPart; message: AssistantMessage }) {
                   drawUnstyledText={false}
                   streaming={isStreaming()}
                   syntaxStyle={untrack(syntax)}
-                  content={(segment as any).content}
+                  content={isStreaming() ? streamingText() : (segment as any).content}
                   conceal={untrack(ctx.conceal)}
                 />
               </Match>
@@ -1456,20 +1420,41 @@ function ToolPart(props: { part: ToolPart; message: AssistantMessage }) {
   const sync = useSync()
   const renderer = useRenderer()
   const [margin, setMargin] = createSignal(0)
-  const [collapsed, setCollapsed] = createSignal(true)
-  
+
   const render = ToolRegistry.render(props.part.tool) ?? GenericTool
   const metadata = props.part.state.status === "pending" ? {} : (props.part.state.metadata ?? {})
   const input = props.part.state.input ?? {}
   const container = ToolRegistry.container(props.part.tool)
-  const permissions = sync.data.permission[props.message.sessionID] ?? []
-  const permissionIndex = permissions.findIndex((x) => x.callID === props.part.callID)
-  const permission = permissions[permissionIndex]
+
+  // Make permissions reactive
+  const permissions = createMemo(() => sync.data.permission[props.message.sessionID] ?? [])
+  const permissionIndex = createMemo(() => permissions().findIndex((x) => x.callID === props.part.callID))
+  const permission = createMemo(() => permissions()[permissionIndex()])
+
+  // Start collapsed by default
+  const [collapsed, setCollapsed] = createSignal(true)
+
+  // Track if we've seen a permission (to detect when it's resolved)
+  const [hadPermission, setHadPermission] = createSignal(false)
+
+  // Auto-expand when permission appears, auto-collapse when it's resolved
+  createEffect(() => {
+    const currentPermission = permission()
+
+    if (currentPermission) {
+      // Permission exists - expand to show approval form
+      setCollapsed(false)
+      setHadPermission(true)
+    } else if (hadPermission()) {
+      // Permission was there but now gone (approved/denied) - collapse back
+      setCollapsed(true)
+    }
+  })
 
   const style: BoxProps =
-    container === "block" || permission
+    container === "block" || permission()
       ? {
-          border: permissionIndex === 0 ? (["left", "right"] as const) : (["left"] as const),
+          border: permissionIndex() === 0 ? (["left", "right"] as const) : (["left"] as const),
           paddingTop: 1,
           paddingBottom: 1,
           paddingLeft: 2,
@@ -1477,7 +1462,7 @@ function ToolPart(props: { part: ToolPart; message: AssistantMessage }) {
           gap: 1,
           backgroundColor: theme.backgroundPanel,
           customBorderChars: SplitBorder.customBorderChars,
-          borderColor: permissionIndex === 0 ? theme.warning : theme.background,
+          borderColor: permissionIndex() === 0 ? theme.warning : theme.background,
         }
       : {
           paddingLeft: 3,
@@ -1513,20 +1498,20 @@ function ToolPart(props: { part: ToolPart; message: AssistantMessage }) {
       {createMemo(() => {
         const RenderComponent = render
         const isCollapsed = collapsed()
-        console.log('[ToolPart] Rendering tool, collapsed:', isCollapsed)
+        console.log("[ToolPart] Rendering tool, collapsed:", isCollapsed)
         return (
           <RenderComponent
             input={input}
             tool={props.part.tool}
             metadata={metadata}
-            permission={permission?.metadata ?? {}}
+            permission={permission()?.metadata ?? {}}
             output={props.part.state.status === "completed" ? props.part.state.output : undefined}
             collapsed={isCollapsed}
             onToggle={() => {
               if (renderer.getSelection()?.getSelectedText()) return
-              console.log('[ToolPart] Toggle clicked, collapsed was:', collapsed())
+              console.log("[ToolPart] Toggle clicked, collapsed was:", collapsed())
               setCollapsed(!collapsed())
-              console.log('[ToolPart] Toggle clicked, collapsed now:', !collapsed())
+              console.log("[ToolPart] Toggle clicked, collapsed now:", !collapsed())
             }}
           />
         )
@@ -1536,7 +1521,7 @@ function ToolPart(props: { part: ToolPart; message: AssistantMessage }) {
           <text fg={theme.error}>{props.part.state.error.replace("Error: ", "")}</text>
         </box>
       )}
-      {permission && (
+      {permission() && (
         <box gap={1}>
           <text fg={theme.text}>Permission required to run this tool:</text>
           <box flexDirection="row" gap={2}>
@@ -1569,9 +1554,9 @@ type ToolProps<T extends Tool.Info> = {
   onToggle?: () => void
 }
 function GenericTool(props: ToolProps<any>) {
-  const icon = createMemo(() => props.collapsed ? "▶" : "▼")
+  const icon = createMemo(() => (props.collapsed ? "▶" : "▼"))
   const { theme, syntax } = useTheme()
-  console.log('[GenericTool]', props.tool, 'collapsed:', props.collapsed, 'onToggle:', !!props.onToggle)
+  console.log("[GenericTool]", props.tool, "collapsed:", props.collapsed, "onToggle:", !!props.onToggle)
   return (
     <>
       <ToolTitle icon={icon()} fallback="Writing command..." when={true} onToggle={props.onToggle}>
@@ -1612,12 +1597,7 @@ const ToolRegistry = (() => {
 
 function ToolBadge(props: { children: string }) {
   const { theme } = useTheme()
-  return (
-    <span style={{ bg: theme.textMuted, fg: theme.background, bold: true }}>
-      {" "}
-      {props.children.toUpperCase()}{" "}
-    </span>
-  )
+  return <span style={{ bg: theme.textMuted, fg: theme.background, bold: true }}> {props.children.toUpperCase()} </span>
 }
 
 function ToolTitle(props: { fallback: string; when: any; icon: string; children: JSX.Element; onToggle?: () => void }) {
@@ -1627,7 +1607,7 @@ function ToolTitle(props: { fallback: string; when: any; icon: string; children:
     <box
       onMouseUp={(evt) => {
         if (renderer.getSelection()?.getSelectedText()) return
-        console.log('[ToolTitle] Clicked, onToggle exists:', !!props.onToggle)
+        console.log("[ToolTitle] Clicked, onToggle exists:", !!props.onToggle)
         props.onToggle?.()
       }}
     >
@@ -1646,7 +1626,7 @@ ToolRegistry.register<typeof BashTool>({
   render(props) {
     const output = createMemo(() => stripAnsi(props.metadata.output?.trim() ?? ""))
     const { theme } = useTheme()
-    const icon = createMemo(() => props.collapsed ? "▶" : "▼")
+    const icon = createMemo(() => (props.collapsed ? "▶" : "▼"))
     return (
       <>
         <ToolTitle icon={icon()} fallback="Writing command..." when={props.input.command} onToggle={props.onToggle}>
@@ -1672,12 +1652,11 @@ ToolRegistry.register<typeof ReadTool>({
   container: "inline",
   render(props) {
     const { theme } = useTheme()
-    const icon = createMemo(() => props.collapsed ? "▶" : "▼")
+    const icon = createMemo(() => (props.collapsed ? "▶" : "▼"))
     return (
       <>
         <ToolTitle icon={icon()} fallback="Reading file..." when={props.input.filePath} onToggle={props.onToggle}>
-          <ToolBadge>Read</ToolBadge> {normalizePath(props.input.filePath!)}{" "}
-          {input(props.input, ["filePath"])}
+          <ToolBadge>Read</ToolBadge> {normalizePath(props.input.filePath!)} {input(props.input, ["filePath"])}
         </ToolTitle>
         <Show when={!props.collapsed && props.output}>
           <box paddingLeft={3}>
@@ -1710,8 +1689,8 @@ ToolRegistry.register<typeof WriteTool>({
         .map((x) => x.toString().padStart(pad, " "))
     })
 
-    const icon = createMemo(() => props.collapsed ? "▶" : "▼")
-    console.log('[WriteTool] collapsed:', props.collapsed)
+    const icon = createMemo(() => (props.collapsed ? "▶" : "▼"))
+    console.log("[WriteTool] collapsed:", props.collapsed)
 
     return (
       <>
@@ -1721,16 +1700,10 @@ ToolRegistry.register<typeof WriteTool>({
         <Show when={!props.collapsed}>
           <box flexDirection="row">
             <box flexShrink={0}>
-              <For each={numbers()}>
-                {(value) => <text style={{ fg: theme.textMuted }}>{value}</text>}
-              </For>
+              <For each={numbers()}>{(value) => <text style={{ fg: theme.textMuted }}>{value}</text>}</For>
             </box>
             <box paddingLeft={1} flexGrow={1}>
-              <code
-                filetype={filetype(props.input.filePath!)}
-                syntaxStyle={syntax()}
-                content={code()}
-              />
+              <code filetype={filetype(props.input.filePath!)} syntaxStyle={syntax()} content={code()} />
             </box>
           </box>
         </Show>
@@ -1743,7 +1716,7 @@ ToolRegistry.register<typeof GlobTool>({
   name: "glob",
   container: "inline",
   render(props) {
-    const icon = createMemo(() => props.collapsed ? "▶" : "▼")
+    const icon = createMemo(() => (props.collapsed ? "▶" : "▼"))
     return (
       <>
         <ToolTitle icon={icon()} fallback="Finding files..." when={props.input.pattern} onToggle={props.onToggle}>
@@ -1760,7 +1733,7 @@ ToolRegistry.register<typeof GrepTool>({
   name: "grep",
   container: "inline",
   render(props) {
-    const icon = createMemo(() => props.collapsed ? "▶" : "▼")
+    const icon = createMemo(() => (props.collapsed ? "▶" : "▼"))
     return (
       <ToolTitle icon={icon()} fallback="Searching content..." when={props.input.pattern} onToggle={props.onToggle}>
         <ToolBadge>Grep</ToolBadge> "{props.input.pattern}"{" "}
@@ -1781,10 +1754,15 @@ ToolRegistry.register<typeof ListTool>({
       }
       return ""
     })
-    const icon = createMemo(() => props.collapsed ? "▶" : "▼")
+    const icon = createMemo(() => (props.collapsed ? "▶" : "▼"))
     return (
       <>
-        <ToolTitle icon={icon()} fallback="Listing directory..." when={props.input.path !== undefined} onToggle={props.onToggle}>
+        <ToolTitle
+          icon={icon()}
+          fallback="Listing directory..."
+          when={props.input.path !== undefined}
+          onToggle={props.onToggle}
+        >
           <ToolBadge>List</ToolBadge> {dir()}
         </ToolTitle>
       </>
@@ -1803,13 +1781,8 @@ ToolRegistry.register<typeof TaskTool>({
 
     return (
       <>
-        <ToolTitle
-          icon="%"
-          fallback="Delegating..."
-          when={props.input.subagent_type ?? props.input.description}
-        >
-          <ToolBadge>Task</ToolBadge> [{props.input.subagent_type ?? "unknown"}]{" "}
-          {props.input.description}
+        <ToolTitle icon="%" fallback="Delegating..." when={props.input.subagent_type ?? props.input.description}>
+          <ToolBadge>Task</ToolBadge> [{props.input.subagent_type ?? "unknown"}] {props.input.description}
         </ToolTitle>
         <Show when={props.metadata.summary?.length}>
           <box>
@@ -1939,7 +1912,7 @@ ToolRegistry.register<typeof EditTool>({
     })
 
     const ft = createMemo(() => filetype(props.input.filePath))
-    const icon = createMemo(() => props.collapsed ? "▶" : "▼")
+    const icon = createMemo(() => (props.collapsed ? "▶" : "▼"))
 
     return (
       <>

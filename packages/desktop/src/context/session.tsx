@@ -197,7 +197,17 @@ export interface FileAttachmentPart extends PartBase {
   selection?: TextSelection
 }
 
-export type ContentPart = TextPart | FileAttachmentPart
+export interface ImageAttachmentPart extends PartBase {
+  type: "image"
+  id: string
+  path: string
+  data: string
+  index: number
+  mimeType?: string
+  base64Data?: string
+}
+
+export type ContentPart = TextPart | FileAttachmentPart | ImageAttachmentPart
 export type Prompt = ContentPart[]
 
 export const DEFAULT_PROMPT: Prompt = [{ type: "text", content: "", start: 0, end: 0 }]

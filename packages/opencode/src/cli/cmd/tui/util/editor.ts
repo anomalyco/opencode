@@ -15,9 +15,18 @@ export namespace Editor {
     await Bun.write(filepath, opts.value)
     opts.renderer.suspend()
     opts.renderer.currentRenderBuffer.clear()
-    const parts = editor.split(" ")
+    const parts = editor.split(" ").filter(Boolean)
+
+    // Validate all parts are strings
+    const cmd: string[] = [...parts, filepath]
+    for (let i = 0; i < cmd.length; i++) {
+      if (typeof cmd[i] !== "string") {
+        throw new Error(`Invalid command argument at index ${i}: expected string, got ${typeof cmd[i]}`)
+      }
+    }
+
     const proc = Bun.spawn({
-      cmd: [...parts, filepath],
+      cmd,
       stdin: "inherit",
       stdout: "inherit",
       stderr: "inherit",

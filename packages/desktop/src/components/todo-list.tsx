@@ -3,6 +3,7 @@ import { createStore } from "solid-js/store"
 import { Icon, Checkbox } from "@opencode-ai/ui"
 import { useSDK } from "@/context/sdk"
 import { useLocal } from "@/context/local"
+import { useSession } from "@/context/session"
 import type { Todo } from "@opencode-ai/sdk"
 
 interface TodoItemProps {
@@ -24,7 +25,8 @@ function TodoItem(props: TodoItemProps) {
 export function TodoList() {
   const sdk = useSDK()
   const local = useLocal()
-  const sessionID = () => local.session.active()?.id
+  const session = useSession()
+  const sessionID = () => session.id
 
   const [store, setStore] = createStore<{
     todos: Todo[]

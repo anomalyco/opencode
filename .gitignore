@@ -28,3 +28,4 @@ packages/opencode/.opencode/rules/typescript-style.json
 packages/opencode/.opencode/workflows/bugfix-workflow.json
 packages/opencode/.opencode/workflows/feature-implementation.json
 packages/opencode/.opencode/workflows/README.md
+/.claude.backup*

@@ -117,7 +117,7 @@ export const { use: useLocal, provider: LocalProvider } = createSimpleContext({
       const list = createMemo(() =>
         (Array.isArray(sync.data.provider) ? sync.data.provider : []).flatMap((p) => Object.values(p.models).map((m) => ({ ...m, provider: p }) as LocalModel)),
       )
-      const find = (key: ModelKey) => list().find((m) => m.id === key?.modelID && m.provider.id === key.providerID)
+      const find = (key: ModelKey | undefined) => key ? list().find((m) => m.id === key.modelID && m.provider.id === key.providerID) : undefined
 
       const fallbackModel = createMemo(() => {
         if (sync.data.config.model) {

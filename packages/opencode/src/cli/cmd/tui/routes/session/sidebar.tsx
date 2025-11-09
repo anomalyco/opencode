@@ -17,7 +17,8 @@ import { DialogSelect, type DialogSelectOption } from "../../ui/dialog-select"
 import { DialogPrompt } from "../../ui/dialog-prompt"
 import { useRoute } from "../../context/route"
 import { $ } from "bun"
-type TabType = "files" | "todos" | "tools"
+import { DialogSubagentAdd } from "../../component/dialog-subagent-add"
+type TabType = "files" | "todos" | "tools" | "subagents"
 
 export function Sidebar(props: { sessionID: string; onToggle: () => void }) {
   const sync = useSync()
@@ -92,11 +93,9 @@ export function Sidebar(props: { sessionID: string; onToggle: () => void }) {
   const [committedFiles, setCommittedFiles] = createSignal<Set<string>>(new Set())
   const [projectFavorites, setProjectFavorites] = createSignal<Set<string>>(new Set())
   const [globalFavorites, setGlobalFavorites] = createSignal<Set<string>>(new Set())
-  const [childSessions, setChildSessions] = createSignal<any[]>([])
-  const [sessionDiffs, setSessionDiffs] = createSignal<any[]>([])
   const [isAddingTodo, setIsAddingTodo] = createSignal(false)
   const [expandedSections, setExpandedSections] = createSignal<Set<string>>(
-    new Set(["toolsUsed", "lsp", "mcp", "plugins", "subagents"])
+    new Set(["toolsUsed", "lsp", "mcp", "plugins", "subagents"]),
   )
 
   const uiExtensions = useUIExtensions()
@@ -105,7 +104,12 @@ export function Sidebar(props: { sessionID: string; onToggle: () => void }) {
   const todo = createMemo(() => sync.data.todo[props.sessionID] ?? [])
   const messages = createMemo(() => sync.data.message[props.sessionID] ?? [])
 
-  // Load favorite tools from config
+  // Get child sessions reactively from sync.data (SSE-based, no polling)
+  const childSessions = createMemo(() =>
+    sync.data.session.filter((x) => x.parentID === props.sessionID).toSorted((a, b) => b.id.localeCompare(a.id)),
+  )
+
+  // Load favorite tools from config (one-time load, no polling)
   const loadFavorites = async () => {
     try {
       const response = await fetch(`${sdk.url}/favorite-tools`)
@@ -119,48 +123,9 @@ export function Sidebar(props: { sessionID: string; onToggle: () => void }) {
     }
   }
 
-  // Load favorites on mount
-  loadFavorites()
-
-  // Load session diffs (files modified during session)
-  const loadSessionDiffs = async () => {
-    try {
-      const response = await fetch(`${sdk.url}/session/${props.sessionID}/diff`)
-      if (response.ok) {
-        const diffs = await response.json()
-        setSessionDiffs(diffs)
-      }
-    } catch (error) {
-      console.error("Failed to load session diffs", error)
-    }
-  }
-
-  // Load child sessions (subagents)
-  const loadChildSessions = async () => {
-    try {
-      const response = await fetch(`${sdk.url}/session/${props.sessionID}/children`)
-      if (response.ok) {
-        const children = await response.json()
-        setChildSessions(children)
-      }
-    } catch (error) {
-      console.error("Failed to load child sessions", error)
-    }
-  }
-
-  // Poll for session diffs and child sessions every 5 seconds
-  let updateInterval: NodeJS.Timeout
+  // Load favorites once on mount (no polling needed)
   onMount(() => {
-    loadSessionDiffs()
-    loadChildSessions()
-    updateInterval = setInterval(() => {
-      loadSessionDiffs()
-      loadChildSessions()
-    }, 5000)
-  })
-
-  onCleanup(() => {
-    if (updateInterval) clearInterval(updateInterval)
+    loadFavorites()
   })
 
   // Get favorite level for a tool
@@ -269,7 +234,7 @@ export function Sidebar(props: { sessionID: string; onToggle: () => void }) {
   }
 
   const uncommittedFiles = createMemo(() => {
-    return sessionDiffs().filter((d) => !committedFiles().has(d.file))
+    return diff().filter((d: any) => !committedFiles().has(d.file))
   })
 
   // Add keyboard shortcuts for tab switching (ctrl+1/2/3)
@@ -420,6 +385,10 @@ export function Sidebar(props: { sessionID: string; onToggle: () => void }) {
     toast.show({ variant: "info", message: "Todo addition coming soon - use chat to add todos for now" })
   }
 
+  function handleAddSubagent() {
+    dialog.replace(() => <DialogSubagentAdd sessionID={props.sessionID} />)
+  }
+
   // Debug: Log UI extensions data (commented out to reduce logging)
   // createMemo(() => {
   //   const extensions = uiExtensions.extensions()
@@ -437,9 +406,7 @@ export function Sidebar(props: { sessionID: string; onToggle: () => void }) {
   })
 
   const context = createMemo(() => {
-    const last = messages().findLast(
-      (x) => x.role === "assistant" && x.tokens?.output > 0,
-    ) as AssistantMessage
+    const last = messages().findLast((x) => x.role === "assistant" && x.tokens?.output > 0) as AssistantMessage
     if (!last || !last.tokens)
       return {
         tokens: 0,
@@ -550,7 +517,10 @@ export function Sidebar(props: { sessionID: string; onToggle: () => void }) {
             }}
             onMouseUp={() => handleTabChange("tools")}
           >
-            {" "}{activeTab() === "tools" ? "●" : "○"} Tools({toolsUsed().length + Object.keys(sync.data.mcp).length + sync.data.lsp.length + sync.data.plugin.length}){" "}
+            {" "}
+            {activeTab() === "tools" ? "●" : "○"} Tools(
+            {toolsUsed().length + Object.keys(sync.data.mcp).length + sync.data.lsp.length + sync.data.plugin.length}
+            ){" "}
           </text>
           <text
             style={{
@@ -560,7 +530,8 @@ export function Sidebar(props: { sessionID: string; onToggle: () => void }) {
             }}
             onMouseUp={() => handleTabChange("todos")}
           >
-            {" "}{activeTab() === "todos" ? "●" : "○"} Todos({todo().length}){" "}
+            {" "}
+            {activeTab() === "todos" ? "●" : "○"} Todos({todo().length}){" "}
           </text>
           <text
             style={{
@@ -570,7 +541,8 @@ export function Sidebar(props: { sessionID: string; onToggle: () => void }) {
             }}
             onMouseUp={() => handleTabChange("files")}
           >
-            {" "}{activeTab() === "files" ? "●" : "○"} Files({sessionDiffs().length}){" "}
+            {" "}
+            {activeTab() === "files" ? "●" : "○"} Files({diff().length}){" "}
           </text>
         </box>
 
@@ -578,7 +550,7 @@ export function Sidebar(props: { sessionID: string; onToggle: () => void }) {
         <Show when={activeTab() === "tools"}>
           <Show when={toolsUsed().length > 0}>
             <box marginTop={0}>
-              <text 
+              <text
                 attributes={TextAttributes.BOLD}
                 onMouseUp={() => {
                   if (renderer.getSelection()?.getSelectedText()) return
@@ -597,11 +569,7 @@ export function Sidebar(props: { sessionID: string; onToggle: () => void }) {
                         <box flexDirection="row" gap={1}>
                           <text
                             fg={
-                              level() === "global"
-                                ? "#FFD700"
-                                : level() === "project"
-                                  ? theme.accent
-                                  : theme.textMuted
+                              level() === "global" ? "#FFD700" : level() === "project" ? theme.accent : theme.textMuted
                             }
                             onMouseUp={() => {
                               if (renderer.getSelection()?.getSelectedText()) return
@@ -637,7 +605,7 @@ export function Sidebar(props: { sessionID: string; onToggle: () => void }) {
           </Show>
           <Show when={sync.data.lsp.length > 0}>
             <box marginTop={0}>
-              <text 
+              <text
                 attributes={TextAttributes.BOLD}
                 onMouseUp={() => {
                   if (renderer.getSelection()?.getSelectedText()) return
@@ -672,7 +640,7 @@ export function Sidebar(props: { sessionID: string; onToggle: () => void }) {
           </Show>
           <Show when={Object.keys(sync.data.mcp).length > 0}>
             <box marginTop={0}>
-              <text 
+              <text
                 attributes={TextAttributes.BOLD}
                 onMouseUp={() => {
                   if (renderer.getSelection()?.getSelectedText()) return
@@ -712,9 +680,7 @@ export function Sidebar(props: { sessionID: string; onToggle: () => void }) {
                         <text fg={theme.textMuted}>
                           <Switch>
                             <Match when={item.status === "connected"}>Connected</Match>
-                            <Match when={item.status === "failed" && item}>
-                              {(val) => <i>{val().error}</i>}
-                            </Match>
+                            <Match when={item.status === "failed" && item}>{(val) => <i>{val().error}</i>}</Match>
                             <Match when={item.status === "disabled"}>Disabled</Match>
                           </Switch>
                         </text>
@@ -764,7 +730,7 @@ export function Sidebar(props: { sessionID: string; onToggle: () => void }) {
           </Show>
           <Show when={sync.data.plugin.length > 0}>
             <box marginTop={0}>
-              <text 
+              <text
                 attributes={TextAttributes.BOLD}
                 onMouseUp={() => {
                   if (renderer.getSelection()?.getSelectedText()) return
@@ -797,13 +763,13 @@ export function Sidebar(props: { sessionID: string; onToggle: () => void }) {
                           <Show when={pluginTools()[plugin.name]?.length > 0}>
                             <text fg={theme.textMuted}>Tools/Functions:</text>
                             <For each={pluginTools()[plugin.name] || []}>
-                              {(tool: any) => (
-                                <text fg={theme.textMuted}>• {tool.name || tool}</text>
-                              )}
+                              {(tool: any) => <text fg={theme.textMuted}>• {tool.name || tool}</text>}
                             </For>
                           </Show>
                           <Show when={!pluginTools()[plugin.name] || pluginTools()[plugin.name]?.length === 0}>
-                            <text fg={theme.textMuted}><i>No tools registered</i></text>
+                            <text fg={theme.textMuted}>
+                              <i>No tools registered</i>
+                            </text>
                           </Show>
                         </box>
                       </Show>
@@ -821,9 +787,7 @@ export function Sidebar(props: { sessionID: string; onToggle: () => void }) {
             <Show when={todo().length > 0}>
               <For each={todo()}>
                 {(todo) => (
-                  <text
-                    style={{ fg: todo.status === "in_progress" ? theme.success : theme.textMuted }}
-                  >
+                  <text style={{ fg: todo.status === "in_progress" ? theme.success : theme.textMuted }}>
                     [{todo.status === "completed" ? "✓" : " "}] {todo.content}
                   </text>
                 )}
@@ -845,10 +809,10 @@ export function Sidebar(props: { sessionID: string; onToggle: () => void }) {
         </Show>
 
         <Show when={activeTab() === "files"}>
-          <Show when={sessionDiffs().length > 0}>
+          <Show when={diff().length > 0}>
             <box marginTop={0} flexDirection="column">
               <text attributes={TextAttributes.BOLD}>Modified Files</text>
-              <For each={sessionDiffs()}>
+              <For each={diff()}>
                 {(item) => {
                   const file = createMemo(() => {
                     const splits = item.file.split(path.sep).filter(Boolean)
@@ -858,16 +822,8 @@ export function Sidebar(props: { sessionID: string; onToggle: () => void }) {
                   })
                   const isCommitted = createMemo(() => committedFiles().has(item.file))
                   return (
-                    <box
-                      flexDirection="row"
-                      gap={1}
-                      justifyContent="space-between"
-                    >
-                      <text
-                        fg={theme.textMuted}
-                      >
-                        {file()}
-                      </text>
+                    <box flexDirection="row" gap={1} justifyContent="space-between">
+                      <text fg={theme.textMuted}>{file()}</text>
                       <box flexDirection="row" gap={1} flexShrink={0}>
                         <Show when={item.additions}>
                           <text fg={theme.diffAdded}>+{item.additions}</text>
@@ -885,22 +841,23 @@ export function Sidebar(props: { sessionID: string; onToggle: () => void }) {
         </Show>
 
         {/* Subagents Section - Always visible below tabs */}
-        <Show when={childSessions().length > 0}>
-          <box marginTop={1}>
-            <text 
-              attributes={TextAttributes.BOLD} 
-              fg={theme.accent}
-              onMouseUp={() => {
-                if (renderer.getSelection()?.getSelectedText()) return
-                toggleSection("subagents")
-              }}
-            >
-              {expandedSections().has("subagents") ? "▼" : "▶"} Subagents ({childSessions().length})
-            </text>
-            <Show when={expandedSections().has("subagents")}>
+        {/* Subagents Section - Always visible */}
+        <box marginTop={1} flexDirection="column">
+          <text
+            attributes={TextAttributes.BOLD}
+            fg={theme.accent}
+            onMouseUp={() => {
+              if (renderer.getSelection()?.getSelectedText()) return
+              toggleSection("subagents")
+            }}
+          >
+            {expandedSections().has("subagents") ? "▼" : "▶"} Subagents ({childSessions().length})
+          </text>
+          <Show when={expandedSections().has("subagents")}>
+            <box flexDirection="column">
               <For each={childSessions()}>
                 {(child) => {
-                  const status = child.orchestration?.status || "unknown"
+                  const status = (child as any).orchestration?.status || "unknown"
                   const statusColor =
                     status === "active"
                       ? theme.success
@@ -909,8 +866,7 @@ export function Sidebar(props: { sessionID: string; onToggle: () => void }) {
                         : status === "paused"
                           ? theme.warning
                           : theme.error
-                  const titleShort =
-                    child.title.length > 35 ? child.title.substring(0, 32) + "..." : child.title
+                  const titleShort = child.title.length > 35 ? child.title.substring(0, 32) + "..." : child.title
                   return (
                     <box
                       flexDirection="row"
@@ -931,9 +887,21 @@ export function Sidebar(props: { sessionID: string; onToggle: () => void }) {
                   )
                 }}
               </For>
-            </Show>
-          </box>
-        </Show>
+              <box marginTop={1}>
+                <text
+                  fg={theme.accent}
+                  attributes={TextAttributes.BOLD}
+                  onMouseUp={() => {
+                    if (renderer.getSelection()?.getSelectedText()) return
+                    handleAddSubagent()
+                  }}
+                >
+                  + Add Subagent
+                </text>
+              </box>
+            </box>
+          </Show>
+        </box>
       </box>
     </Show>
   )

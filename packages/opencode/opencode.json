@@ -11,12 +11,11 @@
     "cc_computer_use",
     "grep",
     "task",
-    "list",
     "write",
     "cc_bash",
     "cc_edit",
-    "switch_mode",
     "add_directory",
-    "ripgrep"
+    "ripgrep",
+    "list"
   ]
 }

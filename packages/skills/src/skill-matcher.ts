@@ -65,7 +65,7 @@ function phraseMatches(request: string, description: string): number {
  * Calculate context similarity based on additional hints
  */
 function contextScore(
-  request: string,
+  _request: string,
   description: string,
   context?: {
     currentFile?: string
@@ -248,7 +248,7 @@ export class SkillMatcher {
    * Generate a human-readable reason for the match
    */
   private generateMatchReason(
-    skill: SkillMetadata,
+    _skill: SkillMetadata,
     confidence: number,
     matchedKeywords: string[]
   ): string {

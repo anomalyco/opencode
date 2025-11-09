@@ -81,9 +81,20 @@ export const AuthLoginCommand = cmd({
         prompts.intro("Add credential")
         if (args.url) {
           const wellknown = await fetch(`${args.url}/.well-known/opencode`).then((x) => x.json() as any)
-          prompts.log.info(`Running \`${wellknown.auth.command.join(" ")}\``)
+
+          // Validate command is an array of strings
+          if (!Array.isArray(wellknown.auth.command)) {
+            throw new Error(`Invalid command: expected array, got ${typeof wellknown.auth.command}`)
+          }
+
+          const cmd = wellknown.auth.command.filter((x: any) => typeof x === "string")
+          if (cmd.length !== wellknown.auth.command.length) {
+            throw new Error(`Invalid command: some elements are not strings`)
+          }
+
+          prompts.log.info(`Running \`${cmd.join(" ")}\``)
           const proc = Bun.spawn({
-            cmd: wellknown.auth.command,
+            cmd,
             stdout: "pipe",
           })
           const exit = await proc.exited

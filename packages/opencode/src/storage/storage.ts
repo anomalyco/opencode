@@ -189,6 +189,16 @@ export namespace Storage {
 
   export async function update<T>(key: string[], fn: (draft: T) => void) {
     const dir = await state().then((x) => x.dir)
+    // Validate all key elements are strings
+    for (let i = 0; i < key.length; i++) {
+      if (typeof key[i] !== "string") {
+        const error = new Error(
+          `Storage.update: key[${i}] must be a string, got ${typeof key[i]}: ${JSON.stringify(key[i])}. Full key: ${JSON.stringify(key)}`,
+        )
+        log.error("invalid key", { key, index: i, value: key[i], type: typeof key[i] })
+        throw error
+      }
+    }
     const target = path.join(dir, ...key) + ".json"
     return withErrorHandling(async () => {
       using _ = await Lock.write("storage")
@@ -201,6 +211,16 @@ export namespace Storage {
 
   export async function write<T>(key: string[], content: T) {
     const dir = await state().then((x) => x.dir)
+    // Validate all key elements are strings
+    for (let i = 0; i < key.length; i++) {
+      if (typeof key[i] !== "string") {
+        const error = new Error(
+          `Storage.write: key[${i}] must be a string, got ${typeof key[i]}: ${JSON.stringify(key[i])}. Full key: ${JSON.stringify(key)}`,
+        )
+        log.error("invalid key", { key, index: i, value: key[i], type: typeof key[i] })
+        throw error
+      }
+    }
     const target = path.join(dir, ...key) + ".json"
     return withErrorHandling(async () => {
       using _ = await Lock.write("storage")

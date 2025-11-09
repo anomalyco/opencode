@@ -35,11 +35,7 @@ export namespace TaskHierarchy {
    * @param title - Optional title for subtask session
    * @returns Child session ID
    */
-  export async function createSubtask(
-    parentSessionID: string,
-    agentName: string,
-    title?: string,
-  ): Promise<string> {
+  export async function createSubtask(parentSessionID: string, agentName: string, title?: string): Promise<string> {
     log.info("creating subtask", { parentSessionID, agentName, title })
 
     // Get parent session to determine depth
@@ -48,10 +44,11 @@ export namespace TaskHierarchy {
     const parentMode = parent.orchestration?.pausedMode
 
     // Create new session for child
-    const childSessionID = await Session.create({
+    const childSession = await Session.create({
       title: title ?? `${agentName} subtask`,
       parentID: parentSessionID,
     })
+    const childSessionID = childSession.id
 
     // Initialize orchestration state for child
     await Session.update(childSessionID, (draft: Session.Info) => {
