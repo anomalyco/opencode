@@ -1,8 +1,11 @@
+import { iife } from "@/util/iife"
 import { MessageV2 } from "./message-v2"
 
 export namespace SessionRetry {
   export const RETRY_INITIAL_DELAY = 2000
   export const RETRY_BACKOFF_FACTOR = 2
+  export const RETRY_MAX_DELAY = 600_000 // 10 minutes
+  export const RETRY_HEADER_BUFFER = 1000 // add 1s buffer to server-provided delays
 
   export async function sleep(ms: number, signal: AbortSignal): Promise<void> {
     return new Promise((resolve, reject) => {
@@ -18,40 +21,57 @@ export namespace SessionRetry {
     })
   }
 
-  export function getRetryDelayInMs(error: MessageV2.APIError, attempt: number): number {
-    const base = RETRY_INITIAL_DELAY * Math.pow(RETRY_BACKOFF_FACTOR, attempt - 1)
-    const headers = error.data.responseHeaders
-    if (!headers) return base
+  export function getRetryDelayInMs(error: MessageV2.APIError, attempt: number) {
+    const delay = iife(() => {
+      const headers = error.data.responseHeaders
+      if (headers) {
+        const retryAfterMs = headers["retry-after-ms"]
+        if (retryAfterMs) {
+          const parsedMs = Number.parseFloat(retryAfterMs)
+          if (!Number.isNaN(parsedMs)) {
+            return parsedMs
+          }
+        }
 
-    const retryAfterMs = headers["retry-after-ms"]
-    if (retryAfterMs) {
-      const parsed = Number.parseFloat(retryAfterMs)
-      const normalized = normalizeDelay({ base, candidate: parsed })
-      if (normalized != null) return normalized
-    }
+        const retryAfter = headers["retry-after"]
+        if (retryAfter) {
+          const parsedSeconds = Number.parseFloat(retryAfter)
+          if (!Number.isNaN(parsedSeconds)) {
+            // convert seconds to milliseconds
+            return Math.ceil(parsedSeconds * 1000)
+          }
+          // Try parsing as HTTP date format
+          const parsed = Date.parse(retryAfter) - Date.now()
+          if (!Number.isNaN(parsed) && parsed > 0) {
+            return Math.ceil(parsed)
+          }
+        }
+      }
 
-    const retryAfter = headers["retry-after"]
-    if (!retryAfter) return base
+      return RETRY_INITIAL_DELAY * Math.pow(RETRY_BACKOFF_FACTOR, attempt - 1)
+    })
 
-    const seconds = Number.parseFloat(retryAfter)
-    if (!Number.isNaN(seconds)) {
-      const normalized = normalizeDelay({ base, candidate: seconds * 1000 })
-      if (normalized != null) return normalized
-      return base
-    }
+    // dont retry if wait is too far from now
+    if (delay > RETRY_MAX_DELAY) return undefined
 
-    const dateMs = Date.parse(retryAfter) - Date.now()
-    const normalized = normalizeDelay({ base, candidate: dateMs })
-    if (normalized != null) return normalized
-
-    return base
+    return delay
   }
 
-  function normalizeDelay(input: { base: number; candidate: number }): number | undefined {
-    if (Number.isNaN(input.candidate)) return undefined
-    if (input.candidate < 0) return undefined
-    if (input.candidate < 60_000) return input.candidate
-    if (input.candidate < input.base) return input.candidate
-    return undefined
+  export function getBoundedDelay(input: {
+    error: MessageV2.APIError
+    attempt: number
+    startTime: number
+    maxDuration?: number
+  }) {
+    const elapsed = Date.now() - input.startTime
+    const maxDuration = input.maxDuration ?? RETRY_MAX_DELAY
+    const remaining = maxDuration - elapsed
+
+    if (remaining <= 0) return undefined
+
+    const delay = getRetryDelayInMs(input.error, input.attempt)
+    if (!delay) return undefined
+
+    return Math.min(delay, remaining)
   }
 }
