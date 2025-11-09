@@ -475,30 +475,15 @@ function App() {
             </For>
           </Show>
         </box>
-        <box flexDirection="row" flexShrink={0} alignItems="center">
+        <box flexDirection="row" flexShrink={0}>
           <text fg={theme.textMuted} paddingRight={1}>
             tab
           </text>
-          <text
-            bg={local.agent.color(local.agent.current()?.name ?? "")}
-            fg={theme.background}
-            paddingTop={1}
-            paddingBottom={1}
-            onMouseUp={() => {
-              if (renderer.getSelection()?.getSelectedText()) return
-              dialog.replace(() => <DialogAgent />)
-            }}
-          >
-            ◀
-          </text>
+          <text bg={local.agent.color(local.agent.current()?.name ?? "")}> </text>
           <text
             bg={local.agent.color(local.agent.current()?.name ?? "")}
             fg={theme.background}
             wrapMode={undefined}
-            paddingTop={1}
-            paddingBottom={1}
-            paddingLeft={1}
-            paddingRight={2}
             onMouseUp={() => {
               if (renderer.getSelection()?.getSelectedText()) return
               dialog.replace(() => <DialogAgent />)
