@@ -174,15 +174,34 @@ export function Session() {
   })
 
   function toBottom() {
-    setTimeout(() => {
-      scroll.scrollTo(scroll.scrollHeight)
-    }, 50)
+    // Multiple attempts to ensure we scroll after content renders
+    setTimeout(() => scroll.scrollTo(scroll.scrollHeight), 50)
+    setTimeout(() => scroll.scrollTo(scroll.scrollHeight), 150)
+    setTimeout(() => scroll.scrollTo(scroll.scrollHeight), 300)
   }
 
   // snap to bottom when revert position changes
   createEffect((old) => {
     if (old !== session()?.revert?.messageID) toBottom()
     return session()?.revert?.messageID
+  })
+
+  // Auto-scroll to bottom when Task tool summary first appears
+  let lastScrolledToolId: string | null = null
+  createEffect(() => {
+    const msgs = messages()
+    const lastMsg = msgs[msgs.length - 1]
+    if (lastMsg?.role === "assistant" && "parts" in lastMsg) {
+      const taskTools = (lastMsg as AssistantMessage).parts.filter((p: Part): p is ToolPart => p.type === "tool" && p.tool === "task")
+      for (const tool of taskTools) {
+        // Only scroll when a new task tool with summary appears (not on updates)
+        if (tool.state.status === "running" && tool.state.metadata?.summary && tool.id !== lastScrolledToolId) {
+          lastScrolledToolId = tool.id
+          toBottom()
+          break
+        }
+      }
+    }
   })
 
   const local = useLocal()
@@ -1478,12 +1497,13 @@ ToolRegistry.register<typeof TaskTool>({
             }}
           >
             {/* Scrollable container with max height */}
-            <box
+            <scrollbox
               border="single"
               borderFg={theme.border}
               paddingLeft={1}
               paddingRight={1}
-              style={{ maxHeight: 10, overflowY: "scroll" }}
+              maxHeight={10}
+              scrollbarOptions={{ visible: false }}
             >
               {/* Running tools section */}
               <Show when={toolsByStatus().running.length > 0}>
@@ -1548,7 +1568,7 @@ ToolRegistry.register<typeof TaskTool>({
                   Queued: {toolsByStatus().pending.length} tool{toolsByStatus().pending.length !== 1 ? "s" : ""}
                 </text>
               </Show>
-            </box>
+            </scrollbox>
           </box>
         </Show>
 

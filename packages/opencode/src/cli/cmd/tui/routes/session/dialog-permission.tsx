@@ -304,6 +304,14 @@ export function DialogPermission(props: DialogPermissionProps) {
       >
         <box paddingLeft={1} paddingRight={1} gap={1}>
           <text attributes={TextAttributes.BOLD}>{currentPermission()!.title}</text>
+
+          {/* Show indicator for subagent permissions */}
+          <Show when={currentPermission()!.metadata?.originSessionID}>
+            <text fg={theme.accent}>
+              ⚡ From subagent: {currentPermission()!.metadata?.originSessionTitle as string || "Unknown"}
+            </text>
+          </Show>
+
           <text fg={theme.textMuted}>Type: {currentPermission()!.type}</text>
 
           {/* Show file path for edit permissions */}

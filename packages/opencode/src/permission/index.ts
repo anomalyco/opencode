@@ -5,6 +5,7 @@ import { Identifier } from "../id/id"
 import { Plugin } from "../plugin"
 import { Instance } from "../project/instance"
 import { Wildcard } from "../util/wildcard"
+import { Session } from "../session"
 
 export namespace Permission {
   const log = Log.create({ service: "permission" })
@@ -133,6 +134,33 @@ export namespace Permission {
         reject,
       }
       Bus.publish(Event.Updated, info)
+
+      // Forward permission to parent session if this is a child session
+      Session.get(input.sessionID)
+        .then((session) => {
+          if (session.parentID) {
+            const forwardedInfo: Info = {
+              ...info,
+              sessionID: session.parentID,
+              metadata: {
+                ...info.metadata,
+                originSessionID: input.sessionID,
+                originSessionTitle: session.title,
+              },
+            }
+            // Add to parent's pending list as well so responses work
+            pending[session.parentID] = pending[session.parentID] || {}
+            pending[session.parentID][info.id] = {
+              info: forwardedInfo,
+              resolve,  // Same resolve/reject as child - they should be linked
+              reject,
+            }
+            Bus.publish(Event.Updated, forwardedInfo)
+          }
+        })
+        .catch(() => {
+          // Session not found, ignore
+        })
     })
   }
 
@@ -144,12 +172,28 @@ export namespace Permission {
     const { pending, approved } = state()
     const match = pending[input.sessionID]?.[input.permissionID]
     if (!match) return
+
+    // Check if this is a forwarded permission from a child session
+    const originSessionID = match.info.metadata?.originSessionID as string | undefined
+
+    // Remove from current session's pending list
     delete pending[input.sessionID][input.permissionID]
     Bus.publish(Event.Replied, {
       sessionID: input.sessionID,
       permissionID: input.permissionID,
       response: input.response,
     })
+
+    // If this was forwarded from a child, also remove from child's pending list
+    if (originSessionID && pending[originSessionID]?.[input.permissionID]) {
+      delete pending[originSessionID][input.permissionID]
+      Bus.publish(Event.Replied, {
+        sessionID: originSessionID,
+        permissionID: input.permissionID,
+        response: input.response,
+      })
+    }
+
     if (input.response === "reject") {
       match.reject(new RejectedError(input.sessionID, input.permissionID, match.info.callID, match.info.metadata))
       return
@@ -161,6 +205,15 @@ export namespace Permission {
       for (const k of approveKeys) {
         approved[input.sessionID][k] = true
       }
+
+      // Also approve for the origin session if this was forwarded
+      if (originSessionID) {
+        approved[originSessionID] = approved[originSessionID] || {}
+        for (const k of approveKeys) {
+          approved[originSessionID][k] = true
+        }
+      }
+
       const items = pending[input.sessionID]
       if (!items) return
       for (const item of Object.values(items)) {
