@@ -144,7 +144,7 @@ export interface Hooks {
    * Called when a new message is received
    */
   "chat.message"?: (
-    input: { sessionID: string; agent?: string; model?: { providerID: string; modelID: string; messageID?: string } },
+    input: { sessionID: string; agent?: string; model?: { providerID: string; modelID: string }; messageID?: string },
     output: { message: UserMessage; parts: Part[] },
   ) => Promise<void>
   /**
