@@ -10,10 +10,23 @@ jobs:
     name: Release Zed Extension
     runs-on: ubuntu-latest
     steps:
+      - uses: actions/checkout@v4
+        if: github.event_name == 'workflow_dispatch'
+        with:
+          fetch-depth: 0
+
+      - name: Get latest version tag
+        if: github.event_name == 'workflow_dispatch'
+        id: get_tag
+        run: |
+          TAG=$(git tag --list 'v[0-9]*.*' --sort=-version:refname | head -n 1)
+          echo "tag=${TAG}" >> $GITHUB_OUTPUT
+          echo "Using tag: ${TAG}"
+
       - uses: huacnlee/zed-extension-action@6a168731f1d994905eeb552b3b42b0cb6c4d12e6
         with:
           extension-name: opencode
           push-to: sst/zed-extensions
-          tag-name: ${{ github.event.release.tag_name }}
+          tag-name: ${{ github.event.release.tag_name || steps.get_tag.outputs.tag }}
         env:
           COMMITTER_TOKEN: ${{ secrets.SST_GITHUB_TOKEN }}
