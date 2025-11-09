@@ -33,6 +33,7 @@ export namespace Agent {
       prompt: z.string().optional(),
       tools: z.record(z.string(), z.boolean()),
       options: z.record(z.string(), z.any()),
+      context: Config.ContextFilter.optional(),
     })
     .meta({
       ref: "Agent",
@@ -148,7 +149,7 @@ export namespace Agent {
           tools: {},
           builtIn: false,
         }
-      const { name, model, prompt, tools, description, temperature, top_p, mode, permission, color, ...extra } = value
+      const { name, model, prompt, tools, description, temperature, top_p, mode, permission, color, context, ...extra } = value
       item.options = {
         ...item.options,
         ...extra,
@@ -169,6 +170,7 @@ export namespace Agent {
       if (top_p != undefined) item.topP = top_p
       if (mode) item.mode = mode
       if (color) item.color = color
+      if (context) item.context = context
       // just here for consistency & to prevent it from being added as an option
       if (name) item.name = name
 

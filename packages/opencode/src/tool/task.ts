@@ -8,6 +8,7 @@ import { Identifier } from "../id/id"
 import { Agent } from "../agent/agent"
 import { SessionLock } from "../session/lock"
 import { SessionPrompt } from "../session/prompt"
+import { ContextFilter } from "../session/context-filter"
 
 export const TaskTool = Tool.define("task", async () => {
   const agents = await Agent.list().then((x) => x.filter((a) => a.mode !== "primary"))
@@ -65,6 +66,40 @@ export const TaskTool = Tool.define("task", async () => {
       ctx.abort.addEventListener("abort", () => {
         SessionLock.abort(session.id)
       })
+
+      // Gather parent session context if agent has context config
+      const contextParts: MessageV2.Part[] = []
+      if (agent.context && agent.context.mode !== "none") {
+        const parentMessages = await Session.messages({ sessionID: ctx.sessionID })
+        const filteredContext = ContextFilter.filter(parentMessages, agent.context)
+        
+        // DEBUG: Log context filtering results
+        const estimatedTokens = Math.round(
+          filteredContext.reduce((sum, part) => {
+            if (part.type === 'text') return sum + ((part as any).text.length / 4)
+            if (part.type === 'tool') return sum + 100
+            return sum + 50
+          }, 0)
+        )
+        
+        console.log('\n🔍 [CONTEXT FILTER DEBUG]')
+        console.log('  Agent:', agent.name)
+        console.log('  Mode:', agent.context.mode)
+        console.log('  Original messages:', parentMessages.length)
+        console.log('  Filtered parts:', filteredContext.length)
+        console.log('  Estimated tokens:', estimatedTokens)
+        console.log('  Config:', JSON.stringify(agent.context, null, 2))
+        console.log('')
+        
+        contextParts.push(...filteredContext)
+      } else {
+        console.log('\n🔍 [CONTEXT FILTER DEBUG]')
+        console.log('  Agent:', agent.name)
+        console.log('  Mode: none (or no config)')
+        console.log('  Context parts: 0')
+        console.log('')
+      }
+
       const promptParts = await SessionPrompt.resolvePromptParts(params.prompt)
       const result = await SessionPrompt.prompt({
         messageID,
@@ -80,7 +115,12 @@ export const TaskTool = Tool.define("task", async () => {
           task: false,
           ...agent.tools,
         },
-        parts: promptParts,
+        parts: [
+          // Include filtered parent context first
+          ...contextParts,
+          // Then the task prompt (with @file references resolved)
+          ...promptParts,
+        ],
       })
       unsub()
       let all

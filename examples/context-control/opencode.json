@@ -1,0 +1,72 @@
+{
+  "$schema": "https://opencode.ai/config.json",
+  "agent": {
+    "doc-reader": {
+      "mode": "subagent",
+      "model": "ollama/llama3.2:1b",
+      "temperature": 0.1,
+      "description": "Reads documentation and summarizes key insights",
+      "context": {
+        "mode": "filtered",
+        "includeMessageTypes": ["user"],
+        "includeToolResults": ["read"],
+        "maxTokens": 2000
+      },
+      "tools": {
+        "write": false,
+        "edit": false,
+        "bash": false
+      }
+    },
+    "code-reviewer": {
+      "mode": "subagent",
+      "model": "ollama/qwen2.5:1.5b",
+      "temperature": 0.2,
+      "description": "Reviews code changes for quality and best practices",
+      "context": {
+        "mode": "filtered",
+        "includeToolResults": ["read", "edit", "write"],
+        "includeFileChanges": true,
+        "maxMessages": 10,
+        "maxTokens": 8000
+      },
+      "tools": {
+        "write": false,
+        "edit": false,
+        "bash": false
+      }
+    },
+    "log-analyzer": {
+      "mode": "subagent",
+      "model": "ollama/llama3.2:1b",
+      "temperature": 0.0,
+      "description": "Analyzes log files for errors and patterns",
+      "context": {
+        "mode": "summary",
+        "includeFileChanges": false,
+        "maxTokens": 1000
+      },
+      "tools": {
+        "write": false,
+        "edit": false,
+        "bash": false,
+        "webfetch": false
+      }
+    },
+    "quick-search": {
+      "mode": "subagent",
+      "model": "ollama/qwen2.5:1.5b",
+      "temperature": 0.0,
+      "description": "Fast search for specific code patterns or functions",
+      "context": {
+        "mode": "none"
+      },
+      "tools": {
+        "write": false,
+        "edit": false,
+        "bash": false,
+        "webfetch": false
+      }
+    }
+  }
+}
