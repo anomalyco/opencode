@@ -10,6 +10,7 @@ import { useSDK } from "../../context/sdk"
 import { parsePatch } from "diff"
 import { LANGUAGE_EXTENSIONS } from "@/lsp/language"
 import * as path from "path"
+import { useLocal } from "../../context/local"
 
 export type DialogPermissionProps = {
   permissions: Permission.Info[]
@@ -21,9 +22,11 @@ export function DialogPermission(props: DialogPermissionProps) {
   const sdk = useSDK()
   const { theme, syntax } = useTheme()
   const dimensions = useTerminalDimensions()
+  const local = useLocal()
 
   const [store, setStore] = createStore({
     selectedIndex: 0,
+    selectedAgentIndex: 0,
   })
 
   let diffScrollBox: ScrollBoxRenderable
@@ -34,6 +37,27 @@ export function DialogPermission(props: DialogPermissionProps) {
     return props.permissions[index]
   })
   const hasMultiple = createMemo(() => props.permissions.length > 1)
+
+  const availableAgents = createMemo(() => local.agent.list())
+  const selectedAgent = createMemo(() => {
+    const perm = currentPermission()
+    if (!perm || perm.type !== "exit-plan-mode") return null
+    const agents = availableAgents()
+    const defaultAgent = perm.metadata.switchToAgent as string || "build"
+    const defaultIndex = agents.findIndex(a => a.name === defaultAgent)
+    const index = defaultIndex >= 0 ? defaultIndex : 0
+    return agents[Math.min(store.selectedAgentIndex || index, agents.length - 1)]
+  })
+
+  onMount(() => {
+    const perm = currentPermission()
+    if (perm && perm.type === "exit-plan-mode") {
+      const defaultAgent = perm.metadata.switchToAgent as string || "build"
+      const agents = availableAgents()
+      const index = agents.findIndex(a => a.name === defaultAgent)
+      if (index >= 0) setStore("selectedAgentIndex", index)
+    }
+  })
 
   // Parse diff and create colored content (same as Edit Tool in session/index.tsx)
   const parsedDiff = createMemo(() => {
@@ -128,23 +152,44 @@ export function DialogPermission(props: DialogPermissionProps) {
   })
 
   useKeyboard((evt) => {
-      // Scroll navigation for diff content
-      if (evt.name === "up" || evt.name === "k") {
-        if (diffScrollBox) {
-          diffScrollBox.scrollBy(-1)
+      const perm = currentPermission()
+
+      // Agent selection for exit-plan-mode permissions (left/right arrows)
+      if (perm && perm.type === "exit-plan-mode") {
+        if (evt.name === "left") {
+          const agents = availableAgents()
+          const prev = (store.selectedAgentIndex - 1 + agents.length) % agents.length
+          setStore("selectedAgentIndex", prev)
+          evt.preventDefault()
+          return
         }
-        evt.preventDefault()
+        if (evt.name === "right") {
+          const agents = availableAgents()
+          const next = (store.selectedAgentIndex + 1) % agents.length
+          setStore("selectedAgentIndex", next)
+          evt.preventDefault()
+          return
+        }
       }
-      if (evt.name === "down" || evt.name === "j") {
-        if (diffScrollBox) {
-          diffScrollBox.scrollBy(1)
+
+      // Scroll navigation for diff content (only for non-exit-plan-mode)
+      if (perm && perm.type !== "exit-plan-mode") {
+        if (evt.name === "up" || evt.name === "k") {
+          if (diffScrollBox) {
+            diffScrollBox.scrollBy(-1)
+          }
+          evt.preventDefault()
         }
-        evt.preventDefault()
+        if (evt.name === "down" || evt.name === "j") {
+          if (diffScrollBox) {
+            diffScrollBox.scrollBy(1)
+          }
+          evt.preventDefault()
+        }
       }
 
       // Actions
       if (evt.name === "return") {
-        const perm = currentPermission()
         if (perm) respondToPermission(perm.id, "once")
         evt.preventDefault()
       }
@@ -169,6 +214,13 @@ export function DialogPermission(props: DialogPermissionProps) {
   })
 
   function respondToPermission(permissionID: string, response: Permission.Response) {
+    const perm = props.permissions.find(p => p.id === permissionID)
+
+    if (perm && perm.type === "exit-plan-mode" && (response === "once" || response === "always")) {
+      const agent = selectedAgent()
+      if (agent) local.agent.set(agent.name)
+    }
+
     sdk.client.postSessionIdPermissionsPermissionId({
       path: {
         permissionID,
@@ -323,6 +375,46 @@ export function DialogPermission(props: DialogPermissionProps) {
         </scrollbox>
       </Show>
 
+      {/* Plan display for exit-plan-mode permissions */}
+      <Show when={currentPermission()!.type === "exit-plan-mode" && currentPermission()!.metadata.plan}>
+        <scrollbox
+          ref={(r: ScrollBoxRenderable) => (diffScrollBox = r)}
+          paddingTop={1}
+          paddingBottom={1}
+          backgroundColor={theme.backgroundElement}
+          maxHeight={diffMaxHeight()}
+          verticalScrollbarOptions={{ visible: true }}
+          horizontalScrollbarOptions={{ visible: false }}
+        >
+          <box paddingLeft={1} paddingRight={1}>
+            <code
+              filetype="markdown"
+              syntaxStyle={syntax()}
+              content={currentPermission()!.metadata.plan as string}
+            />
+          </box>
+        </scrollbox>
+
+        {/* Agent selection for exit-plan-mode */}
+        <box paddingTop={1} paddingLeft={1} gap={1}>
+          <text fg={theme.textMuted}>Switch to agent:</text>
+          <box flexDirection="row" flexWrap="wrap" gap={1}>
+            <For each={availableAgents()}>
+              {(agent, index) => (
+                <text>
+                  <Show when={index() === store.selectedAgentIndex}>
+                    <b style={{ fg: local.agent.color(agent.name) }}>{agent.name}</b>
+                  </Show>
+                  <Show when={index() !== store.selectedAgentIndex}>
+                    <span style={{ fg: theme.textMuted }}>{agent.name}</span>
+                  </Show>
+                </text>
+              )}
+            </For>
+          </box>
+        </box>
+      </Show>
+
       {/* Actions - Always visible at bottom */}
         <box paddingTop={1} flexShrink={0}>
           <box flexDirection="row" flexWrap="wrap" gap={1}>
@@ -344,10 +436,18 @@ export function DialogPermission(props: DialogPermissionProps) {
                 <span style={{ fg: theme.textMuted }}> reject all</span>
               </text>
             </Show>
-            <text>
-              <b style={{ fg: theme.textMuted }}>↑↓/jk</b>
-              <span style={{ fg: theme.textMuted }}> scroll</span>
-            </text>
+            <Show when={currentPermission()!.type === "exit-plan-mode"}>
+              <text>
+                <b style={{ fg: theme.accent }}>←→</b>
+                <span style={{ fg: theme.textMuted }}> select agent</span>
+              </text>
+            </Show>
+            <Show when={currentPermission()!.type !== "exit-plan-mode"}>
+              <text>
+                <b style={{ fg: theme.textMuted }}>↑↓/jk</b>
+                <span style={{ fg: theme.textMuted }}> scroll</span>
+              </text>
+            </Show>
           </box>
         </box>
       </box>
