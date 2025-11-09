@@ -170,7 +170,9 @@ export namespace SessionPrompt {
         state().queued.set(input.sessionID, queue)
       })
     }
-    const agent = await Agent.get(input.agent ?? "build")
+    // Use currentAgent from orchestration state if available (mode switching)
+    const agentName = session.orchestration?.currentAgent ?? input.agent ?? "build"
+    const agent = await Agent.get(agentName)
     const model = await resolveModel({
       agent,
       model: input.model,

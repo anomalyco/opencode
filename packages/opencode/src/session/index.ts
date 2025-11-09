@@ -76,6 +76,7 @@ export namespace Session {
           pausedAt: z.number().optional(),
           completedAt: z.number().optional(),
           result: z.string().optional(),
+          rootAgent: z.string().optional(),
           currentAgent: z.string().optional(),
           subtaskResults: z
             .array(

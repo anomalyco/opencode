@@ -479,38 +479,49 @@ function App() {
           <text fg={theme.textMuted} paddingRight={1}>
             tab
           </text>
-          <text bg={local.agent.color(local.agent.current()?.name ?? "")}> </text>
-          <text
-            bg={local.agent.color(local.agent.current()?.name ?? "")}
-            fg={theme.background}
-            wrapMode={undefined}
-            onMouseUp={() => {
-              if (renderer.getSelection()?.getSelectedText()) return
-              dialog.replace(() => <DialogAgent />)
-            }}
-          >
-            <span style={{ bold: true, underline: true }}>
-              {(() => {
-                const currentRoute = route.data
-                const session =
-                  currentRoute?.type === "session"
-                    ? sync.data.session.find((s: any) => s.id === (currentRoute as SessionRoute).sessionID)
-                    : undefined
-                const rootAgent = (session as any)?.orchestration?.rootAgent
-                const currentAgent = (session as any)?.orchestration?.currentAgent
+          {(() => {
+            const currentRoute = route.data
+            const session =
+              currentRoute?.type === "session"
+                ? sync.data.session.find((s: any) => s.id === (currentRoute as SessionRoute).sessionID)
+                : undefined
+            const rootAgent = (session as any)?.orchestration?.rootAgent
+            const currentAgent = (session as any)?.orchestration?.currentAgent
 
-                // If switched (currentAgent differs from rootAgent), show hierarchy
-                if (currentAgent && rootAgent && currentAgent !== rootAgent) {
-                  return `${currentAgent.toUpperCase()} ▸ ${rootAgent.toUpperCase()}`
-                }
+            // Determine which agent to use for color
+            const agentForColor =
+              currentAgent && rootAgent && currentAgent !== rootAgent
+                ? currentAgent
+                : (local.agent.current()?.name ?? "")
 
-                // Otherwise show current agent from local state
-                const agent = local.agent.current()
-                return agent?.name.toUpperCase() ?? "LOADING"
-              })()}
-            </span>
-            <span> AGENT </span>
-          </text>
+            return (
+              <>
+                <text bg={local.agent.color(agentForColor)}> </text>
+                <text
+                  bg={local.agent.color(agentForColor)}
+                  fg={theme.background}
+                  wrapMode={undefined}
+                  onMouseUp={() => {
+                    if (renderer.getSelection()?.getSelectedText()) return
+                    dialog.replace(() => <DialogAgent />)
+                  }}
+                >
+                  <span style={{ bold: true, underline: true }}>
+                    {(() => {
+                      // If switched (currentAgent differs from rootAgent), show hierarchy
+                      if (currentAgent && rootAgent && currentAgent !== rootAgent) {
+                        return `${rootAgent.toUpperCase()} > ${currentAgent.toUpperCase()}`
+                      }
+
+                      // Otherwise show current agent from local state
+                      const agent = local.agent.current()
+                      return agent?.name.toUpperCase() ?? "LOADING"
+                    })()}
+                  </span>
+                </text>
+              </>
+            )
+          })()}
         </box>
       </box>
     </box>

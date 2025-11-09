@@ -25,6 +25,7 @@ export interface DialogSelectProps<T> {
   }[]
   limit?: number
   current?: T
+  collapsibleDescriptions?: boolean
 }
 
 export interface DialogSelectOption<T = any> {
@@ -49,6 +50,7 @@ export function DialogSelect<T>(props: DialogSelectProps<T>) {
   const [store, setStore] = createStore({
     selected: 0,
     filter: "",
+    expandedValue: null as T | null,
   })
 
   let input: InputRenderable
@@ -59,8 +61,7 @@ export function DialogSelect<T>(props: DialogSelectProps<T>) {
       props.options,
       filter((x) => x.disabled !== true),
       take(props.limit ?? Infinity),
-      (x) =>
-        !needle ? x : fuzzysort.go(needle, x, { keys: ["title", "category"] }).map((x) => x.obj),
+      (x) => (!needle ? x : fuzzysort.go(needle, x, { keys: ["title", "category"] }).map((x) => x.obj)),
     )
     return result
   })
@@ -139,6 +140,17 @@ export function DialogSelect<T>(props: DialogSelectProps<T>) {
     if (evt.name === "pagedown" || (evt.ctrl && evt.name === "d")) {
       evt.preventDefault()
       move(10)
+    }
+    if (props.collapsibleDescriptions && (evt.name === "right" || evt.name === "space")) {
+      evt.preventDefault()
+      const option = selected()
+      if (option) {
+        setStore("expandedValue", (prev) => (isDeepEqual(prev, option.value) ? null : option.value))
+      }
+    }
+    if (props.collapsibleDescriptions && evt.name === "left") {
+      evt.preventDefault()
+      setStore("expandedValue", null)
     }
     if (evt.name === "return" || (evt.ctrl && evt.name === "return")) {
       const option = selected()
@@ -259,37 +271,52 @@ export function DialogSelect<T>(props: DialogSelectProps<T>) {
               <For each={options}>
                 {(option) => {
                   const active = createMemo(() => isDeepEqual(option.value, selected()?.value))
+                  const expanded = createMemo(() => isDeepEqual(store.expandedValue, option.value))
                   return (
                     <box
                       id={JSON.stringify(option.value)}
-                      flexDirection="row"
+                      flexDirection="column"
                       onMouseUp={() => {
-                        option.onSelect?.(dialog)
-                        props.onSelect?.(option)
+                        if (props.collapsibleDescriptions && option.description) {
+                          setStore("expandedValue", (prev) => (isDeepEqual(prev, option.value) ? null : option.value))
+                        } else {
+                          option.onSelect?.(dialog)
+                          props.onSelect?.(option)
+                        }
                       }}
                       onMouseOver={() => {
-                        const index = filtered().findIndex((x) =>
-                          isDeepEqual(x.value, option.value),
-                        )
+                        const index = filtered().findIndex((x) => isDeepEqual(x.value, option.value))
                         if (index === -1) return
                         moveTo(index)
                       }}
-                      backgroundColor={
-                        active() ? (option.bg ?? theme.primary) : RGBA.fromInts(0, 0, 0, 0)
-                      }
+                      backgroundColor={active() ? (option.bg ?? theme.primary) : RGBA.fromInts(0, 0, 0, 0)}
                       paddingLeft={1}
                       paddingRight={1}
-                      gap={1}
+                      gap={0}
                     >
-                      <Option
-                        title={option.title}
-                        footer={option.footer}
-                        description={
-                          option.description !== category ? option.description : undefined
-                        }
-                        active={active()}
-                        current={isDeepEqual(option.value, props.current)}
-                      />
+                      <box flexDirection="row" gap={1}>
+                        <Option
+                          title={option.title}
+                          footer={option.footer}
+                          description={
+                            props.collapsibleDescriptions
+                              ? undefined
+                              : option.description !== category
+                                ? option.description
+                                : undefined
+                          }
+                          active={active()}
+                          current={isDeepEqual(option.value, props.current)}
+                        />
+                        <Show when={props.collapsibleDescriptions && option.description}>
+                          <text fg={active() ? theme.background : theme.textMuted}>{expanded() ? "▼" : "▶"}</text>
+                        </Show>
+                      </box>
+                      <Show when={props.collapsibleDescriptions && expanded() && option.description}>
+                        <box paddingLeft={2} paddingTop={1}>
+                          <text fg={active() ? theme.background : theme.textMuted}>{option.description}</text>
+                        </box>
+                      </Show>
                     </box>
                   )
                 }}
@@ -327,11 +354,11 @@ function Option(props: {
     <>
       <box flexGrow={1} flexDirection="row">
         <Show when={props.current && !props.active}>
-        <text flexShrink={0} fg={theme.primary} marginRight={1}>
-          ●
-        </text>
-      </Show>
-      <text
+          <text flexShrink={0} fg={theme.primary} marginRight={1}>
+            ●
+          </text>
+        </Show>
+        <text
           fg={props.active ? theme.background : props.current ? theme.primary : theme.text}
           attributes={props.active ? TextAttributes.BOLD : undefined}
           overflow="hidden"

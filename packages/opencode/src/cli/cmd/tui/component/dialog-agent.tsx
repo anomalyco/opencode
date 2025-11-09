@@ -12,7 +12,8 @@ export function DialogAgent() {
       return {
         value: item.name,
         title: item.name,
-        description: item.builtIn ? "native" : undefined,
+        footer: item.builtIn ? "native" : undefined,
+        description: item.description,
       }
     }),
   )
@@ -22,6 +23,7 @@ export function DialogAgent() {
       title="Select agent"
       current={local.agent.current().name}
       options={options()}
+      collapsibleDescriptions={true}
       onSelect={(option) => {
         local.agent.set(option.value)
         dialog.clear()
