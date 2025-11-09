@@ -5,3 +5,33 @@ app.log
 
 # Screenshots folder for development
 .screenshots/
+
+# User-specific configuration
+opencode.json
+.opencode/
+.codesurf/
+
+# Auto-generated files with personal paths
+codebase.md
+
+# Test files
+test-*.tsx
+test-*.ts
+test-*.js
+test-*.sh
+test-*.html
+*.backup
+
+# Development scripts
+update-stainless-config.sh
+
+# macOS
+.DS_Store
+
+# Session databases and logs
+*.db
+*.db-shm
+*.db-wal
+*.log
+.crush/
+.turbo/
