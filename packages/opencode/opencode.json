@@ -15,7 +15,6 @@
     "cc_bash",
     "cc_edit",
     "add_directory",
-    "ripgrep",
     "list"
   ]
 }
