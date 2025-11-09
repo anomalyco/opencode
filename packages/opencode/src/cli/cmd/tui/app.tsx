@@ -177,7 +177,7 @@ function App() {
         local.model.set({ providerID, modelID }, { recent: true })
       }
       if (args.continue) {
-        const match = sync.data.session.at(-1)?.id
+        const match = sync.data.session.at(0)?.id
         if (match) {
           route.navigate({
             type: "session",

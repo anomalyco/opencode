@@ -10,7 +10,5 @@ export interface Args {
 
 export const { use: useArgs, provider: ArgsProvider } = createSimpleContext({
   name: "Args",
-  init: (props: Args) => {
-    return props
-  },
+  init: (props: Args) => props,
 })
