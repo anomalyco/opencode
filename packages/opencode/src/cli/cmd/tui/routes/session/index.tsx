@@ -114,6 +114,7 @@ export function Session() {
   const wide = createMemo(() => dimensions().width > 120)
   const sidebarVisible = createMemo(() => sidebar() === "show" || (sidebar() === "auto" && wide()))
   const contentWidth = createMemo(() => dimensions().width - (sidebarVisible() ? 42 : 0) - 4)
+  const showHeader = createMemo(() => sync.data.config.tui?.show_header ?? true)
 
   createEffect(() => {
     sync.session.sync(route.sessionID).catch(() => {
@@ -695,7 +696,7 @@ export function Session() {
                 </text>
               </box>
             </Show>
-            <Show when={!sidebarVisible()}>
+            <Show when={!sidebarVisible() && showHeader()}>
               <Header />
             </Show>
             <scrollbox

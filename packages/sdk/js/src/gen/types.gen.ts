@@ -293,6 +293,10 @@ export type Config = {
      * TUI scroll speed
      */
     scroll_speed?: number
+    /**
+     * Show header with title, context info, and share link when sidebar is hidden
+     */
+    show_header?: boolean
   }
   /**
    * Command configuration, see https://opencode.ai/docs/commands

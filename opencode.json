@@ -1,6 +1,9 @@
 {
   "$schema": "https://opencode.ai/config.json",
   "plugin": ["opencode-openai-codex-auth"],
+  "tui": {
+    "show_header": false
+  },
   "permission": {
     "bash": {
       "git push *": "allow"

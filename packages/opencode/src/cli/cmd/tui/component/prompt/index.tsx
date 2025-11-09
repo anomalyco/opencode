@@ -10,7 +10,7 @@ import {
   fg,
   type KeyBinding,
 } from "@opentui/core"
-import { createEffect, createMemo, Match, Switch, type JSX, onMount, batch } from "solid-js"
+import { createEffect, createMemo, Match, Switch, type JSX, onMount, batch, Show } from "solid-js"
 import { useLocal } from "@tui/context/local"
 import { useTheme } from "@tui/context/theme"
 import { SplitBorder } from "@tui/component/border"
@@ -27,9 +27,10 @@ import { useRenderer } from "@opentui/solid"
 import { Editor } from "@tui/util/editor"
 import { useExit } from "../../context/exit"
 import { Clipboard } from "../../util/clipboard"
-import type { FilePart } from "@opencode-ai/sdk"
+import type { FilePart, AssistantMessage } from "@opencode-ai/sdk"
 import { TuiEvent } from "../../event"
 import { iife } from "@/util/iife"
+import { pipe, sumBy } from "remeda"
 
 export type PromptProps = {
   sessionID?: string
@@ -63,6 +64,38 @@ export function Prompt(props: PromptProps) {
   const command = useCommandDialog()
   const renderer = useRenderer()
   const { theme, syntax } = useTheme()
+
+  const messages = createMemo(() => (props.sessionID ? sync.data.message[props.sessionID] ?? [] : []))
+
+  const cost = createMemo(() => {
+    const total = pipe(
+      messages(),
+      sumBy((x) => (x.role === "assistant" ? x.cost : 0)),
+    )
+    return new Intl.NumberFormat("en-US", {
+      style: "currency",
+      currency: "USD",
+    }).format(total)
+  })
+
+  const context = createMemo(() => {
+    const last = messages().findLast(
+      (x) => x.role === "assistant" && x.tokens.output > 0,
+    ) as AssistantMessage
+    if (!last) return
+    const total =
+      last.tokens.input +
+      last.tokens.output +
+      last.tokens.reasoning +
+      last.tokens.cache.read +
+      last.tokens.cache.write
+    const model = sync.data.provider.find((x) => x.id === last.providerID)?.models[last.modelID]
+    let result = total.toLocaleString()
+    if (model?.limit.context) {
+      result += "/" + Math.round((total / model.limit.context) * 100) + "%"
+    }
+    return result
+  })
 
   const textareaKeybindings = createMemo(() => {
     const newlineBindings = keybind.all.input_newline || []
@@ -710,10 +743,17 @@ export function Prompt(props: PromptProps) {
           ></box>
         </box>
         <box flexDirection="row" justifyContent="space-between">
-          <text flexShrink={0} wrapMode="none" fg={theme.text}>
-            <span style={{ fg: theme.textMuted }}>{local.model.parsed().provider}</span>{" "}
-            <span style={{ bold: true }}>{local.model.parsed().model}</span>
-          </text>
+          <box flexDirection="row" gap={2}>
+            <text flexShrink={0} wrapMode="none" fg={theme.text}>
+              <span style={{ fg: theme.textMuted }}>{local.model.parsed().provider}</span>{" "}
+              <span style={{ bold: true }}>{local.model.parsed().model}</span>
+            </text>
+            <Show when={context()}>
+              <text fg={theme.textMuted} wrapMode="none" flexShrink={0}>
+                {context()}
+              </text>
+            </Show>
+          </box>
           <Switch>
             <Match when={status() === "compacting"}>
               <text fg={theme.textMuted}>compacting...</text>
