@@ -30,11 +30,20 @@ declare module "sst" {
       url: string
     }
     AuthStorage: {
+      namespaceId: string
       type: "sst.cloudflare.Kv"
     }
     Bucket: {
       name: string
       type: "sst.cloudflare.Bucket"
+    }
+    CLOUDFLARE_API_TOKEN: {
+      type: "sst.sst.Secret"
+      value: string
+    }
+    CLOUDFLARE_DEFAULT_ACCOUNT_ID: {
+      type: "sst.sst.Secret"
+      value: string
     }
     Console: {
       type: "sst.cloudflare.SolidStart"
@@ -75,6 +84,10 @@ declare module "sst" {
     GOOGLE_CLIENT_ID: {
       type: "sst.sst.Secret"
       value: string
+    }
+    GatewayKv: {
+      namespaceId: string
+      type: "sst.cloudflare.Kv"
     }
     HONEYCOMB_API_KEY: {
       type: "sst.sst.Secret"

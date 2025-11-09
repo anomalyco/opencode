@@ -22,7 +22,7 @@ export const { use: useSync, provider: SyncProvider } = createSimpleContext({
   name: "Sync",
   init: () => {
     const [store, setStore] = createStore<{
-      ready: boolean
+      status: "loading" | "partial" | "complete"
       provider: Provider[]
       agent: Agent[]
       command: Command[]
@@ -50,7 +50,7 @@ export const { use: useSync, provider: SyncProvider } = createSimpleContext({
       formatter: FormatterStatus[]
     }>({
       config: {},
-      ready: false,
+      status: "loading",
       agent: [],
       permission: {},
       command: [],
@@ -220,27 +220,33 @@ export const { use: useSync, provider: SyncProvider } = createSimpleContext({
       sdk.client.config.providers().then((x) => setStore("provider", x.data!.providers)),
       sdk.client.app.agents().then((x) => setStore("agent", x.data ?? [])),
       sdk.client.config.get().then((x) => setStore("config", x.data!)),
-    ]).then(() => setStore("ready", true))
-
-    // non-blocking
-    Promise.all([
-      sdk.client.session.list().then((x) =>
-        setStore(
-          "session",
-          (x.data ?? []).toSorted((a, b) => a.id.localeCompare(b.id)),
+    ]).then(() => {
+      setStore("status", "partial")
+      // non-blocking
+      Promise.all([
+        sdk.client.session.list().then((x) =>
+          setStore(
+            "session",
+            (x.data ?? []).toSorted((a, b) => a.id.localeCompare(b.id)),
+          ),
         ),
-      ),
-      sdk.client.command.list().then((x) => setStore("command", x.data ?? [])),
-      sdk.client.lsp.status().then((x) => setStore("lsp", x.data!)),
-      sdk.client.mcp.status().then((x) => setStore("mcp", x.data!)),
-      sdk.client.formatter.status().then((x) => setStore("formatter", x.data!)),
-    ])
+        sdk.client.command.list().then((x) => setStore("command", x.data ?? [])),
+        sdk.client.lsp.status().then((x) => setStore("lsp", x.data!)),
+        sdk.client.mcp.status().then((x) => setStore("mcp", x.data!)),
+        sdk.client.formatter.status().then((x) => setStore("formatter", x.data!)),
+      ]).then(() => {
+        setStore("status", "complete")
+      })
+    })
 
     const result = {
       data: store,
       set: setStore,
+      get status() {
+        return store.status
+      },
       get ready() {
-        return store.ready
+        return store.status !== "loading"
       },
       session: {
         get(sessionID: string) {

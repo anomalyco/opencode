@@ -206,6 +206,8 @@ export namespace SessionPrompt {
     const params = await Plugin.trigger(
       "chat.params",
       {
+        sessionID: input.sessionID,
+        agent: agent.name,
         model: model.info,
         provider: await Provider.getProvider(model.providerID),
         message: userMsg,
@@ -353,15 +355,24 @@ export namespace SessionPrompt {
         max: maxRetries,
       })
       if (result.shouldRetry) {
+        const start = Date.now()
         for (let retry = 1; retry < maxRetries; retry++) {
           const lastRetryPart = result.parts.findLast((p): p is MessageV2.RetryPart => p.type === "retry")
 
           if (lastRetryPart) {
-            const delayMs = SessionRetry.getRetryDelayInMs(lastRetryPart.error, retry)
+            const delayMs = SessionRetry.getBoundedDelay({
+              error: lastRetryPart.error,
+              attempt: retry,
+              startTime: start,
+            })
+            if (!delayMs) {
+              break
+            }
 
             log.info("retrying with backoff", {
               attempt: retry,
               delayMs,
+              elapsed: Date.now() - start,
             })
 
             const stop = await SessionRetry.sleep(delayMs, abort.signal)
@@ -882,7 +893,12 @@ export namespace SessionPrompt {
 
     await Plugin.trigger(
       "chat.message",
-      {},
+      {
+        sessionID: input.sessionID,
+        agent: input.agent,
+        model: input.model,
+        messageID: input.messageID,
+      },
       {
         message: info,
         parts,

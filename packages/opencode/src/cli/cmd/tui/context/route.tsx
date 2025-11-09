@@ -14,14 +14,13 @@ export type Route = HomeRoute | SessionRoute
 
 export const { use: useRoute, provider: RouteProvider } = createSimpleContext({
   name: "Route",
-  init: (props: { data?: Route }) => {
+  init: () => {
     const [store, setStore] = createStore<Route>(
-      props.data ??
-        (process.env["OPENCODE_ROUTE"]
-          ? JSON.parse(process.env["OPENCODE_ROUTE"])
-          : {
-              type: "home",
-            }),
+      process.env["OPENCODE_ROUTE"]
+        ? JSON.parse(process.env["OPENCODE_ROUTE"])
+        : {
+            type: "home",
+          },
     )
 
     return {
