@@ -5,7 +5,6 @@ export namespace SessionRetry {
   export const RETRY_INITIAL_DELAY = 2000
   export const RETRY_BACKOFF_FACTOR = 2
   export const RETRY_MAX_DELAY = 600_000 // 10 minutes
-  export const RETRY_HEADER_BUFFER = 1000 // add 1s buffer to server-provided delays
 
   export async function sleep(ms: number, signal: AbortSignal): Promise<void> {
     return new Promise((resolve, reject) => {
