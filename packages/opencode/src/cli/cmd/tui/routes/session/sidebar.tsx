@@ -94,14 +94,32 @@ export function Sidebar(props: { sessionID: string; onToggle: () => void }) {
   const [projectFavorites, setProjectFavorites] = createSignal<Set<string>>(new Set())
   const [globalFavorites, setGlobalFavorites] = createSignal<Set<string>>(new Set())
   const [isAddingTodo, setIsAddingTodo] = createSignal(false)
-  const [expandedSections, setExpandedSections] = createSignal<Set<string>>(
-    new Set(["toolsUsed", "lsp", "mcp", "plugins", "subagents"]),
-  )
+  const [expandedSections, setExpandedSections] = createSignal<Set<string>>(new Set(["toolsUsed"]))
+  const [optimisticTodos, setOptimisticTodos] = createSignal<
+    Array<{ id: string; content: string; status: string; priority: string }>
+  >([])
 
   const uiExtensions = useUIExtensions()
   const session = createMemo(() => sync.session.get(props.sessionID)!)
   const diff = createMemo(() => sync.data.session_diff[props.sessionID] ?? [])
-  const todo = createMemo(() => sync.data.todo[props.sessionID] ?? [])
+  const serverTodos = createMemo(() => sync.data.todo[props.sessionID] ?? [])
+
+  // Merge optimistic todos with server todos
+  const todo = createMemo(() => {
+    const optimistic = optimisticTodos()
+    const server = serverTodos()
+
+    // Remove optimistic todos that now exist on server
+    const serverContents = new Set(server.map((t) => t.content))
+    const validOptimistic = optimistic.filter((t) => !serverContents.has(t.content))
+
+    // Update optimistic list if we removed any
+    if (validOptimistic.length !== optimistic.length) {
+      setOptimisticTodos(validOptimistic)
+    }
+
+    return [...validOptimistic, ...server]
+  })
   const messages = createMemo(() => sync.data.message[props.sessionID] ?? [])
 
   // Get child sessions reactively from sync.data (SSE-based, no polling)
@@ -340,13 +358,12 @@ export function Sidebar(props: { sessionID: string; onToggle: () => void }) {
 
   function toggleSection(sectionId: string) {
     setExpandedSections((prev) => {
-      const newSet = new Set(prev)
-      if (newSet.has(sectionId)) {
-        newSet.delete(sectionId)
-      } else {
-        newSet.add(sectionId)
+      // If clicking the already-open section, collapse it
+      if (prev.has(sectionId)) {
+        return new Set<string>()
       }
-      return newSet
+      // Otherwise, open only this section (mutually exclusive)
+      return new Set<string>([sectionId])
     })
   }
 
@@ -380,9 +397,52 @@ export function Sidebar(props: { sessionID: string; onToggle: () => void }) {
   }
 
   async function handleAddTodo() {
-    // TODO: Implement todo addition with proper input dialog
-    // For now, just show a message that this feature needs implementation
-    toast.show({ variant: "info", message: "Todo addition coming soon - use chat to add todos for now" })
+    dialog.replace(() => (
+      <DialogPrompt
+        title="Add Todo"
+        value=""
+        onConfirm={async (content: string) => {
+          if (!content.trim()) {
+            toast.show({ variant: "error", message: "Todo cannot be empty" })
+            return
+          }
+
+          // Immediately add optimistic todo
+          const optimisticTodo = {
+            id: `optimistic-${Date.now()}`,
+            content: content.trim(),
+            status: "pending",
+            priority: "medium",
+          }
+          setOptimisticTodos((prev) => [optimisticTodo, ...prev])
+
+          // Show immediate feedback
+          toast.show({ variant: "success", message: "Todo added" })
+          dialog.clear()
+
+          // Silently notify agent in background (no await to prevent UI blocking)
+          sdk.client.session
+            .prompt({
+              path: { id: props.sessionID },
+              body: {
+                parts: [
+                  {
+                    type: "text",
+                    text: `Add this todo: ${content.trim()}`,
+                  },
+                ],
+              },
+            })
+            .catch((error) => {
+              console.error("Failed to notify agent about todo:", error)
+              // Don't show error to user - they already see the todo
+            })
+        }}
+        onCancel={() => {
+          dialog.clear()
+        }}
+      />
+    ))
   }
 
   function handleAddSubagent() {
@@ -398,11 +458,41 @@ export function Sidebar(props: { sessionID: string; onToggle: () => void }) {
   // })
 
   const cost = createMemo(() => {
-    const total = messages().reduce((sum, x) => sum + (x.role === "assistant" ? x.cost : 0), 0)
-    return new Intl.NumberFormat("en-US", {
-      style: "currency",
-      currency: "USD",
-    }).format(total)
+    let totalCost = 0
+    let savedCost = 0
+
+    for (const msg of messages()) {
+      if (msg.role !== "assistant") continue
+
+      totalCost += msg.cost
+
+      // Calculate cost savings from cached tokens
+      const model = sync.data.provider.find((x) => x.id === msg.providerID)?.models[msg.modelID]
+      if (model && msg.tokens) {
+        const cacheRead = msg.tokens.cache?.read || 0
+        const cacheWrite = msg.tokens.cache?.write || 0
+
+        // Cache reads are typically 10x cheaper than regular input tokens
+        // Cache writes are same price as input but enable future reads
+        // Estimate savings: cache_read tokens would have cost full input price
+        const inputCostPer1k = model.cost.input
+        const cacheReadCostPer1k = model.cost.cache_read || inputCostPer1k * 0.1
+
+        const savedFromCacheRead = (cacheRead / 1000) * (inputCostPer1k - cacheReadCostPer1k)
+        savedCost += savedFromCacheRead
+      }
+    }
+
+    return {
+      spent: new Intl.NumberFormat("en-US", {
+        style: "currency",
+        currency: "USD",
+      }).format(totalCost),
+      saved: new Intl.NumberFormat("en-US", {
+        style: "currency",
+        currency: "USD",
+      }).format(savedCost),
+    }
   })
 
   const context = createMemo(() => {
@@ -435,11 +525,16 @@ export function Sidebar(props: { sessionID: string; onToggle: () => void }) {
     const model = sync.data.provider.find((x) => x.id === last.providerID)?.models[last.modelID]
     const tokenLimit = model?.limit.context || 0
 
+    // Calculate percentage of tokens that came from cache (free/discounted)
+    const cachedTokens = toolTokens // cache.read tokens
+    const freePercentage = total > 0 ? Math.round((cachedTokens / total) * 100) : 0
+
     return {
       tokens: total,
       tokenLimit,
       tokensFormatted: total.toLocaleString(),
       percentage: tokenLimit ? Math.round((total / tokenLimit) * 100) : 0,
+      freePercentage,
       systemTokens,
       assistantTokens,
       userTokens,
@@ -502,9 +597,13 @@ export function Sidebar(props: { sessionID: string; onToggle: () => void }) {
             backgroundColor={theme.backgroundPanel}
             width={40}
           />
-          <text fg={theme.textMuted}>{context().tokensFormatted} tokens</text>
+          <text fg={theme.textMuted}>
+            {context().tokensFormatted} tokens ({context().freePercentage}% cached)
+          </text>
           <text fg={theme.textMuted}>{context().percentage}% used</text>
-          <text fg={theme.textMuted}>{cost()} spent</text>
+          <text fg={theme.textMuted}>
+            {cost().spent} spent (saved {cost().saved})
+          </text>
         </box>
 
         {/* Tab Navigation */}
@@ -517,7 +616,6 @@ export function Sidebar(props: { sessionID: string; onToggle: () => void }) {
             }}
             onMouseUp={() => handleTabChange("tools")}
           >
-            {" "}
             {activeTab() === "tools" ? "●" : "○"} Tools(
             {toolsUsed().length + Object.keys(sync.data.mcp).length + sync.data.lsp.length + sync.data.plugin.length}
             ){" "}
@@ -530,7 +628,6 @@ export function Sidebar(props: { sessionID: string; onToggle: () => void }) {
             }}
             onMouseUp={() => handleTabChange("todos")}
           >
-            {" "}
             {activeTab() === "todos" ? "●" : "○"} Todos({todo().length}){" "}
           </text>
           <text
@@ -541,7 +638,6 @@ export function Sidebar(props: { sessionID: string; onToggle: () => void }) {
             }}
             onMouseUp={() => handleTabChange("files")}
           >
-            {" "}
             {activeTab() === "files" ? "●" : "○"} Files({diff().length}){" "}
           </text>
         </box>
@@ -557,7 +653,7 @@ export function Sidebar(props: { sessionID: string; onToggle: () => void }) {
                   toggleSection("toolsUsed")
                 }}
               >
-                {expandedSections().has("toolsUsed") ? "▼" : "▶"} Tools Used
+                {expandedSections().has("toolsUsed") ? "▼" : "▶"} Tools Used {`(${toolsUsed().length})`}
               </text>
               <Show when={expandedSections().has("toolsUsed")}>
                 <For each={toolsUsed()}>
@@ -612,7 +708,7 @@ export function Sidebar(props: { sessionID: string; onToggle: () => void }) {
                   toggleSection("lsp")
                 }}
               >
-                {expandedSections().has("lsp") ? "▼" : "▶"} LSP
+                {expandedSections().has("lsp") ? "▼" : "▶"} LSP {`(${sync.data.lsp.length})`}
               </text>
               <Show when={expandedSections().has("lsp")}>
                 <For each={sync.data.lsp}>
@@ -647,7 +743,7 @@ export function Sidebar(props: { sessionID: string; onToggle: () => void }) {
                   toggleSection("mcp")
                 }}
               >
-                {expandedSections().has("mcp") ? "▼" : "▶"} MCP
+                {expandedSections().has("mcp") ? "▼" : "▶"} MCP {`(${Object.keys(sync.data.mcp).length})`}
               </text>
               <Show when={expandedSections().has("mcp")}>
                 <For each={Object.entries(sync.data.mcp)}>
@@ -737,7 +833,7 @@ export function Sidebar(props: { sessionID: string; onToggle: () => void }) {
                   toggleSection("plugins")
                 }}
               >
-                {expandedSections().has("plugins") ? "▼" : "▶"} Plugins
+                {expandedSections().has("plugins") ? "▼" : "▶"} Plugins {`(${sync.data.plugin.length})`}
               </text>
               <Show when={expandedSections().has("plugins")}>
                 <For each={sync.data.plugin}>
