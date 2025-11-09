@@ -6,15 +6,19 @@ import type {
   Provider,
   Permission,
   UserMessage,
+  AssistantMessage,
   Part,
   Auth,
   Config,
+  Agent,
 } from "@opencode-ai/sdk"
 
 import type { BunShell } from "./shell"
 import { type ToolDefinition } from "./tool"
 
 export * from "./tool"
+
+export type MessageWithParts = { info: UserMessage | AssistantMessage; parts: Part[] }
 
 export type PluginInput = {
   client: ReturnType<typeof createOpencodeClient>
@@ -165,6 +169,21 @@ export interface Hooks {
       title: string
       output: string
       metadata: any
+    },
+  ) => Promise<void>
+  /**
+   * Append text to the system prompt.
+   * This hook is called at the beginning of each step in a turn, allowing plugins
+   * to dynamically add context to the system prompt based on the latest history.
+   */
+  "system.prompt.append"?: (
+    context: {
+      sessionID: string
+      agent: Agent
+      history: MessageWithParts[]
+    },
+    output: {
+      prompt: string[]
     },
   ) => Promise<void>
 }

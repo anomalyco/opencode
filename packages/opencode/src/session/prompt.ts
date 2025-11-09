@@ -256,6 +256,11 @@ export namespace SessionPrompt {
       await using _ = defer(async () => {
         await processor.end()
       })
+
+      // Dynamically append plugin prompts for this turn
+      const dynamicPrompts = await appendPluginPrompts(input.sessionID, agent, msgs)
+      const turnSystem = [...system, ...dynamicPrompts]
+
       const doStream = () =>
         streamText({
           onError(error) {
@@ -308,7 +313,7 @@ export namespace SessionPrompt {
           temperature: params.temperature,
           topP: params.topP,
           messages: [
-            ...system.map(
+            ...turnSystem.map(
               (x): ModelMessage => ({
                 role: "system",
                 content: x,
@@ -481,6 +486,38 @@ export namespace SessionPrompt {
       return input.agent.model
     }
     return Provider.defaultModel()
+  }
+
+  async function appendPluginPrompts(
+    sessionID: string,
+    agent: Agent.Info,
+    history: MessageV2.WithParts[],
+  ): Promise<string[]> {
+    const appendedPrompts: string[] = []
+    try {
+      const output = { prompt: [] as string[] }
+      await Plugin.trigger(
+        "system.prompt.append",
+        {
+          sessionID,
+          agent,
+          // Convert internal MessageV2 types to SDK types for plugin boundary
+          history: history.map((m) => ({
+            info: m.info as any, // Cast to SDK message types
+            parts: m.parts,
+          })),
+        },
+        output,
+      )
+      // Basic validation
+      if (Array.isArray(output.prompt)) {
+        appendedPrompts.push(...output.prompt.filter((p) => typeof p === "string"))
+      }
+    } catch (error) {
+      console.error(`Error triggering 'system.prompt.append' hook:`, error)
+      // Gracefully continue without plugin content
+    }
+    return appendedPrompts
   }
 
   async function resolveSystemPrompt(input: {
