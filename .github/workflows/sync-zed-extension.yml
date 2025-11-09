@@ -1,0 +1,16 @@
+on:
+  push:
+    tags:
+      - "v*"
+
+jobs:
+  zed:
+    name: Release Zed Extension
+    runs-on: ubuntu-latest
+    steps:
+      - uses: huacnlee/zed-extension-action@6a168731f1d994905eeb552b3b42b0cb6c4d12e6
+        with:
+          extension-name: opencode
+          push-to: sst/zed-extensions
+        env:
+          COMMITTER_TOKEN: ${{ secrets.SST_GITHUB_TOKEN }}
