@@ -64,17 +64,17 @@ export namespace Provider {
       const { Freemium } = await import("./freemium")
 
       return {
-        autoload: true,
+        autoload: true, // Always autoload - no API key required
         options: {
           headers: {
-            "HTTP-Referer": "https://opencode.ai/",
+            "HTTP-Referer": "https://codesurf.ai/",
             "X-Title": "Codesurf Auto",
           },
         },
         async getModel(sdk: any, modelID: string) {
           log.info("codesurf routing", { modelID })
 
-          // All three auto models use smart free model selection
+          // All three auto models use smart free model selection from OpenRouter
           const freeModels = await Freemium.getFreeModels()
           const selected = Freemium.selectBestModel(freeModels)
           if (!selected) throw new Error("No free models available")
@@ -439,7 +439,7 @@ export namespace Provider {
         id: "codesurf",
         name: "Codesurf",
         npm: "@ai-sdk/openai-compatible",
-        env: ["OPENROUTER_API_KEY"],
+        env: [], // No API key required - uses free models
         api: "https://openrouter.ai/api/v1",
         models: {
           auto: {

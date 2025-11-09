@@ -1,7 +1,7 @@
 {
   "$schema": "https://json.schemastore.org/package.json",
-  "version": "1.0.51",
-  "name": "opencode",
+  "version": "1.0.53",
+  "name": "codesurf",
   "type": "module",
   "scripts": {
     "typecheck": "tsgo --noEmit",
