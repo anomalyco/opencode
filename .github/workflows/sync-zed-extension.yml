@@ -2,9 +2,8 @@ name: "sync-zed-extension"
 
 on:
   workflow_dispatch:
-  push:
-    tags:
-      - "v[0-9]+.*"
+  release:
+    types: [published]
 
 jobs:
   zed:
@@ -15,5 +14,6 @@ jobs:
         with:
           extension-name: opencode
           push-to: sst/zed-extensions
+          tag-name: ${{ github.event.release.tag_name }}
         env:
           COMMITTER_TOKEN: ${{ secrets.SST_GITHUB_TOKEN }}
