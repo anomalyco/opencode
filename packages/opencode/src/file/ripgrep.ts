@@ -283,7 +283,8 @@ export namespace Ripgrep {
       children: [],
     }
     for (const file of files) {
-      if (file.includes(".opencode")) continue
+      // CodeSurf Migration: Ignore both .opencode and .codesurf directories
+      if (file.includes(".opencode") || file.includes(".codesurf")) continue
       const parts = file.split(path.sep)
       getPath(root, parts, true)
     }

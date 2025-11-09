@@ -22,7 +22,9 @@ interface MemoryStore {
   lastUpdated: number
 }
 
-const MEMORY_FILE = ".opencode/memory.json"
+// CodeSurf Migration: Use dynamic folder based on CODESURF_FOLDER env var
+import { Flag } from "../../flag/flag"
+const MEMORY_FILE = `${Flag.CODESURF_FOLDER}/memory.json`
 
 async function loadMemory(): Promise<MemoryStore> {
   const file = Bun.file(MEMORY_FILE)
@@ -112,9 +114,7 @@ export const MemoryListCommand = cmd({
       memories = memories.slice(0, args.limit)
 
       UI.println(`🧠 Memory Store (${store.memories.length} total memories)`)
-      UI.println(
-        `Showing ${memories.length} memories${args.type ? ` (filtered by: ${args.type})` : ""}`,
-      )
+      UI.println(`Showing ${memories.length} memories${args.type ? ` (filtered by: ${args.type})` : ""}`)
       UI.println(`Sorted by: ${args.sort}`)
       UI.empty()
 
@@ -129,12 +129,8 @@ export const MemoryListCommand = cmd({
                 ? `${Math.floor(age / 3600)}h ago`
                 : `${Math.floor(age / 86400)}d ago`
 
-        UI.println(
-          `📌 [${memory.metadata.type}] ${ageStr} | Importance: ${memory.metadata.importance}/10`,
-        )
-        UI.println(
-          `   ${memory.content.substring(0, 200)}${memory.content.length > 200 ? "..." : ""}`,
-        )
+        UI.println(`📌 [${memory.metadata.type}] ${ageStr} | Importance: ${memory.metadata.importance}/10`)
+        UI.println(`   ${memory.content.substring(0, 200)}${memory.content.length > 200 ? "..." : ""}`)
         UI.println(`   ID: ${memory.id}`)
         if (memory.metadata.tags && memory.metadata.tags.length > 0) {
           UI.println(`   Tags: ${memory.metadata.tags.join(", ")}`)
@@ -187,9 +183,7 @@ export const MemorySearchCommand = cmd({
 
       // Simple keyword search
       const query = (args.query || "").toLowerCase()
-      const results = memories
-        .filter((m) => m.content.toLowerCase().includes(query))
-        .slice(0, args.limit)
+      const results = memories.filter((m) => m.content.toLowerCase().includes(query)).slice(0, args.limit)
 
       if (results.length === 0) {
         UI.println(`🔍 No memories found for: "${args.query}"`)
@@ -274,9 +268,7 @@ export const MemoryAddCommand = cmd({
       if (prompts.isCancel(tagsInput)) throw new UI.CancelledError()
 
       const tags =
-        typeof tagsInput === "string" && tagsInput.length > 0
-          ? tagsInput.split(",").map((t) => t.trim())
-          : undefined
+        typeof tagsInput === "string" && tagsInput.length > 0 ? tagsInput.split(",").map((t) => t.trim()) : undefined
 
       const store = await loadMemory()
 
@@ -438,9 +430,7 @@ export const MemoryStatsCommand = cmd({
 
       UI.println(`Average Importance: ${avgImportance.toFixed(1)}/10`)
       UI.println(`Oldest Memory: ${oldestAge}d ago`)
-      UI.println(
-        `Newest Memory: ${newestAge < 60 ? newestAge + "s" : Math.floor(newestAge / 60) + "m"} ago`,
-      )
+      UI.println(`Newest Memory: ${newestAge < 60 ? newestAge + "s" : Math.floor(newestAge / 60) + "m"} ago`)
       UI.println(`Unique Tags: ${tags.size}`)
 
       if (tags.size > 0) {

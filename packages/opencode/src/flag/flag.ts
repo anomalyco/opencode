@@ -1,4 +1,8 @@
 export namespace Flag {
+  // CodeSurf Migration
+  export const CODESURF_FOLDER = process.env["CODESURF_FOLDER"] || ".codesurf"
+  export const CODESURF_COMPATIBILITY_MODE = CODESURF_FOLDER === ".opencode"
+
   export const OPENCODE_AUTO_SHARE = truthy("OPENCODE_AUTO_SHARE")
   export const OPENCODE_CONFIG = process.env["OPENCODE_CONFIG"]
   export const OPENCODE_CONFIG_DIR = process.env["OPENCODE_CONFIG_DIR"]

@@ -6,6 +6,7 @@ import { Agent } from "../../agent/agent"
 import path from "path"
 import matter from "gray-matter"
 import { Instance } from "../../project/instance"
+import { Flag } from "../../flag/flag"
 
 const AgentCreateCommand = cmd({
   command: "create",
@@ -118,8 +119,10 @@ const AgentCreateCommand = cmd({
         }
 
         const content = matter.stringify(generated.systemPrompt, frontmatter)
+        // CodeSurf Migration: Use dynamic folder based on CODESURF_FOLDER env var
+        const projectFolder = Flag.CODESURF_FOLDER
         const filePath = path.join(
-          scope === "global" ? Global.Path.config : path.join(Instance.worktree, ".opencode"),
+          scope === "global" ? Global.Path.config : path.join(Instance.worktree, projectFolder),
           `agent`,
           `${generated.identifier}.md`,
         )

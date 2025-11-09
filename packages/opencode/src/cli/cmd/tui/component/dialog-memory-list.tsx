@@ -23,7 +23,9 @@ interface MemoryStore {
   lastUpdated: number
 }
 
-const MEMORY_FILE = ".opencode/memory.json"
+// CodeSurf Migration: Use dynamic folder based on CODESURF_FOLDER env var
+import { Flag } from "../../../../flag/flag"
+const MEMORY_FILE = `${Flag.CODESURF_FOLDER}/memory.json`
 
 async function loadMemories(): Promise<Memory[]> {
   try {

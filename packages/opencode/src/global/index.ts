@@ -3,15 +3,20 @@ import { xdgData, xdgCache, xdgConfig, xdgState } from "xdg-basedir"
 import path from "path"
 import os from "os"
 
-const app = "opencode"
-const legacyApp = "opencode" // No legacy needed since we're using the same name
+// CodeSurf Migration: Dynamic app name based on CODESURF_FOLDER env var
+// - If CODESURF_FOLDER=".opencode" → Use "opencode" (compatibility mode, shared sessions)
+// - Otherwise → Use "codesurf" (default, independent installation)
+const appFolder = process.env["CODESURF_FOLDER"] || ".codesurf"
+const isCompatibilityMode = appFolder === ".opencode"
+const app = isCompatibilityMode ? "opencode" : "codesurf"
+const legacyApp = "opencode"
 
 const data = path.join(xdgData!, app)
 const cache = path.join(xdgCache!, app)
 const config = path.join(xdgConfig!, app)
 const state = path.join(xdgState!, app)
 
-// Legacy paths for migration
+// Legacy paths for migration (OpenCode paths)
 const legacyData = path.join(xdgData!, legacyApp)
 const legacyCache = path.join(xdgCache!, legacyApp)
 const legacyConfig = path.join(xdgConfig!, legacyApp)

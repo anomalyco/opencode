@@ -55,11 +55,18 @@ export namespace Config {
     result.mode = result.mode || {}
     result.plugin = result.plugin || []
 
+    // CodeSurf Migration: Dynamic directory targets based on compatibility mode
+    // IMPORTANT: Order matters! Last target found wins due to mergeDeep
+    // So we search .opencode FIRST, then .codesurf LAST to give .codesurf precedence
+    const isCompatMode = Flag.CODESURF_COMPATIBILITY_MODE
+    const projectFolder = Flag.CODESURF_FOLDER
+    const targets = isCompatMode ? [".opencode"] : [".opencode", projectFolder]
+
     const directories = [
       Global.Path.config,
       ...(await Array.fromAsync(
         Filesystem.up({
-          targets: [".opencode"],
+          targets,
           start: Instance.directory,
           stop: Instance.worktree,
         }),
@@ -75,7 +82,14 @@ export namespace Config {
     for (const dir of directories) {
       await assertValid(dir)
 
-      for (const file of ["opencode.jsonc", "opencode.json"]) {
+      // CodeSurf Migration: Load config files based on mode
+      // In compatibility mode: only load opencode.json/jsonc
+      // In normal mode: load both (codesurf takes precedence)
+      const configFiles = isCompatMode
+        ? ["opencode.jsonc", "opencode.json"]
+        : ["opencode.jsonc", "opencode.json", "codesurf.jsonc", "codesurf.json"]
+
+      for (const file of configFiles) {
         result = mergeDeep(result, await loadFile(path.join(dir, file)))
         // to satisy the type checker
         result.agent ??= {}
@@ -176,7 +190,9 @@ export namespace Config {
       if (!md.data) continue
 
       const name = (() => {
-        const patterns = ["/.opencode/command/", "/command/"]
+        // CodeSurf Migration: Support both .opencode and .codesurf directories
+        const projectFolder = Flag.CODESURF_FOLDER
+        const patterns = [`/${projectFolder}/command/`, "/.opencode/command/", "/command/"]
         const pattern = patterns.find((p) => item.includes(p))
 
         if (pattern) {
@@ -215,12 +231,16 @@ export namespace Config {
       if (!md.data) continue
 
       // Extract relative path from agent folder for nested agents
+      // CodeSurf Migration: Support both .opencode and .codesurf directories
       let agentName = path.basename(item, ".md")
-      const agentFolderPath = item.includes("/.opencode/agent/")
-        ? item.split("/.opencode/agent/")[1]
-        : item.includes("/agent/")
-          ? item.split("/agent/")[1]
-          : agentName + ".md"
+      const projectFolder = Flag.CODESURF_FOLDER
+      const agentFolderPath = item.includes(`/${projectFolder}/agent/`)
+        ? item.split(`/${projectFolder}/agent/`)[1]
+        : item.includes("/.opencode/agent/")
+          ? item.split("/.opencode/agent/")[1]
+          : item.includes("/agent/")
+            ? item.split("/agent/")[1]
+            : agentName + ".md"
 
       // If agent is in a subfolder, include folder path in name
       if (agentFolderPath.includes("/")) {
