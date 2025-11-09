@@ -16,6 +16,7 @@ export const Instance = {
   async provide<R>(input: { directory: string; init?: () => Promise<any>; fn: () => R }): Promise<R> {
     let existing = cache.get(input.directory)
     if (!existing) {
+      Log.Default.info("creating instance", { directory: input.directory })
       existing = iife(async () => {
         const project = await Project.fromDirectory(input.directory)
         const ctx = {
