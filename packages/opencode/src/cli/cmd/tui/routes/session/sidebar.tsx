@@ -556,7 +556,7 @@ export function Sidebar(props: { sessionID: string; onToggle: () => void }) {
               props.onToggle()
             }}
           >
-            ▶
+            ◀
           </text>
         </box>
         <box>
@@ -606,7 +606,6 @@ export function Sidebar(props: { sessionID: string; onToggle: () => void }) {
           </text>
         </box>
 
-        {/* Tab Navigation */}
         <box flexDirection="row" gap={0} width={40}>
           <text
             style={{

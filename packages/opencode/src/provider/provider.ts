@@ -60,6 +60,30 @@ export namespace Provider {
         },
       }
     },
+    async codesurf() {
+      const { Freemium } = await import("./freemium")
+
+      return {
+        autoload: true,
+        options: {
+          headers: {
+            "HTTP-Referer": "https://opencode.ai/",
+            "X-Title": "Codesurf Auto",
+          },
+        },
+        async getModel(sdk: any, modelID: string) {
+          log.info("codesurf routing", { modelID })
+
+          // All three auto models use smart free model selection
+          const freeModels = await Freemium.getFreeModels()
+          const selected = Freemium.selectBestModel(freeModels)
+          if (!selected) throw new Error("No free models available")
+
+          log.info("codesurf selected model", { from: modelID, to: selected.id })
+          return sdk(selected.id)
+        },
+      }
+    },
     async opencode(input) {
       const hasKey = await (async () => {
         if (input.env.some((item) => process.env[item])) return true
@@ -402,6 +426,55 @@ export namespace Provider {
             temperature: true,
             tool_call: true,
             cost: { input: 0, output: 0, cache_read: 0, cache_write: 0 },
+            limit: { context: 256000, output: 16000 },
+            options: {},
+          },
+        },
+      }
+    }
+
+    // Add Codesurf provider with Auto models
+    if (!disabled.has("codesurf")) {
+      database["codesurf"] = {
+        id: "codesurf",
+        name: "Codesurf",
+        npm: "@ai-sdk/openai-compatible",
+        env: ["OPENROUTER_API_KEY"],
+        api: "https://openrouter.ai/api/v1",
+        models: {
+          auto: {
+            id: "auto",
+            name: "Auto (Smart Selection)",
+            release_date: "2025-01-01",
+            attachment: true,
+            reasoning: true,
+            temperature: true,
+            tool_call: true,
+            cost: { input: 0, output: 0, cache_read: 0, cache_write: 0 },
+            limit: { context: 256000, output: 16000 },
+            options: {},
+          },
+          "auto-free": {
+            id: "auto-free",
+            name: "Auto-Free (Only Free Models)",
+            release_date: "2025-01-01",
+            attachment: true,
+            reasoning: true,
+            temperature: true,
+            tool_call: true,
+            cost: { input: 0, output: 0, cache_read: 0, cache_write: 0 },
+            limit: { context: 256000, output: 16000 },
+            options: {},
+          },
+          "auto-hybrid": {
+            id: "auto-hybrid",
+            name: "Auto-Hybrid (Mostly Free, Paid When Needed)",
+            release_date: "2025-01-01",
+            attachment: true,
+            reasoning: true,
+            temperature: true,
+            tool_call: true,
+            cost: { input: 0.0005, output: 0.0015, cache_read: 0, cache_write: 0 },
             limit: { context: 256000, output: 16000 },
             options: {},
           },
