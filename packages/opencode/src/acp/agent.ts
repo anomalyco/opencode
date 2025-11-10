@@ -150,8 +150,10 @@ export namespace ACP {
                 if (!message || message.info.role !== "assistant") return
 
                 if (part.type === "tool") {
-                  switch (part.state.status) {
+                  switch (part.state.status) {    
                     case "pending":
+                      break
+                    case "running":
                       await this.connection
                         .sessionUpdate({
                           sessionId,
@@ -160,29 +162,13 @@ export namespace ACP {
                             toolCallId: part.callID,
                             title: part.tool,
                             kind: toToolKind(part.tool),
-                            status: "pending",
-                            locations: [],
-                            rawInput: {},
-                          },
-                        })
-                        .catch((err) => {
-                          log.error("failed to send tool pending to ACP", { error: err })
-                        })
-                      break
-                    case "running":
-                      await this.connection
-                        .sessionUpdate({
-                          sessionId,
-                          update: {
-                            sessionUpdate: "tool_call_update",
-                            toolCallId: part.callID,
                             status: "in_progress",
-                            locations: toLocations(part.tool, part.state.input),
+                            locations: [],
                             rawInput: part.state.input,
                           },
                         })
                         .catch((err) => {
-                          log.error("failed to send tool in_progress to ACP", { error: err })
+                          log.error("failed to send tool pending to ACP", { error: err })
                         })
                       break
                     case "completed":
