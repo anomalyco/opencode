@@ -232,13 +232,18 @@ registerCustomTheme("OpenCode", () => {
         },
       },
       {
+        scope: ["meta.object.member"],
+        settings: {
+          foreground: "var(--syntax-primitive)",
+        },
+      },
+      {
         scope: [
           "variable.parameter.function",
           "meta.jsx.children",
           "meta.block",
           "meta.tag.attributes",
           "entity.name.constant",
-          "meta.object.member",
           "meta.embedded.expression",
           "meta.template.expression",
           "string.other.begin.yaml",
