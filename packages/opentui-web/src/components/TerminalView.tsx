@@ -12,12 +12,18 @@ export const TerminalView: Component = () => {
   const sync = useSync()
   const sdk = useSDK()
 
-  // Calculate dimensions based on viewport
+  // Calculate dimensions to fill viewport
   const calculateDims = () => {
+    // Calculate character dimensions in pixels (Berkeley Mono 16px)
     const charWidth = 9.6
     const charHeight = 24
+
+    // Calculate how many cols/rows fit in viewport
     const cols = Math.floor(window.innerWidth / charWidth)
     const rows = Math.floor(window.innerHeight / charHeight)
+
+    console.log(`Calculated dimensions: ${cols}x${rows} (viewport: ${window.innerWidth}x${window.innerHeight})`)
+
     return { cols, rows }
   }
 
@@ -25,18 +31,26 @@ export const TerminalView: Component = () => {
   const [grid, setGrid] = createSignal<TerminalCell[][]>([])
   const [selectedSessionID, setSelectedSessionID] = createSignal<string | null>(null)
   const [inputText, setInputText] = createSignal("")
+  const [cursorVisible, setCursorVisible] = createSignal(true)
+  const [scrollOffset, setScrollOffset] = createSignal(0)
+  const [sessionScrollOffset, setSessionScrollOffset] = createSignal(0)
 
   const drawTerminal = () => {
     const { cols, rows } = dims()
 
-    // Layout regions
+    // Layout regions - scale proportionally based on total cols
+    const SESSION_LIST_WIDTH = Math.max(30, Math.floor(cols * 0.25)) // 25% of width, min 30
+    const SIDEBAR_WIDTH = Math.max(30, Math.floor(cols * 0.25)) // 25% of width, min 30
     const SESSION_LIST_START = 0
-    const SESSION_LIST_WIDTH = 40
-    const MESSAGE_START = 40
-    const MESSAGE_WIDTH = cols - 80
-    const SIDEBAR_START = cols - 40
-    const SIDEBAR_WIDTH = 40
-    const BOTTOM_BAR_ROW = rows - 1
+    const MESSAGE_START = SESSION_LIST_WIDTH
+    const MESSAGE_WIDTH = cols - SESSION_LIST_WIDTH - SIDEBAR_WIDTH
+    const SIDEBAR_START = cols - SIDEBAR_WIDTH
+    const BOTTOM_BAR_ROW_1 = rows - 2
+    const BOTTOM_BAR_ROW_2 = rows - 1
+
+    console.log(
+      `Layout: ${cols}x${rows}, session:${SESSION_LIST_WIDTH}, msg:${MESSAGE_WIDTH}, sidebar:${SIDEBAR_WIDTH}`,
+    )
 
     const buf = new TerminalBuffer(cols, rows)
 
@@ -64,16 +78,19 @@ export const TerminalView: Component = () => {
       bg: Colors.BG_INPUT,
     })
 
-    // Render real sessions from sync data
-    const sessions = sync.data.session
-      .filter((s) => !s.parentID)
-      .sort((a, b) => b.time.updated - a.time.updated)
-      .slice(0, 20)
+    // Render real sessions from sync data with scrolling
+    const allSessions = sync.data.session.filter((s) => !s.parentID).sort((a, b) => b.time.updated - a.time.updated)
+
+    const maxSessionsVisible = Math.floor((rows - 10) / 2) // 2 lines per session
+    const offset = sessionScrollOffset()
+    const sessions = allSessions.slice(offset, offset + maxSessionsVisible)
 
     let sessionRow = 5
     sessions.forEach((session, idx) => {
+      if (sessionRow > rows - 6) return
+
       const isSelected = selectedSessionID() === session.id
-      const marker = isSelected ? "*" : "o"
+      const marker = isSelected ? "●" : "○"
       const color = isSelected ? Colors.SYNTAX_CYAN : Colors.TEXT_MUTED
       const title = session.title.slice(0, SESSION_LIST_WIDTH - 4)
       const msgCount = sync.data.message[session.id]?.length || 0
@@ -87,8 +104,7 @@ export const TerminalView: Component = () => {
         bg: Colors.BG_PANEL,
       })
 
-      sessionRow += 3
-      if (sessionRow > rows - 10) return
+      sessionRow += 2 // Only 2 lines per session, no extra spacing
     })
 
     // Vertical separator
@@ -104,54 +120,118 @@ export const TerminalView: Component = () => {
       fg: Colors.TEXT_MUTED,
       bg: Colors.BG_MAIN,
     })
-    buf.writeString(MESSAGE_START + 50, 1, "Terminal Grid Demo", {
+
+    // Show session title or "Terminal" if no session selected
+    const headerTitle = selectedSessionID()
+      ? sync.data.session.find((s) => s.id === selectedSessionID())?.title.slice(0, MESSAGE_WIDTH - 10) || "Terminal"
+      : "Terminal"
+
+    const headerCol = MESSAGE_START + Math.floor((MESSAGE_WIDTH - headerTitle.length) / 2)
+    buf.writeString(headerCol, 1, headerTitle, {
       fg: Colors.TEXT_BRIGHT,
       bg: Colors.BG_MAIN,
     })
 
+    // Input prompt row (above the 2-row footer)
+    const inputRow = rows - 3
+
     // Render real messages if session selected
     if (selectedSessionID()) {
       const messages = sync.data.message[selectedSessionID()!] || []
-      let msgRow = 5
+      console.log(`Rendering ${messages.length} messages for session ${selectedSessionID()}`)
 
-      messages.slice(-10).forEach((msg) => {
-        const parts = sync.data.part[msg.id] || []
+      let msgRow = 3
+      const maxRow = inputRow - 2
 
-        // Render message content
-        parts.forEach((part) => {
-          if (part.type === "text") {
-            const text = part.text.slice(0, MESSAGE_WIDTH - 4)
-            buf.writeString(MESSAGE_START + 2, msgRow, text, {
-              fg: "#ffffff",
-              bg: Colors.BG_MAIN,
-            })
-            msgRow++
-          }
-        })
-
-        // Render username and status
-        const username = msg.role === "user" ? "jkneen" : "Assistant"
-        const color = msg.role === "user" ? Colors.SYNTAX_YELLOW : Colors.SYNTAX_CYAN
-        buf.writeString(MESSAGE_START + 2, msgRow, username, {
-          fg: color,
+      if (messages.length === 0) {
+        buf.writeString(MESSAGE_START + 2, 10, "No messages yet. Start typing below!", {
+          fg: Colors.TEXT_MUTED,
           bg: Colors.BG_MAIN,
         })
+      } else {
+        // Render last messages that fit on screen
+        const recentMessages = messages.slice(-30)
 
-        msgRow += 2
-        if (msgRow > inputRow - 5) return
+        recentMessages.forEach((msg) => {
+          if (msgRow >= maxRow) return
+
+          const parts = sync.data.part[msg.id] || []
+
+          // Render username first
+          const username = msg.role === "user" ? "jkneen" : "Assistant"
+          const color = msg.role === "user" ? Colors.SYNTAX_YELLOW : Colors.SYNTAX_CYAN
+          buf.writeString(MESSAGE_START + 2, msgRow, username, {
+            fg: color,
+            bg: Colors.BG_MAIN,
+            bold: true,
+          })
+          msgRow++
+
+          // Render message content with proper wrapping
+          parts.forEach((part) => {
+            if (part.type === "text" && msgRow < maxRow) {
+              const maxWidth = MESSAGE_WIDTH - 4
+
+              // Wrap long text across multiple lines
+              const words = part.text.split(" ")
+              let currentLine = ""
+
+              words.forEach((word) => {
+                if (currentLine.length + word.length + 1 <= maxWidth) {
+                  currentLine += (currentLine ? " " : "") + word
+                } else {
+                  // Write current line and start new one
+                  if (currentLine && msgRow < maxRow) {
+                    buf.writeString(MESSAGE_START + 2, msgRow, currentLine, {
+                      fg: Colors.TEXT_MAIN,
+                      bg: Colors.BG_MAIN,
+                    })
+                    msgRow++
+                  }
+                  currentLine = word
+                }
+              })
+
+              // Write remaining line
+              if (currentLine && msgRow < maxRow) {
+                buf.writeString(MESSAGE_START + 2, msgRow, currentLine, {
+                  fg: Colors.TEXT_MAIN,
+                  bg: Colors.BG_MAIN,
+                })
+                msgRow++
+              }
+            }
+          })
+
+          msgRow++ // spacing between messages
+        })
+      }
+    } else {
+      // No session selected
+      buf.writeString(MESSAGE_START + 2, 10, "Select a session from the left panel", {
+        fg: Colors.TEXT_MUTED,
+        bg: Colors.BG_MAIN,
       })
     }
-
-    // Input prompt
-    const inputRow = rows - 2
     buf.writeString(MESSAGE_START + 2, inputRow, "> ", {
       fg: Colors.ACCENT_YELLOW,
       bg: Colors.BG_MAIN,
     })
-    buf.writeChar(MESSAGE_START + 4, inputRow, {
-      char: " ",
-      bg: Colors.ACCENT_YELLOW,
+
+    // Render input text
+    const input = inputText()
+    buf.writeString(MESSAGE_START + 4, inputRow, input, {
+      fg: Colors.TEXT_BRIGHT,
+      bg: Colors.BG_MAIN,
     })
+
+    // Render cursor (blinking block)
+    if (cursorVisible()) {
+      buf.writeChar(MESSAGE_START + 4 + input.length, inputRow, {
+        char: " ",
+        bg: Colors.ACCENT_YELLOW,
+      })
+    }
 
     // Vertical separator
     for (let row = 0; row < rows - 1; row++) {
@@ -167,30 +247,44 @@ export const TerminalView: Component = () => {
       bg: Colors.BG_PANEL,
     })
 
+    // Right edge border
+    for (let row = 0; row < rows - 1; row++) {
+      buf.writeChar(SIDEBAR_START + SIDEBAR_WIDTH - 1, row, {
+        char: " ",
+        bg: Colors.BORDER,
+      })
+    }
+
     buf.writeString(SIDEBAR_START + SIDEBAR_WIDTH - 10, 0, "CODESURF", {
-      fg: "#666666",
+      fg: Colors.TEXT_DIM,
       bg: Colors.BG_PANEL,
       bold: true,
     })
 
-    buf.writeString(SIDEBAR_START + 2, 1, "Terminal Grid Demo", {
-      fg: "#ffffff",
+    // Show session title in sidebar
+    const sidebarTitle = selectedSessionID()
+      ? sync.data.session.find((s) => s.id === selectedSessionID())?.title.slice(0, SIDEBAR_WIDTH - 4) || "Session"
+      : "Session"
+
+    buf.writeString(SIDEBAR_START + 2, 1, sidebarTitle, {
+      fg: Colors.TEXT_BRIGHT,
       bg: Colors.BG_PANEL,
     })
 
     buf.writeString(SIDEBAR_START + 2, 3, "Context", {
-      fg: "#ffffff",
+      fg: Colors.TEXT_BRIGHT,
       bg: Colors.BG_PANEL,
       bold: true,
     })
 
-    drawContextBar(buf, 4, SIDEBAR_START + 2, 30, [
-      { width: 15, color: "#ce9178" },
-      { width: 10, color: "#666666" },
+    const contextBarWidth = Math.min(SIDEBAR_WIDTH - 10, 30)
+    drawContextBar(buf, 4, SIDEBAR_START + 2, contextBarWidth, [
+      { width: Math.floor(contextBarWidth * 0.6), color: "#ce9178" },
+      { width: Math.floor(contextBarWidth * 0.4), color: "#666666" },
     ])
 
-    buf.writeString(SIDEBAR_START + 33, 4, "72%", {
-      fg: "#ffffff",
+    buf.writeString(SIDEBAR_START + contextBarWidth + 3, 4, "72%", {
+      fg: Colors.TEXT_BRIGHT,
       bg: Colors.BG_PANEL,
     })
 
@@ -203,54 +297,54 @@ export const TerminalView: Component = () => {
       bg: Colors.BG_PANEL,
     })
 
-    buf.writeString(SIDEBAR_START + 2, 8, "* Tools(4)", {
+    buf.writeString(SIDEBAR_START + 2, 8, "● Tools(4)", {
       fg: Colors.ACCENT_CYAN,
       bg: Colors.BG_PANEL,
     })
-    buf.writeString(SIDEBAR_START + 14, 8, "o Todos(0)", {
-      fg: "#666666",
+    buf.writeString(SIDEBAR_START + 14, 8, "○ Todos(0)", {
+      fg: Colors.TEXT_MUTED,
       bg: Colors.BG_PANEL,
     })
-    buf.writeString(SIDEBAR_START + 26, 8, "o Files(7)", {
-      fg: "#666666",
+    buf.writeString(SIDEBAR_START + 26, 8, "○ Files(7)", {
+      fg: Colors.TEXT_MUTED,
       bg: Colors.BG_PANEL,
     })
 
     drawSeparator(buf, 9, SIDEBAR_START, SIDEBAR_WIDTH, Colors.BORDER)
 
-    buf.writeString(SIDEBAR_START + 2, 10, "> Tools Used (4)", {
-      fg: "#ffffff",
+    buf.writeString(SIDEBAR_START + 2, 10, "▶ Tools Used (4)", {
+      fg: Colors.TEXT_BRIGHT,
       bg: Colors.BG_PANEL,
     })
     buf.writeString(SIDEBAR_START + 4, 11, "CC_READ", {
-      fg: Colors.ACCENT_CYAN,
-      bg: "#252525",
+      fg: Colors.SYNTAX_CYAN,
+      bg: Colors.BG_DARK,
     })
     buf.writeString(SIDEBAR_START + 4, 12, "CC_WRITE", {
-      fg: Colors.ACCENT_CYAN,
-      bg: "#252525",
+      fg: Colors.SYNTAX_CYAN,
+      bg: Colors.BG_DARK,
     })
     buf.writeString(SIDEBAR_START + 4, 13, "CC_BASH", {
-      fg: Colors.ACCENT_CYAN,
-      bg: "#252525",
+      fg: Colors.SYNTAX_CYAN,
+      bg: Colors.BG_DARK,
     })
     buf.writeString(SIDEBAR_START + 4, 14, "EDIT", {
-      fg: Colors.ACCENT_CYAN,
-      bg: "#252525",
+      fg: Colors.SYNTAX_CYAN,
+      bg: Colors.BG_DARK,
     })
 
     // Subagents section
-    buf.writeString(SIDEBAR_START + 2, 17, "v Subagents (2)", {
-      fg: "#ffffff",
+    buf.writeString(SIDEBAR_START + 2, 17, "▼ Subagents (2)", {
+      fg: Colors.TEXT_BRIGHT,
       bg: Colors.BG_PANEL,
     })
-    buf.writeString(SIDEBAR_START + 4, 18, "* code-reviewer", {
-      fg: Colors.ACCENT_CYAN,
-      bg: "#252525",
+    buf.writeString(SIDEBAR_START + 4, 18, "● code-reviewer", {
+      fg: Colors.SYNTAX_CYAN,
+      bg: Colors.BG_DARK,
     })
-    buf.writeString(SIDEBAR_START + 4, 19, "o git-committer", {
-      fg: "#666666",
-      bg: "#252525",
+    buf.writeString(SIDEBAR_START + 4, 19, "○ git-committer", {
+      fg: Colors.TEXT_MUTED,
+      bg: Colors.BG_DARK,
     })
 
     // === BOTTOM BAR ===
@@ -259,59 +353,190 @@ export const TerminalView: Component = () => {
       bg: Colors.BG_PANEL,
     })
 
+    // Left side: Model selector
     buf.writeString(2, BOTTOM_BAR_ROW, "Anthropic ", {
-      fg: "#ffffff",
+      fg: Colors.TEXT_MUTED,
       bg: Colors.BG_PANEL,
     })
     buf.writeString(12, BOTTOM_BAR_ROW, "Claude Sonnet 4.5 (latest)", {
-      fg: "#ffffff",
+      fg: Colors.TEXT_BRIGHT,
       bg: Colors.BG_PANEL,
       underline: true,
     })
 
-    buf.writeString(cols - 20, BOTTOM_BAR_ROW, "tab", {
-      fg: "#666666",
-      bg: Colors.BG_PANEL,
-    })
-    buf.writeString(cols - 16, BOTTOM_BAR_ROW, "BUILD", {
-      fg: "#ffffff",
-      bg: "#3e3e3e",
-    })
-    buf.writeString(cols - 14, BOTTOM_BAR_ROW, "esc", {
-      fg: "#ffffff",
+    // Right side: Keyboard shortcuts
+    buf.writeString(cols - 21, BOTTOM_BAR_ROW, "esc", {
+      fg: Colors.TEXT_BRIGHT,
       bg: Colors.BG_PANEL,
       bold: true,
     })
-    buf.writeString(cols - 10, BOTTOM_BAR_ROW, " interrupt", {
-      fg: "#666666",
+    buf.writeString(cols - 17, BOTTOM_BAR_ROW, "interrupt", {
+      fg: Colors.TEXT_MUTED,
       bg: Colors.BG_PANEL,
+    })
+    buf.writeString(cols - 11, BOTTOM_BAR_ROW, "tab", {
+      fg: Colors.TEXT_MUTED,
+      bg: Colors.BG_PANEL,
+    })
+    buf.writeString(cols - 7, BOTTOM_BAR_ROW, "BUILD", {
+      fg: Colors.TEXT_BRIGHT,
+      bg: "#005cc5",
+      bold: true,
     })
 
     setGrid(buf.getGrid())
   }
 
+  const handleKeyDown = async (e: KeyboardEvent) => {
+    // Check if we're focused on session list (Ctrl+1) or messages (default)
+    const focusedPanel = "messages" // TODO: track focus state
+
+    if (e.key === "Enter") {
+      const text = inputText()
+      if (text.trim() && selectedSessionID()) {
+        console.log("Sending message:", text)
+        setInputText("")
+        await sdk.client.session.prompt(selectedSessionID()!, { prompt: text })
+        setScrollOffset(0)
+      }
+    } else if (e.key === "Backspace") {
+      setInputText((prev) => prev.slice(0, -1))
+    } else if (e.key === "Escape") {
+      console.log("ESC pressed - interrupt")
+    } else if (e.key === "ArrowUp") {
+      e.preventDefault()
+      if (e.ctrlKey) {
+        // Scroll session list
+        setSessionScrollOffset((prev) => Math.max(0, prev - 1))
+      } else {
+        // Scroll messages
+        setScrollOffset((prev) => Math.max(0, prev - 1))
+      }
+    } else if (e.key === "ArrowDown") {
+      e.preventDefault()
+      if (e.ctrlKey) {
+        // Scroll session list
+        const allSessions = sync.data.session.filter((s) => !s.parentID)
+        setSessionScrollOffset((prev) => Math.max(0, Math.min(allSessions.length - 1, prev + 1)))
+      } else {
+        // Scroll messages
+        setScrollOffset((prev) => Math.max(0, prev + 1))
+      }
+    } else if (e.key.length === 1 && !e.ctrlKey && !e.metaKey) {
+      setInputText((prev) => prev + e.key)
+    }
+  }
+
   onMount(() => {
+    // Fetch initial sessions
+    sync.session.fetch(100)
+
+    // Auto-select the most recent session (this conversation!)
+    setTimeout(() => {
+      const sessions = sync.data.session.filter((s) => !s.parentID).sort((a, b) => b.time.updated - a.time.updated)
+
+      if (sessions.length > 0) {
+        const currentSession = sessions[0]
+        console.log("Auto-selecting current session:", currentSession.title)
+        setSelectedSessionID(currentSession.id)
+        sync.session.sync(currentSession.id)
+      }
+    }, 500)
+
+    // Initial draw
     drawTerminal()
 
     const handleResize = () => {
-      setDims(calculateDims())
-      drawTerminal()
+      console.log("Window resized, recalculating dimensions")
+      const newDims = calculateDims()
+      console.log("New dimensions:", newDims)
+      setDims(newDims)
     }
 
+    // Cursor blink interval
+    const cursorInterval = setInterval(() => {
+      setCursorVisible((prev) => !prev)
+    }, 500)
+
     window.addEventListener("resize", handleResize)
-    onCleanup(() => window.removeEventListener("resize", handleResize))
+    window.addEventListener("keydown", handleKeyDown)
+
+    onCleanup(() => {
+      window.removeEventListener("resize", handleResize)
+      window.removeEventListener("keydown", handleKeyDown)
+      clearInterval(cursorInterval)
+    })
   })
+
+  // Redraw when data changes
+  createEffect(() => {
+    if (sync.data.session.length > 0) {
+      drawTerminal()
+    }
+  })
+
+  // Redraw when selected session changes
+  createEffect(() => {
+    selectedSessionID()
+    drawTerminal()
+  })
+
+  // Redraw when input text or cursor changes
+  createEffect(() => {
+    inputText()
+    cursorVisible()
+    drawTerminal()
+  })
+
+  // Redraw when dimensions change
+  createEffect(() => {
+    dims()
+    drawTerminal()
+  })
+
+  let terminalGridRef: HTMLDivElement | undefined
+
+  const handleClick = async (e: MouseEvent) => {
+    if (!terminalGridRef) return
+
+    const rect = terminalGridRef.getBoundingClientRect()
+    const { cols, rows } = dims()
+    const charWidth = rect.width / cols
+    const charHeight = rect.height / rows
+    const col = Math.floor((e.clientX - rect.left) / charWidth)
+    const row = Math.floor((e.clientY - rect.top) / charHeight)
+
+    const SESSION_LIST_WIDTH = Math.max(30, Math.floor(cols * 0.25))
+
+    console.log(
+      `Clicked at pixel: (${e.clientX}, ${e.clientY}), rect: (${rect.left}, ${rect.top}), col: ${col}, row: ${row}`,
+    )
+
+    // Click in session list area
+    if (col >= 0 && col < SESSION_LIST_WIDTH && row >= 5) {
+      const allSessions = sync.data.session.filter((s) => !s.parentID).sort((a, b) => b.time.updated - a.time.updated)
+
+      const clickedIndex = Math.floor((row - 5) / 2) + sessionScrollOffset()
+      const session = allSessions[clickedIndex]
+      console.log(`Clicked session index: ${clickedIndex}, total sessions: ${sessions.length}`, session)
+      if (session) {
+        console.log(`Selecting session: ${session.id}`)
+        setSelectedSessionID(session.id)
+        await sync.session.sync(session.id)
+      }
+    }
+  }
 
   return (
     <div
+      ref={terminalGridRef}
+      onClick={handleClick}
       style={{
         width: "100vw",
         height: "100vh",
-        display: "flex",
-        "align-items": "flex-start",
-        "justify-content": "flex-start",
-        background: "#0a0a0a",
+        background: "#000000",
         overflow: "hidden",
+        cursor: "pointer",
       }}
     >
       <TerminalGrid grid={grid()} cols={dims().cols} rows={dims().rows} />

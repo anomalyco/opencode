@@ -26,24 +26,24 @@ export interface Region {
   height: number
 }
 
-// OpenCode TUI Theme - VS Code Dark+ inspired
+// OpenCode TUI Theme - Darker theme matching actual TUI
 export const Colors = {
   // Backgrounds
-  BG_MAIN: "#1e1e1e", // Main editor background
-  BG_PANEL: "#252526", // Sidebar background
-  BG_DARK: "#1a1a1a", // Darker elements
-  BG_INPUT: "#3c3c3c", // Input fields
-  BG_HOVER: "#2a2d2e", // Hover state
+  BG_MAIN: "#0a0a0a", // Main editor background - very dark
+  BG_PANEL: "#1a1a1a", // Sidebar background - slightly lighter
+  BG_DARK: "#050505", // Darker elements
+  BG_INPUT: "#2a2a2a", // Input fields
+  BG_HOVER: "#1f1f1f", // Hover state
 
   // Borders
-  BORDER: "#3e3e3e", // Main borders
-  BORDER_LIGHT: "#5e5e5e", // Lighter borders
+  BORDER: "#2a2a2a", // Main borders - subtle
+  BORDER_LIGHT: "#3a3a3a", // Lighter borders
 
   // Text
-  TEXT_MAIN: "#cccccc", // Primary text
-  TEXT_MUTED: "#858585", // Secondary text
-  TEXT_BRIGHT: "#ffffff", // Emphasis text
-  TEXT_DIM: "#6a6a6a", // Dimmed text
+  TEXT_MAIN: "#d4d4d4", // Primary text - brighter
+  TEXT_MUTED: "#6a6a6a", // Secondary text
+  TEXT_BRIGHT: "#ffffff", // Emphasis text - pure white
+  TEXT_DIM: "#4a4a4a", // Dimmed text
 
   // Syntax highlighting (VS Code Dark+)
   SYNTAX_CYAN: "#4ec9b0", // Functions, methods
@@ -76,20 +76,17 @@ export const Colors = {
   ACTIVE_LINE: "#282828",
 } as const
 
-// Standard ASCII characters only (codes 32-126)
-// NO Unicode - separation is done via background colors
+// Unicode characters for terminal UI
 export const Chars = {
   SPACE: " ",
-  BLOCK: "#", // Used for context bar segments and filled areas
-  CIRCLE: "o", // Used for inactive tabs/bullets
-  STAR: "*", // Used for active tabs/bullets
-  TRIANGLE: ">", // Used for collapsed sections
-  DOWN_ARROW: "v", // Used for expanded sections
+  BLOCK: "█", // Full block for context bar
+  CIRCLE_FILLED: "●",
+  CIRCLE_EMPTY: "○",
+  CHEVRON_RIGHT: "›",
+  CHEVRON_DOWN: "v",
+  TRIANGLE_RIGHT: "▶",
+  TRIANGLE_DOWN: "▼",
   PROMPT: ">",
   LEFT_BRACKET: "[",
   RIGHT_BRACKET: "]",
-  VERTICAL_BAR: "|",
-  DASH: "-",
-  PLUS: "+",
-  EQUALS: "=",
 } as const

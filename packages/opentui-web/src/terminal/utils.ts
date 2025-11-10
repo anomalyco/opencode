@@ -134,13 +134,12 @@ export function drawContextBar(
   })
   currentCol++
 
-  // Draw segments with block characters
+  // Draw segments with solid block characters
   for (const segment of segments) {
     for (let i = 0; i < segment.width && currentCol < startCol + totalWidth - 1; i++) {
       buffer.writeChar(currentCol, row, {
-        char: "#",
-        fg: segment.color,
-        bg: Colors.BG_PANEL,
+        char: " ",
+        bg: segment.color,
       })
       currentCol++
     }

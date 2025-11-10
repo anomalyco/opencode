@@ -38,7 +38,7 @@ export const TerminalGrid: Component<TerminalGridProps> = (props) => {
         "line-height": "1.5",
         width: `${props.cols}ch`,
         height: `${props.rows * 1.5}em`,
-        background: "#1a1a1a",
+        background: "#0a0a0a",
         overflow: "hidden",
         "white-space": "pre",
       }}

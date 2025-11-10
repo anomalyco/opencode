@@ -8,10 +8,10 @@ export default defineConfig({
     conditions: ["browser", "import", "module", "default"],
     alias: {
       "@": path.resolve(__dirname, "./src"),
+      "@opencode-ai/sdk/server": path.resolve(__dirname, "./src/server-stub.ts"),
     },
   },
   optimizeDeps: {
-    exclude: ["@opencode-ai/sdk/server", "@opencode-ai/sdk/client", "@opencode-ai/sdk"],
     esbuildOptions: {
       define: {
         global: "globalThis",
