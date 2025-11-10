@@ -32,8 +32,11 @@ export class TerminalBuffer {
   writeChar(col: number, row: number, cell: Partial<TerminalCell>) {
     if (row < 0 || row >= this.dims.rows || col < 0 || col >= this.dims.cols) return
 
-    const current = this.grid[row][col]
-    this.grid[row][col] = { ...current, ...cell }
+    const rowData = this.grid[row]
+    if (!rowData) return
+    const current = rowData[col]
+    if (!current) return
+    rowData[col] = { ...current, ...cell }
   }
 
   // Write a string starting at position
@@ -64,7 +67,8 @@ export class TerminalBuffer {
   // Get cell at position
   getCell(col: number, row: number): TerminalCell | null {
     if (row < 0 || row >= this.dims.rows || col < 0 || col >= this.dims.cols) return null
-    return this.grid[row][col]
+    const cell = this.grid[row]?.[col]
+    return cell || null
   }
 
   // Get entire grid

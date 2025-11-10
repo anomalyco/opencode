@@ -59,7 +59,7 @@ export const { use: useSync, provider: SyncProvider } = createSimpleContext({
       session_diff: {},
       todo: {},
       permission: {},
-      limit: 10,
+      limit: 100,
       message: {},
       part: {},
       node: [],
@@ -162,7 +162,7 @@ export const { use: useSync, provider: SyncProvider } = createSimpleContext({
         sdk.client.session.list().then((x) => {
           const sessions = (Array.isArray(x.data) ? x.data : [])
             .slice()
-            .sort((a, b) => a.id.localeCompare(b.id))
+            .sort((a, b) => b.time.updated - a.time.updated)
             .slice(0, store.limit)
           setStore("session", sessions)
         }),

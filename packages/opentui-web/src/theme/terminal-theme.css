@@ -1,0 +1,98 @@
+/* Terminal Grid Theme - Makes UI components snap to character grid */
+
+:root {
+  /* Character dimensions */
+  --char-width: 1ch;
+  --char-height: 1.5em;
+
+  /* Terminal colors - BRIGHT AND VIBRANT */
+  --bg-main: #0a0a0a;
+  --bg-panel: #1a1a1a;
+  --bg-input: #2a2a2a;
+  --bg-selected: #2a2a2a;
+  --border: #2a2a2a;
+
+  /* Text colors - HIGH CONTRAST */
+  --text-main: #ffffff;
+  --text-bright: #ffffff;
+  --text-secondary: #d4d4d4;
+  --text-muted: #6a6a6a;
+  --text-dim: #4a4a4a;
+  --text-label: #858585;
+
+  /* Terminal bright colors for messages/context */
+  --color-assistant: #d19a66;
+  --color-user: #61afef;
+  --color-tool: #e5c07b;
+  --color-system: #808080;
+
+  /* Legacy accents (keep for backward compat) */
+  --accent-orange: #d19a66;
+  --accent-cyan: #4ec9b0;
+  --accent-yellow: #e5c07b;
+  --accent-blue: #61afef;
+}
+
+/* All inputs snap to grid */
+input,
+textarea,
+button {
+  font-family: "Berkeley Mono", "JetBrains Mono", monospace !important;
+  font-size: 16px !important;
+  line-height: 1.5 !important;
+  padding: 0 !important;
+  margin: 0 !important;
+  border: none !important;
+  outline: none !important;
+}
+
+/* Grid-positioned element */
+.grid-element {
+  position: absolute;
+  font-family: "Berkeley Mono", "JetBrains Mono", monospace;
+  font-size: 16px;
+  line-height: 1.5;
+}
+
+/* Input at grid position */
+.grid-input {
+  background: var(--bg-main);
+  color: var(--text-bright);
+  caret-color: var(--accent-yellow);
+}
+
+/* Button at grid position */
+.grid-button {
+  background: var(--bg-panel);
+  color: var(--accent-orange);
+  cursor: pointer;
+}
+
+.grid-button:hover {
+  color: var(--text-bright);
+}
+
+/* Terminal scrollbar styling */
+.terminal-scrollbar {
+  scrollbar-width: thin;
+  scrollbar-color: #4a4a4a #1a1a1a;
+}
+
+/* Webkit scrollbar (Chrome/Safari/Edge) */
+.terminal-scrollbar::-webkit-scrollbar {
+  width: 12px;
+}
+
+.terminal-scrollbar::-webkit-scrollbar-track {
+  background: #1a1a1a;
+}
+
+.terminal-scrollbar::-webkit-scrollbar-thumb {
+  background: #4a4a4a;
+  border: 2px solid #1a1a1a;
+  border-radius: 0;
+}
+
+.terminal-scrollbar::-webkit-scrollbar-thumb:hover {
+  background: #6a6a6a;
+}

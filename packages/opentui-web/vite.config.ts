@@ -5,13 +5,18 @@ import path from "path"
 export default defineConfig({
   plugins: [solid()],
   resolve: {
+    conditions: ["browser", "import", "module", "default"],
     alias: {
       "@": path.resolve(__dirname, "./src"),
+      "@opencode-ai/sdk/server": path.resolve(__dirname, "./src/server-stub.ts"),
     },
   },
   optimizeDeps: {
-    // Exclude server-only modules from pre-bundling
-    exclude: ["@opencode-ai/sdk/server"],
+    esbuildOptions: {
+      define: {
+        global: "globalThis",
+      },
+    },
   },
   server: {
     port: 3001,
@@ -27,7 +32,7 @@ export default defineConfig({
     target: "esnext",
     outDir: "dist",
     rollupOptions: {
-      external: ["node:child_process", "node:process", "node:fs", "node:path", "node:events"],
+      external: [],
     },
   },
 })

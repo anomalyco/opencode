@@ -22,8 +22,9 @@
     "@opencode-ai/sdk": "workspace:*",
     "@opentui/core": "0.0.0-20251108-0c7899b1",
     "@opentui/solid": "0.0.0-20251108-0c7899b1",
-    "solid-js": "catalog:",
+    "@solid-primitives/event-bus": "1.1.2",
+    "diff": "catalog:",
     "remeda": "catalog:",
-    "diff": "catalog:"
+    "solid-js": "catalog:"
   }
 }

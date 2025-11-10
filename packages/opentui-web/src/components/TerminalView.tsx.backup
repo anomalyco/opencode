@@ -38,109 +38,207 @@ export const TerminalView: Component = () => {
   const drawTerminal = () => {
     const { cols, rows } = dims()
 
-    // EXACT layout from TUI: 43 chars sessions | sep | 74 chars messages | sep | 38 chars sidebar
-    const L_WIDTH = Math.floor(cols * 0.27) // Left panel ~43
-    const R_WIDTH = Math.floor(cols * 0.24) // Right panel ~38
-    const M_WIDTH = cols - L_WIDTH - R_WIDTH - 2 // Middle panel ~74
+    // Layout regions - scale proportionally based on total cols
+    const SESSION_LIST_WIDTH = Math.max(30, Math.floor(cols * 0.25)) // 25% of width, min 30
+    const SIDEBAR_WIDTH = Math.max(30, Math.floor(cols * 0.25)) // 25% of width, min 30
+    const SESSION_LIST_START = 0
+    const MESSAGE_START = SESSION_LIST_WIDTH
+    const MESSAGE_WIDTH = cols - SESSION_LIST_WIDTH - SIDEBAR_WIDTH
+    const SIDEBAR_START = cols - SIDEBAR_WIDTH
+    const BOTTOM_BAR_ROW_1 = rows - 2
+    const BOTTOM_BAR_ROW_2 = rows - 1
 
-    // Calculate sidebar position and dimensions
-    const SIDEBAR_START = cols - R_WIDTH
-    const SIDEBAR_WIDTH = R_WIDTH
-
-    // Bottom bar positioning
-    const BOTTOM_BAR_ROW_2 = rows - 2
+    console.log(
+      `Layout: ${cols}x${rows}, session:${SESSION_LIST_WIDTH}, msg:${MESSAGE_WIDTH}, sidebar:${SIDEBAR_WIDTH}`,
+    )
 
     const buf = new TerminalBuffer(cols, rows)
 
-    // Fill panels with correct backgrounds
-    buf.fillRect(0, 0, L_WIDTH, rows, { char: " ", bg: "#1a1a1a", fg: "#d4d4d4" }) // Left dark
-    buf.fillRect(L_WIDTH + 1, 0, M_WIDTH, rows, { char: " ", bg: "#0a0a0a", fg: "#d4d4d4" }) // Middle black
-    buf.fillRect(cols - R_WIDTH, 0, R_WIDTH, rows, { char: " ", bg: "#1a1a1a", fg: "#d4d4d4" }) // Right dark
-
-    // Vertical separators
-    for (let r = 0; r < rows; r++) {
-      buf.writeString(L_WIDTH, r, "┃", { fg: "#2a2a2a", bg: "#0a0a0a" })
-      buf.writeString(cols - R_WIDTH - 1, r, "┃", { fg: "#2a2a2a", bg: "#0a0a0a" })
-    }
-
-    // === ROW 0: HEADERS ===
-    buf.writeString(0, 0, "SESSIONS", { fg: "#ffffff", bg: "#1a1a1a", bold: true })
-    buf.writeString(L_WIDTH - 3, 0, "◀", { fg: "#6a6a6a", bg: "#1a1a1a" })
-    buf.writeString(cols - R_WIDTH, 0, "CODESURF", { fg: "#ffffff", bg: "#1a1a1a", bold: true })
-    buf.writeString(cols - 3, 0, "◀", { fg: "#6a6a6a", bg: "#1a1a1a" })
-
-    // === ROW 2: Today / Server ===
-    buf.writeString(2, 2, "▼ Today (14)", { fg: "#ffffff", bg: "#1a1a1a" })
-    buf.writeString(cols - R_WIDTH, 2, "server:65132/", { fg: "#6a6a6a", bg: "#1a1a1a" })
-
-    // === ROW 3+: Session titles (indented, one per line) ===
-    const allSessions = sync.data.session.filter((s) => !s.parentID).sort((a, b) => b.time.updated - a.time.updated)
-    let r = 3
-    allSessions.slice(0, rows - 8).forEach((session) => {
-      const isSelected = selectedSessionID() === session.id
-      const title = session.title.slice(0, L_WIDTH - 8)
-      if (isSelected) {
-        buf.writeString(4, r, "▶ " + title, { fg: "#ce9178", bg: "#1a1a1a" })
-      } else {
-        buf.writeString(6, r, title, { fg: "#d4d4d4", bg: "#1a1a1a" })
-      }
-      r++
+    // Clear everything
+    buf.fillRect(0, 0, cols, rows, {
+      char: " ",
+      bg: Colors.BG_MAIN,
+      fg: Colors.TEXT_MAIN,
     })
 
-    // "New Session" at bottom of left panel
-    buf.writeString(0, rows - 3, "New Session", { fg: "#ce9178", bg: "#1a1a1a" })
+    // === LEFT PANEL: SESSION LIST ===
+    buf.fillRect(SESSION_LIST_START, 0, SESSION_LIST_WIDTH, rows - 1, {
+      char: " ",
+      bg: Colors.BG_PANEL,
+    })
 
-    // === CENTER PANEL: MESSAGES ===
-    const msgCol = L_WIDTH + 1
-    if (selectedSessionID()) {
-      const messages = sync.data.message[selectedSessionID()!] || []
-      let msgRow = 0
+    buf.writeString(SESSION_LIST_START + 2, 1, "Sessions", {
+      fg: Colors.TEXT_BRIGHT,
+      bg: Colors.BG_PANEL,
+      bold: true,
+    })
 
-      messages.slice(-20).forEach((msg) => {
-        if (msgRow >= rows - 4) return
+    buf.writeString(SESSION_LIST_START + 2, 3, "[Search...]", {
+      fg: Colors.TEXT_MUTED,
+      bg: Colors.BG_INPUT,
+    })
 
-        const parts = sync.data.part[msg.id] || []
-        const isUser = msg.role === "user"
+    // Render real sessions from sync data with scrolling
+    const allSessions = sync.data.session.filter((s) => !s.parentID).sort((a, b) => b.time.updated - a.time.updated)
 
-        parts.forEach((part: any) => {
-          if (msgRow >= rows - 4) return
+    const maxSessionsVisible = Math.floor((rows - 10) / 2) // 2 lines per session
+    const offset = sessionScrollOffset()
+    const sessions = allSessions.slice(offset, offset + maxSessionsVisible)
 
-          if (part.type === "tool") {
-            // Tool badge: "▶ BASH  command"
-            buf.writeString(msgCol, msgRow, "▶", { fg: "#6a6a6a", bg: "#0a0a0a" })
-            const toolName = (part.name || part.state?.name || "TOOL").toUpperCase()
-            buf.writeString(msgCol + 3, msgRow, toolName, { fg: "#ffffff", bg: "#6a6a6a", bold: true })
-            msgRow++
-          } else if (part.type === "text") {
-            // Text content with orange bar for user
-            const lines = (part.text || "").split("\n")
-            lines.forEach((line: string) => {
-              if (msgRow >= rows - 4) return
-              if (isUser) {
-                buf.writeString(msgCol, msgRow, "│", { fg: "#ce9178", bg: "#0a0a0a" })
-              }
-              const textCol = isUser ? msgCol + 2 : msgCol
-              buf.writeString(textCol, msgRow, line.slice(0, M_WIDTH - 4), { fg: "#d4d4d4", bg: "#0a0a0a" })
-              msgRow++
-            })
-          }
-        })
+    let sessionRow = 5
+    sessions.forEach((session, idx) => {
+      if (sessionRow > rows - 6) return
 
-        // Username + timestamp
-        if (isUser) {
-          buf.writeString(msgCol, msgRow, "jkneen", { fg: "#6a6a6a", bg: "#0a0a0a" })
-          msgRow++
-        }
-        msgRow++
+      const isSelected = selectedSessionID() === session.id
+      const marker = isSelected ? "●" : "○"
+      const color = isSelected ? Colors.SYNTAX_CYAN : Colors.TEXT_MUTED
+      const title = session.title.slice(0, SESSION_LIST_WIDTH - 4)
+      const msgCount = sync.data.message[session.id]?.length || 0
+
+      buf.writeString(SESSION_LIST_START + 2, sessionRow, `${marker} ${title}`, {
+        fg: color,
+        bg: Colors.BG_PANEL,
+      })
+      buf.writeString(SESSION_LIST_START + 2, sessionRow + 1, `  ${msgCount} messages`, {
+        fg: Colors.TEXT_DIM,
+        bg: Colors.BG_PANEL,
+      })
+
+      sessionRow += 2 // Only 2 lines per session, no extra spacing
+    })
+
+    // Vertical separator
+    for (let row = 0; row < rows - 1; row++) {
+      buf.writeChar(SESSION_LIST_WIDTH - 1, row, {
+        char: " ",
+        bg: Colors.BORDER,
       })
     }
 
-    // Input at bottom
-    buf.writeString(msgCol, rows - 2, ">", { fg: "#dcdcaa", bg: "#0a0a0a" })
+    // === CENTER PANEL: MESSAGES ===
+    buf.writeString(MESSAGE_START + 2, 1, "<- Back", {
+      fg: Colors.TEXT_MUTED,
+      bg: Colors.BG_MAIN,
+    })
+
+    // Show session title or "Terminal" if no session selected
+    const headerTitle = selectedSessionID()
+      ? sync.data.session.find((s) => s.id === selectedSessionID())?.title.slice(0, MESSAGE_WIDTH - 10) || "Terminal"
+      : "Terminal"
+
+    const headerCol = MESSAGE_START + Math.floor((MESSAGE_WIDTH - headerTitle.length) / 2)
+    buf.writeString(headerCol, 1, headerTitle, {
+      fg: Colors.TEXT_BRIGHT,
+      bg: Colors.BG_MAIN,
+    })
+
+    // Input prompt row (above the 2-row footer)
+    const inputRow = rows - 3
+
+    // Render real messages if session selected
+    if (selectedSessionID()) {
+      const messages = sync.data.message[selectedSessionID()!] || []
+      console.log(`Rendering ${messages.length} messages for session ${selectedSessionID()}`)
+
+      let msgRow = 3
+      const maxRow = inputRow - 2
+
+      if (messages.length === 0) {
+        buf.writeString(MESSAGE_START + 2, 10, "No messages yet. Start typing below!", {
+          fg: Colors.TEXT_MUTED,
+          bg: Colors.BG_MAIN,
+        })
+      } else {
+        // Render last messages that fit on screen
+        const recentMessages = messages.slice(-30)
+
+        recentMessages.forEach((msg) => {
+          if (msgRow >= maxRow) return
+
+          const parts = sync.data.part[msg.id] || []
+
+          // Render username first
+          const username = msg.role === "user" ? "jkneen" : "Assistant"
+          const color = msg.role === "user" ? Colors.SYNTAX_YELLOW : Colors.SYNTAX_CYAN
+          buf.writeString(MESSAGE_START + 2, msgRow, username, {
+            fg: color,
+            bg: Colors.BG_MAIN,
+            bold: true,
+          })
+          msgRow++
+
+          // Render message content with proper wrapping
+          parts.forEach((part) => {
+            if (part.type === "text" && msgRow < maxRow) {
+              const maxWidth = MESSAGE_WIDTH - 4
+
+              // Wrap long text across multiple lines
+              const words = part.text.split(" ")
+              let currentLine = ""
+
+              words.forEach((word) => {
+                if (currentLine.length + word.length + 1 <= maxWidth) {
+                  currentLine += (currentLine ? " " : "") + word
+                } else {
+                  // Write current line and start new one
+                  if (currentLine && msgRow < maxRow) {
+                    buf.writeString(MESSAGE_START + 2, msgRow, currentLine, {
+                      fg: Colors.TEXT_MAIN,
+                      bg: Colors.BG_MAIN,
+                    })
+                    msgRow++
+                  }
+                  currentLine = word
+                }
+              })
+
+              // Write remaining line
+              if (currentLine && msgRow < maxRow) {
+                buf.writeString(MESSAGE_START + 2, msgRow, currentLine, {
+                  fg: Colors.TEXT_MAIN,
+                  bg: Colors.BG_MAIN,
+                })
+                msgRow++
+              }
+            }
+          })
+
+          msgRow++ // spacing between messages
+        })
+      }
+    } else {
+      // No session selected
+      buf.writeString(MESSAGE_START + 2, 10, "Select a session from the left panel", {
+        fg: Colors.TEXT_MUTED,
+        bg: Colors.BG_MAIN,
+      })
+    }
+    buf.writeString(MESSAGE_START + 2, inputRow, "> ", {
+      fg: Colors.ACCENT_YELLOW,
+      bg: Colors.BG_MAIN,
+    })
+
+    // Render input text
     const input = inputText()
-    buf.writeString(msgCol + 2, rows - 2, input, { fg: "#ffffff", bg: "#0a0a0a" })
+    buf.writeString(MESSAGE_START + 4, inputRow, input, {
+      fg: Colors.TEXT_BRIGHT,
+      bg: Colors.BG_MAIN,
+    })
+
+    // Render cursor (blinking block)
     if (cursorVisible()) {
-      buf.writeString(msgCol + 2 + input.length, rows - 2, "█", { fg: "#dcdcaa", bg: "#0a0a0a" })
+      buf.writeChar(MESSAGE_START + 4 + input.length, inputRow, {
+        char: " ",
+        bg: Colors.ACCENT_YELLOW,
+      })
+    }
+
+    // Vertical separator
+    for (let row = 0; row < rows - 1; row++) {
+      buf.writeChar(SIDEBAR_START - 1, row, {
+        char: " ",
+        bg: Colors.BORDER,
+      })
     }
 
     // === RIGHT PANEL: SIDEBAR ===
@@ -298,10 +396,7 @@ export const TerminalView: Component = () => {
       if (text.trim() && selectedSessionID()) {
         console.log("Sending message:", text)
         setInputText("")
-        await sdk.client.session.prompt({
-          path: { id: selectedSessionID()! },
-          body: { parts: [{ type: "text", text }] },
-        })
+        await sdk.client.session.prompt(selectedSessionID()!, { prompt: text })
         setScrollOffset(0)
       }
     } else if (e.key === "Backspace") {
@@ -342,11 +437,9 @@ export const TerminalView: Component = () => {
 
       if (sessions.length > 0) {
         const currentSession = sessions[0]
-        if (currentSession) {
-          console.log("Auto-selecting current session:", currentSession.title)
-          setSelectedSessionID(currentSession.id)
-          sync.session.sync(currentSession.id)
-        }
+        console.log("Auto-selecting current session:", currentSession.title)
+        setSelectedSessionID(currentSession.id)
+        sync.session.sync(currentSession.id)
       }
     }, 500)
 
@@ -425,7 +518,7 @@ export const TerminalView: Component = () => {
 
       const clickedIndex = Math.floor((row - 5) / 2) + sessionScrollOffset()
       const session = allSessions[clickedIndex]
-      console.log(`Clicked session index: ${clickedIndex}, total sessions: ${allSessions.length}`, session)
+      console.log(`Clicked session index: ${clickedIndex}, total sessions: ${sessions.length}`, session)
       if (session) {
         console.log(`Selecting session: ${session.id}`)
         setSelectedSessionID(session.id)
