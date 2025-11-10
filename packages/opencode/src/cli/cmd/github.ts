@@ -20,8 +20,6 @@ import { Bus } from "../../bus"
 import { MessageV2 } from "../../session/message-v2"
 import { SessionPrompt } from "@/session/prompt"
 import { $ } from "bun"
-import { Agent } from "../../agent/agent"
-import { Color } from "@/util/color"
 
 type GitHubAuthor = {
   login: string
@@ -423,8 +421,7 @@ export const GithubRunCommand = cmd({
         // Setup opencode session
         const repoData = await fetchRepo()
         session = await Session.create({})
-        const agent = await Agent.get("build")
-        subscribeSessionEvents(Color.hexToAnsiBold(agent?.color))
+        subscribeSessionEvents()
         shareId = await (async () => {
           if (share === false) return
           if (!share && repoData.data.private) return
@@ -592,7 +589,7 @@ export const GithubRunCommand = cmd({
         return { userPrompt: prompt, promptFiles: imgData }
       }
 
-      function subscribeSessionEvents(agentColor?: string) {
+      function subscribeSessionEvents() {
         const TOOL: Record<string, [string, string]> = {
           todowrite: ["Todo", UI.Style.TEXT_WARNING_BOLD],
           todoread: ["Todo", UI.Style.TEXT_WARNING_BOLD],
@@ -606,11 +603,9 @@ export const GithubRunCommand = cmd({
           websearch: ["Search", UI.Style.TEXT_DIM_BOLD],
         }
 
-        const resolvedAgentColor = agentColor
-
         function printEvent(color: string, type: string, title: string) {
           UI.println(
-            (resolvedAgentColor ?? color) + `|`,
+            color + `|`,
             UI.Style.TEXT_NORMAL + UI.Style.TEXT_DIM + ` ${type.padEnd(7, " ")}`,
             "",
             UI.Style.TEXT_NORMAL + title,
@@ -630,7 +625,7 @@ export const GithubRunCommand = cmd({
                 ? JSON.stringify(part.state.input)
                 : "Unknown"
             console.log()
-            printEvent(agentColor ?? color, tool, title)
+            printEvent(color, tool, title)
           }
 
           if (part.type === "text") {

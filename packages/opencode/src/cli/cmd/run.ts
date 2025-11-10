@@ -1,7 +1,6 @@
 import type { Argv } from "yargs"
 import path from "path"
 import { UI } from "../ui"
-import { Color } from "@/util/color"
 import { cmd } from "./cmd"
 import { Flag } from "../../flag/flag"
 import { bootstrap } from "../bootstrap"
