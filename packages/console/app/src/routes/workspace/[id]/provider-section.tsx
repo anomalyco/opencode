@@ -22,7 +22,9 @@ const removeProvider = action(async (form: FormData) => {
   if (!provider) return { error: "Provider is required" }
   const workspaceID = form.get("workspaceID")?.toString()
   if (!workspaceID) return { error: "Workspace ID is required" }
-  return json(await withActor(() => Provider.remove({ provider }), workspaceID), { revalidate: listProviders.key })
+  return json(await withActor(() => Provider.remove({ provider }), workspaceID), {
+    revalidate: listProviders.key,
+  })
 }, "provider.remove")
 
 const saveProvider = action(async (form: FormData) => {

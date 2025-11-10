@@ -264,7 +264,7 @@
   [data-component="brand-content"] {
     padding: 4rem 5rem;
 
-    h2 {
+    h1 {
       font-size: 1.5rem;
       font-weight: 500;
       color: var(--color-text-strong);
@@ -298,7 +298,6 @@
       gap: 12px;
       transition: all 0.2s ease;
       text-decoration: none;
-
 
       &:hover:not(:disabled) {
         background: var(--color-background-strong-hover);
@@ -385,10 +384,8 @@
         0 1px 2px -1px rgba(19, 16, 16, 0.12);
 
       @media (max-width: 40rem) {
-        box-shadow:
-          0 0 0 1px rgba(19, 16, 16, 0.16)
+        box-shadow: 0 0 0 1px rgba(19, 16, 16, 0.16);
       }
-
 
       &:hover {
         background: var(--color-background);
@@ -396,11 +393,11 @@
 
       &:active {
         transform: scale(0.98);
-        box-shadow: 0 0 0 1px rgba(19, 16, 16, 0.08), 0 6px 8px -8px rgba(19, 16, 16, 0.50);
+        box-shadow:
+          0 0 0 1px rgba(19, 16, 16, 0.08),
+          0 6px 8px -8px rgba(19, 16, 16, 0.5);
       }
     }
-
-
 
     @media (max-width: 60rem) {
       padding: 2rem 1.5rem;

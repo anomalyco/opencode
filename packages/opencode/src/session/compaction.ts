@@ -1,4 +1,4 @@
-import { streamText, type ModelMessage, LoadAPIKeyError, type StreamTextResult, type Tool as AITool } from "ai"
+import { streamText, type ModelMessage, type StreamTextResult, type Tool as AITool } from "ai"
 import { Session } from "."
 import { Identifier } from "../id/id"
 import { Instance } from "../project/instance"
@@ -50,7 +50,7 @@ export namespace SessionCompaction {
   export async function prune(input: { sessionID: string }) {
     if (Flag.OPENCODE_DISABLE_PRUNE) return
     log.info("pruning")
-    const msgs = await Session.messages(input.sessionID)
+    const msgs = await Session.messages({ sessionID: input.sessionID })
     let total = 0
     let pruned = 0
     const toPrune = []
@@ -100,7 +100,7 @@ export namespace SessionCompaction {
         draft.time.compacting = undefined
       })
     })
-    const toSummarize = await Session.messages(input.sessionID).then(MessageV2.filterCompacted)
+    const toSummarize = await MessageV2.filterCompacted(MessageV2.stream(input.sessionID))
     const model = await Provider.getModel(input.providerID, input.modelID)
     const system = [
       ...SystemPrompt.summarize(model.providerID),
@@ -113,7 +113,6 @@ export namespace SessionCompaction {
       role: "assistant",
       parentID: toSummarize.findLast((m) => m.info.role === "user")?.info.id!,
       sessionID: input.sessionID,
-      system,
       mode: "build",
       path: {
         cwd: Instance.directory,
@@ -252,7 +251,7 @@ export namespace SessionCompaction {
         }
       }
 
-      const parts = await Session.getParts(msg.id)
+      const parts = await MessageV2.parts(msg.id)
       return {
         info: msg,
         parts,
@@ -268,15 +267,24 @@ export namespace SessionCompaction {
       max: maxRetries,
     })
     if (result.shouldRetry) {
+      const start = Date.now()
       for (let retry = 1; retry < maxRetries; retry++) {
-        const lastRetryPart = result.parts.findLast((p) => p.type === "retry")
+        const lastRetryPart = result.parts.findLast((p): p is MessageV2.RetryPart => p.type === "retry")
 
         if (lastRetryPart) {
-          const delayMs = SessionRetry.getRetryDelayInMs(lastRetryPart.error, retry)
+          const delayMs = SessionRetry.getBoundedDelay({
+            error: lastRetryPart.error,
+            attempt: retry,
+            startTime: start,
+          })
+          if (!delayMs) {
+            break
+          }
 
           log.info("retrying with backoff", {
             attempt: retry,
             delayMs,
+            elapsed: Date.now() - start,
           })
 
           const stop = await SessionRetry.sleep(delayMs, signal)
@@ -318,7 +326,7 @@ export namespace SessionCompaction {
     if (
       !msg.error ||
       (MessageV2.AbortedError.isInstance(msg.error) &&
-        result.parts.some((part) => part.type === "text" && part.text.length > 0))
+        result.parts.some((part): part is MessageV2.TextPart => part.type === "text" && part.text.length > 0))
     ) {
       msg.summary = true
       Bus.publish(Event.Compacted, {

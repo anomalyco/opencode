@@ -10,13 +10,12 @@ import { centsToMicroCents } from "./util/price"
 import { User } from "./user"
 
 export namespace Billing {
-  export const CHARGE_NAME = "opencode credits"
-  export const CHARGE_FEE_NAME = "processing fee"
-  export const CHARGE_AMOUNT = 2000 // $20
-  export const CHARGE_AMOUNT_DOLLAR = 20
-  export const CHARGE_FEE = 123 // Stripe fee 4.4% + $0.30
-  export const CHARGE_THRESHOLD_DOLLAR = 5
-  export const CHARGE_THRESHOLD = 500 // $5
+  export const ITEM_CREDIT_NAME = "opencode credits"
+  export const ITEM_FEE_NAME = "processing fee"
+  export const RELOAD_AMOUNT = 20
+  export const RELOAD_AMOUNT_MIN = 10
+  export const RELOAD_TRIGGER = 5
+  export const RELOAD_TRIGGER_MIN = 5
   export const stripe = () =>
     new Stripe(Resource.STRIPE_SECRET_KEY.value, {
       apiVersion: "2025-03-31.basil",
@@ -33,6 +32,8 @@ export namespace Billing {
           paymentMethodLast4: BillingTable.paymentMethodLast4,
           balance: BillingTable.balance,
           reload: BillingTable.reload,
+          reloadAmount: BillingTable.reloadAmount,
+          reloadTrigger: BillingTable.reloadTrigger,
           monthlyLimit: BillingTable.monthlyLimit,
           monthlyUsage: BillingTable.monthlyUsage,
           timeMonthlyUsageUpdated: BillingTable.timeMonthlyUsageUpdated,
@@ -67,17 +68,28 @@ export namespace Billing {
     )
   }
 
+  export const calculateFeeInCents = (x: number) => {
+    // math: x = total - (total * 0.044 + 0.30)
+    // math: x = total * (1-0.044) - 0.30
+    // math: (x + 0.30) / 0.956 = total
+    return Math.round(((x + 30) / 0.956) * 0.044 + 30)
+  }
+
   export const reload = async () => {
-    const { customerID, paymentMethodID } = await Database.use((tx) =>
+    const billing = await Database.use((tx) =>
       tx
         .select({
           customerID: BillingTable.customerID,
           paymentMethodID: BillingTable.paymentMethodID,
+          reloadAmount: BillingTable.reloadAmount,
         })
         .from(BillingTable)
         .where(eq(BillingTable.workspaceID, Actor.workspace()))
         .then((rows) => rows[0]),
     )
+    const customerID = billing.customerID
+    const paymentMethodID = billing.paymentMethodID
+    const amountInCents = (billing.reloadAmount ?? Billing.RELOAD_AMOUNT) * 100
     const paymentID = Identifier.create("payment")
     let invoice
     try {
@@ -89,18 +101,18 @@ export namespace Billing {
         currency: "usd",
       })
       await Billing.stripe().invoiceItems.create({
-        amount: Billing.CHARGE_AMOUNT,
+        amount: amountInCents,
         currency: "usd",
         customer: customerID!,
-        description: CHARGE_NAME,
         invoice: draft.id!,
+        description: ITEM_CREDIT_NAME,
       })
       await Billing.stripe().invoiceItems.create({
-        amount: Billing.CHARGE_FEE,
+        amount: calculateFeeInCents(amountInCents),
         currency: "usd",
         customer: customerID!,
-        description: CHARGE_FEE_NAME,
         invoice: draft.id!,
+        description: ITEM_FEE_NAME,
       })
       await Billing.stripe().invoices.finalizeInvoice(draft.id!)
       invoice = await Billing.stripe().invoices.pay(draft.id!, {
@@ -128,7 +140,7 @@ export namespace Billing {
       await tx
         .update(BillingTable)
         .set({
-          balance: sql`${BillingTable.balance} + ${centsToMicroCents(CHARGE_AMOUNT)}`,
+          balance: sql`${BillingTable.balance} + ${centsToMicroCents(amountInCents)}`,
           reloadError: null,
           timeReloadError: null,
         })
@@ -136,7 +148,7 @@ export namespace Billing {
       await tx.insert(PaymentTable).values({
         workspaceID: Actor.workspace(),
         id: paymentID,
-        amount: centsToMicroCents(CHARGE_AMOUNT),
+        amount: centsToMicroCents(amountInCents),
         invoiceID: invoice.id!,
         paymentID: invoice.payments?.data[0].payment.payment_intent as string,
         customerID,
@@ -159,13 +171,19 @@ export namespace Billing {
     z.object({
       successUrl: z.string(),
       cancelUrl: z.string(),
+      amount: z.number().optional(),
     }),
     async (input) => {
       const user = Actor.assert("user")
-      const { successUrl, cancelUrl } = input
+      const { successUrl, cancelUrl, amount } = input
+
+      if (amount !== undefined && amount < Billing.RELOAD_AMOUNT_MIN) {
+        throw new Error(`Amount must be at least $${Billing.RELOAD_AMOUNT_MIN}`)
+      }
 
       const email = await User.getAuthEmail(user.properties.userID)
       const customer = await Billing.get()
+      const amountInCents = (amount ?? customer.reloadAmount ?? Billing.RELOAD_AMOUNT) * 100
       const session = await Billing.stripe().checkout.sessions.create({
         mode: "payment",
         billing_address_collection: "required",
@@ -173,20 +191,16 @@ export namespace Billing {
           {
             price_data: {
               currency: "usd",
-              product_data: {
-                name: CHARGE_NAME,
-              },
-              unit_amount: CHARGE_AMOUNT,
+              product_data: { name: ITEM_CREDIT_NAME },
+              unit_amount: amountInCents,
             },
             quantity: 1,
           },
           {
             price_data: {
               currency: "usd",
-              product_data: {
-                name: CHARGE_FEE_NAME,
-              },
-              unit_amount: CHARGE_FEE,
+              product_data: { name: ITEM_FEE_NAME },
+              unit_amount: calculateFeeInCents(amountInCents),
             },
             quantity: 1,
           },
@@ -218,6 +232,7 @@ export namespace Billing {
         },
         metadata: {
           workspaceID: Actor.workspace(),
+          amount: amountInCents.toString(),
         },
         success_url: successUrl,
         cancel_url: cancelUrl,

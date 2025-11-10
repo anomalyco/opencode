@@ -6,6 +6,8 @@ import { APICallError, convertToModelMessages, LoadAPIKeyError, type ModelMessag
 import { Identifier } from "../id/id"
 import { LSP } from "../lsp"
 import { Snapshot } from "@/snapshot"
+import { fn } from "@/util/fn"
+import { Storage } from "@/storage/storage"
 
 export namespace MessageV2 {
   export const OutputLengthError = NamedError.create("MessageOutputLengthError", z.object({}))
@@ -313,7 +315,6 @@ export namespace MessageV2 {
         APIError.Schema,
       ])
       .optional(),
-    system: z.string().array(),
     parentID: z.string(),
     modelID: z.string(),
     providerID: z.string(),
@@ -397,7 +398,6 @@ export namespace MessageV2 {
         tokens: v1.metadata.assistant!.tokens,
         modelID: v1.metadata.assistant!.modelID,
         providerID: v1.metadata.assistant!.providerID,
-        system: v1.metadata.assistant!.system,
         mode: "build",
         error: v1.metadata.error,
       }
@@ -636,10 +636,47 @@ export namespace MessageV2 {
     return convertToModelMessages(result)
   }
 
-  export function filterCompacted(msgs: { info: MessageV2.Info; parts: MessageV2.Part[] }[]) {
-    const i = msgs.findLastIndex((m) => m.info.role === "assistant" && !!m.info.summary)
-    if (i === -1) return msgs.slice()
-    return msgs.slice(i)
+  export const stream = fn(Identifier.schema("session"), async function* (sessionID) {
+    const list = await Array.fromAsync(await Storage.list(["message", sessionID]))
+    for (let i = list.length - 1; i >= 0; i--) {
+      yield await get({
+        sessionID,
+        messageID: list[i][2],
+      })
+    }
+  })
+
+  export const parts = fn(Identifier.schema("message"), async (messageID) => {
+    const result = [] as MessageV2.Part[]
+    for (const item of await Storage.list(["part", messageID])) {
+      const read = await Storage.read<MessageV2.Part>(item)
+      result.push(read)
+    }
+    result.sort((a, b) => (a.id > b.id ? 1 : -1))
+    return result
+  })
+
+  export const get = fn(
+    z.object({
+      sessionID: Identifier.schema("session"),
+      messageID: Identifier.schema("message"),
+    }),
+    async (input) => {
+      return {
+        info: await Storage.read<MessageV2.Info>(["message", input.sessionID, input.messageID]),
+        parts: await parts(input.messageID),
+      }
+    },
+  )
+
+  export async function filterCompacted(stream: AsyncIterable<MessageV2.WithParts>) {
+    const result = [] as MessageV2.WithParts[]
+    for await (const msg of stream) {
+      result.push(msg)
+      if (msg.info.role === "assistant" && msg.info.summary === true) break
+    }
+    result.reverse()
+    return result
   }
 
   export function fromError(e: unknown, ctx: { providerID: string }) {
