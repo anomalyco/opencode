@@ -50,28 +50,20 @@
   --radius-4xl: 2rem;
 
   --shadow-xs:
-    0 1px 2px -1px rgba(19, 16, 16, 0.04), 0 1px 2px 0 rgba(19, 16, 16, 0.06),
-    0 1px 3px 0 rgba(19, 16, 16, 0.08);
+    0 1px 2px -1px rgba(19, 16, 16, 0.04), 0 1px 2px 0 rgba(19, 16, 16, 0.06), 0 1px 3px 0 rgba(19, 16, 16, 0.08);
   --shadow-md:
-    0 6px 8px -4px rgba(19, 16, 16, 0.12), 0 4px 3px -2px rgba(19, 16, 16, 0.12),
-    0 1px 2px -1px rgba(19, 16, 16, 0.12);
+    0 6px 8px -4px rgba(19, 16, 16, 0.12), 0 4px 3px -2px rgba(19, 16, 16, 0.12), 0 1px 2px -1px rgba(19, 16, 16, 0.12);
   --shadow-xs-border:
-    0 0 0 1px var(--border-weak-base, rgba(11, 6, 0, 0.20)),
-    0 1px 2px -1px rgba(19, 16, 16, 0.04),
-    0 1px 2px 0 rgba(19, 16, 16, 0.06),
-    0 1px 3px 0 rgba(19, 16, 16, 0.08);
+    0 0 0 1px var(--border-base, rgba(11, 6, 0, 0.2)), 0 1px 2px -1px rgba(19, 16, 16, 0.04),
+    0 1px 2px 0 rgba(19, 16, 16, 0.06), 0 1px 3px 0 rgba(19, 16, 16, 0.08);
   --shadow-xs-border-select:
     0 0 0 3px var(--border-weak-selected, rgba(1, 103, 255, 0.29)),
     0 0 0 1px var(--border-selected, rgba(0, 74, 255, 0.99)), 0 1px 2px -1px rgba(19, 16, 16, 0.25),
     0 1px 2px 0 rgba(19, 16, 16, 0.08), 0 1px 3px 0 rgba(19, 16, 16, 0.12);
   --shadow-xs-border-focus:
-    0 0 0 1px var(--border-base, rgba(11, 6, 0, 0.20)),
-    0 1px 2px -1px rgba(19, 16, 16, 0.25),
-    0 1px 2px 0 rgba(19, 16, 16, 0.08),
-    0 1px 3px 0 rgba(19, 16, 16, 0.12),
-    0 0 0 2px var(--background-weak, #F1F0F0),
+    0 0 0 1px var(--border-base, rgba(11, 6, 0, 0.2)), 0 1px 2px -1px rgba(19, 16, 16, 0.25),
+    0 1px 2px 0 rgba(19, 16, 16, 0.08), 0 1px 3px 0 rgba(19, 16, 16, 0.12), 0 0 0 2px var(--background-weak, #f1f0f0),
     0 0 0 3px var(--border-selected, rgba(0, 74, 255, 0.99));
-
 
   --text-mix-blend-mode: multiply;
 }
@@ -273,20 +265,25 @@
   --icon-diff-add-active: var(--mint-light-12);
   --icon-diff-delete-base: var(--ember-light-10);
   --icon-diff-delete-hover: var(--ember-light-11);
-  --syntax-comment: #8a8a8a;
-  --syntax-string: #d68c27;
-  --syntax-keyword: #3b7dd8;
-  --syntax-function: #d1383d;
-  --syntax-number: #3d9a57;
-  --syntax-operator: #d68c27;
-  --syntax-variable: #b0851f;
-  --syntax-type: #318795;
-  --syntax-constant: #953170;
-  --syntax-punctuation: #1a1a1a;
-  --syntax-success: var(--apple-dark-10);
+  --syntax-comment: var(--text-weaker);
+  --syntax-regexp: var(--text-base);
+  --syntax-string: var(--mint-light-11);
+  --syntax-keyword: var(--text-weak);
+  --syntax-primitive: var(--ember-light-11);
+  --syntax-operator: var(--text-weak);
+  --syntax-variable: var(--text-strong);
+  --syntax-property: var(--lilac-light-11);
+  --syntax-type: var(--cobalt-light-11);
+  --syntax-constant: var(--lilac-light-11);
+  --syntax-punctuation: var(--text-weak);
+  --syntax-object: var(--blue-light-11);
+  --syntax-success: var(--apple-light-10);
   --syntax-warning: var(--amber-light-10);
-  --syntax-critical: var(--ember-dark-9);
-  --syntax-info: var(--lilac-dark-11);
+  --syntax-critical: var(--ember-light-9);
+  --syntax-info: var(--lilac-light-11);
+  --syntax-diff-add: var(--mint-light-11);
+  --syntax-diff-delete: var(--ember-light-11);
+  --syntax-unknown: red;
   --markdown-heading: #d68c27;
   --markdown-text: #1a1a1a;
   --markdown-link: #3b7dd8;
@@ -413,7 +410,7 @@
     --text-on-brand-weaker: var(--smoke-dark-alpha-8);
     --text-on-brand-strong: var(--smoke-dark-alpha-12);
     --button-secondary-base: var(--smoke-dark-4);
-    --button-secondary-hover: #2A2727;
+    --button-secondary-hover: #2a2727;
     --border-base: var(--smoke-dark-alpha-7);
     --border-hover: var(--smoke-dark-alpha-8);
     --border-active: var(--smoke-dark-alpha-9);
@@ -508,20 +505,24 @@
     --icon-diff-add-active: var(--mint-dark-11);
     --icon-diff-delete-base: var(--ember-dark-9);
     --icon-diff-delete-hover: var(--ember-dark-10);
-    --syntax-comment: #808080;
-    --syntax-string: #9d7cd8;
-    --syntax-keyword: #fab283;
-    --syntax-function: #e06c75;
-    --syntax-number: #7fd88f;
-    --syntax-operator: #f5a742;
-    --syntax-variable: #e5c07b;
-    --syntax-type: #56b6c2;
-    --syntax-constant: #c2569a;
-    --syntax-punctuation: #eeeeee;
+    --syntax-comment: var(--text-weaker);
+    --syntax-regexp: var(--text-base);
+    --syntax-string: var(--mint-dark-11);
+    --syntax-keyword: var(--text-weak);
+    --syntax-primitive: var(--ember-dark-11);
+    --syntax-operator: var(--text-weak);
+    --syntax-variable: var(--text-strong);
+    --syntax-property: var(--lilac-dark-11);
+    --syntax-type: var(--cobalt-dark-11);
+    --syntax-constant: var(--lilac-dark-11);
+    --syntax-punctuation: var(--text-weak);
+    --syntax-object: var(--blue-dark-11);
     --syntax-success: var(--apple-dark-10);
     --syntax-warning: var(--amber-dark-10);
-    --syntax-critical: var(--ember-dark-10);
-    --syntax-info: var(--lilac-dark-10);
+    --syntax-critical: var(--ember-dark-9);
+    --syntax-info: var(--lilac-dark-11);
+    --syntax-diff-add: var(--mint-dark-11);
+    --syntax-diff-delete: var(--ember-dark-11);
     --markdown-heading: #9d7cd8;
     --markdown-text: #eeeeee;
     --markdown-link: #fab283;

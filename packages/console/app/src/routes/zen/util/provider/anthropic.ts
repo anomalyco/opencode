@@ -98,7 +98,10 @@ export function fromAnthropicRequest(body: any): CommonRequest {
       typeof (src as any).media_type === "string" &&
       typeof (src as any).data === "string"
     )
-      return { type: "image_url", image_url: { url: `data:${(src as any).media_type};base64,${(src as any).data}` } }
+      return {
+        type: "image_url",
+        image_url: { url: `data:${(src as any).media_type};base64,${(src as any).data}` },
+      }
     return undefined
   }
 
@@ -165,7 +168,11 @@ export function fromAnthropicRequest(body: any): CommonRequest {
         .filter((t: any) => t && typeof t === "object" && "input_schema" in t)
         .map((t: any) => ({
           type: "function",
-          function: { name: (t as any).name, description: (t as any).description, parameters: (t as any).input_schema },
+          function: {
+            name: (t as any).name,
+            description: (t as any).description,
+            parameters: (t as any).input_schema,
+          },
         }))
     : undefined
 
@@ -452,7 +459,12 @@ export function toAnthropicResponse(resp: CommonResponse) {
         } catch {
           input = (tc as any).function.arguments
         }
-        content.push({ type: "tool_use", id: (tc as any).id, name: (tc as any).function.name, input })
+        content.push({
+          type: "tool_use",
+          id: (tc as any).id,
+          name: (tc as any).function.name,
+          input,
+        })
       }
     }
   }
@@ -511,13 +523,22 @@ export function fromAnthropicChunk(chunk: string): CommonChunk | string {
   if (json.type === "content_block_start") {
     const cb = json.content_block
     if (cb?.type === "text") {
-      out.choices.push({ index: json.index ?? 0, delta: { role: "assistant", content: "" }, finish_reason: null })
+      out.choices.push({
+        index: json.index ?? 0,
+        delta: { role: "assistant", content: "" },
+        finish_reason: null,
+      })
     } else if (cb?.type === "tool_use") {
       out.choices.push({
         index: json.index ?? 0,
         delta: {
           tool_calls: [
-            { index: json.index ?? 0, id: cb.id, type: "function", function: { name: cb.name, arguments: "" } },
+            {
+              index: json.index ?? 0,
+              id: cb.id,
+              type: "function",
+              function: { name: cb.name, arguments: "" },
+            },
           ],
         },
         finish_reason: null,
@@ -532,7 +553,9 @@ export function fromAnthropicChunk(chunk: string): CommonChunk | string {
     } else if (d?.type === "input_json_delta") {
       out.choices.push({
         index: json.index ?? 0,
-        delta: { tool_calls: [{ index: json.index ?? 0, function: { arguments: d.partial_json } }] },
+        delta: {
+          tool_calls: [{ index: json.index ?? 0, function: { arguments: d.partial_json } }],
+        },
         finish_reason: null,
       })
     }

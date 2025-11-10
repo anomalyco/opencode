@@ -9,7 +9,8 @@ import type {
   File,
   FileNode,
   Project,
-  Command,
+  FileDiff,
+  Todo,
 } from "@opencode-ai/sdk"
 import { createStore, produce, reconcile } from "solid-js/store"
 import { createMemo } from "solid-js"
@@ -28,6 +29,13 @@ export const { use: useSync, provider: SyncProvider } = createSimpleContext({
       config: Config
       path: Path
       session: Session[]
+      session_diff: {
+        [sessionID: string]: FileDiff[]
+      }
+      todo: {
+        [sessionID: string]: Todo[]
+      }
+      limit: number
       message: {
         [sessionID: string]: Message[]
       }
@@ -44,6 +52,9 @@ export const { use: useSync, provider: SyncProvider } = createSimpleContext({
       agent: [],
       provider: [],
       session: [],
+      session_diff: {},
+      todo: {},
+      limit: 10,
       message: {},
       part: {},
       node: [],
@@ -68,6 +79,12 @@ export const { use: useSync, provider: SyncProvider } = createSimpleContext({
           )
           break
         }
+        case "session.diff":
+          setStore("session_diff", event.properties.sessionID, event.properties.diff)
+          break
+        case "todo.updated":
+          setStore("todo", event.properties.sessionID, event.properties.todos)
+          break
         case "message.updated": {
           const messages = store.message[event.properties.info.sessionID]
           if (!messages) {
@@ -118,12 +135,13 @@ export const { use: useSync, provider: SyncProvider } = createSimpleContext({
       path: () => sdk.client.path.get().then((x) => setStore("path", x.data!)),
       agent: () => sdk.client.app.agents().then((x) => setStore("agent", x.data ?? [])),
       session: () =>
-        sdk.client.session.list().then((x) =>
-          setStore(
-            "session",
-            (x.data ?? []).slice().sort((a, b) => a.id.localeCompare(b.id)),
-          ),
-        ),
+        sdk.client.session.list().then((x) => {
+          const sessions = (x.data ?? [])
+            .slice()
+            .sort((a, b) => a.id.localeCompare(b.id))
+            .slice(0, store.limit)
+          setStore("session", sessions)
+        }),
       config: () => sdk.client.config.get().then((x) => setStore("config", x.data!)),
       changes: () => sdk.client.file.status().then((x) => setStore("changes", x.data!)),
       node: () => sdk.client.file.list({ query: { path: "/" } }).then((x) => setStore("node", x.data!)),
@@ -167,22 +185,19 @@ export const { use: useSync, provider: SyncProvider } = createSimpleContext({
           if (match.found) return store.session[match.index]
           return undefined
         },
-        async sync(sessionID: string, isRetry = false) {
-          const [session, messages] = await Promise.all([
-            sdk.client.session.get({ path: { id: sessionID } }),
-            sdk.client.session.messages({ path: { id: sessionID } }),
+        async sync(sessionID: string, _isRetry = false) {
+          const [session, messages, todo, diff] = await Promise.all([
+            sdk.client.session.get({ path: { id: sessionID }, throwOnError: true }),
+            sdk.client.session.messages({ path: { id: sessionID }, query: { limit: 100 } }),
+            sdk.client.session.todo({ path: { id: sessionID } }),
+            sdk.client.session.diff({ path: { id: sessionID } }),
           ])
-
-          // If no messages and this might be a new session, retry after a delay
-          if (!isRetry && messages.data!.length === 0) {
-            setTimeout(() => this.sync(sessionID, true), 500)
-            return
-          }
-
           setStore(
             produce((draft) => {
               const match = Binary.search(draft.session, sessionID, (s) => s.id)
-              draft.session[match.index] = session.data!
+              if (match.found) draft.session[match.index] = session.data!
+              if (!match.found) draft.session.splice(match.index, 0, session.data!)
+              draft.todo[sessionID] = todo.data ?? []
               draft.message[sessionID] = messages
                 .data!.map((x) => x.info)
                 .slice()
@@ -193,9 +208,15 @@ export const { use: useSync, provider: SyncProvider } = createSimpleContext({
                   .map(sanitizePart)
                   .sort((a, b) => a.id.localeCompare(b.id))
               }
+              draft.session_diff[sessionID] = diff.data ?? []
             }),
           )
         },
+        fetch: async (count = 10) => {
+          setStore("limit", (x) => x + count)
+          await load.session()
+        },
+        more: createMemo(() => store.session.length === store.limit),
       },
       load,
       absolute,

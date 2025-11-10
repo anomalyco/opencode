@@ -1,14 +1,14 @@
 import { marked } from "marked"
 import markedShiki from "marked-shiki"
 import { bundledLanguages, type BundledLanguage } from "shiki"
-
 import { createSimpleContext } from "./helper"
-import { useShiki } from "./shiki"
+import { getSharedHighlighter } from "@pierre/precision-diffs"
+
+const highlighter = await getSharedHighlighter({ themes: ["OpenCode"], langs: [] })
 
 export const { use: useMarked, provider: MarkedProvider } = createSimpleContext({
   name: "Marked",
   init: () => {
-    const highlighter = useShiki()
     return marked.use(
       markedShiki({
         async highlight(code, lang) {
@@ -20,7 +20,7 @@ export const { use: useMarked, provider: MarkedProvider } = createSimpleContext(
           }
           return highlighter.codeToHtml(code, {
             lang: lang || "text",
-            theme: "opencode",
+            theme: "OpenCode",
             tabindex: false,
           })
         },

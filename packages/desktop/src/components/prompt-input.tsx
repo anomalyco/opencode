@@ -1,51 +1,41 @@
-import { Button, Icon, IconButton, Select, SelectDialog } from "@opencode-ai/ui"
+import { Button, Icon, IconButton, Select, SelectDialog, Tooltip } from "@opencode-ai/ui"
 import { useFilteredList } from "@opencode-ai/ui/hooks"
-import { createEffect, on, Component, createMemo, Show, For, onMount, onCleanup } from "solid-js"
+import { createEffect, on, Component, Show, For, onMount, onCleanup, Switch, Match } from "solid-js"
 import { createStore } from "solid-js/store"
 import { FileIcon } from "@/ui"
 import { getDirectory, getFilename } from "@/utils"
 import { createFocusSignal } from "@solid-primitives/active-element"
-import { TextSelection, useLocal } from "@/context/local"
+import { useLocal } from "@/context/local"
 import { DateTime } from "luxon"
-
-interface PartBase {
-  content: string
-  start: number
-  end: number
-}
-
-export interface TextPart extends PartBase {
-  type: "text"
-}
-
-export interface FileAttachmentPart extends PartBase {
-  type: "file"
-  path: string
-  selection?: TextSelection
-}
-
-export type ContentPart = TextPart | FileAttachmentPart
+import { ContentPart, DEFAULT_PROMPT, isPromptEqual, Prompt, useSession } from "@/context/session"
+import { useSDK } from "@/context/sdk"
+import { useNavigate } from "@solidjs/router"
+import { useSync } from "@/context/sync"
 
 interface PromptInputProps {
-  onSubmit: (parts: ContentPart[]) => void
   class?: string
   ref?: (el: HTMLDivElement) => void
 }
 
 export const PromptInput: Component<PromptInputProps> = (props) => {
+  const navigate = useNavigate()
+  const sdk = useSDK()
+  const sync = useSync()
   const local = useLocal()
+  const session = useSession()
   let editorRef!: HTMLDivElement
 
-  const defaultParts = [{ type: "text", content: "", start: 0, end: 0 } as const]
   const [store, setStore] = createStore<{
-    contentParts: ContentPart[]
     popoverIsOpen: boolean
   }>({
-    contentParts: defaultParts,
     popoverIsOpen: false,
   })
 
-  const isEmpty = createMemo(() => isEqual(store.contentParts, defaultParts))
+  createEffect(() => {
+    session.id
+    editorRef.focus()
+  })
+
   const isFocused = createFocusSignal(() => editorRef)
 
   const handlePaste = (event: ClipboardEvent) => {
@@ -71,14 +61,16 @@ export const PromptInput: Component<PromptInputProps> = (props) => {
     }
   })
 
+  const handleFileSelect = (path: string | undefined) => {
+    if (!path) return
+    addPart({ type: "file", path, content: "@" + getFilename(path), start: 0, end: 0 })
+    setStore("popoverIsOpen", false)
+  }
+
   const { flat, active, onInput, onKeyDown, refetch } = useFilteredList<string>({
     items: local.file.searchFilesAndDirectories,
     key: (x) => x,
-    onSelect: (path) => {
-      if (!path) return
-      addPart({ type: "file", path, content: "@" + getFilename(path), start: 0, end: 0 })
-      setStore("popoverIsOpen", false)
-    },
+    onSelect: handleFileSelect,
   })
 
   createEffect(() => {
@@ -88,10 +80,10 @@ export const PromptInput: Component<PromptInputProps> = (props) => {
 
   createEffect(
     on(
-      () => store.contentParts,
+      () => session.prompt.current(),
       (currentParts) => {
         const domParts = parseFromDOM()
-        if (isEqual(currentParts, domParts)) return
+        if (isPromptEqual(currentParts, domParts)) return
 
         const selection = window.getSelection()
         let cursorPosition: number | null = null
@@ -122,8 +114,18 @@ export const PromptInput: Component<PromptInputProps> = (props) => {
     ),
   )
 
-  const parseFromDOM = (): ContentPart[] => {
-    const newParts: ContentPart[] = []
+  createEffect(
+    on(
+      () => session.prompt.cursor(),
+      (cursor) => {
+        if (cursor === undefined) return
+        queueMicrotask(() => setCursorPosition(editorRef, cursor))
+      },
+    ),
+  )
+
+  const parseFromDOM = (): Prompt => {
+    const newParts: Prompt = []
     let position = 0
     editorRef.childNodes.forEach((node) => {
       if (node.nodeType === Node.TEXT_NODE) {
@@ -150,7 +152,7 @@ export const PromptInput: Component<PromptInputProps> = (props) => {
         }
       }
     })
-    if (newParts.length === 0) newParts.push(...defaultParts)
+    if (newParts.length === 0) newParts.push(...DEFAULT_PROMPT)
     return newParts
   }
 
@@ -167,12 +169,13 @@ export const PromptInput: Component<PromptInputProps> = (props) => {
       setStore("popoverIsOpen", false)
     }
 
-    setStore("contentParts", rawParts)
+    session.prompt.set(rawParts, cursorPosition)
   }
 
   const addPart = (part: ContentPart) => {
     const cursorPosition = getCursorPosition(editorRef)
-    const rawText = store.contentParts.map((p) => p.content).join("")
+    const prompt = session.prompt.current()
+    const rawText = prompt.map((p) => p.content).join("")
     const textBeforeCursor = rawText.substring(0, cursorPosition)
     const atMatch = textBeforeCursor.match(/@(\S*)$/)
 
@@ -198,7 +201,7 @@ export const PromptInput: Component<PromptInputProps> = (props) => {
       parts: nextParts,
       inserted,
       cursorPositionAfter,
-    } = store.contentParts.reduce(
+    } = prompt.reduce(
       (acc, item) => {
         if (acc.inserted) {
           acc.parts.push({ ...item, start: acc.runningIndex, end: acc.runningIndex + item.content.length })
@@ -257,7 +260,7 @@ export const PromptInput: Component<PromptInputProps> = (props) => {
     )
 
     if (!inserted) {
-      const baseParts = store.contentParts.filter((item) => !(item.type === "text" && item.content === ""))
+      const baseParts = prompt.filter((item) => !(item.type === "text" && item.content === ""))
       const runningIndex = baseParts.reduce((sum, p) => sum + p.content.length, 0)
       const appendedAcc = { parts: [...baseParts] as ContentPart[], runningIndex }
       if (part.type === "text") {
@@ -270,19 +273,26 @@ export const PromptInput: Component<PromptInputProps> = (props) => {
           end: appendedAcc.runningIndex + part.content.length,
         })
       }
-      const next = appendedAcc.parts.length > 0 ? appendedAcc.parts : defaultParts
-      setStore("contentParts", next)
-      setStore("popoverIsOpen", false)
+      const next = appendedAcc.parts.length > 0 ? appendedAcc.parts : DEFAULT_PROMPT
       const nextCursor = rawText.length + part.content.length
+      session.prompt.set(next, nextCursor)
+      setStore("popoverIsOpen", false)
       queueMicrotask(() => setCursorPosition(editorRef, nextCursor))
       return
     }
 
-    setStore("contentParts", nextParts)
+    session.prompt.set(nextParts, cursorPositionAfter)
     setStore("popoverIsOpen", false)
 
     queueMicrotask(() => setCursorPosition(editorRef, cursorPositionAfter))
   }
+
+  const abort = () =>
+    sdk.client.session.abort({
+      path: {
+        id: session.id!,
+      },
+    })
 
   const handleKeyDown = (event: KeyboardEvent) => {
     if (store.popoverIsOpen && (event.key === "ArrowUp" || event.key === "ArrowDown" || event.key === "Enter")) {
@@ -293,14 +303,100 @@ export const PromptInput: Component<PromptInputProps> = (props) => {
     if (event.key === "Enter" && !event.shiftKey) {
       handleSubmit(event)
     }
+    if (event.key === "Escape") {
+      if (store.popoverIsOpen) {
+        setStore("popoverIsOpen", false)
+      } else if (session.working()) {
+        abort()
+      }
+    }
   }
 
-  const handleSubmit = (event: Event) => {
+  const handleSubmit = async (event: Event) => {
     event.preventDefault()
-    if (store.contentParts.length > 0) {
-      props.onSubmit([...store.contentParts])
-      setStore("contentParts", defaultParts)
+    const prompt = session.prompt.current()
+    const text = prompt.map((part) => part.content).join("")
+    if (text.trim().length === 0) {
+      if (session.working()) abort()
+      return
     }
+
+    let existing = session.info()
+    if (!existing) {
+      const created = await sdk.client.session.create()
+      existing = created.data ?? undefined
+      if (existing) navigate(`/session/${existing.id}`)
+    }
+    if (!existing) return
+
+    // if (!session.id) {
+    // session.layout.setOpenedTabs(
+    // session.layout.copyTabs("", session.id)
+    // }
+
+    const toAbsolutePath = (path: string) => (path.startsWith("/") ? path : sync.absolute(path))
+    const attachments = prompt.filter((part) => part.type === "file")
+
+    // const activeFile = local.context.active()
+    // if (activeFile) {
+    //   registerAttachment(
+    //     activeFile.path,
+    //     activeFile.selection,
+    //     activeFile.name ?? formatAttachmentLabel(activeFile.path, activeFile.selection),
+    //   )
+    // }
+
+    // for (const contextFile of local.context.all()) {
+    //   registerAttachment(
+    //     contextFile.path,
+    //     contextFile.selection,
+    //     formatAttachmentLabel(contextFile.path, contextFile.selection),
+    //   )
+    // }
+
+    const attachmentParts = attachments.map((attachment) => {
+      const absolute = toAbsolutePath(attachment.path)
+      const query = attachment.selection
+        ? `?start=${attachment.selection.startLine}&end=${attachment.selection.endLine}`
+        : ""
+      return {
+        type: "file" as const,
+        mime: "text/plain",
+        url: `file://${absolute}${query}`,
+        filename: getFilename(attachment.path),
+        source: {
+          type: "file" as const,
+          text: {
+            value: attachment.content,
+            start: attachment.start,
+            end: attachment.end,
+          },
+          path: absolute,
+        },
+      }
+    })
+
+    session.layout.setActiveTab(undefined)
+    session.messages.setActive(undefined)
+    session.prompt.set(DEFAULT_PROMPT, 0)
+
+    sdk.client.session.prompt({
+      path: { id: existing.id },
+      body: {
+        agent: local.agent.current()!.name,
+        model: {
+          modelID: local.model.current()!.id,
+          providerID: local.model.current()!.provider.id,
+        },
+        parts: [
+          {
+            type: "text",
+            text,
+          },
+          ...attachmentParts,
+        ],
+      },
+    })
   }
 
   return (
@@ -310,11 +406,12 @@ export const PromptInput: Component<PromptInputProps> = (props) => {
           <Show when={flat().length > 0} fallback={<div class="text-text-weak px-2">No matching files</div>}>
             <For each={flat()}>
               {(i) => (
-                <div
+                <button
                   classList={{
                     "w-full flex items-center justify-between rounded-md": true,
                     "bg-surface-raised-base-hover": active() === i,
                   }}
+                  onClick={() => handleFileSelect(i)}
                 >
                   <div class="flex items-center gap-x-2 grow min-w-0">
                     <FileIcon node={{ path: i, type: "file" }} class="shrink-0 size-4" />
@@ -326,7 +423,7 @@ export const PromptInput: Component<PromptInputProps> = (props) => {
                     </div>
                   </div>
                   <div class="flex items-center gap-x-1 text-text-muted/40 shrink-0"></div>
-                </div>
+                </button>
               )}
             </For>
           </Show>
@@ -354,7 +451,7 @@ export const PromptInput: Component<PromptInputProps> = (props) => {
               "[&>[data-type=file]]:text-icon-info-active": true,
             }}
           />
-          <Show when={isEmpty()}>
+          <Show when={!session.prompt.dirty()}>
             <div class="absolute top-0 left-0 p-3 text-14-regular text-text-weak pointer-events-none">
               Plan and build anything
             </div>
@@ -419,27 +516,37 @@ export const PromptInput: Component<PromptInputProps> = (props) => {
               )}
             </SelectDialog>
           </div>
-          <IconButton type="submit" disabled={isEmpty()} icon="arrow-up" variant="primary" />
+          <Tooltip
+            placement="top"
+            value={
+              <Switch>
+                <Match when={session.working()}>
+                  <div class="flex items-center gap-2">
+                    <span>Stop</span>
+                    <span class="text-icon-base text-12-medium text-[10px]!">ESC</span>
+                  </div>
+                </Match>
+                <Match when={true}>
+                  <div class="flex items-center gap-2">
+                    <span>Send</span>
+                    <Icon name="enter" size="small" class="text-icon-base" />
+                  </div>
+                </Match>
+              </Switch>
+            }
+          >
+            <IconButton
+              type="submit"
+              disabled={!session.prompt.dirty() && !session.working()}
+              icon={session.working() ? "stop" : "arrow-up"}
+              variant="primary"
+              class="rounded-full"
+            />
+          </Tooltip>
         </div>
       </form>
     </div>
   )
-}
-
-function isEqual(arrA: ContentPart[], arrB: ContentPart[]): boolean {
-  if (arrA.length !== arrB.length) return false
-  for (let i = 0; i < arrA.length; i++) {
-    const partA = arrA[i]
-    const partB = arrB[i]
-    if (partA.type !== partB.type) return false
-    if (partA.type === "text" && partA.content !== (partB as TextPart).content) {
-      return false
-    }
-    if (partA.type === "file" && partA.path !== (partB as FileAttachmentPart).path) {
-      return false
-    }
-  }
-  return true
 }
 
 function getCursorPosition(parent: HTMLElement): number {

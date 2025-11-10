@@ -1,6 +1,7 @@
 import "./index.css"
-import { Title, Meta } from "@solidjs/meta"
+import { Title, Meta, Link } from "@solidjs/meta"
 import { createSignal, Show } from "solid-js"
+import { config } from "~/config"
 import { Header } from "~/component/header"
 import { Footer } from "~/component/footer"
 import { Legal } from "~/component/legal"
@@ -54,6 +55,7 @@ export default function Enterprise() {
   return (
     <main data-page="enterprise">
       <Title>OpenCode | Enterprise solutions for your organisation</Title>
+      <Link rel="canonical" href={`${config.baseUrl}/enterprise`} />
       <Meta name="description" content="Contact OpenCode for enterprise solutions" />
       <div data-component="container">
         <Header />
@@ -62,41 +64,28 @@ export default function Enterprise() {
           <section data-component="enterprise-content">
             <div data-component="enterprise-columns">
               <div data-component="enterprise-column-1">
-                <h2>Your code is yours</h2>
+                <h1>Your code is yours</h1>
                 <p>
-                  OpenCode operates securely inside your organization with no data or context stored
-                  and no licensing restrictions or ownership claims. Start a trial with your team,
-                  then deploy it across your organization by integrating it with your SSO and
-                  internal AI gateway.
+                  OpenCode operates securely inside your organization with no data or context stored and no licensing
+                  restrictions or ownership claims. Start a trial with your team, then deploy it across your
+                  organization by integrating it with your SSO and internal AI gateway.
                 </p>
                 <p>Let us know and how we can help.</p>
 
                 <Show when={false}>
                   <div data-component="testimonial">
                     <div data-component="quotation">
-                      <svg
-                        width="20"
-                        height="17"
-                        viewBox="0 0 20 17"
-                        fill="none"
-                        xmlns="http://www.w3.org/2000/svg"
-                      >
+                      <svg width="20" height="17" viewBox="0 0 20 17" fill="none" xmlns="http://www.w3.org/2000/svg">
                         <path
                           d="M19.4118 0L16.5882 9.20833H20V17H12.2353V10.0938L16 0H19.4118ZM7.17647 0L4.35294 9.20833H7.76471V17H0V10.0938L3.76471 0H7.17647Z"
                           fill="currentColor"
                         />
                       </svg>
                     </div>
-                    Thanks to OpenCode, we found a way to create software to track all our assets —
-                    even the imaginary ones.
+                    Thanks to OpenCode, we found a way to create software to track all our assets — even the imaginary
+                    ones.
                     <div data-component="testimonial-logo">
-                      <svg
-                        width="80"
-                        height="79"
-                        viewBox="0 0 80 79"
-                        fill="none"
-                        xmlns="http://www.w3.org/2000/svg"
-                      >
+                      <svg width="80" height="79" viewBox="0 0 80 79" fill="none" xmlns="http://www.w3.org/2000/svg">
                         <path
                           fill-rule="evenodd"
                           clip-rule="evenodd"
@@ -213,11 +202,7 @@ export default function Enterprise() {
                     </button>
                   </form>
 
-                  {showSuccess() && (
-                    <div data-component="success-message">
-                      Message sent, we'll be in touch soon.
-                    </div>
-                  )}
+                  {showSuccess() && <div data-component="success-message">Message sent, we'll be in touch soon.</div>}
                 </div>
               </div>
             </div>
@@ -230,31 +215,29 @@ export default function Enterprise() {
             <ul>
               <li>
                 <Faq question="What is OpenCode Enterprise?">
-                  OpenCode Enterprise is for organizations that want to ensure that their code and
-                  data never leaves their infrastructure. It can do this by using a centralized
-                  config that integrates with your SSO and internal AI gateway.
+                  OpenCode Enterprise is for organizations that want to ensure that their code and data never leaves
+                  their infrastructure. It can do this by using a centralized config that integrates with your SSO and
+                  internal AI gateway.
                 </Faq>
               </li>
               <li>
                 <Faq question="How do I get started with OpenCode Enterprise?">
-                  Simply start with an internal trial with your team. OpenCode by default does not
-                  store your code or context data, making it easy to get started. Then contact us to
-                  discuss pricing and implementation options.
+                  Simply start with an internal trial with your team. OpenCode by default does not store your code or
+                  context data, making it easy to get started. Then contact us to discuss pricing and implementation
+                  options.
                 </Faq>
               </li>
               <li>
                 <Faq question="How does enterprise pricing work?">
-                  We offer per-seat enterprise pricing. If you have your own LLM gateway, we do not
-                  charge for tokens used. For further details, contact us for a custom quote based
-                  on your organization's needs.
+                  We offer per-seat enterprise pricing. If you have your own LLM gateway, we do not charge for tokens
+                  used. For further details, contact us for a custom quote based on your organization's needs.
                 </Faq>
               </li>
               <li>
                 <Faq question="Is my data secure with OpenCode Enterprise?">
-                  Yes. OpenCode does not store your code or context data. All processing happens
-                  locally or through direct API calls to your AI provider. With central config and
-                  SSO integration, your data remains secure within your organization's
-                  infrastructure.
+                  Yes. OpenCode does not store your code or context data. All processing happens locally or through
+                  direct API calls to your AI provider. With central config and SSO integration, your data remains
+                  secure within your organization's infrastructure.
                 </Faq>
               </li>
             </ul>

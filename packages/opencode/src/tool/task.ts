@@ -31,7 +31,7 @@ export const TaskTool = Tool.define("task", async () => {
         parentID: ctx.sessionID,
         title: params.description + ` (@${agent.name} subagent)`,
       })
-      const msg = await Session.getMessage({ sessionID: ctx.sessionID, messageID: ctx.messageID })
+      const msg = await MessageV2.get({ sessionID: ctx.sessionID, messageID: ctx.messageID })
       if (msg.info.role !== "assistant") throw new Error("Not an assistant message")
 
       ctx.metadata({
@@ -89,7 +89,7 @@ export const TaskTool = Tool.define("task", async () => {
       })
       unsub()
       let all
-      all = await Session.messages(session.id)
+      all = await Session.messages({ sessionID: session.id })
       all = all.filter((x) => x.info.role === "assistant")
       all = all.flatMap((msg) => msg.parts.filter((x: any) => x.type === "tool") as MessageV2.ToolPart[])
       return {

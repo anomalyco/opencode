@@ -1,6 +1,6 @@
 import { Resource } from "@opencode-ai/console-resource"
 import { Actor } from "@opencode-ai/console-core/actor.js"
-import { action, query } from "@solidjs/router"
+import { action, json, query } from "@solidjs/router"
 import { withActor } from "~/context/auth.withActor"
 import { Billing } from "@opencode-ai/console-core/billing.js"
 import { User } from "@opencode-ai/console-core/user.js"
@@ -34,6 +34,11 @@ export function formatDateUTC(date: Date) {
   return date.toLocaleDateString("en-US", options)
 }
 
+export function formatBalance(amount: number) {
+  const balance = ((amount ?? 0) / 100000000).toFixed(2)
+  return balance === "-0.00" ? "0.00" : balance
+}
+
 export async function getLastSeenWorkspaceID() {
   "use server"
   return withActor(async () => {
@@ -62,23 +67,40 @@ export const querySessionInfo = query(async (workspaceID: string) => {
   return withActor(() => {
     return {
       isAdmin: Actor.userRole() === "admin",
-      isBeta:
-        Resource.App.stage === "production"
-          ? workspaceID === "wrk_01K46JDFR0E75SG2Q8K172KF3Y"
-          : true,
+      isBeta: Resource.App.stage === "production" ? workspaceID === "wrk_01K46JDFR0E75SG2Q8K172KF3Y" : true,
     }
   }, workspaceID)
 }, "session.get")
 
 export const createCheckoutUrl = action(
-  async (workspaceID: string, successUrl: string, cancelUrl: string) => {
+  async (workspaceID: string, amount: number, successUrl: string, cancelUrl: string) => {
     "use server"
-    return withActor(() => Billing.generateCheckoutUrl({ successUrl, cancelUrl }), workspaceID)
+    return json(
+      await withActor(
+        () =>
+          Billing.generateCheckoutUrl({ amount, successUrl, cancelUrl })
+            .then((data) => ({ error: undefined, data }))
+            .catch((e) => ({
+              error: e.message as string,
+              data: undefined,
+            })),
+        workspaceID,
+      ),
+    )
   },
   "checkoutUrl",
 )
 
 export const queryBillingInfo = query(async (workspaceID: string) => {
   "use server"
-  return withActor(() => Billing.get(), workspaceID)
+  return withActor(async () => {
+    const billing = await Billing.get()
+    return {
+      ...billing,
+      reloadAmount: billing.reloadAmount ?? Billing.RELOAD_AMOUNT,
+      reloadAmountMin: Billing.RELOAD_AMOUNT_MIN,
+      reloadTrigger: billing.reloadTrigger ?? Billing.RELOAD_TRIGGER,
+      reloadTriggerMin: Billing.RELOAD_TRIGGER_MIN,
+    }
+  }, workspaceID)
 }, "billing.get")

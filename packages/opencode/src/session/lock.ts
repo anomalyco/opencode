@@ -50,7 +50,10 @@ export namespace SessionLock {
   export function acquire(input: { sessionID: string }) {
     const lock = get(input.sessionID)
     if (lock) {
-      throw new LockedError({ sessionID: input.sessionID, message: `Session ${input.sessionID} is locked` })
+      throw new LockedError({
+        sessionID: input.sessionID,
+        message: `Session ${input.sessionID} is locked`,
+      })
     }
     const controller = new AbortController()
     state().locks.set(input.sessionID, {
