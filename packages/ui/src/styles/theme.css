@@ -314,7 +314,7 @@
     /* OC-1-Dark */
     color-scheme: dark;
     --background-base: var(--smoke-dark-1);
-    --background-weak: #1B1818;
+    --background-weak: #1b1818;
     --background-strong: #151313;
     --background-stronger: #191515;
     --surface-base: var(--smoke-dark-alpha-2);
@@ -409,7 +409,7 @@
     --text-on-brand-weak: var(--smoke-dark-alpha-9);
     --text-on-brand-weaker: var(--smoke-dark-alpha-8);
     --text-on-brand-strong: var(--smoke-dark-alpha-12);
-    --button-secondary-base: #231F1F;
+    --button-secondary-base: #231f1f;
     --button-secondary-hover: #2a2727;
     --border-base: var(--smoke-dark-alpha-7);
     --border-hover: var(--smoke-dark-alpha-8);
@@ -513,8 +513,8 @@
     --syntax-operator: var(--text-weak);
     --syntax-variable: var(--text-strong);
     --syntax-property: #00ceb9;
-    --syntax-type: #ECF58C;
-    --syntax-constant: #93E9F6;
+    --syntax-type: #ecf58c;
+    --syntax-constant: #93e9f6;
     --syntax-punctuation: var(--text-weaker);
     --syntax-object: #ff9ae2;
     --syntax-success: var(--apple-dark-10);
