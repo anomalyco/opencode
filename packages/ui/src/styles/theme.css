@@ -507,11 +507,11 @@
     --icon-diff-delete-hover: var(--ember-dark-10);
     --syntax-comment: var(--text-weaker);
     --syntax-regexp: var(--text-base);
-    --syntax-string: var(--text-base);
+    --syntax-string: var(--text-strong);
     --syntax-keyword: var(--text-weak);
     --syntax-primitive: #ffba92;
     --syntax-operator: var(--text-weak);
-    --syntax-variable: var(--text-strong);
+    --syntax-variable: var(--text-base);
     --syntax-property: #00ceb9;
     --syntax-type: #ecf58c;
     --syntax-constant: #93e9f6;
