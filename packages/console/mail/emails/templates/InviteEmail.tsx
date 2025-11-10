@@ -1,18 +1,6 @@
 // @ts-nocheck
 import React from "react"
-import {
-  Img,
-  Row,
-  Html,
-  Link,
-  Body,
-  Head,
-  Button,
-  Column,
-  Preview,
-  Section,
-  Container,
-} from "@jsx-email/all"
+import { Img, Row, Html, Link, Body, Head, Button, Column, Preview, Section, Container } from "@jsx-email/all"
 import { Text, Fonts, Title, A, Span } from "../components"
 import {
   unit,
@@ -64,8 +52,8 @@ export const InviteEmail = ({
             <Section style={{ padding: `${unit * 2}px 0 0 0` }}>
               <Text style={headingText}>Join your team's OpenCode workspace</Text>
               <Text style={contentText}>
-                You have been invited by <Span style={contentHighlightText}>{inviter}</Span> to join
-                the <Span style={contentHighlightText}>{workspaceName}</Span> workspace on OpenCode.
+                You have been invited by <Span style={contentHighlightText}>{inviter}</Span> to join the{" "}
+                <Span style={contentHighlightText}>{workspaceName}</Span> workspace on OpenCode.
               </Text>
             </Section>
 
@@ -73,12 +61,7 @@ export const InviteEmail = ({
               <Button style={button} href={url}>
                 <Text style={buttonText}>
                   Join workspace
-                  <Img
-                    width="24"
-                    height="24"
-                    src={`${assetsUrl}/right-arrow.png`}
-                    alt="Arrow right"
-                  />
+                  <Img width="24" height="24" src={`${assetsUrl}/right-arrow.png`} alt="Arrow right" />
                 </Text>
               </Button>
             </Section>

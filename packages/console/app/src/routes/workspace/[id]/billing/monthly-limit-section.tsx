@@ -104,13 +104,9 @@ export function MonthlyLimitSection() {
             </button>
           </Show>
         </div>
-        <Show
-          when={billingInfo()?.monthlyLimit}
-          fallback={<p data-slot="usage-status">No usage limit set.</p>}
-        >
+        <Show when={billingInfo()?.monthlyLimit} fallback={<p data-slot="usage-status">No usage limit set.</p>}>
           <p data-slot="usage-status">
-            Current usage for{" "}
-            {new Date().toLocaleDateString("en-US", { month: "long", timeZone: "UTC" })} is $
+            Current usage for {new Date().toLocaleDateString("en-US", { month: "long", timeZone: "UTC" })} is $
             {(() => {
               const dateLastUsed = billingInfo()?.timeMonthlyUsageUpdated
               if (!dateLastUsed) return "0"

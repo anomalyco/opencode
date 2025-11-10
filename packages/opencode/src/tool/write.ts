@@ -15,35 +15,34 @@ export const WriteTool = Tool.define("write", {
   description: DESCRIPTION,
   parameters: z.object({
     content: z.string().describe("The content to write to the file"),
-    filePath: z
-      .string()
-      .describe("The absolute path to the file to write (must be absolute, not relative)"),
+    filePath: z.string().describe("The absolute path to the file to write (must be absolute, not relative)"),
   }),
   async execute(params, ctx) {
-    const filepath = path.isAbsolute(params.filePath)
-      ? params.filePath
-      : path.join(Instance.directory, params.filePath)
+    const agent = await Agent.get(ctx.agent)
+
+    const filepath = path.isAbsolute(params.filePath) ? params.filePath : path.join(Instance.directory, params.filePath)
     if (!Filesystem.contains(Instance.directory, filepath)) {
       const parentDir = path.dirname(filepath)
-      await Permission.ask({
-        type: "external-directory",
-        pattern: parentDir,
-        sessionID: ctx.sessionID,
-        messageID: ctx.messageID,
-        callID: ctx.callID,
-        title: `Write file outside working directory: ${filepath}`,
-        metadata: {
-          filepath,
-          parentDir,
-        },
-      })
+      if (agent.permission.external_directory === "ask") {
+        await Permission.ask({
+          type: "external_directory",
+          pattern: parentDir,
+          sessionID: ctx.sessionID,
+          messageID: ctx.messageID,
+          callID: ctx.callID,
+          title: `Write file outside working directory: ${filepath}`,
+          metadata: {
+            filepath,
+            parentDir,
+          },
+        })
+      }
     }
 
     const file = Bun.file(filepath)
     const exists = await file.exists()
     if (exists) await FileTime.assert(ctx.sessionID, filepath)
 
-    const agent = await Agent.get(ctx.agent)
     if (agent.permission.edit === "ask")
       await Permission.ask({
         type: "write",

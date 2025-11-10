@@ -41,12 +41,7 @@ export const TuiSpawnCommand = cmd({
       )
       cwd = new URL("../../../../", import.meta.url).pathname
     } else cmd.push(process.execPath)
-    cmd.push(
-      "attach",
-      server.url.toString(),
-      "--dir",
-      args.project ? path.resolve(args.project) : process.cwd(),
-    )
+    cmd.push("attach", server.url.toString(), "--dir", args.project ? path.resolve(args.project) : process.cwd())
     const proc = Bun.spawn({
       cmd,
       cwd,

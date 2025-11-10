@@ -38,11 +38,7 @@ export function DialogRoot(props: DialogProps) {
   return (
     <Kobalte {...others}>
       <Show when={props.trigger}>
-        <Kobalte.Trigger
-          ref={trigger}
-          data-component="dialog-trigger"
-          onFocusIn={handleTriggerFocus}
-        >
+        <Kobalte.Trigger ref={trigger} data-component="dialog-trigger" onFocusIn={handleTriggerFocus}>
           {props.trigger}
         </Kobalte.Trigger>
       </Show>

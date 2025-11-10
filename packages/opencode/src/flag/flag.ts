@@ -13,9 +13,11 @@ export namespace Flag {
   export const OPENCODE_FAKE_VCS = process.env["OPENCODE_FAKE_VCS"]
 
   // Experimental
+  export const OPENCODE_EXPERIMENTAL = truthy("OPENCODE_EXPERIMENTAL")
   export const OPENCODE_EXPERIMENTAL_WATCHER = truthy("OPENCODE_EXPERIMENTAL_WATCHER")
   export const OPENCODE_EXPERIMENTAL_TURN_SUMMARY = truthy("OPENCODE_EXPERIMENTAL_TURN_SUMMARY")
   export const OPENCODE_EXPERIMENTAL_NO_BOOTSTRAP = truthy("OPENCODE_EXPERIMENTAL_NO_BOOTSTRAP")
+  export const OPENCODE_EXPERIMENTAL_EXA = OPENCODE_EXPERIMENTAL || truthy("OPENCODE_EXPERIMENTAL_EXA")
 
   function truthy(key: string) {
     const value = process.env[key]?.toLowerCase()

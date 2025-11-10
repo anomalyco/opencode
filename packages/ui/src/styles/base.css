@@ -269,8 +269,8 @@ textarea,
   crash when using `color-mix(…)` with `currentcolor`. (https://github.com/tailwindlabs/tailwindcss/issues/17194)
 */
 
-@supports (not (-webkit-appearance: -apple-pay-button)) /* Not Safari */ or
-  (contain-intrinsic-size: 1px) /* Safari 17+ */ {
+@supports (not (-webkit-appearance: -apple-pay-button)) /* Not Safari */ or (contain-intrinsic-size: 1px)
+  /* Safari 17+ */ {
   ::placeholder {
     color: color-mix(in oklab, currentcolor 50%, transparent);
   }

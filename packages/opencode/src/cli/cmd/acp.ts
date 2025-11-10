@@ -3,6 +3,8 @@ import { bootstrap } from "../bootstrap"
 import { cmd } from "./cmd"
 import { AgentSideConnection, ndJsonStream } from "@agentclientprotocol/sdk"
 import { ACP } from "@/acp/agent"
+import { Server } from "@/server/server"
+import { createOpencodeClient } from "@opencode-ai/sdk"
 
 const log = Log.create({ service: "acp-command" })
 
@@ -17,15 +19,34 @@ export const AcpCommand = cmd({
   command: "acp",
   describe: "Start ACP (Agent Client Protocol) server",
   builder: (yargs) => {
-    return yargs.option("cwd", {
-      describe: "working directory",
-      type: "string",
-      default: process.cwd(),
-    })
+    return yargs
+      .option("cwd", {
+        describe: "working directory",
+        type: "string",
+        default: process.cwd(),
+      })
+      .option("port", {
+        type: "number",
+        describe: "port to listen on",
+        default: 0,
+      })
+      .option("hostname", {
+        type: "string",
+        describe: "hostname to listen on",
+        default: "127.0.0.1",
+      })
   },
-  handler: async (opts) => {
-    if (opts.cwd) process.chdir(opts["cwd"])
+  handler: async (args) => {
     await bootstrap(process.cwd(), async () => {
+      const server = Server.listen({
+        port: args.port,
+        hostname: args.hostname,
+      })
+
+      const sdk = createOpencodeClient({
+        baseUrl: `http://${server.hostname}:${server.port}`,
+      })
+
       const input = new WritableStream<Uint8Array>({
         write(chunk) {
           return new Promise<void>((resolve, reject) => {
@@ -50,10 +71,10 @@ export const AcpCommand = cmd({
       })
 
       const stream = ndJsonStream(input, output)
-      const agent = await ACP.init()
+      const agent = await ACP.init({ sdk })
 
       new AgentSideConnection((conn) => {
-        return agent.create(conn, {})
+        return agent.create(conn, { sdk })
       }, stream)
 
       log.info("setup connection")

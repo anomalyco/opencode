@@ -17,6 +17,9 @@ import path from "path"
 import { type ToolDefinition } from "@opencode-ai/plugin"
 import z from "zod"
 import { Plugin } from "../plugin"
+import { WebSearchTool } from "./websearch"
+import { CodeSearchTool } from "./codesearch"
+import { Flag } from "@/flag/flag"
 
 export namespace ToolRegistry {
   export const state = Instance.state(async () => {
@@ -91,6 +94,7 @@ export namespace ToolRegistry {
       TodoWriteTool,
       TodoReadTool,
       TaskTool,
+      ...(Flag.OPENCODE_EXPERIMENTAL_EXA ? [WebSearchTool, CodeSearchTool] : []),
       ...custom,
     ]
   }

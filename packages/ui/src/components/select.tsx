@@ -49,9 +49,7 @@ export function Select<T>(props: SelectProps<T> & ButtonProps) {
           {...itemProps}
         >
           <Kobalte.ItemLabel data-slot="select-item-label">
-            {props.label
-              ? props.label(itemProps.item.rawValue)
-              : (itemProps.item.rawValue as string)}
+            {props.label ? props.label(itemProps.item.rawValue) : (itemProps.item.rawValue as string)}
           </Kobalte.ItemLabel>
           <Kobalte.ItemIndicator data-slot="select-item-indicator">
             <Icon name="check-small" size="small" />

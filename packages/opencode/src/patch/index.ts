@@ -104,10 +104,7 @@ export namespace Patch {
     return null
   }
 
-  function parseUpdateFileChunks(
-    lines: string[],
-    startIdx: number,
-  ): { chunks: UpdateFileChunk[]; nextIdx: number } {
+  function parseUpdateFileChunks(lines: string[], startIdx: number): { chunks: UpdateFileChunk[]; nextIdx: number } {
     const chunks: UpdateFileChunk[] = []
     let i = startIdx
 
@@ -161,10 +158,7 @@ export namespace Patch {
     return { chunks, nextIdx: i }
   }
 
-  function parseAddFileContent(
-    lines: string[],
-    startIdx: number,
-  ): { content: string; nextIdx: number } {
+  function parseAddFileContent(lines: string[], startIdx: number): { content: string; nextIdx: number } {
     let content = ""
     let i = startIdx
 
@@ -303,10 +297,7 @@ export namespace Patch {
     content: string
   }
 
-  export function deriveNewContentsFromChunks(
-    filePath: string,
-    chunks: UpdateFileChunk[],
-  ): ApplyPatchFileUpdate {
+  export function deriveNewContentsFromChunks(filePath: string, chunks: UpdateFileChunk[]): ApplyPatchFileUpdate {
     // Read original file content
     let originalContent: string
     try {
@@ -387,9 +378,7 @@ export namespace Patch {
         replacements.push([found, pattern.length, newSlice])
         lineIndex = found + pattern.length
       } else {
-        throw new Error(
-          `Failed to find expected lines in ${filePath}:\n${chunk.old_lines.join("\n")}`,
-        )
+        throw new Error(`Failed to find expected lines in ${filePath}:\n${chunk.old_lines.join("\n")}`)
       }
     }
 
@@ -399,10 +388,7 @@ export namespace Patch {
     return replacements
   }
 
-  function applyReplacements(
-    lines: string[],
-    replacements: Array<[number, number, string[]]>,
-  ): string[] {
+  function applyReplacements(lines: string[], replacements: Array<[number, number, string[]]>): string[] {
     // Apply replacements in reverse order to avoid index shifting
     const result = [...lines]
 
@@ -601,9 +587,7 @@ export namespace Patch {
                 changes.set(resolvedPath, {
                   type: "update",
                   unified_diff: fileUpdate.unified_diff,
-                  move_path: hunk.move_path
-                    ? path.resolve(effectiveCwd, hunk.move_path)
-                    : undefined,
+                  move_path: hunk.move_path ? path.resolve(effectiveCwd, hunk.move_path) : undefined,
                   new_content: fileUpdate.content,
                 })
               } catch (error) {

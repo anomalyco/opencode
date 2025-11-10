@@ -7,7 +7,6 @@ import { ZenData } from "../src/model"
 
 const root = path.resolve(process.cwd(), "..", "..", "..")
 const models = await $`bun sst secret list`.cwd(root).text()
-console.log("models", models)
 
 // read the line starting with "ZEN_MODELS"
 const oldValue1 = models

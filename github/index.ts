@@ -171,9 +171,7 @@ try {
         const summary = await summarize(response)
         await pushToLocalBranch(summary)
       }
-      const hasShared = prData.comments.nodes.some((c) =>
-        c.body.includes(`${useShareUrl()}/s/${shareId}`),
-      )
+      const hasShared = prData.comments.nodes.some((c) => c.body.includes(`${useShareUrl()}/s/${shareId}`))
       await updateComment(`${response}${footer({ image: !hasShared })}`)
     }
     // Fork PR
@@ -185,9 +183,7 @@ try {
         const summary = await summarize(response)
         await pushToForkBranch(summary, prData)
       }
-      const hasShared = prData.comments.nodes.some((c) =>
-        c.body.includes(`${useShareUrl()}/s/${shareId}`),
-      )
+      const hasShared = prData.comments.nodes.some((c) => c.body.includes(`${useShareUrl()}/s/${shareId}`))
       await updateComment(`${response}${footer({ image: !hasShared })}`)
     }
   }
@@ -368,9 +364,7 @@ async function getAccessToken() {
 
   if (!response.ok) {
     const responseJson = (await response.json()) as { error?: string }
-    throw new Error(
-      `App token exchange failed: ${response.status} ${response.statusText} - ${responseJson.error}`,
-    )
+    throw new Error(`App token exchange failed: ${response.status} ${response.statusText} - ${responseJson.error}`)
   }
 
   const responseJson = (await response.json()) as { token: string }
@@ -411,12 +405,8 @@ async function getUserPrompt() {
   // ie. <img alt="Image" src="https://github.com/user-attachments/assets/xxxx" />
   // ie. [api.json](https://github.com/user-attachments/files/21433810/api.json)
   // ie. ![Image](https://github.com/user-attachments/assets/xxxx)
-  const mdMatches = prompt.matchAll(
-    /!?\[.*?\]\((https:\/\/github\.com\/user-attachments\/[^)]+)\)/gi,
-  )
-  const tagMatches = prompt.matchAll(
-    /<img .*?src="(https:\/\/github\.com\/user-attachments\/[^"]+)" \/>/gi,
-  )
+  const mdMatches = prompt.matchAll(/!?\[.*?\]\((https:\/\/github\.com\/user-attachments\/[^)]+)\)/gi)
+  const tagMatches = prompt.matchAll(/<img .*?src="(https:\/\/github\.com\/user-attachments\/[^"]+)" \/>/gi)
   const matches = [...mdMatches, ...tagMatches].sort((a, b) => a.index - b.index)
   console.log("Images", JSON.stringify(matches, null, 2))
 
@@ -443,8 +433,7 @@ async function getUserPrompt() {
 
     // Replace img tag with file path, ie. @image.png
     const replacement = `@${filename}`
-    prompt =
-      prompt.slice(0, start + offset) + replacement + prompt.slice(start + offset + tag.length)
+    prompt = prompt.slice(0, start + offset) + replacement + prompt.slice(start + offset + tag.length)
     offset += replacement.length - tag.length
 
     const contentType = res.headers.get("content-type")
@@ -512,12 +501,7 @@ async function subscribeSessionEvents() {
                     ? JSON.stringify(part.state.input)
                     : "Unknown"
                 console.log()
-                console.log(
-                  color + `|`,
-                  "\x1b[0m\x1b[2m" + ` ${tool.padEnd(7, " ")}`,
-                  "",
-                  "\x1b[0m" + title,
-                )
+                console.log(color + `|`, "\x1b[0m\x1b[2m" + ` ${tool.padEnd(7, " ")}`, "", "\x1b[0m" + title)
               }
 
               if (part.type === "text") {
@@ -729,8 +713,7 @@ async function assertPermissions() {
     throw new Error(`Failed to check permissions for user ${actor}: ${error}`)
   }
 
-  if (!["admin", "write"].includes(permission))
-    throw new Error(`User ${actor} does not have write permissions`)
+  if (!["admin", "write"].includes(permission)) throw new Error(`User ${actor} does not have write permissions`)
 }
 
 async function updateComment(body: string) {
@@ -774,9 +757,7 @@ function footer(opts?: { image?: boolean }) {
 
     return `<a href="${useShareUrl()}/s/${shareId}"><img width="200" alt="${titleAlt}" src="https://social-cards.sst.dev/opencode-share/${title64}.png?model=${providerID}/${modelID}&version=${session.version}&id=${shareId}" /></a>\n`
   })()
-  const shareUrl = shareId
-    ? `[opencode session](${useShareUrl()}/s/${shareId})&nbsp;&nbsp;|&nbsp;&nbsp;`
-    : ""
+  const shareUrl = shareId ? `[opencode session](${useShareUrl()}/s/${shareId})&nbsp;&nbsp;|&nbsp;&nbsp;` : ""
   return `\n\n${image}${shareUrl}[github run](${useEnvRunUrl()})`
 }
 
@@ -959,13 +940,9 @@ function buildPromptDataForPR(pr: GitHubPullRequest) {
     })
     .map((c) => `- ${c.author.login} at ${c.createdAt}: ${c.body}`)
 
-  const files = (pr.files.nodes || []).map(
-    (f) => `- ${f.path} (${f.changeType}) +${f.additions}/-${f.deletions}`,
-  )
+  const files = (pr.files.nodes || []).map((f) => `- ${f.path} (${f.changeType}) +${f.additions}/-${f.deletions}`)
   const reviewData = (pr.reviews.nodes || []).map((r) => {
-    const comments = (r.comments.nodes || []).map(
-      (c) => `    - ${c.path}:${c.line ?? "?"}: ${c.body}`,
-    )
+    const comments = (r.comments.nodes || []).map((c) => `    - ${c.path}:${c.line ?? "?"}: ${c.body}`)
     return [
       `- ${r.author.login} at ${r.submittedAt}:`,
       `  - Review body: ${r.body}`,
@@ -987,15 +964,9 @@ function buildPromptDataForPR(pr: GitHubPullRequest) {
     `Deletions: ${pr.deletions}`,
     `Total Commits: ${pr.commits.totalCount}`,
     `Changed Files: ${pr.files.nodes.length} files`,
-    ...(comments.length > 0
-      ? ["<pull_request_comments>", ...comments, "</pull_request_comments>"]
-      : []),
-    ...(files.length > 0
-      ? ["<pull_request_changed_files>", ...files, "</pull_request_changed_files>"]
-      : []),
-    ...(reviewData.length > 0
-      ? ["<pull_request_reviews>", ...reviewData, "</pull_request_reviews>"]
-      : []),
+    ...(comments.length > 0 ? ["<pull_request_comments>", ...comments, "</pull_request_comments>"] : []),
+    ...(files.length > 0 ? ["<pull_request_changed_files>", ...files, "</pull_request_changed_files>"] : []),
+    ...(reviewData.length > 0 ? ["<pull_request_reviews>", ...reviewData, "</pull_request_reviews>"] : []),
     "</pull_request>",
   ].join("\n")
 }

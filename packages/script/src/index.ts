@@ -10,19 +10,14 @@ if (!expectedBunVersion) {
 }
 
 if (process.versions.bun !== expectedBunVersion) {
-  throw new Error(
-    `This script requires bun@${expectedBunVersion}, but you are using bun@${process.versions.bun}`,
-  )
+  throw new Error(`This script requires bun@${expectedBunVersion}, but you are using bun@${process.versions.bun}`)
 }
 
-const CHANNEL =
-  process.env["OPENCODE_CHANNEL"] ??
-  (await $`git branch --show-current`.text().then((x) => x.trim()))
+const CHANNEL = process.env["OPENCODE_CHANNEL"] ?? (await $`git branch --show-current`.text().then((x) => x.trim()))
 const IS_PREVIEW = CHANNEL !== "latest"
 const VERSION = await (async () => {
   if (process.env["OPENCODE_VERSION"]) return process.env["OPENCODE_VERSION"]
-  if (IS_PREVIEW)
-    return `0.0.0-${CHANNEL}-${new Date().toISOString().slice(0, 16).replace(/[-:T]/g, "")}`
+  if (IS_PREVIEW) return `0.0.0-${CHANNEL}-${new Date().toISOString().slice(0, 16).replace(/[-:T]/g, "")}`
   const version = await fetch("https://registry.npmjs.org/opencode-ai/latest")
     .then((res) => {
       if (!res.ok) throw new Error(res.statusText)
