@@ -198,6 +198,8 @@ export type AgentConfig = {
           [key: string]: "ask" | "allow" | "deny"
         }
     webfetch?: "ask" | "allow" | "deny"
+    doom_loop?: "ask" | "allow" | "deny"
+    external_directory?: "ask" | "allow" | "deny"
   }
   [key: string]:
     | unknown
@@ -216,6 +218,8 @@ export type AgentConfig = {
               [key: string]: "ask" | "allow" | "deny"
             }
         webfetch?: "ask" | "allow" | "deny"
+        doom_loop?: "ask" | "allow" | "deny"
+        external_directory?: "ask" | "allow" | "deny"
       }
     | undefined
 }
@@ -463,6 +467,8 @@ export type Config = {
           [key: string]: "ask" | "allow" | "deny"
         }
     webfetch?: "ask" | "allow" | "deny"
+    doom_loop?: "ask" | "allow" | "deny"
+    external_directory?: "ask" | "allow" | "deny"
   }
   tools?: {
     [key: string]: boolean
@@ -1043,6 +1049,8 @@ export type Agent = {
       [key: string]: "ask" | "allow" | "deny"
     }
     webfetch?: "ask" | "allow" | "deny"
+    doom_loop?: "ask" | "allow" | "deny"
+    external_directory?: "ask" | "allow" | "deny"
   }
   model?: {
     modelID: string

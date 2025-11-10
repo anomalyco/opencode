@@ -360,6 +360,8 @@ export namespace Config {
           edit: Permission.optional(),
           bash: z.union([Permission, z.record(z.string(), Permission)]).optional(),
           webfetch: Permission.optional(),
+          doom_loop: Permission.optional(),
+          external_directory: Permission.optional(),
         })
         .optional(),
     })
@@ -574,6 +576,8 @@ export namespace Config {
           edit: Permission.optional(),
           bash: z.union([Permission, z.record(z.string(), Permission)]).optional(),
           webfetch: Permission.optional(),
+          doom_loop: Permission.optional(),
+          external_directory: Permission.optional(),
         })
         .optional(),
       tools: z.record(z.string(), z.boolean()).optional(),

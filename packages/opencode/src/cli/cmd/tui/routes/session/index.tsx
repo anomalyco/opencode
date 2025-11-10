@@ -149,15 +149,6 @@ export function Session() {
     }, 50)
   }
 
-  // snap to bottom when revert position changes
-  createEffect((old) => {
-    if (old !== session()?.revert?.messageID) toBottom()
-    return session()?.revert?.messageID
-  })
-
-  // snap to bottom when session changes
-  createEffect(on(() => route.sessionID, toBottom))
-
   const local = useLocal()
 
   function moveChild(direction: number) {
@@ -272,14 +263,18 @@ export function Session() {
         const revert = session().revert?.messageID
         const message = messages().findLast((x) => (!revert || x.id < revert) && x.role === "user")
         if (!message) return
-        sdk.client.session.revert({
-          path: {
-            id: route.sessionID,
-          },
-          body: {
-            messageID: message.id,
-          },
-        })
+        sdk.client.session
+          .revert({
+            path: {
+              id: route.sessionID,
+            },
+            body: {
+              messageID: message.id,
+            },
+          })
+          .then(() => {
+            toBottom()
+          })
         const parts = sync.data.part[message.id]
         prompt.set(
           parts.reduce(
@@ -327,7 +322,7 @@ export function Session() {
       },
     },
     {
-      title: "Toggle sidebar",
+      title: sidebarVisible() ? "Hide sidebar" : "Show sidebar",
       value: "session.sidebar.toggle",
       keybind: "sidebar_toggle",
       category: "Session",
@@ -631,6 +626,9 @@ export function Session() {
   const dialog = useDialog()
   const renderer = useRenderer()
 
+  // snap to bottom when session changes
+  createEffect(on(() => route.sessionID, toBottom))
+
   return (
     <context.Provider
       value={{
@@ -879,11 +877,16 @@ function AssistantMessage(props: { message: AssistantMessage; parts: Part[]; las
   return (
     <>
       <For each={props.parts}>
-        {(part) => {
+        {(part, index) => {
           const component = createMemo(() => PART_MAPPING[part.type as keyof typeof PART_MAPPING])
           return (
             <Show when={component()}>
-              <Dynamic component={component()} part={part as any} message={props.message} />
+              <Dynamic
+                last={index() === props.parts.length - 1}
+                component={component()}
+                part={part as any}
+                message={props.message}
+              />
             </Show>
           )
         }}
@@ -944,27 +947,36 @@ const PART_MAPPING = {
   reasoning: ReasoningPart,
 }
 
-function ReasoningPart(props: { part: ReasoningPart; message: AssistantMessage }) {
-  const { theme } = useTheme()
+function ReasoningPart(props: { last: boolean; part: ReasoningPart; message: AssistantMessage }) {
+  const { theme, syntax } = useTheme()
+  const ctx = use()
   return (
     <Show when={props.part.text.trim()}>
       <box
         id={"text-" + props.part.id}
+        paddingLeft={2}
         marginTop={1}
-        flexShrink={0}
+        flexDirection="row"
+        gap={1}
         border={["left"]}
         customBorderChars={SplitBorder.customBorderChars}
-        borderColor={theme.backgroundPanel}
+        borderColor={theme.backgroundElement}
       >
-        <box paddingTop={1} paddingBottom={1} paddingLeft={2} backgroundColor={theme.backgroundPanel}>
-          <text fg={theme.text}>{props.part.text.trim()}</text>
-        </box>
+        <code
+          filetype="markdown"
+          drawUnstyledText={false}
+          streaming={true}
+          syntaxStyle={syntax()}
+          content={props.part.text.trim()}
+          conceal={ctx.conceal()}
+          fg={theme.text}
+        />
       </box>
     </Show>
   )
 }
 
-function TextPart(props: { part: TextPart; message: AssistantMessage }) {
+function TextPart(props: { last: boolean; part: TextPart; message: AssistantMessage }) {
   const ctx = use()
   const { syntax } = useTheme()
   return (
@@ -985,7 +997,7 @@ function TextPart(props: { part: TextPart; message: AssistantMessage }) {
 
 // Pending messages moved to individual tool pending functions
 
-function ToolPart(props: { part: ToolPart; message: AssistantMessage }) {
+function ToolPart(props: { last: boolean; part: ToolPart; message: AssistantMessage }) {
   const { theme } = useTheme()
   const sync = useSync()
   const [margin, setMargin] = createSignal(0)

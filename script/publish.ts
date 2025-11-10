@@ -21,7 +21,7 @@ if (!Script.preview) {
 
   const commits = log
     .split("\n")
-    .filter((line) => line && !line.match(/^\w+ (ignore:|test:|chore:)/i))
+    .filter((line) => line && !line.match(/^\w+ (ignore:|test:|chore:|ci:)/i))
     .join("\n")
 
   const opencode = await createOpencode()

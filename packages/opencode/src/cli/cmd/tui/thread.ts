@@ -102,6 +102,7 @@ export const TuiThreadCommand = cmd({
         continue: args.continue,
         sessionID: args.session,
         agent: args.agent,
+        model: args.model,
         prompt,
       },
       onExit: async () => {
