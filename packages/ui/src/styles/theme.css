@@ -520,7 +520,7 @@
     --syntax-success: var(--apple-dark-10);
     --syntax-warning: var(--amber-dark-10);
     --syntax-critical: var(--ember-dark-9);
-    --syntax-info: var(--lilac-dark-11);
+    --syntax-info: #ff9ae2;
     --syntax-diff-add: var(--mint-dark-11);
     --syntax-diff-delete: var(--ember-dark-11);
     --syntax-unknown: var(--text-weak);
