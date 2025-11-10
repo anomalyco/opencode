@@ -36,7 +36,7 @@ export function DialogModel() {
                 title: model.name ?? item.modelID,
                 description: provider.name,
                 category: "Recent",
-                footer: model.cost.input === 0 && provider.id === "opencode" ? <Free /> : undefined,
+                footer: model.cost?.input === 0 && provider.id === "opencode" ? <Free /> : undefined,
               },
             ]
           })
@@ -59,7 +59,7 @@ export function DialogModel() {
               title: info.name ?? model,
               description: provider.name,
               category: provider.name,
-              footer: info.cost.input === 0 && provider.id === "opencode" ? <Free /> : undefined,
+              footer: info.cost?.input === 0 && provider.id === "opencode" ? <Free /> : undefined,
             })),
             filter((x) => Boolean(ref()?.filter) || !local.model.recent().find((y) => isDeepEqual(y, x.value))),
           ),
