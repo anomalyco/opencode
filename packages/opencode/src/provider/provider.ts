@@ -284,6 +284,31 @@ export namespace Provider {
     const config = await Config.get()
     const database = await ModelsDev.get()
 
+    // Add Claude Sonnet 4.5 1M context model variants
+    if (database["anthropic"]?.models["claude-sonnet-4-5-20250929"]) {
+      const baseModel = database["anthropic"].models["claude-sonnet-4-5-20250929"]
+      // Add versioned 1M model (maps [1m] suffix to base model ID for API)
+      database["anthropic"].models["claude-sonnet-4-5-20250929[1m]"] = {
+        ...baseModel,
+        id: "claude-sonnet-4-5-20250929",
+        name: "Claude Sonnet 4.5 (1M context)",
+        limit: {
+          context: 1000000,
+          output: 64000,
+        },
+      }
+      // Add latest alias 1M model (maps [1m] suffix to base model ID for API)
+      database["anthropic"].models["claude-sonnet-4-5[1m]"] = {
+        ...baseModel,
+        id: "claude-sonnet-4-5-20250929",
+        name: "Claude Sonnet 4.5 latest (1M context)",
+        limit: {
+          context: 1000000,
+          output: 64000,
+        },
+      }
+    }
+
     const providers: {
       [providerID: string]: {
         source: Source
