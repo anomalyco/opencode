@@ -39,6 +39,10 @@ async function main() {
   await $`git clone https://x-access-token:${token}@github.com/${FORK_REPO}.git ${workDir}`
   process.chdir(workDir)
 
+  // Configure git identity
+  await $`git config user.name "github-actions[bot]"`
+  await $`git config user.email "github-actions[bot]@users.noreply.github.com"`
+
   // Sync fork with upstream
   console.log(`🔄 Syncing fork with upstream...`)
   await $`git remote add upstream https://github.com/${UPSTREAM_REPO}.git`
@@ -66,7 +70,7 @@ async function main() {
   const extensionsTomlPath = "extensions.toml"
   const extensionsToml = await Bun.file(extensionsTomlPath).text()
 
-  const versionRegex = new RegExp(`(\\[${EXTENSION_NAME}\\]\\s+(?:.*\\s*)?)version = "[^"]+"`)
+  const versionRegex = new RegExp(`(\\[${EXTENSION_NAME}\\][\\s\\S]*?)version = "[^"]+"`)
   const updatedToml = extensionsToml.replace(versionRegex, `$1version = "${cleanVersion}"`)
 
   if (updatedToml === extensionsToml) {
@@ -76,14 +80,28 @@ async function main() {
   await Bun.write(extensionsTomlPath, updatedToml)
   await $`git add extensions.toml`
 
-  const commitMessage = `Update ${EXTENSION_NAME} to v${cleanVersion}
-
-Release notes:
-
-https://github.com/${OPENCODE_REPO}/releases/tag/v${cleanVersion}`
+  const commitMessage = `Update ${EXTENSION_NAME} to v${cleanVersion}`
 
   await $`git commit -m ${commitMessage}`
   console.log(`✅ Changes committed`)
+
+  // Delete any existing branches for opencode updates
+  console.log(`🔍 Checking for existing branches...`)
+  const branches = await $`git ls-remote --heads https://x-access-token:${token}@github.com/${FORK_REPO}.git`.text()
+  const branchPattern = `refs/heads/update-${EXTENSION_NAME}-`
+  const oldBranches = branches
+    .split("\n")
+    .filter((line) => line.includes(branchPattern))
+    .map((line) => line.split("refs/heads/")[1])
+    .filter(Boolean)
+
+  if (oldBranches.length > 0) {
+    console.log(`🗑️  Found ${oldBranches.length} old branch(es), deleting...`)
+    for (const branch of oldBranches) {
+      await $`git push https://x-access-token:${token}@github.com/${FORK_REPO}.git --delete ${branch}`
+      console.log(`✅ Deleted branch ${branch}`)
+    }
+  }
 
   console.log(`🚀 Pushing to fork...`)
   await $`git push https://x-access-token:${token}@github.com/${FORK_REPO}.git ${branchName}`

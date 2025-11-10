@@ -36,24 +36,27 @@ export const EditTool = Tool.define("edit", {
       throw new Error("oldString and newString must be different")
     }
 
+    const agent = await Agent.get(ctx.agent)
+
     const filePath = path.isAbsolute(params.filePath) ? params.filePath : path.join(Instance.directory, params.filePath)
     if (!Filesystem.contains(Instance.directory, filePath)) {
       const parentDir = path.dirname(filePath)
-      await Permission.ask({
-        type: "external-directory",
-        pattern: parentDir,
-        sessionID: ctx.sessionID,
-        messageID: ctx.messageID,
-        callID: ctx.callID,
-        title: `Edit file outside working directory: ${filePath}`,
-        metadata: {
-          filepath: filePath,
-          parentDir,
-        },
-      })
+      if (agent.permission.external_directory === "ask") {
+        await Permission.ask({
+          type: "external_directory",
+          pattern: parentDir,
+          sessionID: ctx.sessionID,
+          messageID: ctx.messageID,
+          callID: ctx.callID,
+          title: `Edit file outside working directory: ${filePath}`,
+          metadata: {
+            filepath: filePath,
+            parentDir,
+          },
+        })
+      }
     }
 
-    const agent = await Agent.get(ctx.agent)
     const acpTools = ACPToolRegistry.get(ctx.sessionID)
     let diff = ""
     let contentOld = ""
