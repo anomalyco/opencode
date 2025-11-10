@@ -951,23 +951,23 @@ function ReasoningPart(props: { last: boolean; part: ReasoningPart; message: Ass
     <Show when={props.part.text.trim()}>
       <box
         id={"text-" + props.part.id}
+        paddingLeft={2}
         marginTop={1}
-        flexShrink={0}
+        flexDirection="row"
+        gap={1}
         border={["left"]}
         customBorderChars={SplitBorder.customBorderChars}
-        borderColor={theme.backgroundPanel}
+        borderColor={theme.backgroundElement}
       >
-        <box paddingTop={1} paddingBottom={1} paddingLeft={2} backgroundColor={theme.backgroundPanel}>
-          <code
-            filetype="markdown"
-            drawUnstyledText={false}
-            streaming={true}
-            syntaxStyle={syntax()}
-            content={props.part.text.trim()}
-            conceal={ctx.conceal()}
-            fg={theme.text}
-          />
-        </box>
+        <code
+          filetype="markdown"
+          drawUnstyledText={false}
+          streaming={true}
+          syntaxStyle={syntax()}
+          content={props.part.text.trim()}
+          conceal={ctx.conceal()}
+          fg={theme.text}
+        />
       </box>
     </Show>
   )
