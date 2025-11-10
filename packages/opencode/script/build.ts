@@ -1,6 +1,7 @@
 #!/usr/bin/env bun
 
-import solidPlugin from "../../../node_modules/@opentui/solid/scripts/solid-plugin"
+// @ts-expect-error - Plugin file not exported in package types
+import solidPlugin from "../node_modules/@opentui/solid/scripts/solid-plugin"
 import path from "path"
 import fs from "fs"
 import { $ } from "bun"
