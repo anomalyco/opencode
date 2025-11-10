@@ -72,12 +72,19 @@ export namespace SystemPrompt {
     const config = await Config.get()
     const paths = new Set<string>()
 
+    // Find AGENTS.md files going up from current directory
     for (const localRuleFile of LOCAL_RULE_FILES) {
       const matches = await Filesystem.findUp(localRuleFile, Instance.directory, Instance.worktree)
       if (matches.length > 0) {
         matches.forEach((path) => paths.add(path))
         break
       }
+    }
+
+    // Find AGENTS.md files in subdirectories (down from current directory)
+    for (const localRuleFile of LOCAL_RULE_FILES) {
+      const matches = await Filesystem.findDown(localRuleFile, Instance.directory)
+      matches.forEach((path) => paths.add(path))
     }
 
     for (const globalRuleFile of GLOBAL_RULE_FILES) {

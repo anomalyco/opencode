@@ -66,4 +66,29 @@ export namespace Filesystem {
     }
     return result
   }
+
+  export async function findDown(target: string, start: string, maxDepth: number = 10) {
+    const result: string[] = []
+    const glob = new Bun.Glob(`**/${target}`)
+
+    try {
+      for await (const match of glob.scan({
+        cwd: start,
+        absolute: true,
+        onlyFiles: true,
+        followSymlinks: false,
+        dot: false,
+      })) {
+        // Check depth to avoid excessive scanning
+        const depth = relative(start, match).split("/").length - 1
+        if (depth <= maxDepth) {
+          result.push(match)
+        }
+      }
+    } catch {
+      // Skip errors during directory traversal
+    }
+
+    return result
+  }
 }

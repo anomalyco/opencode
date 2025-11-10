@@ -18,6 +18,7 @@ import { DialogPrompt } from "../../ui/dialog-prompt"
 import { useRoute } from "../../context/route"
 import { $ } from "bun"
 import { DialogSubagentAdd } from "../../component/dialog-subagent-add"
+import { Todo } from "@/session/todo"
 type TabType = "files" | "todos" | "tools" | "subagents"
 
 export function Sidebar(props: { sessionID: string; onToggle: () => void }) {
@@ -95,6 +96,7 @@ export function Sidebar(props: { sessionID: string; onToggle: () => void }) {
   const [globalFavorites, setGlobalFavorites] = createSignal<Set<string>>(new Set())
   const [isAddingTodo, setIsAddingTodo] = createSignal(false)
   const [expandedSections, setExpandedSections] = createSignal<Set<string>>(new Set(["toolsUsed"]))
+  const [expandedTodos, setExpandedTodos] = createSignal<Set<string>>(new Set())
   const [optimisticTodos, setOptimisticTodos] = createSignal<
     Array<{ id: string; content: string; status: string; priority: string }>
   >([])
@@ -364,6 +366,18 @@ export function Sidebar(props: { sessionID: string; onToggle: () => void }) {
       }
       // Otherwise, open only this section (mutually exclusive)
       return new Set<string>([sectionId])
+    })
+  }
+
+  function toggleTodo(todoId: string) {
+    setExpandedTodos((prev) => {
+      const next = new Set(prev)
+      if (next.has(todoId)) {
+        next.delete(todoId)
+      } else {
+        next.add(todoId)
+      }
+      return next
     })
   }
 
@@ -880,13 +894,65 @@ export function Sidebar(props: { sessionID: string; onToggle: () => void }) {
           <box marginTop={0}>
             <text attributes={TextAttributes.BOLD}>Todo</text>
             <Show when={todo().length > 0}>
-              <For each={todo()}>
-                {(todo) => (
-                  <text style={{ fg: todo.status === "in_progress" ? theme.success : theme.textMuted }}>
-                    [{todo.status === "completed" ? "✓" : " "}] {todo.content}
-                  </text>
-                )}
-              </For>
+              {/* Recursive Todo Renderer */}
+              {(() => {
+                const renderTodo = (task: Todo.Info, depth: number = 0): any => {
+                  const allTodos = todo()
+                  const hasKids = Todo.hasChildren(allTodos, task.id)
+                  const children = Todo.getChildren(allTodos, task.id)
+                  const indent = "  ".repeat(depth)
+
+                  return (
+                    <>
+                      <box
+                        flexDirection="row"
+                        gap={0}
+                        onMouseUp={() => {
+                          if (renderer.getSelection()?.getSelectedText()) return
+                          if (hasKids) {
+                            toggleTodo(task.id)
+                          }
+                        }}
+                      >
+                        <text>{indent}</text>
+                        <text
+                          style={{
+                            fg: hasKids
+                              ? task.status === "in_progress"
+                                ? theme.success
+                                : task.status === "completed"
+                                  ? theme.textMuted
+                                  : theme.text
+                              : theme.textMuted,
+                          }}
+                        >
+                          {hasKids ? (expandedTodos().has(task.id) ? "▼ " : "▶ ") : "▶ "}
+                        </text>
+                        <text
+                          style={{
+                            fg:
+                              task.status === "in_progress"
+                                ? theme.success
+                                : task.status === "completed"
+                                  ? theme.textMuted
+                                  : hasKids
+                                    ? theme.text
+                                    : theme.textMuted,
+                          }}
+                        >
+                          [{task.status === "completed" ? "✓" : " "}] {task.content}
+                        </text>
+                      </box>
+                      <Show when={hasKids && expandedTodos().has(task.id)}>
+                        <For each={children}>{(child) => renderTodo(child, depth + 1)}</For>
+                      </Show>
+                    </>
+                  )
+                }
+
+                const rootTasks = Todo.getRootTasks(todo())
+                return <For each={rootTasks}>{(task) => renderTodo(task, 0)}</For>
+              })()}
             </Show>
             <box marginTop={1}>
               <text

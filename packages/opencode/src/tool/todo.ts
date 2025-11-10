@@ -13,11 +13,12 @@ export const TodoWriteTool = Tool.define("todowrite", {
       sessionID: opts.sessionID,
       todos: params.todos,
     })
+    const updatedTodos = await Todo.get(opts.sessionID)
     return {
-      title: `${params.todos.filter((x) => x.status !== "completed").length} todos`,
-      output: JSON.stringify(params.todos, null, 2),
+      title: `${updatedTodos.filter((x) => x.status !== "completed").length} todos`,
+      output: JSON.stringify(updatedTodos, null, 2),
       metadata: {
-        todos: params.todos,
+        todos: updatedTodos,
       },
     }
   },
