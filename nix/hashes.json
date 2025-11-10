@@ -1,30 +1,30 @@
 {
   "nodeModules": {
-    "x86_64-linux": "sha256-gwFZjTKos3pr5GE3T6+wJT0lQ3cjSO5GahwiOfMArBc=",
-    "aarch64-linux": "sha256-2mytvbm1D1UkVTEfv0oJD+kmkuDVX87cdbe1azZSYqg=",
-    "aarch64-darwin": "sha256-pIDGFHTLSOt3svygdD+YgRqgy/PdFp+PaAPm5c03+cw=",
-    "x86_64-darwin": "sha256-Mic3Lle8XOc3cS0O2Ll7X1pcLbUuDjb9rcfnYI9ceSU="
+    "x86_64-linux": "sha256-4ZNhLYNMoGu/3Fe60ctzjP3LpkRiO1tVhSbZTlzE5bk=",
+    "aarch64-linux": "sha256-DRQMrcOjyEJ/keccyixZT4pZ9nSzAYUPb7J1zHIzusk=",
+    "aarch64-darwin": "sha256-3JU0mt8L3olSVU014NlZ7gPDXEFsshUi6fwHtHKvMiM=",
+    "x86_64-darwin": "sha256-xPj370tbrauEJW8Q2ySPTNK+sTtHU23C8Uvd1O/VxVE="
   },
   "optional": {
     "@opentui/core-darwin-arm64": {
-      "version": "0.1.39",
-      "sha512": "sha512-tDUdNdzGeylkDWTiDIy/CalM/9nIeDwMZGN0Q6FLqABnAplwBhdIH2w/gInAcMaTyagm7Qk88p398Wbnxa9uyg=="
+      "version": "0.0.0-20251108-0c7899b1",
+      "sha512": "sha512-DS9CmFmZZjwe6PIhz6zhZAsDx11DtyMFDxn8V3On2b8G892aBG6rHYtBBnsM28/1GGEJBTeDQ/jUXPVd6FNJ/g=="
     },
     "@opentui/core-darwin-x64": {
-      "version": "0.1.39",
-      "sha512": "sha512-dWXXNUpdi3ndd+6WotQezsO7g54MLSc/6DmYcl0p7fZrQFct8fX0c9ny/S0xAusNHgBGVS5j5FWE75Mx79301Q=="
+      "version": "0.0.0-20251108-0c7899b1",
+      "sha512": "sha512-K4XwdmT6FTShn7EG8AKliPzO5H59R0XUlZi9+kfRVW59IIJtna5wxbu69SkA28dFoWj5i4yDumwoBI+tI7T6vg=="
     },
     "@opentui/core-linux-arm64": {
-      "version": "0.1.39",
-      "sha512": "sha512-ookQbxLjsg51iwGb6/KTxCfiVRtE9lSE2OVFLLYork8iVzxg81jX29Uoxe1knZ8FjOJ0+VqTzex2IqQH6mjJlw=="
+      "version": "0.0.0-20251108-0c7899b1",
+      "sha512": "sha512-3JUmxZeSvxV5yU7NEXSecy5Z1/LcVUMy1oWyusZgp96X0CTYAXMrolZt9IJDGO5raeO7JId1UaJmWW0r4DR8TA=="
     },
     "@opentui/core-linux-x64": {
-      "version": "0.1.39",
-      "sha512": "sha512-CeXVNa3hB7gTYKYoZAuMtxWMIXn2rPhmXLkHKpEvXvDRjODFDk8wN1AIVnT5tfncXbWNa5z35BhmqewpGkl4oQ=="
+      "version": "0.0.0-20251108-0c7899b1",
+      "sha512": "sha512-i/AQWGyanpPRpk9NK7Ze1tn+d5bqzM9wZFKNB3rd9d2Vbt/ROgBJItG6igz8vzKPKgnlHK4Gw9b5iG5sbjpd+Q=="
     },
     "@opentui/core-win32-x64": {
-      "version": "0.1.39",
-      "sha512": "sha512-lLXeQUBg6Wlenauwd+xaBD+0HT4YIcONeZUTHA+Gyd/rqVhxId97rhhzFikp3bBTvNJlYAscJI3yIF2JvRiFNQ=="
+      "version": "0.0.0-20251108-0c7899b1",
+      "sha512": "sha512-mpOryp37YaHlTsN70LhiSn9hJJBktbyhlH/eB3N2K7H1ANYQVrekgBJ3rDxlH1GDVtRz6vLS3IDlyK75qNX4pg=="
     },
     "@parcel/watcher-darwin-arm64": {
       "version": "2.5.1",
