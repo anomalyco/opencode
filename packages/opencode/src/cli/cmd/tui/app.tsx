@@ -22,7 +22,7 @@ import { Home } from "@tui/routes/home"
 import { Session } from "@tui/routes/session"
 import { PromptHistoryProvider } from "./component/prompt/history"
 import { DialogAlert } from "./ui/dialog-alert"
-import { ToastProvider, useToast } from "./ui/toast"
+import { ToastProvider, useToast, Toast } from "./ui/toast"
 import { ExitProvider, useExit } from "./context/exit"
 import { Session as SessionApi } from "@/session"
 import { TuiEvent } from "./event"
@@ -393,6 +393,15 @@ function App() {
     })
   })
 
+  event.on(Installation.Event.Updated.type, (evt) => {
+    toast.show({
+      variant: "success",
+      title: "Update Complete",
+      message: `OpenCode updated to v${evt.properties.version}`,
+      duration: 5000,
+    })
+  })
+
   return (
     <box
       width={dimensions().width}
@@ -453,6 +462,7 @@ function App() {
           </text>
         </box>
       </box>
+      <Toast />
     </box>
   )
 }
