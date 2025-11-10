@@ -1,7 +1,10 @@
 import type { Component } from "solid-js"
-import { Show, For, createEffect, createSignal } from "solid-js"
+import { Show, createEffect, createSignal } from "solid-js"
 import { useSync } from "../context/sync"
+import { SessionListPanel } from "./session-list-panel"
 import { SessionDetail } from "./session-detail"
+import { Sidebar } from "./sidebar"
+import { BottomBar } from "./bottom-bar"
 
 export const SessionView: Component = () => {
   const sync = useSync()
@@ -26,92 +29,81 @@ export const SessionView: Component = () => {
         overflow: "hidden",
       }}
     >
-      <Show when={!sync.ready}>
-        <div
-          style={{
-            display: "flex",
-            "align-items": "center",
-            "justify-content": "center",
-            flex: 1,
-          }}
-        >
-          Loading...
-        </div>
-      </Show>
+      {/* Main content area with 3 panels */}
+      <div
+        style={{
+          display: "flex",
+          flex: 1,
+          overflow: "hidden",
+        }}
+      >
+        {/* Left: Session List Panel */}
+        <SessionListPanel selectedSessionID={selectedSessionID()} onSelectSession={handleSelectSession} />
 
-      <Show when={sync.ready && !selectedSessionID()}>
+        {/* Center: Session Detail or Welcome Screen */}
         <div
           style={{
             display: "flex",
             "flex-direction": "column",
             flex: 1,
-            padding: "1rem",
-            overflow: "auto",
+            overflow: "hidden",
           }}
         >
-          <h1 style={{ "margin-bottom": "1rem" }}>OpenTUI Web</h1>
+          <Show when={!sync.ready}>
+            <div
+              style={{
+                display: "flex",
+                "align-items": "center",
+                "justify-content": "center",
+                flex: 1,
+              }}
+            >
+              Loading...
+            </div>
+          </Show>
 
-          <div style={{ "margin-bottom": "1rem" }}>
-            <strong>Project:</strong> {sync.data.project.worktree}
-          </div>
+          <Show when={sync.ready && !selectedSessionID()}>
+            <div
+              style={{
+                display: "flex",
+                "flex-direction": "column",
+                "align-items": "center",
+                "justify-content": "center",
+                flex: 1,
+                padding: "2rem",
+                "text-align": "center",
+              }}
+            >
+              <div>🚀</div>
+              <h1 style={{ margin: 0, "margin-bottom": "0.5rem", color: "#d4d4d4" }}>OpenTUI Web</h1>
+              <p style={{ color: "#858585", "max-width": "400px" }}>
+                Select a session from the left panel to get started
+              </p>
+              <div style={{ "margin-top": "2rem", color: "#858585" }}>
+                <div style={{ "margin-bottom": "0.5rem" }}>
+                  <strong>Project:</strong> {sync.data.project.worktree.split("/").pop()}
+                </div>
+                <div>
+                  <strong>Sessions:</strong> {sync.data.session.length}
+                </div>
+              </div>
+            </div>
+          </Show>
 
-          <div style={{ "margin-bottom": "1rem" }}>
-            <strong>Sessions ({sync.data.session.length}):</strong>
-          </div>
-
-          <div style={{ display: "flex", "flex-direction": "column", gap: "0.5rem" }}>
-            <For each={sync.data.session}>
-              {(session) => (
-                <button
-                  onClick={() => handleSelectSession(session.id)}
-                  style={{
-                    padding: "0.75rem",
-                    border: "1px solid #3e3e3e",
-                    "border-radius": "4px",
-                    background: "#252525",
-                    color: "#d4d4d4",
-                    "text-align": "left",
-                    cursor: "pointer",
-                    "font-family": "monospace",
-                    "font-size": "0.95rem",
-                    transition: "all 0.2s",
-                  }}
-                  onMouseEnter={(e) => {
-                    e.currentTarget.style.background = "#2e2e2e"
-                    e.currentTarget.style.borderColor = "#4ec9b0"
-                  }}
-                  onMouseLeave={(e) => {
-                    e.currentTarget.style.background = "#252525"
-                    e.currentTarget.style.borderColor = "#3e3e3e"
-                  }}
-                >
-                  <div>
-                    <strong>ID:</strong> {session.id}
-                  </div>
-                  <div>
-                    <strong>Title:</strong> {session.title}
-                  </div>
-                  <div>
-                    <strong>Version:</strong> {session.version}
-                  </div>
-                  <Show when={sync.data.message[session.id]}>
-                    <div style={{ "margin-top": "0.5rem" }}>
-                      <strong>Messages:</strong> {sync.data.message[session.id]?.length || 0}
-                    </div>
-                  </Show>
-                </button>
-              )}
-            </For>
-          </div>
-
-          <Show when={sync.data.session.length === 0}>
-            <div style={{ "text-align": "center", color: "#888", padding: "2rem" }}>No sessions available</div>
+          <Show when={sync.ready && selectedSessionID()}>
+            <SessionDetail sessionID={selectedSessionID()!} onBack={() => setSelectedSessionID(null)} />
           </Show>
         </div>
-      </Show>
 
+        {/* Right: Sidebar (only show when session is selected) */}
+        <Show when={sync.ready && selectedSessionID()}>
+          <Sidebar sessionID={selectedSessionID()!} onNavigateToSession={handleSelectSession} />
+        </Show>
+      </div>
+
+      {/* Bottom Bar - spans full width */}
       <Show when={sync.ready && selectedSessionID()}>
-        <SessionDetail sessionID={selectedSessionID()!} onBack={() => setSelectedSessionID(null)} />
+        <BottomBar sessionID={selectedSessionID()!} />
       </Show>
     </div>
   )
