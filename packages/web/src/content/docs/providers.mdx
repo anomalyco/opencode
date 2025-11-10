@@ -417,7 +417,7 @@ To use Google Vertex AI with OpenCode:
 1. Head over to the **Model Garden** in the Google Cloud Console and check the
    models available in your region.
 
-   :::tip
+   :::note
    You need to have a Google Cloud project with Vertex AI API enabled.
    :::
 
@@ -439,8 +439,12 @@ To use Google Vertex AI with OpenCode:
    ```bash title="~/.bash_profile"
    export GOOGLE_APPLICATION_CREDENTIALS=/path/to/service-account.json
    export GOOGLE_CLOUD_PROJECT=your-project-id
-   export VERTEX_LOCATION=us-central1
+   export VERTEX_LOCATION=global
    ```
+
+  :::tip
+  The `global` region improves availability and reduces errors at no extra cost. Use regional endpoints (e.g., `us-central1`) for data residency requirements. [Learn more](https://cloud.google.com/vertex-ai/generative-ai/docs/partner-models/use-partner-models#regional_and_global_endpoints)
+  :::
 
 3. Run the `/models` command to select the model you want.
 
