@@ -65,7 +65,7 @@ stdenvNoCC.mkDerivation {
 
       echo "Installed optional package $name -> $dest"
 
-      for ws in packages/*; do
+      for ws in $(find packages -maxdepth 1 -mindepth 1 -type d | sort); do
         [ -d "$ws/node_modules" ] || continue
         ws_dest="$ws/node_modules/$remainder"
         if [ -n "$scope" ]; then
@@ -93,7 +93,7 @@ stdenvNoCC.mkDerivation {
       dest="$out/$rel"
       mkdir -p "$(dirname "$dest")"
       cp -R "$dir" "$dest"
-    done < <(find . -type d -name node_modules -prune)
+    done < <(find . -type d -name node_modules -prune | sort)
     runHook postInstall
   '';
 
