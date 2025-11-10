@@ -22,7 +22,7 @@ import { Home } from "@tui/routes/home"
 import { Session } from "@tui/routes/session"
 import { PromptHistoryProvider } from "./component/prompt/history"
 import { DialogAlert } from "./ui/dialog-alert"
-import { ToastProvider, useToast, Toast } from "./ui/toast"
+import { ToastProvider, useToast } from "./ui/toast"
 import { ExitProvider, useExit } from "./context/exit"
 import { Session as SessionApi } from "@/session"
 import { TuiEvent } from "./event"
@@ -462,7 +462,6 @@ function App() {
           </text>
         </box>
       </box>
-      <Toast />
     </box>
   )
 }
