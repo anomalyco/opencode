@@ -1,0 +1,29 @@
+{
+  "name": "@opencode-ai/opentui-web",
+  "version": "1.0.0",
+  "description": "Web-based TUI for OpenCode - browser-compatible terminal UI",
+  "type": "module",
+  "scripts": {
+    "typecheck": "tsgo --noEmit",
+    "dev": "vite",
+    "build": "vite build",
+    "preview": "vite preview"
+  },
+  "license": "MIT",
+  "devDependencies": {
+    "@tsconfig/bun": "1.0.9",
+    "@types/node": "catalog:",
+    "@typescript/native-preview": "catalog:",
+    "typescript": "catalog:",
+    "vite": "catalog:",
+    "vite-plugin-solid": "catalog:"
+  },
+  "dependencies": {
+    "@opencode-ai/sdk": "workspace:*",
+    "@opentui/core": "0.0.0-20251108-0c7899b1",
+    "@opentui/solid": "0.0.0-20251108-0c7899b1",
+    "solid-js": "catalog:",
+    "remeda": "catalog:",
+    "diff": "catalog:"
+  }
+}
