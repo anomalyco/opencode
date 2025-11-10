@@ -1,18 +1,21 @@
-import type { FileDiff } from "@opencode-ai/sdk"
 import { createMemo, For, Match, Show, Switch } from "solid-js"
 
-export function DiffChanges(props: { diff: FileDiff | FileDiff[]; variant?: "default" | "bars" }) {
+export function DiffChanges(props: {
+  class?: string
+  changes: { additions: number; deletions: number } | { additions: number; deletions: number }[]
+  variant?: "default" | "bars"
+}) {
   const variant = () => props.variant ?? "default"
 
   const additions = createMemo(() =>
-    Array.isArray(props.diff)
-      ? props.diff.reduce((acc, diff) => acc + (diff.additions ?? 0), 0)
-      : props.diff.additions,
+    Array.isArray(props.changes)
+      ? props.changes.reduce((acc, diff) => acc + (diff.additions ?? 0), 0)
+      : props.changes.additions,
   )
   const deletions = createMemo(() =>
-    Array.isArray(props.diff)
-      ? props.diff.reduce((acc, diff) => acc + (diff.deletions ?? 0), 0)
-      : props.diff.deletions,
+    Array.isArray(props.changes)
+      ? props.changes.reduce((acc, diff) => acc + (diff.deletions ?? 0), 0)
+      : props.changes.deletions,
   )
   const total = createMemo(() => (additions() ?? 0) + (deletions() ?? 0))
 
@@ -90,7 +93,7 @@ export function DiffChanges(props: { diff: FileDiff | FileDiff[]; variant?: "def
 
   return (
     <Show when={variant() === "default" ? total() > 0 : true}>
-      <div data-component="diff-changes" data-variant={variant()}>
+      <div data-component="diff-changes" data-variant={variant()} classList={{ [props.class ?? ""]: true }}>
         <Switch>
           <Match when={variant() === "bars"}>
             <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 18 12" fill="none">

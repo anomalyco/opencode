@@ -301,6 +301,42 @@ Or if you already have an API key, you can select **Manually enter API Key** and
 
 ---
 
+### Deep Infra
+
+1. Head over to the [Deep Infra dashboard](https://deepinfra.com/dash), create an account, and generate an API key.
+
+2. Run `opencode auth login` and select **Deep Infra**.
+
+   ```bash
+   $ opencode auth login
+
+   ┌  Add credential
+   │
+   ◆  Select provider
+   │  ● Deep Infra
+   │  ...
+   └
+   ```
+
+3. Enter your Deep Infra API key.
+
+   ```bash
+   $ opencode auth login
+
+   ┌  Add credential
+   │
+   ◇  Select provider
+   │  Deep Infra
+   │
+   ◇  Enter your API key
+   │  _
+   └
+   ```
+
+4. Run the `/models` command to select a model.
+
+---
+
 ### Fireworks AI
 
 1. Head over to the [Fireworks AI console](https://app.fireworks.ai/), create an account, and click **Create API Key**.

@@ -70,9 +70,8 @@ export function MessageProgress(props: { assistantMessages: () => AssistantMessa
 
   const lastPart = createMemo(() => resolvedParts().slice(-1)?.at(0))
   const rawStatus = createMemo(() => {
-    const defaultStatus = "Working..."
     const last = lastPart()
-    if (!last) return defaultStatus
+    if (!last) return undefined
 
     if (last.type === "tool") {
       switch (last.tool) {
@@ -102,7 +101,7 @@ export function MessageProgress(props: { assistantMessages: () => AssistantMessa
     } else if (last.type === "text") {
       return "Gathering thoughts..."
     }
-    return defaultStatus
+    return undefined
   })
 
   const [status, setStatus] = createSignal(rawStatus())
@@ -111,11 +110,11 @@ export function MessageProgress(props: { assistantMessages: () => AssistantMessa
 
   createEffect(() => {
     const newStatus = rawStatus()
-    if (newStatus === status()) return
+    if (newStatus === status() || !newStatus) return
 
     const timeSinceLastChange = Date.now() - lastStatusChange
 
-    if (timeSinceLastChange >= 1000) {
+    if (timeSinceLastChange >= 1500) {
       setStatus(newStatus)
       lastStatusChange = Date.now()
       if (statusTimeout) {
@@ -145,7 +144,7 @@ export function MessageProgress(props: { assistantMessages: () => AssistantMessa
       {/*   )} */}
       {/* </Show> */}
       <div class="flex items-center gap-x-5 pl-3 border border-transparent text-text-base">
-        <Spinner /> <span class="text-12-medium">{status()}</span>
+        <Spinner /> <span class="text-12-medium">{status() ?? "Considering next steps..."}</span>
       </div>
       <Show when={eligibleItems().length > 0}>
         <div

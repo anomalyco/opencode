@@ -41,17 +41,17 @@ export function Select<T>(props: SelectProps<T> & ButtonProps) {
       )}
       itemComponent={(itemProps) => (
         <Kobalte.Item
-          data-slot="item"
+          data-slot="select-item"
           classList={{
             ...(props.classList ?? {}),
             [props.class ?? ""]: !!props.class,
           }}
           {...itemProps}
         >
-          <Kobalte.ItemLabel data-slot="item-label">
+          <Kobalte.ItemLabel data-slot="select-item-label">
             {props.label ? props.label(itemProps.item.rawValue) : (itemProps.item.rawValue as string)}
           </Kobalte.ItemLabel>
-          <Kobalte.ItemIndicator data-slot="item-indicator">
+          <Kobalte.ItemIndicator data-slot="select-item-indicator">
             <Icon name="check-small" size="small" />
           </Kobalte.ItemIndicator>
         </Kobalte.Item>
@@ -61,7 +61,7 @@ export function Select<T>(props: SelectProps<T> & ButtonProps) {
       }}
     >
       <Kobalte.Trigger
-        data-slot="trigger"
+        data-slot="select-trigger"
         as={Button}
         size={props.size}
         variant={props.variant}
@@ -70,7 +70,7 @@ export function Select<T>(props: SelectProps<T> & ButtonProps) {
           [props.class ?? ""]: !!props.class,
         }}
       >
-        <Kobalte.Value<T> data-slot="value">
+        <Kobalte.Value<T> data-slot="select-trigger-value">
           {(state) => {
             const selected = state.selectedOption() ?? props.current
             if (!selected) return props.placeholder || ""
@@ -78,7 +78,7 @@ export function Select<T>(props: SelectProps<T> & ButtonProps) {
             return selected as string
           }}
         </Kobalte.Value>
-        <Kobalte.Icon data-slot="icon">
+        <Kobalte.Icon data-slot="select-trigger-icon">
           <Icon name="chevron-down" size="small" />
         </Kobalte.Icon>
       </Kobalte.Trigger>
@@ -90,7 +90,7 @@ export function Select<T>(props: SelectProps<T> & ButtonProps) {
           }}
           data-component="select-content"
         >
-          <Kobalte.Listbox data-slot="list" />
+          <Kobalte.Listbox data-slot="select-content-list" />
         </Kobalte.Content>
       </Kobalte.Portal>
     </Kobalte>

@@ -113,13 +113,12 @@ export namespace Format {
               ...item.environment,
             })
         } catch (error) {
-          log.error("failed", {
+          log.error("failed to format file", {
             error,
             command: item.command,
             ...item.environment,
+            file,
           })
-          // re-raising
-          throw error
         }
       }
     })

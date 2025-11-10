@@ -1,14 +1,14 @@
 [data-component="select"] {
-  [data-slot="trigger"] {
+  [data-slot="select-trigger"] {
     padding: 0 4px 0 8px;
     box-shadow: none;
 
-    [data-slot="value"] {
+    [data-slot="select-trigger-value"] {
       overflow: hidden;
       text-overflow: ellipsis;
       white-space: nowrap;
     }
-    [data-slot="icon"] {
+    [data-slot="select-trigger-icon"] {
       width: 16px;
       height: 16px;
       flex-shrink: 0;
@@ -38,7 +38,7 @@
     animation: select-open 0.15s ease-out;
   }
 
-  [data-slot="list"] {
+  [data-slot="select-content-list"] {
     overflow-y: auto;
     max-height: 12rem;
     white-space: nowrap;
@@ -55,7 +55,7 @@
   /* [data-slot="section"] { */
   /* } */
 
-  [data-slot="item"] {
+  [data-slot="select-item"] {
     position: relative;
     display: flex;
     align-items: center;
@@ -85,7 +85,7 @@
       background-color: var(--surface-raised-base);
       pointer-events: none;
     }
-    [data-slot="item-indicator"] {
+    [data-slot="select-item-indicator"] {
       margin-left: auto;
       width: 16px;
       height: 16px;

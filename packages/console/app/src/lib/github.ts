@@ -7,10 +7,7 @@ export const github = query(async () => {
     "User-Agent":
       "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/108.0.0.0 Safari/537.36",
   }
-  const apiBaseUrl = config.github.repoUrl.replace(
-    "https://github.com/",
-    "https://api.github.com/repos/",
-  )
+  const apiBaseUrl = config.github.repoUrl.replace("https://github.com/", "https://api.github.com/repos/")
   try {
     const [meta, releases, contributors] = await Promise.all([
       fetch(apiBaseUrl, { headers }).then((res) => res.json()),

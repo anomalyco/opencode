@@ -69,11 +69,7 @@ export function ReloadSection() {
   })
 
   createEffect(() => {
-    if (
-      !setReloadSubmission.pending &&
-      setReloadSubmission.result &&
-      !(setReloadSubmission.result as any).error
-    ) {
+    if (!setReloadSubmission.pending && setReloadSubmission.result && !(setReloadSubmission.result as any).error) {
       setStore("show", false)
     }
   })
@@ -108,8 +104,8 @@ export function ReloadSection() {
             }
           >
             <p>
-              Auto reload is <b>enabled</b>. We'll reload <b>${billingInfo()?.reloadAmount}</b>{" "}
-              (+$1.23 processing fee) when balance reaches <b>${billingInfo()?.reloadTrigger}</b>.
+              Auto reload is <b>enabled</b>. We'll reload <b>${billingInfo()?.reloadAmount}</b> (+$1.23 processing fee)
+              when balance reaches <b>${billingInfo()?.reloadTrigger}</b>.
             </p>
           </Show>
           <button data-color="primary" type="button" onClick={() => show()}>
@@ -194,8 +190,8 @@ export function ReloadSection() {
                 minute: "2-digit",
                 second: "2-digit",
               })}
-              . Reason: {billingInfo()?.reloadError?.replace(/\.$/, "")}. Please update your payment
-              method and try again.
+              . Reason: {billingInfo()?.reloadError?.replace(/\.$/, "")}. Please update your payment method and try
+              again.
             </p>
             <form action={reload} method="post" data-slot="create-form">
               <input type="hidden" name="workspaceID" value={params.id} />

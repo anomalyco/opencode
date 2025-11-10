@@ -62,6 +62,14 @@ export namespace LSPClient {
       // Return server initialization options
       return [input.server.initialization ?? {}]
     })
+    connection.onRequest("client/registerCapability", async () => {})
+    connection.onRequest("client/unregisterCapability", async () => {})
+    connection.onRequest("workspace/workspaceFolders", async () => [
+      {
+        name: "workspace",
+        uri: "file://" + input.root,
+      },
+    ])
     connection.listen()
 
     l.info("sending initialize")
