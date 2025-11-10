@@ -945,7 +945,8 @@ const PART_MAPPING = {
 }
 
 function ReasoningPart(props: { part: ReasoningPart; message: AssistantMessage }) {
-  const { theme } = useTheme()
+  const { theme, syntax } = useTheme()
+  const ctx = use()
   return (
     <Show when={props.part.text.trim()}>
       <box
@@ -957,7 +958,15 @@ function ReasoningPart(props: { part: ReasoningPart; message: AssistantMessage }
         borderColor={theme.backgroundPanel}
       >
         <box paddingTop={1} paddingBottom={1} paddingLeft={2} backgroundColor={theme.backgroundPanel}>
-          <text fg={theme.text}>{props.part.text.trim()}</text>
+          <code
+            filetype="markdown"
+            drawUnstyledText={false}
+            streaming={true}
+            syntaxStyle={syntax()}
+            content={props.part.text.trim()}
+            conceal={ctx.conceal()}
+            fg={theme.text}
+          />
         </box>
       </box>
     </Show>
