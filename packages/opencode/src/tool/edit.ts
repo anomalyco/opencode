@@ -37,6 +37,7 @@ export const EditTool = Tool.define("edit", {
     }
 
     const agent = await Agent.get(ctx.agent)
+    const acpTools = ACPToolRegistry.get(ctx.sessionID)
 
     const filePath = path.isAbsolute(params.filePath) ? params.filePath : path.join(Instance.directory, params.filePath)
     if (!Filesystem.contains(Instance.directory, filePath)) {
@@ -57,7 +58,6 @@ export const EditTool = Tool.define("edit", {
       }
     }
 
-    const acpTools = ACPToolRegistry.get(ctx.sessionID)
     let diff = ""
     let contentOld = ""
     let contentNew = ""

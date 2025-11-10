@@ -30,6 +30,7 @@ export const ReadTool = Tool.define("read", {
     }
     const title = path.relative(Instance.worktree, filepath)
     const agent = await Agent.get(ctx.agent)
+    const acpTools = ACPToolRegistry.get(ctx.sessionID)
 
     if (!ctx.extra?.["bypassCwdCheck"] && !Filesystem.contains(Instance.directory, filepath)) {
       const parentDir = path.dirname(filepath)
@@ -109,7 +110,6 @@ export const ReadTool = Tool.define("read", {
 
     const limit = params.limit ?? DEFAULT_READ_LIMIT
     const offset = params.offset || 0
-    const acpTools = ACPToolRegistry.get(ctx.sessionID)
     let lines: string[]
     if (acpTools?.readTextFile) {
       const result = await acpTools.readTextFile({
