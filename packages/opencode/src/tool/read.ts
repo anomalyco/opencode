@@ -10,6 +10,7 @@ import { Instance } from "../project/instance"
 import { Provider } from "../provider/provider"
 import { Identifier } from "../id/id"
 import { Permission } from "../permission"
+import { Agent } from "@/agent/agent"
 
 const DEFAULT_READ_LIMIT = 2000
 const MAX_LINE_LENGTH = 2000
@@ -27,21 +28,24 @@ export const ReadTool = Tool.define("read", {
       filepath = path.join(process.cwd(), filepath)
     }
     const title = path.relative(Instance.worktree, filepath)
+    const agent = await Agent.get(ctx.agent)
 
     if (!ctx.extra?.["bypassCwdCheck"] && !Filesystem.contains(Instance.directory, filepath)) {
       const parentDir = path.dirname(filepath)
-      await Permission.ask({
-        type: "external-directory",
-        pattern: parentDir,
-        sessionID: ctx.sessionID,
-        messageID: ctx.messageID,
-        callID: ctx.callID,
-        title: `Access file outside working directory: ${filepath}`,
-        metadata: {
-          filepath,
-          parentDir,
-        },
-      })
+      if (agent.permission.external_directory === "ask") {
+        await Permission.ask({
+          type: "external_directory",
+          pattern: parentDir,
+          sessionID: ctx.sessionID,
+          messageID: ctx.messageID,
+          callID: ctx.callID,
+          title: `Access file outside working directory: ${filepath}`,
+          metadata: {
+            filepath,
+            parentDir,
+          },
+        })
+      }
     }
 
     const file = Bun.file(filepath)

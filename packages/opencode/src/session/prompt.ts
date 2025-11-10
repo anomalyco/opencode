@@ -1115,18 +1115,21 @@ export namespace SessionPrompt {
                         JSON.stringify(p.state.input) === JSON.stringify(value.input),
                     )
                   ) {
-                    await Permission.ask({
-                      type: "doom-loop",
-                      pattern: value.toolName,
-                      sessionID: assistantMsg.sessionID,
-                      messageID: assistantMsg.id,
-                      callID: value.toolCallId,
-                      title: `Possible doom loop: "${value.toolName}" called ${DOOM_LOOP_THRESHOLD} times with identical arguments`,
-                      metadata: {
-                        tool: value.toolName,
-                        input: value.input,
-                      },
-                    })
+                    const permission = await Agent.get(input.agent).then((x) => x.permission)
+                    if (permission.doom_loop === "ask") {
+                      await Permission.ask({
+                        type: "doom_loop",
+                        pattern: value.toolName,
+                        sessionID: assistantMsg.sessionID,
+                        messageID: assistantMsg.id,
+                        callID: value.toolCallId,
+                        title: `Possible doom loop: "${value.toolName}" called ${DOOM_LOOP_THRESHOLD} times with identical arguments`,
+                        metadata: {
+                          tool: value.toolName,
+                          input: value.input,
+                        },
+                      })
+                    }
                   }
                 }
                 break
