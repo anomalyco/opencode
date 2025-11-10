@@ -417,13 +417,13 @@ To use Google Vertex AI with OpenCode:
 1. Head over to the **Model Garden** in the Google Cloud Console and check the
    models available in your region.
 
-   :::tip
+   :::note
    You need to have a Google Cloud project with Vertex AI API enabled.
    :::
 
 2. Set the required environment variables:
-   - `GOOGLE_VERTEX_PROJECT`: Your Google Cloud project ID
-   - `GOOGLE_VERTEX_REGION` (optional): The region for Vertex AI (defaults to `us-east5`)
+   - `GOOGLE_CLOUD_PROJECT`: Your Google Cloud project ID
+   - `VERTEX_LOCATION` (optional): The region for Vertex AI (defaults to `global`)
    - Authentication (choose one):
      - `GOOGLE_APPLICATION_CREDENTIALS`: Path to your service account JSON key file
      - Authenticate using gcloud CLI: `gcloud auth application-default login`
@@ -431,16 +431,20 @@ To use Google Vertex AI with OpenCode:
    Set them while running opencode.
 
    ```bash
-   GOOGLE_APPLICATION_CREDENTIALS=/path/to/service-account.json GOOGLE_VERTEX_PROJECT=your-project-id opencode
+   GOOGLE_APPLICATION_CREDENTIALS=/path/to/service-account.json GOOGLE_CLOUD_PROJECT=your-project-id opencode
    ```
 
    Or add them to your bash profile.
 
    ```bash title="~/.bash_profile"
    export GOOGLE_APPLICATION_CREDENTIALS=/path/to/service-account.json
-   export GOOGLE_VERTEX_PROJECT=your-project-id
-   export GOOGLE_VERTEX_REGION=us-central1
+   export GOOGLE_CLOUD_PROJECT=your-project-id
+   export VERTEX_LOCATION=global
    ```
+
+:::tip
+The `global` region improves availability and reduces errors at no extra cost. Use regional endpoints (e.g., `us-central1`) for data residency requirements. [Learn more](https://cloud.google.com/vertex-ai/generative-ai/docs/partner-models/use-partner-models#regional_and_global_endpoints)
+:::
 
 3. Run the `/models` command to select the model you want.
 

@@ -1,17 +1,4 @@
 {
   "$schema": "https://opencode.ai/config.json",
-  "plugin": ["opencode-openai-codex-auth"],
-  "mcp": {
-    "weather": {
-      "type": "local",
-      "command": ["bun", "x", "@h1deya/mcp-server-weather"]
-    },
-    "context7": {
-      "type": "remote",
-      "url": "https://mcp.context7.com/mcp",
-      "headers": {
-        "CONTEXT7_API_KEY": "{env:CONTEXT7_API_KEY}"
-      }
-    }
-  }
+  "plugin": ["opencode-openai-codex-auth"]
 }
