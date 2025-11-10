@@ -11,6 +11,7 @@ import type {
   Project,
   FileDiff,
   Todo,
+  Permission,
 } from "@opencode-ai/sdk"
 import { createStore, produce, reconcile } from "solid-js/store"
 import { createMemo } from "solid-js"
@@ -35,6 +36,9 @@ export const { use: useSync, provider: SyncProvider } = createSimpleContext({
       todo: {
         [sessionID: string]: Todo[]
       }
+      permission: {
+        [sessionID: string]: Permission[]
+      }
       limit: number
       message: {
         [sessionID: string]: Message[]
@@ -54,6 +58,7 @@ export const { use: useSync, provider: SyncProvider } = createSimpleContext({
       session: [],
       session_diff: {},
       todo: {},
+      permission: {},
       limit: 10,
       message: {},
       part: {},
@@ -85,6 +90,21 @@ export const { use: useSync, provider: SyncProvider } = createSimpleContext({
         case "todo.updated":
           setStore("todo", event.properties.sessionID, event.properties.todos)
           break
+        case "permission.updated": {
+          const permissions = store.permission[event.properties.sessionID] || []
+          const sorted = [...permissions, event.properties.permission].sort((a, b) => a.time.created - b.time.created)
+          setStore("permission", event.properties.sessionID, sorted)
+          break
+        }
+        case "permission.replied": {
+          const permissions = store.permission[event.properties.sessionID] || []
+          setStore(
+            "permission",
+            event.properties.sessionID,
+            permissions.filter((p) => p.id !== event.properties.permissionID),
+          )
+          break
+        }
         case "message.updated": {
           const messages = store.message[event.properties.info.sessionID]
           if (!messages) {
@@ -192,13 +212,13 @@ export const { use: useSync, provider: SyncProvider } = createSimpleContext({
             sdk.client.session.todo({ path: { id: sessionID } }),
             sdk.client.session.diff({ path: { id: sessionID } }),
           ])
-          
+
           // Handle case where session doesn't exist or API returns error
           if (!messages.data || !session.data) {
             console.warn(`Session ${sessionID} not found or invalid, skipping sync`)
             return
           }
-          
+
           setStore(
             produce((draft) => {
               const match = Binary.search(draft.session, sessionID, (s) => s.id)

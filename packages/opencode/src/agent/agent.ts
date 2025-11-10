@@ -239,10 +239,8 @@ export namespace Agent {
         mode: "primary",
         builtIn: true,
         temperature: 0.3,
-        model: {
-          providerID: "anthropic",
-          modelID: "claude-sonnet-4-20250514",
-        },
+        // Model auto-selected based on agent permissions (see prompt.ts resolveModel)
+        // Read-only agents automatically use small/cheap models
         prompt: PROMPT_ORCHESTRATOR,
       },
     }

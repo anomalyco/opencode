@@ -49,6 +49,7 @@ import { useSync } from "@/context/sync"
 import { type AssistantMessage as AssistantMessageType } from "@opencode-ai/sdk"
 import { Markdown } from "@opencode-ai/ui"
 import { Spinner } from "@/components/spinner"
+import { PermissionQueue } from "@/components/permission-queue"
 import { useSession } from "@/context/session"
 
 export default function Page() {
@@ -266,6 +267,7 @@ export default function Page() {
 
   return (
     <div class="relative bg-background-base size-full overflow-x-hidden">
+      <PermissionQueue />
       <DragDropProvider
         onDragStart={handleDragStart}
         onDragEnd={handleDragEnd}

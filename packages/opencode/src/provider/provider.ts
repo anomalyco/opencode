@@ -705,26 +705,66 @@ export namespace Provider {
     }
   }
 
+  /**
+   * Selects the most appropriate small/cheap model for cost-effective operations.
+   *
+   * Used for read-only agents (orchestrator, plan) that need reasoning but don't edit code.
+   * Small models cost ~80% less than flagship models while maintaining quality for coordination tasks.
+   *
+   * Selection Priority:
+   * 1. User-configured `small_model` from config (if set)
+   * 2. Auto-selection based on provider's available models:
+   *    - Claude Haiku 4.5 (anthropic)
+   *    - Gemini 2.5 Flash (google)
+   *    - GPT-5 Nano (openai)
+   *
+   * @param providerID - The provider to select a small model from
+   * @returns The selected small model, or undefined if no suitable model found
+   *
+   * @example
+   * ```typescript
+   * // With user config set: config.small_model = "anthropic/claude-haiku-4.5"
+   * const model = await getSmallModel("anthropic")
+   * // Returns: { providerID: "anthropic", modelID: "claude-haiku-4.5" }
+   *
+   * // Without config, auto-selects from available models
+   * const model = await getSmallModel("google")
+   * // Returns: { providerID: "google", modelID: "gemini-2.5-flash-latest" }
+   * ```
+   */
   export async function getSmallModel(providerID: string) {
     const cfg = await Config.get()
 
+    // Priority 1: Use explicitly configured small model
     if (cfg.small_model) {
       const parsed = parseModel(cfg.small_model)
       return getModel(parsed.providerID, parsed.modelID)
     }
 
+    // Priority 2: Auto-select from provider's available models
     const provider = await state().then((state) => state.providers[providerID])
     if (!provider) return
+
+    // Model priority list (ordered by preference)
+    // - claude-haiku variants: Fast, cost-effective Claude models
+    // - gemini-2.5-flash: Google's efficient model for coordination
+    // - gpt-5-nano: OpenAI's small model (when available)
     let priority = ["claude-haiku-4-5", "claude-haiku-4.5", "3-5-haiku", "3.5-haiku", "gemini-2.5-flash", "gpt-5-nano"]
-    // claude-haiku-4.5 is considered a premium model in github copilot, we shouldn't use premium requests for title gen
+
+    // Special case: GitHub Copilot treats claude-haiku-4.5 as premium
+    // Filter it out to avoid unnecessary premium API usage
     if (providerID === "github-copilot") {
       priority = priority.filter((m) => m !== "claude-haiku-4.5")
     }
+
+    // Find first available model matching priority list
     for (const item of priority) {
       for (const model of Object.keys(provider.info.models)) {
         if (model.includes(item)) return getModel(providerID, model)
       }
     }
+
+    // No small model found - caller should fall back to default
   }
 
   const priority = ["gemini-2.5-pro-preview", "gpt-5", "claude-sonnet-4"]

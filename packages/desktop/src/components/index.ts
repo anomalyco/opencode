@@ -1,7 +1,8 @@
-export { Sidebar } from './sidebar'
-export { default as FileTree } from './file-tree'
-export { TodoList } from './todo-list'
-export { VoiceControl } from './voice-control'
-export { MessageProgress } from './message-progress'
-export { PromptInput } from './prompt-input'
-export { Spinner } from './spinner'
+export { Sidebar } from "./sidebar"
+export { default as FileTree } from "./file-tree"
+export { TodoList } from "./todo-list"
+export { VoiceControl } from "./voice-control"
+export { MessageProgress } from "./message-progress"
+export { PromptInput } from "./prompt-input"
+export { Spinner } from "./spinner"
+export { PermissionQueue } from "./permission-queue"

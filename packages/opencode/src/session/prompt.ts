@@ -475,13 +475,90 @@ export namespace SessionPrompt {
     return msgs
   }
 
+  /**
+   * Resolves which model to use for a session, following a priority hierarchy.
+   *
+   * Resolution Priority (highest to lowest):
+   * 1. Explicit model passed in request (input.model)
+   * 2. Agent-specific model configuration (agent.model)
+   * 3. Auto-selection based on agent permissions:
+   *    - Read-only agents (edit: "deny") → Small/cheap model (~80% cost savings)
+   *    - Edit-enabled agents → Default/flagship model
+   * 4. User's configured default model
+   *
+   * Auto-Selection Logic:
+   * - Orchestrator agent: Uses small model (coordinates subtasks, no code edits)
+   * - Plan agent: Uses small model (designs architecture, no code edits)
+   * - General agent: Uses default model (implements code, needs full capability)
+   *
+   * Cost Optimization:
+   * Small models (Haiku, Flash, Nano) cost ~80% less than flagship models
+   * while maintaining sufficient quality for coordination and planning tasks.
+   *
+   * @param input.model - Explicitly requested model (overrides all)
+   * @param input.agent - Agent configuration with permissions and optional model
+   * @returns Resolved model configuration { providerID, modelID }
+   *
+   * @example
+   * ```typescript
+   * // Explicit model override
+   * await resolveModel({
+   *   model: { providerID: "anthropic", modelID: "claude-opus-4" },
+   *   agent: orchestratorAgent
+   * })
+   * // Returns: { providerID: "anthropic", modelID: "claude-opus-4" }
+   *
+   * // Auto-selection for read-only agent
+   * await resolveModel({
+   *   model: undefined,
+   *   agent: { name: "orchestrator", permission: { edit: "deny" } }
+   * })
+   * // Returns: { providerID: "anthropic", modelID: "claude-haiku-4.5" }
+   *
+   * // Auto-selection for edit-enabled agent
+   * await resolveModel({
+   *   model: undefined,
+   *   agent: { name: "general", permission: { edit: "allow" } }
+   * })
+   * // Returns: user's default model (e.g., claude-sonnet-4)
+   * ```
+   */
   async function resolveModel(input: { model: PromptInput["model"]; agent: Agent.Info }) {
+    // Priority 1: Explicit model request (highest priority)
     if (input.model) {
       return input.model
     }
+
+    // Priority 2: Agent-specific model configuration
     if (input.agent.model) {
       return input.agent.model
     }
+
+    // Priority 3: Auto-select based on agent permissions
+    // Read-only agents use small/cheap models for cost optimization
+    if (input.agent.permission.edit === "deny") {
+      const defaultModel = await Provider.defaultModel()
+      const small = await Provider.getSmallModel(defaultModel.providerID)
+
+      if (small) {
+        // Successfully found small model - use it for cost savings
+        log.info("auto-selecting small model for read-only agent", {
+          agent: input.agent.name,
+          smallModel: `${small.providerID}/${small.modelID}`,
+          defaultModel: `${defaultModel.providerID}/${defaultModel.modelID}`,
+          reason: "read-only agent (edit permission denied)",
+        })
+        return { providerID: small.providerID, modelID: small.modelID }
+      }
+
+      // Fallback: No small model available, use default
+      log.warn("small model unavailable for read-only agent, using default", {
+        agent: input.agent.name,
+        providerID: defaultModel.providerID,
+      })
+    }
+
+    // Priority 4: Default to user's configured default model
     return Provider.defaultModel()
   }
 
