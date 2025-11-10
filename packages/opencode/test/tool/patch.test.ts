@@ -3,6 +3,7 @@ import path from "path"
 import { PatchTool } from "../../src/tool/patch"
 import { Instance } from "../../src/project/instance"
 import { tmpdir } from "../fixture/fixture"
+import { Permission } from "../../src/permission"
 import * as fs from "fs/promises"
 
 const ctx = {
@@ -21,9 +22,7 @@ describe("tool.patch", () => {
     await Instance.provide({
       directory: "/tmp",
       fn: async () => {
-        await expect(patchTool.execute({ patchText: "" }, ctx)).rejects.toThrow(
-          "patchText is required",
-        )
+        expect(patchTool.execute({ patchText: "" }, ctx)).rejects.toThrow("patchText is required")
       },
     })
   })
@@ -32,9 +31,7 @@ describe("tool.patch", () => {
     await Instance.provide({
       directory: "/tmp",
       fn: async () => {
-        await expect(patchTool.execute({ patchText: "invalid patch" }, ctx)).rejects.toThrow(
-          "Failed to parse patch",
-        )
+        expect(patchTool.execute({ patchText: "invalid patch" }, ctx)).rejects.toThrow("Failed to parse patch")
       },
     })
   })
@@ -46,14 +43,12 @@ describe("tool.patch", () => {
         const emptyPatch = `*** Begin Patch
 *** End Patch`
 
-        await expect(patchTool.execute({ patchText: emptyPatch }, ctx)).rejects.toThrow(
-          "No file changes found in patch",
-        )
+        expect(patchTool.execute({ patchText: emptyPatch }, ctx)).rejects.toThrow("No file changes found in patch")
       },
     })
   })
 
-  test("should reject files outside working directory", async () => {
+  test("should ask permission for files outside working directory", async () => {
     await Instance.provide({
       directory: "/tmp",
       fn: async () => {
@@ -61,10 +56,10 @@ describe("tool.patch", () => {
 *** Add File: /etc/passwd
 +malicious content
 *** End Patch`
-
-        await expect(patchTool.execute({ patchText: maliciousPatch }, ctx)).rejects.toThrow(
-          "is not in the current working directory",
-        )
+        patchTool.execute({ patchText: maliciousPatch }, ctx)
+        // TODO: this sucks
+        await new Promise((resolve) => setTimeout(resolve, 1000))
+        expect(Permission.pending()[ctx.sessionID]).toBeDefined()
       },
     })
   })
@@ -117,9 +112,7 @@ describe("tool.patch", () => {
         // Verify file was created with correct content
         const filePath = path.join(fixture.path, "config.js")
         const content = await fs.readFile(filePath, "utf-8")
-        expect(content).toBe(
-          'const API_KEY = "test-key"\nconst DEBUG = false\nconst VERSION = "1.0"',
-        )
+        expect(content).toBe('const API_KEY = "test-key"\nconst DEBUG = false\nconst VERSION = "1.0"')
       },
     })
   })

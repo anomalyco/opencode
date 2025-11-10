@@ -3,6 +3,7 @@ import { createAsync, query, redirect } from "@solidjs/router"
 import { Title, Meta, Link } from "@solidjs/meta"
 import { HttpHeader } from "@solidjs/start"
 import zenLogoLight from "../../asset/zen-ornate-light.svg"
+import { config } from "~/config"
 import zenLogoDark from "../../asset/zen-ornate-dark.svg"
 import compareVideo from "../../asset/lander/opencode-comparison-min.mp4"
 import compareVideoPoster from "../../asset/lander/opencode-comparison-poster.png"
@@ -30,6 +31,7 @@ export default function Home() {
     <main data-page="zen">
       <HttpHeader name="Cache-Control" value="public, max-age=1, s-maxage=3600, stale-while-revalidate=86400" />
       <Title>OpenCode Zen | A curated set of reliable optimized models for coding agents</Title>
+      <Link rel="canonical" href={`${config.baseUrl}/zen`} />
       <Link rel="icon" type="image/svg+xml" href="/favicon-zen.svg" />
       <Meta property="og:image" content="/social-share-zen.png" />
       <Meta name="twitter:image" content="/social-share-zen.png" />
@@ -42,7 +44,7 @@ export default function Home() {
             <div data-slot="hero-copy">
               <img data-slot="zen logo light" src={zenLogoLight} alt="zen logo light" />
               <img data-slot="zen logo dark" src={zenLogoDark} alt="zen logo dark" />
-              <strong>Reliable optimized models for coding agents</strong>
+              <h1>Reliable optimized models for coding agents</h1>
               <p>
                 Zen gives you access to a curated set of AI models that OpenCode has tested and benchmarked specifically
                 for coding agents. No need to worry about inconsistent performance and quality, use validated models

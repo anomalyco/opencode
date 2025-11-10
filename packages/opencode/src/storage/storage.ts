@@ -117,6 +117,27 @@ export namespace Storage {
         }
       }
     },
+    async (dir) => {
+      for await (const item of new Bun.Glob("session/*/*.json").scan({
+        cwd: dir,
+        absolute: true,
+      })) {
+        const session = await Bun.file(item).json()
+        if (!session.projectID) continue
+        if (!session.summary?.diffs) continue
+        const { diffs } = session.summary
+        await Bun.file(path.join(dir, "session_diff", session.id + ".json")).write(JSON.stringify(diffs))
+        await Bun.file(path.join(dir, "session", session.projectID, session.id + ".json")).write(
+          JSON.stringify({
+            ...session,
+            summary: {
+              additions: diffs.reduce((sum: any, x: any) => sum + x.additions, 0),
+              deletions: diffs.reduce((sum: any, x: any) => sum + x.deletions, 0),
+            },
+          }),
+        )
+      }
+    },
   ]
 
   const state = lazy(async () => {
@@ -128,9 +149,7 @@ export namespace Storage {
     for (let index = migration; index < MIGRATIONS.length; index++) {
       log.info("running migration", { index })
       const migration = MIGRATIONS[index]
-      await migration(dir).catch((e) => {
-        log.error("failed to run migration", { error: e, index })
-      })
+      await migration(dir).catch(() => log.error("failed to run migration", { index }))
       await Bun.write(path.join(dir, "migration"), (index + 1).toString())
     }
     return {

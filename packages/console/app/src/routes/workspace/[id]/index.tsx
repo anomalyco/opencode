@@ -1,22 +1,32 @@
+import { Show, createMemo } from "solid-js"
+import { createStore } from "solid-js/store"
+import { createAsync, useParams, useAction, useSubmission } from "@solidjs/router"
 import { NewUserSection } from "./new-user-section"
 import { UsageSection } from "./usage-section"
 import { ModelSection } from "./model-section"
 import { ProviderSection } from "./provider-section"
 import { IconLogo } from "~/component/icon"
-import { createAsync, useParams, useAction, useSubmission } from "@solidjs/router"
-import { querySessionInfo, queryBillingInfo, createCheckoutUrl } from "../common"
-import { Show, createMemo } from "solid-js"
+import { querySessionInfo, queryBillingInfo, createCheckoutUrl, formatBalance } from "../common"
 
 export default function () {
   const params = useParams()
   const userInfo = createAsync(() => querySessionInfo(params.id))
   const billingInfo = createAsync(() => queryBillingInfo(params.id))
-  const createCheckoutUrlAction = useAction(createCheckoutUrl)
-  const createCheckoutUrlSubmission = useSubmission(createCheckoutUrl)
-
-  const balanceAmount = createMemo(() => {
-    return ((billingInfo()?.balance ?? 0) / 100000000).toFixed(2)
+  const checkoutAction = useAction(createCheckoutUrl)
+  const checkoutSubmission = useSubmission(createCheckoutUrl)
+  const [store, setStore] = createStore({
+    checkoutRedirecting: false,
   })
+  const balance = createMemo(() => formatBalance(billingInfo()?.balance ?? 0))
+
+  async function onClickCheckout() {
+    const baseUrl = window.location.href
+    const checkout = await checkoutAction(params.id, billingInfo()!.reloadAmount, baseUrl, baseUrl)
+    if (checkout && checkout.data) {
+      setStore("checkoutRedirecting", true)
+      window.location.href = checkout.data
+    }
+  }
 
   return (
     <div data-page="workspace-[id]">
@@ -38,21 +48,15 @@ export default function () {
                   <button
                     data-color="primary"
                     data-size="sm"
-                    disabled={createCheckoutUrlSubmission.pending}
-                    onClick={async () => {
-                      const baseUrl = window.location.href
-                      const checkoutUrl = await createCheckoutUrlAction(params.id, baseUrl, baseUrl)
-                      if (checkoutUrl) {
-                        window.location.href = checkoutUrl
-                      }
-                    }}
+                    disabled={checkoutSubmission.pending || store.checkoutRedirecting}
+                    onClick={onClickCheckout}
                   >
-                    {createCheckoutUrlSubmission.pending ? "Loading..." : "Enable billing"}
+                    {checkoutSubmission.pending || store.checkoutRedirecting ? "Loading..." : "Enable billing"}
                   </button>
                 }
               >
                 <span data-slot="balance">
-                  Current balance <b>${balanceAmount() === "-0.00" ? "0.00" : balanceAmount()}</b>
+                  Current balance <b>${balance()}</b>
                 </span>
               </Show>
             </span>

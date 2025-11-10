@@ -50,6 +50,8 @@ for (const [os, arch] of targets) {
   await $`tar -xf ../../node_modules/${watcher.replace("@parcel/", "parcel-")}-*.tgz -C ../../node_modules/${watcher} --strip-components=1`
 
   const parserWorker = fs.realpathSync(path.resolve(dir, "./node_modules/@opentui/core/parser.worker.js"))
+  const workerPath = "./src/cli/cmd/tui/worker.ts"
+
   await Bun.build({
     conditions: ["browser"],
     tsconfig: "./tsconfig.json",
@@ -61,10 +63,11 @@ for (const [os, arch] of targets) {
       execArgv: [`--user-agent=opencode/${Script.version}`, `--env-file=""`, `--`],
       windows: {},
     },
-    entrypoints: ["./src/index.ts", parserWorker, "./src/cli/cmd/tui/worker.ts"],
+    entrypoints: ["./src/index.ts", parserWorker, workerPath],
     define: {
       OPENCODE_VERSION: `'${Script.version}'`,
       OTUI_TREE_SITTER_WORKER_PATH: "/$bunfs/root/" + path.relative(dir, parserWorker),
+      OPENCODE_WORKER_PATH: workerPath,
       OPENCODE_CHANNEL: `'${Script.channel}'`,
     },
   })

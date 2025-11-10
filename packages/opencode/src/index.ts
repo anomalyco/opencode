@@ -17,11 +17,13 @@ import { StatsCommand } from "./cli/cmd/stats"
 import { McpCommand } from "./cli/cmd/mcp"
 import { GithubCommand } from "./cli/cmd/github"
 import { ExportCommand } from "./cli/cmd/export"
+import { ImportCommand } from "./cli/cmd/import"
 import { AttachCommand } from "./cli/cmd/tui/attach"
 import { TuiThreadCommand } from "./cli/cmd/tui/thread"
 import { TuiSpawnCommand } from "./cli/cmd/tui/spawn"
 import { AcpCommand } from "./cli/cmd/acp"
 import { EOL } from "os"
+import { WebCommand } from "./cli/cmd/web"
 
 process.on("unhandledRejection", (e) => {
   Log.Default.error("rejection", {
@@ -61,7 +63,8 @@ const cli = yargs(hideBin(process.argv))
       })(),
     })
 
-    process.env["OPENCODE"] = "1"
+    process.env.AGENT = "1"
+    process.env.OPENCODE = "1"
 
     Log.Default.info("opencode", {
       version: Installation.VERSION,
@@ -81,9 +84,11 @@ const cli = yargs(hideBin(process.argv))
   .command(AgentCommand)
   .command(UpgradeCommand)
   .command(ServeCommand)
+  .command(WebCommand)
   .command(ModelsCommand)
   .command(StatsCommand)
   .command(ExportCommand)
+  .command(ImportCommand)
   .command(GithubCommand)
   .fail((msg) => {
     if (

@@ -1,9 +1,9 @@
 import { Tooltip as KobalteTooltip } from "@kobalte/core/tooltip"
-import { children, createEffect, createSignal, splitProps } from "solid-js"
+import { children, createEffect, createSignal, splitProps, type JSX } from "solid-js"
 import type { ComponentProps } from "solid-js"
 
 export interface TooltipProps extends ComponentProps<typeof KobalteTooltip> {
-  value: string | (() => string)
+  value: JSX.Element
   class?: string
 }
 
@@ -29,13 +29,13 @@ export function Tooltip(props: TooltipProps) {
   })
 
   return (
-    <KobalteTooltip forceMount {...others} open={open()} onOpenChange={setOpen}>
+    <KobalteTooltip forceMount gutter={4} {...others} open={open()} onOpenChange={setOpen}>
       <KobalteTooltip.Trigger as={"div"} data-component="tooltip-trigger" class={local.class}>
         {c()}
       </KobalteTooltip.Trigger>
       <KobalteTooltip.Portal>
         <KobalteTooltip.Content data-component="tooltip" data-placement={props.placement}>
-          {typeof others.value === "function" ? others.value() : others.value}
+          {others.value}
           {/* <KobalteTooltip.Arrow data-slot="arrow" /> */}
         </KobalteTooltip.Content>
       </KobalteTooltip.Portal>

@@ -1,16 +1,8 @@
 import { render, useKeyboard, useRenderer, useTerminalDimensions } from "@opentui/solid"
 import { Clipboard } from "@tui/util/clipboard"
 import { TextAttributes } from "@opentui/core"
-import { RouteProvider, useRoute, type Route } from "@tui/context/route"
-import {
-  Switch,
-  Match,
-  createEffect,
-  untrack,
-  ErrorBoundary,
-  createSignal,
-  onCleanup,
-} from "solid-js"
+import { RouteProvider, useRoute } from "@tui/context/route"
+import { Switch, Match, createEffect, untrack, ErrorBoundary, createSignal, onMount, batch } from "solid-js"
 import { Installation } from "@/installation"
 import { Global } from "@/global"
 import { DialogProvider, useDialog } from "@tui/ui/dialog"
@@ -32,13 +24,17 @@ import { PromptHistoryProvider } from "./component/prompt/history"
 import { DialogAlert } from "./ui/dialog-alert"
 import { ToastProvider, useToast } from "./ui/toast"
 import { ExitProvider, useExit } from "./context/exit"
-import type { SessionRoute } from "./context/route"
 import { Session as SessionApi } from "@/session"
 import { TuiEvent } from "./event"
 import { KVProvider, useKV } from "./context/kv"
 import { StatusBar } from "./component/status-bar"
+import { Provider } from "@/provider/provider"
+import { ArgsProvider, useArgs, type Args } from "./context/args"
 
 async function getTerminalBackgroundColor(): Promise<"dark" | "light"> {
+  // can't set raw mode if not a TTY
+  if (!process.stdin.isTTY) return "dark"
+
   return new Promise((resolve) => {
     let timeout: NodeJS.Timeout
 
@@ -95,25 +91,10 @@ async function getTerminalBackgroundColor(): Promise<"dark" | "light"> {
   })
 }
 
-export function tui(input: {
-  url: string
-  sessionID?: string
-  model?: string
-  agent?: string
-  prompt?: string
-  onExit?: () => Promise<void>
-}) {
+export function tui(input: { url: string; args: Args; onExit?: () => Promise<void> }) {
   // promise to prevent immediate exit
   return new Promise<void>(async (resolve) => {
     const mode = await getTerminalBackgroundColor()
-
-    const routeData: Route | undefined = input.sessionID
-      ? {
-          type: "session",
-          sessionID: input.sessionID,
-        }
-      : undefined
-
     const onExit = async () => {
       await input.onExit?.()
       resolve()
@@ -122,40 +103,34 @@ export function tui(input: {
     render(
       () => {
         return (
-          <ErrorBoundary
-            fallback={(error, reset) => (
-              <ErrorComponent error={error} reset={reset} onExit={onExit} />
-            )}
-          >
-            <ExitProvider onExit={onExit}>
-              <KVProvider>
-                <ToastProvider>
-                  <RouteProvider data={routeData}>
-                    <SDKProvider url={input.url}>
-                      <SyncProvider>
-                        <ThemeProvider mode={mode}>
-                          <LocalProvider
-                            initialModel={input.model}
-                            initialAgent={input.agent}
-                            initialPrompt={input.prompt}
-                          >
-                            <KeybindProvider>
-                              <DialogProvider>
-                                <CommandProvider>
-                                  <PromptHistoryProvider>
-                                    <App />
-                                  </PromptHistoryProvider>
-                                </CommandProvider>
-                              </DialogProvider>
-                            </KeybindProvider>
-                          </LocalProvider>
-                        </ThemeProvider>
-                      </SyncProvider>
-                    </SDKProvider>
-                  </RouteProvider>
-                </ToastProvider>
-              </KVProvider>
-            </ExitProvider>
+          <ErrorBoundary fallback={(error, reset) => <ErrorComponent error={error} reset={reset} onExit={onExit} />}>
+            <ArgsProvider {...input.args}>
+              <ExitProvider onExit={onExit}>
+                <KVProvider>
+                  <ToastProvider>
+                    <RouteProvider>
+                      <SDKProvider url={input.url}>
+                        <SyncProvider>
+                          <ThemeProvider mode={mode}>
+                            <LocalProvider>
+                              <KeybindProvider>
+                                <DialogProvider>
+                                  <CommandProvider>
+                                    <PromptHistoryProvider>
+                                      <App />
+                                    </PromptHistoryProvider>
+                                  </CommandProvider>
+                                </DialogProvider>
+                              </KeybindProvider>
+                            </LocalProvider>
+                          </ThemeProvider>
+                        </SyncProvider>
+                      </SDKProvider>
+                    </RouteProvider>
+                  </ToastProvider>
+                </KVProvider>
+              </ExitProvider>
+            </ArgsProvider>
           </ErrorBoundary>
         )
       },
@@ -179,41 +154,49 @@ function App() {
   const kv = useKV()
   const command = useCommandDialog()
   const { event } = useSDK()
-  const sync = useSync()
   const toast = useToast()
-  const [sessionExists, setSessionExists] = createSignal(false)
   const { theme, mode, setMode } = useTheme()
+  const sync = useSync()
   const exit = useExit()
-
-  useKeyboard(async (evt) => {
-    if (evt.meta && evt.name === "t") {
-      renderer.toggleDebugOverlay()
-      return
-    }
-
-    if (evt.meta && evt.name === "d") {
-      renderer.console.toggle()
-      return
-    }
-  })
-
-  // Make sure session is valid, otherwise redirect to home
-  createEffect(async () => {
-    if (route.data.type === "session") {
-      const data = route.data as SessionRoute
-      await sync.session.sync(data.sessionID).catch(() => {
-        toast.show({
-          message: `Session not found: ${data.sessionID}`,
-          variant: "error",
-        })
-        return route.navigate({ type: "home" })
-      })
-      setSessionExists(true)
-    }
-  })
 
   createEffect(() => {
     console.log(JSON.stringify(route.data))
+  })
+
+  const args = useArgs()
+  onMount(() => {
+    batch(() => {
+      if (args.agent) local.agent.set(args.agent)
+      if (args.model) {
+        const { providerID, modelID } = Provider.parseModel(args.model)
+        if (!providerID || !modelID)
+          return toast.show({
+            variant: "warning",
+            message: `Invalid model format: ${args.model}`,
+            duration: 3000,
+          })
+        local.model.set({ providerID, modelID }, { recent: true })
+      }
+      if (args.sessionID) {
+        route.navigate({
+          type: "session",
+          sessionID: args.sessionID,
+        })
+      }
+    })
+  })
+
+  createEffect(() => {
+    if (sync.status !== "complete") return
+    if (args.continue) {
+      const match = sync.data.session.at(0)?.id
+      if (match) {
+        route.navigate({
+          type: "session",
+          sessionID: match,
+        })
+      }
+    }
   })
 
   command.register(() => [
@@ -333,6 +316,24 @@ function App() {
       onSelect: exit,
       category: "System",
     },
+    {
+      title: "Toggle debug panel",
+      category: "System",
+      value: "app.debug",
+      onSelect: (dialog) => {
+        renderer.toggleDebugOverlay()
+        dialog.clear()
+      },
+    },
+    {
+      title: "Toggle console",
+      category: "System",
+      value: "app.fps",
+      onSelect: (dialog) => {
+        renderer.console.toggle()
+        dialog.clear()
+      },
+    },
   ])
 
   createEffect(() => {
@@ -363,12 +364,34 @@ function App() {
 
   event.on(SessionApi.Event.Deleted.type, (evt) => {
     if (route.data.type === "session" && route.data.sessionID === evt.properties.info.id) {
+      dialog.clear()
       route.navigate({ type: "home" })
       toast.show({
         variant: "info",
         message: "The current session was deleted",
       })
     }
+  })
+
+  event.on(SessionApi.Event.Error.type, (evt) => {
+    const error = evt.properties.error
+    const message = (() => {
+      if (!error) return "An error occured"
+
+      if (typeof error === "object") {
+        const data = error.data
+        if ("message" in data && typeof data.message === "string") {
+          return data.message
+        }
+      }
+      return String(error)
+    })()
+
+    toast.show({
+      variant: "error",
+      message,
+      duration: 5000,
+    })
   })
 
   return (
@@ -396,7 +419,7 @@ function App() {
           <Match when={route.data.type === "home"}>
             <Home />
           </Match>
-          <Match when={route.data.type === "session" && sessionExists()}>
+          <Match when={route.data.type === "session"}>
             <Session />
           </Match>
         </Switch>

@@ -78,18 +78,12 @@ export namespace Provider {
       }
     },
     "amazon-bedrock": async () => {
-      if (
-        !process.env["AWS_PROFILE"] &&
-        !process.env["AWS_ACCESS_KEY_ID"] &&
-        !process.env["AWS_BEARER_TOKEN_BEDROCK"]
-      )
+      if (!process.env["AWS_PROFILE"] && !process.env["AWS_ACCESS_KEY_ID"] && !process.env["AWS_BEARER_TOKEN_BEDROCK"])
         return { autoload: false }
 
       const region = process.env["AWS_REGION"] ?? "us-east-1"
 
-      const { fromNodeProviderChain } = await import(
-        await BunProc.install("@aws-sdk/credential-providers")
-      )
+      const { fromNodeProviderChain } = await import(await BunProc.install("@aws-sdk/credential-providers"))
       return {
         autoload: true,
         options: {
@@ -118,19 +112,16 @@ export namespace Provider {
             case "eu": {
               const regionRequiresPrefix = [
                 "eu-west-1",
+                "eu-west-2",
                 "eu-west-3",
                 "eu-north-1",
                 "eu-central-1",
                 "eu-south-1",
                 "eu-south-2",
               ].some((r) => region.includes(r))
-              const modelRequiresPrefix = [
-                "claude",
-                "nova-lite",
-                "nova-micro",
-                "llama3",
-                "pixtral",
-              ].some((m) => modelID.includes(m))
+              const modelRequiresPrefix = ["claude", "nova-lite", "nova-micro", "llama3", "pixtral"].some((m) =>
+                modelID.includes(m),
+              )
               if (regionRequiresPrefix && modelRequiresPrefix) {
                 modelID = `${regionPrefix}.${modelID}`
               }
@@ -140,15 +131,13 @@ export namespace Provider {
               const isAustraliaRegion = ["ap-southeast-2", "ap-southeast-4"].includes(region)
               if (
                 isAustraliaRegion &&
-                ["anthropic.claude-sonnet-4-5", "anthropic.claude-haiku"].some((m) =>
-                  modelID.includes(m),
-                )
+                ["anthropic.claude-sonnet-4-5", "anthropic.claude-haiku"].some((m) => modelID.includes(m))
               ) {
                 regionPrefix = "au"
                 modelID = `${regionPrefix}.${modelID}`
               } else {
-                const modelRequiresPrefix = ["claude", "nova-lite", "nova-micro", "nova-pro"].some(
-                  (m) => modelID.includes(m),
+                const modelRequiresPrefix = ["claude", "nova-lite", "nova-micro", "nova-pro"].some((m) =>
+                  modelID.includes(m),
                 )
                 if (modelRequiresPrefix) {
                   regionPrefix = "apac"
@@ -186,12 +175,8 @@ export namespace Provider {
       }
     },
     "google-vertex": async () => {
-      const project =
-        process.env["GOOGLE_CLOUD_PROJECT"] ??
-        process.env["GCP_PROJECT"] ??
-        process.env["GCLOUD_PROJECT"]
-      const location =
-        process.env["GOOGLE_CLOUD_LOCATION"] ?? process.env["VERTEX_LOCATION"] ?? "us-east5"
+      const project = process.env["GOOGLE_CLOUD_PROJECT"] ?? process.env["GCP_PROJECT"] ?? process.env["GCLOUD_PROJECT"]
+      const location = process.env["GOOGLE_CLOUD_LOCATION"] ?? process.env["VERTEX_LOCATION"] ?? "us-east5"
       const autoload = Boolean(project)
       if (!autoload) return { autoload: false }
       return {
@@ -207,12 +192,8 @@ export namespace Provider {
       }
     },
     "google-vertex-anthropic": async () => {
-      const project =
-        process.env["GOOGLE_CLOUD_PROJECT"] ??
-        process.env["GCP_PROJECT"] ??
-        process.env["GCLOUD_PROJECT"]
-      const location =
-        process.env["GOOGLE_CLOUD_LOCATION"] ?? process.env["VERTEX_LOCATION"] ?? "us-east5"
+      const project = process.env["GOOGLE_CLOUD_PROJECT"] ?? process.env["GCP_PROJECT"] ?? process.env["GCLOUD_PROJECT"]
+      const location = process.env["GOOGLE_CLOUD_LOCATION"] ?? process.env["VERTEX_LOCATION"] ?? "us-east5"
       const autoload = Boolean(project)
       if (!autoload) return { autoload: false }
       return {
@@ -230,6 +211,7 @@ export namespace Provider {
   }
 
   const state = Instance.state(async () => {
+    using _ = log.time("state")
     const config = await Config.get()
     const database = await ModelsDev.get()
 
@@ -282,6 +264,18 @@ export namespace Provider {
     }
 
     const configProviders = Object.entries(config.provider ?? {})
+
+    // Add GitHub Copilot Enterprise provider that inherits from GitHub Copilot
+    if (database["github-copilot"]) {
+      const githubCopilot = database["github-copilot"]
+      database["github-copilot-enterprise"] = {
+        ...githubCopilot,
+        id: "github-copilot-enterprise",
+        name: "GitHub Copilot Enterprise",
+        // Enterprise uses a different API endpoint - will be set dynamically based on auth
+        api: undefined,
+      }
+    }
 
     for (const [providerID, provider] of configProviders) {
       const existing = database[providerID]
@@ -378,14 +372,41 @@ export namespace Provider {
       if (!plugin.auth) continue
       const providerID = plugin.auth.provider
       if (disabled.has(providerID)) continue
+
+      // For github-copilot plugin, check if auth exists for either github-copilot or github-copilot-enterprise
+      let hasAuth = false
       const auth = await Auth.get(providerID)
-      if (!auth) continue
+      if (auth) hasAuth = true
+
+      // Special handling for github-copilot: also check for enterprise auth
+      if (providerID === "github-copilot" && !hasAuth) {
+        const enterpriseAuth = await Auth.get("github-copilot-enterprise")
+        if (enterpriseAuth) hasAuth = true
+      }
+
+      if (!hasAuth) continue
       if (!plugin.auth.loader) continue
-      const options = await plugin.auth.loader(
-        () => Auth.get(providerID) as any,
-        database[plugin.auth.provider],
-      )
-      mergeProvider(plugin.auth.provider, options ?? {}, "custom")
+
+      // Load for the main provider if auth exists
+      if (auth) {
+        const options = await plugin.auth.loader(() => Auth.get(providerID) as any, database[plugin.auth.provider])
+        mergeProvider(plugin.auth.provider, options ?? {}, "custom")
+      }
+
+      // If this is github-copilot plugin, also register for github-copilot-enterprise if auth exists
+      if (providerID === "github-copilot") {
+        const enterpriseProviderID = "github-copilot-enterprise"
+        if (!disabled.has(enterpriseProviderID)) {
+          const enterpriseAuth = await Auth.get(enterpriseProviderID)
+          if (enterpriseAuth) {
+            const enterpriseOptions = await plugin.auth.loader(
+              () => Auth.get(enterpriseProviderID) as any,
+              database[enterpriseProviderID],
+            )
+            mergeProvider(enterpriseProviderID, enterpriseOptions ?? {}, "custom")
+          }
+        }
+      }
     }
 
     // load config
@@ -399,14 +420,12 @@ export namespace Provider {
           // Filter out blacklisted models
           .filter(
             ([modelID]) =>
-              modelID !== "gpt-5-chat-latest" &&
-              !(providerID === "openrouter" && modelID === "openai/gpt-5-chat"),
+              modelID !== "gpt-5-chat-latest" && !(providerID === "openrouter" && modelID === "openai/gpt-5-chat"),
           )
           // Filter out experimental models
           .filter(
             ([, model]) =>
-              ((!model.experimental && model.status !== "alpha") ||
-                Flag.OPENCODE_ENABLE_EXPERIMENTAL_MODELS) &&
+              ((!model.experimental && model.status !== "alpha") || Flag.OPENCODE_ENABLE_EXPERIMENTAL_MODELS) &&
               model.status !== "deprecated",
           ),
       )
@@ -453,12 +472,11 @@ export namespace Provider {
       // In addition, Bun's dynamic import logic does not support subpath imports,
       // so we patch the import path to load directly from `dist`.
       const modPath =
-        provider.id === "google-vertex-anthropic"
-          ? `${installedPath}/dist/anthropic/index.mjs`
-          : installedPath
+        provider.id === "google-vertex-anthropic" ? `${installedPath}/dist/anthropic/index.mjs` : installedPath
       const mod = await import(modPath)
       if (options["timeout"] !== undefined && options["timeout"] !== null) {
-        // Only override fetch if user explicitly sets timeout
+        // Preserve custom fetch if it exists, wrap it with timeout logic
+        const customFetch = options["fetch"]
         options["fetch"] = async (input: any, init?: BunFetchRequestInit) => {
           const { signal, ...rest } = init ?? {}
 
@@ -468,7 +486,8 @@ export namespace Provider {
 
           const combined = signals.length > 1 ? AbortSignal.any(signals) : signals[0]
 
-          return fetch(input, {
+          const fetchFn = customFetch ?? fetch
+          return fetchFn(input, {
             ...rest,
             signal: combined,
             // @ts-ignore see here: https://github.com/oven-sh/bun/issues/16682
@@ -552,14 +571,7 @@ export namespace Provider {
 
     const provider = await state().then((state) => state.providers[providerID])
     if (!provider) return
-    let priority = [
-      "claude-haiku-4-5",
-      "claude-haiku-4.5",
-      "3-5-haiku",
-      "3.5-haiku",
-      "gemini-2.5-flash",
-      "gpt-5-nano",
-    ]
+    let priority = ["claude-haiku-4-5", "claude-haiku-4.5", "3-5-haiku", "3.5-haiku", "gemini-2.5-flash", "gpt-5-nano"]
     // claude-haiku-4.5 is considered a premium model in github copilot, we shouldn't use premium requests for title gen
     if (providerID === "github-copilot") {
       priority = priority.filter((m) => m !== "claude-haiku-4.5")

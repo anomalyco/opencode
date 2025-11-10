@@ -64,6 +64,9 @@ export namespace Keybind {
           case "leader":
             info.leader = true
             break
+          case "esc":
+            info.name = "escape"
+            break
           default:
             info.name = part
             break
