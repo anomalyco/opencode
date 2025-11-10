@@ -150,7 +150,7 @@ export namespace ACP {
                 if (!message || message.info.role !== "assistant") return
 
                 if (part.type === "tool") {
-                  switch (part.state.status) {    
+                  switch (part.state.status) {
                     case "pending":
                       break
                     case "running":
@@ -163,12 +163,12 @@ export namespace ACP {
                             title: part.tool,
                             kind: toToolKind(part.tool),
                             status: "in_progress",
-                            locations: [],
+                            locations: toLocations(part.tool, part.state.input),
                             rawInput: part.state.input,
                           },
                         })
                         .catch((err) => {
-                          log.error("failed to send tool pending to ACP", { error: err })
+                          log.error("failed to send tool in_progress to ACP", { error: err })
                         })
                       break
                     case "completed":
