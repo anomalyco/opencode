@@ -237,11 +237,11 @@ export namespace Provider {
       }
 
       type TagsResponse = { models?: Array<{ name: string; model: string }> }
-      const data = await fetch(`${url}/api/tags`, {
+      const data = (await fetch(`${url}/api/tags`, {
         signal: AbortSignal.timeout(3000),
       })
         .then((r) => (r.ok ? r.json() : null))
-        .catch(() => null) as TagsResponse | null
+        .catch(() => null)) as TagsResponse | null
 
       const models = data?.models || []
       if (models.length === 0 && Object.keys(provider?.models || {}).length === 0) {

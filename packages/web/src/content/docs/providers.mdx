@@ -607,6 +607,7 @@ OpenCode provides zero-configuration support for Ollama, automatically detecting
 #### Quick Start (Zero Config!)
 
 1. **Start Ollama** (if not already running):
+
    ```bash
    ollama serve
    ```
@@ -623,11 +624,13 @@ That's it! All your Ollama models will appear in the model list automatically.
 OpenCode will automatically detect the Ollama server URL in the following priority:
 
 1. **Environment variable**: If you set `OLLAMA_BASE_URL`, OpenCode will use that URL.
+
    ```bash
    OLLAMA_BASE_URL=http://192.168.2.26:11434 opencode
    ```
 
    Or add it to your bash profile:
+
    ```bash title="~/.bash_profile"
    export OLLAMA_BASE_URL=http://192.168.2.26:11434
    ```
