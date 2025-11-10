@@ -424,8 +424,7 @@ export const GithubRunCommand = cmd({
         const repoData = await fetchRepo()
         session = await Session.create({})
         const agent = await Agent.get("build")
-        const agentColor = Color.hexToAnsiBold(agent?.color)
-        subscribeSessionEvents(agentColor)
+        subscribeSessionEvents(Color.hexToAnsiBold(agent?.color))
         shareId = await (async () => {
           if (share === false) return
           if (!share && repoData.data.private) return
