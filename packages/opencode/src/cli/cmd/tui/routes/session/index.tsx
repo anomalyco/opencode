@@ -626,6 +626,9 @@ export function Session() {
   const dialog = useDialog()
   const renderer = useRenderer()
 
+  // snap to bottom when session changes
+  createEffect(on(() => route.sessionID, toBottom))
+
   return (
     <context.Provider
       value={{
