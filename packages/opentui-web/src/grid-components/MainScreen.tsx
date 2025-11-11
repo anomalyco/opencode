@@ -10,6 +10,8 @@ interface MainScreenProps {
 export const MainScreen: Component<MainScreenProps> = (props) => {
   const [inputText, setInputText] = createSignal("")
   const [cursorVisible, setCursorVisible] = createSignal(true)
+  const [cursorPosition, setCursorPosition] = createSignal(0)
+  let textareaRef: HTMLTextAreaElement | undefined
 
   // Cursor blink animation
   const blinkInterval = setInterval(() => {
@@ -126,8 +128,9 @@ export const MainScreen: Component<MainScreenProps> = (props) => {
 
           {/* Input text with cursor */}
           <span style={{ color: "#ffffff", flex: "1", display: "flex" }}>
-            {inputText()}
+            {inputText().slice(0, cursorPosition())}
             {cursorVisible() && <span style={{ color: "#ff9800" }}>█</span>}
+            {inputText().slice(cursorPosition())}
           </span>
 
           {/* Placeholder when empty */}
@@ -146,14 +149,20 @@ export const MainScreen: Component<MainScreenProps> = (props) => {
 
           {/* Hidden textarea for keyboard capture */}
           <textarea
+            ref={textareaRef}
             value={inputText()}
-            onInput={(e) => setInputText(e.currentTarget.value)}
+            onInput={(e) => {
+              setInputText(e.currentTarget.value)
+              setCursorPosition(e.currentTarget.selectionStart)
+            }}
+            onClick={(e) => setCursorPosition(e.currentTarget.selectionStart)}
             onKeyDown={(e) => {
               if (e.key === "Enter" && !e.shiftKey) {
                 e.preventDefault()
                 handleSubmit()
               }
             }}
+            onKeyUp={(e) => setCursorPosition(e.currentTarget.selectionStart)}
             autofocus
             style={{
               position: "absolute",

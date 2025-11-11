@@ -37,6 +37,8 @@ export const MessagesPanel: Component<MessagesPanelProps> = (props) => {
   const [promptExpanded, setPromptExpanded] = createSignal(false)
   const [scrollContainer, setScrollContainer] = createSignal<HTMLDivElement>()
   const [cursorVisible, setCursorVisible] = createSignal(true)
+  const [cursorPosition, setCursorPosition] = createSignal(0)
+  let textareaRef: HTMLTextAreaElement | undefined
 
   // Cursor blink animation
   const blinkInterval = setInterval(() => {
@@ -666,8 +668,9 @@ export const MessagesPanel: Component<MessagesPanelProps> = (props) => {
           <span style={{ "margin-left": "1ch" }}></span>
           <span style={{ color: "#ff9800", "font-weight": "bold" }}>{">"}</span>
           <span style={{ "margin-left": "1ch", color: "#ffffff", display: "flex" }}>
-            {props.inputText}
+            {props.inputText.slice(0, cursorPosition())}
             {cursorVisible() && <span style={{ color: "#ff9800" }}>█</span>}
+            {props.inputText.slice(cursorPosition())}
           </span>
 
           {/* Hint text at bottom of input */}
@@ -685,14 +688,20 @@ export const MessagesPanel: Component<MessagesPanelProps> = (props) => {
 
           {/* Hidden textarea for keyboard capture */}
           <textarea
+            ref={textareaRef}
             value={props.inputText}
-            onInput={(e) => props.onInput(e.currentTarget.value)}
+            onInput={(e) => {
+              props.onInput(e.currentTarget.value)
+              setCursorPosition(e.currentTarget.selectionStart)
+            }}
+            onClick={(e) => setCursorPosition(e.currentTarget.selectionStart)}
             onKeyDown={(e) => {
               if (e.key === "Enter" && !e.shiftKey) {
                 e.preventDefault()
                 props.onSubmit?.(props.inputText)
               }
             }}
+            onKeyUp={(e) => setCursorPosition(e.currentTarget.selectionStart)}
             autofocus
             style={{
               position: "absolute",
