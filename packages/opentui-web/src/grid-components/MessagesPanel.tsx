@@ -76,11 +76,13 @@ export const MessagesPanel: Component<MessagesPanelProps> = (props) => {
     messages.forEach((msg, msgIndex) => {
       const isUser = msg.role === "user"
       const isLastMessage = msgIndex === messages.length - 1
-      const toolParts = msg.parts.filter((p) => p.type === "tool_use")
+      const toolParts = msg.parts.filter((p) => p.type === "tool")
       const textParts = msg.parts.filter((p) => p.type === "text")
 
-      // Empty row above message
-      currentRow++
+      // Empty row above message (only for user messages - tools handle their own spacing)
+      if (isUser) {
+        currentRow++
+      }
 
       // USER MESSAGES
       if (isUser) {
@@ -206,18 +208,50 @@ export const MessagesPanel: Component<MessagesPanelProps> = (props) => {
       // ASSISTANT MESSAGES WITH TOOLS
       if (!isUser && toolParts.length > 0) {
         toolParts.forEach((tool: any, toolIdx: number) => {
-          const toolName = (tool.name || tool.state?.name || "TOOL").toUpperCase().replace("CC_", "")
+          const toolName = (tool.tool || "TOOL").toUpperCase().replace("CC_", "")
           const toolId = `${msg.id}-${toolIdx}`
           const toolExpanded = expandedTools().has(toolId)
           const toolInput = tool.input || tool.state?.input || {}
           const toolOutput = tool.output || tool.state?.output || tool.state?.metadata || {}
+
+          const toolStartRow = currentRow
+          const bgWidth = `calc(100% - ${2 * 9.6}px)` // 2 char gap on right
+
+          // Blank line above (row 1 of 3)
+          elements.push(
+            <div
+              style={{
+                position: "absolute",
+                left: "0",
+                top: `${currentRow * 1.2}em`,
+                width: bgWidth,
+                height: "1.2em",
+                background: "#1a1a1a",
+              }}
+            />,
+          )
+          currentRow++
+
+          // Background for content row (row 2 of 3)
+          elements.push(
+            <div
+              style={{
+                position: "absolute",
+                left: "0",
+                top: `${currentRow * 1.2}em`,
+                width: bgWidth,
+                height: "1.2em",
+                background: "#1a1a1a",
+              }}
+            />,
+          )
 
           // Tool header with arrow and badge
           const arrow = toolExpanded ? "▼" : "▶"
           elements.push(
             <GridText col={0} row={currentRow} text={arrow} fg="#6a6a6a" onClick={() => toggleTool(toolId)} />,
           )
-          elements.push(<GridText col={2} row={currentRow} text={` ${toolName} `} fg="#000000" bg="#e5c07b" bold />)
+          elements.push(<GridText col={2} row={currentRow} text={` ${toolName} `} fg="#000000" bg="#9a9a9a" bold />)
 
           // Show summary info when collapsed (for certain tools)
           if (!toolExpanded && toolInput) {
@@ -242,49 +276,161 @@ export const MessagesPanel: Component<MessagesPanelProps> = (props) => {
 
           currentRow++
 
+          // Blank line below (row 3 of 3) - MINIMUM 3 ROWS FOR TOOL BLOCKS
+          elements.push(
+            <div
+              style={{
+                position: "absolute",
+                left: "0",
+                top: `${currentRow * 1.2}em`,
+                width: bgWidth,
+                height: "1.2em",
+                background: "#1a1a1a",
+              }}
+            />,
+          )
+          currentRow++
+
           // Tool output (if expanded)
           if (toolExpanded) {
+            const bgWidth = `calc(100% - ${2 * 9.6}px)` // 2 char gap on right
+
             // Show tool input
             if (toolInput && Object.keys(toolInput).length > 0) {
+              // Background for Input: label row
+              elements.push(
+                <div
+                  style={{
+                    position: "absolute",
+                    left: "0",
+                    top: `${currentRow * 1.2}em`,
+                    width: bgWidth,
+                    height: "1.2em",
+                    background: "#1a1a1a",
+                  }}
+                />,
+              )
               elements.push(<GridText col={2} row={currentRow} text="Input:" fg="#6a6a6a" />)
               currentRow++
 
               const inputStr = JSON.stringify(toolInput, null, 2)
               const inputLines = inputStr.split("\n").slice(0, 20)
               inputLines.forEach((line: string) => {
-                elements.push(<GridText col={4} row={currentRow} text={line.slice(0, panelWidth() - 6)} fg="#ffffff" />)
+                // Background for each input line
+                elements.push(
+                  <div
+                    style={{
+                      position: "absolute",
+                      left: "0",
+                      top: `${currentRow * 1.2}em`,
+                      width: bgWidth,
+                      height: "1.2em",
+                      background: "#1a1a1a",
+                    }}
+                  />,
+                )
+                elements.push(<GridText col={4} row={currentRow} text={line.slice(0, panelWidth() - 6)} fg="#6a6a6a" />)
                 currentRow++
               })
-              currentRow++ // Blank line
+              // Blank line with background
+              elements.push(
+                <div
+                  style={{
+                    position: "absolute",
+                    left: "0",
+                    top: `${currentRow * 1.2}em`,
+                    width: bgWidth,
+                    height: "1.2em",
+                    background: "#1a1a1a",
+                  }}
+                />,
+              )
+              currentRow++
             }
 
             // Show tool output
             if (toolOutput && Object.keys(toolOutput).length > 0) {
+              // Background for Output: label row
+              elements.push(
+                <div
+                  style={{
+                    position: "absolute",
+                    left: "0",
+                    top: `${currentRow * 1.2}em`,
+                    width: bgWidth,
+                    height: "1.2em",
+                    background: "#1a1a1a",
+                  }}
+                />,
+              )
               elements.push(<GridText col={2} row={currentRow} text="Output:" fg="#6a6a6a" />)
               currentRow++
 
               const outputStr = JSON.stringify(toolOutput, null, 2)
               const outputLines = outputStr.split("\n").slice(0, 20)
               outputLines.forEach((line: string) => {
-                elements.push(<GridText col={4} row={currentRow} text={line.slice(0, panelWidth() - 6)} fg="#ffffff" />)
+                // Background for each output line
+                elements.push(
+                  <div
+                    style={{
+                      position: "absolute",
+                      left: "0",
+                      top: `${currentRow * 1.2}em`,
+                      width: bgWidth,
+                      height: "1.2em",
+                      background: "#1a1a1a",
+                    }}
+                  />,
+                )
+                elements.push(<GridText col={4} row={currentRow} text={line.slice(0, panelWidth() - 6)} fg="#6a6a6a" />)
                 currentRow++
               })
             } else {
+              // Background for pending output
+              elements.push(
+                <div
+                  style={{
+                    position: "absolute",
+                    left: "0",
+                    top: `${currentRow * 1.2}em`,
+                    width: bgWidth,
+                    height: "1.2em",
+                    background: "#1a1a1a",
+                  }}
+                />,
+              )
               elements.push(<GridText col={2} row={currentRow} text="Output: (pending)" fg="#6a6a6a" />)
               currentRow++
             }
+
+            // Add blank grey line at bottom of expanded tool content
+            elements.push(
+              <div
+                style={{
+                  position: "absolute",
+                  left: "0",
+                  top: `${currentRow * 1.2}em`,
+                  width: bgWidth,
+                  height: "1.2em",
+                  background: "#1a1a1a",
+                }}
+              />,
+            )
+            currentRow++
           }
 
-          currentRow++ // Space after tool block
+          // No extra space after tool block - the 3rd row is already a blank line
         })
       }
 
-      // ASSISTANT TEXT RESPONSES (no tools) - ALWAYS EXPANDED
-      if (!isUser && toolParts.length === 0 && textParts.length > 0) {
+      // ASSISTANT TEXT RESPONSES - Show text whether there are tools or not
+      if (!isUser && textParts.length > 0) {
         const responseStartRow = currentRow
 
-        // Blank line above
-        currentRow++
+        // Blank line above (only if no tools - tool's 3rd row already provides the gap)
+        if (toolParts.length === 0) {
+          currentRow++
+        }
 
         // Content lines
         textParts.forEach((part) => {
@@ -298,10 +444,10 @@ export const MessagesPanel: Component<MessagesPanelProps> = (props) => {
         // Blank line below content
         currentRow++
 
-        // Orange bar spanning all rows (blank + content + blank)
-        for (let row = responseStartRow; row < currentRow; row++) {
-          elements.push(<GridText col={0} row={row} text="▌" fg="#d19a66" />)
-        }
+        // Orange bar spanning all rows (blank + content + blank) - COMMENTED OUT
+        // for (let row = responseStartRow; row < currentRow; row++) {
+        //   elements.push(<GridText col={0} row={row} text="▌" fg="#d19a66" />)
+        // }
 
         // Attribution line ONLY on last message if completed
         if (isLastMessage && msg.time?.completed) {
@@ -310,8 +456,8 @@ export const MessagesPanel: Component<MessagesPanelProps> = (props) => {
 
           const agent = msg.agent || "General"
           const model = msg.model || "claude-sonnet-4-5"
-          elements.push(<GridText col={0} row={currentRow} text={agent} fg="#569cd6" bold />)
-          elements.push(<GridText col={agent.length + 1} row={currentRow} text={model} fg="#6a6a6a" />)
+          elements.push(<GridText col={2} row={currentRow} text={agent} fg="#569cd6" bold />)
+          elements.push(<GridText col={2 + agent.length + 1} row={currentRow} text={model} fg="#6a6a6a" />)
           currentRow++
         }
       }

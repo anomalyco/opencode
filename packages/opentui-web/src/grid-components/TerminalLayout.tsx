@@ -93,8 +93,8 @@ export const TerminalLayout: Component<TerminalLayoutProps> = (props) => {
       />
       <GridDivider
         col={rightDividerCol()}
-        minCol={100}
-        maxCol={130}
+        minCol={totalCols() - 60}
+        maxCol={totalCols() - 20}
         onDrag={(newCol) => setRightWidth(totalCols() - newCol)}
         alwaysVisible
         style={{ position: "fixed", height: "100vh" }}
