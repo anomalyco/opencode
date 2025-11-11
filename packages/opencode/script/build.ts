@@ -22,26 +22,85 @@ import { Script } from "@opencode-ai/script"
 
 const singleFlag = process.argv.includes("--single")
 
-const allTargets = [
-  ["windows", "x64"],
-  ["linux", "arm64"],
-  ["linux", "x64"],
-  ["linux", "x64-baseline"],
-  ["darwin", "x64"],
-  ["darwin", "x64-baseline"],
-  ["darwin", "arm64"],
+const allTargets: {
+  os: string
+  arch: "arm64" | "x64"
+  abi?: "musl"
+  avx2?: false
+}[] = [
+  {
+    os: "linux",
+    arch: "arm64",
+  },
+  {
+    os: "linux",
+    arch: "x64",
+  },
+  {
+    os: "linux",
+    arch: "x64",
+    avx2: false,
+  },
+  {
+    os: "linux",
+    arch: "arm64",
+    abi: "musl",
+  },
+  {
+    os: "linux",
+    arch: "x64",
+    abi: "musl",
+  },
+  {
+    os: "linux",
+    arch: "x64",
+    abi: "musl",
+    avx2: false,
+  },
+  {
+    os: "darwin",
+    arch: "arm64",
+  },
+  {
+    os: "darwin",
+    arch: "x64",
+  },
+  {
+    os: "darwin",
+    arch: "x64",
+    avx2: false,
+  },
+  {
+    os: "windows",
+    arch: "x64",
+  },
+  {
+    os: "windows",
+    arch: "x64",
+    avx2: false,
+  },
 ]
 
 const targets = singleFlag
-  ? allTargets.filter(([os, arch]) => os === process.platform && arch === process.arch)
+  ? allTargets.filter((item) => item.os === process.platform && item.arch === process.arch)
   : allTargets
 
 await $`rm -rf dist`
 
 const binaries: Record<string, string> = {}
-for (const [os, arch] of targets) {
-  console.log(`building ${os}-${arch}`)
-  const name = `${pkg.name}-${os}-${arch}`
+await $`bun install --os="*" --cpu="*" @opentui/core@${pkg.dependencies["@opentui/core"]}`
+await $`bun install --os="*" --cpu="*" @parcel/watcher@${pkg.dependencies["@parcel/watcher"]}`
+for (const item of targets) {
+  const name = [
+    pkg.name,
+    item.os,
+    item.arch,
+    item.avx2 === false ? "baseline" : undefined,
+    item.abi === undefined ? undefined : item.abi,
+  ]
+    .filter(Boolean)
+    .join("-")
+  console.log(`building ${name}`)
   await $`mkdir -p dist/${name}/bin`
 
   const opentui = `@opentui/core-${os === "windows" ? "win32" : os}-${arch.replace("-baseline", "")}`
@@ -68,7 +127,7 @@ for (const [os, arch] of targets) {
     plugins: [solidPlugin],
     sourcemap: "external",
     compile: {
-      target: `bun-${os}-${arch}` as any,
+      target: name.replace(pkg.name, "bun") as any,
       outfile: `dist/${name}/bin/opencode`,
       execArgv: [`--user-agent=opencode/${Script.version}`, `--env-file=""`, `--`],
       windows: {},
@@ -88,8 +147,8 @@ for (const [os, arch] of targets) {
       {
         name,
         version: Script.version,
-        os: [os === "windows" ? "win32" : os],
-        cpu: [arch],
+        os: [item.os === "windows" ? "win32" : item.os],
+        cpu: [item.arch],
       },
       null,
       2,

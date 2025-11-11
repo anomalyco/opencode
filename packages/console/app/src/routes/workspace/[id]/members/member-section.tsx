@@ -209,7 +209,7 @@ const roleOptions = [
 
 export function MemberSection() {
   const params = useParams()
-  const data = createAsync(() => listMembers(params.id))
+  const data = createAsync(() => listMembers(params.id!))
   const submission = useSubmission(inviteMember)
   const [store, setStore] = createStore({
     show: false,
@@ -328,7 +328,7 @@ export function MemberSection() {
                 {(member) => (
                   <MemberRow
                     member={member}
-                    workspaceID={params.id}
+                    workspaceID={params.id!}
                     actorID={data()!.actorID}
                     actorRole={data()!.actorRole}
                   />
