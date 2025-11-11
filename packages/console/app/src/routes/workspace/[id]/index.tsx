@@ -10,8 +10,8 @@ import { querySessionInfo, queryBillingInfo, createCheckoutUrl, formatBalance } 
 
 export default function () {
   const params = useParams()
-  const userInfo = createAsync(() => querySessionInfo(params.id))
-  const billingInfo = createAsync(() => queryBillingInfo(params.id))
+  const userInfo = createAsync(() => querySessionInfo(params.id!))
+  const billingInfo = createAsync(() => queryBillingInfo(params.id!))
   const checkoutAction = useAction(createCheckoutUrl)
   const checkoutSubmission = useSubmission(createCheckoutUrl)
   const [store, setStore] = createStore({
@@ -21,7 +21,7 @@ export default function () {
 
   async function onClickCheckout() {
     const baseUrl = window.location.href
-    const checkout = await checkoutAction(params.id, billingInfo()!.reloadAmount, baseUrl, baseUrl)
+    const checkout = await checkoutAction(params.id!, billingInfo()!.reloadAmount, baseUrl, baseUrl)
     if (checkout && checkout.data) {
       setStore("checkoutRedirecting", true)
       window.location.href = checkout.data
