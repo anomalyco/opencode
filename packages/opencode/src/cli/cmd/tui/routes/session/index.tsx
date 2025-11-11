@@ -58,6 +58,7 @@ import { Editor } from "../../util/editor"
 import { Global } from "@/global"
 import fs from "fs/promises"
 import stripAnsi from "strip-ansi"
+import { LSP } from "@/lsp/index.ts"
 
 addDefaultParsers(parsers.parsers)
 
@@ -1201,6 +1202,8 @@ ToolRegistry.register<typeof WriteTool>({
         .map((x) => x.toString().padStart(pad, " "))
     })
 
+    const diagnostics = createMemo(() => props.metadata.diagnostics?.[props.input.filePath ?? ""] ?? [])
+
     return (
       <>
         <ToolTitle icon="←" fallback="Preparing write..." when={props.input.filePath}>
@@ -1214,6 +1217,15 @@ ToolRegistry.register<typeof WriteTool>({
             <code filetype={filetype(props.input.filePath!)} syntaxStyle={syntax()} content={code()} />
           </box>
         </box>
+        <Show when={diagnostics().length}>
+          <For each={diagnostics()}>
+            {(diagnostic) => (
+              <text fg={theme.error}>
+                Error [{diagnostic.range.start.line}:{diagnostic.range.start.character}]: {diagnostic.message}
+              </text>
+            )}
+          </For>
+        </Show>
       </>
     )
   },
@@ -1391,6 +1403,12 @@ ToolRegistry.register<typeof EditTool>({
 
     const ft = createMemo(() => filetype(props.input.filePath))
 
+    createEffect(() => console.log(props.metadata.diagnostics))
+    const diagnostics = createMemo(() => {
+      const arr = props.metadata.diagnostics?.[props.input.filePath ?? ""] ?? []
+      return arr.filter((x) => x.severity === 1).slice(0, 3)
+    })
+
     return (
       <>
         <ToolTitle icon="←" fallback="Preparing edit..." when={props.input.filePath}>
@@ -1419,6 +1437,17 @@ ToolRegistry.register<typeof EditTool>({
             </box>
           </Match>
         </Switch>
+        <Show when={diagnostics().length}>
+          <box>
+            <For each={diagnostics()}>
+              {(diagnostic) => (
+                <text fg={theme.error}>
+                  Error [{diagnostic.range.start.line + 1}:{diagnostic.range.start.character + 1}] {diagnostic.message}
+                </text>
+              )}
+            </For>
+          </box>
+        </Show>
       </>
     )
   },
