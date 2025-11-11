@@ -375,6 +375,12 @@ export namespace Config {
         .regex(/^#[0-9a-fA-F]{6}$/, "Invalid hex color format")
         .optional()
         .describe("Hex color code for the agent (e.g., #FF5733)"),
+      maxSteps: z
+        .number()
+        .int()
+        .positive()
+        .optional()
+        .describe("Maximum number of agentic iterations before forcing text-only response"),
       permission: z
         .object({
           edit: Permission.optional(),
