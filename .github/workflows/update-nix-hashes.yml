@@ -63,55 +63,61 @@ jobs:
           git config --global user.email "opencode@sst.dev"
           git config --global user.name "opencode"
 
-      - name: Preflight build
-        id: preflight
+      - name: Build and extract hashes
+        id: build_extract
         continue-on-error: true
         run: |
-          echo "Verifying existing hashes for ${{ matrix.system }}..."
-          nix build .#packages.${{ matrix.system }}.default --system ${{ matrix.system }} -L
-          echo "${{ matrix.system }} preflight build successful."
-
-      - name: Summarize preflight status
-        id: preflight_status
-        run: |
-          set -e
-          if [ "${PREFLIGHT_OUTCOME}" = "failure" ]; then
-            echo "Preflight detected stale hashes."
-            echo "failed=true" >> "$GITHUB_OUTPUT"
-          else
-            echo "Preflight build passed."
-            echo "failed=false" >> "$GITHUB_OUTPUT"
+          set -euo pipefail
+          echo "Building for ${{ matrix.system }} to verify/extract hashes..."
+          
+          BUILD_LOG=$(mktemp)
+          nix build .#packages.${{ matrix.system }}.default --system ${{ matrix.system }} -L 2>&1 | tee "$BUILD_LOG" || BUILD_FAILED=true
+          
+          if [ -z "${BUILD_FAILED:-}" ]; then
+            echo "Build successful with current hashes."
+            echo "needs_update=false" >> "$GITHUB_OUTPUT"
+            rm -f "$BUILD_LOG"
+            exit 0
           fi
-        env:
-          PREFLIGHT_OUTCOME: ${{ steps.preflight.outcome }}
+          
+          echo "Build failed, extracting correct hash..."
+          CORRECT_HASH=$(grep -E 'got:\s+sha256-[A-Za-z0-9+/=]+' "$BUILD_LOG" | awk '{print $2}' | head -n1 || true)
+          
+          if [ -z "$CORRECT_HASH" ]; then
+            CORRECT_HASH=$(grep -A2 'hash mismatch' "$BUILD_LOG" | grep 'got:' | awk '{print $2}' | sed 's/sha256:/sha256-/' || true)
+          fi
+          
+          if [ -z "$CORRECT_HASH" ]; then
+            echo "Failed to extract hash from build output"
+            tail -100 "$BUILD_LOG"
+            rm -f "$BUILD_LOG"
+            exit 1
+          fi
+          
+          echo "Extracted hash: $CORRECT_HASH"
+          echo "needs_update=true" >> "$GITHUB_OUTPUT"
+          echo "hash=$CORRECT_HASH" >> "$GITHUB_OUTPUT"
+          rm -f "$BUILD_LOG"
 
-      - name: Update build output hashes
-        env:
-          SYSTEMS: ${{ matrix.system }}
+      - name: Update hash file
+        if: steps.build_extract.outputs.needs_update == 'true'
         run: |
           set -euo pipefail
-          nix/scripts/update-hashes.sh
-
-      - name: Detect hash changes
-        id: hash_change
-        run: |
-          set -euo pipefail
-          STATUS="$(git status --short -- nix/hashes.json || true)"
-          if [ -z "$STATUS" ]; then
-            echo "changed=false" >> "$GITHUB_OUTPUT"
-            echo "No hash changes detected."
-          else
-            echo "changed=true" >> "$GITHUB_OUTPUT"
-            echo "Hashes updated; running post-update verification."
+          HASH_FILE="nix/hashes.json"
+          SYSTEM="${{ matrix.system }}"
+          CORRECT_HASH="${{ steps.build_extract.outputs.hash }}"
+          
+          if [ ! -f "$HASH_FILE" ]; then
+            mkdir -p "$(dirname "$HASH_FILE")"
+            jq -n '{nodeModules: {}, optional: {}, metadata: {}}' > "$HASH_FILE"
           fi
-
-      - name: Verification build
-        if: steps.hash_change.outputs.changed == 'true'
-          || steps.preflight_status.outputs.failed == 'true'
-        run: |
-          echo "Running post-update verification build for ${{ matrix.system }}..."
-          nix build .#packages.${{ matrix.system }}.default --system ${{ matrix.system }} -L
-          echo "${{ matrix.system }} build successful."
+          
+          echo "Updating hash for ${SYSTEM} to ${CORRECT_HASH}"
+          tmp=$(mktemp)
+          jq --arg system "$SYSTEM" --arg value "$CORRECT_HASH" '.nodeModules[$system] = $value' "$HASH_FILE" >"$tmp"
+          mv "$tmp" "$HASH_FILE"
+          
+          echo "Hash file updated."
 
       - name: Upload hash changes
         uses: actions/upload-artifact@v4
