@@ -129,7 +129,7 @@ export const MainScreen: Component<MainScreenProps> = (props) => {
           {/* Input text with cursor */}
           <span style={{ color: "#ffffff", flex: "1", display: "flex" }}>
             {inputText().slice(0, cursorPosition())}
-            {cursorVisible() && <span style={{ color: "#ff9800" }}>█</span>}
+            <span style={{ color: cursorVisible() ? "#ff9800" : "transparent" }}>█</span>
             {inputText().slice(cursorPosition())}
           </span>
 

@@ -669,7 +669,7 @@ export const MessagesPanel: Component<MessagesPanelProps> = (props) => {
           <span style={{ color: "#ff9800", "font-weight": "bold" }}>{">"}</span>
           <span style={{ "margin-left": "1ch", color: "#ffffff", display: "flex" }}>
             {props.inputText.slice(0, cursorPosition())}
-            {cursorVisible() && <span style={{ color: "#ff9800" }}>█</span>}
+            <span style={{ color: cursorVisible() ? "#ff9800" : "transparent" }}>█</span>
             {props.inputText.slice(cursorPosition())}
           </span>
 
