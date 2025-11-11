@@ -14,5 +14,8 @@ export { SessionsPanel } from "./SessionsPanel"
 export { MessagesPanel } from "./MessagesPanel"
 export { SidebarPanel } from "./SidebarPanel"
 
+// Dialog system
+export { Dialog, SelectList, StyledDialog } from "./Dialog"
+
 // Layout system
 export { TerminalLayout } from "./TerminalLayout"
