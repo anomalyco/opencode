@@ -660,6 +660,61 @@ export function Prompt(props: PromptProps) {
                   )
                   return
                 }
+
+                try {
+                  event.preventDefault()
+
+                  const file = Bun.file(filepath)
+                  const stat = await file.stat()
+                  const isReferenceable = stat.isFile() || stat.isSymbolicLink() || stat.isDirectory()
+
+                  if (!isReferenceable) {
+                    input.insertText(pastedContent)
+                    return
+                  }
+
+                  const currentOffset = input.visualCursor.offset
+                  const virtualText = "@" + filepath
+                  const textToInsert = virtualText + " "
+                  const extmarkStart = currentOffset
+                  const extmarkEnd = extmarkStart + Bun.stringWidth(virtualText)
+
+                  input.insertText(textToInsert)
+
+                  const extmarkId = input.extmarks.create({
+                    start: extmarkStart,
+                    end: extmarkEnd,
+                    virtual: true,
+                    styleId: fileStyleId,
+                    typeId: promptPartTypeId,
+                  })
+
+                  const part = {
+                    type: "file" as const,
+                    mime: file.type || "text/plain",
+                    filename: filepath,
+                    url: `file://${process.cwd()}/${filepath}`,
+                    source: {
+                      type: "file" as const,
+                      text: {
+                        start: extmarkStart,
+                        end: extmarkEnd,
+                        value: virtualText,
+                      },
+                      path: filepath,
+                    },
+                  }
+
+                  setStore(
+                    produce((draft) => {
+                      const partIndex = draft.prompt.parts.length
+                      draft.prompt.parts.push(part)
+                      draft.extmarkToPartIndex.set(extmarkId, partIndex)
+                    }),
+                  )
+                } catch {
+                  input.insertText(pastedContent)
+                }
               }}
               ref={(r: TextareaRenderable) => (input = r)}
               onMouseDown={(r: MouseEvent) => r.target?.focus()}
