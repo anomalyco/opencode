@@ -725,15 +725,12 @@ export default function Page() {
             </div>
           </Tabs.Content>
           <Show when={local.layout.review.state() === "tab" && session.diffs().length}>
-            <Tabs.Content value="review" class="select-text">
+            <Tabs.Content value="review" class="select-text mt-8">
               <div
                 classList={{
                   "relative px-6 py-2 w-full flex flex-col gap-6 flex-1 min-h-0": true,
                 }}
               >
-                <div class="h-8 w-full flex items-center justify-between shrink-0 self-stretch sticky top-0 bg-background-stronger z-100">
-                  <div class="flex items-center gap-x-3"></div>
-                </div>
                 <div class="text-14-medium text-text-strong">All changes</div>
                 <div class="h-full pb-40 overflow-y-auto no-scrollbar">
                   <Accordion class="w-full" multiple>
