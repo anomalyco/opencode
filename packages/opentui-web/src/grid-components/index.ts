@@ -18,6 +18,7 @@ export { MainScreen } from "./MainScreen"
 // Dialog system
 export { Dialog, SelectList, StyledDialog } from "./Dialog"
 export { CommandMenu } from "./CommandMenu"
+export { SessionPicker, type Session } from "./SessionPicker"
 
 // Layout system
 export { TerminalLayout } from "./TerminalLayout"
