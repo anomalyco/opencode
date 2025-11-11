@@ -83,8 +83,8 @@ const targets = singleFlag
 await $`rm -rf dist`
 
 const binaries: Record<string, string> = {}
-await $`bun install --os="*" --arch="*" @opentui/core`
-await $`bun install --os="*" --arch="*" @parcel/watcher`
+await $`bun install --os="*" --arch="*" @opentui/core@${pkg.dependencies["@opentui/core"]}`
+await $`bun install --os="*" --arch="*" @parcel/watcher@${pkg.dependencies["@parcel/watcher"]}`
 for (const item of targets) {
   const name = [
     pkg.name,
