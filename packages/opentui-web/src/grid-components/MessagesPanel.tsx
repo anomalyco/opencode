@@ -126,7 +126,7 @@ export const MessagesPanel: Component<MessagesPanelProps> = (props) => {
             />,
           )
           // img badge
-          elements.push(<GridText col={2} row={currentRow} text=" img " fg="#000000" bg="#d4a574" bold />)
+          elements.push(<GridText col={4} row={currentRow} text=" img " fg="#000000" bg="#d4a574" bold />)
           // file path
           const path = img.source?.data || img.url || ""
           elements.push(<GridText col={8} row={currentRow} text={path.slice(0, panelWidth() - 10)} fg="#6a6a6a" />)
@@ -151,7 +151,7 @@ export const MessagesPanel: Component<MessagesPanelProps> = (props) => {
               }
 
               // Calculate wrapped rows for this line
-              const maxWidth = panelWidth() - 4 // 2 char indent + 2 char right gap
+              const maxWidth = panelWidth() - 6 // 4 char indent (shifted right 2) + 2 char right gap
               const wrappedRows = calculateWrappedRows(line, maxWidth)
 
               // Add background for all wrapped rows
@@ -172,7 +172,7 @@ export const MessagesPanel: Component<MessagesPanelProps> = (props) => {
 
               // Render code blocks with grey color, normal text with white
               const textColor = inCodeBlock ? "#6a6a6a" : "#ffffff"
-              elements.push(<GridTextWrap col={2} row={currentRow} text={line} maxWidth={maxWidth} fg={textColor} />)
+              elements.push(<GridTextWrap col={4} row={currentRow} text={line} maxWidth={maxWidth} fg={textColor} />)
               currentRow += wrappedRows
               contentRows += wrappedRows
             })
@@ -196,8 +196,8 @@ export const MessagesPanel: Component<MessagesPanelProps> = (props) => {
           )
           elements.push(
             <>
-              <GridText col={2} row={currentRow} text="jkneen" fg="#ffffff" />
-              <GridText col={9} row={currentRow} text={` (${time})`} fg="#6a6a6a" />
+              <GridText col={4} row={currentRow} text="jkneen" fg="#ffffff" />
+              <GridText col={11} row={currentRow} text={` (${time})`} fg="#6a6a6a" />
             </>,
           )
           currentRow++
@@ -238,6 +238,8 @@ export const MessagesPanel: Component<MessagesPanelProps> = (props) => {
           const toolStartRow = currentRow
           const bgWidth = `calc(100% - ${2 * 9.6}px)` // 2 char gap on right
 
+          const toolBlockStartRow = currentRow
+
           // Blank line above (row 1 of 3)
           elements.push(
             <div
@@ -270,9 +272,9 @@ export const MessagesPanel: Component<MessagesPanelProps> = (props) => {
           // Tool header with arrow and badge (moved 2 chars right)
           const arrow = toolExpanded ? "▼" : "▶"
           elements.push(
-            <GridText col={2} row={currentRow} text={arrow} fg="#6a6a6a" onClick={() => toggleTool(toolId)} />,
+            <GridText col={4} row={currentRow} text={arrow} fg="#6a6a6a" onClick={() => toggleTool(toolId)} />,
           )
-          elements.push(<GridText col={4} row={currentRow} text={` ${toolName} `} fg="#000000" bg="#9a9a9a" bold />)
+          elements.push(<GridText col={6} row={currentRow} text={` ${toolName} `} fg="#000000" bg="#9a9a9a" bold />)
 
           // Show summary info when collapsed (for certain tools)
           if (!toolExpanded && toolInput) {
@@ -290,7 +292,7 @@ export const MessagesPanel: Component<MessagesPanelProps> = (props) => {
               summary = ` ${toolInput.command.slice(0, 50)}`
             }
             if (summary) {
-              const colAfterBadge = 4 + toolName.length + 3
+              const colAfterBadge = 6 + toolName.length + 3
               elements.push(<GridText col={colAfterBadge} row={currentRow} text={summary} fg="#6a6a6a" />)
             }
           }
@@ -331,7 +333,7 @@ export const MessagesPanel: Component<MessagesPanelProps> = (props) => {
                   }}
                 />,
               )
-              elements.push(<GridText col={2} row={currentRow} text="Input:" fg="#6a6a6a" />)
+              elements.push(<GridText col={4} row={currentRow} text="Input:" fg="#6a6a6a" />)
               currentRow++
 
               const inputStr = JSON.stringify(toolInput, null, 2)
@@ -350,7 +352,7 @@ export const MessagesPanel: Component<MessagesPanelProps> = (props) => {
                     }}
                   />,
                 )
-                elements.push(<GridText col={4} row={currentRow} text={line.slice(0, panelWidth() - 6)} fg="#6a6a6a" />)
+                elements.push(<GridText col={6} row={currentRow} text={line.slice(0, panelWidth() - 8)} fg="#6a6a6a" />)
                 currentRow++
               })
               // Blank line with background
@@ -363,6 +365,7 @@ export const MessagesPanel: Component<MessagesPanelProps> = (props) => {
                     width: bgWidth,
                     height: "1.2em",
                     background: "#1a1a1a",
+                    "border-left": "2px solid #3a3a3a",
                   }}
                 />,
               )
@@ -384,7 +387,7 @@ export const MessagesPanel: Component<MessagesPanelProps> = (props) => {
                   }}
                 />,
               )
-              elements.push(<GridText col={2} row={currentRow} text="Output:" fg="#6a6a6a" />)
+              elements.push(<GridText col={4} row={currentRow} text="Output:" fg="#6a6a6a" />)
               currentRow++
 
               const outputStr = JSON.stringify(toolOutput, null, 2)
@@ -403,7 +406,7 @@ export const MessagesPanel: Component<MessagesPanelProps> = (props) => {
                     }}
                   />,
                 )
-                elements.push(<GridText col={4} row={currentRow} text={line.slice(0, panelWidth() - 6)} fg="#6a6a6a" />)
+                elements.push(<GridText col={6} row={currentRow} text={line.slice(0, panelWidth() - 8)} fg="#6a6a6a" />)
                 currentRow++
               })
             } else {
@@ -420,7 +423,7 @@ export const MessagesPanel: Component<MessagesPanelProps> = (props) => {
                   }}
                 />,
               )
-              elements.push(<GridText col={2} row={currentRow} text="Output: (pending)" fg="#6a6a6a" />)
+              elements.push(<GridText col={4} row={currentRow} text="Output: (pending)" fg="#6a6a6a" />)
               currentRow++
             }
 
@@ -439,6 +442,23 @@ export const MessagesPanel: Component<MessagesPanelProps> = (props) => {
             )
             currentRow++
           }
+
+          const toolBlockEndRow = currentRow
+
+          // Vertical "cut" line - background color creates gap in tool block (rendered after expanded content)
+          elements.push(
+            <div
+              style={{
+                position: "absolute",
+                left: "calc(1ch - 6px)",
+                top: `${toolBlockStartRow * 1.2}em`,
+                width: "3px",
+                height: `${(toolBlockEndRow - toolBlockStartRow) * 1.2}em`,
+                background: "#0a0a0a",
+                "z-index": "10",
+              }}
+            />,
+          )
 
           // No extra space after tool block - the 3rd row is already a blank line
         })
@@ -467,12 +487,12 @@ export const MessagesPanel: Component<MessagesPanelProps> = (props) => {
             }
 
             // Calculate wrapped rows for this line
-            const maxWidth = panelWidth() - 4 // 2 char indent + 2 char right gap
+            const maxWidth = panelWidth() - 6 // 4 char indent (shifted right 2) + 2 char right gap
             const wrappedRows = calculateWrappedRows(line, maxWidth)
 
             // Render code blocks with grey color, normal text with white
             const textColor = inCodeBlock ? "#6a6a6a" : "#ffffff"
-            elements.push(<GridTextWrap col={2} row={currentRow} text={line} maxWidth={maxWidth} fg={textColor} />)
+            elements.push(<GridTextWrap col={4} row={currentRow} text={line} maxWidth={maxWidth} fg={textColor} />)
             currentRow += wrappedRows
           })
         })
@@ -489,8 +509,8 @@ export const MessagesPanel: Component<MessagesPanelProps> = (props) => {
 
           const agent = msg.agent || "General"
           const model = msg.model || "claude-sonnet-4-5"
-          elements.push(<GridText col={2} row={currentRow} text={agent} fg="#569cd6" bold />)
-          elements.push(<GridText col={2 + agent.length + 1} row={currentRow} text={model} fg="#6a6a6a" />)
+          elements.push(<GridText col={4} row={currentRow} text={agent} fg="#569cd6" bold />)
+          elements.push(<GridText col={4 + agent.length + 1} row={currentRow} text={model} fg="#6a6a6a" />)
           currentRow++
         }
       }
@@ -503,7 +523,7 @@ export const MessagesPanel: Component<MessagesPanelProps> = (props) => {
   }
 
   return (
-    <GridPanel col={startCol()} row={0} width={panelWidth()} height="100%" bg="#0a0a0a">
+    <GridPanel col={startCol()} row={0} width={panelWidth()} height="100%" bg="#0a0a0a" style={{ overflow: "visible" }}>
       {/* Scrollable messages area */}
       <div
         ref={setScrollContainer}
@@ -559,6 +579,18 @@ export const MessagesPanel: Component<MessagesPanelProps> = (props) => {
             border: "none",
           }}
         >
+          {/* Orange accent line to left of input */}
+          <div
+            style={{
+              position: "absolute",
+              left: "1ch",
+              top: "0",
+              width: "3px",
+              height: "100%",
+              background: "#e5c07b",
+              "z-index": "10",
+            }}
+          />
           <span style={{ color: "#e5c07b", "font-weight": "bold" }}>{">"}</span>
           <span style={{ "margin-left": "1ch", color: "#ffffff" }}>{props.inputText}</span>
           {props.cursorVisible && <span style={{ color: "#d19a66" }}>█</span>}
