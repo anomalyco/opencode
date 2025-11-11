@@ -17,37 +17,86 @@ import { Script } from "@opencode-ai/script"
 
 const singleFlag = process.argv.includes("--single")
 
-const allTargets = [
-  ["windows", "x64"],
-  ["linux", "arm64"],
-  ["linux", "x64"],
-  ["linux", "x64-baseline"],
-  ["darwin", "x64"],
-  ["darwin", "x64-baseline"],
-  ["darwin", "arm64"],
+const allTargets: {
+  os: string
+  arch: "arm64" | "x64"
+  abi?: "musl"
+  avx2?: false
+}[] = [
+  {
+    os: "linux",
+    arch: "arm64",
+  },
+  {
+    os: "linux",
+    arch: "x64",
+  },
+  {
+    os: "linux",
+    arch: "x64",
+    avx2: false,
+  },
+  {
+    os: "linux",
+    arch: "arm64",
+    abi: "musl",
+  },
+  {
+    os: "linux",
+    arch: "x64",
+    abi: "musl",
+  },
+  {
+    os: "linux",
+    arch: "x64",
+    abi: "musl",
+    avx2: false,
+  },
+  {
+    os: "darwin",
+    arch: "arm64",
+  },
+  {
+    os: "darwin",
+    arch: "x64",
+  },
+  {
+    os: "darwin",
+    arch: "x64",
+    avx2: false,
+  },
+  {
+    os: "windows",
+    arch: "x64",
+  },
+  {
+    os: "windows",
+    arch: "x64",
+    avx2: false,
+  },
 ]
 
 const targets = singleFlag
-  ? allTargets.filter(([os, arch]) => os === process.platform && arch === process.arch)
+  ? allTargets.filter((item) => item.os === process.platform && item.arch === process.arch)
   : allTargets
 
 await $`rm -rf dist`
 
 const binaries: Record<string, string> = {}
-for (const [os, arch] of targets) {
-  console.log(`building ${os}-${arch}`)
-  const name = `${pkg.name}-${os}-${arch}`
+await $`bun install --os="*" --arch="*" @opentui/core`
+await $`bun install --os="*" --arch="*" @parcel/watcher`
+for (const item of targets) {
+  const name = [
+    pkg.name,
+    item.os,
+    item.arch,
+    item.avx2 === false ? "baseline" : undefined,
+    item.abi === undefined ? undefined : item.abi,
+  ]
+    .filter(Boolean)
+    .join("-")
+  console.log(`building ${name}`)
   await $`mkdir -p dist/${name}/bin`
-
-  const opentui = `@opentui/core-${os === "windows" ? "win32" : os}-${arch.replace("-baseline", "")}`
-  await $`mkdir -p ../../node_modules/${opentui}`
-  await $`npm pack ${opentui}@${pkg.dependencies["@opentui/core"]}`.cwd(path.join(dir, "../../node_modules"))
-  await $`tar -xf ../../node_modules/${opentui.replace("@opentui/", "opentui-")}-*.tgz -C ../../node_modules/${opentui} --strip-components=1`
-
-  const watcher = `@parcel/watcher-${os === "windows" ? "win32" : os}-${arch.replace("-baseline", "")}${os === "linux" ? "-glibc" : ""}`
-  await $`mkdir -p ../../node_modules/${watcher}`
-  await $`npm pack ${watcher}`.cwd(path.join(dir, "../../node_modules")).quiet()
-  await $`tar -xf ../../node_modules/${watcher.replace("@parcel/", "parcel-")}-*.tgz -C ../../node_modules/${watcher} --strip-components=1`
 
   const parserWorker = fs.realpathSync(path.resolve(dir, "./node_modules/@opentui/core/parser.worker.js"))
   const workerPath = "./src/cli/cmd/tui/worker.ts"
@@ -58,7 +107,7 @@ for (const [os, arch] of targets) {
     plugins: [solidPlugin],
     sourcemap: "external",
     compile: {
-      target: `bun-${os}-${arch}` as any,
+      target: name.replace(pkg.name, "bun") as any,
       outfile: `dist/${name}/bin/opencode`,
       execArgv: [`--user-agent=opencode/${Script.version}`, `--env-file=""`, `--`],
       windows: {},
@@ -78,8 +127,8 @@ for (const [os, arch] of targets) {
       {
         name,
         version: Script.version,
-        os: [os === "windows" ? "win32" : os],
-        cpu: [arch],
+        os: [item.os === "windows" ? "win32" : item.os],
+        cpu: [item.arch],
       },
       null,
       2,
