@@ -1,11 +1,14 @@
 import type { Component } from "solid-js"
-import { For, createSignal, createEffect, onMount, onCleanup } from "solid-js"
+import { For, createSignal, createEffect, onMount, onCleanup, Show } from "solid-js"
 import { GridPanel } from "./GridPanel"
 import { GridText } from "./GridText"
 import { GridInput } from "./GridInput"
 import { TerminalInput } from "./TerminalInput"
 import { GridTextWrap, calculateWrappedRows } from "./GridTextWrap"
 import { SteeringForm, type SteeringQuestionConfig, type SteeringAnswer } from "../components/SteeringForm"
+import { Autocomplete, type AutocompleteItem } from "./Autocomplete"
+import { useSDK } from "../context/sdk"
+import { SubagentNav } from "./SubagentNav"
 
 interface Message {
   id: string
@@ -28,6 +31,12 @@ interface MessagesPanelProps {
   onScrollContainerRef?: (el: HTMLDivElement | null) => void
   currentModel?: string
   onModelClick?: () => void
+  projectPath?: string
+  // Subagent navigation props
+  parentSessionId?: string
+  currentSessionId?: string
+  siblingSubagents?: Array<{ id: string; title: string }>
+  onNavigate?: (sessionId: string) => void
 }
 
 export const MessagesPanel: Component<MessagesPanelProps> = (props) => {
@@ -35,13 +44,25 @@ export const MessagesPanel: Component<MessagesPanelProps> = (props) => {
   const startCol = () => props.col || 44
   const panelWidth = () => props.width || 74
 
+  // Check if viewing a subagent session
+  const isSubagent = () => !!props.parentSessionId && !!props.currentSessionId
+
   const [expandedTools, setExpandedTools] = createSignal<Set<string>>(new Set())
   const [expandedMessages, setExpandedMessages] = createSignal<Set<string>>(new Set())
   const [promptExpanded, setPromptExpanded] = createSignal(false)
   const [scrollContainer, setScrollContainer] = createSignal<HTMLDivElement>()
   const [cursorVisible, setCursorVisible] = createSignal(true)
   const [cursorPosition, setCursorPosition] = createSignal(0)
+  const [autocompleteOpen, setAutocompleteOpen] = createSignal(false)
+  const [autocompleteItems, setAutocompleteItems] = createSignal<AutocompleteItem[]>([])
+  const [autocompleteIndex, setAutocompleteIndex] = createSignal(0)
+  const [autocompletePosition, setAutocompletePosition] = createSignal({ x: 0, y: 0 })
+  const [autocompleteType, setAutocompleteType] = createSignal<"file" | "command" | null>(null)
+  const [autocompleteStart, setAutocompleteStart] = createSignal(0)
   let textareaRef: HTMLTextAreaElement | undefined
+  let inputContainerRef: HTMLDivElement | undefined
+
+  const sdk = useSDK()
 
   // Cursor blink animation
   const blinkInterval = setInterval(() => {
@@ -88,6 +109,115 @@ export const MessagesPanel: Component<MessagesPanelProps> = (props) => {
       }
       return next
     })
+  }
+
+  // Slash commands
+  const slashCommands: AutocompleteItem[] = [
+    { id: "clear", label: "/clear", description: "Clear the screen", type: "command" },
+    { id: "help", label: "/help", description: "Show help information", type: "command" },
+    { id: "new", label: "/new", description: "Start a new session", type: "command" },
+    { id: "switch", label: "/switch", description: "Switch to another session", type: "command" },
+  ]
+
+  // Detect autocomplete trigger and update items
+  const updateAutocomplete = async (text: string, cursor: number) => {
+    // Find the word/token before cursor
+    const beforeCursor = text.slice(0, cursor)
+
+    // Check for @ (file picker)
+    const atMatch = beforeCursor.match(/@([^\s]*)$/)
+    if (atMatch) {
+      setAutocompleteType("file")
+      setAutocompleteStart(cursor - atMatch[1].length)
+      const query = atMatch[1]
+      await loadFiles(query)
+      calculateAutocompletePosition()
+      return
+    }
+
+    // Check for / at start (slash commands)
+    const slashMatch = beforeCursor.match(/^\/([^\s]*)$/)
+    if (slashMatch) {
+      setAutocompleteType("command")
+      setAutocompleteStart(0)
+      const query = slashMatch[1].toLowerCase()
+      const filtered = slashCommands.filter(
+        (cmd) => cmd.label.toLowerCase().includes(query) || cmd.description?.toLowerCase().includes(query),
+      )
+      setAutocompleteItems(filtered)
+      setAutocompleteIndex(0)
+      setAutocompleteOpen(filtered.length > 0)
+      calculateAutocompletePosition()
+      return
+    }
+
+    // No trigger found, close autocomplete
+    setAutocompleteOpen(false)
+  }
+
+  // Load files from server
+  const loadFiles = async (query: string) => {
+    try {
+      const path = props.projectPath || "."
+      const result = await sdk.client.file.list({
+        query: { path, directory: query || undefined },
+      })
+
+      if (result.data) {
+        const items: AutocompleteItem[] = result.data.map((entry: any) => ({
+          id: entry.path,
+          label: entry.name,
+          description: entry.path,
+          type: entry.type === "directory" ? "directory" : "file",
+        }))
+        setAutocompleteItems(items)
+        setAutocompleteIndex(0)
+        setAutocompleteOpen(items.length > 0)
+      }
+    } catch (error) {
+      console.error("Failed to load files:", error)
+      setAutocompleteOpen(false)
+    }
+  }
+
+  // Calculate autocomplete dropdown position
+  const calculateAutocompletePosition = () => {
+    if (!inputContainerRef) return
+    const rect = inputContainerRef.getBoundingClientRect()
+    // Position dropdown above the input
+    setAutocompletePosition({
+      x: rect.left + 100, // Offset for prompt symbol
+      y: rect.top - 10, // Above input
+    })
+  }
+
+  // Handle autocomplete selection
+  const selectAutocompleteItem = (item: AutocompleteItem) => {
+    const text = props.inputText
+    const cursor = cursorPosition()
+    const start = autocompleteStart()
+
+    let replacement = ""
+    if (autocompleteType() === "file") {
+      replacement = item.id // Use full path
+      if (item.type === "directory") {
+        replacement += "/" // Add trailing slash for directories
+      }
+    } else if (autocompleteType() === "command") {
+      replacement = item.label
+    }
+
+    const newText = text.slice(0, start) + replacement + text.slice(cursor)
+    props.onInput(newText)
+    setCursorPosition(start + replacement.length)
+    setAutocompleteOpen(false)
+
+    // Re-trigger autocomplete for directories
+    if (item.type === "directory") {
+      setTimeout(() => {
+        updateAutocomplete(newText, start + replacement.length)
+      }, 100)
+    }
   }
 
   // Detect steering question tags in text
@@ -673,13 +803,24 @@ export const MessagesPanel: Component<MessagesPanelProps> = (props) => {
 
   return (
     <GridPanel col={startCol()} row={0} width={panelWidth()} height="100%" bg="#0a0a0a" style={{ overflow: "visible" }}>
+      {/* Subagent navigation bar (if in subagent session) */}
+      <Show when={isSubagent()}>
+        <SubagentNav
+          parentSessionId={props.parentSessionId!}
+          currentSessionId={props.currentSessionId!}
+          siblings={props.siblingSubagents || []}
+          onNavigate={props.onNavigate || (() => {})}
+          width={panelWidth()}
+        />
+      </Show>
+
       {/* Scrollable messages area */}
       <div
         ref={setScrollContainer}
         class="terminal-scrollbar"
         style={{
           position: "absolute",
-          top: "0",
+          top: isSubagent() ? "2.4em" : "0", // Offset by nav bar height when in subagent
           left: "0",
           right: "0",
           bottom: "7.2em", // Blank (1.2em) + Input (3.6em) + Model (1.2em) + Blank (1.2em)
@@ -715,6 +856,7 @@ export const MessagesPanel: Component<MessagesPanelProps> = (props) => {
 
         {/* Input row - 3 lines high */}
         <div
+          ref={inputContainerRef}
           style={{
             height: "3.6em",
             background: "#1a1a1a",
@@ -804,17 +946,52 @@ export const MessagesPanel: Component<MessagesPanelProps> = (props) => {
             ref={textareaRef}
             value={props.inputText}
             onInput={(e) => {
-              props.onInput(e.currentTarget.value)
-              setCursorPosition(e.currentTarget.selectionStart)
+              const newValue = e.currentTarget.value
+              props.onInput(newValue)
+              const newCursor = e.currentTarget.selectionStart
+              setCursorPosition(newCursor)
+              updateAutocomplete(newValue, newCursor)
             }}
-            onClick={(e) => setCursorPosition(e.currentTarget.selectionStart)}
+            onClick={(e) => {
+              const newCursor = e.currentTarget.selectionStart
+              setCursorPosition(newCursor)
+              updateAutocomplete(props.inputText, newCursor)
+            }}
             onKeyDown={(e) => {
+              // Autocomplete is open - handle navigation
+              if (autocompleteOpen()) {
+                if (e.key === "ArrowDown") {
+                  e.preventDefault()
+                  setAutocompleteIndex((prev) => Math.min(prev + 1, autocompleteItems().length - 1))
+                  return
+                } else if (e.key === "ArrowUp") {
+                  e.preventDefault()
+                  setAutocompleteIndex((prev) => Math.max(prev - 1, 0))
+                  return
+                } else if (e.key === "Tab" || (e.key === "Enter" && !e.shiftKey)) {
+                  e.preventDefault()
+                  const item = autocompleteItems()[autocompleteIndex()]
+                  if (item) {
+                    selectAutocompleteItem(item)
+                  }
+                  return
+                } else if (e.key === "Escape") {
+                  e.preventDefault()
+                  setAutocompleteOpen(false)
+                  return
+                }
+              }
+
+              // Normal keyboard handling
               if (e.key === "Enter" && !e.shiftKey) {
                 e.preventDefault()
                 props.onSubmit?.(props.inputText)
               }
             }}
-            onKeyUp={(e) => setCursorPosition(e.currentTarget.selectionStart)}
+            onKeyUp={(e) => {
+              const newCursor = e.currentTarget.selectionStart
+              setCursorPosition(newCursor)
+            }}
             autofocus
             style={{
               position: "absolute",
@@ -896,6 +1073,17 @@ export const MessagesPanel: Component<MessagesPanelProps> = (props) => {
           }}
         />
       </div>
+
+      {/* Autocomplete dropdown */}
+      <Show when={autocompleteOpen()}>
+        <Autocomplete
+          items={autocompleteItems()}
+          selectedIndex={autocompleteIndex()}
+          onSelect={selectAutocompleteItem}
+          onClose={() => setAutocompleteOpen(false)}
+          position={autocompletePosition()}
+        />
+      </Show>
     </GridPanel>
   )
 }

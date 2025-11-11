@@ -13,6 +13,7 @@ export { GridShimmer } from "./GridShimmer"
 export { SessionsPanel } from "./SessionsPanel"
 export { MessagesPanel } from "./MessagesPanel"
 export { SidebarPanel } from "./SidebarPanel"
+export { SubagentNav } from "./SubagentNav"
 export { MainScreen } from "./MainScreen"
 
 // Dialog system

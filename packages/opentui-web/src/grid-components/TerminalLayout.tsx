@@ -7,7 +7,7 @@ import { GridDivider } from "./GridDivider"
 import { CommandMenu } from "./CommandMenu"
 
 interface TerminalLayoutProps {
-  sessions: Array<{ id: string; title: string; hasChildren?: boolean }>
+  sessions: Array<{ id: string; title: string; hasChildren?: boolean; parentID?: string }>
   messages: Array<any>
   todos: Array<any>
   subagents: Array<{
@@ -23,6 +23,7 @@ interface TerminalLayoutProps {
   onInput: (text: string) => void
   onSubmit?: (text: string) => void
   currentAgent: string
+  projectPath?: string
 }
 
 export const TerminalLayout: Component<TerminalLayoutProps> = (props) => {
@@ -55,6 +56,18 @@ export const TerminalLayout: Component<TerminalLayoutProps> = (props) => {
   const leftDividerCol = () => (leftCollapsed() ? 0 : leftWidth())
   const rightDividerCol = () => (rightCollapsed() ? totalCols() : totalCols() - rightWidth())
 
+  // Check if current session is a subagent
+  const currentSession = () => props.sessions.find((s) => s.id === props.selectedSessionId)
+  const isSubagent = () => !!currentSession()?.parentID
+  const parentSessionId = () => currentSession()?.parentID
+
+  // Get sibling subagents for navigation
+  const siblingSubagents = () => {
+    const parent = parentSessionId()
+    if (!parent) return []
+    return props.sessions.filter((s) => s.parentID === parent).map((s) => ({ id: s.id, title: s.title }))
+  }
+
   // Window resize listener and keyboard shortcuts
   onMount(() => {
     const handleResize = () => {
@@ -84,6 +97,30 @@ export const TerminalLayout: Component<TerminalLayoutProps> = (props) => {
       else if (e.ctrlKey && e.key === "b") {
         e.preventDefault()
         handleToggleBothSidebars()
+      }
+      // Ctrl+Left - Previous subagent
+      else if (e.ctrlKey && e.key === "ArrowLeft" && isSubagent()) {
+        e.preventDefault()
+        const siblings = siblingSubagents()
+        const currentIndex = siblings.findIndex((s) => s.id === props.selectedSessionId)
+        if (currentIndex > 0) {
+          const prevSibling = siblings[currentIndex - 1]
+          if (prevSibling) {
+            props.onSelectSession(prevSibling.id)
+          }
+        }
+      }
+      // Ctrl+Right - Next subagent
+      else if (e.ctrlKey && e.key === "ArrowRight" && isSubagent()) {
+        e.preventDefault()
+        const siblings = siblingSubagents()
+        const currentIndex = siblings.findIndex((s) => s.id === props.selectedSessionId)
+        if (currentIndex < siblings.length - 1) {
+          const nextSibling = siblings[currentIndex + 1]
+          if (nextSibling) {
+            props.onSelectSession(nextSibling.id)
+          }
+        }
       }
     }
 
@@ -236,6 +273,10 @@ export const TerminalLayout: Component<TerminalLayoutProps> = (props) => {
           inputText={props.inputText}
           onInput={props.onInput}
           onSubmit={props.onSubmit}
+          parentSessionId={parentSessionId()}
+          currentSessionId={props.selectedSessionId || undefined}
+          siblingSubagents={siblingSubagents()}
+          onNavigate={props.onSelectSession}
         />
 
         {/* Right Panel - Sidebar (only show if not collapsed) */}
