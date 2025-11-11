@@ -319,7 +319,9 @@ export const PromptInput: Component<PromptInputProps> = (props) => {
 
     session.layout.setActiveTab(undefined)
     session.messages.setActive(undefined)
-    session.prompt.set(DEFAULT_PROMPT, 0)
+    // Clear the editor DOM directly to ensure it's empty
+    editorRef.innerHTML = ""
+    session.prompt.set([{ type: "text", content: "", start: 0, end: 0 }], 0)
 
     sdk.client.session.prompt({
       path: { id: existing.id },

@@ -1,6 +1,6 @@
 import { createStore, produce } from "solid-js/store"
 import { createSimpleContext } from "./helper"
-import { batch, createEffect, createMemo, createSignal, on } from "solid-js"
+import { batch, createEffect, createMemo } from "solid-js"
 import { useSync } from "./sync"
 import { makePersisted } from "@solid-primitives/storage"
 import { TextSelection, useLocal } from "./local"
@@ -13,9 +13,7 @@ export const { use: useSession, provider: SessionProvider } = createSimpleContex
     const sync = useSync()
     const local = useLocal()
 
-    const seed = props.sessionId ?? "new-session"
-
-    const [persist, setPersist] = makePersisted(
+    const [store, setStore] = makePersisted(
       createStore<{
         messageId?: string
         tabs: {
@@ -32,7 +30,7 @@ export const { use: useSession, provider: SessionProvider } = createSimpleContex
         cursor: undefined,
       }),
       {
-        name: seed,
+        name: props.sessionId ?? "new-session",
       },
     )
 
@@ -52,8 +50,8 @@ export const { use: useSession, provider: SessionProvider } = createSimpleContex
       return userMessages()?.at(0)
     })
     const activeMessage = createMemo(() => {
-      if (!persist.messageId) return lastUserMessage()
-      return userMessages()?.find((m) => m.id === persist.messageId)
+      if (!store.messageId) return lastUserMessage()
+      return userMessages()?.find((m) => m.id === store.messageId)
     })
     const working = createMemo(() => {
       if (!props.sessionId) return false
@@ -104,14 +102,14 @@ export const { use: useSession, provider: SessionProvider } = createSimpleContex
       working,
       diffs,
       prompt: {
-        current: createMemo(() => persist.prompt),
-        cursor: createMemo(() => persist.cursor),
-        dirty: createMemo(() => !isPromptEqual(persist.prompt, DEFAULT_PROMPT)),
+        current: createMemo(() => store.prompt),
+        cursor: createMemo(() => store.cursor),
+        dirty: createMemo(() => !isPromptEqual(store.prompt, DEFAULT_PROMPT)),
         set(prompt: Prompt, cursorPosition?: number) {
           const next = clonePrompt(prompt)
           batch(() => {
-            setPersist("prompt", next)
-            if (cursorPosition !== undefined) setPersist("cursor", cursorPosition)
+            setStore("prompt", next)
+            if (cursorPosition !== undefined) setStore("cursor", cursorPosition)
           })
         },
       },
@@ -121,7 +119,7 @@ export const { use: useSession, provider: SessionProvider } = createSimpleContex
         last: lastUserMessage,
         active: activeMessage,
         setActive(id: string | undefined) {
-          setPersist("messageId", id)
+          setStore("messageId", id)
         },
       },
       usage: {
@@ -130,46 +128,46 @@ export const { use: useSession, provider: SessionProvider } = createSimpleContex
         context,
       },
       layout: {
-        tabs: persist.tabs,
+        tabs: store.tabs,
         setActiveTab(tab: string | undefined) {
-          setPersist("tabs", "active", tab)
+          setStore("tabs", "active", tab)
         },
         setOpenedTabs(tabs: string[]) {
-          setPersist("tabs", "opened", tabs)
+          setStore("tabs", "opened", tabs)
         },
         async openTab(tab: string) {
           if (tab === "chat") {
-            setPersist("tabs", "active", undefined)
+            setStore("tabs", "active", undefined)
             return
           }
           if (tab.startsWith("file://")) {
             await local.file.open(tab.replace("file://", ""))
           }
           if (tab !== "review") {
-            if (!persist.tabs.opened.includes(tab)) {
-              setPersist("tabs", "opened", [...persist.tabs.opened, tab])
+            if (!store.tabs.opened.includes(tab)) {
+              setStore("tabs", "opened", [...store.tabs.opened, tab])
             }
           }
-          setPersist("tabs", "active", tab)
+          setStore("tabs", "active", tab)
         },
         closeTab(tab: string) {
           batch(() => {
-            setPersist(
+            setStore(
               "tabs",
               "opened",
-              persist.tabs.opened.filter((x) => x !== tab),
+              store.tabs.opened.filter((x) => x !== tab),
             )
-            if (persist.tabs.active === tab) {
-              const index = persist.tabs.opened.findIndex((f) => f === tab)
-              const previous = persist.tabs.opened[Math.max(0, index - 1)]
-              setPersist("tabs", "active", previous)
+            if (store.tabs.active === tab) {
+              const index = store.tabs.opened.findIndex((f) => f === tab)
+              const previous = store.tabs.opened[Math.max(0, index - 1)]
+              setStore("tabs", "active", previous)
             }
           })
         },
         moveTab(tab: string, to: number) {
-          const index = persist.tabs.opened.findIndex((f) => f === tab)
+          const index = store.tabs.opened.findIndex((f) => f === tab)
           if (index === -1) return
-          setPersist(
+          setStore(
             "tabs",
             "opened",
             produce((opened) => {
