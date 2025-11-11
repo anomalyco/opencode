@@ -11,7 +11,6 @@ interface GridDividerProps {
 
 export const GridDivider: Component<GridDividerProps> = (props) => {
   const [isDragging, setIsDragging] = createSignal(false)
-  const [isHovered, setIsHovered] = createSignal(false)
 
   const handleMouseDown = (e: MouseEvent) => {
     e.preventDefault()
@@ -38,16 +37,12 @@ export const GridDivider: Component<GridDividerProps> = (props) => {
   }
 
   const backgroundColor = () => {
-    if (isDragging()) return "#4ec9b0"
-    if (isHovered()) return "rgba(106, 106, 106, 0.3)"
     return props.alwaysVisible ? "#2a2a2a" : "transparent"
   }
 
   return (
     <div
       onMouseDown={handleMouseDown}
-      onMouseEnter={() => setIsHovered(true)}
-      onMouseLeave={() => setIsHovered(false)}
       style={{
         position: "fixed",
         left: `${props.col}ch`,
@@ -59,24 +54,7 @@ export const GridDivider: Component<GridDividerProps> = (props) => {
         cursor: "col-resize",
         "z-index": "1000",
         "user-select": "none",
-        transition: "background 0.15s ease",
       }}
-    >
-      {/* Visual indicator */}
-      <div
-        style={{
-          position: "absolute",
-          left: "0",
-          top: "50%",
-          width: "1ch",
-          height: "3em",
-          transform: "translateY(-50%)",
-          background: "#4ec9b0",
-          opacity: isDragging() || isHovered() ? "0.8" : "0",
-          transition: "opacity 0.2s ease",
-          "pointer-events": "none",
-        }}
-      />
-    </div>
+    />
   )
 }
