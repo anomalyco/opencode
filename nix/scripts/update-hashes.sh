@@ -27,8 +27,7 @@ if [ ! -f "$HASH_FILE" ]; then
   cat <<'EOF' >"$HASH_FILE"
 {
   "nodeModules": {},
-  "optional": {},
-  "metadata": {}
+  "optional": {}
 }
 EOF
 fi
@@ -192,60 +191,3 @@ for SYSTEM in $SYSTEMS; do
   rm -f "$BUILD_LOG"
   unset BUILD_LOG
 done
-
-write_metadata() {
-  local tmp stamp ref trigger commit run_url
-  stamp="$(date -u +%Y-%m-%dT%H:%M:%SZ)"
-  ref="${HASH_SOURCE_REF:-${GITHUB_REF_NAME:-}}"
-  if [ -z "$ref" ] && command -v git >/dev/null 2>&1; then
-    ref="$(git rev-parse --abbrev-ref HEAD 2>/dev/null || true)"
-    if [ "$ref" = "HEAD" ]; then
-      ref="$(git rev-parse --short HEAD 2>/dev/null || true)"
-    fi
-  fi
-  if [ -z "$ref" ]; then
-    ref="unknown"
-  fi
-  trigger="${HASH_TRIGGER_COMMIT:-${GITHUB_SHA:-}}"
-  if [ -z "$trigger" ] && command -v git >/dev/null 2>&1; then
-    trigger="$(git rev-parse HEAD 2>/dev/null || true)"
-  fi
-  if [ -z "$trigger" ]; then
-    trigger="unknown"
-  fi
-  commit="${HASH_UPDATE_COMMIT:-}"
-  if [ -z "$commit" ] && command -v git >/dev/null 2>&1; then
-    commit="$(git rev-parse HEAD 2>/dev/null || true)"
-  fi
-  if [ -z "$commit" ]; then
-    commit="$trigger"
-  fi
-  run_url="${HASH_SOURCE_RUN:-}"
-  if [ -z "$run_url" ] && [ -n "${GITHUB_SERVER_URL:-}" ] && [ -n "${GITHUB_REPOSITORY:-}" ] && [ -n "${GITHUB_RUN_ID:-}" ]; then
-    run_url="${GITHUB_SERVER_URL}/${GITHUB_REPOSITORY}/actions/runs/${GITHUB_RUN_ID}"
-  fi
-  tmp=$(mktemp)
-  jq \
-    --arg stamp "$stamp" \
-    --arg ref "$ref" \
-    --arg trigger "$trigger" \
-    --arg commit "$commit" \
-    '
-      .metadata = {
-        stamp: $stamp,
-        ref: $ref,
-        trigger: $trigger,
-        commit: $commit
-      }
-    ' \
-    "$HASH_FILE" >"$tmp"
-  mv "$tmp" "$HASH_FILE"
-  if [ -n "$run_url" ]; then
-    tmp=$(mktemp)
-    jq --arg run "$run_url" '.metadata.workflowRun = $run' "$HASH_FILE" >"$tmp"
-    mv "$tmp" "$HASH_FILE"
-  fi
-  echo "metadata updated: ref=${ref} commit=${commit}"
-}
-
-write_metadata

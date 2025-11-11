@@ -109,7 +109,7 @@ jobs:
           
           if [ ! -f "$HASH_FILE" ]; then
             mkdir -p "$(dirname "$HASH_FILE")"
-            jq -n '{nodeModules: {}, optional: {}, metadata: {}}' > "$HASH_FILE"
+            jq -n '{nodeModules: {}, optional: {}}' > "$HASH_FILE"
           fi
           
           echo "Updating hash for ${SYSTEM} to ${CORRECT_HASH}"
@@ -169,7 +169,7 @@ jobs:
           BASE_HASH="nix/hashes.json"
           if [ ! -f "$BASE_HASH" ]; then
             mkdir -p "$(dirname "$BASE_HASH")"
-            jq -n '{nodeModules: {}, optional: {}, metadata: {}}' > "$BASE_HASH"
+            jq -n '{nodeModules: {}, optional: {}}' > "$BASE_HASH"
           fi
           for system in x86_64-linux aarch64-linux aarch64-darwin x86_64-darwin; do
             if [ -f "hash-artifacts/hashes-${system}/hashes.json" ]; then
@@ -198,62 +198,8 @@ jobs:
             echo "has_data=false" >> "$GITHUB_OUTPUT"
           fi
 
-      - name: Derive commit metadata
-        id: commit_meta
-        run: |
-          set -euo pipefail
-          EVENT="$GITHUB_EVENT_NAME"
-          LABEL="$GITHUB_REF_NAME"
-          SUMMARY="Hashes refreshed for $LABEL"
-          TAG_NAME=""
-          PR_NUMBER=""
-          if [ -f "$GITHUB_EVENT_PATH" ]; then
-            TAG_NAME="$(jq -r '.release.tag_name // empty' "$GITHUB_EVENT_PATH" 2>/dev/null || true)"
-            PR_NUMBER="$(jq -r '.number // empty' "$GITHUB_EVENT_PATH" 2>/dev/null || true)"
-          fi
-          case "$EVENT" in
-            release)
-              LABEL="release:${GITHUB_REF_NAME}"
-              if [ -n "$TAG_NAME" ]; then
-                LABEL="release:${TAG_NAME}"
-              fi
-              SUMMARY="Hashes refreshed for ${LABEL}"
-              ;;
-            pull_request)
-              LABEL="pr:${GITHUB_REF_NAME}"
-              if [ -n "$PR_NUMBER" ]; then
-                LABEL="pr:${PR_NUMBER}"
-              fi
-              SUMMARY="Hashes refreshed for ${LABEL}"
-              ;;
-            workflow_dispatch)
-              LABEL="manual:${GITHUB_REF_NAME}"
-              SUMMARY="Manual hash refresh for ${LABEL}"
-              ;;
-            *)
-              LABEL="branch:${GITHUB_REF_NAME}"
-              SUMMARY="Hashes refreshed for ${LABEL}"
-              ;;
-          esac
-          MESSAGE="nix: update hashes (${LABEL})"
-          if [ "${HAS_HASH_DATA}" != "true" ]; then
-            MESSAGE="nix: bootstrap hashes (${LABEL})"
-          fi
-          BODY="[skip ci]"
-          {
-            echo "message=$MESSAGE"
-            echo "body=$BODY"
-            echo "label=$LABEL"
-            echo "summary=$SUMMARY"
-          } >> "$GITHUB_OUTPUT"
-        env:
-          HAS_HASH_DATA: ${{ steps.merge_hashes.outputs.has_data }}
-
       - name: Commit Nix hash changes
         env:
-          COMMIT_MESSAGE: ${{ steps.commit_meta.outputs.message }}
-          UPDATE_LABEL: ${{ steps.commit_meta.outputs.label }}
-          UPDATE_SUMMARY: ${{ steps.commit_meta.outputs.summary }}
           TARGET_BRANCH: ${{ github.head_ref || github.ref_name }}
         run: |
           set -euo pipefail
@@ -263,13 +209,9 @@ jobs:
             {
               echo "### Nix Hash Update"
               echo ""
-              echo "- context: ${UPDATE_LABEL}"
               echo "- ref: ${GITHUB_REF_NAME}"
               echo "- status: ${status}"
             } >> "$GITHUB_STEP_SUMMARY"
-            if [ -n "${UPDATE_SUMMARY:-}" ]; then
-              echo "- note: ${UPDATE_SUMMARY}" >> "$GITHUB_STEP_SUMMARY"
-            fi
             if [ -n "${GITHUB_SERVER_URL:-}" ] && [ -n "${GITHUB_REPOSITORY:-}" ] && [ -n "${GITHUB_RUN_ID:-}" ]; then
               echo "- run: ${GITHUB_SERVER_URL}/${GITHUB_REPOSITORY}/actions/runs/${GITHUB_RUN_ID}" >> "$GITHUB_STEP_SUMMARY"
             fi
@@ -285,7 +227,7 @@ jobs:
           fi
 
           git add flake.nix nix/node-modules.nix nix/hashes.json
-          git commit -m "$COMMIT_MESSAGE"
+          git commit -m "Update Nix hashes"
 
           BRANCH="${TARGET_BRANCH:-${GITHUB_REF_NAME}}"
           git push origin HEAD:"$BRANCH"
