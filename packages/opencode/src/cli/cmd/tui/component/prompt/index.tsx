@@ -589,33 +589,44 @@ export function Prompt(props: PromptProps) {
                 }
 
                 const pastedContent = event.text.trim()
+
+                // If no text content, try reading clipboard for images (handles in-memory screenshots)
                 if (!pastedContent) {
-                  command.trigger("prompt.paste")
+                  event.preventDefault()
+                  const clipboardContent = await Clipboard.read()
+                  if (clipboardContent?.mime.startsWith("image/")) {
+                    await pasteImage({
+                      filename: "clipboard",
+                      mime: clipboardContent.mime,
+                      content: clipboardContent.data,
+                    })
+                  }
                   return
                 }
 
-                // trim ' from the beginning and end of the pasted content. just
-                // ' and nothing else
+                // Check if pasted text is an image file path
                 const filepath = pastedContent.replace(/^'+|'+$/g, "").replace(/\\ /g, " ")
                 console.log(pastedContent, filepath)
-                try {
-                  const file = Bun.file(filepath)
-                  if (file.type.startsWith("image/")) {
-                    event.preventDefault()
-                    const content = await file
-                      .arrayBuffer()
-                      .then((buffer) => Buffer.from(buffer).toString("base64"))
-                      .catch(console.error)
-                    if (content) {
-                      await pasteImage({
-                        filename: file.name,
-                        mime: file.type,
-                        content,
-                      })
-                      return
-                    }
+
+                // Check if it looks like a file path and if it's an image
+                const file = Bun.file(filepath)
+                const isImageFile = file.type.startsWith("image/")
+
+                if (isImageFile) {
+                  event.preventDefault()
+                  const content = await file
+                    .arrayBuffer()
+                    .then((buffer) => Buffer.from(buffer).toString("base64"))
+                    .catch(console.error)
+                  if (content) {
+                    await pasteImage({
+                      filename: file.name,
+                      mime: file.type,
+                      content,
+                    })
                   }
-                } catch {}
+                  return
+                }
 
                 const lineCount = (pastedContent.match(/\n/g)?.length ?? 0) + 1
                 if (
