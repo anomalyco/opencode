@@ -1,9 +1,9 @@
 {
   "nodeModules": {
-    "x86_64-linux": "sha256-mLjOOpjHChJwB0dlroub6eWGu4dnEstJ4LuLbIxUqsA=",
-    "aarch64-linux": "sha256-DRQMrcOjyEJ/keccyixZT4pZ9nSzAYUPb7J1zHIzusk=",
-    "aarch64-darwin": "sha256-3JU0mt8L3olSVU014NlZ7gPDXEFsshUi6fwHtHKvMiM=",
-    "x86_64-darwin": "sha256-xPj370tbrauEJW8Q2ySPTNK+sTtHU23C8Uvd1O/VxVE="
+    "x86_64-linux": "sha256-+dsSECijB/O6dA87Rdm8mcSrPn7FoMaNM4pzgouyFn0=",
+    "aarch64-linux": "sha256-CoF/CFOeCK1biwA8lPEQelEMhB0w2vD8dj8GbTCu7D8=",
+    "aarch64-darwin": "sha256-qUHSVtDkUcq7bUO3QbPUScqCcwpon2FqebRFA/NcXzA=",
+    "x86_64-darwin": "sha256-1yhZhwXvO/AlUhdN03eUqb7Jkyk2cgr8YwZd8RW3BWw="
   },
   "optional": {
     "@opentui/core-darwin-arm64": {
