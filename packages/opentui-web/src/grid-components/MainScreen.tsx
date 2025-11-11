@@ -3,6 +3,7 @@ import { createSignal, onCleanup, onMount } from "solid-js"
 import { GridPanel } from "./GridPanel"
 import { GridText } from "./GridText"
 import { CommandMenu } from "./CommandMenu"
+import { StyledDialog } from "./Dialog"
 import { SessionPicker, type Session } from "./SessionPicker"
 
 interface MainScreenProps {
@@ -161,26 +162,29 @@ export const MainScreen: Component<MainScreenProps> = (props) => {
           {/* Prompt symbol */}
           <span style={{ color: "#d19a66", "font-weight": "bold", "margin-right": "1ch" }}>{">"}</span>
 
-          {/* Input text with cursor */}
-          <span style={{ color: "#ffffff", flex: "1", display: "flex" }}>
-            {inputText().slice(0, cursorPosition())}
-            <span style={{ color: cursorVisible() ? "#d19a66" : "transparent" }}>█</span>
-            {inputText().slice(cursorPosition())}
-          </span>
+          {/* Input container with placeholder and text */}
+          <span style={{ color: "#ffffff", flex: "1", display: "flex", position: "relative" }}>
+            {/* Placeholder behind cursor when empty */}
+            {!inputText() && (
+              <span
+                style={{
+                  position: "absolute",
+                  left: "0",
+                  color: "#6a6a6a",
+                  "pointer-events": "none",
+                }}
+              >
+                Ask codesurf anything...
+              </span>
+            )}
 
-          {/* Placeholder when empty */}
-          {!inputText() && (
-            <span
-              style={{
-                position: "absolute",
-                left: "calc(1.5em + 2ch)",
-                color: "#6a6a6a",
-                "pointer-events": "none",
-              }}
-            >
-              Ask codesurf anything...
+            {/* Input text with cursor */}
+            <span style={{ position: "relative", "z-index": "1" }}>
+              {inputText().slice(0, cursorPosition())}
+              <span style={{ color: cursorVisible() ? "#d19a66" : "transparent" }}>█</span>
+              {inputText().slice(cursorPosition())}
             </span>
-          )}
+          </span>
 
           {/* Hidden textarea for keyboard capture */}
           <textarea

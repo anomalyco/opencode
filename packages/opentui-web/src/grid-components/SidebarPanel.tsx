@@ -333,7 +333,7 @@ export const SidebarPanel: Component<SidebarPanelProps> = (props) => {
                   col={2}
                   row={subagentsHeaderRow + (subagentsExpanded() ? subagentRows + 1 : 1)}
                   text="+ Add Subagent"
-                  fg="#e5c07b"
+                  fg="#d19a66"
                 />
 
                 {/* LSP Servers header */}
@@ -379,7 +379,7 @@ export const SidebarPanel: Component<SidebarPanelProps> = (props) => {
                   col={2}
                   row={lspHeaderRow + (lspExpanded() ? lspRows + 1 : 1)}
                   text="+ Add Server"
-                  fg="#ff9800"
+                  fg="#d19a66"
                 />
 
                 {/* MCP Servers header */}
@@ -425,7 +425,7 @@ export const SidebarPanel: Component<SidebarPanelProps> = (props) => {
                   col={2}
                   row={mcpHeaderRow + (mcpExpanded() ? mcpRows + 1 : 1)}
                   text="+ Add Server"
-                  fg="#ff9800"
+                  fg="#d19a66"
                 />
               </>
             )
