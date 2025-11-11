@@ -1,6 +1,6 @@
 import type { Component } from "solid-js"
-import { createSignal, onMount, onCleanup } from "solid-js"
-import { TerminalLayout } from "../grid-components"
+import { createSignal, onMount, onCleanup, Show } from "solid-js"
+import { TerminalLayout, MainScreen } from "../grid-components"
 import { useSync } from "../context/sync"
 import { useSDK } from "../context/sdk"
 
@@ -84,9 +84,8 @@ export const TerminalView: Component = () => {
   }
 
   const currentAgent = () => {
-    if (!selectedSessionID()) return "general"
-    const session = sync.session.get(selectedSessionID()!)
-    return session?.agentID || "general"
+    // For now, always return "general" since agentID is not part of Session type
+    return "general"
   }
 
   const handleSelectSession = (id: string) => {
@@ -99,7 +98,24 @@ export const TerminalView: Component = () => {
   }
 
   const handleSubmit = async (text: string) => {
-    if (text.trim() && selectedSessionID()) {
+    if (!text.trim()) return
+
+    // If no session, create a new one
+    if (!selectedSessionID()) {
+      const result = await sdk.client.session.create({
+        body: { title: text.slice(0, 50) },
+      })
+      const newSessionID = result.data!.id
+      setSelectedSessionID(newSessionID)
+      sync.session.sync(newSessionID)
+
+      // Send the initial message
+      await sdk.client.session.prompt({
+        path: { id: newSessionID },
+        body: { parts: [{ type: "text", text }] },
+      })
+    } else {
+      // Send message to existing session
       await sdk.client.session.prompt({
         path: { id: selectedSessionID()! },
         body: { parts: [{ type: "text", text }] },
@@ -111,6 +127,7 @@ export const TerminalView: Component = () => {
   onMount(() => {
     sync.session.fetch(100)
 
+    // Only auto-select if there are existing sessions
     setTimeout(() => {
       const allSessions = sync.data.session.filter((s) => !s.parentID).sort((a, b) => b.time.updated - a.time.updated)
       const firstSession = allSessions[0]
@@ -118,21 +135,24 @@ export const TerminalView: Component = () => {
         setSelectedSessionID(firstSession.id)
         sync.session.sync(firstSession.id)
       }
+      // Otherwise, stay on MainScreen (no session selected)
     }, 500)
   })
 
   return (
-    <TerminalLayout
-      sessions={sessions()}
-      messages={messages()}
-      todos={todos()}
-      subagents={subagents()}
-      selectedSessionId={selectedSessionID()}
-      onSelectSession={handleSelectSession}
-      inputText={inputText()}
-      onInput={handleInput}
-      onSubmit={handleSubmit}
-      currentAgent={currentAgent()}
-    />
+    <Show when={selectedSessionID()} fallback={<MainScreen onSubmit={handleSubmit} />}>
+      <TerminalLayout
+        sessions={sessions()}
+        messages={messages()}
+        todos={todos()}
+        subagents={subagents()}
+        selectedSessionId={selectedSessionID()}
+        onSelectSession={handleSelectSession}
+        inputText={inputText()}
+        onInput={handleInput}
+        onSubmit={handleSubmit}
+        currentAgent={currentAgent()}
+      />
+    </Show>
   )
 }

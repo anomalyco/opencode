@@ -19,6 +19,7 @@ interface CommandMenuProps {
   onSettings: () => void
   onToggleSidebar: () => void
   onToggleSessions: () => void
+  onClearScreen?: () => void
 }
 
 export const CommandMenu: Component<CommandMenuProps> = (props) => {
@@ -32,6 +33,7 @@ export const CommandMenu: Component<CommandMenuProps> = (props) => {
       label: "New Chat",
       description: "Create a new session",
       group: "Session",
+      shortcut: "Ctrl+N",
       action: props.onNewChat,
     },
     {
@@ -53,6 +55,7 @@ export const CommandMenu: Component<CommandMenuProps> = (props) => {
       label: "Toggle Sessions",
       description: "Show/hide sessions panel",
       group: "View",
+      shortcut: "Ctrl+B",
       action: props.onToggleSessions,
     },
     {
@@ -60,7 +63,16 @@ export const CommandMenu: Component<CommandMenuProps> = (props) => {
       label: "Toggle Sidebar",
       description: "Show/hide sidebar panel",
       group: "View",
+      shortcut: "Ctrl+S",
       action: props.onToggleSidebar,
+    },
+    {
+      id: "clear-screen",
+      label: "Clear Screen",
+      description: "Scroll to bottom of messages",
+      group: "View",
+      shortcut: "Ctrl+L",
+      action: () => props.onClearScreen?.(),
     },
     {
       id: "settings",
@@ -259,27 +271,49 @@ export const CommandMenu: Component<CommandMenuProps> = (props) => {
                                 color: selectedIndex() === cmdIndex ? "#000000" : "#ffffff",
                                 cursor: "pointer",
                                 display: "flex",
-                                "flex-direction": "column",
-                                gap: "0.25em",
+                                "justify-content": "space-between",
+                                "align-items": "center",
                                 transition: "background 0.1s ease",
                               }}
                               onMouseEnter={() => setSelectedIndex(cmdIndex)}
                             >
                               <div
                                 style={{
-                                  "font-weight": selectedIndex() === cmdIndex ? "bold" : "normal",
+                                  display: "flex",
+                                  "flex-direction": "column",
+                                  gap: "0.25em",
                                 }}
                               >
-                                {cmd.label}
+                                <div
+                                  style={{
+                                    "font-weight": selectedIndex() === cmdIndex ? "bold" : "normal",
+                                  }}
+                                >
+                                  {cmd.label}
+                                </div>
+                                <div
+                                  style={{
+                                    "font-size": "14px",
+                                    color: selectedIndex() === cmdIndex ? "#000000" : "#858585",
+                                  }}
+                                >
+                                  {cmd.description}
+                                </div>
                               </div>
-                              <div
-                                style={{
-                                  "font-size": "14px",
-                                  color: selectedIndex() === cmdIndex ? "#000000" : "#858585",
-                                }}
-                              >
-                                {cmd.description}
-                              </div>
+                              <Show when={cmd.shortcut}>
+                                <div
+                                  style={{
+                                    "font-size": "12px",
+                                    color: selectedIndex() === cmdIndex ? "#000000" : "#858585",
+                                    padding: "0.25em 0.5em",
+                                    border: `1px solid ${selectedIndex() === cmdIndex ? "#000000" : "#2a2a2a"}`,
+                                    "border-radius": "2px",
+                                    "font-family": '"Berkeley Mono", "JetBrains Mono", monospace',
+                                  }}
+                                >
+                                  {cmd.shortcut}
+                                </div>
+                              </Show>
                             </div>
                           )
                         }}

@@ -73,31 +73,26 @@ export const TerminalLayout: Component<TerminalLayoutProps> = (props) => {
       {
         key: "n",
         ctrl: true,
-        description: "New chat (Ctrl+X N)",
+        description: "New chat",
         action: handleNewChat,
       },
       {
         key: "s",
         ctrl: true,
-        description: "Toggle sidebar (Ctrl+X S)",
+        description: "Toggle sidebar",
         action: handleToggleSidebar,
       },
       {
         key: "l",
         ctrl: true,
-        description: "Toggle sessions panel (Ctrl+X L)",
-        action: handleToggleSessions,
+        description: "Clear screen / scroll to bottom",
+        action: handleClearScreen,
       },
       {
-        key: "l",
+        key: "b",
         ctrl: true,
-        description: "Clear screen / scroll to bottom",
-        action: () => {
-          const container = messagesScrollContainer()
-          if (container) {
-            container.scrollTop = container.scrollHeight
-          }
-        },
+        description: "Toggle sessions panel",
+        action: handleToggleSessions,
       },
       {
         key: "Escape",
@@ -147,6 +142,13 @@ export const TerminalLayout: Component<TerminalLayoutProps> = (props) => {
 
   const handleToggleSessions = () => {
     setLeftCollapsed((prev) => !prev)
+  }
+
+  const handleClearScreen = () => {
+    const container = messagesScrollContainer()
+    if (container) {
+      container.scrollTop = container.scrollHeight
+    }
   }
 
   return (
@@ -232,6 +234,7 @@ export const TerminalLayout: Component<TerminalLayoutProps> = (props) => {
           inputText={props.inputText}
           onInput={props.onInput}
           onSubmit={props.onSubmit}
+          onScrollContainerRef={setMessagesScrollContainer}
         />
 
         {/* Right Panel - Sidebar (only show if not collapsed) */}
@@ -289,7 +292,10 @@ export const TerminalLayout: Component<TerminalLayoutProps> = (props) => {
             ~/Documents/GitHub/flows/opencode-stt
           </span>
           <span>
-            <span style={{ color: "#ffffff", "font-weight": "bold" }}>ctrl+p</span> commands{" "}
+            <span style={{ color: "#ffffff", "font-weight": "bold" }}>ctrl+p</span> menu{" "}
+            <span style={{ color: "#ffffff", "font-weight": "bold" }}>ctrl+n</span> new{" "}
+            <span style={{ color: "#ffffff", "font-weight": "bold" }}>ctrl+l</span> clear{" "}
+            <span style={{ color: "#ffffff", "font-weight": "bold" }}>ctrl+s</span> sidebar{" "}
             <span style={{ color: "#ffffff", "font-weight": "bold" }}>tab</span>{" "}
             <span style={{ color: "#61afef" }}>{props.currentAgent}</span>
           </span>
@@ -306,6 +312,7 @@ export const TerminalLayout: Component<TerminalLayoutProps> = (props) => {
         onSettings={handleSettings}
         onToggleSidebar={handleToggleSidebar}
         onToggleSessions={handleToggleSessions}
+        onClearScreen={handleClearScreen}
       />
     </div>
   )

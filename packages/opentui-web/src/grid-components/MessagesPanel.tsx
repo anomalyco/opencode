@@ -24,6 +24,7 @@ interface MessagesPanelProps {
   onSubmit?: (text: string) => void
   isProcessing?: boolean
   onJumpToLatest?: () => void
+  onScrollContainerRef?: (el: HTMLDivElement | null) => void
 }
 
 export const MessagesPanel: Component<MessagesPanelProps> = (props) => {
@@ -40,6 +41,9 @@ export const MessagesPanel: Component<MessagesPanelProps> = (props) => {
   createEffect(() => {
     const container = scrollContainer()
     if (container && props.messages.length > 0) {
+      // Provide ref to parent if callback exists
+      props.onScrollContainerRef?.(container)
+
       // Use requestAnimationFrame for smooth scrolling
       requestAnimationFrame(() => {
         container.scrollTop = container.scrollHeight
