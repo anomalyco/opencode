@@ -378,8 +378,13 @@ export namespace Session {
       metadata: z.custom<ProviderMetadata>().optional(),
     }),
     (input) => {
+      const totalInput = input.usage.inputTokens ?? 0
+      const cachedRead = input.usage.cachedInputTokens ?? 0
+      const uncachedInput = Math.max(0, totalInput - cachedRead)
+
       const tokens = {
-        input: input.usage.inputTokens ?? 0,
+        // input should count only uncached input tokens
+        input: uncachedInput,
         output: input.usage.outputTokens ?? 0,
         reasoning: input.usage?.reasoningTokens ?? 0,
         cache: {
@@ -387,16 +392,21 @@ export namespace Session {
             // @ts-expect-error
             input.metadata?.["bedrock"]?.["usage"]?.["cacheWriteInputTokens"] ??
             0) as number,
-          read: input.usage.cachedInputTokens ?? 0,
+          read: cachedRead,
         },
       }
+
+      const cost = new Decimal(0)
+        .add(new Decimal(tokens.input).mul(input.model.cost?.input ?? 0).div(1_000_000))
+        .add(new Decimal(tokens.output).mul(input.model.cost?.output ?? 0).div(1_000_000))
+        // charge reasoning tokens at the same rate as output tokens
+        .add(new Decimal(tokens.reasoning).mul(input.model.cost?.output ?? 0).div(1_000_000))
+        .add(new Decimal(tokens.cache.read).mul(input.model.cost?.cache_read ?? 0).div(1_000_000))
+        .add(new Decimal(tokens.cache.write).mul(input.model.cost?.cache_write ?? 0).div(1_000_000))
+        .toNumber()
+
       return {
-        cost: new Decimal(0)
-          .add(new Decimal(tokens.input).mul(input.model.cost?.input ?? 0).div(1_000_000))
-          .add(new Decimal(tokens.output).mul(input.model.cost?.output ?? 0).div(1_000_000))
-          .add(new Decimal(tokens.cache.read).mul(input.model.cost?.cache_read ?? 0).div(1_000_000))
-          .add(new Decimal(tokens.cache.write).mul(input.model.cost?.cache_write ?? 0).div(1_000_000))
-          .toNumber(),
+        cost,
         tokens,
       }
     },
