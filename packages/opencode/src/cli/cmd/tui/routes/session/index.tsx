@@ -168,7 +168,6 @@ export function Session() {
   })
 
   function toBottom() {
-<<<<<<< HEAD
     // Multiple attempts to ensure we scroll after content renders
     setTimeout(() => scroll.scrollTo(scroll.scrollHeight), 50)
     setTimeout(() => scroll.scrollTo(scroll.scrollHeight), 150)
@@ -199,13 +198,6 @@ export function Session() {
     }
   })
 
-=======
-    setTimeout(() => {
-      if (scroll) scroll.scrollTo(scroll.scrollHeight)
-    }, 50)
-  }
-
->>>>>>> upstream/dev
   const local = useLocal()
 
   function moveChild(direction: number) {
@@ -1350,7 +1342,6 @@ ToolRegistry.register<typeof GlobTool>({
     const isRunning = createMemo(() => !props.output && props.input.pattern)
     return (
       <>
-<<<<<<< HEAD
         <ToolTitle
           icon="✱"
           fallback="Finding files..."
@@ -1365,11 +1356,6 @@ ToolRegistry.register<typeof GlobTool>({
           <Show when={isRunning()}>
             <StreamingDots />
           </Show>
-=======
-        <ToolTitle icon="✱" fallback="Finding files..." when={props.input.pattern}>
-          Glob "{props.input.pattern}" <Show when={props.input.path}>in {normalizePath(props.input.path)} </Show>
-          <Show when={props.metadata.count}>({props.metadata.count} matches)</Show>
->>>>>>> upstream/dev
         </ToolTitle>
       </>
     )
@@ -1382,7 +1368,6 @@ ToolRegistry.register<typeof GrepTool>({
   render(props) {
     const isRunning = createMemo(() => !props.output && props.input.pattern)
     return (
-<<<<<<< HEAD
       <ToolTitle
         icon="✱"
         fallback="Searching content..."
@@ -1397,11 +1382,6 @@ ToolRegistry.register<typeof GrepTool>({
         <Show when={isRunning()}>
           <StreamingDots />
         </Show>
-=======
-      <ToolTitle icon="✱" fallback="Searching content..." when={props.input.pattern}>
-        Grep "{props.input.pattern}" <Show when={props.input.path}>in {normalizePath(props.input.path)} </Show>
-        <Show when={props.metadata.matches}>({props.metadata.matches} matches)</Show>
->>>>>>> upstream/dev
       </ToolTitle>
     )
   },
@@ -1461,7 +1441,6 @@ ToolRegistry.register<typeof TaskTool>({
 
     return (
       <>
-<<<<<<< HEAD
         <ToolTitle
           icon="%"
           fallback="Delegating..."
@@ -1479,10 +1458,6 @@ ToolRegistry.register<typeof TaskTool>({
           <Show when={isCompleted() && !isRunning()}>
             <SuccessCheckmark />
           </Show>
-=======
-        <ToolTitle icon="%" fallback="Delegating..." when={props.input.subagent_type ?? props.input.description}>
-          Task [{props.input.subagent_type ?? "unknown"}] {props.input.description}
->>>>>>> upstream/dev
         </ToolTitle>
 
         <Show when={props.metadata.summary?.length}>
