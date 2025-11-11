@@ -27,7 +27,7 @@ const createSessionUrl = action(async (workspaceID: string, returnUrl: string) =
 export function BillingSection() {
   const params = useParams()
   // ORIGINAL CODE - COMMENTED OUT FOR TESTING
-  const billingInfo = createAsync(() => queryBillingInfo(params.id))
+  const billingInfo = createAsync(() => queryBillingInfo(params.id!))
   const checkoutAction = useAction(createCheckoutUrl)
   const checkoutSubmission = useSubmission(createCheckoutUrl)
   const sessionAction = useAction(createSessionUrl)
@@ -51,7 +51,7 @@ export function BillingSection() {
     const amount = parseInt(store.addBalanceAmount)
     const baseUrl = window.location.href
 
-    const checkout = await checkoutAction(params.id, amount, baseUrl, baseUrl)
+    const checkout = await checkoutAction(params.id!, amount, baseUrl, baseUrl)
     if (checkout && checkout.data) {
       setStore("checkoutRedirecting", true)
       window.location.href = checkout.data
@@ -60,7 +60,7 @@ export function BillingSection() {
 
   async function onClickSession() {
     const baseUrl = window.location.href
-    const sessionUrl = await sessionAction(params.id, baseUrl)
+    const sessionUrl = await sessionAction(params.id!, baseUrl)
     if (sessionUrl && sessionUrl.data) {
       setStore("sessionRedirecting", true)
       window.location.href = sessionUrl.data

@@ -54,7 +54,7 @@ const listProviders = query(async (workspaceID: string) => {
 
 function ProviderRow(props: { provider: Provider }) {
   const params = useParams()
-  const providers = createAsync(() => listProviders(params.id))
+  const providers = createAsync(() => listProviders(params.id!))
   const saveSubmission = useSubmission(saveProvider, ([fd]) => fd.get("provider")?.toString() === props.provider.key)
   const removeSubmission = useSubmission(
     removeProvider,

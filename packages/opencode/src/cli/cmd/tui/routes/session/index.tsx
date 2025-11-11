@@ -17,7 +17,7 @@ import { useRoute, useRouteData } from "@tui/context/route"
 import { useSync } from "@tui/context/sync"
 import { SplitBorder } from "@tui/component/border"
 import { useTheme } from "@tui/context/theme"
-import { BoxRenderable, ScrollBoxRenderable, addDefaultParsers } from "@opentui/core"
+import { BoxRenderable, ScrollBoxRenderable, TextAttributes, addDefaultParsers } from "@opentui/core"
 import { Prompt, type PromptRef } from "@tui/component/prompt"
 import type { AssistantMessage, Part, ToolPart, UserMessage, TextPart, ReasoningPart } from "@opencode-ai/sdk"
 import { useLocal } from "@tui/context/local"
@@ -950,14 +950,14 @@ const PART_MAPPING = {
 function ReasoningPart(props: { last: boolean; part: ReasoningPart; message: AssistantMessage }) {
   const { theme, syntax } = useTheme()
   const ctx = use()
+  const content = createMemo(() => props.part.text.trim())
   return (
-    <Show when={props.part.text.trim()}>
+    <Show when={content()}>
       <box
         id={"text-" + props.part.id}
         paddingLeft={2}
         marginTop={1}
-        flexDirection="row"
-        gap={1}
+        flexDirection="column"
         border={["left"]}
         customBorderChars={SplitBorder.customBorderChars}
         borderColor={theme.backgroundElement}
@@ -967,7 +967,7 @@ function ReasoningPart(props: { last: boolean; part: ReasoningPart; message: Ass
           drawUnstyledText={false}
           streaming={true}
           syntaxStyle={syntax()}
-          content={props.part.text.trim()}
+          content={"_Thinking:_ " + content()}
           conceal={ctx.conceal()}
           fg={theme.text}
         />
@@ -1450,15 +1450,24 @@ ToolRegistry.register<typeof TodoWriteTool>({
   render(props) {
     const { theme } = useTheme()
     return (
-      <box>
-        <For each={props.input.todos ?? []}>
-          {(todo) => (
-            <text style={{ fg: todo.status === "in_progress" ? theme.success : theme.textMuted }}>
-              [{todo.status === "completed" ? "✓" : " "}] {todo.content}
-            </text>
-          )}
-        </For>
-      </box>
+      <>
+        <Show when={!props.input.todos?.length}>
+          <ToolTitle icon="⚙" fallback="Updating todos..." when={true}>
+            Updating todos...
+          </ToolTitle>
+        </Show>
+        <Show when={props.metadata.todos?.length}>
+          <box>
+            <For each={props.input.todos ?? []}>
+              {(todo) => (
+                <text style={{ fg: todo.status === "in_progress" ? theme.success : theme.textMuted }}>
+                  [{todo.status === "completed" ? "✓" : " "}] {todo.content}
+                </text>
+              )}
+            </For>
+          </box>
+        </Show>
+      </>
     )
   },
 })
