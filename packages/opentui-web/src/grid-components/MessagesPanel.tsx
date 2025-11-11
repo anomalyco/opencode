@@ -365,7 +365,6 @@ export const MessagesPanel: Component<MessagesPanelProps> = (props) => {
                     width: bgWidth,
                     height: "1.2em",
                     background: "#1a1a1a",
-                    "border-left": "2px solid #3a3a3a",
                   }}
                 />,
               )
@@ -579,18 +578,57 @@ export const MessagesPanel: Component<MessagesPanelProps> = (props) => {
             border: "none",
           }}
         >
-          {/* Orange accent line to left of input */}
+          {/* Left side: Grey accent line */}
           <div
             style={{
               position: "absolute",
-              left: "1ch",
+              left: "calc(1ch - 10px)",
               top: "0",
-              width: "3px",
-              height: "100%",
-              background: "#e5c07b",
+              bottom: "0",
+              width: "4px",
+              background: "#6a6a6a",
               "z-index": "10",
             }}
           />
+          {/* Left side: Black "cut" line immediately right of grey line */}
+          <div
+            style={{
+              position: "absolute",
+              left: "calc(1ch - 6px)",
+              top: "0",
+              bottom: "0",
+              width: "3px",
+              background: "#0a0a0a",
+              "z-index": "10",
+            }}
+          />
+
+          {/* Right side: Black "cut" line */}
+          <div
+            style={{
+              position: "absolute",
+              right: "calc(1ch - 6px)",
+              top: "0",
+              bottom: "0",
+              width: "3px",
+              background: "#0a0a0a",
+              "z-index": "10",
+            }}
+          />
+          {/* Right side: Grey accent line */}
+          <div
+            style={{
+              position: "absolute",
+              right: "calc(1ch - 10px)",
+              top: "0",
+              bottom: "0",
+              width: "4px",
+              background: "#6a6a6a",
+              "z-index": "10",
+            }}
+          />
+
+          <span style={{ "margin-left": "1ch" }}></span>
           <span style={{ color: "#e5c07b", "font-weight": "bold" }}>{">"}</span>
           <span style={{ "margin-left": "1ch", color: "#ffffff" }}>{props.inputText}</span>
           {props.cursorVisible && <span style={{ color: "#d19a66" }}>█</span>}
