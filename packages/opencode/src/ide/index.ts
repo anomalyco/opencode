@@ -6,6 +6,7 @@ import { Bus } from "../bus"
 
 const SUPPORTED_IDES = [
   { name: "Windsurf" as const, cmd: "windsurf" },
+  { name: "Visual Studio Code - Insiders" as const, cmd: "code-insiders" },
   { name: "Visual Studio Code" as const, cmd: "code" },
   { name: "Cursor" as const, cmd: "cursor" },
   { name: "VSCodium" as const, cmd: "codium" },
@@ -43,7 +44,7 @@ export namespace Ide {
   }
 
   export function alreadyInstalled() {
-    return process.env["OPENCODE_CALLER"] === "vscode"
+    return process.env["OPENCODE_CALLER"] === "vscode" || process.env["OPENCODE_CALLER"] === "vscode-insiders"
   }
 
   export async function install(ide: (typeof SUPPORTED_IDES)[number]["name"]) {

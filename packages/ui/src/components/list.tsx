@@ -62,13 +62,7 @@ export function List<T>(props: ListProps<T>) {
   })
 
   return (
-    <VList
-      data-component="list"
-      ref={setVirtualizer}
-      data={props.data}
-      onKeyDown={handleKey}
-      class={props.class}
-    >
+    <VList data-component="list" ref={setVirtualizer} data={props.data} onKeyDown={handleKey} class={props.class}>
       {(item) => (
         <button
           data-slot="item"

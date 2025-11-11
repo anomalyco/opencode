@@ -45,9 +45,7 @@ export namespace SessionRevert {
         if (!revert) {
           if ((msg.info.id === input.messageID && !input.partID) || part.id === input.partID) {
             // if no useful parts left in message, same as reverting whole message
-            const partID = remaining.some((item) => ["text", "tool"].includes(item.type))
-              ? input.partID
-              : undefined
+            const partID = remaining.some((item) => ["text", "tool"].includes(item.type)) ? input.partID : undefined
             revert = {
               messageID: !partID && lastUser ? lastUser.id : msg.info.id,
               partID,

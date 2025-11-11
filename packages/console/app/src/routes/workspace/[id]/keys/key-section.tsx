@@ -45,7 +45,7 @@ const listKeys = query(async (workspaceID: string) => {
 
 export function KeySection() {
   const params = useParams()
-  const keys = createAsync(() => listKeys(params.id))
+  const keys = createAsync(() => listKeys(params.id!))
   const submission = useSubmission(createKey)
   const [store, setStore] = createStore({ show: false })
 
@@ -146,20 +146,14 @@ export function KeySection() {
                             title="Copy API key"
                           >
                             <span>{key.keyDisplay}</span>
-                            <Show
-                              when={copied()}
-                              fallback={<IconCopy style={{ width: "14px", height: "14px" }} />}
-                            >
+                            <Show when={copied()} fallback={<IconCopy style={{ width: "14px", height: "14px" }} />}>
                               <IconCheck style={{ width: "14px", height: "14px" }} />
                             </Show>
                           </button>
                         </Show>
                       </td>
                       <td data-slot="key-user-email">{key.email}</td>
-                      <td
-                        data-slot="key-last-used"
-                        title={key.timeUsed ? formatDateUTC(key.timeUsed) : undefined}
-                      >
+                      <td data-slot="key-last-used" title={key.timeUsed ? formatDateUTC(key.timeUsed) : undefined}>
                         {key.timeUsed ? formatDateForTable(key.timeUsed) : "-"}
                       </td>
                       <td data-slot="key-actions">

@@ -85,12 +85,7 @@ const updateMember = action(async (form: FormData) => {
   )
 }, "member.update")
 
-function MemberRow(props: {
-  member: any
-  workspaceID: string
-  actorID: string
-  actorRole: string
-}) {
+function MemberRow(props: { member: any; workspaceID: string; actorID: string; actorRole: string }) {
   const submission = useSubmission(updateMember)
   const isCurrentUser = () => props.actorID === props.member.id
   const isAdmin = () => props.actorRole === "admin"
@@ -214,7 +209,7 @@ const roleOptions = [
 
 export function MemberSection() {
   const params = useParams()
-  const data = createAsync(() => listMembers(params.id))
+  const data = createAsync(() => listMembers(params.id!))
   const submission = useSubmission(inviteMember)
   const [store, setStore] = createStore({
     show: false,
@@ -333,7 +328,7 @@ export function MemberSection() {
                 {(member) => (
                   <MemberRow
                     member={member}
-                    workspaceID={params.id}
+                    workspaceID={params.id!}
                     actorID={data()!.actorID}
                     actorRole={data()!.actorRole}
                   />

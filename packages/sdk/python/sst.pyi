@@ -25,10 +25,17 @@ class Resource:
         type: str
         url: str
     class AuthStorage:
+        namespaceId: str
         type: str
     class Bucket:
         name: str
         type: str
+    class CLOUDFLARE_API_TOKEN:
+        type: str
+        value: str
+    class CLOUDFLARE_DEFAULT_ACCOUNT_ID:
+        type: str
+        value: str
     class Console:
         type: str
         url: str
@@ -60,6 +67,9 @@ class Resource:
     class GOOGLE_CLIENT_ID:
         type: str
         value: str
+    class GatewayKv:
+        namespaceId: str
+        type: str
     class HONEYCOMB_API_KEY:
         type: str
         value: str

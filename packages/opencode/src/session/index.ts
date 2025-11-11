@@ -172,12 +172,7 @@ export namespace Session {
     })
   })
 
-  export async function createNext(input: {
-    id?: string
-    title?: string
-    parentID?: string
-    directory: string
-  }) {
+  export async function createNext(input: { id?: string; title?: string; parentID?: string; directory: string }) {
     const result: Info = {
       id: Identifier.descending("session", input.id),
       version: Installation.VERSION,
@@ -273,17 +268,6 @@ export namespace Session {
     return diffs ?? []
   })
 
-  export const messageStream = fn(Identifier.schema("session"), async function* (sessionID) {
-    const list = await Array.fromAsync(await Storage.list(["message", sessionID]))
-    for (let i = list.length - 1; i >= 0; i--) {
-      const read = await Storage.read<MessageV2.Info>(list[i])
-      yield {
-        info: read,
-        parts: await getParts(read.id),
-      }
-    }
-  })
-
   export const messages = fn(
     z.object({
       sessionID: Identifier.schema("session"),
@@ -291,7 +275,7 @@ export namespace Session {
     }),
     async (input) => {
       const result = [] as MessageV2.WithParts[]
-      for await (const msg of messageStream(input.sessionID)) {
+      for await (const msg of MessageV2.stream(input.sessionID)) {
         if (input.limit && result.length >= input.limit) break
         result.push(msg)
       }
@@ -299,29 +283,6 @@ export namespace Session {
       return result
     },
   )
-
-  export const getMessage = fn(
-    z.object({
-      sessionID: Identifier.schema("session"),
-      messageID: Identifier.schema("message"),
-    }),
-    async (input) => {
-      return {
-        info: await Storage.read<MessageV2.Info>(["message", input.sessionID, input.messageID]),
-        parts: await getParts(input.messageID),
-      }
-    },
-  )
-
-  export const getParts = fn(Identifier.schema("message"), async (messageID) => {
-    const result = [] as MessageV2.Part[]
-    for (const item of await Storage.list(["part", messageID])) {
-      const read = await Storage.read<MessageV2.Part>(item)
-      result.push(read)
-    }
-    result.sort((a, b) => (a.id > b.id ? 1 : -1))
-    return result
-  })
 
   export async function* list() {
     const project = Instance.project
@@ -434,9 +395,7 @@ export namespace Session {
           .add(new Decimal(tokens.input).mul(input.model.cost?.input ?? 0).div(1_000_000))
           .add(new Decimal(tokens.output).mul(input.model.cost?.output ?? 0).div(1_000_000))
           .add(new Decimal(tokens.cache.read).mul(input.model.cost?.cache_read ?? 0).div(1_000_000))
-          .add(
-            new Decimal(tokens.cache.write).mul(input.model.cost?.cache_write ?? 0).div(1_000_000),
-          )
+          .add(new Decimal(tokens.cache.write).mul(input.model.cost?.cache_write ?? 0).div(1_000_000))
           .toNumber(),
         tokens,
       }

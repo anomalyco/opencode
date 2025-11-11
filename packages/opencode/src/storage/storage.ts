@@ -85,9 +85,7 @@ export namespace Storage {
             const session = await Bun.file(sessionFile).json()
             await Bun.write(dest, JSON.stringify(session))
             log.info(`migrating messages for session ${session.id}`)
-            for await (const msgFile of new Bun.Glob(
-              `storage/session/message/${session.id}/*.json`,
-            ).scan({
+            for await (const msgFile of new Bun.Glob(`storage/session/message/${session.id}/*.json`).scan({
               cwd: fullProjectDir,
               absolute: true,
             })) {
@@ -100,12 +98,12 @@ export namespace Storage {
               await Bun.write(dest, JSON.stringify(message))
 
               log.info(`migrating parts for message ${message.id}`)
-              for await (const partFile of new Bun.Glob(
-                `storage/session/part/${session.id}/${message.id}/*.json`,
-              ).scan({
-                cwd: fullProjectDir,
-                absolute: true,
-              })) {
+              for await (const partFile of new Bun.Glob(`storage/session/part/${session.id}/${message.id}/*.json`).scan(
+                {
+                  cwd: fullProjectDir,
+                  absolute: true,
+                },
+              )) {
                 const dest = path.join(dir, "part", message.id, path.basename(partFile))
                 const part = await Bun.file(partFile).json()
                 log.info("copying", {
@@ -128,9 +126,7 @@ export namespace Storage {
         if (!session.projectID) continue
         if (!session.summary?.diffs) continue
         const { diffs } = session.summary
-        await Bun.file(path.join(dir, "session_diff", session.id + ".json")).write(
-          JSON.stringify(diffs),
-        )
+        await Bun.file(path.join(dir, "session_diff", session.id + ".json")).write(JSON.stringify(diffs))
         await Bun.file(path.join(dir, "session", session.projectID, session.id + ".json")).write(
           JSON.stringify({
             ...session,

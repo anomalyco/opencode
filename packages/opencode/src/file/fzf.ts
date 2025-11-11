@@ -81,9 +81,7 @@ export namespace Fzf {
           })
       }
       if (config.extension === "zip") {
-        const zipFileReader = new ZipReader(
-          new BlobReader(new Blob([await Bun.file(archivePath).arrayBuffer()])),
-        )
+        const zipFileReader = new ZipReader(new BlobReader(new Blob([await Bun.file(archivePath).arrayBuffer()])))
         const entries = await zipFileReader.getEntries()
         let fzfEntry: any
         for (const entry of entries) {

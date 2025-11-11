@@ -60,9 +60,7 @@ export namespace SessionSummary {
 
   async function summarizeMessage(input: { messageID: string; messages: MessageV2.WithParts[] }) {
     const messages = input.messages.filter(
-      (m) =>
-        m.info.id === input.messageID ||
-        (m.info.role === "assistant" && m.info.parentID === input.messageID),
+      (m) => m.info.id === input.messageID || (m.info.role === "assistant" && m.info.parentID === input.messageID),
     )
     const msgWithParts = messages.find((m) => m.info.id === input.messageID)!
     const userMsg = msgWithParts.info as MessageV2.User
@@ -73,14 +71,11 @@ export namespace SessionSummary {
     }
     await Session.updateMessage(userMsg)
 
-    const assistantMsg = messages.find((m) => m.info.role === "assistant")!
-      .info as MessageV2.Assistant
+    const assistantMsg = messages.find((m) => m.info.role === "assistant")!.info as MessageV2.Assistant
     const small = await Provider.getSmallModel(assistantMsg.providerID)
     if (!small) return
 
-    const textPart = msgWithParts.parts.find(
-      (p) => p.type === "text" && !p.synthetic,
-    ) as MessageV2.TextPart
+    const textPart = msgWithParts.parts.find((p) => p.type === "text" && !p.synthetic) as MessageV2.TextPart
     if (textPart && !userMsg.summary?.title) {
       const result = await generateText({
         maxOutputTokens: small.info.reasoning ? 1500 : 20,
@@ -113,8 +108,7 @@ export namespace SessionSummary {
     if (
       messages.some(
         (m) =>
-          m.info.role === "assistant" &&
-          m.parts.some((p) => p.type === "step-finish" && p.reason !== "tool-calls"),
+          m.info.role === "assistant" && m.parts.some((p) => p.type === "step-finish" && p.reason !== "tool-calls"),
       )
     ) {
       let summary = messages

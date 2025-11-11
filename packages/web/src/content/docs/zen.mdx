@@ -75,6 +75,7 @@ You can also access our models through the following API endpoints.
 | Kimi K2           | kimi-k2           | `https://opencode.ai/zen/v1/chat/completions` | `@ai-sdk/openai-compatible` |
 | Qwen3 Coder 480B  | qwen3-coder       | `https://opencode.ai/zen/v1/chat/completions` | `@ai-sdk/openai-compatible` |
 | Grok Code Fast 1  | grok-code         | `https://opencode.ai/zen/v1/chat/completions` | `@ai-sdk/openai-compatible` |
+| Big Pickle        | big-pickle        | `https://opencode.ai/zen/v1/chat/completions` | `@ai-sdk/openai-compatible` |
 
 The [model id](/docs/config/#models) in your OpenCode config
 uses the format `opencode/<model-id>`. For example, for GPT 5 Codex, you would
@@ -117,8 +118,8 @@ We support a pay-as-you-go model. Below are the prices **per 1M tokens**.
 | GLM 4.6                           | $0.60  | $2.20  | $0.10       | -            |
 | Kimi K2                           | $0.60  | $2.50  | $0.36       | -            |
 | Qwen3 Coder 480B                  | $0.45  | $1.50  | -           | -            |
-| Grok Code Fast 1                  | Free   | Free   | -           | -            |
-| Code Supernova                    | Free   | Free   | -           | -            |
+| Grok Code Fast 1                  | Free   | Free   | Free        | -            |
+| Big Pickle                        | Free   | Free   | Free        | -            |
 | Claude Sonnet 4.5 (≤ 200K tokens) | $3.00  | $15.00 | $0.30       | $3.75        |
 | Claude Sonnet 4.5 (> 200K tokens) | $6.00  | $22.50 | $0.60       | $7.50        |
 | Claude Sonnet 4 (≤ 200K tokens)   | $3.00  | $15.00 | $0.30       | $3.75        |
@@ -138,7 +139,7 @@ Credit card fees are passed along at cost; we don't charge anything beyond that.
 The free models:
 
 - Grok Code Fast 1 is currently free on OpenCode for a limited time. The xAI team is using this time to collect feedback and improve Grok Code.
-- Code Supernova is a stealth model that's free on OpenCode for a limited time. The team is using this time to collect feedback and improve the model.
+- Big Pickle is a stealth model that's free on OpenCode for a limited time. The team is using this time to collect feedback and improve the model.
 
 :::tip
 Subscription plans and a free tier are coming soon.
@@ -153,8 +154,7 @@ Subscription plans and a free tier are coming soon.
 All our models are hosted in the US. Our providers follow a zero-retention policy and do not use your data for model training, with the following exceptions:
 
 - Grok Code Fast 1: During its free period, collected data may be used to improve Grok Code.
-- Code Supernova: During its free period, collected data may be used to improve
-  the model.
+- Big Pickle: During its free period, collected data may be used to improve the model.
 - OpenAI APIs: Requests are retained for 30 days in accordance with [OpenAI's Data Policies](https://platform.openai.com/docs/guides/your-data).
 - Anthropic APIs: Requests are retained for 30 days in accordance with [Anthropic's Data Policies](https://docs.anthropic.com/en/docs/claude-code/data-usage).
 

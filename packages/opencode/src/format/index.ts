@@ -91,7 +91,6 @@ export namespace Format {
 
   export function init() {
     log.info("init")
-    return
     Bus.subscribe(File.Event.Edited, async (payload) => {
       const file = payload.properties.file
       log.info("formatting", { file })
@@ -114,13 +113,12 @@ export namespace Format {
               ...item.environment,
             })
         } catch (error) {
-          log.error("failed", {
+          log.error("failed to format file", {
             error,
             command: item.command,
             ...item.environment,
+            file,
           })
-          // re-raising
-          throw error
         }
       }
     })

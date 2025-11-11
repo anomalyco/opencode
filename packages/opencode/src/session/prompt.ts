@@ -206,6 +206,8 @@ export namespace SessionPrompt {
     const params = await Plugin.trigger(
       "chat.params",
       {
+        sessionID: input.sessionID,
+        agent: agent.name,
         model: model.info,
         provider: await Provider.getProvider(model.providerID),
         message: userMsg,
@@ -301,11 +303,7 @@ export namespace SessionPrompt {
             OUTPUT_TOKEN_MAX,
           ),
           abortSignal: abort.signal,
-          providerOptions: ProviderTransform.providerOptions(
-            model.npm,
-            model.providerID,
-            params.options,
-          ),
+          providerOptions: ProviderTransform.providerOptions(model.npm, model.providerID, params.options),
           stopWhen: stepCountIs(1),
           temperature: params.temperature,
           topP: params.topP,
@@ -340,11 +338,7 @@ export namespace SessionPrompt {
                 async transformParams(args) {
                   if (args.type === "stream") {
                     // @ts-expect-error
-                    args.params.prompt = ProviderTransform.message(
-                      args.params.prompt,
-                      model.providerID,
-                      model.modelID,
-                    )
+                    args.params.prompt = ProviderTransform.message(args.params.prompt, model.providerID, model.modelID)
                   }
                   return args.params
                 },
@@ -361,15 +355,24 @@ export namespace SessionPrompt {
         max: maxRetries,
       })
       if (result.shouldRetry) {
+        const start = Date.now()
         for (let retry = 1; retry < maxRetries; retry++) {
-          const lastRetryPart = result.parts.findLast((p) => p.type === "retry")
+          const lastRetryPart = result.parts.findLast((p): p is MessageV2.RetryPart => p.type === "retry")
 
           if (lastRetryPart) {
-            const delayMs = SessionRetry.getRetryDelayInMs(lastRetryPart.error, retry)
+            const delayMs = SessionRetry.getBoundedDelay({
+              error: lastRetryPart.error,
+              attempt: retry,
+              startTime: start,
+            })
+            if (!delayMs) {
+              break
+            }
 
             log.info("retrying with backoff", {
               attempt: retry,
               delayMs,
+              elapsed: Date.now() - start,
             })
 
             const stop = await SessionRetry.sleep(delayMs, abort.signal)
@@ -434,7 +437,7 @@ export namespace SessionPrompt {
     providerID: string
     signal: AbortSignal
   }) {
-    let msgs = await MessageV2.filterCompacted(Session.messageStream(input.sessionID))
+    let msgs = await MessageV2.filterCompacted(MessageV2.stream(input.sessionID))
     const lastAssistant = msgs.findLast((msg) => msg.info.role === "assistant")
     if (
       lastAssistant?.info.role === "assistant" &&
@@ -527,11 +530,7 @@ export namespace SessionPrompt {
     )
     for (const item of await ToolRegistry.tools(input.providerID, input.modelID)) {
       if (Wildcard.all(item.id, enabledTools) === false) continue
-      const schema = ProviderTransform.schema(
-        input.providerID,
-        input.modelID,
-        z.toJSONSchema(item.parameters),
-      )
+      const schema = ProviderTransform.schema(input.providerID, input.modelID, z.toJSONSchema(item.parameters))
       tools[item.id] = tool({
         id: item.id as any,
         description: item.description,
@@ -851,9 +850,7 @@ export namespace SessionPrompt {
                   messageID: info.id,
                   sessionID: input.sessionID,
                   type: "file",
-                  url:
-                    `data:${part.mime};base64,` +
-                    Buffer.from(await file.bytes()).toString("base64"),
+                  url: `data:${part.mime};base64,` + Buffer.from(await file.bytes()).toString("base64"),
                   mime: part.mime,
                   filename: part.filename!,
                   source: part.source,
@@ -896,7 +893,12 @@ export namespace SessionPrompt {
 
     await Plugin.trigger(
       "chat.message",
-      {},
+      {
+        sessionID: input.sessionID,
+        agent: input.agent,
+        model: input.model,
+        messageID: input.messageID,
+      },
       {
         message: info,
         parts,
@@ -927,9 +929,7 @@ export namespace SessionPrompt {
         synthetic: true,
       })
     }
-    const wasPlan = input.messages.some(
-      (msg) => msg.info.role === "assistant" && msg.info.mode === "plan",
-    )
+    const wasPlan = input.messages.some((msg) => msg.info.role === "assistant" && msg.info.mode === "plan")
     if (wasPlan && input.agent.name === "build") {
       userMessage.parts.push({
         id: Identifier.ascending("part"),
@@ -1008,10 +1008,7 @@ export namespace SessionPrompt {
       partFromToolCall(toolCallID: string) {
         return toolcalls[toolCallID]
       },
-      async process(
-        stream: StreamTextResult<Record<string, AITool>, never>,
-        retries: { count: number; max: number },
-      ) {
+      async process(stream: StreamTextResult<Record<string, AITool>, never>, retries: { count: number; max: number }) {
         log.info("process")
         if (!assistantMsg) throw new Error("call next() first before processing")
         let shouldRetry = false
@@ -1106,7 +1103,7 @@ export namespace SessionPrompt {
                   })
                   toolcalls[value.toolCallId] = part as MessageV2.ToolPart
 
-                  const parts = await Session.getParts(assistantMsg.id)
+                  const parts = await MessageV2.parts(assistantMsg.id)
                   const lastThree = parts.slice(-DOOM_LOOP_THRESHOLD)
                   if (
                     lastThree.length === DOOM_LOOP_THRESHOLD &&
@@ -1118,18 +1115,21 @@ export namespace SessionPrompt {
                         JSON.stringify(p.state.input) === JSON.stringify(value.input),
                     )
                   ) {
-                    await Permission.ask({
-                      type: "doom-loop",
-                      pattern: value.toolName,
-                      sessionID: assistantMsg.sessionID,
-                      messageID: assistantMsg.id,
-                      callID: value.toolCallId,
-                      title: `Possible doom loop: "${value.toolName}" called ${DOOM_LOOP_THRESHOLD} times with identical arguments`,
-                      metadata: {
-                        tool: value.toolName,
-                        input: value.input,
-                      },
-                    })
+                    const permission = await Agent.get(input.agent).then((x) => x.permission)
+                    if (permission.doom_loop === "ask") {
+                      await Permission.ask({
+                        type: "doom_loop",
+                        pattern: value.toolName,
+                        sessionID: assistantMsg.sessionID,
+                        messageID: assistantMsg.id,
+                        callID: value.toolCallId,
+                        title: `Possible doom loop: "${value.toolName}" called ${DOOM_LOOP_THRESHOLD} times with identical arguments`,
+                        metadata: {
+                          tool: value.toolName,
+                          input: value.input,
+                        },
+                      })
+                    }
                   }
                 }
                 break
@@ -1167,10 +1167,7 @@ export namespace SessionPrompt {
                       status: "error",
                       input: value.input,
                       error: (value.error as any).toString(),
-                      metadata:
-                        value.error instanceof Permission.RejectedError
-                          ? value.error.metadata
-                          : undefined,
+                      metadata: value.error instanceof Permission.RejectedError ? value.error.metadata : undefined,
                       time: {
                         start: match.state.time.start,
                         end: Date.now(),
@@ -1294,11 +1291,7 @@ export namespace SessionPrompt {
             error: e,
           })
           const error = MessageV2.fromError(e, { providerID: input.providerID })
-          if (
-            retries.count < retries.max &&
-            MessageV2.APIError.isInstance(error) &&
-            error.data.isRetryable
-          ) {
+          if (retries.count < retries.max && MessageV2.APIError.isInstance(error) && error.data.isRetryable) {
             shouldRetry = true
             await Session.updatePart({
               id: Identifier.ascending("part"),
@@ -1319,13 +1312,9 @@ export namespace SessionPrompt {
             })
           }
         }
-        const p = await Session.getParts(assistantMsg.id)
+        const p = await MessageV2.parts(assistantMsg.id)
         for (const part of p) {
-          if (
-            part.type === "tool" &&
-            part.state.status !== "completed" &&
-            part.state.status !== "error"
-          ) {
+          if (part.type === "tool" && part.state.status !== "completed" && part.state.status !== "error") {
             await Session.updatePart({
               ...part,
               state: {
@@ -1820,13 +1809,11 @@ export namespace SessionPrompt {
     if (input.session.parentID) return
     if (!Session.isDefaultTitle(input.session.title)) return
     const isFirst =
-      input.history.filter(
-        (m) => m.info.role === "user" && !m.parts.every((p) => "synthetic" in p && p.synthetic),
-      ).length === 1
+      input.history.filter((m) => m.info.role === "user" && !m.parts.every((p) => "synthetic" in p && p.synthetic))
+        .length === 1
     if (!isFirst) return
     const small =
-      (await Provider.getSmallModel(input.providerID)) ??
-      (await Provider.getModel(input.providerID, input.modelID))
+      (await Provider.getSmallModel(input.providerID)) ?? (await Provider.getModel(input.providerID, input.modelID))
     const options = {
       ...ProviderTransform.options(small.providerID, small.modelID, input.session.id),
       ...small.info.options,

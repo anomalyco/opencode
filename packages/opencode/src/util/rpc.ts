@@ -30,10 +30,7 @@ export namespace Rpc {
       }
     }
     return {
-      call<Method extends keyof T>(
-        method: Method,
-        input: Parameters<T[Method]>[0],
-      ): Promise<ReturnType<T[Method]>> {
+      call<Method extends keyof T>(method: Method, input: Parameters<T[Method]>[0]): Promise<ReturnType<T[Method]>> {
         const requestId = id++
         return new Promise((resolve) => {
           pending.set(requestId, resolve)

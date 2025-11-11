@@ -264,7 +264,7 @@
   [data-component="brand-content"] {
     padding: 4rem 5rem;
 
-    h2 {
+    h1 {
       font-size: 1.5rem;
       font-weight: 500;
       color: var(--color-text-strong);

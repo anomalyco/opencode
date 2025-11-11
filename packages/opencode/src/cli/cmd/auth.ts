@@ -14,11 +14,7 @@ export const AuthCommand = cmd({
   command: "auth",
   describe: "manage credentials",
   builder: (yargs) =>
-    yargs
-      .command(AuthLoginCommand)
-      .command(AuthLogoutCommand)
-      .command(AuthListCommand)
-      .demandCommand(),
+    yargs.command(AuthLoginCommand).command(AuthLogoutCommand).command(AuthListCommand).demandCommand(),
   async handler() {},
 })
 
@@ -64,9 +60,7 @@ export const AuthListCommand = cmd({
         prompts.log.info(`${provider} ${UI.Style.TEXT_DIM}${envVar}`)
       }
 
-      prompts.outro(
-        `${activeEnvVars.length} environment variable` + (activeEnvVars.length === 1 ? "" : "s"),
-      )
+      prompts.outro(`${activeEnvVars.length} environment variable` + (activeEnvVars.length === 1 ? "" : "s"))
     }
   },
 })
@@ -86,9 +80,7 @@ export const AuthLoginCommand = cmd({
         UI.empty()
         prompts.intro("Add credential")
         if (args.url) {
-          const wellknown = await fetch(`${args.url}/.well-known/opencode`).then(
-            (x) => x.json() as any,
-          )
+          const wellknown = await fetch(`${args.url}/.well-known/opencode`).then((x) => x.json() as any)
           prompts.log.info(`Running \`${wellknown.auth.command.join(" ")}\``)
           const proc = Bun.spawn({
             cmd: wellknown.auth.command,
@@ -290,8 +282,7 @@ export const AuthLoginCommand = cmd({
         if (provider === "other") {
           provider = await prompts.text({
             message: "Enter provider id",
-            validate: (x) =>
-              x && x.match(/^[0-9a-z-]+$/) ? undefined : "a-z, 0-9 and hyphens only",
+            validate: (x) => (x && x.match(/^[0-9a-z-]+$/) ? undefined : "a-z, 0-9 and hyphens only"),
           })
           if (prompts.isCancel(provider)) throw new UI.CancelledError()
           provider = provider.replace(/^@ai-sdk\//, "")

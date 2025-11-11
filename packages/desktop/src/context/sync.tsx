@@ -188,7 +188,7 @@ export const { use: useSync, provider: SyncProvider } = createSimpleContext({
         async sync(sessionID: string, _isRetry = false) {
           const [session, messages, todo, diff] = await Promise.all([
             sdk.client.session.get({ path: { id: sessionID }, throwOnError: true }),
-            sdk.client.session.messages({ path: { id: sessionID } }),
+            sdk.client.session.messages({ path: { id: sessionID }, query: { limit: 100 } }),
             sdk.client.session.todo({ path: { id: sessionID } }),
             sdk.client.session.diff({ path: { id: sessionID } }),
           ])
@@ -211,12 +211,6 @@ export const { use: useSync, provider: SyncProvider } = createSimpleContext({
               draft.session_diff[sessionID] = diff.data ?? []
             }),
           )
-
-          // If no messages and this might be a new session, retry after a delay
-          // if (!isRetry && messages.data!.length === 0) {
-          //   setTimeout(() => this.sync(sessionID, true), 500)
-          //   return
-          // }
         },
         fetch: async (count = 10) => {
           setStore("limit", (x) => x + count)
