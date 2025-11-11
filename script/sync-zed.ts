@@ -108,7 +108,7 @@ async function main() {
 
   console.log(`📬 Creating pull request...`)
   const prUrl =
-    await $`gh pr create --repo ${UPSTREAM_REPO} --base main --head ${FORK_REPO.split("/")[0]}:${branchName} --title "Update ${EXTENSION_NAME} to v${cleanVersion}" --body "Release notes:\n\nhttps://github.com/${OPENCODE_REPO}/releases/tag/v${cleanVersion}"`.text()
+    await $`gh pr create --repo ${UPSTREAM_REPO} --base main --head ${FORK_REPO.split("/")[0]}:${branchName} --title "Update ${EXTENSION_NAME} to v${cleanVersion}" --body "Updating OpenCode extension to v${cleanVersion}"`.text()
 
   console.log(`✅ Pull request created: ${prUrl}`)
   console.log(`🎉 Done!`)

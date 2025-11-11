@@ -218,12 +218,6 @@ export function Autocomplete(props: {
           onSelect: () => command.trigger("session.compact"),
         },
         {
-          display: "/share",
-          disabled: !!s.share?.url,
-          description: "share a session",
-          onSelect: () => command.trigger("session.share"),
-        },
-        {
           display: "/unshare",
           disabled: !s.share,
           description: "unshare a session",
@@ -250,7 +244,16 @@ export function Autocomplete(props: {
           onSelect: () => command.trigger("session.timeline"),
         },
       )
+      if (sync.data.config.share !== "disabled") {
+        results.push({
+          display: "/share",
+          disabled: !!s.share?.url,
+          description: "share a session",
+          onSelect: () => command.trigger("session.share"),
+        })
+      }
     }
+
     results.push(
       {
         display: "/new",

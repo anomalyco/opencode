@@ -58,6 +58,7 @@ import { Editor } from "../../util/editor"
 import { Global } from "@/global"
 import fs from "fs/promises"
 import stripAnsi from "strip-ansi"
+import { LSP } from "@/lsp/index.ts"
 
 addDefaultParsers(parsers.parsers)
 
@@ -216,29 +217,33 @@ export function Session() {
         dialog.clear()
       },
     },
-    {
-      title: "Share session",
-      value: "session.share",
-      keybind: "session_share",
-      disabled: !!session()?.share?.url,
-      category: "Session",
-      onSelect: async (dialog) => {
-        await sdk.client.session
-          .share({
-            path: {
-              id: route.sessionID,
+    ...(sync.data.config.share !== "disabled"
+      ? [
+          {
+            title: "Share session",
+            value: "session.share",
+            keybind: "session_share" as const,
+            disabled: !!session()?.share?.url,
+            category: "Session",
+            onSelect: async (dialog: any) => {
+              await sdk.client.session
+                .share({
+                  path: {
+                    id: route.sessionID,
+                  },
+                })
+                .then((res) =>
+                  Clipboard.copy(res.data!.share!.url).catch(() =>
+                    toast.show({ message: "Failed to copy URL to clipboard", variant: "error" }),
+                  ),
+                )
+                .then(() => toast.show({ message: "Share URL copied to clipboard!", variant: "success" }))
+                .catch(() => toast.show({ message: "Failed to share session", variant: "error" }))
+              dialog.clear()
             },
-          })
-          .then((res) =>
-            Clipboard.copy(res.data!.share!.url).catch(() =>
-              toast.show({ message: "Failed to copy URL to clipboard", variant: "error" }),
-            ),
-          )
-          .then(() => toast.show({ message: "Share URL copied to clipboard!", variant: "success" }))
-          .catch(() => toast.show({ message: "Failed to share session", variant: "error" }))
-        dialog.clear()
-      },
-    },
+          },
+        ]
+      : []),
     {
       title: "Unshare session",
       value: "session.unshare",
@@ -1201,6 +1206,8 @@ ToolRegistry.register<typeof WriteTool>({
         .map((x) => x.toString().padStart(pad, " "))
     })
 
+    const diagnostics = createMemo(() => props.metadata.diagnostics?.[props.input.filePath ?? ""] ?? [])
+
     return (
       <>
         <ToolTitle icon="←" fallback="Preparing write..." when={props.input.filePath}>
@@ -1214,6 +1221,15 @@ ToolRegistry.register<typeof WriteTool>({
             <code filetype={filetype(props.input.filePath!)} syntaxStyle={syntax()} content={code()} />
           </box>
         </box>
+        <Show when={diagnostics().length}>
+          <For each={diagnostics()}>
+            {(diagnostic) => (
+              <text fg={theme.error}>
+                Error [{diagnostic.range.start.line}:{diagnostic.range.start.character}]: {diagnostic.message}
+              </text>
+            )}
+          </For>
+        </Show>
       </>
     )
   },
@@ -1391,6 +1407,12 @@ ToolRegistry.register<typeof EditTool>({
 
     const ft = createMemo(() => filetype(props.input.filePath))
 
+    createEffect(() => console.log(props.metadata.diagnostics))
+    const diagnostics = createMemo(() => {
+      const arr = props.metadata.diagnostics?.[props.input.filePath ?? ""] ?? []
+      return arr.filter((x) => x.severity === 1).slice(0, 3)
+    })
+
     return (
       <>
         <ToolTitle icon="←" fallback="Preparing edit..." when={props.input.filePath}>
@@ -1419,6 +1441,17 @@ ToolRegistry.register<typeof EditTool>({
             </box>
           </Match>
         </Switch>
+        <Show when={diagnostics().length}>
+          <box>
+            <For each={diagnostics()}>
+              {(diagnostic) => (
+                <text fg={theme.error}>
+                  Error [{diagnostic.range.start.line + 1}:{diagnostic.range.start.character + 1}] {diagnostic.message}
+                </text>
+              )}
+            </For>
+          </box>
+        </Show>
       </>
     )
   },
