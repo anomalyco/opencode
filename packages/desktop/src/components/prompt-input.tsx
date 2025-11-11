@@ -64,7 +64,6 @@ export const PromptInput: Component<PromptInputProps> = (props) => {
   const handleFileSelect = (path: string | undefined) => {
     if (!path) return
     addPart({ type: "file", path, content: "@" + getFilename(path), start: 0, end: 0 })
-    setStore("popoverIsOpen", false)
   }
 
   const { flat, active, onInput, onKeyDown, refetch } = useFilteredList<string>({
@@ -110,16 +109,6 @@ export const PromptInput: Component<PromptInputProps> = (props) => {
         if (cursorPosition !== null) {
           setCursorPosition(editorRef, cursorPosition)
         }
-      },
-    ),
-  )
-
-  createEffect(
-    on(
-      () => session.prompt.cursor(),
-      (cursor) => {
-        if (cursor === undefined) return
-        queueMicrotask(() => setCursorPosition(editorRef, cursor))
       },
     ),
   )
@@ -173,118 +162,70 @@ export const PromptInput: Component<PromptInputProps> = (props) => {
   }
 
   const addPart = (part: ContentPart) => {
+    const selection = window.getSelection()
+    if (!selection || selection.rangeCount === 0) return
+
     const cursorPosition = getCursorPosition(editorRef)
     const prompt = session.prompt.current()
     const rawText = prompt.map((p) => p.content).join("")
     const textBeforeCursor = rawText.substring(0, cursorPosition)
     const atMatch = textBeforeCursor.match(/@(\S*)$/)
 
-    const startIndex = atMatch ? atMatch.index! : cursorPosition
-    const endIndex = atMatch ? cursorPosition : cursorPosition
+    if (part.type === "file") {
+      const pill = document.createElement("span")
+      pill.textContent = part.content
+      pill.setAttribute("data-type", "file")
+      pill.setAttribute("data-path", part.path)
+      pill.setAttribute("contenteditable", "false")
+      pill.style.userSelect = "text"
+      pill.style.cursor = "default"
 
-    const pushText = (acc: { parts: ContentPart[]; runningIndex: number }, value: string) => {
-      if (!value) return
-      const last = acc.parts[acc.parts.length - 1]
-      if (last && last.type === "text") {
-        acc.parts[acc.parts.length - 1] = {
-          type: "text",
-          content: last.content + value,
-          start: last.start,
-          end: last.end + value.length,
+      const gap = document.createTextNode(" ")
+      const range = selection.getRangeAt(0)
+
+      if (atMatch) {
+        let node: Node | null = range.startContainer
+        let offset = range.startOffset
+        let runningLength = 0
+
+        const walker = document.createTreeWalker(editorRef, NodeFilter.SHOW_TEXT, null)
+        let currentNode = walker.nextNode()
+        while (currentNode) {
+          const textContent = currentNode.textContent || ""
+          if (runningLength + textContent.length >= atMatch.index!) {
+            const localStart = atMatch.index! - runningLength
+            const localEnd = cursorPosition - runningLength
+            if (currentNode === range.startContainer || runningLength + textContent.length >= cursorPosition) {
+              range.setStart(currentNode, localStart)
+              range.setEnd(currentNode, Math.min(localEnd, textContent.length))
+              break
+            }
+          }
+          runningLength += textContent.length
+          currentNode = walker.nextNode()
         }
-        return
       }
-      acc.parts.push({ type: "text", content: value, start: acc.runningIndex, end: acc.runningIndex + value.length })
+
+      range.deleteContents()
+      range.insertNode(gap)
+      range.insertNode(pill)
+      range.setStartAfter(gap)
+      range.collapse(true)
+      selection.removeAllRanges()
+      selection.addRange(range)
+    } else if (part.type === "text") {
+      const textNode = document.createTextNode(part.content)
+      const range = selection.getRangeAt(0)
+      range.deleteContents()
+      range.insertNode(textNode)
+      range.setStartAfter(textNode)
+      range.collapse(true)
+      selection.removeAllRanges()
+      selection.addRange(range)
     }
 
-    const {
-      parts: nextParts,
-      inserted,
-      cursorPositionAfter,
-    } = prompt.reduce(
-      (acc, item) => {
-        if (acc.inserted) {
-          acc.parts.push({ ...item, start: acc.runningIndex, end: acc.runningIndex + item.content.length })
-          acc.runningIndex += item.content.length
-          return acc
-        }
-
-        const nextIndex = acc.runningIndex + item.content.length
-        if (nextIndex <= startIndex) {
-          acc.parts.push({ ...item, start: acc.runningIndex, end: acc.runningIndex + item.content.length })
-          acc.runningIndex = nextIndex
-          return acc
-        }
-
-        if (item.type !== "text") {
-          acc.parts.push({ ...item, start: acc.runningIndex, end: acc.runningIndex + item.content.length })
-          acc.runningIndex = nextIndex
-          return acc
-        }
-
-        const headLength = Math.max(0, startIndex - acc.runningIndex)
-        const tailLength = Math.max(0, endIndex - acc.runningIndex)
-        const head = item.content.slice(0, headLength)
-        const tail = item.content.slice(tailLength)
-
-        pushText(acc, head)
-        acc.runningIndex += head.length
-
-        if (part.type === "text") {
-          pushText(acc, part.content)
-          acc.runningIndex += part.content.length
-        }
-        if (part.type !== "text") {
-          acc.parts.push({ ...part, start: acc.runningIndex, end: acc.runningIndex + part.content.length })
-          acc.runningIndex += part.content.length
-        }
-
-        const needsGap = Boolean(atMatch)
-        const rest = needsGap ? (tail ? (/^\s/.test(tail) ? tail : ` ${tail}`) : " ") : tail
-        pushText(acc, rest)
-        acc.runningIndex += rest.length
-
-        const baseCursor = startIndex + part.content.length
-        const cursorAddition = needsGap && rest.length > 0 ? 1 : 0
-        acc.cursorPositionAfter = baseCursor + cursorAddition
-
-        acc.inserted = true
-        return acc
-      },
-      {
-        parts: [] as ContentPart[],
-        runningIndex: 0,
-        inserted: false,
-        cursorPositionAfter: cursorPosition + part.content.length,
-      },
-    )
-
-    if (!inserted) {
-      const baseParts = prompt.filter((item) => !(item.type === "text" && item.content === ""))
-      const runningIndex = baseParts.reduce((sum, p) => sum + p.content.length, 0)
-      const appendedAcc = { parts: [...baseParts] as ContentPart[], runningIndex }
-      if (part.type === "text") {
-        pushText(appendedAcc, part.content)
-      }
-      if (part.type !== "text") {
-        appendedAcc.parts.push({
-          ...part,
-          start: appendedAcc.runningIndex,
-          end: appendedAcc.runningIndex + part.content.length,
-        })
-      }
-      const next = appendedAcc.parts.length > 0 ? appendedAcc.parts : DEFAULT_PROMPT
-      const nextCursor = rawText.length + part.content.length
-      session.prompt.set(next, nextCursor)
-      setStore("popoverIsOpen", false)
-      queueMicrotask(() => setCursorPosition(editorRef, nextCursor))
-      return
-    }
-
-    session.prompt.set(nextParts, cursorPositionAfter)
+    handleInput()
     setStore("popoverIsOpen", false)
-
-    queueMicrotask(() => setCursorPosition(editorRef, cursorPositionAfter))
   }
 
   const abort = () =>

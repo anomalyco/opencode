@@ -1,6 +1,6 @@
 import { createStore, produce } from "solid-js/store"
 import { createSimpleContext } from "./helper"
-import { batch, createEffect, createMemo } from "solid-js"
+import { batch, createEffect, createMemo, createSignal, on } from "solid-js"
 import { useSync } from "./sync"
 import { makePersisted } from "@solid-primitives/storage"
 import { TextSelection, useLocal } from "./local"
@@ -13,23 +13,26 @@ export const { use: useSession, provider: SessionProvider } = createSimpleContex
     const sync = useSync()
     const local = useLocal()
 
-    const [store, setStore] = makePersisted(
+    const seed = props.sessionId ?? "new-session"
+
+    const [persist, setPersist] = makePersisted(
       createStore<{
-        prompt: Prompt
-        cursorPosition?: number
         messageId?: string
         tabs: {
           active?: string
           opened: string[]
         }
+        prompt: Prompt
+        cursor?: number
       }>({
-        prompt: [{ type: "text", content: "", start: 0, end: 0 }],
         tabs: {
           opened: [],
         },
+        prompt: clonePrompt(DEFAULT_PROMPT),
+        cursor: undefined,
       }),
       {
-        name: props.sessionId ?? "new-session",
+        name: seed,
       },
     )
 
@@ -49,8 +52,8 @@ export const { use: useSession, provider: SessionProvider } = createSimpleContex
       return userMessages()?.at(0)
     })
     const activeMessage = createMemo(() => {
-      if (!store.messageId) return lastUserMessage()
-      return userMessages()?.find((m) => m.id === store.messageId)
+      if (!persist.messageId) return lastUserMessage()
+      return userMessages()?.find((m) => m.id === persist.messageId)
     })
     const working = createMemo(() => {
       if (!props.sessionId) return false
@@ -101,13 +104,14 @@ export const { use: useSession, provider: SessionProvider } = createSimpleContex
       working,
       diffs,
       prompt: {
-        current: createMemo(() => store.prompt),
-        cursor: createMemo(() => store.cursorPosition),
-        dirty: createMemo(() => !isPromptEqual(store.prompt, DEFAULT_PROMPT)),
+        current: createMemo(() => persist.prompt),
+        cursor: createMemo(() => persist.cursor),
+        dirty: createMemo(() => !isPromptEqual(persist.prompt, DEFAULT_PROMPT)),
         set(prompt: Prompt, cursorPosition?: number) {
+          const next = clonePrompt(prompt)
           batch(() => {
-            setStore("prompt", prompt)
-            if (cursorPosition !== undefined) setStore("cursorPosition", cursorPosition)
+            setPersist("prompt", next)
+            if (cursorPosition !== undefined) setPersist("cursor", cursorPosition)
           })
         },
       },
@@ -117,7 +121,7 @@ export const { use: useSession, provider: SessionProvider } = createSimpleContex
         last: lastUserMessage,
         active: activeMessage,
         setActive(id: string | undefined) {
-          setStore("messageId", id)
+          setPersist("messageId", id)
         },
       },
       usage: {
@@ -126,53 +130,52 @@ export const { use: useSession, provider: SessionProvider } = createSimpleContex
         context,
       },
       layout: {
-        tabs: store.tabs,
+        tabs: persist.tabs,
         setActiveTab(tab: string | undefined) {
-          setStore("tabs", "active", tab)
+          setPersist("tabs", "active", tab)
         },
         setOpenedTabs(tabs: string[]) {
-          setStore("tabs", "opened", tabs)
+          setPersist("tabs", "opened", tabs)
         },
         async openTab(tab: string) {
           if (tab === "chat") {
-            setStore("tabs", "active", undefined)
+            setPersist("tabs", "active", undefined)
             return
           }
           if (tab.startsWith("file://")) {
             await local.file.open(tab.replace("file://", ""))
           }
           if (tab !== "review") {
-            if (!store.tabs.opened.includes(tab)) {
-              setStore("tabs", "opened", [...store.tabs.opened, tab])
+            if (!persist.tabs.opened.includes(tab)) {
+              setPersist("tabs", "opened", [...persist.tabs.opened, tab])
             }
           }
-          setStore("tabs", "active", tab)
+          setPersist("tabs", "active", tab)
         },
         closeTab(tab: string) {
           batch(() => {
-            setStore(
+            setPersist(
               "tabs",
               "opened",
-              store.tabs.opened.filter((x) => x !== tab),
+              persist.tabs.opened.filter((x) => x !== tab),
             )
-            if (store.tabs.active === tab) {
-              const index = store.tabs.opened.findIndex((f) => f === tab)
-              const previous = store.tabs.opened[Math.max(0, index - 1)]
-              setStore("tabs", "active", previous)
+            if (persist.tabs.active === tab) {
+              const index = persist.tabs.opened.findIndex((f) => f === tab)
+              const previous = persist.tabs.opened[Math.max(0, index - 1)]
+              setPersist("tabs", "active", previous)
             }
           })
         },
         moveTab(tab: string, to: number) {
-          const index = store.tabs.opened.findIndex((f) => f === tab)
+          const index = persist.tabs.opened.findIndex((f) => f === tab)
           if (index === -1) return
-          setStore(
+          setPersist(
             "tabs",
             "opened",
             produce((opened) => {
               opened.splice(to, 0, opened.splice(index, 1)[0])
             }),
           )
-          // setStore("node", path, "pinned", true)
         },
       },
     }
@@ -214,4 +217,21 @@ export function isPromptEqual(promptA: Prompt, promptB: Prompt): boolean {
     }
   }
   return true
+}
+
+function cloneSelection(selection?: TextSelection) {
+  if (!selection) return undefined
+  return { ...selection }
+}
+
+function clonePart(part: ContentPart): ContentPart {
+  if (part.type === "text") return { ...part }
+  return {
+    ...part,
+    selection: cloneSelection(part.selection),
+  }
+}
+
+function clonePrompt(prompt: Prompt): Prompt {
+  return prompt.map(clonePart)
 }
