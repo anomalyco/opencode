@@ -126,7 +126,7 @@ export const MessagesPanel: Component<MessagesPanelProps> = (props) => {
 
     // Check for @ (file picker)
     const atMatch = beforeCursor.match(/@([^\s]*)$/)
-    if (atMatch) {
+    if (atMatch && atMatch[1] !== undefined) {
       setAutocompleteType("file")
       setAutocompleteStart(cursor - atMatch[1].length)
       const query = atMatch[1]
@@ -137,7 +137,7 @@ export const MessagesPanel: Component<MessagesPanelProps> = (props) => {
 
     // Check for / at start (slash commands)
     const slashMatch = beforeCursor.match(/^\/([^\s]*)$/)
-    if (slashMatch) {
+    if (slashMatch && slashMatch[1] !== undefined) {
       setAutocompleteType("command")
       setAutocompleteStart(0)
       const query = slashMatch[1].toLowerCase()
@@ -157,15 +157,21 @@ export const MessagesPanel: Component<MessagesPanelProps> = (props) => {
 
   // Load files from server
   const loadFiles = async (query: string) => {
+    if (!sdk?.client?.file) {
+      console.warn("SDK client not available")
+      setAutocompleteOpen(false)
+      return
+    }
+
     try {
       const path = props.projectPath || "."
       const result = await sdk.client.file.list({
         query: { path, directory: query || undefined },
       })
 
-      if (result.data) {
+      if (result.data && Array.isArray(result.data)) {
         const items: AutocompleteItem[] = result.data.map((entry: any) => ({
-          id: entry.path,
+          id: entry.path || entry.name,
           label: entry.name,
           description: entry.path,
           type: entry.type === "directory" ? "directory" : "file",
@@ -938,7 +944,7 @@ export const MessagesPanel: Component<MessagesPanelProps> = (props) => {
               "font-size": "14px",
             }}
           >
-            <span>enter send shift+enter newline</span>
+            <span>@ files / commands enter send shift+enter newline</span>
           </div>
 
           {/* Hidden textarea for keyboard capture */}

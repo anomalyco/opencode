@@ -10,6 +10,7 @@ export const TerminalView: Component = () => {
 
   const [selectedSessionID, setSelectedSessionID] = createSignal<string | null>(null)
   const [inputText, setInputText] = createSignal("")
+  const [projectPath, setProjectPath] = createSignal<string>(".")
 
   const sessions = () => {
     // Get all sessions (parents and children)
@@ -18,33 +19,40 @@ export const TerminalView: Component = () => {
     // Build session tree
     const result: Array<{ id: string; title: string; timestamp?: number; hasChildren?: boolean; parentID?: string }> =
       []
+    const seen = new Set<string>()
 
     // First add parent sessions
     allSessions
       .filter((s) => !s.parentID)
       .sort((a, b) => b.time.updated - a.time.updated)
       .forEach((parent) => {
-        result.push({
-          id: parent.id,
-          title: parent.title,
-          timestamp: parent.time.updated,
-          hasChildren: allSessions.some((child) => child.parentID === parent.id),
-        })
-
-        // Add children if parent has any
-        const children = allSessions
-          .filter((child) => child.parentID === parent.id)
-          .sort((a, b) => b.time.updated - a.time.updated)
-
-        children.forEach((child) => {
+        if (!seen.has(parent.id)) {
+          seen.add(parent.id)
           result.push({
-            id: child.id,
-            title: child.title,
-            timestamp: child.time.updated,
-            parentID: parent.id,
-            hasChildren: false,
+            id: parent.id,
+            title: parent.title,
+            timestamp: parent.time.updated,
+            hasChildren: allSessions.some((child) => child.parentID === parent.id),
           })
-        })
+
+          // Add children if parent has any
+          const children = allSessions
+            .filter((child) => child.parentID === parent.id)
+            .sort((a, b) => b.time.updated - a.time.updated)
+
+          children.forEach((child) => {
+            if (!seen.has(child.id)) {
+              seen.add(child.id)
+              result.push({
+                id: child.id,
+                title: child.title,
+                timestamp: child.time.updated,
+                parentID: parent.id,
+                hasChildren: false,
+              })
+            }
+          })
+        }
       })
 
     return result
@@ -169,8 +177,17 @@ export const TerminalView: Component = () => {
     }
   }
 
-  onMount(() => {
+  onMount(async () => {
     sync.session.fetch(100)
+    // Fetch project path
+    try {
+      const pathResult = await sdk.client.path.get()
+      if (pathResult.data) {
+        setProjectPath(pathResult.data.directory || ".")
+      }
+    } catch (error) {
+      console.error("Failed to fetch project path:", error)
+    }
     // Always start on MainScreen - user can select session from sessions panel
     // No auto-selection of previous sessions
   })
@@ -178,7 +195,14 @@ export const TerminalView: Component = () => {
   return (
     <Show
       when={selectedSessionID()}
-      fallback={<MainScreen onSubmit={handleSubmit} sessions={sessions()} onSelectSession={handleSelectSession} />}
+      fallback={
+        <MainScreen
+          onSubmit={handleSubmit}
+          sessions={sessions()}
+          onSelectSession={handleSelectSession}
+          projectPath={projectPath()}
+        />
+      }
     >
       <TerminalLayout
         sessions={sessions()}
@@ -192,6 +216,7 @@ export const TerminalView: Component = () => {
         onInput={handleInput}
         onSubmit={handleSubmit}
         currentAgent={currentAgent()}
+        projectPath={projectPath()}
       />
     </Show>
   )

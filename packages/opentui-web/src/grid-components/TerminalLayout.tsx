@@ -277,6 +277,7 @@ export const TerminalLayout: Component<TerminalLayoutProps> = (props) => {
           currentSessionId={props.selectedSessionId || undefined}
           siblingSubagents={siblingSubagents()}
           onNavigate={props.onSelectSession}
+          projectPath={props.projectPath}
         />
 
         {/* Right Panel - Sidebar (only show if not collapsed) */}

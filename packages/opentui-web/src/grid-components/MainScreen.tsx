@@ -1,10 +1,12 @@
 import type { Component } from "solid-js"
-import { createSignal, onCleanup, onMount } from "solid-js"
+import { createSignal, onCleanup, onMount, Show } from "solid-js"
 import { GridPanel } from "./GridPanel"
 import { GridText } from "./GridText"
 import { CommandMenu } from "./CommandMenu"
 import { StyledDialog } from "./Dialog"
 import { SessionPicker, type Session } from "./SessionPicker"
+import { Autocomplete, type AutocompleteItem } from "./Autocomplete"
+import { useSDK } from "../context/sdk"
 
 interface MainScreenProps {
   onSubmit: (text: string) => void
@@ -16,6 +18,7 @@ interface MainScreenProps {
   onToggleBothSidebars?: () => void
   onSwitchModel?: () => void
   onSwitchAgent?: () => void
+  projectPath?: string
 }
 
 export const MainScreen: Component<MainScreenProps> = (props) => {
@@ -25,7 +28,16 @@ export const MainScreen: Component<MainScreenProps> = (props) => {
   const [cursorPosition, setCursorPosition] = createSignal(0)
   const [commandMenuOpen, setCommandMenuOpen] = createSignal(false)
   const [sessionPickerOpen, setSessionPickerOpen] = createSignal(false)
+  const [autocompleteOpen, setAutocompleteOpen] = createSignal(false)
+  const [autocompleteItems, setAutocompleteItems] = createSignal<AutocompleteItem[]>([])
+  const [autocompleteIndex, setAutocompleteIndex] = createSignal(0)
+  const [autocompletePosition, setAutocompletePosition] = createSignal({ x: 0, y: 0 })
+  const [autocompleteType, setAutocompleteType] = createSignal<"file" | "command" | null>(null)
+  const [autocompleteStart, setAutocompleteStart] = createSignal(0)
   let textareaRef: HTMLTextAreaElement | undefined
+  let inputContainerRef: HTMLDivElement | undefined
+
+  const sdk = useSDK()
 
   // Cursor blink animation
   const blinkInterval = setInterval(() => {
@@ -54,6 +66,7 @@ export const MainScreen: Component<MainScreenProps> = (props) => {
     if (text) {
       props.onSubmit(text)
       setInputText("")
+      setAutocompleteOpen(false)
     }
   }
 
@@ -63,6 +76,117 @@ export const MainScreen: Component<MainScreenProps> = (props) => {
     "Fix bugs in my tests",
     "Refactor this component",
   ]
+
+  // Slash commands
+  const slashCommands: AutocompleteItem[] = [
+    { id: "clear", label: "/clear", description: "Clear the screen", type: "command" },
+    { id: "help", label: "/help", description: "Show help information", type: "command" },
+    { id: "new", label: "/new", description: "Start a new session", type: "command" },
+    { id: "switch", label: "/switch", description: "Switch to another session", type: "command" },
+  ]
+
+  // Detect autocomplete trigger and update items
+  const updateAutocomplete = async (text: string, cursor: number) => {
+    const beforeCursor = text.slice(0, cursor)
+
+    // Check for @ (file picker)
+    const atMatch = beforeCursor.match(/@([^\s]*)$/)
+    if (atMatch && atMatch[1] !== undefined) {
+      setAutocompleteType("file")
+      setAutocompleteStart(cursor - atMatch[1].length)
+      const query = atMatch[1]
+      await loadFiles(query)
+      calculateAutocompletePosition()
+      return
+    }
+
+    // Check for / at start (slash commands)
+    const slashMatch = beforeCursor.match(/^\/([^\s]*)$/)
+    if (slashMatch && slashMatch[1] !== undefined) {
+      setAutocompleteType("command")
+      setAutocompleteStart(0)
+      const query = slashMatch[1].toLowerCase()
+      const filtered = slashCommands.filter(
+        (cmd) => cmd.label.toLowerCase().includes(query) || cmd.description?.toLowerCase().includes(query),
+      )
+      setAutocompleteItems(filtered)
+      setAutocompleteIndex(0)
+      setAutocompleteOpen(filtered.length > 0)
+      calculateAutocompletePosition()
+      return
+    }
+
+    setAutocompleteOpen(false)
+  }
+
+  // Load files from server
+  const loadFiles = async (query: string) => {
+    if (!sdk?.client?.file) {
+      console.warn("SDK client not available")
+      setAutocompleteOpen(false)
+      return
+    }
+
+    try {
+      const path = props.projectPath || "."
+      const result = await sdk.client.file.list({
+        query: { path, directory: query || undefined },
+      })
+
+      if (result.data && Array.isArray(result.data)) {
+        const items: AutocompleteItem[] = result.data.map((entry: any) => ({
+          id: entry.path || entry.name,
+          label: entry.name,
+          description: entry.path,
+          type: entry.type === "directory" ? "directory" : "file",
+        }))
+        setAutocompleteItems(items)
+        setAutocompleteIndex(0)
+        setAutocompleteOpen(items.length > 0)
+      }
+    } catch (error) {
+      console.error("Failed to load files:", error)
+      setAutocompleteOpen(false)
+    }
+  }
+
+  // Calculate autocomplete dropdown position
+  const calculateAutocompletePosition = () => {
+    if (!inputContainerRef) return
+    const rect = inputContainerRef.getBoundingClientRect()
+    setAutocompletePosition({
+      x: rect.left + 50,
+      y: rect.top - 10,
+    })
+  }
+
+  // Handle autocomplete selection
+  const selectAutocompleteItem = (item: AutocompleteItem) => {
+    const text = inputText()
+    const cursor = cursorPosition()
+    const start = autocompleteStart()
+
+    let replacement = ""
+    if (autocompleteType() === "file") {
+      replacement = item.id
+      if (item.type === "directory") {
+        replacement += "/"
+      }
+    } else if (autocompleteType() === "command") {
+      replacement = item.label
+    }
+
+    const newText = text.slice(0, start) + replacement + text.slice(cursor)
+    setInputText(newText)
+    setCursorPosition(start + replacement.length)
+    setAutocompleteOpen(false)
+
+    if (item.type === "directory") {
+      setTimeout(() => {
+        updateAutocomplete(newText, start + replacement.length)
+      }, 100)
+    }
+  }
 
   return (
     <div
@@ -136,6 +260,7 @@ export const MainScreen: Component<MainScreenProps> = (props) => {
       >
         {/* Main Input Box */}
         <div
+          ref={inputContainerRef}
           style={{
             background: "#1a1a1a",
             padding: "1.2em 1.5em",
@@ -191,11 +316,41 @@ export const MainScreen: Component<MainScreenProps> = (props) => {
             ref={textareaRef}
             value={inputText()}
             onInput={(e) => {
-              setInputText(e.currentTarget.value)
-              setCursorPosition(e.currentTarget.selectionStart)
+              const newValue = e.currentTarget.value
+              setInputText(newValue)
+              const newCursor = e.currentTarget.selectionStart
+              setCursorPosition(newCursor)
+              updateAutocomplete(newValue, newCursor)
             }}
-            onClick={(e) => setCursorPosition(e.currentTarget.selectionStart)}
+            onClick={(e) => {
+              const newCursor = e.currentTarget.selectionStart
+              setCursorPosition(newCursor)
+              updateAutocomplete(inputText(), newCursor)
+            }}
             onKeyDown={(e) => {
+              if (autocompleteOpen()) {
+                if (e.key === "ArrowDown") {
+                  e.preventDefault()
+                  setAutocompleteIndex((prev) => Math.min(prev + 1, autocompleteItems().length - 1))
+                  return
+                } else if (e.key === "ArrowUp") {
+                  e.preventDefault()
+                  setAutocompleteIndex((prev) => Math.max(prev - 1, 0))
+                  return
+                } else if (e.key === "Tab" || (e.key === "Enter" && !e.shiftKey)) {
+                  e.preventDefault()
+                  const item = autocompleteItems()[autocompleteIndex()]
+                  if (item) {
+                    selectAutocompleteItem(item)
+                  }
+                  return
+                } else if (e.key === "Escape") {
+                  e.preventDefault()
+                  setAutocompleteOpen(false)
+                  return
+                }
+              }
+
               if (e.key === "Enter" && !e.shiftKey) {
                 e.preventDefault()
                 handleSubmit()
@@ -232,6 +387,10 @@ export const MainScreen: Component<MainScreenProps> = (props) => {
             "text-align": "center",
           }}
         >
+          <span style={{ color: "#ffffff", "font-weight": "bold" }}>@</span> files
+          {" · "}
+          <span style={{ color: "#ffffff", "font-weight": "bold" }}>/</span> commands
+          {" · "}
           <span style={{ color: "#ffffff", "font-weight": "bold" }}>enter</span> to send
           {" · "}
           <span style={{ color: "#ffffff", "font-weight": "bold" }}>shift+enter</span> for new line
@@ -357,6 +516,17 @@ export const MainScreen: Component<MainScreenProps> = (props) => {
         }}
         onClose={() => setSessionPickerOpen(false)}
       />
+
+      {/* Autocomplete dropdown */}
+      <Show when={autocompleteOpen()}>
+        <Autocomplete
+          items={autocompleteItems()}
+          selectedIndex={autocompleteIndex()}
+          onSelect={selectAutocompleteItem}
+          onClose={() => setAutocompleteOpen(false)}
+          position={autocompletePosition()}
+        />
+      </Show>
     </div>
   )
 }
