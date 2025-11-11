@@ -1,5 +1,5 @@
 import type { Component } from "solid-js"
-import { createSignal } from "solid-js"
+import { createSignal, onCleanup } from "solid-js"
 import { GridPanel } from "./GridPanel"
 import { GridText } from "./GridText"
 
@@ -12,9 +12,13 @@ export const MainScreen: Component<MainScreenProps> = (props) => {
   const [cursorVisible, setCursorVisible] = createSignal(true)
 
   // Cursor blink animation
-  setInterval(() => {
+  const blinkInterval = setInterval(() => {
     setCursorVisible((prev) => !prev)
   }, 530)
+
+  onCleanup(() => {
+    clearInterval(blinkInterval)
+  })
 
   const handleSubmit = () => {
     const text = inputText().trim()
@@ -60,41 +64,18 @@ export const MainScreen: Component<MainScreenProps> = (props) => {
           "flex-direction": "column",
         }}
       >
-        {/* Logo - inline SVG */}
-        <svg
-          width="240"
-          height="41.5"
-          viewBox="0 0 289 50"
-          fill="none"
-          xmlns="http://www.w3.org/2000/svg"
-          style={{ "margin-bottom": "1em" }}
+        {/* Logo - text */}
+        <div
+          style={{
+            "font-size": "48px",
+            "font-weight": "bold",
+            color: "#ffffff",
+            "letter-spacing": "-0.02em",
+            "margin-bottom": "0.5em",
+          }}
         >
-          <path d="M264.5 0H288.5V8.5H272.5V16.5H288.5V25H272.5V33H288.5V41.5H264.5V0Z" fill="white" />
-          <path d="M248.5 0H224.5V41.5H248.5V33H232.5V8.5H248.5V0Z" fill="white" />
-          <path d="M256.5 8.5H248.5V33H256.5V8.5Z" fill="white" />
-          <path
-            fill-rule="evenodd"
-            clip-rule="evenodd"
-            d="M184.5 0H216.5V41.5H184.5V0ZM208.5 8.5H192.5V33H208.5V8.5Z"
-            fill="white"
-          />
-          <path d="M144.5 8.5H136.5V41.5H144.5V8.5Z" fill="white" />
-          <path d="M136.5 0H112.5V41.5H120.5V8.5H136.5V0Z" fill="white" />
-          <path d="M80.5 0H104.5V8.5H88.5V16.5H104.5V25H88.5V33H104.5V41.5H80.5V0Z" fill="white" />
-          <path
-            fill-rule="evenodd"
-            clip-rule="evenodd"
-            d="M40.5 0H72.5V41.5H48.5V49.5H40.5V0ZM64.5 8.5H48.5V33H64.5V8.5Z"
-            fill="white"
-          />
-          <path
-            fill-rule="evenodd"
-            clip-rule="evenodd"
-            d="M0.5 0H32.5V41.5955H0.5V0ZM24.5 8.5H8.5V33H24.5V8.5Z"
-            fill="white"
-          />
-          <path d="M152.5 0H176.5V8.5H160.5V33H176.5V41.5H152.5V0Z" fill="white" />
-        </svg>
+          codesurf
+        </div>
 
         {/* Tagline */}
         <div
@@ -104,7 +85,7 @@ export const MainScreen: Component<MainScreenProps> = (props) => {
             "text-align": "center",
           }}
         >
-          the best coding agent on the planet
+          ride the wave of code
         </div>
       </div>
 
@@ -143,8 +124,11 @@ export const MainScreen: Component<MainScreenProps> = (props) => {
           {/* Prompt symbol */}
           <span style={{ color: "#ff9800", "font-weight": "bold", "margin-right": "1ch" }}>{">"}</span>
 
-          {/* Input text */}
-          <span style={{ color: "#ffffff", flex: "1" }}>{inputText() || ""}</span>
+          {/* Input text with cursor */}
+          <span style={{ color: "#ffffff", flex: "1", display: "flex" }}>
+            {inputText()}
+            {cursorVisible() && <span style={{ color: "#ff9800" }}>█</span>}
+          </span>
 
           {/* Placeholder when empty */}
           {!inputText() && (
@@ -156,12 +140,9 @@ export const MainScreen: Component<MainScreenProps> = (props) => {
                 "pointer-events": "none",
               }}
             >
-              Ask opencode anything...
+              Ask codesurf anything...
             </span>
           )}
-
-          {/* Cursor */}
-          {cursorVisible() && <span style={{ color: "#ff9800", "margin-left": "2px" }}>█</span>}
 
           {/* Hidden textarea for keyboard capture */}
           <textarea
