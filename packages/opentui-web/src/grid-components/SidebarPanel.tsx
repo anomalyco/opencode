@@ -13,6 +13,7 @@ interface SidebarPanelProps {
     status: "running" | "completed" | "failed"
     time: { created: number; updated: number }
   }>
+  files?: Array<{ path: string; operation: string; messageID: string; partID: string }>
   lspServers?: Array<{
     id: string
     name: string
@@ -27,6 +28,7 @@ interface SidebarPanelProps {
   onSelectSession?: (id: string) => void
   onSelectLspServer?: (id: string) => void
   onSelectMcpServer?: (id: string) => void
+  onSelectFile?: (messageID: string, partID: string) => void
 }
 
 type TabType = "tools" | "todos" | "files"
@@ -132,7 +134,7 @@ export const SidebarPanel: Component<SidebarPanelProps> = (props) => {
       <GridText
         col={27}
         row={16}
-        text={`${activeTab() === "files" ? "●" : "○"} Files(30)`}
+        text={`${activeTab() === "files" ? "●" : "○"} Files(${props.files?.length ?? 0})`}
         fg={activeTab() === "files" ? "#ffffff" : "#6a6a6a"}
         onClick={() => setActiveTab("files")}
       />
@@ -467,7 +469,127 @@ export const SidebarPanel: Component<SidebarPanelProps> = (props) => {
       )}
 
       {/* Files Tab Content */}
-      {activeTab() === "files" && <GridText col={2} row={18} text="No files modified" fg="#6a6a6a" />}
+      {activeTab() === "files" && (
+        <>
+          <GridText col={2} row={18} text="Files" fg="#ffffff" bold />
+
+          {/* File list grouped by operation */}
+          {props.files && props.files.length > 0 ? (
+            (() => {
+              let currentRow = 19
+              const filesByOp = {
+                write: props.files.filter((f) => f.operation === "write"),
+                edit: props.files.filter((f) => f.operation === "edit"),
+                read: props.files.filter((f) => f.operation === "read"),
+              }
+
+              return (
+                <>
+                  {/* Written Files */}
+                  {filesByOp.write.length > 0 && (
+                    <>
+                      <GridText col={2} row={currentRow} text="Written" fg="#ff9800" bold />
+                      {(() => {
+                        currentRow++
+                        return (
+                          <For each={filesByOp.write.slice(0, 10)}>
+                            {(file) => {
+                              const row = currentRow
+                              currentRow++
+                              const maxLength = panelWidth() - 4
+                              const truncatedPath =
+                                file.path.length > maxLength ? "..." + file.path.slice(-maxLength + 3) : file.path
+                              return (
+                                <GridText
+                                  col={2}
+                                  row={row}
+                                  text={truncatedPath}
+                                  fg="#ffffff"
+                                  onClick={() => props.onSelectFile?.(file.messageID, file.partID)}
+                                />
+                              )
+                            }}
+                          </For>
+                        )
+                      })()}
+                      {(() => {
+                        currentRow++
+                        return null
+                      })()}
+                    </>
+                  )}
+
+                  {/* Edited Files */}
+                  {filesByOp.edit.length > 0 && (
+                    <>
+                      <GridText col={2} row={currentRow} text="Edited" fg="#ff9800" bold />
+                      {(() => {
+                        currentRow++
+                        return (
+                          <For each={filesByOp.edit.slice(0, 10)}>
+                            {(file) => {
+                              const row = currentRow
+                              currentRow++
+                              const maxLength = panelWidth() - 4
+                              const truncatedPath =
+                                file.path.length > maxLength ? "..." + file.path.slice(-maxLength + 3) : file.path
+                              return (
+                                <GridText
+                                  col={2}
+                                  row={row}
+                                  text={truncatedPath}
+                                  fg="#ffffff"
+                                  onClick={() => props.onSelectFile?.(file.messageID, file.partID)}
+                                />
+                              )
+                            }}
+                          </For>
+                        )
+                      })()}
+                      {(() => {
+                        currentRow++
+                        return null
+                      })()}
+                    </>
+                  )}
+
+                  {/* Read Files */}
+                  {filesByOp.read.length > 0 && (
+                    <>
+                      <GridText col={2} row={currentRow} text="Read" fg="#ff9800" bold />
+                      {(() => {
+                        currentRow++
+                        return (
+                          <For each={filesByOp.read.slice(0, 10)}>
+                            {(file) => {
+                              const row = currentRow
+                              currentRow++
+                              const maxLength = panelWidth() - 4
+                              const truncatedPath =
+                                file.path.length > maxLength ? "..." + file.path.slice(-maxLength + 3) : file.path
+                              return (
+                                <GridText
+                                  col={2}
+                                  row={row}
+                                  text={truncatedPath}
+                                  fg="#ffffff"
+                                  onClick={() => props.onSelectFile?.(file.messageID, file.partID)}
+                                />
+                              )
+                            }}
+                          </For>
+                        )
+                      })()}
+                    </>
+                  )}
+                </>
+              )
+            })()
+          ) : (
+            <GridText col={2} row={19} text="No files modified" fg="#6a6a6a" />
+          )}
+        </>
+      )}
     </GridPanel>
   )
 }

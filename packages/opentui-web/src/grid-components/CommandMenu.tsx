@@ -1,5 +1,6 @@
 import type { Component } from "solid-js"
 import { createSignal, For, Show, createEffect } from "solid-js"
+import { SessionPicker, type Session } from "./SessionPicker"
 
 interface Command {
   id: string
@@ -14,9 +15,12 @@ interface Command {
 interface CommandMenuProps {
   isOpen: boolean
   onClose: () => void
+  hideViewCommands?: boolean // Hide sidebar toggles (for MainScreen)
   // Session commands
   onNewSession: () => void
   onSwitchSession: () => void
+  sessions?: Array<{ id: string; title: string }>
+  onSelectSession?: (id: string) => void
   onSessionTimeline?: () => void
   onSessionCompact?: () => void
   onSessionExport?: () => void
@@ -45,6 +49,7 @@ interface CommandMenuProps {
 export const CommandMenu: Component<CommandMenuProps> = (props) => {
   const [searchTerm, setSearchTerm] = createSignal("")
   const [selectedIndex, setSelectedIndex] = createSignal(0)
+  const [showSessionPicker, setShowSessionPicker] = createSignal(false)
   let inputRef: HTMLInputElement | undefined
 
   const commands = (): Command[] => [
@@ -146,31 +151,35 @@ export const CommandMenu: Component<CommandMenuProps> = (props) => {
       disabled: !props.onAgentCycle,
     },
 
-    // View category
-    {
-      id: "sidebar.left.toggle",
-      label: "Toggle sessions panel",
-      description: "Show/hide the left sessions panel",
-      group: "View",
-      keybind: "ctrl+[",
-      action: props.onToggleLeftSidebar,
-    },
-    {
-      id: "sidebar.right.toggle",
-      label: "Toggle sidebar panel",
-      description: "Show/hide the right sidebar panel",
-      group: "View",
-      keybind: "ctrl+]",
-      action: props.onToggleRightSidebar,
-    },
-    {
-      id: "sidebar.both.toggle",
-      label: "Toggle both sidebars",
-      description: "Show/hide both sidebar panels",
-      group: "View",
-      keybind: "ctrl+b",
-      action: props.onToggleBothSidebars,
-    },
+    // View category (hide if hideViewCommands is true)
+    ...(!props.hideViewCommands
+      ? [
+          {
+            id: "sidebar.left.toggle",
+            label: "Toggle sessions panel",
+            description: "Show/hide the left sessions panel",
+            group: "View",
+            keybind: "ctrl+[",
+            action: props.onToggleLeftSidebar,
+          },
+          {
+            id: "sidebar.right.toggle",
+            label: "Toggle sidebar panel",
+            description: "Show/hide the right sidebar panel",
+            group: "View",
+            keybind: "ctrl+]",
+            action: props.onToggleRightSidebar,
+          },
+          {
+            id: "sidebar.both.toggle",
+            label: "Toggle both sidebars",
+            description: "Show/hide both sidebar panels",
+            group: "View",
+            keybind: "ctrl+b",
+            action: props.onToggleBothSidebars,
+          },
+        ]
+      : []),
     {
       id: "messages.conceal",
       label: "Toggle code concealment",

@@ -86,6 +86,48 @@ export const TerminalView: Component = () => {
       }))
   }
 
+  const files = () => {
+    if (!selectedSessionID()) return []
+    const msgs = messages()
+    const fileOps: Array<{ path: string; operation: string; messageID: string; partID: string }> = []
+    const seen = new Set<string>()
+
+    // Extract file operations from tool use parts
+    msgs.forEach((msg) => {
+      msg.parts.forEach((part) => {
+        if (part.type === "tool" && (part.state.status === "completed" || part.state.status === "running")) {
+          let filePath: string | undefined
+          let operation: string | undefined
+
+          // Check tool type and extract filePath
+          if (part.tool === "read" || part.tool === "cc_read") {
+            filePath = part.state.input.filePath as string
+            operation = "read"
+          } else if (part.tool === "edit" || part.tool === "cc_edit") {
+            filePath = part.state.input.filePath as string
+            operation = "edit"
+          } else if (part.tool === "write" || part.tool === "cc_write") {
+            filePath = part.state.input.filePath as string
+            operation = "write"
+          }
+
+          // Add to list if we found a file operation
+          if (filePath && !seen.has(filePath)) {
+            seen.add(filePath)
+            fileOps.push({
+              path: filePath,
+              operation: operation!,
+              messageID: msg.id,
+              partID: part.id,
+            })
+          }
+        }
+      })
+    })
+
+    return fileOps
+  }
+
   const currentAgent = () => {
     // For now, always return "general" since agentID is not part of Session type
     return "general"
@@ -143,6 +185,7 @@ export const TerminalView: Component = () => {
         messages={messages()}
         todos={todos()}
         subagents={subagents()}
+        files={files()}
         selectedSessionId={selectedSessionID()}
         onSelectSession={handleSelectSession}
         inputText={inputText()}

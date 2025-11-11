@@ -16,6 +16,7 @@ interface TerminalLayoutProps {
     status: "running" | "completed" | "failed"
     time: { created: number; updated: number }
   }>
+  files: Array<{ path: string; operation: string; messageID: string; partID: string }>
   selectedSessionId: string | null
   onSelectSession: (id: string) => void
   inputText: string
@@ -29,6 +30,10 @@ export const TerminalLayout: Component<TerminalLayoutProps> = (props) => {
 
   // Character width for Berkeley Mono at 16px
   const CHAR_WIDTH = 9.6
+
+  // Toast notification state
+  const [toastMessage, setToastMessage] = createSignal<string | null>(null)
+  const [toastVisible, setToastVisible] = createSignal(false)
 
   // Calculate total columns based on window width
   const calculateTotalColumns = () => Math.floor(window.innerWidth / CHAR_WIDTH)
@@ -84,9 +89,32 @@ export const TerminalLayout: Component<TerminalLayoutProps> = (props) => {
 
     window.addEventListener("keydown", handleKeyDown)
 
+    // Text selection handler - auto copy to clipboard
+    const handleSelectionChange = () => {
+      const selection = window.getSelection()
+      const selectedText = selection?.toString().trim()
+
+      if (selectedText && selectedText.length > 0) {
+        // Copy to clipboard
+        navigator.clipboard.writeText(selectedText).then(() => {
+          // Show toast
+          setToastMessage(`Copied ${selectedText.length} characters`)
+          setToastVisible(true)
+
+          // Hide toast after 2 seconds
+          setTimeout(() => {
+            setToastVisible(false)
+          }, 2000)
+        })
+      }
+    }
+
+    document.addEventListener("selectionchange", handleSelectionChange)
+
     onCleanup(() => {
       window.removeEventListener("resize", handleResize)
       window.removeEventListener("keydown", handleKeyDown)
+      document.removeEventListener("selectionchange", handleSelectionChange)
     })
   })
 
@@ -217,6 +245,7 @@ export const TerminalLayout: Component<TerminalLayoutProps> = (props) => {
             width={rightWidth()}
             todos={props.todos}
             subagents={props.subagents}
+            files={props.files}
             onCollapse={() => setRightCollapsed(true)}
           />
         )}
