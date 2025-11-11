@@ -795,7 +795,15 @@ export const MessagesPanel: Component<MessagesPanelProps> = (props) => {
           const agent = msg.agent || "General"
           const model = msg.model || "claude-sonnet-4-5"
           elements.push(<GridText col={4} row={currentRow} text={agent} fg="#569cd6" bold />)
-          elements.push(<GridText col={4 + agent.length + 1} row={currentRow} text={model} fg="#6a6a6a" />)
+          elements.push(
+            <GridText
+              col={4 + agent.length + 1}
+              row={currentRow}
+              text={model}
+              fg="#d19a66"
+              style={{ "text-decoration": "underline" }}
+            />,
+          )
           currentRow++
         }
       }
@@ -991,7 +999,11 @@ export const MessagesPanel: Component<MessagesPanelProps> = (props) => {
               // Normal keyboard handling
               if (e.key === "Enter" && !e.shiftKey) {
                 e.preventDefault()
-                props.onSubmit?.(props.inputText)
+                if (props.inputText.trim()) {
+                  props.onSubmit?.(props.inputText)
+                  props.onInput("")
+                  setCursorPosition(0)
+                }
               }
             }}
             onKeyUp={(e) => {

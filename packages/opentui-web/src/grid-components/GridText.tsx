@@ -1,4 +1,4 @@
-import type { Component } from "solid-js"
+import type { Component, JSX } from "solid-js"
 
 interface GridTextProps {
   col: number
@@ -10,6 +10,7 @@ interface GridTextProps {
   onClick?: () => void
   onMouseOver?: () => void
   onMouseOut?: () => void
+  style?: JSX.CSSProperties
 }
 
 export const GridText: Component<GridTextProps> = (props) => {
@@ -30,6 +31,7 @@ export const GridText: Component<GridTextProps> = (props) => {
         "line-height": "1.2",
         cursor: props.onClick ? "pointer" : "default",
         "white-space": "pre",
+        ...props.style,
       }}
     >
       {props.text}
