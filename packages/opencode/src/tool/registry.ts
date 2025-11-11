@@ -11,6 +11,7 @@ import { WebFetchTool } from "./webfetch"
 import { WriteTool } from "./write"
 import { InvalidTool } from "./invalid"
 import { AddDirTool } from "./add-dir"
+import { RunCompactTool } from "./run-compact"
 import { LspDiagnosticTool } from "./lsp-diagnostics"
 import { LspHoverTool } from "./lsp-hover"
 import { SwitchModeTool } from "./switch-mode"
@@ -167,6 +168,7 @@ export namespace ToolRegistry {
       SwitchModeTool,
       CompleteTaskTool,
       AddDirTool,
+      RunCompactTool,
       LspDiagnosticTool,
       LspHoverTool,
       ...ccTools,

@@ -154,9 +154,13 @@ export const MainScreen: Component<MainScreenProps> = (props) => {
   const calculateAutocompletePosition = () => {
     if (!inputContainerRef) return
     const rect = inputContainerRef.getBoundingClientRect()
+
+    // Position at prompt location with offset
+    const xOffset = 50 // Account for prompt symbol
+
     setAutocompletePosition({
-      x: rect.left + 50,
-      y: rect.top - 10,
+      x: rect.left + xOffset,
+      y: rect.top - 320, // Above input (dropdown height ~300px + margin)
     })
   }
 
@@ -230,6 +234,7 @@ export const MainScreen: Component<MainScreenProps> = (props) => {
           <span style={{ color: "#6a6a6a" }}>{`█▀▀▀ █▀▀█ █▀▀█ █▀▀▀ `}</span>
           <span style={{ color: "#ffffff", "font-weight": "bold" }}>{`█▀▀▀ █  █ █▀▀█ █▀▀▀`}</span>
           {`\n`}
+          <span style={{ color: "#6a6a6a" }}>{`█░░░ █░░█ █░░█ █  `}</span>
           <span style={{ color: "#6a6a6a" }}>{`█░░░ █░░█ █░░█ █▀▀▀ `}</span>
           <span style={{ color: "#ffffff", "font-weight": "bold" }}>{`▀▀▀█ █  █ █▄▄▀ █▀▀▀`}</span>
           {`\n`}

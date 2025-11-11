@@ -1,0 +1,14 @@
+Trigger context compaction to summarize and compress the conversation history.
+
+Context compaction creates a summary of older messages to reduce token usage while preserving important information. This is useful when:
+- The conversation is getting long and approaching context limits
+- You want to reduce token costs by compressing older messages
+- You need to free up context space for new interactions
+
+The compaction process:
+1. Identifies messages that can be summarized
+2. Creates an AI-generated summary of the conversation history
+3. Marks old tool results as compacted to save tokens
+4. Preserves recent context for continuity
+
+Use this tool when you notice the conversation history is becoming long or when you want to optimize token usage.

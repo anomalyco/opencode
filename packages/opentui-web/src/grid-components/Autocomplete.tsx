@@ -36,7 +36,7 @@ export const Autocomplete: Component<AutocompleteProps> = (props) => {
       <div
         ref={containerRef}
         style={{
-          position: "absolute",
+          position: "fixed",
           left: `${props.position.x}px`,
           top: `${props.position.y}px`,
           background: "#1a1a1a",
@@ -46,7 +46,7 @@ export const Autocomplete: Component<AutocompleteProps> = (props) => {
           "overflow-y": "auto",
           "min-width": "300px",
           "max-width": "600px",
-          "z-index": "1000",
+          "z-index": "10000",
           "font-family": '"Berkeley Mono", "JetBrains Mono", monospace',
           "font-size": "14px",
           "line-height": "1.2",

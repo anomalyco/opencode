@@ -1,10 +1,12 @@
 import type { Component } from "solid-js"
-import { createSignal, onMount, onCleanup } from "solid-js"
+import { createSignal, onMount, onCleanup, createEffect } from "solid-js"
 import { SessionsPanel } from "./SessionsPanel"
 import { MessagesPanel } from "./MessagesPanel"
 import { SidebarPanel } from "./SidebarPanel"
 import { GridDivider } from "./GridDivider"
 import { CommandMenu } from "./CommandMenu"
+import { ModelPicker, type Model } from "./ModelPicker"
+import { useSDK } from "../context/sdk"
 
 interface TerminalLayoutProps {
   sessions: Array<{ id: string; title: string; hasChildren?: boolean; parentID?: string }>
@@ -28,6 +30,8 @@ interface TerminalLayoutProps {
 
 export const TerminalLayout: Component<TerminalLayoutProps> = (props) => {
   console.log("[TerminalLayout] Rendering with todos:", props.todos, "length:", props.todos?.length)
+
+  const sdk = useSDK()
 
   // Character width for Berkeley Mono at 16px
   const CHAR_WIDTH = 9.6
@@ -53,6 +57,12 @@ export const TerminalLayout: Component<TerminalLayoutProps> = (props) => {
   // Command menu state
   const [commandMenuOpen, setCommandMenuOpen] = createSignal(false)
 
+  // Model picker state
+  const [modelPickerOpen, setModelPickerOpen] = createSignal(false)
+  const [currentModelId, setCurrentModelId] = createSignal<string | null>(null)
+  const [availableModels, setAvailableModels] = createSignal<Model[]>([])
+  const [defaultModels, setDefaultModels] = createSignal<Record<string, string>>({})
+
   const leftDividerCol = () => (leftCollapsed() ? 0 : leftWidth())
   const rightDividerCol = () => (rightCollapsed() ? totalCols() : totalCols() - rightWidth())
 
@@ -67,6 +77,45 @@ export const TerminalLayout: Component<TerminalLayoutProps> = (props) => {
     if (!parent) return []
     return props.sessions.filter((s) => s.parentID === parent).map((s) => ({ id: s.id, title: s.title }))
   }
+
+  // Fetch available models from SDK
+  onMount(async () => {
+    try {
+      const result = await sdk.client.config.providers()
+      if (result.data) {
+        const models: Model[] = []
+        result.data.providers.forEach((provider: any) => {
+          Object.entries(provider.models).forEach(([modelId, modelInfo]: [string, any]) => {
+            models.push({
+              id: modelId,
+              name: modelInfo.name,
+              provider: provider.name,
+              description: modelInfo.experimental ? `${modelInfo.name} (experimental)` : undefined,
+            })
+          })
+        })
+        setAvailableModels(models)
+        setDefaultModels(result.data.default)
+      }
+    } catch (error) {
+      console.error("Failed to fetch models:", error)
+    }
+  })
+
+  // Detect current model from latest assistant message
+  createEffect(() => {
+    const msgs = props.messages
+    if (!msgs.length) return
+
+    // Find the last assistant message with model info
+    for (let i = msgs.length - 1; i >= 0; i--) {
+      const msg = msgs[i]
+      if (msg.role === "assistant" && msg.model) {
+        setCurrentModelId(msg.model)
+        return
+      }
+    }
+  })
 
   // Window resize listener and keyboard shortcuts
   onMount(() => {
@@ -168,7 +217,14 @@ export const TerminalLayout: Component<TerminalLayoutProps> = (props) => {
 
   const handleSwitchModel = () => {
     console.log("Switch model requested")
-    // TODO: Open model selection dialog
+    setModelPickerOpen(true)
+  }
+
+  const handleSelectModel = async (modelId: string) => {
+    console.log("Selected model:", modelId)
+    setCurrentModelId(modelId)
+    // Note: Model is set per-message, not per-session
+    // The next prompt will use the newly selected model via Config
   }
 
   const handleSwitchAgent = () => {
@@ -278,6 +334,8 @@ export const TerminalLayout: Component<TerminalLayoutProps> = (props) => {
           siblingSubagents={siblingSubagents()}
           onNavigate={props.onSelectSession}
           projectPath={props.projectPath}
+          currentModel={availableModels().find((m) => m.id === currentModelId())?.name}
+          onModelClick={handleSwitchModel}
         />
 
         {/* Right Panel - Sidebar (only show if not collapsed) */}
@@ -354,6 +412,15 @@ export const TerminalLayout: Component<TerminalLayoutProps> = (props) => {
         onToggleLeftSidebar={handleToggleLeftSidebar}
         onToggleRightSidebar={handleToggleRightSidebar}
         onToggleBothSidebars={handleToggleBothSidebars}
+      />
+
+      {/* Model Picker */}
+      <ModelPicker
+        isOpen={modelPickerOpen()}
+        models={availableModels()}
+        currentModelId={currentModelId() || undefined}
+        onSelect={handleSelectModel}
+        onClose={() => setModelPickerOpen(false)}
       />
     </div>
   )

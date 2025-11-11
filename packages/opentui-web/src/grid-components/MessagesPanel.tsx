@@ -123,10 +123,13 @@ export const MessagesPanel: Component<MessagesPanelProps> = (props) => {
   const updateAutocomplete = async (text: string, cursor: number) => {
     // Find the word/token before cursor
     const beforeCursor = text.slice(0, cursor)
+    console.log("[Autocomplete] updateAutocomplete:", { text, cursor, beforeCursor })
 
     // Check for @ (file picker)
     const atMatch = beforeCursor.match(/@([^\s]*)$/)
+    console.log("[Autocomplete] @ match:", atMatch)
     if (atMatch && atMatch[1] !== undefined) {
+      console.log("[Autocomplete] Triggering file picker for:", atMatch[1])
       setAutocompleteType("file")
       setAutocompleteStart(cursor - atMatch[1].length)
       const query = atMatch[1]
@@ -137,7 +140,9 @@ export const MessagesPanel: Component<MessagesPanelProps> = (props) => {
 
     // Check for / at start (slash commands)
     const slashMatch = beforeCursor.match(/^\/([^\s]*)$/)
+    console.log("[Autocomplete] / match:", slashMatch)
     if (slashMatch && slashMatch[1] !== undefined) {
+      console.log("[Autocomplete] Triggering slash commands for:", slashMatch[1])
       setAutocompleteType("command")
       setAutocompleteStart(0)
       const query = slashMatch[1].toLowerCase()
@@ -157,6 +162,7 @@ export const MessagesPanel: Component<MessagesPanelProps> = (props) => {
 
   // Load files from server
   const loadFiles = async (query: string) => {
+    console.log("[Autocomplete] loadFiles called:", query)
     if (!sdk?.client?.file) {
       console.warn("SDK client not available")
       setAutocompleteOpen(false)
@@ -165,10 +171,12 @@ export const MessagesPanel: Component<MessagesPanelProps> = (props) => {
 
     try {
       const path = props.projectPath || "."
+      console.log("[Autocomplete] Fetching files from:", path, "query:", query)
       const result = await sdk.client.file.list({
         query: { path, directory: query || undefined },
       })
 
+      console.log("[Autocomplete] File list result:", result.data)
       if (result.data && Array.isArray(result.data)) {
         const items: AutocompleteItem[] = result.data.map((entry: any) => ({
           id: entry.path || entry.name,
@@ -176,9 +184,11 @@ export const MessagesPanel: Component<MessagesPanelProps> = (props) => {
           description: entry.path,
           type: entry.type === "directory" ? "directory" : "file",
         }))
+        console.log("[Autocomplete] Setting items:", items.length, items)
         setAutocompleteItems(items)
         setAutocompleteIndex(0)
         setAutocompleteOpen(items.length > 0)
+        console.log("[Autocomplete] autocompleteOpen set to:", items.length > 0)
       }
     } catch (error) {
       console.error("Failed to load files:", error)
@@ -190,10 +200,17 @@ export const MessagesPanel: Component<MessagesPanelProps> = (props) => {
   const calculateAutocompletePosition = () => {
     if (!inputContainerRef) return
     const rect = inputContainerRef.getBoundingClientRect()
-    // Position dropdown above the input
+
+    // Calculate character width (monospace font)
+    const charWidth = 9.6 // Berkeley Mono at 16px
+
+    // Position at the start of input with small offset
+    // Left padding (1ch) + prompt ("> ") = ~3ch from container left
+    const xOffset = 3 * charWidth
+
     setAutocompletePosition({
-      x: rect.left + 100, // Offset for prompt symbol
-      y: rect.top - 10, // Above input
+      x: rect.left + xOffset,
+      y: rect.top - 320, // Above input (dropdown height ~300px + margin)
     })
   }
 
@@ -1093,6 +1110,14 @@ export const MessagesPanel: Component<MessagesPanelProps> = (props) => {
       </div>
 
       {/* Autocomplete dropdown */}
+      {(() => {
+        console.log("[Autocomplete] Render check:", {
+          open: autocompleteOpen(),
+          items: autocompleteItems().length,
+          position: autocompletePosition(),
+        })
+        return null
+      })()}
       <Show when={autocompleteOpen()}>
         <Autocomplete
           items={autocompleteItems()}
