@@ -9,8 +9,8 @@ import { GridTextWrap, calculateWrappedRows } from "./GridTextWrap"
 interface Message {
   id: string
   role: "user" | "assistant"
-  parts: Array<{ type: string; text?: string; name?: string; input?: any }>
-  time?: { created: number }
+  parts: Array<{ type: string; text?: string; name?: string; input?: any; tool?: string; output?: any; state?: any }>
+  time?: { created: number; completed?: number }
   agent?: string
   model?: string
 }
@@ -268,7 +268,7 @@ export const MessagesPanel: Component<MessagesPanelProps> = (props) => {
           const toolName = group.name
           const toolCount = group.tools.length
           const displayName = toolCount > 1 ? `${toolName}(${toolCount})` : toolName
-          const toolId = group.ids[0] // Use first tool's ID for expansion state
+          const toolId = group.ids[0] || `${msg.id}-unknown` // Use first tool's ID for expansion state
           const tool = group.tools[0] // Use first tool for display
           const toolExpanded = expandedTools().has(toolId)
           const toolInput = tool.input || tool.state?.input || {}
@@ -331,7 +331,7 @@ export const MessagesPanel: Component<MessagesPanelProps> = (props) => {
               summary = ` ${toolInput.command.slice(0, 50)}`
             }
             if (summary) {
-              const colAfterBadge = 6 + toolName.length + 3
+              const colAfterBadge = 6 + displayName.length + 3
               elements.push(<GridText col={colAfterBadge} row={currentRow} text={summary} fg="#6a6a6a" />)
             }
           }

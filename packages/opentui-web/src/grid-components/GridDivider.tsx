@@ -7,6 +7,7 @@ interface GridDividerProps {
   maxCol: number // Maximum column
   onDrag: (col: number) => void
   alwaysVisible?: boolean // Always show the divider (default: false)
+  style?: any // Additional styles
 }
 
 export const GridDivider: Component<GridDividerProps> = (props) => {

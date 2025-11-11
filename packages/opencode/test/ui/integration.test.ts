@@ -1,7 +1,32 @@
-import { describe, test, expect } from "bun:test"
+import { describe, test, expect, beforeAll, afterAll } from "bun:test"
 import { Server } from "@/server/server"
 
+import path from "path"
+
+// Test configuration that includes the example plugin
+const testConfig = JSON.stringify({
+  model: "test/model",
+  plugin: [`file://${path.join(process.cwd(), "examples/plugin-ui-demo/index.ts")}`]
+})
+
 describe("UI Plugin Integration", () => {
+  let originalConfigContent: string | undefined
+
+  beforeAll(() => {
+    // Save original config and set test config
+    originalConfigContent = process.env.OPENCODE_CONFIG_CONTENT
+    process.env.OPENCODE_CONFIG_CONTENT = testConfig
+  })
+
+  afterAll(() => {
+    // Restore original config
+    if (originalConfigContent !== undefined) {
+      process.env.OPENCODE_CONFIG_CONTENT = originalConfigContent
+    } else {
+      delete process.env.OPENCODE_CONFIG_CONTENT
+    }
+  })
+
   test("server /ui/extensions endpoint returns plugin data", async () => {
     // Get the server app instance
     const app = Server.App()

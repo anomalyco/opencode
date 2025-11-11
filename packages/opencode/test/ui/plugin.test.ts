@@ -1,9 +1,34 @@
-import { test, expect, describe } from "bun:test"
+import { test, expect, describe, beforeAll, afterAll } from "bun:test"
 import { Instance } from "../../src/project/instance"
 import { Plugin } from "../../src/plugin"
 import { UIRegistry } from "../../src/ui/registry"
 
+import path from "path"
+
+// Test configuration that includes the example plugin
+const testConfig = JSON.stringify({
+  model: "test/model",
+  plugin: [`file://${path.join(process.cwd(), "examples/plugin-ui-demo/index.ts")}`]
+})
+
 describe("UI Plugin System", () => {
+  let originalConfigContent: string | undefined
+
+  beforeAll(() => {
+    // Save original config and set test config
+    originalConfigContent = process.env.OPENCODE_CONFIG_CONTENT
+    process.env.OPENCODE_CONFIG_CONTENT = testConfig
+  })
+
+  afterAll(() => {
+    // Restore original config
+    if (originalConfigContent !== undefined) {
+      process.env.OPENCODE_CONFIG_CONTENT = originalConfigContent
+    } else {
+      delete process.env.OPENCODE_CONFIG_CONTENT
+    }
+  })
+
   test("should load plugins and register UI extensions", async () => {
     await Instance.provide({
       directory: process.cwd(),
@@ -132,11 +157,17 @@ describe("UI Plugin System", () => {
         expect(data.statusItems).toBeDefined()
         expect(data.commands).toBeDefined()
 
-        expect(data.widgets.length).toBe(1)
-        expect(data.widgets[0].id).toBe("example-counter-widget")
+        // Should have at least one widget with our example
+        expect(data.widgets.length).toBeGreaterThanOrEqual(1)
+        const exampleWidget = data.widgets.find((w: any) => w.id === "example-counter-widget")
+        expect(exampleWidget).toBeDefined()
+        expect(exampleWidget?.label).toBe("Counter Widget")
 
-        expect(data.panels.length).toBe(1)
-        expect(data.panels[0].id).toBe("example-info-panel")
+        // Should have at least one panel with our example
+        expect(data.panels.length).toBeGreaterThanOrEqual(1)
+        const examplePanel = data.panels.find((p: any) => p.id === "example-info-panel")
+        expect(examplePanel).toBeDefined()
+        expect(examplePanel?.label).toBe("Example Info")
       },
     })
   })

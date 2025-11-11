@@ -2,5 +2,6 @@
   "favoriteTools": [
     "ripgrep",
     "edit"
-  ]
+  ],
+  "$schema": "https://opencode.ai/config.json"
 }
