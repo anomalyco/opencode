@@ -46,7 +46,7 @@ const updateWorkspace = action(async (form: FormData) => {
 
 export function SettingsSection() {
   const params = useParams()
-  const workspaceInfo = createAsync(() => getWorkspaceInfo(params.id))
+  const workspaceInfo = createAsync(() => getWorkspaceInfo(params.id!))
   const submission = useSubmission(updateWorkspace)
   const [store, setStore] = createStore({ show: false })
 

@@ -19,7 +19,7 @@ const downloadReceipt = action(async (workspaceID: string, paymentID: string) =>
 
 export function PaymentSection() {
   const params = useParams()
-  const payments = createAsync(() => getPaymentsInfo(params.id))
+  const payments = createAsync(() => getPaymentsInfo(params.id!))
   const downloadReceiptAction = useAction(downloadReceipt)
 
   // DUMMY DATA FOR TESTING
@@ -89,7 +89,7 @@ export function PaymentSection() {
                       <td data-slot="payment-receipt">
                         <button
                           onClick={async () => {
-                            const receiptUrl = await downloadReceiptAction(params.id, payment.paymentID!)
+                            const receiptUrl = await downloadReceiptAction(params.id!, payment.paymentID!)
                             if (receiptUrl) {
                               window.open(receiptUrl, "_blank")
                             }

@@ -17,7 +17,7 @@ import { useRoute, useRouteData } from "@tui/context/route"
 import { useSync } from "@tui/context/sync"
 import { SplitBorder } from "@tui/component/border"
 import { useTheme } from "@tui/context/theme"
-import { BoxRenderable, ScrollBoxRenderable, addDefaultParsers } from "@opentui/core"
+import { BoxRenderable, ScrollBoxRenderable, TextAttributes, addDefaultParsers } from "@opentui/core"
 import { Prompt, type PromptRef } from "@tui/component/prompt"
 import type { AssistantMessage, Part, ToolPart, UserMessage, TextPart, ReasoningPart } from "@opencode-ai/sdk"
 import { useLocal } from "@tui/context/local"
@@ -58,6 +58,7 @@ import { Editor } from "../../util/editor"
 import { Global } from "@/global"
 import fs from "fs/promises"
 import stripAnsi from "strip-ansi"
+import { LSP } from "@/lsp/index.ts"
 
 addDefaultParsers(parsers.parsers)
 
@@ -98,7 +99,7 @@ export function Session() {
     await sync.session
       .sync(route.sessionID)
       .then(() => {
-        scroll.scrollBy(100_000)
+        if (scroll) scroll.scrollBy(100_000)
       })
       .catch(() => {
         toast.show({
@@ -145,7 +146,7 @@ export function Session() {
 
   function toBottom() {
     setTimeout(() => {
-      scroll.scrollTo(scroll.scrollHeight)
+      if (scroll) scroll.scrollTo(scroll.scrollHeight)
     }, 50)
   }
 
@@ -950,14 +951,14 @@ const PART_MAPPING = {
 function ReasoningPart(props: { last: boolean; part: ReasoningPart; message: AssistantMessage }) {
   const { theme, syntax } = useTheme()
   const ctx = use()
+  const content = createMemo(() => props.part.text.trim())
   return (
-    <Show when={props.part.text.trim()}>
+    <Show when={content()}>
       <box
         id={"text-" + props.part.id}
         paddingLeft={2}
         marginTop={1}
-        flexDirection="row"
-        gap={1}
+        flexDirection="column"
         border={["left"]}
         customBorderChars={SplitBorder.customBorderChars}
         borderColor={theme.backgroundElement}
@@ -967,7 +968,7 @@ function ReasoningPart(props: { last: boolean; part: ReasoningPart; message: Ass
           drawUnstyledText={false}
           streaming={true}
           syntaxStyle={syntax()}
-          content={props.part.text.trim()}
+          content={"_Thinking:_ " + content()}
           conceal={ctx.conceal()}
           fg={theme.text}
         />
@@ -1201,6 +1202,8 @@ ToolRegistry.register<typeof WriteTool>({
         .map((x) => x.toString().padStart(pad, " "))
     })
 
+    const diagnostics = createMemo(() => props.metadata.diagnostics?.[props.input.filePath ?? ""] ?? [])
+
     return (
       <>
         <ToolTitle icon="←" fallback="Preparing write..." when={props.input.filePath}>
@@ -1214,6 +1217,15 @@ ToolRegistry.register<typeof WriteTool>({
             <code filetype={filetype(props.input.filePath!)} syntaxStyle={syntax()} content={code()} />
           </box>
         </box>
+        <Show when={diagnostics().length}>
+          <For each={diagnostics()}>
+            {(diagnostic) => (
+              <text fg={theme.error}>
+                Error [{diagnostic.range.start.line}:{diagnostic.range.start.character}]: {diagnostic.message}
+              </text>
+            )}
+          </For>
+        </Show>
       </>
     )
   },
@@ -1391,6 +1403,12 @@ ToolRegistry.register<typeof EditTool>({
 
     const ft = createMemo(() => filetype(props.input.filePath))
 
+    createEffect(() => console.log(props.metadata.diagnostics))
+    const diagnostics = createMemo(() => {
+      const arr = props.metadata.diagnostics?.[props.input.filePath ?? ""] ?? []
+      return arr.filter((x) => x.severity === 1).slice(0, 3)
+    })
+
     return (
       <>
         <ToolTitle icon="←" fallback="Preparing edit..." when={props.input.filePath}>
@@ -1419,6 +1437,17 @@ ToolRegistry.register<typeof EditTool>({
             </box>
           </Match>
         </Switch>
+        <Show when={diagnostics().length}>
+          <box>
+            <For each={diagnostics()}>
+              {(diagnostic) => (
+                <text fg={theme.error}>
+                  Error [{diagnostic.range.start.line + 1}:{diagnostic.range.start.character + 1}] {diagnostic.message}
+                </text>
+              )}
+            </For>
+          </box>
+        </Show>
       </>
     )
   },
@@ -1450,15 +1479,24 @@ ToolRegistry.register<typeof TodoWriteTool>({
   render(props) {
     const { theme } = useTheme()
     return (
-      <box>
-        <For each={props.input.todos ?? []}>
-          {(todo) => (
-            <text style={{ fg: todo.status === "in_progress" ? theme.success : theme.textMuted }}>
-              [{todo.status === "completed" ? "✓" : " "}] {todo.content}
-            </text>
-          )}
-        </For>
-      </box>
+      <>
+        <Show when={!props.input.todos?.length}>
+          <ToolTitle icon="⚙" fallback="Updating todos..." when={true}>
+            Updating todos...
+          </ToolTitle>
+        </Show>
+        <Show when={props.metadata.todos?.length}>
+          <box>
+            <For each={props.input.todos ?? []}>
+              {(todo) => (
+                <text style={{ fg: todo.status === "in_progress" ? theme.success : theme.textMuted }}>
+                  [{todo.status === "completed" ? "✓" : " "}] {todo.content}
+                </text>
+              )}
+            </For>
+          </box>
+        </Show>
+      </>
     )
   },
 })

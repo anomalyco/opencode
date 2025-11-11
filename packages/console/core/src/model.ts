@@ -25,6 +25,7 @@ export namespace ZenData {
     cost200K: ModelCostSchema.optional(),
     allowAnonymous: z.boolean().optional(),
     rateLimit: z.number().optional(),
+    fallbackProvider: z.string().optional(),
     providers: z.array(
       z.object({
         id: z.string(),
