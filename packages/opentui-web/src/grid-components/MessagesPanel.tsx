@@ -22,6 +22,8 @@ interface MessagesPanelProps {
   inputText: string
   onInput: (text: string) => void
   onSubmit?: (text: string) => void
+  isProcessing?: boolean
+  onJumpToLatest?: () => void
 }
 
 export const MessagesPanel: Component<MessagesPanelProps> = (props) => {
@@ -126,7 +128,7 @@ export const MessagesPanel: Component<MessagesPanelProps> = (props) => {
             />,
           )
           // img badge
-          elements.push(<GridText col={4} row={currentRow} text=" img " fg="#000000" bg="#d4a574" bold />)
+          elements.push(<GridText col={4} row={currentRow} text=" img " fg="#000000" bg="#ff9800" bold />)
           // file path
           const path = img.source?.data || img.url || ""
           elements.push(<GridText col={8} row={currentRow} text={path.slice(0, panelWidth() - 10)} fg="#6a6a6a" />)
@@ -629,9 +631,9 @@ export const MessagesPanel: Component<MessagesPanelProps> = (props) => {
           />
 
           <span style={{ "margin-left": "1ch" }}></span>
-          <span style={{ color: "#e5c07b", "font-weight": "bold" }}>{">"}</span>
+          <span style={{ color: "#ff9800", "font-weight": "bold" }}>{">"}</span>
           <span style={{ "margin-left": "1ch", color: "#ffffff" }}>{props.inputText}</span>
-          {props.cursorVisible && <span style={{ color: "#d19a66" }}>█</span>}
+          {props.cursorVisible && <span style={{ color: "#ff9800" }}>█</span>}
 
           {/* Hint text at bottom of input */}
           <div
@@ -677,7 +679,7 @@ export const MessagesPanel: Component<MessagesPanelProps> = (props) => {
             background: "#0a0a0a",
             padding: "0",
             "padding-left": "0",
-            "padding-right": "1ch",
+            "padding-right": "calc(0.5ch - 7px)",
             display: "flex",
             "justify-content": "space-between",
             "align-items": "center",
@@ -685,22 +687,26 @@ export const MessagesPanel: Component<MessagesPanelProps> = (props) => {
             "font-size": "16px",
           }}
         >
-          <span>
-            <span style={{ color: "#858585" }}>Anthropic </span>
-            <span
-              style={{
-                color: "#ff9800",
-                "text-decoration": "underline",
-                "text-decoration-color": "#ff9800",
-                "text-decoration-thickness": "2px",
-                "text-underline-offset": "2px",
-              }}
-            >
-              Claude Sonnet 4.5 (latest)
-            </span>
+          <span style={{ color: "#858585", "padding-left": "1ch" }}>
+            <span style={{ color: "#ffffff", "font-weight": "bold" }}>ctrl+p</span> commands
           </span>
           <span style={{ color: "#858585" }}>
-            <span style={{ color: "#ffffff", "font-weight": "bold" }}>esc</span> interrupt
+            <span
+              onClick={() => props.onJumpToLatest?.()}
+              style={{
+                color: "#ff9800",
+                cursor: "pointer",
+                "margin-right": "2ch",
+              }}
+            >
+              Latest ↓
+            </span>
+            {props.isProcessing && (
+              <>
+                <span style={{ color: "#ffffff", "font-weight": "bold" }}>esc</span>
+                {" interrupt"}
+              </>
+            )}
           </span>
         </div>
 

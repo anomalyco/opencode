@@ -79,21 +79,21 @@ export const SidebarPanel: Component<SidebarPanelProps> = (props) => {
 
       {/* Context bar with colored segments - BRIGHT TERMINAL COLORS */}
       <GridText col={2} row={8} text="█████" fg="#999999" />
-      <GridText col={7} row={8} text="██████████" fg="#e5c07b" />
+      <GridText col={7} row={8} text="██████████" fg="#ff9800" />
       <GridText col={17} row={8} text="██" fg="#4da6ff" />
-      <GridText col={19} row={8} text="███" fg="#e5c07b" />
+      <GridText col={19} row={8} text="███" fg="#ff9800" />
       <GridText col={22} row={8} text="░░░░░░░░░░░░" fg="#3a3a3a" />
       <GridText col={34} row={8} text="50%" fg="#ffffff" />
 
       {/* Legend with colored blocks */}
       <GridText col={2} row={10} text="█" fg="#999999" />
       <GridText col={4} row={10} text="System" fg="#999999" />
-      <GridText col={11} row={10} text="█" fg="#e5c07b" />
-      <GridText col={13} row={10} text="AI" fg="#e5c07b" />
+      <GridText col={11} row={10} text="█" fg="#ff9800" />
+      <GridText col={13} row={10} text="AI" fg="#ff9800" />
       <GridText col={16} row={10} text="█" fg="#4da6ff" />
       <GridText col={18} row={10} text="User" fg="#4da6ff" />
-      <GridText col={23} row={10} text="█" fg="#e5c07b" />
-      <GridText col={25} row={10} text="Tool" fg="#e5c07b" />
+      <GridText col={23} row={10} text="█" fg="#ff9800" />
+      <GridText col={25} row={10} text="Tool" fg="#ff9800" />
 
       {/* Token stats */}
       <GridText col={2} row={12} text="99,050 tokens (99% cached)" fg="#6a6a6a" />
