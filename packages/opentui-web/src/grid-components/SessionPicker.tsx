@@ -262,11 +262,11 @@ export const SessionPicker: Component<SessionPickerProps> = (props) => {
                   const groupStartIndex = currentIndex
                   currentIndex += group.sessions.length
                   return (
-                    <div style={{ "margin-bottom": "0.5em" }}>
+                    <div style={{ "margin-bottom": "0.25em" }}>
                       {/* Date header */}
                       <div
                         style={{
-                          padding: "0.5em 1.5em",
+                          padding: "0.4em 1.5em 0.2em 1.5em",
                           color: "#ff9800",
                           "font-weight": "bold",
                         }}
@@ -284,9 +284,9 @@ export const SessionPicker: Component<SessionPickerProps> = (props) => {
                             <div
                               onClick={() => handleSelect(session.id)}
                               style={{
-                                padding: "0.5em 1.5em",
-                                background: isCurrent() ? "#ff9800" : isSelected() ? "#1a1a1a" : "transparent",
-                                color: isCurrent() ? "#000000" : "#ffffff",
+                                padding: "0.35em 1.5em",
+                                background: isCurrent() || isSelected() ? "#ff9800" : "transparent",
+                                color: isCurrent() || isSelected() ? "#000000" : "#ffffff",
                                 cursor: "pointer",
                                 display: "flex",
                                 "justify-content": "space-between",
@@ -308,7 +308,7 @@ export const SessionPicker: Component<SessionPickerProps> = (props) => {
                               <span
                                 style={{
                                   "font-size": "14px",
-                                  color: isCurrent() ? "#000000" : "#6a6a6a",
+                                  color: isCurrent() || isSelected() ? "#000000" : "#6a6a6a",
                                   "margin-left": "1em",
                                   "flex-shrink": "0",
                                 }}
