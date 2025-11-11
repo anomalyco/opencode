@@ -57,7 +57,8 @@
   },
   "dependencies": {
     "@opencode-ai/script": "workspace:*",
-    "@opencode-ai/sdk": "workspace:*"
+    "@opencode-ai/sdk": "workspace:*",
+    "@opentui/core": "0.1.39"
   },
   "repository": {
     "type": "git",

@@ -83,8 +83,8 @@ const targets = singleFlag
 await $`rm -rf dist`
 
 const binaries: Record<string, string> = {}
-await $`bun install --os="*" --arch="*" @opentui/core@${pkg.dependencies["@opentui/core"]}`
-await $`bun install --os="*" --arch="*" @parcel/watcher@${pkg.dependencies["@parcel/watcher"]}`
+await $`bun install --os="*" --cpu="*" @opentui/core@${pkg.dependencies["@opentui/core"]}`
+await $`bun install --os="*" --cpu="*" @parcel/watcher@${pkg.dependencies["@parcel/watcher"]}`
 for (const item of targets) {
   const name = [
     pkg.name,
@@ -98,7 +98,7 @@ for (const item of targets) {
   console.log(`building ${name}`)
   await $`mkdir -p dist/${name}/bin`
 
-  const parserWorker = fs.realpathSync(path.resolve(dir, "./node_modules/@opentui/core/parser.worker.js"))
+  const parserWorker = fs.realpathSync(path.resolve(dir, "../../node_modules/@opentui/core/parser.worker.js"))
   const workerPath = "./src/cli/cmd/tui/worker.ts"
 
   await Bun.build({
