@@ -1,5 +1,5 @@
 import type { Component } from "solid-js"
-import { createSignal } from "solid-js"
+import { createSignal, onMount, onCleanup } from "solid-js"
 import { SessionsPanel } from "./SessionsPanel"
 import { MessagesPanel } from "./MessagesPanel"
 import { SidebarPanel } from "./SidebarPanel"
@@ -20,9 +20,21 @@ interface TerminalLayoutProps {
   inputText: string
   onInput: (text: string) => void
   onSubmit?: (text: string) => void
+  currentAgent: string
 }
 
 export const TerminalLayout: Component<TerminalLayoutProps> = (props) => {
+  console.log("[TerminalLayout] Rendering with todos:", props.todos, "length:", props.todos?.length)
+
+  // Character width for Berkeley Mono at 16px
+  const CHAR_WIDTH = 9.6
+
+  // Calculate total columns based on window width
+  const calculateTotalColumns = () => Math.floor(window.innerWidth / CHAR_WIDTH)
+
+  // Reactive total columns signal
+  const [totalCols, setTotalCols] = createSignal(calculateTotalColumns())
+
   // Draggable column widths
   const [leftWidth, setLeftWidth] = createSignal(43)
   const [rightWidth, setRightWidth] = createSignal(38)
@@ -32,7 +44,20 @@ export const TerminalLayout: Component<TerminalLayoutProps> = (props) => {
   const [rightCollapsed, setRightCollapsed] = createSignal(false)
 
   const leftDividerCol = () => (leftCollapsed() ? 0 : leftWidth())
-  const rightDividerCol = () => (rightCollapsed() ? 157 : 157 - rightWidth())
+  const rightDividerCol = () => (rightCollapsed() ? totalCols() : totalCols() - rightWidth())
+
+  // Window resize listener
+  onMount(() => {
+    const handleResize = () => {
+      setTotalCols(calculateTotalColumns())
+    }
+
+    window.addEventListener("resize", handleResize)
+
+    onCleanup(() => {
+      window.removeEventListener("resize", handleResize)
+    })
+  })
 
   return (
     <div
@@ -44,7 +69,7 @@ export const TerminalLayout: Component<TerminalLayoutProps> = (props) => {
         bottom: "0",
         width: "100vw",
         height: "100vh",
-        background: "#0a0a0a",
+        background: "#000000",
         overflow: "hidden",
         "font-family": '"Berkeley Mono", "JetBrains Mono", monospace',
         "font-size": "16px",
@@ -58,6 +83,23 @@ export const TerminalLayout: Component<TerminalLayoutProps> = (props) => {
         "-webkit-perspective": "1000",
       }}
     >
+      {/* Dividers - positioned absolutely to span full height including footer */}
+      <GridDivider
+        col={leftDividerCol()}
+        minCol={30}
+        maxCol={60}
+        onDrag={(newCol) => setLeftWidth(newCol)}
+        style={{ position: "fixed", height: "100vh" }}
+      />
+      <GridDivider
+        col={rightDividerCol()}
+        minCol={100}
+        maxCol={130}
+        onDrag={(newCol) => setRightWidth(totalCols() - newCol)}
+        alwaysVisible
+        style={{ position: "fixed", height: "100vh" }}
+      />
+
       {/* Main content area - grows to fill space */}
       <div style={{ flex: "1", position: "relative", overflow: "hidden" }}>
         {/* Left Panel - Sessions (only show if not collapsed) */}
@@ -91,9 +133,6 @@ export const TerminalLayout: Component<TerminalLayoutProps> = (props) => {
           </div>
         )}
 
-        {/* Draggable divider after left panel */}
-        <GridDivider col={leftDividerCol()} minCol={30} maxCol={60} onDrag={(newCol) => setLeftWidth(newCol)} />
-
         {/* Center Panel - Messages */}
         <MessagesPanel
           col={leftDividerCol() + 1}
@@ -102,15 +141,6 @@ export const TerminalLayout: Component<TerminalLayoutProps> = (props) => {
           inputText={props.inputText}
           onInput={props.onInput}
           onSubmit={props.onSubmit}
-        />
-
-        {/* Draggable divider before right panel */}
-        <GridDivider
-          col={rightDividerCol()}
-          minCol={100}
-          maxCol={130}
-          onDrag={(newCol) => setRightWidth(157 - newCol)}
-          alwaysVisible
         />
 
         {/* Right Panel - Sidebar (only show if not collapsed) */}
@@ -149,11 +179,11 @@ export const TerminalLayout: Component<TerminalLayoutProps> = (props) => {
 
       {/* Bottom Bar - fixed height footer */}
       <div style={{ "flex-shrink": "0" }}>
-        {/* Footer - single line */}
+        {/* Footer - single line - PURE BLACK */}
         <div
           style={{
             height: "1.2em",
-            background: "#0a0a0a",
+            background: "#000000",
             color: "#858585",
             padding: "0 1ch",
             display: "flex",
@@ -168,7 +198,8 @@ export const TerminalLayout: Component<TerminalLayoutProps> = (props) => {
             ~/Documents/GitHub/flows/opencode-stt
           </span>
           <span>
-            <span style={{ color: "#ffffff", "font-weight": "bold" }}>tab</span> agent
+            <span style={{ color: "#ffffff", "font-weight": "bold" }}>tab</span>{" "}
+            <span style={{ color: "#61afef" }}>{props.currentAgent}</span>
           </span>
         </div>
       </div>

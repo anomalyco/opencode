@@ -49,11 +49,12 @@ export const GridDivider: Component<GridDividerProps> = (props) => {
       onMouseEnter={() => setIsHovered(true)}
       onMouseLeave={() => setIsHovered(false)}
       style={{
-        position: "absolute",
+        position: "fixed",
         left: `${props.col}ch`,
         top: "0",
+        bottom: "0",
+        height: "100vh",
         width: "1ch",
-        height: "100%",
         background: backgroundColor(),
         cursor: "col-resize",
         "z-index": "1000",

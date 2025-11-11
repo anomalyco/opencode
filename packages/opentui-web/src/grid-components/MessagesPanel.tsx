@@ -29,6 +29,7 @@ export const MessagesPanel: Component<MessagesPanelProps> = (props) => {
   const panelWidth = () => props.width || 74
 
   const [expandedTools, setExpandedTools] = createSignal<Set<string>>(new Set())
+  const [expandedMessages, setExpandedMessages] = createSignal<Set<string>>(new Set())
   const [promptExpanded, setPromptExpanded] = createSignal(false)
   const [scrollContainer, setScrollContainer] = createSignal<HTMLDivElement>()
 
@@ -55,12 +56,26 @@ export const MessagesPanel: Component<MessagesPanelProps> = (props) => {
     })
   }
 
+  const toggleMessage = (msgId: string) => {
+    setExpandedMessages((prev) => {
+      const next = new Set(prev)
+      if (next.has(msgId)) {
+        next.delete(msgId)
+      } else {
+        next.add(msgId)
+      }
+      return next
+    })
+  }
+
   const renderMessages = () => {
     let currentRow = 1
     const elements: any[] = []
+    const messages = props.messages.slice(-15)
 
-    props.messages.slice(-15).forEach((msg) => {
+    messages.forEach((msg, msgIndex) => {
       const isUser = msg.role === "user"
+      const isLastMessage = msgIndex === messages.length - 1
       const toolParts = msg.parts.filter((p) => p.type === "tool_use")
       const textParts = msg.parts.filter((p) => p.type === "text")
 
@@ -156,7 +171,12 @@ export const MessagesPanel: Component<MessagesPanelProps> = (props) => {
               }}
             />,
           )
-          elements.push(<GridText col={2} row={currentRow} text={`jkneen (${time})`} fg="#6a6a6a" />)
+          elements.push(
+            <>
+              <GridText col={2} row={currentRow} text="jkneen" fg="#ffffff" />
+              <GridText col={9} row={currentRow} text={` (${time})`} fg="#6a6a6a" />
+            </>,
+          )
           currentRow++
           contentRows++
         }
@@ -177,18 +197,20 @@ export const MessagesPanel: Component<MessagesPanelProps> = (props) => {
         currentRow++
         contentRows++
 
-        // Blue bar spanning ALL rows (blank + content + username + blank)
+        // ORANGE bar spanning ALL rows (blank + content + username + blank)
         for (let row = textStartRow; row < currentRow; row++) {
-          elements.push(<GridText col={0} row={row} text="▌" fg="#61afef" />)
+          elements.push(<GridText col={0} row={row} text="▌" fg="#e5c07b" />)
         }
       }
 
       // ASSISTANT MESSAGES WITH TOOLS
       if (!isUser && toolParts.length > 0) {
         toolParts.forEach((tool: any, toolIdx: number) => {
-          const toolName = (tool.name || "TOOL").toUpperCase().replace("CC_", "")
+          const toolName = (tool.name || tool.state?.name || "TOOL").toUpperCase().replace("CC_", "")
           const toolId = `${msg.id}-${toolIdx}`
           const toolExpanded = expandedTools().has(toolId)
+          const toolInput = tool.input || tool.state?.input || {}
+          const toolOutput = tool.output || tool.state?.output || tool.state?.metadata || {}
 
           // Tool header with arrow and badge
           const arrow = toolExpanded ? "▼" : "▶"
@@ -198,19 +220,19 @@ export const MessagesPanel: Component<MessagesPanelProps> = (props) => {
           elements.push(<GridText col={2} row={currentRow} text={` ${toolName} `} fg="#000000" bg="#e5c07b" bold />)
 
           // Show summary info when collapsed (for certain tools)
-          if (!toolExpanded && tool.input) {
+          if (!toolExpanded && toolInput) {
             let summary = ""
-            if (toolName === "READ" && tool.input.filePath) {
-              summary = ` ${tool.input.filePath}`
-              if (tool.input.offset || tool.input.limit) {
-                summary += ` [offset=${tool.input.offset || 0}, limit=${tool.input.limit || 2000}]`
+            if (toolName === "READ" && toolInput.filePath) {
+              summary = ` ${toolInput.filePath}`
+              if (toolInput.offset || toolInput.limit) {
+                summary += ` [offset=${toolInput.offset || 0}, limit=${toolInput.limit || 2000}]`
               }
-            } else if (toolName === "EDIT" && tool.input.filePath) {
-              summary = ` ${tool.input.filePath}`
-            } else if (toolName === "WRITE" && tool.input.filePath) {
-              summary = ` ${tool.input.filePath}`
-            } else if (toolName === "BASH" && tool.input.command) {
-              summary = ` ${tool.input.command.slice(0, 50)}`
+            } else if (toolName === "EDIT" && toolInput.filePath) {
+              summary = ` ${toolInput.filePath}`
+            } else if (toolName === "WRITE" && toolInput.filePath) {
+              summary = ` ${toolInput.filePath}`
+            } else if (toolName === "BASH" && toolInput.command) {
+              summary = ` ${toolInput.command.slice(0, 50)}`
             }
             if (summary) {
               const colAfterBadge = 2 + toolName.length + 3
@@ -223,30 +245,41 @@ export const MessagesPanel: Component<MessagesPanelProps> = (props) => {
           // Tool output (if expanded)
           if (toolExpanded) {
             // Show tool input
-            if (tool.input) {
+            if (toolInput && Object.keys(toolInput).length > 0) {
               elements.push(<GridText col={2} row={currentRow} text="Input:" fg="#6a6a6a" />)
               currentRow++
 
-              const inputStr = JSON.stringify(tool.input, null, 2)
-              const inputLines = inputStr.split("\n").slice(0, 10)
+              const inputStr = JSON.stringify(toolInput, null, 2)
+              const inputLines = inputStr.split("\n").slice(0, 20)
               inputLines.forEach((line: string) => {
                 elements.push(<GridText col={4} row={currentRow} text={line.slice(0, panelWidth() - 6)} fg="#ffffff" />)
                 currentRow++
               })
+              currentRow++ // Blank line
             }
 
-            // Show tool output placeholder
-            elements.push(<GridText col={2} row={currentRow} text="Output:" fg="#6a6a6a" />)
-            currentRow++
-            elements.push(<GridText col={4} row={currentRow} text="[Tool output...]" fg="#6a6a6a" />)
-            currentRow++
+            // Show tool output
+            if (toolOutput && Object.keys(toolOutput).length > 0) {
+              elements.push(<GridText col={2} row={currentRow} text="Output:" fg="#6a6a6a" />)
+              currentRow++
+
+              const outputStr = JSON.stringify(toolOutput, null, 2)
+              const outputLines = outputStr.split("\n").slice(0, 20)
+              outputLines.forEach((line: string) => {
+                elements.push(<GridText col={4} row={currentRow} text={line.slice(0, panelWidth() - 6)} fg="#ffffff" />)
+                currentRow++
+              })
+            } else {
+              elements.push(<GridText col={2} row={currentRow} text="Output: (pending)" fg="#6a6a6a" />)
+              currentRow++
+            }
           }
 
           currentRow++ // Space after tool block
         })
       }
 
-      // ASSISTANT TEXT RESPONSES (no tools)
+      // ASSISTANT TEXT RESPONSES (no tools) - ALWAYS EXPANDED
       if (!isUser && toolParts.length === 0 && textParts.length > 0) {
         const responseStartRow = currentRow
 
@@ -262,13 +295,31 @@ export const MessagesPanel: Component<MessagesPanelProps> = (props) => {
           })
         })
 
-        // Blank line below
+        // Blank line below content
         currentRow++
 
-        // No bar for assistant messages
+        // Orange bar spanning all rows (blank + content + blank)
+        for (let row = responseStartRow; row < currentRow; row++) {
+          elements.push(<GridText col={0} row={row} text="▌" fg="#d19a66" />)
+        }
+
+        // Attribution line ONLY on last message if completed
+        if (isLastMessage && msg.time?.completed) {
+          // One blank line above attribution
+          currentRow++
+
+          const agent = msg.agent || "General"
+          const model = msg.model || "claude-sonnet-4-5"
+          elements.push(<GridText col={0} row={currentRow} text={agent} fg="#569cd6" bold />)
+          elements.push(<GridText col={agent.length + 1} row={currentRow} text={model} fg="#6a6a6a" />)
+          currentRow++
+        }
       }
 
-      currentRow++ // Empty row below message
+      // Empty row below message (only if NOT showing attribution)
+      if (!(isLastMessage && msg.time?.completed && !isUser && textParts.length > 0)) {
+        currentRow++
+      }
     })
 
     return elements
@@ -285,7 +336,7 @@ export const MessagesPanel: Component<MessagesPanelProps> = (props) => {
           top: "0",
           left: "0",
           right: "0",
-          bottom: "4.8em", // Model row (1.2em) + Input area (3.6em)
+          bottom: "7.2em", // Blank (1.2em) + Input (3.6em) + Model (1.2em) + Blank (1.2em)
           "overflow-y": "auto",
           "overflow-x": "hidden",
           // GPU acceleration for smooth scrolling
@@ -308,43 +359,19 @@ export const MessagesPanel: Component<MessagesPanelProps> = (props) => {
           background: "#0a0a0a",
         }}
       >
-        {/* Model info row */}
+        {/* Blank line above prompt */}
         <div
           style={{
             height: "1.2em",
-            background: "#1a1a1a",
-            padding: "0 1ch",
-            display: "flex",
-            "justify-content": "space-between",
-            "align-items": "center",
-            "font-family": '"Berkeley Mono", "JetBrains Mono", monospace',
-            "font-size": "16px",
+            background: "#0a0a0a",
           }}
-        >
-          <span>
-            <span style={{ color: "#858585" }}>Anthropic </span>
-            <span
-              style={{
-                color: "#ffffff",
-                "text-decoration": "underline",
-                "text-decoration-color": "#d19a66",
-                "text-decoration-thickness": "2px",
-                "text-underline-offset": "2px",
-              }}
-            >
-              Claude Sonnet 4.5 (latest)
-            </span>
-          </span>
-          <span style={{ color: "#858585" }}>
-            <span style={{ color: "#ffffff", "font-weight": "bold" }}>esc</span> interrupt
-          </span>
-        </div>
+        />
 
         {/* Input row - 3 lines high */}
         <div
           style={{
             height: "3.6em",
-            background: "#2a2a2a",
+            background: "#1a1a1a",
             padding: "0 1ch",
             display: "flex",
             "align-items": "center",
@@ -352,9 +379,10 @@ export const MessagesPanel: Component<MessagesPanelProps> = (props) => {
             "font-family": '"Berkeley Mono", "JetBrains Mono", monospace',
             "font-size": "16px",
             "line-height": "1.2",
+            border: "none",
           }}
         >
-          <span style={{ color: "#e5c07b" }}>{">"}</span>
+          <span style={{ color: "#e5c07b", "font-weight": "bold" }}>{">"}</span>
           <span style={{ "margin-left": "1ch", color: "#ffffff" }}>{props.inputText}</span>
           {props.cursorVisible && <span style={{ color: "#d19a66" }}>█</span>}
 
@@ -363,15 +391,11 @@ export const MessagesPanel: Component<MessagesPanelProps> = (props) => {
             style={{
               position: "absolute",
               bottom: "0.2em",
-              left: "1ch",
               right: "1ch",
-              display: "flex",
-              "justify-content": "space-between",
               color: "#6a6a6a",
               "font-size": "14px",
             }}
           >
-            <span>tab changes agent</span>
             <span>enter send shift+enter newline</span>
           </div>
 
@@ -398,6 +422,48 @@ export const MessagesPanel: Component<MessagesPanelProps> = (props) => {
             }}
           />
         </div>
+
+        {/* Model info row - DIRECTLY UNDER the prompt, NO GAP */}
+        <div
+          style={{
+            height: "1.2em",
+            background: "#0a0a0a",
+            padding: "0",
+            "padding-left": "0",
+            "padding-right": "1ch",
+            display: "flex",
+            "justify-content": "space-between",
+            "align-items": "center",
+            "font-family": '"Berkeley Mono", "JetBrains Mono", monospace',
+            "font-size": "16px",
+          }}
+        >
+          <span>
+            <span style={{ color: "#858585" }}>Anthropic </span>
+            <span
+              style={{
+                color: "#ff9800",
+                "text-decoration": "underline",
+                "text-decoration-color": "#ff9800",
+                "text-decoration-thickness": "2px",
+                "text-underline-offset": "2px",
+              }}
+            >
+              Claude Sonnet 4.5 (latest)
+            </span>
+          </span>
+          <span style={{ color: "#858585" }}>
+            <span style={{ color: "#ffffff", "font-weight": "bold" }}>esc</span> interrupt
+          </span>
+        </div>
+
+        {/* Blank line below model row */}
+        <div
+          style={{
+            height: "1.2em",
+            background: "#0a0a0a",
+          }}
+        />
       </div>
     </GridPanel>
   )

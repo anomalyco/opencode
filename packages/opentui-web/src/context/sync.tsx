@@ -88,6 +88,7 @@ export const { use: useSync, provider: SyncProvider } = createSimpleContext({
           setStore("session_diff", event.properties.sessionID, event.properties.diff)
           break
         case "todo.updated":
+          console.log("[sync.tsx] todo.updated event:", event.properties.sessionID, event.properties.todos)
           setStore("todo", event.properties.sessionID, event.properties.todos)
           break
         case "permission.updated": {
@@ -222,12 +223,15 @@ export const { use: useSync, provider: SyncProvider } = createSimpleContext({
             return
           }
 
+          console.log(`[sync.tsx] session.sync() - sessionID: ${sessionID}, todo.data:`, todo.data)
+
           setStore(
             produce((draft) => {
               const match = Binary.search(draft.session, sessionID, (s) => s.id)
               if (match.found) draft.session[match.index] = session.data!
               if (!match.found) draft.session.splice(match.index, 0, session.data!)
               draft.todo[sessionID] = todo.data ?? []
+              console.log(`[sync.tsx] session.sync() - after setting draft.todo[${sessionID}]:`, draft.todo[sessionID])
               draft.message[sessionID] = messages
                 .data!.map((x) => x.info)
                 .slice()

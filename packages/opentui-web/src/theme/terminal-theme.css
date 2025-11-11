@@ -11,6 +11,22 @@
   --bg-input: #2a2a2a;
   --bg-selected: #2a2a2a;
   --border: #2a2a2a;
+}
+
+/* Thinner font weight for retina displays */
+body,
+* {
+  font-weight: 400 !important;
+  -webkit-font-smoothing: antialiased;
+  -moz-osx-font-smoothing: grayscale;
+}
+
+/* Keep bold elements actually bold */
+strong,
+b,
+[style*="font-weight: bold"],
+.bold {
+  font-weight: 700 !important;
 
   /* Text colors - HIGH CONTRAST */
   --text-main: #ffffff;
@@ -70,6 +86,16 @@ button {
 
 .grid-button:hover {
   color: var(--text-bright);
+}
+
+/* Shimmer animation for loading states */
+@keyframes shimmer {
+  0% {
+    background-position: -200% 0;
+  }
+  100% {
+    background-position: 200% 0;
+  }
 }
 
 /* Terminal scrollbar styling */

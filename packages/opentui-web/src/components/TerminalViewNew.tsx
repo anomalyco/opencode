@@ -58,8 +58,15 @@ export const TerminalView: Component = () => {
   }
 
   const todos = () => {
-    if (!selectedSessionID()) return []
-    return sync.data.todo[selectedSessionID()!] || []
+    if (!selectedSessionID()) {
+      console.log("[TerminalView] todos() - no selected session")
+      return []
+    }
+    const sessionID = selectedSessionID()!
+    const todoData = sync.data.todo[sessionID] || []
+    console.log(`[TerminalView] todos() - sessionID: ${sessionID}, count: ${todoData.length}`, todoData)
+    console.log(`[TerminalView] todos() - full sync.data.todo:`, sync.data.todo)
+    return todoData
   }
 
   const subagents = () => {
@@ -74,6 +81,12 @@ export const TerminalView: Component = () => {
         status: "running" as const, // TODO: Derive actual status from session state
         time: session.time,
       }))
+  }
+
+  const currentAgent = () => {
+    if (!selectedSessionID()) return "general"
+    const session = sync.session.get(selectedSessionID()!)
+    return session?.agentID || "general"
   }
 
   const handleSelectSession = (id: string) => {
@@ -119,6 +132,7 @@ export const TerminalView: Component = () => {
       inputText={inputText()}
       onInput={handleInput}
       onSubmit={handleSubmit}
+      currentAgent={currentAgent()}
     />
   )
 }
