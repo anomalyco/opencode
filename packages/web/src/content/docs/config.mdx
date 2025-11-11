@@ -16,7 +16,7 @@ OpenCode supports both **JSON** and **JSONC** (JSON with Comments) formats.
   "$schema": "https://opencode.ai/config.json",
   // Theme configuration
   "theme": "opencode",
-  "model": "anthropic/claude-sonnet-4-5-20250929",
+  "model": "anthropic/claude-sonnet-4-5",
   "autoupdate": true,
 }
 ```
@@ -128,7 +128,7 @@ You can configure the providers and models you want to use in your OpenCode conf
 {
   "$schema": "https://opencode.ai/config.json",
   "provider": {},
-  "model": "anthropic/claude-sonnet-4-5-20250929",
+  "model": "anthropic/claude-sonnet-4-5",
   "small_model": "anthropic/claude-haiku-4-5"
 }
 ```
@@ -164,7 +164,7 @@ You can configure specialized agents for specific tasks through the `agent` opti
   "agent": {
     "code-reviewer": {
       "description": "Reviews code for best practices and potential issues",
-      "model": "anthropic/claude-sonnet-4-5-20250929",
+      "model": "anthropic/claude-sonnet-4-5",
       "prompt": "You are a code reviewer. Focus on security, performance, and maintainability.",
       "tools": {
         // Disable file modification tools for review-only agent
