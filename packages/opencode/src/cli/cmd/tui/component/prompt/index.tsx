@@ -691,7 +691,7 @@ export function Prompt(props: PromptProps) {
 
                   const part = {
                     type: "file" as const,
-                    mime: file.type || "text/plain",
+                    mime: file.type,
                     filename: filepath,
                     url: `file://${process.cwd()}/${filepath}`,
                     source: {
