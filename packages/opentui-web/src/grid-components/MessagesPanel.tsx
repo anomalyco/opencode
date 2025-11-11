@@ -88,6 +88,7 @@ export const MessagesPanel: Component<MessagesPanelProps> = (props) => {
       if (isUser) {
         const textStartRow = currentRow
         let contentRows = 0
+        const bgWidth = `calc(100% - ${2 * 9.6}px)` // 2 char gap on right
 
         // Add blank line with background at start
         elements.push(
@@ -96,7 +97,7 @@ export const MessagesPanel: Component<MessagesPanelProps> = (props) => {
               position: "absolute",
               left: "0",
               top: `${currentRow * 1.2}em`,
-              width: "100%",
+              width: bgWidth,
               height: "1.2em",
               background: "#1a1a1a",
             }}
@@ -117,7 +118,7 @@ export const MessagesPanel: Component<MessagesPanelProps> = (props) => {
                 position: "absolute",
                 left: "0",
                 top: `${currentRow * 1.2}em`,
-                width: "100%",
+                width: bgWidth,
                 height: "1.2em",
                 background: "#1a1a1a",
               }}
@@ -135,7 +136,9 @@ export const MessagesPanel: Component<MessagesPanelProps> = (props) => {
         // Render text content
         if (textParts.length > 0) {
           textParts.forEach((part) => {
-            const lines = (part.text || "").split("\n")
+            // Replace multiple newlines with single newline
+            const normalizedText = (part.text || "").replace(/\n\n+/g, "\n")
+            const lines = normalizedText.split("\n")
             lines.forEach((line) => {
               // Background for entire row
               elements.push(
@@ -144,7 +147,7 @@ export const MessagesPanel: Component<MessagesPanelProps> = (props) => {
                     position: "absolute",
                     left: "0",
                     top: `${currentRow * 1.2}em`,
-                    width: "100%",
+                    width: bgWidth,
                     height: "1.2em",
                     background: "#1a1a1a",
                   }}
@@ -167,7 +170,7 @@ export const MessagesPanel: Component<MessagesPanelProps> = (props) => {
                 position: "absolute",
                 left: "0",
                 top: `${currentRow * 1.2}em`,
-                width: "100%",
+                width: bgWidth,
                 height: "1.2em",
                 background: "#1a1a1a",
               }}
@@ -190,7 +193,7 @@ export const MessagesPanel: Component<MessagesPanelProps> = (props) => {
               position: "absolute",
               left: "0",
               top: `${currentRow * 1.2}em`,
-              width: "100%",
+              width: bgWidth,
               height: "1.2em",
               background: "#1a1a1a",
             }}
@@ -246,12 +249,12 @@ export const MessagesPanel: Component<MessagesPanelProps> = (props) => {
             />,
           )
 
-          // Tool header with arrow and badge
+          // Tool header with arrow and badge (moved 2 chars right)
           const arrow = toolExpanded ? "▼" : "▶"
           elements.push(
-            <GridText col={0} row={currentRow} text={arrow} fg="#6a6a6a" onClick={() => toggleTool(toolId)} />,
+            <GridText col={2} row={currentRow} text={arrow} fg="#6a6a6a" onClick={() => toggleTool(toolId)} />,
           )
-          elements.push(<GridText col={2} row={currentRow} text={` ${toolName} `} fg="#000000" bg="#9a9a9a" bold />)
+          elements.push(<GridText col={4} row={currentRow} text={` ${toolName} `} fg="#000000" bg="#9a9a9a" bold />)
 
           // Show summary info when collapsed (for certain tools)
           if (!toolExpanded && toolInput) {
@@ -269,7 +272,7 @@ export const MessagesPanel: Component<MessagesPanelProps> = (props) => {
               summary = ` ${toolInput.command.slice(0, 50)}`
             }
             if (summary) {
-              const colAfterBadge = 2 + toolName.length + 3
+              const colAfterBadge = 4 + toolName.length + 3
               elements.push(<GridText col={colAfterBadge} row={currentRow} text={summary} fg="#6a6a6a" />)
             }
           }
@@ -425,24 +428,21 @@ export const MessagesPanel: Component<MessagesPanelProps> = (props) => {
 
       // ASSISTANT TEXT RESPONSES - Show text whether there are tools or not
       if (!isUser && textParts.length > 0) {
-        const responseStartRow = currentRow
+        // Always add 1 blank line before text (whether tools exist or not)
+        currentRow++
 
-        // Blank line above (only if no tools - tool's 3rd row already provides the gap)
-        if (toolParts.length === 0) {
-          currentRow++
-        }
+        const responseStartRow = currentRow
 
         // Content lines
         textParts.forEach((part) => {
-          const lines = (part.text || "").split("\n")
+          // Replace multiple newlines with single newline
+          const normalizedText = (part.text || "").replace(/\n\n+/g, "\n")
+          const lines = normalizedText.split("\n")
           lines.forEach((line) => {
             elements.push(<GridText col={2} row={currentRow} text={line.slice(0, panelWidth() - 4)} fg="#ffffff" />)
             currentRow++
           })
         })
-
-        // Blank line below content
-        currentRow++
 
         // Orange bar spanning all rows (blank + content + blank) - COMMENTED OUT
         // for (let row = responseStartRow; row < currentRow; row++) {
@@ -462,10 +462,8 @@ export const MessagesPanel: Component<MessagesPanelProps> = (props) => {
         }
       }
 
-      // Empty row below message (only if NOT showing attribution)
-      if (!(isLastMessage && msg.time?.completed && !isUser && textParts.length > 0)) {
-        currentRow++
-      }
+      // One blank line between messages
+      currentRow++
     })
 
     return elements
