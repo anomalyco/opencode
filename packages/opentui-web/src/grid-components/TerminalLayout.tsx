@@ -5,7 +5,6 @@ import { MessagesPanel } from "./MessagesPanel"
 import { SidebarPanel } from "./SidebarPanel"
 import { GridDivider } from "./GridDivider"
 import { CommandMenu } from "./CommandMenu"
-import { createKeyboardHandler, type KeyboardShortcut } from "../utils/keyboard"
 
 interface TerminalLayoutProps {
   sessions: Array<{ id: string; title: string; hasChildren?: boolean }>
@@ -23,8 +22,6 @@ interface TerminalLayoutProps {
   onInput: (text: string) => void
   onSubmit?: (text: string) => void
   currentAgent: string
-  currentModel?: string
-  onModelClick?: () => void
 }
 
 export const TerminalLayout: Component<TerminalLayoutProps> = (props) => {
@@ -53,9 +50,6 @@ export const TerminalLayout: Component<TerminalLayoutProps> = (props) => {
   const leftDividerCol = () => (leftCollapsed() ? 0 : leftWidth())
   const rightDividerCol = () => (rightCollapsed() ? totalCols() : totalCols() - rightWidth())
 
-  // Scroll container ref for clear screen functionality
-  const [messagesScrollContainer, setMessagesScrollContainer] = createSignal<HTMLDivElement | null>(null)
-
   // Window resize listener and keyboard shortcuts
   onMount(() => {
     const handleResize = () => {
@@ -64,93 +58,71 @@ export const TerminalLayout: Component<TerminalLayoutProps> = (props) => {
 
     window.addEventListener("resize", handleResize)
 
-    // Define all keyboard shortcuts
-    const shortcuts: KeyboardShortcut[] = [
-      {
-        key: "p",
-        ctrl: true,
-        description: "Open command menu",
-        action: () => setCommandMenuOpen(true),
-      },
-      {
-        key: "n",
-        ctrl: true,
-        description: "New chat",
-        action: handleNewChat,
-      },
-      {
-        key: "s",
-        ctrl: true,
-        description: "Toggle sidebar",
-        action: handleToggleSidebar,
-      },
-      {
-        key: "l",
-        ctrl: true,
-        description: "Clear screen / scroll to bottom",
-        action: handleClearScreen,
-      },
-      {
-        key: "b",
-        ctrl: true,
-        description: "Toggle sessions panel",
-        action: handleToggleSessions,
-      },
-      {
-        key: "Escape",
-        description: "Close command menu",
-        action: () => {
-          if (commandMenuOpen()) {
-            setCommandMenuOpen(false)
-          }
-        },
-      },
-    ]
+    // Global keyboard shortcuts
+    const handleKeyDown = (e: KeyboardEvent) => {
+      // Ctrl+P or Cmd+P - Open command menu
+      if ((e.ctrlKey || e.metaKey) && e.key === "p") {
+        e.preventDefault()
+        setCommandMenuOpen(true)
+      }
+      // Ctrl+[ - Toggle left sidebar
+      else if (e.ctrlKey && e.key === "[") {
+        e.preventDefault()
+        handleToggleLeftSidebar()
+      }
+      // Ctrl+] - Toggle right sidebar
+      else if (e.ctrlKey && e.key === "]") {
+        e.preventDefault()
+        handleToggleRightSidebar()
+      }
+      // Ctrl+B - Toggle both sidebars
+      else if (e.ctrlKey && e.key === "b") {
+        e.preventDefault()
+        handleToggleBothSidebars()
+      }
+    }
 
-    // Setup keyboard handler
-    const keyboardHandler = createKeyboardHandler({ shortcuts, enabled: true })
-    keyboardHandler.attach()
+    window.addEventListener("keydown", handleKeyDown)
 
     onCleanup(() => {
       window.removeEventListener("resize", handleResize)
-      keyboardHandler.detach()
+      window.removeEventListener("keydown", handleKeyDown)
     })
   })
 
   // Command handlers
-  const handleNewChat = () => {
-    console.log("New chat requested")
-    // TODO: Implement new chat creation
+  const handleNewSession = () => {
+    console.log("New session requested")
+    // TODO: Implement new session creation via SDK
   }
 
-  const handleClearHistory = () => {
-    console.log("Clear history requested")
-    // TODO: Implement clear history
+  const handleSwitchSession = () => {
+    console.log("Switch session requested")
+    // TODO: Open session list dialog
   }
 
-  const handleExportChat = () => {
-    console.log("Export chat requested")
-    // TODO: Implement export
+  const handleSwitchModel = () => {
+    console.log("Switch model requested")
+    // TODO: Open model selection dialog
   }
 
-  const handleSettings = () => {
-    console.log("Settings requested")
-    // TODO: Implement settings
+  const handleSwitchAgent = () => {
+    console.log("Switch agent requested")
+    // TODO: Open agent selection dialog
   }
 
-  const handleToggleSidebar = () => {
-    setRightCollapsed((prev) => !prev)
-  }
-
-  const handleToggleSessions = () => {
+  const handleToggleLeftSidebar = () => {
     setLeftCollapsed((prev) => !prev)
   }
 
-  const handleClearScreen = () => {
-    const container = messagesScrollContainer()
-    if (container) {
-      container.scrollTop = container.scrollHeight
-    }
+  const handleToggleRightSidebar = () => {
+    setRightCollapsed((prev) => !prev)
+  }
+
+  const handleToggleBothSidebars = () => {
+    const bothCollapsed = leftCollapsed() && rightCollapsed()
+    setLeftCollapsed(!bothCollapsed)
+    setRightCollapsed(!bothCollapsed)
   }
 
   return (
@@ -236,9 +208,6 @@ export const TerminalLayout: Component<TerminalLayoutProps> = (props) => {
           inputText={props.inputText}
           onInput={props.onInput}
           onSubmit={props.onSubmit}
-          onScrollContainerRef={setMessagesScrollContainer}
-          currentModel={props.currentModel}
-          onModelClick={props.onModelClick}
         />
 
         {/* Right Panel - Sidebar (only show if not collapsed) */}
@@ -296,6 +265,7 @@ export const TerminalLayout: Component<TerminalLayoutProps> = (props) => {
             ~/Documents/GitHub/flows/opencode-stt
           </span>
           <span>
+            <span style={{ color: "#ffffff", "font-weight": "bold" }}>ctrl+p</span> commands{" "}
             <span style={{ color: "#ffffff", "font-weight": "bold" }}>tab</span>{" "}
             <span style={{ color: "#61afef" }}>{props.currentAgent}</span>
           </span>
@@ -306,13 +276,13 @@ export const TerminalLayout: Component<TerminalLayoutProps> = (props) => {
       <CommandMenu
         isOpen={commandMenuOpen()}
         onClose={() => setCommandMenuOpen(false)}
-        onNewChat={handleNewChat}
-        onClearHistory={handleClearHistory}
-        onExportChat={handleExportChat}
-        onSettings={handleSettings}
-        onToggleSidebar={handleToggleSidebar}
-        onToggleSessions={handleToggleSessions}
-        onClearScreen={handleClearScreen}
+        onNewSession={handleNewSession}
+        onSwitchSession={handleSwitchSession}
+        onSwitchModel={handleSwitchModel}
+        onSwitchAgent={handleSwitchAgent}
+        onToggleLeftSidebar={handleToggleLeftSidebar}
+        onToggleRightSidebar={handleToggleRightSidebar}
+        onToggleBothSidebars={handleToggleBothSidebars}
       />
     </div>
   )
