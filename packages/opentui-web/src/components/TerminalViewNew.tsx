@@ -65,6 +65,8 @@ export const TerminalView: Component = () => {
       role: msg.role,
       parts: sync.data.part[msg.id] || [],
       time: msg.time,
+      agent: msg.role === "assistant" ? (msg as any).mode : undefined,
+      model: msg.role === "assistant" ? (msg as any).modelID : undefined,
     }))
   }
 

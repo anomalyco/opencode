@@ -225,8 +225,8 @@ export const MainScreen: Component<MainScreenProps> = (props) => {
         {/* ASCII Logo */}
         <pre
           style={{
-            "font-size": "16px",
-            "line-height": "1.0",
+            "font-size": "20px",            
+            "line-height": "1",
             margin: "0",
             "text-align": "left",
           }}
@@ -234,8 +234,8 @@ export const MainScreen: Component<MainScreenProps> = (props) => {
           <span style={{ color: "#6a6a6a" }}>{`█▀▀▀ █▀▀█ █▀▀█ █▀▀▀ `}</span>
           <span style={{ color: "#ffffff", "font-weight": "bold" }}>{`█▀▀▀ █  █ █▀▀█ █▀▀▀`}</span>
           {`\n`}
-          <span style={{ color: "#6a6a6a" }}>{`█░░░ █░░█ █░░█ █  `}</span>
           <span style={{ color: "#6a6a6a" }}>{`█░░░ █░░█ █░░█ █▀▀▀ `}</span>
+          
           <span style={{ color: "#ffffff", "font-weight": "bold" }}>{`▀▀▀█ █  █ █▄▄▀ █▀▀▀`}</span>
           {`\n`}
           <span style={{ color: "#6a6a6a" }}>{`▀▀▀▀ ▀▀▀▀ ▀▀▀▀ ▀▀▀▀ `}</span>
