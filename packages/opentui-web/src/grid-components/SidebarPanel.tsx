@@ -13,8 +13,20 @@ interface SidebarPanelProps {
     status: "running" | "completed" | "failed"
     time: { created: number; updated: number }
   }>
+  lspServers?: Array<{
+    id: string
+    name: string
+    status: "running" | "stopped"
+  }>
+  mcpServers?: Array<{
+    id: string
+    name: string
+    status: "running" | "stopped"
+  }>
   onCollapse?: () => void
   onSelectSession?: (id: string) => void
+  onSelectLspServer?: (id: string) => void
+  onSelectMcpServer?: (id: string) => void
 }
 
 type TabType = "tools" | "todos" | "files"
@@ -27,6 +39,8 @@ export const SidebarPanel: Component<SidebarPanelProps> = (props) => {
   const [toolsExpanded, setToolsExpanded] = createSignal(false)
   const [pluginsExpanded, setPluginsExpanded] = createSignal(false)
   const [subagentsExpanded, setSubagentsExpanded] = createSignal(false)
+  const [lspExpanded, setLspExpanded] = createSignal(false)
+  const [mcpExpanded, setMcpExpanded] = createSignal(false)
   const [favoriteTools, setFavoriteTools] = createSignal<Set<string>>(new Set())
   const [expandedPlugins, setExpandedPlugins] = createSignal<Set<string>>(new Set())
 
@@ -165,6 +179,34 @@ export const SidebarPanel: Component<SidebarPanelProps> = (props) => {
 
             // Subagents list
             const subagentRows = subagentsExpanded() ? props.subagents.length : 0
+            currentRow += subagentRows
+
+            // Add Subagent row
+            currentRow++
+
+            // Blank line after Subagents
+            currentRow++
+
+            // LSP Servers header
+            const lspHeaderRow = currentRow
+            currentRow++
+
+            // LSP Servers list
+            const lspRows = lspExpanded() ? (props.lspServers?.length ?? 0) : 0
+            currentRow += lspRows
+
+            // Add LSP Server row
+            currentRow++
+
+            // Blank line after LSP
+            currentRow++
+
+            // MCP Servers header
+            const mcpHeaderRow = currentRow
+            currentRow++
+
+            // MCP Servers list
+            const mcpRows = mcpExpanded() ? (props.mcpServers?.length ?? 0) : 0
 
             return (
               <>
@@ -290,6 +332,98 @@ export const SidebarPanel: Component<SidebarPanelProps> = (props) => {
                   row={subagentsHeaderRow + (subagentsExpanded() ? subagentRows + 1 : 1)}
                   text="+ Add Subagent"
                   fg="#e5c07b"
+                />
+
+                {/* LSP Servers header */}
+                <GridText
+                  col={2}
+                  row={lspHeaderRow}
+                  text={`${lspExpanded() ? "▼" : "▶"} LSP Servers (${props.lspServers?.length ?? 0})`}
+                  fg="#ffffff"
+                  onClick={() => setLspExpanded(!lspExpanded())}
+                />
+
+                {/* LSP Server list with status */}
+                {lspExpanded() && props.lspServers && (
+                  <For each={props.lspServers}>
+                    {(server, idx) => {
+                      const row = lspHeaderRow + 1 + idx()
+                      const statusIcon = server.status === "running" ? "●" : "○"
+                      const statusColor = server.status === "running" ? "#98c379" : "#6a6a6a"
+                      const maxNameLength = panelWidth() - 6
+                      const truncatedName =
+                        server.name.length > maxNameLength
+                          ? server.name.slice(0, maxNameLength - 3) + "..."
+                          : server.name
+
+                      return (
+                        <>
+                          <GridText col={2} row={row} text={statusIcon} fg={statusColor} />
+                          <GridText
+                            col={4}
+                            row={row}
+                            text={truncatedName}
+                            fg="#ffffff"
+                            onClick={() => props.onSelectLspServer?.(server.id)}
+                          />
+                        </>
+                      )
+                    }}
+                  </For>
+                )}
+
+                {/* Add LSP Server */}
+                <GridText
+                  col={2}
+                  row={lspHeaderRow + (lspExpanded() ? lspRows + 1 : 1)}
+                  text="+ Add Server"
+                  fg="#ff9800"
+                />
+
+                {/* MCP Servers header */}
+                <GridText
+                  col={2}
+                  row={mcpHeaderRow}
+                  text={`${mcpExpanded() ? "▼" : "▶"} MCP Servers (${props.mcpServers?.length ?? 0})`}
+                  fg="#ffffff"
+                  onClick={() => setMcpExpanded(!mcpExpanded())}
+                />
+
+                {/* MCP Server list with status */}
+                {mcpExpanded() && props.mcpServers && (
+                  <For each={props.mcpServers}>
+                    {(server, idx) => {
+                      const row = mcpHeaderRow + 1 + idx()
+                      const statusIcon = server.status === "running" ? "●" : "○"
+                      const statusColor = server.status === "running" ? "#98c379" : "#6a6a6a"
+                      const maxNameLength = panelWidth() - 6
+                      const truncatedName =
+                        server.name.length > maxNameLength
+                          ? server.name.slice(0, maxNameLength - 3) + "..."
+                          : server.name
+
+                      return (
+                        <>
+                          <GridText col={2} row={row} text={statusIcon} fg={statusColor} />
+                          <GridText
+                            col={4}
+                            row={row}
+                            text={truncatedName}
+                            fg="#ffffff"
+                            onClick={() => props.onSelectMcpServer?.(server.id)}
+                          />
+                        </>
+                      )
+                    }}
+                  </For>
+                )}
+
+                {/* Add MCP Server */}
+                <GridText
+                  col={2}
+                  row={mcpHeaderRow + (mcpExpanded() ? mcpRows + 1 : 1)}
+                  text="+ Add Server"
+                  fg="#ff9800"
                 />
               </>
             )
