@@ -36,6 +36,16 @@ export const MessagesPanel: Component<MessagesPanelProps> = (props) => {
   const [expandedMessages, setExpandedMessages] = createSignal<Set<string>>(new Set())
   const [promptExpanded, setPromptExpanded] = createSignal(false)
   const [scrollContainer, setScrollContainer] = createSignal<HTMLDivElement>()
+  const [cursorVisible, setCursorVisible] = createSignal(true)
+
+  // Cursor blink animation
+  const blinkInterval = setInterval(() => {
+    setCursorVisible((prev) => !prev)
+  }, 530)
+
+  onCleanup(() => {
+    clearInterval(blinkInterval)
+  })
 
   // Auto-scroll to bottom when new messages arrive
   createEffect(() => {
@@ -655,8 +665,10 @@ export const MessagesPanel: Component<MessagesPanelProps> = (props) => {
 
           <span style={{ "margin-left": "1ch" }}></span>
           <span style={{ color: "#ff9800", "font-weight": "bold" }}>{">"}</span>
-          <span style={{ "margin-left": "1ch", color: "#ffffff" }}>{props.inputText}</span>
-          {props.cursorVisible && <span style={{ color: "#ff9800" }}>█</span>}
+          <span style={{ "margin-left": "1ch", color: "#ffffff", display: "flex" }}>
+            {props.inputText}
+            {cursorVisible() && <span style={{ color: "#ff9800" }}>█</span>}
+          </span>
 
           {/* Hint text at bottom of input */}
           <div
