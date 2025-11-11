@@ -296,10 +296,6 @@ export const TerminalLayout: Component<TerminalLayoutProps> = (props) => {
             ~/Documents/GitHub/flows/opencode-stt
           </span>
           <span>
-            <span style={{ color: "#ffffff", "font-weight": "bold" }}>ctrl+p</span> menu{" "}
-            <span style={{ color: "#ffffff", "font-weight": "bold" }}>ctrl+n</span> new{" "}
-            <span style={{ color: "#ffffff", "font-weight": "bold" }}>ctrl+l</span> clear{" "}
-            <span style={{ color: "#ffffff", "font-weight": "bold" }}>ctrl+s</span> sidebar{" "}
             <span style={{ color: "#ffffff", "font-weight": "bold" }}>tab</span>{" "}
             <span style={{ color: "#61afef" }}>{props.currentAgent}</span>
           </span>
