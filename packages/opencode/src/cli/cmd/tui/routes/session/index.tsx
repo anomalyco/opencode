@@ -155,12 +155,23 @@ export function Session() {
   })
 
   // Auto-manage permission modal based on pending permissions
+  let permissionDialogShown = false
   createEffect(() => {
     const perms = permissions()
-    if (perms.length > 0 && dialog.stack.length === 0) {
+    const hasPermissions = perms.length > 0
+    const dialogEmpty = dialog.stack.length === 0
+
+    // Show permission dialog if we have permissions and no dialog is currently shown
+    if (hasPermissions && dialogEmpty && !permissionDialogShown) {
+      permissionDialogShown = true
       toBottom()
-      dialog.replace(() => <DialogPermission permissions={perms} sessionID={route.sessionID} />)
-    } else if (perms.length === 0 && dialog.stack.length > 0) {
+      dialog.replace(() => (
+        <DialogPermission permissions={perms} sessionID={route.sessionID} />
+      ))
+    }
+    // Clear permission dialog ONLY if we previously showed it and now have no permissions
+    else if (!hasPermissions && permissionDialogShown) {
+      permissionDialogShown = false
       dialog.clear()
     }
   })
