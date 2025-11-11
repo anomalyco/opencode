@@ -46,7 +46,20 @@ You can also bind a keyboard shortcut by editing your `keymap.json`:
 [
   {
     "bindings": {
-      "cmd-alt-o": ["agent::NewExternalAgentThread", { "agent": "OpenCode" }]
+      "cmd-alt-o": [
+        "agent::NewExternalAgentThread",
+        {
+          "agent": {
+            "custom": {
+              "name": "OpenCode",
+              "command": {
+                "command": "opencode",
+                "args": ["acp"]
+              }
+            }
+          }
+        }
+      ]
     }
   }
 ]
