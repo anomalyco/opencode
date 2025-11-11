@@ -671,6 +671,12 @@ export const MessagesPanel: Component<MessagesPanelProps> = (props) => {
           <textarea
             value={props.inputText}
             onInput={(e) => props.onInput(e.currentTarget.value)}
+            onKeyDown={(e) => {
+              if (e.key === "Enter" && !e.shiftKey) {
+                e.preventDefault()
+                props.onSubmit?.(props.inputText)
+              }
+            }}
             autofocus
             style={{
               position: "absolute",
