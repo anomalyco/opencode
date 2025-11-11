@@ -109,6 +109,7 @@ export const TerminalLayout: Component<TerminalLayoutProps> = (props) => {
             selectedId={props.selectedSessionId}
             onSelect={props.onSelectSession}
             onCollapse={() => setLeftCollapsed(true)}
+            width={leftWidth()}
           />
         )}
 

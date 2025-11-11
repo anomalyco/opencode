@@ -13,6 +13,7 @@ interface SessionsPanelProps {
   inputText?: string
   onInput?: (text: string) => void
   cursorVisible?: boolean
+  width?: number
 }
 
 export const SessionsPanel: Component<SessionsPanelProps> = (props) => {
@@ -60,7 +61,7 @@ export const SessionsPanel: Component<SessionsPanelProps> = (props) => {
   })
 
   return (
-    <GridPanel col={0} row={0} width={43} height="100%" bg="#0a0a0a">
+    <GridPanel col={0} row={0} width={props.width || 43} height="100%" bg="#0a0a0a">
       {/* Header */}
       <GridText col={1} row={1} text="SESSIONS" fg="#858585" bold />
       <GridText col={36} row={1} text="◀" fg="#858585" onClick={props.onCollapse} />
