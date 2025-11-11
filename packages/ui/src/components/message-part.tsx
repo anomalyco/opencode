@@ -53,16 +53,11 @@ export function Message(props: MessageProps) {
   return (
     <Switch>
       <Match when={props.message.role === "user" && props.message}>
-        {(userMessage) => (
-          <UserMessageDisplay message={userMessage() as UserMessage} parts={props.parts} />
-        )}
+        {(userMessage) => <UserMessageDisplay message={userMessage() as UserMessage} parts={props.parts} />}
       </Match>
       <Match when={props.message.role === "assistant" && props.message}>
         {(assistantMessage) => (
-          <AssistantMessageDisplay
-            message={assistantMessage() as AssistantMessage}
-            parts={props.parts}
-          />
+          <AssistantMessageDisplay message={assistantMessage() as AssistantMessage} parts={props.parts} />
         )}
       </Match>
     </Switch>
@@ -93,12 +88,7 @@ export function Part(props: MessagePartProps) {
   const component = createMemo(() => PART_MAPPING[props.part.type])
   return (
     <Show when={component()}>
-      <Dynamic
-        component={component()}
-        part={props.part}
-        message={props.message}
-        hideDetails={props.hideDetails}
-      />
+      <Dynamic component={component()} part={props.part} message={props.message} hideDetails={props.hideDetails} />
     </Show>
   )
 }
@@ -226,10 +216,7 @@ ToolRegistry.register({
   name: "list",
   render(props) {
     return (
-      <BasicTool
-        icon="bullet-list"
-        trigger={{ title: "List", subtitle: getDirectory(props.input.path || "/") }}
-      >
+      <BasicTool icon="bullet-list" trigger={{ title: "List", subtitle: getDirectory(props.input.path || "/") }}>
         <Show when={false && props.output}>
           <div data-component="tool-output">{props.output}</div>
         </Show>

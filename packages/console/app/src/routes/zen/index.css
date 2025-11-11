@@ -277,7 +277,7 @@ body {
       margin-bottom: 24px;
     }
 
-    strong {
+    h1 {
       font-size: 28px;
       color: var(--color-text-strong);
       font-weight: 500;

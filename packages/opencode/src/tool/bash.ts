@@ -51,9 +51,7 @@ export const BashTool = Tool.define("bash", {
   }),
   async execute(params, ctx) {
     if (params.timeout !== undefined && params.timeout < 0) {
-      throw new Error(
-        `Invalid timeout value: ${params.timeout}. Timeout must be a positive number.`,
-      )
+      throw new Error(`Invalid timeout value: ${params.timeout}. Timeout must be a positive number.`)
     }
     const timeout = Math.min(params.timeout ?? DEFAULT_TIMEOUT, MAX_TIMEOUT)
     const tree = await parser().then((p) => p.parse(params.command))
@@ -101,10 +99,7 @@ export const BashTool = Tool.define("bash", {
 
       // always allow cd if it passes above check
       if (command[0] !== "cd") {
-        const action = Wildcard.allStructured(
-          { head: command[0], tail: command.slice(1) },
-          permissions,
-        )
+        const action = Wildcard.allStructured({ head: command[0], tail: command.slice(1) }, permissions)
         if (action === "deny") {
           throw new Error(
             `The user has specifically restricted access to this command, you are not allowed to execute it. Here is the configuration: ${JSON.stringify(permissions)}`,

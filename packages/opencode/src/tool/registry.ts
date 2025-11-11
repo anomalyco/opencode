@@ -18,6 +18,9 @@ import path from "path"
 import { type ToolDefinition } from "@opencode-ai/plugin"
 import z from "zod"
 import { Plugin } from "../plugin"
+import { WebSearchTool } from "./websearch"
+import { CodeSearchTool } from "./codesearch"
+import { Flag } from "@/flag/flag"
 
 export namespace ToolRegistry {
   export const state = Instance.state(async () => {
@@ -25,7 +28,12 @@ export namespace ToolRegistry {
     const glob = new Bun.Glob("tool/*.{js,ts}")
 
     for (const dir of await Config.directories()) {
-      for await (const match of glob.scan({ cwd: dir, absolute: true, followSymlinks: true, dot: true })) {
+      for await (const match of glob.scan({
+        cwd: dir,
+        absolute: true,
+        followSymlinks: true,
+        dot: true,
+      })) {
         const namespace = path.basename(match, path.extname(match))
         const mod = await import(match)
         for (const [id, def] of Object.entries<ToolDefinition>(mod)) {
@@ -88,6 +96,7 @@ export namespace ToolRegistry {
       TodoReadTool,
       TaskTool,
       ExitPlanModeTool,
+      ...(Flag.OPENCODE_EXPERIMENTAL_EXA ? [WebSearchTool, CodeSearchTool] : []),
       ...custom,
     ]
   }

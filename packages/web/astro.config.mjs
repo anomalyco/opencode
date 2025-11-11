@@ -108,9 +108,6 @@ export default defineConfig({
       ],
     }),
   ],
-  redirects: {
-    "/discord": "https://discord.gg/opencode",
-  },
 })
 
 function configSchema() {

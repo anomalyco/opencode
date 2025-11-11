@@ -77,10 +77,7 @@ export function DialogStatus() {
           </For>
         </box>
       )}
-      <Show
-        when={enabledFormatters().length > 0}
-        fallback={<text fg={theme.text}>No Formatters</text>}
-      >
+      <Show when={enabledFormatters().length > 0} fallback={<text fg={theme.text}>No Formatters</text>}>
         <box>
           <text fg={theme.text}>{enabledFormatters().length} Formatters</text>
           <For each={enabledFormatters()}>

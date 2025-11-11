@@ -143,12 +143,15 @@ export interface Hooks {
   /**
    * Called when a new message is received
    */
-  "chat.message"?: (input: {}, output: { message: UserMessage; parts: Part[] }) => Promise<void>
+  "chat.message"?: (
+    input: { sessionID: string; agent?: string; model?: { providerID: string; modelID: string }; messageID?: string },
+    output: { message: UserMessage; parts: Part[] },
+  ) => Promise<void>
   /**
    * Modify parameters sent to LLM
    */
   "chat.params"?: (
-    input: { model: Model; provider: Provider; message: UserMessage },
+    input: { sessionID: string; agent: string; model: Model; provider: Provider; message: UserMessage },
     output: { temperature: number; topP: number; options: Record<string, any> },
   ) => Promise<void>
   "permission.ask"?: (input: Permission, output: { status: "ask" | "deny" | "allow" }) => Promise<void>

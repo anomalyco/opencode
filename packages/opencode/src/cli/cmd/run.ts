@@ -9,6 +9,7 @@ import { EOL } from "os"
 import { select } from "@clack/prompts"
 import { createOpencodeClient, type OpencodeClient } from "@opencode-ai/sdk"
 import { Server } from "../../server/server"
+import { Provider } from "../../provider/provider"
 
 const TOOL: Record<string, [string, string]> = {
   todowrite: ["Todo", UI.Style.TEXT_WARNING_BOLD],
@@ -210,10 +211,7 @@ export const RunCommand = cmd({
               ],
               initialValue: "once",
             }).catch(() => "reject")
-            const response = (result.toString().includes("cancel") ? "reject" : result) as
-              | "once"
-              | "always"
-              | "reject"
+            const response = (result.toString().includes("cancel") ? "reject" : result) as "once" | "always" | "reject"
             await sdk.postSessionIdPermissionsPermissionId({
               path: { id: sessionID, permissionID: permission.id },
               body: { response },
@@ -233,12 +231,7 @@ export const RunCommand = cmd({
           },
         })
       } else {
-        const modelParam = args.model
-          ? (() => {
-              const [providerID, modelID] = args.model.split("/")
-              return { providerID, modelID }
-            })()
-          : undefined
+        const modelParam = args.model ? Provider.parseModel(args.model) : undefined
         await sdk.session.prompt({
           path: { id: sessionID },
           body: {

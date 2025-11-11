@@ -82,6 +82,10 @@ export namespace Permission {
     },
   )
 
+  export function pending() {
+    return state().pending
+  }
+
   export async function ask(input: {
     type: Info["type"]
     title: Info["title"]
@@ -219,7 +223,11 @@ export namespace Permission {
       for (const item of Object.values(items)) {
         const itemKeys = toKeys(item.info.pattern, item.info.type)
         if (covered(itemKeys, approved[input.sessionID])) {
-          respond({ sessionID: item.info.sessionID, permissionID: item.info.id, response: input.response })
+          respond({
+            sessionID: item.info.sessionID,
+            permissionID: item.info.id,
+            response: input.response,
+          })
         }
       }
     }

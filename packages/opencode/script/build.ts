@@ -61,9 +61,7 @@ for (const [os, arch] of targets) {
     stdio: ["inherit", "inherit", "inherit"],
   }).exited
 
-  const parserWorker = fs.realpathSync(
-    path.resolve(dir, "./node_modules/@opentui/core/parser.worker.js"),
-  )
+  const parserWorker = fs.realpathSync(path.resolve(dir, "./node_modules/@opentui/core/parser.worker.js"))
   const workerPath = "./src/cli/cmd/tui/worker.ts"
 
   await Bun.build({
