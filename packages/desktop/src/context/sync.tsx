@@ -216,7 +216,7 @@ export const { use: useSync, provider: SyncProvider } = createSimpleContext({
           setStore("limit", (x) => x + count)
           await load.session()
         },
-        more: createMemo(() => store.session.length === store.limit),
+        more: createMemo(() => store.session.length >= store.limit),
       },
       load,
       absolute,

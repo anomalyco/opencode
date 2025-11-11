@@ -41,18 +41,28 @@ export namespace Project {
       return project
     }
     let worktree = path.dirname(git)
-    const [id] = await $`git rev-list --max-parents=0 --all`
-      .quiet()
-      .nothrow()
-      .cwd(worktree)
+    const timer = log.time("git.rev-parse")
+    let id = await Bun.file(path.join(git, "opencode"))
       .text()
-      .then((x) =>
-        x
-          .split("\n")
-          .filter(Boolean)
-          .map((x) => x.trim())
-          .toSorted(),
-      )
+      .then((x) => x.trim())
+      .catch(() => {})
+    if (!id) {
+      const roots = await $`git rev-list --max-parents=0 --all`
+        .quiet()
+        .nothrow()
+        .cwd(worktree)
+        .text()
+        .then((x) =>
+          x
+            .split("\n")
+            .filter(Boolean)
+            .map((x) => x.trim())
+            .toSorted(),
+        )
+      id = roots[0]
+      Bun.file(path.join(git, "opencode")).write(id)
+    }
+    timer.stop()
     if (!id) {
       const project: Info = {
         id: "global",

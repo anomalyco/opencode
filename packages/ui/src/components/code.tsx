@@ -42,6 +42,7 @@ export function Code<T>(props: CodeProps<T>) {
         "--pjs-font-features": "var(--font-family-mono--font-feature-settings)",
         "--pjs-header-font-family": "var(--font-family-sans)",
         "--pjs-gap-block": 0,
+        "--pjs-min-number-column-width": "4ch",
       }}
       classList={{
         ...(local.classList || {}),

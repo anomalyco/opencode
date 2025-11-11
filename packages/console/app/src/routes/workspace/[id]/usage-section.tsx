@@ -15,7 +15,7 @@ const getUsageInfo = query(async (workspaceID: string) => {
 export function UsageSection() {
   const params = useParams()
   // ORIGINAL CODE - COMMENTED OUT FOR TESTING
-  const usage = createAsync(() => getUsageInfo(params.id))
+  const usage = createAsync(() => getUsageInfo(params.id!))
 
   // DUMMY DATA FOR TESTING
   // const usage = () => [

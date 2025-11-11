@@ -332,11 +332,12 @@ export default function Page() {
           <Tabs.Content value="chat" class="@container select-text flex flex-col flex-1 min-h-0 overflow-y-hidden">
             <div
               classList={{
-                "w-full grid flex-1 min-h-0": true,
-                "grid-cols-2": local.layout.review.state() === "open",
+                "w-full flex-1 min-h-0": true,
+                grid: local.layout.review.state() !== "open",
+                flex: local.layout.review.state() === "open",
               }}
             >
-              <div class="relative px-6 py-2 w-full flex flex-col gap-6 flex-1 min-h-0 max-w-2xl mx-auto">
+              <div class="relative shrink-0 px-6 py-2 flex flex-col gap-6 flex-1 min-h-0 w-full max-w-xl mx-auto">
                 <Switch>
                   <Match when={session.id}>
                     <div class="h-8 flex shrink-0 self-stretch items-center justify-end">
@@ -357,8 +358,8 @@ export default function Page() {
                           role="list"
                           classList={{
                             "mr-8 shrink-0 flex flex-col items-start": true,
-                            "absolute right-full w-60 @7xl:gap-2": true, // local.layout.review.state() !== "open",
-                            "": local.layout.review.state() === "open",
+                            "absolute right-full w-60 @7xl:gap-2": local.layout.review.state() !== "open",
+                            "mt-1": local.layout.review.state() === "open",
                           }}
                         >
                           <For each={session.messages.user()}>
@@ -436,7 +437,7 @@ export default function Page() {
                           </For>
                         </ul>
                       </Show>
-                      <div ref={messageScrollElement} class="grow w-full min-w-0 h-full overflow-y-auto no-scrollbar">
+                      <div ref={messageScrollElement} class="grow size-full min-w-0 overflow-y-auto no-scrollbar">
                         <For each={session.messages.user()}>
                           {(message) => {
                             const isActive = createMemo(() => session.messages.active()?.id === message.id)
@@ -655,7 +656,7 @@ export default function Page() {
               <Show when={local.layout.review.state() === "open"}>
                 <div
                   classList={{
-                    "relative px-6 py-2 w-full flex flex-col gap-6 flex-1 min-h-0 border-l border-border-weak-base": true,
+                    "relative grow px-6 py-2 w-full flex flex-col gap-6 flex-1 min-h-0 border-l border-border-weak-base": true,
                   }}
                 >
                   <div class="h-8 w-full flex items-center justify-between shrink-0 self-stretch">
