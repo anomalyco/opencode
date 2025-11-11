@@ -58,7 +58,7 @@ const setReload = action(async (form: FormData) => {
 
 export function ReloadSection() {
   const params = useParams()
-  const billingInfo = createAsync(() => queryBillingInfo(params.id))
+  const billingInfo = createAsync(() => queryBillingInfo(params.id!))
   const setReloadSubmission = useSubmission(setReload)
   const reloadSubmission = useSubmission(reload)
   const [store, setStore] = createStore({

@@ -5,7 +5,7 @@ import "./[id].css"
 
 export default function WorkspaceLayout(props: RouteSectionProps) {
   const params = useParams()
-  const userInfo = createAsync(() => querySessionInfo(params.id))
+  const userInfo = createAsync(() => querySessionInfo(params.id!))
 
   return (
     <main data-page="workspace">
