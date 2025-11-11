@@ -230,9 +230,28 @@ export const MessagesPanel: Component<MessagesPanelProps> = (props) => {
 
       // ASSISTANT MESSAGES WITH TOOLS
       if (!isUser && toolParts.length > 0) {
+        // Group consecutive tools with the same name
+        const groupedTools: Array<{ name: string; tools: any[]; ids: string[] }> = []
         toolParts.forEach((tool: any, toolIdx: number) => {
           const toolName = (tool.tool || "TOOL").toUpperCase().replace("CC_", "")
           const toolId = `${msg.id}-${toolIdx}`
+
+          // Check if we can add to the last group
+          const lastGroup = groupedTools[groupedTools.length - 1]
+          if (lastGroup && lastGroup.name === toolName) {
+            lastGroup.tools.push(tool)
+            lastGroup.ids.push(toolId)
+          } else {
+            groupedTools.push({ name: toolName, tools: [tool], ids: [toolId] })
+          }
+        })
+
+        groupedTools.forEach((group) => {
+          const toolName = group.name
+          const toolCount = group.tools.length
+          const displayName = toolCount > 1 ? `${toolName}(${toolCount})` : toolName
+          const toolId = group.ids[0] // Use first tool's ID for expansion state
+          const tool = group.tools[0] // Use first tool for display
           const toolExpanded = expandedTools().has(toolId)
           const toolInput = tool.input || tool.state?.input || {}
           const toolOutput = tool.output || tool.state?.output || tool.state?.metadata || {}
@@ -276,7 +295,7 @@ export const MessagesPanel: Component<MessagesPanelProps> = (props) => {
           elements.push(
             <GridText col={4} row={currentRow} text={arrow} fg="#6a6a6a" onClick={() => toggleTool(toolId)} />,
           )
-          elements.push(<GridText col={6} row={currentRow} text={` ${toolName} `} fg="#000000" bg="#9a9a9a" bold />)
+          elements.push(<GridText col={6} row={currentRow} text={` ${displayName} `} fg="#000000" bg="#9a9a9a" bold />)
 
           // Show summary info when collapsed (for certain tools)
           if (!toolExpanded && toolInput) {
