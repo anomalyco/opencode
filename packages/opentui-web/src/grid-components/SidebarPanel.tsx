@@ -42,22 +42,22 @@ export const SidebarPanel: Component<SidebarPanelProps> = (props) => {
       {/* Context */}
       <GridText col={2} row={7} text="Context" fg="#ffffff" bold />
 
-      {/* Context bar with colored segments - TERMINAL BRIGHT COLORS */}
-      <GridText col={2} row={8} text="█████" fg="#808080" />
-      <GridText col={7} row={8} text="██████████" fg="#d19a66" />
-      <GridText col={17} row={8} text="██" fg="#61afef" />
-      <GridText col={19} row={8} text="███" fg="#e5c07b" />
+      {/* Context bar with colored segments - BRIGHT TERMINAL COLORS */}
+      <GridText col={2} row={8} text="█████" fg="#999999" />
+      <GridText col={7} row={8} text="██████████" fg="#e5954c" />
+      <GridText col={17} row={8} text="██" fg="#4da6ff" />
+      <GridText col={19} row={8} text="███" fg="#f0d060" />
       <GridText col={22} row={8} text="░░░░░░░░░░░░" fg="#3a3a3a" />
       <GridText col={34} row={8} text="50%" fg="#ffffff" />
 
       {/* Legend with colored blocks */}
-      <GridText col={2} row={10} text="█" fg="#808080" />
+      <GridText col={2} row={10} text="█" fg="#999999" />
       <GridText col={4} row={10} text="System" fg="#ffffff" />
-      <GridText col={11} row={10} text="█" fg="#d19a66" />
+      <GridText col={11} row={10} text="█" fg="#e5954c" />
       <GridText col={13} row={10} text="AI" fg="#ffffff" />
-      <GridText col={16} row={10} text="█" fg="#61afef" />
+      <GridText col={16} row={10} text="█" fg="#4da6ff" />
       <GridText col={18} row={10} text="User" fg="#ffffff" />
-      <GridText col={23} row={10} text="█" fg="#e5c07b" />
+      <GridText col={23} row={10} text="█" fg="#f0d060" />
       <GridText col={25} row={10} text="Tool" fg="#ffffff" />
 
       {/* Token stats */}
@@ -67,21 +67,21 @@ export const SidebarPanel: Component<SidebarPanelProps> = (props) => {
 
       {/* Tabs - active tab white with ●, inactive muted with ○ */}
       <GridText
-        col={0}
+        col={2}
         row={16}
         text={`${activeTab() === "tools" ? "●" : "○"} Tools(15)`}
         fg={activeTab() === "tools" ? "#ffffff" : "#6a6a6a"}
         onClick={() => setActiveTab("tools")}
       />
       <GridText
-        col={13}
+        col={15}
         row={16}
         text={`${activeTab() === "todos" ? "●" : "○"} Todos(6)`}
         fg={activeTab() === "todos" ? "#ffffff" : "#6a6a6a"}
         onClick={() => setActiveTab("todos")}
       />
       <GridText
-        col={25}
+        col={27}
         row={16}
         text={`${activeTab() === "files" ? "●" : "○"} Files(30)`}
         fg={activeTab() === "files" ? "#ffffff" : "#6a6a6a"}
@@ -148,7 +148,7 @@ export const SidebarPanel: Component<SidebarPanelProps> = (props) => {
 
           {/* Add Subagent - dynamic row based on expanded state */}
           <GridText
-            col={0}
+            col={2}
             row={subagentsExpanded() ? 24 + props.subagents.length + 1 : 25}
             text="+ Add Subagent"
             fg="#e5c07b"
