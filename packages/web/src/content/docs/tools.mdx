@@ -177,6 +177,8 @@ Search file contents using regular expressions.
 
 Fast content search across your codebase. Supports full regex syntax and file pattern filtering.
 
+When [`ai.useToonEncoding`](/docs/config#toon-encoding) is enabled, search results use the TOON format for improved token efficiency.
+
 ---
 
 ### glob
@@ -194,6 +196,8 @@ Find files by pattern matching.
 
 Search for files using glob patterns like `**/*.js` or `src/**/*.ts`. Returns matching file paths sorted by modification time.
 
+When [`ai.useToonEncoding`](/docs/config#toon-encoding) is enabled, file lists use the TOON format for improved token efficiency.
+
 ---
 
 ### list
@@ -210,6 +214,8 @@ List files and directories in a given path.
 ```
 
 This tool lists directory contents. It accepts glob patterns to filter results.
+
+When [`ai.useToonEncoding`](/docs/config#toon-encoding) is enabled, directory listings use the TOON format for improved token efficiency.
 
 ---
 

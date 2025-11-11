@@ -110,6 +110,50 @@ Available options:
 
 ---
 
+### AI
+
+You can configure AI-specific behavior through the `ai` option.
+
+```json title="opencode.json"
+{
+  "$schema": "https://opencode.ai/config.json",
+  "ai": {
+    "useToonEncoding": false
+  }
+}
+```
+
+#### TOON Encoding
+
+The `useToonEncoding` option enables [TOON (Token-Oriented Object Notation)](https://toon.run) encoding for structured data in AI contexts. TOON is a compact format that reduces token usage by 30-60% compared to JSON for uniform arrays of objects.
+
+When enabled, OpenCode will use TOON encoding for:
+
+- Error reports and diagnostics
+- File lists and directory structures
+- Tool outputs with structured data
+
+This is particularly beneficial for large codebases where token efficiency is important. The feature is opt-in (default `false`) to maintain backward compatibility.
+
+**Example token savings:**
+
+```json
+// JSON (471 characters)
+[
+  { "file": "src/Button.tsx", "line": 42, "severity": "error", "message": "Type error" },
+  { "file": "src/utils.ts", "line": 89, "severity": "warning", "message": "Unused variable" },
+  { "file": "src/Home.tsx", "line": 156, "severity": "error", "message": "Cannot find name" }
+]
+
+// TOON (250 characters - 47% reduction)
+[3]{file,line,severity,message}:
+  src/Button.tsx,42,error,Type error
+  src/utils.ts,89,warning,Unused variable
+  src/Home.tsx,156,error,Cannot find name
+```
+
+---
+
 ### Tools
 
 You can manage the tools an LLM can use through the `tools` option.

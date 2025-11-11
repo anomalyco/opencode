@@ -4,6 +4,8 @@ import { Tool } from "./tool"
 import DESCRIPTION from "./glob.txt"
 import { Ripgrep } from "../file/ripgrep"
 import { Instance } from "../project/instance"
+import { conditionalEncode } from "../util/toon"
+import { Config } from "../config/config"
 
 export const GlobTool = Tool.define("glob", {
   description: DESCRIPTION,
@@ -21,7 +23,7 @@ export const GlobTool = Tool.define("glob", {
     search = path.isAbsolute(search) ? search : path.resolve(Instance.directory, search)
 
     const limit = 100
-    const files = []
+    const files: Array<{ path: string; mtime: number }> = []
     let truncated = false
     for await (const file of Ripgrep.files({
       cwd: search,
@@ -43,15 +45,24 @@ export const GlobTool = Tool.define("glob", {
     }
     files.sort((a, b) => b.mtime - a.mtime)
 
-    const output = []
-    if (files.length === 0) output.push("No files found")
-    if (files.length > 0) {
-      output.push(...files.map((f) => f.path))
-      if (truncated) {
-        output.push("")
-        output.push("(Results are truncated. Consider using a more specific path or pattern.)")
-      }
-    }
+    const config = await Config.get()
+    const output = conditionalEncode(
+      files,
+      (data) => {
+        const fileList = data as Array<{ path: string; mtime: number }>
+        const lines: string[] = []
+        if (fileList.length === 0) lines.push("No files found")
+        if (fileList.length > 0) {
+          lines.push(...fileList.map((f) => f.path))
+          if (truncated) {
+            lines.push("")
+            lines.push("(Results are truncated. Consider using a more specific path or pattern.)")
+          }
+        }
+        return lines.join("\n")
+      },
+      config.ai?.useToonEncoding,
+    )
 
     return {
       title: path.relative(Instance.worktree, search),
@@ -59,7 +70,7 @@ export const GlobTool = Tool.define("glob", {
         count: files.length,
         truncated,
       },
-      output: output.join("\n"),
+      output,
     }
   },
 })

@@ -4,6 +4,8 @@ import { Ripgrep } from "../file/ripgrep"
 
 import DESCRIPTION from "./grep.txt"
 import { Instance } from "../project/instance"
+import { conditionalEncode } from "../util/toon"
+import { Config } from "../config/config"
 
 export const GrepTool = Tool.define("grep", {
   description: DESCRIPTION,
@@ -31,7 +33,7 @@ export const GrepTool = Tool.define("grep", {
       stderr: "pipe",
     })
 
-    const output = await new Response(proc.stdout).text()
+    const rgOutput = await new Response(proc.stdout).text()
     const errorOutput = await new Response(proc.stderr).text()
     const exitCode = await proc.exited
 
@@ -47,7 +49,7 @@ export const GrepTool = Tool.define("grep", {
       throw new Error(`ripgrep failed: ${errorOutput}`)
     }
 
-    const lines = output.trim().split("\n")
+    const lines = rgOutput.trim().split("\n")
     const matches = []
 
     for (const line of lines) {
@@ -85,24 +87,31 @@ export const GrepTool = Tool.define("grep", {
       }
     }
 
-    const outputLines = [`Found ${finalMatches.length} matches`]
-
-    let currentFile = ""
-    for (const match of finalMatches) {
-      if (currentFile !== match.path) {
-        if (currentFile !== "") {
-          outputLines.push("")
+    const config = await Config.get()
+    const output = conditionalEncode(
+      finalMatches,
+      (data) => {
+        const matches = data as typeof finalMatches
+        const lines = [`Found ${matches.length} matches`]
+        let currentFile = ""
+        for (const match of matches) {
+          if (currentFile !== match.path) {
+            if (currentFile !== "") {
+              lines.push("")
+            }
+            currentFile = match.path
+            lines.push(`${match.path}:`)
+          }
+          lines.push(`  Line ${match.lineNum}: ${match.lineText}`)
         }
-        currentFile = match.path
-        outputLines.push(`${match.path}:`)
-      }
-      outputLines.push(`  Line ${match.lineNum}: ${match.lineText}`)
-    }
-
-    if (truncated) {
-      outputLines.push("")
-      outputLines.push("(Results are truncated. Consider using a more specific path or pattern.)")
-    }
+        if (truncated) {
+          lines.push("")
+          lines.push("(Results are truncated. Consider using a more specific path or pattern.)")
+        }
+        return lines.join("\n")
+      },
+      config.ai?.useToonEncoding,
+    )
 
     return {
       title: params.pattern,
@@ -110,7 +119,7 @@ export const GrepTool = Tool.define("grep", {
         matches: finalMatches.length,
         truncated,
       },
-      output: outputLines.join("\n"),
+      output,
     }
   },
 })

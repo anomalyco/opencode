@@ -4,6 +4,8 @@ import * as path from "path"
 import DESCRIPTION from "./ls.txt"
 import { Instance } from "../project/instance"
 import { Ripgrep } from "../file/ripgrep"
+import { conditionalEncode } from "../util/toon"
+import { Config } from "../config/config"
 
 export const IGNORE_PATTERNS = [
   "node_modules/",
@@ -69,34 +71,45 @@ export const ListTool = Tool.define("list", {
       filesByDir.get(dir)!.push(path.basename(file))
     }
 
-    function renderDir(dirPath: string, depth: number): string {
-      const indent = "  ".repeat(depth)
-      let output = ""
+    const config = await Config.get()
 
-      if (depth > 0) {
-        output += `${indent}${path.basename(dirPath)}/\n`
-      }
+    const output = conditionalEncode(
+      files.map((file) => ({
+        path: path.join(searchPath, file),
+        type: dirs.has(file) ? "directory" : "file",
+      })),
+      () => {
+        function renderDir(dirPath: string, depth: number): string {
+          const indent = "  ".repeat(depth)
+          let output = ""
 
-      const childIndent = "  ".repeat(depth + 1)
-      const children = Array.from(dirs)
-        .filter((d) => path.dirname(d) === dirPath && d !== dirPath)
-        .sort()
+          if (depth > 0) {
+            output += `${indent}${path.basename(dirPath)}/\n`
+          }
 
-      // Render subdirectories first
-      for (const child of children) {
-        output += renderDir(child, depth + 1)
-      }
+          const childIndent = "  ".repeat(depth + 1)
+          const children = Array.from(dirs)
+            .filter((d) => path.dirname(d) === dirPath && d !== dirPath)
+            .sort()
 
-      // Render files
-      const files = filesByDir.get(dirPath) || []
-      for (const file of files.sort()) {
-        output += `${childIndent}${file}\n`
-      }
+          // Render subdirectories first
+          for (const child of children) {
+            output += renderDir(child, depth + 1)
+          }
 
-      return output
-    }
+          // Render files
+          const files = filesByDir.get(dirPath) || []
+          for (const file of files.sort()) {
+            output += `${childIndent}${file}\n`
+          }
 
-    const output = `${searchPath}/\n` + renderDir(".", 0)
+          return output
+        }
+
+        return `${searchPath}/\n` + renderDir(".", 0)
+      },
+      config.ai?.useToonEncoding,
+    )
 
     return {
       title: path.relative(Instance.worktree, searchPath),

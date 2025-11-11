@@ -45,6 +45,9 @@ When opencode opens a file, it:
 
 1. Checks the file extension against all enabled LSP servers.
 2. Starts the appropriate LSP server if not already running.
+3. Collects diagnostics (errors, warnings) from the LSP server and provides them to the LLM.
+
+When [`ai.useToonEncoding`](/docs/config#toon-encoding) is enabled, LSP diagnostics use the TOON format for improved token efficiency.
 
 ---
 

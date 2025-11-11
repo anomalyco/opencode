@@ -60,6 +60,7 @@
     "@pierre/precision-diffs": "catalog:",
     "@solid-primitives/event-bus": "1.1.2",
     "@standard-schema/spec": "1.0.0",
+    "@toon-format/toon": "1.0.0",
     "@zip.js/zip.js": "2.7.62",
     "ai": "catalog:",
     "chokidar": "4.0.3",

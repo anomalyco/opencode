@@ -596,6 +596,17 @@ export namespace Config {
         })
         .optional(),
       tools: z.record(z.string(), z.boolean()).optional(),
+      ai: z
+        .object({
+          useToonEncoding: z
+            .boolean()
+            .optional()
+            .default(false)
+            .describe(
+              "Use TOON encoding for structured data in AI contexts to reduce token usage by 30-60%. Default is false (opt-in).",
+            ),
+        })
+        .optional(),
       experimental: z
         .object({
           hook: z
