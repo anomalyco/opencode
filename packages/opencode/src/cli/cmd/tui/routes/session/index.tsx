@@ -165,9 +165,7 @@ export function Session() {
     if (hasPermissions && dialogEmpty && !permissionDialogShown) {
       permissionDialogShown = true
       toBottom()
-      dialog.replace(() => (
-        <DialogPermission permissions={perms} sessionID={route.sessionID} />
-      ))
+      dialog.replace(() => <DialogPermission permissions={perms} sessionID={route.sessionID} />)
     }
     // Clear permission dialog ONLY if we previously showed it and now have no permissions
     else if (!hasPermissions && permissionDialogShown) {
