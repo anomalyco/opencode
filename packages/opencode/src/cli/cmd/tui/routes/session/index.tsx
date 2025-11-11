@@ -159,9 +159,7 @@ export function Session() {
     const perms = permissions()
     if (perms.length > 0 && dialog.stack.length === 0) {
       toBottom()
-      dialog.replace(() => (
-        <DialogPermission permissions={perms} sessionID={route.sessionID} />
-      ))
+      dialog.replace(() => <DialogPermission permissions={perms} sessionID={route.sessionID} />)
     } else if (perms.length === 0 && dialog.stack.length > 0) {
       dialog.clear()
     }
@@ -186,7 +184,9 @@ export function Session() {
     const msgs = messages()
     const lastMsg = msgs[msgs.length - 1]
     if (lastMsg?.role === "assistant" && "parts" in lastMsg) {
-      const taskTools = (lastMsg as AssistantMessage).parts.filter((p: Part): p is ToolPart => p.type === "tool" && p.tool === "task")
+      const taskTools = (lastMsg as AssistantMessage).parts.filter(
+        (p: Part): p is ToolPart => p.type === "tool" && p.tool === "task",
+      )
       for (const tool of taskTools) {
         // Only scroll when a new task tool with summary appears (not on updates)
         if (tool.state.status === "running" && tool.state.metadata?.summary && tool.id !== lastScrolledToolId) {
@@ -1190,11 +1190,15 @@ function ToolTitle(props: {
   const { theme } = useTheme()
   return (
     <text paddingLeft={3} fg={props.when ? theme.textMuted : theme.text}>
-      <Show fallback={<><Spinner /> {props.fallback}</>} when={props.when}>
-        <Show
-          when={props.status === "running"}
-          fallback={<span style={{ bold: true }}>{props.icon}</span>}
-        >
+      <Show
+        fallback={
+          <>
+            <Spinner /> {props.fallback}
+          </>
+        }
+        when={props.when}
+      >
+        <Show when={props.status === "running"} fallback={<span style={{ bold: true }}>{props.icon}</span>}>
           <PulsingDot />
         </Show>{" "}
         {props.children}
@@ -1348,8 +1352,7 @@ ToolRegistry.register<typeof GlobTool>({
           when={props.input.pattern}
           status={isRunning() ? "running" : undefined}
         >
-          Glob "{props.input.pattern}"{" "}
-          <Show when={props.input.path}>in {normalizePath(props.input.path)} </Show>
+          Glob "{props.input.pattern}" <Show when={props.input.path}>in {normalizePath(props.input.path)} </Show>
           <Show when={props.metadata.count}>
             ({props.metadata.count} matches) <SuccessCheckmark />
           </Show>
@@ -1374,8 +1377,7 @@ ToolRegistry.register<typeof GrepTool>({
         when={props.input.pattern}
         status={isRunning() ? "running" : undefined}
       >
-        Grep "{props.input.pattern}"{" "}
-        <Show when={props.input.path}>in {normalizePath(props.input.path)} </Show>
+        Grep "{props.input.pattern}" <Show when={props.input.path}>in {normalizePath(props.input.path)} </Show>
         <Show when={props.metadata.matches}>
           ({props.metadata.matches} matches) <SuccessCheckmark />
         </Show>
@@ -1413,7 +1415,9 @@ ToolRegistry.register<typeof TaskTool>({
   render(props) {
     const { theme } = useTheme()
     const keybind = useKeybind()
-    const isRunning = createMemo(() => props.metadata.status === "running" || (!props.output && props.input.description))
+    const isRunning = createMemo(
+      () => props.metadata.status === "running" || (!props.output && props.input.description),
+    )
     const isCompleted = createMemo(() => props.metadata.status === "completed" || !!props.output)
 
     // Separate tools by status for better organization

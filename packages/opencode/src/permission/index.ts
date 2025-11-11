@@ -156,7 +156,7 @@ export namespace Permission {
             pending[session.parentID] = pending[session.parentID] || {}
             pending[session.parentID][info.id] = {
               info: forwardedInfo,
-              resolve,  // Same resolve/reject as child - they should be linked
+              resolve, // Same resolve/reject as child - they should be linked
               reject,
             }
             Bus.publish(Event.Updated, forwardedInfo)

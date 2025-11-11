@@ -64,7 +64,7 @@ export function Prompt(props: PromptProps) {
   const renderer = useRenderer()
   const { theme, syntax } = useTheme()
 
-  const messages = createMemo(() => (props.sessionID ? sync.data.message[props.sessionID] ?? [] : []))
+  const messages = createMemo(() => (props.sessionID ? (sync.data.message[props.sessionID] ?? []) : []))
 
   const cost = createMemo(() => {
     const total = pipe(
@@ -78,16 +78,10 @@ export function Prompt(props: PromptProps) {
   })
 
   const context = createMemo(() => {
-    const last = messages().findLast(
-      (x) => x.role === "assistant" && x.tokens.output > 0,
-    ) as AssistantMessage
+    const last = messages().findLast((x) => x.role === "assistant" && x.tokens.output > 0) as AssistantMessage
     if (!last) return
     const total =
-      last.tokens.input +
-      last.tokens.output +
-      last.tokens.reasoning +
-      last.tokens.cache.read +
-      last.tokens.cache.write
+      last.tokens.input + last.tokens.output + last.tokens.reasoning + last.tokens.cache.read + last.tokens.cache.write
     const model = sync.data.provider.find((x) => x.id === last.providerID)?.models[last.modelID]
     let result = total.toLocaleString()
     if (model?.limit.context) {

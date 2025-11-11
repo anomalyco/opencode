@@ -429,7 +429,11 @@ export namespace Config {
 
   export const TUI = z.object({
     scroll_speed: z.number().min(1).optional().default(2).describe("TUI scroll speed"),
-    show_header: z.boolean().optional().default(true).describe("Show header with title, context info, and share link when sidebar is hidden"),
+    show_header: z
+      .boolean()
+      .optional()
+      .default(true)
+      .describe("Show header with title, context info, and share link when sidebar is hidden"),
   })
 
   export const Layout = z.enum(["auto", "stretch"]).meta({

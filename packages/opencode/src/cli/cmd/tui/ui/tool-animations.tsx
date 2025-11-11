@@ -51,13 +51,7 @@ export function PulsingDot(props: { color?: RGBA }) {
     },
   })
 
-  const color = () =>
-    RGBA.fromInts(
-      baseColor.r * 255,
-      baseColor.g * 255,
-      baseColor.b * 255,
-      opacity() * 255,
-    )
+  const color = () => RGBA.fromInts(baseColor.r * 255, baseColor.g * 255, baseColor.b * 255, opacity() * 255)
 
   return <span style={{ fg: color() }}>●</span>
 }
@@ -129,12 +123,7 @@ export function StreamingText(props: { text: string; color?: RGBA; speed?: numbe
         {(ch, i) => {
           const phase = (time() + i() * 100) / 1000
           const opacity = 0.5 + Math.sin(phase) * 0.5
-          const color = RGBA.fromInts(
-            baseColor.r * 255,
-            baseColor.g * 255,
-            baseColor.b * 255,
-            opacity * 255,
-          )
+          const color = RGBA.fromInts(baseColor.r * 255, baseColor.g * 255, baseColor.b * 255, opacity * 255)
           return <span style={{ fg: color }}>{ch}</span>
         }}
       </For>
@@ -176,12 +165,7 @@ export function PulsingBorder(props: { children: JSX.Element; active: boolean })
 
   const borderColor = () => {
     if (!props.active) return theme.border
-    return RGBA.fromInts(
-      theme.accent.r * 255,
-      theme.accent.g * 255,
-      theme.accent.b * 255,
-      intensity() * 255,
-    )
+    return RGBA.fromInts(theme.accent.r * 255, theme.accent.g * 255, theme.accent.b * 255, intensity() * 255)
   }
 
   return (
@@ -215,12 +199,7 @@ export function SuccessCheckmark(props: { delay?: number }) {
   }, props.delay ?? 0)
 
   const opacity = () => Math.min(scale(), 1)
-  const color = RGBA.fromInts(
-    theme.success.r * 255,
-    theme.success.g * 255,
-    theme.success.b * 255,
-    opacity() * 255,
-  )
+  const color = RGBA.fromInts(theme.success.r * 255, theme.success.g * 255, theme.success.b * 255, opacity() * 255)
 
   return visible() ? <span style={{ fg: color, bold: true }}>✓</span> : <></>
 }

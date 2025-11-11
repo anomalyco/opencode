@@ -43,8 +43,8 @@ export function DialogPermission(props: DialogPermissionProps) {
     const perm = currentPermission()
     if (!perm || perm.type !== "exit-plan-mode") return null
     const agents = availableAgents()
-    const defaultAgent = perm.metadata.switchToAgent as string || "build"
-    const defaultIndex = agents.findIndex(a => a.name === defaultAgent)
+    const defaultAgent = (perm.metadata.switchToAgent as string) || "build"
+    const defaultIndex = agents.findIndex((a) => a.name === defaultAgent)
     const index = defaultIndex >= 0 ? defaultIndex : 0
     return agents[Math.min(store.selectedAgentIndex || index, agents.length - 1)]
   })
@@ -52,9 +52,9 @@ export function DialogPermission(props: DialogPermissionProps) {
   onMount(() => {
     const perm = currentPermission()
     if (perm && perm.type === "exit-plan-mode") {
-      const defaultAgent = perm.metadata.switchToAgent as string || "build"
+      const defaultAgent = (perm.metadata.switchToAgent as string) || "build"
       const agents = availableAgents()
-      const index = agents.findIndex(a => a.name === defaultAgent)
+      const index = agents.findIndex((a) => a.name === defaultAgent)
       if (index >= 0) setStore("selectedAgentIndex", index)
     }
   })
@@ -152,69 +152,69 @@ export function DialogPermission(props: DialogPermissionProps) {
   })
 
   useKeyboard((evt) => {
+    const perm = currentPermission()
+
+    // Agent selection for exit-plan-mode permissions (left/right arrows)
+    if (perm && perm.type === "exit-plan-mode") {
+      if (evt.name === "left") {
+        const agents = availableAgents()
+        const prev = (store.selectedAgentIndex - 1 + agents.length) % agents.length
+        setStore("selectedAgentIndex", prev)
+        evt.preventDefault()
+        return
+      }
+      if (evt.name === "right") {
+        const agents = availableAgents()
+        const next = (store.selectedAgentIndex + 1) % agents.length
+        setStore("selectedAgentIndex", next)
+        evt.preventDefault()
+        return
+      }
+    }
+
+    // Scroll navigation for diff content (only for non-exit-plan-mode)
+    if (perm && perm.type !== "exit-plan-mode") {
+      if (evt.name === "up" || evt.name === "k") {
+        if (diffScrollBox) {
+          diffScrollBox.scrollBy(-1)
+        }
+        evt.preventDefault()
+      }
+      if (evt.name === "down" || evt.name === "j") {
+        if (diffScrollBox) {
+          diffScrollBox.scrollBy(1)
+        }
+        evt.preventDefault()
+      }
+    }
+
+    // Actions
+    if (evt.name === "return") {
+      if (perm) respondToPermission(perm.id, "once")
+      evt.preventDefault()
+    }
+    if (evt.name === "a") {
       const perm = currentPermission()
-
-      // Agent selection for exit-plan-mode permissions (left/right arrows)
-      if (perm && perm.type === "exit-plan-mode") {
-        if (evt.name === "left") {
-          const agents = availableAgents()
-          const prev = (store.selectedAgentIndex - 1 + agents.length) % agents.length
-          setStore("selectedAgentIndex", prev)
-          evt.preventDefault()
-          return
-        }
-        if (evt.name === "right") {
-          const agents = availableAgents()
-          const next = (store.selectedAgentIndex + 1) % agents.length
-          setStore("selectedAgentIndex", next)
-          evt.preventDefault()
-          return
-        }
-      }
-
-      // Scroll navigation for diff content (only for non-exit-plan-mode)
-      if (perm && perm.type !== "exit-plan-mode") {
-        if (evt.name === "up" || evt.name === "k") {
-          if (diffScrollBox) {
-            diffScrollBox.scrollBy(-1)
-          }
-          evt.preventDefault()
-        }
-        if (evt.name === "down" || evt.name === "j") {
-          if (diffScrollBox) {
-            diffScrollBox.scrollBy(1)
-          }
-          evt.preventDefault()
-        }
-      }
-
-      // Actions
-      if (evt.name === "return") {
-        if (perm) respondToPermission(perm.id, "once")
-        evt.preventDefault()
-      }
-      if (evt.name === "a") {
-        const perm = currentPermission()
-        if (perm) respondToPermission(perm.id, "always")
-        evt.preventDefault()
-      }
-      if (evt.name === "d") {
-        const perm = currentPermission()
-        if (perm) respondToPermission(perm.id, "reject")
-        evt.preventDefault()
-      }
-      if (evt.name === "r") {
-        rejectAll()
-        evt.preventDefault()
-      }
-      if (evt.name === "escape") {
-        rejectAll()
-        evt.preventDefault()
-      }
+      if (perm) respondToPermission(perm.id, "always")
+      evt.preventDefault()
+    }
+    if (evt.name === "d") {
+      const perm = currentPermission()
+      if (perm) respondToPermission(perm.id, "reject")
+      evt.preventDefault()
+    }
+    if (evt.name === "r") {
+      rejectAll()
+      evt.preventDefault()
+    }
+    if (evt.name === "escape") {
+      rejectAll()
+      evt.preventDefault()
+    }
   })
 
   function respondToPermission(permissionID: string, response: Permission.Response) {
-    const perm = props.permissions.find(p => p.id === permissionID)
+    const perm = props.permissions.find((p) => p.id === permissionID)
 
     if (perm && perm.type === "exit-plan-mode" && (response === "once" || response === "always")) {
       const agent = selectedAgent()
@@ -234,7 +234,7 @@ export function DialogPermission(props: DialogPermissionProps) {
     // Update selected index to handle the removed permission
     // The dialog will auto-close via the reactive effect in session/index.tsx
     // when permissions array becomes empty
-    const currentIndex = props.permissions.findIndex(p => p.id === permissionID)
+    const currentIndex = props.permissions.findIndex((p) => p.id === permissionID)
     if (currentIndex !== -1 && store.selectedIndex >= currentIndex && store.selectedIndex > 0) {
       setStore("selectedIndex", Math.max(0, store.selectedIndex - 1))
     }
@@ -255,7 +255,6 @@ export function DialogPermission(props: DialogPermissionProps) {
     dialog.clear()
   }
 
-
   // Truncate metadata entries for responsiveness (exclude diff for edit permissions)
   const visibleMetadata = createMemo(() => {
     const perm = currentPermission()
@@ -275,12 +274,7 @@ export function DialogPermission(props: DialogPermissionProps) {
 
   return (
     <Show when={currentPermission()}>
-      <box
-        paddingLeft={2}
-        paddingRight={2}
-        gap={1}
-        flexDirection="column"
-      >
+      <box paddingLeft={2} paddingRight={2} gap={1} flexDirection="column">
         {/* Header */}
         <box flexDirection="row" justifyContent="space-between">
           <text attributes={TextAttributes.BOLD}>
@@ -293,137 +287,128 @@ export function DialogPermission(props: DialogPermissionProps) {
           <text fg={theme.textMuted}>esc</text>
         </box>
 
-      {/* Current permission details - Scrollable */}
-      <scrollbox
-        paddingTop={1}
-        paddingBottom={1}
-        gap={1}
-        backgroundColor={theme.backgroundElement}
-        maxHeight={detailsMaxHeight()}
-        scrollbarOptions={{ visible: false }}
-      >
-        <box paddingLeft={1} paddingRight={1} gap={1}>
-          <text attributes={TextAttributes.BOLD}>{currentPermission()!.title}</text>
+        {/* Current permission details - Scrollable */}
+        <scrollbox
+          paddingTop={1}
+          paddingBottom={1}
+          gap={1}
+          backgroundColor={theme.backgroundElement}
+          maxHeight={detailsMaxHeight()}
+          scrollbarOptions={{ visible: false }}
+        >
+          <box paddingLeft={1} paddingRight={1} gap={1}>
+            <text attributes={TextAttributes.BOLD}>{currentPermission()!.title}</text>
 
-          {/* Show indicator for subagent permissions */}
-          <Show when={currentPermission()!.metadata?.originSessionID}>
-            <text fg={theme.accent}>
-              ⚡ From subagent: {currentPermission()!.metadata?.originSessionTitle as string || "Unknown"}
-            </text>
-          </Show>
+            {/* Show indicator for subagent permissions */}
+            <Show when={currentPermission()!.metadata?.originSessionID}>
+              <text fg={theme.accent}>
+                ⚡ From subagent: {(currentPermission()!.metadata?.originSessionTitle as string) || "Unknown"}
+              </text>
+            </Show>
 
-          <text fg={theme.textMuted}>Type: {currentPermission()!.type}</text>
+            <text fg={theme.textMuted}>Type: {currentPermission()!.type}</text>
 
-          {/* Show file path for edit permissions */}
-          <Show when={currentPermission()!.type === "edit" && currentPermission()!.metadata.filePath}>
-            <text fg={theme.textMuted}>
-              File: {currentPermission()!.metadata.filePath as string}
-            </text>
-          </Show>
+            {/* Show file path for edit permissions */}
+            <Show when={currentPermission()!.type === "edit" && currentPermission()!.metadata.filePath}>
+              <text fg={theme.textMuted}>File: {currentPermission()!.metadata.filePath as string}</text>
+            </Show>
 
-          <Show when={currentPermission()!.pattern}>
-            <text fg={theme.textMuted}>
-              Pattern: {Array.isArray(currentPermission()!.pattern)
-                ? (currentPermission()!.pattern as string[]).join(", ")
-                : currentPermission()!.pattern as string}
-            </text>
-          </Show>
+            <Show when={currentPermission()!.pattern}>
+              <text fg={theme.textMuted}>
+                Pattern:{" "}
+                {Array.isArray(currentPermission()!.pattern)
+                  ? (currentPermission()!.pattern as string[]).join(", ")
+                  : (currentPermission()!.pattern as string)}
+              </text>
+            </Show>
 
-          {/* Show metadata for non-edit permissions or remaining edit metadata */}
-          <Show when={visibleMetadata().length > 0}>
-            <box paddingTop={1}>
-              <text fg={theme.textMuted}>Details:</text>
-              <For each={visibleMetadata()}>
-                {([key, value]) => (
-                  <text fg={theme.textMuted}>
-                    • {Locale.truncate(
+            {/* Show metadata for non-edit permissions or remaining edit metadata */}
+            <Show when={visibleMetadata().length > 0}>
+              <box paddingTop={1}>
+                <text fg={theme.textMuted}>Details:</text>
+                <For each={visibleMetadata()}>
+                  {([key, value]) => (
+                    <text fg={theme.textMuted}>
+                      •{" "}
+                      {Locale.truncate(
                         `${key}: ${typeof value === "string" ? value : JSON.stringify(value)}`,
-                        Math.max(60, dimensions().width - 20)
+                        Math.max(60, dimensions().width - 20),
                       )}
+                    </text>
+                  )}
+                </For>
+                <Show when={hasMoreMetadata()}>
+                  <text fg={theme.textMuted}>
+                    ... and{" "}
+                    {Object.entries(currentPermission()!.metadata).filter(([key]) => key !== "diff").length -
+                      maxMetadataLines()}{" "}
+                    more
+                  </text>
+                </Show>
+              </box>
+            </Show>
+          </box>
+        </scrollbox>
+
+        {/* Diff display for Edit permissions - split view with colored syntax highlighting */}
+        <Show when={currentPermission()!.type === "edit" && parsedDiff()}>
+          <scrollbox
+            ref={(r: ScrollBoxRenderable) => (diffScrollBox = r)}
+            paddingTop={1}
+            paddingBottom={1}
+            backgroundColor={theme.backgroundElement}
+            maxHeight={diffMaxHeight()}
+            verticalScrollbarOptions={{ visible: true }}
+            horizontalScrollbarOptions={{ visible: false }}
+          >
+            <box paddingLeft={1} flexDirection="row" gap={2}>
+              <box flexGrow={1} flexBasis={0}>
+                <code filetype={filetype()} syntaxStyle={syntax()} content={parsedDiff()!.oldContent} />
+              </box>
+              <box flexGrow={1} flexBasis={0}>
+                <code filetype={filetype()} syntaxStyle={syntax()} content={parsedDiff()!.newContent} />
+              </box>
+            </box>
+          </scrollbox>
+        </Show>
+
+        {/* Plan display for exit-plan-mode permissions */}
+        <Show when={currentPermission()!.type === "exit-plan-mode" && currentPermission()!.metadata.plan}>
+          <scrollbox
+            ref={(r: ScrollBoxRenderable) => (diffScrollBox = r)}
+            paddingTop={1}
+            paddingBottom={1}
+            backgroundColor={theme.backgroundElement}
+            maxHeight={diffMaxHeight()}
+            verticalScrollbarOptions={{ visible: true }}
+            horizontalScrollbarOptions={{ visible: false }}
+          >
+            <box paddingLeft={1} paddingRight={1}>
+              <code filetype="markdown" syntaxStyle={syntax()} content={currentPermission()!.metadata.plan as string} />
+            </box>
+          </scrollbox>
+
+          {/* Agent selection for exit-plan-mode */}
+          <box paddingTop={1} paddingLeft={1} gap={1}>
+            <text fg={theme.textMuted}>Switch to agent:</text>
+            <box flexDirection="row" flexWrap="wrap" gap={1}>
+              <For each={availableAgents()}>
+                {(agent, index) => (
+                  <text>
+                    <Show when={index() === store.selectedAgentIndex}>
+                      <b style={{ fg: local.agent.color(agent.name) }}>{agent.name}</b>
+                    </Show>
+                    <Show when={index() !== store.selectedAgentIndex}>
+                      <span style={{ fg: theme.textMuted }}>{agent.name}</span>
+                    </Show>
                   </text>
                 )}
               </For>
-              <Show when={hasMoreMetadata()}>
-                <text fg={theme.textMuted}>
-                  ... and {Object.entries(currentPermission()!.metadata).filter(([key]) => key !== "diff").length - maxMetadataLines()} more
-                </text>
-              </Show>
-            </box>
-          </Show>
-        </box>
-      </scrollbox>
-
-      {/* Diff display for Edit permissions - split view with colored syntax highlighting */}
-      <Show when={currentPermission()!.type === "edit" && parsedDiff()}>
-        <scrollbox
-          ref={(r: ScrollBoxRenderable) => (diffScrollBox = r)}
-          paddingTop={1}
-          paddingBottom={1}
-          backgroundColor={theme.backgroundElement}
-          maxHeight={diffMaxHeight()}
-          verticalScrollbarOptions={{ visible: true }}
-          horizontalScrollbarOptions={{ visible: false }}
-        >
-          <box paddingLeft={1} flexDirection="row" gap={2}>
-            <box flexGrow={1} flexBasis={0}>
-              <code
-                filetype={filetype()}
-                syntaxStyle={syntax()}
-                content={parsedDiff()!.oldContent}
-              />
-            </box>
-            <box flexGrow={1} flexBasis={0}>
-              <code
-                filetype={filetype()}
-                syntaxStyle={syntax()}
-                content={parsedDiff()!.newContent}
-              />
             </box>
           </box>
-        </scrollbox>
-      </Show>
+        </Show>
 
-      {/* Plan display for exit-plan-mode permissions */}
-      <Show when={currentPermission()!.type === "exit-plan-mode" && currentPermission()!.metadata.plan}>
-        <scrollbox
-          ref={(r: ScrollBoxRenderable) => (diffScrollBox = r)}
-          paddingTop={1}
-          paddingBottom={1}
-          backgroundColor={theme.backgroundElement}
-          maxHeight={diffMaxHeight()}
-          verticalScrollbarOptions={{ visible: true }}
-          horizontalScrollbarOptions={{ visible: false }}
-        >
-          <box paddingLeft={1} paddingRight={1}>
-            <code
-              filetype="markdown"
-              syntaxStyle={syntax()}
-              content={currentPermission()!.metadata.plan as string}
-            />
-          </box>
-        </scrollbox>
-
-        {/* Agent selection for exit-plan-mode */}
-        <box paddingTop={1} paddingLeft={1} gap={1}>
-          <text fg={theme.textMuted}>Switch to agent:</text>
-          <box flexDirection="row" flexWrap="wrap" gap={1}>
-            <For each={availableAgents()}>
-              {(agent, index) => (
-                <text>
-                  <Show when={index() === store.selectedAgentIndex}>
-                    <b style={{ fg: local.agent.color(agent.name) }}>{agent.name}</b>
-                  </Show>
-                  <Show when={index() !== store.selectedAgentIndex}>
-                    <span style={{ fg: theme.textMuted }}>{agent.name}</span>
-                  </Show>
-                </text>
-              )}
-            </For>
-          </box>
-        </box>
-      </Show>
-
-      {/* Actions - Always visible at bottom */}
+        {/* Actions - Always visible at bottom */}
         <box paddingTop={1} flexShrink={0}>
           <box flexDirection="row" flexWrap="wrap" gap={1}>
             <text>

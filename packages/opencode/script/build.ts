@@ -47,9 +47,19 @@ for (const [os, arch] of targets) {
     cwd: path.join(dir, "../../node_modules"),
     stdio: ["inherit", "inherit", "inherit"],
   }).exited
-  await Bun.spawn(["/usr/bin/tar", "-xf", `../../node_modules/${opentui.replace("@opentui/", "opentui-")}-*.tgz`, "-C", `../../node_modules/${opentui}`, "--strip-components=1"], {
-    stdio: ["inherit", "inherit", "inherit"],
-  }).exited
+  await Bun.spawn(
+    [
+      "/usr/bin/tar",
+      "-xf",
+      `../../node_modules/${opentui.replace("@opentui/", "opentui-")}-*.tgz`,
+      "-C",
+      `../../node_modules/${opentui}`,
+      "--strip-components=1",
+    ],
+    {
+      stdio: ["inherit", "inherit", "inherit"],
+    },
+  ).exited
 
   const watcher = `@parcel/watcher-${os === "windows" ? "win32" : os}-${arch.replace("-baseline", "")}${os === "linux" ? "-glibc" : ""}`
   await $`mkdir -p ../../node_modules/${watcher}`
@@ -57,9 +67,19 @@ for (const [os, arch] of targets) {
     cwd: path.join(dir, "../../node_modules"),
     stdio: ["inherit", "pipe", "pipe"],
   }).exited
-  await Bun.spawn(["/usr/bin/tar", "-xf", `../../node_modules/${watcher.replace("@parcel/", "parcel-")}-*.tgz`, "-C", `../../node_modules/${watcher}`, "--strip-components=1"], {
-    stdio: ["inherit", "inherit", "inherit"],
-  }).exited
+  await Bun.spawn(
+    [
+      "/usr/bin/tar",
+      "-xf",
+      `../../node_modules/${watcher.replace("@parcel/", "parcel-")}-*.tgz`,
+      "-C",
+      `../../node_modules/${watcher}`,
+      "--strip-components=1",
+    ],
+    {
+      stdio: ["inherit", "inherit", "inherit"],
+    },
+  ).exited
 
   const parserWorker = fs.realpathSync(path.resolve(dir, "./node_modules/@opentui/core/parser.worker.js"))
   const workerPath = "./src/cli/cmd/tui/worker.ts"

@@ -53,8 +53,7 @@ export const TaskTool = Tool.define("task", async () => {
         const enhancedSummary = Object.values(parts)
           .sort((a, b) => a.id?.localeCompare(b.id))
           .map((part) => {
-            const truncate = (str: string, maxLen: number) =>
-              str.length > maxLen ? str.slice(0, maxLen) + "..." : str
+            const truncate = (str: string, maxLen: number) => (str.length > maxLen ? str.slice(0, maxLen) + "..." : str)
 
             let inputSummary = ""
             let outputSummary = ""
@@ -63,13 +62,15 @@ export const TaskTool = Tool.define("task", async () => {
             if (part.state.status !== "pending") {
               const inputs = part.state.input
               const keyParams = Object.entries(inputs)
-                .filter(([key]) => !["description", "dangerouslyDisableSandbox", "offset", "limit", "timeout"].includes(key))
+                .filter(
+                  ([key]) => !["description", "dangerouslyDisableSandbox", "offset", "limit", "timeout"].includes(key),
+                )
                 .map(([key, val]) => {
                   if (typeof val === "string") return truncate(val, 80)
                   if (typeof val === "number") return String(val)
                   return truncate(JSON.stringify(val), 80)
                 })
-                .filter(val => val.length > 0)
+                .filter((val) => val.length > 0)
                 .join(", ")
               inputSummary = keyParams
             }
@@ -146,13 +147,15 @@ export const TaskTool = Tool.define("task", async () => {
         if (part.state.status !== "pending") {
           const inputs = part.state.input
           const keyParams = Object.entries(inputs)
-            .filter(([key]) => !["description", "dangerouslyDisableSandbox", "offset", "limit", "timeout"].includes(key))
+            .filter(
+              ([key]) => !["description", "dangerouslyDisableSandbox", "offset", "limit", "timeout"].includes(key),
+            )
             .map(([key, val]) => {
               if (typeof val === "string") return truncate(val, 80)
               if (typeof val === "number") return String(val)
               return truncate(JSON.stringify(val), 80)
             })
-            .filter(val => val.length > 0)
+            .filter((val) => val.length > 0)
             .join(", ")
           inputSummary = keyParams
         }

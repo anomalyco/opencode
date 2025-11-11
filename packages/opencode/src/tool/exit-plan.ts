@@ -31,8 +31,7 @@ export const ExitPlanModeTool = Tool.define("exit-plan-mode", {
       metadata: {
         switchToAgent: "build",
       },
-      output:
-        "The user has approved the plan. You may now proceed with implementation.",
+      output: "The user has approved the plan. You may now proceed with implementation.",
     }
   },
 })
