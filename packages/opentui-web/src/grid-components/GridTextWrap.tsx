@@ -1,5 +1,5 @@
 import type { Component } from "solid-js"
-import { For } from "solid-js"
+import { For, createMemo } from "solid-js"
 import { GridText } from "./GridText"
 
 interface GridTextWrapProps {
@@ -47,7 +47,8 @@ export const GridTextWrap: Component<GridTextWrapProps> = (props) => {
     return lines
   }
 
-  const lines = () => wrapText(props.text, props.maxWidth)
+  // Memoize the wrapped lines to prevent recalculation on every render
+  const lines = createMemo(() => wrapText(props.text, props.maxWidth))
 
   return (
     <>

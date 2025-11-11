@@ -1,5 +1,5 @@
 import type { Component } from "solid-js"
-import { For, createSignal, createEffect, onMount, onCleanup, Show } from "solid-js"
+import { For, createSignal, createEffect, createMemo, onMount, onCleanup, Show } from "solid-js"
 import { GridPanel } from "./GridPanel"
 import { GridText } from "./GridText"
 import { GridInput } from "./GridInput"
@@ -281,7 +281,27 @@ export const MessagesPanel: Component<MessagesPanelProps> = (props) => {
     props.onSubmit?.(`Steering form answers:\n${answerText}`)
   }
 
-  const renderMessages = () => {
+  // Create a stable key for messages to prevent unnecessary re-renders
+  // Only recalculate when message IDs or their text content actually changes
+  const messagesKey = createMemo(() => {
+    return props.messages
+      .slice(-15)
+      .map((m) => {
+        const textContent = m.parts
+          .filter((p) => p.type === "text")
+          .map((p) => p.text || "")
+          .join("")
+        return `${m.id}:${textContent.length}:${m.time?.completed || 0}`
+      })
+      .join("|")
+  })
+
+  // Memoize message rendering to prevent flickering
+  // This will only re-render when messagesKey changes (i.e., actual content changes)
+  const renderMessages = createMemo(() => {
+    // Track messagesKey to establish dependency
+    const _key = messagesKey()
+
     let currentRow = 1
     const elements: any[] = []
     const messages = props.messages.slice(-15)
@@ -313,6 +333,8 @@ export const MessagesPanel: Component<MessagesPanelProps> = (props) => {
               width: bgWidth,
               height: "1.2em",
               background: "#1a1a1a",
+              "will-change": "auto",
+              "backface-visibility": "hidden",
             }}
           />,
         )
@@ -830,7 +852,7 @@ export const MessagesPanel: Component<MessagesPanelProps> = (props) => {
     })
 
     return elements
-  }
+  })
 
   return (
     <GridPanel col={startCol()} row={0} width={panelWidth()} height="100%" bg="#0a0a0a" style={{ overflow: "visible" }}>
@@ -862,6 +884,10 @@ export const MessagesPanel: Component<MessagesPanelProps> = (props) => {
           "will-change": "scroll-position",
           // Smooth scroll behavior
           "scroll-behavior": "smooth",
+          // CSS containment to isolate rendering
+          contain: "layout style paint",
+          // Better subpixel rendering
+          "-webkit-font-smoothing": "subpixel-antialiased",
         }}
       >
         {renderMessages()}

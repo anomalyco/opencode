@@ -31,6 +31,9 @@ export const GridText: Component<GridTextProps> = (props) => {
         "line-height": "1.2",
         cursor: props.onClick ? "pointer" : "default",
         "white-space": "pre",
+        // Optimize rendering performance
+        "will-change": "contents",
+        transform: "translateZ(0)",
         ...props.style,
       }}
     >
