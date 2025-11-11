@@ -23,6 +23,8 @@ interface TerminalLayoutProps {
   onInput: (text: string) => void
   onSubmit?: (text: string) => void
   currentAgent: string
+  currentModel?: string
+  onModelClick?: () => void
 }
 
 export const TerminalLayout: Component<TerminalLayoutProps> = (props) => {
@@ -235,6 +237,8 @@ export const TerminalLayout: Component<TerminalLayoutProps> = (props) => {
           onInput={props.onInput}
           onSubmit={props.onSubmit}
           onScrollContainerRef={setMessagesScrollContainer}
+          currentModel={props.currentModel}
+          onModelClick={props.onModelClick}
         />
 
         {/* Right Panel - Sidebar (only show if not collapsed) */}

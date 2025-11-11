@@ -25,6 +25,8 @@ interface MessagesPanelProps {
   isProcessing?: boolean
   onJumpToLatest?: () => void
   onScrollContainerRef?: (el: HTMLDivElement | null) => void
+  currentModel?: string
+  onModelClick?: () => void
 }
 
 export const MessagesPanel: Component<MessagesPanelProps> = (props) => {
@@ -144,7 +146,7 @@ export const MessagesPanel: Component<MessagesPanelProps> = (props) => {
             />,
           )
           // img badge
-          elements.push(<GridText col={4} row={currentRow} text=" img " fg="#000000" bg="#ff9800" bold />)
+          elements.push(<GridText col={4} row={currentRow} text=" img " fg="#000000" bg="#d19a66" bold />)
           // file path
           const path = img.source?.data || img.url || ""
           elements.push(<GridText col={8} row={currentRow} text={path.slice(0, panelWidth() - 10)} fg="#6a6a6a" />)
@@ -666,10 +668,10 @@ export const MessagesPanel: Component<MessagesPanelProps> = (props) => {
           />
 
           <span style={{ "margin-left": "1ch" }}></span>
-          <span style={{ color: "#ff9800", "font-weight": "bold" }}>{">"}</span>
+          <span style={{ color: "#d19a66", "font-weight": "bold" }}>{">"}</span>
           <span style={{ "margin-left": "1ch", color: "#ffffff", display: "flex" }}>
             {props.inputText.slice(0, cursorPosition())}
-            <span style={{ color: cursorVisible() ? "#ff9800" : "transparent" }}>█</span>
+            <span style={{ color: cursorVisible() ? "#d19a66" : "transparent" }}>█</span>
             {props.inputText.slice(cursorPosition())}
           </span>
 
@@ -728,8 +730,8 @@ export const MessagesPanel: Component<MessagesPanelProps> = (props) => {
             height: "1.2em",
             background: "#0a0a0a",
             padding: "0",
-            "padding-left": "0",
-            "padding-right": "calc(0.5ch - 7px)",
+            "padding-left": "1ch",
+            "padding-right": "1ch",
             display: "flex",
             "justify-content": "space-between",
             "align-items": "center",
@@ -737,25 +739,40 @@ export const MessagesPanel: Component<MessagesPanelProps> = (props) => {
             "font-size": "16px",
           }}
         >
-          <span style={{ color: "#858585", "padding-left": "1ch" }}>
-            <span style={{ color: "#ffffff", "font-weight": "bold" }}>ctrl+p</span> commands
-          </span>
+          {/* Left: Model selector */}
           <span style={{ color: "#858585" }}>
+            Anthropic{" "}
+            <span
+              onClick={() => props.onModelClick?.()}
+              style={{
+                color: "#e5c07b",
+                "font-weight": "bold",
+                cursor: props.onModelClick ? "pointer" : "default",
+              }}
+            >
+              {props.currentModel || "Claude Sonnet 4.5 (latest)"}
+            </span>
+          </span>
+
+          {/* Right: Commands and Latest aligned to right edge */}
+          <span style={{ color: "#858585", display: "flex", gap: "2ch" }}>
+            <span>
+              <span style={{ color: "#ffffff", "font-weight": "bold" }}>ctrl+p</span> commands
+            </span>
             <span
               onClick={() => props.onJumpToLatest?.()}
               style={{
-                color: "#ff9800",
+                color: "#d19a66",
                 cursor: "pointer",
-                "margin-right": "2ch",
               }}
             >
               Latest ↓
             </span>
             {props.isProcessing && (
-              <>
+              <span>
                 <span style={{ color: "#ffffff", "font-weight": "bold" }}>esc</span>
                 {" interrupt"}
-              </>
+              </span>
             )}
           </span>
         </div>

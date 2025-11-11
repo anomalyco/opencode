@@ -119,17 +119,17 @@ export const MainScreen: Component<MainScreenProps> = (props) => {
               top: "0",
               bottom: "0",
               width: "3px",
-              background: "#ff9800",
+              background: "#d19a66",
             }}
           />
 
           {/* Prompt symbol */}
-          <span style={{ color: "#ff9800", "font-weight": "bold", "margin-right": "1ch" }}>{">"}</span>
+          <span style={{ color: "#d19a66", "font-weight": "bold", "margin-right": "1ch" }}>{">"}</span>
 
           {/* Input text with cursor */}
           <span style={{ color: "#ffffff", flex: "1", display: "flex" }}>
             {inputText().slice(0, cursorPosition())}
-            <span style={{ color: cursorVisible() ? "#ff9800" : "transparent" }}>█</span>
+            <span style={{ color: cursorVisible() ? "#d19a66" : "transparent" }}>█</span>
             {inputText().slice(cursorPosition())}
           </span>
 
@@ -238,7 +238,7 @@ export const MainScreen: Component<MainScreenProps> = (props) => {
                 "font-size": "14px",
               }}
               onMouseEnter={(e) => {
-                e.currentTarget.style.borderColor = "#ff9800"
+                e.currentTarget.style.borderColor = "#d19a66"
                 e.currentTarget.style.color = "#ffffff"
               }}
               onMouseLeave={(e) => {
