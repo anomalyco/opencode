@@ -51,7 +51,7 @@ export const TuiSpawnCommand = cmd({
       env: {
         ...process.env,
         BUN_OPTIONS: "",
-      }
+      },
     })
     await proc.exited
     await Instance.disposeAll()
