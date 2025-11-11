@@ -603,27 +603,27 @@ export const MessagesPanel: Component<MessagesPanelProps> = (props) => {
             }}
           />
 
-          {/* Right side: Black "cut" line */}
+          {/* Right side: Grey accent line - aligned with divider */}
           <div
             style={{
               position: "absolute",
-              right: "calc(1ch - 6px)",
-              top: "0",
-              bottom: "0",
-              width: "3px",
-              background: "#0a0a0a",
-              "z-index": "10",
-            }}
-          />
-          {/* Right side: Grey accent line */}
-          <div
-            style={{
-              position: "absolute",
-              right: "calc(1ch - 10px)",
+              right: "-7px",
               top: "0",
               bottom: "0",
               width: "4px",
               background: "#6a6a6a",
+              "z-index": "10",
+            }}
+          />
+          {/* Right side: Black "cut" line */}
+          <div
+            style={{
+              position: "absolute",
+              right: "-4px",
+              top: "0",
+              bottom: "0",
+              width: "3px",
+              background: "#0a0a0a",
               "z-index": "10",
             }}
           />

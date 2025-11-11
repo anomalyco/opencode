@@ -7,6 +7,7 @@ interface GridPanelProps {
   height?: number | "100%" // Height in rows or percentage
   bg?: string // Background color
   scrollable?: boolean // Enable scrolling (default: false for backward compatibility)
+  style?: JSX.CSSProperties // Additional custom styles
   children?: JSX.Element
 }
 
@@ -40,6 +41,8 @@ export const GridPanel: Component<GridPanelProps> = (props) => {
           "scrollbar-width": "thin",
           "scrollbar-color": "#3a3a3a #1a1a1a",
         }),
+        // Merge custom styles (allows overriding overflow, etc.)
+        ...props.style,
       }}
     >
       {props.children}
