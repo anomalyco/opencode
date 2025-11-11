@@ -98,7 +98,7 @@ export function Session() {
     await sync.session
       .sync(route.sessionID)
       .then(() => {
-        scroll.scrollBy(100_000)
+        if (scroll) scroll.scrollBy(100_000)
       })
       .catch(() => {
         toast.show({
@@ -145,7 +145,7 @@ export function Session() {
 
   function toBottom() {
     setTimeout(() => {
-      scroll.scrollTo(scroll.scrollHeight)
+      if (scroll) scroll.scrollTo(scroll.scrollHeight)
     }, 50)
   }
 
