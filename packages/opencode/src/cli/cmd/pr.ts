@@ -34,13 +34,18 @@ export const PrCommand = cmd({
           process.exit(1)
         }
 
-        // For fork PRs, add the fork as a remote to enable pushing
+        // Fetch PR info for fork handling and session link detection
         const prInfoResult =
-          await $`gh pr view ${prNumber} --json headRepository,headRepositoryOwner,isCrossRepository,headRefName`.nothrow()
+          await $`gh pr view ${prNumber} --json headRepository,headRepositoryOwner,isCrossRepository,headRefName,body`.nothrow()
+
+        let sessionId: string | undefined
+
         if (prInfoResult.exitCode === 0) {
           const prInfoText = prInfoResult.text()
           if (prInfoText.trim()) {
             const prInfo = JSON.parse(prInfoText)
+
+            // Handle fork PRs
             if (prInfo && prInfo.isCrossRepository && prInfo.headRepository && prInfo.headRepositoryOwner) {
               const forkOwner = prInfo.headRepositoryOwner.login
               const forkName = prInfo.headRepository.name
@@ -57,6 +62,27 @@ export const PrCommand = cmd({
               const headRefName = prInfo.headRefName
               await $`git branch --set-upstream-to=${remoteName}/${headRefName} ${localBranchName}`.nothrow()
             }
+
+            // Check for opencode session link in PR body
+            if (prInfo && prInfo.body) {
+              const sessionMatch = prInfo.body.match(/https:\/\/opencode\.ai\/s\/([a-zA-Z0-9_-]+)/)
+              if (sessionMatch) {
+                const sessionUrl = sessionMatch[0]
+                UI.println(`Found opencode session: ${sessionUrl}`)
+                UI.println(`Importing session...`)
+
+                const importResult = await $`opencode import ${sessionUrl}`.nothrow()
+                if (importResult.exitCode === 0) {
+                  const importOutput = importResult.text().trim()
+                  // Extract session ID from the output (format: "Imported session: <session-id>")
+                  const sessionIdMatch = importOutput.match(/Imported session: ([a-zA-Z0-9_-]+)/)
+                  if (sessionIdMatch) {
+                    sessionId = sessionIdMatch[1]
+                    UI.println(`Session imported: ${sessionId}`)
+                  }
+                }
+              }
+            }
           }
         }
 
@@ -65,9 +91,10 @@ export const PrCommand = cmd({
         UI.println("Starting opencode...")
         UI.println()
 
-        // Launch opencode TUI
+        // Launch opencode TUI with session ID if available
         const { spawn } = await import("child_process")
-        const opencodeProcess = spawn("opencode", [], {
+        const opencodeArgs = sessionId ? ["-s", sessionId] : []
+        const opencodeProcess = spawn("opencode", opencodeArgs, {
           stdio: "inherit",
           cwd: process.cwd(),
         })
