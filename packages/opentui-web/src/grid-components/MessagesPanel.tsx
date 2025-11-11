@@ -4,6 +4,7 @@ import { GridPanel } from "./GridPanel"
 import { GridText } from "./GridText"
 import { GridInput } from "./GridInput"
 import { TerminalInput } from "./TerminalInput"
+import { GridTextWrap, calculateWrappedRows } from "./GridTextWrap"
 
 interface Message {
   id: string
@@ -139,24 +140,41 @@ export const MessagesPanel: Component<MessagesPanelProps> = (props) => {
             // Replace multiple newlines with single newline
             const normalizedText = (part.text || "").replace(/\n\n+/g, "\n")
             const lines = normalizedText.split("\n")
+
+            let inCodeBlock = false
             lines.forEach((line) => {
-              // Background for entire row
-              elements.push(
-                <div
-                  style={{
-                    position: "absolute",
-                    left: "0",
-                    top: `${currentRow * 1.2}em`,
-                    width: bgWidth,
-                    height: "1.2em",
-                    background: "#1a1a1a",
-                  }}
-                />,
-              )
-              // Text content
-              elements.push(<GridText col={2} row={currentRow} text={line.slice(0, panelWidth() - 4)} fg="#ffffff" />)
-              currentRow++
-              contentRows++
+              // Check for code block markers
+              if (line.trim().startsWith("```")) {
+                inCodeBlock = !inCodeBlock
+                // Don't render the ``` line itself
+                return
+              }
+
+              // Calculate wrapped rows for this line
+              const maxWidth = panelWidth() - 4 // 2 char indent + 2 char right gap
+              const wrappedRows = calculateWrappedRows(line, maxWidth)
+
+              // Add background for all wrapped rows
+              for (let i = 0; i < wrappedRows; i++) {
+                elements.push(
+                  <div
+                    style={{
+                      position: "absolute",
+                      left: "0",
+                      top: `${(currentRow + i) * 1.2}em`,
+                      width: bgWidth,
+                      height: "1.2em",
+                      background: "#1a1a1a",
+                    }}
+                  />,
+                )
+              }
+
+              // Render code blocks with grey color, normal text with white
+              const textColor = inCodeBlock ? "#6a6a6a" : "#ffffff"
+              elements.push(<GridTextWrap col={2} row={currentRow} text={line} maxWidth={maxWidth} fg={textColor} />)
+              currentRow += wrappedRows
+              contentRows += wrappedRows
             })
           })
         }
@@ -202,9 +220,9 @@ export const MessagesPanel: Component<MessagesPanelProps> = (props) => {
         currentRow++
         contentRows++
 
-        // ORANGE bar spanning ALL rows (blank + content + username + blank)
+        // BLUE bar spanning ALL rows (blank + content + username + blank)
         for (let row = textStartRow; row < currentRow; row++) {
-          elements.push(<GridText col={0} row={row} text="▌" fg="#e5c07b" />)
+          elements.push(<GridText col={0} row={row} text="▌" fg="#61afef" />)
         }
       }
 
@@ -438,9 +456,24 @@ export const MessagesPanel: Component<MessagesPanelProps> = (props) => {
           // Replace multiple newlines with single newline
           const normalizedText = (part.text || "").replace(/\n\n+/g, "\n")
           const lines = normalizedText.split("\n")
+
+          let inCodeBlock = false
           lines.forEach((line) => {
-            elements.push(<GridText col={2} row={currentRow} text={line.slice(0, panelWidth() - 4)} fg="#ffffff" />)
-            currentRow++
+            // Check for code block markers
+            if (line.trim().startsWith("```")) {
+              inCodeBlock = !inCodeBlock
+              // Don't render the ``` line itself
+              return
+            }
+
+            // Calculate wrapped rows for this line
+            const maxWidth = panelWidth() - 4 // 2 char indent + 2 char right gap
+            const wrappedRows = calculateWrappedRows(line, maxWidth)
+
+            // Render code blocks with grey color, normal text with white
+            const textColor = inCodeBlock ? "#6a6a6a" : "#ffffff"
+            elements.push(<GridTextWrap col={2} row={currentRow} text={line} maxWidth={maxWidth} fg={textColor} />)
+            currentRow += wrappedRows
           })
         })
 

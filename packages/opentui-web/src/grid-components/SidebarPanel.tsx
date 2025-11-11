@@ -14,6 +14,7 @@ interface SidebarPanelProps {
     time: { created: number; updated: number }
   }>
   onCollapse?: () => void
+  onSelectSession?: (id: string) => void
 }
 
 type TabType = "tools" | "todos" | "files"
@@ -26,6 +27,40 @@ export const SidebarPanel: Component<SidebarPanelProps> = (props) => {
   const [toolsExpanded, setToolsExpanded] = createSignal(false)
   const [pluginsExpanded, setPluginsExpanded] = createSignal(false)
   const [subagentsExpanded, setSubagentsExpanded] = createSignal(false)
+  const [favoriteTools, setFavoriteTools] = createSignal<Set<string>>(new Set())
+  const [expandedPlugins, setExpandedPlugins] = createSignal<Set<string>>(new Set())
+
+  const toggleFavorite = (tool: string) => {
+    setFavoriteTools((prev) => {
+      const next = new Set(prev)
+      if (next.has(tool)) {
+        next.delete(tool)
+      } else {
+        next.add(tool)
+      }
+      return next
+    })
+  }
+
+  const togglePlugin = (plugin: string) => {
+    setExpandedPlugins((prev) => {
+      const next = new Set(prev)
+      if (next.has(plugin)) {
+        next.delete(plugin)
+      } else {
+        next.add(plugin)
+      }
+      return next
+    })
+  }
+
+  // Mock data for tools and plugins
+  const toolsList = ["bash", "read", "write", "edit", "grep"]
+  const pluginsList = [
+    { name: "filesystem", tools: ["read", "write", "list"] },
+    { name: "git", tools: ["commit", "diff", "log"] },
+    { name: "web", tools: ["fetch", "scrape"] },
+  ]
 
   return (
     <GridPanel col={startCol()} row={0} width={panelWidth()} height="100%" bg="#0a0a0a" scrollable={true}>
@@ -44,21 +79,21 @@ export const SidebarPanel: Component<SidebarPanelProps> = (props) => {
 
       {/* Context bar with colored segments - BRIGHT TERMINAL COLORS */}
       <GridText col={2} row={8} text="█████" fg="#999999" />
-      <GridText col={7} row={8} text="██████████" fg="#e5954c" />
+      <GridText col={7} row={8} text="██████████" fg="#e5c07b" />
       <GridText col={17} row={8} text="██" fg="#4da6ff" />
-      <GridText col={19} row={8} text="███" fg="#f0d060" />
+      <GridText col={19} row={8} text="███" fg="#e5c07b" />
       <GridText col={22} row={8} text="░░░░░░░░░░░░" fg="#3a3a3a" />
       <GridText col={34} row={8} text="50%" fg="#ffffff" />
 
       {/* Legend with colored blocks */}
       <GridText col={2} row={10} text="█" fg="#999999" />
-      <GridText col={4} row={10} text="System" fg="#ffffff" />
-      <GridText col={11} row={10} text="█" fg="#e5954c" />
-      <GridText col={13} row={10} text="AI" fg="#ffffff" />
+      <GridText col={4} row={10} text="System" fg="#999999" />
+      <GridText col={11} row={10} text="█" fg="#e5c07b" />
+      <GridText col={13} row={10} text="AI" fg="#e5c07b" />
       <GridText col={16} row={10} text="█" fg="#4da6ff" />
-      <GridText col={18} row={10} text="User" fg="#ffffff" />
-      <GridText col={23} row={10} text="█" fg="#f0d060" />
-      <GridText col={25} row={10} text="Tool" fg="#ffffff" />
+      <GridText col={18} row={10} text="User" fg="#4da6ff" />
+      <GridText col={23} row={10} text="█" fg="#e5c07b" />
+      <GridText col={25} row={10} text="Tool" fg="#e5c07b" />
 
       {/* Token stats */}
       <GridText col={2} row={12} text="99,050 tokens (99% cached)" fg="#6a6a6a" />
@@ -91,102 +126,209 @@ export const SidebarPanel: Component<SidebarPanelProps> = (props) => {
       {/* Tools Tab Content */}
       {activeTab() === "tools" && (
         <>
-          {/* Blank line */}
-          {/* Tools Used - row 19 */}
-          <GridText
-            col={2}
-            row={19}
-            text={`${toolsExpanded() ? "▼" : "▶"} Tools Used (5)`}
-            fg="#ffffff"
-            onClick={() => setToolsExpanded(!toolsExpanded())}
-          />
-          {/* Blank line */}
+          {(() => {
+            let currentRow = 19
 
-          {/* Plugins - row 21 */}
-          <GridText
-            col={2}
-            row={21}
-            text={`${pluginsExpanded() ? "▼" : "▶"} Plugins (10)`}
-            fg="#ffffff"
-            onClick={() => setPluginsExpanded(!pluginsExpanded())}
-          />
-          {/* Blank line */}
+            // Tools Used header
+            const toolsHeaderRow = currentRow
+            currentRow++
 
-          {/* Subagents - row 23 */}
-          <GridText
-            col={2}
-            row={23}
-            text={`${subagentsExpanded() ? "▼" : "▶"} Subagents (${props.subagents.length})`}
-            fg="#e5c07b"
-            onClick={() => setSubagentsExpanded(!subagentsExpanded())}
-          />
+            // Tools list
+            const toolsRows = toolsExpanded() ? toolsList.length : 0
+            currentRow += toolsRows
 
-          {/* Subagent list - starts at row 24 */}
-          {subagentsExpanded() && (
-            <For each={props.subagents}>
-              {(subagent, idx) => {
-                const row = 24 + idx()
-                const statusIcon = subagent.status === "running" ? "●" : subagent.status === "completed" ? "✓" : "✗"
-                const statusColor =
-                  subagent.status === "running" ? "#98c379" : subagent.status === "completed" ? "#6a6a6a" : "#e06c75"
-                const textColor = subagent.status === "completed" ? "#6a6a6a" : "#ffffff"
-                const maxTitleLength = panelWidth() - 4
-                const truncatedTitle =
-                  subagent.title.length > maxTitleLength
-                    ? subagent.title.slice(0, maxTitleLength - 3) + "..."
-                    : subagent.title
+            // Blank line after Tools
+            currentRow++
 
-                return (
-                  <>
-                    <GridText col={1} row={row} text={statusIcon} fg={statusColor} />
-                    <GridText col={3} row={row} text={truncatedTitle} fg={textColor} />
-                  </>
-                )
-              }}
-            </For>
-          )}
+            // Plugins header
+            const pluginsHeaderRow = currentRow
+            currentRow++
 
-          {/* Add Subagent - dynamic row based on expanded state */}
-          <GridText
-            col={2}
-            row={subagentsExpanded() ? 24 + props.subagents.length + 1 : 25}
-            text="+ Add Subagent"
-            fg="#e5c07b"
-          />
+            // Calculate plugin rows
+            let pluginRows = 0
+            if (pluginsExpanded()) {
+              pluginsList.forEach((plugin) => {
+                pluginRows++ // plugin header row
+                if (expandedPlugins().has(plugin.name)) {
+                  pluginRows += plugin.tools.length // tool items
+                }
+              })
+              currentRow += pluginRows
+            }
+
+            // Blank line after Plugins
+            currentRow++
+
+            // Subagents header
+            const subagentsHeaderRow = currentRow
+            currentRow++
+
+            // Subagents list
+            const subagentRows = subagentsExpanded() ? props.subagents.length : 0
+
+            return (
+              <>
+                {/* Tools Used header */}
+                <GridText
+                  col={2}
+                  row={toolsHeaderRow}
+                  text={`${toolsExpanded() ? "▼" : "▶"} Tools Used (${toolsList.length})`}
+                  fg="#ffffff"
+                  onClick={() => setToolsExpanded(!toolsExpanded())}
+                />
+
+                {/* Tool list with favorite stars */}
+                {toolsExpanded() && (
+                  <For each={toolsList}>
+                    {(tool, idx) => {
+                      const row = toolsHeaderRow + 1 + idx()
+                      const star = favoriteTools().has(tool) ? "★" : "☆"
+                      return (
+                        <>
+                          <GridText col={2} row={row} text={star} fg="#e5c07b" onClick={() => toggleFavorite(tool)} />
+                          <GridText col={4} row={row} text={tool} fg="#ffffff" />
+                        </>
+                      )
+                    }}
+                  </For>
+                )}
+
+                {/* Plugins header */}
+                <GridText
+                  col={2}
+                  row={pluginsHeaderRow}
+                  text={`${pluginsExpanded() ? "▼" : "▶"} Plugins (${pluginsList.length})`}
+                  fg="#ffffff"
+                  onClick={() => setPluginsExpanded(!pluginsExpanded())}
+                />
+
+                {/* Plugin list with expandable tools */}
+                {pluginsExpanded() &&
+                  (() => {
+                    let pluginCurrentRow = pluginsHeaderRow + 1
+                    return (
+                      <For each={pluginsList}>
+                        {(plugin) => {
+                          const pluginRow = pluginCurrentRow
+                          pluginCurrentRow++
+                          const isExpanded = expandedPlugins().has(plugin.name)
+                          if (isExpanded) {
+                            pluginCurrentRow += plugin.tools.length
+                          }
+
+                          return (
+                            <>
+                              <GridText
+                                col={2}
+                                row={pluginRow}
+                                text={`${isExpanded ? "▼" : "▶"} ${plugin.name} (${plugin.tools.length})`}
+                                fg="#ffffff"
+                                onClick={() => togglePlugin(plugin.name)}
+                              />
+                              {isExpanded && (
+                                <For each={plugin.tools}>
+                                  {(tool, tidx) => (
+                                    <GridText col={4} row={pluginRow + 1 + tidx()} text={`- ${tool}`} fg="#6a6a6a" />
+                                  )}
+                                </For>
+                              )}
+                            </>
+                          )
+                        }}
+                      </For>
+                    )
+                  })()}
+
+                {/* Subagents header */}
+                <GridText
+                  col={2}
+                  row={subagentsHeaderRow}
+                  text={`${subagentsExpanded() ? "▼" : "▶"} Subagents (${props.subagents.length})`}
+                  fg="#e5c07b"
+                  onClick={() => setSubagentsExpanded(!subagentsExpanded())}
+                />
+
+                {/* Subagent list with clickable sessions */}
+                {subagentsExpanded() && (
+                  <For each={props.subagents}>
+                    {(subagent, idx) => {
+                      const row = subagentsHeaderRow + 1 + idx()
+                      const statusIcon =
+                        subagent.status === "running" ? "●" : subagent.status === "completed" ? "✓" : "✗"
+                      const statusColor =
+                        subagent.status === "running"
+                          ? "#98c379"
+                          : subagent.status === "completed"
+                            ? "#61afef"
+                            : "#e06c75"
+                      const textColor = subagent.status === "completed" ? "#6a6a6a" : "#ffffff"
+                      const maxTitleLength = panelWidth() - 6
+                      const truncatedTitle =
+                        subagent.title.length > maxTitleLength
+                          ? subagent.title.slice(0, maxTitleLength - 3) + "..."
+                          : subagent.title
+
+                      return (
+                        <>
+                          <GridText col={2} row={row} text={statusIcon} fg={statusColor} />
+                          <GridText
+                            col={4}
+                            row={row}
+                            text={truncatedTitle}
+                            fg={textColor}
+                            onClick={() => props.onSelectSession?.(subagent.id)}
+                          />
+                        </>
+                      )
+                    }}
+                  </For>
+                )}
+
+                {/* Add Subagent */}
+                <GridText
+                  col={2}
+                  row={subagentsHeaderRow + (subagentsExpanded() ? subagentRows + 1 : 1)}
+                  text="+ Add Subagent"
+                  fg="#e5c07b"
+                />
+              </>
+            )
+          })()}
         </>
       )}
 
       {/* Todos Tab Content */}
       {activeTab() === "todos" && (
         <>
-          <GridText col={2} row={18} text="Todo" fg="#ffffff" bold />
+          <GridText col={2} row={18} text="Todos" fg="#ffffff" bold />
 
-          {/* DEBUG LOG */}
-          {console.log("[SidebarPanel] Todos tab - props.todos:", props.todos, "length:", props.todos?.length)}
+          {/* Todo list with nesting */}
+          {props.todos && props.todos.length > 0 ? (
+            <For each={props.todos.slice(0, 20)}>
+              {(todo, idx) => {
+                const row = 19 + idx()
+                const indent = todo.parentId ? 4 : 2
+                const checkbox = todo.status === "completed" ? "✓" : todo.status === "in_progress" ? "◐" : "○"
+                const checkboxColor =
+                  todo.status === "completed" ? "#98c379" : todo.status === "in_progress" ? "#e5c07b" : "#6a6a6a"
+                const textColor = todo.status === "completed" ? "#6a6a6a" : "#ffffff"
+                const maxLength = panelWidth() - indent - 4
+                const truncatedContent =
+                  todo.content.length > maxLength ? todo.content.slice(0, maxLength - 3) + "..." : todo.content
 
-          {/* Scrollable todo list */}
-          <div style={{ position: "absolute", top: "20em", bottom: "10em", overflow: "auto" }}>
-            {props.todos && props.todos.length > 0 ? (
-              <For each={props.todos.slice(0, 20)}>
-                {(todo, idx) => {
-                  const row = 19 + idx()
-                  const checkbox = todo.status === "completed" ? "[✓]" : "[ ]"
-                  return (
-                    <GridText
-                      col={0}
-                      row={row}
-                      text={`${checkbox} ${todo.content.slice(0, 35)}`}
-                      fg={todo.status === "completed" ? "#6a6a6a" : "#ffffff"}
-                    />
-                  )
-                }}
-              </For>
-            ) : (
-              <GridText col={2} row={19} text="No todos" fg="#6a6a6a" />
-            )}
-          </div>
+                return (
+                  <>
+                    <GridText col={indent} row={row} text={checkbox} fg={checkboxColor} />
+                    <GridText col={indent + 2} row={row} text={truncatedContent} fg={textColor} />
+                  </>
+                )
+              }}
+            </For>
+          ) : (
+            <GridText col={2} row={19} text="No todos" fg="#6a6a6a" />
+          )}
 
-          <GridText col={2} row={60} text="+ Add Todo" fg="#d7ba7d" />
+          <GridText col={2} row={39} text="+ Add Todo" fg="#e5c07b" />
         </>
       )}
 
