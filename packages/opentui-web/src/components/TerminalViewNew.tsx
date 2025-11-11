@@ -126,17 +126,8 @@ export const TerminalView: Component = () => {
 
   onMount(() => {
     sync.session.fetch(100)
-
-    // Only auto-select if there are existing sessions
-    setTimeout(() => {
-      const allSessions = sync.data.session.filter((s) => !s.parentID).sort((a, b) => b.time.updated - a.time.updated)
-      const firstSession = allSessions[0]
-      if (firstSession) {
-        setSelectedSessionID(firstSession.id)
-        sync.session.sync(firstSession.id)
-      }
-      // Otherwise, stay on MainScreen (no session selected)
-    }, 500)
+    // Always start on MainScreen - user can select session from sessions panel
+    // No auto-selection of previous sessions
   })
 
   return (
