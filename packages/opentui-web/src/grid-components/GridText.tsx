@@ -8,12 +8,16 @@ interface GridTextProps {
   bg?: string
   bold?: boolean
   onClick?: () => void
+  onMouseOver?: () => void
+  onMouseOut?: () => void
 }
 
 export const GridText: Component<GridTextProps> = (props) => {
   return (
     <span
       onClick={props.onClick}
+      onMouseOver={props.onMouseOver}
+      onMouseOut={props.onMouseOut}
       style={{
         position: "absolute",
         left: `${props.col}ch`,

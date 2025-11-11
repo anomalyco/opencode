@@ -5,6 +5,7 @@ import { GridText } from "./GridText"
 import { GridInput } from "./GridInput"
 import { TerminalInput } from "./TerminalInput"
 import { GridTextWrap, calculateWrappedRows } from "./GridTextWrap"
+import { SteeringForm, type SteeringQuestionConfig, type SteeringAnswer } from "../components/SteeringForm"
 
 interface Message {
   id: string
@@ -87,6 +88,44 @@ export const MessagesPanel: Component<MessagesPanelProps> = (props) => {
       }
       return next
     })
+  }
+
+  // Detect steering question tags in text
+  const detectSteeringForms = (
+    text: string,
+  ): Array<{ config: SteeringQuestionConfig; startIndex: number; endIndex: number }> => {
+    const forms: Array<{ config: SteeringQuestionConfig; startIndex: number; endIndex: number }> = []
+    const pattern = /<steering-question[^>]*>([\s\S]*?)<\/steering-question>/g
+    let match: RegExpMatchArray | null
+
+    while ((match = pattern.exec(text)) !== null) {
+      try {
+        const configStr = match[1] || "{}"
+        const config = JSON.parse(configStr) as SteeringQuestionConfig
+        forms.push({
+          config,
+          startIndex: match.index || 0,
+          endIndex: (match.index || 0) + match[0].length,
+        })
+      } catch (error) {
+        console.error("Failed to parse steering form config:", error)
+      }
+    }
+
+    return forms
+  }
+
+  const handleSteeringFormSubmit = (answers: SteeringAnswer[]) => {
+    // Format answers as readable text
+    const answerText = answers
+      .map((a) => {
+        const answerValue = Array.isArray(a.answer) ? a.answer.join(", ") : a.answer
+        return `${a.questionId}: ${answerValue}`
+      })
+      .join("\n")
+
+    // Submit answers as a new message
+    props.onSubmit?.(`Steering form answers:\n${answerText}`)
   }
 
   const renderMessages = () => {
@@ -511,28 +550,100 @@ export const MessagesPanel: Component<MessagesPanelProps> = (props) => {
 
         // Content lines
         textParts.forEach((part) => {
-          // Replace multiple newlines with single newline
-          const normalizedText = (part.text || "").replace(/\n\n+/g, "\n")
-          const lines = normalizedText.split("\n")
+          const text = part.text || ""
 
-          let inCodeBlock = false
-          lines.forEach((line) => {
-            // Check for code block markers
-            if (line.trim().startsWith("```")) {
-              inCodeBlock = !inCodeBlock
-              // Don't render the ``` line itself
-              return
+          // Check for steering forms in the text
+          const steeringForms = detectSteeringForms(text)
+
+          if (steeringForms.length > 0) {
+            // Split text into segments with steering forms
+            let lastIndex = 0
+
+            steeringForms.forEach((form) => {
+              // Render text before the form
+              if (form.startIndex > lastIndex) {
+                const beforeText = text.substring(lastIndex, form.startIndex)
+                const normalizedText = beforeText.replace(/\n\n+/g, "\n")
+                const lines = normalizedText.split("\n")
+
+                let inCodeBlock = false
+                lines.forEach((line) => {
+                  if (line.trim().startsWith("```")) {
+                    inCodeBlock = !inCodeBlock
+                    return
+                  }
+
+                  const maxWidth = panelWidth() - 6
+                  const wrappedRows = calculateWrappedRows(line, maxWidth)
+                  const textColor = inCodeBlock ? "#6a6a6a" : "#ffffff"
+                  elements.push(
+                    <GridTextWrap col={4} row={currentRow} text={line} maxWidth={maxWidth} fg={textColor} />,
+                  )
+                  currentRow += wrappedRows
+                })
+              }
+
+              // Render the steering form
+              elements.push(
+                <SteeringForm
+                  config={form.config}
+                  onSubmit={handleSteeringFormSubmit}
+                  row={currentRow}
+                  maxWidth={panelWidth()}
+                />,
+              )
+
+              // Calculate how many rows the form takes (estimate)
+              const formRows = 5 + form.config.questions.length * 3 + (form.config.description ? 1 : 0)
+              currentRow += formRows
+
+              lastIndex = form.endIndex
+            })
+
+            // Render text after the last form
+            if (lastIndex < text.length) {
+              const afterText = text.substring(lastIndex)
+              const normalizedText = afterText.replace(/\n\n+/g, "\n")
+              const lines = normalizedText.split("\n")
+
+              let inCodeBlock = false
+              lines.forEach((line) => {
+                if (line.trim().startsWith("```")) {
+                  inCodeBlock = !inCodeBlock
+                  return
+                }
+
+                const maxWidth = panelWidth() - 6
+                const wrappedRows = calculateWrappedRows(line, maxWidth)
+                const textColor = inCodeBlock ? "#6a6a6a" : "#ffffff"
+                elements.push(<GridTextWrap col={4} row={currentRow} text={line} maxWidth={maxWidth} fg={textColor} />)
+                currentRow += wrappedRows
+              })
             }
+          } else {
+            // No steering forms, render text normally
+            const normalizedText = text.replace(/\n\n+/g, "\n")
+            const lines = normalizedText.split("\n")
 
-            // Calculate wrapped rows for this line
-            const maxWidth = panelWidth() - 6 // 4 char indent (shifted right 2) + 2 char right gap
-            const wrappedRows = calculateWrappedRows(line, maxWidth)
+            let inCodeBlock = false
+            lines.forEach((line) => {
+              // Check for code block markers
+              if (line.trim().startsWith("```")) {
+                inCodeBlock = !inCodeBlock
+                // Don't render the ``` line itself
+                return
+              }
 
-            // Render code blocks with grey color, normal text with white
-            const textColor = inCodeBlock ? "#6a6a6a" : "#ffffff"
-            elements.push(<GridTextWrap col={4} row={currentRow} text={line} maxWidth={maxWidth} fg={textColor} />)
-            currentRow += wrappedRows
-          })
+              // Calculate wrapped rows for this line
+              const maxWidth = panelWidth() - 6 // 4 char indent (shifted right 2) + 2 char right gap
+              const wrappedRows = calculateWrappedRows(line, maxWidth)
+
+              // Render code blocks with grey color, normal text with white
+              const textColor = inCodeBlock ? "#6a6a6a" : "#ffffff"
+              elements.push(<GridTextWrap col={4} row={currentRow} text={line} maxWidth={maxWidth} fg={textColor} />)
+              currentRow += wrappedRows
+            })
+          }
         })
 
         // Orange bar spanning all rows (blank + content + blank) - COMMENTED OUT
