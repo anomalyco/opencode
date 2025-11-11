@@ -16,7 +16,8 @@ export const TerminalView: Component = () => {
     const allSessions = sync.data.session
 
     // Build session tree
-    const result: Array<{ id: string; title: string; hasChildren?: boolean; parentID?: string }> = []
+    const result: Array<{ id: string; title: string; timestamp?: number; hasChildren?: boolean; parentID?: string }> =
+      []
 
     // First add parent sessions
     allSessions
@@ -26,6 +27,7 @@ export const TerminalView: Component = () => {
         result.push({
           id: parent.id,
           title: parent.title,
+          timestamp: parent.time.updated,
           hasChildren: allSessions.some((child) => child.parentID === parent.id),
         })
 
@@ -38,6 +40,7 @@ export const TerminalView: Component = () => {
           result.push({
             id: child.id,
             title: child.title,
+            timestamp: child.time.updated,
             parentID: parent.id,
             hasChildren: false,
           })
@@ -131,7 +134,10 @@ export const TerminalView: Component = () => {
   })
 
   return (
-    <Show when={selectedSessionID()} fallback={<MainScreen onSubmit={handleSubmit} />}>
+    <Show
+      when={selectedSessionID()}
+      fallback={<MainScreen onSubmit={handleSubmit} sessions={sessions()} onSelectSession={handleSelectSession} />}
+    >
       <TerminalLayout
         sessions={sessions()}
         messages={messages()}

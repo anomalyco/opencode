@@ -8,6 +8,7 @@ export interface Session {
 }
 
 interface SessionPickerProps {
+  isOpen: boolean
   sessions: Session[]
   currentSessionId?: string
   onSelect: (sessionId: string) => void
@@ -136,7 +137,7 @@ export const SessionPicker: Component<SessionPickerProps> = (props) => {
 
   // Focus input and reset state when opened
   createEffect(() => {
-    if (inputRef) {
+    if (props.isOpen && inputRef) {
       setTimeout(() => {
         inputRef?.focus()
       }, 0)
@@ -155,7 +156,7 @@ export const SessionPicker: Component<SessionPickerProps> = (props) => {
   let currentIndex = 0
 
   return (
-    <Show when={true}>
+    <Show when={props.isOpen}>
       {/* Overlay backdrop */}
       <div
         onClick={props.onClose}

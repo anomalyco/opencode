@@ -1,16 +1,29 @@
 import type { Component } from "solid-js"
-import { createSignal, onCleanup } from "solid-js"
+import { createSignal, onCleanup, onMount } from "solid-js"
 import { GridPanel } from "./GridPanel"
 import { GridText } from "./GridText"
+import { CommandMenu } from "./CommandMenu"
+import { SessionPicker, type Session } from "./SessionPicker"
 
 interface MainScreenProps {
   onSubmit: (text: string) => void
+  sessions?: Array<{ id: string; title: string; timestamp?: number }>
+  onSelectSession?: (id: string) => void
+  onNewSession?: () => void
+  onToggleLeftSidebar?: () => void
+  onToggleRightSidebar?: () => void
+  onToggleBothSidebars?: () => void
+  onSwitchModel?: () => void
+  onSwitchAgent?: () => void
 }
 
 export const MainScreen: Component<MainScreenProps> = (props) => {
+  console.log("[MainScreen] RENDERING MAIN SCREEN")
   const [inputText, setInputText] = createSignal("")
   const [cursorVisible, setCursorVisible] = createSignal(true)
   const [cursorPosition, setCursorPosition] = createSignal(0)
+  const [commandMenuOpen, setCommandMenuOpen] = createSignal(false)
+  const [sessionPickerOpen, setSessionPickerOpen] = createSignal(false)
   let textareaRef: HTMLTextAreaElement | undefined
 
   // Cursor blink animation
@@ -18,8 +31,21 @@ export const MainScreen: Component<MainScreenProps> = (props) => {
     setCursorVisible((prev) => !prev)
   }, 530)
 
+  // Global keyboard handler for Ctrl+P
+  const handleGlobalKeyDown = (e: KeyboardEvent) => {
+    if (e.key === "p" && (e.ctrlKey || e.metaKey)) {
+      e.preventDefault()
+      setCommandMenuOpen(true)
+    }
+  }
+
+  onMount(() => {
+    window.addEventListener("keydown", handleGlobalKeyDown)
+  })
+
   onCleanup(() => {
     clearInterval(blinkInterval)
+    window.removeEventListener("keydown", handleGlobalKeyDown)
   })
 
   const handleSubmit = () => {
@@ -64,30 +90,39 @@ export const MainScreen: Component<MainScreenProps> = (props) => {
           display: "flex",
           "align-items": "center",
           "flex-direction": "column",
+          "font-family": '"Berkeley Mono", "JetBrains Mono", monospace',
         }}
       >
-        {/* Logo - text */}
-        <div
+        {/* ASCII Logo */}
+        <pre
           style={{
-            "font-size": "48px",
-            "font-weight": "bold",
-            color: "#ffffff",
-            "letter-spacing": "-0.02em",
-            "margin-bottom": "0.5em",
+            "font-size": "16px",
+            "line-height": "1.0",
+            margin: "0",
+            "text-align": "left",
           }}
         >
-          codesurf
-        </div>
+          <span style={{ color: "#6a6a6a" }}>{`█▀▀▀ █▀▀█ █▀▀█ █▀▀▀ `}</span>
+          <span style={{ color: "#ffffff", "font-weight": "bold" }}>{`█▀▀▀ █  █ █▀▀█ █▀▀▀`}</span>
+          {`\n`}
+          <span style={{ color: "#6a6a6a" }}>{`█░░░ █░░█ █░░█ █▀▀▀ `}</span>
+          <span style={{ color: "#ffffff", "font-weight": "bold" }}>{`▀▀▀█ █  █ █▄▄▀ █▀▀▀`}</span>
+          {`\n`}
+          <span style={{ color: "#6a6a6a" }}>{`▀▀▀▀ ▀▀▀▀ ▀▀▀▀ ▀▀▀▀ `}</span>
+          <span style={{ color: "#ffffff", "font-weight": "bold" }}>{`▀▀▀▀ ▀▀▀▀ ▀  ▀ ▀   `}</span>
+        </pre>
 
-        {/* Tagline */}
+        {/* Version */}
         <div
           style={{
             color: "#6a6a6a",
             "font-size": "14px",
-            "text-align": "center",
+            "text-align": "right",
+            width: "100%",
+            "margin-top": "0.5em",
           }}
         >
-          ride the wave of code
+          v0.0.0-dev
         </div>
       </div>
 
@@ -231,18 +266,18 @@ export const MainScreen: Component<MainScreenProps> = (props) => {
                 background: "#1a1a1a",
                 padding: "0.8em 1em",
                 "border-radius": "4px",
-                border: "1px solid #2a2a2a",
+                border: "none",
                 color: "#858585",
                 cursor: "pointer",
                 transition: "all 0.15s ease",
                 "font-size": "14px",
               }}
               onMouseEnter={(e) => {
-                e.currentTarget.style.borderColor = "#d19a66"
+                e.currentTarget.style.background = "#2a2a2a"
                 e.currentTarget.style.color = "#ffffff"
               }}
               onMouseLeave={(e) => {
-                e.currentTarget.style.borderColor = "#2a2a2a"
+                e.currentTarget.style.background = "#1a1a1a"
                 e.currentTarget.style.color = "#858585"
               }}
             >
@@ -252,17 +287,72 @@ export const MainScreen: Component<MainScreenProps> = (props) => {
         </div>
       </div>
 
-      {/* Footer hint */}
+      {/* Footer hint - clickable */}
       <div
+        onClick={() => setCommandMenuOpen(true)}
         style={{
           position: "fixed",
           bottom: "2em",
           color: "#6a6a6a",
           "font-size": "14px",
+          cursor: "pointer",
+          transition: "color 0.15s ease",
+        }}
+        onMouseEnter={(e) => {
+          e.currentTarget.style.color = "#ffffff"
+        }}
+        onMouseLeave={(e) => {
+          e.currentTarget.style.color = "#6a6a6a"
         }}
       >
         <span style={{ color: "#ffffff", "font-weight": "bold" }}>ctrl+p</span> for commands
       </div>
+
+      {/* Command Menu */}
+      <CommandMenu
+        isOpen={commandMenuOpen()}
+        onClose={() => setCommandMenuOpen(false)}
+        hideViewCommands={true}
+        sessions={props.sessions}
+        onSelectSession={(sessionId) => {
+          setCommandMenuOpen(false)
+          props.onSelectSession?.(sessionId)
+        }}
+        onNewSession={() => {
+          setCommandMenuOpen(false)
+          props.onNewSession?.()
+        }}
+        onSwitchSession={() => {
+          setCommandMenuOpen(false)
+          setSessionPickerOpen(true)
+        }}
+        onSwitchModel={() => {
+          setCommandMenuOpen(false)
+          props.onSwitchModel?.()
+        }}
+        onSwitchAgent={() => {
+          setCommandMenuOpen(false)
+          props.onSwitchAgent?.()
+        }}
+        onToggleLeftSidebar={() => {}}
+        onToggleRightSidebar={() => {}}
+        onToggleBothSidebars={() => {}}
+      />
+
+      {/* Session Picker */}
+      <SessionPicker
+        isOpen={sessionPickerOpen()}
+        sessions={(props.sessions || []).map((s) => ({
+          id: s.id,
+          title: s.title,
+          timestamp: s.timestamp || Date.now(),
+        }))}
+        onSelect={(sessionId) => {
+          setSessionPickerOpen(false)
+          props.onSelectSession?.(sessionId)
+        }}
+        onClose={() => setSessionPickerOpen(false)}
+      />
     </div>
   )
 }
