@@ -22,64 +22,19 @@ export const { use: useSession, provider: SessionProvider } = createSimpleContex
           active?: string
           opened: string[]
         }
+        prompt: Prompt
+        cursor?: number
       }>({
         tabs: {
           opened: [],
         },
+        prompt: clonePrompt(DEFAULT_PROMPT),
+        cursor: undefined,
       }),
       {
         name: seed,
       },
     )
-
-    const [promptStore, setPromptStore] = createStore<{
-      prompt: Prompt
-      cursor?: number
-    }>({
-      prompt: clonePrompt(DEFAULT_PROMPT),
-    })
-
-    const key = createMemo(() => props.sessionId ?? "new-session")
-    const [ready, setReady] = createSignal(false)
-    const prefix = "session-prompt:"
-
-    createEffect(
-      on(
-        key,
-        (value) => {
-          setReady(false)
-          const record = localStorage.getItem(prefix + value)
-          if (!record) {
-            setPromptStore("prompt", clonePrompt(DEFAULT_PROMPT))
-            setPromptStore("cursor", undefined)
-            setReady(true)
-            return
-          }
-          const payload = JSON.parse(record) as { prompt?: Prompt; cursor?: number }
-          const parts = payload.prompt ?? DEFAULT_PROMPT
-          const cursor = typeof payload.cursor === "number" ? payload.cursor : undefined
-          setPromptStore("prompt", clonePrompt(parts))
-          setPromptStore("cursor", cursor)
-          setReady(true)
-        },
-        { defer: true },
-      ),
-    )
-
-    createEffect(() => {
-      if (!ready()) return
-      const value = key()
-      const isDefault = isPromptEqual(promptStore.prompt, DEFAULT_PROMPT)
-      if (isDefault && (promptStore.cursor === undefined || promptStore.cursor <= 0)) {
-        localStorage.removeItem(prefix + value)
-        return
-      }
-      const next = JSON.stringify({
-        prompt: clonePrompt(promptStore.prompt),
-        cursor: promptStore.cursor,
-      })
-      localStorage.setItem(prefix + value, next)
-    })
 
     createEffect(() => {
       if (!props.sessionId) return
@@ -149,14 +104,14 @@ export const { use: useSession, provider: SessionProvider } = createSimpleContex
       working,
       diffs,
       prompt: {
-        current: createMemo(() => promptStore.prompt),
-        cursor: createMemo(() => promptStore.cursor),
-        dirty: createMemo(() => !isPromptEqual(promptStore.prompt, DEFAULT_PROMPT)),
+        current: createMemo(() => persist.prompt),
+        cursor: createMemo(() => persist.cursor),
+        dirty: createMemo(() => !isPromptEqual(persist.prompt, DEFAULT_PROMPT)),
         set(prompt: Prompt, cursorPosition?: number) {
           const next = clonePrompt(prompt)
           batch(() => {
-            setPromptStore("prompt", next)
-            if (cursorPosition !== undefined) setPromptStore("cursor", cursorPosition)
+            setPersist("prompt", next)
+            if (cursorPosition !== undefined) setPersist("cursor", cursorPosition)
           })
         },
       },
