@@ -13,9 +13,11 @@ export { GridShimmer } from "./GridShimmer"
 export { SessionsPanel } from "./SessionsPanel"
 export { MessagesPanel } from "./MessagesPanel"
 export { SidebarPanel } from "./SidebarPanel"
+export { MainScreen } from "./MainScreen"
 
 // Dialog system
 export { Dialog, SelectList, StyledDialog } from "./Dialog"
+export { CommandMenu } from "./CommandMenu"
 
 // Layout system
 export { TerminalLayout } from "./TerminalLayout"

@@ -4,6 +4,8 @@ import { SessionsPanel } from "./SessionsPanel"
 import { MessagesPanel } from "./MessagesPanel"
 import { SidebarPanel } from "./SidebarPanel"
 import { GridDivider } from "./GridDivider"
+import { CommandMenu } from "./CommandMenu"
+import { createKeyboardHandler, type KeyboardShortcut } from "../utils/keyboard"
 
 interface TerminalLayoutProps {
   sessions: Array<{ id: string; title: string; hasChildren?: boolean }>
@@ -43,10 +45,16 @@ export const TerminalLayout: Component<TerminalLayoutProps> = (props) => {
   const [leftCollapsed, setLeftCollapsed] = createSignal(false)
   const [rightCollapsed, setRightCollapsed] = createSignal(false)
 
+  // Command menu state
+  const [commandMenuOpen, setCommandMenuOpen] = createSignal(false)
+
   const leftDividerCol = () => (leftCollapsed() ? 0 : leftWidth())
   const rightDividerCol = () => (rightCollapsed() ? totalCols() : totalCols() - rightWidth())
 
-  // Window resize listener
+  // Scroll container ref for clear screen functionality
+  const [messagesScrollContainer, setMessagesScrollContainer] = createSignal<HTMLDivElement | null>(null)
+
+  // Window resize listener and keyboard shortcuts
   onMount(() => {
     const handleResize = () => {
       setTotalCols(calculateTotalColumns())
@@ -54,10 +62,92 @@ export const TerminalLayout: Component<TerminalLayoutProps> = (props) => {
 
     window.addEventListener("resize", handleResize)
 
+    // Define all keyboard shortcuts
+    const shortcuts: KeyboardShortcut[] = [
+      {
+        key: "p",
+        ctrl: true,
+        description: "Open command menu",
+        action: () => setCommandMenuOpen(true),
+      },
+      {
+        key: "n",
+        ctrl: true,
+        description: "New chat (Ctrl+X N)",
+        action: handleNewChat,
+      },
+      {
+        key: "s",
+        ctrl: true,
+        description: "Toggle sidebar (Ctrl+X S)",
+        action: handleToggleSidebar,
+      },
+      {
+        key: "l",
+        ctrl: true,
+        description: "Toggle sessions panel (Ctrl+X L)",
+        action: handleToggleSessions,
+      },
+      {
+        key: "l",
+        ctrl: true,
+        description: "Clear screen / scroll to bottom",
+        action: () => {
+          const container = messagesScrollContainer()
+          if (container) {
+            container.scrollTop = container.scrollHeight
+          }
+        },
+      },
+      {
+        key: "Escape",
+        description: "Close command menu",
+        action: () => {
+          if (commandMenuOpen()) {
+            setCommandMenuOpen(false)
+          }
+        },
+      },
+    ]
+
+    // Setup keyboard handler
+    const keyboardHandler = createKeyboardHandler({ shortcuts, enabled: true })
+    keyboardHandler.attach()
+
     onCleanup(() => {
       window.removeEventListener("resize", handleResize)
+      keyboardHandler.detach()
     })
   })
+
+  // Command handlers
+  const handleNewChat = () => {
+    console.log("New chat requested")
+    // TODO: Implement new chat creation
+  }
+
+  const handleClearHistory = () => {
+    console.log("Clear history requested")
+    // TODO: Implement clear history
+  }
+
+  const handleExportChat = () => {
+    console.log("Export chat requested")
+    // TODO: Implement export
+  }
+
+  const handleSettings = () => {
+    console.log("Settings requested")
+    // TODO: Implement settings
+  }
+
+  const handleToggleSidebar = () => {
+    setRightCollapsed((prev) => !prev)
+  }
+
+  const handleToggleSessions = () => {
+    setLeftCollapsed((prev) => !prev)
+  }
 
   return (
     <div
@@ -199,11 +289,24 @@ export const TerminalLayout: Component<TerminalLayoutProps> = (props) => {
             ~/Documents/GitHub/flows/opencode-stt
           </span>
           <span>
+            <span style={{ color: "#ffffff", "font-weight": "bold" }}>ctrl+p</span> commands{" "}
             <span style={{ color: "#ffffff", "font-weight": "bold" }}>tab</span>{" "}
             <span style={{ color: "#61afef" }}>{props.currentAgent}</span>
           </span>
         </div>
       </div>
+
+      {/* Command Menu */}
+      <CommandMenu
+        isOpen={commandMenuOpen()}
+        onClose={() => setCommandMenuOpen(false)}
+        onNewChat={handleNewChat}
+        onClearHistory={handleClearHistory}
+        onExportChat={handleExportChat}
+        onSettings={handleSettings}
+        onToggleSidebar={handleToggleSidebar}
+        onToggleSessions={handleToggleSessions}
+      />
     </div>
   )
 }
