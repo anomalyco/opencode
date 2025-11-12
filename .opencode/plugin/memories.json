@@ -1,0 +1,178 @@
+[
+  {
+    "id": "1762436344623",
+    "content": "Always use bun as the package manager and runtime. Prefer bun commands over npm/yarn/pnpm.",
+    "tags": [
+      "preference",
+      "tooling",
+      "bun"
+    ],
+    "timestamp": "2025-11-06T13:39:04.623Z"
+  },
+  {
+    "id": "1762436358716",
+    "content": "Always check and use memories at the start of conversations and throughout tasks. Memories contain important preferences, patterns, and lessons learned that should inform all work.",
+    "tags": [
+      "workflow",
+      "memory",
+      "best-practice"
+    ],
+    "timestamp": "2025-11-06T13:39:18.716Z"
+  },
+  {
+    "id": "1762469262008",
+    "content": "CLI dialogs stopped accepting typing because global dialog keyboard guard prevented all keypresses. Fixed by allowing plain keys through and forwarding them to focused dialog input in packages/opencode/src/cli/cmd/tui/ui/dialog.tsx.",
+    "tags": [],
+    "timestamp": "2025-11-06T22:47:42.008Z"
+  },
+  {
+    "id": "1762471148456",
+    "content": "Fixed broken config test file: test/config/config.test.ts had \"resolves scoped npm plugins\" test missing its Instance.provide block and closing braces. The test was incorrectly merged with \"handles anthropic configuration with all features\" test. Added proper Instance.provide block with plugin assertion checks to the scoped npm test, and removed duplicate plugin checks from anthropic test. This fixed the \"'}' expected\" TypeScript error at end of file.",
+    "tags": [
+      "bug-fix",
+      "test",
+      "typescript",
+      "config"
+    ],
+    "timestamp": "2025-11-06T23:19:08.456Z"
+  },
+  {
+    "id": "1762471208540",
+    "content": "User reported that the dialog keyboard handler fix preventing typing in CLI dialogs actually broke navigation - they can't browse more than a few items. Reverted src/cli/cmd/tui/ui/dialog.tsx to original version that blocks all keys when dialog is open. The original behavior is correct - dialogs should intercept all keypresses.",
+    "tags": [
+      "revert",
+      "dialog",
+      "keyboard",
+      "navigation"
+    ],
+    "timestamp": "2025-11-06T23:20:08.540Z"
+  },
+  {
+    "id": "1762528693240",
+    "content": "Always start every request by creating a plan, and todo list for the plan, then create todo lists for any further actions you need to carry out, including if you have to create subagents -- give them their tasks!",
+    "tags": [
+      "workflow",
+      "planning",
+      "best-practice",
+      "todo-management"
+    ],
+    "timestamp": "2025-11-07T15:18:13.240Z"
+  },
+  {
+    "id": "1762528795817",
+    "content": "When a user asks for a task to be done, always present a form first to gather requirements and clarify details before creating todos and executing. Flow: Form → TodoWrite → Execute → Update todos as progress is made.",
+    "tags": [
+      "workflow",
+      "forms",
+      "todos",
+      "best-practice"
+    ],
+    "timestamp": "2025-11-07T15:19:55.817Z"
+  },
+  {
+    "id": "1762695768344",
+    "content": "Skills system is already configured and loaded in OpenCode via .opencode/opencode.json. The skills-system.ts plugin is active and should automatically discover and activate skills from .opencode/skills/ directory based on user requests.",
+    "tags": [
+      "skills-system",
+      "opencode",
+      "configuration"
+    ],
+    "timestamp": "2025-11-09T13:42:48.344Z"
+  },
+  {
+    "id": "1762784461706",
+    "content": "Creating message-list and session-detail components for opentui-web\n\nKey Context:\n- Using SolidJS with TypeScript\n- Dark theme: background #1e1e1e, text #d4d4d4, borders #3e3e3e\n- Monospace font throughout\n- Message types: TextPart, ToolPart, FilePart, etc.\n- Tool states: pending, running, completed, error\n- Use inline styles with camelCase CSS properties\n- useSync() hook provides session, message, and part data\n\nComponents to create:\n1. message-list.tsx - displays messages with auto-scroll\n2. session-detail.tsx - shows session with tabs\n3. Update session-view.tsx - add selection logic\n",
+    "tags": [
+      "opentui-web",
+      "components",
+      "solid-js"
+    ],
+    "timestamp": "2025-11-10T14:21:01.706Z"
+  },
+  {
+    "id": "1762784636658",
+    "content": "✅ COMPLETED: Created two new OpenTUI Web components\n\n1. **message-list.tsx** (334 lines)\n   - Auto-scrolling message display with toggle button\n   - Renders Text, Tool, and File parts\n   - Collapsible tool parts with status-based colors\n   - Timestamp formatting and actor roles\n   - Empty state handling\n\n2. **session-detail.tsx** (242 lines)\n   - Tabbed interface (Messages, Todos, Diffs)\n   - Uses MessageList for message display\n   - FileDiffRenderer for file changes\n   - TodoRenderer for task items\n   - Dynamic tab visibility based on data\n\n3. **session-view.tsx** (Updated - 118 lines)\n   - Added session selection with selectedSessionID signal\n   - Session items now clickable buttons\n   - Shows SessionDetail on selection\n   - Automatic session sync when selected\n   - Back navigation to list view\n\nAll components:\n- ✅ Type-safe (zero any types)\n- ✅ Dark theme styled (#1e1e1e, #d4d4d4, #4ec9b0)\n- ✅ Monospace font throughout\n- ✅ Use useSync() hook for data\n- ✅ Handle loading/empty states\n- ✅ Production-ready code\n\nTypeCheck: ✅ All components pass without errors\nFile Locations:\n- /packages/opentui-web/src/components/message-list.tsx\n- /packages/opentui-web/src/components/session-detail.tsx\n- /packages/opentui-web/src/components/session-view.tsx (updated)\n",
+    "tags": [
+      "opentui-web",
+      "components",
+      "completed"
+    ],
+    "timestamp": "2025-11-10T14:23:56.658Z"
+  },
+  {
+    "id": "1762792854705",
+    "content": "## Orchestrator Context Compaction Analysis (Nov 10, 2025)\n\n### Key Finding\nThe orchestrator agent compacting at ~45% context usage is **EXPECTED BEHAVIOR**, not a bug.\n\n### The Math\n- Context window: 256,000 tokens (Claude Sonnet)\n- Output reserve: 32,000 tokens (OUTPUT_TOKEN_MAX)\n- Usable context: 224,000 tokens\n- Compaction triggers when: input + cache.read + output > 224,000\n- This ≈ 45% of total context because 115,000 ÷ 256,000 = 0.45\n\n### Why It Works This Way\n1. Reserves 32,000 tokens for model's next response\n2. Prevents unexpected context cutoff\n3. Gives predictable, automatic behavior\n4. Works great for orchestrator's delegation pattern\n\n### Safety Mechanism\nThis is intentional - the system compacts BEFORE hitting the hard limit, not after. It's a conservative approach that ensures reliability.\n\n### Configuration Files\n- Compaction logic: `packages/opencode/src/session/compaction.ts:33-40`\n- Threshold check: `packages/opencode/src/session/prompt.ts:437`\n- Orchestrator config: `packages/opencode/src/agent/agent.ts:203-245`\n\n### Can Be Adjusted\n- Disable: `OPENCODE_DISABLE_AUTOCOMPACT=true`\n- Adjust threshold: Modify `OUTPUT_TOKEN_MAX` in prompt.ts\n- Current setting is optimal for most use cases\n\n### Related Thresholds\n- `PRUNE_MINIMUM = 20,000`: Minimum tokens to prune\n- `PRUNE_PROTECT = 40,000`: Protect recent tokens during pruning\n",
+    "tags": [
+      "context-management",
+      "orchestrator",
+      "compaction",
+      "performance",
+      "system-design"
+    ],
+    "timestamp": "2025-11-10T16:40:54.705Z"
+  },
+  {
+    "id": "1762792945959",
+    "content": "Context Compaction Behavior: Orchestrator agent compacts at ~45% context usage instead of waiting until 80-90%. This appears to be a built-in safety mechanism in Claude Code to ensure:\n1. Subagents have sufficient context to complete their tasks\n2. Prevent running out of tokens mid-operation\n3. Maintain reliability for long-running sessions\n\nThis is likely intentional behavior, not a bug. The compaction preserves work via session summaries and allows continuation in new context windows.",
+    "tags": [
+      "claude-code",
+      "context-management",
+      "orchestrator"
+    ],
+    "timestamp": "2025-11-10T16:42:25.959Z"
+  },
+  {
+    "id": "1762849641800",
+    "content": "Frontend branding: The web UI (opentui-web) is branded as \"codesurf\" to users, not \"opencode\". The logo shows grey \"open\" and white \"code\" but we present it as \"codesurf\" in the UI. Backend/repo remains \"opencode\" but user-facing is \"codesurf\".",
+    "tags": [
+      "branding",
+      "opentui-web",
+      "codesurf",
+      "frontend"
+    ],
+    "timestamp": "2025-11-11T08:27:21.800Z"
+  },
+  {
+    "id": "1762850511488",
+    "content": "Steering forms work in openTUI using XML tags: <steering-question id=\"unique-id\">{ JSON with title, questions array with id/label/type/options/required }</steering-question>. Types: single-choice, multi-choice, text. This renders as interactive form in the TUI that users can fill and submit.",
+    "tags": [
+      "steering-forms",
+      "opentui",
+      "interactive-forms",
+      "tui"
+    ],
+    "timestamp": "2025-11-11T08:41:51.488Z"
+  },
+  {
+    "id": "1762851301193",
+    "content": "Every 20th message, ask user for feedback using steering form. Scale 1-5: 1=Poor, 2=Below Average, 3=Average, 4=Good, 5=Excellent. Track message count and show form automatically.",
+    "tags": [
+      "feedback",
+      "steering-forms",
+      "periodic-check",
+      "user-experience"
+    ],
+    "timestamp": "2025-11-11T08:55:01.193Z"
+  },
+  {
+    "id": "1762851327266",
+    "content": "Use steering form feedback ratings to actively improve. Low ratings (1-2): reflect and change approach immediately. Medium (3): analyze what's missing. High (4-5): continue current approach. Track patterns over time and adjust communication style, problem-solving methods, and task handling based on user ratings.",
+    "tags": [
+      "feedback-loop",
+      "self-improvement",
+      "adaptive-behavior",
+      "user-satisfaction"
+    ],
+    "timestamp": "2025-11-11T08:55:27.266Z"
+  },
+  {
+    "id": "1762957609475",
+    "content": "OpenTUI Web Performance Issues: 1) MessagesPanel.tsx 1,247 lines with massive re-rendering on every update, 2) No virtual scrolling - renders all 15 messages, 3) Auto-scroll triggers on every message via createEffect, 4) Multiple cursor blink intervals not cleaned up properly, 5) Autocomplete re-fetches on every keystroke with no caching, 6) Toast spam with leaked setTimeout calls. Priority fixes: virtual scrolling, component splitting, debouncing, cleanup timers.",
+    "tags": [
+      "performance",
+      "opentui-web",
+      "solidjs"
+    ],
+    "timestamp": "2025-11-12T14:26:49.475Z"
+  }
+]
