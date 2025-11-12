@@ -19,7 +19,7 @@ import { useRoute, useRouteData } from "@tui/context/route"
 import { useSync } from "@tui/context/sync"
 import { SplitBorder } from "@tui/component/border"
 import { useTheme } from "@tui/context/theme"
-import { BoxRenderable, ScrollBoxRenderable, addDefaultParsers } from "@opentui/core"
+import { BoxRenderable, ScrollBoxRenderable, addDefaultParsers, TextAttributes } from "@opentui/core"
 import { Prompt, type PromptRef } from "@tui/component/prompt"
 import type {
   AssistantMessage,
@@ -998,7 +998,7 @@ export function Session() {
                 height="100%"
               >
                 <Show when={hasMoreMessages()}>
-                  <box paddingTop={1} paddingBottom={1} paddingLeft={2} onMouseUp={loadMoreMessages}>
+                  <box paddingTop={1} paddingBottom={1} paddingLeft={2} marginBottom={1} onMouseUp={loadMoreMessages}>
                     <text fg={theme.textMuted}>
                       ↑ {allMessages().length - messageWindowSize()} older messages hidden (click to load more)
                     </text>
@@ -1006,6 +1006,17 @@ export function Session() {
                 </Show>
                 <For each={messages()} fallback={<box />}>
                   {(message, index) => {
+                    // Memoize parts to prevent re-rendering completed messages
+                    // Only update parts while message is streaming (not completed)
+                    const messageParts = createMemo(() => {
+                      // If message is completed, cache the parts and don't re-fetch
+                      if ("completed" in message.time && message.time.completed) {
+                        return untrack(() => sync.data.part[message.id] ?? [])
+                      }
+                      // If streaming, keep updating
+                      return sync.data.part[message.id] ?? []
+                    })
+
                     // Check if this user message should be hidden (followed by only add_task calls)
                     const shouldHideUserMessage = createMemo(() => {
                       if (message.role !== "user") return false
@@ -1096,7 +1107,7 @@ export function Session() {
                               dialog.replace(() => <DialogMessage messageID={message.id} sessionID={route.sessionID} />)
                             }}
                             message={message as UserMessage}
-                            parts={sync.data.part[message.id] ?? []}
+                            parts={messageParts()}
                             pending={pending()}
                           />
                         </Match>
@@ -1107,7 +1118,7 @@ export function Session() {
                           <AssistantMessage
                             last={index() === messages().length - 1}
                             message={message as AssistantMessage}
-                            parts={sync.data.part[message.id] ?? []}
+                            parts={messageParts()}
                           />
                         </Match>
                       </Switch>
@@ -1160,10 +1171,21 @@ function UserMessage(props: {
   const text = createMemo(() => props.parts.flatMap((x) => (x.type === "text" && !x.synthetic ? [x] : []))[0])
   const files = createMemo(() => props.parts.flatMap((x) => (x.type === "file" ? [x] : [])))
   const sync = useSync()
+  const sdk = useSDK()
   const { theme } = useTheme()
   const [hover, setHover] = createSignal(false)
   const queued = createMemo(() => props.pending && props.message.id > props.pending)
   const color = createMemo(() => (untrack(queued) ? untrack(() => theme.accent) : untrack(() => theme.secondary)))
+
+  const toggleFavorite = async (e: any) => {
+    e.stopPropagation()
+    await sdk.client.session.toggleMessageFavorite({
+      path: {
+        id: props.message.sessionID,
+        messageID: props.message.id,
+      },
+    })
+  }
 
   return (
     <Show when={text()}>
@@ -1215,6 +1237,11 @@ function UserMessage(props: {
             >
               <span style={{ bg: theme.accent, fg: theme.backgroundPanel, bold: true }}> QUEUED </span>
             </Show>
+          </text>
+          <text onMouseUp={toggleFavorite} attributes={TextAttributes.BOLD}>
+            <span style={{ fg: props.message.favorited ? theme.accent : theme.textMuted }}>
+              [{props.message.favorited ? "★" : "☆"}]
+            </span>
           </text>
         </box>
       </box>
