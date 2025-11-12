@@ -115,6 +115,20 @@ export function Sidebar(props: { sessionID: string }) {
               </For>
             </box>
           </Show>
+          <Show when={todo().length > 0}>
+            <box>
+              <text fg={theme.text}>
+                <b>Todo</b>
+              </text>
+              <For each={todo()}>
+                {(todo) => (
+                  <text style={{ fg: todo.status === "in_progress" ? theme.success : theme.textMuted }}>
+                    [{todo.status === "completed" ? "✓" : " "}] {todo.content}
+                  </text>
+                )}
+              </For>
+            </box>
+          </Show>
           <Show when={diff().length > 0}>
             <box>
               <text fg={theme.text}>
@@ -144,20 +158,6 @@ export function Sidebar(props: { sessionID: string }) {
                     </box>
                   )
                 }}
-              </For>
-            </box>
-          </Show>
-          <Show when={todo().length > 0}>
-            <box>
-              <text fg={theme.text}>
-                <b>Todo</b>
-              </text>
-              <For each={todo()}>
-                {(todo) => (
-                  <text style={{ fg: todo.status === "in_progress" ? theme.success : theme.textMuted }}>
-                    [{todo.status === "completed" ? "✓" : " "}] {todo.content}
-                  </text>
-                )}
               </For>
             </box>
           </Show>

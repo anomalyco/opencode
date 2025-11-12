@@ -49,6 +49,7 @@ if (!Script.preview) {
           - Do NOT make general statements about "improvements", be very specific about what was changed.
           - Do NOT include any information about code changes if they do not affect the user facing changes.
           - For commits that are already well-written and descriptive, avoid rewording them. Simply capitalize the first letter, fix any misspellings, and ensure proper English grammar.
+          - DO NOT read any other commits than the ones listed above (THIS IS IMPORTANT TO AVOID DUPLICATING THINGS IN OUR CHANGELOG)
 
           IMPORTANT: ONLY return a bulleted list of changes, do not include any other information. Do not include a preamble like "Based on my analysis..."
 
@@ -67,7 +68,9 @@ if (!Script.preview) {
       notes.push(line)
     }
   }
-  console.log(notes)
+  console.log("---- Generated Changelog ----")
+  console.log(notes.join("\n"))
+  console.log("-----------------------------")
   opencode.server.close()
 }
 

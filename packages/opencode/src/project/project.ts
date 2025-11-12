@@ -60,7 +60,7 @@ export namespace Project {
             .toSorted(),
         )
       id = roots[0]
-      Bun.file(path.join(git, "opencode")).write(id)
+      if (id) Bun.file(path.join(git, "opencode")).write(id)
     }
     timer.stop()
     if (!id) {
