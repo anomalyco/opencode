@@ -48,13 +48,13 @@ export const SessionsPanel: Component<SessionsPanelProps> = (props) => {
 
   // Create list of visible sessions with their row positions
   const visibleSessions = createMemo(() => {
-    let rowIndex = 0
+    let currentRow = 4
     return props.sessions
       .filter((session) => {
         // Include if not a child, or if parent is expanded
         return !session.parentID || expandedSessions().has(session.parentID)
       })
-      .map((session) => {
+      .map((session, index, array) => {
         // Transform title: remove "(@agent subagent)" and extract agent type
         let displayTitle = session.title
         let agentTag = null
@@ -71,12 +71,23 @@ export const SessionsPanel: Component<SessionsPanelProps> = (props) => {
             agentColor = agentColors[agentType] || "#858585"
           }
         }
+
+        const row = currentRow
+
+        // Increment row: +1 for child sessions, +1.6 for parent sessions (adds gap after parent, 20% less than 2)
+        const nextSession = array[index + 1]
+        if (!nextSession || !nextSession.parentID) {
+          currentRow += 1.6 // Add extra space after parent sessions (reduced by 20%)
+        } else {
+          currentRow += 1 // Normal spacing for child sessions
+        }
+
         return {
           ...session,
           displayTitle,
           agentTag,
           agentColor,
-          row: 4 + rowIndex++,
+          row,
         }
       })
   })
@@ -148,6 +159,8 @@ export const SessionsPanel: Component<SessionsPanelProps> = (props) => {
                       style={{
                         padding: "0 0.5ch",
                         "border-radius": bejazzle.themeFeatures().roundedCorners ? "0.25rem" : "0",
+                        transform: "translateY(6px)",
+                        "margin-top": "4px",
                       }}
                     />
                   )}
@@ -164,6 +177,8 @@ export const SessionsPanel: Component<SessionsPanelProps> = (props) => {
                       "white-space": "nowrap",
                       overflow: "hidden",
                       "text-overflow": "ellipsis",
+                      transform: "translateY(6px)",
+                      "margin-top": "4px",
                     }}
                   />
                 </>
