@@ -12,6 +12,7 @@ import { Auth } from "../auth"
 import { Instance } from "../project/instance"
 import { Global } from "../global"
 import { Flag } from "../flag/flag"
+import { iife } from "@/util/iife"
 
 export namespace Provider {
   const log = Log.create({ service: "provider" })
@@ -290,9 +291,14 @@ export namespace Provider {
 
       for (const [modelID, model] of Object.entries(provider.models ?? {})) {
         const existing = parsed.models[model.id ?? modelID]
+        const name = iife(() => {
+          if (model.name) return model.name
+          if (model.id && model.id !== modelID) return modelID
+          return existing?.name ?? modelID
+        })
         const parsedModel: ModelsDev.Model = {
           id: modelID,
-          name: model.name ?? existing?.name ?? modelID,
+          name,
           release_date: model.release_date ?? existing?.release_date,
           attachment: model.attachment ?? existing?.attachment ?? false,
           reasoning: model.reasoning ?? existing?.reasoning ?? false,
