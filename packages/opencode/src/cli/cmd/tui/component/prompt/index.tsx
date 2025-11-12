@@ -30,6 +30,7 @@ import type { FilePart } from "@opencode-ai/sdk"
 import { TuiEvent } from "../../event"
 import { DialogModel } from "../dialog-model"
 import { useDialog } from "../../ui/dialog"
+import { Perf } from "@/util/perf"
 
 export type PromptProps = {
   sessionID?: string
@@ -283,6 +284,19 @@ export function Prompt(props: PromptProps) {
         draft.prompt.parts = newParts
       }),
     )
+  }
+
+  // Debounced version - delays sync during rapid typing (100ms)
+  let syncDebounceTimer: ReturnType<typeof setTimeout> | null = null
+  const trackedSyncExtmarks = Perf.track("syncExtmarksWithPromptParts", syncExtmarksWithPromptParts)
+  function syncExtmarksDebounced() {
+    if (syncDebounceTimer) {
+      clearTimeout(syncDebounceTimer)
+    }
+    syncDebounceTimer = setTimeout(() => {
+      trackedSyncExtmarks()
+      syncDebounceTimer = null
+    }, 100)
   }
 
   props.ref?.({
@@ -556,7 +570,7 @@ export function Prompt(props: PromptProps) {
                 }
                 setStore("prompt", "input", value)
                 autocomplete.onInput(value)
-                syncExtmarksWithPromptParts()
+                syncExtmarksDebounced() // Use debounced version during typing
               }}
               keyBindings={textareaKeybindings()}
               // TODO: fix this any

@@ -19,6 +19,7 @@ import { useRoute } from "../../context/route"
 import { $ } from "bun"
 import { DialogSubagentAdd } from "../../component/dialog-subagent-add"
 import { Todo } from "@/session/todo"
+import { Perf } from "@/util/perf"
 type TabType = "files" | "todos" | "tools" | "subagents"
 
 export function Sidebar(props: { sessionID: string; onToggle: () => void }) {
@@ -36,25 +37,8 @@ export function Sidebar(props: { sessionID: string; onToggle: () => void }) {
   // Extract port from URL
   const port = sdk.url.split(":").pop() || "unknown"
 
-  // Ping server periodically
-  let pingInterval: NodeJS.Timeout
-  onMount(() => {
-    pingInterval = setInterval(async () => {
-      try {
-        const response = await fetch(`${sdk.url}/health`, {
-          method: "GET",
-          signal: AbortSignal.timeout(1000),
-        })
-        setServerStatus(response.ok ? "connected" : "disconnected")
-      } catch {
-        setServerStatus("disconnected")
-      }
-    }, 5000)
-  })
-
-  onCleanup(() => {
-    if (pingInterval) clearInterval(pingInterval)
-  })
+  // Monitor server status from SSE connection instead of polling
+  // The sync context already handles connection monitoring via EventSource
 
   const showServerDialog = () => {
     const options: DialogSelectOption<string>[] = [
@@ -100,6 +84,8 @@ export function Sidebar(props: { sessionID: string; onToggle: () => void }) {
   const [optimisticTodos, setOptimisticTodos] = createSignal<
     Array<{ id: string; content: string; status: string; priority: string }>
   >([])
+  const [activeContextTags, setActiveContextTags] = createSignal<Set<string>>(new Set())
+  const [customContextTags, setCustomContextTags] = createSignal<string[]>([])
 
   const uiExtensions = useUIExtensions()
   const session = createMemo(() => sync.session.get(props.sessionID)!)
@@ -123,6 +109,47 @@ export function Sidebar(props: { sessionID: string; onToggle: () => void }) {
     return [...validOptimistic, ...server]
   })
   const messages = createMemo(() => sync.data.message[props.sessionID] ?? [])
+
+  // Extract all unique context tags from messages
+  const allContextTags = createMemo(() => {
+    const tags = new Set<string>()
+    messages().forEach((msg) => {
+      const contextTags = (msg as any).metadata?.contextTags || []
+      contextTags.forEach((tag: string) => tags.add(tag))
+    })
+    // Add custom tags
+    customContextTags().forEach((tag) => tags.add(tag))
+    return Array.from(tags).sort()
+  })
+
+  // Toggle context tag active state
+  const toggleContextTag = (tag: string) => {
+    setActiveContextTags((prev) => {
+      const newSet = new Set(prev)
+      if (newSet.has(tag)) {
+        newSet.delete(tag)
+      } else {
+        newSet.add(tag)
+      }
+      return newSet
+    })
+  }
+
+  // Add custom context tag
+  const addCustomContextTag = () => {
+    dialog.replace(() => (
+      <DialogPrompt
+        title="Add Custom Context Tag"
+        onConfirm={(value: string) => {
+          if (value.trim()) {
+            setCustomContextTags((prev) => [...prev, value.trim()])
+            toast.show({ variant: "success", message: `Added tag: ${value.trim()}` })
+          }
+        }}
+        onCancel={() => dialog.clear()}
+      />
+    ))
+  }
 
   // Get child sessions reactively from sync.data (SSE-based, no polling)
   const childSessions = createMemo(() =>
@@ -245,11 +272,22 @@ export function Sidebar(props: { sessionID: string; onToggle: () => void }) {
     }
   }
 
-  // Check committed files when tab switches to files
+  // Debounced git status check - only check after tab is open for 500ms
+  let gitCheckTimeout: NodeJS.Timeout | undefined
   const handleTabChange = (tab: TabType) => {
     setActiveTab(tab)
+
+    // Clear any pending git check
+    if (gitCheckTimeout) {
+      clearTimeout(gitCheckTimeout)
+      gitCheckTimeout = undefined
+    }
+
+    // Debounce git status check when switching to files tab
     if (tab === "files") {
-      checkCommittedFiles()
+      gitCheckTimeout = setTimeout(() => {
+        checkCommittedFiles()
+      }, 500)
     }
   }
 
@@ -264,39 +302,53 @@ export function Sidebar(props: { sessionID: string; onToggle: () => void }) {
     if (evt.ctrl && evt.name === "3") handleTabChange("files")
   })
 
-  // Track tools used in this session
-  const toolsUsed = createMemo(() => {
-    const toolCounts: Record<string, number> = {}
-
-    // Get all parts for messages in this session
-    messages().forEach((msg) => {
-      const parts = sync.data.part[msg.id] || []
-      parts.forEach((part) => {
-        if (part.type === "tool" && part.state?.status === "completed") {
-          const toolName = part.tool
-          // Skip the invalid tool - it's an internal error handler
-          if (toolName === "invalid") return
-          toolCounts[toolName] = (toolCounts[toolName] || 0) + 1
-        }
+  // Track tools used in this session - optimized with two-stage memoization
+  // First memo: Extract just the tool parts from messages (changes less frequently)
+  const toolParts = createMemo(
+    Perf.track("sidebar.toolParts", () => {
+      const parts: Array<{ tool: string; status: string }> = []
+      messages().forEach((msg) => {
+        const msgParts = sync.data.part[msg.id] || []
+        msgParts.forEach((part) => {
+          if (part.type === "tool" && part.state?.status === "completed") {
+            const toolName = part.tool
+            // Skip the invalid tool - it's an internal error handler
+            if (toolName !== "invalid") {
+              parts.push({ tool: toolName, status: part.state.status })
+            }
+          }
+        })
       })
-    })
+      return parts
+    }),
+  )
 
-    // Convert to array and sort by favorites first, then usage
-    return Object.entries(toolCounts)
-      .sort((a, b) => {
-        const aLevel = getFavoriteLevel(a[0])
-        const bLevel = getFavoriteLevel(b[0])
+  // Second memo: Calculate counts and sort (only when tool parts actually change)
+  const toolsUsed = createMemo(
+    Perf.track("sidebar.toolsUsed", () => {
+      const toolCounts: Record<string, number> = {}
 
-        // Sort by favorite level first (global > project > none)
-        const levelOrder = { global: 0, project: 1, none: 2 }
-        const levelDiff = levelOrder[aLevel] - levelOrder[bLevel]
-        if (levelDiff !== 0) return levelDiff
-
-        // Then by usage count
-        return b[1] - a[1]
+      toolParts().forEach((part) => {
+        toolCounts[part.tool] = (toolCounts[part.tool] || 0) + 1
       })
-      .slice(0, 10) // Top 10
-  })
+
+      // Convert to array and sort by favorites first, then usage
+      return Object.entries(toolCounts)
+        .sort((a, b) => {
+          const aLevel = getFavoriteLevel(a[0])
+          const bLevel = getFavoriteLevel(b[0])
+
+          // Sort by favorite level first (global > project > none)
+          const levelOrder = { global: 0, project: 1, none: 2 }
+          const levelDiff = levelOrder[aLevel] - levelOrder[bLevel]
+          if (levelDiff !== 0) return levelDiff
+
+          // Then by usage count
+          return b[1] - a[1]
+        })
+        .slice(0, 10) // Top 10
+    }),
+  )
 
   // Get star icon based on favorite level
   const getStarIcon = (toolId: string): string => {
@@ -1000,6 +1052,65 @@ export function Sidebar(props: { sessionID: string; onToggle: () => void }) {
             </box>
           </Show>
         </Show>
+
+        {/* Context Section - Always visible below tabs */}
+        <box marginTop={1} flexDirection="column">
+          <text
+            attributes={TextAttributes.BOLD}
+            fg={theme.accent}
+            onMouseUp={() => {
+              if (renderer.getSelection()?.getSelectedText()) return
+              toggleSection("context")
+            }}
+          >
+            {expandedSections().has("context") ? "▼" : "▶"} Context ({allContextTags().length})
+          </text>
+          <Show when={expandedSections().has("context")}>
+            <box flexDirection="column" gap={1}>
+              <Show when={allContextTags().length > 0}>
+                <box flexDirection="row" gap={1} flexWrap="wrap">
+                  <For each={allContextTags()}>
+                    {(tag) => {
+                      const isActive = createMemo(() => activeContextTags().has(tag))
+                      const isCustom = createMemo(() => customContextTags().includes(tag))
+                      return (
+                        <text
+                          fg={isActive() ? theme.background : theme.text}
+                          bg={isActive() ? theme.accent : theme.textMuted}
+                          paddingLeft={1}
+                          paddingRight={1}
+                          attributes={isActive() ? TextAttributes.BOLD : undefined}
+                          onMouseUp={() => {
+                            if (renderer.getSelection()?.getSelectedText()) return
+                            toggleContextTag(tag)
+                          }}
+                        >
+                          {tag}
+                          {isCustom() ? "*" : ""}
+                        </text>
+                      )
+                    }}
+                  </For>
+                </box>
+              </Show>
+              <Show when={allContextTags().length === 0}>
+                <text fg={theme.textMuted}>No context tags found</text>
+              </Show>
+              <box marginTop={1}>
+                <text
+                  fg={theme.accent}
+                  attributes={TextAttributes.BOLD}
+                  onMouseUp={() => {
+                    if (renderer.getSelection()?.getSelectedText()) return
+                    addCustomContextTag()
+                  }}
+                >
+                  + Add Custom Tag
+                </text>
+              </box>
+            </box>
+          </Show>
+        </box>
 
         {/* Subagents Section - Always visible below tabs */}
         {/* Subagents Section - Always visible */}

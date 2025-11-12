@@ -67,6 +67,7 @@ import { useKV } from "../../context/kv.tsx"
 import { MessageWidgets } from "@/ui/message-widgets"
 import { PluginComponent } from "../../component/plugin-component"
 import stripAnsi from "strip-ansi"
+import { Perf } from "@/util/perf"
 
 addDefaultParsers(parsers.parsers)
 
@@ -213,13 +214,33 @@ export function Session() {
     }
   })
 
-  const messages = createMemo(() => {
+  // Message windowing for performance - only render recent messages
+  const [messageWindowSize, setMessageWindowSize] = createSignal(30)
+
+  const allMessages = createMemo(() => {
     const currentSessionID = route.sessionID
     const current = sync.data.message[currentSessionID]
 
     // Return current messages if available, otherwise cached
     return current && current.length > 0 ? current : cachedMessages()
   })
+
+  const messages = createMemo(() => {
+    const all = allMessages()
+    const windowSize = messageWindowSize()
+
+    // Always show all messages if under window size
+    if (all.length <= windowSize) return all
+
+    // Show last N messages (most recent)
+    return all.slice(-windowSize)
+  })
+
+  const hasMoreMessages = createMemo(() => allMessages().length > messageWindowSize())
+
+  const loadMoreMessages = () => {
+    setMessageWindowSize((prev) => Math.min(prev + 20, allMessages().length))
+  }
 
   const permissions = createMemo(() => sync.data.permission[route.sessionID] ?? [])
 
@@ -967,6 +988,13 @@ export function Session() {
                 stickyStart="bottom"
                 height="100%"
               >
+                <Show when={hasMoreMessages()}>
+                  <box paddingTop={1} paddingBottom={1} paddingLeft={2} onMouseUp={loadMoreMessages}>
+                    <text fg={theme.textMuted}>
+                      ↑ {allMessages().length - messageWindowSize()} older messages hidden (click to load more)
+                    </text>
+                  </box>
+                </Show>
                 <For each={messages()} fallback={<box />}>
                   {(message, index) => {
                     // Check if this user message should be hidden (followed by only add_task calls)
@@ -1169,15 +1197,17 @@ function UserMessage(props: {
             </For>
           </box>
         </Show>
-        <text fg={theme.text}>
-          {sync.data.config.username ?? "You"}{" "}
-          <Show
-            when={queued()}
-            fallback={<span style={{ fg: theme.textMuted }}>({Locale.time(props.message.time.created)})</span>}
-          >
-            <span style={{ bg: theme.accent, fg: theme.backgroundPanel, bold: true }}> QUEUED </span>
-          </Show>
-        </text>
+        <box flexDirection="row" justifyContent="space-between">
+          <text fg={theme.text}>
+            {sync.data.config.username ?? "You"}{" "}
+            <Show
+              when={queued()}
+              fallback={<span style={{ fg: theme.textMuted }}>({Locale.time(props.message.time.created)})</span>}
+            >
+              <span style={{ bg: theme.accent, fg: theme.backgroundPanel, bold: true }}> QUEUED </span>
+            </Show>
+          </text>
+        </box>
       </box>
     </Show>
   )
@@ -1383,13 +1413,15 @@ function ReasoningPart(props: { part: ReasoningPart; message: AssistantMessage }
   )
 }
 
+// Cache for parsed widget segments - prevents re-parsing identical content
+const widgetParseCache = new Map<string, Awaited<ReturnType<typeof MessageWidgets.splitText>>>()
+
 function TextPart(props: { part: TextPart; message: AssistantMessage }) {
   const ctx = use()
   const { syntax, theme } = useTheme()
   const sdk = useSDK()
   const [segments, setSegments] = createSignal<Awaited<ReturnType<typeof MessageWidgets.splitText>>>([])
   const [processed, setProcessed] = createSignal(false)
-  const [lastText, setLastText] = createSignal("")
 
   // Generate a stable ID based on content hash
   const partId = createMemo(() => {
@@ -1397,41 +1429,57 @@ function TextPart(props: { part: TextPart; message: AssistantMessage }) {
     return `text-${text.substring(0, 50).replace(/\s/g, "")}-${text.length}`
   })
 
-  const isStreaming = createMemo(() => !props.message.time.completed)
+  // Memoize completion status to avoid unnecessary effect triggers
+  const isCompleted = createMemo(() => props.message.time.completed)
+  const isStreaming = createMemo(() => !isCompleted())
+
+  // Memoize trimmed text to reduce string operations
+  const trimmedText = createMemo(() => String(props.part.text || "").trim())
 
   // Use memo for streaming text to avoid rapid re-renders
   const streamingText = createMemo(() => {
     if (isStreaming()) {
-      return String(props.part.text || "").trim()
+      return trimmedText()
     }
     return ""
   })
 
+  // Generate content hash for cache lookup
+  const contentHash = createMemo(() => {
+    const text = trimmedText()
+    // Simple hash using length + first/last chars for quick lookup
+    return `${text.length}-${text.charCodeAt(0) || 0}-${text.charCodeAt(text.length - 1) || 0}`
+  })
+
+  // Only trigger parsing when message completes (not during streaming)
   createEffect(
     on(
-      () => [props.part.text, props.message.time.completed] as const,
-      ([text, completed]) => {
-        const trimmedText = String(text || "").trim()
-
-        // During streaming, minimize updates - just update lastText
+      () => [isCompleted(), trimmedText(), contentHash()] as const,
+      ([completed, text, hash]) => {
+        // Skip all processing during streaming - just show raw text
         if (!completed) {
-          setLastText(trimmedText)
           if (segments().length === 0) {
-            // Initialize segments array only once
-            setSegments([{ type: "text", content: trimmedText }])
+            setSegments([{ type: "text", content: text }])
           }
-          setProcessed(false)
           return
         }
 
-        // If already processed and complete, don't re-process
-        if (processed() && completed) {
+        // Already processed this exact content
+        if (processed()) {
+          return
+        }
+
+        // Check cache first
+        const cached = widgetParseCache.get(hash)
+        if (cached) {
+          setSegments(cached)
+          setProcessed(true)
           return
         }
 
         // WIDGET TEST: If text contains "widget_test", inject a sidebar widget for testing
-        if (trimmedText.includes("widget_test")) {
-          setSegments([
+        if (text.includes("widget_test")) {
+          const testSegments = [
             { type: "text", content: "Testing sidebar widget in message stream:\n\n" },
             {
               type: "widget",
@@ -1441,21 +1489,28 @@ function TextPart(props: { part: TextPart; message: AssistantMessage }) {
               streaming: false,
             },
             { type: "text", content: "\n\nIf you see the context panel above, message widgets work!" },
-          ])
+          ] as Awaited<ReturnType<typeof MessageWidgets.splitText>>
+
+          widgetParseCache.set(hash, testSegments)
+          setSegments(testSegments)
           setProcessed(true)
           return
         }
 
-        // Only parse widgets when message is complete
-        MessageWidgets.splitText(trimmedText, { allowIncomplete: false }).then((result) => {
+        // Parse widgets only once when message completes
+        const trackedSplitText = Perf.track("MessageWidgets.splitText", MessageWidgets.splitText)
+        trackedSplitText(text, { allowIncomplete: false }).then((result) => {
           const widgetCount = result.filter((s) => s.type === "widget").length
-          const hasTag = trimmedText.includes("<steering-question")
+          const hasTag = text.includes("<steering-question")
           if (hasTag || widgetCount > 0) {
             Bun.write(
               Bun.file("/tmp/opencode-widget-debug.log"),
-              `[${new Date().toISOString()}] TextPart segments: ${result.length}, widgets: ${widgetCount}, has tag: ${hasTag}, text length: ${trimmedText.length}\n`,
+              `[${new Date().toISOString()}] TextPart segments: ${result.length}, widgets: ${widgetCount}, has tag: ${hasTag}, text length: ${text.length}\n`,
             )
           }
+
+          // Cache the result
+          widgetParseCache.set(hash, result)
           setSegments(result)
           setProcessed(true)
         })
