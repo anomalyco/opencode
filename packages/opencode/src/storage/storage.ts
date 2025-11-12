@@ -165,10 +165,6 @@ export namespace Storage {
     })
   }
 
-  async function atomicRename(source: string, target: string) {
-    await fs.rename(source, target)
-  }
-
   export async function read<T>(key: string[]) {
     const dir = await state().then((x) => x.dir)
     const target = path.join(dir, ...key) + ".json"
@@ -190,7 +186,7 @@ export namespace Storage {
       const jsonContent = JSON.stringify(content, null, 2)
       const tempFile = target + ".tmp"
       await Bun.write(tempFile, jsonContent)
-      await atomicRename(tempFile, target)
+      await fs.rename(tempFile, target)
       return content as T
     })
   }
@@ -204,7 +200,7 @@ export namespace Storage {
       await fs.mkdir(path.dirname(target), { recursive: true })
       const tempFile = target + ".tmp"
       await Bun.write(tempFile, jsonContent)
-      await atomicRename(tempFile, target)
+      await fs.rename(tempFile, target)
     })
   }
 
