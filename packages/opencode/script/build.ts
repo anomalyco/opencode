@@ -5,15 +5,10 @@ import path from "path"
 import fs from "fs"
 import { $ } from "bun"
 import { fileURLToPath } from "url"
-import { loadBundleMeta, ensureBundle } from "./bundle-utils"
 
 const __filename = fileURLToPath(import.meta.url)
 const __dirname = path.dirname(__filename)
 const dir = path.resolve(__dirname, "..")
-const modulesDir = path.join(dir, "../../node_modules")
-const repoRoot = path.join(dir, "..", "..")
-const hashesPath = path.join(repoRoot, "nix/hashes.json")
-const bundleMeta = await loadBundleMeta(hashesPath)
 
 process.chdir(dir)
 
@@ -102,21 +97,6 @@ for (const item of targets) {
     .join("-")
   console.log(`building ${name}`)
   await $`mkdir -p dist/${name}/bin`
-
-  const opentui = `@opentui/core-${os === "windows" ? "win32" : os}-${arch.replace("-baseline", "")}`
-  await ensureBundle({
-    name: opentui,
-    modulesDir,
-    metadata: bundleMeta,
-    spec: `${opentui}@${pkg.dependencies["@opentui/core"]}`,
-  })
-
-  const watcher = `@parcel/watcher-${os === "windows" ? "win32" : os}-${arch.replace("-baseline", "")}${os === "linux" ? "-glibc" : ""}`
-  await ensureBundle({
-    name: watcher,
-    modulesDir,
-    metadata: bundleMeta,
-  })
 
   const parserWorker = fs.realpathSync(path.resolve(dir, "./node_modules/@opentui/core/parser.worker.js"))
   const workerPath = "./src/cli/cmd/tui/worker.ts"
