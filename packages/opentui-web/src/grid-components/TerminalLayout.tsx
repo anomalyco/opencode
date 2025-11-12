@@ -7,6 +7,7 @@ import { GridDivider } from "./GridDivider"
 import { CommandMenu } from "./CommandMenu"
 import { ModelPicker, type Model } from "./ModelPicker"
 import { useSDK } from "../context/sdk"
+import { useBejazzle } from "../context/bejazzle"
 
 interface TerminalLayoutProps {
   sessions: Array<{ id: string; title: string; hasChildren?: boolean; parentID?: string }>
@@ -32,6 +33,7 @@ export const TerminalLayout: Component<TerminalLayoutProps> = (props) => {
   console.log("[TerminalLayout] Rendering with todos:", props.todos, "length:", props.todos?.length)
 
   const sdk = useSDK()
+  const bejazzle = useBejazzle()
 
   // Character width for Berkeley Mono at 16px
   const CHAR_WIDTH = 9.6
@@ -48,7 +50,7 @@ export const TerminalLayout: Component<TerminalLayoutProps> = (props) => {
 
   // Draggable column widths
   const [leftWidth, setLeftWidth] = createSignal(43)
-  const [rightWidth, setRightWidth] = createSignal(38)
+  const [rightWidth, setRightWidth] = createSignal(50)
 
   // Panel collapse state
   const [leftCollapsed, setLeftCollapsed] = createSignal(false)
@@ -171,6 +173,19 @@ export const TerminalLayout: Component<TerminalLayoutProps> = (props) => {
           }
         }
       }
+      // Ctrl+X then J - Toggle Bejazzle Mode
+      else if (e.ctrlKey && e.key === "x") {
+        e.preventDefault()
+        // Wait for next key
+        const handleNextKey = (e2: KeyboardEvent) => {
+          if (e2.key === "j" || e2.key === "J") {
+            e2.preventDefault()
+            handleToggleBejazzle()
+          }
+          window.removeEventListener("keydown", handleNextKey)
+        }
+        window.addEventListener("keydown", handleNextKey)
+      }
     }
 
     window.addEventListener("keydown", handleKeyDown)
@@ -246,8 +261,108 @@ export const TerminalLayout: Component<TerminalLayoutProps> = (props) => {
     setRightCollapsed(!bothCollapsed)
   }
 
+  const handleToggleBejazzle = () => {
+    const newMode = !bejazzle.bejazzleMode()
+    bejazzle.setBejazzleMode(newMode)
+    // Apply full theme preset when enabling, minimal when disabling
+    bejazzle.applyPreset(newMode ? "full" : "minimal")
+    setToastMessage(newMode ? "🎨 Bejazzle Mode Enabled" : "Bejazzle Mode Disabled")
+    setToastVisible(true)
+    setTimeout(() => setToastVisible(false), 2000)
+  }
+
+  // Session command handlers
+  const handleSessionTimeline = () => {
+    setToastMessage("📍 Session timeline - Coming soon")
+    setToastVisible(true)
+    setTimeout(() => setToastVisible(false), 2000)
+  }
+
+  const handleSessionCompact = () => {
+    setToastMessage("🗜️ Compact session - Coming soon")
+    setToastVisible(true)
+    setTimeout(() => setToastVisible(false), 2000)
+  }
+
+  const handleSessionExport = () => {
+    setToastMessage("📤 Export session - Coming soon")
+    setToastVisible(true)
+    setTimeout(() => setToastVisible(false), 2000)
+  }
+
+  const handleSessionShare = () => {
+    setToastMessage("🔗 Share session - Coming soon")
+    setToastVisible(true)
+    setTimeout(() => setToastVisible(false), 2000)
+  }
+
+  const handleSessionInterrupt = () => {
+    setToastMessage("⏸️ Interrupt session - Coming soon")
+    setToastVisible(true)
+    setTimeout(() => setToastVisible(false), 2000)
+  }
+
+  // Agent command handlers
+  const handleModelCycle = () => {
+    setToastMessage("🔄 Cycle model - Coming soon")
+    setToastVisible(true)
+    setTimeout(() => setToastVisible(false), 2000)
+  }
+
+  const handleAgentCycle = () => {
+    setToastMessage("🔄 Cycle agent - Coming soon")
+    setToastVisible(true)
+    setTimeout(() => setToastVisible(false), 2000)
+  }
+
+  // Message command handlers
+  const handleMessagesCopy = () => {
+    setToastMessage("📋 Copy message - Coming soon")
+    setToastVisible(true)
+    setTimeout(() => setToastVisible(false), 2000)
+  }
+
+  const handleMessagesUndo = () => {
+    setToastMessage("↩️ Undo message - Coming soon")
+    setToastVisible(true)
+    setTimeout(() => setToastVisible(false), 2000)
+  }
+
+  const handleMessagesRedo = () => {
+    setToastMessage("↪️ Redo message - Coming soon")
+    setToastVisible(true)
+    setTimeout(() => setToastVisible(false), 2000)
+  }
+
+  const handleToggleConceal = () => {
+    setToastMessage("👁️ Toggle code concealment - Coming soon")
+    setToastVisible(true)
+    setTimeout(() => setToastVisible(false), 2000)
+  }
+
+  // System command handlers
+  const handleViewStatus = () => {
+    setToastMessage("📊 View status - Coming soon")
+    setToastVisible(true)
+    setTimeout(() => setToastVisible(false), 2000)
+  }
+
+  const handleSwitchTheme = () => {
+    setToastMessage("🎨 Switch theme - Coming soon")
+    setToastVisible(true)
+    setTimeout(() => setToastVisible(false), 2000)
+  }
+
+  const handleHelp = () => {
+    setToastMessage("❓ Help - Coming soon")
+    setToastVisible(true)
+    setTimeout(() => setToastVisible(false), 2000)
+  }
+
   return (
     <div
+      data-bejazzle={bejazzle.bejazzleMode() ? "true" : "false"}
+      data-bejazzle-level={String(bejazzle.bejazzleLevel())}
       style={{
         position: "fixed",
         top: "0",
@@ -272,17 +387,18 @@ export const TerminalLayout: Component<TerminalLayoutProps> = (props) => {
     >
       {/* Dividers - positioned absolutely to span full height including footer */}
       <GridDivider
-        col={leftDividerCol()}
-        minCol={30}
+        col={leftWidth()}
+        minCol={46}
         maxCol={60}
         onDrag={(newCol) => setLeftWidth(newCol)}
+        alwaysVisible={false}
         style={{ position: "fixed", height: "100vh" }}
       />
       <GridDivider
-        col={rightDividerCol()}
+        col={totalCols() - rightWidth() + 6}
         minCol={totalCols() - 60}
         maxCol={totalCols() - 40}
-        onDrag={(newCol) => setRightWidth(Math.max(40, totalCols() - newCol))}
+        onDrag={(newCol) => setRightWidth(Math.max(40, totalCols() - newCol + 6))}
         alwaysVisible
         style={{ position: "fixed", height: "100vh" }}
       />
@@ -323,8 +439,8 @@ export const TerminalLayout: Component<TerminalLayoutProps> = (props) => {
 
         {/* Center Panel - Messages */}
         <MessagesPanel
-          col={leftDividerCol() + 1}
-          width={rightDividerCol() - leftDividerCol() - 1}
+          col={leftWidth()}
+          width={totalCols() - leftWidth() - (rightCollapsed() ? 0 : rightWidth())}
           messages={props.messages}
           inputText={props.inputText}
           onInput={props.onInput}
@@ -341,7 +457,7 @@ export const TerminalLayout: Component<TerminalLayoutProps> = (props) => {
         {/* Right Panel - Sidebar (only show if not collapsed) */}
         {!rightCollapsed() && (
           <SidebarPanel
-            col={rightDividerCol() + 1}
+            col={totalCols() - rightWidth()}
             width={rightWidth()}
             todos={props.todos}
             subagents={props.subagents}
@@ -378,7 +494,7 @@ export const TerminalLayout: Component<TerminalLayoutProps> = (props) => {
         {/* Footer - single line - PURE BLACK */}
         <div
           style={{
-            height: "1.2em",
+            height: "2.4em",
             background: "#000000",
             color: "#858585",
             padding: "0 1ch",
@@ -412,6 +528,7 @@ export const TerminalLayout: Component<TerminalLayoutProps> = (props) => {
         onToggleLeftSidebar={handleToggleLeftSidebar}
         onToggleRightSidebar={handleToggleRightSidebar}
         onToggleBothSidebars={handleToggleBothSidebars}
+        onToggleBejazzle={handleToggleBejazzle}
       />
 
       {/* Model Picker */}

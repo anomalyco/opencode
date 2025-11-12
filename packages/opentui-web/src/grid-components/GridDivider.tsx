@@ -12,6 +12,7 @@ interface GridDividerProps {
 
 export const GridDivider: Component<GridDividerProps> = (props) => {
   const [isDragging, setIsDragging] = createSignal(false)
+  const [isHovering, setIsHovering] = createSignal(false)
 
   const handleMouseDown = (e: MouseEvent) => {
     e.preventDefault()
@@ -38,20 +39,22 @@ export const GridDivider: Component<GridDividerProps> = (props) => {
   }
 
   const backgroundColor = () => {
-    return props.alwaysVisible ? "#2a2a2a" : "transparent"
+    return props.alwaysVisible ? "#1a1a1a" : "transparent"
   }
 
   return (
     <div
       onMouseDown={handleMouseDown}
+      onMouseEnter={() => setIsHovering(true)}
+      onMouseLeave={() => setIsHovering(false)}
       style={{
         position: "fixed",
         left: `${props.col}ch`,
         top: "0",
-        bottom: props.alwaysVisible ? "calc(7.2em + 15px)" : "0",
+        bottom: props.alwaysVisible ? "calc(7.2em + 6ch)" : "0",
         height: props.alwaysVisible ? "auto" : "100vh",
         width: "1ch",
-        background: backgroundColor(),
+        background: props.alwaysVisible ? "#333333" : isHovering() || isDragging() ? "#333333" : "transparent",
         cursor: "col-resize",
         "z-index": "1000",
         "user-select": "none",
