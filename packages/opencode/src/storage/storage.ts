@@ -170,8 +170,7 @@ export namespace Storage {
     const target = path.join(dir, ...key) + ".json"
     return withErrorHandling(async () => {
       using _ = await Lock.read(target)
-      const data = await fs.readFile(target, "utf8")
-      return JSON.parse(data) as T
+      return (await Bun.file(target).json()) as T
     })
   }
 
@@ -180,8 +179,7 @@ export namespace Storage {
     const target = path.join(dir, ...key) + ".json"
     return withErrorHandling(async () => {
       using _ = await Lock.write(target)
-      const data = await fs.readFile(target, "utf8")
-      const content = JSON.parse(data)
+      const content = await Bun.file(target).json()
       fn(content)
       const jsonContent = JSON.stringify(content, null, 2)
       const tempFile = target + ".tmp"
