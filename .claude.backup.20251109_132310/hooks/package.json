@@ -1,0 +1,16 @@
+{
+    "name": "claude-hooks",
+    "version": "1.0.0",
+    "description": "TypeScript hooks for Claude Code skill auto-activation",
+    "private": true,
+    "type": "module",
+    "scripts": {
+        "check": "tsc --noEmit",
+        "test": "tsx skill-activation-prompt.ts < test-input.json"
+    },
+    "dependencies": {
+        "@types/node": "^20.11.0",
+        "tsx": "^4.7.0",
+        "typescript": "^5.3.3"
+    }
+}

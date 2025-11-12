@@ -1,0 +1,3 @@
+packages/console
+packages/skills
+packages/desktop
