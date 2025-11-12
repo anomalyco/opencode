@@ -1145,6 +1145,7 @@ export function Sidebar(props: { sessionID: string; onToggle: () => void }) {
                             bg={getBackgroundColor()}
                             paddingLeft={0}
                             paddingRight={0}
+                            attributes={TextAttributes.BOLD}
                             onMouseUp={() => {
                               if (renderer.getSelection()?.getSelectedText()) return
                               editContextContent(ctx.id)
@@ -1157,12 +1158,13 @@ export function Sidebar(props: { sessionID: string; onToggle: () => void }) {
                             bg={getBackgroundColor()}
                             paddingLeft={0}
                             paddingRight={1}
+                            attributes={TextAttributes.BOLD}
                             onMouseUp={() => {
                               if (renderer.getSelection()?.getSelectedText()) return
                               deleteContext(ctx.id)
                             }}
                           >
-                            [×]
+                            [X]
                           </text>
                         </box>
                       )
