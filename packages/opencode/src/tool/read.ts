@@ -69,15 +69,16 @@ export const ReadTool = Tool.define("read", {
       throw new Error(`File not found: ${filepath}`)
     }
 
-    const isImage = isImageFile(filepath)
-    const supportsImages = await (async () => {
-      if (!ctx.extra?.["providerID"] || !ctx.extra?.["modelID"]) return false
+    const model = await (async () => {
+      if (!ctx.extra?.["providerID"] || !ctx.extra?.["modelID"]) return null
       const providerID = ctx.extra["providerID"] as string
       const modelID = ctx.extra["modelID"] as string
       const model = await Provider.getModel(providerID, modelID).catch(() => undefined)
-      if (!model) return false
-      return model.info.modalities?.input?.includes("image") ?? false
+      return model
     })()
+
+    const isImage = isImageFile(filepath)
+    const supportsImages = model?.info.modalities?.input?.includes("image") ?? false
     if (isImage) {
       if (!supportsImages) {
         throw new Error(`Failed to read image: ${filepath}, model may not be able to read images`)
@@ -103,6 +104,34 @@ export const ReadTool = Tool.define("read", {
       }
     }
 
+    const isPdf = path.extname(filepath).toLowerCase() === ".pdf"
+    const supportsPdfs = model?.info.modalities?.input?.includes("pdf") ?? false
+    if (isPdf) {
+      if (!supportsPdfs) {
+        throw new Error(
+          `Failed to read pdf: ${filepath}, model may not be able to read pdfs`,
+        )
+      }
+      const mime = file.type
+      const msg = "Pdf read successfully"
+      return {
+        title,
+        output: msg,
+        metadata: {
+          preview: msg,
+        },
+        attachments: [
+          {
+            id: Identifier.ascending("part"),
+            sessionID: ctx.sessionID,
+            messageID: ctx.messageID,
+            type: "file",
+            mime,
+            url: `data:${mime};base64,${Buffer.from(await file.bytes()).toString("base64")}`,
+          },
+        ],
+      }
+    }
     const isBinary = await isBinaryFile(filepath, file)
     if (isBinary) throw new Error(`Cannot read binary file: ${filepath}`)
 
