@@ -3,12 +3,10 @@ import path from "path"
 import fs from "fs"
 
 const version = "@VERSION@"
-const repo = process.cwd()
-const pkg = path.join(repo, "packages/opencode")
+const pkg = path.join(process.cwd(), "packages/opencode")
 const parser = fs.realpathSync(
   path.join(pkg, "./node_modules/@opentui/core/parser.worker.js"),
 )
-const dir = pkg
 const worker = "./src/cli/cmd/tui/worker.ts"
 const target = process.env["BUN_COMPILE_TARGET"]
 
@@ -32,20 +30,20 @@ const readTrackedAssets = () => {
 
 const removeTrackedAssets = () => {
   for (const file of readTrackedAssets()) {
-    const targetPath = path.join(pkg, file)
-    if (fs.existsSync(targetPath)) {
-      fs.rmSync(targetPath, { force: true })
+    const filePath = path.join(pkg, file)
+    if (fs.existsSync(filePath)) {
+      fs.rmSync(filePath, { force: true })
     }
   }
 }
 
-const trackedAssets = new Set<string>()
+const assets = new Set<string>()
 
-const addAsset = async (assetPath: string) => {
-  const file = path.basename(assetPath)
+const addAsset = async (p: string) => {
+  const file = path.basename(p)
   const dest = path.join(pkg, file)
-  await Bun.write(dest, Bun.file(assetPath))
-  trackedAssets.add(file)
+  await Bun.write(dest, Bun.file(p))
+  assets.add(file)
 }
 
 removeTrackedAssets()
@@ -58,7 +56,7 @@ const result = await Bun.build({
   entrypoints: ["./src/index.ts", parser, worker],
   define: {
     OPENCODE_VERSION: `'@VERSION@'`,
-    OTUI_TREE_SITTER_WORKER_PATH: "/$bunfs/root/" + path.relative(dir, parser).replace(/\\/g, "/"),
+    OTUI_TREE_SITTER_WORKER_PATH: "/$bunfs/root/" + path.relative(pkg, parser).replace(/\\/g, "/"),
     OPENCODE_CHANNEL: "'latest'",
   },
   compile: {
@@ -77,9 +75,9 @@ if (!result.success) {
   throw new Error("Compilation failed")
 }
 
-const assetOutputs = result.outputs?.filter((item) => item.kind === "asset") ?? []
-for (const asset of assetOutputs) {
-  await addAsset(asset.path)
+const assetOutputs = result.outputs?.filter((x) => x.kind === "asset") ?? []
+for (const x of assetOutputs) {
+  await addAsset(x.path)
 }
 
 const bundle = await Bun.build({
@@ -99,22 +97,21 @@ if (!bundle.success) {
   throw new Error("Worker compilation failed")
 }
 
-const workerAssetOutputs = bundle.outputs?.filter((item) => item.kind === "asset") ?? []
-for (const asset of workerAssetOutputs) {
-  await addAsset(asset.path)
+const workerAssets = bundle.outputs?.filter((x) => x.kind === "asset") ?? []
+for (const x of workerAssets) {
+  await addAsset(x.path)
 }
 
-const output = bundle.outputs.find((item) => item.kind === "entry-point")
+const output = bundle.outputs.find((x) => x.kind === "entry-point")
 if (!output) {
   throw new Error("Worker build produced no entry-point output")
 }
 
 const dest = path.join(pkg, "opencode-worker.js")
-const src = output.path
-await Bun.write(dest, Bun.file(src))
-fs.rmSync(path.dirname(src), { recursive: true, force: true })
+await Bun.write(dest, Bun.file(output.path))
+fs.rmSync(path.dirname(output.path), { recursive: true, force: true })
 
-const assetList = Array.from(trackedAssets)
-await Bun.write(manifestPath, assetList.length > 0 ? assetList.join("\n") + "\n" : "")
+const list = Array.from(assets)
+await Bun.write(manifestPath, list.length > 0 ? list.join("\n") + "\n" : "")
 
 console.log("Build successful!")

@@ -8,7 +8,6 @@ let
       attrs
       // {
         canonicalizeScript = scripts + "/canonicalize-node-modules.ts";
-        optionalMetadataScript = scripts + "/optional-metadata.ts";
       }
     );
 in

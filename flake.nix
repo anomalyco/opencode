@@ -27,12 +27,10 @@
         "aarch64-darwin" = "bun-darwin-arm64";
         "x86_64-darwin" = "bun-darwin-x64";
       };
-      scripts = ./nix/scripts;
-      dummyHash = "sha256-AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA=";
       defaultNodeModules = builtins.listToAttrs (
         map (system: {
           name = system;
-          value = dummyHash;
+          value = "sha256-AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA=";
         }) systems
       );
       hashesFile = "${./nix}/hashes.json";
@@ -41,13 +39,6 @@
       hashes = {
         nodeModules = defaultNodeModules // (hashesData.nodeModules or { });
         optional = hashesData.optional or { };
-        metadata = hashesData.metadata or { };
-      };
-      optionalPackagesFiles = {
-        "aarch64-linux" = ./nix/optional-packages/aarch64-linux.txt;
-        "x86_64-linux" = ./nix/optional-packages/x86_64-linux.txt;
-        "aarch64-darwin" = ./nix/optional-packages/aarch64-darwin.txt;
-        "x86_64-darwin" = ./nix/optional-packages/x86_64-darwin.txt;
       };
       modelsDev = forEachSystem (
         system:
@@ -82,7 +73,6 @@
           pkgs = pkgsFor system;
           mkNodeModules = pkgs.callPackage ./nix/node-modules.nix {
             hash = hashes.nodeModules.${system};
-            optionalPackagesFile = optionalPackagesFiles.${system};
           };
           mkPackage = pkgs.callPackage ./nix/opencode.nix { };
         in
@@ -90,7 +80,7 @@
           default = mkPackage {
             version = packageJson.version;
             src = ./.;
-            scripts = scripts;
+            scripts = ./nix/scripts;
             target = bunTarget.${system};
             modelsDev = "${modelsDev.${system}}/dist/_api.json";
             mkNodeModules = mkNodeModules;

@@ -1,4 +1,4 @@
-{ optionalPackagesFile, hash, lib, stdenvNoCC, bun, cacert, curl }:
+{ hash, lib, stdenvNoCC, bun, cacert, curl }:
 args:
 let
   sourceDateEpoch =
@@ -31,12 +31,6 @@ stdenvNoCC.mkDerivation {
       --no-progress \
       --linker=isolated
 
-    cp ${optionalPackagesFile} optional-packages.txt
-
-    bun --bun ${args.optionalMetadataScript} optional-packages.txt > optional-metadata.txt
-
-    echo "Optional package metadata:"
-    cat optional-metadata.txt
     while IFS=$'\t' read -r name version sha; do
       [ -z "$name" ] && continue
       scope="''${name%%/*}"
