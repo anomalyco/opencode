@@ -366,7 +366,9 @@ export const PromptInput: Component<PromptInputProps> = (props) => {
                       <span class="text-text-weak whitespace-nowrap overflow-hidden overflow-ellipsis truncate min-w-0">
                         {getDirectory(i)}
                       </span>
-                      <span class="text-text-strong whitespace-nowrap">{getFilename(i)}</span>
+                      <Show when={!i.endsWith("/")}>
+                        <span class="text-text-strong whitespace-nowrap">{getFilename(i)}</span>
+                      </Show>
                     </div>
                   </div>
                   <div class="flex items-center gap-x-1 text-text-muted/40 shrink-0"></div>
