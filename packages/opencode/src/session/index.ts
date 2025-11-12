@@ -402,6 +402,9 @@ export namespace Session {
           .add(new Decimal(tokens.output).mul(input.model.cost?.output ?? 0).div(1_000_000))
           .add(new Decimal(tokens.cache.read).mul(input.model.cost?.cache_read ?? 0).div(1_000_000))
           .add(new Decimal(tokens.cache.write).mul(input.model.cost?.cache_write ?? 0).div(1_000_000))
+          // TODO: update models.dev to have better pricing model, for now:
+          // charge reasoning tokens at the same rate as output tokens
+          .add(new Decimal(tokens.reasoning).mul(input.model.cost?.output ?? 0).div(1_000_000))
           .toNumber(),
         tokens,
       }
