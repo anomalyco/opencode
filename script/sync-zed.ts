@@ -7,7 +7,6 @@ import { join } from "path"
 const FORK_REPO = "sst/zed-extensions"
 const UPSTREAM_REPO = "zed-industries/extensions"
 const EXTENSION_NAME = "opencode"
-const OPENCODE_REPO = "sst/opencode"
 
 async function main() {
   const version = process.argv[2]
@@ -40,8 +39,8 @@ async function main() {
   process.chdir(workDir)
 
   // Configure git identity
-  await $`git config user.name "github-actions[bot]"`
-  await $`git config user.email "github-actions[bot]@users.noreply.github.com"`
+  await $`git config user.name "Dax"`
+  await $`git config user.email "mail@thdxr.com"`
 
   // Sync fork with upstream
   console.log(`🔄 Syncing fork with upstream...`)
