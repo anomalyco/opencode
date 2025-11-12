@@ -132,14 +132,8 @@ export function Sidebar(props: { sessionID: string }) {
           </Show>
           <Show when={todo().length > 0}>
             <box>
-              <box 
-                flexDirection="row" 
-                gap={1}
-                onMouseDown={() => setTodoExpanded(!todoExpanded())}
-              >
-                <text fg={theme.text}>
-                  {todoExpanded() ? "▼" : "▶"}
-                </text>
+              <box flexDirection="row" gap={1} onMouseDown={() => setTodoExpanded(!todoExpanded())}>
+                <text fg={theme.text}>{todoExpanded() ? "▼" : "▶"}</text>
                 <text fg={theme.text}>
                   <b>Todo</b>
                 </text>
