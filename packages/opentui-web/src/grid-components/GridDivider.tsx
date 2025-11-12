@@ -8,6 +8,7 @@ interface GridDividerProps {
   onDrag: (col: number) => void
   alwaysVisible?: boolean // Always show the divider (default: false)
   style?: any // Additional styles
+  class?: string // CSS class for targeting
 }
 
 export const GridDivider: Component<GridDividerProps> = (props) => {
@@ -44,6 +45,7 @@ export const GridDivider: Component<GridDividerProps> = (props) => {
 
   return (
     <div
+      class={props.class}
       onMouseDown={handleMouseDown}
       onMouseEnter={() => setIsHovering(true)}
       onMouseLeave={() => setIsHovering(false)}

@@ -53,7 +53,12 @@ b,
 input,
 textarea,
 button {
-  font-family: "Berkeley Mono", "JetBrains Mono", monospace !important;
+  font-family:
+    "Geist",
+    -apple-system,
+    BlinkMacSystemFont,
+    "Segoe UI",
+    sans-serif !important;
   font-size: 16px !important;
   line-height: 1.5 !important;
   padding: 0 !important;
@@ -65,7 +70,12 @@ button {
 /* Grid-positioned element */
 .grid-element {
   position: absolute;
-  font-family: "Berkeley Mono", "JetBrains Mono", monospace;
+  font-family:
+    "Geist",
+    -apple-system,
+    BlinkMacSystemFont,
+    "Segoe UI",
+    sans-serif;
   font-size: 16px;
   line-height: 1.5;
 }

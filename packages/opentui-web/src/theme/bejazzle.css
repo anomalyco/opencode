@@ -1,0 +1,404 @@
+/* Bejazzle Mode - HD Video Game Upgrade */
+/* Applied when data-bejazzle="true" on container */
+/* Individual features controlled by data-* attributes */
+
+[data-bejazzle="true"] {
+  /* Improved line spacing throughout */
+  line-height: 1.4 !important;
+  /* Breathing room from edges */
+  margin-left: 10px !important;
+  margin-top: 10px !important;
+}
+
+/* Right sidebar panel - right margin */
+[data-bejazzle="true"] .sidebar-panel-right {
+  margin-right: 10px !important;
+}
+
+/* ===== ROUNDED CORNERS ===== */
+
+[data-bejazzle="true"][data-rounded-corners="true"] .grid-panel,
+[data-bejazzle="true"][data-rounded-corners="true"] [style*="background: #0a0a0a"],
+[data-bejazzle="true"][data-rounded-corners="true"] [style*="background: #1a1a1a"],
+[data-bejazzle="true"][data-rounded-corners="true"] [style*="background: #2a2a2a"],
+[data-bejazzle="true"][data-rounded-corners="true"] [style*="background: #000000"] {
+  border-radius: 16px !important;
+}
+
+/* Tool chips - rounded */
+[data-bejazzle="true"][data-rounded-corners="true"] span[style*="background: #3a3a3a"],
+[data-bejazzle="true"][data-rounded-corners="true"] span[style*="background: #56b6c2"],
+[data-bejazzle="true"][data-rounded-corners="true"] span[style*="background: #61afef"],
+[data-bejazzle="true"][data-rounded-corners="true"] span[style*="background: #98c379"],
+[data-bejazzle="true"][data-rounded-corners="true"] span[style*="background: #c678dd"],
+[data-bejazzle="true"][data-rounded-corners="true"] span[style*="background: #e5c07b"] {
+  border-radius: 4px !important;
+}
+
+/* Context chips - rounded */
+[data-bejazzle="true"][data-rounded-corners="true"] .context-chip {
+  border-radius: 4px !important;
+}
+
+/* Context bar - md rounded */
+[data-bejazzle="true"][data-rounded-corners="true"] [style*="top: 9.6em"] {
+  border-radius: 8px !important;
+  margin-top: 5px !important;
+}
+
+/* Dialogs and modals - medium rounding */
+[data-bejazzle="true"][data-rounded-corners="true"] [role="dialog"],
+[data-bejazzle="true"][data-rounded-corners="true"] .command-menu,
+[data-bejazzle="true"][data-rounded-corners="true"] .model-picker,
+[data-bejazzle="true"][data-rounded-corners="true"] .autocomplete {
+  border-radius: 12px !important;
+}
+
+/* Input fields - small rounding */
+[data-bejazzle="true"][data-rounded-corners="true"] textarea,
+[data-bejazzle="true"][data-rounded-corners="true"] input[type="text"] {
+  border-radius: 6px !important;
+}
+
+/* ===== GRADIENTS ===== */
+
+/* Context bar gradient - left to right */
+[data-bejazzle="true"][data-gradients="true"] .context-chips-container {
+  background: linear-gradient(90deg, #0a0a0a 0%, #1a1a1a 50%, #0a0a0a 100%) !important;
+  padding: 0.5em;
+  border-radius: 8px;
+}
+
+/* Header gradient */
+[data-bejazzle="true"][data-gradients="true"] [style*="background: #0a0a0a"][style*="height: 1.2em"] {
+  background: linear-gradient(90deg, #0a0a0a 0%, #151515 100%) !important;
+}
+
+/* Panel headers with gradient */
+[data-bejazzle="true"][data-gradients="true"] .panel-header {
+  background: linear-gradient(90deg, #1a1a1a 0%, #252525 100%) !important;
+}
+
+/* ===== BUTTONS ===== */
+
+/* Action buttons - make them look like actual buttons */
+[data-bejazzle="true"][data-enhanced-buttons="true"]
+  [style*="cursor: pointer"]:is(
+    [onclick*="Select"],
+    [onclick*="Deselect"],
+    [onclick*="Add Custom"],
+    [onclick*="Cancel"],
+    [onclick*="Save"]
+  ) {
+  background: linear-gradient(180deg, #2a2a2a 0%, #1a1a1a 100%) !important;
+  border: 1px solid #4a4a4a !important;
+  border-radius: 6px !important;
+  padding: 0.3em 0.8em !important;
+  box-shadow: 0 2px 4px rgba(0, 0, 0, 0.3) !important;
+  transition: all 0.2s ease !important;
+}
+
+[data-bejazzle="true"][data-enhanced-buttons="true"]
+  [style*="cursor: pointer"]:is(
+    [onclick*="Select"],
+    [onclick*="Deselect"],
+    [onclick*="Add Custom"],
+    [onclick*="Cancel"],
+    [onclick*="Save"]
+  ):hover {
+  background: linear-gradient(180deg, #3a3a3a 0%, #2a2a2a 100%) !important;
+  border-color: #5a5a5a !important;
+  transform: translateY(-1px) !important;
+  box-shadow: 0 4px 8px rgba(0, 0, 0, 0.4) !important;
+}
+
+[data-bejazzle="true"][data-enhanced-buttons="true"]
+  [style*="cursor: pointer"]:is(
+    [onclick*="Select"],
+    [onclick*="Deselect"],
+    [onclick*="Add Custom"],
+    [onclick*="Cancel"],
+    [onclick*="Save"]
+  ):active {
+  transform: translateY(0px) !important;
+  box-shadow: 0 1px 2px rgba(0, 0, 0, 0.3) !important;
+}
+
+/* ===== SUBTLE ANIMATIONS ===== */
+
+/* Smooth transitions for all interactive elements */
+[data-bejazzle="true"][data-smooth-transitions="true"] [style*="cursor: pointer"],
+[data-bejazzle="true"][data-smooth-transitions="true"] .grid-text,
+[data-bejazzle="true"][data-smooth-transitions="true"] span[onclick] {
+  transition: all 0.15s ease !important;
+}
+
+/* Hover glow effect on chips */
+[data-bejazzle="true"][data-glow-effects="true"] span[style*="background: #56b6c2"]:hover,
+[data-bejazzle="true"][data-glow-effects="true"] span[style*="background: #61afef"]:hover,
+[data-bejazzle="true"][data-glow-effects="true"] span[style*="background: #98c379"]:hover,
+[data-bejazzle="true"][data-glow-effects="true"] span[style*="background: #c678dd"]:hover,
+[data-bejazzle="true"][data-glow-effects="true"] span[style*="background: #e5c07b"]:hover {
+  box-shadow: 0 0 8px currentColor !important;
+  transform: translateY(-1px) !important;
+}
+
+[data-bejazzle="true"][data-glow-effects="true"] span[style*="background: #3a3a3a"]:hover {
+  box-shadow: 0 0 8px rgba(255, 255, 255, 0.2) !important;
+}
+
+/* Fade in animation for panels */
+[data-bejazzle="true"][data-animations="true"] .grid-panel {
+  animation: bejazzle-fade-in 0.3s ease !important;
+}
+
+@keyframes bejazzle-fade-in {
+  from {
+    opacity: 0;
+    transform: translateY(10px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+
+/* Pulse animation for active elements */
+[data-bejazzle="true"][data-animations="true"] .active-indicator {
+  animation: bejazzle-pulse 2s ease-in-out infinite !important;
+}
+
+@keyframes bejazzle-pulse {
+  0%,
+  100% {
+    opacity: 1;
+  }
+  50% {
+    opacity: 0.6;
+  }
+}
+
+/* ===== ENHANCED SPACING ===== */
+
+/* Better padding for panels */
+[data-bejazzle="true"] .grid-panel {
+  padding: 0.5em !important;
+}
+
+/* More breathing room for text */
+[data-bejazzle="true"] .grid-text {
+  padding: 0.2em 0 !important;
+}
+
+/* Chip spacing */
+[data-bejazzle="true"] .context-chips-container {
+  gap: 0.8ch !important;
+}
+
+/* ===== SHADOWS & DEPTH ===== */
+
+/* Add subtle shadows for depth */
+[data-bejazzle="true"][data-shadows="true"] .grid-panel {
+  box-shadow: 0 4px 12px rgba(0, 0, 0, 0.5) !important;
+}
+
+/* Floating effect for dialogs */
+[data-bejazzle="true"][data-shadows="true"] [role="dialog"],
+[data-bejazzle="true"][data-shadows="true"] .command-menu {
+  box-shadow: 0 8px 32px rgba(0, 0, 0, 0.7) !important;
+}
+
+/* ===== MONACO EDITOR ENHANCEMENT ===== */
+
+/* Monaco gets rounded corners */
+[data-bejazzle="true"][data-rounded-corners="true"] .monaco-editor,
+[data-bejazzle="true"][data-rounded-corners="true"] .monaco-editor .overflow-guard {
+  border-radius: 8px !important;
+}
+
+/* Monaco container shadow */
+[data-bejazzle="true"][data-shadows="true"] .monaco-editor {
+  box-shadow: 0 4px 12px rgba(0, 0, 0, 0.5) !important;
+}
+
+/* Smooth scrolling in Monaco */
+[data-bejazzle="true"][data-smooth-transitions="true"] .monaco-editor .monaco-scrollable-element {
+  scroll-behavior: smooth !important;
+}
+
+/* ===== DIVIDERS ===== */
+
+/* Second divider (between middle and right panel) - INVISIBLE in Bejazzle mode */
+[data-bejazzle="true"] .divider-second {
+  background: transparent !important;
+}
+
+/* Animated dividers */
+[data-bejazzle="true"][data-smooth-transitions="true"] .grid-divider {
+  transition: background 0.2s ease !important;
+}
+
+[data-bejazzle="true"][data-gradients="true"] .grid-divider:hover {
+  background: linear-gradient(90deg, transparent, #61afef, transparent) !important;
+}
+
+/* ===== SCROLLBARS ===== */
+
+/* Custom scrollbars with bejazzle */
+[data-bejazzle="true"][data-custom-scrollbars="true"] ::-webkit-scrollbar {
+  width: 12px;
+  height: 12px;
+}
+
+[data-bejazzle="true"][data-custom-scrollbars="true"] ::-webkit-scrollbar-track {
+  background: #0a0a0a;
+  border-radius: 6px;
+}
+
+[data-bejazzle="true"][data-custom-scrollbars="true"] ::-webkit-scrollbar-thumb {
+  background: linear-gradient(180deg, #3a3a3a, #2a2a2a);
+  border-radius: 6px;
+  border: 2px solid #0a0a0a;
+}
+
+[data-bejazzle="true"][data-custom-scrollbars="true"] ::-webkit-scrollbar-thumb:hover {
+  background: linear-gradient(180deg, #4a4a4a, #3a3a3a);
+}
+
+/* ===== IMAGE PREVIEWS ===== */
+
+/* Show dropped images with nice styling */
+[data-bejazzle="true"][data-rounded-corners="true"] img[src*="data:"],
+[data-bejazzle="true"][data-rounded-corners="true"] img[src*="blob:"] {
+  border-radius: 8px !important;
+}
+
+[data-bejazzle="true"][data-shadows="true"] img[src*="data:"],
+[data-bejazzle="true"][data-shadows="true"] img[src*="blob:"] {
+  box-shadow: 0 4px 12px rgba(0, 0, 0, 0.5) !important;
+}
+
+[data-bejazzle="true"] img[src*="data:"],
+[data-bejazzle="true"] img[src*="blob:"] {
+  max-width: 100%;
+  height: auto;
+}
+
+[data-bejazzle="true"][data-smooth-transitions="true"] img[src*="data:"],
+[data-bejazzle="true"][data-smooth-transitions="true"] img[src*="blob:"] {
+  transition: transform 0.2s ease !important;
+}
+
+[data-bejazzle="true"][data-animations="true"] img[src*="data:"]:hover,
+[data-bejazzle="true"][data-animations="true"] img[src*="blob:"]:hover {
+  transform: scale(1.02) !important;
+}
+
+[data-bejazzle="true"][data-shadows="true"] img[src*="data:"]:hover,
+[data-bejazzle="true"][data-shadows="true"] img[src*="blob:"]:hover {
+  box-shadow: 0 6px 16px rgba(0, 0, 0, 0.6) !important;
+}
+
+/* ===== BROWSER PREVIEW ===== */
+
+/* Web preview iframe styling */
+[data-bejazzle="true"][data-rounded-corners="true"] iframe[src*="http"],
+[data-bejazzle="true"][data-rounded-corners="true"] .browser-view {
+  border-radius: 12px !important;
+}
+
+[data-bejazzle="true"][data-shadows="true"] iframe[src*="http"],
+[data-bejazzle="true"][data-shadows="true"] .browser-view {
+  box-shadow: 0 8px 24px rgba(0, 0, 0, 0.6) !important;
+}
+
+[data-bejazzle="true"] iframe[src*="http"],
+[data-bejazzle="true"] .browser-view {
+  border: 1px solid #2a2a2a !important;
+}
+
+/* Browser view container */
+[data-bejazzle="true"][data-gradients="true"] .browser-view-container {
+  background: linear-gradient(180deg, #1a1a1a 0%, #0a0a0a 100%) !important;
+}
+
+[data-bejazzle="true"][data-rounded-corners="true"] .browser-view-container {
+  border-radius: 12px !important;
+}
+
+[data-bejazzle="true"] .browser-view-container {
+  padding: 1em !important;
+}
+
+[data-bejazzle="true"][data-shadows="true"] .browser-view-container {
+  box-shadow: 0 4px 12px rgba(0, 0, 0, 0.5) !important;
+}
+
+/* ===== LOADING STATES ===== */
+
+/* Shimmer animation for loading */
+[data-bejazzle="true"][data-animations="true"] .loading,
+[data-bejazzle="true"][data-animations="true"] .shimmer {
+  animation: bejazzle-shimmer 2s ease-in-out infinite !important;
+}
+
+[data-bejazzle="true"][data-gradients="true"] .loading,
+[data-bejazzle="true"][data-gradients="true"] .shimmer {
+  background: linear-gradient(90deg, #1a1a1a 0%, #2a2a2a 50%, #1a1a1a 100%) !important;
+  background-size: 200% 100% !important;
+}
+
+@keyframes bejazzle-shimmer {
+  0% {
+    background-position: 200% 0;
+  }
+  100% {
+    background-position: -200% 0;
+  }
+}
+
+/* ===== FOCUS STATES ===== */
+
+/* Better focus indicators */
+[data-bejazzle="true"][data-glow-effects="true"] *:focus-visible {
+  outline: 2px solid #61afef !important;
+  outline-offset: 2px !important;
+}
+
+[data-bejazzle="true"][data-rounded-corners="true"] *:focus-visible {
+  border-radius: 4px !important;
+}
+
+/* ===== SELECTION ===== */
+
+/* Custom text selection */
+[data-bejazzle="true"] ::selection {
+  background: rgba(97, 175, 239, 0.3) !important;
+  color: #ffffff !important;
+}
+
+/* ===== TOAST NOTIFICATIONS ===== */
+
+/* Animated toasts */
+[data-bejazzle="true"][data-rounded-corners="true"] .toast {
+  border-radius: 8px !important;
+}
+
+[data-bejazzle="true"][data-shadows="true"] .toast {
+  box-shadow: 0 4px 12px rgba(0, 0, 0, 0.5) !important;
+}
+
+[data-bejazzle="true"][data-animations="true"] .toast {
+  animation: bejazzle-slide-in 0.3s ease !important;
+}
+
+@keyframes bejazzle-slide-in {
+  from {
+    transform: translateY(-100%);
+    opacity: 0;
+  }
+  to {
+    transform: translateY(0);
+    opacity: 1;
+  }
+}

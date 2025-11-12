@@ -43,6 +43,7 @@ interface CommandMenuProps {
   // System commands
   onViewStatus?: () => void
   onSwitchTheme?: () => void
+  onToggleBejazzle?: () => void
   onHelp?: () => void
 }
 
@@ -237,6 +238,15 @@ export const CommandMenu: Component<CommandMenuProps> = (props) => {
       keybind: "ctrl+x t",
       action: props.onSwitchTheme || (() => console.log("Switch theme")),
       disabled: !props.onSwitchTheme,
+    },
+    {
+      id: "bejazzle.toggle",
+      label: "Enable Bejazzle Mode",
+      description: "Toggle progressive visual enhancements",
+      group: "System",
+      keybind: "ctrl+x j",
+      action: props.onToggleBejazzle || (() => console.log("Toggle bejazzle")),
+      disabled: !props.onToggleBejazzle,
     },
     {
       id: "help.show",

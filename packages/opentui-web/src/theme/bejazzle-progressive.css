@@ -1,0 +1,222 @@
+/* Progressive Bejazzle Mode - Gradient Spotlight + Retina Fonts ONLY */
+/* NO LAYOUT-BREAKING ANIMATIONS */
+
+/* ==========================================
+   GRADIENT SPOTLIGHT EFFECT ON PANELS
+   Subtle lighting from bottom - "is that colored?"
+   ========================================== */
+
+/* All panels get the effect */
+[data-bejazzle="true"] .grid-panel,
+[data-bejazzle="true"] .sidebar-panel,
+[data-bejazzle="true"] [class*="-panel"] {
+  position: relative !important;
+  /* DO NOT set overflow: hidden - it breaks scrollable panels! */
+}
+
+/* Base gradient overlay - positioned absolutely */
+[data-bejazzle="true"] .grid-panel::after,
+[data-bejazzle="true"] .sidebar-panel::after,
+[data-bejazzle="true"] [class*="-panel"]::after {
+  content: "" !important;
+  position: absolute !important;
+  bottom: 0 !important;
+  left: 0 !important;
+  right: 0 !important;
+  height: 100% !important;
+  pointer-events: none !important;
+  z-index: 0 !important;
+  transition: opacity 0.5s ease !important;
+}
+
+/* Level 1: Barely visible - pure white gradient */
+[data-bejazzle="true"][data-bejazzle-level="1"] .grid-panel::after,
+[data-bejazzle="true"][data-bejazzle-level="1"] .sidebar-panel::after,
+[data-bejazzle="true"][data-bejazzle-level="1"] [class*="-panel"]::after {
+  background: linear-gradient(to bottom, transparent 0%, transparent 50%, rgba(255, 255, 255, 0.01) 100%) !important;
+  opacity: 1 !important;
+}
+
+/* Level 2: Subtle brightness with hint of blue */
+[data-bejazzle="true"][data-bejazzle-level="2"] .grid-panel::after,
+[data-bejazzle="true"][data-bejazzle-level="2"] .sidebar-panel::after,
+[data-bejazzle="true"][data-bejazzle-level="2"] [class*="-panel"]::after {
+  background: linear-gradient(
+    to bottom,
+    transparent 0%,
+    transparent 40%,
+    rgba(97, 175, 239, 0.015) 70%,
+    rgba(255, 255, 255, 0.025) 100%
+  ) !important;
+  opacity: 1 !important;
+}
+
+/* Level 3: More noticeable - blue tint visible */
+[data-bejazzle="true"][data-bejazzle-level="3"] .grid-panel::after,
+[data-bejazzle="true"][data-bejazzle-level="3"] .sidebar-panel::after,
+[data-bejazzle="true"][data-bejazzle-level="3"] [class*="-panel"]::after {
+  background: linear-gradient(
+    to bottom,
+    transparent 0%,
+    transparent 30%,
+    rgba(97, 175, 239, 0.03) 60%,
+    rgba(152, 195, 121, 0.02) 80%,
+    rgba(255, 255, 255, 0.04) 100%
+  ) !important;
+  opacity: 1 !important;
+}
+
+/* Level 4: Clear spotlight with color shift */
+[data-bejazzle="true"][data-bejazzle-level="4"] .grid-panel::after,
+[data-bejazzle="true"][data-bejazzle-level="4"] .sidebar-panel::after,
+[data-bejazzle="true"][data-bejazzle-level="4"] [class*="-panel"]::after {
+  background: linear-gradient(
+    to bottom,
+    transparent 0%,
+    transparent 20%,
+    rgba(97, 175, 239, 0.05) 50%,
+    rgba(152, 195, 121, 0.04) 70%,
+    rgba(229, 192, 123, 0.03) 85%,
+    rgba(255, 255, 255, 0.06) 100%
+  ) !important;
+  opacity: 1 !important;
+}
+
+/* Level 5: Obvious but tasteful - "retina cinema display" */
+[data-bejazzle="true"][data-bejazzle-level="5"] .grid-panel::after,
+[data-bejazzle="true"][data-bejazzle-level="5"] .sidebar-panel::after,
+[data-bejazzle="true"][data-bejazzle-level="5"] [class*="-panel"]::after {
+  background: linear-gradient(
+    to bottom,
+    transparent 0%,
+    rgba(97, 175, 239, 0.02) 20%,
+    rgba(97, 175, 239, 0.07) 40%,
+    rgba(152, 195, 121, 0.06) 60%,
+    rgba(229, 192, 123, 0.05) 80%,
+    rgba(255, 255, 255, 0.08) 100%
+  ) !important;
+  opacity: 1 !important;
+  animation: bejazzle-spotlight-breathe 6s ease-in-out infinite !important;
+}
+
+@keyframes bejazzle-spotlight-breathe {
+  0%,
+  100% {
+    opacity: 1 !important;
+  }
+  50% {
+    opacity: 0.85 !important;
+  }
+}
+
+/* Ensure content stays above the gradient */
+[data-bejazzle="true"] .grid-panel > *,
+[data-bejazzle="true"] .sidebar-panel > *,
+[data-bejazzle="true"] [class*="-panel"] > * {
+  position: relative;
+  z-index: 1;
+}
+
+/* ==========================================
+   RETINA FONT RENDERING - THIN & PRECISE
+   Optimized for high-DPI displays
+   ========================================== */
+
+/* Base retina rendering - applies to all text */
+[data-bejazzle="true"] {
+  -webkit-font-smoothing: antialiased !important;
+  -moz-osx-font-smoothing: grayscale !important;
+  text-rendering: optimizeLegibility !important;
+  font-feature-settings:
+    "kern" 1,
+    "liga" 1 !important;
+}
+
+/* Level 1: Subtle refinement - slightly thinner */
+[data-bejazzle="true"][data-bejazzle-level="1"] {
+  font-weight: 400 !important;
+  letter-spacing: 0.01em !important;
+}
+
+[data-bejazzle="true"][data-bejazzle-level="1"] * {
+  -webkit-font-smoothing: antialiased !important;
+  -moz-osx-font-smoothing: grayscale !important;
+}
+
+/* Level 2: Lighter weight on retina */
+[data-bejazzle="true"][data-bejazzle-level="2"] {
+  font-weight: 350 !important;
+  letter-spacing: 0.015em !important;
+}
+
+[data-bejazzle="true"][data-bejazzle-level="2"] * {
+  -webkit-font-smoothing: antialiased !important;
+  text-rendering: geometricPrecision !important;
+}
+
+/* Level 3: Crisp and light */
+[data-bejazzle="true"][data-bejazzle-level="3"] {
+  font-weight: 300 !important;
+  letter-spacing: 0.02em !important;
+}
+
+[data-bejazzle="true"][data-bejazzle-level="3"] * {
+  -webkit-font-smoothing: subpixel-antialiased !important;
+  text-rendering: geometricPrecision !important;
+}
+
+/* Level 4: Very thin and precise */
+[data-bejazzle="true"][data-bejazzle-level="4"] {
+  font-weight: 275 !important;
+  letter-spacing: 0.025em !important;
+}
+
+[data-bejazzle="true"][data-bejazzle-level="4"] * {
+  -webkit-font-smoothing: subpixel-antialiased !important;
+  -moz-osx-font-smoothing: auto !important;
+  text-rendering: geometricPrecision !important;
+  font-feature-settings:
+    "kern" 1,
+    "liga" 1,
+    "calt" 1 !important;
+}
+
+/* Level 5: Ultra-thin retina perfection */
+[data-bejazzle="true"][data-bejazzle-level="5"] {
+  font-weight: 250 !important;
+  letter-spacing: 0.03em !important;
+}
+
+[data-bejazzle="true"][data-bejazzle-level="5"] * {
+  -webkit-font-smoothing: subpixel-antialiased !important;
+  -moz-osx-font-smoothing: auto !important;
+  text-rendering: geometricPrecision !important;
+  font-feature-settings:
+    "kern" 1,
+    "liga" 1,
+    "calt" 1,
+    "ss01" 1 !important;
+}
+
+/* Special handling for monospace code - keep it readable */
+[data-bejazzle="true"] code,
+[data-bejazzle="true"] pre,
+[data-bejazzle="true"] .monospace {
+  font-weight: 350 !important;
+  letter-spacing: 0 !important;
+}
+
+/* Headers get slightly heavier weight to maintain hierarchy */
+[data-bejazzle="true"] h1,
+[data-bejazzle="true"] h2,
+[data-bejazzle="true"] h3,
+[data-bejazzle="true"] h4,
+[data-bejazzle="true"] h5,
+[data-bejazzle="true"] h6 {
+  font-weight: 400 !important;
+}
+
+/* Buttons maintain clickable weight */
+[data-bejazzle="true"] button {
+  font-weight: 400 !important;
+}

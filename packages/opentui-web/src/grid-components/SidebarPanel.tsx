@@ -2,6 +2,7 @@ import type { Component } from "solid-js"
 import { createSignal, For } from "solid-js"
 import { GridPanel } from "./GridPanel"
 import { GridText } from "./GridText"
+import { useBejazzle } from "../context/bejazzle"
 
 interface SidebarPanelProps {
   col?: number
@@ -34,6 +35,7 @@ interface SidebarPanelProps {
 type TabType = "tools" | "todos" | "files"
 
 export const SidebarPanel: Component<SidebarPanelProps> = (props) => {
+  const bejazzle = useBejazzle()
   const startCol = () => props.col ?? 119
   const panelWidth = () => props.width ?? 38
 
@@ -79,7 +81,20 @@ export const SidebarPanel: Component<SidebarPanelProps> = (props) => {
   ]
 
   return (
-    <GridPanel col={startCol()} row={0} width={panelWidth()} height="100%" bg="#0a0a0a" scrollable={true}>
+    <GridPanel
+      col={startCol()}
+      row={0}
+      width={panelWidth()}
+      height="100%"
+      bg="#0a0a0a"
+      scrollable={true}
+      class="sidebar-panel-right"
+      style={{
+        "border-radius": bejazzle.themeFeatures().roundedCorners ? "1rem" : "0",
+        overflow: "visible",
+        "font-family": "Geist, -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif",
+      }}
+    >
       {/* Header - row 1 flush left */}
       <GridText col={2} row={1} text="CODESURF" fg="#858585" bold />
       <GridText col={panelWidth() - 2} row={1} text="◀" fg="#858585" onClick={props.onCollapse} />

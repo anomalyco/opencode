@@ -401,6 +401,7 @@ export const TerminalLayout: Component<TerminalLayoutProps> = (props) => {
         onDrag={(newCol) => setRightWidth(Math.max(40, totalCols() - newCol + 6))}
         alwaysVisible
         style={{ position: "fixed", height: "100vh" }}
+        class="divider-second"
       />
 
       {/* Main content area - grows to fill space */}
