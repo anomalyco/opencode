@@ -48,7 +48,7 @@ export const TaskTool = Tool.define("task", async () => {
           const childSessionID = await TaskHierarchy.createSubtask(
             ctx.sessionID,
             agent.name,
-            params.description + ` (@${agent.name} subagent)`,
+            `[@${agent.name.toUpperCase()}] ${params.description}`,
           )
 
           // Setup parallel worktree AFTER creating the subtask

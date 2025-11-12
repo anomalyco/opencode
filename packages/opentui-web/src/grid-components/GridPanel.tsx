@@ -7,8 +7,10 @@ interface GridPanelProps {
   height?: number | "100%" // Height in rows or percentage
   bg?: string // Background color
   scrollable?: boolean // Enable scrolling (default: false for backward compatibility)
+  leftMargin?: string // Additional left margin (e.g., "10px")
   style?: JSX.CSSProperties // Additional custom styles
   children?: JSX.Element
+  class?: string // CSS class for targeting
 }
 
 export const GridPanel: Component<GridPanelProps> = (props) => {
@@ -18,9 +20,10 @@ export const GridPanel: Component<GridPanelProps> = (props) => {
 
   return (
     <div
+      class={props.class}
       style={{
         position: "absolute",
-        left: `${props.col}ch`,
+        left: `calc(${props.col}ch + ${props.leftMargin || "0px"})`,
         top: `${props.row * 1.2}em`,
         width: `${props.width}ch`,
         height: height,

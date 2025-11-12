@@ -7,6 +7,7 @@ import { TerminalInput } from "./TerminalInput"
 import { GridTextWrap, calculateWrappedRows } from "./GridTextWrap"
 import { SteeringForm, type SteeringQuestionConfig, type SteeringAnswer } from "../components/SteeringForm"
 import { Autocomplete, type AutocompleteItem } from "./Autocomplete"
+import { MessageActionsDialog } from "./MessageActionsDialog"
 import { useSDK } from "../context/sdk"
 import { SubagentNav } from "./SubagentNav"
 
@@ -855,7 +856,18 @@ export const MessagesPanel: Component<MessagesPanelProps> = (props) => {
   })
 
   return (
-    <GridPanel col={startCol()} row={0} width={panelWidth()} height="100%" bg="#0a0a0a" style={{ overflow: "visible" }}>
+    <GridPanel
+      col={startCol()}
+      row={0}
+      width={panelWidth()}
+      height="100%"
+      bg="#0a0a0a"
+      style={{
+        overflow: "visible",
+        "border-radius": "0",
+        "font-family": "Geist, -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif",
+      }}
+    >
       {/* Subagent navigation bar (if in subagent session) */}
       <Show when={isSubagent()}>
         <SubagentNav
