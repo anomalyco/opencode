@@ -289,8 +289,7 @@ export namespace Provider {
       }
 
       for (const [modelID, model] of Object.entries(provider.models ?? {})) {
-        let existing = parsed.models[modelID]
-        if (!existing && model.id) existing = parsed.models[model.id]
+        const existing = parsed.models[model.id ?? modelID]
         const parsedModel: ModelsDev.Model = {
           id: modelID,
           name: model.name ?? existing?.name ?? modelID,
