@@ -135,19 +135,22 @@ export namespace ProviderTransform {
       result["promptCacheKey"] = sessionID
     }
 
-    if (modelID.includes("gpt-5") && !modelID.includes("gpt-5-chat")) {
+    const mid = modelID.toLowerCase()
+    const isOpenAIReasoningFamily = mid.includes("gpt-5") || mid.startsWith("o1") || mid.startsWith("o3")
+    if (isOpenAIReasoningFamily && !mid.includes("gpt-5-chat")) {
       if (modelID.includes("codex")) {
         result["store"] = false
       }
 
-      if (!modelID.includes("codex") && !modelID.includes("gpt-5-pro")) {
-        result["reasoningEffort"] = "medium"
+      if (!mid.includes("codex") && !mid.includes("gpt-5-pro")) {
+        result["reasoningEffort"] = result["reasoningEffort"] ?? "medium"
       }
 
+      // Request reasoning content for any provider that supports it via AI SDK
+      result["include"] = [...new Set([...(result["include"] || []), "reasoning.encrypted_content"])]
+      result["reasoningSummary"] = result["reasoningSummary"] ?? "auto"
       if (providerID === "opencode") {
         result["promptCacheKey"] = sessionID
-        result["include"] = ["reasoning.encrypted_content"]
-        result["reasoningSummary"] = "auto"
       }
     }
     return result

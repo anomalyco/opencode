@@ -65,9 +65,28 @@ export function Message(props: MessageProps) {
 }
 
 export function AssistantMessageDisplay(props: { message: AssistantMessage; parts: PartType[] }) {
+  // Toggle to show reasoning blocks: set localStorage 'opencode:show_reasoning' = '1'
+  // or set globalThis.OPENCODE_SHOW_REASONING = true before rendering UI
+  const showReasoning = (() => {
+    try {
+      // Prefer localStorage flag when available (browser/web)
+      // Accept '1' or 'true'
+      // eslint-disable-next-line no-undef
+      if (typeof localStorage !== "undefined") {
+        // eslint-disable-next-line no-undef
+        const v = localStorage.getItem("opencode:show_reasoning")
+        if (typeof v === "string") return v === "1" || v.toLowerCase() === "true"
+      }
+    } catch {}
+    const g = (globalThis as any)?.OPENCODE_SHOW_REASONING
+    if (typeof g === "boolean") return g
+    if (typeof g === "string") return g === "1" || g.toLowerCase() === "true"
+    return false
+  })()
+
   const filteredParts = createMemo(() => {
     return props.parts?.filter((x) => {
-      if (x.type === "reasoning") return false
+      if (x.type === "reasoning" && !showReasoning) return false
       return x.type !== "tool" || (x as ToolPart).tool !== "todoread"
     })
   })

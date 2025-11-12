@@ -8,9 +8,10 @@
     "file:///Users/jkneen/Documents/GitHub/flows/opencode-stt/packages/opencode/examples/plugin-steering-questions/index.tsx"
   ],
   "favoriteTools": [
-    "ripgrep",
     "read",
     "bash",
+    "cc_read",
+    "cc_bash",
     "edit"
   ]
 }

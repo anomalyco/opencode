@@ -41,6 +41,15 @@ import { Flag } from "@/flag/flag"
 export namespace ToolRegistry {
   const log = Log.create({ service: "tool-registry" })
 
+  function isAnthropicProvider(providerID?: string, modelID?: string) {
+    const provider = providerID?.toLowerCase() ?? ""
+    const model = modelID?.toLowerCase() ?? ""
+    if (provider.includes("anthropic")) return true
+    if (model.includes("anthropic")) return true
+    if (model.includes("claude")) return true
+    return false
+  }
+
   export const state = Instance.state(async () => {
     const custom = [] as Tool.Info[]
     const glob = new Bun.Glob("tool/*.{js,ts}")
@@ -134,25 +143,27 @@ export namespace ToolRegistry {
     custom.push(tool)
   }
 
-  async function all(): Promise<Tool.Info[]> {
+  async function all(providerID: string, modelID: string): Promise<Tool.Info[]> {
     const custom = await state().then((x) => x.custom)
     const config = await Config.get()
     const anthropicConfig = config.anthropic ?? {}
 
     // Build list of Claude Code tools based on config
     const ccTools: Tool.Info[] = []
-    if (anthropicConfig.codeExecutionTool !== false) ccTools.push(ClaudeCodeBashTool)
-    if (anthropicConfig.textEditorTool !== false) {
-      ccTools.push(ClaudeCodeEditTool)
-      ccTools.push(ClaudeCodeReadTool)
-      ccTools.push(ClaudeCodeWriteTool)
-      ccTools.push(ClaudeCodeListTool)
+    if (isAnthropicProvider(providerID, modelID)) {
+      if (anthropicConfig.codeExecutionTool !== false) ccTools.push(ClaudeCodeBashTool)
+      if (anthropicConfig.textEditorTool !== false) {
+        ccTools.push(ClaudeCodeEditTool)
+        ccTools.push(ClaudeCodeReadTool)
+        ccTools.push(ClaudeCodeWriteTool)
+        ccTools.push(ClaudeCodeListTool)
+      }
+      if (anthropicConfig.webFetchTool !== false) ccTools.push(ClaudeCodeWebFetchTool)
+      if (anthropicConfig.computerUseTool === true) ccTools.push(ClaudeCodeComputerUseTool)
+      // Add glob and grep as they're useful for file discovery
+      ccTools.push(ClaudeCodeGlobTool)
+      ccTools.push(ClaudeCodeGrepTool)
     }
-    if (anthropicConfig.webFetchTool !== false) ccTools.push(ClaudeCodeWebFetchTool)
-    if (anthropicConfig.computerUseTool === true) ccTools.push(ClaudeCodeComputerUseTool)
-    // Add glob and grep as they're useful for file discovery
-    ccTools.push(ClaudeCodeGlobTool)
-    ccTools.push(ClaudeCodeGrepTool)
 
     return [
       InvalidTool,
@@ -180,12 +191,12 @@ export namespace ToolRegistry {
     ]
   }
 
-  export async function ids() {
-    return all().then((x) => x.map((t) => t.id))
+  export async function ids(providerID: string, modelID: string) {
+    return all(providerID, modelID).then((x) => x.map((t) => t.id))
   }
 
-  export async function tools(_providerID: string, _modelID: string) {
-    const tools = await all()
+  export async function tools(providerID: string, modelID: string) {
+    const tools = await all(providerID, modelID)
     const result = await Promise.all(
       tools.map(async (t) => ({
         id: t.id,
@@ -196,16 +207,27 @@ export namespace ToolRegistry {
   }
 
   export async function enabled(
-    _providerID: string,
-    _modelID: string,
+    providerID: string,
+    modelID: string,
     agent: Agent.Info,
   ): Promise<Record<string, boolean>> {
     const result: Record<string, boolean> = {}
 
+    if (!isAnthropicProvider(providerID, modelID)) {
+      result["cc_bash"] = false
+      result["cc_edit"] = false
+      result["cc_read"] = false
+      result["cc_write"] = false
+      result["cc_list"] = false
+      result["cc_glob"] = false
+      result["cc_grep"] = false
+      result["cc_webfetch"] = false
+      result["cc_computer_use"] = false
+    }
+
     if (agent.permission.edit === "deny") {
       result["edit"] = false
       result["write"] = false
-      // Also disable Claude Code equivalents
       result["cc_edit"] = false
       result["cc_write"] = false
     }

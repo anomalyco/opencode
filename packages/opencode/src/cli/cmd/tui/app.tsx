@@ -195,6 +195,30 @@ function App() {
 
   command.register(() => [
     {
+      title: "Toggle reasoning visibility",
+      value: "ui.toggle_reasoning",
+      category: "View",
+      onSelect: () => {
+        // Web/desktop builds have localStorage; TUI doesn’t, but we also set a global fallback.
+        // eslint-disable-next-line no-undef
+        const hasLS = typeof localStorage !== "undefined"
+        let current = Boolean((globalThis as any).OPENCODE_SHOW_REASONING)
+        if (hasLS) {
+          // eslint-disable-next-line no-undef
+          const stored = localStorage.getItem("opencode:show_reasoning")
+          if (typeof stored === "string") {
+            current = stored === "1" || stored.toLowerCase() === "true"
+          }
+        }
+        const next = !current
+        // eslint-disable-next-line no-undef
+        if (hasLS) localStorage.setItem("opencode:show_reasoning", next ? "1" : "0")
+        ;(globalThis as any).OPENCODE_SHOW_REASONING = next
+        const label = next ? "Showing reasoning" : "Hiding reasoning"
+        toast?.show?.({ message: label, variant: "info" })
+      },
+    },
+    {
       title: "Switch session",
       value: "session.list",
       keybind: "session_list",
