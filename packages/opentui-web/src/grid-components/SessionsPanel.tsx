@@ -88,6 +88,7 @@ export const SessionsPanel: Component<SessionsPanelProps> = (props) => {
       width={props.width || 20}
       height="100%"
       bg="#0a0a0a"
+      class="sidebar-panel-left"
       style={{
         "border-radius": bejazzle.themeFeatures().roundedCorners ? "1rem" : "0",
         overflow: "visible",

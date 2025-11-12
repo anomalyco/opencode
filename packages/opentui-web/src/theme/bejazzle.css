@@ -5,13 +5,34 @@
 [data-bejazzle="true"] {
   /* Improved line spacing throughout */
   line-height: 1.4 !important;
-  /* Breathing room from edges */
+}
+
+/* Left sidebar panel - NO margin, full edge-to-edge */
+[data-bejazzle="true"] .sidebar-panel-left {
   margin-left: 10px !important;
   margin-top: 10px !important;
 }
 
-/* Right sidebar panel - right margin */
+/* Indent content inside left sidebar */
+[data-bejazzle="true"] .sidebar-panel-left > * {
+  margin-left: 10px !important;
+}
+
+/* Other panels get left margin and top margin */
+[data-bejazzle="true"] .grid-panel:not(.sidebar-panel-left):not(.sidebar-panel-right) {
+  margin-left: 10px !important;
+  margin-top: 20px !important;
+  margin-right: 10px !important;
+  margin-bottom: 10px !important;
+}
+
+/* Right sidebar panel - NO margin, full edge-to-edge */
 [data-bejazzle="true"] .sidebar-panel-right {
+  margin-right: 0 !important;
+}
+
+/* Indent content inside right sidebar */
+[data-bejazzle="true"] .sidebar-panel-right > * {
   margin-right: 10px !important;
 }
 
@@ -22,7 +43,7 @@
 [data-bejazzle="true"][data-rounded-corners="true"] [style*="background: #1a1a1a"],
 [data-bejazzle="true"][data-rounded-corners="true"] [style*="background: #2a2a2a"],
 [data-bejazzle="true"][data-rounded-corners="true"] [style*="background: #000000"] {
-  border-radius: 16px !important;
+  border-radius: 0.75rem !important;
 }
 
 /* Tool chips - rounded */
