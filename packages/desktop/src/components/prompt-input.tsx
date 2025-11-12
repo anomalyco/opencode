@@ -345,7 +345,11 @@ export const PromptInput: Component<PromptInputProps> = (props) => {
   return (
     <div class="relative size-full _max-h-[320px] flex flex-col gap-3">
       <Show when={store.popoverIsOpen}>
-        <div class="absolute inset-x-0 -top-3 -translate-y-full origin-bottom-left max-h-[252px] min-h-10 overflow-y-auto flex flex-col p-2 pb-0 rounded-2xl border border-border-base bg-surface-raised-stronger-non-alpha shadow-md">
+        <div
+          class="absolute inset-x-0 -top-3 -translate-y-full origin-bottom-left max-h-[252px] min-h-10
+                 overflow-auto no-scrollbar flex flex-col p-2 pb-0 rounded-2xl 
+                 border border-border-base bg-surface-raised-stronger-non-alpha shadow-md"
+        >
           <Show when={flat().length > 0} fallback={<div class="text-text-weak px-2">No matching files</div>}>
             <For each={flat()}>
               {(i) => (
@@ -362,7 +366,9 @@ export const PromptInput: Component<PromptInputProps> = (props) => {
                       <span class="text-text-weak whitespace-nowrap overflow-hidden overflow-ellipsis truncate min-w-0">
                         {getDirectory(i)}
                       </span>
-                      <span class="text-text-strong whitespace-nowrap">{getFilename(i)}</span>
+                      <Show when={!i.endsWith("/")}>
+                        <span class="text-text-strong whitespace-nowrap">{getFilename(i)}</span>
+                      </Show>
                     </div>
                   </div>
                   <div class="flex items-center gap-x-1 text-text-muted/40 shrink-0"></div>
