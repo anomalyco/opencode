@@ -29,6 +29,43 @@
         display: flex;
         flex-direction: column;
       }
+      /* Electron transparent title bar support */
+      body.electron #root {
+        margin-top: 20px; /* Space for Electron title bar */
+        height: calc(100vh - 20px);
+        position: relative;
+      }
+      /* Draggable title bar overlay for Electron */
+      body.electron #root::before {
+        content: "";
+        position: absolute;
+        top: -20px;
+        left: 0;
+        right: 0;
+        height: 20px;
+        -webkit-app-region: drag; /* Make draggable */
+        -webkit-user-select: none;
+        user-select: none;
+        pointer-events: none; /* Allow clicks through to content below */
+        z-index: 9999;
+      }
+      /* Non-draggable for interactive elements */
+      button,
+      input,
+      select,
+      textarea,
+      a {
+        -webkit-app-region: no-drag;
+      }
+      /* Center SESSIONS title and hide collapse in Electron mode */
+      body.electron .sessions-title {
+        text-align: center;
+        width: 100%;
+        left: 0 !important;
+      }
+      body.electron .sessions-collapse {
+        display: none !important;
+      }
     </style>
   </head>
   <body>

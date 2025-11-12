@@ -3,20 +3,62 @@
   "version": "1.0.0",
   "description": "Web-based TUI for OpenCode - browser-compatible terminal UI",
   "type": "module",
+  "main": "dist-electron/main.js",
   "scripts": {
     "typecheck": "tsgo --noEmit",
     "dev": "vite",
     "build": "vite build",
-    "preview": "vite preview"
+    "preview": "vite preview",
+    "electron:build-ts": "tsc -p electron/tsconfig.json && cp electron/package.json dist-electron/package.json",
+    "electron:dev": "concurrently \"vite\" \"wait-on http://localhost:3001 && bun run electron:build-ts && cross-env NODE_ENV=development ./node_modules/.bin/electron dist-electron/main.js\"",
+    "electron:build": "vite build && bun run electron:build-ts && ./node_modules/.bin/electron-builder",
+    "electron:start": "bun run electron:build-ts && ./node_modules/.bin/electron dist-electron/main.js"
+  },
+  "build": {
+    "appId": "ai.opencode.opentui",
+    "productName": "OpenTUI",
+    "directories": {
+      "output": "release"
+    },
+    "files": [
+      "dist/**/*",
+      "dist-electron/**/*"
+    ],
+    "mac": {
+      "category": "public.app-category.developer-tools",
+      "target": [
+        "dmg",
+        "zip"
+      ]
+    },
+    "win": {
+      "target": [
+        "nsis",
+        "portable"
+      ]
+    },
+    "linux": {
+      "target": [
+        "AppImage",
+        "deb"
+      ],
+      "category": "Development"
+    }
   },
   "license": "MIT",
   "devDependencies": {
     "@tsconfig/bun": "1.0.9",
+    "@types/electron": "1.6.12",
     "@types/node": "catalog:",
     "@typescript/native-preview": "catalog:",
+    "concurrently": "9.2.1",
+    "cross-env": "10.1.0",
+    "electron": "39.1.2",
+    "electron-builder": "^25.1.8",
     "typescript": "catalog:",
     "vite": "catalog:",
-    "vite-plugin-solid": "catalog:"
+    "vite-plugin-solid": "catalog:",
+    "wait-on": "^8.0.1"
   },
   "dependencies": {
     "@opencode-ai/sdk": "workspace:*",

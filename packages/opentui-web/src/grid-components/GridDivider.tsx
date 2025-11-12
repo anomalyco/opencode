@@ -39,10 +39,6 @@ export const GridDivider: Component<GridDividerProps> = (props) => {
     document.addEventListener("mouseup", handleMouseUp)
   }
 
-  const backgroundColor = () => {
-    return props.alwaysVisible ? "#1a1a1a" : "transparent"
-  }
-
   return (
     <div
       class={props.class}
@@ -56,7 +52,7 @@ export const GridDivider: Component<GridDividerProps> = (props) => {
         bottom: props.alwaysVisible ? "calc(7.2em + 6ch)" : "0",
         height: props.alwaysVisible ? "auto" : "100vh",
         width: "1ch",
-        background: props.alwaysVisible ? "#333333" : isHovering() || isDragging() ? "#333333" : "transparent",
+        background: isHovering() || isDragging() ? "#333333" : "transparent",
         cursor: "col-resize",
         "z-index": "1000",
         "user-select": "none",

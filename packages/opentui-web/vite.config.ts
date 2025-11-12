@@ -4,6 +4,7 @@ import path from "path"
 
 export default defineConfig({
   plugins: [solid()],
+  base: "./", // Use relative paths for Electron compatibility
   resolve: {
     conditions: ["browser", "import", "module", "default"],
     alias: {

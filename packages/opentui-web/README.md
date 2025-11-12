@@ -2,6 +2,8 @@
 
 Web-based TUI (Terminal User Interface) for OpenCode - browser-compatible terminal UI for interacting with OpenCode sessions, agents, and workflows.
 
+**🖥️ Desktop App Available**: OpenTUI Web can now run as a standalone Electron desktop application with a modern transparent title bar! See [ELECTRON.md](./ELECTRON.md) for details.
+
 ## Features
 
 - **Session Management** - Create, list, and manage OpenCode sessions
@@ -20,7 +22,7 @@ Web-based TUI (Terminal User Interface) for OpenCode - browser-compatible termin
 bun install
 ```
 
-### Development
+### Web Development
 
 Start the development server on port 3001 with hot reload:
 
@@ -32,9 +34,49 @@ The application will be available at `http://localhost:3001`.
 
 By default, it connects to the OpenCode API at `http://localhost:4096`. You can configure this in `src/app.tsx`.
 
-### Build
+### Electron Desktop App
 
-Create a production build:
+#### Development Mode
+
+Run the app in Electron with hot reload:
+
+```bash
+bun run electron:dev
+```
+
+This will:
+
+1. Start the Vite dev server on port 3001
+2. Compile the Electron TypeScript code
+3. Launch Electron and load the app
+4. Enable hot reload for the renderer process
+5. Open DevTools automatically
+
+#### Production Build
+
+Build the app for distribution:
+
+```bash
+bun run electron:build
+```
+
+This creates platform-specific installers in the `release/` directory:
+
+- **macOS**: `.dmg` and `.zip` files
+- **Windows**: `.exe` installer and portable `.exe`
+- **Linux**: `.AppImage` and `.deb` packages
+
+#### Run Production Build
+
+Test the production build without creating installers:
+
+```bash
+bun run electron:start
+```
+
+### Web Build
+
+Create a production build for web deployment:
 
 ```bash
 bun run build
@@ -52,7 +94,7 @@ bun run typecheck
 
 ### Preview
 
-Preview the production build locally:
+Preview the web production build locally:
 
 ```bash
 bun run preview
@@ -190,11 +232,121 @@ proxy: {
 └── README.md              # This file
 ```
 
+## Electron Desktop App
+
+OpenTUI Web can run as a standalone desktop application using Electron.
+
+### Architecture
+
+The Electron wrapper consists of:
+
+**Main Process** (`electron/main.ts`):
+
+- Creates and manages the browser window
+- Handles application lifecycle (startup, quit, etc.)
+- Sets up the application menu with keyboard shortcuts
+- Loads Vite dev server in development or built files in production
+- Opens external links in the system browser
+
+**Preload Script** (`electron/preload.ts`):
+
+- Provides secure IPC communication via `contextBridge`
+- Exposes whitelisted APIs to the renderer process
+- Maintains security by avoiding Node.js integration in renderer
+- Provides platform detection (`window.electronAPI.platform`)
+
+**Renderer Process**:
+
+- The same SolidJS app that runs in the browser
+- Can detect Electron environment via `window.electronAPI.isElectron`
+- Communicates with main process through exposed APIs
+
+### Keyboard Shortcuts
+
+- **Cmd/Ctrl+N**: New session
+- **Cmd/Ctrl+Q**: Quit application
+- **Cmd/Ctrl+R**: Reload
+- **Cmd/Ctrl+Shift+R**: Force reload
+- **Cmd/Ctrl+Alt+I**: Toggle DevTools
+- **Cmd/Ctrl+Plus/Minus**: Zoom in/out
+- **Cmd/Ctrl+0**: Reset zoom
+
+### Customization
+
+#### Window Configuration
+
+Customize window size and behavior in `electron/main.ts`:
+
+```typescript
+mainWindow = new BrowserWindow({
+  width: 1200,
+  height: 800,
+  minWidth: 800,
+  minHeight: 600,
+  // ... other options
+})
+```
+
+#### Application Menu
+
+Modify the menu in the `createMenu()` function in `electron/main.ts`.
+
+#### Build Configuration
+
+Customize the build in `package.json` under the `build` key:
+
+```json
+{
+  "build": {
+    "appId": "ai.opencode.opentui",
+    "productName": "OpenTUI"
+    // ... other options
+  }
+}
+```
+
+### IPC Communication
+
+To add custom IPC communication between main and renderer:
+
+1. **In `electron/main.ts`**, listen for events:
+
+```typescript
+import { ipcMain } from "electron"
+
+ipcMain.on("custom-event", (event, arg) => {
+  // Handle event
+  mainWindow?.webContents.send("response-event", result)
+})
+```
+
+2. **In `electron/preload.ts`**, whitelist the channels:
+
+```typescript
+contextBridge.exposeInMainWorld("electronAPI", {
+  send: (channel: string, data: unknown) => {
+    const validChannels = ["custom-event"]
+    if (validChannels.includes(channel)) {
+      ipcRenderer.send(channel, data)
+    }
+  },
+})
+```
+
+3. **In your SolidJS components**, use the API:
+
+```typescript
+if (window.electronAPI?.isElectron) {
+  window.electronAPI.send("custom-event", data)
+}
+```
+
 ## Technology Stack
 
 - **SolidJS**: Reactive UI framework
 - **Vite**: Build tool and dev server
 - **TypeScript**: Type-safe development
+- **Electron**: Desktop app framework (optional)
 - **@opencode-ai/sdk**: OpenCode client SDK
 - **@opentui/core & @opentui/solid**: TUI framework
 - **Remeda**: Functional utilities

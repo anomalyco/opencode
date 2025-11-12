@@ -399,7 +399,7 @@ export const TerminalLayout: Component<TerminalLayoutProps> = (props) => {
         minCol={totalCols() - 60}
         maxCol={totalCols() - 40}
         onDrag={(newCol) => setRightWidth(Math.max(40, totalCols() - newCol + 6))}
-        alwaysVisible
+        alwaysVisible={false}
         style={{ position: "fixed", height: "100vh" }}
         class="divider-second"
       />

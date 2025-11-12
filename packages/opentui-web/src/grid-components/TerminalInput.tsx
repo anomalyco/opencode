@@ -21,7 +21,8 @@ interface TerminalInputProps {
 export const TerminalInput: Component<TerminalInputProps> = (props) => {
   const [cursorVisible, setCursorVisible] = createSignal(true)
   const [optionsExpanded, setOptionsExpanded] = createSignal(false)
-  let inputRef: HTMLInputElement | undefined
+  const [inputHeight, setInputHeight] = createSignal(2) // Start at 2 lines
+  let inputRef: HTMLTextAreaElement | undefined
   let cursorInterval: number | undefined
 
   const panelWidth = props.width || 74
@@ -41,6 +42,15 @@ export const TerminalInput: Component<TerminalInputProps> = (props) => {
       clearInterval(cursorInterval)
     }
   })
+
+  const handleInput = (e: InputEvent & { currentTarget: HTMLTextAreaElement }) => {
+    props.onInput(e.currentTarget.value)
+
+    // Auto-grow textarea based on content
+    const textarea = e.currentTarget
+    const lineCount = textarea.value.split("\n").length
+    setInputHeight(Math.max(2, lineCount)) // Minimum 2 lines
+  }
 
   const handleKeyDown = (e: KeyboardEvent) => {
     // Tab: Toggle options
@@ -63,10 +73,13 @@ export const TerminalInput: Component<TerminalInputProps> = (props) => {
         props.onSubmit?.(props.value)
       }
     }
-    // Shift+Enter: Allow newline (default behavior)
-    else if (e.key === "Enter" && e.shiftKey) {
-      // Allow default behavior - will insert newline
-    }
+    // Shift+Enter: Allow newline (default behavior will add \n)
+  }
+
+  const containerHeight = () => {
+    if (optionsExpanded()) return "15em"
+    // 1.5em per line + 3em for help text
+    return `${inputHeight() * 1.5 + 3}em`
   }
 
   return (
@@ -76,9 +89,10 @@ export const TerminalInput: Component<TerminalInputProps> = (props) => {
         bottom: "0",
         left: "0",
         right: "0",
-        height: optionsExpanded() ? "15em" : "4.5em",
+        height: containerHeight(),
         background: "#0a0a0a",
         "border-top": "1px solid #2a2a2a",
+        "margin-bottom": "5px",
       }}
     >
       {/* Options row (only show when expanded) */}
@@ -96,14 +110,14 @@ export const TerminalInput: Component<TerminalInputProps> = (props) => {
         </>
       )}
 
-      {/* Input area - 2 rows from bottom */}
+      {/* Input area - grows with content */}
       <div
         style={{
           position: "absolute",
           bottom: "3em",
           left: "0",
           right: "0",
-          height: "1.5em",
+          height: `${inputHeight() * 1.5}em`,
           background: "#2a2a2a",
         }}
       >
@@ -112,8 +126,8 @@ export const TerminalInput: Component<TerminalInputProps> = (props) => {
 
         {/* Render attachments as badges */}
         {(() => {
-          let currentCol = 2
           const elements: any[] = []
+          let currentCol = 2
 
           // Render attachments first
           if (props.attachments && props.attachments.length > 0) {
@@ -124,25 +138,14 @@ export const TerminalInput: Component<TerminalInputProps> = (props) => {
             })
           }
 
-          // Render text input after attachments
-          if (props.value) {
-            elements.push(<GridText col={currentCol} row={0} text={props.value} fg="#ffffff" />)
-            currentCol += props.value.length
-          }
-
-          // Render cursor at the end
-          if (cursorVisible()) {
-            elements.push(<GridText col={currentCol} row={0} text="█" fg="#d19a66" />)
-          }
-
           return elements
         })()}
 
-        {/* Hidden input for capturing keystrokes */}
-        <input
+        {/* Textarea for multi-line input with visible cursor */}
+        <textarea
           ref={inputRef}
           value={props.value}
-          onInput={(e) => props.onInput(e.currentTarget.value)}
+          onInput={handleInput}
           onKeyDown={handleKeyDown}
           autofocus
           style={{
@@ -150,17 +153,19 @@ export const TerminalInput: Component<TerminalInputProps> = (props) => {
             left: "2ch",
             top: "0",
             width: `${panelWidth - 4}ch`,
-            height: "1.5em",
+            height: `${inputHeight() * 1.5}em`,
             "font-family": '"Berkeley Mono", "JetBrains Mono", monospace',
             "font-size": "16px",
-            "line-height": "1.2",
+            "line-height": "1.5",
             background: "transparent",
-            color: "transparent",
-            "caret-color": "transparent",
+            color: "#ffffff",
+            "caret-color": "#d19a66",
             border: "none",
             outline: "none",
             padding: "0",
             margin: "0",
+            resize: "none",
+            "overflow-y": "hidden",
           }}
         />
       </div>

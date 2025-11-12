@@ -361,7 +361,22 @@ export const MessagesPanel: Component<MessagesPanelProps> = (props) => {
             />,
           )
           // img badge
-          elements.push(<GridText col={4} row={currentRow} text=" img " fg="#000000" bg="#d19a66" bold />)
+          elements.push(
+            <GridText
+              col={4}
+              row={currentRow}
+              text=" img "
+              fg="#000000"
+              bg="#d19a66"
+              bold
+              style={{
+                "border-radius": "0.375rem",
+                border: "1px solid rgba(255, 255, 255, 0.2)",
+                padding: "0 0.5ch",
+                "font-size": "12px",
+              }}
+            />,
+          )
           // file path
           const path = img.source?.data || img.url || ""
           elements.push(<GridText col={8} row={currentRow} text={path.slice(0, panelWidth() - 10)} fg="#6a6a6a" />)
@@ -526,11 +541,62 @@ export const MessagesPanel: Component<MessagesPanelProps> = (props) => {
           // Tool header with arrow and badge (moved 2 chars right)
           const arrow = toolExpanded ? "▼" : "▶"
           elements.push(
-            <GridText col={4} row={currentRow} text={arrow} fg="#6a6a6a" onClick={() => toggleTool(toolId)} />,
+            <GridText
+              col={4}
+              row={currentRow}
+              text={arrow}
+              fg="#6a6a6a"
+              onClick={() => toggleTool(toolId)}
+              style={{
+                "z-index": "20",
+              }}
+            />,
           )
-          elements.push(<GridText col={6} row={currentRow} text={` ${displayName} `} fg="#000000" bg="#9a9a9a" bold />)
 
-          // Show summary info when collapsed (for certain tools)
+          // Tool name badge - larger and more prominent with tool-specific colors
+          const getBadgeColors = (name: string) => {
+            switch (name) {
+              case "BASH":
+                return { bg: "#98c379", border: "rgba(152, 195, 121, 0.5)" } // Green
+              case "READ":
+                return { bg: "#61afef", border: "rgba(97, 175, 239, 0.5)" } // Blue
+              case "WRITE":
+                return { bg: "#c678dd", border: "rgba(198, 120, 221, 0.5)" } // Purple
+              case "EDIT":
+                return { bg: "#e5c07b", border: "rgba(229, 192, 123, 0.5)" } // Yellow
+              case "GREP":
+              case "GLOB":
+                return { bg: "#56b6c2", border: "rgba(86, 182, 194, 0.5)" } // Cyan
+              case "LIST":
+                return { bg: "#d19a66", border: "rgba(209, 154, 102, 0.5)" } // Orange
+              default:
+                return { bg: "#abb2bf", border: "rgba(171, 178, 191, 0.5)" } // Grey
+            }
+          }
+
+          const badgeColors = getBadgeColors(toolName)
+          elements.push(
+            <GridText
+              col={6}
+              row={currentRow}
+              text={` ${displayName} `}
+              fg="#000000"
+              bg={badgeColors.bg}
+              bold
+              style={{
+                "border-radius": "0.5rem",
+                border: `2px solid ${badgeColors.border}`,
+                padding: "0.2em 0.8ch",
+                "font-size": "16px",
+                "box-shadow": "0 2px 8px rgba(0, 0, 0, 0.3)",
+                "letter-spacing": "0.5px",
+                "z-index": "20",
+                transform: "translateY(-5px)",
+              }}
+            />,
+          )
+
+          // Show summary info when collapsed (for certain tools) - same row, after badge
           if (!toolExpanded && toolInput) {
             let summary = ""
             if (toolName === "READ" && toolInput.filePath) {
@@ -546,8 +612,17 @@ export const MessagesPanel: Component<MessagesPanelProps> = (props) => {
               summary = ` ${toolInput.command.slice(0, 50)}`
             }
             if (summary) {
-              const colAfterBadge = 6 + displayName.length + 3
-              elements.push(<GridText col={colAfterBadge} row={currentRow} text={summary} fg="#6a6a6a" />)
+              // Position summary after badge - calculate column based on badge width with 10px gap (~2 chars)
+              const colAfterBadge = 6 + displayName.length + 5
+              elements.push(
+                <GridText
+                  col={colAfterBadge}
+                  row={currentRow}
+                  text={summary}
+                  fg="#6a6a6a"
+                  style={{ "z-index": "20" }}
+                />,
+              )
             }
           }
 
@@ -937,6 +1012,7 @@ export const MessagesPanel: Component<MessagesPanelProps> = (props) => {
             "font-size": "16px",
             "line-height": "1.2",
             border: "none",
+            "border-radius": "0.5rem",
           }}
         >
           {/* Left side: Grey accent line */}
@@ -1085,7 +1161,7 @@ export const MessagesPanel: Component<MessagesPanelProps> = (props) => {
           />
         </div>
 
-        {/* Model info row - DIRECTLY UNDER the prompt, NO GAP */}
+        {/* Model info row - spacing from prompt */}
         <div
           style={{
             height: "1.2em",
@@ -1093,6 +1169,7 @@ export const MessagesPanel: Component<MessagesPanelProps> = (props) => {
             padding: "0",
             "padding-left": "1ch",
             "padding-right": "1ch",
+            "margin-top": "5px",
             display: "flex",
             "justify-content": "space-between",
             "align-items": "center",

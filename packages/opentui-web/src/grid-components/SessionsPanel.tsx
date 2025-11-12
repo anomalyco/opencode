@@ -96,8 +96,25 @@ export const SessionsPanel: Component<SessionsPanelProps> = (props) => {
       }}
     >
       {/* Header */}
-      <GridText col={1} row={1} text="SESSIONS" fg="#858585" bold />
-      <GridText col={panelWidth() - 2} row={1} text="◀" fg="#858585" onClick={props.onCollapse} />
+      <GridText
+        col={1}
+        row={1}
+        text="SESSIONS"
+        fg="#858585"
+        bold
+        class="sessions-title"
+        style={{
+          position: "relative",
+        }}
+      />
+      <GridText
+        col={panelWidth() - 2}
+        row={1}
+        text="◀"
+        fg="#858585"
+        onClick={props.onCollapse}
+        class="sessions-collapse"
+      />
 
       {/* Today group at row 3 */}
       <GridText
