@@ -83,8 +83,8 @@ const targets = singleFlag
 await $`rm -rf dist`
 
 const binaries: Record<string, string> = {}
-await $`bun install --frozen-lockfile --linker=isolated --os="*" --cpu="*" @opentui/core@${pkg.dependencies["@opentui/core"]}`
-await $`bun install --frozen-lockfile --linker=isolated --os="*" --cpu="*" @parcel/watcher@${pkg.dependencies["@parcel/watcher"]}`
+await $`bun install --os="*" --cpu="*" @opentui/core@${pkg.dependencies["@opentui/core"]}`
+await $`bun install --os="*" --cpu="*" @parcel/watcher@${pkg.dependencies["@parcel/watcher"]}`
 for (const item of targets) {
   const name = [
     pkg.name,
