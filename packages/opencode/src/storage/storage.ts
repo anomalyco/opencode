@@ -178,10 +178,17 @@ export namespace Storage {
     const dir = await state().then((x) => x.dir)
     const target = path.join(dir, ...key) + ".json"
     return withErrorHandling(async () => {
-      using _ = await Lock.write("storage")
+      using _ = await Lock.write(target)
       const content = await Bun.file(target).json()
       fn(content)
-      await Bun.write(target, JSON.stringify(content, null, 2))
+      const jsonContent = JSON.stringify(content, null, 2)
+      const handle = await fs.open(target, "w")
+      try {
+        await handle.writeFile(jsonContent, "utf-8")
+        await handle.sync()
+      } finally {
+        await handle.close()
+      }
       return content as T
     })
   }
@@ -190,8 +197,16 @@ export namespace Storage {
     const dir = await state().then((x) => x.dir)
     const target = path.join(dir, ...key) + ".json"
     return withErrorHandling(async () => {
-      using _ = await Lock.write("storage")
-      await Bun.write(target, JSON.stringify(content, null, 2))
+      using _ = await Lock.write(target)
+      const jsonContent = JSON.stringify(content, null, 2)
+      await fs.mkdir(path.dirname(target), { recursive: true })
+      const handle = await fs.open(target, "w")
+      try {
+        await handle.writeFile(jsonContent, "utf-8")
+        await handle.sync()
+      } finally {
+        await handle.close()
+      }
     })
   }
 
