@@ -81,10 +81,10 @@ class KeybindsConfig:
     session_unshare: Union[Unset, str] = "none"
     session_interrupt: Union[Unset, str] = "esc"
     session_compact: Union[Unset, str] = "<leader>c"
-    session_child_cycle: Union[Unset, str] = "ctrl+right"
-    session_child_cycle_reverse: Union[Unset, str] = "ctrl+left"
-    messages_page_up: Union[Unset, str] = "pgup"
-    messages_page_down: Union[Unset, str] = "pgdown"
+    session_child_cycle: Union[Unset, str] = "ctrl+tab"
+    session_child_cycle_reverse: Union[Unset, str] = "ctrl+shift+tab"
+    messages_page_up: Union[Unset, str] = "ctrl+alt+b,pgup"
+    messages_page_down: Union[Unset, str] = "ctrl+alt+f,pgdown"
     messages_half_page_up: Union[Unset, str] = "ctrl+alt+u"
     messages_half_page_down: Union[Unset, str] = "ctrl+alt+d"
     messages_first: Union[Unset, str] = "ctrl+g"
@@ -114,6 +114,8 @@ class KeybindsConfig:
     messages_next: Union[Unset, str] = "none"
     messages_layout_toggle: Union[Unset, str] = "none"
     messages_revert: Union[Unset, str] = "none"
+    history_previous: Union[Unset, str] = "ctrl+up"
+    history_next: Union[Unset, str] = "ctrl+down"
 
     def to_dict(self) -> dict[str, Any]:
         leader = self.leader

@@ -396,16 +396,16 @@ export namespace Config {
       session_unshare: z.string().optional().default("none").describe("Unshare current session"),
       session_interrupt: z.string().optional().default("escape").describe("Interrupt current session"),
       session_compact: z.string().optional().default("<leader>c").describe("Compact the session"),
-      messages_page_up: z.string().optional().default("pageup").describe("Scroll messages up by one page"),
-      messages_page_down: z.string().optional().default("pagedown").describe("Scroll messages down by one page"),
+      messages_page_up: z.string().optional().default("ctrl+alt+b,pageup").describe("Scroll messages up by one page"),
+      messages_page_down: z.string().optional().default("ctrl+alt+f,pagedown").describe("Scroll messages down by one page"),
       messages_half_page_up: z.string().optional().default("ctrl+alt+u").describe("Scroll messages up by half page"),
       messages_half_page_down: z
         .string()
         .optional()
         .default("ctrl+alt+d")
         .describe("Scroll messages down by half page"),
-      messages_first: z.string().optional().default("ctrl+g,home").describe("Navigate to first message"),
-      messages_last: z.string().optional().default("ctrl+alt+g,end").describe("Navigate to last message"),
+      messages_first: z.string().optional().default("ctrl+g").describe("Navigate to first message"),
+      messages_last: z.string().optional().default("ctrl+alt+g").describe("Navigate to last message"),
       messages_copy: z.string().optional().default("<leader>y").describe("Copy message"),
       messages_undo: z.string().optional().default("<leader>u").describe("Undo message"),
       messages_redo: z.string().optional().default("<leader>r").describe("Redo message"),
@@ -426,10 +426,10 @@ export namespace Config {
       input_paste: z.string().optional().default("ctrl+v").describe("Paste from clipboard"),
       input_submit: z.string().optional().default("return").describe("Submit input"),
       input_newline: z.string().optional().default("shift+return,ctrl+j").describe("Insert newline in input"),
-      history_previous: z.string().optional().default("up").describe("Previous history item"),
-      history_next: z.string().optional().default("down").describe("Next history item"),
-      session_child_cycle: z.string().optional().default("ctrl+right").describe("Next child session"),
-      session_child_cycle_reverse: z.string().optional().default("ctrl+left").describe("Previous child session"),
+      history_previous: z.string().optional().default("ctrl+up").describe("Previous history item"),
+      history_next: z.string().optional().default("ctrl+down").describe("Next history item"),
+      session_child_cycle: z.string().optional().default("ctrl+tab").describe("Next child session"),
+      session_child_cycle_reverse: z.string().optional().default("ctrl+shift+tab").describe("Previous child session"),
     })
     .strict()
     .meta({
