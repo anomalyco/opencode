@@ -167,6 +167,7 @@ export function Diff<T>(props: DiffProps<T>) {
         "--pjs-font-features": "var(--font-family-mono--font-feature-settings)",
         "--pjs-header-font-family": "var(--font-family-sans)",
         "--pjs-gap-block": 0,
+        "--pjs-min-number-column-width": "4ch",
       }}
       ref={container}
     />
@@ -232,13 +233,18 @@ registerCustomTheme("OpenCode", () => {
         },
       },
       {
+        scope: ["meta.object.member"],
+        settings: {
+          foreground: "var(--syntax-primitive)",
+        },
+      },
+      {
         scope: [
           "variable.parameter.function",
           "meta.jsx.children",
           "meta.block",
           "meta.tag.attributes",
           "entity.name.constant",
-          "meta.object.member",
           "meta.embedded.expression",
           "meta.template.expression",
           "string.other.begin.yaml",

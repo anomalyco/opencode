@@ -193,7 +193,7 @@ export namespace Provider {
     },
     "google-vertex-anthropic": async () => {
       const project = process.env["GOOGLE_CLOUD_PROJECT"] ?? process.env["GCP_PROJECT"] ?? process.env["GCLOUD_PROJECT"]
-      const location = process.env["GOOGLE_CLOUD_LOCATION"] ?? process.env["VERTEX_LOCATION"] ?? "us-east5"
+      const location = process.env["GOOGLE_CLOUD_LOCATION"] ?? process.env["VERTEX_LOCATION"] ?? "global"
       const autoload = Boolean(project)
       if (!autoload) return { autoload: false }
       return {
@@ -211,6 +211,7 @@ export namespace Provider {
   }
 
   const state = Instance.state(async () => {
+    using _ = log.time("state")
     const config = await Config.get()
     const database = await ModelsDev.get()
 
@@ -288,7 +289,7 @@ export namespace Provider {
       }
 
       for (const [modelID, model] of Object.entries(provider.models ?? {})) {
-        const existing = parsed.models[modelID]
+        const existing = parsed.models[model.id ?? modelID]
         const parsedModel: ModelsDev.Model = {
           id: modelID,
           name: model.name ?? existing?.name ?? modelID,

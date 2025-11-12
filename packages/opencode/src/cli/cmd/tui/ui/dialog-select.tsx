@@ -30,7 +30,7 @@ export interface DialogSelectOption<T = any> {
   title: string
   value: T
   description?: string
-  footer?: string
+  footer?: JSX.Element | string
   category?: string
   disabled?: boolean
   bg?: RGBA
@@ -172,7 +172,6 @@ export function DialogSelect<T>(props: DialogSelectProps<T>) {
                 props.onFilter?.(e)
               })
             }}
-            onKeyDown={(e) => {}}
             focusedBackgroundColor={theme.backgroundPanel}
             cursorColor={theme.primary}
             focusedTextColor={theme.textMuted}
@@ -256,14 +255,19 @@ function Option(props: {
   description?: string
   active?: boolean
   current?: boolean
-  footer?: string
+  footer?: JSX.Element | string
   onMouseOver?: () => void
 }) {
   const { theme } = useTheme()
+
   return (
     <>
-      <Show when={props.current && !props.active}>
-        <text flexShrink={0} fg={theme.primary} marginRight={0.5}>
+      <Show when={props.current}>
+        <text
+          flexShrink={0}
+          fg={props.active ? theme.background : props.current ? theme.primary : theme.text}
+          marginRight={0.5}
+        >
           ●
         </text>
       </Show>

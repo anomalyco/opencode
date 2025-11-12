@@ -65,6 +65,7 @@ export const TaskTool = Tool.define("task", async () => {
       ctx.abort.addEventListener("abort", () => {
         SessionLock.abort(session.id)
       })
+      const promptParts = await SessionPrompt.resolvePromptParts(params.prompt)
       const result = await SessionPrompt.prompt({
         messageID,
         sessionID: session.id,
@@ -79,13 +80,7 @@ export const TaskTool = Tool.define("task", async () => {
           task: false,
           ...agent.tools,
         },
-        parts: [
-          {
-            id: Identifier.ascending("part"),
-            type: "text",
-            text: params.prompt,
-          },
-        ],
+        parts: promptParts,
       })
       unsub()
       let all

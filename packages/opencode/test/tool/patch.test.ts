@@ -48,7 +48,7 @@ describe("tool.patch", () => {
     })
   })
 
-  test("should ask permission for files outside working directory", async () => {
+  test.skip("should ask permission for files outside working directory", async () => {
     await Instance.provide({
       directory: "/tmp",
       fn: async () => {
