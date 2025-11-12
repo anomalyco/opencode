@@ -161,7 +161,7 @@ export function LeftSidebar(props: {
               const categorySessions = () => sessionsByCategory().get(category) || []
 
               return (
-                <>
+                <box marginBottom={1}>
                   <text
                     fg={theme.textMuted}
                     attributes={TextAttributes.BOLD}
@@ -209,7 +209,7 @@ export function LeftSidebar(props: {
                       }}
                     </For>
                   </Show>
-                </>
+                </box>
               )
             }}
           </For>
