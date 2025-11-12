@@ -21,9 +21,7 @@ export function DialogSessionList() {
 
   const deleteKeybind = "ctrl+d"
 
-  const currentSessionID = createMemo(() =>
-    route.data.type === "session" ? route.data.sessionID : undefined,
-  )
+  const currentSessionID = createMemo(() => (route.data.type === "session" ? route.data.sessionID : undefined))
 
   const allSessions = createMemo(() => {
     const today = new Date().toDateString()
@@ -32,11 +30,13 @@ export function DialogSessionList() {
       .filter((x) => {
         // Filter out sessions with garbage titles
         const title = x.title.toLowerCase()
-        return !title.includes("clarifying") && 
-               !title.includes("parsing") && 
-               !title.includes("invalid input") &&
-               !title.includes("discussing adsad") &&
-               !title.startsWith("new session -")
+        return (
+          !title.includes("clarifying") &&
+          !title.includes("parsing") &&
+          !title.includes("invalid input") &&
+          !title.includes("discussing adsad") &&
+          !title.startsWith("new session -")
+        )
       })
       .sort((a, b) => b.time.updated - a.time.updated) // Sort by most recent first
   })
@@ -45,7 +45,7 @@ export function DialogSessionList() {
     const today = new Date().toDateString()
     const sessions = allSessions().slice(0, displayLimit())
     const hasMore = allSessions().length > displayLimit()
-    
+
     const opts = sessions.map((x) => {
       const date = new Date(x.time.updated)
       let category = date.toDateString()
@@ -53,8 +53,13 @@ export function DialogSessionList() {
         category = "Today"
       }
       const isDeleting = toDelete() === x.id
+
+      // Check if this session has child sessions (subagents)
+      const hasChildren = sync.data.session.some((s) => s.parentID === x.id)
+      const prefix = hasChildren ? "▶ " : ""
+
       return {
-        title: isDeleting ? `Press ${deleteKeybind} again to confirm` : x.title,
+        title: isDeleting ? `Press ${deleteKeybind} again to confirm` : prefix + x.title,
         bg: isDeleting ? theme.error : undefined,
         value: x.id,
         category,
@@ -65,6 +70,7 @@ export function DialogSessionList() {
     if (hasMore) {
       opts.push({
         title: `Load more... (${allSessions().length - displayLimit()} remaining)`,
+        bg: undefined,
         value: "__load_more__",
         category: "",
         footer: "",

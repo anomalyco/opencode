@@ -71,29 +71,51 @@ export function AgentChipText(props: { text: string; fg?: string; truncate?: num
   const { theme } = useTheme()
   const segments = parseAgentChips(props.text)
 
-  // Apply truncation if specified
-  let displayText = props.text
-  if (props.truncate && props.text.length > props.truncate) {
-    displayText = props.text.substring(0, props.truncate - 3) + "..."
-  }
+  // Smart truncation: preserve chip, truncate only text after chip
+  let finalSegments = segments
+  if (props.truncate) {
+    let currentLength = 0
+    const truncatedSegments: TextSegment[] = []
 
-  // Re-parse after truncation
-  const finalSegments = props.truncate ? parseAgentChips(displayText) : segments
+    for (const segment of segments) {
+      const segmentLength = segment.content.length
+
+      if (currentLength + segmentLength <= props.truncate) {
+        // Fits completely
+        truncatedSegments.push(segment)
+        currentLength += segmentLength
+      } else if (segment.type === "chip") {
+        // Always include chip even if it exceeds limit
+        truncatedSegments.push(segment)
+        currentLength += segmentLength
+      } else {
+        // Truncate text segment
+        const remaining = props.truncate - currentLength
+        if (remaining > 3) {
+          truncatedSegments.push({
+            type: "text",
+            content: segment.content.substring(0, remaining - 3) + "...",
+          })
+        }
+        break
+      }
+    }
+
+    finalSegments = truncatedSegments
+  }
 
   return (
     <box flexDirection="row" gap={0}>
       <For each={finalSegments}>
         {(segment) =>
           segment.type === "chip" ? (
-            <text
-              bg={getAgentChipColor(segment.agentType!, theme)}
-              fg="#000000"
-              paddingLeft={1}
-              paddingRight={1}
-              attributes={TextAttributes.BOLD}
-            >
-              {segment.content}
-            </text>
+            <>
+              <text fg={props.fg || theme.text}> </text>
+              <text bg={getAgentChipColor(segment.agentType!, theme)} fg="#000000" attributes={TextAttributes.BOLD}>
+                {" " + segment.content + " "}
+              </text>
+              <text fg={props.fg || theme.text}> </text>
+            </>
           ) : (
             <text fg={props.fg || theme.text}>{segment.content}</text>
           )

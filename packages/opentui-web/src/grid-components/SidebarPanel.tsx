@@ -168,9 +168,6 @@ export const SidebarPanel: Component<SidebarPanelProps> = (props) => {
             const toolsRows = toolsExpanded() ? toolsList.length : 0
             currentRow += toolsRows
 
-            // Blank line after Tools
-            currentRow++
-
             // Plugins header
             const pluginsHeaderRow = currentRow
             currentRow++
@@ -187,9 +184,6 @@ export const SidebarPanel: Component<SidebarPanelProps> = (props) => {
               currentRow += pluginRows
             }
 
-            // Blank line after Plugins
-            currentRow++
-
             // Subagents header
             const subagentsHeaderRow = currentRow
             currentRow++
@@ -197,12 +191,6 @@ export const SidebarPanel: Component<SidebarPanelProps> = (props) => {
             // Subagents list
             const subagentRows = subagentsExpanded() ? props.subagents.length : 0
             currentRow += subagentRows
-
-            // Add Subagent row
-            currentRow++
-
-            // Blank line after Subagents
-            currentRow++
 
             // LSP Servers header
             const lspHeaderRow = currentRow

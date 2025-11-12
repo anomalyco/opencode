@@ -951,10 +951,10 @@ export namespace Server {
         },
       )
       .patch(
-        "/session/:id/message/:messageID/favorite",
+        "/session/:id/message/:messageID/priority",
         describeRoute({
-          description: "Toggle favorite status for a message",
-          operationId: "session.toggleMessageFavorite",
+          description: "Set priority level for a message",
+          operationId: "session.setMessagePriority",
           responses: {
             200: {
               description: "Updated message info",
@@ -974,11 +974,19 @@ export namespace Server {
             messageID: z.string().meta({ description: "Message ID" }),
           }),
         ),
+        validator(
+          "json",
+          z.object({
+            priority: z.enum(["red", "amber", "green", "none"]),
+          }),
+        ),
         async (c) => {
           const params = c.req.valid("param")
-          const updated = await Session.toggleMessageFavorite({
+          const body = c.req.valid("json")
+          const updated = await Session.setMessagePriority({
             sessionID: params.id,
             messageID: params.messageID,
+            priority: body.priority,
           })
           return c.json(updated)
         },

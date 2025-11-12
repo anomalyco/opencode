@@ -705,7 +705,7 @@ export type UserMessage = {
     body?: string
     diffs: Array<FileDiff>
   }
-  favorited?: boolean
+  priority?: "red" | "amber" | "green" | "none"
 }
 
 export type ProviderAuthError = {
@@ -768,7 +768,7 @@ export type AssistantMessage = {
     root: string
   }
   summary?: boolean
-  favorited?: boolean
+  priority?: "red" | "amber" | "green" | "none"
   cost: number
   tokens: {
     input: number
@@ -2346,8 +2346,10 @@ export type SessionMessageResponses = {
 
 export type SessionMessageResponse = SessionMessageResponses[keyof SessionMessageResponses]
 
-export type SessionToggleMessageFavoriteData = {
-  body?: never
+export type SessionSetMessagePriorityData = {
+  body?: {
+    priority: "red" | "amber" | "green" | "none"
+  }
   path: {
     /**
      * Session ID
@@ -2361,10 +2363,10 @@ export type SessionToggleMessageFavoriteData = {
   query?: {
     directory?: string
   }
-  url: "/session/{id}/message/{messageID}/favorite"
+  url: "/session/{id}/message/{messageID}/priority"
 }
 
-export type SessionToggleMessageFavoriteErrors = {
+export type SessionSetMessagePriorityErrors = {
   /**
    * Bad request
    */
@@ -2375,18 +2377,17 @@ export type SessionToggleMessageFavoriteErrors = {
   404: NotFoundError
 }
 
-export type SessionToggleMessageFavoriteError =
-  SessionToggleMessageFavoriteErrors[keyof SessionToggleMessageFavoriteErrors]
+export type SessionSetMessagePriorityError = SessionSetMessagePriorityErrors[keyof SessionSetMessagePriorityErrors]
 
-export type SessionToggleMessageFavoriteResponses = {
+export type SessionSetMessagePriorityResponses = {
   /**
    * Updated message info
    */
   200: Message
 }
 
-export type SessionToggleMessageFavoriteResponse =
-  SessionToggleMessageFavoriteResponses[keyof SessionToggleMessageFavoriteResponses]
+export type SessionSetMessagePriorityResponse =
+  SessionSetMessagePriorityResponses[keyof SessionSetMessagePriorityResponses]
 
 export type SessionCommandData = {
   body?: {

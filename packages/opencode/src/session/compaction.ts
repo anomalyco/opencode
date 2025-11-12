@@ -61,8 +61,9 @@ export namespace SessionCompaction {
       if (msg.info.role === "user") turns++
       if (turns < 2) continue
       if (msg.info.role === "assistant" && msg.info.summary) break loop
-      // Skip favorited messages - they should never be pruned
-      if (msg.info.favorited) continue
+      // Skip red and amber priority messages - they should never be pruned
+      if (msg.info.priority === "red" || msg.info.priority === "amber") continue
+      // Green priority messages are prioritized for removal during compaction
       for (let partIndex = msg.parts.length - 1; partIndex >= 0; partIndex--) {
         const part = msg.parts[partIndex]
         if (part.type === "tool")

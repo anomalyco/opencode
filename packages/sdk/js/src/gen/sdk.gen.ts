@@ -78,9 +78,9 @@ import type {
   SessionMessageData,
   SessionMessageResponses,
   SessionMessageErrors,
-  SessionToggleMessageFavoriteData,
-  SessionToggleMessageFavoriteResponses,
-  SessionToggleMessageFavoriteErrors,
+  SessionSetMessagePriorityData,
+  SessionSetMessagePriorityResponses,
+  SessionSetMessagePriorityErrors,
   SessionCommandData,
   SessionCommandResponses,
   SessionCommandErrors,
@@ -543,18 +543,22 @@ class Session extends _HeyApiClient {
   }
 
   /**
-   * Toggle favorite status for a message
+   * Set priority level for a message
    */
-  public toggleMessageFavorite<ThrowOnError extends boolean = false>(
-    options: Options<SessionToggleMessageFavoriteData, ThrowOnError>,
+  public setMessagePriority<ThrowOnError extends boolean = false>(
+    options: Options<SessionSetMessagePriorityData, ThrowOnError>,
   ) {
     return (options.client ?? this._client).patch<
-      SessionToggleMessageFavoriteResponses,
-      SessionToggleMessageFavoriteErrors,
+      SessionSetMessagePriorityResponses,
+      SessionSetMessagePriorityErrors,
       ThrowOnError
     >({
-      url: "/session/{id}/message/{messageID}/favorite",
+      url: "/session/{id}/message/{messageID}/priority",
       ...options,
+      headers: {
+        "Content-Type": "application/json",
+        ...options.headers,
+      },
     })
   }
 

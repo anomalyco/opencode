@@ -371,9 +371,7 @@ export function Sidebar(props: { sessionID: string; onToggle: () => void }) {
   })
 
   const context = createMemo(() => {
-    const last = messages().findLast(
-      (x) => x.role === "assistant" && x.tokens?.output > 0,
-    ) as AssistantMessage
+    const last = messages().findLast((x) => x.role === "assistant" && x.tokens?.output > 0) as AssistantMessage
     if (!last || !last.tokens)
       return {
         tokens: 0,
@@ -519,13 +517,7 @@ export function Sidebar(props: { sessionID: string; onToggle: () => void }) {
                     <box flexDirection="row" gap={1} justifyContent="space-between">
                       <box flexDirection="row" gap={1}>
                         <text
-                          fg={
-                            level() === "global"
-                              ? "#FFD700"
-                              : level() === "project"
-                                ? theme.accent
-                                : theme.textMuted
-                          }
+                          fg={level() === "global" ? "#FFD700" : level() === "project" ? theme.accent : theme.textMuted}
                           onMouseUp={() => {
                             if (renderer.getSelection()?.getSelectedText()) return
                             cycleFavorite(toolName)
@@ -615,9 +607,7 @@ export function Sidebar(props: { sessionID: string; onToggle: () => void }) {
                       <text fg={theme.textMuted}>
                         <Switch>
                           <Match when={item.status === "connected"}>Connected</Match>
-                          <Match when={item.status === "failed" && item}>
-                            {(val) => <i>{val().error}</i>}
-                          </Match>
+                          <Match when={item.status === "failed" && item}>{(val) => <i>{val().error}</i>}</Match>
                           <Match when={item.status === "disabled"}>Disabled</Match>
                         </Switch>
                       </text>
@@ -675,10 +665,7 @@ export function Sidebar(props: { sessionID: string; onToggle: () => void }) {
                     <text fg={theme.textMuted}>
                       <b>{widget.label}</b>
                     </text>
-                    <PluginComponent
-                      componentId={widget.id}
-                      context={{ sessionID: props.sessionID }}
-                    />
+                    <PluginComponent componentId={widget.id} context={{ sessionID: props.sessionID }} />
                   </box>
                 )}
               </For>
@@ -695,10 +682,7 @@ export function Sidebar(props: { sessionID: string; onToggle: () => void }) {
                     <text fg={theme.textMuted}>
                       <b>{panel.label}</b>
                     </text>
-                    <PluginComponent
-                      componentId={panel.id}
-                      context={{ sessionID: props.sessionID }}
-                    />
+                    <PluginComponent componentId={panel.id} context={{ sessionID: props.sessionID }} />
                   </box>
                 )}
               </For>
@@ -712,10 +696,8 @@ export function Sidebar(props: { sessionID: string; onToggle: () => void }) {
               <text attributes={TextAttributes.BOLD}>Todo</text>
               <For each={todo()}>
                 {(todo) => (
-                  <text
-                    style={{ fg: todo.status === "in_progress" ? theme.success : theme.textMuted }}
-                  >
-                    [{todo.status === "completed" ? "✓" : " "}] {todo.content}
+                  <text style={{ fg: todo.status === "in_progress" ? theme.success : theme.textMuted }}>
+                    {todo.status === "completed" ? "●" : "○"} {todo.content}
                   </text>
                 )}
               </For>
@@ -774,15 +756,7 @@ export function Sidebar(props: { sessionID: string; onToggle: () => void }) {
                         })
                       }}
                     >
-                      <text
-                        fg={
-                          isCommitted()
-                            ? theme.success
-                            : isSelected()
-                              ? theme.accent
-                              : theme.textMuted
-                        }
-                      >
+                      <text fg={isCommitted() ? theme.success : isSelected() ? theme.accent : theme.textMuted}>
                         {isCommitted() ? "[✓]" : isSelected() ? "[✓]" : "[ ]"} {file()}
                       </text>
                       <box flexDirection="row" gap={1} flexShrink={0}>
@@ -799,15 +773,11 @@ export function Sidebar(props: { sessionID: string; onToggle: () => void }) {
               </For>
               <Show when={uncommittedFiles().length > 0}>
                 <box marginTop={1}>
-                  <text fg={theme.textMuted}>
-                    {commitMessage() || "Click Auto or type message"}
-                  </text>
+                  <text fg={theme.textMuted}>{commitMessage() || "Click Auto or type message"}</text>
                 </box>
                 <box flexDirection="row" gap={2}>
                   <text
-                    fg={
-                      selectedFiles().size > 0 && !isCommitting() ? theme.success : theme.textMuted
-                    }
+                    fg={selectedFiles().size > 0 && !isCommitting() ? theme.success : theme.textMuted}
                     onMouseUp={() => {
                       if (selectedFiles().size === 0 || isCommitting()) return
                       const count = selectedFiles().size
@@ -818,9 +788,7 @@ export function Sidebar(props: { sessionID: string; onToggle: () => void }) {
                   </text>
                   <text
                     fg={
-                      selectedFiles().size > 0 && commitMessage() && !isCommitting()
-                        ? theme.success
-                        : theme.textMuted
+                      selectedFiles().size > 0 && commitMessage() && !isCommitting() ? theme.success : theme.textMuted
                     }
                     onMouseUp={() => {
                       if (!isCommitting()) handleCommit()
@@ -831,11 +799,7 @@ export function Sidebar(props: { sessionID: string; onToggle: () => void }) {
                 </box>
                 <text fg={theme.textMuted}>{selectedFiles().size} selected</text>
               </Show>
-              <Show
-                when={
-                  uncommittedFiles().length === 0 && (session().summary?.diffs?.length || 0) > 0
-                }
-              >
+              <Show when={uncommittedFiles().length === 0 && (session().summary?.diffs?.length || 0) > 0}>
                 <text fg={theme.success}>All files committed ✓</text>
               </Show>
             </box>
@@ -859,8 +823,7 @@ export function Sidebar(props: { sessionID: string; onToggle: () => void }) {
                       : status === "paused"
                         ? theme.warning
                         : theme.error
-                const titleShort =
-                  child.title.length > 35 ? child.title.substring(0, 32) + "..." : child.title
+                const titleShort = child.title.length > 35 ? child.title.substring(0, 32) + "..." : child.title
                 return (
                   <box
                     flexDirection="row"

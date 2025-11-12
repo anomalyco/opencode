@@ -65,9 +65,7 @@ function SteeringQuestionWidget(props: { config: any; onSubmit?: (answers: any) 
   const handleMultiChoice = (questionId: string, option: string) => {
     setAnswers((prev) => {
       const current = prev[questionId] || []
-      const updated = current.includes(option)
-        ? current.filter((o: string) => o !== option)
-        : [...current, option]
+      const updated = current.includes(option) ? current.filter((o: string) => o !== option) : [...current, option]
       return { ...prev, [questionId]: updated }
     })
   }
@@ -136,11 +134,7 @@ function SteeringQuestionWidget(props: { config: any; onSubmit?: (answers: any) 
                         const isSelected = createMemo(() => answers()[question.id] === option)
                         return (
                           <text
-                            fg={
-                              isSelected()
-                                ? theme.accent || "#0088ff"
-                                : theme.textMuted || "#808080"
-                            }
+                            fg={isSelected() ? theme.accent || "#0088ff" : theme.textMuted || "#808080"}
                             onMouseUp={() => handleSingleChoice(question.id, option)}
                           >
                             {isSelected() ? "◉" : "○"} {option}
@@ -162,11 +156,7 @@ function SteeringQuestionWidget(props: { config: any; onSubmit?: (answers: any) 
                         })
                         return (
                           <text
-                            fg={
-                              isSelected()
-                                ? theme.accent || "#0088ff"
-                                : theme.textMuted || "#808080"
-                            }
+                            fg={isSelected() ? theme.accent || "#0088ff" : theme.textMuted || "#808080"}
                             onMouseUp={() => handleMultiChoice(question.id, option)}
                           >
                             {isSelected() ? "☑" : "☐"} {option}
@@ -266,9 +256,7 @@ function FormWidget(props: { config: any; onSubmit?: (values: any) => void }) {
   const handleCheckboxMulti = (fieldId: string, option: string) => {
     setValues((prev) => {
       const current = (prev[fieldId] || []) as string[]
-      const updated = current.includes(option)
-        ? current.filter((o: string) => o !== option)
-        : [...current, option]
+      const updated = current.includes(option) ? current.filter((o: string) => o !== option) : [...current, option]
       return { ...prev, [fieldId]: updated }
     })
   }
@@ -307,9 +295,7 @@ function FormWidget(props: { config: any; onSubmit?: (values: any) => void }) {
       .filter((f: any) => f.type !== "label" && f.id)
       .map((f: any) => ({
         fieldId: f.id,
-        value:
-          values()[f.id] ??
-          (f.type === "checkbox" && f.options ? [] : f.type === "checkbox" ? false : ""),
+        value: values()[f.id] ?? (f.type === "checkbox" && f.options ? [] : f.type === "checkbox" ? false : ""),
       }))
       .filter((v: any) => {
         if (typeof v.value === "string") return v.value.length > 0
@@ -370,11 +356,7 @@ function FormWidget(props: { config: any; onSubmit?: (values: any) => void }) {
                         const isSelected = createMemo(() => values()[field.id] === option)
                         return (
                           <text
-                            fg={
-                              isSelected()
-                                ? theme.accent || "#0088ff"
-                                : theme.textMuted || "#808080"
-                            }
+                            fg={isSelected() ? theme.accent || "#0088ff" : theme.textMuted || "#808080"}
                             onMouseUp={() => handleRadio(field.id, option)}
                           >
                             {isSelected() ? "◉" : "○"} {option}
@@ -395,11 +377,7 @@ function FormWidget(props: { config: any; onSubmit?: (values: any) => void }) {
                         })
                         return (
                           <text
-                            fg={
-                              isSelected()
-                                ? theme.accent || "#0088ff"
-                                : theme.textMuted || "#808080"
-                            }
+                            fg={isSelected() ? theme.accent || "#0088ff" : theme.textMuted || "#808080"}
                             onMouseUp={() => handleCheckboxMulti(field.id, option)}
                           >
                             {isSelected() ? "☑" : "☐"} {option}
@@ -413,15 +391,10 @@ function FormWidget(props: { config: any; onSubmit?: (values: any) => void }) {
                 <Show when={field.type === "checkbox" && !field.options}>
                   <box marginTop={0}>
                     <text
-                      fg={
-                        values()[field.id]
-                          ? theme.accent || "#0088ff"
-                          : theme.textMuted || "#808080"
-                      }
+                      fg={values()[field.id] ? theme.accent || "#0088ff" : theme.textMuted || "#808080"}
                       onMouseUp={() => handleCheckboxSingle(field.id)}
                     >
-                      {values()[field.id] ? "☑" : "☐"}{" "}
-                      {values()[field.id] ? "Enabled" : "Disabled"}
+                      {values()[field.id] ? "☑" : "☐"} {values()[field.id] ? "Enabled" : "Disabled"}
                     </text>
                   </box>
                 </Show>
@@ -433,11 +406,7 @@ function FormWidget(props: { config: any; onSubmit?: (values: any) => void }) {
                         const isSelected = createMemo(() => values()[field.id] === option)
                         return (
                           <text
-                            fg={
-                              isSelected()
-                                ? theme.accent || "#0088ff"
-                                : theme.textMuted || "#808080"
-                            }
+                            fg={isSelected() ? theme.accent || "#0088ff" : theme.textMuted || "#808080"}
                             onMouseUp={() => handleDropdown(field.id, option)}
                           >
                             {isSelected() ? "◉" : "○"} {option}
@@ -448,23 +417,13 @@ function FormWidget(props: { config: any; onSubmit?: (values: any) => void }) {
                   </box>
                 </Show>
 
-                <Show
-                  when={
-                    field.type === "text" || field.type === "textarea" || field.type === "number"
-                  }
-                >
+                <Show when={field.type === "text" || field.type === "textarea" || field.type === "number"}>
                   <box marginTop={0}>
                     <text
-                      fg={
-                        values()[field.id]
-                          ? theme.accent || "#0088ff"
-                          : theme.textMuted || "#808080"
-                      }
+                      fg={values()[field.id] ? theme.accent || "#0088ff" : theme.textMuted || "#808080"}
                       onMouseUp={() => handleTextInput(field)}
                     >
-                      {values()[field.id]
-                        ? `> ${values()[field.id]}`
-                        : `${field.placeholder || "Click to enter..."}`}
+                      {values()[field.id] ? `> ${values()[field.id]}` : `${field.placeholder || "Click to enter..."}`}
                     </text>
                   </box>
                 </Show>
@@ -550,10 +509,7 @@ export function PluginComponent(props: PluginComponentProps) {
       }
 
       // Try core built-in renderers as fallback
-      console.log(
-        "[PluginComponent] No plugin found, checking core renderers for:",
-        props.componentId,
-      )
+      console.log("[PluginComponent] No plugin found, checking core renderers for:", props.componentId)
       const coreWidget = getCoreWidget(props.componentId)
       if (coreWidget) {
         console.log("[PluginComponent] ✓ Using core renderer for:", props.componentId)
@@ -588,8 +544,8 @@ export function PluginComponent(props: PluginComponentProps) {
         </text>
       }
     >
-      <Show when={!error()} fallback={<text fg={theme.error}>{error()}</text>}>
-        <Show when={ComponentFn()} fallback={<text fg={theme.textMuted}>No component</text>}>
+      <Show when={!error()} fallback={null}>
+        <Show when={ComponentFn()} fallback={null}>
           {(() => {
             try {
               console.log("[PluginComponent] Rendering component for:", props.componentId)
@@ -597,7 +553,7 @@ export function PluginComponent(props: PluginComponentProps) {
               return <Component />
             } catch (err) {
               console.error("[PluginComponent] Render error:", err)
-              return <text fg={theme.error}>Render error: {String(err)}</text>
+              return null
             }
           })()}
         </Show>

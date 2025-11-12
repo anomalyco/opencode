@@ -277,7 +277,7 @@ export namespace MessageV2 {
         diffs: Snapshot.FileDiff.array(),
       })
       .optional(),
-    favorited: z.boolean().optional(),
+    priority: z.enum(["red", "amber", "green", "none"]).optional(),
   }).meta({
     ref: "UserMessage",
   })
@@ -325,7 +325,7 @@ export namespace MessageV2 {
       root: z.string(),
     }),
     summary: z.boolean().optional(),
-    favorited: z.boolean().optional(),
+    priority: z.enum(["red", "amber", "green", "none"]).optional(),
     cost: z.number(),
     tokens: z.object({
       input: z.number(),
@@ -675,9 +675,13 @@ export namespace MessageV2 {
     const result = [] as MessageV2.WithParts[]
     let foundSummary = false
     for await (const msg of stream) {
-      // Always include favorited messages, even after summary
-      if (msg.info.favorited) {
+      // Always include red and amber priority messages, even after summary
+      if (msg.info.priority === "red" || msg.info.priority === "amber") {
         result.push(msg)
+        continue
+      }
+      // Skip green priority messages after summary (these get removed during compaction)
+      if (foundSummary && msg.info.priority === "green") {
         continue
       }
       result.push(msg)

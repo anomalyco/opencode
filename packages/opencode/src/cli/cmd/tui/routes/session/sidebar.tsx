@@ -994,8 +994,9 @@ export function Sidebar(props: { sessionID: string; onToggle: () => void }) {
                               : theme.textMuted,
                           }}
                         >
-                          {hasKids ? (expandedTodos().has(task.id) ? "▼ " : "▶ ") : "▶ "}
+                          {hasKids ? (expandedTodos().has(task.id) ? "▼" : "▶") : "▶"}
                         </text>
+                        <text> </text>
                         <text
                           style={{
                             fg:
@@ -1008,7 +1009,22 @@ export function Sidebar(props: { sessionID: string; onToggle: () => void }) {
                                     : theme.textMuted,
                           }}
                         >
-                          [{task.status === "completed" ? "✓" : " "}] {task.content}
+                          {task.status === "completed" ? "●" : "○"}
+                        </text>
+                        <text> </text>
+                        <text
+                          style={{
+                            fg:
+                              task.status === "in_progress"
+                                ? theme.success
+                                : task.status === "completed"
+                                  ? theme.textMuted
+                                  : hasKids
+                                    ? theme.text
+                                    : theme.textMuted,
+                          }}
+                        >
+                          {task.content}
                         </text>
                       </box>
                       <Show when={hasKids && expandedTodos().has(task.id)}>
@@ -1207,7 +1223,7 @@ export function Sidebar(props: { sessionID: string; onToggle: () => void }) {
           <Show when={expandedSections().has("subagents")}>
             <box flexDirection="column">
               <For each={childSessions()}>
-                {(child) => {
+                {(child, index) => {
                   const status = (child as any).orchestration?.status || "unknown"
                   const statusColor =
                     status === "active"
@@ -1218,22 +1234,43 @@ export function Sidebar(props: { sessionID: string; onToggle: () => void }) {
                           ? theme.warning
                           : theme.error
 
+                  // Extract agent name and description
+                  const titleParts = child.title.match(/^([@\[][@\w]+[\]]?)\s+(.*)$/)
+                  const agentName = titleParts ? titleParts[1] : child.title
+                  const description = titleParts ? titleParts[2] : ""
+
+                  // Check if this agent is different from the previous one
+                  const prevChild = index() > 0 ? childSessions()[index() - 1] : null
+                  const prevTitleParts = prevChild?.title.match(/^([@\[][@\w]+[\]]?)\s+(.*)$/)
+                  const prevAgentName = prevTitleParts ? prevTitleParts[1] : prevChild?.title
+                  const showAgent = !prevChild || agentName !== prevAgentName
+
                   return (
-                    <box
-                      flexDirection="row"
-                      gap={1}
-                      onMouseUp={() => {
-                        if (renderer.getSelection()?.getSelectedText()) return
-                        navigate({
-                          type: "session",
-                          sessionID: child.id,
-                        })
-                      }}
-                    >
-                      <text flexShrink={0} fg={statusColor}>
-                        •
-                      </text>
-                      <AgentChipText text={child.title} truncate={40} />
+                    <box flexDirection="column" gap={0}>
+                      {showAgent && (
+                        <box paddingBottom={0}>
+                          <AgentChipText text={agentName} />
+                        </box>
+                      )}
+                      <box
+                        flexDirection="row"
+                        gap={1}
+                        paddingLeft={2}
+                        onMouseUp={() => {
+                          if (renderer.getSelection()?.getSelectedText()) return
+                          navigate({
+                            type: "session",
+                            sessionID: child.id,
+                          })
+                        }}
+                      >
+                        <text flexShrink={0} fg={statusColor}>
+                          •
+                        </text>
+                        <text fg={theme.text}>
+                          {description.length > 35 ? description.substring(0, 32) + "..." : description}
+                        </text>
+                      </box>
                     </box>
                   )
                 }}

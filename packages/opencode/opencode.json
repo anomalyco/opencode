@@ -10,7 +10,7 @@
   "favoriteTools": [
     "ripgrep",
     "read",
-    "task",
-    "todowrite"
+    "bash",
+    "edit"
   ]
 }

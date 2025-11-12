@@ -378,14 +378,15 @@ export namespace Session {
     },
   )
 
-  export const toggleMessageFavorite = fn(
+  export const setMessagePriority = fn(
     z.object({
       sessionID: Identifier.schema("session"),
       messageID: Identifier.schema("message"),
+      priority: z.enum(["red", "amber", "green", "none"]),
     }),
     async (input) => {
       const msg = await MessageV2.get(input)
-      msg.info.favorited = !msg.info.favorited
+      msg.info.priority = input.priority
       await updateMessage(msg.info)
       return msg.info
     },

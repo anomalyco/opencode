@@ -19,8 +19,8 @@ export function Toast() {
           position="absolute"
           justifyContent="center"
           alignItems="flex-start"
-          top={2}
-          right={2}
+          top={3}
+          right={3}
           paddingLeft={2}
           paddingRight={2}
           paddingTop={1}

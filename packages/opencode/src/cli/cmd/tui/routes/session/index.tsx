@@ -1152,13 +1152,79 @@ export function Session() {
 }
 
 const MIME_BADGE: Record<string, string> = {
-  "text/plain": "txt",
-  "image/png": "img",
-  "image/jpeg": "img",
-  "image/gif": "img",
-  "image/webp": "img",
+  "text/csv": "csv",
   "application/pdf": "pdf",
+  "application/json": "json",
+  "text/html": "html",
+  "text/plain": "txt",
   "application/x-directory": "dir",
+}
+
+function PriorityCircles(props: {
+  sessionID: string
+  messageID: string
+  priority?: "red" | "amber" | "green" | "none"
+}) {
+  const sdk = useSDK()
+  const toast = useToast()
+  const { theme } = useTheme()
+
+  const setPriority = async (e: any, priority: "red" | "amber" | "green" | "none") => {
+    e.stopPropagation()
+    await sdk.client.session.setMessagePriority({
+      path: {
+        id: props.sessionID,
+        messageID: props.messageID,
+      },
+      body: {
+        priority,
+      },
+    })
+    const priorityLabels = {
+      red: "High priority",
+      amber: "Medium priority",
+      green: "Low priority",
+      none: "No priority",
+    }
+    toast.show({ message: `Message marked as ${priorityLabels[priority]}`, variant: "success" })
+  }
+
+  return (
+    <box flexDirection="row" justifyContent="flex-end" paddingRight={1}>
+      <text onMouseUp={(e) => setPriority(e, props.priority === "red" ? "none" : "red")}>
+        <span
+          style={{
+            fg: props.priority === "red" ? theme.error : theme.textMuted,
+            bold: true,
+          }}
+        >
+          {props.priority === "red" ? "●" : "○"}
+        </span>
+      </text>
+      <text> </text>
+      <text onMouseUp={(e) => setPriority(e, props.priority === "amber" ? "none" : "amber")}>
+        <span
+          style={{
+            fg: props.priority === "amber" ? theme.accent : theme.textMuted,
+            bold: true,
+          }}
+        >
+          {props.priority === "amber" ? "●" : "○"}
+        </span>
+      </text>
+      <text> </text>
+      <text onMouseUp={(e) => setPriority(e, props.priority === "green" ? "none" : "green")}>
+        <span
+          style={{
+            fg: props.priority === "green" ? theme.success : theme.textMuted,
+            bold: true,
+          }}
+        >
+          {props.priority === "green" ? "●" : "○"}
+        </span>
+      </text>
+    </box>
+  )
 }
 
 function UserMessage(props: {
@@ -1172,19 +1238,30 @@ function UserMessage(props: {
   const files = createMemo(() => props.parts.flatMap((x) => (x.type === "file" ? [x] : [])))
   const sync = useSync()
   const sdk = useSDK()
+  const toast = useToast()
   const { theme } = useTheme()
   const [hover, setHover] = createSignal(false)
   const queued = createMemo(() => props.pending && props.message.id > props.pending)
   const color = createMemo(() => (untrack(queued) ? untrack(() => theme.accent) : untrack(() => theme.secondary)))
 
-  const toggleFavorite = async (e: any) => {
+  const setPriority = async (e: any, priority: "red" | "amber" | "green" | "none") => {
     e.stopPropagation()
-    await sdk.client.session.toggleMessageFavorite({
+    await sdk.client.session.setMessagePriority({
       path: {
         id: props.message.sessionID,
         messageID: props.message.id,
       },
+      body: {
+        priority,
+      },
     })
+    const priorityLabels = {
+      red: "High priority",
+      amber: "Medium priority",
+      green: "Low priority",
+      none: "No priority",
+    }
+    toast.show({ message: `Message marked as ${priorityLabels[priority]}`, variant: "success" })
   }
 
   return (
@@ -1228,22 +1305,20 @@ function UserMessage(props: {
             </For>
           </box>
         </Show>
-        <box flexDirection="row" justifyContent="space-between">
-          <text fg={theme.text}>
-            {sync.data.config.username ?? "You"}{" "}
-            <Show
-              when={queued()}
-              fallback={<span style={{ fg: theme.textMuted }}>({Locale.time(props.message.time.created)})</span>}
-            >
-              <span style={{ bg: theme.accent, fg: theme.backgroundPanel, bold: true }}> QUEUED </span>
-            </Show>
-          </text>
-          <text onMouseUp={toggleFavorite} attributes={TextAttributes.BOLD}>
-            <span style={{ fg: props.message.favorited ? theme.accent : theme.textMuted }}>
-              [{props.message.favorited ? "★" : "☆"}]
-            </span>
-          </text>
-        </box>
+        <text fg={theme.text}>
+          {sync.data.config.username ?? "You"}{" "}
+          <Show
+            when={queued()}
+            fallback={<span style={{ fg: theme.textMuted }}>({Locale.time(props.message.time.created)})</span>}
+          >
+            <span style={{ bg: theme.accent, fg: theme.backgroundPanel, bold: true }}> QUEUED </span>
+          </Show>
+        </text>
+        <PriorityCircles
+          sessionID={props.message.sessionID}
+          messageID={props.message.id}
+          priority={props.message.priority}
+        />
       </box>
     </Show>
   )
@@ -1463,6 +1538,11 @@ function AssistantMessage(props: { message: AssistantMessage; parts: Part[]; las
             <span style={{ fg: local.agent.color(props.message.mode) }}>{Locale.titlecase(props.message.mode)}</span>{" "}
             <span style={{ fg: theme.textMuted }}>{props.message.modelID}</span>
           </text>
+          <PriorityCircles
+            sessionID={props.message.sessionID}
+            messageID={props.message.id}
+            priority={props.message.priority}
+          />
         </box>
       </Show>
     </>
@@ -2246,7 +2326,7 @@ ToolRegistry.register<typeof TodoWriteTool>({
         <For each={props.input.todos ?? []}>
           {(todo) => (
             <text style={{ fg: todo.status === "in_progress" ? theme.success : theme.textMuted }}>
-              [{todo.status === "completed" ? "✓" : " "}] {todo.content}
+              {todo.status === "completed" ? "●" : "○"} {todo.content}
             </text>
           )}
         </For>

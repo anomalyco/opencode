@@ -552,22 +552,7 @@ export const MessagesPanel: Component<MessagesPanelProps> = (props) => {
 
           const toolBlockStartRow = currentRow
 
-          // Blank line above (row 1 of 3)
-          elements.push(
-            <div
-              style={{
-                position: "absolute",
-                left: "0",
-                top: `${currentRow * 1.2}em`,
-                width: bgWidth,
-                height: "1.2em",
-                background: "#1a1a1a",
-              }}
-            />,
-          )
-          currentRow++
-
-          // Background for content row (row 2 of 3)
+          // Background for content row
           elements.push(
             <div
               style={{
@@ -669,21 +654,6 @@ export const MessagesPanel: Component<MessagesPanelProps> = (props) => {
             }
           }
 
-          currentRow++
-
-          // Blank line below (row 3 of 3) - MINIMUM 3 ROWS FOR TOOL BLOCKS
-          elements.push(
-            <div
-              style={{
-                position: "absolute",
-                left: "0",
-                top: `${currentRow * 1.2}em`,
-                width: bgWidth,
-                height: "1.2em",
-                background: "#1a1a1a",
-              }}
-            />,
-          )
           currentRow++
 
           // Tool output (if expanded)
