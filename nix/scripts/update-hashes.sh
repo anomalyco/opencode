@@ -5,29 +5,11 @@ set -euo pipefail
 DUMMY="sha256-AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA="
 DEFAULT_HASH_FILE=${MODULES_HASH_FILE:-nix/hashes.json}
 HASH_FILE=${HASH_FILE:-$DEFAULT_HASH_FILE}
-OPTIONAL_PACKAGES_DIR=${OPTIONAL_PACKAGES_DIR:-nix/optional-packages}
-OPTIONAL_FILE=${OPTIONAL_PACKAGES_FILE:-}
-OPTIONAL_AGGREGATE=""
-
-if [ -z "$OPTIONAL_FILE" ] && [ -d "$OPTIONAL_PACKAGES_DIR" ]; then
-  OPTIONAL_AGGREGATE=$(mktemp)
-  find "$OPTIONAL_PACKAGES_DIR" -maxdepth 1 -type f -name '*.txt' | sort | while read -r file; do
-    [ -n "$file" ] || continue
-    cat "$file"
-    echo
-  done | sed 's/#.*$//' | sed '/^[[:space:]]*$/d' | sort -u >"$OPTIONAL_AGGREGATE"
-  OPTIONAL_FILE="$OPTIONAL_AGGREGATE"
-fi
-
-if [ -z "$OPTIONAL_FILE" ]; then
-  OPTIONAL_FILE="nix/optional-packages.txt"
-fi
 
 if [ ! -f "$HASH_FILE" ]; then
   cat <<'EOF' >"$HASH_FILE"
 {
-  "nodeModules": {},
-  "optional": {}
+  "nodeModules": {}
 }
 EOF
 fi
@@ -52,54 +34,10 @@ if [ -z "$SYSTEMS" ]; then
 fi
 
 cleanup() {
-  if [ -n "${JSON_OUTPUT:-}" ] && [ -f "$JSON_OUTPUT" ]; then
-    rm -f "$JSON_OUTPUT"
-  fi
-  if [ -n "${BUILD_LOG:-}" ] && [ -f "$BUILD_LOG" ]; then
-    rm -f "$BUILD_LOG"
-  fi
-  if [ -n "${TMP_EXPR:-}" ] && [ -f "$TMP_EXPR" ]; then
-    rm -f "$TMP_EXPR"
-  fi
-  if [ -n "$OPTIONAL_AGGREGATE" ] && [ -f "$OPTIONAL_AGGREGATE" ]; then
-    rm -f "$OPTIONAL_AGGREGATE"
-  fi
+  rm -f "${JSON_OUTPUT:-}" "${BUILD_LOG:-}" "${TMP_EXPR:-}"
 }
 
 trap cleanup EXIT
-
-update_optional() {
-  if [ ! -f "$OPTIONAL_FILE" ]; then
-    echo "optional package list missing at $OPTIONAL_FILE" >&2
-    return 1
-  fi
-  local meta tmp name ver sha
-  if command -v bun >/dev/null 2>&1; then
-    meta="$(bun --bun nix/scripts/optional-metadata.ts "$OPTIONAL_FILE")" || return 1
-  fi
-  if [ -z "${meta:-}" ] && command -v nix >/dev/null 2>&1; then
-    meta="$(nix shell --quiet nixpkgs#bun -c bun --bun nix/scripts/optional-metadata.ts "$OPTIONAL_FILE")" || return 1
-  fi
-  if [ -z "${meta:-}" ]; then
-    echo "bun unavailable; skipping optional metadata refresh" >&2
-    return 0
-  fi
-  while IFS=$'\t' read -r name ver sha; do
-    [ -n "$name" ] || continue
-    tmp=$(mktemp)
-    jq \
-      --arg name "$name" \
-      --arg ver "$ver" \
-      --arg sha "$sha" \
-      '.optional[$name] = { version: $ver, sha512: $sha }' \
-      "$HASH_FILE" >"$tmp"
-    mv "$tmp" "$HASH_FILE"
-  done <<EOF
-$meta
-EOF
-}
-
-update_optional
 
 write_node_modules_hash() {
   local value="$1"
@@ -113,12 +51,6 @@ for SYSTEM in $SYSTEMS; do
   TARGET="packages.${SYSTEM}.default"
   MODULES_ATTR=".#packages.${SYSTEM}.default.node_modules"
   CORRECT_HASH=""
-
-  echo "Removing cached node_modules output for ${SYSTEM} (if present)..."
-  PREV_PATH="$(nix path-info "$MODULES_ATTR" --system "$SYSTEM" 2>/dev/null || true)"
-  if [ -n "$PREV_PATH" ]; then
-    nix store delete --ignore-liveness "$PREV_PATH" >/dev/null 2>&1 || true
-  fi
 
   DRV_PATH="$(nix eval --raw "${MODULES_ATTR}.drvPath")"
 
@@ -173,18 +105,15 @@ for SYSTEM in $SYSTEMS; do
   fi
 
   if [ -z "$CORRECT_HASH" ]; then
-    echo "Failed to extract node_modules hash for ${SYSTEM}"
-    echo "Build log (last 100 lines):"
-    tail -100 "$BUILD_LOG" || true
+    echo "Failed to determine correct node_modules hash for ${SYSTEM}."
+    echo "Build log:"
+    cat "$BUILD_LOG"
     exit 1
   fi
 
   write_node_modules_hash "$CORRECT_HASH"
 
-  if ! jq -e --arg system "$SYSTEM" --arg hash "$CORRECT_HASH" '.nodeModules[$system] == $hash' "$HASH_FILE" >/dev/null; then
-    echo "Failed to persist node_modules hash for ${SYSTEM}"
-    exit 1
-  fi
+  jq -e --arg system "$SYSTEM" --arg hash "$CORRECT_HASH" '.nodeModules[$system] == $hash' "$HASH_FILE" >/dev/null
 
   echo "node_modules hash updated for ${SYSTEM}: $CORRECT_HASH"
 

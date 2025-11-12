@@ -145,6 +145,54 @@ export namespace SessionPrompt {
     ),
   })
   export type PromptInput = z.infer<typeof PromptInput>
+
+  export async function resolvePromptParts(template: string): Promise<PromptInput["parts"]> {
+    const parts: PromptInput["parts"] = [
+      {
+        type: "text",
+        text: template,
+      },
+    ]
+    const files = ConfigMarkdown.files(template)
+    await Promise.all(
+      files.map(async (match) => {
+        const name = match[1]
+        const filepath = name.startsWith("~/")
+          ? path.join(os.homedir(), name.slice(2))
+          : path.resolve(Instance.worktree, name)
+
+        const stats = await fs.stat(filepath).catch(() => undefined)
+        if (!stats) {
+          const agent = await Agent.get(name)
+          if (agent) {
+            parts.push({
+              type: "agent",
+              name: agent.name,
+            })
+          }
+          return
+        }
+
+        if (stats.isDirectory()) {
+          parts.push({
+            type: "file",
+            url: `file://${filepath}`,
+            filename: name,
+            mime: "application/x-directory",
+          })
+          return
+        }
+
+        parts.push({
+          type: "file",
+          url: `file://${filepath}`,
+          filename: name,
+          mime: "text/plain",
+        })
+      }),
+    )
+    return parts
+  }
   export async function prompt(input: PromptInput): Promise<MessageV2.WithParts> {
     const l = log.clone().tag("session", input.sessionID)
     l.info("prompt")
@@ -1605,51 +1653,7 @@ export namespace SessionPrompt {
     }
     template = template.trim()
 
-    const parts = [
-      {
-        type: "text",
-        text: template,
-      },
-    ] as PromptInput["parts"]
-
-    const files = ConfigMarkdown.files(template)
-    await Promise.all(
-      files.map(async (match) => {
-        const name = match[1]
-        const filepath = name.startsWith("~/")
-          ? path.join(os.homedir(), name.slice(2))
-          : path.resolve(Instance.worktree, name)
-
-        const stats = await fs.stat(filepath).catch(() => undefined)
-        if (!stats) {
-          const agent = await Agent.get(name)
-          if (agent) {
-            parts.push({
-              type: "agent",
-              name: agent.name,
-            })
-          }
-          return
-        }
-
-        if (stats.isDirectory()) {
-          parts.push({
-            type: "file",
-            url: `file://${filepath}`,
-            filename: name,
-            mime: "application/x-directory",
-          })
-          return
-        }
-
-        parts.push({
-          type: "file",
-          url: `file://${filepath}`,
-          filename: name,
-          mime: "text/plain",
-        })
-      }),
-    )
+    const parts = await resolvePromptParts(template)
 
     const model = await (async () => {
       if (command.model) {

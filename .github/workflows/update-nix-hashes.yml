@@ -10,15 +10,11 @@ on:
       - 'bun.lock'
       - 'package.json'
       - 'packages/*/package.json'
-      - 'nix/optional-packages/**'
-      - 'nix/scripts/optional-metadata.ts'
   pull_request:
     paths:
       - 'bun.lock'
       - 'package.json'
       - 'packages/*/package.json'
-      - 'nix/optional-packages/**'
-      - 'nix/scripts/optional-metadata.ts'
 
 jobs:
   cancel-previous:
@@ -109,7 +105,7 @@ jobs:
           
           if [ ! -f "$HASH_FILE" ]; then
             mkdir -p "$(dirname "$HASH_FILE")"
-            jq -n '{nodeModules: {}, optional: {}}' > "$HASH_FILE"
+            jq -n '{nodeModules: {}}' > "$HASH_FILE"
           fi
           
           echo "Updating hash for ${SYSTEM} to ${CORRECT_HASH}"
@@ -169,7 +165,7 @@ jobs:
           BASE_HASH="nix/hashes.json"
           if [ ! -f "$BASE_HASH" ]; then
             mkdir -p "$(dirname "$BASE_HASH")"
-            jq -n '{nodeModules: {}, optional: {}}' > "$BASE_HASH"
+            jq -n '{nodeModules: {}}' > "$BASE_HASH"
           fi
           for system in x86_64-linux aarch64-linux aarch64-darwin x86_64-darwin; do
             if [ -f "hash-artifacts/hashes-${system}/hashes.json" ]; then
@@ -177,8 +173,7 @@ jobs:
               # Deep merge: preserve all keys in nested objects
               jq --arg sys "$system" \
                 --slurpfile new "hash-artifacts/hashes-${system}/hashes.json" \
-                '.nodeModules[$sys] = $new[0].nodeModules[$sys] |
-                 .optional = (.optional + $new[0].optional)' \
+                '.nodeModules[$sys] = $new[0].nodeModules[$sys]' \
                 "$BASE_HASH" > /tmp/merged.json
               mv /tmp/merged.json "$BASE_HASH"
             else
@@ -191,8 +186,7 @@ jobs:
 
           DUMMY="sha256-AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA="
           HAS_NODE=$(jq --arg dummy "$DUMMY" '[ (.nodeModules // {})[] | select(. != $dummy) ] | length' "$BASE_HASH")
-          HAS_OPTIONAL=$(jq '(.optional // {}) | length' "$BASE_HASH")
-          if [ "$HAS_NODE" -gt 0 ] || [ "$HAS_OPTIONAL" -gt 0 ]; then
+          if [ "$HAS_NODE" -gt 0 ]; then
             echo "has_data=true" >> "$GITHUB_OUTPUT"
           else
             echo "has_data=false" >> "$GITHUB_OUTPUT"

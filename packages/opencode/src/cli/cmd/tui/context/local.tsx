@@ -90,6 +90,8 @@ export const { use: useLocal, provider: LocalProvider } = createSimpleContext({
           })
         },
         color(name: string) {
+          const agent = agents().find((x) => x.name === name)
+          if (agent?.color) return agent.color
           const index = agents().findIndex((x) => x.name === name)
           return colors()[index % colors().length]
         },

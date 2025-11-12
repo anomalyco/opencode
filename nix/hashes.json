@@ -1,51 +1,8 @@
 {
   "nodeModules": {
-    "x86_64-linux": "sha256-+dsSECijB/O6dA87Rdm8mcSrPn7FoMaNM4pzgouyFn0=",
-    "aarch64-linux": "sha256-CoF/CFOeCK1biwA8lPEQelEMhB0w2vD8dj8GbTCu7D8=",
-    "aarch64-darwin": "sha256-qUHSVtDkUcq7bUO3QbPUScqCcwpon2FqebRFA/NcXzA=",
-    "x86_64-darwin": "sha256-1yhZhwXvO/AlUhdN03eUqb7Jkyk2cgr8YwZd8RW3BWw="
-  },
-  "optional": {
-    "@opentui/core-darwin-arm64": {
-      "version": "0.0.0-20251108-0c7899b1",
-      "sha512": "sha512-DS9CmFmZZjwe6PIhz6zhZAsDx11DtyMFDxn8V3On2b8G892aBG6rHYtBBnsM28/1GGEJBTeDQ/jUXPVd6FNJ/g=="
-    },
-    "@opentui/core-darwin-x64": {
-      "version": "0.0.0-20251108-0c7899b1",
-      "sha512": "sha512-K4XwdmT6FTShn7EG8AKliPzO5H59R0XUlZi9+kfRVW59IIJtna5wxbu69SkA28dFoWj5i4yDumwoBI+tI7T6vg=="
-    },
-    "@opentui/core-linux-arm64": {
-      "version": "0.0.0-20251108-0c7899b1",
-      "sha512": "sha512-3JUmxZeSvxV5yU7NEXSecy5Z1/LcVUMy1oWyusZgp96X0CTYAXMrolZt9IJDGO5raeO7JId1UaJmWW0r4DR8TA=="
-    },
-    "@opentui/core-linux-x64": {
-      "version": "0.0.0-20251108-0c7899b1",
-      "sha512": "sha512-i/AQWGyanpPRpk9NK7Ze1tn+d5bqzM9wZFKNB3rd9d2Vbt/ROgBJItG6igz8vzKPKgnlHK4Gw9b5iG5sbjpd+Q=="
-    },
-    "@opentui/core-win32-x64": {
-      "version": "0.0.0-20251108-0c7899b1",
-      "sha512": "sha512-mpOryp37YaHlTsN70LhiSn9hJJBktbyhlH/eB3N2K7H1ANYQVrekgBJ3rDxlH1GDVtRz6vLS3IDlyK75qNX4pg=="
-    },
-    "@parcel/watcher-darwin-arm64": {
-      "version": "2.5.1",
-      "sha512": "sha512-eAzPv5osDmZyBhou8PoF4i6RQXAfeKL9tjb3QzYuccXFMQU0ruIc/POh30ePnaOyD1UXdlKguHBmsTs53tVoPw=="
-    },
-    "@parcel/watcher-darwin-x64": {
-      "version": "2.5.1",
-      "sha512": "sha512-1ZXDthrnNmwv10A0/3AJNZ9JGlzrF82i3gNQcWOzd7nJ8aj+ILyW1MTxVk35Db0u91oD5Nlk9MBiujMlwmeXZg=="
-    },
-    "@parcel/watcher-linux-arm64-glibc": {
-      "version": "2.5.1",
-      "sha512": "sha512-LrGp+f02yU3BN9A+DGuY3v3bmnFUggAITBGriZHUREfNEzZh/GO06FF5u2kx8x+GBEUYfyTGamol4j3m9ANe8w=="
-    },
-    "@parcel/watcher-linux-x64-glibc": {
-      "version": "2.5.1",
-      "sha512": "sha512-GcESn8NZySmfwlTsIur+49yDqSny2IhPeZfXunQi48DMugKeZ7uy1FX83pO0X22sHntJ4Ub+9k34XQCX+oHt2A=="
-    },
-    "@parcel/watcher-win32-x64": {
-      "version": "2.5.1",
-      "sha512": "sha512-9lHBdJITeNR++EvSQVUcaZoWupyHfXe1jZvGZ06O/5MflPcuPLtEphScIBL+AiCWBO46tDSHzWyD0uDmmZqsgA=="
-    }
-  },
-  "metadata": {}
+    "x86_64-linux": "sha256-Io3kr7b3DIRSXVm+83sxFABKpSpe5PgHOFuMbC6DpD4=",
+    "aarch64-linux": "sha256-ilWivX9/YkQjhnB8Eb/chLU3JBzbhFDHOdM1Io8Kwl4=",
+    "aarch64-darwin": "sha256-Mt06nci5aMsb9kkrS8tDH1n6+Fvr9RRCJgD64A90rko=",
+    "x86_64-darwin": "sha256-0K1XNrxo3P8krPA+dJ2Yx/Cc9f7IQBQSyt9kXK2Ea3Y="
+  }
 }

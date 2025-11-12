@@ -24,17 +24,18 @@ export namespace Config {
   export const state = Instance.state(async () => {
     const auth = await Auth.all()
     let result = await global()
-    for (const file of ["opencode.jsonc", "opencode.json"]) {
-      const found = await Filesystem.findUp(file, Instance.directory, Instance.worktree)
-      for (const resolved of found.toReversed()) {
-        result = mergeDeep(result, await loadFile(resolved))
-      }
-    }
 
     // Override with custom config if provided
     if (Flag.OPENCODE_CONFIG) {
       result = mergeDeep(result, await loadFile(Flag.OPENCODE_CONFIG))
       log.debug("loaded custom config", { path: Flag.OPENCODE_CONFIG })
+    }
+
+    for (const file of ["opencode.jsonc", "opencode.json"]) {
+      const found = await Filesystem.findUp(file, Instance.directory, Instance.worktree)
+      for (const resolved of found.toReversed()) {
+        result = mergeDeep(result, await loadFile(resolved))
+      }
     }
 
     if (Flag.OPENCODE_CONFIG_CONTENT) {
@@ -74,12 +75,15 @@ export namespace Config {
     for (const dir of directories) {
       await assertValid(dir)
 
-      for (const file of ["opencode.jsonc", "opencode.json"]) {
-        result = mergeDeep(result, await loadFile(path.join(dir, file)))
-        // to satisy the type checker
-        result.agent ??= {}
-        result.mode ??= {}
-        result.plugin ??= []
+      if (dir.endsWith(".opencode")) {
+        for (const file of ["opencode.jsonc", "opencode.json"]) {
+          log.debug(`loading config from ${path.join(dir, file)}`)
+          result = mergeDeep(result, await loadFile(path.join(dir, file)))
+          // to satisy the type checker
+          result.agent ??= {}
+          result.mode ??= {}
+          result.plugin ??= []
+        }
       }
 
       promises.push(installDependencies(dir))
@@ -355,6 +359,11 @@ export namespace Config {
       disable: z.boolean().optional(),
       description: z.string().optional().describe("Description of when to use the agent"),
       mode: z.union([z.literal("subagent"), z.literal("primary"), z.literal("all")]).optional(),
+      color: z
+        .string()
+        .regex(/^#[0-9a-fA-F]{6}$/, "Invalid hex color format")
+        .optional()
+        .describe("Hex color code for the agent (e.g., #FF5733)"),
       permission: z
         .object({
           edit: Permission.optional(),

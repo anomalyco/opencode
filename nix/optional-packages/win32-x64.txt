@@ -1,2 +1,0 @@
-@parcel/watcher-win32-x64
-@opentui/core-win32-x64

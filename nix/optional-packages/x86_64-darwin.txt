@@ -1,2 +1,0 @@
-@parcel/watcher-darwin-x64
-@opentui/core-darwin-x64
