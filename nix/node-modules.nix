@@ -28,7 +28,8 @@ stdenvNoCC.mkDerivation {
     bun install \
       --frozen-lockfile \
       --ignore-scripts \
-      --no-progress
+      --no-progress \
+      --linker=isolated
 
     cp ${optionalPackagesFile} optional-packages.txt
 
