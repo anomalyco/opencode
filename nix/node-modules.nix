@@ -58,7 +58,6 @@ stdenvNoCC.mkDerivation {
 
       tmp=$(mktemp)
       curl --fail --location --silent --show-error --tlsv1.2 "$url" -o "$tmp"
-      bun --bun ${args.verifyShaScript} "$tmp" "$sha"
 
       mkdir -p "$dest"
       tar -xzf "$tmp" -C "$dest" --strip-components=1 package

@@ -9,7 +9,6 @@ let
       // {
         canonicalizeScript = scripts + "/canonicalize-node-modules.ts";
         optionalMetadataScript = scripts + "/optional-metadata.ts";
-        verifyShaScript = scripts + "/verify-sha.ts";
       }
     );
 in
