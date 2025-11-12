@@ -108,9 +108,7 @@ export const ReadTool = Tool.define("read", {
     const supportsPdfs = model?.info.modalities?.input?.includes("pdf") ?? false
     if (isPdf) {
       if (!supportsPdfs) {
-        throw new Error(
-          `Failed to read pdf: ${filepath}, model may not be able to read pdfs`,
-        )
+        throw new Error(`Failed to read pdf: ${filepath}, model may not be able to read pdfs`)
       }
       const mime = file.type
       const msg = "Pdf read successfully"
