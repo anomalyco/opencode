@@ -488,6 +488,8 @@ function ErrorComponent(props: { error: Error; reset: () => void; onExit: () => 
     )
   }
 
+  issueURL.searchParams.set("opencode-version", Installation.VERSION)
+
   const copyIssueURL = () => {
     Clipboard.copy(issueURL.toString()).then(() => {
       setCopied(true)
