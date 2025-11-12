@@ -1,5 +1,5 @@
 // This method is called when your extension is deactivated
-export function deactivate() {}
+export function deactivate() { }
 
 import * as vscode from "vscode"
 
@@ -43,18 +43,52 @@ export function activate(context: vscode.ExtensionContext) {
   context.subscriptions.push(openTerminalDisposable, addFilepathDisposable)
 
   async function openTerminal() {
-    // Create a new terminal in split screen
     const port = Math.floor(Math.random() * (65535 - 16384 + 1)) + 16384
+
+    // Get terminal location preference
+    const config = vscode.workspace.getConfiguration("opencode")
+    const terminalLocationSetting = config.get<string>("terminalLocation", "besideEditor")
+
+    let terminalLocation: vscode.TerminalLocation | vscode.TerminalEditorLocationOptions | vscode.TerminalSplitLocationOptions
+
+    switch (terminalLocationSetting) {
+      case "auto":
+        const activeEditor = vscode.window.activeTextEditor
+        terminalLocation = {
+          viewColumn: activeEditor && activeEditor.viewColumn == vscode.ViewColumn.One ? vscode.ViewColumn.Beside : vscode.ViewColumn.Active,
+          preserveFocus: false,
+        }
+        break
+      case "besideEditor":
+        terminalLocation = {
+          viewColumn: vscode.ViewColumn.Beside,
+          preserveFocus: false,
+        }
+        break
+      case "activeEditor":
+        terminalLocation = {
+          viewColumn: vscode.ViewColumn.Active,
+          preserveFocus: false,
+        }
+        break
+      case "panel":
+        terminalLocation = vscode.TerminalLocation.Panel
+        break
+      default:
+        terminalLocation = {
+          viewColumn: vscode.ViewColumn.Beside,
+          preserveFocus: false,
+        }
+    }
+
+    const fileRef = getActiveFile()
     const terminal = vscode.window.createTerminal({
       name: TERMINAL_NAME,
       iconPath: {
         light: vscode.Uri.file(context.asAbsolutePath("images/button-dark.svg")),
         dark: vscode.Uri.file(context.asAbsolutePath("images/button-light.svg")),
       },
-      location: {
-        viewColumn: vscode.ViewColumn.Beside,
-        preserveFocus: false,
-      },
+      location: terminalLocation,
       env: {
         _EXTENSION_OPENCODE_PORT: port.toString(),
         OPENCODE_CALLER: "vscode",
@@ -62,9 +96,8 @@ export function activate(context: vscode.ExtensionContext) {
     })
 
     terminal.show()
-    terminal.sendText(`opencode --port ${port}`)
+    terminal.sendText(`opencode --port ${port} && exit`)
 
-    const fileRef = getActiveFile()
     if (!fileRef) {
       return
     }

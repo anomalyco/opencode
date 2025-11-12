@@ -23,6 +23,28 @@
   "activationEvents": [],
   "main": "./dist/extension.js",
   "contributes": {
+    "configuration": {
+      "title": "opencode",
+      "properties": {
+        "opencode.terminalLocation": {
+          "type": "string",
+          "enum": [
+            "auto",
+            "besideEditor",
+            "activeEditor",
+            "panel"
+          ],
+          "enumDescriptions": [
+            "Auto open in active/beside editor based on current editor column",
+            "Always open beside the editor",
+            "Always open in the active editor",
+            "Always open in the panel"
+          ],
+          "default": "besideEditor",
+          "description": "Controls where the opencode terminal opens"
+        }
+      }
+    },
     "commands": [
       {
         "command": "opencode.openTerminal",
