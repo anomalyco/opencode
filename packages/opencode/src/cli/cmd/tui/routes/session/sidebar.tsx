@@ -6,7 +6,7 @@ import { PluginComponent } from "../../component/plugin-component"
 import { Locale } from "@/util/locale"
 import path from "path"
 import type { AssistantMessage } from "@opencode-ai/sdk"
-import { TextAttributes } from "@opentui/core"
+import { TextAttributes, RGBA } from "@opentui/core"
 import { ContextUsageBar } from "../../component/context-usage-bar"
 import { useLocal } from "../../context/local"
 import { useKeyboard, useRenderer } from "@opentui/solid"
@@ -661,8 +661,8 @@ export function Sidebar(props: { sessionID: string; onToggle: () => void }) {
             toolTokens={context().toolTokens}
             agentColor={local.agent.color("assistant")}
             systemColor={theme.textMuted}
-            assistantColor={theme.primary}
-            toolColor={theme.accent}
+            assistantColor={RGBA.fromHex("#D4A574")}
+            toolColor={RGBA.fromHex("#8B7355")}
             userColor={theme.secondary}
             backgroundColor={theme.backgroundPanel}
             width={40}
@@ -1058,7 +1058,7 @@ export function Sidebar(props: { sessionID: string; onToggle: () => void }) {
         </Show>
 
         {/* Context Section - Always visible below tabs */}
-        <box marginTop={2} flexDirection="column">
+        <box marginTop={1} flexDirection="column">
           <box flexDirection="row" gap={1}>
             <text
               attributes={TextAttributes.BOLD}
@@ -1179,7 +1179,7 @@ export function Sidebar(props: { sessionID: string; onToggle: () => void }) {
 
         {/* Subagents Section - Always visible below tabs */}
         {/* Subagents Section - Always visible */}
-        <box marginTop={2} flexDirection="column">
+        <box marginTop={1} flexDirection="column">
           <box flexDirection="row" gap={1}>
             <text
               attributes={TextAttributes.BOLD}
