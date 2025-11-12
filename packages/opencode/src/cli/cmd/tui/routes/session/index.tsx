@@ -56,6 +56,7 @@ import { DialogMessage } from "./dialog-message"
 import type { PromptInfo } from "../../component/prompt/history"
 import { iife } from "@/util/iife"
 import { DialogConfirm } from "@tui/ui/dialog-confirm"
+import { DialogSelect } from "@tui/ui/dialog-select"
 import { DialogTimeline } from "./dialog-timeline"
 import { Sidebar } from "./sidebar"
 import { LeftSidebar } from "./left-sidebar"
@@ -951,7 +952,7 @@ export function Session() {
                       })
                     }}
                   >
-                    ← Back to parent
+                    ← Back
                   </text>
                   <text
                     fg={theme.accent}
@@ -966,7 +967,7 @@ export function Session() {
                   </text>
                 </box>
                 <text fg={theme.text}>
-                  <b>Viewing subagent session</b>
+                  <b>Subagent Session</b>
                 </text>
                 <text
                   fg={theme.accent}
@@ -984,6 +985,21 @@ export function Session() {
               <Header />
             </Show>
             <box flexGrow={1} flexShrink={1}>
+              {/* Non-scrolling load more banner */}
+              <Show when={hasMoreMessages()}>
+                <box
+                  paddingTop={1}
+                  paddingBottom={1}
+                  paddingLeft={2}
+                  marginBottom={1}
+                  onMouseUp={loadMoreMessages}
+                  flexShrink={0}
+                >
+                  <text fg={theme.textMuted}>
+                    ↑ {allMessages().length - messageWindowSize()} older messages hidden (click to load more)
+                  </text>
+                </box>
+              </Show>
               <scrollbox
                 ref={(r) => (scroll = r)}
                 scrollbarOptions={{
@@ -997,13 +1013,6 @@ export function Session() {
                 stickyStart="bottom"
                 height="100%"
               >
-                <Show when={hasMoreMessages()}>
-                  <box paddingTop={1} paddingBottom={1} paddingLeft={2} marginBottom={1} onMouseUp={loadMoreMessages}>
-                    <text fg={theme.textMuted}>
-                      ↑ {allMessages().length - messageWindowSize()} older messages hidden (click to load more)
-                    </text>
-                  </box>
-                </Show>
                 <For each={messages()} fallback={<box />}>
                   {(message, index) => {
                     // Memoize parts to prevent re-rendering completed messages
@@ -1887,6 +1896,11 @@ function ToolPart(props: { part: ToolPart; message: AssistantMessage }) {
           </box>
         </box>
       )}
+      <PriorityCircles
+        sessionID={props.message.sessionID}
+        messageID={props.message.id}
+        priority={props.message.priority}
+      />
     </box>
   )
 }
@@ -1906,7 +1920,15 @@ function GenericTool(props: ToolProps<any>) {
   console.log("[GenericTool]", props.tool, "collapsed:", props.collapsed, "onToggle:", !!props.onToggle)
   return (
     <>
-      <ToolTitle icon={icon()} fallback="Writing command..." when={true} onToggle={props.onToggle}>
+      <ToolTitle
+        icon={icon()}
+        fallback="Writing command..."
+        when={true}
+        onToggle={props.onToggle}
+        toolName={props.tool}
+        input={props.input}
+        output={props.output}
+      >
         <ToolBadge>{props.tool}</ToolBadge> {input(props.input)}
       </ToolTitle>
       <Show when={!props.collapsed}>
@@ -1947,22 +1969,81 @@ function ToolBadge(props: { children: string }) {
   return <span style={{ bg: theme.textMuted, fg: theme.background, bold: true }}> {props.children.toUpperCase()} </span>
 }
 
-function ToolTitle(props: { fallback: string; when: any; icon: string; children: JSX.Element; onToggle?: () => void }) {
+function ToolTitle(props: {
+  fallback: string
+  when: any
+  icon: string
+  children: JSX.Element
+  onToggle?: () => void
+  toolName?: string
+  input?: any
+  output?: string
+}) {
   const { theme } = useTheme()
   const renderer = useRenderer()
+  const dialog = useDialog()
+  const toast = useToast()
+
+  const showMenu = (evt: any) => {
+    evt.stopPropagation?.()
+
+    const options: any[] = []
+
+    // Add copy output option if output exists
+    if (props.output) {
+      options.push({
+        title: "Copy output",
+        value: "copy-output",
+        onSelect: () => {
+          Clipboard.copy(props.output!)
+            .then(() => toast.show({ message: "Output copied to clipboard!", variant: "success" }))
+            .catch(() => toast.show({ message: "Failed to copy to clipboard", variant: "error" }))
+          dialog.clear()
+        },
+      })
+    }
+
+    // Add copy command/input option if input exists
+    if (props.input) {
+      const inputStr = JSON.stringify(props.input, null, 2)
+      options.push({
+        title: "Copy input",
+        value: "copy-input",
+        onSelect: () => {
+          Clipboard.copy(inputStr)
+            .then(() => toast.show({ message: "Input copied to clipboard!", variant: "success" }))
+            .catch(() => toast.show({ message: "Failed to copy to clipboard", variant: "error" }))
+          dialog.clear()
+        },
+      })
+    }
+
+    if (options.length > 0) {
+      dialog.replace(() => <DialogSelect title={`${props.toolName || "Tool"} Actions`} options={options} />)
+    }
+  }
+
   return (
-    <box
-      onMouseUp={(evt) => {
-        if (renderer.getSelection()?.getSelectedText()) return
-        console.log("[ToolTitle] Clicked, onToggle exists:", !!props.onToggle)
-        props.onToggle?.()
-      }}
-    >
-      <text fg={props.when ? theme.textMuted : theme.text}>
-        <Show fallback={<>~ {props.fallback}</>} when={props.when}>
-          <span style={{ bold: true }}>{props.icon}</span> {props.children}
-        </Show>
-      </text>
+    <box flexDirection="row">
+      <box
+        flexGrow={1}
+        onMouseUp={(evt) => {
+          if (renderer.getSelection()?.getSelectedText()) return
+          console.log("[ToolTitle] Clicked, onToggle exists:", !!props.onToggle)
+          props.onToggle?.()
+        }}
+      >
+        <text fg={props.when ? theme.textMuted : theme.text}>
+          <Show fallback={<>~ {props.fallback}</>} when={props.when}>
+            <span style={{ bold: true }}>{props.icon}</span> {props.children}
+          </Show>
+        </text>
+      </box>
+      <box flexShrink={0} paddingLeft={2}>
+        <text fg={theme.textMuted} attributes={1} onMouseUp={showMenu}>
+          ⋮
+        </text>
+      </box>
     </box>
   )
 }
@@ -1976,7 +2057,15 @@ ToolRegistry.register<typeof BashTool>({
     const icon = createMemo(() => (props.collapsed ? "▶" : "▼"))
     return (
       <>
-        <ToolTitle icon={icon()} fallback="Writing command..." when={props.input.command} onToggle={props.onToggle}>
+        <ToolTitle
+          icon={icon()}
+          fallback="Writing command..."
+          when={props.input.command}
+          onToggle={props.onToggle}
+          toolName="Bash"
+          input={props.input}
+          output={output()}
+        >
           <ToolBadge>Bash</ToolBadge> {props.input.description || "Shell"}
         </ToolTitle>
         <Show when={!props.collapsed}>
@@ -2002,7 +2091,15 @@ ToolRegistry.register<typeof ReadTool>({
     const icon = createMemo(() => (props.collapsed ? "▶" : "▼"))
     return (
       <>
-        <ToolTitle icon={icon()} fallback="Reading file..." when={props.input.filePath} onToggle={props.onToggle}>
+        <ToolTitle
+          icon={icon()}
+          fallback="Reading file..."
+          when={props.input.filePath}
+          onToggle={props.onToggle}
+          toolName="Read"
+          input={props.input}
+          output={props.output}
+        >
           <ToolBadge>Read</ToolBadge> {normalizePath(props.input.filePath!)} {input(props.input, ["filePath"])}
         </ToolTitle>
         <Show when={!props.collapsed && props.output}>
@@ -2041,7 +2138,15 @@ ToolRegistry.register<typeof WriteTool>({
 
     return (
       <>
-        <ToolTitle icon={icon()} fallback="Preparing write..." when={props.input.filePath} onToggle={props.onToggle}>
+        <ToolTitle
+          icon={icon()}
+          fallback="Preparing write..."
+          when={props.input.filePath}
+          onToggle={props.onToggle}
+          toolName="Write"
+          input={props.input}
+          output={props.output}
+        >
           <ToolBadge>Write</ToolBadge> {props.input.filePath}
         </ToolTitle>
         <Show when={!props.collapsed}>
@@ -2066,7 +2171,15 @@ ToolRegistry.register<typeof GlobTool>({
     const icon = createMemo(() => (props.collapsed ? "▶" : "▼"))
     return (
       <>
-        <ToolTitle icon={icon()} fallback="Finding files..." when={props.input.pattern} onToggle={props.onToggle}>
+        <ToolTitle
+          icon={icon()}
+          fallback="Finding files..."
+          when={props.input.pattern}
+          onToggle={props.onToggle}
+          toolName="Glob"
+          input={props.input}
+          output={props.output}
+        >
           <ToolBadge>Glob</ToolBadge> "{props.input.pattern}"{" "}
           <Show when={props.input.path}>in {normalizePath(props.input.path)} </Show>
           <Show when={props.metadata.count}>({props.metadata.count} matches)</Show>
@@ -2082,7 +2195,15 @@ ToolRegistry.register<typeof GrepTool>({
   render(props) {
     const icon = createMemo(() => (props.collapsed ? "▶" : "▼"))
     return (
-      <ToolTitle icon={icon()} fallback="Searching content..." when={props.input.pattern} onToggle={props.onToggle}>
+      <ToolTitle
+        icon={icon()}
+        fallback="Searching content..."
+        when={props.input.pattern}
+        onToggle={props.onToggle}
+        toolName="Grep"
+        input={props.input}
+        output={props.output}
+      >
         <ToolBadge>Grep</ToolBadge> "{props.input.pattern}"{" "}
         <Show when={props.input.path}>in {normalizePath(props.input.path)} </Show>
         <Show when={props.metadata.matches}>({props.metadata.matches} matches)</Show>
@@ -2109,6 +2230,9 @@ ToolRegistry.register<typeof ListTool>({
           fallback="Listing directory..."
           when={props.input.path !== undefined}
           onToggle={props.onToggle}
+          toolName="List"
+          input={props.input}
+          output={props.output}
         >
           <ToolBadge>List</ToolBadge> {dir()}
         </ToolTitle>
@@ -2128,7 +2252,14 @@ ToolRegistry.register<typeof TaskTool>({
 
     return (
       <>
-        <ToolTitle icon="%" fallback="Delegating..." when={props.input.subagent_type ?? props.input.description}>
+        <ToolTitle
+          icon="%"
+          fallback="Delegating..."
+          when={props.input.subagent_type ?? props.input.description}
+          toolName="Task"
+          input={props.input}
+          output={props.output}
+        >
           <ToolBadge>Task</ToolBadge> [{props.input.subagent_type ?? "unknown"}] {props.input.description}
         </ToolTitle>
         <Show when={props.metadata.summary?.length}>
@@ -2173,7 +2304,14 @@ ToolRegistry.register<typeof WebFetchTool>({
   container: "inline",
   render(props) {
     return (
-      <ToolTitle icon="%" fallback="Fetching from the web..." when={(props.input as any).url}>
+      <ToolTitle
+        icon="%"
+        fallback="Fetching from the web..."
+        when={(props.input as any).url}
+        toolName="WebFetch"
+        input={props.input}
+        output={props.output}
+      >
         <ToolBadge>WebFetch</ToolBadge> {(props.input as any).url}
       </ToolTitle>
     )
@@ -2263,7 +2401,15 @@ ToolRegistry.register<typeof EditTool>({
 
     return (
       <>
-        <ToolTitle icon={icon()} fallback="Preparing edit..." when={props.input.filePath} onToggle={props.onToggle}>
+        <ToolTitle
+          icon={icon()}
+          fallback="Preparing edit..."
+          when={props.input.filePath}
+          onToggle={props.onToggle}
+          toolName="Edit"
+          input={props.input}
+          output={props.output}
+        >
           <ToolBadge>Edit</ToolBadge> {normalizePath(props.input.filePath!)}{" "}
           {input({
             replaceAll: props.input.replaceAll,
@@ -2303,7 +2449,14 @@ ToolRegistry.register<typeof PatchTool>({
     const { theme } = useTheme()
     return (
       <>
-        <ToolTitle icon="%" fallback="Preparing patch..." when={true}>
+        <ToolTitle
+          icon="%"
+          fallback="Preparing patch..."
+          when={true}
+          toolName="Patch"
+          input={props.input}
+          output={props.output}
+        >
           <ToolBadge>Patch</ToolBadge>
         </ToolTitle>
         <Show when={props.output}>
@@ -2352,6 +2505,9 @@ ToolRegistry.register({
           fallback="Creating subagent task..."
           when={props.input.subagent_type ?? props.input.description}
           onToggle={props.onToggle}
+          toolName="Add Task"
+          input={props.input}
+          output={props.output}
         >
           <ToolBadge>Add Task</ToolBadge> [{props.input.subagent_type ?? "unknown"}] {props.input.description}
         </ToolTitle>

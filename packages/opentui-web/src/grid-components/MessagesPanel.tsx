@@ -331,24 +331,7 @@ export const MessagesPanel: Component<MessagesPanelProps> = (props) => {
     const messages = props.messages.slice(-15)
     const hiddenCount = props.messages.length - messages.length
 
-    // Show "load more" indicator if there are hidden messages
-    if (hiddenCount > 0) {
-      const loadMoreText = `↑ ${hiddenCount} older message${hiddenCount === 1 ? "" : "s"} hidden (click to load more)`
-      elements.push(
-        <GridText
-          col={2}
-          row={currentRow}
-          text={loadMoreText}
-          fg="#666666"
-          style={{ cursor: "pointer" }}
-          onClick={() => {
-            console.log("Load more messages clicked - TODO: implement pagination")
-            // TODO: Implement load more functionality
-          }}
-        />,
-      )
-      currentRow += 2 // Add spacing after indicator
-    }
+    // Load more indicator moved to sticky header
 
     messages.forEach((msg, msgIndex) => {
       const isUser = msg.role === "user"
@@ -990,6 +973,29 @@ export const MessagesPanel: Component<MessagesPanelProps> = (props) => {
           "-webkit-font-smoothing": "subpixel-antialiased",
         }}
       >
+        {/* Sticky load-more banner at top */}
+        <Show when={props.messages.length > 15}>
+          <div
+            style={{
+              position: "sticky",
+              top: "0",
+              background: "#0a0a0a",
+              color: "#666666",
+              padding: "0 1ch",
+              height: "1.2em",
+              cursor: "pointer",
+              "z-index": "30",
+            }}
+            onClick={() => {
+              console.log("Load more messages clicked - TODO: implement pagination")
+            }}
+          >
+            {(() => {
+              const n = props.messages.length - 15
+              return `↑ ${n} older message${n === 1 ? "" : "s"} hidden (click to load more)`
+            })()}
+          </div>
+        </Show>
         {renderMessages()}
       </div>
 

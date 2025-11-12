@@ -88,7 +88,7 @@ export function Sidebar(props: { sessionID: string; onToggle: () => void }) {
     Array<{ id: string; content: string; status: string; priority: string }>
   >([])
   const [contexts, setContexts] = createSignal<Array<{ id: string; name: string; content: string }>>([])
-  const [activeContextId, setActiveContextId] = createSignal<string | null>(null)
+  const [activeContextIds, setActiveContextIds] = createSignal<Set<string>>(new Set())
 
   const uiExtensions = useUIExtensions()
   const session = createMemo(() => sync.session.get(props.sessionID)!)
@@ -112,6 +112,17 @@ export function Sidebar(props: { sessionID: string; onToggle: () => void }) {
     return [...validOptimistic, ...server]
   })
   const messages = createMemo(() => sync.data.message[props.sessionID] ?? [])
+
+  // Deduplicate plugins by name to avoid showing duplicates
+  const uniquePlugins = createMemo(() => {
+    const seen = new Map()
+    for (const plugin of sync.data.plugin) {
+      if (!seen.has(plugin.name)) {
+        seen.set(plugin.name, plugin)
+      }
+    }
+    return Array.from(seen.values())
+  })
 
   // Context management functions
   const createContext = () => {
@@ -145,14 +156,24 @@ export function Sidebar(props: { sessionID: string; onToggle: () => void }) {
     if (!ctx) return
 
     setContexts((prev) => prev.filter((c) => c.id !== contextId))
-    if (activeContextId() === contextId) {
-      setActiveContextId(null)
-    }
+    setActiveContextIds((prev) => {
+      const newSet = new Set(prev)
+      newSet.delete(contextId)
+      return newSet
+    })
     toast.show({ variant: "success", message: `Deleted context: ${ctx.name}` })
   }
 
   const toggleContext = (contextId: string) => {
-    setActiveContextId((prev) => (prev === contextId ? null : contextId))
+    setActiveContextIds((prev) => {
+      const newSet = new Set(prev)
+      if (newSet.has(contextId)) {
+        newSet.delete(contextId)
+      } else {
+        newSet.add(contextId)
+      }
+      return newSet
+    })
   }
 
   // Get child sessions reactively from sync.data (SSE-based, no polling)
@@ -686,7 +707,7 @@ export function Sidebar(props: { sessionID: string; onToggle: () => void }) {
             onMouseUp={() => handleTabChange("tools")}
           >
             {activeTab() === "tools" ? "●" : "○"} Tools(
-            {toolsUsed().length + Object.keys(sync.data.mcp).length + sync.data.lsp.length + sync.data.plugin.length}
+            {toolsUsed().length + Object.keys(sync.data.mcp).length + sync.data.lsp.length + uniquePlugins().length}
             ){" "}
           </text>
           <text
@@ -893,7 +914,7 @@ export function Sidebar(props: { sessionID: string; onToggle: () => void }) {
               </Show>
             </box>
           </Show>
-          <Show when={sync.data.plugin.length > 0}>
+          <Show when={uniquePlugins().length > 0}>
             <box marginTop={0}>
               <text
                 attributes={TextAttributes.BOLD}
@@ -902,10 +923,10 @@ export function Sidebar(props: { sessionID: string; onToggle: () => void }) {
                   toggleSection("plugins")
                 }}
               >
-                {expandedSections().has("plugins") ? "▼" : "▶"} Plugins {`(${sync.data.plugin.length})`}
+                {expandedSections().has("plugins") ? "▼" : "▶"} Plugins {`(${uniquePlugins().length})`}
               </text>
               <Show when={expandedSections().has("plugins")}>
-                <For each={sync.data.plugin}>
+                <For each={uniquePlugins()}>
                   {(plugin) => (
                     <box flexDirection="column">
                       <box flexDirection="row" gap={1}>
@@ -1116,7 +1137,7 @@ export function Sidebar(props: { sessionID: string; onToggle: () => void }) {
                     })}
                   >
                     {(ctx) => {
-                      const isActive = createMemo(() => activeContextId() === ctx.id)
+                      const isActive = createMemo(() => activeContextIds().has(ctx.id))
                       const hasContent = createMemo(() => ctx.content.trim().length > 0)
                       const isHighPriority = createMemo(() => ctx.name.startsWith("!"))
                       const isNegative = createMemo(() => ctx.name.startsWith("-"))

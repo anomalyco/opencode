@@ -135,7 +135,6 @@ export function LeftSidebar(props: {
             openSearchDialog()
           }}
         >
-          <text fg={theme.textMuted}>🔍</text>
           <box flexGrow={1}>
             <Show when={searchQuery()} fallback={<text fg={theme.textMuted}>Click to search...</text>}>
               <text fg={theme.text}>{searchQuery()}</text>
