@@ -97,15 +97,17 @@
           opencode-dev = {
             type = "app";
             meta = {
-                description = "Nix devshell shell for OpenCode";
-                runtimeInputs = [ pkgs.bun ];
-              };
-            program = "${pkgs.writeShellApplication {
-              name = "opencode-dev";
-              text = ''
-                exec bun run dev "$@"
-              '';
-            }}/bin/opencode-dev";
+              description = "Nix devshell shell for OpenCode";
+              runtimeInputs = [ pkgs.bun ];
+            };
+            program = "${
+              pkgs.writeShellApplication {
+                name = "opencode-dev";
+                text = ''
+                  exec bun run dev "$@"
+                '';
+              }
+            }/bin/opencode-dev";
           };
         }
       );
