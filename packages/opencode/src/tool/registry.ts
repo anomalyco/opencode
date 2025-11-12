@@ -34,6 +34,9 @@ import { type ToolDefinition } from "@opencode-ai/plugin"
 import z from "zod"
 import { Plugin } from "../plugin"
 import { Log } from "../util/log"
+import { WebSearchTool } from "./websearch"
+import { CodeSearchTool } from "./codesearch"
+import { Flag } from "@/flag/flag"
 
 export namespace ToolRegistry {
   const log = Log.create({ service: "tool-registry" })
@@ -172,6 +175,7 @@ export namespace ToolRegistry {
       LspDiagnosticTool,
       LspHoverTool,
       ...ccTools,
+      ...(Flag.OPENCODE_EXPERIMENTAL_EXA ? [WebSearchTool, CodeSearchTool] : []),
       ...custom,
     ]
   }

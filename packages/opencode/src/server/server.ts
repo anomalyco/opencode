@@ -167,6 +167,7 @@ export namespace Server {
           return c.json(await Config.get())
         },
       )
+
       .patch(
         "/config",
         describeRoute({

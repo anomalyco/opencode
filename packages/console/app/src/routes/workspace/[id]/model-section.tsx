@@ -52,8 +52,8 @@ const updateModel = action(async (form: FormData) => {
 
 export function ModelSection() {
   const params = useParams()
-  const modelsInfo = createAsync(() => getModelsInfo(params.id))
-  const userInfo = createAsync(() => querySessionInfo(params.id))
+  const modelsInfo = createAsync(() => getModelsInfo(params.id!))
+  const userInfo = createAsync(() => querySessionInfo(params.id!))
 
   const modelsWithLab = createMemo(() => {
     const info = modelsInfo()

@@ -412,6 +412,15 @@ function App() {
     })
   })
 
+  event.on(Installation.Event.Updated.type, (evt) => {
+    toast.show({
+      variant: "success",
+      title: "Update Complete",
+      message: `OpenCode updated to v${evt.properties.version}`,
+      duration: 5000,
+    })
+  })
+
   return (
     <box
       width={dimensions().width}
@@ -549,6 +558,8 @@ function ErrorComponent(props: { error: Error; reset: () => void; onExit: () => 
       "```\n" + props.error.stack.substring(0, 6000 - issueURL.toString().length) + "...\n```",
     )
   }
+
+  issueURL.searchParams.set("opencode-version", Installation.VERSION)
 
   const copyIssueURL = () => {
     Clipboard.copy(issueURL.toString()).then(() => {

@@ -3,7 +3,7 @@
 import solidPlugin from "../node_modules/@opentui/solid/scripts/solid-plugin"
 import path from "path"
 import fs from "fs"
-import { $, Glob } from "bun"
+import { $ } from "bun"
 import { fileURLToPath } from "url"
 
 const __filename = fileURLToPath(import.meta.url)
@@ -17,46 +17,86 @@ import { Script } from "@opencode-ai/script"
 
 const singleFlag = process.argv.includes("--single")
 
-const allTargets = [
-  ["windows", "x64"],
-  ["linux", "arm64"],
-  ["linux", "x64"],
-  ["linux", "x64-baseline"],
-  ["darwin", "x64"],
-  ["darwin", "x64-baseline"],
-  ["darwin", "arm64"],
+const allTargets: {
+  os: string
+  arch: "arm64" | "x64"
+  abi?: "musl"
+  avx2?: false
+}[] = [
+  {
+    os: "linux",
+    arch: "arm64",
+  },
+  {
+    os: "linux",
+    arch: "x64",
+  },
+  {
+    os: "linux",
+    arch: "x64",
+    avx2: false,
+  },
+  {
+    os: "linux",
+    arch: "arm64",
+    abi: "musl",
+  },
+  {
+    os: "linux",
+    arch: "x64",
+    abi: "musl",
+  },
+  {
+    os: "linux",
+    arch: "x64",
+    abi: "musl",
+    avx2: false,
+  },
+  {
+    os: "darwin",
+    arch: "arm64",
+  },
+  {
+    os: "darwin",
+    arch: "x64",
+  },
+  {
+    os: "darwin",
+    arch: "x64",
+    avx2: false,
+  },
+  {
+    os: "windows",
+    arch: "x64",
+  },
+  {
+    os: "windows",
+    arch: "x64",
+    avx2: false,
+  },
 ]
 
 const targets = singleFlag
-  ? allTargets.filter(([os, arch]) => os === process.platform && arch === process.arch)
+  ? allTargets.filter((item) => item.os === process.platform && item.arch === process.arch)
   : allTargets
 
 await $`rm -rf dist`
 
 const binaries: Record<string, string> = {}
-for (const [os, arch] of targets) {
-  console.log(`building ${os}-${arch}`)
-  const name = `${pkg.name}-ai-${os}-${arch}`
+await $`bun install --os="*" --cpu="*" @opentui/core@${pkg.dependencies["@opentui/core"]}`
+await $`bun install --os="*" --cpu="*" @parcel/watcher@${pkg.dependencies["@parcel/watcher"]}`
+for (const item of targets) {
+  const name = [
+    pkg.name,
+    item.os,
+    item.arch,
+    item.avx2 === false ? "baseline" : undefined,
+    item.abi === undefined ? undefined : item.abi,
+  ]
+    .filter(Boolean)
+    .join("-")
+  console.log(`building ${name}`)
   await $`mkdir -p dist/${name}/bin`
-
-  const opentui = `@opentui/core-${os === "windows" ? "win32" : os}-${arch.replace("-baseline", "")}`
-  await $`mkdir -p ../../node_modules/${opentui}`
-  await $`npm pack ${opentui}@${pkg.dependencies["@opentui/core"]}`.cwd(path.join(dir, "../../node_modules"))
-  const opentuiFiles = fs
-    .readdirSync(path.join(dir, "../../node_modules"))
-    .filter((f) => f.startsWith(opentui.replace("@opentui/", "opentui-")) && f.endsWith(".tgz"))
-  const opentuiTarball = opentuiFiles.sort().reverse()[0]
-  await $`tar -xf ../../node_modules/${opentuiTarball} -C ../../node_modules/${opentui} --strip-components=1`
-
-  const watcher = `@parcel/watcher-${os === "windows" ? "win32" : os}-${arch.replace("-baseline", "")}${os === "linux" ? "-glibc" : ""}`
-  const watcherDir = path.join(dir, "../../node_modules", watcher)
-  await $`mkdir -p ${watcherDir}`
-  await $`npm pack ${watcher}`.cwd(path.join(dir, "../../node_modules")).quiet()
-  const watcherFiles = fs
-    .readdirSync(path.join(dir, "../../node_modules"))
-    .filter((f) => f.startsWith(watcher.replace("@parcel/", "parcel-")) && f.endsWith(".tgz"))
-  const watcherTarball = watcherFiles.sort().reverse()[0]
-  await $`tar -xf ../../node_modules/${watcherTarball} -C ../../node_modules/${watcher} --strip-components=1`
 
   const parserWorker = fs.realpathSync(path.resolve(dir, "./node_modules/@opentui/core/parser.worker.js"))
   const workerPath = "./src/cli/cmd/tui/worker.ts"
@@ -67,11 +107,9 @@ for (const [os, arch] of targets) {
     plugins: [solidPlugin],
     sourcemap: "external",
     compile: {
-      target: `bun-${os}-${arch}` as any,
+      target: name.replace(pkg.name, "bun") as any,
       outfile: `dist/${name}/bin/codesurf`,
-      execArgv: [`--user-agent=codesurf/${Script.version}`, `--env-file=""`, `--`].filter(
-        (arg): arg is string => typeof arg === "string",
-      ),
+      execArgv: [`--user-agent=codesurf/${Script.version}`, `--env-file=""`, `--`],
       windows: {},
     },
     entrypoints: ["./src/index.ts", parserWorker, workerPath],
@@ -83,22 +121,14 @@ for (const [os, arch] of targets) {
     },
   })
 
-  // Copy tiktoken wasm file to dist
-  const tiktokenWasmSource = path.resolve(dir, "./node_modules/@dqbd/tiktoken/tiktoken_bg.wasm")
-  const tiktokenWasmDest = path.resolve(dir, `dist/${name}/bin/tiktoken_bg.wasm`)
-  if (fs.existsSync(tiktokenWasmSource)) {
-    fs.copyFileSync(tiktokenWasmSource, tiktokenWasmDest)
-  }
-
   await $`rm -rf ./dist/${name}/bin/tui`
   await Bun.file(`dist/${name}/package.json`).write(
     JSON.stringify(
       {
         name,
         version: Script.version,
-        os: [os === "windows" ? "win32" : os],
-        cpu: [arch],
-        files: ["bin"],
+        os: [item.os === "windows" ? "win32" : item.os],
+        cpu: [item.arch],
       },
       null,
       2,

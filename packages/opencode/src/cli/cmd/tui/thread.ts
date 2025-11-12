@@ -124,6 +124,7 @@ export const TuiThreadCommand = cmd({
         sessionID,
         model: args.model,
         agent: args.agent,
+        model: args.model,
         prompt,
         onExit: async () => {
           await client.call("shutdown", undefined)

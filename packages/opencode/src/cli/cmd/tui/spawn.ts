@@ -77,6 +77,10 @@ export const TuiSpawnCommand = cmd({
       stdout: "inherit",
       stderr: "inherit",
       stdin: "inherit",
+      env: {
+        ...process.env,
+        BUN_OPTIONS: "",
+      },
     })
     await proc.exited
     await Instance.disposeAll()

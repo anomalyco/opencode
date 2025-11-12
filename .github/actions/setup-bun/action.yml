@@ -13,9 +13,9 @@ runs:
       uses: actions/cache@v4
       with:
         path: ~/.bun
-        key: ${{ runner.os }}-bun-${{ hashFiles('bun.lockb', 'bun.lock') }}
+        key: ${{ runner.os }}-bun-${{ hashFiles('package.json') }}-${{ hashFiles('bun.lockb', 'bun.lock') }}
         restore-keys: |
-          ${{ runner.os }}-bun-
+          ${{ runner.os }}-bun-${{ hashFiles('package.json') }}-
 
     - name: Install dependencies
       run: bun install

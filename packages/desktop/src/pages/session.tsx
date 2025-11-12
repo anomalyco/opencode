@@ -44,7 +44,7 @@ import {
   useDragDropContext,
 } from "@thisbeyond/solid-dnd"
 import type { DragEvent, Transformer } from "@thisbeyond/solid-dnd"
-import type { JSX } from "solid-js"
+import type { JSX, ParentProps } from "solid-js"
 import { useSync } from "@/context/sync"
 import { type AssistantMessage as AssistantMessageType } from "@opencode-ai/sdk"
 import { Markdown } from "@opencode-ai/ui"
@@ -334,11 +334,12 @@ export default function Page() {
           <Tabs.Content value="chat" class="@container select-text flex flex-col flex-1 min-h-0 overflow-y-hidden">
             <div
               classList={{
-                "w-full grid flex-1 min-h-0": true,
-                "grid-cols-2": local.layout.review.state() === "open",
+                "w-full flex-1 min-h-0": true,
+                grid: local.layout.review.state() !== "open",
+                flex: local.layout.review.state() === "open",
               }}
             >
-              <div class="relative px-6 py-2 w-full flex flex-col gap-6 flex-1 min-h-0 max-w-2xl mx-auto">
+              <div class="relative shrink-0 px-6 py-2 flex flex-col gap-6 flex-1 min-h-0 w-full max-w-xl mx-auto">
                 <Switch>
                   <Match when={session.id}>
                     <div class="h-8 flex shrink-0 self-stretch items-center justify-end">
@@ -359,8 +360,8 @@ export default function Page() {
                           role="list"
                           classList={{
                             "mr-8 shrink-0 flex flex-col items-start": true,
-                            "absolute right-full w-60 @7xl:gap-2": true, // local.layout.review.state() !== "open",
-                            "": local.layout.review.state() === "open",
+                            "absolute right-full w-60 @7xl:gap-2": local.layout.review.state() !== "open",
+                            "mt-1": local.layout.review.state() === "open",
                           }}
                         >
                           <For each={session.messages.user()}>
@@ -438,7 +439,7 @@ export default function Page() {
                           </For>
                         </ul>
                       </Show>
-                      <div ref={messageScrollElement} class="grow w-full min-w-0 h-full overflow-y-auto no-scrollbar">
+                      <div ref={messageScrollElement} class="grow size-full min-w-0 overflow-y-auto no-scrollbar">
                         <For each={session.messages.user()}>
                           {(message) => {
                             const isActive = createMemo(() => session.messages.active()?.id === message.id)
@@ -478,7 +479,7 @@ export default function Page() {
                                   class="flex flex-col items-start self-stretch gap-8 pb-20"
                                 >
                                   {/* Title */}
-                                  <div class="flex flex-col items-start gap-2 self-stretch sticky top-0 bg-background-stronger z-10 pb-1">
+                                  <div class="flex flex-col items-start gap-2 self-stretch sticky top-0 bg-background-stronger z-20 pb-1">
                                     <div class="w-full text-14-medium text-text-strong">
                                       <Show
                                         when={titled()}
@@ -525,7 +526,7 @@ export default function Page() {
                                         <For each={message.summary?.diffs ?? []}>
                                           {(diff) => (
                                             <Accordion.Item value={diff.file}>
-                                              <Accordion.Header>
+                                              <StickyAccordionHeader class="top-10 data-expanded:before:-top-10 ">
                                                 <Accordion.Trigger>
                                                   <div class="flex items-center justify-between w-full gap-5">
                                                     <div class="grow flex items-center gap-5 min-w-0">
@@ -550,8 +551,8 @@ export default function Page() {
                                                     </div>
                                                   </div>
                                                 </Accordion.Trigger>
-                                              </Accordion.Header>
-                                              <Accordion.Content class="max-h-[360px] overflow-y-auto no-scrollbar">
+                                              </StickyAccordionHeader>
+                                              <Accordion.Content class="max-h-60 overflow-y-auto no-scrollbar">
                                                 <Diff
                                                   before={{
                                                     name: diff.file!,
@@ -657,7 +658,7 @@ export default function Page() {
               <Show when={local.layout.review.state() === "open"}>
                 <div
                   classList={{
-                    "relative px-6 py-2 w-full flex flex-col gap-6 flex-1 min-h-0 border-l border-border-weak-base": true,
+                    "relative grow px-6 py-2 w-full flex flex-col gap-6 flex-1 min-h-0 border-l border-border-weak-base": true,
                   }}
                 >
                   <div class="h-8 w-full flex items-center justify-between shrink-0 self-stretch">
@@ -683,7 +684,7 @@ export default function Page() {
                       <For each={session.diffs()}>
                         {(diff) => (
                           <Accordion.Item value={diff.file} defaultOpen>
-                            <Accordion.Header>
+                            <StickyAccordionHeader>
                               <Accordion.Trigger>
                                 <div class="flex items-center justify-between w-full gap-5">
                                   <div class="grow flex items-center gap-5 min-w-0">
@@ -703,7 +704,7 @@ export default function Page() {
                                   </div>
                                 </div>
                               </Accordion.Trigger>
-                            </Accordion.Header>
+                            </StickyAccordionHeader>
                             <Accordion.Content>
                               <Diff
                                 before={{
@@ -726,22 +727,19 @@ export default function Page() {
             </div>
           </Tabs.Content>
           <Show when={local.layout.review.state() === "tab" && session.diffs().length}>
-            <Tabs.Content value="review" class="select-text">
+            <Tabs.Content value="review" class="select-text flex flex-col h-full overflow-hidden mt-8">
               <div
                 classList={{
-                  "relative px-6 py-2 w-full flex flex-col gap-6 flex-1 min-h-0": true,
+                  "relative px-6 py-2 w-full flex flex-col gap-6 flex-1 min-h-0 overflow-hidden": true,
                 }}
               >
-                <div class="h-8 w-full flex items-center justify-between shrink-0 self-stretch sticky top-0 bg-background-stronger z-100">
-                  <div class="flex items-center gap-x-3"></div>
-                </div>
-                <div class="text-14-medium text-text-strong">All changes</div>
-                <div class="h-full pb-40 overflow-y-auto no-scrollbar">
+                <div class="text-14-medium text-text-strong shrink-0">All changes</div>
+                <div class="flex-1 min-h-0 pb-40 overflow-y-auto no-scrollbar">
                   <Accordion class="w-full" multiple>
                     <For each={session.diffs()}>
                       {(diff) => (
                         <Accordion.Item value={diff.file} defaultOpen>
-                          <Accordion.Header>
+                          <StickyAccordionHeader>
                             <Accordion.Trigger>
                               <div class="flex items-center justify-between w-full gap-5">
                                 <div class="grow flex items-center gap-5 min-w-0">
@@ -759,7 +757,7 @@ export default function Page() {
                                 </div>
                               </div>
                             </Accordion.Trigger>
-                          </Accordion.Header>
+                          </StickyAccordionHeader>
                           <Accordion.Content>
                             <Diff
                               diffStyle="split"
@@ -897,5 +895,20 @@ export default function Page() {
         </SelectDialog>
       </Show>
     </div>
+  )
+}
+
+function StickyAccordionHeader(props: ParentProps<{ class?: string }>) {
+  return (
+    <Accordion.Header
+      classList={{
+        "sticky top-0 data-expanded:z-10": true,
+        "data-expanded:before:content-[''] data-expanded:before:z-[-10]": true,
+        "data-expanded:before:absolute data-expanded:before:inset-0 data-expanded:before:bg-background-stronger": true,
+        [props.class ?? ""]: !!props.class,
+      }}
+    >
+      {props.children}
+    </Accordion.Header>
   )
 }
