@@ -551,12 +551,13 @@ export namespace LSPServer {
     id: "sourcekit-lsp",
     extensions: [".swift", ".objc", "objcpp"],
     root: NearestRoot(["Package.swift", "*.xcodeproj", "*.xcworkspace"]),
-    async spawn(_, root) {
+    async spawn(root) {
       // Check if sourcekit-lsp is available in the PATH
       // This is installed with the Swift toolchain
-      if (Bun.which("sourcekit-lsp")) {
+      const sourcekit = Bun.which("sourcekit-lsp")
+      if (sourcekit) {
         return {
-          process: spawn(Bun.which("sourcekit-lsp")!, {
+          process: spawn(sourcekit, {
             cwd: root,
           }),
         }
@@ -566,15 +567,15 @@ export namespace LSPServer {
       // This is specific to macOS where sourcekit-lsp is typically installed with Xcode
       if (!Bun.which("xcrun")) return
 
-      const lspLoc = Bun.spawnSync(["xcrun", "--find", "sourcekit-lsp"])
+      const lspLoc = await $`xcrun --find sourcekit-lsp`.quiet().nothrow()
 
       if (lspLoc.exitCode !== 0) return
 
-      const location = lspLoc.stdout.toString().trim()
+      const bin = lspLoc.text().trim()
 
       return {
-        process: spawn(location, {
-                    cwd: root,
+        process: spawn(bin, {
+          cwd: root,
         }),
       }
     },
