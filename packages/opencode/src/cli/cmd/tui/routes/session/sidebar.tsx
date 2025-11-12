@@ -1058,7 +1058,7 @@ export function Sidebar(props: { sessionID: string; onToggle: () => void }) {
         </Show>
 
         {/* Context Section - Always visible below tabs */}
-        <box marginTop={1} flexDirection="column">
+        <box marginTop={2} flexDirection="column">
           <box flexDirection="row" gap={1}>
             <text
               attributes={TextAttributes.BOLD}
@@ -1179,7 +1179,7 @@ export function Sidebar(props: { sessionID: string; onToggle: () => void }) {
 
         {/* Subagents Section - Always visible below tabs */}
         {/* Subagents Section - Always visible */}
-        <box marginTop={1} flexDirection="column">
+        <box marginTop={2} flexDirection="column">
           <box flexDirection="row" gap={1}>
             <text
               attributes={TextAttributes.BOLD}

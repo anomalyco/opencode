@@ -1325,27 +1325,73 @@ function AssistantMessage(props: { message: AssistantMessage; parts: Part[]; las
   const local = useLocal()
   const { theme } = useTheme()
 
-  // Check if message has any tools - if so, group ALL tools together
-  const hasTools = createMemo(() => props.parts.some((p) => p.type === "tool"))
-  const allTools = createMemo(() => props.parts.filter((p) => p.type === "tool") as ToolPart[])
+  // Group consecutive identical tools
+  const partGroups = createMemo(() => {
+    const groups: Array<{ type: "single"; part: Part } | { type: "group"; parts: ToolPart[] }> = []
+    let i = 0
+
+    while (i < props.parts.length) {
+      const part = props.parts[i]
+
+      // If it's a tool, look ahead for consecutive identical tools
+      if (part.type === "tool") {
+        const toolPart = part as ToolPart
+        const consecutiveTools: ToolPart[] = [toolPart]
+        let j = i + 1
+
+        // Collect consecutive tools of the same type
+        while (j < props.parts.length) {
+          const nextPart = props.parts[j]
+          if (nextPart.type === "tool" && (nextPart as ToolPart).tool === toolPart.tool) {
+            consecutiveTools.push(nextPart as ToolPart)
+            j++
+          } else {
+            break
+          }
+        }
+
+        // If we found 2+ consecutive identical tools, group them
+        if (consecutiveTools.length > 1) {
+          groups.push({ type: "group", parts: consecutiveTools })
+          i = j
+        } else {
+          groups.push({ type: "single", part })
+          i++
+        }
+      } else {
+        groups.push({ type: "single", part })
+        i++
+      }
+    }
+
+    return groups
+  })
 
   return (
     <>
-      <Show when={hasTools() && allTools().length > 1}>
-        <GroupedToolParts parts={allTools()} allParts={props.parts} message={props.message} />
-      </Show>
-      <Show when={!hasTools() || allTools().length <= 1}>
-        <For each={props.parts}>
-          {(part) => {
-            const component = createMemo(() => PART_MAPPING[part.type as keyof typeof PART_MAPPING])
-            return (
-              <Show when={component()}>
-                <Dynamic component={component()} part={part as any} message={props.message} />
-              </Show>
-            )
-          }}
-        </For>
-      </Show>
+      <For each={partGroups()}>
+        {(group) => (
+          <Switch>
+            <Match when={group.type === "group"}>
+              {(() => {
+                const g = group as { type: "group"; parts: ToolPart[] }
+                return <GroupedToolParts parts={g.parts} allParts={props.parts} message={props.message} />
+              })()}
+            </Match>
+            <Match when={group.type === "single"}>
+              {(() => {
+                const g = group as { type: "single"; part: Part }
+                const component = createMemo(() => PART_MAPPING[g.part.type as keyof typeof PART_MAPPING])
+                return (
+                  <Show when={component()}>
+                    <Dynamic component={component()} part={g.part as any} message={props.message} />
+                  </Show>
+                )
+              })()}
+            </Match>
+          </Switch>
+        )}
+      </For>
       <Show when={props.message.error}>
         <box
           border={["left"]}
