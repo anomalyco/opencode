@@ -1,0 +1,2 @@
+packages/desktop:build:cd /Users/jkneen/Documents/GitHub/flows/opencode-stt/packages/desktop && npm run build
+packages/desktop:tsc:cd /Users/jkneen/Documents/GitHub/flows/opencode-stt/packages/desktop && npx tsc --noEmit

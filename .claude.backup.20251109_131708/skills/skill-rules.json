@@ -1,0 +1,156 @@
+{
+    "version": "1.0",
+    "description": "Skill activation triggers for Claude Code. Auto-generated for monorepo-pnpm structure.",
+    "skills": {
+    "skill-developer": {
+        "type": "domain",
+        "enforcement": "suggest",
+        "priority": "high",
+        "description": "Meta-skill for creating and managing Claude Code skills",
+        "promptTriggers": {
+            "keywords": [
+                "skill system",
+                "create skill",
+                "add skill",
+                "skill triggers",
+                "skill rules",
+                "hook system",
+                "skill development",
+                "skill-rules.json"
+            ],
+            "intentPatterns": [
+                "(how do|how does|explain).*?skill",
+                "(create|add|modify|build).*?skill",
+                "skill.*?(work|trigger|activate|system)"
+            ]
+        }
+    },
+    "backend-dev-guidelines": {
+        "type": "domain",
+        "enforcement": "suggest",
+        "priority": "high",
+        "description": "Backend development patterns for Node.js/Express/TypeScript",
+        "promptTriggers": {
+            "keywords": [
+                "backend", "microservice", "controller", "service", "repository",
+                "route", "routing", "express", "API", "endpoint", "middleware",
+                "validation", "Zod", "Prisma", "database access", "BaseController"
+            ],
+            "intentPatterns": [
+                "(create|add|implement|build).*?(route|endpoint|API|controller|service|repository)",
+                "(fix|handle|debug).*?(error|exception|backend)",
+                "(add|implement).*?(middleware|validation|error.*?handling)",
+                "(organize|structure|refactor).*?(backend|service|API)"
+            ]
+        },
+        "fileTriggers": {
+            "pathPatterns": ["packages/*/src/**/*.ts"],
+            "pathExclusions": ["**/*.test.ts", "**/*.spec.ts"],
+            "contentPatterns": [
+                "router\\\\.",
+                "app\\\\.(get|post|put|delete|patch)",
+                "export.*Controller",
+                "export.*Service",
+                "prisma\\\\."
+            ]
+        }
+    },
+    "frontend-dev-guidelines": {
+        "type": "guardrail",
+        "enforcement": "block",
+        "priority": "high",
+        "description": "React/TypeScript best practices including MUI v7 compatibility",
+        "promptTriggers": {
+            "keywords": [
+                "component", "react component", "UI", "interface", "page",
+                "modal", "dialog", "form", "MUI", "Material-UI", "Grid",
+                "styling", "frontend", "React"
+            ],
+            "intentPatterns": [
+                "(create|add|make|build|update|modify|edit).*?(component|UI|page|modal|dialog|form)",
+                "(style|design|layout).*?(component|UI)"
+            ]
+        },
+        "fileTriggers": {
+            "pathPatterns": ["packages/*/src/**/*.tsx"],
+            "pathExclusions": [
+                "**/*.test.tsx", "**/*.test.ts", "**/*.spec.tsx",
+                "**/*.styles.ts", "**/vite.config.ts", "**/tsconfig.json"
+            ],
+            "contentPatterns": [
+                "from '@mui/material';",
+                "import.*Grid.*from.*@mui",
+                "<Grid ",
+                "Grid2",
+                "makeStyles"
+            ]
+        },
+        "blockMessage": "⚠️ BLOCKED - Frontend Best Practices Required\\n\\nREQUIRED: Use Skill tool: 'frontend-dev-guidelines'\\nReason: Enforce MUI v7 compatibility and React best practices",
+        "skipConditions": {
+            "sessionSkillUsed": true,
+            "fileMarkers": ["@skip-validation"],
+            "envOverride": "SKIP_FRONTEND_GUIDELINES"
+        }
+    },
+    "route-tester": {
+        "type": "domain",
+        "enforcement": "suggest",
+        "priority": "high",
+        "description": "Testing authenticated API routes with JWT cookie-based auth",
+        "promptTriggers": {
+            "keywords": [
+                "test route", "test endpoint", "test API", "route testing",
+                "API testing", "authenticated route", "JWT testing"
+            ],
+            "intentPatterns": [
+                "(test|debug|verify).*?(route|endpoint|API)",
+                "test.*?(authenticated|auth|JWT|cookie)"
+            ]
+        },
+        "fileTriggers": {
+            "pathPatterns": ["**/routes/**/*.ts", "**/test-*.js", "**/test-*.ts"],
+            "contentPatterns": [
+                "router\\\\.(get|post|put|delete|patch)",
+                "app\\\\.(get|post|put|delete|patch)"
+            ]
+        }
+    },
+    "error-tracking": {
+        "type": "domain",
+        "enforcement": "suggest",
+        "priority": "high",
+        "description": "Sentry error tracking and performance monitoring patterns",
+        "promptTriggers": {
+            "keywords": [
+                "error handling", "exception", "sentry", "error tracking",
+                "captureException", "monitoring", "performance tracking"
+            ],
+            "intentPatterns": [
+                "(add|create|implement|setup).*?(error handling|sentry|error tracking)",
+                "(fix|handle|catch).*?(error|exception)"
+            ]
+        },
+        "fileTriggers": {
+            "pathPatterns": [
+                "**/instrument.ts", "**/sentry*.ts",
+                "**/*Controller.ts", "**/*Service.ts"
+            ],
+            "contentPatterns": [
+                "@sentry", "Sentry\\\\.", "captureException", "captureMessage"
+            ]
+        }
+    }
+},
+    "notes": {
+        "generated": "2025-11-09T13:03:20Z",
+        "structure": "monorepo-pnpm",
+        "enforcement_types": {
+            "suggest": "Skill suggestion appears but doesn't block execution",
+            "block": "Requires skill to be used before proceeding (guardrail)",
+            "warn": "Shows warning but allows proceeding"
+        },
+        "customization": {
+            "note": "This file was auto-generated. You can customize paths, keywords, and triggers as needed."
+        }
+    }
+}
