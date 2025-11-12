@@ -6,6 +6,7 @@ import (
 	"context"
 	"net/http"
 	"os"
+	"slices"
 
 	"github.com/sst/opencode-sdk-go/internal/requestconfig"
 	"github.com/sst/opencode-sdk-go/option"
@@ -17,10 +18,14 @@ import (
 type Client struct {
 	Options []option.RequestOption
 	Event   *EventService
+	Path    *PathService
 	App     *AppService
+	Agent   *AgentService
 	Find    *FindService
 	File    *FileService
 	Config  *ConfigService
+	Command *CommandService
+	Project *ProjectService
 	Session *SessionService
 	Tui     *TuiService
 }
@@ -45,10 +50,14 @@ func NewClient(opts ...option.RequestOption) (r *Client) {
 	r = &Client{Options: opts}
 
 	r.Event = NewEventService(opts...)
+	r.Path = NewPathService(opts...)
 	r.App = NewAppService(opts...)
+	r.Agent = NewAgentService(opts...)
 	r.Find = NewFindService(opts...)
 	r.File = NewFileService(opts...)
 	r.Config = NewConfigService(opts...)
+	r.Command = NewCommandService(opts...)
+	r.Project = NewProjectService(opts...)
 	r.Session = NewSessionService(opts...)
 	r.Tui = NewTuiService(opts...)
 
@@ -87,7 +96,7 @@ func NewClient(opts ...option.RequestOption) (r *Client) {
 // For even greater flexibility, see [option.WithResponseInto] and
 // [option.WithResponseBodyInto].
 func (r *Client) Execute(ctx context.Context, method string, path string, params interface{}, res interface{}, opts ...option.RequestOption) error {
-	opts = append(r.Options, opts...)
+	opts = slices.Concat(r.Options, opts)
 	return requestconfig.ExecuteNewRequest(ctx, method, path, params, res, opts...)
 }
 

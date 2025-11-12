@@ -7,11 +7,17 @@ import (
 	"errors"
 	"fmt"
 	"net/http"
+	"net/url"
+	"reflect"
+	"slices"
 
 	"github.com/sst/opencode-sdk-go/internal/apijson"
+	"github.com/sst/opencode-sdk-go/internal/apiquery"
 	"github.com/sst/opencode-sdk-go/internal/param"
 	"github.com/sst/opencode-sdk-go/internal/requestconfig"
 	"github.com/sst/opencode-sdk-go/option"
+	"github.com/sst/opencode-sdk-go/shared"
+	"github.com/tidwall/gjson"
 )
 
 // SessionPermissionService contains methods and other services that help with
@@ -34,8 +40,8 @@ func NewSessionPermissionService(opts ...option.RequestOption) (r *SessionPermis
 }
 
 // Respond to a permission request
-func (r *SessionPermissionService) Respond(ctx context.Context, id string, permissionID string, body SessionPermissionRespondParams, opts ...option.RequestOption) (res *bool, err error) {
-	opts = append(r.Options[:], opts...)
+func (r *SessionPermissionService) Respond(ctx context.Context, id string, permissionID string, params SessionPermissionRespondParams, opts ...option.RequestOption) (res *bool, err error) {
+	opts = slices.Concat(r.Options, opts)
 	if id == "" {
 		err = errors.New("missing required id parameter")
 		return
@@ -45,7 +51,7 @@ func (r *SessionPermissionService) Respond(ctx context.Context, id string, permi
 		return
 	}
 	path := fmt.Sprintf("session/%s/permissions/%s", id, permissionID)
-	err = requestconfig.ExecuteNewRequest(ctx, http.MethodPost, path, body, &res, opts...)
+	err = requestconfig.ExecuteNewRequest(ctx, http.MethodPost, path, params, &res, opts...)
 	return
 }
 
@@ -58,7 +64,7 @@ type Permission struct {
 	Title     string                 `json:"title,required"`
 	Type      string                 `json:"type,required"`
 	CallID    string                 `json:"callID"`
-	Pattern   string                 `json:"pattern"`
+	Pattern   PermissionPatternUnion `json:"pattern"`
 	JSON      permissionJSON         `json:"-"`
 }
 
@@ -105,12 +111,46 @@ func (r permissionTimeJSON) RawJSON() string {
 	return r.raw
 }
 
+// Union satisfied by [shared.UnionString] or [PermissionPatternArray].
+type PermissionPatternUnion interface {
+	ImplementsPermissionPatternUnion()
+}
+
+func init() {
+	apijson.RegisterUnion(
+		reflect.TypeOf((*PermissionPatternUnion)(nil)).Elem(),
+		"",
+		apijson.UnionVariant{
+			TypeFilter: gjson.String,
+			Type:       reflect.TypeOf(shared.UnionString("")),
+		},
+		apijson.UnionVariant{
+			TypeFilter: gjson.JSON,
+			Type:       reflect.TypeOf(PermissionPatternArray{}),
+		},
+	)
+}
+
+type PermissionPatternArray []string
+
+func (r PermissionPatternArray) ImplementsPermissionPatternUnion() {}
+
 type SessionPermissionRespondParams struct {
-	Response param.Field[SessionPermissionRespondParamsResponse] `json:"response,required"`
+	Response  param.Field[SessionPermissionRespondParamsResponse] `json:"response,required"`
+	Directory param.Field[string]                                 `query:"directory"`
 }
 
 func (r SessionPermissionRespondParams) MarshalJSON() (data []byte, err error) {
 	return apijson.MarshalRoot(r)
+}
+
+// URLQuery serializes [SessionPermissionRespondParams]'s query parameters as
+// `url.Values`.
+func (r SessionPermissionRespondParams) URLQuery() (v url.Values) {
+	return apiquery.MarshalWithSettings(r, apiquery.QuerySettings{
+		ArrayFormat:  apiquery.ArrayQueryFormatComma,
+		NestedFormat: apiquery.NestedQueryFormatBrackets,
+	})
 }
 
 type SessionPermissionRespondParamsResponse string

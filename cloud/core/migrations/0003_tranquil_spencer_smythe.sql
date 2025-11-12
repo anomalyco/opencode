@@ -1,1 +1,0 @@
-ALTER TABLE "usage" DROP COLUMN "request_id";

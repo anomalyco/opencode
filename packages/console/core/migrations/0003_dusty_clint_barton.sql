@@ -1,0 +1,1 @@
+ALTER TABLE `key` ADD CONSTRAINT `name` UNIQUE(`workspace_id`,`name`);

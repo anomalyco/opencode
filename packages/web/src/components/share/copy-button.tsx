@@ -11,8 +11,7 @@ export function CopyButton(props: CopyButtonProps) {
 
   function handleCopyClick() {
     if (props.text) {
-      navigator.clipboard.writeText(props.text)
-        .catch((err) => console.error("Copy failed", err))
+      navigator.clipboard.writeText(props.text).catch((err) => console.error("Copy failed", err))
 
       setCopied(true)
       setTimeout(() => setCopied(false), 2000)
@@ -21,15 +20,8 @@ export function CopyButton(props: CopyButtonProps) {
 
   return (
     <div data-component="copy-button" class={styles.root}>
-      <button
-        type="button"
-        onClick={handleCopyClick}
-        data-copied={copied() ? true : undefined}
-      >
-        {copied()
-          ? <IconCheckCircle width={16} height={16} />
-          : <IconClipboard width={16} height={16} />
-        }
+      <button type="button" onClick={handleCopyClick} data-copied={copied() ? true : undefined}>
+        {copied() ? <IconCheckCircle width={16} height={16} /> : <IconClipboard width={16} height={16} />}
       </button>
     </div>
   )

@@ -1,0 +1,1 @@
+ALTER TABLE `usage` DROP COLUMN `cache_write_tokens`;

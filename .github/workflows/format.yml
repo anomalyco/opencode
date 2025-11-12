@@ -1,0 +1,29 @@
+name: format
+
+on:
+  push:
+    branches-ignore:
+      - production
+  pull_request:
+    branches-ignore:
+      - production
+  workflow_dispatch:
+jobs:
+  format:
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+        with:
+          token: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Setup Bun
+        uses: ./.github/actions/setup-bun
+
+      - name: run
+        run: |
+          ./script/format.ts
+        env:
+          CI: true

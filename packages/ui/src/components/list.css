@@ -1,0 +1,30 @@
+[data-component="list"] {
+  /* overflow-y: auto; */
+
+  /* Hide scrollbar */
+  &::-webkit-scrollbar {
+    display: none;
+  }
+  -ms-overflow-style: none;
+  scrollbar-width: none;
+
+  [data-slot="item"] {
+    width: 100%;
+    margin-bottom: 6px;
+    padding: 4px 12px;
+    text-align: left;
+
+    border-radius: 6px;
+    transition: background-color 0.2s ease-in-out;
+
+    &[data-active="true"] {
+      background-color: var(--surface-raised-base-hover);
+    }
+    &:hover {
+      background-color: var(--surface-raised-base-hover);
+    }
+    &:focus {
+      outline: none;
+    }
+  }
+}

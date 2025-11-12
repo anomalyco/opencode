@@ -13,8 +13,8 @@ import (
 	"github.com/sst/opencode-sdk-go/option"
 )
 
-func TestFindFiles(t *testing.T) {
-	t.Skip("skipped: tests are disabled for the time being")
+func TestFindFilesWithOptionalParams(t *testing.T) {
+	t.Skip("Prism tests are disabled")
 	baseURL := "http://localhost:4010"
 	if envURL, ok := os.LookupEnv("TEST_API_BASE_URL"); ok {
 		baseURL = envURL
@@ -26,7 +26,8 @@ func TestFindFiles(t *testing.T) {
 		option.WithBaseURL(baseURL),
 	)
 	_, err := client.Find.Files(context.TODO(), opencode.FindFilesParams{
-		Query: opencode.F("query"),
+		Query:     opencode.F("query"),
+		Directory: opencode.F("directory"),
 	})
 	if err != nil {
 		var apierr *opencode.Error
@@ -37,8 +38,8 @@ func TestFindFiles(t *testing.T) {
 	}
 }
 
-func TestFindSymbols(t *testing.T) {
-	t.Skip("skipped: tests are disabled for the time being")
+func TestFindSymbolsWithOptionalParams(t *testing.T) {
+	t.Skip("Prism tests are disabled")
 	baseURL := "http://localhost:4010"
 	if envURL, ok := os.LookupEnv("TEST_API_BASE_URL"); ok {
 		baseURL = envURL
@@ -50,7 +51,8 @@ func TestFindSymbols(t *testing.T) {
 		option.WithBaseURL(baseURL),
 	)
 	_, err := client.Find.Symbols(context.TODO(), opencode.FindSymbolsParams{
-		Query: opencode.F("query"),
+		Query:     opencode.F("query"),
+		Directory: opencode.F("directory"),
 	})
 	if err != nil {
 		var apierr *opencode.Error
@@ -61,8 +63,8 @@ func TestFindSymbols(t *testing.T) {
 	}
 }
 
-func TestFindText(t *testing.T) {
-	t.Skip("skipped: tests are disabled for the time being")
+func TestFindTextWithOptionalParams(t *testing.T) {
+	t.Skip("Prism tests are disabled")
 	baseURL := "http://localhost:4010"
 	if envURL, ok := os.LookupEnv("TEST_API_BASE_URL"); ok {
 		baseURL = envURL
@@ -74,7 +76,8 @@ func TestFindText(t *testing.T) {
 		option.WithBaseURL(baseURL),
 	)
 	_, err := client.Find.Text(context.TODO(), opencode.FindTextParams{
-		Pattern: opencode.F("pattern"),
+		Pattern:   opencode.F("pattern"),
+		Directory: opencode.F("directory"),
 	})
 	if err != nil {
 		var apierr *opencode.Error

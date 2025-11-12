@@ -6,6 +6,7 @@ import (
 	"context"
 	"net/http"
 	"net/url"
+	"slices"
 
 	"github.com/sst/opencode-sdk-go/internal/apijson"
 	"github.com/sst/opencode-sdk-go/internal/apiquery"
@@ -35,7 +36,7 @@ func NewFindService(opts ...option.RequestOption) (r *FindService) {
 
 // Find files
 func (r *FindService) Files(ctx context.Context, query FindFilesParams, opts ...option.RequestOption) (res *[]string, err error) {
-	opts = append(r.Options[:], opts...)
+	opts = slices.Concat(r.Options, opts)
 	path := "find/file"
 	err = requestconfig.ExecuteNewRequest(ctx, http.MethodGet, path, query, &res, opts...)
 	return
@@ -43,7 +44,7 @@ func (r *FindService) Files(ctx context.Context, query FindFilesParams, opts ...
 
 // Find workspace symbols
 func (r *FindService) Symbols(ctx context.Context, query FindSymbolsParams, opts ...option.RequestOption) (res *[]Symbol, err error) {
-	opts = append(r.Options[:], opts...)
+	opts = slices.Concat(r.Options, opts)
 	path := "find/symbol"
 	err = requestconfig.ExecuteNewRequest(ctx, http.MethodGet, path, query, &res, opts...)
 	return
@@ -51,7 +52,7 @@ func (r *FindService) Symbols(ctx context.Context, query FindSymbolsParams, opts
 
 // Find text in files
 func (r *FindService) Text(ctx context.Context, query FindTextParams, opts ...option.RequestOption) (res *[]FindTextResponse, err error) {
-	opts = append(r.Options[:], opts...)
+	opts = slices.Concat(r.Options, opts)
 	path := "find"
 	err = requestconfig.ExecuteNewRequest(ctx, http.MethodGet, path, query, &res, opts...)
 	return
@@ -290,7 +291,8 @@ func (r findTextResponseSubmatchesMatchJSON) RawJSON() string {
 }
 
 type FindFilesParams struct {
-	Query param.Field[string] `query:"query,required"`
+	Query     param.Field[string] `query:"query,required"`
+	Directory param.Field[string] `query:"directory"`
 }
 
 // URLQuery serializes [FindFilesParams]'s query parameters as `url.Values`.
@@ -302,7 +304,8 @@ func (r FindFilesParams) URLQuery() (v url.Values) {
 }
 
 type FindSymbolsParams struct {
-	Query param.Field[string] `query:"query,required"`
+	Query     param.Field[string] `query:"query,required"`
+	Directory param.Field[string] `query:"directory"`
 }
 
 // URLQuery serializes [FindSymbolsParams]'s query parameters as `url.Values`.
@@ -314,7 +317,8 @@ func (r FindSymbolsParams) URLQuery() (v url.Values) {
 }
 
 type FindTextParams struct {
-	Pattern param.Field[string] `query:"pattern,required"`
+	Pattern   param.Field[string] `query:"pattern,required"`
+	Directory param.Field[string] `query:"directory"`
 }
 
 // URLQuery serializes [FindTextParams]'s query parameters as `url.Values`.

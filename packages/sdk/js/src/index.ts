@@ -1,35 +1,21 @@
-import { createClient } from "./gen/client/client.js"
-import { type Config } from "./gen/client/types.js"
-import { OpencodeClient } from "./gen/sdk.gen.js"
-export * from "./gen/types.gen.js"
-import { spawn } from "child_process"
+export * from "./client.js"
+export * from "./server.js"
 
-export function createOpencodeClient(config?: Config) {
-  const client = createClient(config)
-  return new OpencodeClient({ client })
-}
+import { createOpencodeClient } from "./client.js"
+import { createOpencodeServer } from "./server.js"
+import type { ServerOptions } from "./server.js"
 
-export type ServerConfig = {
-  host?: string
-  port?: number
-}
+export async function createOpencode(options?: ServerOptions) {
+  const server = await createOpencodeServer({
+    ...options,
+  })
 
-export async function createOpencodeServer(config?: ServerConfig) {
-  config = Object.assign(
-    {
-      host: "127.0.0.1",
-      port: 4096,
-    },
-    config ?? {},
-  )
-
-  const proc = spawn(`opencode`, [`serve`, `--host=${config.host}`, `--port=${config.port}`])
-  const url = `http://${config.host}:${config.port}`
+  const client = createOpencodeClient({
+    baseUrl: server.url,
+  })
 
   return {
-    url,
-    close() {
-      proc.kill()
-    },
+    client,
+    server,
   }
 }

@@ -1,19 +1,21 @@
-import { App } from "../app/app"
 import { Ripgrep } from "../file/ripgrep"
 import { Global } from "../global"
 import { Filesystem } from "../util/filesystem"
 import { Config } from "../config/config"
+
+import { Instance } from "../project/instance"
 import path from "path"
 import os from "os"
 
 import PROMPT_ANTHROPIC from "./prompt/anthropic.txt"
 import PROMPT_ANTHROPIC_WITHOUT_TODO from "./prompt/qwen.txt"
+import PROMPT_POLARIS from "./prompt/polaris.txt"
 import PROMPT_BEAST from "./prompt/beast.txt"
 import PROMPT_GEMINI from "./prompt/gemini.txt"
 import PROMPT_ANTHROPIC_SPOOF from "./prompt/anthropic_spoof.txt"
 import PROMPT_SUMMARIZE from "./prompt/summarize.txt"
 import PROMPT_TITLE from "./prompt/title.txt"
-import PROMPT_COPILOT_GPT_5 from "./prompt/copilot-gpt-5.txt"
+import PROMPT_CODEX from "./prompt/codex.txt"
 
 export namespace SystemPrompt {
   export function header(providerID: string) {
@@ -22,29 +24,30 @@ export namespace SystemPrompt {
   }
 
   export function provider(modelID: string) {
-    if (modelID.includes("gpt-5")) return [PROMPT_COPILOT_GPT_5]
+    if (modelID.includes("gpt-5")) return [PROMPT_CODEX]
     if (modelID.includes("gpt-") || modelID.includes("o1") || modelID.includes("o3")) return [PROMPT_BEAST]
     if (modelID.includes("gemini-")) return [PROMPT_GEMINI]
     if (modelID.includes("claude")) return [PROMPT_ANTHROPIC]
+    if (modelID.includes("polaris-alpha")) return [PROMPT_POLARIS]
     return [PROMPT_ANTHROPIC_WITHOUT_TODO]
   }
 
   export async function environment() {
-    const app = App.info()
+    const project = Instance.project
     return [
       [
         `Here is some useful information about the environment you are running in:`,
         `<env>`,
-        `  Working directory: ${app.path.cwd}`,
-        `  Is directory a git repo: ${app.git ? "yes" : "no"}`,
+        `  Working directory: ${Instance.directory}`,
+        `  Is directory a git repo: ${project.vcs === "git" ? "yes" : "no"}`,
         `  Platform: ${process.platform}`,
         `  Today's date: ${new Date().toDateString()}`,
         `</env>`,
         `<project>`,
         `  ${
-          app.git
+          project.vcs === "git"
             ? await Ripgrep.tree({
-                cwd: app.path.cwd,
+                cwd: Instance.directory,
                 limit: 200,
               })
             : ""
@@ -65,12 +68,11 @@ export namespace SystemPrompt {
   ]
 
   export async function custom() {
-    const { cwd, root } = App.info().path
     const config = await Config.get()
     const paths = new Set<string>()
 
     for (const localRuleFile of LOCAL_RULE_FILES) {
-      const matches = await Filesystem.findUp(localRuleFile, cwd, root)
+      const matches = await Filesystem.findUp(localRuleFile, Instance.directory, Instance.worktree)
       if (matches.length > 0) {
         matches.forEach((path) => paths.add(path))
         break
@@ -99,7 +101,7 @@ export namespace SystemPrompt {
             }),
           ).catch(() => [])
         } else {
-          matches = await Filesystem.globUp(instruction, cwd, root).catch(() => [])
+          matches = await Filesystem.globUp(instruction, Instance.directory, Instance.worktree).catch(() => [])
         }
         matches.forEach((path) => paths.add(path))
       }
@@ -108,7 +110,8 @@ export namespace SystemPrompt {
     const found = Array.from(paths).map((p) =>
       Bun.file(p)
         .text()
-        .catch(() => ""),
+        .catch(() => "")
+        .then((x) => "Instructions from: " + p + "\n" + x),
     )
     return Promise.all(found).then((result) => result.filter(Boolean))
   }

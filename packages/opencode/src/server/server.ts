@@ -1,13 +1,13 @@
 import { Log } from "../util/log"
 import { Bus } from "../bus"
-import { describeRoute, generateSpecs, openAPISpecs } from "hono-openapi"
+import { describeRoute, generateSpecs, validator, resolver, openAPIRouteHandler } from "hono-openapi"
 import { Hono } from "hono"
-import { streamSSE } from "hono/streaming"
+import { cors } from "hono/cors"
+import { stream, streamSSE } from "hono/streaming"
+import { proxy } from "hono/proxy"
 import { Session } from "../session"
-import { resolver, validator as zValidator } from "hono-openapi/zod"
-import { z } from "zod"
+import z from "zod"
 import { Provider } from "../provider/provider"
-import { App } from "../app/app"
 import { mapValues } from "remeda"
 import { NamedError } from "../util/error"
 import { ModelsDev } from "../provider/models"
@@ -15,12 +15,31 @@ import { Ripgrep } from "../file/ripgrep"
 import { Config } from "../config/config"
 import { File } from "../file"
 import { LSP } from "../lsp"
+import { Format } from "../format"
 import { MessageV2 } from "../session/message-v2"
-import { callTui, TuiRoute } from "./tui"
+import { TuiRoute } from "./tui"
 import { Permission } from "../permission"
-import { lazy } from "../util/lazy"
+import { Instance } from "../project/instance"
 import { Agent } from "../agent/agent"
 import { Auth } from "../auth"
+import { Command } from "../command"
+import { Global } from "../global"
+import { ProjectRoute } from "./project"
+import { ToolRegistry } from "../tool/registry"
+import { zodToJsonSchema } from "zod-to-json-schema"
+import { SessionLock } from "../session/lock"
+import { SessionPrompt } from "../session/prompt"
+import { SessionCompaction } from "../session/compaction"
+import { SessionRevert } from "../session/revert"
+import { lazy } from "../util/lazy"
+import { Todo } from "../session/todo"
+import { InstanceBootstrap } from "../project/bootstrap"
+import { MCP } from "../mcp"
+import { Storage } from "../storage/storage"
+import type { ContentfulStatusCode } from "hono/utils/http-status"
+import { TuiEvent } from "@/cli/cmd/tui/event"
+import { Snapshot } from "@/snapshot"
+import { SessionSummary } from "@/session/summary"
 
 const ERRORS = {
   400: {
@@ -30,38 +49,55 @@ const ERRORS = {
         schema: resolver(
           z
             .object({
-              data: z.record(z.string(), z.any()),
+              data: z.any().nullable(),
+              errors: z.array(z.record(z.string(), z.any())),
+              success: z.literal(false),
             })
-            .openapi({
-              ref: "Error",
+            .meta({
+              ref: "BadRequestError",
             }),
         ),
       },
     },
   },
+  404: {
+    description: "Not found",
+    content: {
+      "application/json": {
+        schema: resolver(Storage.NotFoundError.Schema),
+      },
+    },
+  },
 } as const
+
+function errors(...codes: number[]) {
+  return Object.fromEntries(codes.map((code) => [code, ERRORS[code as keyof typeof ERRORS]]))
+}
 
 export namespace Server {
   const log = Log.create({ service: "server" })
-
-  export type Routes = ReturnType<typeof app>
 
   export const Event = {
     Connected: Bus.event("server.connected", z.object({})),
   }
 
-  export const app = lazy(() => {
-    const app = new Hono()
-
-    const result = app
+  const app = new Hono()
+  export const App = lazy(() =>
+    app
       .onError((err, c) => {
+        log.error("failed", {
+          error: err,
+        })
         if (err instanceof NamedError) {
-          return c.json(err.toObject(), {
-            status: 400,
-          })
+          let status: ContentfulStatusCode
+          if (err instanceof Storage.NotFoundError) status = 404
+          else if (err instanceof Provider.ModelNotFoundError) status = 400
+          else status = 500
+          return c.json(err.toObject(), { status })
         }
-        return c.json(new NamedError.Unknown({ message: err.toString() }).toObject(), {
-          status: 400,
+        const message = err instanceof Error && err.stack ? err.stack : err.toString()
+        return c.json(new NamedError.Unknown({ message }).toObject(), {
+          status: 500,
         })
       })
       .use(async (c, next) => {
@@ -72,17 +108,29 @@ export namespace Server {
             path: c.req.path,
           })
         }
-        const start = Date.now()
+        const timer = log.time("request", {
+          method: c.req.method,
+          path: c.req.path,
+        })
         await next()
         if (!skipLogging) {
-          log.info("response", {
-            duration: Date.now() - start,
-          })
+          timer.stop()
         }
       })
+      .use(async (c, next) => {
+        const directory = c.req.query("directory") ?? process.cwd()
+        return Instance.provide({
+          directory,
+          init: InstanceBootstrap,
+          async fn() {
+            return next()
+          },
+        })
+      })
+      .use(cors())
       .get(
         "/doc",
-        openAPISpecs(app, {
+        openAPIRouteHandler(app, {
           documentation: {
             info: {
               title: "opencode",
@@ -93,91 +141,8 @@ export namespace Server {
           },
         }),
       )
-      .get(
-        "/event",
-        describeRoute({
-          description: "Get events",
-          operationId: "event.subscribe",
-          responses: {
-            200: {
-              description: "Event stream",
-              content: {
-                "application/json": {
-                  schema: resolver(
-                    Bus.payloads().openapi({
-                      ref: "Event",
-                    }),
-                  ),
-                },
-              },
-            },
-          },
-        }),
-        async (c) => {
-          log.info("event connected")
-          return streamSSE(c, async (stream) => {
-            stream.writeSSE({
-              data: JSON.stringify({
-                type: "server.connected",
-                properties: {},
-              }),
-            })
-            const unsub = Bus.subscribeAll(async (event) => {
-              await stream.writeSSE({
-                data: JSON.stringify(event),
-              })
-            })
-            await new Promise<void>((resolve) => {
-              stream.onAbort(() => {
-                unsub()
-                resolve()
-                log.info("event disconnected")
-              })
-            })
-          })
-        },
-      )
-      .get(
-        "/app",
-        describeRoute({
-          description: "Get app info",
-          operationId: "app.get",
-          responses: {
-            200: {
-              description: "200",
-              content: {
-                "application/json": {
-                  schema: resolver(App.Info),
-                },
-              },
-            },
-          },
-        }),
-        async (c) => {
-          return c.json(App.info())
-        },
-      )
-      .post(
-        "/app/init",
-        describeRoute({
-          description: "Initialize the app",
-          operationId: "app.init",
-          responses: {
-            200: {
-              description: "Initialize the app",
-              content: {
-                "application/json": {
-                  schema: resolver(z.boolean()),
-                },
-              },
-            },
-          },
-        }),
-        async (c) => {
-          await App.initialize()
-          return c.json(true)
-        },
-      )
+      .use(validator("query", z.object({ directory: z.string().optional() })))
+      .route("/project", ProjectRoute)
       .get(
         "/config",
         describeRoute({
@@ -196,6 +161,137 @@ export namespace Server {
         }),
         async (c) => {
           return c.json(await Config.get())
+        },
+      )
+
+      .patch(
+        "/config",
+        describeRoute({
+          description: "Update config",
+          operationId: "config.update",
+          responses: {
+            200: {
+              description: "Successfully updated config",
+              content: {
+                "application/json": {
+                  schema: resolver(Config.Info),
+                },
+              },
+            },
+            ...errors(400),
+          },
+        }),
+        validator("json", Config.Info),
+        async (c) => {
+          const config = c.req.valid("json")
+          await Config.update(config)
+          return c.json(config)
+        },
+      )
+      .get(
+        "/experimental/tool/ids",
+        describeRoute({
+          description: "List all tool IDs (including built-in and dynamically registered)",
+          operationId: "tool.ids",
+          responses: {
+            200: {
+              description: "Tool IDs",
+              content: {
+                "application/json": {
+                  schema: resolver(z.array(z.string()).meta({ ref: "ToolIDs" })),
+                },
+              },
+            },
+            ...errors(400),
+          },
+        }),
+        async (c) => {
+          return c.json(await ToolRegistry.ids())
+        },
+      )
+      .get(
+        "/experimental/tool",
+        describeRoute({
+          description: "List tools with JSON schema parameters for a provider/model",
+          operationId: "tool.list",
+          responses: {
+            200: {
+              description: "Tools",
+              content: {
+                "application/json": {
+                  schema: resolver(
+                    z
+                      .array(
+                        z
+                          .object({
+                            id: z.string(),
+                            description: z.string(),
+                            parameters: z.any(),
+                          })
+                          .meta({ ref: "ToolListItem" }),
+                      )
+                      .meta({ ref: "ToolList" }),
+                  ),
+                },
+              },
+            },
+            ...errors(400),
+          },
+        }),
+        validator(
+          "query",
+          z.object({
+            provider: z.string(),
+            model: z.string(),
+          }),
+        ),
+        async (c) => {
+          const { provider, model } = c.req.valid("query")
+          const tools = await ToolRegistry.tools(provider, model)
+          return c.json(
+            tools.map((t) => ({
+              id: t.id,
+              description: t.description,
+              // Handle both Zod schemas and plain JSON schemas
+              parameters: (t.parameters as any)?._def ? zodToJsonSchema(t.parameters as any) : t.parameters,
+            })),
+          )
+        },
+      )
+      .get(
+        "/path",
+        describeRoute({
+          description: "Get the current path",
+          operationId: "path.get",
+          responses: {
+            200: {
+              description: "Path",
+              content: {
+                "application/json": {
+                  schema: resolver(
+                    z
+                      .object({
+                        state: z.string(),
+                        config: z.string(),
+                        worktree: z.string(),
+                        directory: z.string(),
+                      })
+                      .meta({
+                        ref: "Path",
+                      }),
+                  ),
+                },
+              },
+            },
+          },
+        }),
+        async (c) => {
+          return c.json({
+            state: Global.Path.state,
+            config: Global.Path.config,
+            worktree: Instance.worktree,
+            directory: Instance.directory,
+          })
         },
       )
       .get(
@@ -234,12 +330,13 @@ export namespace Server {
                 },
               },
             },
+            ...errors(400, 404),
           },
         }),
-        zValidator(
+        validator(
           "param",
           z.object({
-            id: z.string(),
+            id: Session.get.schema,
           }),
         ),
         async (c) => {
@@ -262,12 +359,13 @@ export namespace Server {
                 },
               },
             },
+            ...errors(400, 404),
           },
         }),
-        zValidator(
+        validator(
           "param",
           z.object({
-            id: z.string(),
+            id: Session.children.schema,
           }),
         ),
         async (c) => {
@@ -276,13 +374,42 @@ export namespace Server {
           return c.json(session)
         },
       )
+      .get(
+        "/session/:id/todo",
+        describeRoute({
+          description: "Get the todo list for a session",
+          operationId: "session.todo",
+          responses: {
+            200: {
+              description: "Todo list",
+              content: {
+                "application/json": {
+                  schema: resolver(Todo.Info.array()),
+                },
+              },
+            },
+            ...errors(400, 404),
+          },
+        }),
+        validator(
+          "param",
+          z.object({
+            id: z.string().meta({ description: "Session ID" }),
+          }),
+        ),
+        async (c) => {
+          const sessionID = c.req.valid("param").id
+          const todos = await Todo.get(sessionID)
+          return c.json(todos)
+        },
+      )
       .post(
         "/session",
         describeRoute({
           description: "Create a new session",
           operationId: "session.create",
           responses: {
-            ...ERRORS,
+            ...errors(400),
             200: {
               description: "Successfully created session",
               content: {
@@ -293,18 +420,10 @@ export namespace Server {
             },
           },
         }),
-        zValidator(
-          "json",
-          z
-            .object({
-              parentID: z.string().optional(),
-              title: z.string().optional(),
-            })
-            .optional(),
-        ),
+        validator("json", Session.create.schema.optional()),
         async (c) => {
           const body = c.req.valid("json") ?? {}
-          const session = await Session.create(body.parentID, body.title)
+          const session = await Session.create(body)
           return c.json(session)
         },
       )
@@ -322,16 +441,21 @@ export namespace Server {
                 },
               },
             },
+            ...errors(400, 404),
           },
         }),
-        zValidator(
+        validator(
           "param",
           z.object({
-            id: z.string(),
+            id: Session.remove.schema,
           }),
         ),
         async (c) => {
-          await Session.remove(c.req.valid("param").id)
+          const sessionID = c.req.valid("param").id
+          await Session.remove(sessionID)
+          await Bus.publish(TuiEvent.CommandExecute, {
+            command: "session.list",
+          })
           return c.json(true)
         },
       )
@@ -349,15 +473,16 @@ export namespace Server {
                 },
               },
             },
+            ...errors(400, 404),
           },
         }),
-        zValidator(
+        validator(
           "param",
           z.object({
             id: z.string(),
           }),
         ),
-        zValidator(
+        validator(
           "json",
           z.object({
             title: z.string().optional(),
@@ -390,27 +515,51 @@ export namespace Server {
                 },
               },
             },
+            ...errors(400, 404),
           },
         }),
-        zValidator(
+        validator(
           "param",
           z.object({
-            id: z.string().openapi({ description: "Session ID" }),
+            id: z.string().meta({ description: "Session ID" }),
           }),
         ),
-        zValidator(
-          "json",
-          z.object({
-            messageID: z.string(),
-            providerID: z.string(),
-            modelID: z.string(),
-          }),
-        ),
+        validator("json", Session.initialize.schema.omit({ sessionID: true })),
         async (c) => {
           const sessionID = c.req.valid("param").id
           const body = c.req.valid("json")
           await Session.initialize({ ...body, sessionID })
           return c.json(true)
+        },
+      )
+      .post(
+        "/session/:id/fork",
+        describeRoute({
+          description: "Fork an existing session at a specific message",
+          operationId: "session.fork",
+          responses: {
+            200: {
+              description: "200",
+              content: {
+                "application/json": {
+                  schema: resolver(Session.Info),
+                },
+              },
+            },
+          },
+        }),
+        validator(
+          "param",
+          z.object({
+            id: Session.fork.schema.shape.sessionID,
+          }),
+        ),
+        validator("json", Session.fork.schema.omit({ sessionID: true })),
+        async (c) => {
+          const sessionID = c.req.valid("param").id
+          const body = c.req.valid("json")
+          const result = await Session.fork({ ...body, sessionID })
+          return c.json(result)
         },
       )
       .post(
@@ -427,16 +576,17 @@ export namespace Server {
                 },
               },
             },
+            ...errors(400, 404),
           },
         }),
-        zValidator(
+        validator(
           "param",
           z.object({
             id: z.string(),
           }),
         ),
         async (c) => {
-          return c.json(Session.abort(c.req.valid("param").id))
+          return c.json(SessionLock.abort(c.req.valid("param").id))
         },
       )
       .post(
@@ -453,9 +603,10 @@ export namespace Server {
                 },
               },
             },
+            ...errors(400, 404),
           },
         }),
-        zValidator(
+        validator(
           "param",
           z.object({
             id: z.string(),
@@ -466,6 +617,44 @@ export namespace Server {
           await Session.share(id)
           const session = await Session.get(id)
           return c.json(session)
+        },
+      )
+      .get(
+        "/session/:id/diff",
+        describeRoute({
+          description: "Get the diff that resulted from this user message",
+          operationId: "session.diff",
+          responses: {
+            200: {
+              description: "Successfully retrieved diff",
+              content: {
+                "application/json": {
+                  schema: resolver(Snapshot.FileDiff.array()),
+                },
+              },
+            },
+          },
+        }),
+        validator(
+          "param",
+          z.object({
+            id: SessionSummary.diff.schema.shape.sessionID,
+          }),
+        ),
+        validator(
+          "query",
+          z.object({
+            messageID: SessionSummary.diff.schema.shape.messageID,
+          }),
+        ),
+        async (c) => {
+          const query = c.req.valid("query")
+          const params = c.req.valid("param")
+          const result = await SessionSummary.diff({
+            sessionID: params.id,
+            messageID: query.messageID,
+          })
+          return c.json(result)
         },
       )
       .delete(
@@ -482,12 +671,13 @@ export namespace Server {
                 },
               },
             },
+            ...errors(400, 404),
           },
         }),
-        zValidator(
+        validator(
           "param",
           z.object({
-            id: z.string(),
+            id: Session.unshare.schema,
           }),
         ),
         async (c) => {
@@ -511,15 +701,16 @@ export namespace Server {
                 },
               },
             },
+            ...errors(400, 404),
           },
         }),
-        zValidator(
+        validator(
           "param",
           z.object({
-            id: z.string().openapi({ description: "Session ID" }),
+            id: z.string().meta({ description: "Session ID" }),
           }),
         ),
-        zValidator(
+        validator(
           "json",
           z.object({
             providerID: z.string(),
@@ -529,7 +720,7 @@ export namespace Server {
         async (c) => {
           const id = c.req.valid("param").id
           const body = c.req.valid("json")
-          await Session.summarize({ ...body, sessionID: id })
+          await SessionCompaction.run({ ...body, sessionID: id })
           return c.json(true)
         },
       )
@@ -543,28 +734,60 @@ export namespace Server {
               description: "List of messages",
               content: {
                 "application/json": {
-                  schema: resolver(
-                    z
-                      .object({
-                        info: MessageV2.Info,
-                        parts: MessageV2.Part.array(),
-                      })
-                      .array(),
-                  ),
+                  schema: resolver(MessageV2.WithParts.array()),
                 },
               },
             },
+            ...errors(400, 404),
           },
         }),
-        zValidator(
+        validator(
           "param",
           z.object({
-            id: z.string().openapi({ description: "Session ID" }),
+            id: z.string().meta({ description: "Session ID" }),
+          }),
+        ),
+        validator(
+          "query",
+          z.object({
+            limit: z.coerce.number().optional(),
           }),
         ),
         async (c) => {
-          const messages = await Session.messages(c.req.valid("param").id)
+          const query = c.req.valid("query")
+          const messages = await Session.messages({
+            sessionID: c.req.valid("param").id,
+            limit: query.limit,
+          })
           return c.json(messages)
+        },
+      )
+      .get(
+        "/session/:id/diff",
+        describeRoute({
+          description: "Get the diff for this session",
+          operationId: "session.diff",
+          responses: {
+            200: {
+              description: "List of diffs",
+              content: {
+                "application/json": {
+                  schema: resolver(Snapshot.FileDiff.array()),
+                },
+              },
+            },
+            ...errors(400, 404),
+          },
+        }),
+        validator(
+          "param",
+          z.object({
+            id: z.string().meta({ description: "Session ID" }),
+          }),
+        ),
+        async (c) => {
+          const diff = await Session.diff(c.req.valid("param").id)
+          return c.json(diff)
         },
       )
       .get(
@@ -586,18 +809,22 @@ export namespace Server {
                 },
               },
             },
+            ...errors(400, 404),
           },
         }),
-        zValidator(
+        validator(
           "param",
           z.object({
-            id: z.string().openapi({ description: "Session ID" }),
-            messageID: z.string().openapi({ description: "Message ID" }),
+            id: z.string().meta({ description: "Session ID" }),
+            messageID: z.string().meta({ description: "Message ID" }),
           }),
         ),
         async (c) => {
           const params = c.req.valid("param")
-          const message = await Session.getMessage(params.id, params.messageID)
+          const message = await MessageV2.get({
+            sessionID: params.id,
+            messageID: params.messageID,
+          })
           return c.json(message)
         },
       )
@@ -605,29 +832,75 @@ export namespace Server {
         "/session/:id/message",
         describeRoute({
           description: "Create and send a new message to a session",
-          operationId: "session.chat",
+          operationId: "session.prompt",
           responses: {
             200: {
               description: "Created message",
               content: {
                 "application/json": {
-                  schema: resolver(MessageV2.Assistant),
+                  schema: resolver(
+                    z.object({
+                      info: MessageV2.Assistant,
+                      parts: MessageV2.Part.array(),
+                    }),
+                  ),
                 },
               },
             },
+            ...errors(400, 404),
           },
         }),
-        zValidator(
+        validator(
           "param",
           z.object({
-            id: z.string().openapi({ description: "Session ID" }),
+            id: z.string().meta({ description: "Session ID" }),
           }),
         ),
-        zValidator("json", Session.ChatInput.omit({ sessionID: true })),
+        validator("json", SessionPrompt.PromptInput.omit({ sessionID: true })),
+        async (c) => {
+          c.status(200)
+          c.header("Content-Type", "application/json")
+          return stream(c, async (stream) => {
+            const sessionID = c.req.valid("param").id
+            const body = c.req.valid("json")
+            const msg = await SessionPrompt.prompt({ ...body, sessionID })
+            stream.write(JSON.stringify(msg))
+          })
+        },
+      )
+      .post(
+        "/session/:id/command",
+        describeRoute({
+          description: "Send a new command to a session",
+          operationId: "session.command",
+          responses: {
+            200: {
+              description: "Created message",
+              content: {
+                "application/json": {
+                  schema: resolver(
+                    z.object({
+                      info: MessageV2.Assistant,
+                      parts: MessageV2.Part.array(),
+                    }),
+                  ),
+                },
+              },
+            },
+            ...errors(400, 404),
+          },
+        }),
+        validator(
+          "param",
+          z.object({
+            id: z.string().meta({ description: "Session ID" }),
+          }),
+        ),
+        validator("json", SessionPrompt.CommandInput.omit({ sessionID: true })),
         async (c) => {
           const sessionID = c.req.valid("param").id
           const body = c.req.valid("json")
-          const msg = await Session.chat({ ...body, sessionID })
+          const msg = await SessionPrompt.command({ ...body, sessionID })
           return c.json(msg)
         },
       )
@@ -645,19 +918,20 @@ export namespace Server {
                 },
               },
             },
+            ...errors(400, 404),
           },
         }),
-        zValidator(
+        validator(
           "param",
           z.object({
-            id: z.string().openapi({ description: "Session ID" }),
+            id: z.string().meta({ description: "Session ID" }),
           }),
         ),
-        zValidator("json", Session.CommandInput.omit({ sessionID: true })),
+        validator("json", SessionPrompt.ShellInput.omit({ sessionID: true })),
         async (c) => {
           const sessionID = c.req.valid("param").id
           const body = c.req.valid("json")
-          const msg = await Session.shell({ ...body, sessionID })
+          const msg = await SessionPrompt.shell({ ...body, sessionID })
           return c.json(msg)
         },
       )
@@ -675,19 +949,23 @@ export namespace Server {
                 },
               },
             },
+            ...errors(400, 404),
           },
         }),
-        zValidator(
+        validator(
           "param",
           z.object({
             id: z.string(),
           }),
         ),
-        zValidator("json", Session.RevertInput.omit({ sessionID: true })),
+        validator("json", SessionRevert.RevertInput.omit({ sessionID: true })),
         async (c) => {
           const id = c.req.valid("param").id
           log.info("revert", c.req.valid("json"))
-          const session = await Session.revert({ sessionID: id, ...c.req.valid("json") })
+          const session = await SessionRevert.revert({
+            sessionID: id,
+            ...c.req.valid("json"),
+          })
           return c.json(session)
         },
       )
@@ -705,9 +983,10 @@ export namespace Server {
                 },
               },
             },
+            ...errors(400, 404),
           },
         }),
-        zValidator(
+        validator(
           "param",
           z.object({
             id: z.string(),
@@ -715,7 +994,7 @@ export namespace Server {
         ),
         async (c) => {
           const id = c.req.valid("param").id
-          const session = await Session.unrevert({ sessionID: id })
+          const session = await SessionRevert.unrevert({ sessionID: id })
           return c.json(session)
         },
       )
@@ -732,22 +1011,48 @@ export namespace Server {
                 },
               },
             },
+            ...errors(400, 404),
           },
         }),
-        zValidator(
+        validator(
           "param",
           z.object({
             id: z.string(),
             permissionID: z.string(),
           }),
         ),
-        zValidator("json", z.object({ response: Permission.Response })),
+        validator("json", z.object({ response: Permission.Response })),
         async (c) => {
           const params = c.req.valid("param")
           const id = params.id
           const permissionID = params.permissionID
-          Permission.respond({ sessionID: id, permissionID, response: c.req.valid("json").response })
+          Permission.respond({
+            sessionID: id,
+            permissionID,
+            response: c.req.valid("json").response,
+          })
           return c.json(true)
+        },
+      )
+      .get(
+        "/command",
+        describeRoute({
+          description: "List all commands",
+          operationId: "command.list",
+          responses: {
+            200: {
+              description: "List of commands",
+              content: {
+                "application/json": {
+                  schema: resolver(Command.Info.array()),
+                },
+              },
+            },
+          },
+        }),
+        async (c) => {
+          const commands = await Command.list()
+          return c.json(commands)
         },
       )
       .get(
@@ -772,6 +1077,7 @@ export namespace Server {
           },
         }),
         async (c) => {
+          using _ = log.time("providers")
           const providers = await Provider.list().then((x) => mapValues(x, (item) => item.info))
           return c.json({
             providers: Object.values(providers),
@@ -795,17 +1101,16 @@ export namespace Server {
             },
           },
         }),
-        zValidator(
+        validator(
           "query",
           z.object({
             pattern: z.string(),
           }),
         ),
         async (c) => {
-          const app = App.info()
           const pattern = c.req.valid("query").pattern
           const result = await Ripgrep.search({
-            cwd: app.path.cwd,
+            cwd: Instance.directory,
             pattern,
             limit: 10,
           })
@@ -828,21 +1133,22 @@ export namespace Server {
             },
           },
         }),
-        zValidator(
+        validator(
           "query",
           z.object({
             query: z.string(),
+            dirs: z.union([z.literal("true"), z.literal("false")]).optional(),
           }),
         ),
         async (c) => {
           const query = c.req.valid("query").query
-          const app = App.info()
-          const result = await Ripgrep.files({
-            cwd: app.path.cwd,
+          const dirs = c.req.valid("query").dirs
+          const results = await File.search({
             query,
             limit: 10,
+            dirs: dirs !== "false",
           })
-          return c.json(result)
+          return c.json(results)
         },
       )
       .get(
@@ -861,20 +1167,51 @@ export namespace Server {
             },
           },
         }),
-        zValidator(
+        validator(
           "query",
           z.object({
             query: z.string(),
           }),
         ),
         async (c) => {
+          /*
           const query = c.req.valid("query").query
           const result = await LSP.workspaceSymbol(query)
           return c.json(result)
+          */
+          return c.json([])
         },
       )
       .get(
         "/file",
+        describeRoute({
+          description: "List files and directories",
+          operationId: "file.list",
+          responses: {
+            200: {
+              description: "Files and directories",
+              content: {
+                "application/json": {
+                  schema: resolver(File.Node.array()),
+                },
+              },
+            },
+          },
+        }),
+        validator(
+          "query",
+          z.object({
+            path: z.string(),
+          }),
+        ),
+        async (c) => {
+          const path = c.req.valid("query").path
+          const content = await File.list(path)
+          return c.json(content)
+        },
+      )
+      .get(
+        "/file/content",
         describeRoute({
           description: "Read a file",
           operationId: "file.read",
@@ -883,18 +1220,13 @@ export namespace Server {
               description: "File content",
               content: {
                 "application/json": {
-                  schema: resolver(
-                    z.object({
-                      type: z.enum(["raw", "patch"]),
-                      content: z.string(),
-                    }),
-                  ),
+                  schema: resolver(File.Content),
                 },
               },
             },
           },
         }),
-        zValidator(
+        validator(
           "query",
           z.object({
             path: z.string(),
@@ -903,10 +1235,6 @@ export namespace Server {
         async (c) => {
           const path = c.req.valid("query").path
           const content = await File.read(path)
-          log.info("read file", {
-            path,
-            content: content.content,
-          })
           return c.json(content)
         },
       )
@@ -945,18 +1273,19 @@ export namespace Server {
                 },
               },
             },
+            ...errors(400),
           },
         }),
-        zValidator(
+        validator(
           "json",
           z.object({
-            service: z.string().openapi({ description: "Service name for the log entry" }),
-            level: z.enum(["debug", "info", "error", "warn"]).openapi({ description: "Log level" }),
-            message: z.string().openapi({ description: "Log message" }),
+            service: z.string().meta({ description: "Service name for the log entry" }),
+            level: z.enum(["debug", "info", "error", "warn"]).meta({ description: "Log level" }),
+            message: z.string().meta({ description: "Log message" }),
             extra: z
               .record(z.string(), z.any())
               .optional()
-              .openapi({ description: "Additional metadata for the log entry" }),
+              .meta({ description: "Additional metadata for the log entry" }),
           }),
         ),
         async (c) => {
@@ -1002,6 +1331,96 @@ export namespace Server {
           return c.json(modes)
         },
       )
+      .get(
+        "/mcp",
+        describeRoute({
+          description: "Get MCP server status",
+          operationId: "mcp.status",
+          responses: {
+            200: {
+              description: "MCP server status",
+              content: {
+                "application/json": {
+                  schema: resolver(z.record(z.string(), MCP.Status)),
+                },
+              },
+            },
+          },
+        }),
+        async (c) => {
+          return c.json(await MCP.status())
+        },
+      )
+      .post(
+        "/mcp",
+        describeRoute({
+          description: "Add MCP server dynamically",
+          operationId: "mcp.add",
+          responses: {
+            200: {
+              description: "MCP server added successfully",
+              content: {
+                "application/json": {
+                  schema: resolver(z.record(z.string(), MCP.Status)),
+                },
+              },
+            },
+            ...errors(400),
+          },
+        }),
+        validator(
+          "json",
+          z.object({
+            name: z.string(),
+            config: Config.Mcp,
+          }),
+        ),
+        async (c) => {
+          const { name, config } = c.req.valid("json")
+          const result = await MCP.add(name, config)
+          return c.json(result.status)
+        },
+      )
+      .get(
+        "/lsp",
+        describeRoute({
+          description: "Get LSP server status",
+          operationId: "lsp.status",
+          responses: {
+            200: {
+              description: "LSP server status",
+              content: {
+                "application/json": {
+                  schema: resolver(LSP.Status.array()),
+                },
+              },
+            },
+          },
+        }),
+        async (c) => {
+          return c.json(await LSP.status())
+        },
+      )
+      .get(
+        "/formatter",
+        describeRoute({
+          description: "Get formatter status",
+          operationId: "formatter.status",
+          responses: {
+            200: {
+              description: "Formatter status",
+              content: {
+                "application/json": {
+                  schema: resolver(Format.Status.array()),
+                },
+              },
+            },
+          },
+        }),
+        async (c) => {
+          return c.json(await Format.status())
+        },
+      )
       .post(
         "/tui/append-prompt",
         describeRoute({
@@ -1016,15 +1435,14 @@ export namespace Server {
                 },
               },
             },
+            ...errors(400),
           },
         }),
-        zValidator(
-          "json",
-          z.object({
-            text: z.string(),
-          }),
-        ),
-        async (c) => c.json(await callTui(c)),
+        validator("json", TuiEvent.PromptAppend.properties),
+        async (c) => {
+          await Bus.publish(TuiEvent.PromptAppend, c.req.valid("json"))
+          return c.json(true)
+        },
       )
       .post(
         "/tui/open-help",
@@ -1042,7 +1460,10 @@ export namespace Server {
             },
           },
         }),
-        async (c) => c.json(await callTui(c)),
+        async (c) => {
+          // TODO: open dialog
+          return c.json(true)
+        },
       )
       .post(
         "/tui/open-sessions",
@@ -1060,7 +1481,12 @@ export namespace Server {
             },
           },
         }),
-        async (c) => c.json(await callTui(c)),
+        async (c) => {
+          await Bus.publish(TuiEvent.CommandExecute, {
+            command: "session.list",
+          })
+          return c.json(true)
+        },
       )
       .post(
         "/tui/open-themes",
@@ -1078,7 +1504,12 @@ export namespace Server {
             },
           },
         }),
-        async (c) => c.json(await callTui(c)),
+        async (c) => {
+          await Bus.publish(TuiEvent.CommandExecute, {
+            command: "session.list",
+          })
+          return c.json(true)
+        },
       )
       .post(
         "/tui/open-models",
@@ -1096,7 +1527,12 @@ export namespace Server {
             },
           },
         }),
-        async (c) => c.json(await callTui(c)),
+        async (c) => {
+          await Bus.publish(TuiEvent.CommandExecute, {
+            command: "model.list",
+          })
+          return c.json(true)
+        },
       )
       .post(
         "/tui/submit-prompt",
@@ -1114,7 +1550,12 @@ export namespace Server {
             },
           },
         }),
-        async (c) => c.json(await callTui(c)),
+        async (c) => {
+          await Bus.publish(TuiEvent.CommandExecute, {
+            command: "prompt.submit",
+          })
+          return c.json(true)
+        },
       )
       .post(
         "/tui/clear-prompt",
@@ -1132,7 +1573,12 @@ export namespace Server {
             },
           },
         }),
-        async (c) => c.json(await callTui(c)),
+        async (c) => {
+          await Bus.publish(TuiEvent.CommandExecute, {
+            command: "prompt.clear",
+          })
+          return c.json(true)
+        },
       )
       .post(
         "/tui/execute-command",
@@ -1148,15 +1594,30 @@ export namespace Server {
                 },
               },
             },
+            ...errors(400),
           },
         }),
-        zValidator(
-          "json",
-          z.object({
-            command: z.string(),
-          }),
-        ),
-        async (c) => c.json(await callTui(c)),
+        validator("json", z.object({ command: z.string() })),
+        async (c) => {
+          const command = c.req.valid("json").command
+          await Bus.publish(TuiEvent.CommandExecute, {
+            // @ts-expect-error
+            command: {
+              session_new: "session.new",
+              session_share: "session.share",
+              session_interrupt: "session.interrupt",
+              session_compact: "session.compact",
+              messages_page_up: "session.page.up",
+              messages_page_down: "session.page.down",
+              messages_half_page_up: "session.half.page.up",
+              messages_half_page_down: "session.half.page.down",
+              messages_first: "session.first",
+              messages_last: "session.last",
+              agent_cycle: "agent.cycle",
+            }[command],
+          })
+          return c.json(true)
+        },
       )
       .post(
         "/tui/show-toast",
@@ -1174,15 +1635,49 @@ export namespace Server {
             },
           },
         }),
-        zValidator(
+        validator("json", TuiEvent.ToastShow.properties),
+        async (c) => {
+          await Bus.publish(TuiEvent.ToastShow, c.req.valid("json"))
+          return c.json(true)
+        },
+      )
+      .post(
+        "/tui/publish",
+        describeRoute({
+          description: "Publish a TUI event",
+          operationId: "tui.publish",
+          responses: {
+            200: {
+              description: "Event published successfully",
+              content: {
+                "application/json": {
+                  schema: resolver(z.boolean()),
+                },
+              },
+            },
+            ...errors(400),
+          },
+        }),
+        validator(
           "json",
-          z.object({
-            title: z.string().optional(),
-            message: z.string(),
-            variant: z.enum(["info", "success", "warning", "error"]),
-          }),
+          z.union(
+            Object.values(TuiEvent).map((def) => {
+              return z
+                .object({
+                  type: z.literal(def.type),
+                  properties: def.properties,
+                })
+                .meta({
+                  ref: "Event" + "." + def.type,
+                })
+            }),
+          ),
         ),
-        async (c) => c.json(await callTui(c)),
+        async (c) => {
+          const evt = c.req.valid("json")
+          await Bus.publish(Object.values(TuiEvent).find((def) => def.type === evt.type)!, evt.properties)
+          return c.json(true)
+        },
       )
       .route("/tui/control", TuiRoute)
       .put(
@@ -1199,16 +1694,16 @@ export namespace Server {
                 },
               },
             },
-            ...ERRORS,
+            ...errors(400),
           },
         }),
-        zValidator(
+        validator(
           "param",
           z.object({
             id: z.string(),
           }),
         ),
-        zValidator("json", Auth.Info),
+        validator("json", Auth.Info),
         async (c) => {
           const id = c.req.valid("param").id
           const info = c.req.valid("json")
@@ -1216,13 +1711,62 @@ export namespace Server {
           return c.json(true)
         },
       )
-
-    return result
-  })
+      .get(
+        "/event",
+        describeRoute({
+          description: "Get events",
+          operationId: "event.subscribe",
+          responses: {
+            200: {
+              description: "Event stream",
+              content: {
+                "text/event-stream": {
+                  schema: resolver(
+                    Bus.payloads().meta({
+                      ref: "Event",
+                    }),
+                  ),
+                },
+              },
+            },
+          },
+        }),
+        async (c) => {
+          log.info("event connected")
+          return streamSSE(c, async (stream) => {
+            stream.writeSSE({
+              data: JSON.stringify({
+                type: "server.connected",
+                properties: {},
+              }),
+            })
+            const unsub = Bus.subscribeAll(async (event) => {
+              await stream.writeSSE({
+                data: JSON.stringify(event),
+              })
+            })
+            await new Promise<void>((resolve) => {
+              stream.onAbort(() => {
+                unsub()
+                resolve()
+                log.info("event disconnected")
+              })
+            })
+          })
+        },
+      )
+      .all("/*", async (c) => {
+        return proxy(`https://desktop.dev.opencode.ai${c.req.path}`, {
+          ...c.req,
+          headers: {
+            host: "desktop.dev.opencode.ai",
+          },
+        })
+      }),
+  )
 
   export async function openapi() {
-    const a = app()
-    const result = await generateSpecs(a, {
+    const result = await generateSpecs(App(), {
       documentation: {
         info: {
           title: "opencode",
@@ -1240,7 +1784,7 @@ export namespace Server {
       port: opts.port,
       hostname: opts.hostname,
       idleTimeout: 0,
-      fetch: app().fetch,
+      fetch: App().fetch,
     })
     return server
   }
