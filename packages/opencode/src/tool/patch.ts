@@ -54,7 +54,21 @@ export const PatchTool = Tool.define("patch", {
       const filePath = path.resolve(Instance.directory, hunk.path)
 
       if (!Filesystem.contains(Instance.directory, filePath)) {
-        throw new Error(`File ${filePath} is not in the current working directory`)
+        const parentDir = path.dirname(filePath)
+        if (agent.permission.external_directory === "ask") {
+          await Permission.ask({
+            type: "external_directory",
+            pattern: parentDir,
+            sessionID: ctx.sessionID,
+            messageID: ctx.messageID,
+            callID: ctx.callID,
+            title: `Patch file outside working directory: ${filePath}`,
+            metadata: {
+              filepath: filePath,
+              parentDir,
+            },
+          })
+        }
       }
 
       switch (hunk.type) {

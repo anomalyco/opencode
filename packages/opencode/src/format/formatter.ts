@@ -1,3 +1,4 @@
+import { readableStreamToText } from "bun"
 import { BunProc } from "../bun"
 import { Instance } from "../project/instance"
 import { Filesystem } from "../util/filesystem"
@@ -174,6 +175,33 @@ export const ruff: Info = {
       }
     }
     return false
+  },
+}
+
+export const rlang: Info = {
+  name: "air",
+  command: ["air", "format", "$FILE"],
+  extensions: [".R"],
+  async enabled() {
+    const airPath = Bun.which("air")
+    if (airPath == null) return false
+
+    try {
+      const proc = Bun.spawn(["air", "--help"], {
+        stdout: "pipe",
+        stderr: "pipe",
+      })
+      await proc.exited
+      const output = await readableStreamToText(proc.stdout)
+
+      // Check for "Air: An R language server and formatter"
+      const firstLine = output.split("\n")[0]
+      const hasR = firstLine.includes("R language")
+      const hasFormatter = firstLine.includes("formatter")
+      return hasR && hasFormatter
+    } catch (error) {
+      return false
+    }
   },
 }
 

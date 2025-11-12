@@ -532,7 +532,9 @@ export function toOaCompatibleChunk(chunk: CommonChunk): string {
       total_tokens: chunk.usage.total_tokens,
       ...(chunk.usage.prompt_tokens_details?.cached_tokens
         ? {
-            prompt_tokens_details: { cached_tokens: chunk.usage.prompt_tokens_details.cached_tokens },
+            prompt_tokens_details: {
+              cached_tokens: chunk.usage.prompt_tokens_details.cached_tokens,
+            },
           }
         : {}),
     }

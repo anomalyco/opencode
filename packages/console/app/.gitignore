@@ -23,6 +23,9 @@ app.config.timestamp_*.js
 # Temp
 gitignore
 
+# Generated files
+public/sitemap.xml
+
 # System Files
 .DS_Store
 Thumbs.db

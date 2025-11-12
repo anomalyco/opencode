@@ -31,7 +31,7 @@
       margin: 0;
     }
 
-    >button {
+    > button {
       align-self: flex-start;
     }
   }
@@ -80,7 +80,7 @@
       }
     }
 
-    >button[type="reset"] {
+    > button[type="reset"] {
       align-self: flex-start;
     }
 

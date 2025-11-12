@@ -77,7 +77,10 @@ export function fromOpenaiRequest(body: any): CommonRequest {
       typeof (s as any).media_type === "string" &&
       typeof (s as any).data === "string"
     )
-      return { type: "image_url", image_url: { url: `data:${(s as any).media_type};base64,${(s as any).data}` } }
+      return {
+        type: "image_url",
+        image_url: { url: `data:${(s as any).media_type};base64,${(s as any).data}` },
+      }
     return undefined
   }
 
@@ -153,7 +156,11 @@ export function fromOpenaiRequest(body: any): CommonRequest {
     }
 
     if ((m as any).role === "tool") {
-      msgs.push({ role: "tool", tool_call_id: (m as any).tool_call_id, content: (m as any).content })
+      msgs.push({
+        role: "tool",
+        tool_call_id: (m as any).tool_call_id,
+        content: (m as any).content,
+      })
       continue
     }
   }
@@ -210,7 +217,10 @@ export function toOpenaiRequest(body: CommonRequest) {
       typeof (s as any).media_type === "string" &&
       typeof (s as any).data === "string"
     )
-      return { type: "input_image", image_url: { url: `data:${(s as any).media_type};base64,${(s as any).data}` } }
+      return {
+        type: "input_image",
+        image_url: { url: `data:${(s as any).media_type};base64,${(s as any).data}` },
+      }
     return undefined
   }
 
@@ -498,7 +508,9 @@ export function fromOpenaiChunk(chunk: string): CommonChunk | string {
     if (typeof name === "string" && name.length > 0) {
       out.choices.push({
         index: 0,
-        delta: { tool_calls: [{ index: 0, id, type: "function", function: { name, arguments: "" } }] },
+        delta: {
+          tool_calls: [{ index: 0, id, type: "function", function: { name, arguments: "" } }],
+        },
         finish_reason: null,
       })
     }
@@ -555,7 +567,12 @@ export function toOpenaiChunk(chunk: CommonChunk): string {
   const model = chunk.model
 
   if (d.content) {
-    const data = { id, type: "response.output_text.delta", delta: d.content, response: { id, model } }
+    const data = {
+      id,
+      type: "response.output_text.delta",
+      delta: d.content,
+      response: { id, model },
+    }
     return `event: response.output_text.delta\ndata: ${JSON.stringify(data)}`
   }
 
@@ -565,7 +582,13 @@ export function toOpenaiChunk(chunk: CommonChunk): string {
         const data = {
           type: "response.output_item.added",
           output_index: 0,
-          item: { id: tc.id, type: "function_call", name: tc.function.name, call_id: tc.id, arguments: "" },
+          item: {
+            id: tc.id,
+            type: "function_call",
+            name: tc.function.name,
+            call_id: tc.id,
+            arguments: "",
+          },
         }
         return `event: response.output_item.added\ndata: ${JSON.stringify(data)}`
       }
@@ -593,7 +616,11 @@ export function toOpenaiChunk(chunk: CommonChunk): string {
         }
       : undefined
 
-    const data: any = { id, type: "response.completed", response: { id, model, ...(usage ? { usage } : {}) } }
+    const data: any = {
+      id,
+      type: "response.completed",
+      response: { id, model, ...(usage ? { usage } : {}) },
+    }
     return `event: response.completed\ndata: ${JSON.stringify(data)}`
   }
 

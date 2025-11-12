@@ -43,9 +43,7 @@
       "compositePrimaryKeys": {
         "account_id_pk": {
           "name": "account_id_pk",
-          "columns": [
-            "id"
-          ]
+          "columns": ["id"]
         }
       },
       "uniqueConstraints": {},
@@ -109,17 +107,12 @@
       "indexes": {
         "provider": {
           "name": "provider",
-          "columns": [
-            "provider",
-            "subject"
-          ],
+          "columns": ["provider", "subject"],
           "isUnique": true
         },
         "account_id": {
           "name": "account_id",
-          "columns": [
-            "account_id"
-          ],
+          "columns": ["account_id"],
           "isUnique": false
         }
       },
@@ -127,9 +120,7 @@
       "compositePrimaryKeys": {
         "auth_id_pk": {
           "name": "auth_id_pk",
-          "columns": [
-            "id"
-          ]
+          "columns": ["id"]
         }
       },
       "uniqueConstraints": {},
@@ -277,9 +268,7 @@
       "indexes": {
         "global_customer_id": {
           "name": "global_customer_id",
-          "columns": [
-            "customer_id"
-          ],
+          "columns": ["customer_id"],
           "isUnique": true
         }
       },
@@ -287,10 +276,7 @@
       "compositePrimaryKeys": {
         "billing_workspace_id_id_pk": {
           "name": "billing_workspace_id_id_pk",
-          "columns": [
-            "workspace_id",
-            "id"
-          ]
+          "columns": ["workspace_id", "id"]
         }
       },
       "uniqueConstraints": {},
@@ -377,10 +363,7 @@
       "compositePrimaryKeys": {
         "payment_workspace_id_id_pk": {
           "name": "payment_workspace_id_id_pk",
-          "columns": [
-            "workspace_id",
-            "id"
-          ]
+          "columns": ["workspace_id", "id"]
         }
       },
       "uniqueConstraints": {},
@@ -502,10 +485,7 @@
       "compositePrimaryKeys": {
         "usage_workspace_id_id_pk": {
           "name": "usage_workspace_id_id_pk",
-          "columns": [
-            "workspace_id",
-            "id"
-          ]
+          "columns": ["workspace_id", "id"]
         }
       },
       "uniqueConstraints": {},
@@ -583,9 +563,7 @@
       "indexes": {
         "global_key": {
           "name": "global_key",
-          "columns": [
-            "key"
-          ],
+          "columns": ["key"],
           "isUnique": true
         }
       },
@@ -593,10 +571,7 @@
       "compositePrimaryKeys": {
         "key_workspace_id_id_pk": {
           "name": "key_workspace_id_id_pk",
-          "columns": [
-            "workspace_id",
-            "id"
-          ]
+          "columns": ["workspace_id", "id"]
         }
       },
       "uniqueConstraints": {},
@@ -653,10 +628,7 @@
       "indexes": {
         "model_workspace_model": {
           "name": "model_workspace_model",
-          "columns": [
-            "workspace_id",
-            "model"
-          ],
+          "columns": ["workspace_id", "model"],
           "isUnique": true
         }
       },
@@ -664,10 +636,7 @@
       "compositePrimaryKeys": {
         "model_workspace_id_id_pk": {
           "name": "model_workspace_id_id_pk",
-          "columns": [
-            "workspace_id",
-            "id"
-          ]
+          "columns": ["workspace_id", "id"]
         }
       },
       "uniqueConstraints": {},
@@ -731,10 +700,7 @@
       "indexes": {
         "workspace_provider": {
           "name": "workspace_provider",
-          "columns": [
-            "workspace_id",
-            "provider"
-          ],
+          "columns": ["workspace_id", "provider"],
           "isUnique": true
         }
       },
@@ -742,10 +708,7 @@
       "compositePrimaryKeys": {
         "provider_workspace_id_id_pk": {
           "name": "provider_workspace_id_id_pk",
-          "columns": [
-            "workspace_id",
-            "id"
-          ]
+          "columns": ["workspace_id", "id"]
         }
       },
       "uniqueConstraints": {},
@@ -858,32 +821,22 @@
       "indexes": {
         "user_account_id": {
           "name": "user_account_id",
-          "columns": [
-            "workspace_id",
-            "account_id"
-          ],
+          "columns": ["workspace_id", "account_id"],
           "isUnique": true
         },
         "user_email": {
           "name": "user_email",
-          "columns": [
-            "workspace_id",
-            "email"
-          ],
+          "columns": ["workspace_id", "email"],
           "isUnique": true
         },
         "global_account_id": {
           "name": "global_account_id",
-          "columns": [
-            "account_id"
-          ],
+          "columns": ["account_id"],
           "isUnique": false
         },
         "global_email": {
           "name": "global_email",
-          "columns": [
-            "email"
-          ],
+          "columns": ["email"],
           "isUnique": false
         }
       },
@@ -891,10 +844,7 @@
       "compositePrimaryKeys": {
         "user_workspace_id_id_pk": {
           "name": "user_workspace_id_id_pk",
-          "columns": [
-            "workspace_id",
-            "id"
-          ]
+          "columns": ["workspace_id", "id"]
         }
       },
       "uniqueConstraints": {},
@@ -951,9 +901,7 @@
       "indexes": {
         "slug": {
           "name": "slug",
-          "columns": [
-            "slug"
-          ],
+          "columns": ["slug"],
           "isUnique": true
         }
       },
@@ -961,9 +909,7 @@
       "compositePrimaryKeys": {
         "workspace_id": {
           "name": "workspace_id",
-          "columns": [
-            "id"
-          ]
+          "columns": ["id"]
         }
       },
       "uniqueConstraints": {},

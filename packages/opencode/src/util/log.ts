@@ -50,6 +50,7 @@ export namespace Log {
   export function file() {
     return logpath
   }
+  let write = (msg: any) => Bun.stderr.write(msg)
 
   export async function init(options: Options) {
     if (options.level) level = options.level
@@ -62,10 +63,10 @@ export namespace Log {
     const logfile = Bun.file(logpath)
     await fs.truncate(logpath).catch(() => {})
     const writer = logfile.writer()
-    process.stderr.write = (msg) => {
-      writer.write(msg)
+    write = async (msg: any) => {
+      const num = writer.write(msg)
       writer.flush()
-      return true
+      return num
     }
   }
 
@@ -123,22 +124,22 @@ export namespace Log {
     const result: Logger = {
       debug(message?: any, extra?: Record<string, any>) {
         if (shouldLog("DEBUG")) {
-          process.stderr.write("DEBUG " + build(message, extra))
+          write("DEBUG " + build(message, extra))
         }
       },
       info(message?: any, extra?: Record<string, any>) {
         if (shouldLog("INFO")) {
-          process.stderr.write("INFO  " + build(message, extra))
+          write("INFO  " + build(message, extra))
         }
       },
       error(message?: any, extra?: Record<string, any>) {
         if (shouldLog("ERROR")) {
-          process.stderr.write("ERROR " + build(message, extra))
+          write("ERROR " + build(message, extra))
         }
       },
       warn(message?: any, extra?: Record<string, any>) {
         if (shouldLog("WARN")) {
-          process.stderr.write("WARN  " + build(message, extra))
+          write("WARN  " + build(message, extra))
         }
       },
       tag(key: string, value: string) {

@@ -3,7 +3,6 @@ import { EditTool } from "./edit"
 import { GlobTool } from "./glob"
 import { GrepTool } from "./grep"
 import { ListTool } from "./ls"
-import { PatchTool } from "./patch"
 import { ReadTool } from "./read"
 import { TaskTool } from "./task"
 import { TodoWriteTool, TodoReadTool } from "./todo"
@@ -18,6 +17,9 @@ import path from "path"
 import { type ToolDefinition } from "@opencode-ai/plugin"
 import z from "zod"
 import { Plugin } from "../plugin"
+import { WebSearchTool } from "./websearch"
+import { CodeSearchTool } from "./codesearch"
+import { Flag } from "@/flag/flag"
 
 export namespace ToolRegistry {
   export const state = Instance.state(async () => {
@@ -25,7 +27,12 @@ export namespace ToolRegistry {
     const glob = new Bun.Glob("tool/*.{js,ts}")
 
     for (const dir of await Config.directories()) {
-      for await (const match of glob.scan({ cwd: dir, absolute: true, followSymlinks: true, dot: true })) {
+      for await (const match of glob.scan({
+        cwd: dir,
+        absolute: true,
+        followSymlinks: true,
+        dot: true,
+      })) {
         const namespace = path.basename(match, path.extname(match))
         const mod = await import(match)
         for (const [id, def] of Object.entries<ToolDefinition>(mod)) {
@@ -82,12 +89,12 @@ export namespace ToolRegistry {
       GlobTool,
       GrepTool,
       ListTool,
-      PatchTool,
       ReadTool,
       WriteTool,
       TodoWriteTool,
       TodoReadTool,
       TaskTool,
+      ...(Flag.OPENCODE_EXPERIMENTAL_EXA ? [WebSearchTool, CodeSearchTool] : []),
       ...custom,
     ]
   }
@@ -113,11 +120,9 @@ export namespace ToolRegistry {
     agent: Agent.Info,
   ): Promise<Record<string, boolean>> {
     const result: Record<string, boolean> = {}
-    result["patch"] = false
 
     if (agent.permission.edit === "deny") {
       result["edit"] = false
-      result["patch"] = false
       result["write"] = false
     }
     if (agent.permission.bash["*"] === "deny" && Object.keys(agent.permission.bash).length === 1) {

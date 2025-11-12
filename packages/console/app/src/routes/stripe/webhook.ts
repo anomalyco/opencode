@@ -41,8 +41,7 @@ export async function POST(input: APIEvent) {
     }
     if (body.type === "checkout.session.completed") {
       const workspaceID = body.data.object.metadata?.workspaceID
-      const amountInCents =
-        body.data.object.metadata?.amount && parseInt(body.data.object.metadata?.amount)
+      const amountInCents = body.data.object.metadata?.amount && parseInt(body.data.object.metadata?.amount)
       const customerID = body.data.object.customer as string
       const paymentID = body.data.object.payment_intent as string
       const invoiceID = body.data.object.invoice as string
@@ -55,8 +54,7 @@ export async function POST(input: APIEvent) {
 
       await Actor.provide("system", { workspaceID }, async () => {
         const customer = await Billing.get()
-        if (customer?.customerID && customer.customerID !== customerID)
-          throw new Error("Customer ID mismatch")
+        if (customer?.customerID && customer.customerID !== customerID) throw new Error("Customer ID mismatch")
 
         // set customer metadata
         if (!customer?.customerID) {
@@ -72,8 +70,7 @@ export async function POST(input: APIEvent) {
           expand: ["payment_method"],
         })
         const paymentMethod = paymentIntent.payment_method
-        if (!paymentMethod || typeof paymentMethod === "string")
-          throw new Error("Payment method not expanded")
+        if (!paymentMethod || typeof paymentMethod === "string") throw new Error("Payment method not expanded")
 
         await Database.transaction(async (tx) => {
           await tx
@@ -128,12 +125,7 @@ export async function POST(input: APIEvent) {
             amount: PaymentTable.amount,
           })
           .from(PaymentTable)
-          .where(
-            and(
-              eq(PaymentTable.paymentID, paymentIntentID),
-              eq(PaymentTable.workspaceID, workspaceID),
-            ),
-          )
+          .where(and(eq(PaymentTable.paymentID, paymentIntentID), eq(PaymentTable.workspaceID, workspaceID)))
           .then((rows) => rows[0]?.amount),
       )
       if (!amount) throw new Error("Payment not found")
@@ -144,12 +136,7 @@ export async function POST(input: APIEvent) {
           .set({
             timeRefunded: new Date(body.created * 1000),
           })
-          .where(
-            and(
-              eq(PaymentTable.paymentID, paymentIntentID),
-              eq(PaymentTable.workspaceID, workspaceID),
-            ),
-          )
+          .where(and(eq(PaymentTable.paymentID, paymentIntentID), eq(PaymentTable.workspaceID, workspaceID)))
 
         await tx
           .update(BillingTable)

@@ -190,6 +190,10 @@ export type AgentConfig = {
    */
   description?: string
   mode?: "subagent" | "primary" | "all"
+  /**
+   * Hex color code for the agent (e.g., #FF5733)
+   */
+  color?: string
   permission?: {
     edit?: "ask" | "allow" | "deny"
     bash?:
@@ -198,6 +202,8 @@ export type AgentConfig = {
           [key: string]: "ask" | "allow" | "deny"
         }
     webfetch?: "ask" | "allow" | "deny"
+    doom_loop?: "ask" | "allow" | "deny"
+    external_directory?: "ask" | "allow" | "deny"
   }
   [key: string]:
     | unknown
@@ -216,6 +222,8 @@ export type AgentConfig = {
               [key: string]: "ask" | "allow" | "deny"
             }
         webfetch?: "ask" | "allow" | "deny"
+        doom_loop?: "ask" | "allow" | "deny"
+        external_directory?: "ask" | "allow" | "deny"
       }
     | undefined
 }
@@ -463,6 +471,8 @@ export type Config = {
           [key: string]: "ask" | "allow" | "deny"
         }
     webfetch?: "ask" | "allow" | "deny"
+    doom_loop?: "ask" | "allow" | "deny"
+    external_directory?: "ask" | "allow" | "deny"
   }
   tools?: {
     [key: string]: boolean
@@ -533,6 +543,7 @@ export type Session = {
   summary?: {
     additions: number
     deletions: number
+    files: number
     diffs?: Array<FileDiff>
   }
   share?: {
@@ -643,13 +654,7 @@ export type AssistantMessage = {
     created: number
     completed?: number
   }
-  error?:
-    | ProviderAuthError
-    | UnknownError
-    | MessageOutputLengthError
-    | MessageAbortedError
-    | ApiError
-  system: Array<string>
+  error?: ProviderAuthError | UnknownError | MessageOutputLengthError | MessageAbortedError | ApiError
   parentID: string
   modelID: string
   providerID: string
@@ -1042,12 +1047,15 @@ export type Agent = {
   builtIn: boolean
   topP?: number
   temperature?: number
+  color?: string
   permission: {
     edit: "ask" | "allow" | "deny"
     bash: {
       [key: string]: "ask" | "allow" | "deny"
     }
     webfetch?: "ask" | "allow" | "deny"
+    doom_loop?: "ask" | "allow" | "deny"
+    external_directory?: "ask" | "allow" | "deny"
   }
   model?: {
     modelID: string
@@ -1253,14 +1261,6 @@ export type EventFileEdited = {
   }
 }
 
-export type EventFileWatcherUpdated = {
-  type: "file.watcher.updated"
-  properties: {
-    file: string
-    event: "add" | "change" | "unlink"
-  }
-}
-
 export type EventTodoUpdated = {
   type: "todo.updated"
   properties: {
@@ -1307,16 +1307,19 @@ export type EventSessionDeleted = {
   }
 }
 
+export type EventSessionDiff = {
+  type: "session.diff"
+  properties: {
+    sessionID: string
+    diff: Array<FileDiff>
+  }
+}
+
 export type EventSessionError = {
   type: "session.error"
   properties: {
     sessionID?: string
-    error?:
-      | ProviderAuthError
-      | UnknownError
-      | MessageOutputLengthError
-      | MessageAbortedError
-      | ApiError
+    error?: ProviderAuthError | UnknownError | MessageOutputLengthError | MessageAbortedError | ApiError
   }
 }
 
@@ -1324,6 +1327,14 @@ export type EventServerConnected = {
   type: "server.connected"
   properties: {
     [key: string]: unknown
+  }
+}
+
+export type EventFileWatcherUpdated = {
+  type: "file.watcher.updated"
+  properties: {
+    file: string
+    event: "add" | "change" | "unlink"
   }
 }
 
@@ -1339,18 +1350,19 @@ export type Event =
   | EventPermissionUpdated
   | EventPermissionReplied
   | EventFileEdited
-  | EventFileWatcherUpdated
   | EventTodoUpdated
   | EventCommandExecuted
   | EventSessionIdle
   | EventSessionCreated
   | EventSessionUpdated
   | EventSessionDeleted
+  | EventSessionDiff
   | EventSessionError
   | EventTuiPromptAppend
   | EventTuiCommandExecute
   | EventTuiToastShow
   | EventServerConnected
+  | EventFileWatcherUpdated
 
 export type ProjectListData = {
   body?: never
@@ -1972,6 +1984,7 @@ export type SessionMessagesData = {
   }
   query?: {
     directory?: string
+    limit?: number
   }
   url: "/session/{id}/message"
 }
@@ -2542,6 +2555,38 @@ export type McpStatusResponses = {
 
 export type McpStatusResponse = McpStatusResponses[keyof McpStatusResponses]
 
+export type McpAddData = {
+  body?: {
+    name: string
+    config: McpLocalConfig | McpRemoteConfig
+  }
+  path?: never
+  query?: {
+    directory?: string
+  }
+  url: "/mcp"
+}
+
+export type McpAddErrors = {
+  /**
+   * Bad request
+   */
+  400: BadRequestError
+}
+
+export type McpAddError = McpAddErrors[keyof McpAddErrors]
+
+export type McpAddResponses = {
+  /**
+   * MCP server added successfully
+   */
+  200: {
+    [key: string]: McpStatus
+  }
+}
+
+export type McpAddResponse = McpAddResponses[keyof McpAddResponses]
+
 export type LspStatusData = {
   body?: never
   path?: never
@@ -2834,8 +2879,7 @@ export type TuiControlResponseResponses = {
   200: boolean
 }
 
-export type TuiControlResponseResponse =
-  TuiControlResponseResponses[keyof TuiControlResponseResponses]
+export type TuiControlResponseResponse = TuiControlResponseResponses[keyof TuiControlResponseResponses]
 
 export type AuthSetData = {
   body?: Auth
