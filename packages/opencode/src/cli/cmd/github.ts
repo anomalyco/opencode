@@ -439,9 +439,10 @@ export const GithubRunCommand = cmd({
           // Local PR
           if (prData.headRepository.nameWithOwner === prData.baseRepository.nameWithOwner) {
             await checkoutLocalBranch(prData)
+            const head = (await $`git rev-parse HEAD`).stdout.toString().trim()
             const dataPrompt = buildPromptDataForPR(prData)
             const response = await chat(`${userPrompt}\n\n${dataPrompt}`, promptFiles)
-            if (await branchIsDirty()) {
+            if (await branchIsDirty(head)) {
               const summary = await summarize(response)
               await pushToLocalBranch(summary)
             }
@@ -451,9 +452,10 @@ export const GithubRunCommand = cmd({
           // Fork PR
           else {
             await checkoutForkBranch(prData)
+            const head = (await $`git rev-parse HEAD`).stdout.toString().trim()
             const dataPrompt = buildPromptDataForPR(prData)
             const response = await chat(`${userPrompt}\n\n${dataPrompt}`, promptFiles)
-            if (await branchIsDirty()) {
+            if (await branchIsDirty(head)) {
               const summary = await summarize(response)
               await pushToForkBranch(summary, prData)
             }
@@ -464,10 +466,11 @@ export const GithubRunCommand = cmd({
         // Issue
         else {
           const branch = await checkoutNewBranch()
+          const head = (await $`git rev-parse HEAD`).stdout.toString().trim()
           const issueData = await fetchIssue()
           const dataPrompt = buildPromptDataForIssue(issueData)
           const response = await chat(`${userPrompt}\n\n${dataPrompt}`, promptFiles)
-          if (await branchIsDirty()) {
+          if (await branchIsDirty(head)) {
             const summary = await summarize(response)
             await pushToNewBranch(summary, branch)
             const pr = await createPR(
@@ -832,10 +835,13 @@ Co-authored-by: ${actor} <${actor}@users.noreply.github.com>"`
         await $`git push fork HEAD:${remoteBranch}`
       }
 
-      async function branchIsDirty() {
+      async function branchIsDirty(originalHead: string) {
         console.log("Checking if branch is dirty...")
         const ret = await $`git status --porcelain`
-        return ret.stdout.toString().trim().length > 0
+        const status = ret.stdout.toString().trim()
+        if (status.length > 0) return true
+        const head = await $`git rev-parse HEAD`
+        return head.stdout.toString().trim() !== originalHead
       }
 
       async function assertPermissions() {
