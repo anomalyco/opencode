@@ -757,7 +757,13 @@ export function Session() {
                         index={index()}
                         onMouseUp={() => {
                           if (renderer.getSelection()?.getSelectedText()) return
-                          dialog.replace(() => <DialogMessage messageID={message.id} sessionID={route.sessionID} />)
+                          dialog.replace(() => (
+                            <DialogMessage
+                              messageID={message.id}
+                              sessionID={route.sessionID}
+                              setPrompt={(promptInfo) => prompt.set(promptInfo)}
+                            />
+                          ))
                         }}
                         message={message as UserMessage}
                         parts={sync.data.part[message.id] ?? []}
