@@ -132,15 +132,34 @@ export namespace SessionPrompt {
             const info = yield* fsys.stat(filepath).pipe(Effect.option)
             if (Option.isNone(info)) {
               const found = yield* agents.get(name)
-              if (found) parts.push({ type: "agent", name: found.name })
+              if (found) {
+                parts.push({
+                  type: "agent" as const,
+                  name: found.name,
+                  source: {
+                    start: match.index!,
+                    end: match.index! + match[0].length,
+                    value: match[0],
+                  },
+                })
+              }
               return
             }
             const stat = info.value
             parts.push({
-              type: "file",
-              url: pathToFileURL(filepath).href,
-              filename: name,
+              type: "file" as const,
               mime: stat.type === "Directory" ? "application/x-directory" : "text/plain",
+              filename: name,
+              url: pathToFileURL(filepath).href,
+              source: {
+                type: "file" as const,
+                path: name,
+                text: {
+                  start: match.index!,
+                  end: match.index! + match[0].length,
+                  value: match[0],
+                },
+              },
             })
           }),
           { concurrency: "unbounded", discard: true },
