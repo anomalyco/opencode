@@ -77,7 +77,7 @@
   --background-weak: var(--smoke-light-3);
   --background-strong: var(--smoke-light-1);
   --background-stronger: #fcfcfc;
-  --surface-base: var(--smoke-light-alpha-2);
+  --surface-base: var(--smoke-light-3);
   --base: var(--smoke-light-alpha-2);
   --surface-base-hover: #0500000f;
   --surface-base-active: var(--smoke-light-alpha-3);
@@ -317,7 +317,7 @@
     --background-weak: #1b1818;
     --background-strong: #151313;
     --background-stronger: #191515;
-    --surface-base: var(--smoke-dark-alpha-2);
+    --surface-base: var(--smoke-dark-3);
     --base: var(--smoke-dark-alpha-2);
     --surface-base-hover: #e0b7b716;
     --surface-base-active: var(--smoke-dark-alpha-3);
