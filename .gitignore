@@ -17,7 +17,6 @@ dist
 .opencode/raid.db
 **/.serena
 .serena/
-<<<<<<< Updated upstream
 /packages/desktop/src-tauri
 /packages/livekit-player/src-tauri
 packages/opencode/.opencode/raid.db
@@ -30,4 +29,3 @@ packages/opencode/.opencode/workflows/bugfix-workflow.json
 packages/opencode/.opencode/workflows/feature-implementation.json
 packages/opencode/.opencode/workflows/README.md
 /.claude.backup.*
-
