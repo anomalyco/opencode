@@ -586,7 +586,7 @@ export const MessagesPanel: Component<MessagesPanelProps> = (props) => {
               style={{
                 "border-radius": "0.5rem",
                 border: `2px solid ${badgeColors.border}`,
-                padding: "0.2em 0.8ch",
+                padding: "2px",
                 "font-size": "16px",
                 "box-shadow": "0 2px 8px rgba(0, 0, 0, 0.3)",
                 "letter-spacing": "0.5px",
