@@ -77,6 +77,7 @@ export const BashTool = Tool.define("bash", {
           continue
         }
         command.push(child.text)
+        //
       }
 
       // not an exhaustive list, but covers most common cases
