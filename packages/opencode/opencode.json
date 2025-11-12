@@ -8,13 +8,9 @@
     "file:///Users/jkneen/Documents/GitHub/flows/opencode-stt/packages/opencode/examples/plugin-steering-questions/index.tsx"
   ],
   "favoriteTools": [
-    "cc_computer_use",
-    "grep",
+    "ripgrep",
+    "read",
     "task",
-    "write",
-    "cc_bash",
-    "cc_edit",
-    "add_directory",
-    "list"
+    "todowrite"
   ]
 }

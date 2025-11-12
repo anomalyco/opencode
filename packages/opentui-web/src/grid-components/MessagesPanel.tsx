@@ -10,6 +10,7 @@ import { Autocomplete, type AutocompleteItem } from "./Autocomplete"
 import { MessageActionsDialog } from "./MessageActionsDialog"
 import { useSDK } from "../context/sdk"
 import { SubagentNav } from "./SubagentNav"
+import { debounce, LRUCache } from "../utils/debounce"
 
 interface Message {
   id: string
@@ -64,6 +65,9 @@ export const MessagesPanel: Component<MessagesPanelProps> = (props) => {
   let inputContainerRef: HTMLDivElement | undefined
 
   const sdk = useSDK()
+
+  // File list cache (LRU cache with max 50 entries)
+  const fileCache = new LRUCache<string, AutocompleteItem[]>(50)
 
   // Cursor blink animation
   const blinkInterval = setInterval(() => {
@@ -161,8 +165,8 @@ export const MessagesPanel: Component<MessagesPanelProps> = (props) => {
     setAutocompleteOpen(false)
   }
 
-  // Load files from server
-  const loadFiles = async (query: string) => {
+  // Load files from server (with caching)
+  const loadFilesImpl = async (query: string) => {
     console.log("[Autocomplete] loadFiles called:", query)
     if (!sdk?.client?.file) {
       console.warn("SDK client not available")
@@ -170,8 +174,20 @@ export const MessagesPanel: Component<MessagesPanelProps> = (props) => {
       return
     }
 
+    const path = props.projectPath || "."
+    const cacheKey = `${path}:${query || ""}`
+
+    // Check cache first
+    const cached = fileCache.get(cacheKey)
+    if (cached) {
+      console.log("[Autocomplete] Using cached results:", cached.length)
+      setAutocompleteItems(cached)
+      setAutocompleteIndex(0)
+      setAutocompleteOpen(cached.length > 0)
+      return
+    }
+
     try {
-      const path = props.projectPath || "."
       console.log("[Autocomplete] Fetching files from:", path, "query:", query)
       const result = await sdk.client.file.list({
         query: { path, directory: query || undefined },
@@ -186,6 +202,10 @@ export const MessagesPanel: Component<MessagesPanelProps> = (props) => {
           type: entry.type === "directory" ? "directory" : "file",
         }))
         console.log("[Autocomplete] Setting items:", items.length, items)
+
+        // Store in cache
+        fileCache.set(cacheKey, items)
+
         setAutocompleteItems(items)
         setAutocompleteIndex(0)
         setAutocompleteOpen(items.length > 0)
@@ -196,6 +216,9 @@ export const MessagesPanel: Component<MessagesPanelProps> = (props) => {
       setAutocompleteOpen(false)
     }
   }
+
+  // Debounced version to prevent excessive API calls
+  const loadFiles = debounce(loadFilesImpl, 300)
 
   // Calculate autocomplete dropdown position
   const calculateAutocompletePosition = () => {
@@ -306,6 +329,26 @@ export const MessagesPanel: Component<MessagesPanelProps> = (props) => {
     let currentRow = 1
     const elements: any[] = []
     const messages = props.messages.slice(-15)
+    const hiddenCount = props.messages.length - messages.length
+
+    // Show "load more" indicator if there are hidden messages
+    if (hiddenCount > 0) {
+      const loadMoreText = `↑ ${hiddenCount} older message${hiddenCount === 1 ? "" : "s"} hidden (click to load more)`
+      elements.push(
+        <GridText
+          col={2}
+          row={currentRow}
+          text={loadMoreText}
+          fg="#666666"
+          style={{ cursor: "pointer" }}
+          onClick={() => {
+            console.log("Load more messages clicked - TODO: implement pagination")
+            // TODO: Implement load more functionality
+          }}
+        />,
+      )
+      currentRow += 2 // Add spacing after indicator
+    }
 
     messages.forEach((msg, msgIndex) => {
       const isUser = msg.role === "user"

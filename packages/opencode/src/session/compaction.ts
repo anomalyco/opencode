@@ -61,6 +61,8 @@ export namespace SessionCompaction {
       if (msg.info.role === "user") turns++
       if (turns < 2) continue
       if (msg.info.role === "assistant" && msg.info.summary) break loop
+      // Skip favorited messages - they should never be pruned
+      if (msg.info.favorited) continue
       for (let partIndex = msg.parts.length - 1; partIndex >= 0; partIndex--) {
         const part = msg.parts[partIndex]
         if (part.type === "tool")

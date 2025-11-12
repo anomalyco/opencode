@@ -277,6 +277,7 @@ export namespace MessageV2 {
         diffs: Snapshot.FileDiff.array(),
       })
       .optional(),
+    favorited: z.boolean().optional(),
   }).meta({
     ref: "UserMessage",
   })
@@ -324,6 +325,7 @@ export namespace MessageV2 {
       root: z.string(),
     }),
     summary: z.boolean().optional(),
+    favorited: z.boolean().optional(),
     cost: z.number(),
     tokens: z.object({
       input: z.number(),
@@ -671,9 +673,18 @@ export namespace MessageV2 {
 
   export async function filterCompacted(stream: AsyncIterable<MessageV2.WithParts>) {
     const result = [] as MessageV2.WithParts[]
+    let foundSummary = false
     for await (const msg of stream) {
+      // Always include favorited messages, even after summary
+      if (msg.info.favorited) {
+        result.push(msg)
+        continue
+      }
       result.push(msg)
-      if (msg.info.role === "assistant" && msg.info.summary === true) break
+      if (msg.info.role === "assistant" && msg.info.summary === true) {
+        foundSummary = true
+        break
+      }
     }
     result.reverse()
     return result

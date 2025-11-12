@@ -179,6 +179,7 @@ export namespace Message {
             })
             .optional(),
           snapshot: z.string().optional(),
+          contextTags: z.array(z.string()).optional(),
         })
         .meta({ ref: "MessageMetadata" }),
     })

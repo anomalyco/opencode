@@ -68,6 +68,9 @@ import { MessageWidgets } from "@/ui/message-widgets"
 import { PluginComponent } from "../../component/plugin-component"
 import stripAnsi from "strip-ansi"
 import { Perf } from "@/util/perf"
+import { FileBrowser } from "@tui/component/file-browser"
+import { CodeEditor } from "@tui/component/code-editor"
+import { FileViewer } from "@tui/component/file-viewer"
 
 addDefaultParsers(parsers.parsers)
 
@@ -255,6 +258,12 @@ export function Session() {
   const [leftSidebar, setLeftSidebar] = createSignal<"show" | "hide" | "auto">(kv.get("leftSidebar", "auto"))
   const [rightSidebar, setRightSidebar] = createSignal<"show" | "hide" | "auto">(kv.get("rightSidebar", "auto"))
   const [conceal, setConceal] = createSignal(true)
+
+  // File browser, editor, and viewer state
+  const [showFileBrowser, setShowFileBrowser] = createSignal(false)
+  const [showCodeEditor, setShowCodeEditor] = createSignal(false)
+  const [showFileViewer, setShowFileViewer] = createSignal(false)
+  const [selectedFile, setSelectedFile] = createSignal<string | undefined>()
 
   // Detect if messages are currently streaming to disable sticky scroll
   const isStreaming = createMemo(() => {

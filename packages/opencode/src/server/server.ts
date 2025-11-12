@@ -464,7 +464,7 @@ export namespace Server {
         "/session/:id/todo",
         describeRoute({
           description: "Get the todo list for a session",
-          operationId: "session.todo",
+          operationId: "session.getTodo",
           responses: {
             200: {
               description: "Todo list",
@@ -493,7 +493,7 @@ export namespace Server {
         "/session/:id/todo",
         describeRoute({
           description: "Update the todo list for a session",
-          operationId: "session.todo.update",
+          operationId: "session.updateTodo",
           responses: {
             200: {
               description: "Updated todo list",
@@ -948,6 +948,39 @@ export namespace Server {
             messageID: params.messageID,
           })
           return c.json(message)
+        },
+      )
+      .patch(
+        "/session/:id/message/:messageID/favorite",
+        describeRoute({
+          description: "Toggle favorite status for a message",
+          operationId: "session.toggleMessageFavorite",
+          responses: {
+            200: {
+              description: "Updated message info",
+              content: {
+                "application/json": {
+                  schema: resolver(MessageV2.Info),
+                },
+              },
+            },
+            ...errors(400, 404),
+          },
+        }),
+        validator(
+          "param",
+          z.object({
+            id: z.string().meta({ description: "Session ID" }),
+            messageID: z.string().meta({ description: "Message ID" }),
+          }),
+        ),
+        async (c) => {
+          const params = c.req.valid("param")
+          const updated = await Session.toggleMessageFavorite({
+            sessionID: params.id,
+            messageID: params.messageID,
+          })
+          return c.json(updated)
         },
       )
       .post(
@@ -1643,11 +1676,15 @@ export namespace Server {
               description: "Loaded plugins",
               content: {
                 "application/json": {
-                  schema: resolver(z.array(z.object({
-                    name: z.string(),
-                    path: z.string(),
-                    status: z.literal("loaded")
-                  }))),
+                  schema: resolver(
+                    z.array(
+                      z.object({
+                        name: z.string(),
+                        path: z.string(),
+                        status: z.literal("loaded"),
+                      }),
+                    ),
+                  ),
                 },
               },
             },

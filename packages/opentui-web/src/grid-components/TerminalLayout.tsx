@@ -41,6 +41,20 @@ export const TerminalLayout: Component<TerminalLayoutProps> = (props) => {
   // Toast notification state
   const [toastMessage, setToastMessage] = createSignal<string | null>(null)
   const [toastVisible, setToastVisible] = createSignal(false)
+  let toastTimeout: number | undefined
+
+  // Helper function to show toast with automatic cleanup
+  const showToast = (message: string, duration = 2000) => {
+    // Clear any existing timeout
+    if (toastTimeout) {
+      clearTimeout(toastTimeout)
+    }
+    setToastMessage(message)
+    setToastVisible(true)
+    toastTimeout = window.setTimeout(() => {
+      setToastVisible(false)
+    }, duration)
+  }
 
   // Calculate total columns based on window width
   const calculateTotalColumns = () => Math.floor(window.innerWidth / CHAR_WIDTH)
@@ -198,14 +212,7 @@ export const TerminalLayout: Component<TerminalLayoutProps> = (props) => {
       if (selectedText && selectedText.length > 0) {
         // Copy to clipboard
         navigator.clipboard.writeText(selectedText).then(() => {
-          // Show toast
-          setToastMessage(`Copied ${selectedText.length} characters`)
-          setToastVisible(true)
-
-          // Hide toast after 2 seconds
-          setTimeout(() => {
-            setToastVisible(false)
-          }, 2000)
+          showToast(`Copied ${selectedText.length} characters`)
         })
       }
     }
@@ -216,6 +223,10 @@ export const TerminalLayout: Component<TerminalLayoutProps> = (props) => {
       window.removeEventListener("resize", handleResize)
       window.removeEventListener("keydown", handleKeyDown)
       document.removeEventListener("selectionchange", handleSelectionChange)
+      // Clean up toast timeout
+      if (toastTimeout) {
+        clearTimeout(toastTimeout)
+      }
     })
   })
 
@@ -266,97 +277,67 @@ export const TerminalLayout: Component<TerminalLayoutProps> = (props) => {
     bejazzle.setBejazzleMode(newMode)
     // Apply full theme preset when enabling, minimal when disabling
     bejazzle.applyPreset(newMode ? "full" : "minimal")
-    setToastMessage(newMode ? "🎨 Bejazzle Mode Enabled" : "Bejazzle Mode Disabled")
-    setToastVisible(true)
-    setTimeout(() => setToastVisible(false), 2000)
+    showToast(newMode ? "🎨 Bejazzle Mode Enabled" : "Bejazzle Mode Disabled")
   }
 
   // Session command handlers
   const handleSessionTimeline = () => {
-    setToastMessage("📍 Session timeline - Coming soon")
-    setToastVisible(true)
-    setTimeout(() => setToastVisible(false), 2000)
+    showToast("📍 Session timeline - Coming soon")
   }
 
   const handleSessionCompact = () => {
-    setToastMessage("🗜️ Compact session - Coming soon")
-    setToastVisible(true)
-    setTimeout(() => setToastVisible(false), 2000)
+    showToast("🗜️ Compact session - Coming soon")
   }
 
   const handleSessionExport = () => {
-    setToastMessage("📤 Export session - Coming soon")
-    setToastVisible(true)
-    setTimeout(() => setToastVisible(false), 2000)
+    showToast("📤 Export session - Coming soon")
   }
 
   const handleSessionShare = () => {
-    setToastMessage("🔗 Share session - Coming soon")
-    setToastVisible(true)
-    setTimeout(() => setToastVisible(false), 2000)
+    showToast("🔗 Share session - Coming soon")
   }
 
   const handleSessionInterrupt = () => {
-    setToastMessage("⏸️ Interrupt session - Coming soon")
-    setToastVisible(true)
-    setTimeout(() => setToastVisible(false), 2000)
+    showToast("⏸️ Interrupt session - Coming soon")
   }
 
   // Agent command handlers
   const handleModelCycle = () => {
-    setToastMessage("🔄 Cycle model - Coming soon")
-    setToastVisible(true)
-    setTimeout(() => setToastVisible(false), 2000)
+    showToast("🔄 Cycle model - Coming soon")
   }
 
   const handleAgentCycle = () => {
-    setToastMessage("🔄 Cycle agent - Coming soon")
-    setToastVisible(true)
-    setTimeout(() => setToastVisible(false), 2000)
+    showToast("🔄 Cycle agent - Coming soon")
   }
 
   // Message command handlers
   const handleMessagesCopy = () => {
-    setToastMessage("📋 Copy message - Coming soon")
-    setToastVisible(true)
-    setTimeout(() => setToastVisible(false), 2000)
+    showToast("📋 Copy message - Coming soon")
   }
 
   const handleMessagesUndo = () => {
-    setToastMessage("↩️ Undo message - Coming soon")
-    setToastVisible(true)
-    setTimeout(() => setToastVisible(false), 2000)
+    showToast("↩️ Undo message - Coming soon")
   }
 
   const handleMessagesRedo = () => {
-    setToastMessage("↪️ Redo message - Coming soon")
-    setToastVisible(true)
-    setTimeout(() => setToastVisible(false), 2000)
+    showToast("↪️ Redo message - Coming soon")
   }
 
   const handleToggleConceal = () => {
-    setToastMessage("👁️ Toggle code concealment - Coming soon")
-    setToastVisible(true)
-    setTimeout(() => setToastVisible(false), 2000)
+    showToast("👁️ Toggle code concealment - Coming soon")
   }
 
   // System command handlers
   const handleViewStatus = () => {
-    setToastMessage("📊 View status - Coming soon")
-    setToastVisible(true)
-    setTimeout(() => setToastVisible(false), 2000)
+    showToast("📊 View status - Coming soon")
   }
 
   const handleSwitchTheme = () => {
-    setToastMessage("🎨 Switch theme - Coming soon")
-    setToastVisible(true)
-    setTimeout(() => setToastVisible(false), 2000)
+    showToast("🎨 Switch theme - Coming soon")
   }
 
   const handleHelp = () => {
-    setToastMessage("❓ Help - Coming soon")
-    setToastVisible(true)
-    setTimeout(() => setToastVisible(false), 2000)
+    showToast("❓ Help - Coming soon")
   }
 
   return (

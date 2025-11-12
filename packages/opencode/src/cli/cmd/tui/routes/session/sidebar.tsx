@@ -18,6 +18,9 @@ import { DialogPrompt } from "../../ui/dialog-prompt"
 import { useRoute } from "../../context/route"
 import { $ } from "bun"
 import { DialogSubagentAdd } from "../../component/dialog-subagent-add"
+import { DialogContextAdd } from "../../component/dialog-context-add"
+import { DialogContextEdit } from "../../component/dialog-context-edit"
+import { AgentChipText } from "../../component/agent-chip-text"
 import { Todo } from "@/session/todo"
 import { Perf } from "@/util/perf"
 type TabType = "files" | "todos" | "tools" | "subagents"
@@ -84,8 +87,8 @@ export function Sidebar(props: { sessionID: string; onToggle: () => void }) {
   const [optimisticTodos, setOptimisticTodos] = createSignal<
     Array<{ id: string; content: string; status: string; priority: string }>
   >([])
-  const [activeContextTags, setActiveContextTags] = createSignal<Set<string>>(new Set())
-  const [customContextTags, setCustomContextTags] = createSignal<string[]>([])
+  const [contexts, setContexts] = createSignal<Array<{ id: string; name: string; content: string }>>([])
+  const [activeContextId, setActiveContextId] = createSignal<string | null>(null)
 
   const uiExtensions = useUIExtensions()
   const session = createMemo(() => sync.session.get(props.sessionID)!)
@@ -110,45 +113,46 @@ export function Sidebar(props: { sessionID: string; onToggle: () => void }) {
   })
   const messages = createMemo(() => sync.data.message[props.sessionID] ?? [])
 
-  // Extract all unique context tags from messages
-  const allContextTags = createMemo(() => {
-    const tags = new Set<string>()
-    messages().forEach((msg) => {
-      const contextTags = (msg as any).metadata?.contextTags || []
-      contextTags.forEach((tag: string) => tags.add(tag))
-    })
-    // Add custom tags
-    customContextTags().forEach((tag) => tags.add(tag))
-    return Array.from(tags).sort()
-  })
-
-  // Toggle context tag active state
-  const toggleContextTag = (tag: string) => {
-    setActiveContextTags((prev) => {
-      const newSet = new Set(prev)
-      if (newSet.has(tag)) {
-        newSet.delete(tag)
-      } else {
-        newSet.add(tag)
-      }
-      return newSet
-    })
-  }
-
-  // Add custom context tag
-  const addCustomContextTag = () => {
+  // Context management functions
+  const createContext = () => {
     dialog.replace(() => (
-      <DialogPrompt
-        title="Add Custom Context Tag"
-        onConfirm={(value: string) => {
-          if (value.trim()) {
-            setCustomContextTags((prev) => [...prev, value.trim()])
-            toast.show({ variant: "success", message: `Added tag: ${value.trim()}` })
-          }
+      <DialogContextAdd
+        onConfirm={(name: string, content: string) => {
+          const id = `ctx_${Date.now()}`
+          setContexts((prev) => [...prev, { id, name, content }])
         }}
-        onCancel={() => dialog.clear()}
       />
     ))
+  }
+
+  const editContextContent = (contextId: string) => {
+    const ctx = contexts().find((c) => c.id === contextId)
+    if (!ctx) return
+
+    dialog.replace(() => (
+      <DialogContextEdit
+        name={ctx.name}
+        content={ctx.content}
+        onConfirm={(content: string) => {
+          setContexts((prev) => prev.map((c) => (c.id === contextId ? { ...c, content } : c)))
+        }}
+      />
+    ))
+  }
+
+  const deleteContext = (contextId: string) => {
+    const ctx = contexts().find((c) => c.id === contextId)
+    if (!ctx) return
+
+    setContexts((prev) => prev.filter((c) => c.id !== contextId))
+    if (activeContextId() === contextId) {
+      setActiveContextId(null)
+    }
+    toast.show({ variant: "success", message: `Deleted context: ${ctx.name}` })
+  }
+
+  const toggleContext = (contextId: string) => {
+    setActiveContextId((prev) => (prev === contextId ? null : contextId))
   }
 
   // Get child sessions reactively from sync.data (SSE-based, no polling)
@@ -944,7 +948,19 @@ export function Sidebar(props: { sessionID: string; onToggle: () => void }) {
 
         <Show when={activeTab() === "todos"}>
           <box marginTop={0}>
-            <text attributes={TextAttributes.BOLD}>Todo</text>
+            <box flexDirection="row" gap={1}>
+              <text attributes={TextAttributes.BOLD}>Todo</text>
+              <text
+                fg={theme.accent}
+                attributes={TextAttributes.BOLD}
+                onMouseUp={() => {
+                  if (renderer.getSelection()?.getSelectedText()) return
+                  handleAddTodo()
+                }}
+              >
+                + Add
+              </text>
+            </box>
             <Show when={todo().length > 0}>
               {/* Recursive Todo Renderer */}
               {(() => {
@@ -1006,18 +1022,6 @@ export function Sidebar(props: { sessionID: string; onToggle: () => void }) {
                 return <For each={rootTasks}>{(task) => renderTodo(task, 0)}</For>
               })()}
             </Show>
-            <box marginTop={1}>
-              <text
-                fg={theme.accent}
-                attributes={TextAttributes.BOLD}
-                onMouseUp={() => {
-                  if (renderer.getSelection()?.getSelectedText()) return
-                  handleAddTodo()
-                }}
-              >
-                + Add Todo
-              </text>
-            </box>
           </box>
         </Show>
 
@@ -1055,59 +1059,120 @@ export function Sidebar(props: { sessionID: string; onToggle: () => void }) {
 
         {/* Context Section - Always visible below tabs */}
         <box marginTop={1} flexDirection="column">
-          <text
-            attributes={TextAttributes.BOLD}
-            fg={theme.accent}
-            onMouseUp={() => {
-              if (renderer.getSelection()?.getSelectedText()) return
-              toggleSection("context")
-            }}
-          >
-            {expandedSections().has("context") ? "▼" : "▶"} Context ({allContextTags().length})
-          </text>
+          <box flexDirection="row" gap={1}>
+            <text
+              attributes={TextAttributes.BOLD}
+              fg={theme.accent}
+              onMouseUp={() => {
+                if (renderer.getSelection()?.getSelectedText()) return
+                toggleSection("context")
+              }}
+            >
+              {expandedSections().has("context") ? "▼" : "▶"} Context ({contexts().length})
+            </text>
+            <text
+              fg={theme.accent}
+              attributes={TextAttributes.BOLD}
+              onMouseUp={() => {
+                if (renderer.getSelection()?.getSelectedText()) return
+                createContext()
+              }}
+            >
+              + Add
+            </text>
+          </box>
           <Show when={expandedSections().has("context")}>
             <box flexDirection="column" gap={1}>
-              <Show when={allContextTags().length > 0}>
+              <Show when={contexts().length > 0}>
                 <box flexDirection="row" gap={1} flexWrap="wrap">
-                  <For each={allContextTags()}>
-                    {(tag) => {
-                      const isActive = createMemo(() => activeContextTags().has(tag))
-                      const isCustom = createMemo(() => customContextTags().includes(tag))
+                  <For
+                    each={contexts().sort((a, b) => {
+                      const aIsHighPriority = a.name.startsWith("!")
+                      const bIsHighPriority = b.name.startsWith("!")
+                      const aIsNegative = a.name.startsWith("-")
+                      const bIsNegative = b.name.startsWith("-")
+
+                      if (aIsHighPriority && !bIsHighPriority) return -1
+                      if (!aIsHighPriority && bIsHighPriority) return 1
+                      if (!aIsNegative && bIsNegative) return -1
+                      if (aIsNegative && !bIsNegative) return 1
+                      return 0
+                    })}
+                  >
+                    {(ctx) => {
+                      const isActive = createMemo(() => activeContextId() === ctx.id)
+                      const hasContent = createMemo(() => ctx.content.trim().length > 0)
+                      const isHighPriority = createMemo(() => ctx.name.startsWith("!"))
+                      const isNegative = createMemo(() => ctx.name.startsWith("-"))
+
+                      const getBackgroundColor = () => {
+                        if (isActive()) {
+                          if (isNegative()) return theme.error
+                          if (isHighPriority()) return theme.warning
+                          return theme.accent
+                        }
+                        if (isNegative()) return "#8B0000" // dark red
+                        if (isHighPriority()) return "#B8860B" // dark orange/gold
+                        return "#444444"
+                      }
+
+                      const getTextColor = () => {
+                        if (isActive()) return theme.background
+                        if (isNegative()) return "#FFFFFF" // white text on red
+                        if (isHighPriority()) return "#FFFFFF" // white text on orange
+                        return "#000000"
+                      }
+
                       return (
-                        <text
-                          fg={isActive() ? theme.background : theme.text}
-                          bg={isActive() ? theme.accent : theme.textMuted}
-                          paddingLeft={1}
-                          paddingRight={1}
-                          attributes={isActive() ? TextAttributes.BOLD : undefined}
-                          onMouseUp={() => {
-                            if (renderer.getSelection()?.getSelectedText()) return
-                            toggleContextTag(tag)
-                          }}
-                        >
-                          {tag}
-                          {isCustom() ? "*" : ""}
-                        </text>
+                        <box flexDirection="row" gap={0}>
+                          <text
+                            fg={getTextColor()}
+                            bg={getBackgroundColor()}
+                            paddingLeft={1}
+                            paddingRight={0}
+                            attributes={isActive() ? TextAttributes.BOLD : undefined}
+                            onMouseUp={() => {
+                              if (renderer.getSelection()?.getSelectedText()) return
+                              toggleContext(ctx.id)
+                            }}
+                          >
+                            {" "}
+                            {ctx.name.toUpperCase()}
+                            {hasContent() ? "*" : ""}{" "}
+                          </text>
+                          <text
+                            fg={isActive() ? theme.background : "#888888"}
+                            bg={getBackgroundColor()}
+                            paddingLeft={0}
+                            paddingRight={0}
+                            onMouseUp={() => {
+                              if (renderer.getSelection()?.getSelectedText()) return
+                              editContextContent(ctx.id)
+                            }}
+                          >
+                            [E]
+                          </text>
+                          <text
+                            fg={isActive() ? theme.background : "#888888"}
+                            bg={getBackgroundColor()}
+                            paddingLeft={0}
+                            paddingRight={1}
+                            onMouseUp={() => {
+                              if (renderer.getSelection()?.getSelectedText()) return
+                              deleteContext(ctx.id)
+                            }}
+                          >
+                            [×]
+                          </text>
+                        </box>
                       )
                     }}
                   </For>
                 </box>
               </Show>
-              <Show when={allContextTags().length === 0}>
-                <text fg={theme.textMuted}>No context tags found</text>
+              <Show when={contexts().length === 0}>
+                <text fg={theme.textMuted}>No contexts created yet</text>
               </Show>
-              <box marginTop={1}>
-                <text
-                  fg={theme.accent}
-                  attributes={TextAttributes.BOLD}
-                  onMouseUp={() => {
-                    if (renderer.getSelection()?.getSelectedText()) return
-                    addCustomContextTag()
-                  }}
-                >
-                  + Add Custom Tag
-                </text>
-              </box>
             </box>
           </Show>
         </box>
@@ -1115,16 +1180,28 @@ export function Sidebar(props: { sessionID: string; onToggle: () => void }) {
         {/* Subagents Section - Always visible below tabs */}
         {/* Subagents Section - Always visible */}
         <box marginTop={1} flexDirection="column">
-          <text
-            attributes={TextAttributes.BOLD}
-            fg={theme.accent}
-            onMouseUp={() => {
-              if (renderer.getSelection()?.getSelectedText()) return
-              toggleSection("subagents")
-            }}
-          >
-            {expandedSections().has("subagents") ? "▼" : "▶"} Subagents ({childSessions().length})
-          </text>
+          <box flexDirection="row" gap={1}>
+            <text
+              attributes={TextAttributes.BOLD}
+              fg={theme.accent}
+              onMouseUp={() => {
+                if (renderer.getSelection()?.getSelectedText()) return
+                toggleSection("subagents")
+              }}
+            >
+              {expandedSections().has("subagents") ? "▼" : "▶"} Subagents ({childSessions().length})
+            </text>
+            <text
+              fg={theme.accent}
+              attributes={TextAttributes.BOLD}
+              onMouseUp={() => {
+                if (renderer.getSelection()?.getSelectedText()) return
+                handleAddSubagent()
+              }}
+            >
+              + Add
+            </text>
+          </box>
           <Show when={expandedSections().has("subagents")}>
             <box flexDirection="column">
               <For each={childSessions()}>
@@ -1138,7 +1215,7 @@ export function Sidebar(props: { sessionID: string; onToggle: () => void }) {
                         : status === "paused"
                           ? theme.warning
                           : theme.error
-                  const titleShort = child.title.length > 35 ? child.title.substring(0, 32) + "..." : child.title
+
                   return (
                     <box
                       flexDirection="row"
@@ -1154,23 +1231,11 @@ export function Sidebar(props: { sessionID: string; onToggle: () => void }) {
                       <text flexShrink={0} fg={statusColor}>
                         •
                       </text>
-                      <text fg={theme.text}>{titleShort}</text>
+                      <AgentChipText text={child.title} truncate={40} />
                     </box>
                   )
                 }}
               </For>
-              <box marginTop={1}>
-                <text
-                  fg={theme.accent}
-                  attributes={TextAttributes.BOLD}
-                  onMouseUp={() => {
-                    if (renderer.getSelection()?.getSelectedText()) return
-                    handleAddSubagent()
-                  }}
-                >
-                  + Add Subagent
-                </text>
-              </box>
             </box>
           </Show>
         </box>

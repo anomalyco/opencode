@@ -526,101 +526,125 @@ export function CodeEditor(props: CodeEditorProps) {
       }))
   }
 
+  // Centered dialog calculations
+  const dialogWidth = () => Math.min(Math.floor(dimensions().width * 0.8), 120)
+  const dialogHeight = () => Math.min(Math.floor(dimensions().height * 0.8), 40)
+  const dialogX = () => Math.floor((dimensions().width - dialogWidth()) / 2)
+  const dialogY = () => Math.floor((dimensions().height - dialogHeight()) / 2)
+
   return (
-    <box
-      width={dimensions().width}
-      height={dimensions().height}
-      flexDirection="column"
-      backgroundColor={theme.background}
-    >
-      {/* Header */}
-      <box height={1} backgroundColor={theme.backgroundPanel} flexDirection="row" justifyContent="space-between">
-        <box flexDirection="row" gap={1} paddingLeft={1}>
-          <text fg={theme.text} attributes={TextAttributes.BOLD}>
-            {fileName()}
-          </text>
-          <text fg={theme.textMuted}>({getLanguage()})</text>
-          {isDirty() && <text fg={theme.warning}>[+]</text>}
-          {props.readOnly && <text fg={theme.textMuted}>[RO]</text>}
-        </box>
-        <box paddingRight={1}>
-          <text fg={theme.textMuted}>{lines().length} lines</text>
-        </box>
-      </box>
-
-      {/* Editor area */}
-      <box flexGrow={1} flexDirection="column" backgroundColor={theme.background}>
-        <Show when={isLoading()}>
-          <box flexGrow={1} justifyContent="center" alignItems="center">
-            <text fg={theme.textMuted}>Loading...</text>
-          </box>
-        </Show>
-
-        <Show when={error()}>
-          <box flexGrow={1} flexDirection="column" justifyContent="center" alignItems="center" gap={1}>
-            <text fg={theme.error} attributes={TextAttributes.BOLD}>
-              Error: {error()}
-            </text>
-          </box>
-        </Show>
-
-        <Show when={!isLoading() && !error()}>
-          <box flexDirection="column">
-            <For each={visibleLines()}>
-              {(line) => {
-                const lineNumWidth = maxLineNumWidth()
-                const lineNum = String(line.lineNumber).padStart(lineNumWidth, " ")
-                const isCursorLine = line.isCursor
-
-                return (
-                  <box flexDirection="row" backgroundColor={isCursorLine ? theme.backgroundElement : undefined}>
-                    {/* Line number */}
-                    <text fg={theme.textMuted} flexShrink={0} paddingRight={1}>
-                      {lineNum}
-                    </text>
-
-                    {/* Line content */}
-                    <text fg={getLineColor(line.content, getLanguage())} wrapMode="none">
-                      {line.content || " "}
-                    </text>
-
-                    {/* Cursor indicator */}
-                    {isCursorLine && (
-                      <text fg={theme.accent} attributes={TextAttributes.BOLD}>
-                        {" "}
-                        ←
-                      </text>
-                    )}
-                  </box>
-                )
-              }}
-            </For>
-          </box>
-        </Show>
-      </box>
-
-      {/* Status bar */}
+    <box width={dimensions().width} height={dimensions().height}>
+      {/* Backdrop */}
       <box
-        height={1}
-        backgroundColor={theme.backgroundPanel}
-        flexDirection="row"
-        justifyContent="space-between"
-        paddingLeft={1}
-        paddingRight={1}
-      >
-        <text fg={theme.text}>{message()}</text>
-        <text fg={theme.textMuted}>
-          {cursorLine() + 1}:{cursorCol() + 1}
-        </text>
-      </box>
+        position="absolute"
+        top={0}
+        left={0}
+        width={dimensions().width}
+        height={dimensions().height}
+        backgroundColor={theme.background}
+      />
 
-      {/* Help footer */}
-      <box height={1} backgroundColor={theme.backgroundElement} paddingLeft={1} flexDirection="row" gap={2}>
-        <text fg={theme.textMuted}>ESC:exit</text>
-        <text fg={theme.textMuted}>i:insert</text>
-        <text fg={theme.textMuted}>v:visual</text>
-        <text fg={theme.textMuted}>:w:save</text>
-        <text fg={theme.textMuted}>hjkl:move</text>
+      {/* Centered Dialog */}
+      <box
+        position="absolute"
+        top={dialogY()}
+        left={dialogX()}
+        width={dialogWidth()}
+        height={dialogHeight()}
+        flexDirection="column"
+        backgroundColor={theme.background}
+        borderStyle="rounded"
+        borderColor={theme.border}
+      >
+        {/* Header */}
+        <box height={1} backgroundColor={theme.backgroundPanel} flexDirection="row" justifyContent="space-between">
+          <box flexDirection="row" gap={1} paddingLeft={1}>
+            <text fg={theme.text} attributes={TextAttributes.BOLD}>
+              {fileName()}
+            </text>
+            <text fg={theme.textMuted}>({getLanguage()})</text>
+            {isDirty() && <text fg={theme.warning}>[+]</text>}
+            {props.readOnly && <text fg={theme.textMuted}>[RO]</text>}
+          </box>
+          <box paddingRight={1}>
+            <text fg={theme.textMuted}>{lines().length} lines</text>
+          </box>
+        </box>
+
+        {/* Editor area */}
+        <box flexGrow={1} flexDirection="column" backgroundColor={theme.background}>
+          <Show when={isLoading()}>
+            <box flexGrow={1} justifyContent="center" alignItems="center">
+              <text fg={theme.textMuted}>Loading...</text>
+            </box>
+          </Show>
+
+          <Show when={error()}>
+            <box flexGrow={1} flexDirection="column" justifyContent="center" alignItems="center" gap={1}>
+              <text fg={theme.error} attributes={TextAttributes.BOLD}>
+                Error: {error()}
+              </text>
+            </box>
+          </Show>
+
+          <Show when={!isLoading() && !error()}>
+            <box flexDirection="column">
+              <For each={visibleLines()}>
+                {(line) => {
+                  const lineNumWidth = maxLineNumWidth()
+                  const lineNum = String(line.lineNumber).padStart(lineNumWidth, " ")
+                  const isCursorLine = line.isCursor
+
+                  return (
+                    <box flexDirection="row" backgroundColor={isCursorLine ? theme.backgroundElement : undefined}>
+                      {/* Line number */}
+                      <text fg={theme.textMuted} flexShrink={0} paddingRight={1}>
+                        {lineNum}
+                      </text>
+
+                      {/* Line content */}
+                      <text fg={getLineColor(line.content, getLanguage())} wrapMode="none">
+                        {line.content || " "}
+                      </text>
+
+                      {/* Cursor indicator */}
+                      {isCursorLine && (
+                        <text fg={theme.accent} attributes={TextAttributes.BOLD}>
+                          {" "}
+                          ←
+                        </text>
+                      )}
+                    </box>
+                  )
+                }}
+              </For>
+            </box>
+          </Show>
+        </box>
+
+        {/* Status bar */}
+        <box
+          height={1}
+          backgroundColor={theme.backgroundPanel}
+          flexDirection="row"
+          justifyContent="space-between"
+          paddingLeft={1}
+          paddingRight={1}
+        >
+          <text fg={theme.text}>{message()}</text>
+          <text fg={theme.textMuted}>
+            {cursorLine() + 1}:{cursorCol() + 1}
+          </text>
+        </box>
+
+        {/* Help footer */}
+        <box height={1} backgroundColor={theme.backgroundElement} paddingLeft={1} flexDirection="row" gap={2}>
+          <text fg={theme.textMuted}>ESC:exit</text>
+          <text fg={theme.textMuted}>i:insert</text>
+          <text fg={theme.textMuted}>v:visual</text>
+          <text fg={theme.textMuted}>:w:save</text>
+          <text fg={theme.textMuted}>hjkl:move</text>
+        </box>
       </box>
     </box>
   )

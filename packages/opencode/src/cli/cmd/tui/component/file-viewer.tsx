@@ -137,87 +137,111 @@ export function FileViewer(props: FileViewerProps) {
     return Math.round((scrollOffset() / maxScroll()) * 100)
   }
 
+  // Centered dialog calculations
+  const dialogWidth = () => Math.min(Math.floor(dimensions().width * 0.8), 120)
+  const dialogHeight = () => Math.min(Math.floor(dimensions().height * 0.8), 40)
+  const dialogX = () => Math.floor((dimensions().width - dialogWidth()) / 2)
+  const dialogY = () => Math.floor((dimensions().height - dialogHeight()) / 2)
+
   return (
-    <box
-      width={dimensions().width}
-      height={dimensions().height}
-      flexDirection="column"
-      backgroundColor={theme.background}
-    >
-      {/* Header */}
-      <box height={1} backgroundColor={theme.backgroundPanel} flexDirection="row" justifyContent="space-between">
-        <box flexDirection="row" gap={1} paddingLeft={1}>
-          <text fg={theme.text} attributes={TextAttributes.BOLD}>
-            {fileName()}
-          </text>
-          <text fg={theme.textMuted}>({getLanguage()})</text>
-        </box>
-        <box flexDirection="row" gap={2} paddingRight={1}>
-          <text fg={theme.textMuted}>{lines().length} lines</text>
-          <text fg={theme.error} attributes={TextAttributes.BOLD}>
-            ESC to close
-          </text>
-        </box>
-      </box>
+    <box width={dimensions().width} height={dimensions().height}>
+      {/* Backdrop */}
+      <box
+        position="absolute"
+        top={0}
+        left={0}
+        width={dimensions().width}
+        height={dimensions().height}
+        backgroundColor={theme.background}
+      />
 
-      {/* File path */}
-      <box height={1} backgroundColor={theme.backgroundElement} paddingLeft={1}>
-        <text fg={theme.textMuted}>{props.filePath}</text>
-      </box>
-
-      {/* Content area */}
-      <box flexGrow={1} flexDirection="column" backgroundColor={theme.background}>
-        <Show when={isLoading()}>
-          <box flexGrow={1} justifyContent="center" alignItems="center">
-            <text fg={theme.textMuted}>Loading file...</text>
-          </box>
-        </Show>
-
-        <Show when={error()}>
-          <box flexGrow={1} flexDirection="column" justifyContent="center" alignItems="center" gap={1}>
-            <text fg={theme.error} attributes={TextAttributes.BOLD}>
-              Error Loading File
+      {/* Centered Dialog */}
+      <box
+        position="absolute"
+        top={dialogY()}
+        left={dialogX()}
+        width={dialogWidth()}
+        height={dialogHeight()}
+        flexDirection="column"
+        backgroundColor={theme.background}
+        borderStyle="rounded"
+        borderColor={theme.border}
+      >
+        {/* Header */}
+        <box height={1} backgroundColor={theme.backgroundPanel} flexDirection="row" justifyContent="space-between">
+          <box flexDirection="row" gap={1} paddingLeft={1}>
+            <text fg={theme.text} attributes={TextAttributes.BOLD}>
+              {fileName()}
             </text>
-            <text fg={theme.textMuted}>{error()}</text>
+            <text fg={theme.textMuted}>({getLanguage()})</text>
           </box>
-        </Show>
-
-        <Show when={!isLoading() && !error()}>
-          <box flexDirection="column" paddingLeft={1}>
-            <For each={visibleLines()}>
-              {(line) => {
-                const lineNumWidth = String(lines().length).length
-                const lineNum = String(line.lineNumber).padStart(lineNumWidth, " ")
-                return (
-                  <box flexDirection="row" gap={1}>
-                    <text fg={theme.textMuted} flexShrink={0}>
-                      {lineNum}
-                    </text>
-                    <text fg={getLineColor(line.content, getLanguage())} wrapMode="none">
-                      {line.content || " "}
-                    </text>
-                  </box>
-                )
-              }}
-            </For>
+          <box flexDirection="row" gap={2} paddingRight={1}>
+            <text fg={theme.textMuted}>{lines().length} lines</text>
+            <text fg={theme.error} attributes={TextAttributes.BOLD}>
+              ESC to close
+            </text>
           </box>
-        </Show>
-      </box>
-
-      {/* Footer - status bar */}
-      <box height={2} backgroundColor={theme.backgroundPanel} flexDirection="column">
-        <box height={1} paddingLeft={1} paddingRight={1} flexDirection="row" justifyContent="space-between">
-          <text fg={theme.textMuted}>
-            Lines {scrollOffset() + 1}-{Math.min(scrollOffset() + (dimensions().height - 6), lines().length)} of{" "}
-            {lines().length}
-          </text>
-          <text fg={theme.textMuted}>{scrollPercentage()}%</text>
         </box>
-        <box height={1} paddingLeft={1} flexDirection="row" gap={2}>
-          <text fg={theme.textMuted}>↑↓ scroll</text>
-          <text fg={theme.textMuted}>PgUp/PgDn jump</text>
-          <text fg={theme.textMuted}>Home/End top/bottom</text>
-          <text fg={theme.textMuted}>g/G top/bottom</text>
+
+        {/* File path */}
+        <box height={1} backgroundColor={theme.backgroundElement} paddingLeft={1}>
+          <text fg={theme.textMuted}>{props.filePath}</text>
+        </box>
+
+        {/* Content area */}
+        <box flexGrow={1} flexDirection="column" backgroundColor={theme.background}>
+          <Show when={isLoading()}>
+            <box flexGrow={1} justifyContent="center" alignItems="center">
+              <text fg={theme.textMuted}>Loading file...</text>
+            </box>
+          </Show>
+
+          <Show when={error()}>
+            <box flexGrow={1} flexDirection="column" justifyContent="center" alignItems="center" gap={1}>
+              <text fg={theme.error} attributes={TextAttributes.BOLD}>
+                Error Loading File
+              </text>
+              <text fg={theme.textMuted}>{error()}</text>
+            </box>
+          </Show>
+
+          <Show when={!isLoading() && !error()}>
+            <box flexDirection="column" paddingLeft={1}>
+              <For each={visibleLines()}>
+                {(line) => {
+                  const lineNumWidth = String(lines().length).length
+                  const lineNum = String(line.lineNumber).padStart(lineNumWidth, " ")
+                  return (
+                    <box flexDirection="row" gap={1}>
+                      <text fg={theme.textMuted} flexShrink={0}>
+                        {lineNum}
+                      </text>
+                      <text fg={getLineColor(line.content, getLanguage())} wrapMode="none">
+                        {line.content || " "}
+                      </text>
+                    </box>
+                  )
+                }}
+              </For>
+            </box>
+          </Show>
+        </box>
+
+        {/* Footer - status bar */}
+        <box height={2} backgroundColor={theme.backgroundPanel} flexDirection="column">
+          <box height={1} paddingLeft={1} paddingRight={1} flexDirection="row" justifyContent="space-between">
+            <text fg={theme.textMuted}>
+              Lines {scrollOffset() + 1}-{Math.min(scrollOffset() + (dimensions().height - 6), lines().length)} of{" "}
+              {lines().length}
+            </text>
+            <text fg={theme.textMuted}>{scrollPercentage()}%</text>
+          </box>
+          <box height={1} paddingLeft={1} flexDirection="row" gap={2}>
+            <text fg={theme.textMuted}>↑↓ scroll</text>
+            <text fg={theme.textMuted}>PgUp/PgDn jump</text>
+            <text fg={theme.textMuted}>Home/End top/bottom</text>
+            <text fg={theme.textMuted}>g/G top/bottom</text>
+          </box>
         </box>
       </box>
     </box>

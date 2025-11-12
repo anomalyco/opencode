@@ -152,12 +152,7 @@ export const { use: useSync, provider: SyncProvider } = createSimpleContext({
           }
           const result = Binary.search(messages, event.properties.info.id, (m) => m.id)
           if (result.found) {
-            setStore(
-              "message",
-              event.properties.info.sessionID,
-              result.index,
-              reconcile(event.properties.info),
-            )
+            setStore("message", event.properties.info.sessionID, result.index, reconcile(event.properties.info))
             break
           }
           setStore(
@@ -192,12 +187,7 @@ export const { use: useSync, provider: SyncProvider } = createSimpleContext({
           }
           const result = Binary.search(parts, event.properties.part.id, (p) => p.id)
           if (result.found) {
-            setStore(
-              "part",
-              event.properties.part.messageID,
-              result.index,
-              reconcile(event.properties.part),
-            )
+            setStore("part", event.properties.part.messageID, result.index, reconcile(event.properties.part))
             break
           }
           setStore(
@@ -251,7 +241,9 @@ export const { use: useSync, provider: SyncProvider } = createSimpleContext({
       sdk.client.lsp.status().then((x) => setStore("lsp", x.data!)),
       sdk.client.mcp.status().then((x) => setStore("mcp", x.data!)),
       sdk.client.formatter.status().then((x) => setStore("formatter", x.data!)),
-      fetch(`${sdk.url}/plugins`).then((r) => r.json()).then((x) => setStore("plugin", x ?? [])),
+      fetch(`${sdk.url}/plugins`)
+        .then((r) => r.json())
+        .then((x) => setStore("plugin", x ?? [])),
     ])
 
     const result = {
@@ -283,7 +275,7 @@ export const { use: useSync, provider: SyncProvider } = createSimpleContext({
           const [session, messages, todo, diff] = await Promise.all([
             sdk.client.session.get({ path: { id: sessionID }, throwOnError: true }),
             sdk.client.session.messages({ path: { id: sessionID }, query: { limit: 100 } }),
-            sdk.client.session.todo({ path: { id: sessionID } }),
+            sdk.client.session.getTodo({ path: { id: sessionID } }),
             sdk.client.session.diff({ path: { id: sessionID } }),
           ])
           console.log("fetched in " + (Date.now() - now), sessionID)

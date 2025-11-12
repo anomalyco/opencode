@@ -378,6 +378,19 @@ export namespace Session {
     },
   )
 
+  export const toggleMessageFavorite = fn(
+    z.object({
+      sessionID: Identifier.schema("session"),
+      messageID: Identifier.schema("message"),
+    }),
+    async (input) => {
+      const msg = await MessageV2.get(input)
+      msg.info.favorited = !msg.info.favorited
+      await updateMessage(msg.info)
+      return msg.info
+    },
+  )
+
   const UpdatePartInput = z.union([
     MessageV2.Part,
     z.object({

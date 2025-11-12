@@ -159,98 +159,121 @@ export function FileBrowser(props: FileBrowserProps) {
     }
   }
 
+  // Calculate centered dialog dimensions
+  const dialogWidth = Math.min(Math.floor(dimensions().width * 0.8), 120)
+  const dialogHeight = Math.min(Math.floor(dimensions().height * 0.8), 40)
+  const offsetX = Math.floor((dimensions().width - dialogWidth) / 2)
+  const offsetY = Math.floor((dimensions().height - dialogHeight) / 2)
+
   return (
-    <box
-      width={dimensions().width}
-      height={dimensions().height}
-      flexDirection="column"
-      backgroundColor={theme.background}
-    >
-      {/* Header */}
-      <box height={1} backgroundColor={theme.backgroundPanel} flexDirection="row" justifyContent="space-between">
-        <box paddingLeft={1}>
-          <text fg={theme.text} attributes={TextAttributes.BOLD}>
-            File Browser
-          </text>
-        </box>
-        <box paddingRight={1}>
-          <text fg={theme.error} attributes={TextAttributes.BOLD}>
-            ESC to close
-          </text>
-        </box>
-      </box>
+    <box width={dimensions().width} height={dimensions().height} flexDirection="column" backgroundColor="transparent">
+      {/* Semi-transparent backdrop */}
+      <box
+        width={dimensions().width}
+        height={dimensions().height}
+        position="absolute"
+        backgroundColor={theme.background}
+        onMouseUp={() => props.onClose()}
+      />
 
-      {/* Path */}
-      <box height={1} backgroundColor={theme.backgroundElement} paddingLeft={1}>
-        <text fg={theme.textMuted}>{props.directory || "."}</text>
-      </box>
-
-      {/* Content area */}
-      <box flexGrow={1} flexDirection="column" backgroundColor={theme.background}>
-        <Show when={isLoading()}>
-          <box flexGrow={1} justifyContent="center" alignItems="center">
-            <text fg={theme.textMuted}>Loading files...</text>
-          </box>
-        </Show>
-
-        <Show when={error()}>
-          <box flexGrow={1} flexDirection="column" justifyContent="center" alignItems="center" gap={1}>
-            <text fg={theme.error} attributes={TextAttributes.BOLD}>
-              Error Loading Files
+      {/* Centered dialog */}
+      <box
+        width={dialogWidth}
+        height={dialogHeight}
+        position="absolute"
+        left={offsetX}
+        top={offsetY}
+        flexDirection="column"
+        backgroundColor={theme.background}
+        borderStyle="rounded"
+        borderColor={theme.primary}
+      >
+        {/* Header */}
+        <box height={1} backgroundColor={theme.backgroundPanel} flexDirection="row" justifyContent="space-between">
+          <box paddingLeft={1}>
+            <text fg={theme.text} attributes={TextAttributes.BOLD}>
+              File Browser
             </text>
-            <text fg={theme.textMuted}>{error()}</text>
           </box>
-        </Show>
-
-        <Show when={!isLoading() && !error()}>
-          <box flexDirection="column" paddingLeft={1} paddingTop={1}>
-            <For each={flattenedFiles()}>
-              {(item, idx) => {
-                const isSelected = idx() === selectedIndex()
-                const indent = "  ".repeat(item.depth)
-
-                return (
-                  <box
-                    flexDirection="row"
-                    gap={1}
-                    backgroundColor={isSelected ? theme.backgroundElement : undefined}
-                    onMouseUp={() => {
-                      setSelectedIndex(idx())
-                      if (item.node.type === "directory") {
-                        toggleDirectory(item.node.path)
-                      } else {
-                        props.onSelectFile(item.node.path)
-                      }
-                    }}
-                  >
-                    <text>{indent}</text>
-                    <text fg={getFileColor(item.node, isSelected)} flexShrink={0}>
-                      {getFileIcon(item.node)}
-                    </text>
-                    <text
-                      fg={getFileColor(item.node, isSelected)}
-                      attributes={isSelected ? TextAttributes.BOLD : undefined}
-                    >
-                      {item.node.name}
-                    </text>
-                  </box>
-                )
-              }}
-            </For>
+          <box paddingRight={1}>
+            <text fg={theme.error} attributes={TextAttributes.BOLD}>
+              ESC to close
+            </text>
           </box>
-        </Show>
-      </box>
-
-      {/* Footer */}
-      <box height={2} backgroundColor={theme.backgroundPanel} flexDirection="column">
-        <box height={1} paddingLeft={1}>
-          <text fg={theme.textMuted}>{flattenedFiles().length} items</text>
         </box>
-        <box height={1} paddingLeft={1} flexDirection="row" gap={2}>
-          <text fg={theme.textMuted}>↑↓ navigate</text>
-          <text fg={theme.textMuted}>←→ collapse/expand</text>
-          <text fg={theme.textMuted}>Enter open</text>
-          <text fg={theme.textMuted}>ESC close</text>
+
+        {/* Path */}
+        <box height={1} backgroundColor={theme.backgroundElement} paddingLeft={1}>
+          <text fg={theme.textMuted}>{props.directory || "."}</text>
+        </box>
+
+        {/* Content area */}
+        <box flexGrow={1} flexDirection="column" backgroundColor={theme.background}>
+          <Show when={isLoading()}>
+            <box flexGrow={1} justifyContent="center" alignItems="center">
+              <text fg={theme.textMuted}>Loading files...</text>
+            </box>
+          </Show>
+
+          <Show when={error()}>
+            <box flexGrow={1} flexDirection="column" justifyContent="center" alignItems="center" gap={1}>
+              <text fg={theme.error} attributes={TextAttributes.BOLD}>
+                Error Loading Files
+              </text>
+              <text fg={theme.textMuted}>{error()}</text>
+            </box>
+          </Show>
+
+          <Show when={!isLoading() && !error()}>
+            <box flexDirection="column" paddingLeft={1} paddingTop={1}>
+              <For each={flattenedFiles()}>
+                {(item, idx) => {
+                  const isSelected = idx() === selectedIndex()
+                  const indent = "  ".repeat(item.depth)
+
+                  return (
+                    <box
+                      flexDirection="row"
+                      gap={1}
+                      backgroundColor={isSelected ? theme.backgroundElement : undefined}
+                      onMouseUp={() => {
+                        setSelectedIndex(idx())
+                        if (item.node.type === "directory") {
+                          toggleDirectory(item.node.path)
+                        } else {
+                          props.onSelectFile(item.node.path)
+                        }
+                      }}
+                    >
+                      <text>{indent}</text>
+                      <text fg={getFileColor(item.node, isSelected)} flexShrink={0}>
+                        {getFileIcon(item.node)}
+                      </text>
+                      <text
+                        fg={getFileColor(item.node, isSelected)}
+                        attributes={isSelected ? TextAttributes.BOLD : undefined}
+                      >
+                        {item.node.name}
+                      </text>
+                    </box>
+                  )
+                }}
+              </For>
+            </box>
+          </Show>
+        </box>
+
+        {/* Footer */}
+        <box height={2} backgroundColor={theme.backgroundPanel} flexDirection="column">
+          <box height={1} paddingLeft={1}>
+            <text fg={theme.textMuted}>{flattenedFiles().length} items</text>
+          </box>
+          <box height={1} paddingLeft={1} flexDirection="row" gap={2}>
+            <text fg={theme.textMuted}>↑↓ navigate</text>
+            <text fg={theme.textMuted}>←→ collapse/expand</text>
+            <text fg={theme.textMuted}>Enter open</text>
+            <text fg={theme.textMuted}>ESC close</text>
+          </box>
         </box>
       </box>
     </box>
