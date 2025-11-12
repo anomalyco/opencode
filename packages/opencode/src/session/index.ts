@@ -378,8 +378,14 @@ export namespace Session {
       metadata: z.custom<ProviderMetadata>().optional(),
     }),
     (input) => {
+      const cachedInputTokens = input.usage.cachedInputTokens ?? 0
+      const excludesCachedTokens = !!(input.metadata?.["anthropic"] || input.metadata?.["bedrock"])
+      const adjustedInputTokens = excludesCachedTokens
+        ? (input.usage.inputTokens ?? 0)
+        : (input.usage.inputTokens ?? 0) - cachedInputTokens
+
       const tokens = {
-        input: input.usage.inputTokens ?? 0,
+        input: adjustedInputTokens,
         output: input.usage.outputTokens ?? 0,
         reasoning: input.usage?.reasoningTokens ?? 0,
         cache: {
@@ -387,7 +393,7 @@ export namespace Session {
             // @ts-expect-error
             input.metadata?.["bedrock"]?.["usage"]?.["cacheWriteInputTokens"] ??
             0) as number,
-          read: input.usage.cachedInputTokens ?? 0,
+          read: cachedInputTokens,
         },
       }
       return {
