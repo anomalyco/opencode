@@ -165,6 +165,13 @@ export namespace Storage {
     })
   }
 
+  async function atomicRename(source: string, target: string) {
+    if (process.platform === "win32") {
+      await fs.unlink(target).catch(() => {})
+    }
+    await fs.rename(source, target)
+  }
+
   export async function read<T>(key: string[]) {
     const dir = await state().then((x) => x.dir)
     const target = path.join(dir, ...key) + ".json"
@@ -182,13 +189,9 @@ export namespace Storage {
       const content = await Bun.file(target).json()
       fn(content)
       const jsonContent = JSON.stringify(content, null, 2)
-      const handle = await fs.open(target, "w")
-      try {
-        await handle.writeFile(jsonContent, "utf-8")
-        await handle.sync()
-      } finally {
-        await handle.close()
-      }
+      const tempFile = target + ".tmp"
+      await Bun.write(tempFile, jsonContent)
+      await atomicRename(tempFile, target)
       return content as T
     })
   }
@@ -200,13 +203,9 @@ export namespace Storage {
       using _ = await Lock.write(target)
       const jsonContent = JSON.stringify(content, null, 2)
       await fs.mkdir(path.dirname(target), { recursive: true })
-      const handle = await fs.open(target, "w")
-      try {
-        await handle.writeFile(jsonContent, "utf-8")
-        await handle.sync()
-      } finally {
-        await handle.close()
-      }
+      const tempFile = target + ".tmp"
+      await Bun.write(tempFile, jsonContent)
+      await atomicRename(tempFile, target)
     })
   }
 
