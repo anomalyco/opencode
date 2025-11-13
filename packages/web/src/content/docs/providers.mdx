@@ -783,6 +783,42 @@ OpenCode Zen is a list of tested and verified models provided by the OpenCode te
 
 ---
 
+### OVHcloud AI Endpoints
+
+1. Head over to the [OVHcloud panel](https://ovh.com/manager). Navigate to the `Public Cloud` section, `AI & Machine Learning` > `AI Endpoints` and in `API Keys` tab, click **Create a new API key**.
+
+2. Run `opencode auth login` and select **OVHcloud AI Endpoints**.
+
+   ```bash
+   $ opencode auth login
+
+   ┌  Add credential
+   │
+   ◆  Select provider
+   │  ● OVHcloud AI Endpoints
+   │  ...
+   └
+   ```
+
+3. Enter your OVHcloud AI Endpoints API key.
+
+   ```bash
+   $ opencode auth login
+
+   ┌  Add credential
+   │
+   ◇  Select provider
+   │  OVHcloud AI Endpoints
+   │
+   ◇  Enter your API key
+   │  _
+   └
+   ```
+
+4. Run the `/models` command to select a model like _gpt-oss-120b_.
+
+---
+
 ### Together AI
 
 1. Head over to the [Together AI console](https://api.together.ai), create an account, and click **Add Key**.

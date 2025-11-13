@@ -378,8 +378,14 @@ export namespace Session {
       metadata: z.custom<ProviderMetadata>().optional(),
     }),
     (input) => {
+      const cachedInputTokens = input.usage.cachedInputTokens ?? 0
+      const excludesCachedTokens = !!(input.metadata?.["anthropic"] || input.metadata?.["bedrock"])
+      const adjustedInputTokens = excludesCachedTokens
+        ? (input.usage.inputTokens ?? 0)
+        : (input.usage.inputTokens ?? 0) - cachedInputTokens
+
       const tokens = {
-        input: input.usage.inputTokens ?? 0,
+        input: adjustedInputTokens,
         output: input.usage.outputTokens ?? 0,
         reasoning: input.usage?.reasoningTokens ?? 0,
         cache: {
@@ -387,7 +393,7 @@ export namespace Session {
             // @ts-expect-error
             input.metadata?.["bedrock"]?.["usage"]?.["cacheWriteInputTokens"] ??
             0) as number,
-          read: input.usage.cachedInputTokens ?? 0,
+          read: cachedInputTokens,
         },
       }
       return {
@@ -396,6 +402,9 @@ export namespace Session {
           .add(new Decimal(tokens.output).mul(input.model.cost?.output ?? 0).div(1_000_000))
           .add(new Decimal(tokens.cache.read).mul(input.model.cost?.cache_read ?? 0).div(1_000_000))
           .add(new Decimal(tokens.cache.write).mul(input.model.cost?.cache_write ?? 0).div(1_000_000))
+          // TODO: update models.dev to have better pricing model, for now:
+          // charge reasoning tokens at the same rate as output tokens
+          .add(new Decimal(tokens.reasoning).mul(input.model.cost?.output ?? 0).div(1_000_000))
           .toNumber(),
         tokens,
       }

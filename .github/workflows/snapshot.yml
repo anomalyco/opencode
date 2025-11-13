@@ -4,7 +4,7 @@ on:
   push:
     branches:
       - dev
-      - opentui
+      - windows
       - v0
 
 concurrency: ${{ github.workflow }}-${{ github.ref }}
