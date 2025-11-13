@@ -241,6 +241,22 @@ export function Sidebar(props: {
     sync.data.session.filter((x) => x.parentID === props.sessionID).toSorted((a, b) => b.id.localeCompare(a.id)),
   )
 
+  // Track expanded state per agent group in Subagents section
+  const [expandedAgentGroups, setExpandedAgentGroups] = createSignal<Set<string>>(new Set())
+
+  // Group child sessions by parsed agent name (e.g. "@GENERAL")
+  const subagentGroups = createMemo(() => {
+    const groups = new Map<string, any[]>()
+    for (const child of childSessions()) {
+      const parsed = parseSubagentTitle(child.title)
+      const name = parsed.agent || "@GENERAL"
+      const arr = groups.get(name)
+      if (arr) arr.push(child)
+      else groups.set(name, [child])
+    }
+    return Array.from(groups.entries()).map(([agent, items]) => ({ agent, items }))
+  })
+
   // Load favorite tools from config (one-time load, no polling)
   const loadFavorites = async () => {
     try {
@@ -1350,55 +1366,68 @@ export function Sidebar(props: {
           </box>
           <Show when={expandedSections().has("subagents")}>
             <box flexDirection="column">
-              <For each={childSessions()}>
-                {(child, index) => {
-                  const status = (child as any).orchestration?.status || "unknown"
-                  const statusColor =
-                    status === "active"
-                      ? theme.success
-                      : status === "completed"
-                        ? theme.textMuted
-                        : status === "paused"
-                          ? theme.warning
-                          : theme.error
-
-                  const parsed = parseSubagentTitle(child.title)
-                  const agentName = parsed.agent
-                  const description = parsed.description || child.title
-
-                  const prevChild = index() > 0 ? childSessions()[index() - 1] : null
-                  const prevAgentName = prevChild ? parseSubagentTitle(prevChild.title).agent : undefined
-                  const showAgent = agentName && agentName !== prevAgentName
-
-                  const summary = description.length > 35 ? description.substring(0, 32) + "..." : description
-
-                  return (
-                    <box flexDirection="column" gap={0}>
-                      {showAgent && (
-                        <box paddingBottom={0}>
-                          <AgentChipText text={agentName} />
-                        </box>
-                      )}
-                      <box
-                        flexDirection="row"
-                        gap={1}
-                        paddingLeft={2}
-                        onMouseUp={() => {
-                          if (renderer.getSelection()?.getSelectedText()) return
-                          navigate({
-                            type: "session",
-                            sessionID: child.id,
-                          })
-                        }}
-                      >
-                        <text flexShrink={0} fg={statusColor}>
-                          •
-                        </text>
-                        <text fg={theme.text}>{summary}</text>
-                      </box>
+              <For each={subagentGroups()}>
+                {(group) => (
+                  <box flexDirection="column" gap={0}>
+                    <box
+                      flexDirection="row"
+                      alignItems="center"
+                      gap={1}
+                      paddingLeft={1}
+                      onMouseUp={() => {
+                        if (renderer.getSelection()?.getSelectedText()) return
+                        setExpandedAgentGroups((prev) => {
+                          const next = new Set(prev)
+                          if (next.has(group.agent)) next.delete(group.agent)
+                          else next.add(group.agent)
+                          return next
+                        })
+                      }}
+                    >
+                      <text>{expandedAgentGroups().has(group.agent) ? "▼" : "▶"}</text>
+                      <AgentChipText text={group.agent} />
                     </box>
-                  )
-                }}
+                    <Show when={expandedAgentGroups().has(group.agent)}>
+                      <For each={group.items}>
+                        {(child) => {
+                          const status = (child as any).orchestration?.status || "unknown"
+                          const statusColor =
+                            status === "active"
+                              ? theme.success
+                              : status === "completed"
+                                ? theme.textMuted
+                                : status === "paused"
+                                  ? theme.warning
+                                  : theme.error
+
+                          const parsed = parseSubagentTitle(child.title)
+                          const description = parsed.description || child.title
+                          const summary = description.length > 35 ? description.substring(0, 32) + "..." : description
+
+                          return (
+                            <box
+                              flexDirection="row"
+                              gap={1}
+                              paddingLeft={3}
+                              onMouseUp={() => {
+                                if (renderer.getSelection()?.getSelectedText()) return
+                                navigate({
+                                  type: "session",
+                                  sessionID: child.id,
+                                })
+                              }}
+                            >
+                              <text flexShrink={0} fg={statusColor}>
+                                •
+                              </text>
+                              <text fg={theme.text}>{summary}</text>
+                            </box>
+                          )
+                        }}
+                      </For>
+                    </Show>
+                  </box>
+                )}
               </For>
             </box>
           </Show>

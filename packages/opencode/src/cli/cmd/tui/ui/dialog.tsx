@@ -8,7 +8,7 @@ export function Dialog(
   props: ParentProps<{
     size?: "medium" | "large"
     onClose: () => void
-    frame?: { width?: number | null; height?: number | null }
+    frame?: { width?: number | null; height?: number | null; left?: number | null; top?: number | null }
   }>,
 ) {
   const dimensions = useTerminalDimensions()
@@ -21,12 +21,27 @@ export function Dialog(
       }}
       width={dimensions().width}
       height={dimensions().height}
-      alignItems="center"
+      alignItems="flex-start"
       position="absolute"
       paddingTop={
-        typeof props.frame?.height === "number"
-          ? Math.max(1, Math.floor((dimensions().height - Math.min(dimensions().height - 2, props.frame.height)) / 2))
+        typeof props.frame?.top === "number"
+          ? Math.max(1, Math.min(props.frame.top, Math.max(1, dimensions().height - 2)))
           : Math.floor(dimensions().height / 4)
+      }
+      paddingLeft={
+        typeof props.frame?.left === "number"
+          ? Math.max(0, Math.min(props.frame.left, Math.max(0, dimensions().width - 2)))
+          : Math.max(
+              0,
+              Math.floor(
+                (dimensions().width -
+                  Math.min(
+                    dimensions().width - 2,
+                    typeof props.frame?.width === "number" ? props.frame.width : props.size === "large" ? 80 : 60,
+                  )) /
+                  2,
+              ),
+            )
       }
       left={0}
       top={0}
@@ -61,7 +76,12 @@ function init() {
       onClose?: () => void
     }[],
     size: "medium" as "medium" | "large",
-    frame: { width: null as number | null, height: null as number | null },
+    frame: {
+      width: null as number | null,
+      height: null as number | null,
+      left: null as number | null,
+      top: null as number | null,
+    },
   })
 
   useKeyboard((evt) => {
@@ -155,10 +175,12 @@ function init() {
     setSize(size: "medium" | "large") {
       setStore("size", size)
     },
-    setFrame(frame: { width?: number | null; height?: number | null }) {
+    setFrame(frame: { width?: number | null; height?: number | null; left?: number | null; top?: number | null }) {
       setStore("frame", {
         width: typeof frame.width === "number" ? frame.width : null,
         height: typeof frame.height === "number" ? frame.height : null,
+        left: typeof frame.left === "number" ? frame.left : null,
+        top: typeof frame.top === "number" ? frame.top : null,
       })
     },
   }
