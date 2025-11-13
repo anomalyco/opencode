@@ -52,10 +52,10 @@ jobs:
           name: node-modules-${{ matrix.system }}
           retention-days: 3
           path: |
-            node-modules-${{ matrix.system }}-${SNAPSHOT_SUFFIX}.tar.gz
-            node-modules-${{ matrix.system }}-${SNAPSHOT_SUFFIX}.sha256
-            node-modules-${{ matrix.system }}-${SNAPSHOT_SUFFIX}.list
-            node-modules-${{ matrix.system }}-${SNAPSHOT_SUFFIX}.txt
+            node-modules-${{ matrix.system }}-${{ env.SNAPSHOT_SUFFIX }}.tar.gz
+            node-modules-${{ matrix.system }}-${{ env.SNAPSHOT_SUFFIX }}.sha256
+            node-modules-${{ matrix.system }}-${{ env.SNAPSHOT_SUFFIX }}.list
+            node-modules-${{ matrix.system }}-${{ env.SNAPSHOT_SUFFIX }}.txt
 
       - name: Clean working tree
         run: |
