@@ -21,7 +21,7 @@ await $`cp -r ./bin ./dist/${pkg.name}/bin`
 // Copy Windows .exe if any Windows binaries were built
 let hasWindowsBinary = false
 for (const binaryName of Object.keys(binaries)) {
-  if (binaryName.includes("win32")) {
+  if (binaryName.includes("windows")) {
     const winBinaryPath = `./dist/${binaryName}/bin/opencode.exe`
     if (fs.existsSync(winBinaryPath)) {
       await $`cp ${winBinaryPath} ./dist/${pkg.name}/bin/opencode.exe`
