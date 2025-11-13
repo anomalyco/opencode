@@ -20,7 +20,7 @@ function detectPlatformAndArch() {
       platform = "linux"
       break
     case "win32":
-      platform = "windows"
+      platform = "win32"
       break
     default:
       platform = os.platform()
@@ -50,21 +50,62 @@ function detectPlatformAndArch() {
 function findBinary() {
   const { platform, arch } = detectPlatformAndArch()
   const packageName = `opencode-${platform}-${arch}`
-  const binary = platform === "windows" ? "opencode.exe" : "opencode"
+  const binaryName = platform === "win32" ? "opencode.exe" : "opencode"
 
   try {
     // Use require.resolve to find the package
     const packageJsonPath = require.resolve(`${packageName}/package.json`)
     const packageDir = path.dirname(packageJsonPath)
-    const binaryPath = path.join(packageDir, "bin", binary)
+    const binaryPath = path.join(packageDir, "bin", binaryName)
 
     if (!fs.existsSync(binaryPath)) {
       throw new Error(`Binary not found at ${binaryPath}`)
     }
 
-    return binaryPath
+    return { binaryPath, binaryName }
   } catch (error) {
     throw new Error(`Could not find package ${packageName}: ${error.message}`)
+  }
+}
+
+function prepareBinDirectory(binaryName) {
+  const binDir = path.join(__dirname, "bin")
+  const targetPath = path.join(binDir, binaryName)
+
+  // Ensure bin directory exists
+  if (!fs.existsSync(binDir)) {
+    fs.mkdirSync(binDir, { recursive: true })
+  }
+
+  // Remove existing binary/symlink if it exists
+  if (fs.existsSync(targetPath)) {
+    fs.unlinkSync(targetPath)
+  }
+
+  return { binDir, targetPath }
+}
+
+function copyBinary(sourcePath, binaryName) {
+  const { targetPath } = prepareBinDirectory(binaryName)
+
+  fs.copyFileSync(sourcePath, targetPath)
+  console.log(`opencode binary installed: ${targetPath}`)
+
+  // Verify the file exists after operation
+  if (!fs.existsSync(targetPath)) {
+    throw new Error(`Failed to copy binary to ${targetPath}`)
+  }
+}
+
+function symlinkBinary(sourcePath, binaryName) {
+  const { targetPath } = prepareBinDirectory(binaryName)
+
+  fs.symlinkSync(sourcePath, targetPath)
+  console.log(`opencode binary symlinked: ${targetPath} -> ${sourcePath}`)
+
+  // Verify the file exists after operation
+  if (!fs.existsSync(targetPath)) {
+    throw new Error(`Failed to symlink binary to ${targetPath}`)
   }
 }
 
@@ -102,27 +143,37 @@ async function main() {
     if (os.platform() === "win32") {
       // NPM eg format - npm/11.4.2 node/v24.4.1 win32 x64
       // Bun eg format - bun/1.2.19 npm/? node/v24.3.0 win32 x64
-      if (process.env.npm_config_user_agent.startsWith("npm")) {
+      // pnpm eg format - pnpm/8.10.0 npm/? node/v20.10.0 win32 x64
+      const userAgent = process.env.npm_config_user_agent || ""
+
+      if (userAgent.startsWith("npm")) {
         await regenerateWindowsCmdWrappers()
-      } else {
-        console.log("Windows detected but not npm, skipping postinstall")
+        return
       }
+
+      if (userAgent.startsWith("bun")) {
+        console.log("Windows + bun detected: Setting up binary")
+        const { binaryPath, binaryName } = findBinary()
+        copyBinary(binaryPath, binaryName)
+        return
+      }
+
+      if (userAgent.startsWith("pnpm")) {
+        console.log("Windows + pnpm detected: Setting up binary")
+        const { binaryPath, binaryName } = findBinary()
+        copyBinary(binaryPath, binaryName)
+        return
+      }
+
+      // Unknown package manager on Windows
+      console.log("Windows detected but unknown package manager, skipping postinstall")
       return
     }
 
-    const binaryPath = findBinary()
-    const binScript = path.join(__dirname, "bin", "opencode")
-
-    // Remove existing bin script if it exists
-    if (fs.existsSync(binScript)) {
-      fs.unlinkSync(binScript)
-    }
-
-    // Create symlink to the actual binary
-    fs.symlinkSync(binaryPath, binScript)
-    console.log(`opencode binary symlinked: ${binScript} -> ${binaryPath}`)
+    const { binaryPath, binaryName } = findBinary()
+    symlinkBinary(binaryPath, binaryName)
   } catch (error) {
-    console.error("Failed to create opencode binary symlink:", error.message)
+    console.error("Failed to setup opencode binary:", error.message)
     process.exit(1)
   }
 }
