@@ -53,6 +53,13 @@ jobs:
           retention-days: 3
           path: |
             node-modules-${{ matrix.system }}-${{ env.SNAPSHOT_SUFFIX }}.tar.gz
+
+      - name: Upload hash metadata
+        uses: actions/upload-artifact@v4
+        with:
+          name: node-modules-${{ matrix.system }}-meta
+          retention-days: 30
+          path: |
             node-modules-${{ matrix.system }}-${{ env.SNAPSHOT_SUFFIX }}.sha256
             node-modules-${{ matrix.system }}-${{ env.SNAPSHOT_SUFFIX }}.list
             node-modules-${{ matrix.system }}-${{ env.SNAPSHOT_SUFFIX }}.txt
