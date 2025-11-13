@@ -17,7 +17,7 @@
 
   ::-webkit-scrollbar-thumb {
     background-color: var(--theme-border-subtle);
-    border-radius: 6px;
+    border-radius: var(--radius-md);
   }
 
   * {

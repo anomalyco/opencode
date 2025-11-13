@@ -21,7 +21,7 @@
 [data-component="select-content"] {
   min-width: 4rem;
   overflow: hidden;
-  border-radius: 8px;
+  border-radius: var(--radius-md);
   border-width: 1px;
   border-style: solid;
   border-color: var(--border-weak-base);
@@ -60,7 +60,7 @@
     display: flex;
     align-items: center;
     padding: 0 6px 0 6px;
-    border-radius: 6px;
+    border-radius: var(--radius-sm);
 
     /* text-12-medium */
     font-family: var(--font-family-sans);

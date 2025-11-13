@@ -25,7 +25,7 @@
     padding: 2px;
     aspect-ratio: 1;
     flex-shrink: 0;
-    border-radius: 4px;
+    border-radius: var(--radius-sm);
     border: 1px solid var(--border-weak-base);
     /* background-color: var(--surface-weak); */
   }

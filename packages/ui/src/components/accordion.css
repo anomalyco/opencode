@@ -24,7 +24,7 @@
       [data-slot="accordion-trigger"] {
         width: 100%;
         display: flex;
-        height: 40px;
+        height: 32px;
         padding: 8px 12px;
         justify-content: space-between;
         align-items: center;
@@ -63,23 +63,24 @@
       margin-bottom: 8px;
 
       [data-slot="accordion-trigger"] {
-        border-radius: 8px 8px 0 0;
+        border-top-left-radius: var(--radius-md);
+        border-top-right-radius: var(--radius-md);
       }
 
       [data-slot="accordion-content"] {
         border: 1px solid var(--border-weak-base);
         border-top: none;
-        border-bottom-left-radius: 8px;
-        border-bottom-right-radius: 8px;
+        border-bottom-left-radius: var(--radius-md);
+        border-bottom-right-radius: var(--radius-md);
       }
 
       [data-slot="accordion-item"]:has(+ &) {
         &[data-closed] {
-          border-bottom-left-radius: 8px;
-          border-bottom-right-radius: 8px;
+          border-bottom-left-radius: var(--radius-md);
+          border-bottom-right-radius: var(--radius-md);
           [data-slot="accordion-trigger"] {
-            border-bottom-left-radius: 8px;
-            border-bottom-right-radius: 8px;
+            border-bottom-left-radius: var(--radius-md);
+            border-bottom-right-radius: var(--radius-md);
           }
         }
         margin-bottom: 8px;
@@ -89,8 +90,8 @@
         margin-top: 8px;
 
         [data-slot="accordion-trigger"] {
-          border-top-left-radius: 8px;
-          border-top-right-radius: 8px;
+          border-top-left-radius: var(--radius-md);
+          border-top-right-radius: var(--radius-md);
         }
       }
     }
@@ -106,8 +107,8 @@
 
       &[data-closed] {
         [data-slot="accordion-trigger"] {
-          border-top-left-radius: 8px;
-          border-top-right-radius: 8px;
+          border-top-left-radius: var(--radius-md);
+          border-top-right-radius: var(--radius-md);
         }
       }
     }
@@ -117,8 +118,8 @@
 
       &[data-closed] {
         [data-slot="accordion-trigger"] {
-          border-bottom-left-radius: 8px;
-          border-bottom-right-radius: 8px;
+          border-bottom-left-radius: var(--radius-md);
+          border-bottom-right-radius: var(--radius-md);
         }
       }
     }

@@ -49,6 +49,18 @@ export namespace Format {
         result.name = name
         formatters[name] = result
       }
+      const result: Formatter.Info = mergeDeep(formatters[name] ?? {}, {
+        command: [],
+        extensions: [],
+        ...item,
+      })
+
+      if (result.command.length === 0) continue
+
+      result.enabled = async () => true
+      result.name = name
+      formatters[name] = result
+    }
 
       return {
         enabled,
