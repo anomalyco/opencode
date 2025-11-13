@@ -41,6 +41,9 @@ export namespace Format {
         extensions: [],
         ...item,
       })
+
+      if (result.command.length === 0) continue
+
       result.enabled = async () => true
       result.name = name
       formatters[name] = result
