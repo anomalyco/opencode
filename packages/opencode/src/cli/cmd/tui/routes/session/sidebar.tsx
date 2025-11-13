@@ -761,10 +761,11 @@ export function Sidebar(props: { sessionID: string; onToggle: () => void }) {
             }}
             onMouseUp={() => handleTabChange("tools")}
           >
-            {activeTab() === "tools" ? "●" : "○"} Tools(
+            {activeTab() === "tools" ? "● " : "○ "}Tools(
             {toolsUsed().length + Object.keys(sync.data.mcp).length + sync.data.lsp.length + uniquePlugins().length}
             ){" "}
           </text>
+
           <text
             style={{
               fg: activeTab() === "todos" ? theme.text : theme.textMuted,
@@ -1024,7 +1025,7 @@ export function Sidebar(props: { sessionID: string; onToggle: () => void }) {
 
         <Show when={activeTab() === "todos"}>
           <box marginTop={0}>
-            <box flexDirection="row" gap={1}>
+            <box flexDirection="row" alignItems="center" justifyContent="space-between" width="100%">
               <text attributes={TextAttributes.BOLD}>Todo</text>
               <text
                 fg={theme.accent}
@@ -1061,20 +1062,6 @@ export function Sidebar(props: { sessionID: string; onToggle: () => void }) {
                         <text>{indent}</text>
                         <text
                           style={{
-                            fg: hasKids
-                              ? task.status === "in_progress"
-                                ? theme.success
-                                : task.status === "completed"
-                                  ? theme.textMuted
-                                  : theme.text
-                              : theme.textMuted,
-                          }}
-                        >
-                          {hasKids ? (expandedTodos().has(task.id) ? "▼" : "▶") : "▶"}
-                        </text>
-                        <text> </text>
-                        <text
-                          style={{
                             fg:
                               task.status === "in_progress"
                                 ? theme.success
@@ -1085,7 +1072,13 @@ export function Sidebar(props: { sessionID: string; onToggle: () => void }) {
                                     : theme.textMuted,
                           }}
                         >
-                          {task.status === "completed" ? "●" : "○"}
+                          {hasKids
+                            ? expandedTodos().has(task.id)
+                              ? "▼"
+                              : "▶"
+                            : task.status === "completed"
+                              ? "●"
+                              : "○"}
                         </text>
                         <text> </text>
                         <text
@@ -1151,7 +1144,7 @@ export function Sidebar(props: { sessionID: string; onToggle: () => void }) {
 
         {/* Context Section - Always visible below tabs */}
         <box marginTop={1} flexDirection="column">
-          <box flexDirection="row" gap={1}>
+          <box flexDirection="row" alignItems="center" justifyContent="space-between" width="100%">
             <text
               attributes={TextAttributes.BOLD}
               fg={theme.accent}
@@ -1274,7 +1267,7 @@ export function Sidebar(props: { sessionID: string; onToggle: () => void }) {
         {/* Subagents Section - Always visible below tabs */}
         {/* Subagents Section - Always visible */}
         <box marginTop={1} flexDirection="column">
-          <box flexDirection="row" gap={1}>
+          <box flexDirection="row" alignItems="center" justifyContent="space-between" width="100%">
             <text
               attributes={TextAttributes.BOLD}
               fg={theme.accent}
