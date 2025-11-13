@@ -9,7 +9,7 @@ import {
   fg,
   type KeyBinding,
 } from "@opentui/core"
-import { createEffect, createMemo, Match, Switch, type JSX, onMount, batch } from "solid-js"
+import { createEffect, createMemo, Match, Switch, Show, type JSX, onMount, batch } from "solid-js"
 import { useLocal } from "@tui/context/local"
 import { useTheme } from "@tui/context/theme"
 import { SplitBorder } from "@tui/component/border"
@@ -30,6 +30,7 @@ import type { FilePart } from "@opencode-ai/sdk"
 import { TuiEvent } from "../../event"
 import { DialogModel } from "../dialog-model"
 import { useDialog } from "../../ui/dialog"
+import { useToast } from "../../ui/toast"
 import { Perf } from "@/util/perf"
 import path from "path"
 
@@ -55,6 +56,7 @@ export function Prompt(props: PromptProps) {
   let input: TextareaRenderable
   let anchor: BoxRenderable
   let autocomplete: AutocompleteRef
+  let promptPartTypeId: number
 
   const keybind = useKeybind()
   const local = useLocal()
@@ -67,6 +69,9 @@ export function Prompt(props: PromptProps) {
   const renderer = useRenderer()
   const { theme, syntax } = useTheme()
   const dialog = useDialog()
+  const toast = useToast()
+  let aborting = false
+  let dropProcessing = false
 
   const textareaKeybindings = createMemo(() => {
     const newlineBindings = keybind.all.input_newline || []
@@ -95,173 +100,25 @@ export function Prompt(props: PromptProps) {
   const fileStyleId = syntax().getStyleId("extmark.file")!
   const agentStyleId = syntax().getStyleId("extmark.agent")!
   const pasteStyleId = syntax().getStyleId("extmark.paste")!
-  let promptPartTypeId: number
 
-  command.register(() => {
-    return [
-      {
-        title: "Open editor",
-        category: "Session",
-        keybind: "editor_open",
-        value: "prompt.editor",
-        onSelect: async (dialog, trigger) => {
-          dialog.clear()
-
-          // replace summarized text parts with the actual text
-          const text = store.prompt.parts
-            .filter((p) => p.type === "text")
-            .reduce((acc, p) => {
-              if (!p.source) return acc
-              return acc.replace(p.source.text.value, p.text)
-            }, store.prompt.input)
-
-          const nonTextParts = store.prompt.parts.filter((p) => p.type !== "text")
-
-          const value = trigger === "prompt" ? "" : text
-          const content = await Editor.open({ value, renderer })
-          if (!content) return
-
-          input.setText(content, { history: false })
-
-          // Update positions for nonTextParts based on their location in new content
-          // Filter out parts whose virtual text was deleted
-          // this handles a case where the user edits the text in the editor
-          // such that the virtual text moves around or is deleted
-          const updatedNonTextParts = nonTextParts
-            .map((part) => {
-              let virtualText = ""
-              if (part.type === "file" && part.source?.text) {
-                virtualText = part.source.text.value
-              } else if (part.type === "agent" && part.source) {
-                virtualText = part.source.value
-              }
-
-              if (!virtualText) return part
-
-              const newStart = content.indexOf(virtualText)
-              // if the virtual text is deleted, remove the part
-              if (newStart === -1) return null
-
-              const newEnd = newStart + virtualText.length
-
-              if (part.type === "file" && part.source?.text) {
-                return {
-                  ...part,
-                  source: {
-                    ...part.source,
-                    text: {
-                      ...part.source.text,
-                      start: newStart,
-                      end: newEnd,
-                    },
-                  },
-                }
-              }
-
-              if (part.type === "agent" && part.source) {
-                return {
-                  ...part,
-                  source: {
-                    ...part.source,
-                    start: newStart,
-                    end: newEnd,
-                  },
-                }
-              }
-
-              return part
-            })
-            .filter((part) => part !== null)
-
-          setStore("prompt", {
-            input: content,
-            // keep only the non-text parts because the text parts were
-            // already expanded inline
-            parts: updatedNonTextParts,
-          })
-          restoreExtmarksFromParts(updatedNonTextParts)
-          input.cursorOffset = Bun.stringWidth(content)
+  const stopSession = async () => {
+    if (status() !== "working") return
+    if (!props.sessionID) return
+    if (aborting) return
+    aborting = true
+    try {
+      await sdk.client.session.abort({
+        path: {
+          id: props.sessionID,
         },
-      },
-      {
-        title: "Clear prompt",
-        value: "prompt.clear",
-        category: "Prompt",
-        disabled: true,
-        onSelect: (dialog) => {
-          input.extmarks.clear()
-          input.clear()
-          dialog.clear()
-        },
-      },
-      {
-        title: "Submit prompt",
-        value: "prompt.submit",
-        disabled: true,
-        keybind: "input_submit",
-        category: "Prompt",
-        onSelect: (dialog) => {
-          if (!input.focused) return
-          submit()
-          dialog.clear()
-        },
-      },
-      {
-        title: "Paste",
-        value: "prompt.paste",
-        disabled: true,
-        keybind: "input_paste",
-        category: "Prompt",
-        onSelect: async () => {
-          const content = await Clipboard.read()
-          if (content?.mime) {
-            await attachFilePart({
-              filename: "clipboard",
-              mime: content.mime,
-              content: content.data,
-            })
-          }
-        },
-      },
-      {
-        title: "Interrupt session",
-        value: "session.interrupt",
-        keybind: "session_interrupt",
-        disabled: status() !== "working",
-        category: "Session",
-        onSelect: (dialog) => {
-          if (!props.sessionID) return
-          if (autocomplete.visible) return
-          if (!input.focused) return
-
-          setStore("interrupt", store.interrupt + 1)
-
-          setTimeout(() => {
-            setStore("interrupt", 0)
-          }, 5000)
-
-          if (store.interrupt >= 2) {
-            sdk.client.session.abort({
-              path: {
-                id: props.sessionID,
-              },
-            })
-            setStore("interrupt", 0)
-          }
-          dialog.clear()
-        },
-      },
-    ]
-  })
-
-  sdk.event.on(TuiEvent.PromptAppend.type, (evt) => {
-    input.insertText(evt.properties.text)
-  })
-
-  createEffect(() => {
-    if (props.disabled) input.cursorColor = theme.backgroundElement
-    if (!props.disabled) input.cursorColor = theme.primary
-  })
+      })
+    } catch (error) {
+      console.error("[Prompt] Failed to stop session", error)
+      toast.show({ message: "Failed to stop session", variant: "error" })
+    } finally {
+      aborting = false
+    }
+  }
 
   const [store, setStore] = createStore<{
     prompt: PromptInfo
@@ -552,11 +409,7 @@ export function Prompt(props: PromptProps) {
   async function attachFilePart(file: { filename?: string; filepath?: string; content: string; mime: string }) {
     const start = input.visualCursor.offset
     const index = store.prompt.parts.filter((x) => x.type === "file").length + 1
-    const label = file.mime.startsWith("image/")
-      ? `Image ${index}`
-      : file.filename
-        ? `File ${file.filename}`
-        : `File ${index}`
+    const label = file.mime.startsWith("image/") ? `Image ${index}` : `File ${index}`
     const virtualText = `[${label}]`
     const end = start + virtualText.length
 
@@ -566,7 +419,7 @@ export function Prompt(props: PromptProps) {
       start,
       end,
       virtual: true,
-      styleId: fileStyleId,
+      styleId: pasteStyleId,
       typeId: promptPartTypeId,
     })
 
@@ -677,11 +530,9 @@ export function Prompt(props: PromptProps) {
     return value
   }
 
-  async function attachFilesFromText(input: string) {
-    const candidates = extractFilePathCandidates(input)
-    if (!candidates.length) return false
-
+  async function attachFilesFromCandidates(candidates: string[]) {
     let attached = false
+
     for (const candidate of candidates) {
       const normalized = normalizeFilePath(candidate)
       if (!normalized) continue
@@ -703,6 +554,38 @@ export function Prompt(props: PromptProps) {
     }
 
     return attached
+  }
+
+  async function handleDropFileTokens(value: string) {
+    if (dropProcessing) return
+    const pattern = /(^|\s)([^[]+?)\[(?:Image|File) \d+\]/g
+    const matches = [...value.matchAll(pattern)]
+    if (!matches.length) return
+    dropProcessing = true
+    try {
+      let updated = value
+      let modified = false
+      for (const match of matches) {
+        const rawPath = match[2]?.trim()
+        if (!rawPath) continue
+        const attached = await attachFilesFromCandidates([rawPath])
+        if (attached) {
+          updated = updated.replace(match[0], match[1] ?? "")
+          modified = true
+        }
+      }
+
+      if (modified) {
+        const normalized = updated.replace(/\s{2,}/g, " ").trimStart()
+        input.setText(normalized, { history: false })
+        setStore("prompt", "input", normalized)
+        autocomplete.onInput(normalized)
+        syncExtmarksDebounced()
+        input.cursorOffset = normalized.length
+      }
+    } finally {
+      dropProcessing = false
+    }
   }
 
   return (
@@ -762,6 +645,7 @@ export function Prompt(props: PromptProps) {
                 setStore("prompt", "input", value)
                 autocomplete.onInput(value)
                 syncExtmarksDebounced() // Use debounced version during typing
+                void handleDropFileTokens(value)
               }}
               keyBindings={textareaKeybindings()}
               // TODO: fix this any
@@ -839,15 +723,20 @@ export function Prompt(props: PromptProps) {
                   return
                 }
 
-                const pastedContent = event.text.trim()
+                const rawContent = event.text
+                const pastedContent = rawContent.trim()
                 if (!pastedContent) {
                   command.trigger("prompt.paste")
                   return
                 }
 
-                const attached = await attachFilesFromText(pastedContent)
-                if (attached) {
+                const fileCandidates = extractFilePathCandidates(pastedContent)
+                if (fileCandidates.length) {
                   event.preventDefault()
+                  const attached = await attachFilesFromCandidates(fileCandidates)
+                  if (!attached) {
+                    input.insertText(rawContent)
+                  }
                   return
                 }
 
@@ -905,40 +794,53 @@ export function Prompt(props: PromptProps) {
           <box backgroundColor={theme.backgroundElement} width={1} justifyContent="center" alignItems="center"></box>
         </box>
         <box flexDirection="row" justifyContent="space-between">
-          <text
-            flexShrink={0}
-            wrapMode="none"
-            fg={theme.text}
-            onMouseUp={() => {
-              if (renderer.getSelection()?.getSelectedText()) return
-              dialog.replace(() => <DialogModel />)
-            }}
-          >
-            {(() => {
-              const parsed = local.model.parsed()
-              if (!parsed) return <span style={{ fg: theme.textMuted }}>Loading...</span>
-              return (
-                <>
-                  <span style={{ fg: theme.textMuted }}>{parsed.provider}</span>{" "}
-                  <span style={{ bold: true, fg: theme.primary, underline: true }}>{parsed.model}</span>
-                </>
-              )
-            })()}
-          </text>
+          <box flexDirection="row" alignItems="center" gap={1} flexShrink={0} flexWrap="no-wrap">
+            <text
+              flexShrink={0}
+              wrapMode="none"
+              fg={theme.text}
+              onMouseUp={() => {
+                if (renderer.getSelection()?.getSelectedText()) return
+                dialog.replace(() => <DialogModel />)
+              }}
+            >
+              {(() => {
+                const parsed = local.model.parsed()
+                if (!parsed) return <span style={{ fg: theme.textMuted }}>Loading...</span>
+                return (
+                  <>
+                    <span style={{ fg: theme.textMuted }}>{parsed.provider}</span>{" "}
+                    <span style={{ bold: true, fg: theme.primary, underline: true }}>{parsed.model}</span>
+                  </>
+                )
+              })()}
+            </text>
+          </box>
           <Switch>
             <Match when={status() === "compacting"}>
               <text fg={theme.textMuted}>compacting...</text>
             </Match>
             <Match when={status() === "working"}>
-              <box flexDirection="row" gap={1}>
+              <box flexDirection="row" gap={2} alignItems="center">
                 <text fg={store.interrupt > 0 ? theme.primary : theme.text}>
                   esc{" "}
                   <span style={{ fg: store.interrupt > 0 ? theme.primary : theme.textMuted }}>
                     {store.interrupt > 0 ? "again to interrupt" : "interrupt"}
                   </span>
                 </text>
+                <text
+                  fg={theme.error}
+                  onMouseUp={(event) => {
+                    if (renderer.getSelection()?.getSelectedText()) return
+                    event.stopPropagation()
+                    void stopSession()
+                  }}
+                >
+                  <span style={{ fg: theme.error, bold: true }}>■ stop</span>
+                </text>
               </box>
             </Match>
+
             <Match when={props.hint}>{props.hint!}</Match>
             <Match when={true}>
               <box flexDirection="row" gap={2}>

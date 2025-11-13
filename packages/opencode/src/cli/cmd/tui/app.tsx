@@ -14,7 +14,9 @@ import { DialogStatus } from "@tui/component/dialog-status"
 import { DialogThemeList } from "@tui/component/dialog-theme-list"
 import { DialogHelp } from "./ui/dialog-help"
 import { CommandProvider, useCommandDialog } from "@tui/component/dialog-command"
+import { DialogKanban } from "./component/dialog-kanban"
 import { DialogAgent } from "@tui/component/dialog-agent"
+
 import { DialogAgentManager } from "@tui/component/dialog-agent-manager"
 import { DialogSessionList } from "@tui/component/dialog-session-list"
 // import { DialogSkillManager } from "@tui/component/dialog-skill-manager" // DISABLED: migrated to plugin
@@ -237,6 +239,14 @@ function App() {
           type: "home",
         })
         dialog.clear()
+      },
+    },
+    {
+      title: "Open Kanban board",
+      value: "ui.kanban",
+      category: "Session",
+      onSelect: () => {
+        dialog.replace(() => <DialogKanban />)
       },
     },
     {

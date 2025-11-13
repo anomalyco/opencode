@@ -63,7 +63,6 @@
     "gray-matter": "4.0.3",
     "livekit-server-sdk": "2.14.0",
     "openai": "6.8.1",
-    "opencode-openai-codex-auth": "3.1.0",
     "ulid": "3.0.1",
     "yaml": "2.8.1"
   },

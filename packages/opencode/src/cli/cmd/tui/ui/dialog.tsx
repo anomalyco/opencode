@@ -8,6 +8,7 @@ export function Dialog(
   props: ParentProps<{
     size?: "medium" | "large"
     onClose: () => void
+    frame?: { width?: number | null; height?: number | null }
   }>,
 ) {
   const dimensions = useTerminalDimensions()
@@ -22,7 +23,11 @@ export function Dialog(
       height={dimensions().height}
       alignItems="center"
       position="absolute"
-      paddingTop={dimensions().height / 4}
+      paddingTop={
+        typeof props.frame?.height === "number"
+          ? Math.max(1, Math.floor((dimensions().height - Math.min(dimensions().height - 2, props.frame.height)) / 2))
+          : Math.floor(dimensions().height / 4)
+      }
       left={0}
       top={0}
       backgroundColor={RGBA.fromInts(0, 0, 0, 150)}
@@ -31,8 +36,15 @@ export function Dialog(
         onMouseUp={async (e) => {
           e.stopPropagation()
         }}
-        width={props.size === "large" ? 80 : 60}
+        width={Math.min(
+          dimensions().width - 2,
+          typeof props.frame?.width === "number" ? props.frame.width : props.size === "large" ? 80 : 60,
+        )}
+        height={
+          typeof props.frame?.height === "number" ? Math.min(dimensions().height - 2, props.frame.height) : undefined
+        }
         maxWidth={dimensions().width - 2}
+        maxHeight={dimensions().height - 2}
         backgroundColor={theme.backgroundPanel}
         paddingTop={1}
       >
@@ -49,6 +61,7 @@ function init() {
       onClose?: () => void
     }[],
     size: "medium" as "medium" | "large",
+    frame: { width: null as number | null, height: null as number | null },
   })
 
   useKeyboard((evt) => {
@@ -109,6 +122,7 @@ function init() {
       }
       batch(() => {
         setStore("size", "medium")
+        setStore("frame", { width: null, height: null })
         setStore("stack", [])
       })
       refocus()
@@ -121,6 +135,7 @@ function init() {
         if (item.onClose) item.onClose()
       }
       setStore("size", "medium")
+      setStore("frame", { width: null, height: null })
       setStore("stack", [
         {
           element: input,
@@ -134,8 +149,17 @@ function init() {
     get size() {
       return store.size
     },
+    get frame() {
+      return store.frame
+    },
     setSize(size: "medium" | "large") {
       setStore("size", size)
+    },
+    setFrame(frame: { width?: number | null; height?: number | null }) {
+      setStore("frame", {
+        width: typeof frame.width === "number" ? frame.width : null,
+        height: typeof frame.height === "number" ? frame.height : null,
+      })
     },
   }
 }
@@ -152,7 +176,7 @@ export function DialogProvider(props: ParentProps) {
       <box position="absolute">
         <Show when={value.stack.at(-1)} keyed>
           {(currentDialog) => (
-            <Dialog onClose={() => value.clear()} size={value.size}>
+            <Dialog onClose={() => value.clear()} size={value.size} frame={value.frame}>
               {currentDialog.element}
             </Dialog>
           )}

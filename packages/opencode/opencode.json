@@ -8,10 +8,20 @@
     "file:///Users/jkneen/Documents/GitHub/flows/opencode-stt/packages/opencode/examples/plugin-steering-questions/index.tsx"
   ],
   "favoriteTools": [
-    "read",
-    "bash",
-    "cc_read",
+    "cc_computer_use",
+    "grep",
+    "task",
+    "write",
     "cc_bash",
-    "edit"
+    "cc_edit",
+    "cc_glob",
+    "cc_grep",
+    "add_memory",
+    "todowrite",
+    "todoread",
+    "read",
+    "edit",
+    "switch_mode",
+    "glob"
   ]
 }

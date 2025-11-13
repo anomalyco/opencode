@@ -58,6 +58,7 @@ export namespace SessionPrompt {
   export const OUTPUT_TOKEN_MAX = 32_000
   const MAX_RETRIES = 10
   const DOOM_LOOP_THRESHOLD = 3
+  const SESSION_TITLE_MAX_LENGTH = 25
 
   export const Event = {
     Idle: Bus.event(
@@ -2084,7 +2085,9 @@ export namespace SessionPrompt {
               .find((line) => line.length > 0)
             if (!cleaned) return
 
-            const title = cleaned.length > 100 ? cleaned.substring(0, 97) + "..." : cleaned
+            const needsTruncate = cleaned.length > SESSION_TITLE_MAX_LENGTH
+            const shortened = cleaned.substring(0, Math.max(0, SESSION_TITLE_MAX_LENGTH - 3)).trimEnd()
+            const title = needsTruncate ? `${shortened}...` : cleaned
             draft.title = title
           })
       })

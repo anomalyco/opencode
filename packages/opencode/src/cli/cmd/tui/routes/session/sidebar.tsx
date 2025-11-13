@@ -701,31 +701,35 @@ export function Sidebar(props: {
             CODESURF
           </text>
           <box flexDirection="row" gap={1} alignItems="center">
-            <text fg={theme.textMuted} wrapMode="none">
-              {props.width}c
-            </text>
-            <text
-              fg={canShrink() ? theme.textMuted : theme.border}
-              onMouseUp={(evt) => {
-                if (renderer.getSelection()?.getSelectedText()) return
-                if (!canShrink()) return
-                props.onResize(-props.widthStep)
-                evt.stopPropagation?.()
-              }}
-            >
-              -
-            </text>
-            <text
-              fg={canGrow() ? theme.textMuted : theme.border}
-              onMouseUp={(evt) => {
-                if (renderer.getSelection()?.getSelectedText()) return
-                if (!canGrow()) return
-                props.onResize(props.widthStep)
-                evt.stopPropagation?.()
-              }}
-            >
-              +
-            </text>
+            <box flexDirection="row" gap={0} alignItems="center">
+              <text
+                fg={canShrink() ? theme.textMuted : theme.border}
+                wrapMode="none"
+                onMouseUp={(evt) => {
+                  if (renderer.getSelection()?.getSelectedText()) return
+                  if (!canShrink()) return
+                  props.onResize(-props.widthStep)
+                  evt.stopPropagation?.()
+                }}
+              >
+                -
+              </text>
+              <text fg={theme.textMuted} wrapMode="none">
+                {props.width}c
+              </text>
+              <text
+                fg={canGrow() ? theme.textMuted : theme.border}
+                wrapMode="none"
+                onMouseUp={(evt) => {
+                  if (renderer.getSelection()?.getSelectedText()) return
+                  if (!canGrow()) return
+                  props.onResize(props.widthStep)
+                  evt.stopPropagation?.()
+                }}
+              >
+                +
+              </text>
+            </box>
             <text
               fg={theme.textMuted}
               onMouseUp={() => {
@@ -737,6 +741,7 @@ export function Sidebar(props: {
             </text>
           </box>
         </box>
+
         <box>
           <text
             fg={theme.textMuted}
@@ -748,6 +753,7 @@ export function Sidebar(props: {
             server:{port}
           </text>
         </box>
+
         <box>
           <box flexDirection="row" alignItems="flex-start" justifyContent="space-between" gap={1}>
             <box flexGrow={1}>
@@ -1196,7 +1202,7 @@ export function Sidebar(props: {
         </Show>
 
         {/* Context Section - Always visible below tabs */}
-        <box marginTop={1} flexDirection="column">
+        <box marginTop={0} flexDirection="column">
           <box flexDirection="row" alignItems="center" justifyContent="space-between" width="100%">
             <text
               attributes={TextAttributes.BOLD}
@@ -1319,7 +1325,7 @@ export function Sidebar(props: {
 
         {/* Subagents Section - Always visible below tabs */}
         {/* Subagents Section - Always visible */}
-        <box marginTop={1} flexDirection="column">
+        <box marginTop={0} flexDirection="column">
           <box flexDirection="row" alignItems="center" justifyContent="space-between" width="100%">
             <text
               attributes={TextAttributes.BOLD}

@@ -202,10 +202,6 @@ export type AgentConfig = {
    */
   description?: string
   mode?: "subagent" | "primary" | "all"
-  /**
-   * Hex color code for the agent (e.g., #FF5733)
-   */
-  color?: string
   permission?: {
     edit?: "ask" | "allow" | "deny"
     bash?:
@@ -214,8 +210,6 @@ export type AgentConfig = {
           [key: string]: "ask" | "allow" | "deny"
         }
     webfetch?: "ask" | "allow" | "deny"
-    doom_loop?: "ask" | "allow" | "deny"
-    external_directory?: "ask" | "allow" | "deny"
   }
   [key: string]:
     | unknown
@@ -234,8 +228,6 @@ export type AgentConfig = {
               [key: string]: "ask" | "allow" | "deny"
             }
         webfetch?: "ask" | "allow" | "deny"
-        doom_loop?: "ask" | "allow" | "deny"
-        external_directory?: "ask" | "allow" | "deny"
       }
     | undefined
 }
@@ -491,8 +483,6 @@ export type Config = {
           [key: string]: "ask" | "allow" | "deny"
         }
     webfetch?: "ask" | "allow" | "deny"
-    doom_loop?: "ask" | "allow" | "deny"
-    external_directory?: "ask" | "allow" | "deny"
   }
   tools?: {
     [key: string]: boolean

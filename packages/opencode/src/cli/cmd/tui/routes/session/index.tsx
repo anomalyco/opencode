@@ -13,16 +13,21 @@ import {
   untrack,
   type Component,
 } from "solid-js"
+
 import { Dynamic } from "solid-js/web"
 import path from "path"
+import { tmpdir } from "os"
+import { fileURLToPath } from "url"
+import open from "open"
 import { useRoute, useRouteData } from "@tui/context/route"
 import { useSync } from "@tui/context/sync"
 import { SplitBorder } from "@tui/component/border"
 import { useTheme } from "@tui/context/theme"
-import { BoxRenderable, ScrollBoxRenderable, addDefaultParsers, TextAttributes } from "@opentui/core"
+import { BoxRenderable, ScrollBoxRenderable, RGBA, addDefaultParsers, TextAttributes } from "@opentui/core"
 import { Prompt, type PromptRef } from "@tui/component/prompt"
 import type {
   AssistantMessage,
+  FilePart,
   Part,
   ToolPart,
   UserMessage,
@@ -57,7 +62,7 @@ import { DialogMessage } from "./dialog-message"
 import type { PromptInfo } from "../../component/prompt/history"
 import { iife } from "@/util/iife"
 import { DialogConfirm } from "@tui/ui/dialog-confirm"
-import { DialogSelect } from "@tui/ui/dialog-select"
+import { DialogSelect, type DialogSelectOption } from "@tui/ui/dialog-select"
 import { DialogTimeline } from "./dialog-timeline"
 import { Sidebar } from "./sidebar"
 import { LeftSidebar } from "./left-sidebar"
@@ -1263,10 +1268,79 @@ const MIME_BADGE: Record<string, string> = {
   "application/x-directory": "dir",
 }
 
+const ATTACHMENT_EXTENSION_HINTS: Record<string, string> = {
+  "image/png": "png",
+  "image/jpeg": "jpg",
+  "image/jpg": "jpg",
+  "image/gif": "gif",
+  "image/webp": "webp",
+  "image/bmp": "bmp",
+  "application/pdf": "pdf",
+  "application/zip": "zip",
+}
+const ATTACHMENT_TMP_PREFIX = "opencode-attachment"
+
+function sanitizeAttachmentFilename(name: string) {
+  return path.basename(name).replace(/[^a-zA-Z0-9._-]/g, "_")
+}
+
+function getExtensionFromMime(mime: string) {
+  if (!mime) return "bin"
+  const hint = ATTACHMENT_EXTENSION_HINTS[mime]
+  if (hint) return hint
+  const parts = mime.split("/")
+  if (parts.length > 1 && parts[1]) return parts[1]
+  return "bin"
+}
+
+function deriveAttachmentName(file: FilePart, mime: string) {
+  const base = file.filename ? sanitizeAttachmentFilename(file.filename) : ""
+  if (!base) return `attachment.${getExtensionFromMime(mime)}`
+  if (path.extname(base)) return base
+  return `${base}.${getExtensionFromMime(mime)}`
+}
+
+async function persistAttachmentBuffer(buffer: Uint8Array | Buffer, file: FilePart, mime: string) {
+  const effectiveMime = mime || file.mime || "application/octet-stream"
+  const attachmentName = deriveAttachmentName(file, effectiveMime)
+  const uniqueSuffix = `${Date.now()}-${Math.random().toString(16).slice(2)}`
+  const targetPath = path.join(tmpdir(), `${ATTACHMENT_TMP_PREFIX}-${uniqueSuffix}-${attachmentName}`)
+  await Bun.write(targetPath, buffer)
+  return targetPath
+}
+
+async function saveDataUrlAttachment(file: FilePart) {
+  const url = file.url
+  const commaIndex = url.indexOf(",")
+  if (commaIndex === -1) throw new Error("Invalid data URL")
+  const meta = url.slice("data:".length, commaIndex)
+  const payload = url.slice(commaIndex + 1)
+  const mime = meta.split(";")[0] || file.mime || "application/octet-stream"
+  if (/;base64/i.test(meta)) {
+    const buffer = Buffer.from(payload, "base64")
+    return persistAttachmentBuffer(buffer, file, mime)
+  }
+  let normalized = payload
+  try {
+    normalized = decodeURIComponent(payload.replace(/\+/g, "%20"))
+  } catch {}
+  const buffer = Buffer.from(normalized, "utf8")
+  return persistAttachmentBuffer(buffer, file, mime)
+}
+
+async function resolveAttachmentTarget(file: FilePart) {
+  const url = file.url
+  if (!url) throw new Error("Missing attachment URL")
+  if (url.startsWith("data:")) return saveDataUrlAttachment(file)
+  if (url.startsWith("file://")) return fileURLToPath(url)
+  return url
+}
+
 function PriorityCircles(props: {
   sessionID: string
   messageID: string
   priority?: "red" | "amber" | "green" | "none"
+  compact?: boolean
 }) {
   const sdk = useSDK()
   const toast = useToast()
@@ -1292,40 +1366,40 @@ function PriorityCircles(props: {
     toast.show({ message: `Message marked as ${priorityLabels[priority]}`, variant: "success" })
   }
 
+  const items: Array<{ key: "red" | "amber" | "green"; color: RGBA }> = [
+    { key: "red", color: theme.error },
+    { key: "amber", color: theme.accent },
+    { key: "green", color: theme.success },
+  ]
+
   return (
-    <box flexDirection="row" justifyContent="flex-end" paddingRight={1}>
-      <text onMouseUp={(e) => setPriority(e, props.priority === "red" ? "none" : "red")}>
-        <span
-          style={{
-            fg: props.priority === "red" ? theme.error : theme.textMuted,
-            bold: true,
-          }}
-        >
-          {props.priority === "red" ? "●" : "○"}
-        </span>
-      </text>
+    <box
+      flexDirection="row"
+      justifyContent={props.compact ? undefined : "flex-end"}
+      alignItems="center"
+      paddingRight={props.compact ? 0 : 1}
+      gap={0}
+    >
+      <For each={items}>
+        {(item, index) => (
+          <box flexDirection="row" alignItems="center">
+            <text onMouseUp={(e) => setPriority(e, props.priority === item.key ? "none" : item.key)}>
+              <span
+                style={{
+                  fg: props.priority === item.key ? item.color : theme.textMuted,
+                  bold: true,
+                }}
+              >
+                {props.priority === item.key ? "●" : "○"}
+              </span>
+            </text>
+            <Show when={index() < items.length - 1}>
+              <text> </text>
+            </Show>
+          </box>
+        )}
+      </For>
       <text> </text>
-      <text onMouseUp={(e) => setPriority(e, props.priority === "amber" ? "none" : "amber")}>
-        <span
-          style={{
-            fg: props.priority === "amber" ? theme.accent : theme.textMuted,
-            bold: true,
-          }}
-        >
-          {props.priority === "amber" ? "●" : "○"}
-        </span>
-      </text>
-      <text> </text>
-      <text onMouseUp={(e) => setPriority(e, props.priority === "green" ? "none" : "green")}>
-        <span
-          style={{
-            fg: props.priority === "green" ? theme.success : theme.textMuted,
-            bold: true,
-          }}
-        >
-          {props.priority === "green" ? "●" : "○"}
-        </span>
-      </text>
     </box>
   )
 }
@@ -1338,33 +1412,26 @@ function UserMessage(props: {
   pending?: string
 }) {
   const text = createMemo(() => props.parts.flatMap((x) => (x.type === "text" && !x.synthetic ? [x] : []))[0])
-  const files = createMemo(() => props.parts.flatMap((x) => (x.type === "file" ? [x] : [])))
+  const files = createMemo(() => props.parts.filter((part): part is FilePart => part.type === "file"))
   const sync = useSync()
-  const sdk = useSDK()
   const toast = useToast()
   const { theme } = useTheme()
+  const renderer = useRenderer()
   const [hover, setHover] = createSignal(false)
   const queued = createMemo(() => props.pending && props.message.id > props.pending)
   const color = createMemo(() => (untrack(queued) ? untrack(() => theme.accent) : untrack(() => theme.secondary)))
 
-  const setPriority = async (e: any, priority: "red" | "amber" | "green" | "none") => {
-    e.stopPropagation()
-    await sdk.client.session.setMessagePriority({
-      path: {
-        id: props.message.sessionID,
-        messageID: props.message.id,
-      },
-      body: {
-        priority,
-      },
-    })
-    const priorityLabels = {
-      red: "High priority",
-      amber: "Medium priority",
-      green: "Low priority",
-      none: "No priority",
+  const openAttachment = async (event: any, file: FilePart) => {
+    event.stopPropagation()
+    if (renderer.getSelection()?.getSelectedText()) return
+    try {
+      const target = await resolveAttachmentTarget(file)
+      await open(target, { wait: false })
+    } catch (error) {
+      console.error("attachment open failed", error)
+      const label = file.filename ?? file.mime
+      toast.show({ message: `Failed to open ${label}`, variant: "error" })
     }
-    toast.show({ message: `Message marked as ${priorityLabels[priority]}`, variant: "success" })
   }
 
   return (
@@ -1390,7 +1457,7 @@ function UserMessage(props: {
       >
         <text fg={theme.text}>{text()?.text}</text>
         <Show when={files().length}>
-          <box flexDirection="row" paddingBottom={1} paddingTop={1} gap={1} flexWrap="wrap">
+          <box flexDirection="row" flexWrap="wrap" marginTop={1} gap={0}>
             <For each={files()}>
               {(file) => {
                 const bg = createMemo(() => {
@@ -1399,10 +1466,15 @@ function UserMessage(props: {
                   return theme.secondary
                 })
                 return (
-                  <text fg={theme.text}>
-                    <span style={{ bg: bg(), fg: theme.background }}> {MIME_BADGE[file.mime] ?? file.mime} </span>
-                    <span style={{ bg: theme.backgroundElement, fg: theme.textMuted }}> {file.filename} </span>
-                  </text>
+                  <box marginRight={1} marginBottom={0}>
+                    <text fg={theme.text} onMouseUp={(event) => void openAttachment(event, file)}>
+                      <span style={{ bg: bg(), fg: theme.background }}> {MIME_BADGE[file.mime] ?? file.mime} </span>
+                      <span style={{ bg: theme.backgroundElement, fg: theme.textMuted }}>
+                        {" "}
+                        {file.filename ?? "attachment"}{" "}
+                      </span>
+                    </text>
+                  </box>
                 )
               }}
             </For>
@@ -1427,7 +1499,7 @@ function UserMessage(props: {
   )
 }
 
-function GroupedToolParts(props: { parts: ToolPart[]; allParts: Part[]; message: AssistantMessage }) {
+function GroupedToolParts(props: { parts: ToolPart[]; message: AssistantMessage }) {
   const { theme } = useTheme()
   const renderer = useRenderer()
   const sync = useSync()
@@ -1510,16 +1582,7 @@ function GroupedToolParts(props: { parts: ToolPart[]; allParts: Part[]; message:
 
       <Show when={!collapsed()}>
         <box paddingLeft={2} marginTop={1} gap={1}>
-          <For each={props.allParts}>
-            {(part) => {
-              const component = createMemo(() => PART_MAPPING[part.type as keyof typeof PART_MAPPING])
-              return (
-                <Show when={component()}>
-                  <Dynamic component={component()} part={part as any} message={props.message} />
-                </Show>
-              )
-            }}
-          </For>
+          <For each={props.parts}>{(part) => <ToolPart part={part} message={props.message} indent={0} />}</For>
         </box>
       </Show>
     </box>
@@ -1580,7 +1643,7 @@ function AssistantMessage(props: { message: AssistantMessage; parts: Part[]; las
             <Match when={group.type === "group"}>
               {(() => {
                 const g = group as { type: "group"; parts: ToolPart[] }
-                return <GroupedToolParts parts={g.parts} allParts={props.parts} message={props.message} />
+                return <GroupedToolParts parts={g.parts} message={props.message} />
               })()}
             </Match>
             <Match when={group.type === "single"}>
@@ -1663,7 +1726,7 @@ function ReasoningPart(props: { part: ReasoningPart; message: AssistantMessage }
   const text = createMemo(() => props.part.text.trim())
   return (
     <Show when={text()}>
-      <box id={"reasoning-" + props.part.id} paddingLeft={3} marginTop={1} flexShrink={0}>
+      <box id={"reasoning-" + props.part.id} paddingLeft={3} marginTop={1} marginBottom={1} flexShrink={0}>
         <text wrapMode="word">
           <span style={{ italic: true, fg: theme.textMuted }}>Thinking:</span>{" "}
           <span style={{ fg: theme.accent }}>{text()}</span>
@@ -1860,16 +1923,25 @@ function TextPart(props: { part: TextPart; message: AssistantMessage }) {
 
 // Pending messages moved to individual tool pending functions
 
-function ToolPart(props: { part: ToolPart; message: AssistantMessage }) {
+function ToolPart(props: { part: ToolPart; message: AssistantMessage; indent?: number }) {
   const { theme } = useTheme()
   const sync = useSync()
   const renderer = useRenderer()
   const [margin, setMargin] = createSignal(0)
+  const inlineIndent = props.indent ?? 3
 
-  const render = ToolRegistry.render(props.part.tool) ?? GenericTool
+  const render = toolRegistry.render(props.part.tool) ?? GenericTool
   const metadata = props.part.state.status === "pending" ? {} : (props.part.state.metadata ?? {})
   const input = props.part.state.input ?? {}
-  const container = ToolRegistry.container(props.part.tool)
+  const container = toolRegistry.container(props.part.tool)
+  const priorityControls = (
+    <PriorityCircles
+      sessionID={props.message.sessionID}
+      messageID={props.message.id}
+      priority={props.message.priority}
+      compact
+    />
+  )
 
   // Make permissions reactive
   const permissions = createMemo(() => sync.data.permission[props.message.sessionID] ?? [])
@@ -1896,27 +1968,31 @@ function ToolPart(props: { part: ToolPart; message: AssistantMessage }) {
     }
   })
 
-  const style: BoxProps =
-    container === "block" || permission()
-      ? {
-          border: permissionIndex() === 0 ? (["left", "right"] as const) : (["left"] as const),
-          paddingTop: 1,
-          paddingBottom: 1,
-          paddingLeft: 2,
-          marginTop: 1,
-          gap: 1,
-          backgroundColor: theme.backgroundPanel,
-          customBorderChars: SplitBorder.customBorderChars,
-          borderColor: permissionIndex() === 0 ? theme.warning : theme.background,
-        }
-      : {
-          paddingLeft: 3,
-        }
+  const style = createMemo(() => {
+    if (container === "block" || permission()) {
+      const collapsedState = collapsed()
+      const marginTop = collapsedState ? 0 : 1
+      return {
+        border: permissionIndex() === 0 ? (["left", "right"] as const) : (["left"] as const),
+        paddingTop: collapsedState ? 0 : 1,
+        paddingBottom: collapsedState ? 0 : 1,
+        paddingLeft: collapsedState ? 1 : 2,
+        marginTop,
+        gap: collapsedState ? 0 : 1,
+        backgroundColor: theme.backgroundPanel,
+        customBorderChars: SplitBorder.customBorderChars,
+        borderColor: permissionIndex() === 0 ? theme.warning : theme.background,
+      } as BoxProps
+    }
+    return {
+      paddingLeft: inlineIndent,
+    } as BoxProps
+  })
 
   return (
     <box
       marginTop={margin()}
-      {...style}
+      {...style()}
       renderBefore={function () {
         const el = this as BoxRenderable
         const parent = el.parent
@@ -1952,6 +2028,7 @@ function ToolPart(props: { part: ToolPart; message: AssistantMessage }) {
             permission={permission()?.metadata ?? {}}
             output={props.part.state.status === "completed" ? props.part.state.output : undefined}
             collapsed={isCollapsed}
+            priorityControls={priorityControls}
             onToggle={() => {
               if (renderer.getSelection()?.getSelectedText()) return
               console.log("[ToolPart] Toggle clicked, collapsed was:", collapsed())
@@ -1985,14 +2062,41 @@ function ToolPart(props: { part: ToolPart; message: AssistantMessage }) {
           </box>
         </box>
       )}
-      <PriorityCircles
-        sessionID={props.message.sessionID}
-        messageID={props.message.id}
-        priority={props.message.priority}
-      />
     </box>
   )
 }
+
+type ToolComponent<T extends Tool.Info = any> = Component<ToolProps<T>>
+
+type ToolRegistration<T extends Tool.Info = any> = {
+  name: string
+  container?: "block" | "inline"
+  render: ToolComponent<T>
+}
+
+type ToolComponentRegistry = {
+  register<T extends Tool.Info>(tool: ToolRegistration<T>): void
+  render(name: string): ToolComponent<any> | undefined
+  container(name: string): "block" | "inline"
+}
+
+const toolRegistry: ToolComponentRegistry = (() => {
+  const renderers = new Map<string, ToolComponent<any>>()
+  const containers = new Map<string, "block" | "inline">()
+
+  return {
+    register(tool) {
+      renderers.set(tool.name, tool.render as ToolComponent<any>)
+      containers.set(tool.name, tool.container ?? "inline")
+    },
+    render(name) {
+      return renderers.get(name)
+    },
+    container(name) {
+      return containers.get(name) ?? "block"
+    },
+  }
+})()
 
 type ToolProps<T extends Tool.Info> = {
   input: Partial<Tool.InferParameters<T>>
@@ -2002,134 +2106,144 @@ type ToolProps<T extends Tool.Info> = {
   output?: string
   collapsed?: boolean
   onToggle?: () => void
+  priorityControls?: JSX.Element
 }
+
 function GenericTool(props: ToolProps<any>) {
   const icon = createMemo(() => (props.collapsed ? "▶" : "▼"))
-  const { theme, syntax } = useTheme()
-  console.log("[GenericTool]", props.tool, "collapsed:", props.collapsed, "onToggle:", !!props.onToggle)
   return (
-    <>
-      <ToolTitle
-        icon={icon()}
-        fallback="Writing command..."
-        when={true}
-        onToggle={props.onToggle}
-        toolName={props.tool}
-        input={props.input}
-        output={props.output}
-      >
-        <ToolBadge>{props.tool}</ToolBadge> {input(props.input)}
-      </ToolTitle>
-      <Show when={!props.collapsed}>
-        <Show when={props.output}>
-          <box>
-            <text fg={theme.text}>{props.output}</text>
-          </box>
-        </Show>
-      </Show>
-    </>
+    <ToolTitle
+      icon={icon()}
+      fallback="Writing command..."
+      when={true}
+      onToggle={props.onToggle}
+      collapsed={props.collapsed}
+      toolName={props.tool}
+      input={props.input}
+      output={props.output}
+      trailing={props.priorityControls}
+    >
+      <ToolBadge>{props.tool}</ToolBadge> {input(props.input)}
+    </ToolTitle>
   )
 }
 
-type ToolRegistration<T extends Tool.Info = any> = {
-  name: string
-  container: "inline" | "block"
-  render?: Component<ToolProps<T>>
-}
-const ToolRegistry = (() => {
-  const state: Record<string, ToolRegistration> = {}
-  function register<T extends Tool.Info>(input: ToolRegistration<T>) {
-    state[input.name] = input
-    return input
-  }
-  return {
-    register,
-    container(name: string) {
-      return state[name]?.container
-    },
-    render(name: string) {
-      return state[name]?.render
-    },
-  }
-})()
-
-function ToolBadge(props: { children: string }) {
-  const { theme } = useTheme()
-  return <span style={{ bg: theme.textMuted, fg: theme.background, bold: true }}> {props.children.toUpperCase()} </span>
-}
-
-function ToolTitle(props: {
+type ToolTitleProps = {
+  icon: string
   fallback: string
   when: any
-  icon: string
-  children: JSX.Element
+  collapsed?: boolean
   onToggle?: () => void
-  toolName?: string
-  input?: any
+  toolName: string
+  input: Record<string, unknown>
   output?: string
-}) {
+  trailing?: JSX.Element
+  children: JSX.Element
+}
+
+type ToolMouseEvent = {
+  stopPropagation?: () => void
+}
+
+function ToolTitle(props: ToolTitleProps) {
   const { theme } = useTheme()
-  const renderer = useRenderer()
   const dialog = useDialog()
+  const renderer = useRenderer()
   const toast = useToast()
 
-  const showMenu = (evt: any) => {
-    evt.stopPropagation?.()
+  const isCollapsed = createMemo(() => Boolean(props.collapsed))
+  const serializedInput = createMemo(() => {
+    const entries = Object.entries(props.input ?? {})
+    if (entries.length === 0) return ""
+    try {
+      return JSON.stringify(props.input, null, 2)
+    } catch {
+      return ""
+    }
+  })
+  const serializedOutput = createMemo(() => (props.output ?? "").trim())
 
-    const options: any[] = []
+  const copy = (label: string, value: string) => {
+    if (!value) return
+    Clipboard.copy(value)
+      .then(() => toast.show({ message: `${label} copied to clipboard`, variant: "success" }))
+      .catch(() => toast.show({ message: `Failed to copy ${label.toLowerCase()}`, variant: "error" }))
+  }
 
-    // Add copy output option if output exists
-    if (props.output) {
+  const showMenu = (event: ToolMouseEvent) => {
+    event.stopPropagation?.()
+    if (renderer.getSelection()?.getSelectedText()) return
+
+    const options: DialogSelectOption<string>[] = []
+    if (props.onToggle) {
       options.push({
-        title: "Copy output",
-        value: "copy-output",
-        onSelect: () => {
-          Clipboard.copy(props.output!)
-            .then(() => toast.show({ message: "Output copied to clipboard!", variant: "success" }))
-            .catch(() => toast.show({ message: "Failed to copy to clipboard", variant: "error" }))
-          dialog.clear()
+        title: isCollapsed() ? "Expand output" : "Collapse output",
+        value: "toggle",
+        onSelect: (ctx) => {
+          props.onToggle?.()
+          ctx.clear()
         },
       })
     }
-
-    // Add copy command/input option if input exists
-    if (props.input) {
-      const inputStr = JSON.stringify(props.input, null, 2)
+    const inputText = serializedInput()
+    if (inputText) {
       options.push({
-        title: "Copy input",
+        title: "Copy tool input",
         value: "copy-input",
-        onSelect: () => {
-          Clipboard.copy(inputStr)
-            .then(() => toast.show({ message: "Input copied to clipboard!", variant: "success" }))
-            .catch(() => toast.show({ message: "Failed to copy to clipboard", variant: "error" }))
-          dialog.clear()
+        onSelect: (ctx) => {
+          copy(`${props.toolName} input`, inputText)
+          ctx.clear()
         },
       })
     }
-
-    if (options.length > 0) {
-      dialog.replace(() => <DialogSelect title={`${props.toolName || "Tool"} Actions`} options={options} />)
+    const outputText = serializedOutput()
+    if (outputText) {
+      options.push({
+        title: "Copy tool output",
+        value: "copy-output",
+        onSelect: (ctx) => {
+          copy(`${props.toolName} output`, outputText)
+          ctx.clear()
+        },
+      })
     }
+    if (options.length === 0) return
+    dialog.replace(() => <DialogSelect title={`${props.toolName} Actions`} options={options} />)
+  }
+
+  const handleToggle = (event: ToolMouseEvent) => {
+    if (!props.onToggle) return
+    if (renderer.getSelection()?.getSelectedText()) return
+    event.stopPropagation?.()
+    props.onToggle()
   }
 
   return (
-    <box flexDirection="row">
-      <box
-        flexGrow={1}
-        onMouseUp={(evt) => {
-          if (renderer.getSelection()?.getSelectedText()) return
-          console.log("[ToolTitle] Clicked, onToggle exists:", !!props.onToggle)
-          props.onToggle?.()
-        }}
-      >
+    <box
+      flexDirection="row"
+      alignItems="center"
+      justifyContent="space-between"
+      paddingLeft={2}
+      paddingRight={1}
+      paddingTop={0}
+      paddingBottom={0}
+      gap={1}
+    >
+      <box flexDirection="row" alignItems="center" gap={1} flexGrow={1} onMouseUp={(event) => handleToggle(event)}>
+        <text fg={theme.textMuted}>
+          <span style={{ bold: true }}>{props.icon}</span>
+        </text>
         <text fg={props.when ? theme.textMuted : theme.text}>
           <Show fallback={<>~ {props.fallback}</>} when={props.when}>
-            <span style={{ bold: true }}>{props.icon}</span> {props.children}
+            {props.children}
           </Show>
         </text>
       </box>
-      <box flexShrink={0} paddingLeft={2}>
-        <text fg={theme.textMuted} attributes={1} onMouseUp={showMenu}>
+      <box flexDirection="row" alignItems="center" gap={props.trailing ? 0 : 1} flexShrink={0}>
+        <Show when={props.trailing}>
+          <box alignItems="center">{props.trailing}</box>
+        </Show>
+        <text fg={theme.textMuted} attributes={1} onMouseUp={(event) => showMenu(event)}>
           ⋮
         </text>
       </box>
@@ -2137,7 +2251,12 @@ function ToolTitle(props: {
   )
 }
 
-ToolRegistry.register<typeof BashTool>({
+function ToolBadge(props: { children: JSX.Element }) {
+  const { theme } = useTheme()
+  return <span style={{ bg: theme.backgroundElement, fg: theme.accent, bold: true }}> {props.children} </span>
+}
+
+toolRegistry.register<typeof BashTool>({
   name: "bash",
   container: "block",
   render(props) {
@@ -2151,9 +2270,11 @@ ToolRegistry.register<typeof BashTool>({
           fallback="Writing command..."
           when={props.input.command}
           onToggle={props.onToggle}
+          collapsed={props.collapsed}
           toolName="Bash"
           input={props.input}
           output={output()}
+          trailing={props.priorityControls}
         >
           <ToolBadge>Bash</ToolBadge> {props.input.description || "Shell"}
         </ToolTitle>
@@ -2172,7 +2293,7 @@ ToolRegistry.register<typeof BashTool>({
   },
 })
 
-ToolRegistry.register<typeof ReadTool>({
+toolRegistry.register<typeof ReadTool>({
   name: "read",
   container: "inline",
   render(props) {
@@ -2185,14 +2306,16 @@ ToolRegistry.register<typeof ReadTool>({
           fallback="Reading file..."
           when={props.input.filePath}
           onToggle={props.onToggle}
+          collapsed={props.collapsed}
           toolName="Read"
           input={props.input}
           output={props.output}
+          trailing={props.priorityControls}
         >
           <ToolBadge>Read</ToolBadge> {normalizePath(props.input.filePath!)} {input(props.input, ["filePath"])}
         </ToolTitle>
         <Show when={!props.collapsed && props.output}>
-          <box paddingLeft={3}>
+          <box>
             <text fg={theme.textMuted}>{props.output}</text>
           </box>
         </Show>
@@ -2201,7 +2324,7 @@ ToolRegistry.register<typeof ReadTool>({
   },
 })
 
-ToolRegistry.register<typeof WriteTool>({
+toolRegistry.register<typeof WriteTool>({
   name: "write",
   container: "block",
   render(props) {
@@ -2232,9 +2355,11 @@ ToolRegistry.register<typeof WriteTool>({
           fallback="Preparing write..."
           when={props.input.filePath}
           onToggle={props.onToggle}
+          collapsed={props.collapsed}
           toolName="Write"
           input={props.input}
           output={props.output}
+          trailing={props.priorityControls}
         >
           <ToolBadge>Write</ToolBadge> {props.input.filePath}
         </ToolTitle>
@@ -2253,7 +2378,7 @@ ToolRegistry.register<typeof WriteTool>({
   },
 })
 
-ToolRegistry.register<typeof GlobTool>({
+toolRegistry.register<typeof GlobTool>({
   name: "glob",
   container: "inline",
   render(props) {
@@ -2265,9 +2390,11 @@ ToolRegistry.register<typeof GlobTool>({
           fallback="Finding files..."
           when={props.input.pattern}
           onToggle={props.onToggle}
+          collapsed={props.collapsed}
           toolName="Glob"
           input={props.input}
           output={props.output}
+          trailing={props.priorityControls}
         >
           <ToolBadge>Glob</ToolBadge> "{props.input.pattern}"{" "}
           <Show when={props.input.path}>in {normalizePath(props.input.path)} </Show>
@@ -2278,7 +2405,7 @@ ToolRegistry.register<typeof GlobTool>({
   },
 })
 
-ToolRegistry.register<typeof GrepTool>({
+toolRegistry.register<typeof GrepTool>({
   name: "grep",
   container: "inline",
   render(props) {
@@ -2289,9 +2416,11 @@ ToolRegistry.register<typeof GrepTool>({
         fallback="Searching content..."
         when={props.input.pattern}
         onToggle={props.onToggle}
+        collapsed={props.collapsed}
         toolName="Grep"
         input={props.input}
         output={props.output}
+        trailing={props.priorityControls}
       >
         <ToolBadge>Grep</ToolBadge> "{props.input.pattern}"{" "}
         <Show when={props.input.path}>in {normalizePath(props.input.path)} </Show>
@@ -2301,7 +2430,7 @@ ToolRegistry.register<typeof GrepTool>({
   },
 })
 
-ToolRegistry.register<typeof ListTool>({
+toolRegistry.register<typeof ListTool>({
   name: "list",
   container: "inline",
   render(props) {
@@ -2319,9 +2448,11 @@ ToolRegistry.register<typeof ListTool>({
           fallback="Listing directory..."
           when={props.input.path !== undefined}
           onToggle={props.onToggle}
+          collapsed={props.collapsed}
           toolName="List"
           input={props.input}
           output={props.output}
+          trailing={props.priorityControls}
         >
           <ToolBadge>List</ToolBadge> {dir()}
         </ToolTitle>
@@ -2330,7 +2461,7 @@ ToolRegistry.register<typeof ListTool>({
   },
 })
 
-ToolRegistry.register<typeof TaskTool>({
+toolRegistry.register<typeof TaskTool>({
   name: "task",
   container: "block",
   render(props) {
@@ -2345,9 +2476,12 @@ ToolRegistry.register<typeof TaskTool>({
           icon="%"
           fallback="Delegating..."
           when={props.input.subagent_type ?? props.input.description}
+          onToggle={props.onToggle}
+          collapsed={props.collapsed}
           toolName="Task"
           input={props.input}
           output={props.output}
+          trailing={props.priorityControls}
         >
           <ToolBadge>Task</ToolBadge> [{props.input.subagent_type ?? "unknown"}] {props.input.description}
         </ToolTitle>
@@ -2388,7 +2522,7 @@ ToolRegistry.register<typeof TaskTool>({
   },
 })
 
-ToolRegistry.register<typeof WebFetchTool>({
+toolRegistry.register<typeof WebFetchTool>({
   name: "webfetch",
   container: "inline",
   render(props) {
@@ -2397,9 +2531,12 @@ ToolRegistry.register<typeof WebFetchTool>({
         icon="%"
         fallback="Fetching from the web..."
         when={(props.input as any).url}
+        onToggle={props.onToggle}
+        collapsed={props.collapsed}
         toolName="WebFetch"
         input={props.input}
         output={props.output}
+        trailing={props.priorityControls}
       >
         <ToolBadge>WebFetch</ToolBadge> {(props.input as any).url}
       </ToolTitle>
@@ -2407,7 +2544,7 @@ ToolRegistry.register<typeof WebFetchTool>({
   },
 })
 
-ToolRegistry.register<typeof EditTool>({
+toolRegistry.register<typeof EditTool>({
   name: "edit",
   container: "block",
   render(props) {
@@ -2495,9 +2632,11 @@ ToolRegistry.register<typeof EditTool>({
           fallback="Preparing edit..."
           when={props.input.filePath}
           onToggle={props.onToggle}
+          collapsed={props.collapsed}
           toolName="Edit"
           input={props.input}
           output={props.output}
+          trailing={props.priorityControls}
         >
           <ToolBadge>Edit</ToolBadge> {normalizePath(props.input.filePath!)}{" "}
           {input({
@@ -2531,7 +2670,7 @@ ToolRegistry.register<typeof EditTool>({
   },
 })
 
-ToolRegistry.register<typeof PatchTool>({
+toolRegistry.register<typeof PatchTool>({
   name: "patch",
   container: "block",
   render(props) {
@@ -2542,9 +2681,12 @@ ToolRegistry.register<typeof PatchTool>({
           icon="%"
           fallback="Preparing patch..."
           when={true}
+          onToggle={props.onToggle}
+          collapsed={props.collapsed}
           toolName="Patch"
           input={props.input}
           output={props.output}
+          trailing={props.priorityControls}
         >
           <ToolBadge>Patch</ToolBadge>
         </ToolTitle>
@@ -2558,7 +2700,7 @@ ToolRegistry.register<typeof PatchTool>({
   },
 })
 
-ToolRegistry.register<typeof TodoWriteTool>({
+toolRegistry.register<typeof TodoWriteTool>({
   name: "todowrite",
   container: "block",
   render(props) {
@@ -2568,7 +2710,8 @@ ToolRegistry.register<typeof TodoWriteTool>({
         <For each={props.input.todos ?? []}>
           {(todo) => (
             <text style={{ fg: todo.status === "in_progress" ? theme.success : theme.textMuted }}>
-              {todo.status === "completed" ? "●" : "○"} {todo.content}
+              {todo.status === "completed" ? "● " : "○ "}
+              {todo.content}
             </text>
           )}
         </For>
@@ -2577,7 +2720,7 @@ ToolRegistry.register<typeof TodoWriteTool>({
   },
 })
 
-ToolRegistry.register<typeof AddTaskTool>({
+toolRegistry.register<typeof AddTaskTool>({
   name: "add_task",
   container: "block",
   render(props) {
@@ -2595,9 +2738,11 @@ ToolRegistry.register<typeof AddTaskTool>({
           fallback="Creating subagent task..."
           when={taskInput.subagent_type ?? taskInput.description}
           onToggle={props.onToggle}
+          collapsed={props.collapsed}
           toolName="Add Task"
           input={props.input}
           output={props.output}
+          trailing={props.priorityControls}
         >
           <ToolBadge>Add Task</ToolBadge> [{taskInput.subagent_type ?? "unknown"}] {taskInput.description}
         </ToolTitle>
@@ -2630,46 +2775,46 @@ ToolRegistry.register<typeof AddTaskTool>({
 })
 
 // Register cc_* (Anthropic-native) tools to use same renderers as standard tools
-ToolRegistry.register({
+toolRegistry.register({
   name: "cc_bash",
   container: "block",
-  render: ToolRegistry.render("bash"),
+  render: toolRegistry.render("bash")!,
 })
 
-ToolRegistry.register({
+toolRegistry.register({
   name: "cc_read",
   container: "inline",
-  render: ToolRegistry.render("read"),
+  render: toolRegistry.render("read")!,
 })
 
-ToolRegistry.register({
+toolRegistry.register({
   name: "cc_write",
   container: "block",
-  render: ToolRegistry.render("write"),
+  render: toolRegistry.render("write")!,
 })
 
-ToolRegistry.register({
+toolRegistry.register({
   name: "cc_edit",
   container: "block",
-  render: ToolRegistry.render("edit"),
+  render: toolRegistry.render("edit")!,
 })
 
-ToolRegistry.register({
+toolRegistry.register({
   name: "cc_list",
   container: "inline",
-  render: ToolRegistry.render("list"),
+  render: toolRegistry.render("list")!,
 })
 
-ToolRegistry.register({
+toolRegistry.register({
   name: "cc_glob",
   container: "inline",
-  render: ToolRegistry.render("glob"),
+  render: toolRegistry.render("glob")!,
 })
 
-ToolRegistry.register({
+toolRegistry.register({
   name: "cc_grep",
   container: "inline",
-  render: ToolRegistry.render("grep"),
+  render: toolRegistry.render("grep")!,
 })
 
 function normalizePath(input?: string) {

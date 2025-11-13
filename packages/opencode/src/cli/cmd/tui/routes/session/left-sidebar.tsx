@@ -1,5 +1,6 @@
 import { createMemo, createSignal, For, Show, createEffect, onCleanup } from "solid-js"
 import { useTheme } from "../../context/theme"
+import { useKV } from "../../context/kv"
 
 import { useSync } from "@tui/context/sync"
 import { Locale } from "@/util/locale"
@@ -8,9 +9,41 @@ import { useRenderer } from "@opentui/solid"
 import { useDialog } from "../../ui/dialog"
 import { DialogPrompt } from "../../ui/dialog-prompt"
 
-const RECENT_CATEGORY = "Recent"
-const RECENT_WINDOW_MS = 60 * 60 * 1000
-const RECENT_REFRESH_INTERVAL_MS = 60 * 1000
+const HIDDEN_CATEGORY = "Hidden"
+const CLOCK_REFRESH_INTERVAL_MS = 60 * 1000
+const HIDDEN_SESSIONS_KV_KEY = "leftSidebar.hiddenSessions"
+const DAY_IN_MS = 24 * 60 * 60 * 1000
+const DATE_CATEGORY_ORDER = ["Today", "Yesterday", "This week", "Last week", "Older"] as const
+const RUNNING_SPINNER_FRAMES = ["⠋", "⠙", "⠹", "⠸", "⠼", "⠴", "⠦", "⠧", "⠇", "⠏"] as const
+const RUNNING_SPINNER_INTERVAL_MS = 120
+const HIDE_ICON = "⊖"
+const SHOW_ICON = "⊕"
+
+type DateCategory = (typeof DATE_CATEGORY_ORDER)[number]
+
+function shiftDays(base: Date, days: number) {
+  return new Date(base.getTime() + days * DAY_IN_MS)
+}
+
+function startOfDay(date: Date) {
+  return new Date(date.getFullYear(), date.getMonth(), date.getDate())
+}
+
+function getDateCategory(
+  date: Date,
+  refs: {
+    todayStart: Date
+    yesterdayStart: Date
+    weekStart: Date
+    lastWeekStart: Date
+  },
+): DateCategory {
+  if (date >= refs.todayStart) return "Today"
+  if (date >= refs.yesterdayStart) return "Yesterday"
+  if (date >= refs.weekStart) return "This week"
+  if (date >= refs.lastWeekStart) return "Last week"
+  return "Older"
+}
 
 export function LeftSidebar(props: {
   sessionID: string
@@ -29,14 +62,52 @@ export function LeftSidebar(props: {
   const { theme } = useTheme()
   const renderer = useRenderer()
   const dialog = useDialog()
+  const kv = useKV()
+
+  const [hiddenSessionIDs, setHiddenSessionIDs] = createSignal<string[]>(kv.get(HIDDEN_SESSIONS_KV_KEY, []))
+  const hiddenSessionSet = createMemo(() => new Set(hiddenSessionIDs()))
+
+  const persistHiddenSessions = (editor: (draft: Set<string>) => void) => {
+    const next = new Set(hiddenSessionSet())
+    editor(next)
+    const nextList = Array.from(next)
+    setHiddenSessionIDs(nextList)
+    kv.set(HIDDEN_SESSIONS_KV_KEY, nextList)
+  }
+
+  const hideSession = (sessionID: string) => {
+    if (hiddenSessionSet().has(sessionID)) return
+    persistHiddenSessions((draft) => {
+      draft.add(sessionID)
+    })
+  }
+
+  const showSession = (sessionID: string) => {
+    if (!hiddenSessionSet().has(sessionID)) return
+    persistHiddenSessions((draft) => {
+      draft.delete(sessionID)
+    })
+  }
+
+  const isSessionHidden = (sessionID: string) => hiddenSessionSet().has(sessionID)
 
   const [displayLimit, setDisplayLimit] = createSignal(20)
-  const [expandedCategories, setExpandedCategories] = createSignal<Set<string>>(new Set([RECENT_CATEGORY, "Today"]))
+  const [expandedCategories, setExpandedCategories] = createSignal<Set<string>>(new Set([DATE_CATEGORY_ORDER[0]]))
   const [searchQuery, setSearchQuery] = createSignal("")
+  const isSearching = createMemo(() => searchQuery().trim().length > 0)
+
   const [clock, setClock] = createSignal(Date.now())
+  const [spinnerIndex, setSpinnerIndex] = createSignal(0)
 
   createEffect(() => {
-    const interval = setInterval(() => setClock(Date.now()), RECENT_REFRESH_INTERVAL_MS)
+    const interval = setInterval(() => setClock(Date.now()), CLOCK_REFRESH_INTERVAL_MS)
+    onCleanup(() => clearInterval(interval))
+  })
+
+  createEffect(() => {
+    const interval = setInterval(() => {
+      setSpinnerIndex((prev) => (prev + 1) % RUNNING_SPINNER_FRAMES.length)
+    }, RUNNING_SPINNER_INTERVAL_MS)
     onCleanup(() => clearInterval(interval))
   })
 
@@ -70,50 +141,57 @@ export function LeftSidebar(props: {
         )
       })
       .filter((x) => {
-        // If no search query, show all
         if (!query) return true
-        // Search in session title
         return x.title.toLowerCase().includes(query)
       })
       .sort((a, b) => b.time.updated - a.time.updated)
   })
 
-  const recentSessions = createMemo(() => {
-    const currentTime = clock()
-    return allSessions().filter((session) => {
-      const updatedAt = new Date(session.time.updated).getTime()
-      return currentTime - updatedAt <= RECENT_WINDOW_MS
-    })
+  const visibleSessions = createMemo(() => {
+    if (isSearching()) return allSessions()
+    const hidden = hiddenSessionSet()
+    return allSessions().filter((session) => !hidden.has(session.id))
   })
 
-  // Group sessions by date
+  const hiddenSessions = createMemo(() => {
+    const hidden = hiddenSessionSet()
+    return allSessions().filter((session) => hidden.has(session.id))
+  })
+
   const sessionsByCategory = createMemo(() => {
     const grouped = new Map<string, any[]>()
+    DATE_CATEGORY_ORDER.forEach((category) => grouped.set(category, []))
+
     const now = clock()
-    const today = new Date(now)
+    const nowDate = new Date(now)
+    const todayStart = startOfDay(nowDate)
+    const yesterdayStart = shiftDays(todayStart, -1)
+    const weekStart = shiftDays(todayStart, -todayStart.getDay())
+    const lastWeekStart = shiftDays(weekStart, -7)
 
-    allSessions().forEach((session) => {
+    visibleSessions().forEach((session) => {
       const sessionDate = new Date(session.time.updated)
-      if (now - sessionDate.getTime() <= RECENT_WINDOW_MS) {
-        return
-      }
-      const isToday = sessionDate.toDateString() === today.toDateString()
-      const category = isToday ? "Today" : sessionDate.toLocaleDateString()
-
-      if (!grouped.has(category)) {
-        grouped.set(category, [])
-      }
+      const category = getDateCategory(sessionDate, {
+        todayStart,
+        yesterdayStart,
+        weekStart,
+        lastWeekStart,
+      })
       grouped.get(category)!.push(session)
     })
 
     return grouped
   })
 
-  // Get all categories for UI
   const allCategories = createMemo(() => {
-    const categories = Array.from(sessionsByCategory().keys())
-    if (recentSessions().length) {
-      return [RECENT_CATEGORY, ...categories]
+    const categories: string[] = []
+    DATE_CATEGORY_ORDER.forEach((category) => {
+      if ((sessionsByCategory().get(category)?.length ?? 0) > 0) {
+        categories.push(category)
+      }
+    })
+    if (!isSearching() && hiddenSessions().length) {
+      categories.push(HIDDEN_CATEGORY)
     }
     return categories
   })
@@ -136,6 +214,40 @@ export function LeftSidebar(props: {
   const currentSession = createMemo(() => sync.session.get(props.sessionID)!)
   const canShrink = () => props.width > props.minWidth
   const canGrow = () => props.width < props.maxWidth
+
+  type SessionIndicatorState = "idle" | "active" | "attention" | "error"
+
+  const getSessionIndicatorState = (session: {
+    id: string
+    orchestration?: { status?: string }
+  }): SessionIndicatorState => {
+    const orchestrationStatus = session.orchestration?.status
+    if (orchestrationStatus === "failed") return "error"
+    if (orchestrationStatus === "paused") return "attention"
+    if (orchestrationStatus === "active") return "active"
+
+    const pendingPermissions = (sync.data.permission?.[session.id]?.length ?? 0) > 0
+    if (pendingPermissions) return "attention"
+
+    const messages = sync.data.message?.[session.id] ?? []
+    const lastMessage = messages[messages.length - 1] as any
+    if (lastMessage?.error) return "error"
+
+    const derivedStatus = sync.session.status(session.id)
+    if (derivedStatus === "working" || derivedStatus === "compacting") return "active"
+
+    return "idle"
+  }
+
+  const getSessionStatusColor = (session: { id: string; orchestration?: { status?: string } }) => {
+    const state = getSessionIndicatorState(session)
+    if (state === "error" || state === "attention") return theme.error
+    if (state === "active") return theme.warning
+    return theme.textMuted
+  }
+
+  const isSessionActive = (session: { id: string; orchestration?: { status?: string } }) =>
+    getSessionIndicatorState(session) === "active"
 
   return (
     <Show when={currentSession()}>
@@ -171,21 +283,6 @@ export function LeftSidebar(props: {
                 +
               </text>
             </box>
-            <text fg={theme.textMuted} attributes={TextAttributes.BOLD}>
-              SESSIONS
-            </text>
-          </box>
-          <text
-            fg={theme.textMuted}
-            onMouseUp={() => {
-              if (renderer.getSelection()?.getSelectedText()) return
-              props.onToggle()
-            }}
-          >
-            ◀
-          </text>
-        </box>
-
             <text fg={theme.textMuted} attributes={TextAttributes.BOLD}>
               SESSIONS
             </text>
@@ -238,8 +335,8 @@ export function LeftSidebar(props: {
             {(category) => {
               const isExpanded = () => expandedCategories().has(category)
               const categorySessions = () => {
-                if (category === RECENT_CATEGORY) {
-                  return recentSessions()
+                if (category === HIDDEN_CATEGORY) {
+                  return hiddenSessions()
                 }
                 return sessionsByCategory().get(category) || []
               }
@@ -263,12 +360,29 @@ export function LeftSidebar(props: {
                       {(session) => {
                         const [hover, setHover] = createSignal(false)
                         const isOpen = () => props.openTabs.includes(session.id)
+                        const sessionColor = () =>
+                          session.id === props.sessionID ? theme.accent : getSessionStatusColor(session)
+
+                        const title = () =>
+                          Locale.truncate(Locale.stripMarkdown(session.title), isOpen() && hover() ? 33 : 37)
+                        const suffix = () => (isOpen() && hover() ? " ×" : "")
+                        const prefix = () => {
+                          if (isSessionActive(session)) {
+                            return `  ${RUNNING_SPINNER_FRAMES[spinnerIndex()]} `
+                          }
+                          return session.id === props.sessionID ? "  ▶ " : "    "
+                        }
+                        const lineText = () => `${prefix()}${title()}${suffix()}`
+
+                        const hidden = () => isSessionHidden(session.id)
+                        const hideIcon = () => (hidden() ? SHOW_ICON : HIDE_ICON)
+                        const hideColor = () => (hidden() ? theme.success : theme.textMuted)
 
                         return (
-                          <text
-                            fg={session.id === props.sessionID ? theme.accent : theme.text}
-                            attributes={session.id === props.sessionID ? TextAttributes.BOLD : undefined}
-                            wrapMode="none"
+                          <box
+                            flexDirection="row"
+                            alignItems="center"
+                            gap={1}
                             height={1}
                             renderBefore={function () {
                               const el = this as any
@@ -280,15 +394,40 @@ export function LeftSidebar(props: {
                               const target = (evt as any).target
                               if (target?.textContent?.includes("×")) {
                                 props.onClose(session.id)
-                              } else if (session.id !== props.sessionID) {
+                                return
+                              }
+                              if (session.id !== props.sessionID) {
                                 props.onSelect(session.id)
                               }
                             }}
                           >
-                            {session.id === props.sessionID ? "  ▶ " : "    "}
-                            {Locale.truncate(Locale.stripMarkdown(session.title), isOpen() && hover() ? 33 : 37)}
-                            {isOpen() && hover() && " ×"}
-                          </text>
+                            <box flexGrow={1} overflow="hidden">
+                              <text
+                                fg={sessionColor()}
+                                attributes={session.id === props.sessionID ? TextAttributes.BOLD : undefined}
+                                wrapMode="none"
+                                height={1}
+                              >
+                                {lineText()}
+                              </text>
+                            </box>
+                            <text
+                              fg={hideColor()}
+                              wrapMode="none"
+                              height={1}
+                              onMouseUp={(evt) => {
+                                evt.stopPropagation?.()
+                                const currentlyHidden = hidden()
+                                if (currentlyHidden) {
+                                  showSession(session.id)
+                                  return
+                                }
+                                hideSession(session.id)
+                              }}
+                            >
+                              {hideIcon()}
+                            </text>
+                          </box>
                         )
                       }}
                     </For>

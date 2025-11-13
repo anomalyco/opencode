@@ -9,6 +9,7 @@ import { useSDK } from "@tui/context/sdk"
 import { useDialog } from "@tui/ui/dialog"
 import { DialogSelect, type DialogSelectOption } from "@tui/ui/dialog-select"
 import { useRenderer } from "@opentui/solid"
+import { DialogKanban } from "../../component/dialog-kanban"
 
 const Title = (props: { session: Accessor<Session> }) => {
   const { theme } = useTheme()
@@ -94,6 +95,10 @@ export function Header() {
   }
   const shareEnabled = createMemo(() => sync.data.config.share !== "disabled")
 
+  const openKanban = () => {
+    dialog.replace(() => <DialogKanban />)
+  }
+
   const cost = createMemo(() => {
     const total = pipe(
       messages(),
@@ -122,18 +127,31 @@ export function Header() {
 
   return (
     <box paddingLeft={1} paddingRight={1} {...SplitBorder} borderColor={theme.backgroundElement} flexShrink={0}>
-      <box flexDirection="row" gap={2} alignItems="center">
-        <text fg={theme.text}>
-          <span style={{ bold: true, fg: theme.accent }}>#</span> <span style={{ bold: true }}>{session().title}</span>
-        </text>
+      <box flexDirection="row" justifyContent="space-between" alignItems="center" gap={2}>
+        <box flexDirection="row" gap={2} alignItems="center">
+          <text fg={theme.text}>
+            <span style={{ bold: true, fg: theme.accent }}>#</span>{" "}
+            <span style={{ bold: true }}>{session().title}</span>
+          </text>
+          <text
+            fg={theme.textMuted}
+            onMouseUp={() => {
+              if (renderer.getSelection()?.getSelectedText()) return
+              showServerDialog()
+            }}
+          >
+            server:{port}
+          </text>
+        </box>
         <text
           fg={theme.textMuted}
+          wrapMode="none"
           onMouseUp={() => {
             if (renderer.getSelection()?.getSelectedText()) return
-            showServerDialog()
+            openKanban()
           }}
         >
-          server:{port}
+          ▦ Kanban
         </text>
       </box>
       <Show
