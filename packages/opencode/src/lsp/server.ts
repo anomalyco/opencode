@@ -9,6 +9,7 @@ import fs from "fs/promises"
 import { Filesystem } from "../util/filesystem"
 import { Instance } from "../project/instance"
 import { Flag } from "../flag/flag"
+import { extendTypeScriptInitializationWithVueIntegration } from "./integrations/vue-typescript"
 
 export namespace LSPServer {
   const log = Log.create({ service: "lsp.server" })
@@ -86,7 +87,7 @@ export namespace LSPServer {
       ["package-lock.json", "bun.lockb", "bun.lock", "pnpm-lock.yaml", "yarn.lock"],
       ["deno.json", "deno.jsonc"],
     ),
-    extensions: [".ts", ".tsx", ".js", ".jsx", ".mjs", ".cjs", ".mts", ".cts"],
+    extensions: [".ts", ".tsx", ".js", ".jsx", ".mjs", ".cjs", ".mts", ".cts", ".vue"],
     async spawn(root) {
       const tsserver = await Bun.resolve("typescript/lib/tsserver.js", Instance.directory).catch(() => {})
       if (!tsserver) return
@@ -99,11 +100,11 @@ export namespace LSPServer {
       })
       return {
         process: proc,
-        initialization: {
+        initialization: await extendTypeScriptInitializationWithVueIntegration({
           tsserver: {
             path: tsserver,
           },
-        },
+        }),
       }
     },
   }
