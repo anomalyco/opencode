@@ -1,5 +1,5 @@
 import { useSync } from "@tui/context/sync"
-import { createMemo, For, Show, Switch, Match } from "solid-js"
+import { createMemo, For, Show, Switch, Match, createSignal } from "solid-js"
 import { useTheme } from "../../context/theme"
 import { Locale } from "@/util/locale"
 import path from "path"
@@ -12,6 +12,11 @@ export function Sidebar(props: { sessionID: string }) {
   const diff = createMemo(() => sync.data.session_diff[props.sessionID] ?? [])
   const todo = createMemo(() => sync.data.todo[props.sessionID] ?? [])
   const messages = createMemo(() => sync.data.message[props.sessionID] ?? [])
+
+  const [mcpExpanded, setMcpExpanded] = createSignal(true)
+  const [diffExpanded, setDiffExpanded] = createSignal(true)
+  const [todoExpanded, setTodoExpanded] = createSignal(true)
+  const [lspExpanded, setLspExpanded] = createSignal(true)
 
   const cost = createMemo(() => {
     const total = messages().reduce((sum, x) => sum + (x.role === "assistant" ? x.cost : 0), 0)
@@ -55,110 +60,130 @@ export function Sidebar(props: { sessionID: string }) {
           </box>
           <Show when={Object.keys(sync.data.mcp).length > 0}>
             <box>
-              <text fg={theme.text}>
-                <b>MCP</b>
-              </text>
-              <For each={Object.entries(sync.data.mcp)}>
-                {([key, item]) => (
-                  <box flexDirection="row" gap={1}>
-                    <text
-                      flexShrink={0}
-                      style={{
-                        fg: {
-                          connected: theme.success,
-                          failed: theme.error,
-                          disabled: theme.textMuted,
-                        }[item.status],
-                      }}
-                    >
-                      •
-                    </text>
-                    <text fg={theme.text} wrapMode="word">
-                      {key}{" "}
-                      <span style={{ fg: theme.textMuted }}>
-                        <Switch>
-                          <Match when={item.status === "connected"}>Connected</Match>
-                          <Match when={item.status === "failed" && item}>{(val) => <i>{val().error}</i>}</Match>
-                          <Match when={item.status === "disabled"}>Disabled in configuration</Match>
-                        </Switch>
-                      </span>
-                    </text>
-                  </box>
-                )}
-              </For>
+              <box flexDirection="row" gap={1} onMouseDown={() => setMcpExpanded(!mcpExpanded())}>
+                <text fg={theme.text}>{mcpExpanded() ? "▼" : "▶"}</text>
+                <text fg={theme.text}>
+                  <b>MCP</b>
+                </text>
+              </box>
+              <Show when={mcpExpanded()}>
+                <For each={Object.entries(sync.data.mcp)}>
+                  {([key, item]) => (
+                    <box flexDirection="row" gap={1}>
+                      <text
+                        flexShrink={0}
+                        style={{
+                          fg: {
+                            connected: theme.success,
+                            failed: theme.error,
+                            disabled: theme.textMuted,
+                          }[item.status],
+                        }}
+                      >
+                        •
+                      </text>
+                      <text fg={theme.text} wrapMode="word">
+                        {key}{" "}
+                        <span style={{ fg: theme.textMuted }}>
+                          <Switch>
+                            <Match when={item.status === "connected"}>Connected</Match>
+                            <Match when={item.status === "failed" && item}>{(val) => <i>{val().error}</i>}</Match>
+                            <Match when={item.status === "disabled"}>Disabled in configuration</Match>
+                          </Switch>
+                        </span>
+                      </text>
+                    </box>
+                  )}
+                </For>
+              </Show>
             </box>
           </Show>
           <Show when={sync.data.lsp.length > 0}>
             <box>
-              <text fg={theme.text}>
-                <b>LSP</b>
-              </text>
-              <For each={sync.data.lsp}>
-                {(item) => (
-                  <box flexDirection="row" gap={1}>
-                    <text
-                      flexShrink={0}
-                      style={{
-                        fg: {
-                          connected: theme.success,
-                          error: theme.error,
-                        }[item.status],
-                      }}
-                    >
-                      •
-                    </text>
-                    <text fg={theme.textMuted}>
-                      {item.id} {item.root}
-                    </text>
-                  </box>
-                )}
-              </For>
+              <box flexDirection="row" gap={1} onMouseDown={() => setLspExpanded(!lspExpanded())}>
+                <text fg={theme.text}>{lspExpanded() ? "▼" : "▶"}</text>
+                <text fg={theme.text}>
+                  <b>LSP</b>
+                </text>
+              </box>
+              <Show when={lspExpanded()}>
+                <For each={sync.data.lsp}>
+                  {(item) => (
+                    <box flexDirection="row" gap={1}>
+                      <text
+                        flexShrink={0}
+                        style={{
+                          fg: {
+                            connected: theme.success,
+                            error: theme.error,
+                          }[item.status],
+                        }}
+                      >
+                        •
+                      </text>
+                      <text fg={theme.textMuted}>
+                        {item.id} {item.root}
+                      </text>
+                    </box>
+                  )}
+                </For>
+              </Show>
             </box>
           </Show>
           <Show when={todo().length > 0}>
             <box>
-              <text fg={theme.text}>
-                <b>Todo</b>
-              </text>
-              <For each={todo()}>
-                {(todo) => (
-                  <text style={{ fg: todo.status === "in_progress" ? theme.success : theme.textMuted }}>
-                    [{todo.status === "completed" ? "✓" : " "}] {todo.content}
-                  </text>
-                )}
-              </For>
+              <box flexDirection="row" gap={1} onMouseDown={() => setTodoExpanded(!todoExpanded())}>
+                <text fg={theme.text}>{todoExpanded() ? "▼" : "▶"}</text>
+                <text fg={theme.text}>
+                  <b>Todo</b>
+                </text>
+              </box>
+              <Show when={todoExpanded()}>
+                <For each={todo()}>
+                  {(todo) => (
+                    <text style={{ fg: todo.status === "in_progress" ? theme.success : theme.textMuted }}>
+                      [{todo.status === "completed" ? "✓" : " "}] {todo.content}
+                    </text>
+                  )}
+                </For>
+              </Show>
             </box>
           </Show>
           <Show when={diff().length > 0}>
             <box>
-              <text fg={theme.text}>
-                <b>Modified Files</b>
-              </text>
-              <For each={diff() || []}>
-                {(item) => {
-                  const file = createMemo(() => {
-                    const splits = item.file.split(path.sep).filter(Boolean)
-                    const last = splits.at(-1)!
-                    const rest = splits.slice(0, -1).join(path.sep)
-                    return Locale.truncateMiddle(rest, 30 - last.length) + "/" + last
-                  })
-                  return (
-                    <box flexDirection="row" gap={1} justifyContent="space-between">
-                      <text fg={theme.textMuted} wrapMode="char">
-                        {file()}
-                      </text>
-                      <box flexDirection="row" gap={1} flexShrink={0}>
-                        <Show when={item.additions}>
-                          <text fg={theme.diffAdded}>+{item.additions}</text>
-                        </Show>
-                        <Show when={item.deletions}>
-                          <text fg={theme.diffRemoved}>-{item.deletions}</text>
-                        </Show>
+              <box flexDirection="row" gap={1} onMouseDown={() => setDiffExpanded(!diffExpanded())}>
+                <text fg={theme.text}>{diffExpanded() ? "▼" : "▶"}</text>
+                <text fg={theme.text}>
+                  <b>Modified Files</b>
+                </text>
+              </box>
+              <Show when={diffExpanded()}>
+                <For each={diff() || []}>
+                  {(item) => {
+                    const file = createMemo(() => {
+                      const splits = item.file.split(path.sep).filter(Boolean)
+                      const last = splits.at(-1)!
+                      const rest = splits.slice(0, -1).join(path.sep)
+                      return Locale.truncateMiddle(rest, 30 - last.length) + "/" + last
+                    })
+                    return (
+                      <box flexDirection="row" gap={1} justifyContent="space-between">
+                        <text fg={theme.textMuted} wrapMode="char">
+                          {file()}
+                        </text>
+                        <box flexDirection="row" gap={1} flexShrink={0}>
+                          <Show when={item.additions}>
+                            <text fg={theme.diffAdded}>+{item.additions}</text>
+                          </Show>
+                          <Show when={item.deletions}>
+                            <text fg={theme.diffRemoved}>-{item.deletions}</text>
+                          </Show>
+                        </box>
                       </box>
-                    </box>
-                  )
-                }}
-              </For>
+                    )
+                  }}
+                </For>
+              </Show>
             </box>
           </Show>
         </box>
