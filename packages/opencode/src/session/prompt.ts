@@ -345,7 +345,7 @@ export namespace SessionPrompt {
           maxRetries: 0,
           activeTools: Object.keys(tools).filter((x) => x !== "invalid"),
           maxOutputTokens: ProviderTransform.maxOutputTokens(
-            model.providerID,
+            model.npm ?? "",
             params.options,
             model.info.limit.output,
             OUTPUT_TOKEN_MAX,

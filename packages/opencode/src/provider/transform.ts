@@ -176,7 +176,7 @@ export namespace ProviderTransform {
   }
 
   export function maxOutputTokens(
-    providerID: string,
+    npm: string,
     options: Record<string, any>,
     modelLimit: number,
     globalLimit: number,
@@ -184,7 +184,7 @@ export namespace ProviderTransform {
     const modelCap = modelLimit || globalLimit
     const standardLimit = Math.min(modelCap, globalLimit)
 
-    if (providerID === "anthropic") {
+    if (npm === "@ai-sdk/anthropic") {
       const thinking = options?.["thinking"]
       const budgetTokens = typeof thinking?.["budgetTokens"] === "number" ? thinking["budgetTokens"] : 0
       const enabled = thinking?.["type"] === "enabled"
