@@ -2,43 +2,22 @@
 
 import fs from "fs"
 import path from "path"
-import os from "os"
 import { fileURLToPath } from "url"
 
-const __dirname = path.dirname(fileURLToPath(import.meta.url))
-
-function main() {
-  if (os.platform() !== "win32") {
-    console.log("Non-Windows platform detected, skipping preinstall")
-    return
-  }
-
-  console.log("Windows detected: Modifying package.json bin entry")
-
-  // Read package.json
-  const packageJsonPath = path.join(__dirname, "package.json")
-  const packageJson = JSON.parse(fs.readFileSync(packageJsonPath, "utf8"))
-
-  // Modify bin to point to .cmd file on Windows
-  packageJson.bin = {
-    opencode: "./bin/opencode.cmd",
-  }
-
-  // Write it back
-  fs.writeFileSync(packageJsonPath, JSON.stringify(packageJson, null, 2))
-  console.log("Updated package.json bin to use opencode.cmd")
-
-  // Now you can also remove the Unix script if you want
-  const unixScript = path.join(__dirname, "bin", "opencode")
-  if (fs.existsSync(unixScript)) {
-    console.log("Removing Unix shell script")
-    fs.unlinkSync(unixScript)
-  }
-}
+const dir = path.dirname(fileURLToPath(import.meta.url))
+const packagePath = path.join(dir, "package.json")
 
 try {
-  main()
+  const content = fs.readFileSync(packagePath, "utf8")
+  const data = JSON.parse(content)
+  const current = data.bin && data.bin.opencode
+  if (current !== "./bin/opencode") {
+    data.bin = {
+      opencode: "./bin/opencode",
+    }
+    fs.writeFileSync(packagePath, JSON.stringify(data, null, 2))
+    console.log("Normalized opencode bin entry for cross-platform launcher")
+  }
 } catch (error) {
   console.error("Preinstall script error:", error.message)
-  process.exit(0)
 }

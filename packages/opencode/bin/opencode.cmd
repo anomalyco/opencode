@@ -24,7 +24,7 @@ if "%PROCESSOR_ARCHITECTURE%"=="AMD64" (
     set "arch=x64"
 )
 
-set "name=opencode-!platform!-!arch!"
+set "base=opencode-!platform!-!arch!"
 set "binary=opencode.exe"
 
 rem Search for the binary starting from script location
@@ -32,10 +32,13 @@ set "resolved="
 set "current_dir=%script_dir%"
 
 :search_loop
-set "candidate=%current_dir%\node_modules\%name%\bin\%binary%"
-if exist "%candidate%" (
-    set "resolved=%candidate%"
-    goto :execute
+if exist "%current_dir%\node_modules" (
+    for /d %%d in ("%current_dir%\node_modules\%base%*") do (
+        if exist "%%d\bin\%binary%" (
+            set "resolved=%%d\bin\%binary%"
+            goto :execute
+        )
+    )
 )
 
 rem Move up one directory
