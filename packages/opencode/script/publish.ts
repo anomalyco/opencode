@@ -3,7 +3,6 @@ import { $ } from "bun"
 import pkg from "../package.json"
 import { Script } from "@opencode-ai/script"
 import { fileURLToPath } from "url"
-import fs from "fs"
 
 const dir = fileURLToPath(new URL("..", import.meta.url))
 process.chdir(dir)
@@ -17,21 +16,6 @@ const { binaries } = await import("./build.ts")
 
 await $`mkdir -p ./dist/${pkg.name}`
 await $`cp -r ./bin ./dist/${pkg.name}/bin`
-
-// Copy Windows .exe if any Windows binaries were built
-let hasWindowsBinary = false
-for (const binaryName of Object.keys(binaries)) {
-  if (binaryName.includes("win32")) {
-    const winBinaryPath = `./dist/${binaryName}/bin/opencode.exe`
-    if (fs.existsSync(winBinaryPath)) {
-      await $`cp ${winBinaryPath} ./dist/${pkg.name}/bin/opencode.exe`
-      hasWindowsBinary = true
-      break
-    }
-  }
-}
-
-await $`cp ./script/preinstall.mjs ./dist/${pkg.name}/preinstall.mjs`
 await $`cp ./script/postinstall.mjs ./dist/${pkg.name}/postinstall.mjs`
 
 await Bun.file(`./dist/${pkg.name}/package.json`).write(
@@ -39,10 +23,9 @@ await Bun.file(`./dist/${pkg.name}/package.json`).write(
     {
       name: pkg.name + "-ai",
       bin: {
-        [pkg.name]: hasWindowsBinary ? `./bin/${pkg.name}.exe` : `./bin/${pkg.name}`,
+        [pkg.name]: `./bin/${pkg.name}`,
       },
       scripts: {
-        preinstall: "bun ./preinstall.mjs || node ./preinstall.mjs",
         postinstall: "bun ./postinstall.mjs || node ./postinstall.mjs",
       },
       version: Script.version,
