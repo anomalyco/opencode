@@ -66,11 +66,11 @@ const allTargets: {
     avx2: false,
   },
   {
-    os: "win32",
+    os: "windows",
     arch: "x64",
   },
   {
-    os: "win32",
+    os: "windows",
     arch: "x64",
     avx2: false,
   },
@@ -127,7 +127,7 @@ for (const item of targets) {
       {
         name,
         version: Script.version,
-        os: [item.os],
+        os: [item.os === "windows" ? "win32" : item.os],
         cpu: [item.arch],
       },
       null,
