@@ -595,7 +595,7 @@ export namespace Provider {
           // Filter out blacklisted models
           .filter(
             ([modelID]) =>
-              modelID !== "gpt-5-chat-latest" && !(providerID === "openrouter" && modelID === "openai/gpt-5-chat"),
+              modelID !== "gpt-5.1-chat-latest" && !(providerID === "openrouter" && modelID === "openai/gpt-5.1-chat"),
           )
           // Filter out experimental models
           .filter(
@@ -779,8 +779,8 @@ export namespace Provider {
     // Model priority list (ordered by preference)
     // - claude-haiku variants: Fast, cost-effective Claude models
     // - gemini-2.5-flash: Google's efficient model for coordination
-    // - gpt-5-nano: OpenAI's small model (when available)
-    let priority = ["claude-haiku-4-5", "claude-haiku-4.5", "3-5-haiku", "3.5-haiku", "gemini-2.5-flash", "gpt-5-nano"]
+    // - gpt-5.1-nano: OpenAI's small model (when available)
+    let priority = ["claude-haiku-4-5", "3-5-haiku", "3.5-haiku", "gemini-2.5-flash", "gpt-5.1-nano"]
 
     // Special case: GitHub Copilot treats claude-haiku-4.5 as premium
     // Filter it out to avoid unnecessary premium API usage
@@ -798,7 +798,7 @@ export namespace Provider {
     // No small model found - caller should fall back to default
   }
 
-  const priority = ["gemini-2.5-pro-preview", "gpt-5", "claude-sonnet-4"]
+  const priority = ["gemini-2.5-pro-preview", "gpt-5.1", "claude-sonnet-4.5[1m]"]
   export function sort(models: ModelsDev.Model[]) {
     return sortBy(
       models,

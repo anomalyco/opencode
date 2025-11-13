@@ -321,7 +321,7 @@ export function toOpenaiRequest(body: CommonRequest) {
     metadata: (body as any).metadata,
     store: (body as any).store,
     user: (body as any).user,
-    text: { verbosity: body.model === "gpt-5-codex" ? "medium" : "low" },
+    text: { verbosity: body.model === "gpt-5.1-codex" ? "medium" : "low" },
     reasoning: { effort: "medium" },
   }
 }

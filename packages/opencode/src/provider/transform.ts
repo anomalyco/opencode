@@ -136,13 +136,13 @@ export namespace ProviderTransform {
     }
 
     const mid = modelID.toLowerCase()
-    const isOpenAIReasoningFamily = mid.includes("gpt-5") || mid.startsWith("o1") || mid.startsWith("o3")
-    if (isOpenAIReasoningFamily && !mid.includes("gpt-5-chat")) {
+    const isOpenAIReasoningFamily = mid.includes("gpt-5.1") || mid.startsWith("o1") || mid.startsWith("o3")
+    if (isOpenAIReasoningFamily && !mid.includes("gpt-5.1-chat")) {
       if (modelID.includes("codex")) {
         result["store"] = false
       }
 
-      if (!mid.includes("codex") && !mid.includes("gpt-5-pro")) {
+      if (!mid.includes("codex") && !mid.includes("gpt-5.1-pro")) {
         result["reasoningEffort"] = result["reasoningEffort"] ?? "medium"
       }
 

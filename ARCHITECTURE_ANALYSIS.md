@@ -896,7 +896,7 @@ WITH AUTO-SELECTION:
 1. `claude-haiku-4-5` / `claude-haiku-4.5` - Anthropic's fast model
 2. `3-5-haiku` / `3.5-haiku` - Claude 3.5 Haiku variants
 3. `gemini-2.5-flash` - Google's efficient model
-4. `gpt-5-nano` - OpenAI's small model (when available)
+4. `gpt-5.1-nano` - OpenAI's small model (when available)
 
 ### Configuration
 

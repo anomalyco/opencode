@@ -211,7 +211,7 @@ export function DialogKanban() {
     maxHeight: 40,
     step: 2,
   }
-  const [layout, setLayout] = createStore({ width: 120, height: 24 })
+  const [layout, setLayout] = createStore({ width: 130, height: 29 })
   let dragging = false,
     startX = 0,
     startY = 0,
