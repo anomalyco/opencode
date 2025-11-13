@@ -16,7 +16,6 @@ const { binaries } = await import("./build.ts")
 
 await $`mkdir -p ./dist/${pkg.name}`
 await $`cp -r ./bin ./dist/${pkg.name}/bin`
-// await $`cp ./script/preinstall.mjs ./dist/${pkg.name}/preinstall.mjs`
 await $`cp ./script/postinstall.mjs ./dist/${pkg.name}/postinstall.mjs`
 
 await Bun.file(`./dist/${pkg.name}/package.json`).write(
@@ -27,7 +26,6 @@ await Bun.file(`./dist/${pkg.name}/package.json`).write(
         [pkg.name]: `./bin/${pkg.name}`,
       },
       scripts: {
-        // preinstall: "bun ./preinstall.mjs || node ./preinstall.mjs",
         postinstall: "bun ./postinstall.mjs || node ./postinstall.mjs",
       },
       version: Script.version,
