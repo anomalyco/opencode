@@ -1,9 +1,5 @@
 { hash, lib, stdenvNoCC, bun, cacert, curl }:
 args:
-let
-  sourceDateEpoch =
-    if args ? sourceDateEpoch then args.sourceDateEpoch else 1;
-in
 stdenvNoCC.mkDerivation {
   pname = "opencode-node_modules";
   version = args.version;
