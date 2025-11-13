@@ -8,6 +8,7 @@ let
       attrs
       // {
         canonicalizeScript = scripts + "/canonicalize-node-modules.ts";
+        normalizeBinsScript = scripts + "/normalize-bun-binaries.ts";
       }
     );
 in

@@ -42,6 +42,7 @@ bun install \
   --linker=isolated
 
 bun --bun nix/scripts/canonicalize-node-modules.ts
+bun --bun nix/scripts/normalize-bun-binaries.ts
 
 i=0
 while IFS= read -r dir; do
