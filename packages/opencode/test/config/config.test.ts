@@ -1,10 +1,64 @@
 import { test, expect } from "bun:test"
 import { Config } from "../../src/config/config"
 import { Instance } from "../../src/project/instance"
+import { Global } from "../../src/global"
 import { tmpdir } from "../fixture/fixture"
 import path from "path"
 import fs from "fs/promises"
 import { pathToFileURL } from "url"
+
+async function withHotReloadFlag<T>(value: string | undefined, fn: () => Promise<T>) {
+  const previous = process.env.OPENCODE_CONFIG_HOT_RELOAD
+  if (typeof value === "string") {
+    process.env.OPENCODE_CONFIG_HOT_RELOAD = value
+  } else {
+    delete process.env.OPENCODE_CONFIG_HOT_RELOAD
+  }
+  try {
+    return await fn()
+  } finally {
+    if (previous === undefined) {
+      delete process.env.OPENCODE_CONFIG_HOT_RELOAD
+    } else {
+      process.env.OPENCODE_CONFIG_HOT_RELOAD = previous
+    }
+  }
+}
+
+function scopedPluginFixture() {
+  return tmpdir({
+    init: async (dir) => {
+      const pluginDir = path.join(dir, "node_modules", "@scope", "plugin")
+      await fs.mkdir(pluginDir, { recursive: true })
+
+      await Bun.write(
+        path.join(dir, "package.json"),
+        JSON.stringify({ name: "config-fixture", version: "1.0.0", type: "module" }, null, 2),
+      )
+
+      await Bun.write(
+        path.join(pluginDir, "package.json"),
+        JSON.stringify(
+          {
+            name: "@scope/plugin",
+            version: "1.0.0",
+            type: "module",
+            main: "./index.js",
+          },
+          null,
+          2,
+        ),
+      )
+
+      await Bun.write(path.join(pluginDir, "index.js"), "export default {}\n")
+
+      await Bun.write(
+        path.join(dir, "opencode.json"),
+        JSON.stringify({ $schema: "https://opencode.ai/config.json", plugin: ["@scope/plugin"] }, null, 2),
+      )
+    },
+  })
+}
 
 test("loads config with defaults when no files exist", async () => {
   await using tmp = await tmpdir()
@@ -214,6 +268,34 @@ test("handles agent configuration", async () => {
   })
 })
 
+test("preserves scoped plugin specifiers and resolves relative plugin paths", async () => {
+  await using tmp = await tmpdir({
+    init: async (dir) => {
+      const pluginDir = path.join(dir, "local-plugins")
+      await fs.mkdir(pluginDir, { recursive: true })
+      const pluginFile = path.join(pluginDir, "custom.ts")
+      await Bun.write(pluginFile, "export default {}")
+      await Bun.write(
+        path.join(dir, "opencode.jsonc"),
+        JSON.stringify({
+          $schema: "https://opencode.ai/config.json",
+          plugin: ["@promethean-os/opencode-openai-codex-auth", "./local-plugins/custom.ts"],
+        }),
+      )
+    },
+  })
+
+  await Instance.provide({
+    directory: tmp.path,
+    fn: async () => {
+      const config = await Config.get()
+      expect(config.plugin).toContain("@promethean-os/opencode-openai-codex-auth")
+      const pluginFileUrl = pathToFileURL(path.join(tmp.path, "local-plugins", "custom.ts")).href
+      expect(config.plugin).toContain(pluginFileUrl)
+    },
+  })
+})
+
 test("handles command configuration", async () => {
   await using tmp = await tmpdir({
     init: async (dir) => {
@@ -333,9 +415,9 @@ test("updates config and writes to file", async () => {
     directory: tmp.path,
     fn: async () => {
       const newConfig = { model: "updated/model" }
-      await Config.update(newConfig as any)
+      const result = await Config.update({ update: newConfig as any })
 
-      const writtenConfig = JSON.parse(await Bun.file(path.join(tmp.path, "config.json")).text())
+      const writtenConfig = JSON.parse(await Bun.file(result.filepath).text())
       expect(writtenConfig.model).toBe("updated/model")
     },
   })
@@ -352,54 +434,73 @@ test("gets config directories", async () => {
   })
 })
 
-test("resolves scoped npm plugins in config", async () => {
-  await using tmp = await tmpdir({
+test("does not rewrite scoped npm plugins even when hot reload is enabled", async () => {
+  await withHotReloadFlag("true", async () => {
+    await using tmp = await scopedPluginFixture()
+
+    await Instance.provide({
+      directory: tmp.path,
+      fn: async () => {
+        const config = await Config.get()
+        expect(config.plugin).toContain("@scope/plugin")
+      },
+    })
+  })
+})
+
+test("keeps scoped npm plugin identifiers when hot reload is disabled", async () => {
+  await withHotReloadFlag(undefined, async () => {
+    await using tmp = await scopedPluginFixture()
+
+    await Instance.provide({
+      directory: tmp.path,
+      fn: async () => {
+        const config = await Config.get()
+        expect(config.plugin).toContain("@scope/plugin")
+      },
+    })
+  })
+})
+
+test("appends plugins discovered from directories after merging config files", async () => {
+  await using globalTmp = await tmpdir({
     init: async (dir) => {
-      const pluginDir = path.join(dir, "node_modules", "@scope", "plugin")
-      await fs.mkdir(pluginDir, { recursive: true })
-
+      await fs.mkdir(path.join(dir, "plugin"), { recursive: true })
+      await Bun.write(path.join(dir, "plugin", "custom.ts"), "export const plugin = {}")
       await Bun.write(
-        path.join(dir, "package.json"),
-        JSON.stringify({ name: "config-fixture", version: "1.0.0", type: "module" }, null, 2),
-      )
-
-      await Bun.write(
-        path.join(pluginDir, "package.json"),
-        JSON.stringify(
-          {
-            name: "@scope/plugin",
-            version: "1.0.0",
-            type: "module",
-            main: "./index.js",
-          },
-          null,
-          2,
-        ),
-      )
-
-      await Bun.write(path.join(pluginDir, "index.js"), "export default {}\n")
-
-      await Bun.write(
-        path.join(dir, "opencode.json"),
-        JSON.stringify({ $schema: "https://opencode.ai/config.json", plugin: ["@scope/plugin"] }, null, 2),
+        path.join(dir, "opencode.jsonc"),
+        JSON.stringify({
+          $schema: "https://opencode.ai/config.json",
+          plugin: ["global-plugin"],
+        }),
       )
     },
   })
 
-  await Instance.provide({
-    directory: tmp.path,
-    fn: async () => {
-      const config = await Config.get()
-      const pluginEntries = config.plugin ?? []
-
-      const baseUrl = pathToFileURL(path.join(tmp.path, "opencode.json")).href
-      const expected = import.meta.resolve("@scope/plugin", baseUrl)
-
-      expect(pluginEntries.includes(expected)).toBe(true)
-
-      const scopedEntry = pluginEntries.find((entry) => entry === expected)
-      expect(scopedEntry).toBeDefined()
-      expect(scopedEntry?.includes("/node_modules/@scope/plugin/")).toBe(true)
+  await using workspace = await tmpdir({
+    init: async (dir) => {
+      await fs.mkdir(path.join(dir, ".opencode"), { recursive: true })
+      await Bun.write(
+        path.join(dir, ".opencode", "opencode.json"),
+        JSON.stringify({
+          $schema: "https://opencode.ai/config.json",
+          plugin: ["local-plugin"],
+        }),
+      )
     },
   })
+
+  const previousGlobalConfig = Global.Path.config
+  ;(Global.Path as any).config = globalTmp.path
+  try {
+    await Instance.provide({
+      directory: workspace.path,
+      fn: async () => {
+        const config = await Config.get()
+        expect(config.plugin).toEqual(["local-plugin", `file://${path.join(globalTmp.path, "plugin", "custom.ts")}`])
+      },
+    })
+  } finally {
+    ;(Global.Path as any).config = previousGlobalConfig
+  }
 })

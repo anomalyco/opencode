@@ -10,9 +10,11 @@ import { Bus } from "../bus"
 import { Command } from "../command"
 import { Instance } from "./instance"
 import { Log } from "@/util/log"
+import { ConfigInvalidation } from "../config/invalidation"
 
 export async function InstanceBootstrap() {
   Log.Default.info("bootstrapping", { directory: Instance.directory })
+  await ConfigInvalidation.setup()
   await Plugin.init()
   Share.init()
   Format.init()

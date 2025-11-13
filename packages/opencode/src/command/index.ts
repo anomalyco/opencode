@@ -1,6 +1,7 @@
 import z from "zod"
 import { Config } from "../config/config"
 import { Instance } from "../project/instance"
+import { State } from "../project/state"
 import PROMPT_INITIALIZE from "./template/initialize.txt"
 import { Bus } from "../bus"
 import { Identifier } from "../id/id"
@@ -36,32 +37,36 @@ export namespace Command {
     })
   export type Info = z.infer<typeof Info>
 
-  const state = Instance.state(async () => {
-    const cfg = await Config.get()
+  const state = State.register(
+    "command",
+    () => Instance.directory,
+    async () => {
+      const cfg = await Config.get()
 
-    const result: Record<string, Info> = {}
+      const result: Record<string, Info> = {}
 
-    for (const [name, command] of Object.entries(cfg.command ?? {})) {
-      result[name] = {
-        name,
-        agent: command.agent,
-        model: command.model,
-        description: command.description,
-        template: command.template,
-        subtask: command.subtask,
+      for (const [name, command] of Object.entries(cfg.command ?? {})) {
+        result[name] = {
+          name,
+          agent: command.agent,
+          model: command.model,
+          description: command.description,
+          template: command.template,
+          subtask: command.subtask,
+        }
       }
-    }
 
-    if (result[Default.INIT] === undefined) {
-      result[Default.INIT] = {
-        name: Default.INIT,
-        description: "create/update AGENTS.md",
-        template: PROMPT_INITIALIZE.replace("${path}", Instance.worktree),
+      if (result[Default.INIT] === undefined) {
+        result[Default.INIT] = {
+          name: Default.INIT,
+          description: "create/update AGENTS.md",
+          template: PROMPT_INITIALIZE.replace("${path}", Instance.worktree),
+        }
       }
-    }
 
-    return result
-  })
+      return result
+    },
+  )
 
   export async function get(name: string) {
     return state().then((x) => x[name])

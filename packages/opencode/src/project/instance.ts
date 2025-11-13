@@ -48,6 +48,31 @@ export const Instance = {
   state<S>(init: () => S, dispose?: (state: Awaited<S>) => Promise<void>): () => S {
     return State.create(() => Instance.directory, init, dispose)
   },
+  async invalidate(name: string) {
+    await State.invalidate(name, Instance.directory)
+  },
+  async forEach(fn: (directory: string) => Promise<void>): Promise<Array<{ directory: string; error: Error }>> {
+    const errors: Array<{ directory: string; error: Error }> = []
+
+    for (const [directory, contextPromise] of cache) {
+      const ctx = await contextPromise
+      await context
+        .provide(ctx, async () => {
+          await fn(directory)
+        })
+        .catch((error) => {
+          errors.push({
+            directory,
+            error: error instanceof Error ? error : new Error(String(error)),
+          })
+        })
+    }
+
+    if (errors.length > 0) {
+      Log.Default.warn("some instances failed during forEach", { errors })
+    }
+    return errors
+  },
   async dispose() {
     Log.Default.info("disposing instance", { directory: Instance.directory })
     await State.dispose(Instance.directory)

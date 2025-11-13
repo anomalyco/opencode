@@ -2,6 +2,7 @@ import z from "zod"
 import { Bus } from "../bus"
 import { Flag } from "../flag/flag"
 import { Instance } from "../project/instance"
+import { State } from "../project/state"
 import { Log } from "../util/log"
 import { FileIgnore } from "./ignore"
 import { Config } from "../config/config"
@@ -29,7 +30,9 @@ export namespace FileWatcher {
     return createWrapper(binding) as typeof import("@parcel/watcher")
   })
 
-  const state = Instance.state(
+  const state = State.register(
+    "filewatcher",
+    () => Instance.directory,
     async () => {
       if (Instance.project.vcs !== "git") return {}
       log.info("init")

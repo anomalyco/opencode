@@ -7,6 +7,7 @@ import { Log } from "../util/log"
 import { NamedError } from "../util/error"
 import z from "zod/v4"
 import { Instance } from "../project/instance"
+import { State } from "../project/state"
 import { withTimeout } from "@/util/timeout"
 
 export namespace MCP {
@@ -52,7 +53,9 @@ export namespace MCP {
   export type Status = z.infer<typeof Status>
   type MCPClient = Awaited<ReturnType<typeof experimental_createMCPClient>>
 
-  const state = Instance.state(
+  const state = State.register(
+    "mcp",
+    () => Instance.directory,
     async () => {
       const cfg = await Config.get()
       const config = cfg.mcp ?? {}
