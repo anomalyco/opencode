@@ -30,6 +30,7 @@ stdenvNoCC.mkDerivation {
       --no-progress \
       --linker=isolated
     bun --bun ${args.canonicalizeScript}
+    bun --bun ${args.normalizeBinsScript}
     runHook postBuild
   '';
 
