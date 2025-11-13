@@ -401,9 +401,7 @@ export namespace Config {
         .regex(/^#[0-9a-fA-F]{6}$/, "Invalid hex color format")
         .optional()
         .describe("Hex color code for the agent (e.g., #FF5733)"),
-      context: ContextFilter.describe(
-        "Control what context from the parent session is passed to this subagent",
-      ),
+      context: ContextFilter.describe("Control what context from the parent session is passed to this subagent"),
       permission: z
         .object({
           edit: Permission.optional(),

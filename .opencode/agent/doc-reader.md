@@ -18,6 +18,7 @@ Extract key points, APIs, and caveats from documentation.
 Provide a short summary and a Q&A with likely follow-ups.
 
 Focus on:
+
 - Main concepts and their purpose
 - API endpoints and their parameters
 - Common pitfalls and best practices

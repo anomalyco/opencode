@@ -6,10 +6,7 @@ export namespace ContextFilter {
   /**
    * Filters parent session context based on agent context configuration
    */
-  export function filter(
-    messages: MessageV2.WithParts[],
-    config: Config.ContextFilter | undefined,
-  ): MessageV2.Part[] {
+  export function filter(messages: MessageV2.WithParts[], config: Config.ContextFilter | undefined): MessageV2.Part[] {
     // Default to "none" mode if no config provided
     if (!config || config.mode === "none") {
       return []
@@ -33,12 +30,9 @@ export namespace ContextFilter {
   /**
    * Convert messages to parts with no filtering
    */
-  function convertMessagesToParts(
-    messages: MessageV2.WithParts[],
-    config: Config.ContextFilter,
-  ): MessageV2.Part[] {
+  function convertMessagesToParts(messages: MessageV2.WithParts[], config: Config.ContextFilter): MessageV2.Part[] {
     if (!config) return []
-    
+
     let filtered = messages
 
     // Apply max messages limit
@@ -66,7 +60,7 @@ export namespace ContextFilter {
    */
   function createSummary(messages: MessageV2.WithParts[], config: Config.ContextFilter): MessageV2.Part[] {
     if (!config) return []
-    
+
     const parts: MessageV2.Part[] = []
 
     // Count tool invocations
@@ -136,7 +130,7 @@ export namespace ContextFilter {
    */
   function filterSelective(messages: MessageV2.WithParts[], config: Config.ContextFilter): MessageV2.Part[] {
     if (!config) return []
-    
+
     const parts: MessageV2.Part[] = []
 
     // Apply message limit first

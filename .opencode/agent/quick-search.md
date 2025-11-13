@@ -15,6 +15,7 @@ tools:
 Search the codebase for the requested pattern, function, or code snippet.
 
 Return:
+
 - File paths and line numbers
 - Brief context around each match
 - Total number of matches found

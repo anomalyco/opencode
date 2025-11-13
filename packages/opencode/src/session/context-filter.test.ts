@@ -5,10 +5,7 @@ import { Identifier } from "../id/id"
 
 describe("ContextFilter", () => {
   // Helper to create a mock message
-  function createMessage(
-    role: "user" | "assistant",
-    parts: MessageV2.Part[],
-  ): MessageV2.WithParts {
+  function createMessage(role: "user" | "assistant", parts: MessageV2.Part[]): MessageV2.WithParts {
     return {
       info: {
         id: Identifier.ascending("message"),
@@ -34,11 +31,7 @@ describe("ContextFilter", () => {
   }
 
   // Helper to create a tool part
-  function createToolPart(
-    tool: string,
-    output: string,
-    input: Record<string, any> = {},
-  ): MessageV2.ToolPart {
+  function createToolPart(tool: string, output: string, input: Record<string, any> = {}): MessageV2.ToolPart {
     return {
       id: Identifier.ascending("part"),
       sessionID: Identifier.ascending("session"),
@@ -185,10 +178,7 @@ describe("ContextFilter", () => {
     test("combines message type and tool filters", () => {
       const messages = [
         createMessage("user", [createTextPart("User message")]),
-        createMessage("assistant", [
-          createTextPart("Assistant text"),
-          createToolPart("read", "file content"),
-        ]),
+        createMessage("assistant", [createTextPart("Assistant text"), createToolPart("read", "file content")]),
       ]
       const result = ContextFilter.filter(messages, {
         mode: "filtered",
