@@ -6,6 +6,9 @@ on:
       suffix:
         description: Optional label appended to artifact names
         required: false
+  push:
+    branches:
+      - "debug/**"
 
 jobs:
   snapshot:
