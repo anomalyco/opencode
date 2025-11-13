@@ -30,7 +30,7 @@ export function MonthlyLimitSection() {
   const params = useParams()
   const submission = useSubmission(setMonthlyLimit)
   const [store, setStore] = createStore({ show: false })
-  const billingInfo = createAsync(() => queryBillingInfo(params.id))
+  const billingInfo = createAsync(() => queryBillingInfo(params.id!))
 
   let input: HTMLInputElement
 

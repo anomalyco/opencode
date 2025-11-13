@@ -16,7 +16,7 @@ OpenCode supports both **JSON** and **JSONC** (JSON with Comments) formats.
   "$schema": "https://opencode.ai/config.json",
   // Theme configuration
   "theme": "opencode",
-  "model": "anthropic/claude-sonnet-4-20250514",
+  "model": "anthropic/claude-sonnet-4-5",
   "autoupdate": true,
 }
 ```
@@ -128,8 +128,8 @@ You can configure the providers and models you want to use in your OpenCode conf
 {
   "$schema": "https://opencode.ai/config.json",
   "provider": {},
-  "model": "anthropic/claude-sonnet-4-20250514",
-  "small_model": "anthropic/claude-3-5-haiku-20241022"
+  "model": "anthropic/claude-sonnet-4-5",
+  "small_model": "anthropic/claude-haiku-4-5"
 }
 ```
 
@@ -164,7 +164,7 @@ You can configure specialized agents for specific tasks through the `agent` opti
   "agent": {
     "code-reviewer": {
       "description": "Reviews code for best practices and potential issues",
-      "model": "anthropic/claude-sonnet-4-20250514",
+      "model": "anthropic/claude-sonnet-4-5",
       "prompt": "You are a code reviewer. Focus on security, performance, and maintainability.",
       "tools": {
         // Disable file modification tools for review-only agent
@@ -213,7 +213,7 @@ You can configure custom commands for repetitive tasks through the `command` opt
       "template": "Run the full test suite with coverage report and show any failures.\nFocus on the failing tests and suggest fixes.",
       "description": "Run tests with coverage",
       "agent": "build",
-      "model": "anthropic/claude-3-5-sonnet-20241022",
+      "model": "anthropic/claude-haiku-4-5",
     },
     "component": {
       "template": "Create a new React component named $ARGUMENTS with TypeScript support.\nInclude proper typing and basic structure.",

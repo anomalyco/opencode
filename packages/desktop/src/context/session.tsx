@@ -15,18 +15,19 @@ export const { use: useSession, provider: SessionProvider } = createSimpleContex
 
     const [store, setStore] = makePersisted(
       createStore<{
-        prompt: Prompt
-        cursorPosition?: number
         messageId?: string
         tabs: {
           active?: string
           opened: string[]
         }
+        prompt: Prompt
+        cursor?: number
       }>({
-        prompt: [{ type: "text", content: "", start: 0, end: 0 }],
         tabs: {
           opened: [],
         },
+        prompt: clonePrompt(DEFAULT_PROMPT),
+        cursor: undefined,
       }),
       {
         name: props.sessionId ?? "new-session",
@@ -102,12 +103,13 @@ export const { use: useSession, provider: SessionProvider } = createSimpleContex
       diffs,
       prompt: {
         current: createMemo(() => store.prompt),
-        cursor: createMemo(() => store.cursorPosition),
+        cursor: createMemo(() => store.cursor),
         dirty: createMemo(() => !isPromptEqual(store.prompt, DEFAULT_PROMPT)),
         set(prompt: Prompt, cursorPosition?: number) {
+          const next = clonePrompt(prompt)
           batch(() => {
-            setStore("prompt", prompt)
-            if (cursorPosition !== undefined) setStore("cursorPosition", cursorPosition)
+            setStore("prompt", next)
+            if (cursorPosition !== undefined) setStore("cursor", cursorPosition)
           })
         },
       },
@@ -172,7 +174,6 @@ export const { use: useSession, provider: SessionProvider } = createSimpleContex
               opened.splice(to, 0, opened.splice(index, 1)[0])
             }),
           )
-          // setStore("node", path, "pinned", true)
         },
       },
     }
@@ -214,4 +215,21 @@ export function isPromptEqual(promptA: Prompt, promptB: Prompt): boolean {
     }
   }
   return true
+}
+
+function cloneSelection(selection?: TextSelection) {
+  if (!selection) return undefined
+  return { ...selection }
+}
+
+function clonePart(part: ContentPart): ContentPart {
+  if (part.type === "text") return { ...part }
+  return {
+    ...part,
+    selection: cloneSelection(part.selection),
+  }
+}
+
+function clonePrompt(prompt: Prompt): Prompt {
+  return prompt.map(clonePart)
 }

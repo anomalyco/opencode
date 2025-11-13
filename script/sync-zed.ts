@@ -7,7 +7,6 @@ import { join } from "path"
 const FORK_REPO = "sst/zed-extensions"
 const UPSTREAM_REPO = "zed-industries/extensions"
 const EXTENSION_NAME = "opencode"
-const OPENCODE_REPO = "sst/opencode"
 
 async function main() {
   const version = process.argv[2]
@@ -40,8 +39,8 @@ async function main() {
   process.chdir(workDir)
 
   // Configure git identity
-  await $`git config user.name "github-actions[bot]"`
-  await $`git config user.email "github-actions[bot]@users.noreply.github.com"`
+  await $`git config user.name "Dax Raad"`
+  await $`git config user.email "d@ironbay.co"`
 
   // Sync fork with upstream
   console.log(`🔄 Syncing fork with upstream...`)
@@ -108,7 +107,7 @@ async function main() {
 
   console.log(`📬 Creating pull request...`)
   const prUrl =
-    await $`gh pr create --repo ${UPSTREAM_REPO} --base main --head ${FORK_REPO.split("/")[0]}:${branchName} --title "Update ${EXTENSION_NAME} to v${cleanVersion}" --body "Release notes:\n\nhttps://github.com/${OPENCODE_REPO}/releases/tag/v${cleanVersion}"`.text()
+    await $`gh pr create --repo ${UPSTREAM_REPO} --base main --head ${FORK_REPO.split("/")[0]}:${branchName} --title "Update ${EXTENSION_NAME} to v${cleanVersion}" --body "Updating OpenCode extension to v${cleanVersion}"`.text()
 
   console.log(`✅ Pull request created: ${prUrl}`)
   console.log(`🎉 Done!`)

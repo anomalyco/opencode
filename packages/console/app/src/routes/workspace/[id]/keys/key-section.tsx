@@ -45,7 +45,7 @@ const listKeys = query(async (workspaceID: string) => {
 
 export function KeySection() {
   const params = useParams()
-  const keys = createAsync(() => listKeys(params.id))
+  const keys = createAsync(() => listKeys(params.id!))
   const submission = useSubmission(createKey)
   const [store, setStore] = createStore({ show: false })
 

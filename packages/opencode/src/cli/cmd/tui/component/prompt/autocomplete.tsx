@@ -8,6 +8,7 @@ import { useSync } from "@tui/context/sync"
 import { useTheme } from "@tui/context/theme"
 import { SplitBorder } from "@tui/component/border"
 import { useCommandDialog } from "@tui/component/dialog-command"
+import { Locale } from "@/util/locale"
 import type { PromptInfo } from "./history"
 
 export type AutocompleteRef = {
@@ -125,10 +126,11 @@ export function Autocomplete(props: {
 
       // Add file options
       if (!result.error && result.data) {
+        const width = store.position.width - 4
         options.push(
           ...result.data.map(
             (item): AutocompleteOption => ({
-              display: item,
+              display: Locale.truncateMiddle(item, width),
               onSelect: () => {
                 insertPart(item, {
                   type: "file",
@@ -218,12 +220,6 @@ export function Autocomplete(props: {
           onSelect: () => command.trigger("session.compact"),
         },
         {
-          display: "/share",
-          disabled: !!s.share?.url,
-          description: "share a session",
-          onSelect: () => command.trigger("session.share"),
-        },
-        {
           display: "/unshare",
           disabled: !s.share,
           description: "unshare a session",
@@ -250,7 +246,16 @@ export function Autocomplete(props: {
           onSelect: () => command.trigger("session.timeline"),
         },
       )
+      if (sync.data.config.share !== "disabled") {
+        results.push({
+          display: "/share",
+          disabled: !!s.share?.url,
+          description: "share a session",
+          onSelect: () => command.trigger("session.share"),
+        })
+      }
     }
+
     results.push(
       {
         display: "/new",
