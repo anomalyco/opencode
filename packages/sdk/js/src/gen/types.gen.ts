@@ -301,6 +301,15 @@ export type Config = {
      * TUI scroll speed
      */
     scroll_speed?: number
+    /**
+     * Scroll acceleration settings
+     */
+    scroll_acceleration?: {
+      /**
+       * Enable scroll acceleration
+       */
+      enabled: boolean
+    }
   }
   /**
    * Command configuration, see https://opencode.ai/docs/commands
