@@ -53,10 +53,14 @@ export const Instance = {
     await State.dispose(Instance.directory)
   },
   async disposeAll() {
+    Log.Default.info("disposing all instances")
     for (const [_key, value] of cache) {
-      await context.provide(await value, async () => {
-        await Instance.dispose()
-      })
+      const awaited = await value.catch(() => {})
+      if (awaited) {
+        await context.provide(await value, async () => {
+          await Instance.dispose()
+        })
+      }
     }
     cache.clear()
   },
