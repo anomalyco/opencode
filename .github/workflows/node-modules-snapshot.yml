@@ -1,0 +1,60 @@
+name: Snapshot Node Modules
+
+on:
+  workflow_dispatch:
+    inputs:
+      suffix:
+        description: Optional label appended to artifact names
+        required: false
+
+jobs:
+  snapshot:
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - runner: ubuntu-latest
+            system: x86_64-linux
+          - runner: ubuntu-24.04-arm
+            system: aarch64-linux
+          - runner: macos-latest
+            system: aarch64-darwin
+          - runner: macos-15-intel
+            system: x86_64-darwin
+    runs-on: ${{ matrix.runner }}
+    permissions:
+      contents: read
+    env:
+      SNAPSHOT_SUFFIX: ${{ inputs.suffix || github.run_attempt }}
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Setup Nix
+        uses: DeterminateSystems/nix-installer-action@v20
+
+      - name: Capture node_modules snapshot
+        run: |
+          set -euo pipefail
+          nix develop .#devShells.${{ matrix.system }}.default -c \
+            bash script/node-modules-snapshot.sh \
+            "${{ matrix.system }}" \
+            "${SNAPSHOT_SUFFIX}"
+
+      - name: Upload snapshot artifacts
+        uses: actions/upload-artifact@v4
+        with:
+          name: node-modules-${{ matrix.system }}
+          retention-days: 3
+          path: |
+            node-modules-${{ matrix.system }}-${SNAPSHOT_SUFFIX}.tar.gz
+            node-modules-${{ matrix.system }}-${SNAPSHOT_SUFFIX}.sha256
+            node-modules-${{ matrix.system }}-${SNAPSHOT_SUFFIX}.list
+            node-modules-${{ matrix.system }}-${SNAPSHOT_SUFFIX}.txt
+
+      - name: Clean working tree
+        run: |
+          set -euo pipefail
+          find . -type d -name node_modules -prune -exec rm -rf {} +
