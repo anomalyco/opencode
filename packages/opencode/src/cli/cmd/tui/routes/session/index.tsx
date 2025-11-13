@@ -1420,6 +1420,7 @@ function UserMessage(props: {
   const [hover, setHover] = createSignal(false)
   const queued = createMemo(() => props.pending && props.message.id > props.pending)
   const color = createMemo(() => (untrack(queued) ? untrack(() => theme.accent) : untrack(() => theme.secondary)))
+  const displayName = createMemo(() => sync.data.config.username ?? "You")
 
   const openAttachment = async (event: any, file: FilePart) => {
     event.stopPropagation()
@@ -1481,12 +1482,15 @@ function UserMessage(props: {
           </box>
         </Show>
         <text fg={theme.text}>
-          {sync.data.config.username ?? "You"}{" "}
           <Show
             when={queued()}
-            fallback={<span style={{ fg: theme.textMuted }}>({Locale.time(props.message.time.created)})</span>}
+            fallback={
+              <>
+                {displayName()} <span style={{ fg: theme.textMuted }}>({Locale.time(props.message.time.created)})</span>
+              </>
+            }
           >
-            <span style={{ bg: theme.accent, fg: theme.backgroundPanel, bold: true }}> QUEUED </span>
+            <span style={{ bg: theme.accent, fg: theme.backgroundPanel, bold: true }}> QUEUED </span> {displayName()}
           </Show>
         </text>
         <PriorityCircles
@@ -1724,9 +1728,21 @@ const PART_MAPPING = {
 function ReasoningPart(props: { part: ReasoningPart; message: AssistantMessage }) {
   const { theme } = useTheme()
   const text = createMemo(() => props.part.text.trim())
+  const previousIsReasoning = createMemo(() => {
+    const parts = ((props.message as any).parts as Part[] | undefined) ?? []
+    const index = parts.findIndex((part) => part.id === props.part.id)
+    if (index <= 0) return false
+    return parts[index - 1]?.type === "reasoning"
+  })
   return (
     <Show when={text()}>
-      <box id={"reasoning-" + props.part.id} paddingLeft={3} marginTop={1} marginBottom={1} flexShrink={0}>
+      <box
+        id={"reasoning-" + props.part.id}
+        paddingLeft={3}
+        marginTop={previousIsReasoning() ? 0 : 1}
+        marginBottom={1}
+        flexShrink={0}
+      >
         <text wrapMode="word">
           <span style={{ italic: true, fg: theme.textMuted }}>Thinking:</span>{" "}
           <span style={{ fg: theme.accent }}>{text()}</span>
@@ -1928,9 +1944,11 @@ function ToolPart(props: { part: ToolPart; message: AssistantMessage; indent?: n
   const sync = useSync()
   const renderer = useRenderer()
   const [margin, setMargin] = createSignal(0)
-  const inlineIndent = props.indent ?? 3
+  const isTaskTool = props.part.tool === "task"
+  const inlineIndent = props.indent ?? (props.part.tool === "read" ? 2 : 3)
 
   const render = toolRegistry.render(props.part.tool) ?? GenericTool
+
   const metadata = props.part.state.status === "pending" ? {} : (props.part.state.metadata ?? {})
   const input = props.part.state.input ?? {}
   const container = toolRegistry.container(props.part.tool)
@@ -1972,11 +1990,13 @@ function ToolPart(props: { part: ToolPart; message: AssistantMessage; indent?: n
     if (container === "block" || permission()) {
       const collapsedState = collapsed()
       const marginTop = collapsedState ? 0 : 1
+      const basePaddingLeft = collapsedState ? 1 : 2
+      const paddingLeft = isTaskTool ? Math.max(0, basePaddingLeft - 1) : basePaddingLeft
       return {
         border: permissionIndex() === 0 ? (["left", "right"] as const) : (["left"] as const),
         paddingTop: collapsedState ? 0 : 1,
         paddingBottom: collapsedState ? 0 : 1,
-        paddingLeft: collapsedState ? 1 : 2,
+        paddingLeft,
         marginTop,
         gap: collapsedState ? 0 : 1,
         backgroundColor: theme.backgroundPanel,

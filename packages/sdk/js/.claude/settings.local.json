@@ -1,0 +1,19 @@
+{
+  "permissions": {
+    "allow": [
+      "Bash(bun run build:*)",
+      "Bash(bun run dev:*)",
+      "Bash(node -e:*)",
+      "Bash(bun prettier:*)",
+      "Bash(bun -e:*)",
+      "Bash(bun tsc:*)",
+      "Bash(bun:*)",
+      "Bash(/Users/jkneen/Documents/GitHub/flows/opencode-stt/packages/sdk/js/openapi.json)",
+      "Bash(echo:*)",
+      "Bash(git checkout:*)",
+      "Bash(./script/build.ts)"
+    ],
+    "deny": [],
+    "ask": []
+  }
+}

@@ -107,19 +107,21 @@ export function AgentChipText(props: { text: string; fg?: string; truncate?: num
   return (
     <box flexDirection="row" gap={0}>
       <For each={finalSegments}>
-        {(segment) =>
-          segment.type === "chip" ? (
-            <>
-              <text fg={props.fg || theme.text}> </text>
-              <text bg={getAgentChipColor(segment.agentType!, theme)} fg="#000000" attributes={TextAttributes.BOLD}>
-                {" " + segment.content + " "}
-              </text>
-              <text fg={props.fg || theme.text}> </text>
-            </>
-          ) : (
-            <text fg={props.fg || theme.text}>{segment.content}</text>
-          )
-        }
+        {(segment) => {
+          if (segment.type === "chip") {
+            const chipColor = getAgentChipColor(segment.agentType!, theme)
+            return (
+              <>
+                <text fg={props.fg || theme.text}> </text>
+                <text fg={chipColor} attributes={TextAttributes.BOLD}>
+                  [{segment.content}]
+                </text>
+                <text fg={props.fg || theme.text}> </text>
+              </>
+            )
+          }
+          return <text fg={props.fg || theme.text}>{segment.content}</text>
+        }}
       </For>
     </box>
   )

@@ -3,7 +3,7 @@ import { createStore, produce } from "solid-js/store"
 import { useTheme } from "@tui/context/theme"
 import { useDialog } from "@tui/ui/dialog"
 import { TextAttributes } from "@opentui/core"
-import { useKeyboard, useTerminalDimensions } from "@opentui/solid"
+import { useKeyboard, useRenderer, useTerminalDimensions } from "@opentui/solid"
 import { DialogPrompt } from "../ui/dialog-prompt"
 import { randomUUID } from "node:crypto"
 
@@ -43,6 +43,9 @@ type BoardState = {
 }
 
 const LINK_ATTRS = TextAttributes.UNDERLINE
+
+const INSTRUCTION_TEXT =
+  "Navigate with ←/→, focus cards with ↑/↓, move cards with ctrl+←/→, press a to capture a new slice of work."
 
 const BOARD_SEED: KanbanColumn[] = [
   {
@@ -192,6 +195,7 @@ export function DialogKanban() {
   const dialog = useDialog()
   const { theme } = useTheme()
   const term = useTerminalDimensions()
+  const renderer = useRenderer()
   const [board, setBoard] = createStore<BoardState>({
     columns: BOARD_SEED.map((col) => ({
       ...col,
@@ -256,6 +260,7 @@ export function DialogKanban() {
   const scrollHeight = createMemo(() => Math.max(8, layout.height - 11))
 
   const [compact, setCompact] = createSignal(true)
+  const [dragDebug, setDragDebug] = createSignal("idle")
 
   onMount(() => {
     dialog.setSize("large")
@@ -418,26 +423,44 @@ export function DialogKanban() {
           justifyContent="space-between"
           renderBefore={function () {
             const el = this as any
-            el.on("mousedown", (e: any) => {
+            const handleDown = (e: any) => {
               dragging = true
               startX = e?.x ?? 0
               startY = e?.y ?? 0
-              const f = (dialog as any).frame || {}
-              baseLeft = f.left ?? 0
-              baseTop = f.top ?? 0
-            })
-            el.on("mouseup", () => {
-              dragging = false
-            })
-            el.on("mousemove", (e: any) => {
+              e?.preventDefault?.()
+              renderer.clearSelection?.()
+              setDragDebug(`start x:${startX} y:${startY}`)
+              const frame = dialog.frame
+              const dims = term()
+              const w = layout.width + 4
+              const h = layout.height + 12
+              baseLeft = frame.left ?? Math.max(0, Math.floor((dims.width - w) / 2))
+              baseTop = frame.top ?? Math.max(1, Math.floor((dims.height - h) / 3))
+            }
+            const handleMove = (e: any) => {
               if (!dragging) return
               const dims = term()
               const w = layout.width + 4
               const h = layout.height + 12
-              const nextLeft = Math.max(0, Math.min(baseLeft + ((e?.x ?? 0) - startX), Math.max(0, dims.width - w)))
-              const nextTop = Math.max(1, Math.min(baseTop + ((e?.y ?? 0) - startY), Math.max(1, dims.height - h)))
+              const dx = (e?.x ?? startX) - startX
+              const dy = (e?.y ?? startY) - startY
+              const nextLeft = Math.max(0, Math.min(baseLeft + dx, Math.max(0, dims.width - w)))
+              const nextTop = Math.max(1, Math.min(baseTop + dy, Math.max(1, dims.height - h)))
+              setDragDebug(`drag dx:${dx} dy:${dy} pos:${nextLeft},${nextTop}`)
               dialog.setFrame?.({ width: w, height: h, left: nextLeft, top: nextTop })
-            })
+            }
+            const handleUp = () => {
+              dragging = false
+              setDragDebug("release")
+            }
+            const handleLeave = () => {
+              dragging = false
+              setDragDebug("cancel")
+            }
+            el.on("mousedown", handleDown)
+            el.on("mousemove", handleMove)
+            el.on("mouseup", handleUp)
+            el.on("mouseleave", handleLeave)
           }}
         >
           <text fg={theme.text} attributes={TextAttributes.BOLD}>
@@ -447,7 +470,7 @@ export function DialogKanban() {
         </box>
 
         <text fg={theme.textMuted} wrapMode="word">
-          Navigate with ←/→, focus cards with ↑/↓, move cards with ctrl+←/→, press a to capture a new slice of work.
+          {dragDebug() === "idle" ? INSTRUCTION_TEXT : `${INSTRUCTION_TEXT}     drag debug: ${dragDebug()}`}
         </text>
         <box flexDirection="row" gap={1} alignItems="center" flexWrap="wrap">
           <box flexDirection="row" gap={0} alignItems="center">

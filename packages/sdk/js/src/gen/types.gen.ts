@@ -47,6 +47,22 @@ export type KeybindsConfig = {
    */
   sidebar_both_toggle?: string
   /**
+   * Decrease left sidebar width
+   */
+  sidebar_left_narrow?: string
+  /**
+   * Increase left sidebar width
+   */
+  sidebar_left_widen?: string
+  /**
+   * Decrease right sidebar width
+   */
+  sidebar_right_narrow?: string
+  /**
+   * Increase right sidebar width
+   */
+  sidebar_right_widen?: string
+  /**
    * View status
    */
   status_view?: string
