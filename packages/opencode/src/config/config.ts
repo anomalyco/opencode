@@ -437,7 +437,13 @@ export namespace Config {
     })
 
   export const TUI = z.object({
-    scroll_speed: z.number().min(1).optional().default(2).describe("TUI scroll speed"),
+    scroll_speed: z.number().min(1).optional().default(1).describe("TUI scroll speed"),
+    scroll_acceleration: z
+      .object({
+        enabled: z.boolean().describe("Enable scroll acceleration"),
+      })
+      .optional()
+      .describe("Scroll acceleration settings"),
   })
 
   export const Layout = z.enum(["auto", "stretch"]).meta({
