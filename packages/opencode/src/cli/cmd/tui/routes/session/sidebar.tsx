@@ -20,6 +20,7 @@ import { $ } from "bun"
 import { DialogSubagentAdd } from "../../component/dialog-subagent-add"
 import { DialogContextAdd } from "../../component/dialog-context-add"
 import { DialogContextEdit } from "../../component/dialog-context-edit"
+import { DialogSessionRename } from "../../component/dialog-session-rename"
 import { AgentChipText } from "../../component/agent-chip-text"
 import { Todo } from "@/session/todo"
 import { Perf } from "@/util/perf"
@@ -44,7 +45,15 @@ function parseSubagentTitle(title: string): { agent?: string; description: strin
   return { description: trimmed }
 }
 
-export function Sidebar(props: { sessionID: string; onToggle: () => void }) {
+export function Sidebar(props: {
+  sessionID: string
+  onToggle: () => void
+  width: number
+  minWidth: number
+  maxWidth: number
+  widthStep: number
+  onResize: (delta: number) => void
+}) {
   const sync = useSync()
   const { theme } = useTheme()
   const { navigate } = useRoute()
@@ -142,6 +151,8 @@ export function Sidebar(props: { sessionID: string; onToggle: () => void }) {
     }
     return Array.from(seen.values())
   })
+  const canShrink = () => props.width > props.minWidth
+  const canGrow = () => props.width < props.maxWidth
 
   // Context management functions
   const createContext = () => {
@@ -684,20 +695,47 @@ export function Sidebar(props: { sessionID: string; onToggle: () => void }) {
 
   return (
     <Show when={session()}>
-      <box flexShrink={0} gap={1} width={40}>
-        <box flexDirection="row" justifyContent="space-between" paddingRight={1}>
+      <box flexShrink={0} gap={1} width={props.width}>
+        <box flexDirection="row" justifyContent="space-between" paddingRight={1} alignItems="center">
           <text fg={theme.textMuted} attributes={TextAttributes.BOLD}>
             CODESURF
           </text>
-          <text
-            fg={theme.textMuted}
-            onMouseUp={() => {
-              if (renderer.getSelection()?.getSelectedText()) return
-              props.onToggle()
-            }}
-          >
-            ◀
-          </text>
+          <box flexDirection="row" gap={1} alignItems="center">
+            <text fg={theme.textMuted} wrapMode="none">
+              {props.width}c
+            </text>
+            <text
+              fg={canShrink() ? theme.textMuted : theme.border}
+              onMouseUp={(evt) => {
+                if (renderer.getSelection()?.getSelectedText()) return
+                if (!canShrink()) return
+                props.onResize(-props.widthStep)
+                evt.stopPropagation?.()
+              }}
+            >
+              -
+            </text>
+            <text
+              fg={canGrow() ? theme.textMuted : theme.border}
+              onMouseUp={(evt) => {
+                if (renderer.getSelection()?.getSelectedText()) return
+                if (!canGrow()) return
+                props.onResize(props.widthStep)
+                evt.stopPropagation?.()
+              }}
+            >
+              +
+            </text>
+            <text
+              fg={theme.textMuted}
+              onMouseUp={() => {
+                if (renderer.getSelection()?.getSelectedText()) return
+                props.onToggle()
+              }}
+            >
+              ◀
+            </text>
+          </box>
         </box>
         <box>
           <text
@@ -711,9 +749,24 @@ export function Sidebar(props: { sessionID: string; onToggle: () => void }) {
           </text>
         </box>
         <box>
-          <text fg={theme.text} wrapMode="word" attributes={TextAttributes.BOLD}>
-            {session().title}
-          </text>
+          <box flexDirection="row" alignItems="flex-start" justifyContent="space-between" gap={1}>
+            <box flexGrow={1}>
+              <text fg={theme.text} wrapMode="word" attributes={TextAttributes.BOLD}>
+                {session().title}
+              </text>
+            </box>
+            <text
+              fg={theme.accent}
+              flexShrink={0}
+              attributes={TextAttributes.UNDERLINE}
+              onMouseUp={() => {
+                if (renderer.getSelection()?.getSelectedText()) return
+                dialog.replace(() => <DialogSessionRename session={props.sessionID} />)
+              }}
+            >
+              Rename
+            </text>
+          </box>
           <Show when={session().share?.url}>
             <text fg={theme.textMuted}>{session().share!.url}</text>
           </Show>
@@ -741,7 +794,7 @@ export function Sidebar(props: { sessionID: string; onToggle: () => void }) {
             toolColor={RGBA.fromHex("#8B7355")}
             userColor={theme.secondary}
             backgroundColor={theme.backgroundPanel}
-            width={40}
+            width={props.width}
           />
           <text fg={theme.textMuted}>
             {context().tokensFormatted} tokens ({context().freePercentage}% cached)
@@ -752,7 +805,7 @@ export function Sidebar(props: { sessionID: string; onToggle: () => void }) {
           </text>
         </box>
 
-        <box flexDirection="row" gap={0} width={40}>
+        <box flexDirection="row" gap={0} width={props.width}>
           <text
             style={{
               fg: activeTab() === "tools" ? theme.text : theme.textMuted,

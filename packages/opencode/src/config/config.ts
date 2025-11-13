@@ -402,6 +402,26 @@ export namespace Config {
       sidebar_left_toggle: z.string().optional().default("ctrl+[").describe("Toggle left sidebar"),
       sidebar_right_toggle: z.string().optional().default("ctrl+]").describe("Toggle right sidebar"),
       sidebar_both_toggle: z.string().optional().default("ctrl+b").describe("Toggle both sidebars"),
+      sidebar_left_narrow: z
+        .string()
+        .optional()
+        .default("cmd+shift+[,ctrl+shift+[")
+        .describe("Decrease left sidebar width"),
+      sidebar_left_widen: z
+        .string()
+        .optional()
+        .default("cmd+shift+],ctrl+shift+]")
+        .describe("Increase left sidebar width"),
+      sidebar_right_narrow: z
+        .string()
+        .optional()
+        .default("cmd+alt+[,ctrl+alt+[")
+        .describe("Decrease right sidebar width"),
+      sidebar_right_widen: z
+        .string()
+        .optional()
+        .default("cmd+alt+],ctrl+alt+]")
+        .describe("Increase right sidebar width"),
       status_view: z.string().optional().default("<leader>s").describe("View status"),
       session_export: z.string().optional().default("<leader>x").describe("Export session to editor"),
       session_new: z.string().optional().default("<leader>n").describe("Create a new session"),

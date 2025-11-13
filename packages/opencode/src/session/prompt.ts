@@ -275,6 +275,7 @@ export namespace SessionPrompt {
       },
     )
 
+    let lastMessages: MessageV2.WithParts[] = []
     let step = 0
     while (true) {
       const msgs: MessageV2.WithParts[] = pipe(
@@ -286,6 +287,7 @@ export namespace SessionPrompt {
         }),
         (messages) => insertReminders({ messages, agent }),
       )
+      lastMessages = msgs
       step++
       await processor.next(msgs.findLast((m) => m.info.role === "user")?.info.id!)
       if (step === 1) {
@@ -459,6 +461,28 @@ export namespace SessionPrompt {
         }
       }
       await processor.end()
+
+      const missingCallID = extractMissingToolCallID(result.info.error)
+      if (missingCallID) {
+        const recovered = await recoverMissingToolCall({
+          callID: missingCallID,
+          history: lastMessages,
+          sessionID: input.sessionID,
+        })
+        if (recovered) {
+          await removeMessageWithParts({
+            sessionID: result.info.sessionID,
+            messageID: result.info.id,
+            parts: result.parts,
+          })
+          log.info("recovered missing tool call context", {
+            sessionID: input.sessionID,
+            callID: missingCallID,
+            tool: recovered.tool,
+          })
+          continue
+        }
+      }
 
       const queued = state().queued.get(input.sessionID) ?? []
 
@@ -1465,6 +1489,113 @@ export namespace SessionPrompt {
       },
     }
     return result
+  }
+
+  const TOOL_RESULT_CONTEXT_ERROR =
+    /No tool call found for function call output with call_id (?<callID>[A-Za-z0-9_\-]+)/i
+
+  function extractMissingToolCallID(error?: MessageV2.Assistant["error"]) {
+    if (!error || error.name !== "APIError") return
+    const inspect = [error.data.message, error.data.responseBody]
+    for (const source of inspect) {
+      if (!source) continue
+      const callID = matchMissingToolCallID(source)
+      if (callID) return callID
+      try {
+        const parsed = JSON.parse(source)
+        const nested = typeof parsed?.error?.message === "string" ? parsed.error.message : undefined
+        const nestedID = nested ? matchMissingToolCallID(nested) : undefined
+        if (nestedID) return nestedID
+      } catch {
+        continue
+      }
+    }
+  }
+
+  function matchMissingToolCallID(message: string) {
+    const match = TOOL_RESULT_CONTEXT_ERROR.exec(message)
+    return match?.groups?.callID
+  }
+
+  async function recoverMissingToolCall(input: { callID: string; history: MessageV2.WithParts[]; sessionID: string }) {
+    for (let i = input.history.length - 1; i >= 0; i--) {
+      const message = input.history[i]
+      if (message.info.role !== "assistant") continue
+      const target = message.parts.find(
+        (part): part is MessageV2.ToolPart => part.type === "tool" && part.callID === input.callID,
+      )
+      if (!target) continue
+
+      await Session.removePart({
+        sessionID: message.info.sessionID,
+        messageID: message.info.id,
+        partID: target.id,
+      })
+
+      await Session.updatePart({
+        id: Identifier.ascending("part"),
+        messageID: message.info.id,
+        sessionID: message.info.sessionID,
+        type: "text",
+        synthetic: true,
+        text: buildToolRecoveryNote(target, input.callID),
+      })
+
+      return {
+        tool: target.tool,
+      }
+    }
+  }
+
+  function buildToolRecoveryNote(part: MessageV2.ToolPart, callID: string) {
+    const sections = [
+      `Developer note: Tool call ${callID} for "${part.tool}" was converted to plain text because the original function call fell out of context.`,
+      `Tool input:\n${formatJSON(part.state.input)}`,
+    ]
+
+    if (part.state.status === "completed") {
+      const output = "output" in part.state ? (part.state.output ?? "[no output]") : "[no output]"
+      sections.push(`Tool output:\n${truncateText(output)}`)
+      if (part.state.attachments?.length) {
+        const attachments = part.state.attachments
+          .map((attachment) => `${attachment.filename ?? attachment.mime} → ${attachment.url}`)
+          .join("\n")
+        sections.push(`Attachments:\n${attachments}`)
+      }
+    } else if (part.state.status === "error") {
+      sections.push(`Tool error:\n${part.state.error}`)
+    } else {
+      sections.push("Tool execution did not finish, so no output was captured.")
+    }
+
+    return sections.join("\n\n")
+  }
+
+  function formatJSON(value: unknown) {
+    try {
+      return truncateText(JSON.stringify(value, null, 2))
+    } catch {
+      return "[unserializable input]"
+    }
+  }
+
+  function truncateText(text: string, limit = 4000) {
+    if (text.length <= limit) return text
+    return text.slice(0, limit) + "\n...[truncated]"
+  }
+
+  async function removeMessageWithParts(input: { sessionID: string; messageID: string; parts: MessageV2.Part[] }) {
+    for (const part of input.parts ?? []) {
+      await Session.removePart({
+        sessionID: input.sessionID,
+        messageID: input.messageID,
+        partID: part.id,
+      }).catch(() => {})
+    }
+    await Session.removeMessage({
+      sessionID: input.sessionID,
+      messageID: input.messageID,
+    })
   }
 
   function isBusy(sessionID: string) {

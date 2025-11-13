@@ -285,7 +285,7 @@ export function DialogSelect<T>(props: DialogSelectProps<T>) {
                         }
                       }}
                       onMouseOver={() => {
-                        const index = filtered().findIndex((x) => isDeepEqual(x.value, option.value))
+                        const index = flat().findIndex((x) => isDeepEqual(x.value, option.value))
                         if (index === -1) return
                         moveTo(index)
                       }}

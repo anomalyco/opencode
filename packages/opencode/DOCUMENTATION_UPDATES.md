@@ -7,26 +7,32 @@ This document tracks all documentation updates made to highlight CodeSurf-specif
 ## Files Created
 
 ### 1. CodeSurfBlock Component
+
 **Location**: `packages/web/src/components/CodeSurfBlock.astro`
 
 A reusable Astro component for highlighting CodeSurf features in documentation with three types:
+
 - **Feature** (🏄 blue): New CodeSurf features
 - **Difference** (⚡ purple): How CodeSurf differs from OpenCode
 - **Addition** (➕ green): Enhancements to existing features
 
 ### 2. Component Documentation
+
 **Location**: `packages/web/src/components/CODESURF_DOCS.md`
 
 Complete guide for using the CodeSurfBlock component including:
+
 - Usage examples
 - Props reference
 - Styling guidelines
 - Best practices
 
 ### 3. Features Summary
+
 **Location**: `packages/opencode/CODESURF_FEATURES.md`
 
 Comprehensive list of all CodeSurf-specific features including:
+
 - Dual sidebar system
 - Tool favorites
 - Quick commit workflow
@@ -36,64 +42,81 @@ Comprehensive list of all CodeSurf-specific features including:
 ## Files Updated
 
 ### 1. TUI Documentation
+
 **Location**: `packages/web/src/content/docs/tui.mdx`
 
 **Added sections:**
+
 - **Sidebars**: Dual sidebar layout (left sessions, right tools/todos/files)
 - **Session Management**: Quick commit workflow and session switching
 - **Tool Favorites**: How to mark and use favorite tools
 - **Mouse Support**: Enhanced mouse interaction details
 
 **Import added:**
+
 ```mdx
-import CodeSurfBlock from "../../components/CodeSurfBlock.astro"
+import CodeSurfBlock from "../../components/CodeSurfBlock.astro
+
+"
 ```
 
 ### 2. Keybinds Documentation
+
 **Location**: `packages/web/src/content/docs/keybinds.mdx`
 
 **Added section:**
+
 - **Sidebar Keybinds**: CodeSurf-specific sidebar toggle keybinds
 - **Quick Tab Switching**: Number keys for tab navigation
 
 **Import added:**
+
 ```mdx
-import CodeSurfBlock from "../../components/CodeSurfBlock.astro"
+import CodeSurfBlock from "../../components/CodeSurfBlock.astro
+
+"
 ```
 
 ## Features Documented
 
 ### Dual Sidebar System
+
 - ✅ Left sidebar: Session list and switching
 - ✅ Right sidebar: Tools, Todos, Files tabs
 - ✅ Toggle keybinds: `Cmd+[`, `Cmd+]`, `Cmd+B`
+- ✅ Width controls: Header +/- buttons plus Shift+Bracket keybinds to resize
 - ✅ Tab switching: `1`, `2`, `3` keys
 
 ### Tool Favorites
+
 - ✅ Star system: None → Project → Global
 - ✅ Visual indicators: ☆ gray, ★ blue, ★ gold
 - ✅ Sorting behavior
 - ✅ Config persistence
 
 ### Quick Commit Workflow
+
 - ✅ File selection checkboxes
 - ✅ Auto commit message generation
 - ✅ Custom commit messages
 - ✅ Committed status indicators
 
 ### Session Management
+
 - ✅ Persistent session list
 - ✅ Active session indicator (▶)
 - ✅ Single-click switching
 - ✅ No duplicate titles
 
 ### Mouse Support
+
 - ✅ Click to select text
 - ✅ UI element interaction
 - ✅ Mouse wheel scrolling
 - ✅ Input protection (filtered escape codes)
 
 ### UI/UX Enhancements
+
 - ✅ No text wrapping in session names
 - ✅ Proper truncation with ellipsis
 - ✅ Optimized sidebar width (45 chars)
@@ -112,6 +135,7 @@ import CodeSurfBlock from "../../components/CodeSurfBlock.astro"
 ### Visual Indicators
 
 All CodeSurf-specific content is wrapped in `<CodeSurfBlock>` components with:
+
 - Color-coded borders (blue/purple/green)
 - Icon indicators (🏄/⚡/➕)
 - Descriptive titles
@@ -172,6 +196,7 @@ Before deploying updated documentation:
 ## Contact
 
 For documentation questions or suggestions:
+
 - File an issue in the CodeSurf repository
 - Tag documentation-related PRs with `docs:`
 - Follow the documentation style guide in this file

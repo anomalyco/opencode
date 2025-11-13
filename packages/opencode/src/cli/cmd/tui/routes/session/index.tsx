@@ -76,6 +76,14 @@ import { FileViewer } from "@tui/component/file-viewer"
 
 addDefaultParsers(parsers.parsers)
 
+const SIDEBAR_WIDTH_STEP = 2
+const LEFT_SIDEBAR_WIDTH_DEFAULT = 45
+const LEFT_SIDEBAR_WIDTH_MIN = 30
+const LEFT_SIDEBAR_WIDTH_MAX = 60
+const RIGHT_SIDEBAR_WIDTH_DEFAULT = 40
+const RIGHT_SIDEBAR_WIDTH_MIN = 30
+const RIGHT_SIDEBAR_WIDTH_MAX = 60
+
 const context = createContext<{
   width: number
   conceal: () => boolean
@@ -261,6 +269,47 @@ export function Session() {
   const [rightSidebar, setRightSidebar] = createSignal<"show" | "hide" | "auto">(kv.get("rightSidebar", "auto"))
   const [conceal, setConceal] = createSignal(true)
 
+  const clampWidth = (value: number, min: number, max: number) => {
+    if (value < min) return min
+    if (value > max) return max
+    return value
+  }
+
+  const readWidth = (key: string, fallback: number, min: number, max: number) => {
+    const stored = kv.get(key)
+    if (typeof stored !== "number") return fallback
+    return clampWidth(Math.round(stored), min, max)
+  }
+
+  const [leftSidebarWidth, setLeftSidebarWidth] = createSignal(
+    readWidth("leftSidebarWidth", LEFT_SIDEBAR_WIDTH_DEFAULT, LEFT_SIDEBAR_WIDTH_MIN, LEFT_SIDEBAR_WIDTH_MAX),
+  )
+  const [rightSidebarWidth, setRightSidebarWidth] = createSignal(
+    readWidth("rightSidebarWidth", RIGHT_SIDEBAR_WIDTH_DEFAULT, RIGHT_SIDEBAR_WIDTH_MIN, RIGHT_SIDEBAR_WIDTH_MAX),
+  )
+
+  const updateLeftSidebarWidth = (value: number) => {
+    const next = clampWidth(value, LEFT_SIDEBAR_WIDTH_MIN, LEFT_SIDEBAR_WIDTH_MAX)
+    if (next === leftSidebarWidth()) return
+    setLeftSidebarWidth(next)
+    kv.set("leftSidebarWidth", next)
+  }
+
+  const updateRightSidebarWidth = (value: number) => {
+    const next = clampWidth(value, RIGHT_SIDEBAR_WIDTH_MIN, RIGHT_SIDEBAR_WIDTH_MAX)
+    if (next === rightSidebarWidth()) return
+    setRightSidebarWidth(next)
+    kv.set("rightSidebarWidth", next)
+  }
+
+  const adjustLeftSidebarWidth = (delta: number) => {
+    updateLeftSidebarWidth(leftSidebarWidth() + delta)
+  }
+
+  const adjustRightSidebarWidth = (delta: number) => {
+    updateRightSidebarWidth(rightSidebarWidth() + delta)
+  }
+
   // File browser, editor, and viewer state
   const [showFileBrowser, setShowFileBrowser] = createSignal(false)
   const [showCodeEditor, setShowCodeEditor] = createSignal(false)
@@ -333,12 +382,6 @@ export function Session() {
     })
   }
 
-  const handleSwitchSession = () => {
-    import("@tui/component/dialog-session-list").then((m) => {
-      dialog.replace(() => <m.DialogSessionList />)
-    })
-  }
-
   const handleCloseSession = async (sessionID: string) => {
     const tabs = openTabs()
 
@@ -384,8 +427,8 @@ export function Session() {
   })
 
   const contentWidth = createMemo(() => {
-    const leftWidth = leftSidebarVisible() ? 30 : 0
-    const rightWidth = rightSidebarVisible() ? 42 : 0
+    const leftWidth = leftSidebarVisible() ? leftSidebarWidth() : 0
+    const rightWidth = rightSidebarVisible() ? rightSidebarWidth() : 0
     return dimensions().width - leftWidth - rightWidth - 4
   })
 
@@ -696,6 +739,46 @@ export function Session() {
       },
     },
     {
+      title: "Narrow left sidebar",
+      value: "session.sidebar.left.narrow",
+      keybind: "sidebar_left_narrow" as any,
+      category: "Session",
+      onSelect: (dialog) => {
+        adjustLeftSidebarWidth(-SIDEBAR_WIDTH_STEP)
+        dialog.clear()
+      },
+    },
+    {
+      title: "Widen left sidebar",
+      value: "session.sidebar.left.widen",
+      keybind: "sidebar_left_widen" as any,
+      category: "Session",
+      onSelect: (dialog) => {
+        adjustLeftSidebarWidth(SIDEBAR_WIDTH_STEP)
+        dialog.clear()
+      },
+    },
+    {
+      title: "Narrow right sidebar",
+      value: "session.sidebar.right.narrow",
+      keybind: "sidebar_right_narrow" as any,
+      category: "Session",
+      onSelect: (dialog) => {
+        adjustRightSidebarWidth(-SIDEBAR_WIDTH_STEP)
+        dialog.clear()
+      },
+    },
+    {
+      title: "Widen right sidebar",
+      value: "session.sidebar.right.widen",
+      keybind: "sidebar_right_widen" as any,
+      category: "Session",
+      onSelect: (dialog) => {
+        adjustRightSidebarWidth(SIDEBAR_WIDTH_STEP)
+        dialog.clear()
+      },
+    },
+    {
       title: "Toggle legacy sidebar",
       value: "session.sidebar.toggle",
       keybind: "sidebar_toggle",
@@ -916,9 +999,14 @@ export function Session() {
             sessionID={route.sessionID}
             onToggle={toggleLeftSidebar}
             onSelect={selectSession}
-            onSwitch={handleSwitchSession}
+            onNewSession={handleNewSession}
             openTabs={openTabs()}
             onClose={handleCloseSession}
+            width={leftSidebarWidth()}
+            minWidth={LEFT_SIDEBAR_WIDTH_MIN}
+            maxWidth={LEFT_SIDEBAR_WIDTH_MAX}
+            widthStep={SIDEBAR_WIDTH_STEP}
+            onResize={adjustLeftSidebarWidth}
           />
         </Show>
 
@@ -1151,7 +1239,15 @@ export function Session() {
 
         {/* Right Sidebar */}
         <Show when={rightSidebarVisible()}>
-          <Sidebar sessionID={route.sessionID} onToggle={toggleRightSidebar} />
+          <Sidebar
+            sessionID={route.sessionID}
+            onToggle={toggleRightSidebar}
+            width={rightSidebarWidth()}
+            minWidth={RIGHT_SIDEBAR_WIDTH_MIN}
+            maxWidth={RIGHT_SIDEBAR_WIDTH_MAX}
+            widthStep={SIDEBAR_WIDTH_STEP}
+            onResize={adjustRightSidebarWidth}
+          />
         </Show>
       </box>
     </context.Provider>

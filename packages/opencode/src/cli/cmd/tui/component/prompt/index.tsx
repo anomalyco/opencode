@@ -31,6 +31,7 @@ import { TuiEvent } from "../../event"
 import { DialogModel } from "../dialog-model"
 import { useDialog } from "../../ui/dialog"
 import { Perf } from "@/util/perf"
+import path from "path"
 
 export type PromptProps = {
   sessionID?: string
@@ -213,8 +214,8 @@ export function Prompt(props: PromptProps) {
         category: "Prompt",
         onSelect: async () => {
           const content = await Clipboard.read()
-          if (content?.mime.startsWith("image/")) {
-            await pasteImage({
+          if (content?.mime) {
+            await attachFilePart({
               filename: "clipboard",
               mime: content.mime,
               content: content.data,
@@ -548,21 +549,24 @@ export function Prompt(props: PromptProps) {
   }
   const exit = useExit()
 
-  async function pasteImage(file: { filename?: string; content: string; mime: string }) {
-    const currentOffset = input.visualCursor.offset
-    const extmarkStart = currentOffset
-    const count = store.prompt.parts.filter((x) => x.type === "file").length
-    const virtualText = `[Image ${count + 1}]`
-    const extmarkEnd = extmarkStart + virtualText.length
-    const textToInsert = virtualText + " "
+  async function attachFilePart(file: { filename?: string; filepath?: string; content: string; mime: string }) {
+    const start = input.visualCursor.offset
+    const index = store.prompt.parts.filter((x) => x.type === "file").length + 1
+    const label = file.mime.startsWith("image/")
+      ? `Image ${index}`
+      : file.filename
+        ? `File ${file.filename}`
+        : `File ${index}`
+    const virtualText = `[${label}]`
+    const end = start + virtualText.length
 
-    input.insertText(textToInsert)
+    input.insertText(`${virtualText} `)
 
     const extmarkId = input.extmarks.create({
-      start: extmarkStart,
-      end: extmarkEnd,
+      start,
+      end,
       virtual: true,
-      styleId: pasteStyleId,
+      styleId: fileStyleId,
       typeId: promptPartTypeId,
     })
 
@@ -573,14 +577,15 @@ export function Prompt(props: PromptProps) {
       url: `data:${file.mime};base64,${file.content}`,
       source: {
         type: "file",
-        path: file.filename ?? "",
+        path: file.filepath ?? file.filename ?? "",
         text: {
-          start: extmarkStart,
-          end: extmarkEnd,
+          start,
+          end,
           value: virtualText,
         },
       },
     }
+
     setStore(
       produce((draft) => {
         const partIndex = draft.prompt.parts.length
@@ -588,7 +593,116 @@ export function Prompt(props: PromptProps) {
         draft.extmarkToPartIndex.set(extmarkId, partIndex)
       }),
     )
-    return
+  }
+
+  const MIME_HINTS: Record<string, string> = {
+    ".png": "image/png",
+    ".jpg": "image/jpeg",
+    ".jpeg": "image/jpeg",
+    ".gif": "image/gif",
+    ".webp": "image/webp",
+    ".bmp": "image/bmp",
+    ".svg": "image/svg+xml",
+    ".txt": "text/plain",
+    ".md": "text/markdown",
+    ".json": "application/json",
+    ".csv": "text/csv",
+    ".pdf": "application/pdf",
+    ".zip": "application/zip",
+  }
+
+  function guessMimeFromPath(filePath: string) {
+    const ext = path.extname(filePath).toLowerCase()
+    return MIME_HINTS[ext]
+  }
+
+  function looksLikePath(value: string) {
+    const trimmed = value.trim().replace(/^['"]+|['"]+$/g, "")
+    if (!trimmed) return false
+    if (trimmed.startsWith("file://")) return true
+    if (trimmed.startsWith("/") || trimmed.startsWith("./") || trimmed.startsWith("../") || trimmed.startsWith("~/")) {
+      return true
+    }
+    return /^[A-Za-z]:[\\/]/.test(trimmed)
+  }
+
+  function extractFilePathCandidates(input: string) {
+    const trimmed = input.trim()
+    if (!trimmed) return []
+    const quoted = [...trimmed.matchAll(/(['"])(.*?)\1/g)]
+      .map((match) => match[2])
+      .filter((candidate) => looksLikePath(candidate))
+    if (quoted.length) {
+      return quoted
+    }
+
+    const lines = trimmed
+      .split(/\r?\n/)
+      .map((line) => line.trim())
+      .filter(Boolean)
+    if (lines.length > 1 && lines.every((line) => looksLikePath(line))) {
+      return lines
+    }
+
+    return looksLikePath(trimmed) ? [trimmed] : []
+  }
+
+  function normalizeFilePath(candidate: string) {
+    let value = candidate.trim()
+    if (!value) return
+    value = value.replace(/^['"]+|['"]+$/g, "")
+    value = value.replace(/\\ /g, " ")
+    if (!value) return
+
+    if (value.startsWith("file://")) {
+      try {
+        const url = new URL(value)
+        let pathname = decodeURIComponent(url.pathname)
+        if (/^\/[A-Za-z]:/.test(pathname)) {
+          pathname = pathname.slice(1)
+        }
+        value = pathname || value
+      } catch {
+        return
+      }
+    }
+
+    if (value.startsWith("~")) {
+      const home = process.env.HOME
+      if (home) {
+        value = path.join(home, value.slice(1))
+      }
+    }
+
+    return value
+  }
+
+  async function attachFilesFromText(input: string) {
+    const candidates = extractFilePathCandidates(input)
+    if (!candidates.length) return false
+
+    let attached = false
+    for (const candidate of candidates) {
+      const normalized = normalizeFilePath(candidate)
+      if (!normalized) continue
+      try {
+        const bunFile = Bun.file(normalized)
+        if (!(await bunFile.exists())) continue
+        const buffer = await bunFile.arrayBuffer()
+        const mime = bunFile.type || guessMimeFromPath(normalized) || "application/octet-stream"
+        await attachFilePart({
+          filename: path.basename(normalized),
+          filepath: normalized,
+          mime,
+          content: Buffer.from(buffer).toString("base64"),
+        })
+        attached = true
+      } catch (error) {
+        console.warn("[Prompt] Failed to attach file", error)
+      }
+    }
+
+    return attached
   }
 
   return (
@@ -731,28 +845,11 @@ export function Prompt(props: PromptProps) {
                   return
                 }
 
-                // trim ' from the beginning and end of the pasted content. just
-                // ' and nothing else
-                const filepath = pastedContent.replace(/^'+|'+$/g, "").replace(/\\ /g, " ")
-                console.log(pastedContent, filepath)
-                try {
-                  const file = Bun.file(filepath)
-                  if (file.type.startsWith("image/")) {
-                    event.preventDefault()
-                    const content = await file
-                      .arrayBuffer()
-                      .then((buffer) => Buffer.from(buffer).toString("base64"))
-                      .catch(console.error)
-                    if (content) {
-                      await pasteImage({
-                        filename: file.name,
-                        mime: file.type,
-                        content,
-                      })
-                      return
-                    }
-                  }
-                } catch {}
+                const attached = await attachFilesFromText(pastedContent)
+                if (attached) {
+                  event.preventDefault()
+                  return
+                }
 
                 const lineCount = (pastedContent.match(/\n/g)?.length ?? 0) + 1
                 if (

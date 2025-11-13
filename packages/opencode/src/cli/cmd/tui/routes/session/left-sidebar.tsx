@@ -1,5 +1,6 @@
-import { createMemo, createSignal, For, Show } from "solid-js"
+import { createMemo, createSignal, For, Show, createEffect, onCleanup } from "solid-js"
 import { useTheme } from "../../context/theme"
+
 import { useSync } from "@tui/context/sync"
 import { Locale } from "@/util/locale"
 import { TextAttributes } from "@opentui/core"
@@ -7,13 +8,22 @@ import { useRenderer } from "@opentui/solid"
 import { useDialog } from "../../ui/dialog"
 import { DialogPrompt } from "../../ui/dialog-prompt"
 
+const RECENT_CATEGORY = "Recent"
+const RECENT_WINDOW_MS = 60 * 60 * 1000
+const RECENT_REFRESH_INTERVAL_MS = 60 * 1000
+
 export function LeftSidebar(props: {
   sessionID: string
   onToggle: () => void
   onSelect: (sessionID: string) => void
-  onSwitch: () => void
+  onNewSession: () => void
   openTabs: string[]
-  onClose: (sessionID: string) => void
+  onClose: (sessionID: string) => void | Promise<void>
+  width: number
+  minWidth: number
+  maxWidth: number
+  widthStep: number
+  onResize: (delta: number) => void
 }) {
   const sync = useSync()
   const { theme } = useTheme()
@@ -21,8 +31,14 @@ export function LeftSidebar(props: {
   const dialog = useDialog()
 
   const [displayLimit, setDisplayLimit] = createSignal(20)
-  const [expandedCategories, setExpandedCategories] = createSignal<Set<string>>(new Set(["Today"]))
+  const [expandedCategories, setExpandedCategories] = createSignal<Set<string>>(new Set([RECENT_CATEGORY, "Today"]))
   const [searchQuery, setSearchQuery] = createSignal("")
+  const [clock, setClock] = createSignal(Date.now())
+
+  createEffect(() => {
+    const interval = setInterval(() => setClock(Date.now()), RECENT_REFRESH_INTERVAL_MS)
+    onCleanup(() => clearInterval(interval))
+  })
 
   const openSearchDialog = () => {
     dialog.replace(() => (
@@ -62,13 +78,25 @@ export function LeftSidebar(props: {
       .sort((a, b) => b.time.updated - a.time.updated)
   })
 
+  const recentSessions = createMemo(() => {
+    const currentTime = clock()
+    return allSessions().filter((session) => {
+      const updatedAt = new Date(session.time.updated).getTime()
+      return currentTime - updatedAt <= RECENT_WINDOW_MS
+    })
+  })
+
   // Group sessions by date
   const sessionsByCategory = createMemo(() => {
     const grouped = new Map<string, any[]>()
-    const today = new Date()
+    const now = clock()
+    const today = new Date(now)
 
     allSessions().forEach((session) => {
       const sessionDate = new Date(session.time.updated)
+      if (now - sessionDate.getTime() <= RECENT_WINDOW_MS) {
+        return
+      }
       const isToday = sessionDate.toDateString() === today.toDateString()
       const category = isToday ? "Today" : sessionDate.toLocaleDateString()
 
@@ -83,7 +111,11 @@ export function LeftSidebar(props: {
 
   // Get all categories for UI
   const allCategories = createMemo(() => {
-    return Array.from(sessionsByCategory().keys())
+    const categories = Array.from(sessionsByCategory().keys())
+    if (recentSessions().length) {
+      return [RECENT_CATEGORY, ...categories]
+    }
+    return categories
   })
 
   // Toggle category expansion
@@ -102,14 +134,62 @@ export function LeftSidebar(props: {
   const sessions = createMemo(() => allSessions().slice(0, displayLimit()))
   const hasMore = createMemo(() => allSessions().length > displayLimit())
   const currentSession = createMemo(() => sync.session.get(props.sessionID)!)
+  const canShrink = () => props.width > props.minWidth
+  const canGrow = () => props.width < props.maxWidth
 
   return (
     <Show when={currentSession()}>
-      <box flexShrink={0} gap={1} width={45}>
-        <box flexDirection="row" justifyContent="space-between" paddingRight={1}>
-          <text fg={theme.textMuted} attributes={TextAttributes.BOLD}>
-            SESSIONS
+      <box flexShrink={0} gap={1} width={props.width}>
+        <box flexDirection="row" justifyContent="space-between" paddingRight={1} alignItems="center">
+          <box flexDirection="row" gap={1} alignItems="center">
+            <box flexDirection="row" gap={0} alignItems="center">
+              <text
+                fg={canShrink() ? theme.textMuted : theme.border}
+                wrapMode="none"
+                onMouseUp={(evt) => {
+                  if (renderer.getSelection()?.getSelectedText()) return
+                  if (!canShrink()) return
+                  props.onResize(-props.widthStep)
+                  evt.stopPropagation?.()
+                }}
+              >
+                -
+              </text>
+              <text fg={theme.textMuted} wrapMode="none">
+                {props.width}c
+              </text>
+              <text
+                fg={canGrow() ? theme.textMuted : theme.border}
+                wrapMode="none"
+                onMouseUp={(evt) => {
+                  if (renderer.getSelection()?.getSelectedText()) return
+                  if (!canGrow()) return
+                  props.onResize(props.widthStep)
+                  evt.stopPropagation?.()
+                }}
+              >
+                +
+              </text>
+            </box>
+            <text fg={theme.textMuted} attributes={TextAttributes.BOLD}>
+              SESSIONS
+            </text>
+          </box>
+          <text
+            fg={theme.textMuted}
+            onMouseUp={() => {
+              if (renderer.getSelection()?.getSelectedText()) return
+              props.onToggle()
+            }}
+          >
+            ◀
           </text>
+        </box>
+
+            <text fg={theme.textMuted} attributes={TextAttributes.BOLD}>
+              SESSIONS
+            </text>
+          </box>
           <text
             fg={theme.textMuted}
             onMouseUp={() => {
@@ -157,7 +237,12 @@ export function LeftSidebar(props: {
           <For each={allCategories()}>
             {(category) => {
               const isExpanded = () => expandedCategories().has(category)
-              const categorySessions = () => sessionsByCategory().get(category) || []
+              const categorySessions = () => {
+                if (category === RECENT_CATEGORY) {
+                  return recentSessions()
+                }
+                return sessionsByCategory().get(category) || []
+              }
 
               return (
                 <box marginBottom={1}>
@@ -220,7 +305,7 @@ export function LeftSidebar(props: {
             attributes={TextAttributes.BOLD}
             onMouseUp={() => {
               if (renderer.getSelection()?.getSelectedText()) return
-              props.onSwitch()
+              props.onNewSession()
             }}
           >
             New Session
