@@ -23,7 +23,7 @@ export const setupVueTypeScriptBridge = (
   if (vueClientsBridged.has(vueClient.root)) return
   vueClientsBridged.add(vueClient.root)
 
-  log.info("wiring vue↔ts bridge", { root: path.relative(process.cwd(), vueClient.root) })
+  log.info("wiring vue-typescript bridge", { root: path.relative(process.cwd(), vueClient.root) })
 
   vueClient.connection.onNotification("tsserver/request", async ([id, command, payload]: [number, string, unknown]) => {
     try {
