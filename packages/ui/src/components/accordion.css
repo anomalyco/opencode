@@ -12,9 +12,6 @@
     align-items: flex-start;
     gap: 0px;
     align-self: stretch;
-    border: 1px solid var(--border-weak-base);
-    border-bottom: none;
-    border-top: none;
     overflow: clip;
 
     [data-slot="accordion-header"] {
@@ -27,7 +24,7 @@
       [data-slot="accordion-trigger"] {
         width: 100%;
         display: flex;
-        height: 40px;
+        height: 32px;
         padding: 8px 12px;
         justify-content: space-between;
         align-items: center;
@@ -36,7 +33,7 @@
         user-select: none;
 
         background-color: var(--surface-base);
-        border-bottom: 1px solid var(--border-weak-base);
+        border: 1px solid var(--border-weak-base);
         overflow: clip;
         color: var(--text-strong);
         transition: background-color 0.15s ease;
@@ -62,55 +59,67 @@
     }
 
     &[data-expanded] {
-      border: 1px solid var(--border-weak-base);
-      border-bottom: 1px solid var(--border-weak-base);
       margin-top: 8px;
       margin-bottom: 8px;
-      border-radius: 8px;
+
+      [data-slot="accordion-trigger"] {
+        border-top-left-radius: var(--radius-md);
+        border-top-right-radius: var(--radius-md);
+      }
+
+      [data-slot="accordion-content"] {
+        border: 1px solid var(--border-weak-base);
+        border-top: none;
+        border-bottom-left-radius: var(--radius-md);
+        border-bottom-right-radius: var(--radius-md);
+      }
 
       [data-slot="accordion-item"]:has(+ &) {
         &[data-closed] {
-          border-bottom-left-radius: 8px;
-          border-bottom-right-radius: 8px;
+          border-bottom-left-radius: var(--radius-md);
+          border-bottom-right-radius: var(--radius-md);
           [data-slot="accordion-trigger"] {
-            border-bottom-left-radius: 8px;
-            border-bottom-right-radius: 8px;
+            border-bottom-left-radius: var(--radius-md);
+            border-bottom-right-radius: var(--radius-md);
           }
         }
         margin-bottom: 8px;
       }
 
       & + [data-slot="accordion-item"] {
-        border-top: 1px solid var(--border-weak-base);
-        border-top-left-radius: 8px;
-        border-top-right-radius: 8px;
         margin-top: 8px;
+
+        [data-slot="accordion-trigger"] {
+          border-top-left-radius: var(--radius-md);
+          border-top-right-radius: var(--radius-md);
+        }
+      }
+    }
+
+    &[data-closed] + &[data-closed] {
+      [data-slot="accordion-trigger"] {
+        border-top: none;
       }
     }
 
     &:first-child {
       margin-top: 0px;
-      border-top: 1px solid var(--border-weak-base);
-      border-top-left-radius: 8px;
-      border-top-right-radius: 8px;
 
       &[data-closed] {
         [data-slot="accordion-trigger"] {
-          border-top-left-radius: 8px;
-          border-top-right-radius: 8px;
+          border-top-left-radius: var(--radius-md);
+          border-top-right-radius: var(--radius-md);
         }
       }
     }
 
     &:last-child {
       margin-bottom: 0px;
-      border-bottom-left-radius: 8px;
-      border-bottom-right-radius: 8px;
 
       &[data-closed] {
         [data-slot="accordion-trigger"] {
-          border-bottom-left-radius: 8px;
-          border-bottom-right-radius: 8px;
+          border-bottom-left-radius: var(--radius-md);
+          border-bottom-right-radius: var(--radius-md);
         }
       }
     }

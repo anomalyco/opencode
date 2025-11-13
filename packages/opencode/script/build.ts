@@ -66,11 +66,11 @@ const allTargets: {
     avx2: false,
   },
   {
-    os: "windows",
+    os: "win32",
     arch: "x64",
   },
   {
-    os: "windows",
+    os: "win32",
     arch: "x64",
     avx2: false,
   },
@@ -88,7 +88,8 @@ await $`bun install --os="*" --cpu="*" @parcel/watcher@${pkg.dependencies["@parc
 for (const item of targets) {
   const name = [
     pkg.name,
-    item.os,
+    // changing to win32 flags npm for some reason
+    item.os === "win32" ? "windows" : item.os,
     item.arch,
     item.avx2 === false ? "baseline" : undefined,
     item.abi === undefined ? undefined : item.abi,
@@ -115,7 +116,7 @@ for (const item of targets) {
     entrypoints: ["./src/index.ts", parserWorker, workerPath],
     define: {
       OPENCODE_VERSION: `'${Script.version}'`,
-      OTUI_TREE_SITTER_WORKER_PATH: "/$bunfs/root/" + path.relative(dir, parserWorker),
+      OTUI_TREE_SITTER_WORKER_PATH: "/$bunfs/root/" + path.relative(dir, parserWorker).replaceAll("\\", "/"),
       OPENCODE_WORKER_PATH: workerPath,
       OPENCODE_CHANNEL: `'${Script.channel}'`,
     },
@@ -127,7 +128,7 @@ for (const item of targets) {
       {
         name,
         version: Script.version,
-        os: [item.os === "windows" ? "win32" : item.os],
+        os: [item.os],
         cpu: [item.arch],
       },
       null,

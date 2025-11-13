@@ -1,5 +1,5 @@
 import { $ } from "bun"
-import { platform } from "os"
+import { platform, release } from "os"
 import clipboardy from "clipboardy"
 import { lazy } from "../../../../util/lazy.js"
 import { tmpdir } from "os"
@@ -29,6 +29,18 @@ export namespace Clipboard {
       }
     }
 
+    if (os === "win32" || release().includes("WSL")) {
+      const script =
+        "Add-Type -AssemblyName System.Windows.Forms; $img = [System.Windows.Forms.Clipboard]::GetImage(); if ($img) { $ms = New-Object System.IO.MemoryStream; $img.Save($ms, [System.Drawing.Imaging.ImageFormat]::Png); [System.Convert]::ToBase64String($ms.ToArray()) }"
+      const base64 = await $`powershell.exe -command "${script}"`.nothrow().text()
+      if (base64) {
+        const imageBuffer = Buffer.from(base64.trim(), "base64")
+        if (imageBuffer.length > 0) {
+          return { data: imageBuffer.toString("base64"), mime: "image/png" }
+        }
+      }
+    }
+
     if (os === "linux") {
       const wayland = await $`wl-paste -t image/png`.nothrow().arrayBuffer()
       if (wayland && wayland.byteLength > 0) {
@@ -37,18 +49,6 @@ export namespace Clipboard {
       const x11 = await $`xclip -selection clipboard -t image/png -o`.nothrow().arrayBuffer()
       if (x11 && x11.byteLength > 0) {
         return { data: Buffer.from(x11).toString("base64"), mime: "image/png" }
-      }
-    }
-
-    if (os === "win32") {
-      const script =
-        "Add-Type -AssemblyName System.Windows.Forms; $img = [System.Windows.Forms.Clipboard]::GetImage(); if ($img) { $ms = New-Object System.IO.MemoryStream; $img.Save($ms, [System.Drawing.Imaging.ImageFormat]::Png); [System.Convert]::ToBase64String($ms.ToArray()) }"
-      const base64 = await $`powershell -command "${script}"`.nothrow().text()
-      if (base64) {
-        const imageBuffer = Buffer.from(base64.trim(), "base64")
-        if (imageBuffer.length > 0) {
-          return { data: imageBuffer.toString("base64"), mime: "image/png" }
-        }
       }
     }
 
