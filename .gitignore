@@ -18,3 +18,4 @@ dist
 **/.serena
 .serena/
 /.claude.backup.*
+packages/opencode-kanban/
