@@ -44,6 +44,7 @@ import type { EditTool } from "@/tool/edit"
 import type { PatchTool } from "@/tool/patch"
 import type { WebFetchTool } from "@/tool/webfetch"
 import type { TaskTool } from "@/tool/task"
+import type { AddTaskTool } from "@/tool/add-task"
 import { useKeyboard, useRenderer, useTerminalDimensions, type BoxProps, type JSX } from "@opentui/solid"
 import { useSDK } from "@tui/context/sdk"
 import { useCommandDialog } from "@tui/component/dialog-command"
@@ -1003,11 +1004,8 @@ export function Session() {
               <scrollbox
                 ref={(r) => (scroll = r)}
                 scrollbarOptions={{
-                  paddingLeft: 2,
-                  trackOptions: {
-                    backgroundColor: theme.backgroundElement,
-                    foregroundColor: theme.border,
-                  },
+                  // Keep feed width fixed so completed messages don't re-wrap mid-stream
+                  visible: false,
                 }}
                 stickyScroll={!isStreaming()}
                 stickyStart="bottom"
@@ -2483,7 +2481,7 @@ ToolRegistry.register<typeof TodoWriteTool>({
   },
 })
 
-ToolRegistry.register({
+ToolRegistry.register<typeof AddTaskTool>({
   name: "add_task",
   container: "block",
   render(props) {
@@ -2492,19 +2490,20 @@ ToolRegistry.register({
     const { navigate } = useRoute()
     const renderer = useRenderer()
     const icon = createMemo(() => (props.collapsed ? "▶" : "▼"))
+    const taskInput = props.input as { subagent_type?: string; description?: string }
 
     return (
       <>
         <ToolTitle
           icon={icon()}
           fallback="Creating subagent task..."
-          when={props.input.subagent_type ?? props.input.description}
+          when={taskInput.subagent_type ?? taskInput.description}
           onToggle={props.onToggle}
           toolName="Add Task"
           input={props.input}
           output={props.output}
         >
-          <ToolBadge>Add Task</ToolBadge> [{props.input.subagent_type ?? "unknown"}] {props.input.description}
+          <ToolBadge>Add Task</ToolBadge> [{taskInput.subagent_type ?? "unknown"}] {taskInput.description}
         </ToolTitle>
         <Show when={!props.collapsed}>
           <Show when={props.metadata.sessionId}>

@@ -23,7 +23,26 @@ import { DialogContextEdit } from "../../component/dialog-context-edit"
 import { AgentChipText } from "../../component/agent-chip-text"
 import { Todo } from "@/session/todo"
 import { Perf } from "@/util/perf"
+import { ContextIntelligence } from "@/session/context-intelligence"
 type TabType = "files" | "todos" | "tools" | "subagents"
+
+function parseSubagentTitle(title: string): { agent?: string; description: string } {
+  const trimmed = title.trim()
+  if (!trimmed) return { description: "" }
+
+  const suffixMatch = /\((@[A-Za-z0-9_-]+)\s+subagent\)\s*$/i.exec(trimmed)
+  if (suffixMatch && suffixMatch.index !== undefined) {
+    const description = trimmed.slice(0, suffixMatch.index).trim()
+    return { agent: suffixMatch[1], description: description || trimmed }
+  }
+
+  const prefixMatch = /^([@\[][@\w-]+[\]]?)\s+(.*)$/.exec(trimmed)
+  if (prefixMatch) {
+    return { agent: prefixMatch[1], description: prefixMatch[2].trim() }
+  }
+
+  return { description: trimmed }
+}
 
 export function Sidebar(props: { sessionID: string; onToggle: () => void }) {
   const sync = useSync()
@@ -128,9 +147,39 @@ export function Sidebar(props: { sessionID: string; onToggle: () => void }) {
   const createContext = () => {
     dialog.replace(() => (
       <DialogContextAdd
-        onConfirm={(name: string, content: string) => {
+        onConfirm={async (name: string, content: string) => {
           const id = `ctx_${Date.now()}`
           setContexts((prev) => [...prev, { id, name, content }])
+
+          // Start background analysis
+          if (content.trim().length > 0) {
+            try {
+              // Fetch URL content if present
+              const enrichedContent = await ContextIntelligence.fetchContextContent(content)
+              if (enrichedContent !== content) {
+                setContexts((prev) => prev.map((c) => (c.id === id ? { ...c, content: enrichedContent } : c)))
+              }
+
+              // Analyze in background without blocking UI
+              ContextIntelligence.processContextBackground({
+                id,
+                name,
+                content: enrichedContent,
+              })
+                .then((analysis) => {
+                  toast.show({
+                    variant: "info",
+                    message: `Context "${name}" analyzed - Priority: ${analysis.traffic_light_prediction.priority}`,
+                    duration: 2000,
+                  })
+                })
+                .catch((error) => {
+                  console.warn("Context analysis failed:", error)
+                })
+            } catch (error) {
+              console.warn("Context processing failed:", error)
+            }
+          }
         }}
       />
     ))
@@ -680,7 +729,13 @@ export function Sidebar(props: { sessionID: string; onToggle: () => void }) {
             assistantTokens={context().assistantTokens}
             userTokens={context().userTokens}
             toolTokens={context().toolTokens}
-            agentColor={local.agent.color("assistant")}
+            agentColor={(() => {
+              const color = local.agent.color("assistant")
+              if (typeof color === "string") {
+                return color.startsWith("#") ? RGBA.fromHex(color) : RGBA.fromHex("#" + color)
+              }
+              return color
+            })()}
             systemColor={theme.textMuted}
             assistantColor={RGBA.fromHex("#D4A574")}
             toolColor={RGBA.fromHex("#8B7355")}
@@ -931,7 +986,7 @@ export function Sidebar(props: { sessionID: string; onToggle: () => void }) {
                     <box flexDirection="column">
                       <box flexDirection="row" gap={1}>
                         <text flexShrink={0} fg={theme.success}>
-                          •
+                          ●
                         </text>
                         <text
                           fg={theme.text}
@@ -1255,16 +1310,15 @@ export function Sidebar(props: { sessionID: string; onToggle: () => void }) {
                           ? theme.warning
                           : theme.error
 
-                  // Extract agent name and description
-                  const titleParts = child.title.match(/^([@\[][@\w]+[\]]?)\s+(.*)$/)
-                  const agentName = titleParts ? titleParts[1] : child.title
-                  const description = titleParts ? titleParts[2] : ""
+                  const parsed = parseSubagentTitle(child.title)
+                  const agentName = parsed.agent
+                  const description = parsed.description || child.title
 
-                  // Check if this agent is different from the previous one
                   const prevChild = index() > 0 ? childSessions()[index() - 1] : null
-                  const prevTitleParts = prevChild?.title.match(/^([@\[][@\w]+[\]]?)\s+(.*)$/)
-                  const prevAgentName = prevTitleParts ? prevTitleParts[1] : prevChild?.title
-                  const showAgent = !prevChild || agentName !== prevAgentName
+                  const prevAgentName = prevChild ? parseSubagentTitle(prevChild.title).agent : undefined
+                  const showAgent = agentName && agentName !== prevAgentName
+
+                  const summary = description.length > 35 ? description.substring(0, 32) + "..." : description
 
                   return (
                     <box flexDirection="column" gap={0}>
@@ -1288,9 +1342,7 @@ export function Sidebar(props: { sessionID: string; onToggle: () => void }) {
                         <text flexShrink={0} fg={statusColor}>
                           •
                         </text>
-                        <text fg={theme.text}>
-                          {description.length > 35 ? description.substring(0, 32) + "..." : description}
-                        </text>
+                        <text fg={theme.text}>{summary}</text>
                       </box>
                     </box>
                   )
