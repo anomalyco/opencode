@@ -74,9 +74,9 @@ function findBinary(startDir) {
 const resolved = findBinary(scriptDir)
 if (!resolved) {
   console.error(
-    "It seems that your package manager failed to install the right version of the opencode CLI for your platform. You can try manually installing the \"" +
+    'It seems that your package manager failed to install the right version of the opencode CLI for your platform. You can try manually installing the "' +
       base +
-      "\" package",
+      '" package',
   )
   process.exit(1)
 }
