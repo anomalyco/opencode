@@ -1188,7 +1188,7 @@ export namespace Server {
           "query",
           z.object({
             query: z.string(),
-            dirs: z.union([z.literal("true"), z.literal("false")]).optional(),
+            dirs: z.enum(["true", "false"]).optional(),
           }),
         ),
         async (c) => {
