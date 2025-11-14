@@ -134,8 +134,14 @@ export const ReadTool = Tool.define("read", {
     let output = "<file>\n"
     output += content.join("\n")
 
-    if (lines.length > offset + content.length) {
-      output += `\n\n(File has more lines. Use 'offset' parameter to read beyond line ${offset + content.length})`
+    const totalLines = lines.length
+    const lastReadLine = offset + content.length
+    const hasMoreLines = totalLines > lastReadLine
+
+    if (hasMoreLines) {
+      output += `\n\n(File has more lines. Use 'offset' parameter to read beyond line ${lastReadLine})`
+    } else {
+      output += `\n\n(End of file - total ${totalLines} lines)`
     }
     output += "\n</file>"
 
