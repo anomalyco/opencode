@@ -149,7 +149,7 @@ export namespace ProviderTransform {
         result["reasoningEffort"] = "medium"
       }
 
-      if (modelID.endsWith("gpt-5.1")) {
+      if (modelID.endsWith("gpt-5.1") && providerID !== "azure") {
         result["textVerbosity"] = "low"
       }
 
