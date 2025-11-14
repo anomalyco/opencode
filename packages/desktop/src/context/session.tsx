@@ -3,7 +3,7 @@ import { createSimpleContext } from "./helper"
 import { batch, createEffect, createMemo } from "solid-js"
 import { useSync } from "./sync"
 import { makePersisted } from "@solid-primitives/storage"
-import { TextSelection, useLocal } from "./local"
+import { TextSelection } from "./local"
 import { pipe, sumBy } from "remeda"
 import { AssistantMessage } from "@opencode-ai/sdk"
 
@@ -11,7 +11,6 @@ export const { use: useSession, provider: SessionProvider } = createSimpleContex
   name: "Session",
   init: (props: { sessionId?: string }) => {
     const sync = useSync()
-    const local = useLocal()
 
     const [store, setStore] = makePersisted(
       createStore<{
@@ -139,9 +138,6 @@ export const { use: useSession, provider: SessionProvider } = createSimpleContex
           if (tab === "chat") {
             setStore("tabs", "active", undefined)
             return
-          }
-          if (tab.startsWith("file://")) {
-            await local.file.open(tab.replace("file://", ""))
           }
           if (tab !== "review") {
             if (!store.tabs.opened.includes(tab)) {

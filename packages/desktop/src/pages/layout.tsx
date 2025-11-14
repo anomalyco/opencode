@@ -1,33 +1,85 @@
-import { Button, Tooltip, DiffChanges, IconButton } from "@opencode-ai/ui"
-import { createMemo, For, ParentProps, Show } from "solid-js"
+import { Button, Tooltip, DiffChanges, IconButton, Mark, Icon } from "@opencode-ai/ui"
+import { createMemo, For, Match, ParentProps, Show, Switch } from "solid-js"
 import { DateTime } from "luxon"
 import { useSync } from "@/context/sync"
 import { A, useParams } from "@solidjs/router"
-import { useLocal } from "@/context/local"
+import { useLayout } from "@/context/layout"
 
 export default function Layout(props: ParentProps) {
   const params = useParams()
   const sync = useSync()
-  const local = useLocal()
+  const layout = useLayout()
 
   return (
     <div class="relative h-screen flex flex-col">
-      <header class="hidden h-12 shrink-0 bg-background-strong border-b border-border-weak-base"></header>
-      <div class="h-[calc(100vh-0rem)] flex">
+      <header class="h-12 shrink-0 bg-background-base border-b border-border-weak-base">
         <div
           classList={{
-            "@container w-14 pb-4 shrink-0 bg-background-weak": true,
-            "flex flex-col items-start self-stretch justify-between": true,
+            "w-12 shrink-0 px-4 py-3.5": true,
+            "flex items-center justify-start self-stretch": true,
             "border-r border-border-weak-base": true,
-            "w-70": local.layout.sidebar.opened(),
           }}
+          style={{ width: layout.sidebar.opened() ? `${layout.sidebar.width()}px` : undefined }}
         >
-          <div class="flex flex-col justify-center items-start gap-4 self-stretch py-2 overflow-hidden mx-auto @[4rem]:mx-0">
-            <div class="h-8 shrink-0 flex items-center self-stretch px-3">
-              <Tooltip placement="right" value="Collapse sidebar">
-                <IconButton icon="layout-left" variant="ghost" size="large" onClick={local.layout.sidebar.toggle} />
-              </Tooltip>
-            </div>
+          <Mark class="shrink-0" />
+        </div>
+      </header>
+      <div class="h-[calc(100vh-3rem)] flex">
+        <div
+          classList={{
+            "@container w-12 pb-5 shrink-0 bg-background-base": true,
+            "flex flex-col gap-5.5 items-start self-stretch justify-between": true,
+            "border-r border-border-weak-base": true,
+          }}
+          style={{ width: layout.sidebar.opened() ? `${layout.sidebar.width()}px` : undefined }}
+        >
+          <div class="flex flex-col justify-center items-start gap-4 self-stretch p-2 overflow-hidden mx-auto @[4rem]:mx-0">
+            <Switch>
+              <Match when={layout.sidebar.opened()}>
+                <Button
+                  variant="ghost"
+                  size="large"
+                  class="group/sidebar-toggle w-full text-left justify-start"
+                  onClick={layout.sidebar.toggle}
+                >
+                  <div class="relative -ml-px flex items-center justify-center size-4 [&>*]:absolute [&>*]:inset-0">
+                    <Icon name="layout-left" size="small" class="group-hover/sidebar-toggle:hidden" />
+                    <Icon
+                      name="layout-left-partial"
+                      size="small"
+                      class="hidden group-hover/sidebar-toggle:inline-block"
+                    />
+                    <Icon
+                      name="layout-left-full"
+                      size="small"
+                      class="hidden group-active/sidebar-toggle:inline-block"
+                    />
+                  </div>
+                  <div class="hidden group-hover/sidebar-toggle:block group-active/sidebar-toggle:block text-text-base">
+                    Toggle sidebar
+                  </div>
+                </Button>
+              </Match>
+              <Match when={!layout.sidebar.opened()}>
+                <Tooltip placement="right" value="Toggle sidebar">
+                  <Button variant="ghost" size="large" class="group/sidebar-toggle" onClick={layout.sidebar.toggle}>
+                    <div class="relative -ml-px flex items-center justify-center size-4 [&>*]:absolute [&>*]:inset-0">
+                      <Icon name="layout-right" size="small" class="group-hover/sidebar-toggle:hidden" />
+                      <Icon
+                        name="layout-right-partial"
+                        size="small"
+                        class="hidden group-hover/sidebar-toggle:inline-block"
+                      />
+                      <Icon
+                        name="layout-right-full"
+                        size="small"
+                        class="hidden group-active/sidebar-toggle:inline-block"
+                      />
+                    </div>
+                  </Button>
+                </Tooltip>
+              </Match>
+            </Switch>
             <div class="w-full px-3">
               <Button as={A} href="/session" class="hidden @[4rem]:flex w-full" size="large" icon="edit-small-2">
                 New Session

@@ -5,7 +5,6 @@ import type { FileContent, FileNode, Model, Provider, File as FileStatus } from 
 import { createSimpleContext } from "./helper"
 import { useSDK } from "./sdk"
 import { useSync } from "./sync"
-import { makePersisted } from "@solid-primitives/storage"
 
 export type LocalFile = FileNode &
   Partial<{
@@ -457,57 +456,11 @@ export const { use: useLocal, provider: LocalProvider } = createSimpleContext({
       }
     })()
 
-    const layout = (() => {
-      const [store, setStore] = makePersisted(
-        createStore({
-          sidebar: {
-            opened: true,
-            width: 240,
-          },
-          review: {
-            state: "pane" as "pane" | "tab",
-          },
-        }),
-        {
-          name: "_default-layout",
-        },
-      )
-
-      return {
-        sidebar: {
-          opened: createMemo(() => store.sidebar.opened),
-          open() {
-            setStore("sidebar", "opened", true)
-          },
-          close() {
-            setStore("sidebar", "opened", false)
-          },
-          toggle() {
-            setStore("sidebar", "opened", (x) => !x)
-          },
-          width: createMemo(() => store.sidebar.width),
-          resize(width: number) {
-            setStore("sidebar", "width", width)
-          },
-        },
-        review: {
-          state: createMemo(() => store.review?.state ?? "closed"),
-          pane() {
-            setStore("review", "state", "pane")
-          },
-          tab() {
-            setStore("review", "state", "tab")
-          },
-        },
-      }
-    })()
-
     const result = {
       model,
       agent,
       file,
       context,
-      layout,
     }
     return result
   },

@@ -5,12 +5,15 @@ import { onCleanup } from "solid-js"
 
 export const { use: useSDK, provider: SDKProvider } = createSimpleContext({
   name: "SDK",
-  init: (props: { url: string }) => {
+  init: (props: { url: string; directory?: string }) => {
     const abort = new AbortController()
-    const sdk = createOpencodeClient({
-      baseUrl: props.url,
-      signal: abort.signal,
-    })
+    const sdk = createOpencodeClient(
+      {
+        baseUrl: props.url,
+        signal: abort.signal,
+      },
+      { directory: props.directory },
+    )
 
     const emitter = createGlobalEmitter<{
       [key in Event["type"]]: Extract<Event, { type: key }>
@@ -27,6 +30,6 @@ export const { use: useSDK, provider: SDKProvider } = createSimpleContext({
       abort.abort()
     })
 
-    return { client: sdk, event: emitter }
+    return { url: props.url, directory: props.directory, client: sdk, event: emitter }
   },
 })

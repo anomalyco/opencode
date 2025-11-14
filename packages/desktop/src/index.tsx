@@ -6,10 +6,10 @@ import { MetaProvider } from "@solidjs/meta"
 import { Fonts, MarkedProvider } from "@opencode-ai/ui"
 import { SDKProvider } from "./context/sdk"
 import { SyncProvider } from "./context/sync"
-import { LocalProvider } from "./context/local"
 import Layout from "@/pages/layout"
 import SessionLayout from "@/pages/session-layout"
 import Session from "@/pages/session"
+import { LayoutProvider } from "./context/layout"
 
 const host = import.meta.env.VITE_OPENCODE_SERVER_HOST ?? "127.0.0.1"
 const port = import.meta.env.VITE_OPENCODE_SERVER_PORT ?? "4096"
@@ -32,7 +32,7 @@ render(
     <MarkedProvider>
       <SDKProvider url={url}>
         <SyncProvider>
-          <LocalProvider>
+          <LayoutProvider>
             <MetaProvider>
               <Fonts />
               <Router root={Layout}>
@@ -41,7 +41,7 @@ render(
                 </Route>
               </Router>
             </MetaProvider>
-          </LocalProvider>
+          </LayoutProvider>
         </SyncProvider>
       </SDKProvider>
     </MarkedProvider>

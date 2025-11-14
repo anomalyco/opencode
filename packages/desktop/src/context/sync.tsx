@@ -63,6 +63,8 @@ export const { use: useSync, provider: SyncProvider } = createSimpleContext({
 
     const sdk = useSDK()
     sdk.event.listen((e) => {
+      // fetch the child store
+      // make a set store function that always rights to the child store
       const event = e.details
       switch (event.type) {
         case "session.updated": {
