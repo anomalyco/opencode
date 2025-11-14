@@ -68,6 +68,7 @@ You can also access our models through the following API endpoints.
 | GPT 5.1 Codex     | gpt-5.1-codex     | `https://opencode.ai/zen/v1/responses`        | `@ai-sdk/openai`            |
 | GPT 5             | gpt-5             | `https://opencode.ai/zen/v1/responses`        | `@ai-sdk/openai`            |
 | GPT 5 Codex       | gpt-5-codex       | `https://opencode.ai/zen/v1/responses`        | `@ai-sdk/openai`            |
+| GPT 5 Nano        | gpt-5-nano        | `https://opencode.ai/zen/v1/responses`        | `@ai-sdk/openai`            |
 | Claude Sonnet 4.5 | claude-sonnet-4-5 | `https://opencode.ai/zen/v1/messages`         | `@ai-sdk/anthropic`         |
 | Claude Sonnet 4   | claude-sonnet-4   | `https://opencode.ai/zen/v1/messages`         | `@ai-sdk/anthropic`         |
 | Claude Haiku 4.5  | claude-haiku-4-5  | `https://opencode.ai/zen/v1/messages`         | `@ai-sdk/anthropic`         |
@@ -117,11 +118,11 @@ We support a pay-as-you-go model. Below are the prices **per 1M tokens**.
 
 | Model                             | Input  | Output | Cached Read | Cached Write |
 | --------------------------------- | ------ | ------ | ----------- | ------------ |
+| Big Pickle                        | Free   | Free   | Free        | -            |
+| Grok Code Fast 1                  | Free   | Free   | Free        | -            |
 | GLM 4.6                           | $0.60  | $2.20  | $0.10       | -            |
 | Kimi K2                           | $0.60  | $2.50  | $0.36       | -            |
 | Qwen3 Coder 480B                  | $0.45  | $1.50  | -           | -            |
-| Grok Code Fast 1                  | Free   | Free   | Free        | -            |
-| Big Pickle                        | Free   | Free   | Free        | -            |
 | Claude Sonnet 4.5 (≤ 200K tokens) | $3.00  | $15.00 | $0.30       | $3.75        |
 | Claude Sonnet 4.5 (> 200K tokens) | $6.00  | $22.50 | $0.60       | $7.50        |
 | Claude Sonnet 4 (≤ 200K tokens)   | $3.00  | $15.00 | $0.30       | $3.75        |
@@ -133,6 +134,7 @@ We support a pay-as-you-go model. Below are the prices **per 1M tokens**.
 | GPT 5.1 Codex                     | $1.25  | $10.00 | $0.125      | -            |
 | GPT 5                             | $1.25  | $10.00 | $0.125      | -            |
 | GPT 5 Codex                       | $1.25  | $10.00 | $0.125      | -            |
+| GPT 5 Nano                        | Free   | Free   | Free        | -            |
 
 You might notice _Claude Haiku 3.5_ in your usage history. This is a [low cost model](/docs/config/#models) that's used to generate the titles of your sessions.
 
