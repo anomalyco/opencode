@@ -43,6 +43,7 @@ export const rpc = {
     }
   },
   async shutdown() {
+    Log.Default.info("worker shutting down")
     await Instance.disposeAll()
     await server.stop(true)
   },
