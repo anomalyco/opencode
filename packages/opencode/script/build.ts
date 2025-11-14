@@ -115,7 +115,7 @@ for (const item of targets) {
     entrypoints: ["./src/index.ts", parserWorker, workerPath],
     define: {
       OPENCODE_VERSION: `'${Script.version}'`,
-      OTUI_TREE_SITTER_WORKER_PATH: "/$bunfs/root/" + path.relative(dir, parserWorker),
+      OTUI_TREE_SITTER_WORKER_PATH: "/$bunfs/root/" + path.relative(dir, parserWorker).replaceAll("\\", "/"),
       OPENCODE_WORKER_PATH: workerPath,
       OPENCODE_CHANNEL: `'${Script.channel}'`,
     },
