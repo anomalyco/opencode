@@ -71,12 +71,18 @@ export const ReadTool = Tool.define("read", {
 
     const isImage = isImageFile(filepath)
     const supportsImages = await (async () => {
-      if (!ctx.extra?.["providerID"] || !ctx.extra?.["modelID"]) return false
+      if (!ctx.extra?.["providerID"] || !ctx.extra?.["modelID"]) {
+        // When providerID/modelID aren't available (e.g., -f flag), allow images through
+        // The AI SDK will handle validation at the model level
+        return true
+      }
       const providerID = ctx.extra["providerID"] as string
       const modelID = ctx.extra["modelID"] as string
       const model = await Provider.getModel(providerID, modelID).catch(() => undefined)
       if (!model) return false
-      return model.info.modalities?.input?.includes("image") ?? false
+      const hasModalities = model.info.modalities?.input?.includes("image")
+      const hasAttachment = model.info.attachment
+      return hasModalities ?? hasAttachment ?? false
     })()
     if (isImage) {
       if (!supportsImages) {

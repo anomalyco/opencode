@@ -541,7 +541,17 @@ export namespace MessageV2 {
                 },
               ]
             // text/plain and directory files are converted into text parts, ignore them
-            if (part.type === "file" && part.mime !== "text/plain" && part.mime !== "application/x-directory")
+            if (part.type === "file" && part.mime !== "text/plain" && part.mime !== "application/x-directory") {
+              // For vision support: convert image attachments to image type
+              if (part.mime.startsWith("image/")) {
+                return [
+                  {
+                    type: "image",
+                    image: part.url,
+                    mimeType: part.mime,
+                  },
+                ]
+              }
               return [
                 {
                   type: "file",
@@ -550,6 +560,7 @@ export namespace MessageV2 {
                   filename: part.filename,
                 },
               ]
+            }
             return []
           }),
         })
@@ -585,12 +596,22 @@ export namespace MessageV2 {
                         type: "text",
                         text: `Tool ${part.tool} returned an attachment:`,
                       },
-                      ...part.state.attachments.map((attachment) => ({
-                        type: "file" as const,
-                        url: attachment.url,
-                        mediaType: attachment.mime,
-                        filename: attachment.filename,
-                      })),
+                      ...part.state.attachments.map((attachment) => {
+                        // For vision support: convert image attachments to image type
+                        if (attachment.mime.startsWith("image/")) {
+                          return {
+                            type: "image" as const,
+                            image: attachment.url,
+                            mimeType: attachment.mime,
+                          }
+                        }
+                        return {
+                          type: "file" as const,
+                          url: attachment.url,
+                          mediaType: attachment.mime,
+                          filename: attachment.filename,
+                        }
+                      }),
                     ],
                   })
                 }
