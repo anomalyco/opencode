@@ -2408,6 +2408,46 @@ export type SessionSetMessagePriorityResponses = {
 export type SessionSetMessagePriorityResponse =
   SessionSetMessagePriorityResponses[keyof SessionSetMessagePriorityResponses]
 
+export type SessionCompactMessageData = {
+  body?: never
+  path: {
+    /**
+     * Session ID
+     */
+    id: string
+    /**
+     * Message ID
+     */
+    messageID: string
+  }
+  query?: {
+    directory?: string
+  }
+  url: "/session/{id}/message/{messageID}/compact"
+}
+
+export type SessionCompactMessageErrors = {
+  /**
+   * Bad request
+   */
+  400: BadRequestError
+  /**
+   * Not found
+   */
+  404: NotFoundError
+}
+
+export type SessionCompactMessageError = SessionCompactMessageErrors[keyof SessionCompactMessageErrors]
+
+export type SessionCompactMessageResponses = {
+  /**
+   * Updated message info
+   */
+  200: Message
+}
+
+export type SessionCompactMessageResponse = SessionCompactMessageResponses[keyof SessionCompactMessageResponses]
+
 export type SessionCommandData = {
   body?: {
     messageID?: string

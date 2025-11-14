@@ -85,9 +85,10 @@ await $`rm -rf dist`
 const binaries: Record<string, string> = {}
 await $`bun install --os="*" --cpu="*" @opentui/core@${pkg.dependencies["@opentui/core"]}`
 await $`bun install --os="*" --cpu="*" @parcel/watcher@${pkg.dependencies["@parcel/watcher"]}`
+const binaryPrefix = `${pkg.name}-ai`
 for (const item of targets) {
   const name = [
-    pkg.name,
+    binaryPrefix,
     item.os,
     item.arch,
     item.avx2 === false ? "baseline" : undefined,
@@ -107,7 +108,7 @@ for (const item of targets) {
     plugins: [solidPlugin],
     sourcemap: "external",
     compile: {
-      target: name.replace(pkg.name, "bun") as any,
+      target: name.replace(binaryPrefix, "bun") as any,
       outfile: `dist/${name}/bin/codesurf`,
       execArgv: [`--user-agent=codesurf/${Script.version}`, `--env-file=""`, `--`],
       windows: {},

@@ -993,6 +993,39 @@ export namespace Server {
         },
       )
       .post(
+        "/session/:id/message/:messageID/compact",
+        describeRoute({
+          description: "Summarize and compact a single message",
+          operationId: "session.compactMessage",
+          responses: {
+            200: {
+              description: "Updated message info",
+              content: {
+                "application/json": {
+                  schema: resolver(MessageV2.Info),
+                },
+              },
+            },
+            ...errors(400, 404),
+          },
+        }),
+        validator(
+          "param",
+          z.object({
+            id: z.string().meta({ description: "Session ID" }),
+            messageID: z.string().meta({ description: "Message ID" }),
+          }),
+        ),
+        async (c) => {
+          const params = c.req.valid("param")
+          const info = await SessionCompaction.compactMessage({
+            sessionID: params.id,
+            messageID: params.messageID,
+          })
+          return c.json(info)
+        },
+      )
+      .post(
         "/session/:id/message",
         describeRoute({
           description: "Create and send a new message to a session",

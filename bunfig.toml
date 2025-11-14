@@ -1,2 +1,5 @@
 [install]
 exact = true
+
+[scripts]
+shell = "system"

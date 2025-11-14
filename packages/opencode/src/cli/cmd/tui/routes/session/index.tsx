@@ -1399,7 +1399,31 @@ function PriorityCircles(props: {
           </box>
         )}
       </For>
-      <text> </text>
+    </box>
+  )
+}
+
+function MessageControls(props: {
+  sessionID: string
+  messageID: string
+  priority?: "red" | "amber" | "green" | "none"
+}) {
+  const { theme } = useTheme()
+  const dialog = useDialog()
+  const renderer = useRenderer()
+
+  const openMenu = (event: ToolMouseEvent) => {
+    event.stopPropagation?.()
+    if (renderer.getSelection()?.getSelectedText()) return
+    dialog.replace(() => <DialogMessage messageID={props.messageID} sessionID={props.sessionID} />)
+  }
+
+  return (
+    <box flexDirection="row" alignItems="center" gap={1}>
+      <PriorityCircles sessionID={props.sessionID} messageID={props.messageID} priority={props.priority} compact />
+      <text fg={theme.textMuted} attributes={1} onMouseUp={(event) => openMenu(event)}>
+        ⋮{" "}
+      </text>
     </box>
   )
 }
@@ -1456,6 +1480,13 @@ function UserMessage(props: {
         borderColor={color()}
         flexShrink={0}
       >
+        <box flexDirection="row" justifyContent="flex-end" marginBottom={1}>
+          <MessageControls
+            sessionID={props.message.sessionID}
+            messageID={props.message.id}
+            priority={props.message.priority}
+          />
+        </box>
         <text fg={theme.text}>{text()?.text}</text>
         <Show when={files().length}>
           <box flexDirection="row" flexWrap="wrap" marginTop={1} gap={0}>
@@ -1493,11 +1524,6 @@ function UserMessage(props: {
             <span style={{ bg: theme.accent, fg: theme.backgroundPanel, bold: true }}> QUEUED </span> {displayName()}
           </Show>
         </text>
-        <PriorityCircles
-          sessionID={props.message.sessionID}
-          messageID={props.message.id}
-          priority={props.message.priority}
-        />
       </box>
     </Show>
   )
@@ -1641,6 +1667,13 @@ function AssistantMessage(props: { message: AssistantMessage; parts: Part[]; las
 
   return (
     <>
+      <box paddingLeft={2} marginTop={1} flexDirection="row" justifyContent="flex-end">
+        <MessageControls
+          sessionID={props.message.sessionID}
+          messageID={props.message.id}
+          priority={props.message.priority}
+        />
+      </box>
       <For each={partGroups()}>
         {(group) => (
           <Switch>
@@ -1708,11 +1741,6 @@ function AssistantMessage(props: { message: AssistantMessage; parts: Part[]; las
             <span style={{ fg: local.agent.color(props.message.mode) }}>{Locale.titlecase(props.message.mode)}</span>{" "}
             <span style={{ fg: theme.textMuted }}>{props.message.modelID}</span>
           </text>
-          <PriorityCircles
-            sessionID={props.message.sessionID}
-            messageID={props.message.id}
-            priority={props.message.priority}
-          />
         </box>
       </Show>
     </>
@@ -2259,12 +2287,12 @@ function ToolTitle(props: ToolTitleProps) {
           </Show>
         </text>
       </box>
-      <box flexDirection="row" alignItems="center" gap={props.trailing ? 0 : 1} flexShrink={0}>
+      <box flexDirection="row" alignItems="center" gap={1} flexShrink={0}>
         <Show when={props.trailing}>
           <box alignItems="center">{props.trailing}</box>
         </Show>
         <text fg={theme.textMuted} attributes={1} onMouseUp={(event) => showMenu(event)}>
-          ⋮
+          ⋮{" "}
         </text>
       </box>
     </box>

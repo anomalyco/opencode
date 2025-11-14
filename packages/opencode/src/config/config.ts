@@ -888,9 +888,63 @@ export namespace Config {
     return state().then((x) => x.config)
   }
 
+  const BASE_CONFIG_FILES = ["opencode.jsonc", "opencode.json", "codesurf.jsonc", "codesurf.json"]
+
+  function directoryConfigFiles() {
+    return Flag.CODESURF_COMPATIBILITY_MODE ? ["opencode.jsonc", "opencode.json"] : BASE_CONFIG_FILES
+  }
+
+  function fallbackConfigFileName() {
+    return Flag.CODESURF_COMPATIBILITY_MODE ? "opencode.jsonc" : "codesurf.jsonc"
+  }
+
+  async function collectConfigSources() {
+    const seen = new Set<string>()
+    const ordered: string[] = []
+    const addUnique = (filepath: string) => {
+      if (seen.has(filepath)) return
+      seen.add(filepath)
+      ordered.push(filepath)
+    }
+
+    for (const file of BASE_CONFIG_FILES) {
+      const found = await Filesystem.findUp(file, Instance.directory, Instance.worktree)
+      for (const resolved of found.toReversed()) {
+        addUnique(resolved)
+      }
+    }
+
+    const configDirs = await directories()
+    for (const dir of configDirs) {
+      for (const file of directoryConfigFiles()) {
+        const candidate = path.join(dir, file)
+        if (await Bun.file(candidate).exists()) addUnique(candidate)
+      }
+    }
+
+    return ordered
+  }
+
+  export async function projectConfigPath() {
+    const sources = await collectConfigSources()
+    const scoped = Instance.project.id === "global" ? sources : sources.filter((file) => Filesystem.contains(Instance.worktree, path.dirname(file)))
+    const selected =
+      scoped.at(-1) ??
+      (Instance.project.id === "global"
+        ? sources.at(-1)
+        : undefined)
+    if (selected) return selected
+
+    const fallbackDir =
+      Instance.project.id === "global" ? Global.Path.config : path.join(Instance.directory, Flag.CODESURF_FOLDER)
+    await fs.mkdir(fallbackDir, { recursive: true })
+    return path.join(fallbackDir, fallbackConfigFileName())
+  }
+
   export async function update(config: Info) {
-    const filepath = path.join(Instance.directory, "config.json")
+    const filepath = await projectConfigPath()
     const existing = await loadFile(filepath)
+    await fs.mkdir(path.dirname(filepath), { recursive: true })
     await Bun.write(filepath, JSON.stringify(mergeDeep(existing, config), null, 2))
     await Instance.dispose()
   }

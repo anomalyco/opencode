@@ -294,12 +294,12 @@ export function Sidebar(props: { sessionID: string; onToggle: () => void }) {
       .slice(0, 10) // Top 10
   })
 
-  // Get star icon based on favorite level
-  const getStarIcon = (toolId: string): string => {
+  // Favorite indicator circle based on level
+  const getStarIcon = (toolId: string): { icon: string; color: RGBA } => {
     const level = getFavoriteLevel(toolId)
-    if (level === "global") return "★" // Gold star (will be colored)
-    if (level === "project") return "★" // Solid star
-    return "☆" // Outline star
+    if (level === "global") return { icon: "●", color: RGBA.fromHex("#FFFFFF") }
+    if (level === "project") return { icon: "●", color: RGBA.fromHex("#B3B3B3") }
+    return { icon: "○", color: theme.textMuted }
   }
 
   async function handleCommit() {

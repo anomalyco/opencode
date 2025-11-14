@@ -109,6 +109,10 @@ All CodeSurf features integrate with existing OpenCode config:
 }
 ```
 
+### Smarter config writes
+- The `/config` HTTP endpoint and in-app editors now write back to whichever config file is actually being read (workspace `codesurf.jsonc`, `.opencode/opencode.json`, etc.).
+- Tool favorite state uses the same resolver, so starring tools never creates stray `codesurf.jsonc` files and always persists beside your chosen config.
+
 ## Differences from OpenCode
 
 All OpenCode features remain intact. CodeSurf adds:

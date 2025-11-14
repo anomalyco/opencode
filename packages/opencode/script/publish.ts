@@ -7,40 +7,58 @@ const dir = new URL("..", import.meta.url).pathname
 process.chdir(dir)
 
 const { binaries } = await import("./build.ts")
-{
-  const name = `${pkg.name}-ai-${process.platform}-${process.arch}`
-  console.log(`smoke test: running dist/${name}/bin/codesurf --version`)
-  await $`./dist/${name}/bin/codesurf --version`
-}
+const smokeTarget = `${pkg.name}-ai-${process.platform}-${process.arch}`
+console.log(`smoke test: running dist/${smokeTarget}/bin/codesurf --version`)
+await $`./dist/${smokeTarget}/bin/codesurf --version`
 
 await $`mkdir -p ./dist/${pkg.name}`
 await $`cp -r ./bin ./dist/${pkg.name}/bin`
 await $`cp ./script/preinstall.mjs ./dist/${pkg.name}/preinstall.mjs`
 await $`cp ./script/postinstall.mjs ./dist/${pkg.name}/postinstall.mjs`
 await $`cp ./README.md ./dist/${pkg.name}/README.md`
-await Bun.file(`./dist/${pkg.name}/package.json`).write(
+
+const metaPackage = {
+  name: pkg.name,
+  bin: {
+    codesurf: "./bin/codesurf",
+    surf: "./bin/surf",
+  },
+  scripts: {
+    preinstall: "bun ./preinstall.mjs || node ./preinstall.mjs",
+    postinstall: "bun ./postinstall.mjs || node ./postinstall.mjs",
+  },
+  version: Script.version,
+  optionalDependencies: binaries,
+}
+
+const metaBaseDir = `./dist/${pkg.name}`
+const metaAliasDir = `./dist/${pkg.name}-ai`
+
+await Bun.file(`${metaBaseDir}/package.json`).write(JSON.stringify(metaPackage, null, 2))
+await $`rm -rf ${metaAliasDir}`
+await $`cp -R ${metaBaseDir} ${metaAliasDir}`
+await Bun.file(`${metaAliasDir}/package.json`).write(
   JSON.stringify(
     {
-      name: pkg.name + "-ai",
-      bin: {
-        codesurf: "./bin/codesurf",
-        surf: "./bin/surf",
-      },
-      scripts: {
-        preinstall: "bun ./preinstall.mjs || node ./preinstall.mjs",
-        postinstall: "bun ./postinstall.mjs || node ./postinstall.mjs",
-      },
-      version: Script.version,
-      optionalDependencies: binaries,
+      ...metaPackage,
+      name: `${pkg.name}-ai`,
     },
     null,
     2,
   ),
 )
+
+const metaPackages = [
+  { name: pkg.name, path: metaBaseDir },
+  { name: `${pkg.name}-ai`, path: metaAliasDir },
+]
+
 for (const [name] of Object.entries(binaries)) {
   await $`cd dist/${name} && chmod -R 777 . && bun publish --access public --tag ${Script.channel}`
 }
-await $`cd ./dist/${pkg.name} && bun publish --access public --tag ${Script.channel}`
+for (const { path } of metaPackages) {
+  await $`cd ${path} && bun publish --access public --tag ${Script.channel}`
+}
 
 if (!Script.preview) {
   const major = Script.version.split(".")[0]
@@ -57,10 +75,12 @@ if (!Script.preview) {
   }
 
   // Calculate SHA values
-  const arm64Sha = await $`sha256sum ./dist/opencode-linux-arm64.zip | cut -d' ' -f1`.text().then((x) => x.trim())
-  const x64Sha = await $`sha256sum ./dist/opencode-linux-x64.zip | cut -d' ' -f1`.text().then((x) => x.trim())
-  const macX64Sha = await $`sha256sum ./dist/opencode-darwin-x64.zip | cut -d' ' -f1`.text().then((x) => x.trim())
-  const macArm64Sha = await $`sha256sum ./dist/opencode-darwin-arm64.zip | cut -d' ' -f1`.text().then((x) => x.trim())
+  const arm64Sha = await $`sha256sum ./dist/${pkg.name}-linux-arm64.zip | cut -d' ' -f1`.text().then((x) => x.trim())
+  const x64Sha = await $`sha256sum ./dist/${pkg.name}-linux-x64.zip | cut -d' ' -f1`.text().then((x) => x.trim())
+  const macX64Sha = await $`sha256sum ./dist/${pkg.name}-darwin-x64.zip | cut -d' ' -f1`.text().then((x) => x.trim())
+  const macArm64Sha = await $`sha256sum ./dist/${pkg.name}-darwin-arm64.zip | cut -d' ' -f1`
+    .text()
+    .then((x) => x.trim())
 
   const [pkgver, _subver = ""] = Script.version.split(/(-.*)/, 2)
 

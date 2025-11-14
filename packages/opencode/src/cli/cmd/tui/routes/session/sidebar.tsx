@@ -25,6 +25,7 @@ import { AgentChipText } from "../../component/agent-chip-text"
 import { Todo } from "@/session/todo"
 import { Perf } from "@/util/perf"
 import { ContextIntelligence } from "@/session/context-intelligence"
+import { DialogContextTimeline } from "./dialog-context-timeline"
 type TabType = "files" | "todos" | "tools" | "subagents"
 
 function parseSubagentTitle(title: string): { agent?: string; description: string } {
@@ -451,12 +452,12 @@ export function Sidebar(props: {
     }),
   )
 
-  // Get star icon based on favorite level
-  const getStarIcon = (toolId: string): string => {
+  // Favorite indicator circle based on level
+  const getStarIcon = (toolId: string): { icon: string; color: string } => {
     const level = getFavoriteLevel(toolId)
-    if (level === "global") return "★" // Gold star (will be colored)
-    if (level === "project") return "★" // Solid star
-    return "☆" // Outline star
+    if (level === "global") return { icon: "●", color: "#FFFFFF" }
+    if (level === "project") return { icon: "●", color: "#B3B3B3" }
+    return { icon: "○", color: theme.textMuted }
   }
 
   async function handleCommit() {
@@ -793,7 +794,13 @@ export function Sidebar(props: {
             <text fg={theme.textMuted}>{session().share!.url}</text>
           </Show>
         </box>
-        <box>
+        <box
+          onMouseUp={(evt) => {
+            if (renderer.getSelection()?.getSelectedText()) return
+            dialog.replace(() => <DialogContextTimeline sessionID={props.sessionID} />)
+            evt.stopPropagation?.()
+          }}
+        >
           <text fg={theme.text} attributes={TextAttributes.BOLD}>
             Context
           </text>
@@ -824,6 +831,9 @@ export function Sidebar(props: {
           <text fg={theme.textMuted}>{context().percentage}% used</text>
           <text fg={theme.textMuted}>
             {cost().spent} spent (saved {cost().saved})
+          </text>
+          <text fg={theme.textMuted} wrapMode="word">
+            Click to open a detailed context timeline
           </text>
         </box>
 
@@ -880,20 +890,18 @@ export function Sidebar(props: {
                 <For each={toolsUsed()}>
                   {([toolName, count]) => {
                     const isClaudeCode = toolName.startsWith("cc_")
-                    const level = createMemo(() => getFavoriteLevel(toolName))
+                    const star = createMemo(() => getStarIcon(toolName))
                     return (
                       <box flexDirection="row" gap={1} justifyContent="space-between">
                         <box flexDirection="row" gap={1}>
                           <text
-                            fg={
-                              level() === "global" ? "#FFD700" : level() === "project" ? theme.accent : theme.textMuted
-                            }
+                            fg={star().color}
                             onMouseUp={() => {
                               if (renderer.getSelection()?.getSelectedText()) return
                               cycleFavorite(toolName)
                             }}
                           >
-                            {getStarIcon(toolName)}
+                            {star().icon}
                           </text>
                           <text
                             fg={isClaudeCode ? theme.accent : theme.text}
@@ -1006,24 +1014,19 @@ export function Sidebar(props: {
                         <box marginLeft={3} flexDirection="column">
                           <For each={Object.entries(mcpTools()[key] || {})}>
                             {([toolName]) => {
-                              const level = createMemo(() => getFavoriteLevel(toolName))
+                              const star = createMemo(() => getStarIcon(toolName))
                               return (
                                 <box flexDirection="row" gap={1}>
                                   <text
-                                    fg={
-                                      level() === "global"
-                                        ? "#FFD700"
-                                        : level() === "project"
-                                          ? theme.accent
-                                          : theme.textMuted
-                                    }
+                                    fg={star().color}
                                     onMouseUp={() => {
                                       if (renderer.getSelection()?.getSelectedText()) return
                                       cycleFavorite(toolName)
                                     }}
                                   >
-                                    {getStarIcon(toolName)}
+                                    {star().icon}
                                   </text>
+
                                   <text
                                     fg={theme.textMuted}
                                     onMouseUp={() => {

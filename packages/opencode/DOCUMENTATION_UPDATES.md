@@ -92,7 +92,8 @@ import CodeSurfBlock from "../../components/CodeSurfBlock.astro
 - ✅ Star system: None → Project → Global
 - ✅ Visual indicators: ☆ gray, ★ blue, ★ gold
 - ✅ Sorting behavior
-- ✅ Config persistence
+- ✅ Config persistence (favorites share the same resolver as runtime config selection and never create stray files)
+- ✅ `/favorite-tools/cycle` endpoint writes to the active workspace config rather than creating new files
 
 ### Quick Commit Workflow
 
@@ -158,7 +159,7 @@ CodeSurf features an enhanced dual sidebar layout:
 
 Areas that may need CodeSurf-specific documentation:
 
-1. **Configuration**: How favorites are stored in config
+1. ~~**Configuration**: How favorites are stored in config~~ (covered in CODESURF_FEATURES.md + Tool Favorites section above)
 2. **Themes**: Any CodeSurf-specific theme adjustments
 3. **Troubleshooting**: CodeSurf-specific issues and solutions
 4. **CLI**: Any command-line differences

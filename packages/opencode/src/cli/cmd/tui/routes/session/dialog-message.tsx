@@ -4,6 +4,9 @@ import { DialogSelect } from "@tui/ui/dialog-select"
 import { useSDK } from "@tui/context/sdk"
 import { useRoute } from "@tui/context/route"
 import type { PromptInfo } from "@tui/component/prompt/history"
+import { useToast } from "../../ui/toast"
+import { Locale } from "@/util/locale"
+import { estimateMessageTokens, pickMessageContentParts } from "@/session/message-content"
 
 export function DialogMessage(props: {
   messageID: string
@@ -14,11 +17,39 @@ export function DialogMessage(props: {
   const sdk = useSDK()
   const message = createMemo(() => sync.data.message[props.sessionID]?.find((x) => x.id === props.messageID))
   const route = useRoute()
+  const toast = useToast()
+  const parts = createMemo(() => sync.data.part[props.messageID] ?? [])
+  const compactTokens = createMemo(() => {
+    const content = pickMessageContentParts(parts())
+    return estimateMessageTokens(content)
+  })
 
   return (
     <DialogSelect
       title="Message Actions"
       options={[
+        {
+          title: `Compact message (${Locale.number(compactTokens() || 0)} tokens)`,
+          value: "session.compactMessage",
+          description: "Summarize this message to reduce context usage",
+          onSelect: (dialog) => {
+            dialog.clear()
+            sdk.client.session
+              .compactMessage({
+                path: {
+                  id: props.sessionID,
+                  messageID: props.messageID,
+                },
+              })
+              .then(() => {
+                toast.show({ message: "Message compacted", variant: "success" })
+              })
+              .catch((error) => {
+                const message = error instanceof Error ? error.message : "Failed to compact message"
+                toast.show({ message, variant: "error" })
+              })
+          },
+        },
         {
           title: "Revert",
           value: "session.revert",

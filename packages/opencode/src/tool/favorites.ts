@@ -54,10 +54,6 @@ export namespace ToolFavorites {
   export async function saveProject(favorites: Set<string>): Promise<void> {
     try {
       const configPath = await findConfigFile()
-      if (!configPath) {
-        log.error("no config file found to save favorites")
-        return
-      }
 
       const file = Bun.file(configPath)
       const content = await file.text()
@@ -108,27 +104,14 @@ export namespace ToolFavorites {
     }
   }
 
-  async function findConfigFile(): Promise<string | null> {
-    const configFiles = ["codesurf.jsonc", "codesurf.json", "opencode.jsonc", "opencode.json"]
-
-    for (const file of configFiles) {
-      const fullPath = path.join(Instance.directory, file)
-      if (await Bun.file(fullPath).exists()) {
-        return fullPath
-      }
+  async function findConfigFile(): Promise<string> {
+    const configPath = await Config.projectConfigPath()
+    const file = Bun.file(configPath)
+    if (!(await file.exists())) {
+      await Bun.write(configPath, JSON.stringify({}, null, 2))
+      log.info("created new config file", { path: configPath })
     }
-
-    for (const file of configFiles) {
-      const fullPath = path.join(Instance.worktree, file)
-      if (await Bun.file(fullPath).exists()) {
-        return fullPath
-      }
-    }
-
-    const defaultPath = path.join(Instance.worktree, "codesurf.jsonc")
-    await Bun.write(defaultPath, JSON.stringify({}, null, 2))
-    log.info("created new config file", { path: defaultPath })
-    return defaultPath
+    return configPath
   }
 
   // Cycle through states: none → project → global → none

@@ -41,7 +41,10 @@ export namespace TaskHierarchy {
     // Get parent session to determine depth
     const parent = await Session.get(parentSessionID)
     const parentDepth = parent.orchestration?.depth ?? 0
-    const parentMode = parent.orchestration?.pausedMode
+    const parentMode =
+      parent.orchestration?.currentAgent ??
+      parent.orchestration?.rootAgent ??
+      parent.orchestration?.pausedMode
 
     // Create new session for child
     const childSession = await Session.create({
@@ -71,9 +74,7 @@ export namespace TaskHierarchy {
         draft.orchestration.pausedAt = Date.now()
       }
       // Store mode for resumption if provided
-      if (parentMode) {
-        draft.orchestration.pausedMode = parentMode
-      }
+      if (parentMode) draft.orchestration.pausedMode = parentMode
     })
 
     log.info("subtask created", {

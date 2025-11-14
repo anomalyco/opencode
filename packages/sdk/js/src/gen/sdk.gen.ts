@@ -81,6 +81,9 @@ import type {
   SessionSetMessagePriorityData,
   SessionSetMessagePriorityResponses,
   SessionSetMessagePriorityErrors,
+  SessionCompactMessageData,
+  SessionCompactMessageResponses,
+  SessionCompactMessageErrors,
   SessionCommandData,
   SessionCommandResponses,
   SessionCommandErrors,
@@ -559,6 +562,22 @@ class Session extends _HeyApiClient {
         "Content-Type": "application/json",
         ...options.headers,
       },
+    })
+  }
+
+  /**
+   * Summarize and compact a single message
+   */
+  public compactMessage<ThrowOnError extends boolean = false>(
+    options: Options<SessionCompactMessageData, ThrowOnError>,
+  ) {
+    return (options.client ?? this._client).post<
+      SessionCompactMessageResponses,
+      SessionCompactMessageErrors,
+      ThrowOnError
+    >({
+      url: "/session/{id}/message/{messageID}/compact",
+      ...options,
     })
   }
 

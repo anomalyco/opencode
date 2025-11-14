@@ -1,7 +1,15 @@
 {
   "favoriteTools": [
-    "ripgrep",
-    "edit"
+    "cc_computer_use",
+    "write",
+    "cc_bash",
+    "cc_edit",
+    "cc_glob",
+    "cc_grep",
+    "add_memory",
+    "todoread",
+    "switch_mode",
+    "glob"
   ],
   "$schema": "https://opencode.ai/config.json"
 }

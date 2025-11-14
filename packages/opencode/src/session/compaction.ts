@@ -1,4 +1,4 @@
-import { streamText, type ModelMessage, type StreamTextResult, type Tool as AITool } from "ai"
+import { generateText, streamText, type ModelMessage, type StreamTextResult, type Tool as AITool } from "ai"
 import { Session } from "."
 import { Identifier } from "../id/id"
 import { Instance } from "../project/instance"
@@ -17,6 +17,7 @@ import { SessionLock } from "./lock"
 import { ProviderTransform } from "@/provider/transform"
 import { SessionRetry } from "./retry"
 import { Config } from "@/config/config"
+import { estimateMessageTokens, messageText, pickMessageContentParts } from "./message-content"
 
 export namespace SessionCompaction {
   const log = Log.create({ service: "session.compaction" })
@@ -28,6 +29,27 @@ export namespace SessionCompaction {
         sessionID: z.string(),
       }),
     ),
+  }
+
+  async function resolveCompactModel(info: MessageV2.Info, sessionID: string) {
+    if (info.role === "assistant") {
+      const preferred = await Provider.getSmallModel(info.providerID)
+      if (preferred) return preferred
+      return Provider.getModel(info.providerID, info.modelID)
+    }
+
+    const messages = await Session.messages({ sessionID })
+    const nextAssistant = messages.find((msg) => msg.info.role === "assistant" && msg.info.id > info.id)
+    if (nextAssistant) {
+      const preferred = await Provider.getSmallModel(nextAssistant.info.providerID)
+      if (preferred) return preferred
+      return Provider.getModel(nextAssistant.info.providerID, nextAssistant.info.modelID)
+    }
+
+    const fallback = await Provider.defaultModel()
+    const preferred = await Provider.getSmallModel(fallback.providerID)
+    if (preferred) return preferred
+    return Provider.getModel(fallback.providerID, fallback.modelID)
   }
 
   export function isOverflow(input: { tokens: MessageV2.Assistant["tokens"]; model: ModelsDev.Model }) {
@@ -88,6 +110,110 @@ export namespace SessionCompaction {
       }
       log.info("pruned", { count: toPrune.length })
     }
+  }
+
+  export async function compactMessage(input: { sessionID: string; messageID: string }) {
+    const message = await MessageV2.get(input)
+    const contentParts = pickMessageContentParts(message.parts)
+    const combined = messageText(contentParts)
+    if (!combined) return message.info
+
+    const model = await resolveCompactModel(message.info, input.sessionID)
+    const maxOutput = Math.min(200, model.info.limit.output || 200)
+    const tokensBefore = estimateMessageTokens(contentParts)
+
+    const response = await generateText({
+      model: model.language,
+      maxOutputTokens: maxOutput,
+      providerOptions: ProviderTransform.providerOptions(model.npm, model.providerID, model.info.options),
+      headers: model.info.headers,
+      messages: [
+        {
+          role: "system",
+          content:
+            "You compress previous steps so the assistant can keep working. Write 2-4 concise bullet points that preserve file names, commands, errors, and next actions. Keep things factual and avoid commentary.",
+        },
+        {
+          role: "user",
+          content: `
+Original role: ${message.info.role}
+Approximate tokens: ${tokensBefore}
+
+<content>
+${combined}
+</content>
+          `.trim(),
+        },
+      ],
+    })
+
+    const summary = response.text.trim()
+    if (!summary) return message.info
+
+    const now = Date.now()
+    const tokensAfter = Token.estimate(summary)
+    let updatedText = false
+    for (const part of message.parts) {
+      if (part.type !== "text") continue
+      if (part.synthetic) continue
+
+      if (!updatedText) {
+        const metadata = {
+          ...(part.metadata ?? {}),
+          compaction: {
+            time: now,
+            tokensBefore,
+            tokensAfter,
+            method: "manual",
+          },
+        }
+        await Session.updatePart({
+          ...part,
+          text: summary,
+          metadata,
+        })
+        updatedText = true
+        continue
+      }
+
+      await Session.removePart({
+        sessionID: input.sessionID,
+        messageID: input.messageID,
+        partID: part.id,
+      })
+    }
+
+    if (!updatedText) {
+      await Session.updatePart({
+        id: Identifier.ascending("part"),
+        messageID: input.messageID,
+        sessionID: input.sessionID,
+        type: "text",
+        text: summary,
+        metadata: {
+          compaction: {
+            time: now,
+            tokensBefore,
+            tokensAfter,
+            method: "manual",
+          },
+        },
+        time: {
+          start: now,
+          end: now,
+        },
+      })
+    }
+
+    for (const part of message.parts) {
+      if (part.type !== "tool") continue
+      if (part.state.status !== "completed") continue
+      if (part.state.time.compacted) continue
+      part.state.time.compacted = now
+      await Session.updatePart(part)
+    }
+
+    return message.info
   }
 
   export async function run(input: { sessionID: string; providerID: string; modelID: string; signal?: AbortSignal }) {

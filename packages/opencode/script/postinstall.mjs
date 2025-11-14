@@ -50,7 +50,7 @@ function detectPlatformAndArch() {
 function findBinary() {
   const { platform, arch } = detectPlatformAndArch()
   const packageName = `codesurf-ai-${platform}-${arch}`
-  const binary = platform === "windows" ? "codesurf.exe" : "codesurf"
+  const binaryName = platform === "windows" ? "codesurf.exe" : "codesurf"
 
   try {
     // Use require.resolve to find the package
@@ -170,7 +170,7 @@ async function main() {
       return
     }
 
-    const binaryPath = findBinary()
+    const { binaryPath } = findBinary()
     const codeSurfScript = path.join(__dirname, "bin", "codesurf")
     const surfScript = path.join(__dirname, "bin", "surf")
 

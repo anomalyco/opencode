@@ -65,7 +65,12 @@ export namespace ModelsDev {
     const file = Bun.file(filepath)
     const result = await file.json().catch(() => {})
     if (result) return result as Record<string, Provider>
-    const json = await data()
+    const json = await data().catch((error) => {
+      log.error("failed to load embedded models", {
+        error,
+      })
+    })
+    if (!json) return {} as Record<string, Provider>
     return JSON.parse(json) as Record<string, Provider>
   }
 
