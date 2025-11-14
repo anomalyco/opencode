@@ -471,19 +471,12 @@ export namespace Provider {
       const existing = s.sdk.get(key)
       if (existing) return existing
       
-      const isLocalPath = pkg.startsWith("/") || pkg.startsWith("file:") || pkg.startsWith("./")
-      
       let installedPath: string
-      if (isLocalPath) {
-        log.info("loading local provider", { pkg })
-        const projectDir = Instance.directory
-        installedPath = pkg.startsWith("file:") 
-          ? path.join(projectDir, pkg.slice(5))
-          : pkg.startsWith("./")
-            ? path.join(projectDir, pkg)
-            : pkg
-      } else {
+      if (!pkg.startsWith("file://")) {
         installedPath = await BunProc.install(pkg, "latest")
+      } else {
+        log.info("loading local provider", { pkg })
+        installedPath = pkg
       }
       
       // The `google-vertex-anthropic` provider points to the `@ai-sdk/google-vertex` package.
