@@ -149,6 +149,10 @@ export namespace ProviderTransform {
         result["reasoningEffort"] = "medium"
       }
 
+      if (modelID.endsWith("gpt-5.1")) {
+        result["textVerbosity"] = "low"
+      }
+
       if (providerID === "opencode") {
         result["promptCacheKey"] = sessionID
         result["include"] = ["reasoning.encrypted_content"]
