@@ -49,14 +49,8 @@ export const ContextUsageBar: Component<ContextUsageBarProps> = (props) => {
 
     if (filled > 0 && props.currentTokens > 0) {
       // Calculate proportional segment counts
-      const systemCount = Math.max(
-        1,
-        Math.round((props.systemTokens / props.currentTokens) * filled),
-      )
-      const assistantCount = Math.max(
-        1,
-        Math.round((props.assistantTokens / props.currentTokens) * filled),
-      )
+      const systemCount = Math.max(1, Math.round((props.systemTokens / props.currentTokens) * filled))
+      const assistantCount = Math.max(1, Math.round((props.assistantTokens / props.currentTokens) * filled))
       const userCount = Math.max(1, Math.round((props.userTokens / props.currentTokens) * filled))
       const toolCount = Math.max(1, Math.round((props.toolTokens / props.currentTokens) * filled))
 
@@ -67,9 +61,7 @@ export const ContextUsageBar: Component<ContextUsageBarProps> = (props) => {
       // Distribute difference (usually ±1-2 segments due to rounding)
       if (diff > 0) {
         // Add to largest category
-        if (
-          props.systemTokens >= Math.max(props.assistantTokens, props.userTokens, props.toolTokens)
-        ) {
+        if (props.systemTokens >= Math.max(props.assistantTokens, props.userTokens, props.toolTokens)) {
           total = systemCount + diff + assistantCount + userCount + toolCount
         } else if (props.assistantTokens >= Math.max(props.userTokens, props.toolTokens)) {
           total = systemCount + assistantCount + diff + userCount + toolCount
@@ -135,10 +127,10 @@ export const ContextUsageBar: Component<ContextUsageBarProps> = (props) => {
           </text>
         </box>
         <box flexDirection="row" gap={1} paddingTop={1} paddingBottom={1}>
-          <text fg={props.systemColor || props.agentColor}>█ System</text>
-          <text fg={props.assistantColor || props.agentColor}>█ AI</text>
-          <text fg={props.userColor || props.agentColor}>█ User</text>
-          <text fg={props.toolColor || props.agentColor}>█ Tool</text>
+          <text fg={props.systemColor || props.agentColor}>● System</text>
+          <text fg={props.assistantColor || props.agentColor}>● AI</text>
+          <text fg={props.userColor || props.agentColor}>● User</text>
+          <text fg={props.toolColor || props.agentColor}>● Tool</text>
         </box>
       </box>
     </Show>

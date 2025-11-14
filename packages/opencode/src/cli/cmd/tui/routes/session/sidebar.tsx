@@ -804,27 +804,33 @@ export function Sidebar(props: {
           <text fg={theme.text} attributes={TextAttributes.BOLD}>
             Context
           </text>
-          <ContextUsageBar
-            currentTokens={context().tokens}
-            tokenLimit={context().tokenLimit}
-            systemTokens={context().systemTokens}
-            assistantTokens={context().assistantTokens}
-            userTokens={context().userTokens}
-            toolTokens={context().toolTokens}
-            agentColor={(() => {
+          {(() => {
+            const agentColor = createMemo(() => {
               const color = local.agent.color("assistant")
               if (typeof color === "string") {
                 return color.startsWith("#") ? RGBA.fromHex(color) : RGBA.fromHex("#" + color)
               }
               return color
-            })()}
-            systemColor={theme.textMuted}
-            assistantColor={RGBA.fromHex("#D4A574")}
-            toolColor={RGBA.fromHex("#8B7355")}
-            userColor={theme.secondary}
-            backgroundColor={theme.backgroundPanel}
-            width={props.width}
-          />
+            })
+
+            return (
+              <ContextUsageBar
+                currentTokens={context().tokens}
+                tokenLimit={context().tokenLimit}
+                systemTokens={context().systemTokens}
+                assistantTokens={context().assistantTokens}
+                userTokens={context().userTokens}
+                toolTokens={context().toolTokens}
+                agentColor={agentColor()}
+                systemColor={theme.textMuted}
+                assistantColor={theme.accent}
+                toolColor={theme.warning}
+                userColor={theme.secondary}
+                backgroundColor={theme.backgroundPanel}
+                width={props.width}
+              />
+            )
+          })()}
           <text fg={theme.textMuted}>
             {context().tokensFormatted} tokens ({context().freePercentage}% cached)
           </text>

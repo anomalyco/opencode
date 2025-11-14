@@ -244,7 +244,11 @@ export function DialogContextTimeline(props: { sessionID: string }) {
                     </Show>
                   </box>
                   <box flexDirection="column" gap={0} flexGrow={1}>
-                    <text fg={typeColor(item.type)} wrapMode="word" onMouseUp={() => toggleItem(item.id)}>
+                    <text
+                      fg={typeColor(item.type)}
+                      wrapMode={isExpanded() ? "word" : "none"}
+                      onMouseUp={() => toggleItem(item.id)}
+                    >
                       {isExpanded() ? "▼" : "▶"} {item.title} · {Locale.time(item.timestamp)} — {item.summary}
                       {item.meta ? ` (${item.meta})` : ""}
                     </text>

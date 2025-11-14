@@ -32,7 +32,7 @@ import type {
   ToolPart,
   UserMessage,
   TextPart,
-  ReasoningPart,
+  ReasoningPart as ReasoningPartPart,
   Session as SessionType,
 } from "@opencode-ai/sdk"
 import { useLocal } from "@tui/context/local"
@@ -52,6 +52,7 @@ import type { TaskTool } from "@/tool/task"
 import type { AddTaskTool } from "@/tool/add-task"
 import { useKeyboard, useRenderer, useTerminalDimensions, type BoxProps, type JSX } from "@opentui/solid"
 import { useSDK } from "@tui/context/sdk"
+
 import { useCommandDialog } from "@tui/component/dialog-command"
 import { Shimmer } from "@tui/ui/shimmer"
 import { useKeybind } from "@tui/context/keybind"
@@ -1750,10 +1751,10 @@ function AssistantMessage(props: { message: AssistantMessage; parts: Part[]; las
 const PART_MAPPING = {
   text: TextPart,
   tool: ToolPart,
-  reasoning: ReasoningPart,
+  reasoning: ReasoningPartView,
 }
 
-function ReasoningPart(props: { part: ReasoningPart; message: AssistantMessage }) {
+function ReasoningPartView(props: { part: ReasoningPartPart; message: AssistantMessage; trailing?: JSX.Element }) {
   const { theme } = useTheme()
   const text = createMemo(() => props.part.text.trim())
   const previousIsReasoning = createMemo(() => {
@@ -1768,13 +1769,18 @@ function ReasoningPart(props: { part: ReasoningPart; message: AssistantMessage }
         id={"reasoning-" + props.part.id}
         paddingLeft={3}
         marginTop={previousIsReasoning() ? 0 : 1}
-        marginBottom={1}
+        marginBottom={0}
         flexShrink={0}
       >
-        <text wrapMode="word">
-          <span style={{ italic: true, fg: theme.textMuted }}>Thinking:</span>{" "}
-          <span style={{ fg: theme.accent }}>{text()}</span>
-        </text>
+        <box flexDirection="row" alignItems="center" justifyContent="space-between" gap={1}>
+          <text wrapMode="word">
+            <span style={{ italic: true, fg: theme.textMuted }}>Thinking:</span>{" "}
+            <span style={{ fg: theme.accent }}>{text()}</span>
+          </text>
+          <Show when={props.trailing}>
+            <box flexShrink={0}>{props.trailing}</box>
+          </Show>
+        </box>
       </box>
     </Show>
   )
@@ -1967,6 +1973,9 @@ function TextPart(props: { part: TextPart; message: AssistantMessage }) {
 
 // Pending messages moved to individual tool pending functions
 
+const BLOCK_CONTAINER_MIN_HEIGHT = 3
+const BLOCK_CONTAINER_PADDING = 1
+
 function ToolPart(props: { part: ToolPart; message: AssistantMessage; indent?: number }) {
   const { theme } = useTheme()
   const sync = useSync()
@@ -2015,25 +2024,32 @@ function ToolPart(props: { part: ToolPart; message: AssistantMessage; indent?: n
   })
 
   const style = createMemo(() => {
+    const collapsedState = collapsed()
     if (container === "block" || permission()) {
-      const collapsedState = collapsed()
-      const marginTop = collapsedState ? 0 : 1
       const basePaddingLeft = collapsedState ? 1 : 2
       const paddingLeft = isTaskTool ? Math.max(0, basePaddingLeft - 1) : basePaddingLeft
       return {
         border: permissionIndex() === 0 ? (["left", "right"] as const) : (["left"] as const),
-        paddingTop: collapsedState ? 0 : 1,
-        paddingBottom: collapsedState ? 0 : 1,
+        paddingTop: BLOCK_CONTAINER_PADDING,
+        paddingBottom: BLOCK_CONTAINER_PADDING,
         paddingLeft,
-        marginTop,
         gap: collapsedState ? 0 : 1,
+        minHeight: BLOCK_CONTAINER_MIN_HEIGHT,
         backgroundColor: theme.backgroundPanel,
         customBorderChars: SplitBorder.customBorderChars,
         borderColor: permissionIndex() === 0 ? theme.warning : theme.background,
       } as BoxProps
     }
     return {
+      border: ["left"] as const,
+      customBorderChars: SplitBorder.customBorderChars,
+      borderColor: theme.background,
       paddingLeft: inlineIndent,
+      paddingTop: BLOCK_CONTAINER_PADDING,
+      paddingBottom: BLOCK_CONTAINER_PADDING,
+      minHeight: BLOCK_CONTAINER_MIN_HEIGHT,
+      gap: collapsedState ? 0 : 1,
+      backgroundColor: theme.backgroundPanel,
     } as BoxProps
   })
 
@@ -2067,7 +2083,7 @@ function ToolPart(props: { part: ToolPart; message: AssistantMessage; indent?: n
       {createMemo(() => {
         const RenderComponent = render
         const isCollapsed = collapsed()
-        console.log("[ToolPart] Rendering tool, collapsed:", isCollapsed)
+
         return (
           <RenderComponent
             input={input}
@@ -2079,9 +2095,7 @@ function ToolPart(props: { part: ToolPart; message: AssistantMessage; indent?: n
             priorityControls={priorityControls}
             onToggle={() => {
               if (renderer.getSelection()?.getSelectedText()) return
-              console.log("[ToolPart] Toggle clicked, collapsed was:", collapsed())
               setCollapsed(!collapsed())
-              console.log("[ToolPart] Toggle clicked, collapsed now:", !collapsed())
             }}
           />
         )
@@ -2287,21 +2301,27 @@ function ToolTitle(props: ToolTitleProps) {
           </Show>
         </text>
       </box>
-      <box flexDirection="row" alignItems="center" gap={1} flexShrink={0}>
+      <box flexDirection="row" alignItems="center" gap={0} flexShrink={0}>
         <Show when={props.trailing}>
           <box alignItems="center">{props.trailing}</box>
         </Show>
-        <text fg={theme.textMuted} attributes={1} onMouseUp={(event) => showMenu(event)}>
-          ⋮{" "}
-        </text>
+        <box paddingLeft={props.trailing ? 1 : 0}>
+          <text fg={theme.textMuted} attributes={1} onMouseUp={(event) => showMenu(event)}>
+            ⋮{" "}
+          </text>
+        </box>
       </box>
     </box>
   )
 }
 
-function ToolBadge(props: { children: JSX.Element }) {
+function ToolBadge(props: { children: JSX.Element | string }) {
   const { theme } = useTheme()
-  return <span style={{ bg: theme.backgroundElement, fg: theme.accent, bold: true }}> {props.children} </span>
+  const label = createMemo(() => {
+    if (typeof props.children === "string") return props.children.toUpperCase()
+    return String(props.children ?? "").toUpperCase()
+  })
+  return <span style={{ bg: theme.accent, fg: theme.background, bold: true }}> {label()} </span>
 }
 
 toolRegistry.register<typeof BashTool>({

@@ -11,16 +11,7 @@ type ReasoningPart = {
   text: string
 }
 
-type CompletedToolPart = {
-  type: "tool"
-  tool: string
-  state: {
-    status: "completed"
-    output: string
-  }
-}
-
-export type MessageContentPart = TextPart | ReasoningPart | CompletedToolPart
+export type MessageContentPart = TextPart | ReasoningPart
 
 function isRecord(input: unknown): input is Record<string, unknown> {
   return typeof input === "object" && input !== null
@@ -38,15 +29,6 @@ function isReasoningPart(part: unknown): part is ReasoningPart {
   return typeof part.text === "string"
 }
 
-function isCompletedToolPart(part: unknown): part is CompletedToolPart {
-  if (!isRecord(part)) return false
-  if (part.type !== "tool") return false
-  const state = part.state
-  if (!isRecord(state)) return false
-  if (state.status !== "completed") return false
-  return typeof state.output === "string" && typeof part.tool === "string"
-}
-
 export function pickMessageContentParts(parts: unknown[]) {
   const result: MessageContentPart[] = []
   for (const part of parts) {
@@ -55,10 +37,6 @@ export function pickMessageContentParts(parts: unknown[]) {
       continue
     }
     if (isReasoningPart(part)) {
-      result.push(part)
-      continue
-    }
-    if (isCompletedToolPart(part)) {
       result.push(part)
     }
   }
@@ -79,11 +57,6 @@ export function messageText(parts: MessageContentPart[]) {
       const text = part.text.trim()
       if (text) segments.push(`Reasoning:\n${text}`)
       continue
-    }
-
-    if (part.type === "tool" && part.state.status === "completed") {
-      const text = part.state.output.trim()
-      if (text) segments.push(`Tool ${part.tool}:\n${text}`)
     }
   }
 

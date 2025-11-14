@@ -6,6 +6,8 @@ import { TextAttributes } from "@opentui/core"
 import { useKeyboard, useRenderer, useTerminalDimensions } from "@opentui/solid"
 import { DialogPrompt } from "../ui/dialog-prompt"
 import { randomUUID } from "node:crypto"
+import path from "path"
+import { Global } from "@/global"
 
 type AccentKey = "primary" | "secondary" | "accent" | "warning" | "success" | "info" | "error"
 

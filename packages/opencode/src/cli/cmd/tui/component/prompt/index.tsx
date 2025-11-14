@@ -42,6 +42,7 @@ export type PromptProps = {
   hint?: JSX.Element
   showPlaceholder?: boolean
   onScrollToBottom?: () => void
+  showLatestIndicator?: boolean
 }
 
 export type PromptRef = {
@@ -847,7 +848,7 @@ export function Prompt(props: PromptProps) {
                 <text fg={theme.text}>
                   {keybind.print("command_list")} <span style={{ fg: theme.textMuted }}>commands</span>
                 </text>
-                {props.onScrollToBottom && (
+                {props.onScrollToBottom && props.showLatestIndicator && (
                   <text
                     fg={theme.accent}
                     onMouseUp={() => {
