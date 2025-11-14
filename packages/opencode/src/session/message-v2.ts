@@ -533,29 +533,53 @@ export namespace MessageV2 {
           id: msg.info.id,
           role: "user",
           parts: msg.parts.flatMap((part): UIMessage["parts"] => {
-            if (part.type === "text")
+            // Filter out synthetic text parts (system-generated metadata)
+            if (part.type === "text") {
+              if (part.synthetic) return []
               return [
                 {
                   type: "text",
                   text: part.text,
                 },
               ]
+            }
             // text/plain and directory files are converted into text parts, ignore them
             if (part.type === "file" && part.mime !== "text/plain" && part.mime !== "application/x-directory") {
-              // For vision support: convert image attachments to image type
-              if (part.mime.startsWith("image/")) {
-                return [
-                  {
-                    type: "image",
-                    image: part.url,
-                    mimeType: part.mime,
-                  },
-                ]
+              // For vision support: convert all file attachments (including images) to AI SDK FilePart format
+              // The provider will convert image/* files to OpenAI's image_url format automatically
+
+              // AI SDK expects data to be either:
+              // - A data URL string for remote APIs (data:image/png;base64,...)
+              // - Binary data as Uint8Array
+              // NOTE: file:// URLs won't work for remote APIs, so we must read and encode
+              let dataValue: string
+              if (part.url.startsWith("file://")) {
+                // For file:// URLs, read the file and convert to base64 data URL
+                // This is necessary for remote APIs that can't access local files
+                try {
+                  const filePath = part.url.replace("file://", "")
+                  // Use Node's fs to read the file synchronously
+                  const fs = require("fs")
+                  const buffer = fs.readFileSync(filePath)
+                  const base64 = buffer.toString("base64")
+                  dataValue = `data:${part.mime};base64,${base64}`
+                } catch (error) {
+                  console.error("Failed to read file for vision:", error)
+                  // Fallback to original URL
+                  dataValue = part.url
+                }
+              } else if (part.url.startsWith("data:")) {
+                // Already a data: URL string, pass as-is
+                dataValue = part.url
+              } else {
+                // Unknown URL format, pass as-is
+                dataValue = part.url
               }
+
               return [
                 {
                   type: "file",
-                  url: part.url,
+                  url: dataValue,
                   mediaType: part.mime,
                   filename: part.filename,
                 },

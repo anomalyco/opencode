@@ -1856,7 +1856,8 @@ export namespace SessionPrompt {
                 created: Date.now(),
               },
             },
-            parts: input.message.parts,
+            // Filter out file parts (images) for title generation - only use text parts
+            parts: input.message.parts.filter((part) => part.type === "text"),
           },
         ]),
       ],

@@ -108,7 +108,8 @@ export const RunCommand = cmd({
         }
 
         const stat = await file.stat()
-        const mime = stat.isDirectory() ? "application/x-directory" : "text/plain"
+        // For vision support: detect MIME type from file instead of hardcoding to text/plain
+        const mime = stat.isDirectory() ? "application/x-directory" : (file.type || "text/plain")
 
         fileParts.push({
           type: "file",
