@@ -6,6 +6,17 @@ import { type Config } from "./gen/client/types.gen.js"
 import { OpencodeClient } from "./gen/sdk.gen.js"
 
 export function createOpencodeClient(config?: Config) {
+  if (!config?.fetch) {
+    config = {
+      ...config,
+      fetch: (req) => {
+        // @ts-ignore
+        req.timeout = false
+        return fetch(req)
+      },
+    }
+  }
+
   const client = createClient(config)
   return new OpencodeClient({ client })
 }

@@ -39,8 +39,8 @@ async function main() {
   process.chdir(workDir)
 
   // Configure git identity
-  await $`git config user.name "Dax"`
-  await $`git config user.email "mail@thdxr.com"`
+  await $`git config user.name "Dax Raad"`
+  await $`git config user.email "d@ironbay.co"`
 
   // Sync fork with upstream
   console.log(`🔄 Syncing fork with upstream...`)

@@ -465,11 +465,11 @@ export const { use: useLocal, provider: LocalProvider } = createSimpleContext({
             width: 240,
           },
           review: {
-            state: "closed" as "open" | "closed" | "tab",
+            state: "pane" as "pane" | "tab",
           },
         }),
         {
-          name: "default-layout",
+          name: "_default-layout",
         },
       )
 
@@ -492,11 +492,8 @@ export const { use: useLocal, provider: LocalProvider } = createSimpleContext({
         },
         review: {
           state: createMemo(() => store.review?.state ?? "closed"),
-          open() {
-            setStore("review", "state", "open")
-          },
-          close() {
-            setStore("review", "state", "closed")
+          pane() {
+            setStore("review", "state", "pane")
           },
           tab() {
             setStore("review", "state", "tab")

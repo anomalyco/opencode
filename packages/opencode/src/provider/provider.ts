@@ -12,6 +12,7 @@ import { Auth } from "../auth"
 import { Instance } from "../project/instance"
 import { Global } from "../global"
 import { Flag } from "../flag/flag"
+import { iife } from "@/util/iife"
 
 export namespace Provider {
   const log = Log.create({ service: "provider" })
@@ -52,7 +53,7 @@ export namespace Provider {
 
       return {
         autoload: Object.keys(input.models).length > 0,
-        options: {},
+        options: hasKey ? {} : { apiKey: "public" },
       }
     },
     openai: async () => {
@@ -290,9 +291,14 @@ export namespace Provider {
 
       for (const [modelID, model] of Object.entries(provider.models ?? {})) {
         const existing = parsed.models[model.id ?? modelID]
+        const name = iife(() => {
+          if (model.name) return model.name
+          if (model.id && model.id !== modelID) return modelID
+          return existing?.name ?? modelID
+        })
         const parsedModel: ModelsDev.Model = {
           id: modelID,
-          name: model.name ?? existing?.name ?? modelID,
+          name,
           release_date: model.release_date ?? existing?.release_date,
           attachment: model.attachment ?? existing?.attachment ?? false,
           reasoning: model.reasoning ?? existing?.reasoning ?? false,
@@ -575,6 +581,9 @@ export namespace Provider {
     // claude-haiku-4.5 is considered a premium model in github copilot, we shouldn't use premium requests for title gen
     if (providerID === "github-copilot") {
       priority = priority.filter((m) => m !== "claude-haiku-4.5")
+    }
+    if (providerID === "opencode" || providerID === "local") {
+      priority = ["gpt-5-nano"]
     }
     for (const item of priority) {
       for (const model of Object.keys(provider.info.models)) {
