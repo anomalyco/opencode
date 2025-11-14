@@ -2,6 +2,8 @@
 
 import type { Options as ClientOptions, TDataShape, Client } from "./client/index.js"
 import type {
+  GlobalEventButtData,
+  GlobalEventButtResponses,
   ProjectListData,
   ProjectListResponses,
   ProjectCurrentData,
@@ -173,6 +175,32 @@ class _HeyApiClient {
       this._client = args.client
     }
   }
+}
+
+class Event extends _HeyApiClient {
+  /**
+   * Get events
+   */
+  public butt<ThrowOnError extends boolean = false>(options?: Options<GlobalEventButtData, ThrowOnError>) {
+    return (options?.client ?? this._client).get.sse<GlobalEventButtResponses, unknown, ThrowOnError>({
+      url: "/global/event",
+      ...options,
+    })
+  }
+
+  /**
+   * Get events
+   */
+  public subscribe<ThrowOnError extends boolean = false>(options?: Options<EventSubscribeData, ThrowOnError>) {
+    return (options?.client ?? this._client).get.sse<EventSubscribeResponses, unknown, ThrowOnError>({
+      url: "/event",
+      ...options,
+    })
+  }
+}
+
+class Global extends _HeyApiClient {
+  event = new Event({ client: this._client })
 }
 
 class Project extends _HeyApiClient {
@@ -828,18 +856,6 @@ class Auth extends _HeyApiClient {
   }
 }
 
-class Event extends _HeyApiClient {
-  /**
-   * Get events
-   */
-  public subscribe<ThrowOnError extends boolean = false>(options?: Options<EventSubscribeData, ThrowOnError>) {
-    return (options?.client ?? this._client).get.sse<EventSubscribeResponses, unknown, ThrowOnError>({
-      url: "/event",
-      ...options,
-    })
-  }
-}
-
 export class OpencodeClient extends _HeyApiClient {
   /**
    * Respond to a permission request
@@ -860,6 +876,7 @@ export class OpencodeClient extends _HeyApiClient {
       },
     })
   }
+  global = new Global({ client: this._client })
   project = new Project({ client: this._client })
   config = new Config({ client: this._client })
   tool = new Tool({ client: this._client })

@@ -2,6 +2,7 @@ import z from "zod"
 import type { ZodType } from "zod"
 import { Log } from "../util/log"
 import { Instance } from "../project/instance"
+import { GlobalBus } from "./global"
 
 export namespace Bus {
   const log = Log.create({ service: "bus" })
@@ -65,6 +66,10 @@ export namespace Bus {
         pending.push(sub(payload))
       }
     }
+    GlobalBus.emit("event", {
+      directory: Instance.directory,
+      payload,
+    })
     return Promise.all(pending)
   }
 
