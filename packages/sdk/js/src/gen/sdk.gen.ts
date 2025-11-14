@@ -2,8 +2,8 @@
 
 import type { Options as ClientOptions, TDataShape, Client } from "./client/index.js"
 import type {
-  GlobalEventSubscribeData,
-  GlobalEventSubscribeResponses,
+  GlobalEventData,
+  GlobalEventResponses,
   ProjectListData,
   ProjectListResponses,
   ProjectCurrentData,
@@ -145,6 +145,8 @@ import type {
   AuthSetData,
   AuthSetResponses,
   AuthSetErrors,
+  EventSubscribeData,
+  EventSubscribeResponses,
 } from "./types.gen.js"
 import { client as _heyApiClient } from "./client.gen.js"
 
@@ -175,20 +177,16 @@ class _HeyApiClient {
   }
 }
 
-class Event extends _HeyApiClient {
+class Global extends _HeyApiClient {
   /**
    * Get events
    */
-  public subscribe<ThrowOnError extends boolean = false>(options?: Options<GlobalEventSubscribeData, ThrowOnError>) {
-    return (options?.client ?? this._client).get.sse<GlobalEventSubscribeResponses, unknown, ThrowOnError>({
+  public event<ThrowOnError extends boolean = false>(options?: Options<GlobalEventData, ThrowOnError>) {
+    return (options?.client ?? this._client).get.sse<GlobalEventResponses, unknown, ThrowOnError>({
       url: "/global/event",
       ...options,
     })
   }
-}
-
-class Global extends _HeyApiClient {
-  event = new Event({ client: this._client })
 }
 
 class Project extends _HeyApiClient {
@@ -840,6 +838,18 @@ class Auth extends _HeyApiClient {
         "Content-Type": "application/json",
         ...options.headers,
       },
+    })
+  }
+}
+
+class Event extends _HeyApiClient {
+  /**
+   * Get events
+   */
+  public subscribe<ThrowOnError extends boolean = false>(options?: Options<EventSubscribeData, ThrowOnError>) {
+    return (options?.client ?? this._client).get.sse<EventSubscribeResponses, unknown, ThrowOnError>({
+      url: "/event",
+      ...options,
     })
   }
 }

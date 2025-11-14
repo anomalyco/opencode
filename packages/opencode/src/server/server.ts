@@ -122,7 +122,7 @@ export namespace Server {
         "/global/event",
         describeRoute({
           description: "Get events",
-          operationId: "global.event.subscribe",
+          operationId: "global.event",
           responses: {
             200: {
               description: "Event stream",

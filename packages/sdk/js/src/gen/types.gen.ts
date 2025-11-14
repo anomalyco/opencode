@@ -1378,21 +1378,21 @@ export type WellKnownAuth = {
 
 export type Auth = OAuth | ApiAuth | WellKnownAuth
 
-export type GlobalEventSubscribeData = {
+export type GlobalEventData = {
   body?: never
   path?: never
   query?: never
   url: "/global/event"
 }
 
-export type GlobalEventSubscribeResponses = {
+export type GlobalEventResponses = {
   /**
    * Event stream
    */
   200: GlobalEvent
 }
 
-export type GlobalEventSubscribeResponse = GlobalEventSubscribeResponses[keyof GlobalEventSubscribeResponses]
+export type GlobalEventResponse = GlobalEventResponses[keyof GlobalEventResponses]
 
 export type ProjectListData = {
   body?: never
