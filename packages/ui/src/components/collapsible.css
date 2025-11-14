@@ -5,7 +5,7 @@
   background-color: var(--surface-inset-base);
   border: 1px solid var(--border-weaker-base);
   transition: background-color 0.15s ease;
-  border-radius: 8px;
+  border-radius: var(--radius-md);
   overflow: clip;
 
   [data-slot="collapsible-trigger"] {

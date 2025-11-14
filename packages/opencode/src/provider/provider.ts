@@ -53,7 +53,7 @@ export namespace Provider {
 
       return {
         autoload: Object.keys(input.models).length > 0,
-        options: {},
+        options: hasKey ? {} : { apiKey: "public" },
       }
     },
     openai: async () => {
@@ -581,6 +581,9 @@ export namespace Provider {
     // claude-haiku-4.5 is considered a premium model in github copilot, we shouldn't use premium requests for title gen
     if (providerID === "github-copilot") {
       priority = priority.filter((m) => m !== "claude-haiku-4.5")
+    }
+    if (providerID === "opencode" || providerID === "local") {
+      priority = ["gpt-5-nano"]
     }
     for (const item of priority) {
       for (const model of Object.keys(provider.info.models)) {
