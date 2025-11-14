@@ -470,7 +470,7 @@ export namespace Provider {
       const key = Bun.hash.xxHash32(JSON.stringify({ pkg, options }))
       const existing = s.sdk.get(key)
       if (existing) return existing
-      
+
       let installedPath: string
       if (!pkg.startsWith("file://")) {
         installedPath = await BunProc.install(pkg, "latest")
@@ -478,7 +478,7 @@ export namespace Provider {
         log.info("loading local provider", { pkg })
         installedPath = pkg
       }
-      
+
       // The `google-vertex-anthropic` provider points to the `@ai-sdk/google-vertex` package.
       // Ref: https://github.com/sst/models.dev/blob/0a87de42ab177bebad0620a889e2eb2b4a5dd4ab/providers/google-vertex-anthropic/provider.toml
       // However, the actual export is at the subpath `@ai-sdk/google-vertex/anthropic`.
