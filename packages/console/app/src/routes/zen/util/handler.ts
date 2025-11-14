@@ -291,7 +291,7 @@ export async function handler(
 
   async function authenticate(modelInfo: ModelInfo, providerInfo: ProviderInfo) {
     const apiKey = opts.parseApiKey(input.request.headers)
-    if (!apiKey) {
+    if (!apiKey || apiKey === "public") {
       if (modelInfo.allowAnonymous) return
       throw new AuthError("Missing API key.")
     }

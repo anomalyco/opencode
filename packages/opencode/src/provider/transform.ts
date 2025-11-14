@@ -128,10 +128,15 @@ export namespace ProviderTransform {
     return undefined
   }
 
-  export function options(providerID: string, modelID: string, sessionID: string): Record<string, any> | undefined {
+  export function options(
+    providerID: string,
+    modelID: string,
+    npm: string,
+    sessionID: string,
+  ): Record<string, any> | undefined {
     const result: Record<string, any> = {}
 
-    if (providerID === "openai") {
+    if (providerID === "openai" || npm.includes("openai")) {
       result["promptCacheKey"] = sessionID
     }
 
@@ -142,6 +147,10 @@ export namespace ProviderTransform {
 
       if (!modelID.includes("codex") && !modelID.includes("gpt-5-pro")) {
         result["reasoningEffort"] = "medium"
+      }
+
+      if (modelID.endsWith("gpt-5.1") && providerID !== "azure") {
+        result["textVerbosity"] = "low"
       }
 
       if (providerID === "opencode") {
