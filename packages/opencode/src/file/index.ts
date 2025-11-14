@@ -123,10 +123,11 @@ export namespace File {
     type Entry = { files: string[]; dirs: string[] }
     let cache: Entry = { files: [], dirs: [] }
     let fetching = false
-    const fetchEntries = async (result: Entry) => {
+    const fetchEntries = async () => {
+      const temp: Entry = { files: [], dirs: [] }
       const set = new Set<string>()
       for await (const file of Ripgrep.files({ cwd: Instance.directory })) {
-        result.files.push(file)
+        temp.files.push(file)
         let current = file
         while (true) {
           const dir = path.dirname(current)
@@ -135,14 +136,14 @@ export namespace File {
           current = dir
           if (set.has(dir)) continue
           set.add(dir)
-          result.dirs.push(dir + "/")
+          temp.dirs.push(dir + "/")
         }
       }
-      cache = result
+      cache = temp
     }
-    const refresh = (result: Entry) => {
+    const refresh = () => {
       fetching = true
-      fetchEntries(result)
+      fetchEntries()
         .catch((error) => {
           if (error instanceof Error && "code" in error && error.code === "ENOENT") return
           log.error("failed to refresh files", { error })
@@ -151,15 +152,12 @@ export namespace File {
           fetching = false
         })
     }
-    refresh(cache)
+    refresh()
 
     return {
       async files() {
         if (!fetching) {
-          refresh({
-            files: [],
-            dirs: [],
-          })
+          refresh()
         }
         return cache
       },
