@@ -616,6 +616,11 @@ export type Event =
   | EventServerConnected
   | EventFileWatcherUpdated
 
+export type GlobalEvent = {
+  directory: string
+  payload: Event
+}
+
 export type Project = {
   id: string
   worktree: string
@@ -1373,21 +1378,21 @@ export type WellKnownAuth = {
 
 export type Auth = OAuth | ApiAuth | WellKnownAuth
 
-export type GlobalEventButtData = {
+export type GlobalEventSubscribeData = {
   body?: never
   path?: never
   query?: never
   url: "/global/event"
 }
 
-export type GlobalEventButtResponses = {
+export type GlobalEventSubscribeResponses = {
   /**
    * Event stream
    */
-  200: Event
+  200: GlobalEvent
 }
 
-export type GlobalEventButtResponse = GlobalEventButtResponses[keyof GlobalEventButtResponses]
+export type GlobalEventSubscribeResponse = GlobalEventSubscribeResponses[keyof GlobalEventSubscribeResponses]
 
 export type ProjectListData = {
   body?: never

@@ -129,9 +129,14 @@ export namespace Server {
               content: {
                 "text/event-stream": {
                   schema: resolver(
-                    Bus.payloads().meta({
-                      ref: "Event",
-                    }),
+                    z
+                      .object({
+                        directory: z.string(),
+                        payload: Bus.payloads(),
+                      })
+                      .meta({
+                        ref: "GlobalEvent",
+                      }),
                   ),
                 },
               },
@@ -1767,11 +1772,7 @@ export namespace Server {
               description: "Event stream",
               content: {
                 "text/event-stream": {
-                  schema: resolver(
-                    Bus.payloads().meta({
-                      ref: "Event",
-                    }),
-                  ),
+                  schema: resolver(Bus.payloads()),
                 },
               },
             },

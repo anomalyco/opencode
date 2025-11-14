@@ -2,8 +2,8 @@
 
 import type { Options as ClientOptions, TDataShape, Client } from "./client/index.js"
 import type {
-  GlobalEventButtData,
-  GlobalEventButtResponses,
+  GlobalEventSubscribeData,
+  GlobalEventSubscribeResponses,
   ProjectListData,
   ProjectListResponses,
   ProjectCurrentData,
@@ -145,8 +145,6 @@ import type {
   AuthSetData,
   AuthSetResponses,
   AuthSetErrors,
-  EventSubscribeData,
-  EventSubscribeResponses,
 } from "./types.gen.js"
 import { client as _heyApiClient } from "./client.gen.js"
 
@@ -181,19 +179,9 @@ class Event extends _HeyApiClient {
   /**
    * Get events
    */
-  public butt<ThrowOnError extends boolean = false>(options?: Options<GlobalEventButtData, ThrowOnError>) {
-    return (options?.client ?? this._client).get.sse<GlobalEventButtResponses, unknown, ThrowOnError>({
+  public subscribe<ThrowOnError extends boolean = false>(options?: Options<GlobalEventSubscribeData, ThrowOnError>) {
+    return (options?.client ?? this._client).get.sse<GlobalEventSubscribeResponses, unknown, ThrowOnError>({
       url: "/global/event",
-      ...options,
-    })
-  }
-
-  /**
-   * Get events
-   */
-  public subscribe<ThrowOnError extends boolean = false>(options?: Options<EventSubscribeData, ThrowOnError>) {
-    return (options?.client ?? this._client).get.sse<EventSubscribeResponses, unknown, ThrowOnError>({
-      url: "/event",
       ...options,
     })
   }
