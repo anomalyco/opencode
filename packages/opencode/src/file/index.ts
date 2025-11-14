@@ -144,7 +144,7 @@ export namespace File {
       fetching = true
       fetchEntries(result)
         .catch((error) => {
-          if (error instanceof Error && 'code' in error && error.code === "ENOENT") return
+          if (error instanceof Error && "code" in error && error.code === "ENOENT") return
           log.error("failed to refresh files", { error })
         })
         .finally(() => {
