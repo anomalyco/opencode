@@ -23,6 +23,14 @@ export namespace ModelsDev {
         output: z.number(),
         cache_read: z.number().optional(),
         cache_write: z.number().optional(),
+        context_over_200k: z
+          .object({
+            input: z.number(),
+            output: z.number(),
+            cache_read: z.number().optional(),
+            cache_write: z.number().optional(),
+          })
+          .optional(),
       }),
       limit: z.object({
         context: z.number(),
