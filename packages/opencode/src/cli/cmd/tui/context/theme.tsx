@@ -1,12 +1,16 @@
 import { SyntaxStyle, RGBA, type TerminalColors } from "@opentui/core"
 import path from "path"
-import { createEffect, createMemo, onMount } from "solid-js"
+import { createEffect, createMemo } from "solid-js"
 import { useSync } from "@tui/context/sync"
 import { createSimpleContext } from "./helper"
 import aura from "./theme/aura.json" with { type: "json" }
 import ayu from "./theme/ayu.json" with { type: "json" }
 import catppuccin from "./theme/catppuccin.json" with { type: "json" }
 import cobalt2 from "./theme/cobalt2.json" with { type: "json" }
+import colorless from "./theme/colorless.json" with { type: "json" }
+import colorlessHintsBlue from "./theme/colorless-hints-blue.json" with { type: "json" }
+import colorlessHintsGreen from "./theme/colorless-hints-green.json" with { type: "json" }
+import colorlessHintsRed from "./theme/colorless-hints-red.json" with { type: "json" }
 import dracula from "./theme/dracula.json" with { type: "json" }
 import everforest from "./theme/everforest.json" with { type: "json" }
 import github from "./theme/github.json" with { type: "json" }
@@ -103,6 +107,10 @@ export const DEFAULT_THEMES: Record<string, ThemeJson> = {
   ayu,
   catppuccin,
   cobalt2,
+  colorless,
+  "colorless-hints-blue": colorlessHintsBlue,
+  "colorless-hints-green": colorlessHintsGreen,
+  "colorless-hints-red": colorlessHintsRed,
   dracula,
   everforest,
   github,

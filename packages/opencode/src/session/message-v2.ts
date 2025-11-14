@@ -620,13 +620,8 @@ export namespace MessageV2 {
                 ]
             }
             if (part.type === "reasoning") {
-              return [
-                {
-                  type: "reasoning",
-                  text: part.text,
-                  providerMetadata: part.metadata,
-                },
-              ]
+              // Provider APIs reject reasoning content in prompts, so skip it
+              return []
             }
 
             return []

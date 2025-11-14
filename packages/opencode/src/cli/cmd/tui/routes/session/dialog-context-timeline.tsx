@@ -190,21 +190,13 @@ export function DialogContextTimeline(props: { sessionID: string }) {
     }
   }
 
-  const [expandedItems, setExpandedItems] = createSignal(new Set<string>())
+  const [expandedItem, setExpandedItem] = createSignal<string | null>(null)
   const toggleItem = (id: string) => {
-    setExpandedItems((prev) => {
-      const next = new Set(prev)
-      if (next.has(id)) {
-        next.delete(id)
-      } else {
-        next.add(id)
-      }
-      return next
-    })
+    setExpandedItem((prev) => (prev === id ? null : id))
   }
 
   return (
-    <box paddingLeft={2} paddingRight={2} paddingBottom={1} gap={1}>
+    <box paddingLeft={2} paddingRight={2} paddingTop={1} paddingBottom={1} gap={1}>
       <box flexDirection="row" justifyContent="space-between" alignItems="center">
         <text fg={theme.text} attributes={TextAttributes.BOLD}>
           Context Timeline
@@ -231,45 +223,67 @@ export function DialogContextTimeline(props: { sessionID: string }) {
       </Show>
 
       <Show when={timeline().length > 0} fallback={<text fg={theme.textMuted}>No timeline entries yet.</text>}>
-        <box flexDirection="column" gap={1} paddingTop={1}>
+        <box flexDirection="row" flexWrap="wrap" gap={1} paddingTop={1}>
           <For each={timeline()}>
-            {(item, index) => {
-              const isExpanded = createMemo(() => expandedItems().has(item.id))
+            {(item) => {
+              const isExpanded = createMemo(() => expandedItem() === item.id)
+              const preview = createMemo(() => {
+                const details = item.details ?? []
+                if (!details.length || isExpanded()) return null
+                if (details.length === 1) return details[0]
+                return `${details[0]} (+${details.length - 1} more)`
+              })
               return (
-                <box flexDirection="row" gap={1} alignItems="flex-start">
-                  <box flexDirection="column" alignItems="center" width={1}>
-                    <text fg={typeColor(item.type)}>{TYPE_SYMBOL[item.type]}</text>
-                    <Show when={index() < timeline().length - 1}>
-                      <text fg={theme.border}>│</text>
-                    </Show>
-                  </box>
-                  <box flexDirection="column" gap={0} flexGrow={1}>
-                    <text
-                      fg={typeColor(item.type)}
-                      wrapMode={isExpanded() ? "word" : "none"}
-                      onMouseUp={() => toggleItem(item.id)}
-                    >
-                      {isExpanded() ? "▼" : "▶"} {item.title} · {Locale.time(item.timestamp)} — {item.summary}
-                      {item.meta ? ` (${item.meta})` : ""}
+                <box
+                  flexDirection="column"
+                  gap={1}
+                  padding={1}
+                  minWidth={38}
+                  flexBasis={0}
+                  flexGrow={1}
+                  borderStyle="rounded"
+                  borderColor={typeColor(item.type)}
+                  backgroundColor={theme.backgroundPanel}
+                  onMouseUp={() => toggleItem(item.id)}
+                >
+                  <box flexDirection="row" justifyContent="space-between" alignItems="center" gap={1}>
+                    <text fg={typeColor(item.type)} attributes={TextAttributes.BOLD}>
+                      {isExpanded() ? "▼" : "▶"} {TYPE_SYMBOL[item.type]} {item.title}
                     </text>
-                    <Show when={isExpanded()}>
-                      <box flexDirection="column" gap={0}>
-                        <Show when={item.tokens}>
-                          <text fg={theme.textMuted}>{item.tokens}</text>
-                        </Show>
-                        <Show when={item.cost}>
-                          <text fg={theme.textMuted}>{item.cost}</text>
-                        </Show>
-                        <For each={item.details ?? []}>
-                          {(detail) => (
-                            <text fg={theme.textMuted} wrapMode="word">
-                              • {detail}
-                            </text>
-                          )}
-                        </For>
-                      </box>
-                    </Show>
+                    <text fg={theme.textMuted}>{Locale.time(item.timestamp)}</text>
                   </box>
+                  <text fg={theme.text} wrapMode="word">
+                    {item.summary}
+                    {item.meta ? ` · ${item.meta}` : ""}
+                  </text>
+                  <Show when={item.tokens || item.cost}>
+                    <box flexDirection="column" gap={0}>
+                      <Show when={item.tokens}>
+                        <text fg={theme.textMuted}>{item.tokens}</text>
+                      </Show>
+                      <Show when={item.cost}>
+                        <text fg={theme.textMuted}>{item.cost}</text>
+                      </Show>
+                    </box>
+                  </Show>
+                  <Show when={preview()}>
+                    {(detail) => (
+                      <text fg={theme.textMuted} wrapMode="word">
+                        • {detail()}
+                      </text>
+                    )}
+                  </Show>
+                  <Show when={isExpanded()}>
+                    <box flexDirection="column" gap={0}>
+                      <For each={item.details ?? []}>
+                        {(detail) => (
+                          <text fg={theme.textMuted} wrapMode="word">
+                            • {detail}
+                          </text>
+                        )}
+                      </For>
+                    </box>
+                  </Show>
                 </box>
               )
             }}

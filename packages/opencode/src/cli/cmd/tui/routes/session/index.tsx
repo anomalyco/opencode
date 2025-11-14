@@ -1410,10 +1410,12 @@ function MessageControls(props: {
   sessionID: string
   messageID: string
   priority?: "red" | "amber" | "green" | "none"
+  inline?: boolean
 }) {
   const { theme } = useTheme()
   const dialog = useDialog()
   const renderer = useRenderer()
+  const inline = props.inline ?? false
 
   const openMenu = (event: ToolMouseEvent) => {
     event.stopPropagation?.()
@@ -1422,11 +1424,11 @@ function MessageControls(props: {
   }
 
   return (
-    <box flexDirection="row" alignItems="center" gap={0}>
-      <box width={9} justifyContent="flex-end" flexShrink={0}>
+    <box flexDirection="row" alignItems="center" gap={inline ? 1 : 0}>
+      <box width={inline ? undefined : 9} justifyContent="flex-end" flexShrink={0} marginLeft={inline ? 1 : 0}>
         <PriorityCircles sessionID={props.sessionID} messageID={props.messageID} priority={props.priority} compact />
       </box>
-      <text fg={theme.textMuted} attributes={1} onMouseUp={(event) => openMenu(event)}>
+      <text fg={theme.textMuted} attributes={1} marginLeft={-1} onMouseUp={(event) => openMenu(event)}>
         ⋮
       </text>
     </box>
@@ -1442,6 +1444,7 @@ function UserMessage(props: {
 }) {
   const text = createMemo(() => props.parts.flatMap((x) => (x.type === "text" && !x.synthetic ? [x] : []))[0])
   const files = createMemo(() => props.parts.filter((part): part is FilePart => part.type === "file"))
+  const hasFiles = createMemo(() => files().length > 0)
   const sync = useSync()
   const toast = useToast()
   const { theme } = useTheme()
@@ -1465,7 +1468,7 @@ function UserMessage(props: {
   }
 
   return (
-    <Show when={text()}>
+    <Show when={text() || hasFiles()}>
       <box
         id={props.message.id}
         onMouseOver={() => {
@@ -1485,21 +1488,25 @@ function UserMessage(props: {
         borderColor={color()}
         flexShrink={0}
       >
-        <box flexDirection="row" justifyContent="flex-end" marginBottom={1}>
-          <MessageControls
-            sessionID={props.message.sessionID}
-            messageID={props.message.id}
-            priority={props.message.priority}
-          />
-        </box>
-        <text fg={theme.text}>{text()?.text}</text>
-        <Show when={files().length}>
-          <box flexDirection="row" flexWrap="wrap" marginTop={1} gap={0}>
+        <Show when={!hasFiles()}>
+          <>
+            <box flexDirection="row" justifyContent="flex-end" marginBottom={1}>
+              <MessageControls
+                sessionID={props.message.sessionID}
+                messageID={props.message.id}
+                priority={props.message.priority}
+              />
+            </box>
+            <text fg={theme.text}>{text()?.text}</text>
+          </>
+        </Show>
+        <Show when={hasFiles()}>
+          <box flexDirection="column" gap={1}>
             <For each={files()}>
               {(file) => {
                 const badgeColor = createMemo(() => theme.warning)
                 return (
-                  <box marginRight={1} marginBottom={0}>
+                  <box flexDirection="row" alignItems="center" justifyContent="space-between" gap={1}>
                     <text fg={theme.text} onMouseUp={(event) => void openAttachment(event, file)}>
                       <span style={{ bg: badgeColor(), fg: theme.background }}>
                         {" "}
@@ -1510,12 +1517,19 @@ function UserMessage(props: {
                         {file.filename ?? "attachment"}{" "}
                       </span>
                     </text>
+                    <MessageControls
+                      sessionID={props.message.sessionID}
+                      messageID={props.message.id}
+                      priority={props.message.priority}
+                      inline
+                    />
                   </box>
                 )
               }}
             </For>
           </box>
         </Show>
+
         <text fg={theme.text}>
           <Show
             when={queued()}
@@ -2379,9 +2393,10 @@ toolRegistry.register<typeof BashTool>({
 
 toolRegistry.register<typeof ReadTool>({
   name: "read",
-  container: "inline",
+  container: "block",
   render(props) {
-    const { theme } = useTheme()
+    const { theme, syntax } = useTheme()
+    const ft = createMemo(() => filetype(props.input.filePath!))
     return (
       <>
         <ToolTitle
@@ -2400,8 +2415,8 @@ toolRegistry.register<typeof ReadTool>({
           </text>
         </ToolTitle>
         <Show when={!props.collapsed && props.output}>
-          <box>
-            <text fg={theme.textMuted}>{props.output}</text>
+          <box paddingTop={1}>
+            <code filetype={ft()} syntaxStyle={syntax()} content={props.output ?? ""} />
           </box>
         </Show>
       </>
