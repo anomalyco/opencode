@@ -699,33 +699,6 @@ export namespace SessionPrompt {
         }
       }
       item.toModelOutput = (result) => {
-        const hasNonTextContent = result.content.some((item: any) => item.type !== "text")
-        if (hasNonTextContent) {
-          const contentItems = result.content
-            .map((item: any) => {
-              if (item.type === "text") {
-                return {
-                  type: "text",
-                  text: item.text,
-                }
-              }
-              if (item.type === "image") {
-                return {
-                  type: "media",
-                  data: item.data,
-                  mediaType: item.mimeType,
-                }
-              }
-              // Add support for other types if needed
-              return null
-            })
-            .filter(Boolean)
-          return {
-            type: "content",
-            value: contentItems,
-          }
-        }
-
         return {
           type: "text",
           value: result.output,
