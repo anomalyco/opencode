@@ -2,8 +2,9 @@
 import { $ } from "bun"
 import pkg from "../package.json"
 import { Script } from "@opencode-ai/script"
+import { fileURLToPath } from "url"
 
-const dir = new URL("..", import.meta.url).pathname
+const dir = fileURLToPath(new URL("..", import.meta.url))
 process.chdir(dir)
 
 const { binaries } = await import("./build.ts")
@@ -13,7 +14,6 @@ await $`./dist/${smokeTarget}/bin/codesurf --version`
 
 await $`mkdir -p ./dist/${pkg.name}`
 await $`cp -r ./bin ./dist/${pkg.name}/bin`
-await $`cp ./script/preinstall.mjs ./dist/${pkg.name}/preinstall.mjs`
 await $`cp ./script/postinstall.mjs ./dist/${pkg.name}/postinstall.mjs`
 await $`cp ./README.md ./dist/${pkg.name}/README.md`
 
@@ -54,7 +54,15 @@ const metaPackages = [
 ]
 
 for (const [name] of Object.entries(binaries)) {
-  await $`cd dist/${name} && chmod -R 777 . && bun publish --access public --tag ${Script.channel}`
+  try {
+    process.chdir(`./dist/${name}`)
+    if (process.platform !== "win32") {
+      await $`chmod -R 777 .`
+    }
+    await $`bun publish --access public --tag ${Script.channel}`
+  } finally {
+    process.chdir(dir)
+  }
 }
 for (const { path } of metaPackages) {
   await $`cd ${path} && bun publish --access public --tag ${Script.channel}`

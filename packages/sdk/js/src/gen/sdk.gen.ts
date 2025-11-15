@@ -2,6 +2,8 @@
 
 import type { Options as ClientOptions, TDataShape, Client } from "./client/index.js"
 import type {
+  GlobalEventData,
+  GlobalEventResponses,
   ProjectListData,
   ProjectListResponses,
   ProjectCurrentData,
@@ -205,6 +207,18 @@ class _HeyApiClient {
     if (args?.client) {
       this._client = args.client
     }
+  }
+}
+
+class Global extends _HeyApiClient {
+  /**
+   * Get events
+   */
+  public event<ThrowOnError extends boolean = false>(options?: Options<GlobalEventData, ThrowOnError>) {
+    return (options?.client ?? this._client).get.sse<GlobalEventResponses, unknown, ThrowOnError>({
+      url: "/global/event",
+      ...options,
+    })
   }
 }
 
@@ -1068,6 +1082,7 @@ export class OpencodeClient extends _HeyApiClient {
       },
     })
   }
+  global = new Global({ client: this._client })
   project = new Project({ client: this._client })
   config = new Config({ client: this._client })
   favoriteTools = new FavoriteTools({ client: this._client })

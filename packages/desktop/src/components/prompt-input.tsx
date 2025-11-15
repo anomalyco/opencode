@@ -7,7 +7,16 @@ import { getDirectory, getFilename } from "@/utils"
 import { createFocusSignal } from "@solid-primitives/active-element"
 import { useLocal } from "@/context/local"
 import { DateTime } from "luxon"
-import { ContentPart, DEFAULT_PROMPT, FileAttachmentPart, ImageAttachmentPart, isPromptEqual, Prompt, TextPart, useSession } from "@/context/session"
+import {
+  ContentPart,
+  DEFAULT_PROMPT,
+  FileAttachmentPart,
+  ImageAttachmentPart,
+  isPromptEqual,
+  Prompt,
+  TextPart,
+  useSession,
+} from "@/context/session"
 import { useSDK } from "@/context/sdk"
 import { useNavigate } from "@solidjs/router"
 import { useSync } from "@/context/sync"
@@ -513,7 +522,11 @@ export const PromptInput: Component<PromptInputProps> = (props) => {
   return (
     <div class="relative size-full _max-h-[320px] flex flex-col gap-3">
       <Show when={store.popoverIsOpen}>
-        <div class="absolute inset-x-0 -top-3 -translate-y-full origin-bottom-left max-h-[252px] min-h-10 overflow-y-auto flex flex-col p-2 pb-0 rounded-2xl border border-border-base bg-surface-raised-stronger-non-alpha shadow-md">
+        <div
+          class="absolute inset-x-0 -top-3 -translate-y-full origin-bottom-left max-h-[252px] min-h-10
+                 overflow-y-auto no-scrollbar flex flex-col p-2 pb-0 rounded-2xl
+                 border border-border-base bg-surface-raised-stronger-non-alpha shadow-md"
+        >
           <Show when={flat().length > 0} fallback={<div class="text-text-weak px-2">No matching files</div>}>
             <For each={flat()}>
               {(i) => (
@@ -544,7 +557,7 @@ export const PromptInput: Component<PromptInputProps> = (props) => {
         onSubmit={handleSubmit}
         classList={{
           "bg-surface-raised-stronger-non-alpha border border-border-strong-base": true,
-          "rounded-2xl overflow-clip focus-within:border-transparent focus-within:shadow-xs-border-select": true,
+          "rounded-md overflow-clip focus-within:border-transparent focus-within:shadow-xs-border-select": true,
           [props.class ?? ""]: !!props.class,
         }}
       >
@@ -570,19 +583,19 @@ export const PromptInput: Component<PromptInputProps> = (props) => {
             onDragLeave={handleDragLeave}
             onDrop={handleDrop}
             classList={{
-              "w-full p-3 text-14-regular text-text-strong focus:outline-none whitespace-pre-wrap": true,
+              "w-full px-5 py-3 text-14-regular text-text-strong focus:outline-none whitespace-pre-wrap": true,
               "[&>[data-type=file]]:text-icon-info-active": true,
               "ring-2 ring-primary": isDragging(),
               "ring-offset-2": isDragging(),
             }}
           />
           <Show when={!session.prompt.dirty()}>
-            <div class="absolute top-0 left-0 p-3 text-14-regular text-text-weak pointer-events-none">
+            <div class="absolute top-0 left-0 px-5 py-3 text-14-regular text-text-weak pointer-events-none">
               Plan and build anything
             </div>
           </Show>
         </div>
-        <div class="p-3 flex items-center justify-between">
+        <div class="relative p-3 flex items-center justify-between">
           <div class="flex items-center justify-start gap-1">
             <Show when={speech.isSupported()}>
               <IconButton
@@ -678,7 +691,7 @@ export const PromptInput: Component<PromptInputProps> = (props) => {
               disabled={!session.prompt.dirty() && !session.working()}
               icon={session.working() ? "stop" : "arrow-up"}
               variant="primary"
-              class="rounded-full"
+              class="h-10 w-8 absolute right-2 bottom-2"
             />
           </Tooltip>
         </div>

@@ -66,11 +66,11 @@ const allTargets: {
     avx2: false,
   },
   {
-    os: "windows",
+    os: "win32",
     arch: "x64",
   },
   {
-    os: "windows",
+    os: "win32",
     arch: "x64",
     avx2: false,
   },
@@ -89,7 +89,8 @@ const binaryPrefix = `${pkg.name}-ai`
 for (const item of targets) {
   const name = [
     binaryPrefix,
-    item.os,
+    // Windows artifacts must use "windows" instead of win32 for npm
+    item.os === "win32" ? "windows" : item.os,
     item.arch,
     item.avx2 === false ? "baseline" : undefined,
     item.abi === undefined ? undefined : item.abi,
@@ -128,7 +129,7 @@ for (const item of targets) {
       {
         name,
         version: Script.version,
-        os: [item.os === "windows" ? "win32" : item.os],
+        os: [item.os],
         cpu: [item.arch],
       },
       null,

@@ -3,6 +3,7 @@ import { EditTool } from "./edit"
 import { GlobTool } from "./glob"
 import { GrepTool } from "./grep"
 import { ListTool } from "./ls"
+import { BatchTool } from "./batch"
 import { ReadTool } from "./read"
 import { TaskTool } from "./task"
 import { AddTaskTool } from "./add-task"
@@ -174,16 +175,16 @@ export namespace ToolRegistry {
     return [
       InvalidTool,
       BashTool,
-      EditTool,
-      WebFetchTool,
+      ReadTool,
       GlobTool,
       GrepTool,
       ListTool,
-      ReadTool,
+      EditTool,
       WriteTool,
+      TaskTool,
+      WebFetchTool,
       TodoWriteTool,
       TodoReadTool,
-      TaskTool,
       AddTaskTool,
       SwitchModeTool,
       CompleteTaskTool,
@@ -191,6 +192,7 @@ export namespace ToolRegistry {
       RunCompactTool,
       LspDiagnosticTool,
       LspHoverTool,
+      ...(config.experimental?.batch_tool === true ? [BatchTool] : []),
       ...ccTools,
       ...(Flag.OPENCODE_EXPERIMENTAL_EXA ? [WebSearchTool, CodeSearchTool] : []),
       ...custom,
