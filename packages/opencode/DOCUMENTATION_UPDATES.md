@@ -79,6 +79,11 @@ import CodeSurfBlock from "../../components/CodeSurfBlock.astro
 
 ## Features Documented
 
+### Provider Override Files
+
+- **Location:** `.opencode/provider/*.jsonc`
+- **Highlights:** You can now drop JSON/JSONC files inside the project’s `.opencode/provider/` folder to register new LLM providers or override existing ones without editing the main config. Each file can define a single provider (with an `id` field) or a record of providers, using the same schema as `config.provider`.
+
 ### Dual Sidebar System
 
 - ✅ Left sidebar: Session list and switching

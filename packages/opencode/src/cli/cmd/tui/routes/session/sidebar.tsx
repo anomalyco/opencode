@@ -9,7 +9,9 @@ import type { AssistantMessage } from "@opencode-ai/sdk"
 import { TextAttributes, RGBA } from "@opentui/core"
 import { ContextUsageBar } from "../../component/context-usage-bar"
 import { useLocal } from "../../context/local"
+import { resolveThemeColor } from "../../context/theme"
 import { useKeyboard, useRenderer } from "@opentui/solid"
+
 import { useToast } from "../../ui/toast"
 import { useSDK } from "../../context/sdk"
 import { useDialog } from "../../ui/dialog"
@@ -44,6 +46,90 @@ function parseSubagentTitle(title: string): { agent?: string; description: strin
   }
 
   return { description: trimmed }
+}
+
+type ContextItem = {
+  id: string
+  name: string
+  content: string
+  tags: string[]
+  activeTags: Set<string>
+  compact: boolean
+  lastUpdated: number
+}
+
+type ContextChip = {
+  tag: string
+  count: number
+}
+
+const CONTEXT_STOP_WORDS = new Set([
+  "the",
+  "this",
+  "that",
+  "with",
+  "from",
+  "have",
+  "using",
+  "into",
+  "over",
+  "just",
+  "then",
+  "than",
+  "when",
+  "where",
+  "your",
+  "about",
+  "which",
+  "their",
+  "there",
+  "after",
+  "before",
+  "because",
+  "while",
+  "should",
+  "could",
+  "would",
+])
+
+function generateContextTags(content: string): string[] {
+  const cleaned = Locale.stripMarkdown(content).toLowerCase()
+  const words = cleaned.split(/[^a-z0-9#]+/g).filter(Boolean)
+  const counts = new Map<string, number>()
+  for (const raw of words) {
+    if (raw.length < 3 && !raw.startsWith("#")) continue
+    const normalized = raw.startsWith("#") ? raw : raw.replace(/[^a-z0-9]/g, "")
+    if (!normalized || CONTEXT_STOP_WORDS.has(normalized)) continue
+    const tag = normalized.startsWith("#") ? normalized : `#${normalized}`
+    counts.set(tag, (counts.get(tag) || 0) + 1)
+  }
+  return Array.from(counts.entries())
+    .sort((a, b) => b[1] - a[1])
+    .slice(0, 8)
+    .map(([tag]) => tag)
+}
+
+function createContextItem(id: string, name: string, content: string): ContextItem {
+  const tags = generateContextTags(content)
+  return {
+    id,
+    name,
+    content,
+    tags,
+    activeTags: new Set(tags),
+    compact: false,
+    lastUpdated: Date.now(),
+  }
+}
+
+function summarizeContent(content: string, limit: number) {
+  const text = Locale.stripMarkdown(content).replace(/\s+/g, " ").trim()
+  if (!text) return "(no content)"
+  return Locale.truncate(text, limit)
+}
+
+function formatTimestamp(timestamp: number) {
+  return Locale.time(timestamp)
 }
 
 export function Sidebar(props: {
@@ -822,11 +908,11 @@ export function Sidebar(props: {
                 userTokens={context().userTokens}
                 toolTokens={context().toolTokens}
                 agentColor={agentColor()}
-                systemColor={theme.textMuted}
-                assistantColor={theme.accent}
-                toolColor={theme.warning}
-                userColor={theme.secondary}
-                backgroundColor={theme.backgroundPanel}
+                systemColor={resolveThemeColor(theme.textMuted)}
+                assistantColor={resolveThemeColor(theme.accent)}
+                toolColor={resolveThemeColor(theme.warning)}
+                userColor={resolveThemeColor(theme.secondary)}
+                backgroundColor={resolveThemeColor(theme.backgroundPanel)}
                 width={props.width}
               />
             )

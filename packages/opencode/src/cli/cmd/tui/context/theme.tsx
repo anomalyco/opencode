@@ -132,16 +132,22 @@ export const DEFAULT_THEMES: Record<string, ThemeJson> = {
   zenburn,
 }
 
+export function resolveThemeColor(
+  value: ColorValue,
+  defs: Record<string, HexColor | RefName> = {},
+  mode: "dark" | "light" = "dark",
+): RGBA {
+  if (value instanceof RGBA) return value
+  if (typeof value === "string")
+    return value.startsWith("#") ? RGBA.fromHex(value) : resolveThemeColor(defs[value], defs, mode)
+  return resolveThemeColor(value[mode], defs, mode)
+}
+
 function resolveTheme(theme: ThemeJson, mode: "dark" | "light") {
   const defs = theme.defs ?? {}
-  function resolveColor(c: ColorValue): RGBA {
-    if (c instanceof RGBA) return c
-    if (typeof c === "string") return c.startsWith("#") ? RGBA.fromHex(c) : resolveColor(defs[c])
-    return resolveColor(c[mode])
-  }
   return Object.fromEntries(
     Object.entries(theme.theme).map(([key, value]) => {
-      return [key, resolveColor(value)]
+      return [key, resolveThemeColor(value, defs, mode)]
     }),
   ) as Theme
 }

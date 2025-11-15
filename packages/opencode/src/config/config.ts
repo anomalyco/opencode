@@ -21,6 +21,34 @@ import matter from "gray-matter"
 
 export namespace Config {
   const log = Log.create({ service: "config" })
+  const ProviderOverride = ModelsDev.Provider.partial()
+    .extend({
+      models: z.record(z.string(), ModelsDev.Model.partial()).optional(),
+      options: z
+        .object({
+          apiKey: z.string().optional(),
+          baseURL: z.string().optional(),
+          enterpriseUrl: z.string().optional().describe("GitHub Enterprise URL for copilot authentication"),
+          timeout: z
+            .union([
+              z
+                .number()
+                .int()
+                .positive()
+                .describe(
+                  "Timeout in milliseconds for requests to this provider. Default is 300000 (5 minutes). Set to false to disable timeout.",
+                ),
+              z.literal(false).describe("Disable timeout for this provider entirely."),
+            ])
+            .optional()
+            .describe(
+              "Timeout in milliseconds for requests to this provider. Default is 300000 (5 minutes). Set to false to disable timeout.",
+            ),
+        })
+        .catchall(z.any())
+        .optional(),
+    })
+    .strict()
 
   export const state = Instance.state(async () => {
     const auth = await Auth.all()
@@ -101,6 +129,10 @@ export namespace Config {
       result.command = mergeDeep(result.command ?? {}, await loadCommand(dir))
       result.agent = mergeDeep(result.agent, await loadAgent(dir))
       result.agent = mergeDeep(result.agent, await loadMode(dir))
+      const providerOverrides = await loadProvider(dir)
+      if (Object.keys(providerOverrides).length > 0) {
+        result.provider = mergeDeep(result.provider ?? {}, providerOverrides)
+      }
       result.plugin.push(...(await loadPlugin(dir)))
     }
     await Promise.allSettled(promises)
@@ -290,6 +322,54 @@ export namespace Config {
         continue
       }
     }
+    return result
+  }
+
+  const PROVIDER_GLOB = new Bun.Glob("provider/*.{json,jsonc}")
+  async function loadProvider(dir: string) {
+    const result: Record<string, z.infer<typeof ProviderOverride>> = {}
+
+    for await (const item of PROVIDER_GLOB.scan({
+      absolute: true,
+      followSymlinks: true,
+      dot: true,
+      cwd: dir,
+    })) {
+      const errors: JsoncParseError[] = []
+      const text = await Bun.file(item).text()
+      const parsedJson = parseJsonc(text, errors, { allowTrailingComma: true })
+
+      if (errors.length) {
+        const message = errors.map((error) => printParseErrorCode(error.error)).join("\n")
+        throw new InvalidError({
+          path: item,
+          message,
+        })
+      }
+
+      const ProviderFileSchema = z.union([
+        ProviderOverride.extend({ id: z.string() }),
+        z.record(z.string(), ProviderOverride),
+      ])
+
+      const parsed = ProviderFileSchema.safeParse(parsedJson)
+      if (!parsed.success) {
+        throw new InvalidError({ path: item, issues: parsed.error.issues })
+      }
+
+      const data = parsed.data
+
+      if ("id" in data && typeof (data as any).id === "string") {
+        const { id, ...rest } = data as z.infer<typeof ProviderOverride> & { id: string }
+        result[id] = rest
+        continue
+      }
+
+      for (const [id, config] of Object.entries(data as Record<string, z.infer<typeof ProviderOverride>>)) {
+        result[id] = mergeDeep(result[id] ?? {}, config)
+      }
+    }
+
     return result
   }
 
@@ -536,37 +616,7 @@ export namespace Config {
         .optional()
         .describe("Agent configuration, see https://opencode.ai/docs/agent"),
       provider: z
-        .record(
-          z.string(),
-          ModelsDev.Provider.partial()
-            .extend({
-              models: z.record(z.string(), ModelsDev.Model.partial()).optional(),
-              options: z
-                .object({
-                  apiKey: z.string().optional(),
-                  baseURL: z.string().optional(),
-                  enterpriseUrl: z.string().optional().describe("GitHub Enterprise URL for copilot authentication"),
-                  timeout: z
-                    .union([
-                      z
-                        .number()
-                        .int()
-                        .positive()
-                        .describe(
-                          "Timeout in milliseconds for requests to this provider. Default is 300000 (5 minutes). Set to false to disable timeout.",
-                        ),
-                      z.literal(false).describe("Disable timeout for this provider entirely."),
-                    ])
-                    .optional()
-                    .describe(
-                      "Timeout in milliseconds for requests to this provider. Default is 300000 (5 minutes). Set to false to disable timeout.",
-                    ),
-                })
-                .catchall(z.any())
-                .optional(),
-            })
-            .strict(),
-        )
+        .record(z.string(), ProviderOverride)
         .optional()
         .describe("Custom provider configurations and model overrides"),
       mcp: z.record(z.string(), Mcp).optional().describe("MCP (Model Context Protocol) server configurations"),

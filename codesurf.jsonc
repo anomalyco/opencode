@@ -10,10 +10,7 @@
     "todoread",
     "switch_mode",
     "glob",
-    "edit",
-    "bash",
-    "read",
-    "todowrite"
+    "list_memory"
   ],
   "$schema": "https://opencode.ai/config.json"
 }

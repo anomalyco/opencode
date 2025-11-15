@@ -14,7 +14,7 @@
 import { type Plugin, tool } from "@opencode-ai/plugin"
 import { Database } from "bun:sqlite"
 import { mkdir, readFile } from "node:fs/promises"
-import { dirname, join, basename, extname } from "node:path"
+import { dirname, join, basename, extname, resolve as resolvePath } from "node:path"
 import { homedir } from "node:os"
 import { get_encoding } from "@dqbd/tiktoken"
 import matter from "gray-matter"
@@ -969,6 +969,9 @@ Return only a JSON array of keywords, nothing else. Format: ["keyword1", "keywor
 // ============================================================================
 
 export const RaidKnowledgeBasePlugin: Plugin = async (ctx) => {
+  const projectRoot = ctx.directory
+  const getConfig = () => loadRaidConfig(projectRoot)
+
   return {
     tool: {
       kb_ingest: tool({
@@ -996,8 +999,9 @@ export const RaidKnowledgeBasePlugin: Plugin = async (ctx) => {
         },
         async execute(params) {
           const { filePath, source, title, tags, generateSummary } = params
+          const absolutePath = resolvePath(projectRoot, filePath)
           try {
-            const config = loadRaidConfig()
+            const config = getConfig()
             const validation = validateRaidConfig(config)
 
             if (!validation.valid) {
@@ -1007,15 +1011,15 @@ export const RaidKnowledgeBasePlugin: Plugin = async (ctx) => {
             const kb = new RaidKnowledgeBase(config)
             const orchestrator = new RaidOrchestrator(config, kb)
 
-            const content = await readFile(filePath, "utf-8")
+            const content = await readFile(absolutePath, "utf-8")
 
             if (!content.trim()) {
               kb.close()
-              return `Error: File ${filePath} is empty`
+              return `Error: File ${absolutePath} is empty`
             }
 
             const docId = ulid()
-            const docTitle = title ?? basename(filePath, extname(filePath))
+            const docTitle = title ?? basename(absolutePath, extname(absolutePath))
 
             let summary = ""
             let keywords: string[] = []
@@ -1093,7 +1097,7 @@ ${summary ? `- Summary: ${summary}` : ""}`
         async execute(params) {
           const { query, maxResults, source, tags, contentType, includeContent } = params
           try {
-            const config = loadRaidConfig()
+            const config = getConfig()
             const validation = validateRaidConfig(config)
 
             if (!validation.valid) {
@@ -1159,7 +1163,7 @@ ${includeContent ? `\nContent:\n${doc.content}\n` : ""}`
         async execute(params) {
           const { query, documentIds, showProgress } = params
           try {
-            const config = loadRaidConfig()
+            const config = getConfig()
             const validation = validateRaidConfig(config)
 
             if (!validation.valid) {
@@ -1220,7 +1224,7 @@ ${includeContent ? `\nContent:\n${doc.content}\n` : ""}`
         async execute(params) {
           const { action, documentId, source, limit, offset } = params
           try {
-            const config = loadRaidConfig()
+            const config = getConfig()
             const validation = validateRaidConfig(config)
 
             if (!validation.valid) {
