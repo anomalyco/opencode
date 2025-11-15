@@ -103,7 +103,8 @@ export function parseModelsString(modelsString: string): Record<string, { name: 
  */
 async function updateProviderConfig(
   providerConfig: Record<string, any>,
-  isGlobal: boolean
+  isGlobal: boolean,
+  defaultModel?: string
 ): Promise<string> {
   const configDir = isGlobal ? Global.Path.config : process.cwd()
 
@@ -136,10 +137,18 @@ async function updateProviderConfig(
     }
   }
 
-  // Deep merge the provider config into existing config
-  const updatedConfig = mergeDeep(existingConfig, {
+  // Build the config update
+  const configUpdate: any = {
     provider: providerConfig
-  })
+  }
+
+  // Add default model if specified
+  if (defaultModel) {
+    configUpdate.model = defaultModel
+  }
+
+  // Deep merge the provider config into existing config
+  const updatedConfig = mergeDeep(existingConfig, configUpdate)
 
   // Write back to file
   await Bun.write(configPath, JSON.stringify(updatedConfig, null, 2))
@@ -176,6 +185,10 @@ export const ProviderAddCommand = cmd({
         describe: "comma-separated list of models in format 'id:name,id2:name2'",
         type: "string",
       })
+      .option("default-model", {
+        describe: "set this model as the default (format: model-id from --models)",
+        type: "string",
+      })
       .option("global", {
         describe: "save to global config instead of project config",
         type: "boolean",
@@ -187,8 +200,8 @@ export const ProviderAddCommand = cmd({
           "Add a local Ollama provider to the project",
         ],
         [
-          "$0 provider add custom_cloud --name 'Custom Cloud AI' --url 'https://api.custom-ai.com/v1' --key 'sk-xxx' --global",
-          "Add a custom cloud provider globally",
+          "$0 provider add custom_cloud --name 'Custom Cloud AI' --url 'https://api.custom-ai.com/v1' --key 'sk-xxx' --default-model 'my-model' --global",
+          "Add a custom cloud provider globally with default model",
         ],
       ])
   },
@@ -202,6 +215,7 @@ export const ProviderAddCommand = cmd({
       const url = args.url as string
       const key = args.key as string
       const modelsString = args.models as string | undefined
+      const defaultModelId = args["default-model"] as string | undefined
       const isGlobal = args.global as boolean
 
       // Validate ID format (alphanumeric, hyphens, underscores)
@@ -246,6 +260,35 @@ export const ProviderAddCommand = cmd({
         }
       }
 
+      // Validate default model if specified, or auto-select first model
+      let defaultModelPath: string | undefined
+      if (defaultModelId) {
+        // Check if models were provided
+        if (Object.keys(modelsConfig).length === 0) {
+          prompts.log.error("--default-model requires --models to be specified")
+          prompts.outro("Failed")
+          return
+        }
+
+        // Check if the model ID exists in the models config
+        if (!modelsConfig[defaultModelId]) {
+          prompts.log.error(
+            `Model "${defaultModelId}" not found in --models. Available: ${Object.keys(modelsConfig).join(", ")}`
+          )
+          prompts.outro("Failed")
+          return
+        }
+
+        // Build the full model path (provider/model-id)
+        defaultModelPath = `${id}/${defaultModelId}`
+        prompts.log.info(`Setting default model: ${defaultModelPath}`)
+      } else if (Object.keys(modelsConfig).length > 0) {
+        // Auto-select the first model as default when models are provided
+        const firstModelId = Object.keys(modelsConfig)[0]
+        defaultModelPath = `${id}/${firstModelId}`
+        prompts.log.info(`Auto-selecting first model as default: ${defaultModelPath}`)
+      }
+
       // Store API key securely
       prompts.log.step("Storing API key securely...")
       await Auth.set(id, {
@@ -267,7 +310,7 @@ export const ProviderAddCommand = cmd({
 
       // Update config file
       prompts.log.step("Updating configuration...")
-      const configPath = await updateProviderConfig(providerConfig, isGlobal)
+      const configPath = await updateProviderConfig(providerConfig, isGlobal, defaultModelPath)
 
       // Success message
       prompts.log.success(`Provider "${name}" (${id}) added successfully`)
@@ -276,6 +319,9 @@ export const ProviderAddCommand = cmd({
         prompts.log.info(`Models configured: ${Object.keys(modelsConfig).join(", ")}`)
       } else {
         prompts.log.warn("No models configured. Add them manually to the config file.")
+      }
+      if (defaultModelPath) {
+        prompts.log.success(`Default model set to: ${defaultModelPath}`)
       }
 
       prompts.outro("Done")
