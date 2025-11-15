@@ -43,6 +43,8 @@ class KeybindsConfig:
         model_list (Union[Unset, str]): List available models Default: '<leader>m'.
         model_cycle_recent (Union[Unset, str]): Next recent model Default: 'f2'.
         model_cycle_recent_reverse (Union[Unset, str]): Previous recent model Default: 'shift+f2'.
+        model_cycle_favorite (Union[Unset, str]): Next favorite model Default: 'none'.
+        model_cycle_favorite_reverse (Union[Unset, str]): Previous favorite model Default: 'none'.
         agent_list (Union[Unset, str]): List agents Default: '<leader>a'.
         agent_cycle (Union[Unset, str]): Next agent Default: 'tab'.
         agent_cycle_reverse (Union[Unset, str]): Previous agent Default: 'shift+tab'.
@@ -95,6 +97,8 @@ class KeybindsConfig:
     model_list: Union[Unset, str] = "<leader>m"
     model_cycle_recent: Union[Unset, str] = "f2"
     model_cycle_recent_reverse: Union[Unset, str] = "shift+f2"
+    model_cycle_favorite: Union[Unset, str] = "none"
+    model_cycle_favorite_reverse: Union[Unset, str] = "none"
     agent_list: Union[Unset, str] = "<leader>a"
     agent_cycle: Union[Unset, str] = "tab"
     agent_cycle_reverse: Union[Unset, str] = "shift+tab"
@@ -175,6 +179,10 @@ class KeybindsConfig:
         model_cycle_recent = self.model_cycle_recent
 
         model_cycle_recent_reverse = self.model_cycle_recent_reverse
+
+        model_cycle_favorite = self.model_cycle_favorite
+
+        model_cycle_favorite_reverse = self.model_cycle_favorite_reverse
 
         agent_list = self.agent_list
 
@@ -277,6 +285,10 @@ class KeybindsConfig:
             field_dict["model_cycle_recent"] = model_cycle_recent
         if model_cycle_recent_reverse is not UNSET:
             field_dict["model_cycle_recent_reverse"] = model_cycle_recent_reverse
+        if model_cycle_favorite is not UNSET:
+            field_dict["model_cycle_favorite"] = model_cycle_favorite
+        if model_cycle_favorite_reverse is not UNSET:
+            field_dict["model_cycle_favorite_reverse"] = model_cycle_favorite_reverse
         if agent_list is not UNSET:
             field_dict["agent_list"] = agent_list
         if agent_cycle is not UNSET:
@@ -381,6 +393,10 @@ class KeybindsConfig:
 
         model_cycle_recent_reverse = d.pop("model_cycle_recent_reverse", UNSET)
 
+        model_cycle_favorite = d.pop("model_cycle_favorite", UNSET)
+
+        model_cycle_favorite_reverse = d.pop("model_cycle_favorite_reverse", UNSET)
+
         agent_list = d.pop("agent_list", UNSET)
 
         agent_cycle = d.pop("agent_cycle", UNSET)
@@ -450,6 +466,8 @@ class KeybindsConfig:
             model_list=model_list,
             model_cycle_recent=model_cycle_recent,
             model_cycle_recent_reverse=model_cycle_recent_reverse,
+            model_cycle_favorite=model_cycle_favorite,
+            model_cycle_favorite_reverse=model_cycle_favorite_reverse,
             agent_list=agent_list,
             agent_cycle=agent_cycle,
             agent_cycle_reverse=agent_cycle_reverse,

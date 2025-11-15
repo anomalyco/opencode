@@ -423,9 +423,15 @@ export const PromptInput: Component<PromptInputProps> = (props) => {
               items={local.model.list()}
               current={local.model.current()}
               filterKeys={["provider.name", "name", "id"]}
-              groupBy={(x) => (local.model.recent().includes(x) ? "Recent" : x.provider.name)}
+              groupBy={(x) => {
+                if (local.model.favorite().includes(x)) return "Favorites"
+                if (local.model.recent().includes(x)) return "Recent"
+                return x.provider.name
+              }}
               sortGroupsBy={(a, b) => {
                 const order = ["opencode", "anthropic", "github-copilot", "openai", "google", "openrouter", "vercel"]
+                if (a.category === "Favorites" && b.category !== "Favorites") return -1
+                if (b.category === "Favorites" && a.category !== "Favorites") return 1
                 if (a.category === "Recent" && b.category !== "Recent") return -1
                 if (b.category === "Recent" && a.category !== "Recent") return 1
                 const aProvider = a.items[0].provider.id
@@ -433,6 +439,12 @@ export const PromptInput: Component<PromptInputProps> = (props) => {
                 if (order.includes(aProvider) && !order.includes(bProvider)) return -1
                 if (!order.includes(aProvider) && order.includes(bProvider)) return 1
                 return order.indexOf(aProvider) - order.indexOf(bProvider)
+              }}
+              onKeyEvent={(event, item) => {
+                if (event.ctrlKey && event.key.toLowerCase() === "f" && item) {
+                  event.preventDefault()
+                  local.model.toggleFavorite({ modelID: item.id, providerID: item.provider.id })
+                }
               }}
               onSelect={(x) =>
                 local.model.set(x ? { modelID: x.id, providerID: x.provider.id } : undefined, { recent: true })
@@ -458,9 +470,14 @@ export const PromptInput: Component<PromptInputProps> = (props) => {
                       </Show>
                     </div>
                   </div>
-                  <Show when={!i.cost || i.cost?.input === 0}>
-                    <div class="overflow-hidden text-12-medium text-text-strong">Free</div>
-                  </Show>
+                  <div class="flex items-center gap-x-2 shrink-0">
+                    <Show when={local.model.favorite().includes(i)}>
+                      <Icon name="bookmark" size="small" class="text-icon-base" />
+                    </Show>
+                    <Show when={!i.cost || i.cost?.input === 0}>
+                      <div class="overflow-hidden text-12-medium text-text-strong">Free</div>
+                    </Show>
+                  </div>
                 </div>
               )}
             </SelectDialog>
