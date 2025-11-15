@@ -28,6 +28,12 @@ OpenCode supports both **JSON** and **JSONC** (JSON with Comments) formats.
 You can place your config in a couple of different locations and they have a
 different order of precedence.
 
+:::note[Config Merging]
+Configuration files are **merged together**, not replaced. Settings from all config locations are combined using a deep merge strategy, where later configs override earlier ones only for conflicting keys. Non-conflicting settings from all configs are preserved.
+
+For example, if your global config sets `theme: "opencode"` and `autoupdate: true`, and your project config sets `model: "anthropic/claude-sonnet-4-5"`, the final configuration will include all three settings.
+:::
+
 ---
 
 ### Global
@@ -38,7 +44,7 @@ Place your global OpenCode config in `~/.config/opencode/opencode.json`. You'll 
 
 ### Per project
 
-You can also add a `opencode.json` in your project. It takes precedence over the global config. This is useful for configuring providers or modes specific to your project.
+You can also add a `opencode.json` in your project. Settings from this config are merged with and can override the global config. This is useful for configuring providers or modes specific to your project.
 
 :::tip
 Place project specific config in the root of your project.
@@ -52,7 +58,7 @@ This is also safe to be checked into Git and uses the same schema as the global 
 
 ### Custom path
 
-You can also specify a custom config file path using the `OPENCODE_CONFIG` environment variable. This takes precedence over the global and project configs.
+You can also specify a custom config file path using the `OPENCODE_CONFIG` environment variable. Settings from this config are merged with and can override the global and project configs.
 
 ```bash
 export OPENCODE_CONFIG=/path/to/my/custom-config.json
