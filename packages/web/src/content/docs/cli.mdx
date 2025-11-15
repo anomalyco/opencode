@@ -170,6 +170,68 @@ This is useful for figuring out the exact model name to use in [your config](/do
 
 ---
 
+### provider
+
+Manage custom providers for OpenCode.
+
+```bash
+opencode provider [command]
+```
+
+---
+
+#### add
+
+Add a new OpenAI-compatible provider to your configuration. This command securely stores the API key and updates your config file with the provider details.
+
+```bash
+opencode provider add <id> --name <name> --url <url> --key <key> [--models <models>] [--global]
+```
+
+##### Arguments
+
+| Argument | Description                                                    |
+| -------- | -------------------------------------------------------------- |
+| `id`     | Unique identifier for the provider (e.g., `my_ollama`, `groq`) |
+
+##### Flags
+
+| Flag       | Description                                                                  |
+| ---------- | ---------------------------------------------------------------------------- |
+| `--name`   | Human-readable display name for the provider                                 |
+| `--url`    | Base URL for the provider's API endpoint                                     |
+| `--key`    | API key for the provider (stored securely in auth.json)                      |
+| `--models` | Comma-separated list of models in format `id:name,id2:name2` (optional)     |
+| `--global` | Save to global config instead of project config (default: false)             |
+
+##### Examples
+
+Add a local Ollama provider to your project:
+
+```bash
+opencode provider add ollama_local \
+  --name "Ollama (local)" \
+  --url "http://localhost:11434/v1" \
+  --key "ollama" \
+  --models "llama3:'Llama 3',codegemma:'Code Gemma'"
+```
+
+Add a custom cloud provider globally:
+
+```bash
+opencode provider add custom_cloud \
+  --name "Custom Cloud AI" \
+  --url "https://api.custom-ai.com/v1" \
+  --key "sk-xxxxxxxxxxxxxxxxxxxx" \
+  --global
+```
+
+The API key is stored securely in `~/.local/share/opencode/auth.json`, while the provider configuration is added to `opencode.json` in your project directory (or globally with `--global`).
+
+For more details on configuring custom providers, see the [providers documentation](/docs/providers).
+
+---
+
 ### run
 
 Run opencode in non-interactive mode by passing a prompt directly.

@@ -965,6 +965,34 @@ To add any **OpenAI-compatible** provider that's not listed in `opencode auth lo
 You can use any OpenAI-compatible provider with opencode. Most modern AI providers offer OpenAI-compatible APIs.
 :::
 
+### Using the CLI (Recommended)
+
+You can quickly add a custom provider using the `opencode provider add` command, which handles both the API key storage and config file updates in one step:
+
+```bash
+opencode provider add <id> \
+  --name "Provider Name" \
+  --url "https://api.provider.com/v1" \
+  --key "your-api-key" \
+  --models "model-id:'Model Display Name'"
+```
+
+For example, to add a local Ollama instance:
+
+```bash
+opencode provider add ollama_local \
+  --name "Ollama (local)" \
+  --url "http://localhost:11434/v1" \
+  --key "ollama" \
+  --models "llama3:'Llama 3 8B',codegemma:'Code Gemma 7B'"
+```
+
+See the [CLI documentation](/docs/cli#provider) for full details and more examples.
+
+### Manual Configuration
+
+Alternatively, you can manually configure a custom provider:
+
 1. Run `opencode auth login` and scroll down to **Other**.
 
    ```bash
