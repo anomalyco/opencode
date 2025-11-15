@@ -4,40 +4,7 @@ import path from "path"
 import { Auth } from "../../src/auth"
 import { Instance } from "../../src/project/instance"
 import { Global } from "../../src/global"
-
-// Re-export the parseModelsString function for testing
-// In a real implementation, this would be exported from the provider.ts file
-function parseModelsString(modelsString: string): Record<string, { name: string }> {
-  if (!modelsString || modelsString.trim() === "") {
-    return {}
-  }
-
-  const result: Record<string, { name: string }> = {}
-
-  // Split by comma, but handle quoted values
-  const modelPairs = modelsString.split(",").map(s => s.trim()).filter(Boolean)
-
-  for (const pair of modelPairs) {
-    // Match pattern like: id:'name' or id:name
-    const match = pair.match(/^([^:]+):(.+)$/)
-    if (!match) {
-      throw new Error(`Invalid model format: "${pair}". Expected format: "id:name" or "id:'name'"`)
-    }
-
-    const [, modelId, modelName] = match
-    const id = modelId.trim()
-
-    // Remove quotes from name if present
-    let name = modelName.trim()
-    if ((name.startsWith("'") && name.endsWith("'")) || (name.startsWith('"') && name.endsWith('"'))) {
-      name = name.slice(1, -1)
-    }
-
-    result[id] = { name }
-  }
-
-  return result
-}
+import { parseModelsString } from "../../src/cli/cmd/provider"
 
 describe("parseModelsString", () => {
   test("parses single model with single quotes", () => {
@@ -100,6 +67,53 @@ describe("parseModelsString", () => {
     expect(result).toEqual({
       "gpt-4-turbo": { name: "GPT 4" },
       "claude_3_5": { name: "Claude 3.5" }
+    })
+  })
+
+  test("handles model names with commas inside quotes", () => {
+    const result = parseModelsString("model1:'GPT-4, Turbo',model2:'Claude 3.5, Sonnet'")
+    expect(result).toEqual({
+      model1: { name: "GPT-4, Turbo" },
+      model2: { name: "Claude 3.5, Sonnet" }
+    })
+  })
+
+  test("handles model names with colons", () => {
+    const result = parseModelsString("model1:'GPT-4: Advanced'")
+    expect(result).toEqual({
+      model1: { name: "GPT-4: Advanced" }
+    })
+  })
+
+  test("throws error for invalid model ID with spaces", () => {
+    expect(() => parseModelsString("model with spaces:'Name'")).toThrow("Invalid model ID")
+  })
+
+  test("throws error for mismatched quotes", () => {
+    expect(() => parseModelsString("model1:'incomplete")).toThrow("Mismatched quotes")
+  })
+
+  test("handles multiple commas between entries", () => {
+    const result = parseModelsString("model1:'Name 1',,,model2:'Name 2'")
+    expect(result).toEqual({
+      model1: { name: "Name 1" },
+      model2: { name: "Name 2" }
+    })
+  })
+
+  test("handles mixed quote styles", () => {
+    const result = parseModelsString("model1:'Single Quotes',model2:\"Double Quotes\"")
+    expect(result).toEqual({
+      model1: { name: "Single Quotes" },
+      model2: { name: "Double Quotes" }
+    })
+  })
+
+  test("allows uppercase in model IDs", () => {
+    const result = parseModelsString("GPT-4:'GPT 4',Claude-3:'Claude 3'")
+    expect(result).toEqual({
+      "GPT-4": { name: "GPT 4" },
+      "Claude-3": { name: "Claude 3" }
     })
   })
 })

@@ -22,15 +22,48 @@ export const ProviderCommand = cmd({
  * @param modelsString - Comma-separated string like "llama3:'Llama 3',codegemma:'Code Gemma'"
  * @returns Object like { "llama3": { "name": "Llama 3" }, "codegemma": { "name": "Code Gemma" } }
  */
-function parseModelsString(modelsString: string): Record<string, { name: string }> {
+export function parseModelsString(modelsString: string): Record<string, { name: string }> {
   if (!modelsString || modelsString.trim() === "") {
     return {}
   }
 
   const result: Record<string, { name: string }> = {}
 
-  // Split by comma, but handle quoted values
-  const modelPairs = modelsString.split(",").map(s => s.trim()).filter(Boolean)
+  // Split by comma, but respect quotes (handles commas inside quoted names)
+  const modelPairs: string[] = []
+  let current = ""
+  let inQuotes = false
+  let quoteChar = ""
+
+  for (let i = 0; i < modelsString.length; i++) {
+    const char = modelsString[i]
+
+    if ((char === "'" || char === '"') && (i === 0 || modelsString[i - 1] !== "\\")) {
+      if (!inQuotes) {
+        inQuotes = true
+        quoteChar = char
+        current += char
+      } else if (char === quoteChar) {
+        inQuotes = false
+        quoteChar = ""
+        current += char
+      } else {
+        current += char
+      }
+    } else if (char === "," && !inQuotes) {
+      if (current.trim()) {
+        modelPairs.push(current.trim())
+      }
+      current = ""
+    } else {
+      current += char
+    }
+  }
+
+  // Add the last pair
+  if (current.trim()) {
+    modelPairs.push(current.trim())
+  }
 
   for (const pair of modelPairs) {
     // Match pattern like: id:'name' or id:name
@@ -42,10 +75,20 @@ function parseModelsString(modelsString: string): Record<string, { name: string 
     const [, modelId, modelName] = match
     const id = modelId.trim()
 
-    // Remove quotes from name if present
+    // Validate model ID format (similar to provider ID)
+    if (!id.match(/^[a-z0-9_-]+$/i)) {
+      throw new Error(`Invalid model ID: "${id}". Must contain only letters, numbers, hyphens, and underscores`)
+    }
+
+    // Remove quotes from name if present and properly matched
     let name = modelName.trim()
     if ((name.startsWith("'") && name.endsWith("'")) || (name.startsWith('"') && name.endsWith('"'))) {
       name = name.slice(1, -1)
+    }
+
+    // Check for mismatched quotes
+    if ((name.startsWith("'") && !name.endsWith("'")) || (name.startsWith('"') && !name.endsWith('"'))) {
+      throw new Error(`Mismatched quotes in model name: "${modelName.trim()}"`)
     }
 
     result[id] = { name }
@@ -175,6 +218,19 @@ export const ProviderAddCommand = cmd({
         prompts.log.error(`Invalid URL: ${url}`)
         prompts.outro("Failed")
         return
+      }
+
+      // Check if provider ID already exists
+      const existingAuth = await Auth.get(id)
+      if (existingAuth) {
+        const confirm = await prompts.confirm({
+          message: `Provider "${id}" already exists. Overwrite?`,
+          initialValue: false,
+        })
+        if (prompts.isCancel(confirm) || !confirm) {
+          prompts.outro("Cancelled")
+          return
+        }
       }
 
       // Parse models if provided
