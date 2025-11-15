@@ -144,12 +144,6 @@ export namespace ToolRegistry {
     custom.push(tool)
   }
 
-  export type RendererInfo = {
-    name: string
-    container?: "block" | "inline"
-    render: (props: Tool.RenderProps<any>) => JSX.Element
-  }
-
   async function all(providerID: string, modelID: string): Promise<Tool.Info[]> {
     const custom = await state().then((x) => x.custom)
     const config = await Config.get()
