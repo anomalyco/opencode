@@ -12,5 +12,5 @@ uv run --project packages/sdk/python pytest -q
 
 Notes
 
-- Integration test starts a headless opencode server via Bun in a subprocess
+- Integration test starts a headless chalice server via Bun in a subprocess
 - SSE behavior is validated using real streaming from the server

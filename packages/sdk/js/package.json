@@ -1,6 +1,6 @@
 {
   "$schema": "https://json.schemastore.org/package.json",
-  "name": "@opencode-ai/sdk",
+  "name": "@chalicecode-ai/sdk",
   "version": "1.0.65",
   "type": "module",
   "scripts": {

@@ -13,10 +13,10 @@ if (process.versions.bun !== expectedBunVersion) {
   throw new Error(`This script requires bun@${expectedBunVersion}, but you are using bun@${process.versions.bun}`)
 }
 
-const CHANNEL = process.env["OPENCODE_CHANNEL"] ?? (await $`git branch --show-current`.text().then((x) => x.trim()))
+const CHANNEL = process.env["CHALICECODE_CHANNEL"] ?? (await $`git branch --show-current`.text().then((x) => x.trim()))
 const IS_PREVIEW = CHANNEL !== "latest"
 const VERSION = await (async () => {
-  if (process.env["OPENCODE_VERSION"]) return process.env["OPENCODE_VERSION"]
+  if (process.env["CHALICECODE_VERSION"]) return process.env["CHALICECODE_VERSION"]
   if (IS_PREVIEW) return `0.0.0-${CHANNEL}-${new Date().toISOString().slice(0, 16).replace(/[-:T]/g, "")}`
   const version = await fetch("https://registry.npmjs.org/opencode-ai/latest")
     .then((res) => {
@@ -25,7 +25,7 @@ const VERSION = await (async () => {
     })
     .then((data: any) => data.version)
   const [major, minor, patch] = version.split(".").map((x: string) => Number(x) || 0)
-  const t = process.env["OPENCODE_BUMP"]?.toLowerCase()
+  const t = process.env["CHALICECODE_BUMP"]?.toLowerCase()
   if (t === "major") return `${major + 1}.0.0`
   if (t === "minor") return `${major}.${minor + 1}.0`
   return `${major}.${minor}.${patch + 1}`

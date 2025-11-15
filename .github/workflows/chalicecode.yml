@@ -1,0 +1,29 @@
+name: chalicecode
+
+on:
+  issue_comment:
+    types: [created]
+
+jobs:
+  opencode:
+    if: |
+      contains(github.event.comment.body, ' /oc') ||
+      startsWith(github.event.comment.body, '/oc') ||
+      contains(github.event.comment.body, ' /chalice-code') ||
+      startsWith(github.event.comment.body, '/chalice-code')
+    runs-on: ubuntu-latest
+    permissions:
+      id-token: write
+      contents: read
+      pull-requests: read
+      issues: read
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Run chalice
+        uses: sst/chalice-code/github@latest
+        env:
+          CHALICECODE_API_KEY: ${{ secrets.CHALICECODE_API_KEY }}
+        with:
+          model: opencode/glm-4.6

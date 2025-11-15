@@ -1,30 +1,30 @@
 ---
 title: Providers
-description: Using any LLM provider in OpenCode.
+description: Using any LLM provider in ChaliceCode.
 ---
 
 import config from "../../../config.mjs"
 export const console = config.console
 
-OpenCode uses the [AI SDK](https://ai-sdk.dev/) and [Models.dev](https://models.dev) to support for **75+ LLM providers** and it supports running local models.
+ChaliceCode uses the [AI SDK](https://ai-sdk.dev/) and [Models.dev](https://models.dev) to support for **75+ LLM providers** and it supports running local models.
 
 To add a provider you need to:
 
 1. Add the API keys for the provider using `opencode auth login`.
-2. Configure the provider in your OpenCode config.
+2. Configure the provider in your ChaliceCode config.
 
 ---
 
 ### Credentials
 
 When you add a provider's API keys with `opencode auth login`, they are stored
-in `~/.local/share/opencode/auth.json`.
+in `~/.local/share/chalice-code/auth.json`.
 
 ---
 
 ### Config
 
-You can customize the providers through the `provider` section in your OpenCode
+You can customize the providers through the `provider` section in your ChaliceCode
 config.
 
 ---
@@ -35,7 +35,7 @@ You can customize the base URL for any provider by setting the `baseURL` option.
 
 ```json title="opencode.json" {6}
 {
-  "$schema": "https://opencode.ai/config.json",
+  "$schema": "https://chalice-code.ai/config.json",
   "provider": {
     "anthropic": {
       "options": {
@@ -48,28 +48,28 @@ You can customize the base URL for any provider by setting the `baseURL` option.
 
 ---
 
-## OpenCode Zen
+## ChaliceCode Zen
 
-OpenCode Zen is a list of models provided by the OpenCode team that have been
-tested and verified to work well with OpenCode. [Learn more](/docs/zen).
+ChaliceCode Zen is a list of models provided by the ChaliceCode team that have been
+tested and verified to work well with ChaliceCode. [Learn more](/docs/zen).
 
 :::tip
-If you are new, we recommend starting with OpenCode Zen.
+If you are new, we recommend starting with ChaliceCode Zen.
 :::
 
-1. Run `opencode auth login`, select opencode, and head to [opencode.ai/auth](https://opencode.ai/auth).
+1. Run `opencode auth login`, select chalice, and head to [opencode.ai/auth](https://chalice-code.ai/auth).
 2. Sign in, add your billing details, and copy your API key.
 3. Paste your API key.
 
    ```bash
-   $ opencode auth login
+   $ chalice auth login
 
    ┌  Add credential
    │
    ◇  Select provider
-   │  opencode
+   │  chalice
    │
-   ●  Create an api key at https://opencode.ai/auth
+   ●  Create an api key at https://chalice-code.ai/auth
    │
    ◆  Enter your API key
    │  _
@@ -78,7 +78,7 @@ If you are new, we recommend starting with OpenCode Zen.
 
 4. Run `/models` in the TUI to see the list of models we recommend.
 
-It works like any other provider in OpenCode. And is completely optional to use
+It works like any other provider in ChaliceCode. And is completely optional to use
 it.
 
 ---
@@ -96,7 +96,7 @@ Don't see a provider here? Submit a PR.
 
 ### Amazon Bedrock
 
-To use Amazon Bedrock with OpenCode:
+To use Amazon Bedrock with ChaliceCode:
 
 1. Head over to the **Model catalog** in the Amazon Bedrock console and request
    access to the models you want.
@@ -113,10 +113,10 @@ To use Amazon Bedrock with OpenCode:
    - `AWS_BEARER_TOKEN_BEDROCK`: You can generate a long-term API key from the
      Amazon Bedrock console.
 
-   Once you have one of the above, set it while running opencode.
+   Once you have one of the above, set it while running chalice.
 
    ```bash
-   AWS_ACCESS_KEY_ID=XXX opencode
+   AWS_ACCESS_KEY_ID=XXX chalice
    ```
 
    Or add it to your bash profile.
@@ -131,12 +131,12 @@ To use Amazon Bedrock with OpenCode:
 
 ### Anthropic
 
-We recommend signing up for [Claude Pro](https://www.anthropic.com/news/claude-pro) or [Max](https://www.anthropic.com/max), it's the most cost-effective way to use opencode.
+We recommend signing up for [Claude Pro](https://www.anthropic.com/news/claude-pro) or [Max](https://www.anthropic.com/max), it's the most cost-effective way to use chalice.
 
 Once you've signed up, run `opencode auth login` and select Anthropic.
 
 ```bash
-$ opencode auth login
+$ chalice auth login
 
 ┌  Add credential
 │
@@ -150,7 +150,7 @@ Here you can select the **Claude Pro/Max** option and it'll open your browser
 and ask you to authenticate.
 
 ```bash
-$ opencode auth login
+$ chalice auth login
 ┌  Add credential
 │
 ◇  Select provider
@@ -182,13 +182,13 @@ Or if you already have an API key, you can select **Manually enter API Key** and
 2. Go to [Azure AI Foundry](https://ai.azure.com/) and deploy a model.
 
    :::note
-   The deployment name must match the model name for opencode to work properly.
+   The deployment name must match the model name for chalice to work properly.
    :::
 
 3. Run `opencode auth login` and select **Azure**.
 
    ```bash
-   $ opencode auth login
+   $ chalice auth login
 
    ┌  Add credential
    │
@@ -201,7 +201,7 @@ Or if you already have an API key, you can select **Manually enter API Key** and
 4. Enter your API key.
 
    ```bash
-   $ opencode auth login
+   $ chalice auth login
 
    ┌  Add credential
    │
@@ -216,7 +216,7 @@ Or if you already have an API key, you can select **Manually enter API Key** and
 5. Set your resource name as an environment variable:
 
    ```bash
-   AZURE_RESOURCE_NAME=XXX opencode
+   AZURE_RESOURCE_NAME=XXX chalice
    ```
 
    Or add it to your bash profile:
@@ -236,7 +236,7 @@ Or if you already have an API key, you can select **Manually enter API Key** and
 2. Run `opencode auth login` and select **Baseten**.
 
    ```bash
-   $ opencode auth login
+   $ chalice auth login
 
    ┌  Add credential
    │
@@ -249,7 +249,7 @@ Or if you already have an API key, you can select **Manually enter API Key** and
 3. Enter your Baseten API key.
 
    ```bash
-   $ opencode auth login
+   $ chalice auth login
 
    ┌  Add credential
    │
@@ -272,7 +272,7 @@ Or if you already have an API key, you can select **Manually enter API Key** and
 2. Run `opencode auth login` and select **Cerebras**.
 
    ```bash
-   $ opencode auth login
+   $ chalice auth login
 
    ┌  Add credential
    │
@@ -285,7 +285,7 @@ Or if you already have an API key, you can select **Manually enter API Key** and
 3. Enter your Cerebras API key.
 
    ```bash
-   $ opencode auth login
+   $ chalice auth login
 
    ┌  Add credential
    │
@@ -308,7 +308,7 @@ Or if you already have an API key, you can select **Manually enter API Key** and
 2. Run `opencode auth login` and select **DeepSeek**.
 
    ```bash
-   $ opencode auth login
+   $ chalice auth login
 
    ┌  Add credential
    │
@@ -321,7 +321,7 @@ Or if you already have an API key, you can select **Manually enter API Key** and
 3. Enter your DeepSeek API key.
 
    ```bash
-   $ opencode auth login
+   $ chalice auth login
 
    ┌  Add credential
    │
@@ -344,7 +344,7 @@ Or if you already have an API key, you can select **Manually enter API Key** and
 2. Run `opencode auth login` and select **Deep Infra**.
 
    ```bash
-   $ opencode auth login
+   $ chalice auth login
 
    ┌  Add credential
    │
@@ -357,7 +357,7 @@ Or if you already have an API key, you can select **Manually enter API Key** and
 3. Enter your Deep Infra API key.
 
    ```bash
-   $ opencode auth login
+   $ chalice auth login
 
    ┌  Add credential
    │
@@ -380,7 +380,7 @@ Or if you already have an API key, you can select **Manually enter API Key** and
 2. Run `opencode auth login` and select **Fireworks AI**.
 
    ```bash
-   $ opencode auth login
+   $ chalice auth login
 
    ┌  Add credential
    │
@@ -393,7 +393,7 @@ Or if you already have an API key, you can select **Manually enter API Key** and
 3. Enter your Fireworks AI API key.
 
    ```bash
-   $ opencode auth login
+   $ chalice auth login
 
    ┌  Add credential
    │
@@ -411,7 +411,7 @@ Or if you already have an API key, you can select **Manually enter API Key** and
 
 ### GitHub Copilot
 
-To use your GitHub Copilot subscription with opencode:
+To use your GitHub Copilot subscription with chalice:
 
 :::note
 Some models might need a [Pro+
@@ -423,7 +423,7 @@ Some models need to be manually enabled in your [GitHub Copilot settings](https:
 1. Run `opencode auth login` and select GitHub Copilot.
 
    ```bash
-   $ opencode auth login
+   $ chalice auth login
    ┌  Add credential
 
    │
@@ -448,7 +448,7 @@ Some models need to be manually enabled in your [GitHub Copilot settings](https:
 
 ### Google Vertex AI
 
-To use Google Vertex AI with OpenCode:
+To use Google Vertex AI with ChaliceCode:
 
 1. Head over to the **Model Garden** in the Google Cloud Console and check the
    models available in your region.
@@ -464,10 +464,10 @@ To use Google Vertex AI with OpenCode:
      - `GOOGLE_APPLICATION_CREDENTIALS`: Path to your service account JSON key file
      - Authenticate using gcloud CLI: `gcloud auth application-default login`
 
-   Set them while running opencode.
+   Set them while running chalice.
 
    ```bash
-   GOOGLE_APPLICATION_CREDENTIALS=/path/to/service-account.json GOOGLE_CLOUD_PROJECT=your-project-id opencode
+   GOOGLE_APPLICATION_CREDENTIALS=/path/to/service-account.json GOOGLE_CLOUD_PROJECT=your-project-id chalice
    ```
 
    Or add them to your bash profile.
@@ -493,7 +493,7 @@ The `global` region improves availability and reduces errors at no extra cost. U
 2. Run `opencode auth login` and select Groq.
 
    ```bash
-   $ opencode auth login
+   $ chalice auth login
 
    ┌  Add credential
    │
@@ -506,7 +506,7 @@ The `global` region improves availability and reduces errors at no extra cost. U
 3. Enter the API key for the provider.
 
    ```bash
-   $ opencode auth login
+   $ chalice auth login
 
    ┌  Add credential
    │
@@ -531,7 +531,7 @@ The `global` region improves availability and reduces errors at no extra cost. U
 2. Run `opencode auth login` and select **Hugging Face**.
 
    ```bash
-   $ opencode auth login
+   $ chalice auth login
 
    ┌  Add credential
    │
@@ -544,7 +544,7 @@ The `global` region improves availability and reduces errors at no extra cost. U
 3. Enter your Hugging Face token.
 
    ```bash
-   $ opencode auth login
+   $ chalice auth login
 
    ┌  Add credential
    │
@@ -562,11 +562,11 @@ The `global` region improves availability and reduces errors at no extra cost. U
 
 ### LM Studio
 
-You can configure opencode to use local models through LM Studio.
+You can configure chalice to use local models through LM Studio.
 
 ```json title="opencode.json" "lmstudio" {5, 6, 8, 10-14}
 {
-  "$schema": "https://opencode.ai/config.json",
+  "$schema": "https://chalice-code.ai/config.json",
   "provider": {
     "lmstudio": {
       "npm": "@ai-sdk/openai-compatible",
@@ -603,7 +603,7 @@ To use Kimi K2 from Moonshot AI:
 2. Run `opencode auth login` and select **Moonshot AI**.
 
    ```bash
-   $ opencode auth login
+   $ chalice auth login
 
    ┌  Add credential
    │
@@ -616,7 +616,7 @@ To use Kimi K2 from Moonshot AI:
 3. Enter your Moonshot API key.
 
    ```bash
-   $ opencode auth login
+   $ chalice auth login
 
    ┌  Add credential
    │
@@ -634,11 +634,11 @@ To use Kimi K2 from Moonshot AI:
 
 ### Ollama
 
-You can configure opencode to use local models through Ollama.
+You can configure chalice to use local models through Ollama.
 
 ```json title="opencode.json" "ollama" {5, 6, 8, 10-14}
 {
-  "$schema": "https://opencode.ai/config.json",
+  "$schema": "https://chalice-code.ai/config.json",
   "provider": {
     "ollama": {
       "npm": "@ai-sdk/openai-compatible",
@@ -677,7 +677,7 @@ If tool calls aren't working, try increasing `num_ctx` in Ollama. Start around 1
 2. Run `opencode auth login` and select OpenAI.
 
    ```bash
-   $ opencode auth login
+   $ chalice auth login
 
    ┌  Add credential
    │
@@ -690,7 +690,7 @@ If tool calls aren't working, try increasing `num_ctx` in Ollama. Start around 1
 3. Enter the API key for the provider.
 
    ```bash
-   $ opencode auth login
+   $ chalice auth login
 
    ┌  Add credential
    │
@@ -706,34 +706,34 @@ If tool calls aren't working, try increasing `num_ctx` in Ollama. Start around 1
 
 ---
 
-### OpenCode Zen
+### ChaliceCode Zen
 
-OpenCode Zen is a list of tested and verified models provided by the OpenCode team. [Learn more](/docs/zen).
+ChaliceCode Zen is a list of tested and verified models provided by the ChaliceCode team. [Learn more](/docs/zen).
 
-1. Sign in to **<a href={console}>OpenCode Zen</a>** and click **Create API Key**.
+1. Sign in to **<a href={console}>ChaliceCode Zen</a>** and click **Create API Key**.
 
-2. Run `opencode auth login` and select **OpenCode Zen**.
+2. Run `opencode auth login` and select **ChaliceCode Zen**.
 
    ```bash
-   $ opencode auth login
+   $ chalice auth login
 
    ┌  Add credential
    │
    ◆  Select provider
-   │  ● OpenCode Zen
+   │  ● ChaliceCode Zen
    │  ...
    └
    ```
 
-3. Enter your OpenCode API key.
+3. Enter your ChaliceCode API key.
 
    ```bash
-   $ opencode auth login
+   $ chalice auth login
 
    ┌  Add credential
    │
    ◇  Select provider
-   │  OpenCode Zen
+   │  ChaliceCode Zen
    │
    ◇  Enter your API key
    │  _
@@ -751,7 +751,7 @@ OpenCode Zen is a list of tested and verified models provided by the OpenCode te
 2. Run `opencode auth login` and select OpenRouter.
 
    ```bash
-   $ opencode auth login
+   $ chalice auth login
 
    ┌  Add credential
    │
@@ -766,7 +766,7 @@ OpenCode Zen is a list of tested and verified models provided by the OpenCode te
 3. Enter the API key for the provider.
 
    ```bash
-   $ opencode auth login
+   $ chalice auth login
 
    ┌  Add credential
    │
@@ -780,11 +780,11 @@ OpenCode Zen is a list of tested and verified models provided by the OpenCode te
 
 4. Many OpenRouter models are preloaded by default, run the `/models` command to select the one you want.
 
-   You can also add additional models through your opencode config.
+   You can also add additional models through your chalice config.
 
    ```json title="opencode.json" {6}
    {
-     "$schema": "https://opencode.ai/config.json",
+     "$schema": "https://chalice-code.ai/config.json",
      "provider": {
        "openrouter": {
          "models": {
@@ -795,11 +795,11 @@ OpenCode Zen is a list of tested and verified models provided by the OpenCode te
    }
    ```
 
-5. You can also customize them through your opencode config. Here's an example of specifying a provider
+5. You can also customize them through your chalice config. Here's an example of specifying a provider
 
    ```json title="opencode.json"
    {
-     "$schema": "https://opencode.ai/config.json",
+     "$schema": "https://chalice-code.ai/config.json",
      "provider": {
        "openrouter": {
          "models": {
@@ -826,7 +826,7 @@ OpenCode Zen is a list of tested and verified models provided by the OpenCode te
 2. Run `opencode auth login` and select **OVHcloud AI Endpoints**.
 
    ```bash
-   $ opencode auth login
+   $ chalice auth login
 
    ┌  Add credential
    │
@@ -839,7 +839,7 @@ OpenCode Zen is a list of tested and verified models provided by the OpenCode te
 3. Enter your OVHcloud AI Endpoints API key.
 
    ```bash
-   $ opencode auth login
+   $ chalice auth login
 
    ┌  Add credential
    │
@@ -862,7 +862,7 @@ OpenCode Zen is a list of tested and verified models provided by the OpenCode te
 2. Run `opencode auth login` and select **Together AI**.
 
    ```bash
-   $ opencode auth login
+   $ chalice auth login
 
    ┌  Add credential
    │
@@ -875,7 +875,7 @@ OpenCode Zen is a list of tested and verified models provided by the OpenCode te
 3. Enter your Together AI API key.
 
    ```bash
-   $ opencode auth login
+   $ chalice auth login
 
    ┌  Add credential
    │
@@ -893,13 +893,13 @@ OpenCode Zen is a list of tested and verified models provided by the OpenCode te
 
 ### xAI
 
-For a limited time, you can use xAI's Grok Code for free with opencode.
+For a limited time, you can use xAI's Grok Code for free with chalice.
 
 :::tip
-Grok Code is available for free for a limited time on opencode.
+Grok Code is available for free for a limited time on chalice.
 :::
 
-1. Make sure you are on the latest version of opencode.
+1. Make sure you are on the latest version of chalice.
 
 2. Run the `/models` command and select **Grok Code Free**.
 
@@ -915,7 +915,7 @@ monitor and improve Grok Code.
 2. Run `opencode auth login` and select **Z.AI**.
 
    ```bash
-   $ opencode auth login
+   $ chalice auth login
 
    ┌  Add credential
    │
@@ -928,7 +928,7 @@ monitor and improve Grok Code.
    If you are subscribed to the **GLM Coding Plan**, select **Z.AI Coding Plan**.
 
    ```bash
-   $ opencode auth login
+   $ chalice auth login
 
    ┌  Add credential
    │
@@ -941,7 +941,7 @@ monitor and improve Grok Code.
 3. Enter your Z.AI API key.
 
    ```bash
-   $ opencode auth login
+   $ chalice auth login
 
    ┌  Add credential
    │
@@ -962,13 +962,13 @@ monitor and improve Grok Code.
 To add any **OpenAI-compatible** provider that's not listed in `opencode auth login`:
 
 :::tip
-You can use any OpenAI-compatible provider with opencode. Most modern AI providers offer OpenAI-compatible APIs.
+You can use any OpenAI-compatible provider with chalice. Most modern AI providers offer OpenAI-compatible APIs.
 :::
 
 1. Run `opencode auth login` and scroll down to **Other**.
 
    ```bash
-   $ opencode auth login
+   $ chalice auth login
 
    ┌  Add credential
    │
@@ -981,7 +981,7 @@ You can use any OpenAI-compatible provider with opencode. Most modern AI provide
 2. Enter a unique ID for the provider.
 
    ```bash
-   $ opencode auth login
+   $ chalice auth login
 
    ┌  Add credential
    │
@@ -997,11 +997,11 @@ You can use any OpenAI-compatible provider with opencode. Most modern AI provide
 3. Enter your API key for the provider.
 
    ```bash
-   $ opencode auth login
+   $ chalice auth login
 
    ┌  Add credential
    │
-   ▲  This only stores a credential for myprovider - you will need configure it in opencode.json, check the docs for examples.
+   ▲  This only stores a credential for myprovider - you will need configure it in chalice.json, check the docs for examples.
    │
    ◇  Enter your API key
    │  sk-...
@@ -1012,7 +1012,7 @@ You can use any OpenAI-compatible provider with opencode. Most modern AI provide
 
    ```json title="opencode.json" ""myprovider"" {5-15}
    {
-     "$schema": "https://opencode.ai/config.json",
+     "$schema": "https://chalice-code.ai/config.json",
      "provider": {
        "myprovider": {
          "npm": "@ai-sdk/openai-compatible",
@@ -1050,7 +1050,7 @@ Here's an example setting the `apiKey`, `headers`, and model `limit` options.
 
 ```json title="opencode.json" {9,11,17-20}
 {
-  "$schema": "https://opencode.ai/config.json",
+  "$schema": "https://chalice-code.ai/config.json",
   "provider": {
     "myprovider": {
       "npm": "@ai-sdk/openai-compatible",
@@ -1083,7 +1083,7 @@ Configuration details:
 - **limit.context**: Maximum input tokens the model accepts.
 - **limit.output**: Maximum tokens the model can generate.
 
-The `limit` fields allow OpenCode to understand how much context you have left. Standard providers pull these from models.dev automatically.
+The `limit` fields allow ChaliceCode to understand how much context you have left. Standard providers pull these from models.dev automatically.
 
 ---
 
@@ -1096,7 +1096,7 @@ If you are having trouble with configuring a provider, check the following:
 
    This doesn't apply to providers like Amazon Bedrock, that rely on environment variables for their auth.
 
-2. For custom providers, check the opencode config and:
-   - Make sure the provider ID used in `opencode auth login` matches the ID in your opencode config.
+2. For custom providers, check the chalice config and:
+   - Make sure the provider ID used in `opencode auth login` matches the ID in your chalice config.
    - The right npm package is used for the provider. For example, use `@ai-sdk/cerebras` for Cerebras. And for all other OpenAI-compatible providers, use `@ai-sdk/openai-compatible`.
    - Check correct API endpoint is used in the `options.baseURL` field.

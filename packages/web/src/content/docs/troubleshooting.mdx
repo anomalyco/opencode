@@ -3,7 +3,7 @@ title: Troubleshooting
 description: Common issues and how to resolve them.
 ---
 
-To debug any issues with OpenCode, you can check the logs or the session data
+To debug any issues with ChaliceCode, you can check the logs or the session data
 that it stores locally.
 
 ---
@@ -12,7 +12,7 @@ that it stores locally.
 
 Log files are written to:
 
-- **macOS/Linux**: `~/.local/share/opencode/log/`
+- **macOS/Linux**: `~/.local/share/chalice-code/log/`
 - **Windows**: `%USERPROFILE%\.local\share\opencode\log\`
 
 Log files are named with timestamps (e.g., `2025-01-09T123456.log`) and the most recent 10 log files are kept.
@@ -25,7 +25,7 @@ You can set the log level with the `--log-level` command-line option to get more
 
 opencode stores session data and other application data on disk at:
 
-- **macOS/Linux**: `~/.local/share/opencode/`
+- **macOS/Linux**: `~/.local/share/chalice-code/`
 - **Windows**: `%USERPROFILE%\.local\share\opencode`
 
 This directory contains:
@@ -40,13 +40,13 @@ This directory contains:
 
 ## Getting help
 
-If you're experiencing issues with OpenCode:
+If you're experiencing issues with ChaliceCode:
 
 1. **Report issues on GitHub**
 
    The best way to report bugs or request features is through our GitHub repository:
 
-   [**github.com/sst/opencode/issues**](https://github.com/sst/opencode/issues)
+   [**github.com/sst/chalice-code/issues**](https://github.com/sst/chalice-code/issues)
 
    Before creating a new issue, search existing issues to see if your problem has already been reported.
 
@@ -54,7 +54,7 @@ If you're experiencing issues with OpenCode:
 
    For real-time help and community discussion, join our Discord server:
 
-   [**opencode.ai/discord**](https://opencode.ai/discord)
+   [**opencode.ai/discord**](https://chalice-code.ai/discord)
 
 ---
 
@@ -64,7 +64,7 @@ Here are some common issues and how to resolve them.
 
 ---
 
-### opencode won't start
+### chalice won't start
 
 1. Check the logs for error messages
 2. Try running with `--print-logs` to see output in the terminal
@@ -110,31 +110,31 @@ To resolve this:
 2. If the issue persists, try clearing your stored configuration:
 
    ```bash
-   rm -rf ~/.local/share/opencode
+   rm -rf ~/.local/share/chalice-code
    ```
 
 3. Re-authenticate with your provider:
    ```bash
-   opencode auth login <provider>
+   chalice auth login <provider>
    ```
 
 ---
 
 ### AI_APICallError and provider package issues
 
-If you encounter API call errors, this may be due to outdated provider packages. opencode dynamically installs provider packages (OpenAI, Anthropic, Google, etc.) as needed and caches them locally.
+If you encounter API call errors, this may be due to outdated provider packages. chalice dynamically installs provider packages (OpenAI, Anthropic, Google, etc.) as needed and caches them locally.
 
 To resolve provider package issues:
 
 1. Clear the provider package cache:
 
    ```bash
-   rm -rf ~/.cache/opencode
+   rm -rf ~/.cache/chalice-code
    ```
 
-2. Restart opencode to reinstall the latest provider packages
+2. Restart chalice to reinstall the latest provider packages
 
-This will force opencode to download the most recent versions of provider packages, which often resolves compatibility issues with model parameters and API changes.
+This will force chalice to download the most recent versions of provider packages, which often resolves compatibility issues with model parameters and API changes.
 
 ---
 

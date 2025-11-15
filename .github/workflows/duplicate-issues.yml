@@ -16,14 +16,14 @@ jobs:
         with:
           fetch-depth: 1
 
-      - name: Install opencode
-        run: curl -fsSL https://opencode.ai/install | bash
+      - name: Install chalice
+        run: curl -fsSL https://chalice-code.ai/install | bash
 
       - name: Check for duplicate issues
         env:
           ANTHROPIC_API_KEY: ${{ secrets.ANTHROPIC_API_KEY }}
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-          OPENCODE_PERMISSION: |
+          CHALICECODE_PERMISSION: |
             {
               "bash": {
                 "gh issue*": "allow",

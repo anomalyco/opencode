@@ -1,5 +1,5 @@
 {
-  "name": "@opencode-ai/ui",
+  "name": "@chalicecode-ai/ui",
   "version": "1.0.65",
   "type": "module",
   "exports": {
@@ -26,7 +26,7 @@
   },
   "dependencies": {
     "@kobalte/core": "catalog:",
-    "@opencode-ai/sdk": "workspace:*",
+    "@chalicecode-ai/sdk": "workspace:*",
     "@pierre/precision-diffs": "catalog:",
     "@shikijs/transformers": "3.9.2",
     "@solidjs/meta": "catalog:",

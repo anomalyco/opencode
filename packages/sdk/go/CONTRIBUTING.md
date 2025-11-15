@@ -41,7 +41,7 @@ To use a local version of this library from source in another project, edit the 
 directive. This can be done through the CLI with the following:
 
 ```sh
-$ go mod edit -replace github.com/sst/opencode-sdk-go=/path/to/opencode-sdk-go
+$ go mod edit -replace github.com/sst/chalice-code-sdk-go=/path/to/chalice-code-sdk-go
 ```
 
 ## Running tests

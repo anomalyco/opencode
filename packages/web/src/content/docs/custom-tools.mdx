@@ -1,9 +1,9 @@
 ---
 title: Custom Tools
-description: Create tools the LLM can call in opencode.
+description: Create tools the LLM can call in chalice.
 ---
 
-Custom tools are functions you create that the LLM can call during conversations. They work alongside opencode's [built-in tools](/docs/tools) like `read`, `write`, and `bash`.
+Custom tools are functions you create that the LLM can call during conversations. They work alongside chalice's [built-in tools](/docs/tools) like `read`, `write`, and `bash`.
 
 ---
 
@@ -17,8 +17,8 @@ Tools are defined as **TypeScript** or **JavaScript** files.
 
 They can be defined:
 
-- Locally by placing them in the `.opencode/tool/` directory of your project.
-- Or globally, by placing them in `~/.config/opencode/tool/`.
+- Locally by placing them in the `.chalicecode/tool/` directory of your project.
+- Or globally, by placing them in `~/.config/chalice-code/tool/`.
 
 ---
 
@@ -26,8 +26,8 @@ They can be defined:
 
 The easiest way to create tools is using the `tool()` helper which provides type-safety and validation.
 
-```ts title=".opencode/tool/database.ts" {1}
-import { tool } from "@opencode-ai/plugin"
+```ts title=".chalicecode/tool/database.ts" {1}
+import { tool } from "@chalicecode-ai/plugin"
 
 export default tool({
   description: "Query the project database",
@@ -78,8 +78,8 @@ export default {
 
 Tools receive context about the current session:
 
-```ts title=".opencode/tool/project.ts" {8}
-import { tool } from "@opencode-ai/plugin"
+```ts title=".chalicecode/tool/project.ts" {8}
+import { tool } from "@chalicecode-ai/plugin"
 
 export default tool({
   description: "Get project information",
@@ -98,8 +98,8 @@ export default tool({
 
 You can also export multiple tools from a single file. Each export becomes **a separate tool** with the name **`<filename>_<exportname>`**:
 
-```ts title=".opencode/tool/math.ts"
-import { tool } from "@opencode-ai/plugin"
+```ts title=".chalicecode/tool/math.ts"
+import { tool } from "@chalicecode-ai/plugin"
 
 export const add = tool({
   description: "Add two numbers",

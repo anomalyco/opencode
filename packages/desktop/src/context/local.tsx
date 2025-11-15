@@ -1,7 +1,7 @@
 import { createStore, produce, reconcile } from "solid-js/store"
 import { batch, createEffect, createMemo } from "solid-js"
 import { uniqueBy } from "remeda"
-import type { FileContent, FileNode, Model, Provider, File as FileStatus } from "@opencode-ai/sdk"
+import type { FileContent, FileNode, Model, Provider, File as FileStatus } from "@chalicecode-ai/sdk"
 import { createSimpleContext } from "./helper"
 import { useSDK } from "./sdk"
 import { useSync } from "./sync"

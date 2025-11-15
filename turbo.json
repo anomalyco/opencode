@@ -6,7 +6,7 @@
       "dependsOn": ["^build"],
       "outputs": ["dist/**"]
     },
-    "opencode#test": {
+    "chalicecode#test": {
       "dependsOn": ["^build"],
       "outputs": []
     }

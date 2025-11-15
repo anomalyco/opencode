@@ -50,12 +50,12 @@ jobs:
           mkdir -p ~/.ssh
           echo "${{ secrets.AUR_KEY }}" > ~/.ssh/id_rsa
           chmod 600 ~/.ssh/id_rsa
-          git config --global user.email "opencode@sst.dev"
-          git config --global user.name "opencode"
+          git config --global user.email "chalicecode@forgedinfiles.com"
+          git config --global user.name "chalicecode"
           ssh-keyscan -H aur.archlinux.org >> ~/.ssh/known_hosts || true
 
       - name: Install OpenCode
-        run: curl -fsSL https://opencode.ai/install | bash
+        run: curl -fsSL https://chalice-code.ai/install | bash
 
       - name: Setup npm auth
         run: |
@@ -65,10 +65,10 @@ jobs:
         run: |
           ./script/publish.ts
         env:
-          OPENCODE_BUMP: ${{ inputs.bump }}
-          OPENCODE_VERSION: ${{ inputs.version }}
-          OPENCODE_CHANNEL: latest
+          CHALICECODE_BUMP: ${{ inputs.bump }}
+          CHALICECODE_VERSION: ${{ inputs.version }}
+          CHALICECODE_CHANNEL: latest
           NPM_CONFIG_TOKEN: ${{ secrets.NPM_TOKEN }}
           GITHUB_TOKEN: ${{ secrets.SST_GITHUB_TOKEN }}
           AUR_KEY: ${{ secrets.AUR_KEY }}
-          OPENCODE_API_KEY: ${{ secrets.OPENCODE_API_KEY }}
+          CHALICECODE_API_KEY: ${{ secrets.CHALICECODE_API_KEY }}

@@ -1,11 +1,11 @@
 # Configuration
 
-OpenCodeClient accepts common options for auth, timeouts, and retries.
+ChaliceCodeClient accepts common options for auth, timeouts, and retries.
 
 ```python
-from opencode_ai import OpenCodeClient
+from chalice_ai import ChaliceCodeClient
 
-client = OpenCodeClient(
+client = ChaliceCodeClient(
     base_url="http://localhost:4096",
     token="pypi-or-other-token",
     auth_header_name="Authorization",

@@ -1,6 +1,6 @@
 ## project
 
-goal is to let a single instance of opencode be able to run sessions for
+goal is to let a single instance of chalice be able to run sessions for
 multiple projects and different worktrees per project
 
 ### api

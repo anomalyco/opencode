@@ -1,7 +1,7 @@
 import { For, JSXElement, Match, Show, Switch, createEffect, createMemo, createSignal, onCleanup } from "solid-js"
-import { Part } from "@opencode-ai/ui"
+import { Part } from "@chalicecode-ai/ui"
 import { useSync } from "@/context/sync"
-import type { AssistantMessage as AssistantMessageType, ToolPart } from "@opencode-ai/sdk"
+import type { AssistantMessage as AssistantMessageType, ToolPart } from "@chalicecode-ai/sdk"
 import { Spinner } from "./spinner"
 
 export function MessageProgress(props: { assistantMessages: () => AssistantMessageType[]; done?: boolean }) {

@@ -3,9 +3,9 @@
 Access file status and project information.
 
 ```python
-from opencode_ai import OpenCodeClient
+from chalice_ai import ChaliceCodeClient
 
-client = OpenCodeClient()
+client = ChaliceCodeClient()
 
 # Projects
 for p in client.list_projects() or []:

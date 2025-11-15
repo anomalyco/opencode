@@ -1,6 +1,6 @@
 #!/usr/bin/env bash
 set -euo pipefail
-APP=opencode
+APP=chalicecode
 
 RED='\033[0;31m'
 GREEN='\033[0;32m'
@@ -45,19 +45,19 @@ case "$filename" in
     ;;
 esac
 
-INSTALL_DIR=$HOME/.opencode/bin
+INSTALL_DIR=$HOME/.chalicecode/bin
 mkdir -p "$INSTALL_DIR"
 
 if [ -z "$requested_version" ]; then
-    url="https://github.com/sst/opencode/releases/latest/download/$filename"
-    specific_version=$(curl -s https://api.github.com/repos/sst/opencode/releases/latest | sed -n 's/.*"tag_name": *"v\([^"]*\)".*/\1/p')
+    url="https://github.com/ForgedInFiles/chalice-code/releases/latest/download/$filename"
+    specific_version=$(curl -s https://api.github.com/repos/ForgedInFiles/chalice-code/releases/latest | sed -n 's/.*"tag_name": *"v\([^"]*\)".*/\1/p')
 
     if [[ $? -ne 0 || -z "$specific_version" ]]; then
         echo -e "${RED}Failed to fetch version information${NC}"
         exit 1
     fi
 else
-    url="https://github.com/sst/opencode/releases/download/v${requested_version}/$filename"
+    url="https://github.com/ForgedInFiles/chalice-code/releases/download/v${requested_version}/$filename"
     specific_version=$requested_version
 fi
 
@@ -76,12 +76,12 @@ print_message() {
 }
 
 check_version() {
-    if command -v opencode >/dev/null 2>&1; then
-        opencode_path=$(which opencode)
+    if command -v chalice >/dev/null 2>&1; then
+        chalice_path=$(which chalice)
 
 
         ## TODO: check if version is installed
-        # installed_version=$(opencode version)
+        # installed_version=$(chalice version)
         installed_version="0.0.1"
         installed_version=$(echo $installed_version | awk '{print $2}')
 
@@ -95,13 +95,13 @@ check_version() {
 }
 
 download_and_install() {
-    print_message info "Downloading ${ORANGE}opencode ${GREEN}version: ${YELLOW}$specific_version ${GREEN}..."
-    mkdir -p opencodetmp && cd opencodetmp
+    print_message info "Downloading ${ORANGE}chalicecode ${GREEN}version: ${YELLOW}$specific_version ${GREEN}..."
+    mkdir -p chalicecodetmp && cd chalicecodetmp
     curl -# -L -o "$filename" "$url"
     unzip -q "$filename"
-    mv opencode "$INSTALL_DIR"
-    chmod 755 "${INSTALL_DIR}/opencode"
-    cd .. && rm -rf opencodetmp
+    mv chalice "$INSTALL_DIR"
+    chmod 755 "${INSTALL_DIR}/chalice"
+    cd .. && rm -rf chalicecodetmp
 }
 
 check_version
@@ -115,9 +115,9 @@ add_to_path() {
     if grep -Fxq "$command" "$config_file"; then
         print_message info "Command already exists in $config_file, skipping write."
     elif [[ -w $config_file ]]; then
-        echo -e "\n# opencode" >> "$config_file"
+        echo -e "\n# chalicecode" >> "$config_file"
         echo "$command" >> "$config_file"
-        print_message info "Successfully added ${ORANGE}opencode ${GREEN}to \$PATH in $config_file"
+        print_message info "Successfully added ${ORANGE}chalicecode ${GREEN}to \$PATH in $config_file"
     else
         print_message warning "Manually add the directory to $config_file (or similar):"
         print_message info "  $command"

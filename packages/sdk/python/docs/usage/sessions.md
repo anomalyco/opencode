@@ -3,10 +3,10 @@
 List sessions and inspect them. The wrapper exposes a convenience method while the generated API remains available under `opencode_ai.api.default`.
 
 ```python
-from opencode_ai import OpenCodeClient
-from opencode_ai.api.default import session_list as generated
+from chalice_ai import ChaliceCodeClient
+from chalice_ai.api.default import session_list as generated
 
-client = OpenCodeClient()
+client = ChaliceCodeClient()
 
 # Wrapper
 sessions = client.list_sessions() or []

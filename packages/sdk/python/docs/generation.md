@@ -18,5 +18,5 @@ uv run --project packages/sdk/python python packages/sdk/python/scripts/generate
 
 Post-generation
 
-- The generator injects `extras.py` (OpenCodeClient) and patches `__init__.py` to export it
+- The generator injects `extras.py` (ChaliceCodeClient) and patches `__init__.py` to export it
 - Code is formatted with `ruff` (imports) and `black`

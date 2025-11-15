@@ -1,5 +1,5 @@
-import { Button, Icon, IconButton, Select, SelectDialog, Tooltip } from "@opencode-ai/ui"
-import { useFilteredList } from "@opencode-ai/ui/hooks"
+import { Button, Icon, IconButton, Select, SelectDialog, Tooltip } from "@chalicecode-ai/ui"
+import { useFilteredList } from "@chalicecode-ai/ui/hooks"
 import { createEffect, on, Component, Show, For, onMount, onCleanup, Switch, Match } from "solid-js"
 import { createStore } from "solid-js/store"
 import { FileIcon } from "@/ui"

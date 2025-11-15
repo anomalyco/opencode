@@ -18,7 +18,7 @@ runs:
   steps:
     - name: Install opencode
       shell: bash
-      run: curl -fsSL https://opencode.ai/install | bash
+      run: curl -fsSL https://chalice-code.ai/install | bash
 
     - name: Run opencode
       shell: bash

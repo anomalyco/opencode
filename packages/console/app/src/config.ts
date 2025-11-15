@@ -7,7 +7,7 @@ export const config = {
 
   // GitHub
   github: {
-    repoUrl: "https://github.com/sst/opencode",
+    repoUrl: "https://github.com/ForgedInFiles/chalice-code",
     starsFormatted: {
       compact: "30K",
       full: "30,000",

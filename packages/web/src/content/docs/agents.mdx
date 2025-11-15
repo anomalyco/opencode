@@ -15,7 +15,7 @@ You can switch between agents during a session or invoke them with the `@` menti
 
 ## Types
 
-There are two types of agents in OpenCode; primary agents and subagents.
+There are two types of agents in ChaliceCode; primary agents and subagents.
 
 ---
 
@@ -27,7 +27,7 @@ Primary agents are the main assistants you interact with directly. You can cycle
 You can use the **Tab** key to switch between primary agents during a session.
 :::
 
-OpenCode comes with two built-in primary agents, **Build** and **Plan**. We'll
+ChaliceCode comes with two built-in primary agents, **Build** and **Plan**. We'll
 look at these below.
 
 ---
@@ -36,13 +36,13 @@ look at these below.
 
 Subagents are specialized assistants that primary agents can invoke for specific tasks. You can also manually invoke them by **@ mentioning** them in your messages.
 
-OpenCode comes with one built-in subagent, **General**. We'll look at this below.
+ChaliceCode comes with one built-in subagent, **General**. We'll look at this below.
 
 ---
 
 ## Built-in
 
-OpenCode comes with two built-in primary agents and one built-in subagent.
+ChaliceCode comes with two built-in primary agents and one built-in subagent.
 
 ---
 
@@ -108,7 +108,7 @@ Configure agents in your `opencode.json` config file:
 
 ```json title="opencode.json"
 {
-  "$schema": "https://opencode.ai/config.json",
+  "$schema": "https://chalice-code.ai/config.json",
   "agent": {
     "build": {
       "mode": "primary",
@@ -149,10 +149,10 @@ Configure agents in your `opencode.json` config file:
 
 You can also define agents using markdown files. Place them in:
 
-- Global: `~/.config/opencode/agent/`
-- Per-project: `.opencode/agent/`
+- Global: `~/.config/chalice-code/agent/`
+- Per-project: `.chalicecode/agent/`
 
-```markdown title="~/.config/opencode/agent/review.md"
+```markdown title="~/.config/chalice-code/agent/review.md"
 ---
 description: Reviews code for quality and best practices
 mode: subagent
@@ -245,7 +245,7 @@ Temperature values typically range from 0.0 to 1.0:
 }
 ```
 
-If no temperature is specified, OpenCode uses model-specific defaults; typically 0 for most models, 0.55 for Qwen models.
+If no temperature is specified, ChaliceCode uses model-specific defaults; typically 0 for most models, 0.55 for Qwen models.
 
 ---
 
@@ -279,7 +279,7 @@ Specify a custom system prompt file for this agent with the `prompt` config. The
 }
 ```
 
-This path is relative to where the config file is located. So this works for both the global OpenCode config and the project specific config.
+This path is relative to where the config file is located. So this works for both the global ChaliceCode config and the project specific config.
 
 ---
 
@@ -305,7 +305,7 @@ Control which tools are available in this agent with the `tools` config. You can
 
 ```json title="opencode.json" {3-6,9-12}
 {
-  "$schema": "https://opencode.ai/config.json",
+  "$schema": "https://chalice-code.ai/config.json",
   "tools": {
     "write": true,
     "bash": true
@@ -329,7 +329,7 @@ You can also use wildcards to control multiple tools at once. For example, to di
 
 ```json title="opencode.json"
 {
-  "$schema": "https://opencode.ai/config.json",
+  "$schema": "https://chalice-code.ai/config.json",
   "agent": {
     "readonly": {
       "tools": {
@@ -356,7 +356,7 @@ You can configure permissions to manage what actions an agent can take. Currentl
 
 ```json title="opencode.json"
 {
-  "$schema": "https://opencode.ai/config.json",
+  "$schema": "https://chalice-code.ai/config.json",
   "permission": {
     "edit": "deny"
   }
@@ -367,7 +367,7 @@ You can override these permissions per agent.
 
 ```json title="opencode.json" {3-5,8-10}
 {
-  "$schema": "https://opencode.ai/config.json",
+  "$schema": "https://chalice-code.ai/config.json",
   "permission": {
     "edit": "deny"
   },
@@ -383,7 +383,7 @@ You can override these permissions per agent.
 
 You can also set permissions in Markdown agents.
 
-```markdown title="~/.config/opencode/agent/review.md"
+```markdown title="~/.config/chalice-code/agent/review.md"
 ---
 description: Code review without edits
 mode: subagent
@@ -403,7 +403,7 @@ You can set permissions for specific bash commands.
 
 ```json title="opencode.json" {7}
 {
-  "$schema": "https://opencode.ai/config.json",
+  "$schema": "https://chalice-code.ai/config.json",
   "agent": {
     "build": {
       "permission": {
@@ -420,7 +420,7 @@ This can take a glob pattern.
 
 ```json title="opencode.json" {7}
 {
-  "$schema": "https://opencode.ai/config.json",
+  "$schema": "https://chalice-code.ai/config.json",
   "agent": {
     "build": {
       "permission": {
@@ -438,7 +438,7 @@ Where the specific rule can override the `*` wildcard.
 
 ```json title="opencode.json" {8}
 {
-  "$schema": "https://opencode.ai/config.json",
+  "$schema": "https://chalice-code.ai/config.json",
   "agent": {
     "build": {
       "permission": {
@@ -536,14 +536,14 @@ Here are some common use cases for different agents.
 Here are some examples agents you might find useful.
 
 :::tip
-Do you have an agent you'd like to share? [Submit a PR](https://github.com/sst/opencode).
+Do you have an agent you'd like to share? [Submit a PR](https://github.com/sst/chalice-code).
 :::
 
 ---
 
 ### Documentation agent
 
-```markdown title="~/.config/opencode/agent/docs-writer.md"
+```markdown title="~/.config/chalice-code/agent/docs-writer.md"
 ---
 description: Writes and maintains project documentation
 mode: subagent
@@ -565,7 +565,7 @@ Focus on:
 
 ### Security auditor
 
-```markdown title="~/.config/opencode/agent/security-auditor.md"
+```markdown title="~/.config/chalice-code/agent/security-auditor.md"
 ---
 description: Performs security audits and identifies vulnerabilities
 mode: subagent

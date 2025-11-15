@@ -1,17 +1,17 @@
 ---
 title: GitHub
-description: Use opencode in GitHub issues and pull-requests.
+description: Use chalice in GitHub issues and pull-requests.
 ---
 
-opencode integrates with your GitHub workflow. Mention `/opencode` or `/oc` in your comment, and opencode will execute tasks within your GitHub Actions runner.
+opencode integrates with your GitHub workflow. Mention `/chalice-code` or `/oc` in your comment, and chalice will execute tasks within your GitHub Actions runner.
 
 ---
 
 ## Features
 
-- **Triage issues**: Ask opencode to look into an issue and explain it to you.
-- **Fix and implement**: Ask opencode to fix an issue or implement a feature. And it will work in a new branch and submits a PR with all the changes.
-- **Secure**: opencode runs inside your GitHub's runners.
+- **Triage issues**: Ask chalice to look into an issue and explain it to you.
+- **Fix and implement**: Ask chalice to fix an issue or implement a feature. And it will work in a new branch and submits a PR with all the changes.
+- **Secure**: chalice runs inside your GitHub's runners.
 
 ---
 
@@ -33,24 +33,24 @@ Or you can set it up manually.
 
 1. **Install the GitHub app**
 
-   Head over to [**github.com/apps/opencode-agent**](https://github.com/apps/opencode-agent). Make sure it's installed on the target repository.
+   Head over to [**github.com/apps/chalice-code-agent**](https://github.com/apps/chalice-code-agent). Make sure it's installed on the target repository.
 
 2. **Add the workflow**
 
-   Add the following workflow file to `.github/workflows/opencode.yml` in your repo. Make sure to set the appropriate `model` and required API keys in `env`.
+   Add the following workflow file to `.github/workflows/chalice-code.yml` in your repo. Make sure to set the appropriate `model` and required API keys in `env`.
 
-   ```yml title=".github/workflows/opencode.yml" {24,26}
-   name: opencode
+   ```yml title=".github/workflows/chalice-code.yml" {24,26}
+   name: chalice
 
    on:
      issue_comment:
        types: [created]
 
    jobs:
-     opencode:
+     chalice:
        if: |
          contains(github.event.comment.body, '/oc') ||
-         contains(github.event.comment.body, '/opencode')
+         contains(github.event.comment.body, '/chalice-code')
        runs-on: ubuntu-latest
        permissions:
          id-token: write
@@ -60,8 +60,8 @@ Or you can set it up manually.
            with:
              fetch-depth: 1
 
-         - name: Run opencode
-           uses: sst/opencode/github@latest
+         - name: Run chalice
+           uses: sst/chalice-code/github@latest
            env:
              ANTHROPIC_API_KEY: ${{ secrets.ANTHROPIC_API_KEY }}
            with:
@@ -78,11 +78,11 @@ Or you can set it up manually.
 
 ## Configuration
 
-- `model`: The model to use with opencode. Takes the format of `provider/model`. This is **required**.
-- `share`: Whether to share the opencode session. Defaults to **true** for public repositories.
-- `token`: Optional GitHub access token for performing operations such as creating comments, committing changes, and opening pull requests. By default, opencode uses the installation access token from the opencode GitHub App, so commits, comments, and pull requests appear as coming from the app.
+- `model`: The model to use with chalice. Takes the format of `provider/model`. This is **required**.
+- `share`: Whether to share the chalice session. Defaults to **true** for public repositories.
+- `token`: Optional GitHub access token for performing operations such as creating comments, committing changes, and opening pull requests. By default, chalice uses the installation access token from the chalice GitHub App, so commits, comments, and pull requests appear as coming from the app.
 
-  Alternatively, you can use the GitHub Action runner's [built-in `GITHUB_TOKEN`](https://docs.github.com/en/actions/tutorials/authenticate-with-github_token) without installing the opencode GitHub App. Just make sure to grant the required permissions in your workflow:
+  Alternatively, you can use the GitHub Action runner's [built-in `GITHUB_TOKEN`](https://docs.github.com/en/actions/tutorials/authenticate-with-github_token) without installing the chalice GitHub App. Just make sure to grant the required permissions in your workflow:
 
   ```yaml
   permissions:
@@ -98,27 +98,27 @@ Or you can set it up manually.
 
 ## Examples
 
-Here are some examples of how you can use opencode in GitHub.
+Here are some examples of how you can use chalice in GitHub.
 
 - **Explain an issue**
 
   Add this comment in a GitHub issue.
 
   ```
-  /opencode explain this issue
+  /chalice-code explain this issue
   ```
 
-  opencode will read the entire thread, including all comments, and reply with a clear explanation.
+  chalice will read the entire thread, including all comments, and reply with a clear explanation.
 
 - **Fix an issue**
 
   In a GitHub issue, say:
 
   ```
-  /opencode fix this
+  /chalice-code fix this
   ```
 
-  And opencode will create a new branch, implement the changes, and open a PR with the changes.
+  And chalice will create a new branch, implement the changes, and open a PR with the changes.
 
 - **Review PRs and make changes**
 
@@ -128,4 +128,4 @@ Here are some examples of how you can use opencode in GitHub.
   Delete the attachment from S3 when the note is removed /oc
   ```
 
-  opencode will implement the requested change and commit it to the same PR.
+  chalice will implement the requested change and commit it to the same PR.

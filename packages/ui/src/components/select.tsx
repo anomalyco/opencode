@@ -1,6 +1,6 @@
 import { Select as Kobalte } from "@kobalte/core/select"
 import { createMemo, type ComponentProps } from "solid-js"
-import { Icon, Button, type ButtonProps } from "@opencode-ai/ui"
+import { Icon, Button, type ButtonProps } from "@chalicecode-ai/ui"
 import { pipe, groupBy, entries, map } from "remeda"
 
 export interface SelectProps<T> {

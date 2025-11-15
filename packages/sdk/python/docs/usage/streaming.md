@@ -3,9 +3,9 @@
 Subscribe to the event stream. The wrapper provides both sync and async interfaces.
 
 ```python
-from opencode_ai import OpenCodeClient
+from chalice_ai import ChaliceCodeClient
 
-client = OpenCodeClient()
+client = ChaliceCodeClient()
 
 # Sync streaming
 for event in client.subscribe_events():
@@ -17,10 +17,10 @@ Async variant:
 
 ```python
 import asyncio
-from opencode_ai import OpenCodeClient
+from chalice_ai import ChaliceCodeClient
 
 async def main():
-    client = OpenCodeClient()
+    client = ChaliceCodeClient()
     async for event in client.subscribe_events_async():
         print(event)
         break

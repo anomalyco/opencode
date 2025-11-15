@@ -1,21 +1,21 @@
 ---
 title: Rules
-description: Set custom instructions for opencode.
+description: Set custom instructions for chalice.
 ---
 
-You can provide custom instructions to opencode by creating an `AGENTS.md` file. This is similar to `CLAUDE.md` or Cursor's rules. It contains instructions that will be included in the LLM's context to customize its behavior for your specific project.
+You can provide custom instructions to chalice by creating an `AGENTS.md` file. This is similar to `CLAUDE.md` or Cursor's rules. It contains instructions that will be included in the LLM's context to customize its behavior for your specific project.
 
 ---
 
 ## Initialize
 
-To create a new `AGENTS.md` file, you can run the `/init` command in opencode.
+To create a new `AGENTS.md` file, you can run the `/init` command in chalice.
 
 :::tip
 You should commit your project's `AGENTS.md` file to Git.
 :::
 
-This will scan your project and all its contents to understand what the project is about and generate an `AGENTS.md` file with it. This helps opencode to navigate the project better.
+This will scan your project and all its contents to understand what the project is about and generate an `AGENTS.md` file with it. This helps chalice to navigate the project better.
 
 If you have an existing `AGENTS.md` file, this will try to add to it.
 
@@ -62,7 +62,7 @@ The ones we have seen above, where the `AGENTS.md` is placed in the project root
 
 ### Global
 
-You can also have global rules in a `~/.config/opencode/AGENTS.md` file. This gets applied across all opencode sessions.
+You can also have global rules in a `~/.config/chalice-code/AGENTS.md` file. This gets applied across all chalice sessions.
 
 Since this isn't committed to Git or shared with your team, we recommend using this to specify any personal rules that the LLM should follow.
 
@@ -70,24 +70,24 @@ Since this isn't committed to Git or shared with your team, we recommend using t
 
 ## Precedence
 
-So when opencode starts, it looks for:
+So when chalice starts, it looks for:
 
 1. **Local files** by traversing up from the current directory
-2. **Global file** by checking `~/.config/opencode/AGENTS.md`
+2. **Global file** by checking `~/.config/chalice-code/AGENTS.md`
 
-If you have both global and project-specific rules, opencode will combine them together.
+If you have both global and project-specific rules, chalice will combine them together.
 
 ---
 
 ## Custom Instructions
 
-You can specify custom instruction files in your `opencode.json` or the global `~/.config/opencode/opencode.json`. This allows you and your team to reuse existing rules rather than having to duplicate them to AGENTS.md.
+You can specify custom instruction files in your `opencode.json` or the global `~/.config/chalice-code/chalice-code.json`. This allows you and your team to reuse existing rules rather than having to duplicate them to AGENTS.md.
 
 Example:
 
 ```json title="opencode.json"
 {
-  "$schema": "https://opencode.ai/config.json",
+  "$schema": "https://chalice-code.ai/config.json",
   "instructions": ["CONTRIBUTING.md", "docs/guidelines.md", ".cursor/rules/*.md"]
 }
 ```
@@ -98,22 +98,22 @@ All instruction files are combined with your `AGENTS.md` files.
 
 ## Referencing External Files
 
-While opencode doesn't automatically parse file references in `AGENTS.md`, you can achieve similar functionality in two ways:
+While chalice doesn't automatically parse file references in `AGENTS.md`, you can achieve similar functionality in two ways:
 
-### Using opencode.json
+### Using chalice.json
 
 The recommended approach is to use the `instructions` field in `opencode.json`:
 
 ```json title="opencode.json"
 {
-  "$schema": "https://opencode.ai/config.json",
+  "$schema": "https://chalice-code.ai/config.json",
   "instructions": ["docs/development-standards.md", "test/testing-guidelines.md", "packages/*/AGENTS.md"]
 }
 ```
 
 ### Manual Instructions in AGENTS.md
 
-You can teach opencode to read external files by providing explicit instructions in your `AGENTS.md`. Here's a practical example:
+You can teach chalice to read external files by providing explicit instructions in your `AGENTS.md`. Here's a practical example:
 
 ```markdown title="AGENTS.md"
 # TypeScript Project Rules
@@ -145,7 +145,7 @@ This approach allows you to:
 - Create modular, reusable rule files
 - Share rules across projects via symlinks or git submodules
 - Keep AGENTS.md concise while referencing detailed guidelines
-- Ensure opencode loads files only when needed for the specific task
+- Ensure chalice loads files only when needed for the specific task
 
 :::tip
 For monorepos or projects with shared standards, using `opencode.json` with glob patterns (like `packages/*/AGENTS.md`) is more maintainable than manual instructions.

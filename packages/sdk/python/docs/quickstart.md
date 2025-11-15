@@ -3,9 +3,9 @@
 Create a client and make your first calls.
 
 ```python
-from opencode_ai import OpenCodeClient
+from chalice_ai import ChaliceCodeClient
 
-client = OpenCodeClient(base_url="http://localhost:4096")
+client = ChaliceCodeClient(base_url="http://localhost:4096")
 
 # List projects
 for p in client.list_projects() or []:

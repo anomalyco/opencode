@@ -21,7 +21,7 @@ uv sync --dev --project packages/sdk/python
 Using pip (alternative)
 
 ```bash
-pip install opencode-ai
+pip install chalicecode-ai
 ```
 
 Preview docs locally

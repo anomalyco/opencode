@@ -13,7 +13,7 @@
 
 ## Debugging
 
-- To test opencode in the `packages/opencode` directory you can run `bun dev`
+- To test chalice in the `packages/chalice-code` directory you can run `bun dev`
 
 ## Tool Calling
 

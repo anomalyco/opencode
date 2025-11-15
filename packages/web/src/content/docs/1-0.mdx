@@ -1,31 +1,31 @@
 ---
 title: Migrating to 1.0
-description: What's new in OpenCode 1.0.
+description: What's new in ChaliceCode 1.0.
 ---
 
-OpenCode 1.0 is a complete rewrite of the TUI.
+ChaliceCode 1.0 is a complete rewrite of the TUI.
 
 We moved from the go+bubbletea based TUI which had performance and capability issues to an in-house framework (OpenTUI) written in zig+solidjs.
 
-The new TUI works like the old one since it connects to the same opencode server.
+The new TUI works like the old one since it connects to the same chalice server.
 
 ---
 
 ## Upgrading
 
 You should not be autoupgraded to 1.0 if you are currently using a previous
-version. However some older versions of OpenCode always grab latest.
+version. However some older versions of ChaliceCode always grab latest.
 
 To upgrade manually, run
 
 ```bash
-$ opencode upgrade 1.0.0
+$ chalice upgrade 1.0.0
 ```
 
 To downgrade back to 0.x, run
 
 ```bash
-$ opencode upgrade 0.15.31
+$ chalice upgrade 0.15.31
 ```
 
 ---

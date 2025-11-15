@@ -1,8 +1,8 @@
 import { getRequestEvent } from "solid-js/web"
-import { and, Database, eq, inArray, isNull, sql } from "@opencode-ai/console-core/drizzle/index.js"
-import { UserTable } from "@opencode-ai/console-core/schema/user.sql.js"
+import { and, Database, eq, inArray, isNull, sql } from "@chalicecode-ai/console-core/drizzle/index.js"
+import { UserTable } from "@chalicecode-ai/console-core/schema/user.sql.js"
 import { redirect } from "@solidjs/router"
-import { Actor } from "@opencode-ai/console-core/actor.js"
+import { Actor } from "@chalicecode-ai/console-core/actor.js"
 
 import { createClient } from "@openauthjs/openauth/client"
 import { useAuthSession } from "./auth.session"

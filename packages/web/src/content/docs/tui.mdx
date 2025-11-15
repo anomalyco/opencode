@@ -1,13 +1,13 @@
 ---
 title: TUI
-description: Using the OpenCode terminal user interface.
+description: Using the ChaliceCode terminal user interface.
 ---
 
 import { Tabs, TabItem } from "@astrojs/starlight/components"
 
-OpenCode provides an interactive terminal interface or TUI for working on your projects with an LLM.
+ChaliceCode provides an interactive terminal interface or TUI for working on your projects with an LLM.
 
-Running OpenCode starts the TUI for the current directory.
+Running ChaliceCode starts the TUI for the current directory.
 
 ```bash
 opencode
@@ -57,7 +57,7 @@ The output of the command is added to the conversation as a tool result.
 
 ## Commands
 
-When using the OpenCode TUI, you can type `/` followed by a command name to quickly execute actions. For example:
+When using the ChaliceCode TUI, you can type `/` followed by a command name to quickly execute actions. For example:
 
 ```bash frame="none"
 /help
@@ -107,7 +107,7 @@ Open external editor for composing messages. Uses the editor set in your `EDITOR
 
 ### exit
 
-Exit OpenCode. _Aliases_: `/quit`, `/q`
+Exit ChaliceCode. _Aliases_: `/quit`, `/q`
 
 ```bash frame="none"
 /exit
@@ -330,11 +330,11 @@ Some editors need command-line arguments to run in blocking mode. The `--wait` f
 
 ## Configure
 
-You can customize TUI behavior through your OpenCode config file.
+You can customize TUI behavior through your ChaliceCode config file.
 
 ```json title="opencode.json"
 {
-  "$schema": "https://opencode.ai/config.json",
+  "$schema": "https://chalice-code.ai/config.json",
   "tui": {
     "scroll_speed": 3,
     "scroll_acceleration": {

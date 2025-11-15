@@ -17,14 +17,14 @@ jobs:
         with:
           fetch-depth: 1
 
-      - name: Install opencode
-        run: curl -fsSL https://opencode.ai/install | bash
+      - name: Install chalice
+        run: curl -fsSL https://chalice-code.ai/install | bash
 
       - name: Check PR guidelines compliance
         env:
           ANTHROPIC_API_KEY: ${{ secrets.ANTHROPIC_API_KEY }}
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-          OPENCODE_PERMISSION: '{ "bash": { "gh*": "allow", "gh pr review*": "deny", "*": "deny" } }'
+          CHALICECODE_PERMISSION: '{ "bash": { "gh*": "allow", "gh pr review*": "deny", "*": "deny" } }'
         run: |
           opencode run -m anthropic/claude-sonnet-4-20250514 "A new pull request has been created: '${{ github.event.pull_request.title }}'
 

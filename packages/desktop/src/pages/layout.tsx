@@ -1,4 +1,4 @@
-import { Button, Tooltip, DiffChanges, IconButton } from "@opencode-ai/ui"
+import { Button, Tooltip, DiffChanges, IconButton } from "@chalicecode-ai/ui"
 import { createMemo, For, ParentProps, Show } from "solid-js"
 import { DateTime } from "luxon"
 import { useSync } from "@/context/sync"

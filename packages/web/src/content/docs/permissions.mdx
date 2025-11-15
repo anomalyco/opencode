@@ -3,11 +3,11 @@ title: Permissions
 description: Control which actions require approval to run.
 ---
 
-By default, OpenCode **allows all operations** without requiring explicit approval. You can configure this using the `permission` option.
+By default, ChaliceCode **allows all operations** without requiring explicit approval. You can configure this using the `permission` option.
 
 ```json title="opencode.json"
 {
-  "$schema": "https://opencode.ai/config.json",
+  "$schema": "https://chalice-code.ai/config.json",
   "permission": {
     "edit": "allow",
     "bash": "ask",
@@ -36,7 +36,7 @@ Use the `permission.edit` key to control whether file editing operations require
 
 ```json title="opencode.json" {4}
 {
-  "$schema": "https://opencode.ai/config.json",
+  "$schema": "https://chalice-code.ai/config.json",
   "permission": {
     "edit": "ask"
   }
@@ -52,7 +52,7 @@ whole need user approval.
 
 ```json title="opencode.json" {4}
 {
-  "$schema": "https://opencode.ai/config.json",
+  "$schema": "https://chalice-code.ai/config.json",
   "permission": {
     "bash": "ask"
   }
@@ -63,7 +63,7 @@ Or, you can target specific commands and set it to `allow`, `ask`, or `deny`.
 
 ```json title="opencode.json"
 {
-  "$schema": "https://opencode.ai/config.json",
+  "$schema": "https://chalice-code.ai/config.json",
   "permission": {
     "bash": {
       "git push": "ask",
@@ -91,7 +91,7 @@ For example, **disable all** Terraform commands.
 
 ```json title="opencode.json" {5}
 {
-  "$schema": "https://opencode.ai/config.json",
+  "$schema": "https://chalice-code.ai/config.json",
   "permission": {
     "bash": {
       "terraform *": "deny"
@@ -105,7 +105,7 @@ example, **deny all commands** except a couple of specific ones.
 
 ```json title="opencode.json" {5}
 {
-  "$schema": "https://opencode.ai/config.json",
+  "$schema": "https://chalice-code.ai/config.json",
   "permission": {
     "bash": {
       "*": "deny",
@@ -136,7 +136,7 @@ Use the `permission.webfetch` key to control whether the LLM can fetch web pages
 
 ```json title="opencode.json" {4}
 {
-  "$schema": "https://opencode.ai/config.json",
+  "$schema": "https://chalice-code.ai/config.json",
   "permission": {
     "webfetch": "ask"
   }
@@ -152,7 +152,7 @@ overrides the global config. [Learn more](/docs/agents#permissions) about agent 
 
 ```json title="opencode.json" {3-7,10-14}
 {
-  "$schema": "https://opencode.ai/config.json",
+  "$schema": "https://chalice-code.ai/config.json",
   "permission": {
     "bash": {
       "git push": "ask"
@@ -175,7 +175,7 @@ allow `git push` commands.
 
 You can also configure permissions for agents in Markdown.
 
-```markdown title="~/.config/opencode/agent/review.md"
+```markdown title="~/.config/chalice-code/agent/review.md"
 ---
 description: Code review without edits
 mode: subagent

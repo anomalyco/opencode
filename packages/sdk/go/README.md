@@ -1,8 +1,8 @@
 # Opencode Go API Library
 
-<a href="https://pkg.go.dev/github.com/sst/opencode-sdk-go"><img src="https://pkg.go.dev/badge/github.com/sst/opencode-sdk-go.svg" alt="Go Reference"></a>
+<a href="https://pkg.go.dev/github.com/sst/chalice-code-sdk-go"><img src="https://pkg.go.dev/badge/github.com/sst/chalice-code-sdk-go.svg" alt="Go Reference"></a>
 
-The Opencode Go library provides convenient access to the [Opencode REST API](https://opencode.ai/docs)
+The Opencode Go library provides convenient access to the [Opencode REST API](https://chalice-code.ai/docs)
 from applications written in Go.
 
 It is generated with [Stainless](https://www.stainless.com/).
@@ -13,7 +13,7 @@ It is generated with [Stainless](https://www.stainless.com/).
 
 ```go
 import (
-	"github.com/sst/opencode-sdk-go" // imported as opencode
+	"github.com/sst/chalice-code-sdk-go" // imported as chalice
 )
 ```
 
@@ -24,7 +24,7 @@ Or to pin the version:
 <!-- x-release-please-start-version -->
 
 ```sh
-go get -u 'github.com/sst/opencode-sdk-go@v0.18.0'
+go get -u 'github.com/sst/chalice-code-sdk-go@v0.18.0'
 ```
 
 <!-- x-release-please-end -->
@@ -44,12 +44,12 @@ import (
 	"context"
 	"fmt"
 
-	"github.com/sst/opencode-sdk-go"
+	"github.com/sst/chalice-code-sdk-go"
 )
 
 func main() {
-	client := opencode.NewClient()
-	sessions, err := client.Session.List(context.TODO(), opencode.SessionListParams{})
+	client := chalice.NewClient()
+	sessions, err := client.Session.List(context.TODO(), chalice.SessionListParams{})
 	if err != nil {
 		panic(err.Error())
 	}
@@ -72,18 +72,18 @@ To send a null, use `Null[T]()`, and to send a nonconforming value, use `Raw[T](
 
 ```go
 params := FooParams{
-	Name: opencode.F("hello"),
+	Name: chalice.F("hello"),
 
 	// Explicitly send `"description": null`
-	Description: opencode.Null[string](),
+	Description: chalice.Null[string](),
 
-	Point: opencode.F(opencode.Point{
-		X: opencode.Int(0),
-		Y: opencode.Int(1),
+	Point: chalice.F(opencode.Point{
+		X: chalice.Int(0),
+		Y: chalice.Int(1),
 
 		// In cases where the API specifies a given type,
 		// but you want to send something else, use `Raw`:
-		Z: opencode.Raw[int64](0.01), // sends a float
+		Z: chalice.Raw[int64](0.01), // sends a float
 	}),
 }
 ```
@@ -137,7 +137,7 @@ This library uses the functional options pattern. Functions defined in the
 requests. For example:
 
 ```go
-client := opencode.NewClient(
+client := chalice.NewClient(
 	// Adds a header to every request made by the client
 	option.WithHeader("X-Some-Header", "custom_header_info"),
 )
@@ -150,7 +150,7 @@ client.Session.List(context.TODO(), ...,
 )
 ```
 
-See the [full list of request options](https://pkg.go.dev/github.com/sst/opencode-sdk-go/option).
+See the [full list of request options](https://pkg.go.dev/github.com/sst/chalice-code-sdk-go/option).
 
 ### Pagination
 
@@ -171,7 +171,7 @@ When the API returns a non-success status code, we return an error with type
 To handle errors, we recommend that you use the `errors.As` pattern:
 
 ```go
-_, err := client.Session.List(context.TODO(), opencode.SessionListParams{})
+_, err := client.Session.List(context.TODO(), chalice.SessionListParams{})
 if err != nil {
 	var apierr *opencode.Error
 	if errors.As(err, &apierr) {
@@ -227,7 +227,7 @@ You can use the `WithMaxRetries` option to configure or disable this:
 
 ```go
 // Configure the default for all requests:
-client := opencode.NewClient(
+client := chalice.NewClient(
 	option.WithMaxRetries(0), // default is 2
 )
 
@@ -294,9 +294,9 @@ or the `option.WithJSONSet()` methods.
 
 ```go
 params := FooNewParams{
-    ID:   opencode.F("id_xxxx"),
-    Data: opencode.F(FooNewParamsData{
-        FirstName: opencode.F("John"),
+    ID:   chalice.F("id_xxxx"),
+    Data: chalice.F(FooNewParamsData{
+        FirstName: chalice.F("John"),
     }),
 }
 client.Foo.New(context.Background(), params, option.WithJSONSet("data.last_name", "Doe"))
@@ -331,7 +331,7 @@ func Logger(req *http.Request, next option.MiddlewareNext) (res *http.Response, 
     return res, err
 }
 
-client := opencode.NewClient(
+client := chalice.NewClient(
 	option.WithMiddleware(Logger),
 )
 ```
@@ -356,7 +356,7 @@ This package generally follows [SemVer](https://semver.org/spec/v2.0.0.html) con
 
 We take backwards-compatibility seriously and work hard to ensure you can rely on a smooth upgrade experience.
 
-We are keen for your feedback; please open an [issue](https://www.github.com/sst/opencode-sdk-go/issues) with questions, bugs, or suggestions.
+We are keen for your feedback; please open an [issue](https://www.github.com/sst/chalice-code-sdk-go/issues) with questions, bugs, or suggestions.
 
 ## Contributing
 

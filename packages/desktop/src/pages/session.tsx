@@ -14,7 +14,7 @@ import {
   Tooltip,
   ProgressCircle,
   Button,
-} from "@opencode-ai/ui"
+} from "@chalicecode-ai/ui"
 import { FileIcon } from "@/ui"
 import { MessageProgress } from "@/components/message-progress"
 import {
@@ -46,8 +46,8 @@ import {
 import type { DragEvent, Transformer } from "@thisbeyond/solid-dnd"
 import type { JSX } from "solid-js"
 import { useSync } from "@/context/sync"
-import { type AssistantMessage as AssistantMessageType } from "@opencode-ai/sdk"
-import { Markdown } from "@opencode-ai/ui"
+import { type AssistantMessage as AssistantMessageType } from "@chalicecode-ai/sdk"
+import { Markdown } from "@chalicecode-ai/ui"
 import { Spinner } from "@/components/spinner"
 import { useSession } from "@/context/session"
 import { StickyAccordionHeader } from "@/components/sticky-accordion-header"

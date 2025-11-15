@@ -2,18 +2,18 @@
 
 organization:
   name: opencode
-  docs: "https://opencode.ai/docs"
+  docs: "https://chalice-code.ai/docs"
   contact: "support@sst.dev"
 
 targets:
   typescript:
     package_name: "@opencode-ai/sdk"
-    production_repo: "sst/opencode-sdk-js"
+    production_repo: "sst/chalice-code-sdk-js"
     publish:
       npm: true
   go:
     package_name: opencode
-    production_repo: sst/opencode-sdk-go
+    production_repo: sst/chalice-code-sdk-go
 
 environments:
   production: http://localhost:54321

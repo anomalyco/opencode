@@ -3,7 +3,7 @@ title: Tools
 description: Manage the tools an LLM can use.
 ---
 
-Tools allow the LLM to perform actions in your codebase. OpenCode comes with a set of built-in tools, but you can extend it with [custom tools](/docs/custom-tools) or [MCP servers](/docs/mcp-servers).
+Tools allow the LLM to perform actions in your codebase. ChaliceCode comes with a set of built-in tools, but you can extend it with [custom tools](/docs/custom-tools) or [MCP servers](/docs/mcp-servers).
 
 By default, all tools are **enabled** and don't need permission to run. But you can configure this and control the [permissions](/docs/permissions) through your config.
 
@@ -23,7 +23,7 @@ Disable or enable tools globally using the `tools` option.
 
 ```json title="opencode.json"
 {
-  "$schema": "https://opencode.ai/config.json",
+  "$schema": "https://chalice-code.ai/config.json",
   "tools": {
     "write": false,
     "bash": false,
@@ -36,7 +36,7 @@ You can also use wildcards to control multiple tools at once. For example, to di
 
 ```json title="opencode.json"
 {
-  "$schema": "https://opencode.ai/config.json",
+  "$schema": "https://chalice-code.ai/config.json",
   "tools": {
     "mymcp_*": false
   }
@@ -51,7 +51,7 @@ Override global tool settings for specific agents using the `tools` config in th
 
 ```json title="opencode.json" {3-6,9-12}
 {
-  "$schema": "https://opencode.ai/config.json",
+  "$schema": "https://chalice-code.ai/config.json",
   "tools": {
     "write": true,
     "bash": true
@@ -71,7 +71,7 @@ For example, here the `plan` agent overrides the global config to disable `write
 
 You can also configure tools for agents in Markdown.
 
-```markdown title="~/.config/opencode/agent/readonly.md"
+```markdown title="~/.config/chalice-code/agent/readonly.md"
 ---
 description: Read-only analysis agent
 mode: subagent
@@ -90,7 +90,7 @@ Analyze code without making any modifications.
 
 ## Built-in
 
-Here are all the built-in tools available in OpenCode.
+Here are all the built-in tools available in ChaliceCode.
 
 ---
 
@@ -100,7 +100,7 @@ Execute shell commands in your project environment.
 
 ```json title="opencode.json" {4}
 {
-  "$schema": "https://opencode.ai/config.json",
+  "$schema": "https://chalice-code.ai/config.json",
   "tools": {
     "bash": true
   }
@@ -117,7 +117,7 @@ Modify existing files using exact string replacements.
 
 ```json title="opencode.json" {4}
 {
-  "$schema": "https://opencode.ai/config.json",
+  "$schema": "https://chalice-code.ai/config.json",
   "tools": {
     "edit": true
   }
@@ -134,7 +134,7 @@ Create new files or overwrite existing ones.
 
 ```json title="opencode.json" {4}
 {
-  "$schema": "https://opencode.ai/config.json",
+  "$schema": "https://chalice-code.ai/config.json",
   "tools": {
     "write": true
   }
@@ -151,7 +151,7 @@ Read file contents from your codebase.
 
 ```json title="opencode.json" {4}
 {
-  "$schema": "https://opencode.ai/config.json",
+  "$schema": "https://chalice-code.ai/config.json",
   "tools": {
     "read": true
   }
@@ -168,7 +168,7 @@ Search file contents using regular expressions.
 
 ```json title="opencode.json" {4}
 {
-  "$schema": "https://opencode.ai/config.json",
+  "$schema": "https://chalice-code.ai/config.json",
   "tools": {
     "grep": true
   }
@@ -185,7 +185,7 @@ Find files by pattern matching.
 
 ```json title="opencode.json" {4}
 {
-  "$schema": "https://opencode.ai/config.json",
+  "$schema": "https://chalice-code.ai/config.json",
   "tools": {
     "glob": true
   }
@@ -202,7 +202,7 @@ List files and directories in a given path.
 
 ```json title="opencode.json" {4}
 {
-  "$schema": "https://opencode.ai/config.json",
+  "$schema": "https://chalice-code.ai/config.json",
   "tools": {
     "list": true
   }
@@ -219,7 +219,7 @@ Apply patches to files.
 
 ```json title="opencode.json" {4}
 {
-  "$schema": "https://opencode.ai/config.json",
+  "$schema": "https://chalice-code.ai/config.json",
   "tools": {
     "patch": true
   }
@@ -236,7 +236,7 @@ Manage todo lists during coding sessions.
 
 ```json title="opencode.json" {4}
 {
-  "$schema": "https://opencode.ai/config.json",
+  "$schema": "https://chalice-code.ai/config.json",
   "tools": {
     "todowrite": true
   }
@@ -253,7 +253,7 @@ Read existing todo lists.
 
 ```json title="opencode.json" {4}
 {
-  "$schema": "https://opencode.ai/config.json",
+  "$schema": "https://chalice-code.ai/config.json",
   "tools": {
     "todoread": true
   }
@@ -270,7 +270,7 @@ Fetch web content.
 
 ```json title="opencode.json" {4}
 {
-  "$schema": "https://opencode.ai/config.json",
+  "$schema": "https://chalice-code.ai/config.json",
   "tools": {
     "webfetch": true
   }

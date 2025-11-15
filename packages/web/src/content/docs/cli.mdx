@@ -1,17 +1,17 @@
 ---
 title: CLI
-description: OpenCode CLI options and commands.
+description: ChaliceCode CLI options and commands.
 ---
 
 import { Tabs, TabItem } from "@astrojs/starlight/components"
 
-The OpenCode CLI by default starts the [TUI](/docs/tui) when run without any arguments.
+The ChaliceCode CLI by default starts the [TUI](/docs/tui) when run without any arguments.
 
 ```bash
 opencode
 ```
 
-But it also accepts commands as documented on this page. This allows you to interact with OpenCode programmatically.
+But it also accepts commands as documented on this page. This allows you to interact with ChaliceCode programmatically.
 
 ```bash
 opencode run "Explain how closures work in JavaScript"
@@ -21,7 +21,7 @@ opencode run "Explain how closures work in JavaScript"
 
 ### tui
 
-Start the OpenCode terminal user interface.
+Start the ChaliceCode terminal user interface.
 
 ```bash
 opencode [project]
@@ -43,13 +43,13 @@ opencode [project]
 
 ## Commands
 
-The OpenCode CLI also has the following commands.
+The ChaliceCode CLI also has the following commands.
 
 ---
 
 ### agent
 
-Manage agents for OpenCode.
+Manage agents for ChaliceCode.
 
 ```bash
 opencode agent [command]
@@ -81,13 +81,13 @@ opencode auth [command]
 
 #### login
 
-OpenCode is powered by the provider list at [Models.dev](https://models.dev), so you can use `opencode auth login` to configure API keys for any provider you'd like to use. This is stored in `~/.local/share/opencode/auth.json`.
+ChaliceCode is powered by the provider list at [Models.dev](https://models.dev), so you can use `opencode auth login` to configure API keys for any provider you'd like to use. This is stored in `~/.local/share/chalice-code/auth.json`.
 
 ```bash
 opencode auth login
 ```
 
-When OpenCode starts up it loads the providers from the credentials file. And if there are any keys defined in your environments or a `.env` file in your project.
+When ChaliceCode starts up it loads the providers from the credentials file. And if there are any keys defined in your environments or a `.env` file in your project.
 
 ---
 
@@ -172,7 +172,7 @@ This is useful for figuring out the exact model name to use in [your config](/do
 
 ### run
 
-Run opencode in non-interactive mode by passing a prompt directly.
+Run chalice in non-interactive mode by passing a prompt directly.
 
 ```bash
 opencode run [message..]
@@ -207,20 +207,20 @@ opencode run --attach http://localhost:4096 "Explain async/await in JavaScript"
 | `--file`     | `-f`  | File(s) to attach to message                                       |
 | `--format`   |       | Format: default (formatted) or json (raw JSON events)              |
 | `--title`    |       | Title for the session (uses truncated prompt if no value provided) |
-| `--attach`   |       | Attach to a running opencode server (e.g., http://localhost:4096)  |
+| `--attach`   |       | Attach to a running chalice server (e.g., http://localhost:4096)  |
 | `--port`     |       | Port for the local server (defaults to random port)                |
 
 ---
 
 ### serve
 
-Start a headless opencode server for API access. Check out the [server docs](/docs/server) for the full HTTP interface.
+Start a headless chalice server for API access. Check out the [server docs](/docs/server) for the full HTTP interface.
 
 ```bash
 opencode serve
 ```
 
-This starts an HTTP server that provides API access to opencode functionality without the TUI interface.
+This starts an HTTP server that provides API access to chalice functionality without the TUI interface.
 
 #### Flags
 
@@ -233,7 +233,7 @@ This starts an HTTP server that provides API access to opencode functionality wi
 
 ### upgrade
 
-Updates opencode to the latest version or a specific version.
+Updates chalice to the latest version or a specific version.
 
 ```bash
 opencode upgrade [target]
@@ -261,7 +261,7 @@ opencode upgrade v0.1.48
 
 ## Global Flags
 
-The opencode CLI takes the following global flags.
+The chalice CLI takes the following global flags.
 
 | Flag           | Short | Description                          |
 | -------------- | ----- | ------------------------------------ |

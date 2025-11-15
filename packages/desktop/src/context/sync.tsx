@@ -11,7 +11,7 @@ import type {
   Project,
   FileDiff,
   Todo,
-} from "@opencode-ai/sdk"
+} from "@chalicecode-ai/sdk"
 import { createStore, produce, reconcile } from "solid-js/store"
 import { createMemo } from "solid-js"
 import { Binary } from "@/utils/binary"

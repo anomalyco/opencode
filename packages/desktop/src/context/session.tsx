@@ -5,7 +5,7 @@ import { useSync } from "./sync"
 import { makePersisted } from "@solid-primitives/storage"
 import { TextSelection, useLocal } from "./local"
 import { pipe, sumBy } from "remeda"
-import { AssistantMessage } from "@opencode-ai/sdk"
+import { AssistantMessage } from "@chalicecode-ai/sdk"
 
 export const { use: useSession, provider: SessionProvider } = createSimpleContext({
   name: "Session",

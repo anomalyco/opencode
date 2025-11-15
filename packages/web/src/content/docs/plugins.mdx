@@ -1,9 +1,9 @@
 ---
 title: Plugins
-description: Write your own plugins to extend OpenCode.
+description: Write your own plugins to extend ChaliceCode.
 ---
 
-Plugins allow you to extend OpenCode by hooking into various events and customizing behavior. You can create plugins to add new features, integrate with external services, or modify OpenCode's default behavior.
+Plugins allow you to extend ChaliceCode by hooking into various events and customizing behavior. You can create plugins to add new features, integrate with external services, or modify ChaliceCode's default behavior.
 
 ---
 
@@ -18,14 +18,14 @@ functions. Each function receives a context object and returns a hooks object.
 
 Plugins are loaded from:
 
-1. `.opencode/plugin` directory either in your project
-2. Or, globally in `~/.config/opencode/plugin`
+1. `.chalicecode/plugin` directory either in your project
+2. Or, globally in `~/.config/chalice-code/plugin`
 
 ---
 
 ### Basic structure
 
-```js title=".opencode/plugin/example.js"
+```js title=".chalicecode/plugin/example.js"
 export const MyPlugin = async ({ project, client, $, directory, worktree }) => {
   console.log("Plugin initialized!")
 
@@ -40,7 +40,7 @@ The plugin function receives:
 - `project`: The current project information.
 - `directory`: The current working directory.
 - `worktree`: The git worktree path.
-- `client`: An opencode SDK client for interacting with the AI.
+- `client`: An chalice SDK client for interacting with the AI.
 - `$`: Bun's [shell API](https://bun.com/docs/runtime/shell) for executing commands.
 
 ---
@@ -50,7 +50,7 @@ The plugin function receives:
 For TypeScript plugins, you can import types from the plugin package:
 
 ```ts title="my-plugin.ts" {1}
-import type { Plugin } from "@opencode-ai/plugin"
+import type { Plugin } from "@chalicecode-ai/plugin"
 
 export const MyPlugin: Plugin = async ({ project, client, $, directory, worktree }) => {
   return {
@@ -63,7 +63,7 @@ export const MyPlugin: Plugin = async ({ project, client, $, directory, worktree
 
 ## Examples
 
-Here are some examples of plugins you can use to extend opencode.
+Here are some examples of plugins you can use to extend chalice.
 
 ---
 
@@ -71,7 +71,7 @@ Here are some examples of plugins you can use to extend opencode.
 
 Send notifications when certain events occur:
 
-```js title=".opencode/plugin/notification.js"
+```js title=".chalicecode/plugin/notification.js"
 export const NotificationPlugin = async ({ project, client, $, directory, worktree }) => {
   return {
     event: async ({ event }) => {
@@ -90,9 +90,9 @@ We are using `osascript` to run AppleScript on macOS. Here we are using it to se
 
 ### .env protection
 
-Prevent opencode from reading `.env` files:
+Prevent chalice from reading `.env` files:
 
-```javascript title=".opencode/plugin/env-protection.js"
+```javascript title=".chalicecode/plugin/env-protection.js"
 export const EnvProtection = async ({ project, client, $, directory, worktree }) => {
   return {
     "tool.execute.before": async (input, output) => {
@@ -108,10 +108,10 @@ export const EnvProtection = async ({ project, client, $, directory, worktree })
 
 ### Custom tools
 
-Plugins can also add custom tools to opencode:
+Plugins can also add custom tools to chalice:
 
-```ts title=".opencode/plugin/custom-tools.ts"
-import { type Plugin, tool } from "@opencode-ai/plugin"
+```ts title=".chalicecode/plugin/custom-tools.ts"
+import { type Plugin, tool } from "@chalicecode-ai/plugin"
 
 export const CustomToolsPlugin: Plugin = async (ctx) => {
   return {
@@ -130,10 +130,10 @@ export const CustomToolsPlugin: Plugin = async (ctx) => {
 }
 ```
 
-The `tool` helper creates a custom tool that opencode can call. It takes a Zod schema function and returns a tool definition with:
+The `tool` helper creates a custom tool that chalice can call. It takes a Zod schema function and returns a tool definition with:
 
 - `description`: What the tool does
 - `args`: Zod schema for the tool's arguments
 - `execute`: Function that runs when the tool is called
 
-Your custom tools will be available to opencode alongside built-in tools.
+Your custom tools will be available to chalice alongside built-in tools.
