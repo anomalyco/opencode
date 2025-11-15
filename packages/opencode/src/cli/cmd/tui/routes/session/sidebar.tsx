@@ -924,9 +924,7 @@ export function Sidebar(props: {
           <text fg={theme.textMuted}>
             {cost().spent} spent (saved {cost().saved})
           </text>
-          <text fg={theme.textMuted} wrapMode="word">
-            Click to open a detailed context timeline
-          </text>
+          <text fg={theme.textMuted} wrapMode="word"></text>
         </box>
 
         <box flexDirection="row" gap={0} width={props.width}>

@@ -1,9 +1,10 @@
-import { For, Show, createMemo, createSignal, onMount } from "solid-js"
-import { TextAttributes } from "@opentui/core"
+import { For, Show, createEffect, createMemo, createSignal, onMount } from "solid-js"
+import { RGBA, TextAttributes } from "@opentui/core"
 import { useSync } from "@tui/context/sync"
 import { useTheme } from "@tui/context/theme"
 import { useDialog } from "@tui/ui/dialog"
 import { Locale } from "@/util/locale"
+import { useTerminalDimensions } from "@opentui/solid"
 import type { AssistantMessage, ReasoningPart, TextPart, ToolPart } from "@opencode-ai/sdk"
 
 const money = new Intl.NumberFormat("en-US", {
@@ -54,8 +55,23 @@ export function DialogContextTimeline(props: { sessionID: string }) {
   const sync = useSync()
   const { theme } = useTheme()
   const dialog = useDialog()
+  const dimensions = useTerminalDimensions()
+  const [maxHeight, setMaxHeight] = createSignal(Math.max(24, Math.floor(dimensions().height * 0.75)))
+  const timelineListHeight = createMemo(() => {
+    const height = maxHeight()
+    if (!height) return undefined
+    return Math.max(10, height - 12)
+  })
 
-  onMount(() => dialog.setSize("large"))
+  createEffect(() => {
+    const dims = dimensions()
+    const height = Math.max(24, Math.floor(dims.height * 0.75))
+    setMaxHeight(height)
+    dialog.setFrame({
+      height,
+      top: Math.max(1, Math.floor((dims.height - height) / 2)),
+    })
+  })
 
   const messages = createMemo(() => sync.data.message[props.sessionID] ?? [])
 
@@ -102,7 +118,8 @@ export function DialogContextTimeline(props: { sessionID: string }) {
           `User: ${stats.userTokens.toLocaleString()} tokens`,
           `Tool/cache: ${stats.toolTokens.toLocaleString()} tokens`,
         ],
-        tokens: `${stats.tokensFormatted} / ${stats.tokenLimitFormatted} (${stats.percentage}% used)`,
+        tokens: `${stats.tokensFormatted} / ${stats.tokenLimitFormatted}`,
+        meta: `${stats.percentage}% used`,
       })
     }
 
@@ -190,6 +207,20 @@ export function DialogContextTimeline(props: { sessionID: string }) {
     }
   }
 
+  const typeBackground = (type: TimelineItem["type"]) => {
+    switch (type) {
+      case "user":
+        return RGBA.fromInts(theme.secondary.r, theme.secondary.g, theme.secondary.b, 60)
+      case "assistant":
+        return RGBA.fromInts(theme.accent.r, theme.accent.g, theme.accent.b, 60)
+      case "tool":
+        return RGBA.fromInts(theme.warning.r, theme.warning.g, theme.warning.b, 60)
+      case "system":
+      default:
+        return RGBA.fromInts(theme.textMuted.r, theme.textMuted.g, theme.textMuted.b, 40)
+    }
+  }
+
   const [expandedItem, setExpandedItem] = createSignal<string | null>(null)
   const toggleItem = (id: string) => {
     setExpandedItem((prev) => (prev === id ? null : id))
@@ -209,21 +240,53 @@ export function DialogContextTimeline(props: { sessionID: string }) {
       </text>
 
       <Show when={contextStats().tokens > 0}>
-        <box flexDirection="column" paddingTop={1}>
-          <text fg={theme.text}>
-            {contextStats().tokensFormatted} tokens in play ({contextStats().percentage}% of limit{" "}
-            {contextStats().tokenLimitFormatted})
-          </text>
-          <text fg={theme.textMuted}>
-            System {contextStats().systemTokens.toLocaleString()} • Assistant{" "}
-            {contextStats().assistantTokens.toLocaleString()} • User {contextStats().userTokens.toLocaleString()} • Tool{" "}
-            {contextStats().toolTokens.toLocaleString()}
-          </text>
+        <box flexDirection="row" gap={1} paddingTop={1}>
+          <box
+            flexGrow={1}
+            padding={1}
+            borderStyle="rounded"
+            borderColor={theme.border}
+            backgroundColor={theme.backgroundPanel}
+          >
+            <text fg={theme.text} attributes={TextAttributes.BOLD}>
+              Tokens
+            </text>
+            <text fg={theme.text}>{contextStats().tokensFormatted}</text>
+            <text fg={theme.textMuted}>
+              {contextStats().percentage}% of {contextStats().tokenLimitFormatted}
+            </text>
+          </box>
+          <box
+            flexGrow={1}
+            padding={1}
+            borderStyle="rounded"
+            borderColor={theme.border}
+            backgroundColor={theme.backgroundPanel}
+          >
+            <text fg={theme.text} attributes={TextAttributes.BOLD}>
+              Breakdown
+            </text>
+            <text fg={theme.textMuted}>
+              System {contextStats().systemTokens.toLocaleString()} • Assistant{" "}
+              {contextStats().assistantTokens.toLocaleString()} • User {contextStats().userTokens.toLocaleString()} •
+              Tool {contextStats().toolTokens.toLocaleString()}
+            </text>
+          </box>
         </box>
       </Show>
 
       <Show when={timeline().length > 0} fallback={<text fg={theme.textMuted}>No timeline entries yet.</text>}>
-        <box flexDirection="row" flexWrap="wrap" gap={1} paddingTop={1}>
+        <scrollbox
+          flexDirection="column"
+          gap={1}
+          paddingTop={1}
+          maxHeight={timelineListHeight()}
+          scrollbarOptions={{ visible: false }}
+          renderBefore={function () {
+            const el = this as any
+            el.enableMouse?.()
+          }}
+        >
           <For each={timeline()}>
             {(item) => {
               const isExpanded = createMemo(() => expandedItem() === item.id)
@@ -238,12 +301,12 @@ export function DialogContextTimeline(props: { sessionID: string }) {
                   flexDirection="column"
                   gap={1}
                   padding={1}
-                  minWidth={38}
+                  minWidth={50}
                   flexBasis={0}
                   flexGrow={1}
                   borderStyle="rounded"
                   borderColor={typeColor(item.type)}
-                  backgroundColor={theme.backgroundPanel}
+                  backgroundColor={typeBackground(item.type)}
                   onMouseUp={() => toggleItem(item.id)}
                 >
                   <box flexDirection="row" justifyContent="space-between" alignItems="center" gap={1}>
@@ -288,7 +351,7 @@ export function DialogContextTimeline(props: { sessionID: string }) {
               )
             }}
           </For>
-        </box>
+        </scrollbox>
       </Show>
     </box>
   )
