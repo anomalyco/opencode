@@ -9,6 +9,7 @@ import catppuccin from "./theme/catppuccin.json" with { type: "json" }
 import cobalt2 from "./theme/cobalt2.json" with { type: "json" }
 import dracula from "./theme/dracula.json" with { type: "json" }
 import everforest from "./theme/everforest.json" with { type: "json" }
+import flexoki from "./theme/flexoki.json" with { type: "json" }
 import github from "./theme/github.json" with { type: "json" }
 import gruvbox from "./theme/gruvbox.json" with { type: "json" }
 import kanagawa from "./theme/kanagawa.json" with { type: "json" }
@@ -105,6 +106,7 @@ export const DEFAULT_THEMES: Record<string, ThemeJson> = {
   cobalt2,
   dracula,
   everforest,
+  flexoki,
   github,
   gruvbox,
   kanagawa,
@@ -128,7 +130,10 @@ function resolveTheme(theme: ThemeJson, mode: "dark" | "light") {
   const defs = theme.defs ?? {}
   function resolveColor(c: ColorValue): RGBA {
     if (c instanceof RGBA) return c
-    if (typeof c === "string") return c.startsWith("#") ? RGBA.fromHex(c) : resolveColor(defs[c])
+    if (typeof c === "string") {
+      if (c === "transparent" || c === "none") return RGBA.fromInts(0, 0, 0, 0)
+      return c.startsWith("#") ? RGBA.fromHex(c) : resolveColor(defs[c])
+    }
     return resolveColor(c[mode])
   }
   return Object.fromEntries(
@@ -864,18 +869,21 @@ function generateSyntax(theme: Theme) {
       scope: ["diff.plus"],
       style: {
         foreground: theme.diffAdded,
+        background: theme.diffAddedBg,
       },
     },
     {
       scope: ["diff.minus"],
       style: {
         foreground: theme.diffRemoved,
+        background: theme.diffRemovedBg,
       },
     },
     {
       scope: ["diff.delta"],
       style: {
         foreground: theme.diffContext,
+        background: theme.diffContextBg,
       },
     },
     {

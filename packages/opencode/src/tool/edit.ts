@@ -19,6 +19,10 @@ import { Agent } from "../agent/agent"
 import { Snapshot } from "@/snapshot"
 import { ACPToolRegistry } from "@/acp/registry"
 
+function normalizeLineEndings(text: string): string {
+  return text.replaceAll("\r\n", "\n")
+}
+
 export const EditTool = Tool.define("edit", {
   description: DESCRIPTION,
   parameters: z.object({
@@ -111,7 +115,9 @@ export const EditTool = Tool.define("edit", {
 
       contentNew = replace(contentOld, params.oldString, params.newString, params.replaceAll)
 
-      diff = trimDiff(createTwoFilesPatch(filePath, filePath, contentOld, contentNew))
+      diff = trimDiff(
+        createTwoFilesPatch(filePath, filePath, normalizeLineEndings(contentOld), normalizeLineEndings(contentNew)),
+      )
       if (agent.permission.edit === "ask") {
         await Permission.ask({
           type: "edit",
