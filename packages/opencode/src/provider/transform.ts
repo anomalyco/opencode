@@ -136,7 +136,7 @@ export namespace ProviderTransform {
   ): Record<string, any> | undefined {
     const result: Record<string, any> = {}
 
-    if (providerID === "openai" || npm.includes("openai")) {
+    if (providerID === "openai") {
       result["promptCacheKey"] = sessionID
     }
 
