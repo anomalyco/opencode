@@ -1,7 +1,4 @@
 {
   "$schema": "https://opencode.ai/config.json",
-  "plugin": ["opencode-openai-codex-auth"],
-  "experimental": {
-    "batch_tool": true
-  }
+  "plugin": ["opencode-openai-codex-auth"]
 }
