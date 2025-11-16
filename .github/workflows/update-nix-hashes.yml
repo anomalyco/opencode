@@ -17,32 +17,10 @@ on:
       - 'packages/*/package.json'
 
 jobs:
-  cancel-previous:
+  update:
     runs-on: ubuntu-latest
-    steps:
-      - uses: styfle/cancel-workflow-action@0.12.1
-        with:
-          access_token: ${{ github.token }}
-
-  verify:
-    needs: cancel-previous
-    strategy:
-      fail-fast: false
-      matrix:
-        include:
-          - runner: ubuntu-latest
-            system: x86_64-linux
-            platform: linux
-          - runner: ubuntu-24.04-arm
-            system: aarch64-linux
-            platform: linux
-          - runner: macos-latest
-            system: aarch64-darwin
-            platform: darwin
-          - runner: macos-15-intel
-            system: x86_64-darwin
-            platform: darwin
-    runs-on: ${{ matrix.runner }}
+    env:
+      SYSTEM: x86_64-linux
 
     steps:
       - name: Checkout repository
@@ -59,140 +37,12 @@ jobs:
           git config --global user.email "opencode@sst.dev"
           git config --global user.name "opencode"
 
-      - name: Build and extract hashes
-        id: build_extract
-        continue-on-error: true
+      - name: Update node_modules hash
         run: |
           set -euo pipefail
-          echo "Building for ${{ matrix.system }} to verify/extract hashes..."
-          
-          BUILD_LOG=$(mktemp)
-          nix build .#packages.${{ matrix.system }}.default --system ${{ matrix.system }} -L 2>&1 | tee "$BUILD_LOG" || BUILD_FAILED=true
-          
-          if [ -z "${BUILD_FAILED:-}" ]; then
-            echo "Build successful with current hashes."
-            echo "needs_update=false" >> "$GITHUB_OUTPUT"
-            rm -f "$BUILD_LOG"
-            exit 0
-          fi
-          
-          echo "Build failed, extracting correct hash..."
-          CORRECT_HASH=$(grep -E 'got:\s+sha256-[A-Za-z0-9+/=]+' "$BUILD_LOG" | awk '{print $2}' | head -n1 || true)
-          
-          if [ -z "$CORRECT_HASH" ]; then
-            CORRECT_HASH=$(grep -A2 'hash mismatch' "$BUILD_LOG" | grep 'got:' | awk '{print $2}' | sed 's/sha256:/sha256-/' || true)
-          fi
-          
-          if [ -z "$CORRECT_HASH" ]; then
-            echo "Failed to extract hash from build output"
-            tail -100 "$BUILD_LOG"
-            rm -f "$BUILD_LOG"
-            exit 1
-          fi
-          
-          echo "Extracted hash: $CORRECT_HASH"
-          echo "needs_update=true" >> "$GITHUB_OUTPUT"
-          echo "hash=$CORRECT_HASH" >> "$GITHUB_OUTPUT"
-          rm -f "$BUILD_LOG"
+          nix/scripts/update-hashes.sh
 
-      - name: Update hash file
-        if: steps.build_extract.outputs.needs_update == 'true'
-        run: |
-          set -euo pipefail
-          HASH_FILE="nix/hashes.json"
-          SYSTEM="${{ matrix.system }}"
-          CORRECT_HASH="${{ steps.build_extract.outputs.hash }}"
-          
-          if [ ! -f "$HASH_FILE" ]; then
-            mkdir -p "$(dirname "$HASH_FILE")"
-            jq -n '{nodeModules: {}}' > "$HASH_FILE"
-          fi
-          
-          echo "Updating hash for ${SYSTEM} to ${CORRECT_HASH}"
-          tmp=$(mktemp)
-          jq --arg system "$SYSTEM" --arg value "$CORRECT_HASH" '.nodeModules[$system] = $value' "$HASH_FILE" >"$tmp"
-          mv "$tmp" "$HASH_FILE"
-          
-          echo "Hash file updated."
-
-      - name: Upload hash changes
-        uses: actions/upload-artifact@v4
-        with:
-          name: hashes-${{ matrix.system }}
-          path: nix/hashes.json
-          retention-days: 1
-
-  commit-hashes:
-    needs: verify
-    if: always()
-    runs-on: ubuntu-latest
-    steps:
-      - name: Checkout repository
-        uses: actions/checkout@v4
-        with:
-          token: ${{ secrets.GITHUB_TOKEN }}
-          fetch-depth: 0
-
-      - name: Configure git
-        run: |
-          git config --global user.email "opencode@sst.dev"
-          git config --global user.name "opencode"
-
-      - name: Download all hash files
-        uses: actions/download-artifact@v4
-        with:
-          path: hash-artifacts
-
-      - name: Sync branch state
-        env:
-          TARGET_BRANCH: ${{ github.head_ref || github.ref_name }}
-        run: |
-          set -euo pipefail
-          BRANCH="${TARGET_BRANCH:-${GITHUB_REF_NAME}}"
-          git fetch origin "$BRANCH"
-          if git show-ref --verify --quiet "refs/heads/$BRANCH"; then
-            git checkout "$BRANCH"
-          else
-            git checkout -b "$BRANCH"
-          fi
-          git reset --hard "origin/$BRANCH"
-
-      - name: Merge hash files
-        id: merge_hashes
-        run: |
-          set -euo pipefail
-
-          BASE_HASH="nix/hashes.json"
-          if [ ! -f "$BASE_HASH" ]; then
-            mkdir -p "$(dirname "$BASE_HASH")"
-            jq -n '{nodeModules: {}}' > "$BASE_HASH"
-          fi
-          for system in x86_64-linux aarch64-linux aarch64-darwin x86_64-darwin; do
-            if [ -f "hash-artifacts/hashes-${system}/hashes.json" ]; then
-              echo "Merging ${system} hashes..."
-              # Deep merge: preserve all keys in nested objects
-              jq --arg sys "$system" \
-                --slurpfile new "hash-artifacts/hashes-${system}/hashes.json" \
-                '.nodeModules[$sys] = $new[0].nodeModules[$sys]' \
-                "$BASE_HASH" > /tmp/merged.json
-              mv /tmp/merged.json "$BASE_HASH"
-            else
-              echo "Warning: No hash artifact found for ${system}"
-            fi
-          done
-
-          echo "Final merged hashes.json:"
-          cat "$BASE_HASH"
-
-          DUMMY="sha256-AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA="
-          HAS_NODE=$(jq --arg dummy "$DUMMY" '[ (.nodeModules // {})[] | select(. != $dummy) ] | length' "$BASE_HASH")
-          if [ "$HAS_NODE" -gt 0 ]; then
-            echo "has_data=true" >> "$GITHUB_OUTPUT"
-          else
-            echo "has_data=false" >> "$GITHUB_OUTPUT"
-          fi
-
-      - name: Commit Nix hash changes
+      - name: Commit hash changes
         env:
           TARGET_BRANCH: ${{ github.head_ref || github.ref_name }}
         run: |
@@ -220,7 +70,7 @@ jobs:
             exit 0
           fi
 
-          git add flake.nix nix/node-modules.nix nix/hashes.json
+          git add "${FILES[@]}"
           git commit -m "Update Nix hashes"
 
           BRANCH="${TARGET_BRANCH:-${GITHUB_REF_NAME}}"

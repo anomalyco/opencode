@@ -21,6 +21,8 @@ stdenvNoCC.mkDerivation {
     export HOME=$(mktemp -d)
     export BUN_INSTALL_CACHE_DIR=$(mktemp -d)
     bun install \
+      --cpu="*" \
+      --os="*" \
       --frozen-lockfile \
       --ignore-scripts \
       --no-progress \

@@ -27,19 +27,11 @@
         "aarch64-darwin" = "bun-darwin-arm64";
         "x86_64-darwin" = "bun-darwin-x64";
       };
-      defaultNodeModules = builtins.listToAttrs (
-        map (system: {
-          name = system;
-          value = "sha256-AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA=";
-        }) systems
-      );
+      defaultNodeModules = "sha256-AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA=";
       hashesFile = "${./nix}/hashes.json";
       hashesData =
         if builtins.pathExists hashesFile then builtins.fromJSON (builtins.readFile hashesFile) else { };
-      hashes = {
-        nodeModules = defaultNodeModules // (hashesData.nodeModules or { });
-        optional = hashesData.optional or { };
-      };
+      nodeModulesHash = hashesData.nodeModules or defaultNodeModules;
       modelsDev = forEachSystem (
         system:
         let
@@ -72,7 +64,7 @@
         let
           pkgs = pkgsFor system;
           mkNodeModules = pkgs.callPackage ./nix/node-modules.nix {
-            hash = hashes.nodeModules.${system};
+            hash = nodeModulesHash;
           };
           mkPackage = pkgs.callPackage ./nix/opencode.nix { };
         in
