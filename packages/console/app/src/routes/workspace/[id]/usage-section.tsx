@@ -26,9 +26,9 @@ export function UsageSection() {
     setStore({ usage: usage() })
   }, [usage])
 
-  const hasResults = createMemo(() => store.usage.length > 0)
+  const hasResults = createMemo(() => store.usage && store.usage.length > 0)
   const canGoPrev = createMemo(() => store.page > 0)
-  const canGoNext = createMemo(() => store.usage.length === PAGE_SIZE)
+  const canGoNext = createMemo(() => store.usage && store.usage.length === PAGE_SIZE)
 
   const goPrev = async () => {
     const usage = await getUsageInfo(params.id!, store.page - 1)
