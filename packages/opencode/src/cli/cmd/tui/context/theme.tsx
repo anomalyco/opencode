@@ -864,18 +864,21 @@ function generateSyntax(theme: Theme) {
       scope: ["diff.plus"],
       style: {
         foreground: theme.diffAdded,
+        background: theme.diffAddedBg,
       },
     },
     {
       scope: ["diff.minus"],
       style: {
         foreground: theme.diffRemoved,
+        background: theme.diffRemovedBg,
       },
     },
     {
       scope: ["diff.delta"],
       style: {
         foreground: theme.diffContext,
+        background: theme.diffContextBg,
       },
     },
     {

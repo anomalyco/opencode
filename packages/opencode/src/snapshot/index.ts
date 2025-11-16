@@ -24,6 +24,8 @@ export namespace Snapshot {
         })
         .quiet()
         .nothrow()
+      // Configure git to not convert line endings on Windows
+      await $`git --git-dir ${git} config core.autocrlf false`.quiet().nothrow()
       log.info("initialized")
     }
     await $`git --git-dir ${git} --work-tree ${Instance.worktree} add .`.quiet().cwd(Instance.directory).nothrow()
@@ -45,10 +47,11 @@ export namespace Snapshot {
   export async function patch(hash: string): Promise<Patch> {
     const git = gitdir()
     await $`git --git-dir ${git} --work-tree ${Instance.worktree} add .`.quiet().cwd(Instance.directory).nothrow()
-    const result = await $`git --git-dir ${git} --work-tree ${Instance.worktree} diff --name-only ${hash} -- .`
-      .quiet()
-      .cwd(Instance.directory)
-      .nothrow()
+    const result =
+      await $`git -c core.autocrlf=false --git-dir ${git} --work-tree ${Instance.worktree} diff --name-only ${hash} -- .`
+        .quiet()
+        .cwd(Instance.directory)
+        .nothrow()
 
     // If git diff fails, return empty patch
     if (result.exitCode !== 0) {
@@ -122,10 +125,11 @@ export namespace Snapshot {
   export async function diff(hash: string) {
     const git = gitdir()
     await $`git --git-dir ${git} --work-tree ${Instance.worktree} add .`.quiet().cwd(Instance.directory).nothrow()
-    const result = await $`git --git-dir ${git} --work-tree ${Instance.worktree} diff ${hash} -- .`
-      .quiet()
-      .cwd(Instance.worktree)
-      .nothrow()
+    const result =
+      await $`git -c core.autocrlf=false --git-dir ${git} --work-tree ${Instance.worktree} diff ${hash} -- .`
+        .quiet()
+        .cwd(Instance.worktree)
+        .nothrow()
 
     if (result.exitCode !== 0) {
       log.warn("failed to get diff", {
@@ -155,7 +159,7 @@ export namespace Snapshot {
   export async function diffFull(from: string, to: string): Promise<FileDiff[]> {
     const git = gitdir()
     const result: FileDiff[] = []
-    for await (const line of $`git --git-dir ${git} --work-tree ${Instance.worktree} diff --no-renames --numstat ${from} ${to} -- .`
+    for await (const line of $`git -c core.autocrlf=false --git-dir ${git} --work-tree ${Instance.worktree} diff --no-renames --numstat ${from} ${to} -- .`
       .quiet()
       .cwd(Instance.directory)
       .nothrow()
@@ -165,10 +169,16 @@ export namespace Snapshot {
       const isBinaryFile = additions === "-" && deletions === "-"
       const before = isBinaryFile
         ? ""
-        : await $`git --git-dir ${git} --work-tree ${Instance.worktree} show ${from}:${file}`.quiet().nothrow().text()
+        : await $`git -c core.autocrlf=false --git-dir ${git} --work-tree ${Instance.worktree} show ${from}:${file}`
+            .quiet()
+            .nothrow()
+            .text()
       const after = isBinaryFile
         ? ""
-        : await $`git --git-dir ${git} --work-tree ${Instance.worktree} show ${to}:${file}`.quiet().nothrow().text()
+        : await $`git -c core.autocrlf=false --git-dir ${git} --work-tree ${Instance.worktree} show ${to}:${file}`
+            .quiet()
+            .nothrow()
+            .text()
       result.push({
         file,
         before,
