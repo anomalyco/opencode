@@ -1018,6 +1018,12 @@ export type Config = {
             output: number
             cache_read?: number
             cache_write?: number
+            context_over_200k?: {
+              input: number
+              output: number
+              cache_read?: number
+              cache_write?: number
+            }
           }
           limit?: {
             context: number
@@ -1129,6 +1135,10 @@ export type Config = {
      */
     chatMaxRetries?: number
     disable_paste_summary?: boolean
+    /**
+     * Enable the batch tool
+     */
+    batch_tool?: boolean
   }
 }
 
@@ -1220,6 +1230,12 @@ export type Model = {
     output: number
     cache_read?: number
     cache_write?: number
+    context_over_200k?: {
+      input: number
+      output: number
+      cache_read?: number
+      cache_write?: number
+    }
   }
   limit: {
     context: number
