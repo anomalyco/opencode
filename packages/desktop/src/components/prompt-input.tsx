@@ -347,7 +347,7 @@ export const PromptInput: Component<PromptInputProps> = (props) => {
       <Show when={store.popoverIsOpen}>
         <div
           class="absolute inset-x-0 -top-3 -translate-y-full origin-bottom-left max-h-[252px] min-h-10
-                 overflow-auto no-scrollbar flex flex-col p-2 pb-0 rounded-2xl 
+                 overflow-auto no-scrollbar flex flex-col p-2 pb-0 rounded-md
                  border border-border-base bg-surface-raised-stronger-non-alpha shadow-md"
         >
           <Show when={flat().length > 0} fallback={<div class="text-text-weak px-2">No matching files</div>}>
@@ -382,7 +382,7 @@ export const PromptInput: Component<PromptInputProps> = (props) => {
         onSubmit={handleSubmit}
         classList={{
           "bg-surface-raised-stronger-non-alpha border border-border-strong-base": true,
-          "rounded-2xl overflow-clip focus-within:border-transparent focus-within:shadow-xs-border-select": true,
+          "rounded-md overflow-clip focus-within:border-transparent focus-within:shadow-xs-border-select": true,
           [props.class ?? ""]: !!props.class,
         }}
       >
@@ -396,17 +396,17 @@ export const PromptInput: Component<PromptInputProps> = (props) => {
             onInput={handleInput}
             onKeyDown={handleKeyDown}
             classList={{
-              "w-full p-3 text-14-regular text-text-strong focus:outline-none whitespace-pre-wrap": true,
+              "w-full px-5 py-3 text-14-regular text-text-strong focus:outline-none whitespace-pre-wrap": true,
               "[&>[data-type=file]]:text-icon-info-active": true,
             }}
           />
           <Show when={!session.prompt.dirty()}>
-            <div class="absolute top-0 left-0 p-3 text-14-regular text-text-weak pointer-events-none">
+            <div class="absolute top-0 left-0 px-5 py-3 text-14-regular text-text-weak pointer-events-none">
               Plan and build anything
             </div>
           </Show>
         </div>
-        <div class="p-3 flex items-center justify-between">
+        <div class="relative p-3 flex items-center justify-between">
           <div class="flex items-center justify-start gap-1">
             <Select
               options={local.agent.list().map((agent) => agent.name)}
@@ -489,7 +489,7 @@ export const PromptInput: Component<PromptInputProps> = (props) => {
               disabled={!session.prompt.dirty() && !session.working()}
               icon={session.working() ? "stop" : "arrow-up"}
               variant="primary"
-              class="rounded-full"
+              class="h-10 w-8 absolute right-2 bottom-2"
             />
           </Tooltip>
         </div>

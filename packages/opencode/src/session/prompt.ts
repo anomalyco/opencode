@@ -266,7 +266,7 @@ export namespace SessionPrompt {
           : undefined,
         topP: agent.topP ?? ProviderTransform.topP(model.providerID, model.modelID),
         options: {
-          ...ProviderTransform.options(model.providerID, model.modelID, input.sessionID),
+          ...ProviderTransform.options(model.providerID, model.modelID, model.npm ?? "", input.sessionID),
           ...model.info.options,
           ...agent.options,
         },
@@ -345,7 +345,7 @@ export namespace SessionPrompt {
           maxRetries: 0,
           activeTools: Object.keys(tools).filter((x) => x !== "invalid"),
           maxOutputTokens: ProviderTransform.maxOutputTokens(
-            model.providerID,
+            model.npm ?? "",
             params.options,
             model.info.limit.output,
             OUTPUT_TOKEN_MAX,
@@ -671,15 +671,31 @@ export namespace SessionPrompt {
           result,
         )
 
-        const output = result.content
-          .filter((x: any) => x.type === "text")
-          .map((x: any) => x.text)
-          .join("\n\n")
+        const textParts: string[] = []
+        const attachments: MessageV2.FilePart[] = []
+
+        for (const item of result.content) {
+          if (item.type === "text") {
+            textParts.push(item.text)
+          } else if (item.type === "image") {
+            attachments.push({
+              id: Identifier.ascending("part"),
+              sessionID: input.sessionID,
+              messageID: input.processor.message.id,
+              type: "file",
+              mime: item.mimeType,
+              url: `data:${item.mimeType};base64,${item.data}`,
+            })
+          }
+          // Add support for other types if needed
+        }
 
         return {
           title: "",
           metadata: result.metadata ?? {},
-          output,
+          output: textParts.join("\n\n"),
+          attachments,
+          content: result.content, // directly return content to preserve ordering when outputting to model
         }
       }
       item.toModelOutput = (result) => {
@@ -1819,7 +1835,7 @@ export namespace SessionPrompt {
     const small =
       (await Provider.getSmallModel(input.providerID)) ?? (await Provider.getModel(input.providerID, input.modelID))
     const options = {
-      ...ProviderTransform.options(small.providerID, small.modelID, input.session.id),
+      ...ProviderTransform.options(small.providerID, small.modelID, small.npm ?? "", input.session.id),
       ...small.info.options,
     }
     if (small.providerID === "openai" || small.modelID.includes("gpt-5")) {

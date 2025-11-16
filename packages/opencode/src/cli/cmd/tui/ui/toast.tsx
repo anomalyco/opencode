@@ -31,11 +31,11 @@ export function Toast() {
           customBorderChars={SplitBorder.customBorderChars}
         >
           <Show when={current().title}>
-            <text attributes={TextAttributes.BOLD} marginBottom={1}>
+            <text attributes={TextAttributes.BOLD} marginBottom={1} fg={theme.text}>
               {current().title}
             </text>
           </Show>
-          <text>{current().message}</text>
+          <text fg={theme.text}>{current().message}</text>
         </box>
       )}
     </Show>

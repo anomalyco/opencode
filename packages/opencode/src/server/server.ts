@@ -40,6 +40,7 @@ import type { ContentfulStatusCode } from "hono/utils/http-status"
 import { TuiEvent } from "@/cli/cmd/tui/event"
 import { Snapshot } from "@/snapshot"
 import { SessionSummary } from "@/session/summary"
+import { GlobalBus } from "@/bus/global"
 
 const ERRORS = {
   400: {
@@ -117,6 +118,56 @@ export namespace Server {
           timer.stop()
         }
       })
+      .get(
+        "/global/event",
+        describeRoute({
+          description: "Get events",
+          operationId: "global.event",
+          responses: {
+            200: {
+              description: "Event stream",
+              content: {
+                "text/event-stream": {
+                  schema: resolver(
+                    z
+                      .object({
+                        directory: z.string(),
+                        payload: Bus.payloads(),
+                      })
+                      .meta({
+                        ref: "GlobalEvent",
+                      }),
+                  ),
+                },
+              },
+            },
+          },
+        }),
+        async (c) => {
+          log.info("global event connected")
+          return streamSSE(c, async (stream) => {
+            stream.writeSSE({
+              data: JSON.stringify({
+                type: "server.connected",
+                properties: {},
+              }),
+            })
+            async function handler(event: any) {
+              await stream.writeSSE({
+                data: JSON.stringify(event),
+              })
+            }
+            GlobalBus.on("event", handler)
+            await new Promise<void>((resolve) => {
+              stream.onAbort(() => {
+                GlobalBus.off("event", handler)
+                resolve()
+                log.info("global event disconnected")
+              })
+            })
+          })
+        },
+      )
       .use(async (c, next) => {
         const directory = c.req.query("directory") ?? process.cwd()
         return Instance.provide({
@@ -1137,7 +1188,7 @@ export namespace Server {
           "query",
           z.object({
             query: z.string(),
-            dirs: z.union([z.literal("true"), z.literal("false")]).optional(),
+            dirs: z.enum(["true", "false"]).optional(),
           }),
         ),
         async (c) => {
@@ -1721,11 +1772,7 @@ export namespace Server {
               description: "Event stream",
               content: {
                 "text/event-stream": {
-                  schema: resolver(
-                    Bus.payloads().meta({
-                      ref: "Event",
-                    }),
-                  ),
+                  schema: resolver(Bus.payloads()),
                 },
               },
             },

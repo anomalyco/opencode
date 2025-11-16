@@ -1,11 +1,9 @@
 import { Accordion as Kobalte } from "@kobalte/core/accordion"
-import { createSignal, splitProps } from "solid-js"
+import { splitProps } from "solid-js"
 import type { ComponentProps, ParentProps } from "solid-js"
 
 export interface AccordionProps extends ComponentProps<typeof Kobalte> {}
-export interface AccordionItemProps extends ComponentProps<typeof Kobalte.Item> {
-  defaultOpen?: boolean
-}
+export interface AccordionItemProps extends ComponentProps<typeof Kobalte.Item> {}
 export interface AccordionHeaderProps extends ComponentProps<typeof Kobalte.Header> {}
 export interface AccordionTriggerProps extends ComponentProps<typeof Kobalte.Trigger> {}
 export interface AccordionContentProps extends ComponentProps<typeof Kobalte.Content> {}
@@ -25,14 +23,11 @@ function AccordionRoot(props: AccordionProps) {
 }
 
 function AccordionItem(props: AccordionItemProps) {
-  const [split, rest] = splitProps(props, ["class", "classList", "defaultOpen"])
-  const [open, setOpen] = createSignal(split.defaultOpen ?? false)
+  const [split, rest] = splitProps(props, ["class", "classList"])
   return (
     <Kobalte.Item
       {...rest}
       data-slot="accordion-item"
-      onOpenChange={setOpen}
-      open={open()}
       classList={{
         ...(split.classList ?? {}),
         [split.class ?? ""]: !!split.class,

@@ -17,6 +17,8 @@ import { useSDK } from "@tui/context/sdk"
 import { Binary } from "@/util/binary"
 import { createSimpleContext } from "./helper"
 import type { Snapshot } from "@/snapshot"
+import { useExit } from "./exit"
+import { onMount } from "solid-js"
 
 export const { use: useSync, provider: SyncProvider } = createSimpleContext({
   name: "Sync",
@@ -215,28 +217,36 @@ export const { use: useSync, provider: SyncProvider } = createSimpleContext({
       }
     })
 
-    // blocking
-    Promise.all([
-      sdk.client.config.providers({ throwOnError: true }).then((x) => setStore("provider", x.data!.providers)),
-      sdk.client.app.agents({ throwOnError: true }).then((x) => setStore("agent", x.data ?? [])),
-      sdk.client.config.get({ throwOnError: true }).then((x) => setStore("config", x.data!)),
-    ]).then(() => {
-      setStore("status", "partial")
-      // non-blocking
+    const exit = useExit()
+
+    onMount(() => {
+      // blocking
       Promise.all([
-        sdk.client.session.list().then((x) =>
-          setStore(
-            "session",
-            (x.data ?? []).toSorted((a, b) => a.id.localeCompare(b.id)),
-          ),
-        ),
-        sdk.client.command.list().then((x) => setStore("command", x.data ?? [])),
-        sdk.client.lsp.status().then((x) => setStore("lsp", x.data!)),
-        sdk.client.mcp.status().then((x) => setStore("mcp", x.data!)),
-        sdk.client.formatter.status().then((x) => setStore("formatter", x.data!)),
-      ]).then(() => {
-        setStore("status", "complete")
-      })
+        sdk.client.config.providers({ throwOnError: true }).then((x) => setStore("provider", x.data!.providers)),
+        sdk.client.app.agents({ throwOnError: true }).then((x) => setStore("agent", x.data ?? [])),
+        sdk.client.config.get({ throwOnError: true }).then((x) => setStore("config", x.data!)),
+      ])
+        .then(() => {
+          setStore("status", "partial")
+          // non-blocking
+          Promise.all([
+            sdk.client.session.list().then((x) =>
+              setStore(
+                "session",
+                (x.data ?? []).toSorted((a, b) => a.id.localeCompare(b.id)),
+              ),
+            ),
+            sdk.client.command.list().then((x) => setStore("command", x.data ?? [])),
+            sdk.client.lsp.status().then((x) => setStore("lsp", x.data!)),
+            sdk.client.mcp.status().then((x) => setStore("mcp", x.data!)),
+            sdk.client.formatter.status().then((x) => setStore("formatter", x.data!)),
+          ]).then(() => {
+            setStore("status", "complete")
+          })
+        })
+        .catch(async (e) => {
+          await exit(e)
+        })
     })
 
     const result = {

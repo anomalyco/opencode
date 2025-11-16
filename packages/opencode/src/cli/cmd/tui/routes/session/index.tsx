@@ -17,7 +17,14 @@ import { useRoute, useRouteData } from "@tui/context/route"
 import { useSync } from "@tui/context/sync"
 import { SplitBorder } from "@tui/component/border"
 import { useTheme } from "@tui/context/theme"
-import { BoxRenderable, ScrollBoxRenderable, TextAttributes, addDefaultParsers } from "@opentui/core"
+import {
+  BoxRenderable,
+  ScrollBoxRenderable,
+  TextAttributes,
+  addDefaultParsers,
+  MacOSScrollAccel,
+  type ScrollAcceleration,
+} from "@opentui/core"
 import { Prompt, type PromptRef } from "@tui/component/prompt"
 import type { AssistantMessage, Part, ToolPart, UserMessage, TextPart, ReasoningPart } from "@opencode-ai/sdk"
 import { useLocal } from "@tui/context/local"
@@ -62,6 +69,16 @@ import { LSP } from "@/lsp/index.ts"
 
 addDefaultParsers(parsers.parsers)
 
+class CustomSpeedScroll implements ScrollAcceleration {
+  constructor(private speed: number) {}
+
+  tick(_now?: number): number {
+    return this.speed
+  }
+
+  reset(): void {}
+}
+
 const context = createContext<{
   width: number
   conceal: () => boolean
@@ -94,6 +111,17 @@ export function Session() {
   const wide = createMemo(() => dimensions().width > 120)
   const sidebarVisible = createMemo(() => sidebar() === "show" || (sidebar() === "auto" && wide()))
   const contentWidth = createMemo(() => dimensions().width - (sidebarVisible() ? 42 : 0) - 4)
+
+  const scrollAcceleration = createMemo(() => {
+    const tui = sync.data.config.tui
+    if (tui?.scroll_acceleration?.enabled) {
+      return new MacOSScrollAccel()
+    }
+    if (tui?.scroll_speed) {
+      return new CustomSpeedScroll(tui.scroll_speed)
+    }
+    return undefined
+  })
 
   createEffect(async () => {
     await sync.session
@@ -684,6 +712,7 @@ export function Session() {
               stickyScroll={true}
               stickyStart="bottom"
               flexGrow={1}
+              scrollAcceleration={scrollAcceleration()}
             >
               <For each={messages()}>
                 {(message, index) => (
@@ -1224,7 +1253,7 @@ ToolRegistry.register<typeof WriteTool>({
             <For each={numbers()}>{(value) => <text style={{ fg: theme.textMuted }}>{value}</text>}</For>
           </box>
           <box paddingLeft={1} flexGrow={1}>
-            <code filetype={filetype(props.input.filePath!)} syntaxStyle={syntax()} content={code()} />
+            <code fg={theme.text} filetype={filetype(props.input.filePath!)} syntaxStyle={syntax()} content={code()} />
           </box>
         </box>
         <Show when={diagnostics().length}>
@@ -1434,16 +1463,16 @@ ToolRegistry.register<typeof EditTool>({
           <Match when={diff() && style() === "split"}>
             <box paddingLeft={1} flexDirection="row" gap={2}>
               <box flexGrow={1} flexBasis={0}>
-                <code filetype={ft()} syntaxStyle={syntax()} content={diff()!.oldContent} />
+                <code fg={theme.text} filetype={ft()} syntaxStyle={syntax()} content={diff()!.oldContent} />
               </box>
               <box flexGrow={1} flexBasis={0}>
-                <code filetype={ft()} syntaxStyle={syntax()} content={diff()!.newContent} />
+                <code fg={theme.text} filetype={ft()} syntaxStyle={syntax()} content={diff()!.newContent} />
               </box>
             </box>
           </Match>
           <Match when={code()}>
             <box paddingLeft={1}>
-              <code filetype={ft()} syntaxStyle={syntax()} content={code()} />
+              <code fg={theme.text} filetype={ft()} syntaxStyle={syntax()} content={code()} />
             </box>
           </Match>
         </Switch>

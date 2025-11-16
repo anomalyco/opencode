@@ -6,7 +6,7 @@
 [data-component="tooltip"] {
   z-index: 1000;
   max-width: 320px;
-  border-radius: 6px;
+  border-radius: var(--radius-md);
   background-color: var(--surface-float-base);
   color: rgba(253, 252, 252, 0.94);
   padding: 2px 8px;
