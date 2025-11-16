@@ -156,7 +156,10 @@ export const EditTool = Tool.define("edit", {
       await Bus.publish(File.Event.Edited, {
         file: filePath,
       })
-      diff = trimDiff(createTwoFilesPatch(filePath, filePath, contentOld, contentNew))
+      contentNew = await file.text()
+      diff = trimDiff(
+        createTwoFilesPatch(filePath, filePath, normalizeLineEndings(contentOld), normalizeLineEndings(contentNew)),
+      )
     })()
 
     FileTime.read(ctx.sessionID, filePath)
