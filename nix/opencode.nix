@@ -85,7 +85,7 @@ stdenvNoCC.mkDerivation (finalAttrs: {
   '';
 
   postFixup = ''
-    wrapProgram "$out/bin/opencode" --prefix PATH : ${lib.makeBinPath [ fzf ripgrep ]}${lib.optionalString stdenvNoCC.hostPlatform.isLinux " --set LD_LIBRARY_PATH \"${lib.makeLibraryPath [ stdenv.cc.cc.lib ]}\""}
+    wrapProgram "$out/bin/opencode" --prefix PATH : ${lib.makeBinPath [ fzf ripgrep ]}
   '';
 
   meta = {
