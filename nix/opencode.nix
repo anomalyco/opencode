@@ -1,4 +1,4 @@
-{ lib, stdenv, stdenvNoCC, bun, makeBinaryWrapper }:
+{ lib, stdenv, stdenvNoCC, bun, fzf, ripgrep, makeBinaryWrapper }:
 args:
 let
   scripts = args.scripts;
@@ -84,9 +84,8 @@ stdenvNoCC.mkDerivation (finalAttrs: {
     runHook postInstall
   '';
 
-  postFixup = lib.optionalString stdenvNoCC.hostPlatform.isLinux ''
-    wrapProgram $out/bin/opencode \
-      --set LD_LIBRARY_PATH "${lib.makeLibraryPath [ stdenv.cc.cc.lib ]}"
+  postFixup = ''
+    wrapProgram "$out/bin/opencode" --prefix PATH : ${lib.makeBinPath [ fzf ripgrep ]}${lib.optionalString stdenvNoCC.hostPlatform.isLinux " --set LD_LIBRARY_PATH \"${lib.makeLibraryPath [ stdenv.cc.cc.lib ]}\""}
   '';
 
   meta = {
