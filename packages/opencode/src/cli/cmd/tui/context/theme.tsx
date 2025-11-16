@@ -130,7 +130,10 @@ function resolveTheme(theme: ThemeJson, mode: "dark" | "light") {
   const defs = theme.defs ?? {}
   function resolveColor(c: ColorValue): RGBA {
     if (c instanceof RGBA) return c
-    if (typeof c === "string") return c.startsWith("#") ? RGBA.fromHex(c) : resolveColor(defs[c])
+    if (typeof c === "string") {
+      if (c === "transparent" || c === "none") return RGBA.fromInts(0, 0, 0, 0)
+      return c.startsWith("#") ? RGBA.fromHex(c) : resolveColor(defs[c])
+    }
     return resolveColor(c[mode])
   }
   return Object.fromEntries(
