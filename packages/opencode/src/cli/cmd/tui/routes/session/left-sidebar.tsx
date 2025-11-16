@@ -18,6 +18,8 @@ const RUNNING_SPINNER_FRAMES = ["⠋", "⠙", "⠹", "⠸", "⠼", "⠴", "⠦",
 const RUNNING_SPINNER_INTERVAL_MS = 120
 const HIDE_ICON = "⊖"
 const SHOW_ICON = "⊕"
+const OLDER_INITIAL_LIMIT = 12
+const OLDER_INCREMENT = 12
 
 type DateCategory = (typeof DATE_CATEGORY_ORDER)[number]
 
@@ -98,6 +100,7 @@ export function LeftSidebar(props: {
 
   const [clock, setClock] = createSignal(Date.now())
   const [spinnerIndex, setSpinnerIndex] = createSignal(0)
+  const [olderLimit, setOlderLimit] = createSignal(OLDER_INITIAL_LIMIT)
 
   createEffect(() => {
     const interval = setInterval(() => setClock(Date.now()), CLOCK_REFRESH_INTERVAL_MS)
@@ -225,24 +228,18 @@ export function LeftSidebar(props: {
     const orchestrationStatus = session.orchestration?.status
     if (orchestrationStatus === "failed") return "error"
     if (orchestrationStatus === "paused") return "attention"
-    if (orchestrationStatus === "active") return "active"
 
     const pendingPermissions = (sync.data.permission?.[session.id]?.length ?? 0) > 0
     if (pendingPermissions) return "attention"
 
     const messages = sync.data.message?.[session.id] ?? []
-    const lastMessage = messages[messages.length - 1] as { error?: unknown; role?: string; time?: { completed?: number } } | undefined
+    const lastMessage = messages[messages.length - 1] as
+      | { error?: unknown; role?: string; time?: { completed?: number } }
+      | undefined
     if (lastMessage?.error) return "error"
 
-    // Only consider a session "working" if it was updated recently (within last 5 minutes)
-    const RECENT_THRESHOLD_MS = 5 * 60 * 1000
-    const sessionUpdatedTime = session.time?.updated ?? 0
-    const isRecentlyUpdated = Date.now() - sessionUpdatedTime < RECENT_THRESHOLD_MS
-
-    if (isRecentlyUpdated) {
-      const derivedStatus = sync.session.status(session.id)
-      if (derivedStatus === "working" || derivedStatus === "compacting") return "active"
-    }
+    const derivedStatus = sync.session.status(session.id)
+    if (derivedStatus === "working" || derivedStatus === "compacting") return "active"
 
     return "idle"
   }
@@ -346,7 +343,11 @@ export function LeftSidebar(props: {
                 if (category === HIDDEN_CATEGORY) {
                   return hiddenSessions()
                 }
-                return sessionsByCategory().get(category) || []
+                const sessions = sessionsByCategory().get(category) || []
+                if (!isSearching() && category === "Older") {
+                  return sessions.slice(0, olderLimit())
+                }
+                return sessions
               }
 
               return (
@@ -458,6 +459,19 @@ export function LeftSidebar(props: {
             New Session
           </text>
         </box>
+        <Show when={!isSearching() && (sessionsByCategory().get("Older")?.length ?? 0) > olderLimit()}>
+          <box marginTop={1}>
+            <text
+              fg={theme.textMuted}
+              onMouseUp={() => {
+                if (renderer.getSelection()?.getSelectedText()) return
+                setOlderLimit((prev) => prev + OLDER_INCREMENT)
+              }}
+            >
+              load more ({sessionsByCategory().get("Older")!.length - olderLimit()})
+            </text>
+          </box>
+        </Show>
       </box>
     </Show>
   )

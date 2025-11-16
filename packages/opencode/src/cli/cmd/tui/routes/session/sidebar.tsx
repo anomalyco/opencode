@@ -876,13 +876,12 @@ export function Sidebar(props: {
             <text
               fg={theme.accent}
               flexShrink={0}
-              attributes={TextAttributes.UNDERLINE}
               onMouseUp={() => {
                 if (renderer.getSelection()?.getSelectedText()) return
                 dialog.replace(() => <DialogSessionRename session={props.sessionID} />)
               }}
             >
-              Rename
+              edit
             </text>
           </box>
           <Show when={session().share?.url}>
@@ -890,8 +889,8 @@ export function Sidebar(props: {
           </Show>
         </box>
         <box>
-          <text fg={theme.text} attributes={TextAttributes.BOLD}>
-            Context
+          <text fg={theme.text}>
+            <span style={{ bold: expandedSections().has("context") && activeTab() !== "tools" }}>Context</span>
           </text>
           {(() => {
             const agentColor = createMemo<RGBA>(() => {
@@ -972,13 +971,16 @@ export function Sidebar(props: {
           <Show when={toolsUsed().length > 0}>
             <box marginTop={0}>
               <text
-                attributes={TextAttributes.BOLD}
                 onMouseUp={() => {
                   if (renderer.getSelection()?.getSelectedText()) return
                   toggleSection("toolsUsed")
                 }}
               >
-                {expandedSections().has("toolsUsed") ? "▼" : "▶"} Tools Used {`(${toolsUsed().length})`}
+                <span style={{ fg: theme.text, bold: expandedSections().has("toolsUsed") }}>
+                  {expandedSections().has("toolsUsed") ? "▼" : "▶"}
+                </span>{" "}
+                <span style={{ fg: theme.text }}>{"Tools Used"}</span>{" "}
+                <span style={{ fg: theme.textMuted }}>{`(${toolsUsed().length})`}</span>
               </text>
               <Show when={expandedSections().has("toolsUsed")}>
                 <For each={toolsUsed()}>
@@ -1025,28 +1027,30 @@ export function Sidebar(props: {
           <Show when={sync.data.lsp.length > 0}>
             <box marginTop={0}>
               <text
-                attributes={TextAttributes.BOLD}
                 onMouseUp={() => {
                   if (renderer.getSelection()?.getSelectedText()) return
                   toggleSection("lsp")
                 }}
               >
-                {expandedSections().has("lsp") ? "▼" : "▶"} LSP {`(${sync.data.lsp.length})`}
+                <span style={{ fg: theme.text, bold: expandedSections().has("lsp") }}>
+                  {expandedSections().has("lsp") ? "▼" : "▶"}
+                </span>{" "}
+                <span style={{ fg: theme.text }}>{"LSP"}</span>{" "}
+                <span style={{ fg: theme.textMuted }}>{`(${sync.data.lsp.length})`}</span>
               </text>
               <Show when={expandedSections().has("lsp")}>
                 <For each={sync.data.lsp}>
                   {(item) => (
                     <box flexDirection="row" gap={1}>
                       <text
+                        fg={theme.accent}
                         flexShrink={0}
-                        style={{
-                          fg: {
-                            connected: theme.success,
-                            error: theme.error,
-                          }[item.status],
+                        onMouseUp={() => {
+                          if (renderer.getSelection()?.getSelectedText()) return
+                          dialog.replace(() => <DialogSessionRename session={props.sessionID} />)
                         }}
                       >
-                        •
+                        edit
                       </text>
                       <text fg={theme.textMuted}>
                         {item.id} {item.root}
@@ -1060,13 +1064,16 @@ export function Sidebar(props: {
           <Show when={Object.keys(sync.data.mcp).length > 0}>
             <box marginTop={0}>
               <text
-                attributes={TextAttributes.BOLD}
                 onMouseUp={() => {
                   if (renderer.getSelection()?.getSelectedText()) return
-                  toggleSection("mcp")
+                  toggleSection("plugins")
                 }}
               >
-                {expandedSections().has("mcp") ? "▼" : "▶"} MCP {`(${Object.keys(sync.data.mcp).length})`}
+                <span style={{ fg: theme.text, bold: expandedSections().has("plugins") }}>
+                  {expandedSections().has("plugins") ? "▼" : "▶"}
+                </span>{" "}
+                <span style={{ fg: theme.text }}>Plugins</span>{" "}
+                <span style={{ fg: theme.textMuted }}>({uniquePlugins().length})</span>
               </text>
               <Show when={expandedSections().has("mcp")}>
                 <For each={Object.entries(sync.data.mcp)}>
@@ -1086,15 +1093,14 @@ export function Sidebar(props: {
                           •
                         </text>
                         <text
-                          wrapMode="word"
                           fg={theme.accent}
-                          attributes={TextAttributes.BOLD}
+                          flexShrink={0}
                           onMouseUp={() => {
                             if (renderer.getSelection()?.getSelectedText()) return
-                            toggleMcpServer(key)
+                            dialog.replace(() => <DialogSessionRename session={props.sessionID} />)
                           }}
                         >
-                          {expandedMcpServers().has(key) ? "▼" : "▶"} {key}
+                          edit
                         </text>
                         <text fg={theme.textMuted}>
                           <Switch>
@@ -1145,13 +1151,16 @@ export function Sidebar(props: {
           <Show when={uniquePlugins().length > 0}>
             <box marginTop={0}>
               <text
-                attributes={TextAttributes.BOLD}
                 onMouseUp={() => {
                   if (renderer.getSelection()?.getSelectedText()) return
                   toggleSection("plugins")
                 }}
               >
-                {expandedSections().has("plugins") ? "▼" : "▶"} Plugins {`(${uniquePlugins().length})`}
+                <span style={{ fg: theme.text, bold: expandedSections().has("plugins") }}>
+                  {expandedSections().has("plugins") ? "▼" : "▶"}
+                </span>{" "}
+                <span style={{ fg: theme.text }}>{"Plugins"}</span>{" "}
+                <span style={{ fg: theme.textMuted }}>{`(${uniquePlugins().length})`}</span>
               </text>
               <Show when={expandedSections().has("plugins")}>
                 <For each={uniquePlugins()}>
@@ -1203,13 +1212,12 @@ export function Sidebar(props: {
               <text attributes={TextAttributes.BOLD}>Todo</text>
               <text
                 fg={theme.accent}
-                attributes={TextAttributes.BOLD}
                 onMouseUp={() => {
                   if (renderer.getSelection()?.getSelectedText()) return
                   handleAddTodo()
                 }}
               >
-                + Add
+                + add
               </text>
             </box>
             <Show when={todo().length > 0}>
@@ -1295,8 +1303,8 @@ export function Sidebar(props: {
         <box marginTop={0} flexDirection="column">
           <box flexDirection="row" alignItems="center" justifyContent="space-between" width="100%">
             <text
-              attributes={TextAttributes.BOLD}
               fg={theme.accent}
+              attributes={expandedSections().has("context") ? TextAttributes.BOLD : undefined}
               onMouseUp={() => {
                 if (renderer.getSelection()?.getSelectedText()) return
                 toggleSection("context")
@@ -1306,13 +1314,12 @@ export function Sidebar(props: {
             </text>
             <text
               fg={theme.accent}
-              attributes={TextAttributes.BOLD}
               onMouseUp={() => {
                 if (renderer.getSelection()?.getSelectedText()) return
                 createContext()
               }}
             >
-              + Add
+              + add
             </text>
           </box>
           <Show when={expandedSections().has("context")}>
@@ -1332,15 +1339,15 @@ export function Sidebar(props: {
                           if (isHighPriority()) return theme.warning
                           return theme.accent
                         }
-                        if (isNegative()) return "#8B0000" // dark red
-                        if (isHighPriority()) return "#B8860B" // dark orange/gold
+                        if (isNegative()) return "#8B0000"
+                        if (isHighPriority()) return "#B8860B"
                         return "#444444"
                       }
 
                       const getTextColor = () => {
                         if (isActive()) return theme.background
-                        if (isNegative()) return "#FFFFFF" // white text on red
-                        if (isHighPriority()) return "#FFFFFF" // white text on orange
+                        if (isNegative()) return "#FFFFFF"
+                        if (isHighPriority()) return "#FFFFFF"
                         return "#000000"
                       }
 
@@ -1400,13 +1407,12 @@ export function Sidebar(props: {
           </Show>
         </box>
 
-        {/* Subagents Section - Always visible below tabs */}
-        {/* Subagents Section - Always visible */}
+        {/* Subagents Section */}
         <box marginTop={0} flexDirection="column">
           <box flexDirection="row" alignItems="center" justifyContent="space-between" width="100%">
             <text
-              attributes={TextAttributes.BOLD}
               fg={theme.accent}
+              attributes={expandedSections().has("subagents") ? TextAttributes.BOLD : undefined}
               onMouseUp={() => {
                 if (renderer.getSelection()?.getSelectedText()) return
                 toggleSection("subagents")
@@ -1416,13 +1422,48 @@ export function Sidebar(props: {
             </text>
             <text
               fg={theme.accent}
-              attributes={TextAttributes.BOLD}
               onMouseUp={() => {
                 if (renderer.getSelection()?.getSelectedText()) return
                 handleAddSubagent()
               }}
             >
-              + Add
+              + add
+            </text>
+          </box>
+          <Show when={expandedSections().has("subagents")}>...</Show>
+        </box>
+
+        {/* Subagents Section - Always visible below tabs */}
+        {/* Subagents Section - Always visible */}
+        <box marginTop={0} flexDirection="column">
+          <box flexDirection="row" alignItems="center" justifyContent="space-between" width="100%">
+            <text
+              fg={theme.accent}
+              attributes={expandedSections().has("context") ? TextAttributes.BOLD : undefined}
+              onMouseUp={() => {
+                if (renderer.getSelection()?.getSelectedText()) return
+                toggleSection("context")
+              }}
+            >
+              {expandedSections().has("context") ? "▼" : "▶"} Context ({contexts().length})
+            </text>
+            <text
+              fg={theme.accent}
+              onMouseUp={() => {
+                if (renderer.getSelection()?.getSelectedText()) return
+                createContext()
+              }}
+            >
+              + add
+            </text>
+            <text
+              fg={theme.accent}
+              onMouseUp={() => {
+                if (renderer.getSelection()?.getSelectedText()) return
+                handleAddSubagent()
+              }}
+            >
+              + add
             </text>
           </box>
           <Show when={expandedSections().has("subagents")}>

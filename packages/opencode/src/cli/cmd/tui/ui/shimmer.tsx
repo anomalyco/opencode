@@ -8,6 +8,7 @@ export type ShimmerProps = {
 }
 
 const DURATION = 2_500
+const THROTTLE_MS = 100 // Update max 10fps instead of 60fps
 
 export function Shimmer(props: ShimmerProps) {
   const timeline = useTimeline({
@@ -17,6 +18,9 @@ export function Shimmer(props: ShimmerProps) {
   const characters = props.text.split("")
   const color = props.color
 
+  // Single throttled update signal instead of per-character
+  const [lastUpdate, setLastUpdate] = createSignal(Date.now())
+
   const shimmerSignals = characters.map((_, i) => {
     const [shimmer, setShimmer] = createSignal(0.4)
     const target = {
@@ -24,6 +28,7 @@ export function Shimmer(props: ShimmerProps) {
       setShimmer,
     }
 
+    let lastThrottledUpdate = 0
     timeline!.add(
       target,
       {
@@ -33,7 +38,13 @@ export function Shimmer(props: ShimmerProps) {
         alternate: true,
         loop: 2,
         onUpdate: () => {
-          target.setShimmer(target.shimmer)
+          // Throttle updates to reduce from 60fps to ~10fps
+          const now = Date.now()
+          if (now - lastThrottledUpdate >= THROTTLE_MS) {
+            target.setShimmer(target.shimmer)
+            lastThrottledUpdate = now
+            setLastUpdate(now) // Trigger single reactive update
+          }
         },
       },
       (i * (DURATION / (props.text.length + 1))) / 2,
@@ -42,15 +53,21 @@ export function Shimmer(props: ShimmerProps) {
     return shimmer
   })
 
+  // Memoize the expensive color calculations
+  const memoizedChars = createMemo(() => {
+    lastUpdate() // Track the throttled updates
+    return characters.map((ch, i) => {
+      const shimmer = shimmerSignals[i]
+      const fg = RGBA.fromInts(color.r * 255, color.g * 255, color.b * 255, shimmer() * 255)
+      return { ch, fg }
+    })
+  })
+
   return (
     <text>
-      {(() => {
-        return characters.map((ch, i) => {
-          const shimmer = shimmerSignals[i]
-          const fg = RGBA.fromInts(color.r * 255, color.g * 255, color.b * 255, shimmer() * 255)
-          return <span style={{ fg }}>{ch}</span>
-        })
-      })()}
+      {memoizedChars().map(({ ch, fg }) => (
+        <span style={{ fg }}>{ch}</span>
+      ))}
     </text>
   )
 }

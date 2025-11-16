@@ -174,5 +174,17 @@
       "solidjs"
     ],
     "timestamp": "2025-11-12T14:26:49.475Z"
+  },
+  {
+    "id": "1763322709930",
+    "content": "CRITICAL LESSON: 60fps Debug Output = Animation Performance Issue\n\nWhen user reports \"debug showing 60fps\", immediately check for:\n1. Animation onUpdate callbacks running every frame\n2. Timeline/shimmer effects with loop:true \n3. Excessive signal updates in render loops\n\nThe shimmer animation was updating reactive signals 60 times per second for each character, causing massive UI slowdowns. Solution: throttle animation updates to 10fps and memoize expensive calculations.\n\nAlso fixed: Multiple shimmers (only last message should shimmer) and session sync race conditions causing CLI lockups.",
+    "tags": [
+      "performance",
+      "animation",
+      "60fps",
+      "shimmer",
+      "render-loop"
+    ],
+    "timestamp": "2025-11-16T19:51:49.930Z"
   }
 ]

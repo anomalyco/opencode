@@ -448,15 +448,20 @@ export function Session() {
   const keybind = useKeybind()
 
   // Sync session data when session changes
-  createEffect(async () => {
-    await sync.session.sync(route.sessionID).catch(() => {
-      toast.show({
-        message: `Session not found: ${route.sessionID}`,
-        variant: "error",
-      })
-      return navigate({ type: "home" })
-    })
-  })
+  createEffect(
+    on(
+      () => route.sessionID,
+      async (sessionID) => {
+        await sync.session.sync(sessionID).catch(() => {
+          toast.show({
+            message: `Session not found: ${sessionID}`,
+            variant: "error",
+          })
+          return navigate({ type: "home" })
+        })
+      },
+    ),
+  )
 
   useKeyboard((evt) => {
     if (dialog.stack.length > 0) return
@@ -1740,8 +1745,9 @@ function AssistantMessage(props: { message: AssistantMessage; parts: Part[]; las
       </Show>
       <Show
         when={
-          !props.message.time.completed ||
-          (props.last && props.parts.some((item) => item.type === "step-finish" && item.reason === "tool-calls"))
+          props.last &&
+          (!props.message.time.completed ||
+            props.parts.some((item) => item.type === "step-finish" && item.reason === "tool-calls"))
         }
       >
         <box
