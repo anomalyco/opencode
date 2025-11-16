@@ -206,7 +206,12 @@ export namespace Config {
       {
         cwd: dir,
       },
-    ).catch(() => {})
+    ).catch((err) => {
+      log.warn("failed to install plugin package", {
+        dir,
+        error: err instanceof Error ? err.message : String(err),
+      })
+    })
   }
 
   const COMMAND_GLOB = new Bun.Glob("command/**/*.md")
@@ -809,7 +814,12 @@ export namespace Config {
         await Bun.write(path.join(Global.Path.config, "config.json"), JSON.stringify(result, null, 2))
         await fs.unlink(path.join(Global.Path.config, "config"))
       })
-      .catch(() => {})
+      .catch((err) => {
+        log.warn("failed to migrate legacy config", {
+          path: Global.Path.config,
+          error: err instanceof Error ? err.message : String(err),
+        })
+      })
 
     return result
   })
@@ -904,7 +914,13 @@ export namespace Config {
           const plugin = data.plugin[i]
           try {
             data.plugin[i] = import.meta.resolve!(plugin, configFilepath)
-          } catch (err) {}
+          } catch (err) {
+            log.warn("failed to resolve plugin path", {
+              plugin,
+              configFilepath,
+              error: err instanceof Error ? err.message : String(err),
+            })
+          }
         }
       }
       return data

@@ -1,7 +1,15 @@
 import path from "path"
 import fs from "fs/promises"
-import { Global } from "../global"
 import z from "zod"
+
+// Defer Global import to avoid circular dependency
+let Global: any = null
+async function getGlobal() {
+  if (!Global) {
+    Global = await import("../global")
+  }
+  return Global.Global
+}
 
 export namespace Log {
   export const Level = z.enum(["DEBUG", "INFO", "WARN", "ERROR"]).meta({ ref: "LogLevel", description: "Log level" })
@@ -54,10 +62,11 @@ export namespace Log {
 
   export async function init(options: Options) {
     if (options.level) level = options.level
-    cleanup(Global.Path.log)
+    const global = await getGlobal()
+    cleanup(global.Path.log)
     if (options.print) return
     logpath = path.join(
-      Global.Path.log,
+      global.Path.log,
       options.dev ? "dev.log" : new Date().toISOString().split(".")[0].replace(/:/g, "") + ".log",
     )
     const logfile = Bun.file(logpath)

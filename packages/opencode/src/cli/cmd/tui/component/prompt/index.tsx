@@ -314,7 +314,10 @@ export function Prompt(props: PromptProps) {
 
       // Handle special /voice command locally
       if (commandName === "voice") {
-        command.trigger("livekit.connect")
+        toast.show({
+          message: "Voice commands have been removed. LiveKit integration is no longer available.",
+          variant: "error",
+        })
         input.extmarks.clear()
         setStore("prompt", {
           input: "",

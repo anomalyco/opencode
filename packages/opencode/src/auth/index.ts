@@ -1,9 +1,20 @@
 import path from "path"
 import { Global } from "../global"
-import fs from "fs/promises"
 import z from "zod"
+import { NamedError } from "../util/error"
+import { Log } from "../util/log"
 
 export namespace Auth {
+  const log = Log.create({ service: "auth" })
+
+  export const CorruptedFileError = NamedError.create(
+    "AuthCorruptedFileError",
+    z.object({
+      filepath: z.string(),
+      message: z.string(),
+    }),
+  )
+
   export const Oauth = z
     .object({
       type: z.literal("oauth"),
@@ -35,30 +46,37 @@ export namespace Auth {
   const filepath = path.join(Global.Path.data, "auth.json")
 
   export async function get(providerID: string) {
-    const file = Bun.file(filepath)
-    return file
-      .json()
-      .catch(() => ({}))
-      .then((x) => x[providerID] as Info | undefined)
+    const data = await all()
+    return data[providerID] as Info | undefined
   }
 
   export async function all(): Promise<Record<string, Info>> {
     const file = Bun.file(filepath)
-    return file.json().catch(() => ({}))
+    const exists = await file.exists()
+    if (!exists) {
+      return {}
+    }
+
+    try {
+      return await file.json()
+    } catch (error) {
+      const errorMessage = error instanceof Error ? error.message : String(error)
+      log.error("Failed to parse auth file", { filepath, error: errorMessage })
+      throw new CorruptedFileError(
+        { filepath, message: errorMessage },
+        { cause: error instanceof Error ? error : undefined },
+      )
+    }
   }
 
   export async function set(key: string, info: Info) {
-    const file = Bun.file(filepath)
     const data = await all()
-    await Bun.write(file, JSON.stringify({ ...data, [key]: info }, null, 2))
-    await fs.chmod(file.name!, 0o600)
+    await Bun.write(filepath, JSON.stringify({ ...data, [key]: info }, null, 2), { mode: 0o600 })
   }
 
   export async function remove(key: string) {
-    const file = Bun.file(filepath)
     const data = await all()
     delete data[key]
-    await Bun.write(file, JSON.stringify(data, null, 2))
-    await fs.chmod(file.name!, 0o600)
+    await Bun.write(filepath, JSON.stringify(data, null, 2), { mode: 0o600 })
   }
 }

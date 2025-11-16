@@ -8,7 +8,10 @@
     "test": "bun test",
     "build": "./script/build.ts",
     "dev": "bun ./src/index.ts",
-    "random": "echo 'Random script updated at $(date)'"
+    "random": "echo 'Random script updated at $(date)'",
+    "lint": "eslint . --max-warnings 0",
+    "lint:fix": "eslint . --fix",
+    "lint:report": "eslint . --format json --output-file eslint-report.json || true"
   },
   "bin": {
     "codesurf": "./bin/codesurf",
@@ -22,6 +25,7 @@
     "@ai-sdk/amazon-bedrock": "2.2.10",
     "@ai-sdk/google-vertex": "3.0.16",
     "@babel/core": "7.28.4",
+    "@eslint/js": "^9.15.0",
     "@octokit/webhooks-types": "7.6.1",
     "@parcel/watcher-darwin-arm64": "2.5.1",
     "@parcel/watcher-darwin-x64": "2.5.1",
@@ -32,12 +36,13 @@
     "@tsconfig/bun": "catalog:",
     "@types/babel__core": "7.20.5",
     "@types/bun": "catalog:",
-    "@types/turndown": "5.0.5",
     "@types/yargs": "17.0.33",
+    "eslint": "^9.15.0",
+    "globals": "^15.12.0",
     "typescript": "catalog:",
+    "typescript-eslint": "^8.15.0",
     "@typescript/native-preview": "catalog:",
     "vscode-languageserver-types": "3.17.5",
-    "why-is-node-running": "3.2.2",
     "zod-to-json-schema": "3.24.5",
     "@opencode-ai/script": "workspace:*"
   },

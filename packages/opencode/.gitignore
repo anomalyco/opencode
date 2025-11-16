@@ -35,3 +35,6 @@ update-stainless-config.sh
 *.log
 .crush/
 .turbo/
+
+# ESLint reports
+eslint-report.json

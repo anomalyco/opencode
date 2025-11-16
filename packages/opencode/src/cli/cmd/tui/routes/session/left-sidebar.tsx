@@ -220,6 +220,7 @@ export function LeftSidebar(props: {
   const getSessionIndicatorState = (session: {
     id: string
     orchestration?: { status?: string }
+    time?: { updated?: number }
   }): SessionIndicatorState => {
     const orchestrationStatus = session.orchestration?.status
     if (orchestrationStatus === "failed") return "error"
@@ -230,11 +231,18 @@ export function LeftSidebar(props: {
     if (pendingPermissions) return "attention"
 
     const messages = sync.data.message?.[session.id] ?? []
-    const lastMessage = messages[messages.length - 1] as any
+    const lastMessage = messages[messages.length - 1] as { error?: unknown; role?: string; time?: { completed?: number } } | undefined
     if (lastMessage?.error) return "error"
 
-    const derivedStatus = sync.session.status(session.id)
-    if (derivedStatus === "working" || derivedStatus === "compacting") return "active"
+    // Only consider a session "working" if it was updated recently (within last 5 minutes)
+    const RECENT_THRESHOLD_MS = 5 * 60 * 1000
+    const sessionUpdatedTime = session.time?.updated ?? 0
+    const isRecentlyUpdated = Date.now() - sessionUpdatedTime < RECENT_THRESHOLD_MS
+
+    if (isRecentlyUpdated) {
+      const derivedStatus = sync.session.status(session.id)
+      if (derivedStatus === "working" || derivedStatus === "compacting") return "active"
+    }
 
     return "idle"
   }

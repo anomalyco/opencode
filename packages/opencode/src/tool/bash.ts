@@ -21,6 +21,127 @@ const SIGKILL_TIMEOUT_MS = 200
 
 export const log = Log.create({ service: "bash-tool" })
 
+// Safe environment variables whitelist
+// These are essential for shell operation and don't contain secrets
+const SAFE_ENV_VARS = new Set([
+  // Shell essentials
+  "PATH",
+  "HOME",
+  "USER",
+  "SHELL",
+  "TERM",
+  "TMPDIR",
+  "TMP",
+  "TEMP",
+
+  // Locale settings
+  "LANG",
+  "LANGUAGE",
+  "LC_ALL",
+  "LC_CTYPE",
+  "LC_NUMERIC",
+  "LC_TIME",
+  "LC_COLLATE",
+  "LC_MONETARY",
+  "LC_MESSAGES",
+  "LC_PAPER",
+  "LC_NAME",
+  "LC_ADDRESS",
+  "LC_TELEPHONE",
+  "LC_MEASUREMENT",
+  "LC_IDENTIFICATION",
+
+  // Editor preferences
+  "EDITOR",
+  "VISUAL",
+  "PAGER",
+
+  // Terminal settings
+  "COLORTERM",
+  "TERM_PROGRAM",
+  "TERM_PROGRAM_VERSION",
+  "COLUMNS",
+  "LINES",
+
+  // Common development tools
+  "DISPLAY",
+  "SSH_AUTH_SOCK",
+  "GPG_TTY",
+  "XDG_RUNTIME_DIR",
+  "XDG_CONFIG_HOME",
+  "XDG_DATA_HOME",
+  "XDG_CACHE_HOME",
+
+  // System info (non-sensitive)
+  "PWD",
+  "OLDPWD",
+  "HOSTNAME",
+  "HOSTTYPE",
+  "MACHTYPE",
+  "OSTYPE",
+  "SHLVL",
+
+  // Node/NPM (non-sensitive)
+  "NODE_ENV",
+  "NODE_PATH",
+  "NPM_CONFIG_PREFIX",
+  "NVM_DIR",
+
+  // Git (non-sensitive)
+  "GIT_EDITOR",
+  "GIT_PAGER",
+
+  // Build tools (non-sensitive)
+  "CC",
+  "CXX",
+  "CFLAGS",
+  "CXXFLAGS",
+  "LDFLAGS",
+
+  // Package managers (non-sensitive)
+  "GOPATH",
+  "GOROOT",
+  "CARGO_HOME",
+  "RUSTUP_HOME",
+  "PYENV_ROOT",
+  "RBENV_ROOT",
+])
+
+/**
+ * Creates a filtered environment object that only includes safe variables.
+ * This prevents leaking API keys and other secrets to child processes.
+ *
+ * @param additionalAllowed - Optional array of additional variable names to allow
+ * @returns Filtered environment object
+ */
+function safeEnvironment(additionalAllowed?: string[]): NodeJS.ProcessEnv {
+  const result: NodeJS.ProcessEnv = {}
+
+  for (const [key, value] of Object.entries(process.env)) {
+    if (value === undefined) continue
+
+    // Check if it's in the safe list
+    if (SAFE_ENV_VARS.has(key)) {
+      result[key] = value
+      continue
+    }
+
+    // Check additional allowed vars
+    if (additionalAllowed?.includes(key)) {
+      result[key] = value
+      continue
+    }
+
+    // Allow LC_* variables not explicitly listed
+    if (key.startsWith("LC_")) {
+      result[key] = value
+      continue
+    }
+  }
+
+  return result
+}
+
 const parser = lazy(async () => {
   const { Parser } = await import("web-tree-sitter")
   const { default: treeWasm } = await import("web-tree-sitter/tree-sitter.wasm" as string, {
@@ -148,9 +269,7 @@ export const BashTool = Tool.define("bash", {
     const shell = process.env["SHELL"]
     const spawnOptions = {
       cwd: Instance.directory,
-      env: {
-        ...process.env,
-      },
+      env: safeEnvironment(),
       stdio: ["ignore", "pipe", "pipe"],
       detached: process.platform !== "win32",
       shell: process.platform === "win32" && shell ? shell : true,

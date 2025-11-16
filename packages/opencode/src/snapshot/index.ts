@@ -111,7 +111,12 @@ export namespace Snapshot {
             })
           } else {
             log.info("file did not exist in snapshot, deleting", { file })
-            await fs.unlink(file).catch(() => {})
+            await fs.unlink(file).catch((err) => {
+              log.debug("failed to delete file during snapshot restore", {
+                file,
+                error: err instanceof Error ? err.message : String(err),
+              })
+            })
           }
         }
         files.add(file)

@@ -294,7 +294,10 @@ export function DialogSelect<T>(props: DialogSelectProps<T>) {
                       paddingRight={1}
                       gap={0}
                     >
-                      <box flexDirection="row" gap={1}>
+                      <box flexDirection="row" gap={1} alignItems="center">
+                        <Show when={props.collapsibleDescriptions && option.description}>
+                          <text fg={active() ? theme.background : theme.textMuted}>{expanded() ? "▼" : "▶"}</text>
+                        </Show>
                         <Option
                           title={option.title}
                           footer={option.footer}
@@ -308,9 +311,6 @@ export function DialogSelect<T>(props: DialogSelectProps<T>) {
                           active={active()}
                           current={isDeepEqual(option.value, props.current)}
                         />
-                        <Show when={props.collapsibleDescriptions && option.description}>
-                          <text fg={active() ? theme.background : theme.textMuted}>{expanded() ? "▼" : "▶"}</text>
-                        </Show>
                       </box>
                       <Show when={props.collapsibleDescriptions && expanded() && option.description}>
                         <box paddingLeft={2} paddingTop={1}>

@@ -154,7 +154,7 @@ export function DialogContextTimeline(props: { sessionID: string }) {
       if ((message as AssistantMessage).error) {
         const err = (message as AssistantMessage).error!
         assistantDetails.push(
-          `Error: ${"data" in err && err.data && typeof err.data === "object" && "message" in err.data ? (err.data as any).message : err.name}`,
+          `Error: ${"data" in err && err.data && typeof err.data === "object" && "message" in err.data ? (err.data as { message: string }).message : err.name}`,
         )
       }
 
@@ -283,7 +283,7 @@ export function DialogContextTimeline(props: { sessionID: string }) {
           maxHeight={timelineListHeight()}
           scrollbarOptions={{ visible: false }}
           renderBefore={function () {
-            const el = this as any
+            const el = this as unknown as { enableMouse?: () => void }
             el.enableMouse?.()
           }}
         >

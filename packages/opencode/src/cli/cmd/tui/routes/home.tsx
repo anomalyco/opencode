@@ -50,7 +50,7 @@ export function Home() {
 
   return (
     <box flexGrow={1} justifyContent="center" alignItems="center" paddingLeft={2} paddingRight={2} gap={1}>
-      <Logo />
+      <Logo variant="bracket" />
       <box width={39}>
         <HelpRow keybind="command_list">Commands</HelpRow>
         <HelpRow keybind="session_list">List sessions</HelpRow>

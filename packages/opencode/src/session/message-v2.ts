@@ -31,6 +31,12 @@ export namespace MessageV2 {
   )
   export type APIError = z.infer<typeof APIError.Schema>
 
+  // TODO: Apply branded types for type-safe ID handling
+  // After migration:
+  // - id: PartID (branded string)
+  // - sessionID: SessionID (branded string)
+  // - messageID: MessageID (branded string)
+  // See src/util/branded-types.ts for branded type utilities
   const PartBase = z.object({
     id: z.string(),
     sessionID: z.string(),
@@ -249,6 +255,8 @@ export namespace MessageV2 {
       ref: "ToolState",
     })
 
+  // TODO: callID should use ToolCallID branded type
+  // After migration: callID: ToolCallID (branded string)
   export const ToolPart = PartBase.extend({
     type: z.literal("tool"),
     callID: z.string(),
@@ -260,6 +268,11 @@ export namespace MessageV2 {
   })
   export type ToolPart = z.infer<typeof ToolPart>
 
+  // TODO: Apply branded types for type-safe ID handling
+  // After migration:
+  // - id: MessageID (branded string)
+  // - sessionID: SessionID (branded string)
+  // See src/util/branded-types.ts for branded type utilities
   const Base = z.object({
     id: z.string(),
     sessionID: z.string(),
@@ -301,6 +314,8 @@ export namespace MessageV2 {
     })
   export type Part = z.infer<typeof Part>
 
+  // TODO: parentID should use MessageID branded type
+  // After migration: parentID: MessageID (branded string)
   export const Assistant = Base.extend({
     role: z.literal("assistant"),
     time: z.object({
@@ -725,4 +740,163 @@ export namespace MessageV2 {
         return new NamedError.Unknown({ message: JSON.stringify(e) }, { cause: e })
     }
   }
+
+  // Type guard functions for Part discriminated union
+  export function isTextPart(part: Part): part is TextPart {
+    return part.type === "text"
+  }
+
+  export function isReasoningPart(part: Part): part is ReasoningPart {
+    return part.type === "reasoning"
+  }
+
+  export function isFilePart(part: Part): part is FilePart {
+    return part.type === "file"
+  }
+
+  export function isToolPart(part: Part): part is ToolPart {
+    return part.type === "tool"
+  }
+
+  export function isStepStartPart(part: Part): part is StepStartPart {
+    return part.type === "step-start"
+  }
+
+  export function isStepFinishPart(part: Part): part is StepFinishPart {
+    return part.type === "step-finish"
+  }
+
+  export function isSnapshotPart(part: Part): part is SnapshotPart {
+    return part.type === "snapshot"
+  }
+
+  export function isPatchPart(part: Part): part is PatchPart {
+    return part.type === "patch"
+  }
+
+  export function isAgentPart(part: Part): part is AgentPart {
+    return part.type === "agent"
+  }
+
+  export function isRetryPart(part: Part): part is RetryPart {
+    return part.type === "retry"
+  }
+
+  // Type guard functions for Message roles
+  export function isUserMessage(msg: Info): msg is User {
+    return msg.role === "user"
+  }
+
+  export function isAssistantMessage(msg: Info): msg is Assistant {
+    return msg.role === "assistant"
+  }
+
+  // Type guard functions for ToolState discriminated union
+  export function isToolStatePending(state: z.infer<typeof ToolState>): state is ToolStatePending {
+    return state.status === "pending"
+  }
+
+  export function isToolStateRunning(state: z.infer<typeof ToolState>): state is ToolStateRunning {
+    return state.status === "running"
+  }
+
+  export function isToolStateCompleted(state: z.infer<typeof ToolState>): state is ToolStateCompleted {
+    return state.status === "completed"
+  }
+
+  export function isToolStateError(state: z.infer<typeof ToolState>): state is ToolStateError {
+    return state.status === "error"
+  }
+
+  // Helper functions for extracting specific parts
+  export function getTextParts(parts: Part[]): TextPart[] {
+    return parts.filter(isTextPart)
+  }
+
+  export function getReasoningParts(parts: Part[]): ReasoningPart[] {
+    return parts.filter(isReasoningPart)
+  }
+
+  export function getFileParts(parts: Part[]): FilePart[] {
+    return parts.filter(isFilePart)
+  }
+
+  export function getToolParts(parts: Part[]): ToolPart[] {
+    return parts.filter(isToolPart)
+  }
+
+  export function getStepStartParts(parts: Part[]): StepStartPart[] {
+    return parts.filter(isStepStartPart)
+  }
+
+  export function getStepFinishParts(parts: Part[]): StepFinishPart[] {
+    return parts.filter(isStepFinishPart)
+  }
+
+  export function getSnapshotParts(parts: Part[]): SnapshotPart[] {
+    return parts.filter(isSnapshotPart)
+  }
+
+  export function getPatchParts(parts: Part[]): PatchPart[] {
+    return parts.filter(isPatchPart)
+  }
+
+  export function getAgentParts(parts: Part[]): AgentPart[] {
+    return parts.filter(isAgentPart)
+  }
+
+  export function getRetryParts(parts: Part[]): RetryPart[] {
+    return parts.filter(isRetryPart)
+  }
+
+  // Helper to get the first part of a specific type
+  export function getFirstTextPart(parts: Part[]): TextPart | undefined {
+    return parts.find(isTextPart)
+  }
+
+  export function getFirstToolPart(parts: Part[]): ToolPart | undefined {
+    return parts.find(isToolPart)
+  }
+
+  export function getFirstFilePart(parts: Part[]): FilePart | undefined {
+    return parts.find(isFilePart)
+  }
+
+  // Helper to check if parts contain a specific type
+  export function hasTextPart(parts: Part[]): boolean {
+    return parts.some(isTextPart)
+  }
+
+  export function hasToolPart(parts: Part[]): boolean {
+    return parts.some(isToolPart)
+  }
+
+  export function hasFilePart(parts: Part[]): boolean {
+    return parts.some(isFilePart)
+  }
+
+  export function hasReasoningPart(parts: Part[]): boolean {
+    return parts.some(isReasoningPart)
+  }
+
+  // Helper to get completed tool parts
+  export function getCompletedToolParts(parts: Part[]): ToolPart[] {
+    return getToolParts(parts).filter((part) => part.state.status === "completed")
+  }
+
+  // Helper to get error tool parts
+  export function getErrorToolParts(parts: Part[]): ToolPart[] {
+    return getToolParts(parts).filter((part) => part.state.status === "error")
+  }
+
+  // Helper to get running tool parts
+  export function getRunningToolParts(parts: Part[]): ToolPart[] {
+    return getToolParts(parts).filter((part) => part.state.status === "running")
+  }
+
+  // Helper to get pending tool parts
+  export function getPendingToolParts(parts: Part[]): ToolPart[] {
+    return getToolParts(parts).filter((part) => part.state.status === "pending")
+  }
 }
+

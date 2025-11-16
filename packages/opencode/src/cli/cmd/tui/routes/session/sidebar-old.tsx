@@ -1,5 +1,5 @@
 import { useSync } from "@tui/context/sync"
-import { createMemo, createSignal, For, Show, Switch, Match, onMount, onCleanup } from "solid-js"
+import { createMemo, createSignal, For, Show, Switch, Match } from "solid-js"
 import { useTheme } from "../../context/theme"
 import { useUIExtensions } from "../../context/ui-extensions"
 import { PluginComponent } from "../../component/plugin-component"
@@ -10,8 +10,8 @@ import { TextAttributes } from "@opentui/core"
 import { ContextUsageBar } from "../../component/context-usage-bar"
 import { useLocal } from "../../context/local"
 import { useKeyboard, useRenderer } from "@opentui/solid"
-import { useToast } from "../../ui/toast"
 import { useSDK } from "../../context/sdk"
+import { useServerStatus } from "../../context/server-status"
 import { useDialog } from "../../ui/dialog"
 import { DialogSelect, type DialogSelectOption } from "../../ui/dialog-select"
 import { useRoute } from "../../context/route"
@@ -24,34 +24,10 @@ export function Sidebar(props: { sessionID: string; onToggle: () => void }) {
   const { navigate } = useRoute()
   const local = useLocal()
   const renderer = useRenderer()
-  const toast = useToast()
   const sdk = useSDK()
   const dialog = useDialog()
+  const serverStatus = useServerStatus()
   const [activeTab, setActiveTab] = createSignal<TabType>("tools")
-  const [serverStatus, setServerStatus] = createSignal<"connected" | "disconnected">("connected")
-
-  // Extract port from URL
-  const port = sdk.url.split(":").pop() || "unknown"
-
-  // Ping server periodically
-  let pingInterval: NodeJS.Timeout
-  onMount(() => {
-    pingInterval = setInterval(async () => {
-      try {
-        const response = await fetch(`${sdk.url}/health`, {
-          method: "GET",
-          signal: AbortSignal.timeout(1000),
-        })
-        setServerStatus(response.ok ? "connected" : "disconnected")
-      } catch {
-        setServerStatus("disconnected")
-      }
-    }, 5000)
-  })
-
-  onCleanup(() => {
-    if (pingInterval) clearInterval(pingInterval)
-  })
 
   const showServerDialog = () => {
     const options: DialogSelectOption<string>[] = [
@@ -71,10 +47,9 @@ export function Sidebar(props: { sessionID: string; onToggle: () => void }) {
       {
         title: "Copy Server URL",
         value: "copy",
-        description: `Copy ${sdk.url} to clipboard`,
+        description: `Copy ${serverStatus.url()} to clipboard`,
         onSelect: (ctx) => {
-          console.log("Server URL:", sdk.url)
-          ctx.clear()
+          Promise.resolve(serverStatus.copyUrl()).finally(() => ctx.clear())
         },
       },
     ]
@@ -459,7 +434,11 @@ export function Sidebar(props: { sessionID: string; onToggle: () => void }) {
             assistantTokens={context().assistantTokens}
             userTokens={context().userTokens}
             toolTokens={context().toolTokens}
-            agentColor={local.agent.color("assistant")}
+            agentColor={
+              typeof local.agent.color("assistant") === "string"
+                ? RGBA.fromHex(String(local.agent.color("assistant")))
+                : local.agent.color("assistant")
+            }
             systemColor={theme.textMuted}
             assistantColor={theme.primary}
             toolColor={theme.accent}

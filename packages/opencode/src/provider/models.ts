@@ -71,7 +71,12 @@ export namespace ModelsDev {
   export async function get() {
     refresh()
     const file = Bun.file(filepath)
-    const result = await file.json().catch(() => {})
+    const result = await file.json().catch((err) => {
+      log.debug("failed to load cached models database", {
+        filepath,
+        error: err instanceof Error ? err.message : String(err),
+      })
+    })
     if (result) return result as Record<string, Provider>
     const json = await data().catch((error) => {
       log.error("failed to load embedded models", {

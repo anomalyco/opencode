@@ -2,8 +2,10 @@ import fs from "fs/promises"
 import { xdgData, xdgCache, xdgConfig, xdgState } from "xdg-basedir"
 import path from "path"
 import os from "os"
+import { Log } from "../util/log"
 
 // CodeSurf Migration: Dynamic app name based on CODESURF_FOLDER env var
+
 // - If CODESURF_FOLDER=".opencode" → Use "opencode" (compatibility mode, shared sessions)
 // - Otherwise → Use "codesurf" (default, independent installation)
 const appFolder = process.env["CODESURF_FOLDER"] || ".codesurf"
@@ -66,9 +68,9 @@ async function migrateFromLegacy() {
     }
 
     // Migration logic removed - app name is now consistently "opencode"
-    console.log("[Info] Using opencode directories")
+    // Note: Logging removed to avoid circular dependency
   } catch (error) {
-    console.error("[Error] Directory setup failed:", error)
+    // Note: Logging removed to avoid circular dependency
   }
 }
 

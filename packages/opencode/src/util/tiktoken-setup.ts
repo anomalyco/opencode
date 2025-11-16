@@ -6,6 +6,9 @@
 import fs from "node:fs"
 import path from "node:path"
 import { fileURLToPath } from "node:url"
+import { Log } from "./log"
+
+const log = Log.create({ service: "tiktoken-setup" })
 
 // Setup WASM file location for tiktoken in compiled binary
 function setupTiktokenWasm() {
@@ -32,7 +35,7 @@ function setupTiktokenWasm() {
         const redirected = wasmSource
         // Debug logging (can be removed after verification)
         if (process.env.DEBUG_TIKTOKEN) {
-          console.log(`[tiktoken-setup] Redirecting WASM load from ${filepath} to ${redirected}`)
+          log.debug(`Redirecting WASM load from ${filepath} to ${redirected}`)
         }
         filepath = redirected
       }
@@ -45,7 +48,7 @@ function setupTiktokenWasm() {
     // console.log(`[tiktoken-setup] Successfully loaded WASM file (${wasmBytes.length} bytes) from ${wasmSource}`)
   } catch (error) {
     // Silently fail - might not be needed in dev environment
-    console.warn("Warning: Could not setup tiktoken WASM:", error)
+    log.warn("Could not setup tiktoken WASM", { error })
   }
 }
 

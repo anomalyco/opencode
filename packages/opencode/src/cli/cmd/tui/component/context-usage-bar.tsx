@@ -36,76 +36,56 @@ export const ContextUsageBar: Component<ContextUsageBarProps> = (props) => {
     return Math.min(Math.floor((length * percent) / 100), length)
   })
 
-  // Calculate proportional blocks based on actual token usage
   const barSegments = createMemo<Array<{ char: string; color: RGBA; type: string }>>(() => {
     const filled = filledCount()
     const length = barLength()
     const empty = length - filled
+    const totalTokens = props.systemTokens + props.assistantTokens + props.userTokens + props.toolTokens
 
     const segments: Array<{ char: string; color: RGBA; type: string }> = []
-
-    // Add left border
     segments.push({ char: "▐", color: props.agentColor, type: "border" })
 
-    if (filled > 0 && props.currentTokens > 0) {
-      // Calculate proportional segment counts
-      const systemCount = Math.max(1, Math.round((props.systemTokens / props.currentTokens) * filled))
-      const assistantCount = Math.max(1, Math.round((props.assistantTokens / props.currentTokens) * filled))
-      const userCount = Math.max(1, Math.round((props.userTokens / props.currentTokens) * filled))
-      const toolCount = Math.max(1, Math.round((props.toolTokens / props.currentTokens) * filled))
+    if (filled > 0 && totalTokens > 0) {
+      const categories = [
+        { type: "system", tokens: props.systemTokens, color: props.systemColor || props.agentColor },
+        { type: "assistant", tokens: props.assistantTokens, color: props.assistantColor || props.agentColor },
+        { type: "user", tokens: props.userTokens, color: props.userColor || props.agentColor },
+        { type: "tool", tokens: props.toolTokens, color: props.toolColor || props.agentColor },
+      ]
 
-      // Adjust to fit exactly
-      let total = systemCount + assistantCount + userCount + toolCount
-      let diff = filled - total
-
-      // Distribute difference (usually ±1-2 segments due to rounding)
-      if (diff > 0) {
-        // Add to largest category
-        if (props.systemTokens >= Math.max(props.assistantTokens, props.userTokens, props.toolTokens)) {
-          total = systemCount + diff + assistantCount + userCount + toolCount
-        } else if (props.assistantTokens >= Math.max(props.userTokens, props.toolTokens)) {
-          total = systemCount + assistantCount + diff + userCount + toolCount
-        } else if (props.userTokens >= props.toolTokens) {
-          total = systemCount + assistantCount + userCount + diff + toolCount
-        } else {
-          total = systemCount + assistantCount + userCount + toolCount + diff
+      const counts = categories.map((category) => {
+        const exact = (category.tokens / totalTokens) * filled
+        return {
+          ...category,
+          exact,
+          count: Math.max(0, Math.floor(exact)),
         }
+      })
+
+      let assigned = counts.reduce((sum, c) => sum + c.count, 0)
+      let remaining = filled - assigned
+
+      while (remaining > 0) {
+        const next = counts
+          .filter((category) => category.tokens > 0)
+          .sort((a, b) => (b.exact - Math.floor(b.exact)) - (a.exact - Math.floor(a.exact)))[0]
+        if (!next) break
+        next.count++
+        remaining--
       }
 
-      // System prompt blocks (white)
-      for (let i = 0; i < Math.round((props.systemTokens / props.currentTokens) * filled); i++) {
-        segments.push({ char: "█", color: props.systemColor || props.agentColor, type: "system" })
-      }
-
-      // Assistant blocks (primary color)
-      for (let i = 0; i < Math.round((props.assistantTokens / props.currentTokens) * filled); i++) {
-        segments.push({
-          char: "█",
-          color: props.assistantColor || props.agentColor,
-          type: "assistant",
-        })
-      }
-
-      // User blocks (secondary color)
-      for (let i = 0; i < Math.round((props.userTokens / props.currentTokens) * filled); i++) {
-        segments.push({ char: "█", color: props.userColor || props.agentColor, type: "user" })
-      }
-
-      // Tool blocks (accent color)
-      const toolSegments = filled - segments.length + 1 // +1 for border we'll add
-      for (let i = 0; i < toolSegments; i++) {
-        segments.push({ char: "█", color: props.toolColor || props.agentColor, type: "tool" })
-      }
+      counts.forEach((category) => {
+        for (let i = 0; i < category.count; i++) {
+          segments.push({ char: "█", color: category.color, type: category.type })
+        }
+      })
     }
 
-    // Empty segments
     for (let i = 0; i < empty; i++) {
       segments.push({ char: "░", color: props.agentColor, type: "empty" })
     }
 
-    // Add right border
     segments.push({ char: "▌", color: props.agentColor, type: "border" })
-
     return segments
   })
 
@@ -130,7 +110,7 @@ export const ContextUsageBar: Component<ContextUsageBarProps> = (props) => {
           <text fg={props.systemColor || props.agentColor}>● System</text>
           <text fg={props.assistantColor || props.agentColor}>● AI</text>
           <text fg={props.userColor || props.agentColor}>● User</text>
-          <text fg={props.toolColor || props.agentColor}>● Tool</text>
+          <text fg={props.toolColor || props.agentColor}>● Tool/Cached</text>
         </box>
       </box>
     </Show>

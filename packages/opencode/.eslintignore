@@ -1,0 +1,30 @@
+# Build artifacts
+dist/
+build/
+.turbo/
+
+# Dependencies
+node_modules/
+
+# Generated files
+*.generated.ts
+*.generated.tsx
+
+# Scripts (often have different requirements)
+script/
+
+# Test coverage
+coverage/
+
+# Type declaration files
+*.d.ts
+
+# Binary directory
+bin/
+
+# Environment files
+.env*
+
+# Cache directories
+.cache/
+.parcel-cache/

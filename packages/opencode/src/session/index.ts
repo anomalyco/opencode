@@ -34,6 +34,15 @@ export namespace Session {
     ).test(title)
   }
 
+  // TODO: Apply branded types for type-safe ID handling
+  // After migration:
+  // - id: SessionID (branded string)
+  // - projectID: ProjectID (branded string)
+  // - parentID: SessionID | undefined
+  // - revert.messageID: MessageID
+  // - revert.partID: PartID
+  // - orchestration.subtaskResults[].sessionID: SessionID
+  // See src/util/branded-types.ts for branded type utilities
   export const Info = z
     .object({
       id: Identifier.schema("session"),

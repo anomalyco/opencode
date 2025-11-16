@@ -98,12 +98,379 @@ function toEventName(name: string) {
   return name.slice(3)
 }
 
-function evalInScope(expr: string, scope: Record<string, any>) {
-  // Scoped evaluator for expressions
-  const keys = Object.keys(scope)
-  const vals = Object.values(scope)
-  // eslint-disable-next-line no-new-func
-  return Function(...keys, `with(this){ return (${expr}); }`).call(scope, ...vals)
+// -----------------------------
+// SECURITY: Safe Expression Parser
+// -----------------------------
+
+// Whitelist of allowed global functions/objects
+const ALLOWED_GLOBALS = new Set([
+  "Math",
+  "Date",
+  "Number",
+  "String",
+  "Boolean",
+  "Array",
+  "Object",
+  "JSON",
+  "parseInt",
+  "parseFloat",
+  "isNaN",
+  "isFinite",
+  "encodeURI",
+  "decodeURI",
+  "encodeURIComponent",
+  "decodeURIComponent",
+])
+
+// Dangerous patterns that should never appear in expressions
+const DANGEROUS_PATTERNS = [
+  /\bconstructor\b/i, // Access to constructor
+  /\b__proto__\b/i, // Prototype pollution
+  /\bprototype\b/i, // Direct prototype access
+  /\beval\b/i, // eval function
+  /\bFunction\b/i, // Function constructor
+  /\bimport\b/i, // Dynamic imports
+  /\brequire\b/i, // CommonJS require
+  /\bprocess\b/i, // Node.js process
+  /\bglobalThis\b/i, // Global object access
+  /\bwindow\b/i, // Browser window
+  /\bdocument\b/i, // DOM access (for security)
+  /\bsetTimeout\b/i, // Async execution
+  /\bsetInterval\b/i, // Async execution
+  /\bsetImmediate\b/i, // Async execution
+  /\bfetch\b/i, // Network requests
+  /\bXMLHttpRequest\b/i, // Network requests
+  /\bWebSocket\b/i, // Network connections
+  /\bexec\b/i, // Command execution patterns
+  /\bspawn\b/i, // Process spawning
+  /\bchild_process\b/i, // Child process module
+  /\bfs\b\s*\./, // File system access
+  /\bmodule\b/, // Module system
+  /\bexports\b/, // Module exports
+  /\b__dirname\b/, // Directory access
+  /\b__filename\b/, // File access
+]
+
+// Maximum expression length to prevent DoS
+const MAX_EXPR_LENGTH = 500
+
+// Maximum nesting depth for property access
+const MAX_DEPTH = 10
+
+// Expression validation result
+interface ValidationResult {
+  valid: boolean
+  error?: string
+}
+
+// Validate expression for security issues
+function validateExpression(expr: string): ValidationResult {
+  // Check length
+  if (expr.length > MAX_EXPR_LENGTH) {
+    return { valid: false, error: `Expression too long (max ${MAX_EXPR_LENGTH} chars)` }
+  }
+
+  // Check for dangerous patterns
+  for (const pattern of DANGEROUS_PATTERNS) {
+    if (pattern.test(expr)) {
+      return { valid: false, error: `Dangerous pattern detected: ${pattern.source}` }
+    }
+  }
+
+  // Check for assignment operators (prevent side effects)
+  if (/(?<![=!<>])=(?![=])/.test(expr) && !expr.includes("==") && !expr.includes("===")) {
+    // Allow == and === but not single =
+    const assignMatch = expr.match(/(?<![=!<>])=(?![=])/)
+    if (assignMatch && !expr.includes("=>")) {
+      // Allow arrow functions
+      return { valid: false, error: "Assignment operators not allowed in expressions" }
+    }
+  }
+
+  // Check for function definitions
+  if (/\bfunction\s*\(/.test(expr) || /=>\s*\{/.test(expr)) {
+    return { valid: false, error: "Function definitions not allowed in expressions" }
+  }
+
+  return { valid: true }
+}
+
+// Parse a simple property access path (e.g., "user.name" or "items[0].title")
+function parsePath(path: string): string[] {
+  const parts: string[] = []
+  let current = ""
+  let depth = 0
+  let inBracket = false
+
+  for (let i = 0; i < path.length; i++) {
+    const char = path[i]
+
+    if (char === "[" && !inBracket) {
+      if (current) {
+        parts.push(current)
+        current = ""
+      }
+      inBracket = true
+      depth++
+    } else if (char === "]" && inBracket) {
+      depth--
+      if (depth === 0) {
+        inBracket = false
+        // Remove quotes if present
+        const key = current.trim().replace(/^["']|["']$/g, "")
+        parts.push(key)
+        current = ""
+      } else {
+        current += char
+      }
+    } else if (char === "." && !inBracket && depth === 0) {
+      if (current) {
+        parts.push(current)
+        current = ""
+      }
+    } else {
+      current += char
+    }
+
+    if (parts.length > MAX_DEPTH) {
+      throw new Error(`Property access depth exceeded (max ${MAX_DEPTH})`)
+    }
+  }
+
+  if (current) {
+    parts.push(current)
+  }
+
+  return parts
+}
+
+// Safely get a value from scope by path
+function safeGetPath(path: string[], scope: Record<string, any>): any {
+  let current: any = scope
+
+  for (const part of path) {
+    if (current == null) {
+      return undefined
+    }
+
+    // Prevent prototype pollution
+    if (part === "__proto__" || part === "constructor" || part === "prototype") {
+      throw new Error(`Access to '${part}' is forbidden`)
+    }
+
+    // Check if it's an array index
+    const index = parseInt(part, 10)
+    if (!isNaN(index) && Array.isArray(current)) {
+      current = current[index]
+    } else if (typeof current === "object" && current !== null) {
+      current = current[part]
+    } else {
+      return undefined
+    }
+  }
+
+  return current
+}
+
+// Safe expression evaluator - only supports basic operations
+function safeEvalExpression(expr: string, scope: Record<string, any>): any {
+  expr = expr.trim()
+
+  // Validate expression first
+  const validation = validateExpression(expr)
+  if (!validation.valid) {
+    throw new Error(`Invalid expression: ${validation.error}`)
+  }
+
+  // Handle empty expression
+  if (!expr) {
+    return undefined
+  }
+
+  // Handle string literals
+  if (/^["'].*["']$/.test(expr)) {
+    return expr.slice(1, -1)
+  }
+
+  // Handle number literals
+  if (/^-?\d+(\.\d+)?$/.test(expr)) {
+    return parseFloat(expr)
+  }
+
+  // Handle boolean literals
+  if (expr === "true") return true
+  if (expr === "false") return false
+  if (expr === "null") return null
+  if (expr === "undefined") return undefined
+
+  // Handle ternary operator: condition ? trueVal : falseVal
+  const ternaryMatch = expr.match(/^(.+?)\s*\?\s*(.+?)\s*:\s*(.+)$/)
+  if (ternaryMatch) {
+    const [, condExpr, trueExpr, falseExpr] = ternaryMatch
+    const condition = safeEvalExpression(condExpr, scope)
+    return condition ? safeEvalExpression(trueExpr, scope) : safeEvalExpression(falseExpr, scope)
+  }
+
+  // Handle logical OR: a || b
+  if (expr.includes("||")) {
+    const parts = expr.split("||").map((p) => p.trim())
+    for (const part of parts) {
+      const val = safeEvalExpression(part, scope)
+      if (val) return val
+    }
+    return false
+  }
+
+  // Handle logical AND: a && b
+  if (expr.includes("&&")) {
+    const parts = expr.split("&&").map((p) => p.trim())
+    let result: any = true
+    for (const part of parts) {
+      result = safeEvalExpression(part, scope)
+      if (!result) return result
+    }
+    return result
+  }
+
+  // Handle comparison operators
+  const comparisonOps = ["===", "!==", "==", "!=", "<=", ">=", "<", ">"]
+  for (const op of comparisonOps) {
+    const idx = expr.indexOf(op)
+    if (idx !== -1) {
+      const left = safeEvalExpression(expr.slice(0, idx), scope)
+      const right = safeEvalExpression(expr.slice(idx + op.length), scope)
+      switch (op) {
+        case "===":
+          return left === right
+        case "!==":
+          return left !== right
+        case "==":
+          return left == right
+        case "!=":
+          return left != right
+        case "<=":
+          return left <= right
+        case ">=":
+          return left >= right
+        case "<":
+          return left < right
+        case ">":
+          return left > right
+      }
+    }
+  }
+
+  // Handle arithmetic operators (simple cases)
+  if (expr.includes("+") && !expr.includes("++")) {
+    const parts = expr.split("+").map((p) => p.trim())
+    const firstVal = safeEvalExpression(parts[0], scope)
+    return parts.slice(1).reduce((acc: string | number, part: string) => {
+      const val = safeEvalExpression(part, scope)
+      return typeof acc === "number" && typeof val === "number" ? acc + val : String(acc) + String(val)
+    }, firstVal as string | number)
+  }
+
+  if (expr.includes("-") && !expr.includes("--") && !expr.startsWith("-")) {
+    const parts = expr.split("-").map((p) => p.trim())
+    return parts.reduce((acc, part, i) => {
+      const val = safeEvalExpression(part, scope)
+      return i === 0 ? val : acc - val
+    }, 0)
+  }
+
+  if (expr.includes("*") && !expr.includes("**")) {
+    const parts = expr.split("*").map((p) => p.trim())
+    return parts.reduce((acc, part) => {
+      const val = safeEvalExpression(part, scope)
+      return acc * val
+    }, 1)
+  }
+
+  if (expr.includes("/")) {
+    const parts = expr.split("/").map((p) => p.trim())
+    return parts.reduce((acc, part, i) => {
+      const val = safeEvalExpression(part, scope)
+      return i === 0 ? val : acc / val
+    }, 0)
+  }
+
+  if (expr.includes("%")) {
+    const parts = expr.split("%").map((p) => p.trim())
+    return parts.reduce((acc, part, i) => {
+      const val = safeEvalExpression(part, scope)
+      return i === 0 ? val : acc % val
+    }, 0)
+  }
+
+  // Handle logical NOT: !value
+  if (expr.startsWith("!")) {
+    return !safeEvalExpression(expr.slice(1), scope)
+  }
+
+  // Handle parentheses
+  if (expr.startsWith("(") && expr.endsWith(")")) {
+    return safeEvalExpression(expr.slice(1, -1), scope)
+  }
+
+  // Handle function calls: func() or obj.method()
+  const funcCallMatch = expr.match(/^([\w.]+)\((.*)\)$/)
+  if (funcCallMatch) {
+    const [, funcPath, argsStr] = funcCallMatch
+    const pathParts = parsePath(funcPath)
+    const func = safeGetPath(pathParts, scope)
+
+    if (typeof func !== "function") {
+      throw new Error(`'${funcPath}' is not a function`)
+    }
+
+    // Parse arguments (simple comma-separated values)
+    const args: any[] = []
+    if (argsStr.trim()) {
+      // Simple argument parsing (doesn't handle nested function calls)
+      let depth = 0
+      let current = ""
+      for (const char of argsStr) {
+        if (char === "(" || char === "[" || char === "{") depth++
+        else if (char === ")" || char === "]" || char === "}") depth--
+
+        if (char === "," && depth === 0) {
+          args.push(safeEvalExpression(current.trim(), scope))
+          current = ""
+        } else {
+          current += char
+        }
+      }
+      if (current.trim()) {
+        args.push(safeEvalExpression(current.trim(), scope))
+      }
+    }
+
+    // Call the function with evaluated arguments
+    return func(...args)
+  }
+
+  // Handle property access: obj.prop or obj[key]
+  const pathParts = parsePath(expr)
+  if (pathParts.length > 0) {
+    return safeGetPath(pathParts, scope)
+  }
+
+  throw new Error(`Unable to evaluate expression: ${expr}`)
+}
+
+// Secure wrapper for evalInScope with logging
+function evalInScope(expr: string, scope: Record<string, any>): any {
+  try {
+    return safeEvalExpression(expr, scope)
+  } catch (error) {
+    // Log security violations for auditing
+    console.warn(`[xml-runtime] Expression evaluation blocked:`, {
+      expression: expr.slice(0, 100), // Truncate for logging
+      error: error instanceof Error ? error.message : String(error),
+      timestamp: new Date().toISOString(),
+    })
+    throw error
+  }
 }
 
 function reactiveApply(apply: () => void) {

@@ -19,3 +19,4 @@ dist
 .serena/
 /.claude.backup.*
 packages/opencode-kanban/
+/.claude/tsc-cache

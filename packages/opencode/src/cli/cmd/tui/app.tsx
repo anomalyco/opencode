@@ -2,7 +2,7 @@ import { render, useKeyboard, useRenderer, useTerminalDimensions } from "@opentu
 import { Clipboard } from "@tui/util/clipboard"
 import { TextAttributes } from "@opentui/core"
 import { RouteProvider, useRoute, type Route, type SessionRoute } from "@tui/context/route"
-import { Switch, Match, createEffect, untrack, ErrorBoundary, createSignal, For, Show } from "solid-js"
+import { Switch, Match, createEffect, untrack, ErrorBoundary, createSignal, For, Show, on } from "solid-js"
 import { Installation } from "@/installation"
 import { Global } from "@/global"
 import { DialogProvider, useDialog } from "@tui/ui/dialog"
@@ -12,6 +12,7 @@ import { LocalProvider, useLocal } from "@tui/context/local"
 import { DialogModel } from "@tui/component/dialog-model"
 import { DialogStatus } from "@tui/component/dialog-status"
 import { DialogThemeList } from "@tui/component/dialog-theme-list"
+import { ServerStatusProvider } from "./context/server-status"
 import { DialogHelp } from "./ui/dialog-help"
 import { CommandProvider, useCommandDialog } from "@tui/component/dialog-command"
 import { DialogKanban } from "./component/dialog-kanban"
@@ -35,6 +36,7 @@ import { KVProvider, useKV } from "./context/kv"
 import { UIExtensionsProvider, useUIExtensions } from "./context/ui-extensions"
 import { PluginComponent } from "./component/plugin-component"
 import { ArgsProvider } from "./context/args"
+import { TransitionAnimation } from "./component/transition-animation"
 
 async function getTerminalBackgroundColor(): Promise<"dark" | "light"> {
   // can't set raw mode if not a TTY
@@ -137,23 +139,25 @@ export function tui(input: {
                       >
                         <SyncProvider>
                           <UIExtensionsProvider>
-                            <KeybindProvider>
-                              <ThemeProvider mode={mode}>
-                                <LocalProvider
-                                  initialModel={input.model}
-                                  initialAgent={input.agent}
-                                  initialPrompt={input.prompt}
-                                >
-                                  <DialogProvider>
-                                    <CommandProvider>
-                                      <PromptHistoryProvider>
-                                        <App />
-                                      </PromptHistoryProvider>
-                                    </CommandProvider>
-                                  </DialogProvider>
-                                </LocalProvider>
-                              </ThemeProvider>
-                            </KeybindProvider>
+                            <ServerStatusProvider>
+                              <KeybindProvider>
+                                <ThemeProvider mode={mode}>
+                                  <LocalProvider
+                                    initialModel={input.model}
+                                    initialAgent={input.agent}
+                                    initialPrompt={input.prompt}
+                                  >
+                                    <DialogProvider>
+                                      <CommandProvider>
+                                        <PromptHistoryProvider>
+                                          <App />
+                                        </PromptHistoryProvider>
+                                      </CommandProvider>
+                                    </DialogProvider>
+                                  </LocalProvider>
+                                </ThemeProvider>
+                              </KeybindProvider>
+                            </ServerStatusProvider>
                           </UIExtensionsProvider>
                         </SyncProvider>
                       </ArgsProvider>
@@ -190,6 +194,33 @@ function App() {
   const { theme, mode, setMode } = useTheme()
   const exit = useExit()
   const uiExtensions = useUIExtensions()
+
+  // Transition animation state
+  const [isTransitioning, setIsTransitioning] = createSignal(false)
+  const [previousRoute, setPreviousRoute] = createSignal<string>("home")
+  const [pendingSessionRoute, setPendingSessionRoute] = createSignal<string | null>(null)
+
+  // Track route changes for animation
+  createEffect(
+    on(
+      () => route.data.type,
+      (currentType, prevType) => {
+        // Animate when going from home to session
+        if (prevType === "home" && currentType === "session" && !isTransitioning()) {
+          const sessionRoute = route.data as SessionRoute
+          setPendingSessionRoute(sessionRoute.sessionID)
+          setIsTransitioning(true)
+          // Route will actually change after animation completes
+        }
+        setPreviousRoute(currentType)
+      },
+    ),
+  )
+
+  const handleTransitionComplete = () => {
+    setIsTransitioning(false)
+    setPendingSessionRoute(null)
+  }
 
   createEffect(() => {
     console.log(JSON.stringify(route.data))
@@ -489,6 +520,7 @@ function App() {
             <Session />
           </Match>
         </Switch>
+        <TransitionAnimation active={isTransitioning()} onComplete={handleTransitionComplete} />
       </box>
       <box
         height={1}

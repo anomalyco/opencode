@@ -9,7 +9,8 @@
     "add_memory",
     "todoread",
     "switch_mode",
-    "glob"
+    "glob",
+    "todowrite"
   ],
   "$schema": "https://opencode.ai/config.json"
 }

@@ -2,6 +2,7 @@ import z from "zod"
 import { Tool } from "./tool"
 import DESCRIPTION from "./cc-grep.txt"
 import { GrepTool } from "./grep"
+import { assertValidRegex } from "../util/regex-validator"
 
 /**
  * cc_grep - Anthropic-native content search tool
@@ -24,6 +25,9 @@ export const ClaudeCodeGrepTool = Tool.define("cc_grep", {
       .describe("The directory to search in. Defaults to the current working directory."),
   }),
   async execute(params, ctx) {
+    // Validate regex pattern for ReDoS vulnerabilities before delegating
+    assertValidRegex(params.pattern)
+
     // Delegate to the standard grep tool
     const grepTool = await GrepTool.init()
     return grepTool.execute(params, ctx)

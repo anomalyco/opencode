@@ -2,7 +2,7 @@ import z from "zod"
 import path from "path"
 import { Config } from "../config/config"
 import { mergeDeep, sortBy } from "remeda"
-import { NoSuchModelError, type LanguageModel, type Provider as SDK } from "ai"
+import { NoSuchModelError, type LanguageModel, type Provider as AIProvider } from "ai"
 import { Log } from "../util/log"
 import { BunProc } from "../bun"
 import { Plugin } from "../plugin"
@@ -17,11 +17,51 @@ import { iife } from "@/util/iife"
 export namespace Provider {
   const log = Log.create({ service: "provider" })
 
-  type CustomLoader = (provider: ModelsDev.Provider) => Promise<{
+  /**
+   * Extended SDK interface that accounts for provider-specific methods.
+   * Different AI SDK providers expose different methods:
+   * - Standard: `sdk.languageModel(id)`
+   * - OpenAI: `sdk.responses(id)` or `sdk.chat(id)`
+   * - OpenRouter: Callable as `sdk(id)`
+   */
+  interface ProviderSDK extends AIProvider {
+    /** OpenAI-specific: Returns response-based language model */
+    responses?: (modelId: string) => LanguageModel
+    /** OpenAI-specific: Returns chat-based language model */
+    chat?: (modelId: string) => LanguageModel
+    /** Some providers are callable directly (e.g., OpenRouter) */
+    (modelId: string): LanguageModel
+  }
+
+  /**
+   * Common options passed to provider SDK initialization and model retrieval.
+   */
+  interface ProviderOptions {
+    apiKey?: string
+    baseURL?: string
+    timeout?: number | false
+    headers?: Record<string, string>
+    cacheControl?: boolean
+    region?: string
+    project?: string
+    location?: string
+    credentialProvider?: () => Promise<unknown>
+    includeUsage?: boolean
+    fetch?: (input: RequestInfo | URL, init?: RequestInit) => Promise<Response>
+    useCompletionUrls?: boolean
+    [key: string]: unknown
+  }
+
+  /**
+   * Return type for custom provider loaders.
+   */
+  interface CustomLoaderResult {
     autoload: boolean
-    getModel?: (sdk: any, modelID: string, options?: Record<string, any>) => Promise<any>
-    options?: Record<string, any>
-  }>
+    getModel?: (sdk: ProviderSDK, modelID: string, options?: ProviderOptions) => Promise<LanguageModel>
+    options?: ProviderOptions
+  }
+
+  type CustomLoader = (provider: ModelsDev.Provider) => Promise<CustomLoaderResult>
 
   type Source = "env" | "config" | "custom" | "api"
 
@@ -72,7 +112,7 @@ export namespace Provider {
             "X-Title": "Codesurf Auto",
           },
         },
-        async getModel(sdk: any, modelID: string) {
+        async getModel(sdk: ProviderSDK, modelID: string): Promise<LanguageModel> {
           log.info("codesurf routing", { modelID })
 
           // All three auto models use smart free model selection from OpenRouter
@@ -107,7 +147,10 @@ export namespace Provider {
     openai: async () => {
       return {
         autoload: false,
-        async getModel(sdk: any, modelID: string, _options?: Record<string, any>) {
+        async getModel(sdk: ProviderSDK, modelID: string, _options?: ProviderOptions): Promise<LanguageModel> {
+          if (!sdk.responses) {
+            throw new Error("OpenAI SDK does not support responses method")
+          }
           return sdk.responses(modelID)
         },
         options: {},
@@ -116,10 +159,16 @@ export namespace Provider {
     azure: async () => {
       return {
         autoload: false,
-        async getModel(sdk: any, modelID: string, options?: Record<string, any>) {
-          if (options?.["useCompletionUrls"]) {
+        async getModel(sdk: ProviderSDK, modelID: string, options?: ProviderOptions): Promise<LanguageModel> {
+          if (options?.useCompletionUrls) {
+            if (!sdk.chat) {
+              throw new Error("Azure SDK does not support chat method")
+            }
             return sdk.chat(modelID)
           } else {
+            if (!sdk.responses) {
+              throw new Error("Azure SDK does not support responses method")
+            }
             return sdk.responses(modelID)
           }
         },
@@ -139,7 +188,7 @@ export namespace Provider {
           region,
           credentialProvider: fromNodeProviderChain(),
         },
-        async getModel(sdk: any, modelID: string, _options?: Record<string, any>) {
+        async getModel(sdk: ProviderSDK, modelID: string, _options?: ProviderOptions): Promise<LanguageModel> {
           let regionPrefix = region.split("-")[0]
 
           switch (regionPrefix) {
@@ -223,7 +272,7 @@ export namespace Provider {
             "X-Title": "OpenCode Freemium",
           },
         },
-        async getModel(sdk: any, modelID: string) {
+        async getModel(sdk: ProviderSDK, modelID: string): Promise<LanguageModel> {
           const freeModels = await Freemium.getFreeModels()
           const selected = Freemium.selectBestModel(freeModels)
           if (!selected) throw new Error("No free models available")
@@ -255,7 +304,7 @@ export namespace Provider {
           project,
           location,
         },
-        async getModel(sdk: any, modelID: string) {
+        async getModel(sdk: ProviderSDK, modelID: string): Promise<LanguageModel> {
           const id = String(modelID).trim()
           return sdk.languageModel(id)
         },
@@ -272,7 +321,7 @@ export namespace Provider {
           project,
           location,
         },
-        async getModel(sdk: any, modelID: string) {
+        async getModel(sdk: ProviderSDK, modelID: string): Promise<LanguageModel> {
           const id = String(modelID).trim()
           return sdk.languageModel(id)
         },
@@ -310,14 +359,17 @@ export namespace Provider {
       }
     }
 
-    const providers: {
-      [providerID: string]: {
-        source: Source
-        info: ModelsDev.Provider
-        getModel?: (sdk: any, modelID: string, options?: Record<string, any>) => Promise<any>
-        options: Record<string, any>
-      }
-    } = {}
+    /**
+     * Internal representation of a loaded provider with its configuration.
+     */
+    interface LoadedProvider {
+      source: Source
+      info: ModelsDev.Provider
+      getModel?: (sdk: ProviderSDK, modelID: string, options?: ProviderOptions) => Promise<LanguageModel>
+      options: ProviderOptions
+    }
+
+    const providers: Record<string, LoadedProvider> = {}
     const models = new Map<
       string,
       {
@@ -328,23 +380,23 @@ export namespace Provider {
         npm?: string
       }
     >()
-    const sdk = new Map<number, SDK>()
-    // Maps `${provider}/${key}` to the provider’s actual model ID for custom aliases.
+    const sdk = new Map<number, AIProvider>()
+    // Maps `${provider}/${key}` to the provider's actual model ID for custom aliases.
     const realIdByKey = new Map<string, string>()
 
     log.info("init")
 
     function mergeProvider(
       id: string,
-      options: Record<string, any>,
+      options: ProviderOptions,
       source: Source,
-      getModel?: (sdk: any, modelID: string, options?: Record<string, any>) => Promise<any>,
-    ) {
+      getModel?: (sdk: ProviderSDK, modelID: string, options?: ProviderOptions) => Promise<LanguageModel>,
+    ): void {
       const provider = providers[id]
       if (!provider) {
         const info = database[id]
         if (!info) return
-        if (info.api && !options["baseURL"]) options["baseURL"] = info.api
+        if (info.api && !options.baseURL) options.baseURL = info.api
         providers[id] = {
           source,
           info,
@@ -353,7 +405,7 @@ export namespace Provider {
         }
         return
       }
-      provider.options = mergeDeep(provider.options, options)
+      provider.options = mergeDeep(provider.options, options) as ProviderOptions
       provider.source = source
       provider.getModel = getModel ?? provider.getModel
     }
@@ -625,16 +677,16 @@ export namespace Provider {
     return state().then((state) => state.providers)
   }
 
-  async function getSDK(provider: ModelsDev.Provider, model: ModelsDev.Model) {
+  async function getSDK(provider: ModelsDev.Provider, model: ModelsDev.Model): Promise<AIProvider> {
     return (async () => {
       using _ = log.time("getSDK", {
         providerID: provider.id,
       })
       const s = await state()
       const pkg = model.provider?.npm ?? provider.npm ?? provider.id
-      const options = { ...s.providers[provider.id]?.options }
-      if (pkg.includes("@ai-sdk/openai-compatible") && options["includeUsage"] === undefined) {
-        options["includeUsage"] = true
+      const options: ProviderOptions = { ...s.providers[provider.id]?.options }
+      if (pkg.includes("@ai-sdk/openai-compatible") && options.includeUsage === undefined) {
+        options.includeUsage = true
       }
       const key = Bun.hash.xxHash32(JSON.stringify({ pkg, options }))
       const existing = s.sdk.get(key)
@@ -657,15 +709,17 @@ export namespace Provider {
       const modPath =
         provider.id === "google-vertex-anthropic" ? `${installedPath}/dist/anthropic/index.mjs` : installedPath
       const mod = await import(modPath)
-      if (options["timeout"] !== undefined && options["timeout"] !== null) {
+      if (options.timeout !== undefined && options.timeout !== null) {
         // Preserve custom fetch if it exists, wrap it with timeout logic
-        const customFetch = options["fetch"]
-        options["fetch"] = async (input: any, init?: BunFetchRequestInit) => {
+        const customFetch = options.fetch
+        options.fetch = async (input: RequestInfo | URL, init?: RequestInit): Promise<Response> => {
           const { signal, ...rest } = init ?? {}
 
           const signals: AbortSignal[] = []
           if (signal) signals.push(signal)
-          if (options["timeout"] !== false) signals.push(AbortSignal.timeout(options["timeout"]))
+          if (options.timeout !== false && typeof options.timeout === "number") {
+            signals.push(AbortSignal.timeout(options.timeout))
+          }
 
           const combined = signals.length > 1 ? AbortSignal.any(signals) : signals[0]
 
@@ -678,13 +732,15 @@ export namespace Provider {
           })
         }
       }
-      const fn = mod[Object.keys(mod).find((key) => key.startsWith("create"))!]
+      const fn = mod[Object.keys(mod).find((key) => key.startsWith("create"))!] as (
+        options: ProviderOptions & { name: string },
+      ) => AIProvider
       const loaded = fn({
         name: provider.id,
         ...options,
       })
       s.sdk.set(key, loaded)
-      return loaded as SDK
+      return loaded
     })().catch((e) => {
       throw new InitError({ providerID: provider.id }, { cause: e })
     })
@@ -714,7 +770,7 @@ export namespace Provider {
       const keyReal = `${providerID}/${modelID}`
       const realID = s.realIdByKey.get(keyReal) ?? info.id
       const language = provider.getModel
-        ? await provider.getModel(sdk, realID, provider.options)
+        ? await provider.getModel(sdk as ProviderSDK, realID, provider.options)
         : sdk.languageModel(realID)
       log.info("found", { providerID, modelID })
       s.models.set(key, {

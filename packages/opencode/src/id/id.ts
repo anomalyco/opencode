@@ -1,5 +1,21 @@
 import z from "zod"
 import { randomBytes } from "crypto"
+import type { SessionID, MessageID, PermissionID, UserID, PartID } from "../util/branded-types"
+
+// Re-export branded types for convenient access
+export type { SessionID, MessageID, PermissionID, UserID, PartID } from "../util/branded-types"
+export {
+  asSessionID,
+  asMessageID,
+  asPermissionID,
+  asUserID,
+  asPartID,
+  asProjectID,
+  asToolCallID,
+  unwrapID,
+  isSameID,
+} from "../util/branded-types"
+export type { ProjectID, ToolCallID, Brand } from "../util/branded-types"
 
 export namespace Identifier {
   const prefixes = {
@@ -9,6 +25,15 @@ export namespace Identifier {
     user: "usr",
     part: "prt",
   } as const
+
+  // Map prefix keys to their branded types
+  type PrefixToBrandedType = {
+    session: SessionID
+    message: MessageID
+    permission: PermissionID
+    user: UserID
+    part: PartID
+  }
 
   export function schema(prefix: keyof typeof prefixes) {
     return z.string().startsWith(prefixes[prefix])
@@ -20,12 +45,26 @@ export namespace Identifier {
   let lastTimestamp = 0
   let counter = 0
 
-  export function ascending(prefix: keyof typeof prefixes, given?: string) {
-    return generateID(prefix, false, given)
+  /**
+   * Generate an ascending (time-ordered) ID for the given prefix
+   * Returns a branded type for compile-time type safety
+   */
+  export function ascending<P extends keyof typeof prefixes>(
+    prefix: P,
+    given?: string,
+  ): PrefixToBrandedType[P] {
+    return generateID(prefix, false, given) as PrefixToBrandedType[P]
   }
 
-  export function descending(prefix: keyof typeof prefixes, given?: string) {
-    return generateID(prefix, true, given)
+  /**
+   * Generate a descending (reverse time-ordered) ID for the given prefix
+   * Returns a branded type for compile-time type safety
+   */
+  export function descending<P extends keyof typeof prefixes>(
+    prefix: P,
+    given?: string,
+  ): PrefixToBrandedType[P] {
+    return generateID(prefix, true, given) as PrefixToBrandedType[P]
   }
 
   function generateID(prefix: keyof typeof prefixes, descending: boolean, given?: string): string {

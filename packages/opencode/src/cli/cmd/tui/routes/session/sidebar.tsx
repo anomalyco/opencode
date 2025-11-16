@@ -1,17 +1,16 @@
 import { useSync } from "@tui/context/sync"
-import { createMemo, createSignal, For, Show, Switch, Match, onMount, onCleanup } from "solid-js"
+import { createMemo, createSignal, For, Show, Switch, Match, onMount, type JSX } from "solid-js"
 import { useTheme } from "../../context/theme"
 import { useUIExtensions } from "../../context/ui-extensions"
 import { PluginComponent } from "../../component/plugin-component"
 import { Locale } from "@/util/locale"
 import path from "path"
-import type { AssistantMessage } from "@opencode-ai/sdk"
-import { TextAttributes, RGBA } from "@opentui/core"
+import type { AssistantMessage, Session, Todo as SDKTodo } from "@opencode-ai/sdk"
+import { RGBA, TextAttributes } from "@opentui/core"
 import { ContextUsageBar } from "../../component/context-usage-bar"
 import { useLocal } from "../../context/local"
 import { resolveThemeColor } from "../../context/theme"
 import { useKeyboard, useRenderer } from "@opentui/solid"
-
 import { useToast } from "../../ui/toast"
 import { useSDK } from "../../context/sdk"
 import { useDialog } from "../../ui/dialog"
@@ -28,6 +27,7 @@ import { Todo } from "@/session/todo"
 import { Perf } from "@/util/perf"
 import { ContextIntelligence } from "@/session/context-intelligence"
 import { DialogContextTimeline } from "./dialog-context-timeline"
+import { useServerStatus } from "../../context/server-status"
 type TabType = "files" | "todos" | "tools" | "subagents"
 
 function parseSubagentTitle(title: string): { agent?: string; description: string } {
@@ -92,6 +92,22 @@ const CONTEXT_STOP_WORDS = new Set([
   "would",
 ])
 
+const currencyFormatter = new Intl.NumberFormat("en-US", { style: "currency", currency: "USD" })
+const emptyContextSummary = {
+  tokens: 0,
+  tokenLimit: 0,
+  tokensFormatted: "0",
+  percentage: 0,
+  systemTokens: 0,
+  assistantTokens: 0,
+  userTokens: 0,
+  toolTokens: 0,
+  freePercentage: 0,
+  promptTokens: 0,
+  cachedTokens: 0,
+  cachedTokensFormatted: "0",
+}
+
 function generateContextTags(content: string): string[] {
   const cleaned = Locale.stripMarkdown(content).toLowerCase()
   const words = cleaned.split(/[^a-z0-9#]+/g).filter(Boolean)
@@ -149,14 +165,8 @@ export function Sidebar(props: {
   const toast = useToast()
   const sdk = useSDK()
   const dialog = useDialog()
+  const serverStatus = useServerStatus()
   const [activeTab, setActiveTab] = createSignal<TabType>("tools")
-  const [serverStatus, setServerStatus] = createSignal<"connected" | "disconnected">("connected")
-
-  // Extract port from URL
-  const port = sdk.url.split(":").pop() || "unknown"
-
-  // Monitor server status from SSE connection instead of polling
-  // The sync context already handles connection monitoring via EventSource
 
   const showServerDialog = () => {
     const options: DialogSelectOption<string>[] = [
@@ -176,10 +186,9 @@ export function Sidebar(props: {
       {
         title: "Copy Server URL",
         value: "copy",
-        description: `Copy ${sdk.url} to clipboard`,
+        description: `Copy ${serverStatus.url()} to clipboard`,
         onSelect: (ctx) => {
-          console.log("Server URL:", sdk.url)
-          ctx.clear()
+          Promise.resolve(serverStatus.copyUrl()).finally(() => ctx.clear())
         },
       },
     ]
@@ -187,9 +196,9 @@ export function Sidebar(props: {
     dialog.replace(() => <DialogSelect title="Server Management" options={options} />)
   }
   const [expandedMcpServers, setExpandedMcpServers] = createSignal<Set<string>>(new Set())
-  const [mcpTools, setMcpTools] = createSignal<Record<string, Record<string, any>>>({})
+  const [mcpTools, setMcpTools] = createSignal<Record<string, Record<string, unknown>>>({})
   const [expandedPlugins, setExpandedPlugins] = createSignal<Set<string>>(new Set())
-  const [pluginTools, setPluginTools] = createSignal<Record<string, any[]>>({})
+  const [pluginTools, setPluginTools] = createSignal<Record<string, Array<{ name: string } | string>>>({})
   const [selectedFiles, setSelectedFiles] = createSignal<Set<string>>(new Set())
   const [commitMessage, setCommitMessage] = createSignal("")
   const [isCommitting, setIsCommitting] = createSignal(false)
@@ -204,6 +213,19 @@ export function Sidebar(props: {
   >([])
   const [contexts, setContexts] = createSignal<Array<{ id: string; name: string; content: string }>>([])
   const [activeContextIds, setActiveContextIds] = createSignal<Set<string>>(new Set())
+  const sortedContexts = createMemo(() => {
+    return [...contexts()].sort((a, b) => {
+      const aIsHighPriority = a.name.startsWith("!")
+      const bIsHighPriority = b.name.startsWith("!")
+      if (aIsHighPriority && !bIsHighPriority) return -1
+      if (!aIsHighPriority && bIsHighPriority) return 1
+      const aIsNegative = a.name.startsWith("-")
+      const bIsNegative = b.name.startsWith("-")
+      if (!aIsNegative && bIsNegative) return -1
+      if (aIsNegative && !bIsNegative) return 1
+      return 0
+    })
+  })
 
   const uiExtensions = useUIExtensions()
   const session = createMemo(() => sync.session.get(props.sessionID)!)
@@ -227,6 +249,51 @@ export function Sidebar(props: {
     return [...validOptimistic, ...server]
   })
   const messages = createMemo(() => sync.data.message[props.sessionID] ?? [])
+  const messageStats = createMemo(
+    Perf.track("sidebar.messageStats", () => {
+      const stats: {
+        toolCounts: Map<string, number>
+        lastAssistant?: AssistantMessage
+        lastAssistantTokenLimit: number
+        totalCost: number
+        savedCost: number
+      } = {
+        toolCounts: new Map(),
+        lastAssistant: undefined,
+        lastAssistantTokenLimit: 0,
+        totalCost: 0,
+        savedCost: 0,
+      }
+      const providersById = new Map(sync.data.provider.map((provider) => [provider.id, provider]))
+
+      for (const msg of messages()) {
+        if (msg.role === "assistant") {
+          stats.totalCost += msg.cost
+          if ((msg.tokens?.output || 0) > 0) {
+            stats.lastAssistant = msg as AssistantMessage
+            stats.lastAssistantTokenLimit = providersById.get(msg.providerID)?.models[msg.modelID]?.limit.context || 0
+          }
+
+          const model = providersById.get(msg.providerID)?.models[msg.modelID]
+          if (model && msg.tokens) {
+            const cacheRead = msg.tokens.cache?.read || 0
+            const cacheReadCostPer1k = model.cost.cache_read || model.cost.input * 0.1
+            stats.savedCost += (cacheRead / 1000) * (model.cost.input - cacheReadCostPer1k)
+          }
+        }
+
+        const msgParts = sync.data.part[msg.id] || []
+        for (const part of msgParts) {
+          if (part.type === "tool" && part.state?.status === "completed" && part.tool !== "invalid") {
+            const current = stats.toolCounts.get(part.tool) || 0
+            stats.toolCounts.set(part.tool, current + 1)
+          }
+        }
+      }
+
+      return stats
+    }),
+  )
 
   // Deduplicate plugins by name to avoid showing duplicates
   const uniquePlugins = createMemo(() => {
@@ -333,7 +400,7 @@ export function Sidebar(props: {
 
   // Group child sessions by parsed agent name (e.g. "@GENERAL")
   const subagentGroups = createMemo(() => {
-    const groups = new Map<string, any[]>()
+    const groups = new Map<string, Session[]>()
     for (const child of childSessions()) {
       const parsed = parseSubagentTitle(child.title)
       const name = parsed.agent || "@GENERAL"
@@ -480,7 +547,7 @@ export function Sidebar(props: {
   }
 
   const uncommittedFiles = createMemo(() => {
-    return diff().filter((d: any) => !committedFiles().has(d.file))
+    return diff().filter((d) => !committedFiles().has(d.file))
   })
 
   // Add keyboard shortcuts for tab switching (ctrl+1/2/3)
@@ -490,38 +557,10 @@ export function Sidebar(props: {
     if (evt.ctrl && evt.name === "3") handleTabChange("files")
   })
 
-  // Track tools used in this session - optimized with two-stage memoization
-  // First memo: Extract just the tool parts from messages (changes less frequently)
-  const toolParts = createMemo(
-    Perf.track("sidebar.toolParts", () => {
-      const parts: Array<{ tool: string; status: string }> = []
-      messages().forEach((msg) => {
-        const msgParts = sync.data.part[msg.id] || []
-        msgParts.forEach((part) => {
-          if (part.type === "tool" && part.state?.status === "completed") {
-            const toolName = part.tool
-            // Skip the invalid tool - it's an internal error handler
-            if (toolName !== "invalid") {
-              parts.push({ tool: toolName, status: part.state.status })
-            }
-          }
-        })
-      })
-      return parts
-    }),
-  )
-
-  // Second memo: Calculate counts and sort (only when tool parts actually change)
+  // Track tools used in this session
   const toolsUsed = createMemo(
     Perf.track("sidebar.toolsUsed", () => {
-      const toolCounts: Record<string, number> = {}
-
-      toolParts().forEach((part) => {
-        toolCounts[part.tool] = (toolCounts[part.tool] || 0) + 1
-      })
-
-      // Convert to array and sort by favorites first, then usage
-      return Object.entries(toolCounts)
+      return Array.from(messageStats().toolCounts.entries())
         .sort((a, b) => {
           const aLevel = getFavoriteLevel(a[0])
           const bLevel = getFavoriteLevel(b[0])
@@ -712,76 +751,43 @@ export function Sidebar(props: {
   // })
 
   const cost = createMemo(() => {
-    let totalCost = 0
-    let savedCost = 0
-
-    for (const msg of messages()) {
-      if (msg.role !== "assistant") continue
-
-      totalCost += msg.cost
-
-      // Calculate cost savings from cached tokens
-      const model = sync.data.provider.find((x) => x.id === msg.providerID)?.models[msg.modelID]
-      if (model && msg.tokens) {
-        const cacheRead = msg.tokens.cache?.read || 0
-        const cacheWrite = msg.tokens.cache?.write || 0
-
-        // Cache reads are typically 10x cheaper than regular input tokens
-        // Cache writes are same price as input but enable future reads
-        // Estimate savings: cache_read tokens would have cost full input price
-        const inputCostPer1k = model.cost.input
-        const cacheReadCostPer1k = model.cost.cache_read || inputCostPer1k * 0.1
-
-        const savedFromCacheRead = (cacheRead / 1000) * (inputCostPer1k - cacheReadCostPer1k)
-        savedCost += savedFromCacheRead
-      }
-    }
-
+    const stats = messageStats()
     return {
-      spent: new Intl.NumberFormat("en-US", {
-        style: "currency",
-        currency: "USD",
-      }).format(totalCost),
-      saved: new Intl.NumberFormat("en-US", {
-        style: "currency",
-        currency: "USD",
-      }).format(savedCost),
+      spent: currencyFormatter.format(stats.totalCost),
+      saved: currencyFormatter.format(stats.savedCost),
     }
   })
 
   const context = createMemo(() => {
-    const last = messages().findLast((x) => x.role === "assistant" && x.tokens?.output > 0) as AssistantMessage
-    if (!last || !last.tokens)
-      return {
-        tokens: 0,
-        tokenLimit: 0,
-        tokensFormatted: "0",
-        percentage: 0,
-        systemTokens: 0,
-        assistantTokens: 0,
-        userTokens: 0,
-        toolTokens: 0,
-      }
+    const stats = messageStats()
+    const last = stats.lastAssistant
+    if (!last || !last.tokens) return emptyContextSummary
 
-    // System prompt (cache write tokens - this is the initial system context)
-    const systemTokens = last.tokens.cache?.write || 0
+    const inputTokens = last.tokens.input || 0
+    const cacheReadTokens = last.tokens.cache?.read || 0
+    const cacheWriteTokens = last.tokens.cache?.write || 0
 
-    // Assistant tokens (output from model)
     const assistantTokens = (last.tokens.output || 0) + (last.tokens.reasoning || 0)
 
-    // User tokens (input excluding cache, since cache is system)
-    const userTokens = Math.max(0, (last.tokens.input || 0) - (last.tokens.cache?.read || 0))
+    let systemTokens = 0
+    let userTokens = inputTokens
+    let cachedTokens = cacheReadTokens
 
-    // Tool tokens (cache read - these are tool definitions/results)
-    const toolTokens = last.tokens.cache?.read || 0
+    if (cacheReadTokens > 0) {
+      systemTokens = cacheReadTokens
+    } else if (cacheWriteTokens > 0) {
+      systemTokens = Math.min(cacheWriteTokens, inputTokens)
+      userTokens = Math.max(0, inputTokens - systemTokens)
+      cachedTokens = 0
+    }
+
+    const toolTokens = 0
 
     const total = systemTokens + assistantTokens + userTokens + toolTokens
-    const model = sync.data.provider.find((x) => x.id === last.providerID)?.models[last.modelID]
-    const tokenLimit = model?.limit.context || 0
+    const tokenLimit = stats.lastAssistantTokenLimit
 
-    // Calculate percentage of tokens that came from cache (free/discounted)
-    const cachedTokens = toolTokens // cache.read tokens
-    const freePercentage = total > 0 ? Math.round((cachedTokens / total) * 100) : 0
+    const promptTokens = systemTokens + userTokens
+    const freePercentage = promptTokens > 0 ? Math.round((cachedTokens / promptTokens) * 100) : 0
 
     return {
       tokens: total,
@@ -793,6 +799,9 @@ export function Sidebar(props: {
       assistantTokens,
       userTokens,
       toolTokens,
+      promptTokens,
+      cachedTokens,
+      cachedTokensFormatted: cachedTokens.toLocaleString(),
     }
   })
 
@@ -853,7 +862,7 @@ export function Sidebar(props: {
               showServerDialog()
             }}
           >
-            server:{port}
+            server:{serverStatus.port()}
           </text>
         </box>
 
@@ -880,23 +889,18 @@ export function Sidebar(props: {
             <text fg={theme.textMuted}>{session().share!.url}</text>
           </Show>
         </box>
-        <box
-          onMouseUp={(evt) => {
-            if (renderer.getSelection()?.getSelectedText()) return
-            dialog.replace(() => <DialogContextTimeline sessionID={props.sessionID} />)
-            evt.stopPropagation?.()
-          }}
-        >
+        <box>
           <text fg={theme.text} attributes={TextAttributes.BOLD}>
             Context
           </text>
           {(() => {
-            const agentColor = createMemo(() => {
+            const agentColor = createMemo<RGBA>(() => {
               const color = local.agent.color("assistant")
+              if (color instanceof RGBA) return color
               if (typeof color === "string") {
-                return color.startsWith("#") ? RGBA.fromHex(color) : RGBA.fromHex("#" + color)
+                return color.startsWith("#") ? RGBA.fromHex(color) : RGBA.fromHex(`#${color}`)
               }
-              return color
+              return resolveThemeColor(theme.accent)
             })
 
             return (
@@ -917,10 +921,10 @@ export function Sidebar(props: {
               />
             )
           })()}
+
           <text fg={theme.textMuted}>
-            {context().tokensFormatted} tokens ({context().freePercentage}% cached)
+            {context().tokensFormatted} tokens ({context().freePercentage}% prompt cached)
           </text>
-          <text fg={theme.textMuted}>{context().percentage}% used</text>
           <text fg={theme.textMuted}>
             {cost().spent} spent (saved {cost().saved})
           </text>
@@ -1173,7 +1177,9 @@ export function Sidebar(props: {
                           <Show when={pluginTools()[plugin.name]?.length > 0}>
                             <text fg={theme.textMuted}>Tools/Functions:</text>
                             <For each={pluginTools()[plugin.name] || []}>
-                              {(tool: any) => <text fg={theme.textMuted}>• {tool.name || tool}</text>}
+                              {(tool) => (
+                                <text fg={theme.textMuted}>• {typeof tool === "string" ? tool : tool.name}</text>
+                              )}
                             </For>
                           </Show>
                           <Show when={!pluginTools()[plugin.name] || pluginTools()[plugin.name]?.length === 0}>
@@ -1207,61 +1213,37 @@ export function Sidebar(props: {
               </text>
             </box>
             <Show when={todo().length > 0}>
-              {/* Recursive Todo Renderer */}
               {(() => {
-                const renderTodo = (task: Todo.Info, depth: number = 0): any => {
+                const renderTodo = (task: SDKTodo, depth: number = 0): JSX.Element => {
                   const allTodos = todo()
                   const hasKids = Todo.hasChildren(allTodos, task.id)
                   const children = Todo.getChildren(allTodos, task.id)
-                  const indent = "  ".repeat(depth)
+                  const color =
+                    task.status === "in_progress"
+                      ? theme.success
+                      : task.status === "completed"
+                        ? theme.textMuted
+                        : hasKids
+                          ? theme.text
+                          : theme.textMuted
+                  const prefix = hasKids
+                    ? expandedTodos().has(task.id)
+                      ? "▼"
+                      : "▶"
+                    : task.status === "completed"
+                      ? "☒"
+                      : "☐"
 
                   return (
                     <>
                       <box
-                        flexDirection="row"
-                        gap={0}
                         onMouseUp={() => {
                           if (renderer.getSelection()?.getSelectedText()) return
-                          if (hasKids) {
-                            toggleTodo(task.id)
-                          }
+                          if (hasKids) toggleTodo(task.id)
                         }}
                       >
-                        <text>{indent}</text>
-                        <text
-                          style={{
-                            fg:
-                              task.status === "in_progress"
-                                ? theme.success
-                                : task.status === "completed"
-                                  ? theme.textMuted
-                                  : hasKids
-                                    ? theme.text
-                                    : theme.textMuted,
-                          }}
-                        >
-                          {hasKids
-                            ? expandedTodos().has(task.id)
-                              ? "▼"
-                              : "▶"
-                            : task.status === "completed"
-                              ? "●"
-                              : "○"}
-                        </text>
-                        <text> </text>
-                        <text
-                          style={{
-                            fg:
-                              task.status === "in_progress"
-                                ? theme.success
-                                : task.status === "completed"
-                                  ? theme.textMuted
-                                  : hasKids
-                                    ? theme.text
-                                    : theme.textMuted,
-                          }}
-                        >
-                          {task.content}
+                        <text fg={color} wrapMode="word">
+                          {`${"  ".repeat(depth)}${prefix} ${task.content}`}
                         </text>
                       </box>
                       <Show when={hasKids && expandedTodos().has(task.id)}>
@@ -1271,8 +1253,7 @@ export function Sidebar(props: {
                   )
                 }
 
-                const rootTasks = Todo.getRootTasks(todo())
-                return <For each={rootTasks}>{(task) => renderTodo(task, 0)}</For>
+                return <For each={Todo.getRootTasks(todo())}>{(task) => renderTodo(task, 0)}</For>
               })()}
             </Show>
           </box>
@@ -1338,20 +1319,7 @@ export function Sidebar(props: {
             <box flexDirection="column" gap={1}>
               <Show when={contexts().length > 0}>
                 <box flexDirection="row" gap={1} flexWrap="wrap">
-                  <For
-                    each={contexts().sort((a, b) => {
-                      const aIsHighPriority = a.name.startsWith("!")
-                      const bIsHighPriority = b.name.startsWith("!")
-                      const aIsNegative = a.name.startsWith("-")
-                      const bIsNegative = b.name.startsWith("-")
-
-                      if (aIsHighPriority && !bIsHighPriority) return -1
-                      if (!aIsHighPriority && bIsHighPriority) return 1
-                      if (!aIsNegative && bIsNegative) return -1
-                      if (aIsNegative && !bIsNegative) return 1
-                      return 0
-                    })}
-                  >
+                  <For each={sortedContexts()}>
                     {(ctx) => {
                       const isActive = createMemo(() => activeContextIds().has(ctx.id))
                       const hasContent = createMemo(() => ctx.content.trim().length > 0)
@@ -1483,7 +1451,7 @@ export function Sidebar(props: {
                     <Show when={expandedAgentGroups().has(group.agent)}>
                       <For each={group.items}>
                         {(child) => {
-                          const status = (child as any).orchestration?.status || "unknown"
+                          const status = child.orchestration?.status ?? "unknown"
                           const statusColor =
                             status === "active"
                               ? theme.success

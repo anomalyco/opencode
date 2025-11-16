@@ -1,15 +1,16 @@
-import { type Accessor, createMemo, createSignal, Match, onCleanup, onMount, Show, Switch } from "solid-js"
+import { type Accessor, createMemo, Match, Show, Switch } from "solid-js"
 import { useRouteData } from "@tui/context/route"
 import { useSync } from "@tui/context/sync"
 import { pipe, sumBy } from "remeda"
 import { useTheme } from "@tui/context/theme"
 import { SplitBorder } from "@tui/component/border"
 import type { AssistantMessage, Session } from "@opencode-ai/sdk"
-import { useSDK } from "@tui/context/sdk"
 import { useDialog } from "@tui/ui/dialog"
 import { DialogSelect, type DialogSelectOption } from "@tui/ui/dialog-select"
 import { useRenderer } from "@opentui/solid"
 import { DialogKanban } from "../../component/dialog-kanban"
+import { useServerStatus } from "../../context/server-status"
+import { useSDK } from "@tui/context/sdk"
 
 const Title = (props: { session: Accessor<Session> }) => {
   const { theme } = useTheme()
@@ -40,30 +41,9 @@ export function Header() {
   const renderer = useRenderer()
   const session = createMemo(() => sync.session.get(route.sessionID)!)
   const messages = createMemo(() => sync.data.message[route.sessionID] ?? [])
-  const [serverStatus, setServerStatus] = createSignal<"connected" | "disconnected">("connected")
+  const serverStatus = useServerStatus()
 
-  // Extract port from URL
-  const port = sdk.url.split(":").pop() || "unknown"
-
-  // Ping server periodically
-  let pingInterval: NodeJS.Timeout
-  onMount(() => {
-    pingInterval = setInterval(async () => {
-      try {
-        const response = await fetch(`${sdk.url}/health`, {
-          method: "GET",
-          signal: AbortSignal.timeout(1000),
-        })
-        setServerStatus(response.ok ? "connected" : "disconnected")
-      } catch {
-        setServerStatus("disconnected")
-      }
-    }, 5000)
-  })
-
-  onCleanup(() => {
-    if (pingInterval) clearInterval(pingInterval)
-  })
+  const port = serverStatus.port()
 
   const showServerDialog = () => {
     const options: DialogSelectOption<string>[] = [
@@ -83,9 +63,9 @@ export function Header() {
       {
         title: "Copy Server URL",
         value: "copy",
-        description: `Copy ${sdk.url} to clipboard`,
+        description: `Copy ${serverStatus.url()} to clipboard`,
         onSelect: (ctx) => {
-          console.log("Server URL:", sdk.url)
+          serverStatus.copyUrl()
           ctx.clear()
         },
       },

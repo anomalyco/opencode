@@ -4,6 +4,7 @@ import { Ripgrep } from "../file/ripgrep"
 
 import DESCRIPTION from "./grep.txt"
 import { Instance } from "../project/instance"
+import { assertValidRegex, withTimeout } from "../util/regex-validator"
 
 export const GrepTool = Tool.define("grep", {
   description: DESCRIPTION,
@@ -16,6 +17,9 @@ export const GrepTool = Tool.define("grep", {
     if (!params.pattern) {
       throw new Error("pattern is required")
     }
+
+    // Validate regex pattern for ReDoS vulnerabilities
+    assertValidRegex(params.pattern)
 
     const searchPath = params.path || Instance.directory
 
@@ -36,14 +40,21 @@ export const GrepTool = Tool.define("grep", {
       }
     }
 
-    const proc = Bun.spawn(cmd, {
-      stdout: "pipe",
-      stderr: "pipe",
-    })
+    // Execute with timeout to prevent long-running operations
+    const executeSearch = async () => {
+      const proc = Bun.spawn(cmd, {
+        stdout: "pipe",
+        stderr: "pipe",
+      })
 
-    const output = await new Response(proc.stdout).text()
-    const errorOutput = await new Response(proc.stderr).text()
-    const exitCode = await proc.exited
+      const output = await new Response(proc.stdout).text()
+      const errorOutput = await new Response(proc.stderr).text()
+      const exitCode = await proc.exited
+
+      return { output, errorOutput, exitCode, proc }
+    }
+
+    const { output, errorOutput, exitCode } = await withTimeout(executeSearch(), 5000)
 
     if (exitCode === 1) {
       return {

@@ -3,6 +3,8 @@
  * Tracks execution times and call frequencies for optimization insights
  */
 
+import { Log } from "./log"
+
 export namespace Perf {
   interface Metric {
     name: string
@@ -16,6 +18,7 @@ export namespace Perf {
 
   const metrics = new Map<string, Metric>()
   const enabled = process.env.OPENCODE_PERF === "1"
+  const log = Log.create({ service: "perf" })
 
   /**
    * Wrap a function with performance tracking
@@ -118,30 +121,30 @@ export namespace Perf {
    */
   export function report() {
     if (!enabled) {
-      console.log("Performance monitoring disabled. Set OPENCODE_PERF=1 to enable.")
+      log.info("Performance monitoring disabled. Set OPENCODE_PERF=1 to enable.")
       return
     }
 
     const sorted = getMetrics()
 
-    console.log("\n=== OpenTUI Performance Report ===\n")
-    console.log("Name".padEnd(40), "Calls".padEnd(10), "Avg(ms)".padEnd(12), "Total(ms)".padEnd(12), "Min/Max(ms)")
-    console.log("-".repeat(100))
+    log.info("\n=== OpenTUI Performance Report ===\n")
+    log.info("Name".padEnd(40) + "Calls".padEnd(10) + "Avg(ms)".padEnd(12) + "Total(ms)".padEnd(12) + "Min/Max(ms)")
+    log.info("-".repeat(100))
 
     for (const metric of sorted) {
-      console.log(
-        metric.name.padEnd(40),
-        metric.count.toString().padEnd(10),
-        metric.avgTime.toFixed(2).padEnd(12),
-        metric.totalTime.toFixed(2).padEnd(12),
-        `${metric.minTime.toFixed(2)} / ${metric.maxTime.toFixed(2)}`,
+      log.info(
+        metric.name.padEnd(40) +
+          metric.count.toString().padEnd(10) +
+          metric.avgTime.toFixed(2).padEnd(12) +
+          metric.totalTime.toFixed(2).padEnd(12) +
+          `${metric.minTime.toFixed(2)} / ${metric.maxTime.toFixed(2)}`,
       )
     }
 
-    console.log("-".repeat(100))
-    console.log(`Total tracked operations: ${sorted.reduce((sum, m) => sum + m.count, 0)}`)
-    console.log(`Total time: ${sorted.reduce((sum, m) => sum + m.totalTime, 0).toFixed(2)}ms`)
-    console.log("\n")
+    log.info("-".repeat(100))
+    log.info(`Total tracked operations: ${sorted.reduce((sum, m) => sum + m.count, 0)}`)
+    log.info(`Total time: ${sorted.reduce((sum, m) => sum + m.totalTime, 0).toFixed(2)}ms`)
+    log.info("\n")
   }
 
   /**

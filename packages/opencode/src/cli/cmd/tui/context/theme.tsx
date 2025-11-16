@@ -7,10 +7,10 @@ import aura from "./theme/aura.json" with { type: "json" }
 import ayu from "./theme/ayu.json" with { type: "json" }
 import catppuccin from "./theme/catppuccin.json" with { type: "json" }
 import cobalt2 from "./theme/cobalt2.json" with { type: "json" }
-import colorless from "./theme/colorless.json" with { type: "json" }
-import colorlessHintsBlue from "./theme/colorless-hints-blue.json" with { type: "json" }
-import colorlessHintsGreen from "./theme/colorless-hints-green.json" with { type: "json" }
-import colorlessHintsRed from "./theme/colorless-hints-red.json" with { type: "json" }
+import codesurf from "./theme/codesurf.json" with { type: "json" }
+import codesurfBlue from "./theme/codesurf-blue.json" with { type: "json" }
+import codesurfGreen from "./theme/codesurf-green.json" with { type: "json" }
+import codesurfRed from "./theme/codesurf-red.json" with { type: "json" }
 import dracula from "./theme/dracula.json" with { type: "json" }
 import everforest from "./theme/everforest.json" with { type: "json" }
 import github from "./theme/github.json" with { type: "json" }
@@ -107,10 +107,10 @@ export const DEFAULT_THEMES: Record<string, ThemeJson> = {
   ayu,
   catppuccin,
   cobalt2,
-  colorless,
-  "colorless-hints-blue": colorlessHintsBlue,
-  "colorless-hints-green": colorlessHintsGreen,
-  "colorless-hints-red": colorlessHintsRed,
+  codesurf,
+  "codesurf-blue": codesurfBlue,
+  "codesurf-green": codesurfGreen,
+  "codesurf-red": codesurfRed,
   dracula,
   everforest,
   github,
@@ -157,10 +157,18 @@ export const { use: useTheme, provider: ThemeProvider } = createSimpleContext({
   init: (props: { mode: "dark" | "light" }) => {
     const sync = useSync()
     const kv = useKV()
+    const resolveInitialTheme = () => {
+      const configTheme = sync.data.config.theme
+      if (configTheme) return configTheme as string
+      const saved = kv.get("theme") as string | undefined
+      if (saved && saved !== "opencode") return saved
+      kv.set("theme", "codesurf")
+      return "codesurf"
+    }
     const [store, setStore] = createStore({
       themes: DEFAULT_THEMES,
       mode: props.mode,
-      active: (sync.data.config.theme ?? kv.get("theme", "opencode")) as string,
+      active: resolveInitialTheme(),
       ready: false,
     })
 
@@ -185,7 +193,7 @@ export const { use: useTheme, provider: ThemeProvider } = createSimpleContext({
       })
 
     const values = createMemo(() => {
-      return resolveTheme(store.themes[store.active] ?? store.themes.opencode, store.mode)
+      return resolveTheme(store.themes[store.active] ?? store.themes.codesurf, store.mode)
     })
 
     const syntax = createMemo(() => generateSyntax(values()))
