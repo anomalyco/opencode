@@ -168,6 +168,7 @@ export interface Hooks {
       prompt: string
       model?: { providerID: string; modelID: string }
       noReply?: boolean
+      optimizeEnabled: boolean
     },
     output: {
       model?: { providerID: string; modelID: string }

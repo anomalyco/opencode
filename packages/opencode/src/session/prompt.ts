@@ -109,6 +109,7 @@ export namespace SessionPrompt {
     noReply: z.boolean().optional(),
     system: z.string().optional(),
     tools: z.record(z.string(), z.boolean()).optional(),
+    optimizeEnabled: z.boolean().optional(),
     parts: z.array(
       z.discriminatedUnion("type", [
         MessageV2.TextPart.omit({
@@ -234,6 +235,7 @@ export namespace SessionPrompt {
         prompt: promptText,
         model: input.model,
         noReply: input.noReply,
+        optimizeEnabled: input.optimizeEnabled ?? true,
       },
       {
         model: input.model,

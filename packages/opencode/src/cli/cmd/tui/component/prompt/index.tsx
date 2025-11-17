@@ -752,10 +752,18 @@ export function Prompt(props: PromptProps) {
           <box backgroundColor={theme.backgroundElement} width={1} justifyContent="center" alignItems="center"></box>
         </box>
         <box flexDirection="row" justifyContent="space-between">
-          <text flexShrink={0} wrapMode="none" fg={theme.text}>
-            <span style={{ fg: theme.textMuted }}>{local.model.parsed().provider}</span>{" "}
-            <span style={{ bold: true }}>{local.model.parsed().model}</span>
-          </text>
+          <box flexDirection="row" gap={2} flexShrink={0} wrapMode="none">
+            <text fg={theme.text}>
+              <span style={{ fg: theme.textMuted }}>{local.model.parsed().provider}</span>{" "}
+              <span style={{ bold: true }}>{local.model.parsed().model}</span>
+            </text>
+            <text fg={theme.text}>
+              <span style={{ fg: theme.textMuted }}>OPTIMIZE:</span>{" "}
+              <span style={{ bold: true, fg: local.optimize.enabled ? theme.success : theme.textMuted }}>
+                {local.optimize.enabled ? "ON" : "OFF"}
+              </span>
+            </text>
+          </box>
           <Switch>
             <Match when={status() === "compacting"}>
               <text fg={theme.textMuted}>compacting...</text>

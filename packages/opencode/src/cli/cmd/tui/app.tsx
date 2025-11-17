@@ -277,6 +277,16 @@ function App() {
       },
     },
     {
+      title: `Toggle model optimization (${local.optimize.enabled ? "ON" : "OFF"})`,
+      value: "optimize.toggle",
+      keybind: "optimize_toggle",
+      category: "Agent",
+      onSelect: () => {
+        local.optimize.toggle()
+        dialog.clear()
+      },
+    },
+    {
       title: "View status",
       keybind: "status_view",
       value: "opencode.status",

@@ -231,9 +231,59 @@ export const { use: useLocal, provider: LocalProvider } = createSimpleContext({
       }
     })
 
+    const optimize = iife(() => {
+      const [optimizeStore, setOptimizeStore] = createStore<{
+        enabled: boolean
+      }>({
+        enabled: true, // Default to ON
+      })
+
+      const file = Bun.file(path.join(Global.Path.state, "optimize.json"))
+
+      // Load saved state
+      file
+        .json()
+        .then((x) => {
+          setOptimizeStore("enabled", x.enabled ?? true)
+        })
+        .catch(() => {})
+
+      return {
+        get enabled() {
+          return optimizeStore.enabled
+        },
+        toggle() {
+          const newState = !optimizeStore.enabled
+          setOptimizeStore("enabled", newState)
+          // Persist state
+          Bun.write(
+            file,
+            JSON.stringify({
+              enabled: newState,
+            }),
+          )
+          toast.show({
+            message: `Model optimization ${newState ? "enabled" : "disabled"}`,
+            variant: "success",
+            duration: 2000,
+          })
+        },
+        set(enabled: boolean) {
+          setOptimizeStore("enabled", enabled)
+          Bun.write(
+            file,
+            JSON.stringify({
+              enabled,
+            }),
+          )
+        },
+      }
+    })
+
     const result = {
       model,
       agent,
+      optimize,
     }
     return result
   },
