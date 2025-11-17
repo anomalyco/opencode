@@ -186,14 +186,22 @@ export function ContextProvider(props: ParentProps<{ sessionID: string }>) {
   }
 
   const markUsed = (ids: string[]) => {
+    if (!ids.length) return
+    const selected = new Set(ids)
     applyUpdate(props.sessionID, (prev) =>
       prev.map((ctx) => {
-        if (ctx.mode !== "conditional") return ctx
-        if (ids.includes(ctx.id)) {
-          return { ...ctx, lastUsedAt: Date.now(), engagement: (ctx.engagement ?? 0) + 1 }
+        if (selected.has(ctx.id)) {
+          const next = (ctx.engagement ?? 0) + 1
+          if (ctx.mode === "conditional" && next >= 3) {
+            return { ...ctx, mode: "always", active: true, engagement: next, lastUsedAt: Date.now(), promotedAt: Date.now() }
+          }
+          return { ...ctx, engagement: next, lastUsedAt: Date.now() }
         }
-        if (ctx.lastUsedAt !== undefined) {
+        if (ctx.mode === "conditional" && ctx.lastUsedAt !== undefined) {
           const penalty = Math.max((ctx.engagement ?? 0) - 1, 0)
+          if (penalty === 0) {
+            return { ...ctx, lastUsedAt: undefined, engagement: 0, active: false }
+          }
           return { ...ctx, lastUsedAt: undefined, engagement: penalty }
         }
         return ctx
