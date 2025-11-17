@@ -284,9 +284,9 @@ export const { use: useSync, provider: SyncProvider } = createSimpleContext({
           if (last.role === "user") return "working"
           return last.time.completed ? "idle" : "working"
         },
-        async sync(sessionID: string) {
+        async sync(sessionID: string, options?: { force?: boolean }) {
           const now = Date.now()
-          if (store.message[sessionID]) return
+          if (store.message[sessionID] && !options?.force) return
           console.log("syncing", sessionID)
           const [session, messages, todo, diff] = await Promise.all([
             sdk.client.session.get({ path: { id: sessionID }, throwOnError: true }),

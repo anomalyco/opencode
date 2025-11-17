@@ -592,25 +592,93 @@ export namespace MessageV2 {
                 },
               ]
             if (part.type === "tool") {
-              if (part.state.status === "completed") {
-                if (part.state.attachments?.length) {
-                  result.push({
-                    id: Identifier.ascending("message"),
-                    role: "user",
-                    parts: [
-                      {
-                        type: "text",
-                        text: `Tool ${part.tool} returned an attachment:`,
-                      },
-                      ...part.state.attachments.map((attachment) => ({
-                        type: "file" as const,
-                        url: attachment.url,
-                        mediaType: attachment.mime,
-                        filename: attachment.filename,
-                      })),
-                    ],
-                  })
-                }
+            if (part.state.status === "completed") {
+              if (part.state.attachments?.length) {
+                result.push({
+                  id: Identifier.ascending("message"),
+                  role: "user",
+                  parts: [
+                    {
+                      type: "text",
+                      text: `Tool ${part.tool} returned an attachment:`,
+                    },
+                    ...part.state.attachments.map((attachment) => ({
+                      type: "file" as const,
+                      url: attachment.url,
+                      mediaType: attachment.mime,
+                      filename: attachment.filename,
+                    })),
+                  ],
+                })
+              }
+              return [
+                {
+                  type: ("tool-" + part.tool) as `tool-${string}`,
+                  state: "output-available",
+                  toolCallId: part.callID,
+                  input: part.state.input,
+                  output: part.state.time.compacted ? "[Old tool result content cleared]" : part.state.output,
+                  callProviderMetadata: part.metadata,
+                },
+              ]
+            }
+            if (part.state.status === "error")
+              return [
+                {
+                  type: ("tool-" + part.tool) as `tool-${string}`,
+                  state: "output-error",
+                  toolCallId: part.callID,
+                  input: part.state.input,
+                  errorText: part.state.error,
+                  callProviderMetadata: part.metadata,
+                },
+              ]
+          }
+          if (part.type === "reasoning") {
+            return []
+          }
+          return []
+        }),
+      })
+    }
+
+    return convertToModelMessages(result)
+  }
+              return [
+                {
+                  type: ("tool-" + part.tool) as `tool-${string}`,
+                  state: "output-available",
+                  toolCallId: part.callID,
+                  input: part.state.input,
+                  output: part.state.time.compacted ? "[Old tool result content cleared]" : part.state.output,
+                  callProviderMetadata: part.metadata,
+                },
+              ]
+            }
+            if (part.state.status === "error")
+              return [
+                {
+                  type: ("tool-" + part.tool) as `tool-${string}`,
+                  state: "output-error",
+                  toolCallId: part.callID,
+                  input: part.state.input,
+                  errorText: part.state.error,
+                  callProviderMetadata: part.metadata,
+                },
+              ]
+          }
+          if (part.type === "reasoning") {
+            // Provider APIs reject reasoning content in prompts, so skip it
+            return []
+          }
+
+          return []
+        }),
+      })
+    }
+
+    return convertToModelMessages(result)
+  }
                 return [
                   {
                     type: ("tool-" + part.tool) as `tool-${string}`,
@@ -640,6 +708,11 @@ export namespace MessageV2 {
             return []
           }),
         })
+      }
+    }
+
+    return convertToModelMessages(result)
+  }
       }
     }
 
@@ -798,102 +871,4 @@ export namespace MessageV2 {
     return state.status === "running"
   }
 
-  export function isToolStateCompleted(state: z.infer<typeof ToolState>): state is ToolStateCompleted {
-    return state.status === "completed"
-  }
-
-  export function isToolStateError(state: z.infer<typeof ToolState>): state is ToolStateError {
-    return state.status === "error"
-  }
-
-  // Helper functions for extracting specific parts
-  export function getTextParts(parts: Part[]): TextPart[] {
-    return parts.filter(isTextPart)
-  }
-
-  export function getReasoningParts(parts: Part[]): ReasoningPart[] {
-    return parts.filter(isReasoningPart)
-  }
-
-  export function getFileParts(parts: Part[]): FilePart[] {
-    return parts.filter(isFilePart)
-  }
-
-  export function getToolParts(parts: Part[]): ToolPart[] {
-    return parts.filter(isToolPart)
-  }
-
-  export function getStepStartParts(parts: Part[]): StepStartPart[] {
-    return parts.filter(isStepStartPart)
-  }
-
-  export function getStepFinishParts(parts: Part[]): StepFinishPart[] {
-    return parts.filter(isStepFinishPart)
-  }
-
-  export function getSnapshotParts(parts: Part[]): SnapshotPart[] {
-    return parts.filter(isSnapshotPart)
-  }
-
-  export function getPatchParts(parts: Part[]): PatchPart[] {
-    return parts.filter(isPatchPart)
-  }
-
-  export function getAgentParts(parts: Part[]): AgentPart[] {
-    return parts.filter(isAgentPart)
-  }
-
-  export function getRetryParts(parts: Part[]): RetryPart[] {
-    return parts.filter(isRetryPart)
-  }
-
-  // Helper to get the first part of a specific type
-  export function getFirstTextPart(parts: Part[]): TextPart | undefined {
-    return parts.find(isTextPart)
-  }
-
-  export function getFirstToolPart(parts: Part[]): ToolPart | undefined {
-    return parts.find(isToolPart)
-  }
-
-  export function getFirstFilePart(parts: Part[]): FilePart | undefined {
-    return parts.find(isFilePart)
-  }
-
-  // Helper to check if parts contain a specific type
-  export function hasTextPart(parts: Part[]): boolean {
-    return parts.some(isTextPart)
-  }
-
-  export function hasToolPart(parts: Part[]): boolean {
-    return parts.some(isToolPart)
-  }
-
-  export function hasFilePart(parts: Part[]): boolean {
-    return parts.some(isFilePart)
-  }
-
-  export function hasReasoningPart(parts: Part[]): boolean {
-    return parts.some(isReasoningPart)
-  }
-
-  // Helper to get completed tool parts
-  export function getCompletedToolParts(parts: Part[]): ToolPart[] {
-    return getToolParts(parts).filter((part) => part.state.status === "completed")
-  }
-
-  // Helper to get error tool parts
-  export function getErrorToolParts(parts: Part[]): ToolPart[] {
-    return getToolParts(parts).filter((part) => part.state.status === "error")
-  }
-
-  // Helper to get running tool parts
-  export function getRunningToolParts(parts: Part[]): ToolPart[] {
-    return getToolParts(parts).filter((part) => part.state.status === "running")
-  }
-
-  // Helper to get pending tool parts
-  export function getPendingToolParts(parts: Part[]): ToolPart[] {
-    return getToolParts(parts).filter((part) => part.state.status === "pending")
-  }
-}
+  export function isToolStateCompleted(state: z.infe

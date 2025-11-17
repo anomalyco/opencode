@@ -201,7 +201,18 @@ export namespace SessionPrompt {
     const session = await Session.get(input.sessionID)
     await SessionRevert.cleanup(session)
 
-    const userMsg = await createUserMessage(input)
+    const agentName = session.orchestration?.currentAgent ?? input.agent ?? "build"
+    const agent = await Agent.get(agentName)
+    const resolvedModel = await resolveModel({
+      agent,
+      model: input.model,
+    })
+    const model = await Provider.getModel(resolvedModel.providerID, resolvedModel.modelID)
+
+    const userMsg = await createUserMessage(input, {
+      agent: agent.name,
+      model: resolvedModel,
+    })
     await Session.touch(input.sessionID)
 
     // Early return for context-only messages (no AI inference)
@@ -219,13 +230,6 @@ export namespace SessionPrompt {
         state().queued.set(input.sessionID, queue)
       })
     }
-    // Use currentAgent from orchestration state if available (mode switching)
-    const agentName = session.orchestration?.currentAgent ?? input.agent ?? "build"
-    const agent = await Agent.get(agentName)
-    const model = await resolveModel({
-      agent,
-      model: input.model,
-    }).then((x) => Provider.getModel(x.providerID, x.modelID))
 
     using abort = lock(input.sessionID)
 
@@ -814,7 +818,16 @@ export namespace SessionPrompt {
     return tools
   }
 
-  async function createUserMessage(input: PromptInput) {
+  async function createUserMessage(
+    input: PromptInput,
+    context: {
+      agent: string
+      model: {
+        providerID: string
+        modelID: string
+      }
+    },
+  ) {
     const info: MessageV2.Info = {
       id: input.messageID ?? Identifier.ascending("message"),
       role: "user",
@@ -822,6 +835,8 @@ export namespace SessionPrompt {
       time: {
         created: Date.now(),
       },
+      agent: context.agent,
+      model: context.model,
     }
 
     const parts = await Promise.all(
@@ -1651,7 +1666,7 @@ export namespace SessionPrompt {
     using abort = lock(input.sessionID)
     const session = await Session.get(input.sessionID)
     if (session.revert) {
-      SessionRevert.cleanup(session)
+      await SessionRevert.cleanup(session)
     }
     const userMsg: MessageV2.User = {
       id: Identifier.ascending("message"),

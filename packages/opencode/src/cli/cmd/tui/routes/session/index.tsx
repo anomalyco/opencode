@@ -308,7 +308,7 @@ function ToolChipDetails(props: { chip?: ToolChip }) {
             </text>
             <text fg={theme.textMuted}>{chip().label}</text>
           </box>
-          <ToolPart part={chip().part} message={chip().message} indent={0} />
+          <ToolPart part={chip().part} message={chip().message} indent={0} showPriorityControls={false} />
         </box>
       )}
     </Show>
@@ -1162,7 +1162,7 @@ export function Session() {
     if (!s) return
     const messageID = s.revert?.messageID
     if (!messageID) return
-    const reverted = messages().filter((x) => x.id >= messageID && x.role === "user")
+    const reverted = allMessages().filter((x) => x.id > messageID && x.role === "user")
 
     const diffFiles = (() => {
       const diffText = s.revert?.diff || ""
@@ -1596,17 +1596,32 @@ function PriorityCircles(props: {
     return derived || "(no content)"
   }
 
+  const updateLocalPriority = (priority: "red" | "amber" | "green" | "none") => {
+    const messages = sync.data.message[props.sessionID]
+    if (!messages) return
+    const index = messages.findIndex((m) => m.id === props.messageID)
+    if (index === -1) return
+    sync.set("message", props.sessionID, index, "priority", priority)
+  }
+
   const setPriority = async (e: any, priority: "red" | "amber" | "green" | "none") => {
     e.stopPropagation()
-    await sdk.client.session.setMessagePriority({
-      path: {
-        id: props.sessionID,
-        messageID: props.messageID,
-      },
-      body: {
-        priority,
-      },
-    })
+    try {
+      await sdk.client.session.setMessagePriority({
+        path: {
+          id: props.sessionID,
+          messageID: props.messageID,
+        },
+        body: {
+          priority,
+        },
+      })
+      updateLocalPriority(priority)
+    } catch (error) {
+      const message = error instanceof Error ? error.message : "Unable to update priority"
+      toast.show({ message, variant: "error" })
+      return
+    }
     const priorityLabels = {
       green: "Always include",
       amber: "Include when relevant",
@@ -2293,7 +2308,12 @@ function TextPart(props: { part: TextPart; message: AssistantMessage }) {
 const BLOCK_CONTAINER_MIN_HEIGHT = 3
 const BLOCK_CONTAINER_PADDING = 1
 
-function ToolPart(props: { part: ToolPart; message: AssistantMessage; indent?: number }) {
+function ToolPart(props: {
+  part: ToolPart
+  message: AssistantMessage
+  indent?: number
+  showPriorityControls?: boolean
+}) {
   const { theme } = useTheme()
   const sync = useSync()
   const renderer = useRenderer()
@@ -2306,14 +2326,17 @@ function ToolPart(props: { part: ToolPart; message: AssistantMessage; indent?: n
   const metadata = props.part.state.status === "pending" ? {} : (props.part.state.metadata ?? {})
   const input = props.part.state.input ?? {}
   const container = toolRegistry.container(props.part.tool)
-  const priorityControls = (
-    <PriorityCircles
-      sessionID={props.message.sessionID}
-      messageID={props.message.id}
-      priority={props.message.priority}
-      compact
-    />
-  )
+  const priorityControls =
+    props.showPriorityControls === false
+      ? undefined
+      : (
+          <PriorityCircles
+            sessionID={props.message.sessionID}
+            messageID={props.message.id}
+            priority={props.message.priority}
+            compact
+          />
+        )
 
   // Make permissions reactive
   const permissions = createMemo(() => sync.data.permission[props.message.sessionID] ?? [])

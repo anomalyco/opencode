@@ -1,9 +1,11 @@
 import { createMemo } from "solid-js"
 import { useSync } from "@tui/context/sync"
 import { DialogSelect } from "@tui/ui/dialog-select"
+import { DialogConfirm } from "@tui/ui/dialog-confirm"
 import { useSDK } from "@tui/context/sdk"
 import { useRoute } from "@tui/context/route"
 import type { PromptInfo } from "@tui/component/prompt/history"
+import type { Session as SessionType } from "@opencode-ai/sdk"
 import { useToast } from "../../ui/toast"
 import { Locale } from "@/util/locale"
 import { estimateMessageTokens, pickMessageContentParts } from "@/session/message-content"
@@ -12,6 +14,7 @@ export function DialogMessage(props: {
   messageID: string
   sessionID: string
   setPrompt?: (prompt: PromptInfo) => void
+  onRevert?: (info: SessionType["revert"] | undefined) => void
 }) {
   const sync = useSync()
   const sdk = useSDK()
@@ -54,18 +57,42 @@ export function DialogMessage(props: {
           title: "Revert",
           value: "session.revert",
           description: "undo messages and file changes",
-          onSelect: (dialog) => {
+          onSelect: async (dialog) => {
             const msg = message()
             if (!msg) return
 
-            sdk.client.session.revert({
-              path: {
-                id: props.sessionID,
-              },
-              body: {
-                messageID: msg.id,
-              },
-            })
+            const confirmed = await DialogConfirm.show(
+              dialog,
+              "Confirm Revert",
+              "Rewind to this point and drop newer messages?",
+            )
+            if (!confirmed) return
+
+            try {
+              const response = await sdk.client.session.revert({
+                path: {
+                  id: props.sessionID,
+                },
+                body: {
+                  messageID: msg.id,
+                },
+              })
+
+              if (response.data) {
+                const index = sync.data.session.findIndex((session) => session.id === props.sessionID)
+                if (index !== -1) {
+                  sync.set("session", index, response.data)
+                }
+                props.onRevert?.(response.data.revert ?? { messageID: msg.id })
+                await sync.session.sync(props.sessionID, { force: true })
+                props.onRevert?.(undefined)
+              }
+            } catch (error) {
+              const message = error instanceof Error ? error.message : "Failed to revert message"
+              toast.show({ message, variant: "error" })
+              dialog.clear()
+              return
+            }
 
             if (props.setPrompt) {
               const parts = sync.data.part[msg.id]
