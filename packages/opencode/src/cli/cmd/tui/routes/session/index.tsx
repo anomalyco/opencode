@@ -73,6 +73,8 @@ import parsers from "../../../../../../parsers-config.ts"
 import { Clipboard } from "../../util/clipboard"
 import { Toast, useToast } from "../../ui/toast"
 import { useKV } from "../../context/kv.tsx"
+import { useContextManager } from "../../context/context"
+import { pickMessageContentParts, messageText } from "@/session/message-content"
 import { MessageWidgets } from "@/ui/message-widgets"
 import { PluginComponent } from "../../component/plugin-component"
 import stripAnsi from "strip-ansi"
@@ -1352,6 +1354,44 @@ function PriorityCircles(props: {
   const sdk = useSDK()
   const toast = useToast()
   const { theme } = useTheme()
+  const sync = useSync()
+  const contextManager = useContextManager(true)
+
+  const buildMessageContext = () => {
+    const messageList = sync.data.message[props.sessionID] ?? []
+    const message = messageList.find((m) => m.id === props.messageID)
+    const partList = sync.data.part[props.messageID] ?? []
+    const main = messageText(pickMessageContentParts(partList)).trim()
+    if (main) return main
+
+    const fallback: string[] = []
+    for (const part of partList as any[]) {
+      if (!part || typeof part !== "object") continue
+      if (part.type === "file") {
+        const label = part.filename || part.source?.file?.path || part.url || part.id
+        fallback.push(`File: ${label}`)
+        continue
+      }
+      if (part.type === "tool") {
+        const state = part.state
+        if (state?.status === "completed") {
+          fallback.push(`Tool ${part.tool}: ${Locale.truncate(state.output ?? "", 400)}`)
+        } else if (state?.status === "error") {
+          fallback.push(`Tool ${part.tool} error: ${state.error}`)
+        }
+        continue
+      }
+      if (part.type === "input" && typeof part.text === "string") {
+        fallback.push(part.text)
+      }
+    }
+    if (message?.summary && typeof message.summary === "object") {
+      if (message.summary.body) fallback.push(message.summary.body)
+      else if (message.summary.title) fallback.push(message.summary.title)
+    }
+    const derived = fallback.map((text) => text?.toString().trim()).filter(Boolean).join("\n\n")
+    return derived || "(no content)"
+  }
 
   const setPriority = async (e: any, priority: "red" | "amber" | "green" | "none") => {
     e.stopPropagation()
@@ -1371,6 +1411,28 @@ function PriorityCircles(props: {
       none: "No priority",
     }
     toast.show({ message: `Message marked as ${priorityLabels[priority]}`, variant: "success" })
+    if (contextManager) {
+      if (priority === "green" || priority === "amber") {
+        const messageList = sync.data.message[props.sessionID] ?? []
+        const message = messageList.find((m) => m.id === props.messageID)
+        const text = buildMessageContext()
+        const snippet = text.replace(/\s+/g, " ").trim()
+        const labelSource = snippet ? Locale.truncate(snippet, 24) : message?.role ?? "message"
+        const name = labelSource.toUpperCase()
+        contextManager.upsertMessageContext({
+          sessionID: props.sessionID,
+          messageID: props.messageID,
+          name,
+          content: text,
+          mode: priority === "green" ? "always" : "conditional",
+          active: true,
+        })
+      } else if (priority === "red") {
+        contextManager.setMessageContextActive({ sessionID: props.sessionID, messageID: props.messageID, active: false })
+      } else if (priority === "none") {
+        contextManager.removeMessageContext({ sessionID: props.sessionID, messageID: props.messageID })
+      }
+    }
   }
 
   // Render from least to most restrictive priority: green -> amber -> red

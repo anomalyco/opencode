@@ -26,6 +26,8 @@ export function DialogMultiField(props: DialogMultiFieldProps) {
   const focusField = (fieldName: string) => {
     const target = textareas[fieldName]
     if (!target) return
+    const idx = props.fields.findIndex((field) => field.name === fieldName)
+    if (idx >= 0) setFocusedIndex(idx)
     try {
       target.focus()
       target.gotoLineEnd()
@@ -96,7 +98,7 @@ export function DialogMultiField(props: DialogMultiFieldProps) {
                   }}
                   initialValue={field.value || ""}
                   placeholder={field.placeholder || ""}
-                  onFocus={() => setFocusedIndex(index())}
+                  onMouseUp={() => setFocusedIndex(index())}
                 />
               </box>
             </box>

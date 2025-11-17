@@ -12,7 +12,8 @@
     "glob",
     "todowrite",
     "ripgrep",
-    "read"
+    "read",
+    "webfetch"
   ],
   "$schema": "https://opencode.ai/config.json"
 }

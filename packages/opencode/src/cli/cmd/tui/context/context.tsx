@@ -3,12 +3,23 @@ import path from "path"
 import { mkdir } from "fs/promises"
 import { useToast } from "../ui/toast"
 
+export type ContextMode = "manual" | "always" | "conditional"
+type ContextSource =
+  | {
+      type: "message"
+      sessionID: string
+      messageID: string
+    }
+
 export type ContextItem = {
   id: string
   name: string
   content: string
   active: boolean
   createdAt: number
+  mode: ContextMode
+  source?: ContextSource
+  lastUsedAt?: number
 }
 
 type ContextState = {
@@ -19,14 +30,21 @@ type ContextState = {
   addContext: (input: { name: string; content: string }) => string
   updateContext: (id: string, updater: (ctx: ContextItem) => ContextItem) => void
   toggleContext: (id: string) => void
+  markUsed: (ids: string[]) => void
+  upsertMessageContext: (input: { sessionID: string; messageID: string; name: string; content: string; mode: Exclude<ContextMode, "manual">; active?: boolean }) => void
+  setMessageContextActive: (input: { sessionID: string; messageID: string; active: boolean }) => void
+  removeMessageContext: (input: { sessionID: string; messageID: string }) => void
   reload: () => Promise<void>
 }
 
 const ContextManager = createContext<ContextState | undefined>()
 
+export function useContextManager(): ContextState
+export function useContextManager(optional: true): ContextState | undefined
 export function useContextManager(optional = false) {
   const ctx = useContext(ContextManager)
-  if (!ctx && !optional) {
+  if (!ctx) {
+    if (optional) return undefined
     throw new Error("useContextManager must be used within a ContextProvider")
   }
   return ctx
@@ -38,7 +56,8 @@ const persistDelay = 250
 export function ContextProvider(props: ParentProps<{ sessionID: string }>) {
   const toast = useToast()
   const [contexts, setContexts] = createSignal<ContextItem[]>([])
-  const [activeIds, setActiveIds] = createSignal<Set<string>>(new Set())
+  const [activeIds, setActiveIds] = createSignal<Set<string>>(new Set<string>())
+  const collectActiveIds = (items: ContextItem[]) => new Set<string>(items.filter((ctx) => ctx.active).map((ctx) => ctx.id))
   const filePathFor = (sessionID: string) => path.join(process.cwd(), ".opencode", "context", `${sessionID}.json`)
   let persistTimer: ReturnType<typeof setTimeout> | undefined
   let lastSessionID: string | undefined
@@ -68,25 +87,30 @@ export function ContextProvider(props: ParentProps<{ sessionID: string }>) {
       if (!(await file.exists())) {
         if (sessionID !== props.sessionID) return
         setContexts([])
-        setActiveIds(new Set())
+        setActiveIds(new Set<string>())
         return
       }
-      const data = (await file.json()) as Array<Omit<ContextItem, "createdAt" | "active"> & { active?: boolean; createdAt?: number }>
+      const data = (await file.json()) as Array<
+        Omit<ContextItem, "createdAt" | "active" | "mode"> & { active?: boolean; createdAt?: number; mode?: ContextMode }
+      >
       const normalized = data.map((item) => ({
         id: item.id,
         name: item.name,
         content: item.content ?? "",
         active: item.active !== false,
         createdAt: item.createdAt ?? Date.now(),
+        mode: item.mode ?? "manual",
+        source: item.source,
+        lastUsedAt: item.lastUsedAt,
       }))
       if (sessionID !== props.sessionID) return
       setContexts(normalized)
-      setActiveIds(new Set(normalized.filter((ctx) => ctx.active).map((ctx) => ctx.id)))
+      setActiveIds(collectActiveIds(normalized))
     } catch (error) {
       console.error("[ContextProvider] Failed to load contexts", error)
       toast.show({ variant: "error", message: "Failed to load contexts" })
       setContexts([])
-      setActiveIds(new Set())
+      setActiveIds(new Set<string>())
     }
   }
 
@@ -103,7 +127,7 @@ export function ContextProvider(props: ParentProps<{ sessionID: string }>) {
     }
     lastSessionID = sessionID
     setContexts([])
-    setActiveIds(new Set())
+    setActiveIds(new Set<string>())
     void hydrate(sessionID)
   })
 
@@ -118,20 +142,21 @@ export function ContextProvider(props: ParentProps<{ sessionID: string }>) {
     }
   })
 
-  const updateContexts = (updater: (prev: ContextItem[]) => ContextItem[]) => {
-    const sessionID = props.sessionID
+  const applyUpdate = (sessionID: string | undefined, updater: (prev: ContextItem[]) => ContextItem[]) => {
     if (!sessionID) return
     setContexts((prev) => {
       const next = updater(prev)
       schedulePersist(sessionID, next)
-      setActiveIds(new Set(next.filter((ctx) => ctx.active).map((ctx) => ctx.id)))
+      setActiveIds(collectActiveIds(next))
       return next
     })
   }
 
   const addContext = (input: { name: string; content: string }) => {
+    const sessionID = props.sessionID
+    if (!sessionID) return ""
     const newId = `ctx_${Date.now()}`
-    updateContexts((prev) => [
+    applyUpdate(sessionID, (prev) => [
       ...prev,
       {
         id: newId,
@@ -139,21 +164,91 @@ export function ContextProvider(props: ParentProps<{ sessionID: string }>) {
         content: input.content,
         active: true,
         createdAt: Date.now(),
+        mode: "manual",
       },
     ])
     return newId
   }
 
   const updateContext = (id: string, updater: (ctx: ContextItem) => ContextItem) => {
-    updateContexts((prev) => prev.map((ctx) => (ctx.id === id ? updater(ctx) : ctx)))
+    applyUpdate(props.sessionID, (prev) => prev.map((ctx) => (ctx.id === id ? updater(ctx) : ctx)))
   }
 
   const toggleContext = (id: string) => {
-    updateContexts((prev) =>
+    applyUpdate(props.sessionID, (prev) =>
       prev.map((ctx) => {
         if (ctx.id !== id) return ctx
         return { ...ctx, active: !ctx.active }
       }),
+    )
+  }
+
+  const markUsed = (ids: string[]) => {
+    applyUpdate(props.sessionID, (prev) =>
+      prev.map((ctx) => {
+        if (ctx.mode !== "conditional") return ctx
+        if (ids.includes(ctx.id)) {
+          return { ...ctx, lastUsedAt: Date.now() }
+        }
+        if (ctx.lastUsedAt !== undefined) {
+          return { ...ctx, lastUsedAt: undefined }
+        }
+        return ctx
+      }),
+    )
+  }
+
+  const upsertMessageContext = (input: {
+    sessionID: string
+    messageID: string
+    name: string
+    content: string
+    mode: Exclude<ContextMode, "manual">
+    active?: boolean
+  }) => {
+    if (props.sessionID !== input.sessionID) return
+    const newId = `ctx_msg_${input.messageID}`
+    applyUpdate(input.sessionID, (prev) => {
+      const next = [...prev]
+      const index = next.findIndex(
+        (ctx) => ctx.source?.type === "message" && ctx.source.messageID === input.messageID && ctx.source.sessionID === input.sessionID,
+      )
+      const base = index >= 0 ? next[index] : undefined
+      const nextActive =
+        input.active ??
+        (input.mode === "conditional" ? true : base?.active ?? true)
+      const item: ContextItem = {
+        id: base?.id ?? newId,
+        name: input.name,
+        content: input.content,
+        active: nextActive,
+        createdAt: base?.createdAt ?? Date.now(),
+        mode: input.mode,
+        source: { type: "message", sessionID: input.sessionID, messageID: input.messageID },
+        lastUsedAt: base?.lastUsedAt,
+      }
+      if (index >= 0) next[index] = item
+      else next.push(item)
+      return next
+    })
+  }
+
+  const setMessageContextActive = (input: { sessionID: string; messageID: string; active: boolean }) => {
+    if (props.sessionID !== input.sessionID) return
+    applyUpdate(input.sessionID, (prev) =>
+      prev.map((ctx) => {
+        if (ctx.source?.type === "message" && ctx.source.messageID === input.messageID && ctx.source.sessionID === input.sessionID) {
+          return { ...ctx, active: input.active }
+        }
+        return ctx
+      }),
+    )
+  }
+
+  const removeMessageContext = (input: { sessionID: string; messageID: string }) => {
+    if (props.sessionID !== input.sessionID) return
+    applyUpdate(input.sessionID, (prev) =>
+      prev.filter((ctx) => !(ctx.source?.type === "message" && ctx.source.messageID === input.messageID && ctx.source.sessionID === input.sessionID)),
     )
   }
 
@@ -165,7 +260,11 @@ export function ContextProvider(props: ParentProps<{ sessionID: string }>) {
     addContext,
     updateContext,
     toggleContext,
-    reload: hydrate,
+    markUsed,
+    upsertMessageContext,
+    setMessageContextActive,
+    removeMessageContext,
+    reload: () => (props.sessionID ? hydrate(props.sessionID) : Promise.resolve()),
   }
 
   return <ContextManager.Provider value={value}>{props.children}</ContextManager.Provider>

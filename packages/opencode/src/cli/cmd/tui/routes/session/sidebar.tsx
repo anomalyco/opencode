@@ -191,15 +191,19 @@ export function Sidebar(props: {
   const selectedContextTokens = createMemo(() => contextManager.selectedTokenCount())
   const sortedContexts = createMemo(() => {
     return [...contexts()].sort((a, b) => {
-      const aIsHighPriority = a.name.startsWith("!")
-      const bIsHighPriority = b.name.startsWith("!")
+      const aManual = a.mode === "manual"
+      const bManual = b.mode === "manual"
+      if (aManual && !bManual) return -1
+      if (!aManual && bManual) return 1
+      const aIsHighPriority = aManual && a.name.startsWith("!")
+      const bIsHighPriority = bManual && b.name.startsWith("!")
       if (aIsHighPriority && !bIsHighPriority) return -1
       if (!aIsHighPriority && bIsHighPriority) return 1
-      const aIsNegative = a.name.startsWith("-")
-      const bIsNegative = b.name.startsWith("-")
+      const aIsNegative = aManual && a.name.startsWith("-")
+      const bIsNegative = bManual && b.name.startsWith("-")
       if (!aIsNegative && bIsNegative) return -1
       if (aIsNegative && !bIsNegative) return 1
-      return 0
+      return b.createdAt - a.createdAt
     })
   })
 
@@ -537,7 +541,11 @@ export function Sidebar(props: {
     const level = getFavoriteLevel(toolId)
     if (level === "global") return { icon: "●", color: "#FFFFFF" }
     if (level === "project") return { icon: "●", color: "#B3B3B3" }
-    return { icon: "○", color: theme.textMuted }
+    const muted = theme.textMuted
+    return {
+      icon: "○",
+      color: typeof muted === "string" ? muted : muted.toString(),
+    }
   }
 
   async function handleCommit() {
@@ -1279,30 +1287,48 @@ export function Sidebar(props: {
           <Show when={expandedSections().has("context")}>
             <box flexDirection="column" gap={1}>
               <Show when={contexts().length > 0}>
-                <box flexDirection="row" gap="1ch" flexWrap="wrap">
+                <box flexDirection="row" gap={1} flexWrap="wrap">
                   <For each={sortedContexts()}>
                     {(ctx) => {
-                      const isActive = createMemo(() => activeContextIds().has(ctx.id))
+                      const isIncluded = createMemo(() => activeContextIds().has(ctx.id))
                       const hasContent = createMemo(() => ctx.content.trim().length > 0)
-                      const isHighPriority = createMemo(() => ctx.name.startsWith("!"))
-                      const isNegative = createMemo(() => ctx.name.startsWith("-"))
+                      const isManualPriority = createMemo(() => ctx.mode === "manual" && ctx.name.startsWith("!"))
+                      const isNegative = createMemo(() => ctx.mode === "manual" && ctx.name.startsWith("-"))
+                      const isConditional = createMemo(() => ctx.mode === "conditional")
+                      const wasUsed = createMemo(() => Boolean(ctx.lastUsedAt))
+                      const displayActive = createMemo(() => isIncluded() || isConditional())
 
                       const getBackgroundColor = () => {
-                        if (isActive()) {
+                        if (isConditional()) {
+                          if (isIncluded()) return theme.warning
+                          return theme.backgroundElement
+                        }
+                        if (isIncluded()) {
                           if (isNegative()) return theme.error
-                          if (isHighPriority()) return theme.warning
+                          if (isManualPriority()) return theme.warning
                           return theme.accent
                         }
-                        if (isNegative()) return "#8B0000" // dark red
-                        if (isHighPriority()) return "#B8860B" // dark orange/gold
+                        if (isNegative()) return "#8B0000"
+                        if (isManualPriority()) return "#B8860B"
                         return "#444444"
                       }
 
                       const getTextColor = () => {
-                        if (isActive()) return theme.background
-                        if (isNegative()) return "#FFFFFF" // white text on red
-                        if (isHighPriority()) return "#FFFFFF" // white text on orange
+                        if (isConditional()) {
+                          if (isIncluded()) return theme.background
+                          return wasUsed() ? theme.text : theme.textMuted
+                        }
+                        if (isIncluded()) return theme.background
+                        if (isNegative()) return "#FFFFFF"
+                        if (isManualPriority()) return "#FFFFFF"
                         return "#000000"
+                      }
+
+                      const attributes = () => {
+                        let attr = 0
+                        if (displayActive()) attr |= TextAttributes.BOLD
+                        if (isConditional()) attr |= TextAttributes.ITALIC
+                        return attr === 0 ? undefined : attr
                       }
 
                       return (
@@ -1311,13 +1337,16 @@ export function Sidebar(props: {
                           bg={getBackgroundColor()}
                           paddingLeft={1}
                           paddingRight={1}
-                          attributes={isActive() ? TextAttributes.BOLD : undefined}
+                          attributes={attributes()}
                           onMouseUp={() => {
                             if (renderer.getSelection()?.getSelectedText()) return
                             toggleContext(ctx.id)
                           }}
                         >
                           {` ${ctx.name.toUpperCase()}${hasContent() ? "*" : ""} `}
+                          <Show when={isConditional()}>
+                            <span style={{ fg: wasUsed() ? theme.text : theme.textMuted }}>{wasUsed() ? "●" : "○"}</span>
+                          </Show>
                         </text>
                       )
                     }}

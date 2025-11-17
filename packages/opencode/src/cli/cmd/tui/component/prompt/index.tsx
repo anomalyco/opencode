@@ -33,7 +33,7 @@ import { useDialog } from "../../ui/dialog"
 import { useToast } from "../../ui/toast"
 import { Perf } from "@/util/perf"
 import path from "path"
-import { useContextManager } from "../../context/context"
+import { useContextManager, type ContextItem } from "../../context/context"
 
 export type PromptProps = {
   sessionID?: string
@@ -76,6 +76,16 @@ export function Prompt(props: PromptProps) {
   const selectedContexts = createMemo(() => contextManager?.selectedContexts() ?? [])
   let aborting = false
   let dropProcessing = false
+
+  const shouldIncludeConditionalContext = (ctx: ContextItem, sessionID: string) => {
+    if (ctx.mode !== "conditional") return ctx.active
+    if (!ctx.active) return false
+    if (!ctx.source || ctx.source.type !== "message") return false
+    if (ctx.source.sessionID !== sessionID) return false
+    const messages = sync.data.message[sessionID] ?? []
+    const recentWindow = messages.slice(-8)
+    return recentWindow.some((msg) => msg.id === ctx.source!.messageID)
+  }
 
   const textareaKeybindings = createMemo(() => {
     const newlineBindings = keybind.all.input_newline || []
@@ -299,9 +309,17 @@ export function Prompt(props: PromptProps) {
 
     // Filter out text parts (pasted content) since they're now expanded inline
     const nonTextParts = store.prompt.parts.filter((part) => part.type !== "text")
+    const activeContexts =
+      props.sessionID && contextManager
+        ? selectedContexts().filter((ctx) => {
+            if (!ctx.active) return false
+            if (ctx.mode !== "conditional") return true
+            return shouldIncludeConditionalContext(ctx, props.sessionID!)
+          })
+        : []
     const contextParts =
-      props.sessionID && selectedContexts().length > 0
-        ? selectedContexts().map((ctx) => ({
+      props.sessionID && activeContexts.length > 0
+        ? activeContexts.map((ctx) => ({
             id: Identifier.ascending("part"),
             type: "text" as const,
             text: `Context: ${ctx.name}\n${ctx.content}`,
@@ -400,6 +418,9 @@ export function Prompt(props: PromptProps) {
           ],
         },
       })
+      if (activeContexts.length > 0) {
+        contextManager?.markUsed(activeContexts.map((ctx) => ctx.id))
+      }
     }
     history.append(store.prompt)
     input.extmarks.clear()
