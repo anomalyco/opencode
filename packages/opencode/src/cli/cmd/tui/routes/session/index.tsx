@@ -82,6 +82,7 @@ class CustomSpeedScroll implements ScrollAcceleration {
 const context = createContext<{
   width: number
   conceal: () => boolean
+  showThinking: () => boolean
 }>()
 
 function use() {
