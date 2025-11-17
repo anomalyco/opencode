@@ -100,10 +100,7 @@ export const TuiThreadCommand = cmd({
       const worker = new Worker(workerPath, {
         env: Object.fromEntries(
           Object.entries(process.env)
-            .filter(
-              (entry): entry is [string, string] =>
-                entry[1] !== undefined && typeof entry[1] === "string",
-            )
+            .filter((entry): entry is [string, string] => entry[1] !== undefined && typeof entry[1] === "string")
             .map(([key, value]) => [key, String(value)]),
         ),
       })
@@ -122,9 +119,9 @@ export const TuiThreadCommand = cmd({
       await tui({
         url: server.url,
         sessionID,
-        model: args.model,
+
         agent: args.agent,
-        model: args.model,
+
         prompt,
         onExit: async () => {
           await client.call("shutdown", undefined)

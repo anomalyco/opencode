@@ -68,6 +68,8 @@ import { DialogSelect, type DialogSelectOption } from "@tui/ui/dialog-select"
 import { DialogTimeline } from "./dialog-timeline"
 import { Sidebar } from "./sidebar"
 import { LeftSidebar } from "./left-sidebar"
+import SidebarWorker from "../../sidebar-worker.tsx"
+import LeftSidebarWorker from "../../left-sidebar-worker.tsx"
 import { LANGUAGE_EXTENSIONS } from "@/lsp/language"
 import parsers from "../../../../../../parsers-config.ts"
 import { Clipboard } from "../../util/clipboard"
@@ -1211,7 +1213,7 @@ export function Session() {
       <box flexDirection="row" paddingBottom={1} paddingTop={1} paddingLeft={2} paddingRight={2} gap={2}>
         {/* Left Sidebar */}
         <Show when={leftSidebarVisible()}>
-          <LeftSidebar
+          <LeftSidebarWorker
             sessionID={route.sessionID}
             onToggle={toggleLeftSidebar}
             onSelect={selectSession}
@@ -1454,13 +1456,10 @@ export function Session() {
 
         {/* Right Sidebar */}
         <Show when={rightSidebarVisible()}>
-          <Sidebar
+          <SidebarWorker
             sessionID={route.sessionID}
-            onToggle={toggleRightSidebar}
             width={rightSidebarWidth()}
-            minWidth={RIGHT_SIDEBAR_WIDTH_MIN}
-            maxWidth={RIGHT_SIDEBAR_WIDTH_MAX}
-            widthStep={SIDEBAR_WIDTH_STEP}
+            onToggle={toggleRightSidebar}
             onResize={adjustRightSidebarWidth}
           />
         </Show>
