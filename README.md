@@ -50,18 +50,19 @@ XDG_BIN_DIR=$HOME/.local/bin curl -fsSL https://opencode.ai/install | bash
 
 ### Agents
 
-OpenCode includes three built-in agents you can switch between:
+OpenCode includes two built-in agents you can switch between,
+you can switch between these using the `Tab` key.
 
-- **build** (default) - Full access agent for development work
-- **plan** - Read-only agent for safe code exploration and analysis
+- **build** - Default, full access agent for development work
+- **plan** - Read-only agent for analysis and code exploration
   - Denies file edits by default
   - Asks permission before running bash commands
   - Ideal for exploring unfamiliar codebases or planning changes
-- **general** - Subagent for complex searches and multi-step tasks
 
-Switch agents using `Tab` or `@mention` them in messages. Configure in `opencode.json`.
+Also, included is a **general** subagent for complex searches and multi-step tasks.
+This is used internally and can be invoked using `@general` in messages.
 
-Learn more about [customizing agents](https://opencode.ai/docs/agents).
+Learn more about [agents](https://opencode.ai/docs/agents).
 
 ### Documentation
 
