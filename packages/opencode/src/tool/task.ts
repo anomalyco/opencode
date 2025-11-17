@@ -11,6 +11,137 @@ import { SessionPrompt } from "../session/prompt"
 import { TaskHierarchy } from "../session/task-hierarchy"
 import { Parallel } from "../parallel"
 import { Log } from "../util/log"
+import { Rpc } from "../util/rpc"
+import { appendFile } from "fs/promises"
+
+// Worker-based subagent execution
+async function spawnThreadedSubagent(options: {
+  sessionID: string
+  messageID: string
+  agent: Agent.Info
+  params: { description: string; prompt: string; subagent_type: string; parallel?: boolean }
+  ctx: any
+  log: ReturnType<typeof Log.create>
+}) {
+  const { sessionID, agent, params, ctx, log } = options
+
+  const workerLogPath = "/tmp/opencode-task-worker.log"
+  const logMsg = async (msg: string) => {
+    const timestamp = new Date().toISOString()
+    await appendFile(workerLogPath, `[${timestamp}] ${msg}\n`)
+  }
+
+  await logMsg(`Spawning threaded subagent: ${agent.name} - ${params.description}`)
+
+  // Create child session in main thread first (needs Instance context)
+  const childSessionID = await TaskHierarchy.createSubtask(
+    sessionID,
+    agent.name,
+    `[@${agent.name.toUpperCase()}] ${params.description} [THREADED]`,
+  )
+
+  await logMsg(`Created child session: ${childSessionID}`)
+
+  // Spawn worker for execution
+  const worker = new Worker(new URL("../cli/cmd/tui/workers/subagent.worker.ts", import.meta.url))
+
+  worker.onerror = async (err) => {
+    await logMsg(`Worker error: ${err}`)
+  }
+
+  const parts: Record<string, MessageV2.ToolPart> = {}
+
+  // Track worker state
+  let workerState = {
+    status: "initializing" as string,
+    progress: { toolCalls: 0, tokensUsed: 0, cost: 0 },
+    result: "",
+    error: "",
+  }
+
+  worker.onmessage = async (evt) => {
+    try {
+      const msg = JSON.parse(evt.data)
+      if (msg.type === "state.update") {
+        workerState = msg.state
+        await logMsg(`Worker state: ${workerState.status} - tools: ${workerState.progress.toolCalls}`)
+
+        // Update metadata with worker progress
+        ctx.metadata({
+          title: params.description,
+          metadata: {
+            sessionId: childSessionID,
+            threaded: true,
+            workerStatus: workerState.status,
+            progress: workerState.progress,
+          },
+        })
+      }
+    } catch {
+      // Not JSON message, ignore
+    }
+  }
+
+  const client = Rpc.client<any>(worker)
+
+  // Initialize worker - it will execute the subagent
+  await client.call("init", {
+    serverUrl: `http://127.0.0.1:${process.env.PORT || 3000}/`,
+    parentSessionID: sessionID,
+    agentName: agent.name,
+    prompt: params.prompt,
+    description: params.description,
+    parallel: params.parallel ?? false,
+  })
+
+  await logMsg("Worker initialized, executing subagent...")
+
+  // Monitor for completion (poll every 500ms)
+  const startTime = Date.now()
+  const timeoutMs = 300000 // 5 minutes
+
+  while (workerState.status === "initializing" || workerState.status === "running") {
+    if (Date.now() - startTime > timeoutMs) {
+      worker.terminate()
+      throw new Error(`Worker timed out after ${timeoutMs}ms`)
+    }
+
+    if (ctx.abort.aborted) {
+      await client.call("abort", undefined)
+      worker.terminate()
+      throw new Error("Task aborted by user")
+    }
+
+    await new Promise((resolve) => setTimeout(resolve, 500))
+  }
+
+  await logMsg(`Worker completed: ${workerState.status}`)
+  worker.terminate()
+
+  if (workerState.status === "failed") {
+    throw new Error(workerState.error || "Subagent execution failed")
+  }
+
+  // Get final session state
+  const session = await Session.get(childSessionID)
+  const all = await Session.messages({ sessionID: childSessionID })
+  const toolParts = all
+    .filter((x) => x.info.role === "assistant")
+    .flatMap((msg) => msg.parts.filter((x: any) => x.type === "tool") as MessageV2.ToolPart[])
+
+  await logMsg(`Threaded subagent complete: ${toolParts.length} tool calls`)
+
+  return {
+    title: params.description,
+    metadata: {
+      summary: toolParts,
+      sessionId: childSessionID,
+      parallel: params.parallel,
+      branch: undefined as string | undefined,
+    },
+    output: workerState.result || "Task completed in worker thread",
+  }
+}
 
 export const TaskTool = Tool.define("task", async () => {
   const log = Log.create({ service: "task-tool" })
@@ -31,11 +162,31 @@ export const TaskTool = Tool.define("task", async () => {
         .boolean()
         .optional()
         .describe("Run subtask in isolated git worktree for parallel execution (requires git repository)"),
+      threaded: z
+        .boolean()
+        .optional()
+        .describe("Run subtask in isolated worker thread for true CPU parallelism (experimental)"),
     }),
     async execute(params, ctx) {
       try {
         const agent = await Agent.get(params.subagent_type)
         if (!agent) throw new Error(`Unknown agent type: ${params.subagent_type} is not a valid agent type`)
+
+        // If threaded mode requested, spawn in isolated worker thread
+        if (params.threaded) {
+          log.info("spawning subagent in worker thread", { agent: agent.name, description: params.description })
+
+          const workerResult = await spawnThreadedSubagent({
+            sessionID: ctx.sessionID,
+            messageID: ctx.messageID,
+            agent,
+            params,
+            ctx,
+            log,
+          })
+
+          return workerResult
+        }
 
         // Setup parallel worktree if requested
         let parallelResult: Parallel.Result | undefined

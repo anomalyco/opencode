@@ -2382,7 +2382,7 @@ function ToolPart(props: { part: ToolPart; message: AssistantMessage; indent?: n
           return
         }
         if (el.height > 1) {
-          setMargin(1)
+          setMargin(0)
           return
         }
         const children = parent.getChildren()

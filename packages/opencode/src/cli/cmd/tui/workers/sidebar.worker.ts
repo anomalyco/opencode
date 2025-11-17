@@ -152,19 +152,20 @@ export const rpc = {
   },
 
   // Heavy computation: message stats (costs, token usage)
-  async computeMessageStats(
+  async computeMessageStats(input: {
     messages: Array<{
       role: string
       cost?: number
       tokens?: { input?: number; output?: number; cache?: { read?: number } }
       providerID?: string
       modelID?: string
-    }>,
+    }>
     providers: Array<{
       id: string
       models: Record<string, { limit: { context: number }; cost: { input: number; cache_read?: number } }>
-    }>,
-  ) {
+    }>
+  }) {
+    const { messages, providers } = input
     await logWorker(`Computing message stats for ${messages.length} messages`)
 
     const providersById = new Map(providers.map((p) => [p.id, p]))
