@@ -229,6 +229,62 @@ Or if you already have an API key, you can select **Manually enter API Key** and
 
 ---
 
+### Azure Cognitive Services
+
+1. Head over to the [Azure portal](https://portal.azure.com/) and create an **Azure OpenAI** resource. You'll need:
+   - **Resource name**: This becomes part of your API endpoint (`https://AZURE_COGNITIVE_SERVICES_RESOURCE_NAME.cognitiveservices.azure.com/`)
+   - **API key**: Either `KEY 1` or `KEY 2` from your resource
+
+2. Go to [Azure AI Foundry](https://ai.azure.com/) and deploy a model.
+
+   :::note
+   The deployment name must match the model name for opencode to work properly.
+   :::
+
+3. Run `opencode auth login` and select **Azure**.
+
+   ```bash
+   $ opencode auth login
+
+   ┌  Add credential
+   │
+   ◆  Select provider
+   │  ● Azure Cognitive Services
+   │  ...
+   └
+   ```
+
+4. Enter your API key.
+
+   ```bash
+   $ opencode auth login
+
+   ┌  Add credential
+   │
+   ◇  Select provider
+   │  Azure Cognitive Services
+   │
+   ◇  Enter your API key
+   │  _
+   └
+   ```
+
+5. Set your resource name as an environment variable:
+
+   ```bash
+   AZURE_COGNITIVE_SERVICES_RESOURCE_NAME=XXX opencode
+   ```
+
+   Or add it to your bash profile:
+
+   ```bash title="~/.bash_profile"
+   export AZURE_COGNITIVE_SERVICES_RESOURCE_NAME=XXX
+   ```
+
+6. Run the `/models` command to select your deployed model.
+
+---
+
 ### Baseten
 
 1. Head over to the [Baseten](https://app.baseten.co/), create an account, and generate an API key.
