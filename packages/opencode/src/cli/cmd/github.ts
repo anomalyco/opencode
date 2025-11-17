@@ -666,7 +666,7 @@ export const GithubRunCommand = cmd({
             providerID,
             modelID,
           },
-          agent: "general",
+          agent: "build",
           parts: [
             {
               id: Identifier.ascending("part"),

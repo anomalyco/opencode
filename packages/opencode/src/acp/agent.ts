@@ -547,7 +547,7 @@ export namespace ACP {
       if (!current) {
         this.sessionManager.setModel(session.id, model)
       }
-      const agent = session.modeId ?? "general"
+      const agent = session.modeId ?? "build"
 
       const parts: Array<
         { type: "text"; text: string } | { type: "file"; url: string; filename: string; mime: string }

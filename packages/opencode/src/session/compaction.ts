@@ -242,7 +242,7 @@ ${combined}
       role: "assistant",
       parentID: toSummarize.findLast((m) => m.info.role === "user")?.info.id!,
       sessionID: input.sessionID,
-      mode: "general",
+      mode: "build",
       path: {
         cwd: Instance.directory,
         root: Instance.worktree,

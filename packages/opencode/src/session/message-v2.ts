@@ -415,7 +415,7 @@ export namespace MessageV2 {
         tokens: v1.metadata.assistant!.tokens,
         modelID: v1.metadata.assistant!.modelID,
         providerID: v1.metadata.assistant!.providerID,
-        mode: "general",
+        mode: "build",
         error: v1.metadata.error,
       }
       const parts = v1.parts.flatMap((part): Part[] => {
