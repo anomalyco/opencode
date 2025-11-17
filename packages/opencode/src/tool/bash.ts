@@ -89,10 +89,18 @@ export const BashTool = Tool.define("bash", {
             .text()
             .then((x) => x.trim())
           log.info("resolved path", { arg, resolved })
-          if (resolved && !Filesystem.contains(Instance.directory, resolved)) {
-            throw new Error(
-              `This command references paths outside of ${Instance.directory} so it is not allowed to be executed.`,
-            )
+          if (resolved) {
+            // Git Bash on Windows returns Unix-style paths like /c/Users/...
+            const normalized =
+              process.platform === "win32" && resolved.match(/^\/[a-z]\//)
+                ? resolved.replace(/^\/([a-z])\//, (_, drive) => `${drive.toUpperCase()}:\\`).replace(/\//g, "\\")
+                : resolved
+
+            if (!Filesystem.contains(Instance.directory, normalized)) {
+              throw new Error(
+                `This command references paths outside of ${Instance.directory} so it is not allowed to be executed.`,
+              )
+            }
           }
         }
       }
