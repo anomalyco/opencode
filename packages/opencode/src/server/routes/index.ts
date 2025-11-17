@@ -16,5 +16,6 @@ export {
   commandRoutes,
   pathRoutes,
   logRoutes,
+  gitRoutes,
 } from "./misc"
 export { errors, ERRORS } from "./shared"

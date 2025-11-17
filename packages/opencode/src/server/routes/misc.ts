@@ -265,10 +265,7 @@ export function logRoutes() {
         service: z.string().meta({ description: "Service name for the log entry" }),
         level: z.enum(["debug", "info", "error", "warn"]).meta({ description: "Log level" }),
         message: z.string().meta({ description: "Log message" }),
-        extra: z
-          .record(z.string(), z.any())
-          .optional()
-          .meta({ description: "Additional metadata for the log entry" }),
+        extra: z.record(z.string(), z.any()).optional().meta({ description: "Additional metadata for the log entry" }),
       }),
     ),
     async (c) => {
@@ -291,6 +288,84 @@ export function logRoutes() {
       }
 
       return c.json(true)
+    },
+  )
+
+  return router
+}
+
+export function gitRoutes() {
+  const router = new Hono()
+
+  router.get(
+    "/status",
+    describeRoute({
+      description: "Get git repository status",
+      operationId: "git.status",
+      responses: {
+        200: {
+          description: "Git status",
+          content: {
+            "application/json": {
+              schema: resolver(
+                z.object({
+                  branch: z.string(),
+                  ahead: z.number(),
+                  behind: z.number(),
+                  modified: z.number(),
+                  staged: z.number(),
+                  untracked: z.number(),
+                }),
+              ),
+            },
+          },
+        },
+      },
+    }),
+    async (c) => {
+      try {
+        const { $ } = await import("bun")
+        const cwd = Instance.directory
+
+        // Get current branch
+        const branchResult = await $`git -C ${cwd} rev-parse --abbrev-ref HEAD`.quiet()
+        const branch = branchResult.text().trim() || "main"
+
+        // Get ahead/behind counts
+        let ahead = 0
+        let behind = 0
+        try {
+          const aheadBehindResult = await $`git -C ${cwd} rev-list --left-right --count HEAD...@{u}`.quiet()
+          const parts = aheadBehindResult.text().trim().split(/\s+/)
+          ahead = parseInt(parts[0]) || 0
+          behind = parseInt(parts[1]) || 0
+        } catch {
+          // No upstream tracking
+        }
+
+        // Get file counts
+        const statusResult = await $`git -C ${cwd} status --porcelain`.quiet()
+        const lines = statusResult
+          .text()
+          .trim()
+          .split("\n")
+          .filter((l) => l)
+        let modified = 0
+        let staged = 0
+        let untracked = 0
+
+        for (const line of lines) {
+          const x = line[0]
+          const y = line[1]
+          if (x === "?" && y === "?") untracked++
+          else if (x !== " " && x !== "?") staged++
+          if (y !== " " && y !== "?") modified++
+        }
+
+        return c.json({ branch, ahead, behind, modified, staged, untracked })
+      } catch (err) {
+        return c.json({ branch: "unknown", ahead: 0, behind: 0, modified: 0, staged: 0, untracked: 0 })
+      }
     },
   )
 

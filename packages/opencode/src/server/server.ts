@@ -36,6 +36,7 @@ import {
   commandRoutes,
   pathRoutes,
   logRoutes,
+  gitRoutes,
 } from "./routes"
 
 export namespace Server {
@@ -118,6 +119,7 @@ export namespace Server {
       .route("/find", findRoutes())
       .route("/file", fileRoutes())
       .route("/log", logRoutes())
+      .route("/git", gitRoutes())
       .route("/agent", agentRoutes())
       .route("/mcp", mcpRoutes())
       .route("/lsp", lspRoutes())
