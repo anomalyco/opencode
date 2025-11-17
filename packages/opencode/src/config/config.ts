@@ -75,7 +75,7 @@ export namespace Config {
     for (const dir of directories) {
       await assertValid(dir)
 
-      if (dir.endsWith(".opencode")) {
+      if (dir.endsWith(".opencode") || dir === Flag.OPENCODE_CONFIG_DIR) {
         for (const file of ["opencode.jsonc", "opencode.json"]) {
           log.debug(`loading config from ${path.join(dir, file)}`)
           result = mergeDeep(result, await loadFile(path.join(dir, file)))
