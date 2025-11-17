@@ -12,7 +12,7 @@ export namespace Agent {
     .object({
       name: z.string(),
       description: z.string().optional(),
-      mode: z.union([z.literal("subagent"), z.literal("primary"), z.literal("all")]),
+      mode: z.enum(["subagent", "primary", "all"]),
       builtIn: z.boolean(),
       topP: z.number().optional(),
       temperature: z.number().optional(),
