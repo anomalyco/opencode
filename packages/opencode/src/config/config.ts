@@ -437,7 +437,7 @@ export namespace Config {
     })
 
   export const TUI = z.object({
-    scroll_speed: z.number().min(1).optional().default(1).describe("TUI scroll speed"),
+    scroll_speed: z.number().min(0.001).optional().default(1).describe("TUI scroll speed"),
     scroll_acceleration: z
       .object({
         enabled: z.boolean().describe("Enable scroll acceleration"),

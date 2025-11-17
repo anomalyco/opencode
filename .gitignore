@@ -14,3 +14,5 @@ dist
 **/.serena
 .serena/
 refs
+Session.vim
+opencode.json
