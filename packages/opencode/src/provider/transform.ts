@@ -136,7 +136,7 @@ export namespace ProviderTransform {
   ): Record<string, any> | undefined {
     const result: Record<string, any> = {}
 
-    if (providerID === "openai") {
+    if (providerID === "openai" || npm === "@ai-sdk/openai") {
       result["promptCacheKey"] = sessionID
     }
 
