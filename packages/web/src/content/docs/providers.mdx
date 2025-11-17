@@ -957,6 +957,59 @@ monitor and improve Grok Code.
 
 ---
 
+### ZenMux
+
+1. Head over to the [ZenMux dashboard](https://zenmux.ai/settings/keys), click **Create API Key**, and copy the key.
+
+2. Run `opencode auth login` and select ZenMux.
+
+   ```bash
+   $ opencode auth login
+
+   ┌  Add credential
+   │
+   ◆  Select provider
+   │  ● ZenMux
+   │  ○ Zhipu AI
+   │  ○ Zhipu AI Coding Plan
+   │  ...
+   └
+   ```
+
+3. Enter the API key for the provider.
+
+   ```bash
+   $ opencode auth login
+
+   ┌  Add credential
+   │
+   ◇  Select provider
+   │  ZenMux
+   │
+   ◇  Enter your API key
+   │  _
+   └
+   ```
+
+4. Many ZenMux models are preloaded by default, run the `/models` command to select the one you want.
+
+   You can also add additional models through your opencode config.
+
+   ```json title="opencode.json" {6}
+   {
+     "$schema": "https://opencode.ai/config.json",
+     "provider": {
+       "zenmux": {
+         "models": {
+           "somecoolnewmodel": {}
+         }
+       }
+     }
+   }
+   ```
+
+---
+
 ## Custom provider
 
 To add any **OpenAI-compatible** provider that's not listed in `opencode auth login`:

@@ -141,7 +141,7 @@ export namespace Config {
     for (const dir of directories) {
       await assertValid(dir)
 
-      if (dir !== Global.Path.config) {
+      if (dir.endsWith(".opencode") || dir === Flag.OPENCODE_CONFIG_DIR) {
         for (const file of ["opencode.jsonc", "opencode.json"]) {
           result = mergeDeep(result, await loadFile(path.join(dir, file)))
           result.agent ??= {}
@@ -695,6 +695,7 @@ export namespace Config {
             .optional(),
           chatMaxRetries: z.number().optional().describe("Number of retries for chat completions on failure"),
           disable_paste_summary: z.boolean().optional(),
+          batch_tool: z.boolean().optional().describe("Enable the batch tool"),
         })
         .optional(),
     })
