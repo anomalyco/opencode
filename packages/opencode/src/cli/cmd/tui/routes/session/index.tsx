@@ -1754,8 +1754,8 @@ function UserMessage(props: {
         }}
         onMouseUp={props.onMouseUp}
         border={["left"]}
-        paddingTop={1}
-        paddingBottom={1}
+        paddingTop={0}
+        paddingBottom={0}
         paddingLeft={2}
         marginTop={props.index === 0 ? 0 : 1}
         backgroundColor={hover() ? theme.backgroundElement : theme.backgroundPanel}
@@ -1763,54 +1763,45 @@ function UserMessage(props: {
         borderColor={color()}
         flexShrink={0}
       >
-        <Show when={!hasFiles()}>
-          <>
-            <box flexDirection="row" justifyContent="flex-end" marginBottom={1}>
-              <MessageControls
-                sessionID={props.message.sessionID}
-                messageID={props.message.id}
-                priority={props.message.priority}
-              />
+        <box flexDirection="column" gap={0} justifyContent="center">
+          <box flexDirection="row" alignItems="flex-start" justifyContent="space-between" gap={1}>
+            <box flexDirection="column" flexGrow={1} gap={hasFiles() ? 1 : 0}>
+              <Show when={!hasFiles()}>
+                <text fg={theme.text}>{text()?.text}</text>
+              </Show>
+              <Show when={hasFiles()}>
+                <box flexDirection="column" gap={0}>
+                  <For each={files()}>
+                    {(file) => (
+                      <text fg={theme.text} onMouseUp={(event) => void openAttachment(event, file)}>
+                        <span style={{ fg: theme.text, bold: true }}>{MIME_BADGE[file.mime] ?? file.mime}</span>{" "}
+                        <span style={{ fg: theme.textMuted }}>{file.filename ?? "attachment"}</span>
+                      </text>
+                    )}
+                  </For>
+                </box>
+              </Show>
             </box>
-            <text fg={theme.text}>{text()?.text}</text>
-          </>
-        </Show>
-        <Show when={hasFiles()}>
-          <box flexDirection="column" gap={1}>
-            <For each={files()}>
-              {(file) => {
-                const badgeColor = createMemo(() => theme.warning)
-                return (
-                  <box flexDirection="row" alignItems="center" justifyContent="space-between" gap={1}>
-                    <text fg={theme.text} onMouseUp={(event) => void openAttachment(event, file)}>
-                      <span style={{ fg: theme.text, bold: true }}>{MIME_BADGE[file.mime] ?? file.mime}</span>{" "}
-                      <span style={{ fg: theme.textMuted }}>{file.filename ?? "attachment"}</span>
-                    </text>
-                    <MessageControls
-                      sessionID={props.message.sessionID}
-                      messageID={props.message.id}
-                      priority={props.message.priority}
-                      inline
-                    />
-                  </box>
-                )
-              }}
-            </For>
+            <MessageControls
+              sessionID={props.message.sessionID}
+              messageID={props.message.id}
+              priority={props.message.priority}
+            />
           </box>
-        </Show>
-
-        <text fg={queued() ? theme.accent : theme.text}>
-          <Show
-            when={queued()}
-            fallback={
-              <>
-                {displayName()} <span style={{ fg: theme.textMuted }}>({Locale.time(props.message.time.created)})</span>
-              </>
-            }
-          >
-            <span style={{ bg: theme.accent, fg: theme.backgroundPanel, bold: true }}> QUEUED </span> {displayName()}
-          </Show>
-        </text>
+          <text fg={queued() ? theme.accent : theme.text} marginTop={hasFiles() ? 0 : 1}>
+            <Show
+              when={queued()}
+              fallback={
+                <>
+                  {displayName()}{" "}
+                  <span style={{ fg: theme.textMuted }}>({Locale.time(props.message.time.created)})</span>
+                </>
+              }
+            >
+              <span style={{ bg: theme.accent, fg: theme.backgroundPanel, bold: true }}> QUEUED </span> {displayName()}
+            </Show>
+          </text>
+        </box>
       </box>
     </Show>
   )
