@@ -14,7 +14,7 @@
     padding: 4px 12px;
     text-align: left;
 
-    border-radius: 6px;
+    border-radius: var(--radius-md);
     transition: background-color 0.2s ease-in-out;
 
     &[data-active="true"] {

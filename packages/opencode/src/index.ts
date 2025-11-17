@@ -25,6 +25,7 @@ import { TuiSpawnCommand } from "./cli/cmd/tui/spawn"
 import { AcpCommand } from "./cli/cmd/acp"
 import { EOL } from "os"
 import { WebCommand } from "./cli/cmd/web"
+import { PrCommand } from "./cli/cmd/pr"
 
 process.on("unhandledRejection", (e) => {
   Log.Default.error("rejection", {
@@ -92,6 +93,7 @@ const cli = yargs(hideBin(process.argv))
   .command(ExportCommand)
   .command(ImportCommand)
   .command(GithubCommand)
+  .command(PrCommand)
   .fail((msg) => {
     if (
       msg.startsWith("Unknown argument") ||

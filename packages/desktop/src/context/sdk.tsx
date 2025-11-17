@@ -10,11 +10,6 @@ export const { use: useSDK, provider: SDKProvider } = createSimpleContext({
     const sdk = createOpencodeClient({
       baseUrl: props.url,
       signal: abort.signal,
-      fetch: (req) => {
-        // @ts-ignore
-        req.timeout = false
-        return fetch(req)
-      },
     })
 
     const emitter = createGlobalEmitter<{

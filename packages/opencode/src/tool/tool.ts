@@ -29,6 +29,7 @@ export namespace Tool {
         output: string
         attachments?: MessageV2.FilePart[]
       }>
+      formatValidationError?(error: z.ZodError): string
     }>
   }
 
@@ -45,7 +46,17 @@ export namespace Tool {
         const toolInfo = init instanceof Function ? await init() : init
         const execute = toolInfo.execute
         toolInfo.execute = (args, ctx) => {
-          toolInfo.parameters.parse(args)
+          try {
+            toolInfo.parameters.parse(args)
+          } catch (error) {
+            if (error instanceof z.ZodError && toolInfo.formatValidationError) {
+              throw new Error(toolInfo.formatValidationError(error), { cause: error })
+            }
+            throw new Error(
+              `The ${id} tool was called with invalid arguments: ${error}.\nPlease rewrite the input so it satisfies the expected schema.`,
+              { cause: error },
+            )
+          }
           return execute(args, ctx)
         }
         return toolInfo

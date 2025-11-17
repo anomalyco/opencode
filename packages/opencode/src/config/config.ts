@@ -24,17 +24,18 @@ export namespace Config {
   export const state = Instance.state(async () => {
     const auth = await Auth.all()
     let result = await global()
-    for (const file of ["opencode.jsonc", "opencode.json"]) {
-      const found = await Filesystem.findUp(file, Instance.directory, Instance.worktree)
-      for (const resolved of found.toReversed()) {
-        result = mergeDeep(result, await loadFile(resolved))
-      }
-    }
 
     // Override with custom config if provided
     if (Flag.OPENCODE_CONFIG) {
       result = mergeDeep(result, await loadFile(Flag.OPENCODE_CONFIG))
       log.debug("loaded custom config", { path: Flag.OPENCODE_CONFIG })
+    }
+
+    for (const file of ["opencode.jsonc", "opencode.json"]) {
+      const found = await Filesystem.findUp(file, Instance.directory, Instance.worktree)
+      for (const resolved of found.toReversed()) {
+        result = mergeDeep(result, await loadFile(resolved))
+      }
     }
 
     if (Flag.OPENCODE_CONFIG_CONTENT) {
@@ -74,12 +75,15 @@ export namespace Config {
     for (const dir of directories) {
       await assertValid(dir)
 
-      for (const file of ["opencode.jsonc", "opencode.json"]) {
-        result = mergeDeep(result, await loadFile(path.join(dir, file)))
-        // to satisy the type checker
-        result.agent ??= {}
-        result.mode ??= {}
-        result.plugin ??= []
+      if (dir.endsWith(".opencode") || dir === Flag.OPENCODE_CONFIG_DIR) {
+        for (const file of ["opencode.jsonc", "opencode.json"]) {
+          log.debug(`loading config from ${path.join(dir, file)}`)
+          result = mergeDeep(result, await loadFile(path.join(dir, file)))
+          // to satisy the type checker
+          result.agent ??= {}
+          result.mode ??= {}
+          result.plugin ??= []
+        }
       }
 
       promises.push(installDependencies(dir))
@@ -333,7 +337,7 @@ export namespace Config {
   export const Mcp = z.discriminatedUnion("type", [McpLocal, McpRemote])
   export type Mcp = z.infer<typeof Mcp>
 
-  export const Permission = z.union([z.literal("ask"), z.literal("allow"), z.literal("deny")])
+  export const Permission = z.enum(["ask", "allow", "deny"])
   export type Permission = z.infer<typeof Permission>
 
   export const Command = z.object({
@@ -354,7 +358,12 @@ export namespace Config {
       tools: z.record(z.string(), z.boolean()).optional(),
       disable: z.boolean().optional(),
       description: z.string().optional().describe("Description of when to use the agent"),
-      mode: z.union([z.literal("subagent"), z.literal("primary"), z.literal("all")]).optional(),
+      mode: z.enum(["subagent", "primary", "all"]).optional(),
+      color: z
+        .string()
+        .regex(/^#[0-9a-fA-F]{6}$/, "Invalid hex color format")
+        .optional()
+        .describe("Hex color code for the agent (e.g., #FF5733)"),
       permission: z
         .object({
           edit: Permission.optional(),
@@ -428,7 +437,13 @@ export namespace Config {
     })
 
   export const TUI = z.object({
-    scroll_speed: z.number().min(1).optional().default(2).describe("TUI scroll speed"),
+    scroll_speed: z.number().min(1).optional().default(1).describe("TUI scroll speed"),
+    scroll_acceleration: z
+      .object({
+        enabled: z.boolean().describe("Enable scroll acceleration"),
+      })
+      .optional()
+      .describe("Scroll acceleration settings"),
   })
 
   export const Layout = z.enum(["auto", "stretch"]).meta({
@@ -607,6 +622,7 @@ export namespace Config {
             .optional(),
           chatMaxRetries: z.number().optional().describe("Number of retries for chat completions on failure"),
           disable_paste_summary: z.boolean().optional(),
+          batch_tool: z.boolean().optional().describe("Enable the batch tool"),
         })
         .optional(),
     })

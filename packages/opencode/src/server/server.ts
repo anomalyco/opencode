@@ -27,7 +27,6 @@ import { Global } from "../global"
 import { ProjectRoute } from "./project"
 import { ToolRegistry } from "../tool/registry"
 import { zodToJsonSchema } from "zod-to-json-schema"
-import { SessionLock } from "../session/lock"
 import { SessionPrompt } from "../session/prompt"
 import { SessionCompaction } from "../session/compaction"
 import { SessionRevert } from "../session/revert"
@@ -40,6 +39,8 @@ import type { ContentfulStatusCode } from "hono/utils/http-status"
 import { TuiEvent } from "@/cli/cmd/tui/event"
 import { Snapshot } from "@/snapshot"
 import { SessionSummary } from "@/session/summary"
+import { GlobalBus } from "@/bus/global"
+import { SessionStatus } from "@/session/status"
 
 const ERRORS = {
   400: {
@@ -49,7 +50,7 @@ const ERRORS = {
         schema: resolver(
           z
             .object({
-              data: z.any().nullable(),
+              data: z.any(),
               errors: z.array(z.record(z.string(), z.any())),
               success: z.literal(false),
             })
@@ -117,6 +118,56 @@ export namespace Server {
           timer.stop()
         }
       })
+      .get(
+        "/global/event",
+        describeRoute({
+          description: "Get events",
+          operationId: "global.event",
+          responses: {
+            200: {
+              description: "Event stream",
+              content: {
+                "text/event-stream": {
+                  schema: resolver(
+                    z
+                      .object({
+                        directory: z.string(),
+                        payload: Bus.payloads(),
+                      })
+                      .meta({
+                        ref: "GlobalEvent",
+                      }),
+                  ),
+                },
+              },
+            },
+          },
+        }),
+        async (c) => {
+          log.info("global event connected")
+          return streamSSE(c, async (stream) => {
+            stream.writeSSE({
+              data: JSON.stringify({
+                type: "server.connected",
+                properties: {},
+              }),
+            })
+            async function handler(event: any) {
+              await stream.writeSSE({
+                data: JSON.stringify(event),
+              })
+            }
+            GlobalBus.on("event", handler)
+            await new Promise<void>((resolve) => {
+              stream.onAbort(() => {
+                GlobalBus.off("event", handler)
+                resolve()
+                log.info("global event disconnected")
+              })
+            })
+          })
+        },
+      )
       .use(async (c, next) => {
         const directory = c.req.query("directory") ?? process.cwd()
         return Instance.provide({
@@ -163,6 +214,7 @@ export namespace Server {
           return c.json(await Config.get())
         },
       )
+
       .patch(
         "/config",
         describeRoute({
@@ -313,6 +365,28 @@ export namespace Server {
           const sessions = await Array.fromAsync(Session.list())
           sessions.sort((a, b) => b.time.updated - a.time.updated)
           return c.json(sessions)
+        },
+      )
+      .get(
+        "/session/status",
+        describeRoute({
+          description: "Get session status",
+          operationId: "session.status",
+          responses: {
+            200: {
+              description: "Get session status",
+              content: {
+                "application/json": {
+                  schema: resolver(z.record(z.string(), SessionStatus.Info)),
+                },
+              },
+            },
+            ...errors(400),
+          },
+        }),
+        async (c) => {
+          const result = SessionStatus.list()
+          return c.json(result)
         },
       )
       .get(
@@ -585,7 +659,8 @@ export namespace Server {
           }),
         ),
         async (c) => {
-          return c.json(SessionLock.abort(c.req.valid("param").id))
+          SessionPrompt.cancel(c.req.valid("param").id)
+          return c.json(true)
         },
       )
       .post(
@@ -719,7 +794,14 @@ export namespace Server {
         async (c) => {
           const id = c.req.valid("param").id
           const body = c.req.valid("json")
-          await SessionCompaction.run({ ...body, sessionID: id })
+          await SessionCompaction.create({
+            sessionID: id,
+            model: {
+              providerID: body.providerID,
+              modelID: body.modelID,
+            },
+          })
+          await SessionPrompt.loop(id)
           return c.json(true)
         },
       )
@@ -1136,7 +1218,7 @@ export namespace Server {
           "query",
           z.object({
             query: z.string(),
-            dirs: z.union([z.literal("true"), z.literal("false")]).optional(),
+            dirs: z.enum(["true", "false"]).optional(),
           }),
         ),
         async (c) => {
@@ -1720,11 +1802,7 @@ export namespace Server {
               description: "Event stream",
               content: {
                 "text/event-stream": {
-                  schema: resolver(
-                    Bus.payloads().meta({
-                      ref: "Event",
-                    }),
-                  ),
+                  schema: resolver(Bus.payloads()),
                 },
               },
             },

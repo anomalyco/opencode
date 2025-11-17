@@ -228,11 +228,21 @@ export function Prompt(props: PromptProps) {
           if (!props.sessionID) return
           if (autocomplete.visible) return
           if (!input.focused) return
-          sdk.client.session.abort({
-            path: {
-              id: props.sessionID,
-            },
-          })
+
+          setStore("interrupt", store.interrupt + 1)
+
+          setTimeout(() => {
+            setStore("interrupt", 0)
+          }, 5000)
+
+          if (store.interrupt >= 2) {
+            sdk.client.session.abort({
+              path: {
+                id: props.sessionID,
+              },
+            })
+            setStore("interrupt", 0)
+          }
           dialog.clear()
         },
       },
@@ -252,6 +262,7 @@ export function Prompt(props: PromptProps) {
     prompt: PromptInfo
     mode: "normal" | "shell"
     extmarkToPartIndex: Map<number, number>
+    interrupt: number
   }>({
     prompt: {
       input: "",
@@ -259,6 +270,7 @@ export function Prompt(props: PromptProps) {
     },
     mode: "normal",
     extmarkToPartIndex: new Map(),
+    interrupt: 0,
   })
 
   createEffect(() => {
@@ -578,8 +590,7 @@ export function Prompt(props: PromptProps) {
                 syncExtmarksWithPromptParts()
               }}
               keyBindings={textareaKeybindings()}
-              // TODO: fix this any
-              onKeyDown={async (e: any) => {
+              onKeyDown={async (e) => {
                 if (props.disabled) {
                   e.preventDefault()
                   return
@@ -653,7 +664,11 @@ export function Prompt(props: PromptProps) {
                   return
                 }
 
-                const pastedContent = event.text.trim()
+                // Normalize line endings at the boundary
+                // Windows ConPTY/Terminal often sends CR-only newlines in bracketed paste
+                // Replace CRLF first, then any remaining CR
+                const normalizedText = event.text.replace(/\r\n/g, "\n").replace(/\r/g, "\n")
+                const pastedContent = normalizedText.trim()
                 if (!pastedContent) {
                   command.trigger("prompt.paste")
                   return
@@ -746,8 +761,11 @@ export function Prompt(props: PromptProps) {
             </Match>
             <Match when={status() === "working"}>
               <box flexDirection="row" gap={1}>
-                <text fg={theme.text}>
-                  esc <span style={{ fg: theme.textMuted }}>interrupt</span>
+                <text fg={store.interrupt > 0 ? theme.primary : theme.text}>
+                  esc{" "}
+                  <span style={{ fg: store.interrupt > 0 ? theme.primary : theme.textMuted }}>
+                    {store.interrupt > 0 ? "again to interrupt" : "interrupt"}
+                  </span>
                 </text>
               </box>
             </Match>

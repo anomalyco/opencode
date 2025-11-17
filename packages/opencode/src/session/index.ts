@@ -1,7 +1,6 @@
 import { Decimal } from "decimal.js"
 import z from "zod"
 import { type LanguageModelUsage, type ProviderMetadata } from "ai"
-
 import { Bus } from "../bus"
 import { Config } from "../config/config"
 import { Flag } from "../flag/flag"
@@ -378,8 +377,14 @@ export namespace Session {
       metadata: z.custom<ProviderMetadata>().optional(),
     }),
     (input) => {
+      const cachedInputTokens = input.usage.cachedInputTokens ?? 0
+      const excludesCachedTokens = !!(input.metadata?.["anthropic"] || input.metadata?.["bedrock"])
+      const adjustedInputTokens = excludesCachedTokens
+        ? (input.usage.inputTokens ?? 0)
+        : (input.usage.inputTokens ?? 0) - cachedInputTokens
+
       const tokens = {
-        input: input.usage.inputTokens ?? 0,
+        input: adjustedInputTokens,
         output: input.usage.outputTokens ?? 0,
         reasoning: input.usage?.reasoningTokens ?? 0,
         cache: {
@@ -387,15 +392,23 @@ export namespace Session {
             // @ts-expect-error
             input.metadata?.["bedrock"]?.["usage"]?.["cacheWriteInputTokens"] ??
             0) as number,
-          read: input.usage.cachedInputTokens ?? 0,
+          read: cachedInputTokens,
         },
       }
+
+      const costInfo =
+        input.model.cost?.context_over_200k && tokens.input + tokens.cache.read > 200_000
+          ? input.model.cost.context_over_200k
+          : input.model.cost
       return {
         cost: new Decimal(0)
-          .add(new Decimal(tokens.input).mul(input.model.cost?.input ?? 0).div(1_000_000))
-          .add(new Decimal(tokens.output).mul(input.model.cost?.output ?? 0).div(1_000_000))
-          .add(new Decimal(tokens.cache.read).mul(input.model.cost?.cache_read ?? 0).div(1_000_000))
-          .add(new Decimal(tokens.cache.write).mul(input.model.cost?.cache_write ?? 0).div(1_000_000))
+          .add(new Decimal(tokens.input).mul(costInfo?.input ?? 0).div(1_000_000))
+          .add(new Decimal(tokens.output).mul(costInfo?.output ?? 0).div(1_000_000))
+          .add(new Decimal(tokens.cache.read).mul(costInfo?.cache_read ?? 0).div(1_000_000))
+          .add(new Decimal(tokens.cache.write).mul(costInfo?.cache_write ?? 0).div(1_000_000))
+          // TODO: update models.dev to have better pricing model, for now:
+          // charge reasoning tokens at the same rate as output tokens
+          .add(new Decimal(tokens.reasoning).mul(costInfo?.output ?? 0).div(1_000_000))
           .toNumber(),
         tokens,
       }
