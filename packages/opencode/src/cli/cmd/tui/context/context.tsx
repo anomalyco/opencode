@@ -21,7 +21,6 @@ export type ContextItem = {
   source?: ContextSource
   lastUsedAt?: number
   engagement?: number
-  promotedAt?: number
 }
 
 type ContextState = {
@@ -185,6 +184,23 @@ export function ContextProvider(props: ParentProps<{ sessionID: string }>) {
       }),
     )
   }
+
+  const markUsed = (ids: string[]) => {
+    applyUpdate(props.sessionID, (prev) =>
+      prev.map((ctx) => {
+        if (ctx.mode !== "conditional") return ctx
+        if (ids.includes(ctx.id)) {
+          return { ...ctx, lastUsedAt: Date.now(), engagement: (ctx.engagement ?? 0) + 1 }
+        }
+        if (ctx.lastUsedAt !== undefined) {
+          const penalty = Math.max((ctx.engagement ?? 0) - 1, 0)
+          return { ...ctx, lastUsedAt: undefined, engagement: penalty }
+        }
+        return ctx
+      }),
+    )
+  }
+
   const upsertMessageContext = (input: {
     sessionID: string
     messageID: string
