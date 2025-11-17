@@ -228,6 +228,7 @@ export function LeftSidebar(props: {
     const orchestrationStatus = session.orchestration?.status
     if (orchestrationStatus === "failed") return "error"
     if (orchestrationStatus === "paused") return "attention"
+    if (orchestrationStatus === "active") return "active"
 
     const pendingPermissions = (sync.data.permission?.[session.id]?.length ?? 0) > 0
     if (pendingPermissions) return "attention"
@@ -440,6 +441,25 @@ export function LeftSidebar(props: {
                         )
                       }}
                     </For>
+                    <Show
+                      when={
+                        !isSearching() &&
+                        category === "Older" &&
+                        (sessionsByCategory().get("Older")?.length ?? 0) > olderLimit()
+                      }
+                    >
+                      <box marginTop={1} paddingLeft={4}>
+                        <text
+                          fg={theme.textMuted}
+                          onMouseUp={() => {
+                            if (renderer.getSelection()?.getSelectedText()) return
+                            setOlderLimit((prev) => prev + OLDER_INCREMENT)
+                          }}
+                        >
+                          load more ({sessionsByCategory().get("Older")!.length - olderLimit()})
+                        </text>
+                      </box>
+                    </Show>
                   </Show>
                 </box>
               )
@@ -459,19 +479,6 @@ export function LeftSidebar(props: {
             New Session
           </text>
         </box>
-        <Show when={!isSearching() && (sessionsByCategory().get("Older")?.length ?? 0) > olderLimit()}>
-          <box marginTop={1}>
-            <text
-              fg={theme.textMuted}
-              onMouseUp={() => {
-                if (renderer.getSelection()?.getSelectedText()) return
-                setOlderLimit((prev) => prev + OLDER_INCREMENT)
-              }}
-            >
-              load more ({sessionsByCategory().get("Older")!.length - olderLimit()})
-            </text>
-          </box>
-        </Show>
       </box>
     </Show>
   )

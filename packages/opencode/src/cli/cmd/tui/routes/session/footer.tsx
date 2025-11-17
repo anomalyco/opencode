@@ -4,12 +4,14 @@ import { useRenderer } from "@opentui/solid"
 import { TextAttributes } from "@opentui/core"
 import { DialogSelect, type DialogSelectOption } from "@tui/ui/dialog-select"
 import { useServerStatus } from "../../context/server-status"
+import { useLocal } from "../../context/local"
 
 export function Footer() {
   const { theme } = useTheme()
   const dialog = useDialog()
   const renderer = useRenderer()
   const serverStatus = useServerStatus()
+  const local = useLocal()
 
   const showServerDialog = () => {
     const options: DialogSelectOption<string>[] = [
@@ -64,15 +66,28 @@ export function Footer() {
         </span>{" "}
         Port {serverStatus.port()}
       </text>
-      <text
-        fg={theme.accent}
-        onMouseUp={() => {
-          if (renderer.getSelection()?.getSelectedText()) return
-          showServerDialog()
-        }}
-      >
-        [Manage]
-      </text>
+      <box flexDirection="row" gap={2} alignItems="center">
+        <text
+          fg={theme.accent}
+          onMouseUp={() => {
+            if (renderer.getSelection()?.getSelectedText()) return
+            showServerDialog()
+          }}
+        >
+          [Manage]
+        </text>
+        <box flexDirection="row" alignItems="center" gap={1}>
+          <text
+            fg={theme.background}
+            bg={theme.secondary}
+            attributes={TextAttributes.BOLD}
+            paddingLeft={1}
+            paddingRight={1}
+          >
+            {local.agent.current()?.name?.toUpperCase() ?? "DEFAULT"} AGENT ◀
+          </text>
+        </box>
+      </box>
     </box>
   )
 }

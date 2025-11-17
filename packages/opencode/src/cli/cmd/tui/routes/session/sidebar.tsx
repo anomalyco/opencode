@@ -5,6 +5,7 @@ import { useUIExtensions } from "../../context/ui-extensions"
 import { PluginComponent } from "../../component/plugin-component"
 import { Locale } from "@/util/locale"
 import path from "path"
+import { promises as fs } from "fs"
 import type { AssistantMessage, Session, Todo as SDKTodo } from "@opencode-ai/sdk"
 import { RGBA, TextAttributes } from "@opentui/core"
 import { ContextUsageBar } from "../../component/context-usage-bar"
@@ -212,6 +213,17 @@ export function Sidebar(props: {
     Array<{ id: string; content: string; status: string; priority: string }>
   >([])
   const [contexts, setContexts] = createSignal<Array<{ id: string; name: string; content: string }>>([])
+
+  const persistContexts = async (items: Array<{ id: string; name: string; content: string }>) => {
+    try {
+      const projectDir = process.cwd()
+      const targetDir = path.join(projectDir, ".opencode", "context")
+      await fs.mkdir(targetDir, { recursive: true })
+      await fs.writeFile(path.join(targetDir, `${props.sessionID}.json`), JSON.stringify(items, null, 2))
+    } catch (error) {
+      console.error("Failed to persist contexts", error)
+    }
+  }
   const [activeContextIds, setActiveContextIds] = createSignal<Set<string>>(new Set())
   const sortedContexts = createMemo(() => {
     return [...contexts()].sort((a, b) => {
@@ -309,12 +321,17 @@ export function Sidebar(props: {
   const canGrow = () => props.width < props.maxWidth
 
   // Context management functions
+
   const createContext = () => {
     dialog.replace(() => (
       <DialogContextAdd
         onConfirm={async (name: string, content: string) => {
           const id = `ctx_${Date.now()}`
-          setContexts((prev) => [...prev, { id, name, content }])
+          setContexts((prev) => {
+            const next = [...prev, { id, name, content }]
+            void persistContexts(next)
+            return next
+          })
 
           // Start background analysis
           if (content.trim().length > 0) {
@@ -1312,7 +1329,7 @@ export function Sidebar(props: {
                 createContext()
               }}
             >
-              + Add
+              + Configure
             </text>
           </box>
           <Show when={expandedSections().has("context")}>
@@ -1345,49 +1362,20 @@ export function Sidebar(props: {
                       }
 
                       return (
-                        <box flexDirection="row" gap={0}>
-                          <text
-                            fg={getTextColor()}
-                            bg={getBackgroundColor()}
-                            paddingLeft={1}
-                            paddingRight={0}
-                            attributes={isActive() ? TextAttributes.BOLD : undefined}
-                            onMouseUp={() => {
-                              if (renderer.getSelection()?.getSelectedText()) return
-                              toggleContext(ctx.id)
-                            }}
-                          >
-                            {" "}
-                            {ctx.name.toUpperCase()}
-                            {hasContent() ? "*" : ""}{" "}
-                          </text>
-                          <text
-                            fg={isActive() ? theme.background : "#888888"}
-                            bg={getBackgroundColor()}
-                            paddingLeft={0}
-                            paddingRight={0}
-                            attributes={TextAttributes.BOLD}
-                            onMouseUp={() => {
-                              if (renderer.getSelection()?.getSelectedText()) return
-                              editContextContent(ctx.id)
-                            }}
-                          >
-                            [E]
-                          </text>
-                          <text
-                            fg={isActive() ? theme.background : "#888888"}
-                            bg={getBackgroundColor()}
-                            paddingLeft={0}
-                            paddingRight={1}
-                            attributes={TextAttributes.BOLD}
-                            onMouseUp={() => {
-                              if (renderer.getSelection()?.getSelectedText()) return
-                              deleteContext(ctx.id)
-                            }}
-                          >
-                            [X]
-                          </text>
-                        </box>
+                        <text
+                          fg={getTextColor()}
+                          bg={getBackgroundColor()}
+                          paddingLeft={1}
+                          paddingRight={1}
+                          attributes={isActive() ? TextAttributes.BOLD : undefined}
+                          onMouseUp={() => {
+                            if (renderer.getSelection()?.getSelectedText()) return
+                            toggleContext(ctx.id)
+                          }}
+                        >
+                          {ctx.name.toUpperCase()}
+                          {hasContent() ? "*" : ""}
+                        </text>
                       )
                     }}
                   </For>

@@ -1456,7 +1456,7 @@ function UserMessage(props: {
   const renderer = useRenderer()
   const [hover, setHover] = createSignal(false)
   const queued = createMemo(() => props.pending && props.message.id > props.pending)
-  const color = createMemo(() => (untrack(queued) ? untrack(() => theme.accent) : untrack(() => theme.secondary)))
+  const color = createMemo(() => (queued() ? theme.info : theme.secondary))
   const displayName = createMemo(() => sync.data.config.username ?? "You")
 
   const openAttachment = async (event: any, file: FilePart) => {
@@ -1513,14 +1513,8 @@ function UserMessage(props: {
                 return (
                   <box flexDirection="row" alignItems="center" justifyContent="space-between" gap={1}>
                     <text fg={theme.text} onMouseUp={(event) => void openAttachment(event, file)}>
-                      <span style={{ bg: badgeColor(), fg: theme.background }}>
-                        {" "}
-                        {MIME_BADGE[file.mime] ?? file.mime}{" "}
-                      </span>
-                      <span style={{ bg: theme.backgroundElement, fg: theme.textMuted }}>
-                        {" "}
-                        {file.filename ?? "attachment"}{" "}
-                      </span>
+                      <span style={{ fg: theme.text, bold: true }}>{MIME_BADGE[file.mime] ?? file.mime}</span>{" "}
+                      <span style={{ fg: theme.textMuted }}>{file.filename ?? "attachment"}</span>
                     </text>
                     <MessageControls
                       sessionID={props.message.sessionID}
@@ -1535,7 +1529,7 @@ function UserMessage(props: {
           </box>
         </Show>
 
-        <text fg={theme.text}>
+        <text fg={queued() ? theme.accent : theme.text}>
           <Show
             when={queued()}
             fallback={
@@ -1759,7 +1753,9 @@ function AssistantMessage(props: { message: AssistantMessage; parts: Part[]; las
           customBorderChars={SplitBorder.customBorderChars}
           borderColor={theme.backgroundElement}
         >
-          <text fg={local.agent.color(props.message.mode)}>{Locale.titlecase(props.message.mode)}</text>
+          <text fg={local.agent.color(props.message.mode)}>
+            <span style={{ fg: theme.textMuted }}></span> {Locale.titlecase(props.message.mode)}
+          </text>
           <Shimmer text={`${props.message.modelID}`} color={theme.text} />
         </box>
       </Show>
@@ -1787,7 +1783,7 @@ const PART_MAPPING = {
 }
 
 function ReasoningPart(props: { part: ReasoningPart; message: AssistantMessage; trailing?: JSX.Element }) {
-  const { theme } = useTheme()
+  const { theme, syntax } = useTheme()
   const text = createMemo(() => props.part.text.trim())
   const previousIsReasoning = createMemo(() => {
     const parts = ((props.message as any).parts as Part[] | undefined) ?? []
@@ -1795,23 +1791,51 @@ function ReasoningPart(props: { part: ReasoningPart; message: AssistantMessage; 
     if (index <= 0) return false
     return parts[index - 1]?.type === "reasoning"
   })
+  const summary = createMemo(() => {
+    const firstLine = text()
+      .split("\n")
+      .find((line) => line.trim())
+      ?.trim()
+    if (!firstLine) return "Thinking through next step"
+    return firstLine.length > 200 ? `${firstLine.slice(0, 197)}…` : firstLine
+  })
+  const body = createMemo(() => {
+    const value = text()
+    if (!value) return ""
+    const lines = value.split("\n")
+    const firstIndex = lines.findIndex((line) => line.trim())
+    if (firstIndex === -1) return ""
+    return lines
+      .slice(firstIndex + 1)
+      .join("\n")
+      .trim()
+  })
+  const borderColor = createMemo(() => theme.border)
+  const highlight = createMemo(() => theme.warning ?? theme.accent)
+  const showBody = createMemo(() => body().length > 0)
   return (
     <Show when={text()}>
-      <box
-        id={"reasoning-" + props.part.id}
-        paddingLeft={3}
-        marginTop={previousIsReasoning() ? 0 : 1}
-        marginBottom={0}
-        flexShrink={0}
-      >
-        <box flexDirection="row" alignItems="center" justifyContent="space-between" gap={1} paddingRight={0}>
-          <text wrapMode="word" fg={theme.textMuted}>
-            <span style={{ italic: true }}>Thinking:</span> <span style={{ fg: theme.textMuted }}>{text()}</span>
-          </text>
-          <Show when={props.trailing}>
-            <box flexShrink={0} width={8} justifyContent="flex-end">
-              {props.trailing}
-            </box>
+      <box id={"reasoning-" + props.part.id} marginTop={previousIsReasoning() ? 0 : 1} flexShrink={0}>
+        <box
+          border={["left"]}
+          customBorderChars={SplitBorder.customBorderChars}
+          borderColor={borderColor()}
+          paddingLeft={2}
+          flexDirection="column"
+          gap={showBody() ? 1 : 0}
+        >
+          <box flexDirection="row" justifyContent="space-between" alignItems="baseline" gap={1}>
+            <text wrapMode="word" fg={highlight()}>
+              <span style={{ italic: true }}>Thinking:</span> <span style={{ bold: true }}>{summary()}</span>
+            </text>
+            <Show when={props.trailing}>
+              <box flexShrink={0} width={8} justifyContent="flex-end">
+                {props.trailing}
+              </box>
+            </Show>
+          </box>
+          <Show when={body()}>
+            <code filetype="markdown" drawUnstyledText={false} syntaxStyle={syntax()} content={body()} />
           </Show>
         </box>
       </box>
@@ -2207,9 +2231,10 @@ type ToolProps<T extends Tool.Info> = {
 
 function GenericTool(props: ToolProps<any>) {
   const { theme } = useTheme()
+  const arrow = createMemo(() => (props.tool.toLowerCase().includes("read") ? "→" : "←"))
   return (
     <ToolTitle
-      fallback="Writing command..."
+      fallback="Working..."
       when={true}
       onToggle={props.onToggle}
       collapsed={props.collapsed}
@@ -2218,8 +2243,9 @@ function GenericTool(props: ToolProps<any>) {
       output={props.output}
       trailing={props.priorityControls}
     >
-      <ToolBadge>{props.tool}</ToolBadge>
-      <text fg={theme.text}>{input(props.input)}</text>
+      <text fg={theme.textMuted}>
+        {props.tool.toLowerCase().includes("read") ? "→" : "←"} {props.tool} {input(props.input)}
+      </text>
     </ToolTitle>
   )
 }

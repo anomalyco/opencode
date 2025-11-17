@@ -10,7 +10,8 @@
     "todoread",
     "switch_mode",
     "glob",
-    "todowrite"
+    "todowrite",
+    "ripgrep"
   ],
   "$schema": "https://opencode.ai/config.json"
 }
