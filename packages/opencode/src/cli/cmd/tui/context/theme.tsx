@@ -278,8 +278,8 @@ function generateSystem(colors: TerminalColors, mode: "dark" | "light"): ThemeJs
       text: fg,
       textMuted,
 
-      // Background colors - use 'none' to inherit terminal defaults and transparency
-      background: "none",
+      // Background colors
+      background: bg,
       backgroundPanel: grays[2],
       backgroundElement: grays[3],
 
