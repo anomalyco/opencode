@@ -219,10 +219,55 @@ export namespace SessionPrompt {
       })
     }
     const agent = await Agent.get(input.agent ?? "build")
+
+    // Execute prompt.before hook to allow plugins to override model selection
+    const promptText = userMsg.parts
+      .filter((p) => p.type === "text" && !("synthetic" in p && p.synthetic))
+      .map((p) => (p.type === "text" ? p.text : ""))
+      .join("\n")
+
+    const hookOutput = await Plugin.trigger(
+      "prompt.before",
+      {
+        sessionID: input.sessionID,
+        agent: agent.name,
+        prompt: promptText,
+        model: input.model,
+        noReply: input.noReply,
+      },
+      {
+        model: input.model,
+        additionalContext: undefined,
+        block: false,
+        blockReason: undefined,
+      },
+    )
+
+    // Check if plugin blocked the prompt
+    if (hookOutput.block) {
+      throw new Error(hookOutput.blockReason || "Prompt blocked by plugin")
+    }
+
+    // Use model from hook if provided, otherwise use original input
+    const selectedModel = hookOutput.model ?? input.model
+
     const model = await resolveModel({
       agent,
-      model: input.model,
+      model: selectedModel,
     }).then((x) => Provider.getModel(x.providerID, x.modelID))
+
+    // Inject additional context if provided by hook
+    if (hookOutput.additionalContext) {
+      userMsg.parts.push({
+        id: Identifier.ascending("part"),
+        messageID: userMsg.info.id,
+        sessionID: input.sessionID,
+        type: "text",
+        text: hookOutput.additionalContext,
+        synthetic: true,
+      })
+      await Session.updatePart(userMsg.parts[userMsg.parts.length - 1])
+    }
 
     using abort = lock(input.sessionID)
 

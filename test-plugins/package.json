@@ -1,0 +1,14 @@
+{
+  "name": "@opencode-ai/test-plugins",
+  "version": "1.0.0",
+  "description": "Test plugins for prompt.before hook",
+  "type": "module",
+  "exports": {
+    "./prompt-logger": "./prompt-logger.plugin.ts",
+    "./model-switcher": "./model-switcher.plugin.ts",
+    "./prompt-blocker": "./prompt-blocker.plugin.ts"
+  },
+  "peerDependencies": {
+    "@opencode-ai/plugin": "*"
+  }
+}

@@ -154,6 +154,28 @@ export interface Hooks {
     input: { sessionID: string; agent: string; model: Model; provider: Provider; message: UserMessage },
     output: { temperature: number; topP: number; options: Record<string, any> },
   ) => Promise<void>
+  /**
+   * Called before OpenCode sends a prompt to the LLM, allowing plugins to:
+   * - Inspect the prompt and session context
+   * - Override model selection dynamically
+   * - Inject additional context
+   * - Block prompts if needed
+   */
+  "prompt.before"?: (
+    input: {
+      sessionID: string
+      agent: string
+      prompt: string
+      model?: { providerID: string; modelID: string }
+      noReply?: boolean
+    },
+    output: {
+      model?: { providerID: string; modelID: string }
+      additionalContext?: string
+      block?: boolean
+      blockReason?: string
+    },
+  ) => Promise<void>
   "permission.ask"?: (input: Permission, output: { status: "ask" | "deny" | "allow" }) => Promise<void>
   "tool.execute.before"?: (
     input: { tool: string; sessionID: string; callID: string },
