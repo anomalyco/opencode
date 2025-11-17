@@ -44,7 +44,7 @@ export namespace SystemPrompt {
         `  Platform: ${process.platform}`,
         `  Today's date: ${new Date().toDateString()}`,
         `</env>`,
-        `<files>`,
+        `<project>`,
         `  ${
           project.vcs === "git"
             ? await Ripgrep.tree({
@@ -53,7 +53,7 @@ export namespace SystemPrompt {
               })
             : ""
         }`,
-        `</files>`,
+        `</project>`,
       ].join("\n"),
     ]
   }

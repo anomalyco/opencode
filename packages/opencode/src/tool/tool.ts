@@ -50,12 +50,9 @@ export namespace Tool {
             toolInfo.parameters.parse(args)
           } catch (error) {
             if (error instanceof z.ZodError && toolInfo.formatValidationError) {
-              throw new Error(toolInfo.formatValidationError(error), { cause: error })
+              throw new Error(toolInfo.formatValidationError(error))
             }
-            throw new Error(
-              `The ${id} tool was called with invalid arguments: ${error}.\nPlease rewrite the input so it satisfies the expected schema.`,
-              { cause: error },
-            )
+            throw error
           }
           return execute(args, ctx)
         }

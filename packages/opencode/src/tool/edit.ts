@@ -18,10 +18,6 @@ import { Instance } from "../project/instance"
 import { Agent } from "../agent/agent"
 import { Snapshot } from "@/snapshot"
 
-function normalizeLineEndings(text: string): string {
-  return text.replaceAll("\r\n", "\n")
-}
-
 export const EditTool = Tool.define("edit", {
   description: DESCRIPTION,
   parameters: z.object({
@@ -95,9 +91,7 @@ export const EditTool = Tool.define("edit", {
       contentOld = await file.text()
       contentNew = replace(contentOld, params.oldString, params.newString, params.replaceAll)
 
-      diff = trimDiff(
-        createTwoFilesPatch(filePath, filePath, normalizeLineEndings(contentOld), normalizeLineEndings(contentNew)),
-      )
+      diff = trimDiff(createTwoFilesPatch(filePath, filePath, contentOld, contentNew))
       if (agent.permission.edit === "ask") {
         await Permission.ask({
           type: "edit",
@@ -117,9 +111,7 @@ export const EditTool = Tool.define("edit", {
         file: filePath,
       })
       contentNew = await file.text()
-      diff = trimDiff(
-        createTwoFilesPatch(filePath, filePath, normalizeLineEndings(contentOld), normalizeLineEndings(contentNew)),
-      )
+      diff = trimDiff(createTwoFilesPatch(filePath, filePath, contentOld, contentNew))
     })()
 
     FileTime.read(ctx.sessionID, filePath)

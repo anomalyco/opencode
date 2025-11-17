@@ -110,17 +110,15 @@ export namespace Config {
     for (const dir of directories) {
       await assertValid(dir)
 
-      const opencodeOnly = dir.endsWith(".opencode") || dir === Flag.OPENCODE_CONFIG_DIR
-      const configFiles = (() => {
-        if (isCompatMode) return ["opencode.jsonc", "opencode.json"]
-        if (opencodeOnly) return ["opencode.jsonc", "opencode.json"]
-        return ["opencode.jsonc", "opencode.json", "codesurf.jsonc", "codesurf.json"]
-      })()
+      // CodeSurf Migration: Load config files based on mode
+      // In compatibility mode: only load opencode.json/jsonc
+      // In normal mode: load both (codesurf takes precedence)
+      const configFiles = isCompatMode
+        ? ["opencode.jsonc", "opencode.json"]
+        : ["opencode.jsonc", "opencode.json", "codesurf.jsonc", "codesurf.json"]
 
       for (const file of configFiles) {
-        const target = path.join(dir, file)
-        log.debug(`loading config from ${target}`)
-        result = mergeDeep(result, await loadFile(target))
+        result = mergeDeep(result, await loadFile(path.join(dir, file)))
         // to satisy the type checker
         result.agent ??= {}
         result.mode ??= {}
@@ -443,7 +441,7 @@ export namespace Config {
   export const Mcp = z.discriminatedUnion("type", [McpLocal, McpRemote])
   export type Mcp = z.infer<typeof Mcp>
 
-  export const Permission = z.enum(["ask", "allow", "deny"])
+  export const Permission = z.union([z.literal("ask"), z.literal("allow"), z.literal("deny")])
   export type Permission = z.infer<typeof Permission>
 
   export const Command = z.object({
@@ -464,12 +462,7 @@ export namespace Config {
       tools: z.record(z.string(), z.boolean()).optional(),
       disable: z.boolean().optional(),
       description: z.string().optional().describe("Description of when to use the agent"),
-      mode: z.enum(["subagent", "primary", "all"]).optional(),
-      color: z
-        .string()
-        .regex(/^#[0-9a-fA-F]{6}$/, "Invalid hex color format")
-        .optional()
-        .describe("Hex color code for the agent (e.g., #FF5733)"),
+      mode: z.union([z.literal("subagent"), z.literal("primary"), z.literal("all")]).optional(),
       permission: z
         .object({
           edit: Permission.optional(),

@@ -1,7 +1,7 @@
 {
   "$schema": "https://json.schemastore.org/package.json",
   "name": "codesurf",
-  "version": "1.0.68",
+  "version": "1.0.62",
   "type": "module",
   "scripts": {
     "typecheck": "tsgo --noEmit",
@@ -62,8 +62,8 @@
     "@opencode-ai/plugin": "workspace:*",
     "@opencode-ai/script": "workspace:*",
     "@opencode-ai/sdk": "workspace:*",
-    "@opentui/core": "0.1.45",
-    "@opentui/solid": "0.1.45",
+    "@opentui/core": "0.1.42",
+    "@opentui/solid": "0.1.42",
     "@parcel/watcher": "2.5.1",
     "@pierre/precision-diffs": "catalog:",
     "@solid-primitives/event-bus": "1.1.2",

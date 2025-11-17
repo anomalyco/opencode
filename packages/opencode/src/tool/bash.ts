@@ -213,15 +213,10 @@ export const BashTool = Tool.define("bash", {
             .then((x) => x.trim())
           log.info("resolved path", { arg, resolved })
           if (resolved) {
-            // Git Bash on Windows returns Unix-style paths like /c/Users/...
-            const normalized =
-              process.platform === "win32" && resolved.match(/^\/[a-z]\//)
-                ? resolved.replace(/^\/([a-z])\//, (_, drive) => `${drive.toUpperCase()}:\\`).replace(/\//g, "\\")
-                : resolved
             const allowed =
-              Filesystem.contains(Instance.directory, normalized) ||
+              Filesystem.contains(Instance.directory, resolved) ||
               Session.AllowedDirectories.get(ctx.sessionID).some((dir) =>
-                Filesystem.contains(dir, normalized),
+                Filesystem.contains(dir, resolved),
               )
             if (!allowed) {
               throw new Error(

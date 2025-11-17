@@ -49,14 +49,14 @@ export const ReadTool = Tool.define("read", {
       }
     }
 
-    const block = iife(() => {
-      const whitelist = [".env.sample", ".example"]
+    const block = (() => {
+      const whitelist = [".env.example", ".env.sample"]
 
       if (whitelist.some((w) => filepath.endsWith(w))) return false
       if (filepath.includes(".env")) return true
 
       return false
-    })
+    })()
 
     if (block) {
       throw new Error(`The user has blocked you from reading ${filepath}, DO NOT make further attempts to read it`)
