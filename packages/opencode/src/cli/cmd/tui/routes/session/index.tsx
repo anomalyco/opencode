@@ -1787,19 +1787,19 @@ function UserMessage(props: {
               priority={props.message.priority}
             />
           </box>
-          <text fg={queued() ? theme.accent : theme.text} marginTop={hasFiles() ? 0 : 1}>
-            <Show
-              when={queued()}
-              fallback={
-                <>
-                  {displayName()}{" "}
-                  <span style={{ fg: theme.textMuted }}>({Locale.time(props.message.time.created)})</span>
-                </>
-              }
-            >
-              <span style={{ bg: theme.accent, fg: theme.backgroundPanel, bold: true }}> QUEUED </span> {displayName()}
-            </Show>
-          </text>
+          <Switch>
+            <Match when={queued()}>
+              <text fg={theme.accent} marginTop={hasFiles() ? 0 : 1}>
+                <span style={{ bg: theme.accent, fg: theme.backgroundPanel, bold: true }}> QUEUED </span>{" "}
+                {displayName()}
+              </text>
+            </Match>
+            <Match when={!queued()}>
+              <text fg={theme.text} marginTop={hasFiles() ? 0 : 1}>
+                {displayName()} <span style={{ fg: theme.textMuted }}>({Locale.time(props.message.time.created)})</span>
+              </text>
+            </Match>
+          </Switch>
         </box>
       </box>
     </Show>

@@ -15,7 +15,19 @@ const HIDDEN_SESSIONS_KV_KEY = "leftSidebar.hiddenSessions"
 const DAY_IN_MS = 24 * 60 * 60 * 1000
 const DATE_CATEGORY_ORDER = ["Today", "Yesterday", "This week", "Last week", "Older"] as const
 const RUNNING_SPINNER_FRAMES = ["⠋", "⠙", "⠹", "⠸", "⠼", "⠴", "⠦", "⠧", "⠇", "⠏"] as const
-const RUNNING_SPINNER_INTERVAL_MS = 120
+const RUNNING_SPINNER_INTERVAL_MS = 200
+
+// Isolated spinner component to prevent reactivity cascade
+function SessionSpinner() {
+  const [index, setIndex] = createSignal(0)
+  createEffect(() => {
+    const interval = setInterval(() => {
+      setIndex((prev) => (prev + 1) % RUNNING_SPINNER_FRAMES.length)
+    }, RUNNING_SPINNER_INTERVAL_MS)
+    onCleanup(() => clearInterval(interval))
+  })
+  return <text>{RUNNING_SPINNER_FRAMES[index()]} </text>
+}
 const STALE_SPINNER_TIMEOUT_MS = 15_000
 const HIDE_ICON = "⊖"
 const SHOW_ICON = "⊕"
@@ -100,18 +112,10 @@ export function LeftSidebar(props: {
   const isSearching = createMemo(() => searchQuery().trim().length > 0)
 
   const [clock, setClock] = createSignal(Date.now())
-  const [spinnerIndex, setSpinnerIndex] = createSignal(0)
   const [olderLimit, setOlderLimit] = createSignal(OLDER_INITIAL_LIMIT)
 
   createEffect(() => {
     const interval = setInterval(() => setClock(Date.now()), CLOCK_REFRESH_INTERVAL_MS)
-    onCleanup(() => clearInterval(interval))
-  })
-
-  createEffect(() => {
-    const interval = setInterval(() => {
-      setSpinnerIndex((prev) => (prev + 1) % RUNNING_SPINNER_FRAMES.length)
-    }, RUNNING_SPINNER_INTERVAL_MS)
     onCleanup(() => clearInterval(interval))
   })
 
@@ -385,13 +389,14 @@ export function LeftSidebar(props: {
                         const title = () =>
                           Locale.truncate(Locale.stripMarkdown(session.title), isOpen() && hover() ? 33 : 37)
                         const suffix = () => (isOpen() && hover() ? " ×" : "")
-                        const prefix = () => {
-                          if (isSessionActive(session)) {
-                            return `  ${RUNNING_SPINNER_FRAMES[spinnerIndex()]} `
-                          }
-                          return session.id === props.sessionID ? "  ▶ " : "    "
+                        const staticPrefix = () => {
+                          return session.id === props.sessionID ? "▶ " : "  "
                         }
-                        const lineText = () => `${prefix()}${title()}${suffix()}`
+                        const lineText = () => `${staticPrefix()}${title()}${suffix()}`
+                        const showSpinner = () => {
+                          const status = sync.session.status(session.id)
+                          return status === "working" || status === "compacting"
+                        }
 
                         const hidden = () => isSessionHidden(session.id)
                         const hideIcon = () => (hidden() ? SHOW_ICON : HIDE_ICON)
@@ -420,14 +425,17 @@ export function LeftSidebar(props: {
                               }
                             }}
                           >
-                            <box flexGrow={1} overflow="hidden">
+                            <box flexGrow={1} overflow="hidden" flexDirection="row">
+                              <Show when={showSpinner()}>
+                                <SessionSpinner />
+                              </Show>
                               <text
                                 fg={sessionColor()}
                                 attributes={session.id === props.sessionID ? TextAttributes.BOLD : undefined}
                                 wrapMode="none"
                                 height={1}
                               >
-                                {lineText()}
+                                {showSpinner() ? `${title()}${suffix()}` : lineText()}
                               </text>
                             </box>
                             <text

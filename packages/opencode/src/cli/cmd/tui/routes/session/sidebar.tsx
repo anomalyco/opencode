@@ -1,5 +1,16 @@
 import { useSync } from "@tui/context/sync"
-import { createMemo, createSignal, For, Show, Switch, Match, onMount, type JSX } from "solid-js"
+import {
+  createMemo,
+  createSignal,
+  For,
+  Show,
+  Switch,
+  Match,
+  onMount,
+  createEffect,
+  onCleanup,
+  type JSX,
+} from "solid-js"
 import { useTheme } from "../../context/theme"
 import { useUIExtensions } from "../../context/ui-extensions"
 import { PluginComponent } from "../../component/plugin-component"
@@ -30,6 +41,19 @@ import { DialogContextTimeline } from "./dialog-context-timeline"
 import { useServerStatus } from "../../context/server-status"
 import { useContextManager } from "../../context/context"
 type TabType = "files" | "todos" | "tools" | "subagents"
+
+const SPINNER_FRAMES = ["⠋", "⠙", "⠹", "⠸", "⠼", "⠴", "⠦", "⠧", "⠇", "⠏"] as const
+
+function SubagentSpinner() {
+  const [index, setIndex] = createSignal(0)
+  createEffect(() => {
+    const interval = setInterval(() => {
+      setIndex((prev) => (prev + 1) % SPINNER_FRAMES.length)
+    }, 200)
+    onCleanup(() => clearInterval(interval))
+  })
+  return <text>{SPINNER_FRAMES[index()]} </text>
+}
 
 function parseSubagentTitle(title: string): { agent?: string; description: string } {
   const trimmed = title.trim()
@@ -130,6 +154,23 @@ export function Sidebar(props: {
   maxWidth: number
   widthStep: number
   onResize: (delta: number) => void
+  workerState?: {
+    gitStatus?: {
+      branch: string
+      ahead: number
+      behind: number
+      modified: number
+      staged: number
+      untracked: number
+    }
+    messageStats?: {
+      totalCost: number
+      savedCost: number
+      toolCounts: Record<string, number>
+      lastTokenUsage: number
+      lastTokenLimit: number
+    }
+  }
 }) {
   const sync = useSync()
   const { theme } = useTheme()
@@ -369,6 +410,24 @@ export function Sidebar(props: {
     }
     return Array.from(groups.entries()).map(([agent, items]) => ({ agent, items }))
   })
+
+  // Check if any subagent is actively working
+  const hasActiveSubagent = () => {
+    for (const child of childSessions()) {
+      const status = sync.session.status(child.id)
+      if (status === "working" || status === "compacting") return true
+    }
+    return false
+  }
+
+  // Check if a specific agent group has active subagents
+  const groupHasActiveSubagent = (items: Session[]) => {
+    for (const child of items) {
+      const status = sync.session.status(child.id)
+      if (status === "working" || status === "compacting") return true
+    }
+    return false
+  }
 
   // Load favorite tools from config (one-time load, no polling)
   const loadFavorites = async () => {
@@ -831,6 +890,22 @@ export function Sidebar(props: {
             server:{serverStatus.port()}
           </text>
         </box>
+
+        <Show when={props.workerState?.gitStatus}>
+          <box flexDirection="row" gap={1}>
+            <text fg={theme.textMuted}>{props.workerState!.gitStatus!.branch}</text>
+            <Show when={props.workerState!.gitStatus!.ahead > 0 || props.workerState!.gitStatus!.behind > 0}>
+              <text fg={theme.warning}>
+                ↑{props.workerState!.gitStatus!.ahead} ↓{props.workerState!.gitStatus!.behind}
+              </text>
+            </Show>
+            <Show when={props.workerState!.gitStatus!.modified > 0 || props.workerState!.gitStatus!.staged > 0}>
+              <text fg={theme.accent}>
+                M:{props.workerState!.gitStatus!.modified} S:{props.workerState!.gitStatus!.staged}
+              </text>
+            </Show>
+          </box>
+        </Show>
 
         <box>
           <box flexDirection="row" alignItems="flex-start" justifyContent="space-between" gap={1}>
@@ -1346,7 +1421,9 @@ export function Sidebar(props: {
                         >
                           {` ${ctx.name.toUpperCase()}${usageCount() > 0 ? ` (${usageCount()})` : ""}${hasContent() ? "*" : ""} `}
                           <Show when={isConditional()}>
-                            <span style={{ fg: wasUsed() ? theme.text : theme.textMuted }}>{wasUsed() ? "●" : "○"}</span>
+                            <span style={{ fg: wasUsed() ? theme.text : theme.textMuted }}>
+                              {wasUsed() ? "●" : "○"}
+                            </span>
                           </Show>
                         </text>
                       )
@@ -1373,7 +1450,10 @@ export function Sidebar(props: {
                 toggleSection("subagents")
               }}
             >
-              {expandedSections().has("subagents") ? "▼" : "▶"} Subagents ({childSessions().length})
+              {expandedSections().has("subagents") ? "▼" : "▶"} Subagents ({childSessions().length}){" "}
+              <Show when={!expandedSections().has("subagents") && hasActiveSubagent()}>
+                <SubagentSpinner />
+              </Show>
             </text>
             <text
               fg={theme.accent}
@@ -1408,11 +1488,18 @@ export function Sidebar(props: {
                     >
                       <text>{expandedAgentGroups().has(group.agent) ? "▼" : "▶"}</text>
                       <AgentChipText text={group.agent} />
+                      <Show when={!expandedAgentGroups().has(group.agent) && groupHasActiveSubagent(group.items)}>
+                        <SubagentSpinner />
+                      </Show>
                     </box>
                     <Show when={expandedAgentGroups().has(group.agent)}>
                       <For each={group.items}>
                         {(child) => {
                           const status = child.orchestration?.status ?? "unknown"
+                          const isWorking = () => {
+                            const s = sync.session.status(child.id)
+                            return s === "working" || s === "compacting"
+                          }
                           const statusColor =
                             status === "active"
                               ? theme.success
@@ -1439,9 +1526,16 @@ export function Sidebar(props: {
                                 })
                               }}
                             >
-                              <text flexShrink={0} fg={statusColor}>
-                                •
-                              </text>
+                              <Show
+                                when={isWorking()}
+                                fallback={
+                                  <text flexShrink={0} fg={statusColor}>
+                                    •{" "}
+                                  </text>
+                                }
+                              >
+                                <SubagentSpinner />
+                              </Show>
                               <text fg={theme.text}>{summary}</text>
                             </box>
                           )

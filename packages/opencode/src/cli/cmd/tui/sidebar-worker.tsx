@@ -121,6 +121,13 @@ export default function SidebarWorker(props: {
       maxWidth={60}
       widthStep={2}
       onResize={props.onResize}
+      workerState={
+        workerReady() && workerState()
+          ? {
+              gitStatus: workerState()!.gitStatus,
+            }
+          : undefined
+      }
     />
   )
 }
