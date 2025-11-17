@@ -1296,6 +1296,7 @@ export function Sidebar(props: {
                       const isNegative = createMemo(() => ctx.mode === "manual" && ctx.name.startsWith("-"))
                       const isConditional = createMemo(() => ctx.mode === "conditional")
                       const wasUsed = createMemo(() => Boolean(ctx.lastUsedAt))
+                      const usageCount = createMemo(() => ctx.engagement ?? 0)
                       const displayActive = createMemo(() => isIncluded() || isConditional())
 
                       const getBackgroundColor = () => {
@@ -1343,7 +1344,7 @@ export function Sidebar(props: {
                             toggleContext(ctx.id)
                           }}
                         >
-                          {` ${ctx.name.toUpperCase()}${hasContent() ? "*" : ""} `}
+                          {` ${ctx.name.toUpperCase()}${usageCount() > 0 ? ` (${usageCount()})` : ""}${hasContent() ? "*" : ""} `}
                           <Show when={isConditional()}>
                             <span style={{ fg: wasUsed() ? theme.text : theme.textMuted }}>{wasUsed() ? "●" : "○"}</span>
                           </Show>

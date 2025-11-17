@@ -20,6 +20,7 @@ export type ContextItem = {
   mode: ContextMode
   source?: ContextSource
   lastUsedAt?: number
+  engagement?: number
 }
 
 type ContextState = {
@@ -165,6 +166,7 @@ export function ContextProvider(props: ParentProps<{ sessionID: string }>) {
         active: true,
         createdAt: Date.now(),
         mode: "manual",
+        engagement: 0,
       },
     ])
     return newId
@@ -188,10 +190,11 @@ export function ContextProvider(props: ParentProps<{ sessionID: string }>) {
       prev.map((ctx) => {
         if (ctx.mode !== "conditional") return ctx
         if (ids.includes(ctx.id)) {
-          return { ...ctx, lastUsedAt: Date.now() }
+          return { ...ctx, lastUsedAt: Date.now(), engagement: (ctx.engagement ?? 0) + 1 }
         }
         if (ctx.lastUsedAt !== undefined) {
-          return { ...ctx, lastUsedAt: undefined }
+          const penalty = Math.max((ctx.engagement ?? 0) - 1, 0)
+          return { ...ctx, lastUsedAt: undefined, engagement: penalty }
         }
         return ctx
       }),
@@ -226,6 +229,7 @@ export function ContextProvider(props: ParentProps<{ sessionID: string }>) {
         mode: input.mode,
         source: { type: "message", sessionID: input.sessionID, messageID: input.messageID },
         lastUsedAt: base?.lastUsedAt,
+        engagement: base?.engagement ?? 0,
       }
       if (index >= 0) next[index] = item
       else next.push(item)
