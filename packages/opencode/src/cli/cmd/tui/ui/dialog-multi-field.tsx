@@ -23,14 +23,24 @@ export function DialogMultiField(props: DialogMultiFieldProps) {
   const textareas: Record<string, TextareaRenderable> = {}
   const [focusedIndex, setFocusedIndex] = createSignal(0)
 
+  const focusField = (fieldName: string) => {
+    const target = textareas[fieldName]
+    if (!target) return
+    try {
+      target.focus()
+      target.gotoLineEnd()
+    } catch (error) {
+      console.warn("[DialogMultiField] Failed to focus field", error)
+    }
+  }
+
   useKeyboard((evt) => {
     // Tab: move to next field
     if (evt.name === "tab" && !evt.shift) {
       const nextIndex = (focusedIndex() + 1) % props.fields.length
       setFocusedIndex(nextIndex)
       const nextField = props.fields[nextIndex]
-      textareas[nextField.name]?.focus()
-      textareas[nextField.name]?.gotoLineEnd()
+      focusField(nextField.name)
       return
     }
 
@@ -39,8 +49,7 @@ export function DialogMultiField(props: DialogMultiFieldProps) {
       const prevIndex = (focusedIndex() - 1 + props.fields.length) % props.fields.length
       setFocusedIndex(prevIndex)
       const prevField = props.fields[prevIndex]
-      textareas[prevField.name]?.focus()
-      textareas[prevField.name]?.gotoLineEnd()
+      focusField(prevField.name)
       return
     }
 
@@ -59,10 +68,7 @@ export function DialogMultiField(props: DialogMultiFieldProps) {
     dialog.setSize("large")
     setTimeout(() => {
       const firstField = props.fields[0]
-      if (firstField && textareas[firstField.name]) {
-        textareas[firstField.name].focus()
-        textareas[firstField.name].gotoLineEnd()
-      }
+      if (firstField) focusField(firstField.name)
     }, 1)
   })
 

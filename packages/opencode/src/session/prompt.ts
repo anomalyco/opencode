@@ -220,7 +220,7 @@ export namespace SessionPrompt {
       })
     }
     // Use currentAgent from orchestration state if available (mode switching)
-    const agentName = session.orchestration?.currentAgent ?? input.agent ?? "build"
+    const agentName = session.orchestration?.currentAgent ?? input.agent ?? "general"
     const agent = await Agent.get(agentName)
     const model = await resolveModel({
       agent,
@@ -1099,7 +1099,7 @@ export namespace SessionPrompt {
       })
     }
     const wasPlan = input.messages.some((msg) => msg.info.role === "assistant" && msg.info.mode === "plan")
-    if (wasPlan && input.agent.name === "build") {
+    if (wasPlan && input.agent.name === "general") {
       userMessage.parts.push({
         id: Identifier.ascending("part"),
         messageID: userMessage.info.id,
@@ -1843,7 +1843,7 @@ export namespace SessionPrompt {
   export async function command(input: CommandInput) {
     log.info("command", input)
     const command = await Command.get(input.command)
-    const agentName = command.agent ?? input.agent ?? "build"
+    const agentName = command.agent ?? input.agent ?? "general"
 
     const raw = input.arguments.match(argsRegex) ?? []
     const args = raw.map((arg) => arg.replace(quoteTrimRegex, ""))

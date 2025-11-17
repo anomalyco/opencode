@@ -33,6 +33,7 @@ import { useDialog } from "../../ui/dialog"
 import { useToast } from "../../ui/toast"
 import { Perf } from "@/util/perf"
 import path from "path"
+import { useContextManager } from "../../context/context"
 
 export type PromptProps = {
   sessionID?: string
@@ -71,6 +72,8 @@ export function Prompt(props: PromptProps) {
   const { theme, syntax } = useTheme()
   const dialog = useDialog()
   const toast = useToast()
+  const contextManager = useContextManager(true)
+  const selectedContexts = createMemo(() => contextManager?.selectedContexts() ?? [])
   let aborting = false
   let dropProcessing = false
 
@@ -296,6 +299,14 @@ export function Prompt(props: PromptProps) {
 
     // Filter out text parts (pasted content) since they're now expanded inline
     const nonTextParts = store.prompt.parts.filter((part) => part.type !== "text")
+    const contextParts =
+      props.sessionID && selectedContexts().length > 0
+        ? selectedContexts().map((ctx) => ({
+            id: Identifier.ascending("part"),
+            type: "text" as const,
+            text: `Context: ${ctx.name}\n${ctx.content}`,
+          }))
+        : []
 
     if (store.mode === "shell") {
       sdk.client.session.shell({
@@ -376,6 +387,7 @@ export function Prompt(props: PromptProps) {
           agent: currentAgent.name,
           model: currentModel,
           parts: [
+            ...contextParts,
             {
               id: Identifier.ascending("part"),
               type: "text",

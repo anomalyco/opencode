@@ -37,6 +37,7 @@ import { UIExtensionsProvider, useUIExtensions } from "./context/ui-extensions"
 import { PluginComponent } from "./component/plugin-component"
 import { ArgsProvider } from "./context/args"
 import { TransitionAnimation } from "./component/transition-animation"
+import { ContextProvider } from "./context/context"
 
 async function getTerminalBackgroundColor(): Promise<"dark" | "light"> {
   // can't set raw mode if not a TTY
@@ -517,7 +518,9 @@ function App() {
             <Home />
           </Match>
           <Match when={route.data.type === "session"}>
-            <Session />
+            <ContextProvider sessionID={(route.data as SessionRoute).sessionID}>
+              <Session />
+            </ContextProvider>
           </Match>
         </Switch>
         <TransitionAnimation active={isTransitioning()} onComplete={handleTransitionComplete} />
@@ -574,7 +577,7 @@ function App() {
                 <text bg={local.agent.color(agentForColor)}> </text>
                 <text
                   bg={local.agent.color(agentForColor)}
-                  fg={theme.background}
+                  fg={theme.text}
                   wrapMode={undefined}
                   onMouseUp={() => {
                     if (renderer.getSelection()?.getSelectedText()) return

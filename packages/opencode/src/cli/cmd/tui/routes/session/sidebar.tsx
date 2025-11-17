@@ -5,7 +5,6 @@ import { useUIExtensions } from "../../context/ui-extensions"
 import { PluginComponent } from "../../component/plugin-component"
 import { Locale } from "@/util/locale"
 import path from "path"
-import { promises as fs } from "fs"
 import type { AssistantMessage, Session, Todo as SDKTodo } from "@opencode-ai/sdk"
 import { RGBA, TextAttributes } from "@opentui/core"
 import { ContextUsageBar } from "../../component/context-usage-bar"
@@ -29,6 +28,7 @@ import { Perf } from "@/util/perf"
 import { ContextIntelligence } from "@/session/context-intelligence"
 import { DialogContextTimeline } from "./dialog-context-timeline"
 import { useServerStatus } from "../../context/server-status"
+import { useContextManager } from "../../context/context"
 type TabType = "files" | "todos" | "tools" | "subagents"
 
 function parseSubagentTitle(title: string): { agent?: string; description: string } {
@@ -47,21 +47,6 @@ function parseSubagentTitle(title: string): { agent?: string; description: strin
   }
 
   return { description: trimmed }
-}
-
-type ContextItem = {
-  id: string
-  name: string
-  content: string
-  tags: string[]
-  activeTags: Set<string>
-  compact: boolean
-  lastUpdated: number
-}
-
-type ContextChip = {
-  tag: string
-  count: number
 }
 
 const CONTEXT_STOP_WORDS = new Set([
@@ -107,6 +92,7 @@ const emptyContextSummary = {
   promptTokens: 0,
   cachedTokens: 0,
   cachedTokensFormatted: "0",
+  contextTokens: 0,
 }
 
 function generateContextTags(content: string): string[] {
@@ -124,19 +110,6 @@ function generateContextTags(content: string): string[] {
     .sort((a, b) => b[1] - a[1])
     .slice(0, 8)
     .map(([tag]) => tag)
-}
-
-function createContextItem(id: string, name: string, content: string): ContextItem {
-  const tags = generateContextTags(content)
-  return {
-    id,
-    name,
-    content,
-    tags,
-    activeTags: new Set(tags),
-    compact: false,
-    lastUpdated: Date.now(),
-  }
 }
 
 function summarizeContent(content: string, limit: number) {
@@ -212,19 +185,10 @@ export function Sidebar(props: {
   const [optimisticTodos, setOptimisticTodos] = createSignal<
     Array<{ id: string; content: string; status: string; priority: string }>
   >([])
-  const [contexts, setContexts] = createSignal<Array<{ id: string; name: string; content: string }>>([])
-
-  const persistContexts = async (items: Array<{ id: string; name: string; content: string }>) => {
-    try {
-      const projectDir = process.cwd()
-      const targetDir = path.join(projectDir, ".opencode", "context")
-      await fs.mkdir(targetDir, { recursive: true })
-      await fs.writeFile(path.join(targetDir, `${props.sessionID}.json`), JSON.stringify(items, null, 2))
-    } catch (error) {
-      console.error("Failed to persist contexts", error)
-    }
-  }
-  const [activeContextIds, setActiveContextIds] = createSignal<Set<string>>(new Set())
+  const contextManager = useContextManager()
+  const contexts = createMemo(() => contextManager.contexts())
+  const activeContextIds = contextManager.activeContextIds
+  const selectedContextTokens = createMemo(() => contextManager.selectedTokenCount())
   const sortedContexts = createMemo(() => {
     return [...contexts()].sort((a, b) => {
       const aIsHighPriority = a.name.startsWith("!")
@@ -321,90 +285,64 @@ export function Sidebar(props: {
   const canGrow = () => props.width < props.maxWidth
 
   // Context management functions
-
-  const createContext = () => {
-    dialog.replace(() => (
-      <DialogContextAdd
-        onConfirm={async (name: string, content: string) => {
-          const id = `ctx_${Date.now()}`
-          setContexts((prev) => {
-            const next = [...prev, { id, name, content }]
-            void persistContexts(next)
-            return next
-          })
-
-          // Start background analysis
-          if (content.trim().length > 0) {
-            try {
-              // Fetch URL content if present
-              const enrichedContent = await ContextIntelligence.fetchContextContent(content)
-              if (enrichedContent !== content) {
-                setContexts((prev) => prev.map((c) => (c.id === id ? { ...c, content: enrichedContent } : c)))
-              }
-
-              // Analyze in background without blocking UI
-              ContextIntelligence.processContextBackground({
-                id,
-                name,
-                content: enrichedContent,
-              })
-                .then((analysis) => {
-                  toast.show({
-                    variant: "info",
-                    message: `Context "${name}" analyzed - Priority: ${analysis.traffic_light_prediction.priority}`,
-                    duration: 2000,
-                  })
-                })
-                .catch((error) => {
+  const configureContexts = () => {
+    const openCreate = () => {
+      dialog.replace(() => (
+        <DialogContextAdd
+          onConfirm={async (name: string, content: string) => {
+            const createdId = contextManager.addContext({ name, content })
+            if (content.trim().length > 0) {
+              try {
+                const enrichedContent = await ContextIntelligence.fetchContextContent(content)
+                if (enrichedContent !== content) {
+                  contextManager.updateContext(createdId, (ctx) => ({ ...ctx, content: enrichedContent }))
+                }
+                ContextIntelligence.processContextBackground({
+                  id: createdId,
+                  name,
+                  content: enrichedContent,
+                }).catch((error) => {
                   console.warn("Context analysis failed:", error)
                 })
-            } catch (error) {
-              console.warn("Context processing failed:", error)
+              } catch (error) {
+                console.warn("Context processing failed:", error)
+              }
             }
-          }
-        }}
-      />
-    ))
-  }
+          }}
+        />
+      ))
+    }
 
-  const editContextContent = (contextId: string) => {
-    const ctx = contexts().find((c) => c.id === contextId)
-    if (!ctx) return
+    const options = [
+      {
+        title: "Add new context",
+        value: "context.add",
+        description: "Create a new reusable context snippet",
+        onSelect: () => openCreate(),
+      },
+      ...contexts().map((ctx) => ({
+        title: `${ctx.active ? "●" : "○"} ${ctx.name}`,
+        value: ctx.id,
+        description: Locale.truncate(Locale.stripMarkdown(ctx.content) || "No content", 100),
+        onSelect: () => {
+          dialog.replace(() => (
+            <DialogContextEdit
+              name={ctx.name}
+              content={ctx.content}
+              onConfirm={(content: string) => {
+                contextManager.updateContext(ctx.id, (current) => ({ ...current, content }))
+              }}
+            />
+          ))
+        },
+      })),
+    ]
 
-    dialog.replace(() => (
-      <DialogContextEdit
-        name={ctx.name}
-        content={ctx.content}
-        onConfirm={(content: string) => {
-          setContexts((prev) => prev.map((c) => (c.id === contextId ? { ...c, content } : c)))
-        }}
-      />
-    ))
-  }
-
-  const deleteContext = (contextId: string) => {
-    const ctx = contexts().find((c) => c.id === contextId)
-    if (!ctx) return
-
-    setContexts((prev) => prev.filter((c) => c.id !== contextId))
-    setActiveContextIds((prev) => {
-      const newSet = new Set(prev)
-      newSet.delete(contextId)
-      return newSet
-    })
-    toast.show({ variant: "success", message: `Deleted context: ${ctx.name}` })
+    dialog.replace(() => <DialogSelect title="Contexts" options={options} />)
   }
 
   const toggleContext = (contextId: string) => {
-    setActiveContextIds((prev) => {
-      const newSet = new Set(prev)
-      if (newSet.has(contextId)) {
-        newSet.delete(contextId)
-      } else {
-        newSet.add(contextId)
-      }
-      return newSet
-    })
+    contextManager.toggleContext(contextId)
   }
 
   // Get child sessions reactively from sync.data (SSE-based, no polling)
@@ -799,6 +737,8 @@ export function Sidebar(props: {
     }
 
     const toolTokens = 0
+    const extraContextTokens = selectedContextTokens()
+    systemTokens += extraContextTokens
 
     const total = systemTokens + assistantTokens + userTokens + toolTokens
     const tokenLimit = stats.lastAssistantTokenLimit
@@ -819,6 +759,7 @@ export function Sidebar(props: {
       promptTokens,
       cachedTokens,
       cachedTokensFormatted: cachedTokens.toLocaleString(),
+      contextTokens: extraContextTokens,
     }
   })
 
@@ -942,6 +883,9 @@ export function Sidebar(props: {
           <text fg={theme.textMuted}>
             {context().tokensFormatted} tokens ({context().freePercentage}% prompt cached)
           </text>
+          <Show when={context().contextTokens > 0}>
+            <text fg={theme.textMuted}>Includes {Locale.number(context().contextTokens)} from selected context</text>
+          </Show>
           <text fg={theme.textMuted}>
             {cost().spent} spent (saved {cost().saved})
           </text>
@@ -1326,7 +1270,7 @@ export function Sidebar(props: {
               attributes={TextAttributes.BOLD}
               onMouseUp={() => {
                 if (renderer.getSelection()?.getSelectedText()) return
-                createContext()
+                configureContexts()
               }}
             >
               + Configure
@@ -1335,7 +1279,7 @@ export function Sidebar(props: {
           <Show when={expandedSections().has("context")}>
             <box flexDirection="column" gap={1}>
               <Show when={contexts().length > 0}>
-                <box flexDirection="row" gap={1} flexWrap="wrap">
+                <box flexDirection="row" gap="1ch" flexWrap="wrap">
                   <For each={sortedContexts()}>
                     {(ctx) => {
                       const isActive = createMemo(() => activeContextIds().has(ctx.id))
@@ -1373,8 +1317,7 @@ export function Sidebar(props: {
                             toggleContext(ctx.id)
                           }}
                         >
-                          {ctx.name.toUpperCase()}
-                          {hasContent() ? "*" : ""}
+                          {` ${ctx.name.toUpperCase()}${hasContent() ? "*" : ""} `}
                         </text>
                       )
                     }}

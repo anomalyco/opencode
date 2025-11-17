@@ -11,7 +11,8 @@
     "switch_mode",
     "glob",
     "todowrite",
-    "ripgrep"
+    "ripgrep",
+    "read"
   ],
   "$schema": "https://opencode.ai/config.json"
 }

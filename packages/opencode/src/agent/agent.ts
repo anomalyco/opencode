@@ -138,14 +138,7 @@ export namespace Agent {
         mode: "subagent",
         builtIn: true,
       },
-      build: {
-        name: "build",
-        tools: { ...defaultTools },
-        options: {},
-        permission: agentPermission,
-        mode: "primary",
-        builtIn: true,
-      },
+
       plan: {
         name: "plan",
         description: "Read-only planning and analysis agent for architecture design and planning",

@@ -166,12 +166,7 @@ export const RunCommand = cmd({
 
         // Switch to worktree directory
         process.chdir(parallelResult.worktreePath)
-        UI.println(
-          UI.Style.TEXT_INFO_BOLD +
-            "📦 Worktree: " +
-            UI.Style.TEXT_NORMAL +
-            parallelResult.branchName,
-        )
+        UI.println(UI.Style.TEXT_INFO_BOLD + "📦 Worktree: " + UI.Style.TEXT_NORMAL + parallelResult.branchName)
       } catch (error) {
         UI.error(error instanceof Error ? error.message : String(error))
         process.exit(1)
@@ -276,7 +271,7 @@ export const RunCommand = cmd({
         await sdk.session.command({
           path: { id: sessionID },
           body: {
-            agent: args.agent || "build",
+            agent: args.agent || "general",
             model: args.model,
             command: args.command,
             arguments: message,
@@ -287,7 +282,7 @@ export const RunCommand = cmd({
         await sdk.session.prompt({
           path: { id: sessionID },
           body: {
-            agent: args.agent || "build",
+            agent: args.agent || "general",
             model: modelParam,
             parts: [...fileParts, { type: "text", text: message }],
           },
@@ -402,10 +397,7 @@ export const RunCommand = cmd({
       try {
         await Parallel.teardown(parallelResult, true)
       } catch (error) {
-        UI.error(
-          "Parallel mode teardown failed: " +
-            (error instanceof Error ? error.message : String(error)),
-        )
+        UI.error("Parallel mode teardown failed: " + (error instanceof Error ? error.message : String(error)))
         process.exit(1)
       }
     }

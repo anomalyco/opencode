@@ -415,7 +415,7 @@ export namespace MessageV2 {
         tokens: v1.metadata.assistant!.tokens,
         modelID: v1.metadata.assistant!.modelID,
         providerID: v1.metadata.assistant!.providerID,
-        mode: "build",
+        mode: "general",
         error: v1.metadata.error,
       }
       const parts = v1.parts.flatMap((part): Part[] => {
@@ -899,4 +899,3 @@ export namespace MessageV2 {
     return getToolParts(parts).filter((part) => part.state.status === "pending")
   }
 }
-
