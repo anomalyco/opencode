@@ -279,6 +279,7 @@ function App() {
     {
       title: `Toggle model optimization (${local.optimize.enabled ? "ON" : "OFF"})`,
       value: "optimize.toggle",
+      keybind: "optimize_toggle",
       category: "Agent",
       onSelect: () => {
         local.optimize.toggle()
