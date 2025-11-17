@@ -460,6 +460,7 @@ export function Prompt(props: PromptProps) {
           messageID,
           agent: local.agent.current().name,
           model: local.model.current(),
+          optimizeEnabled: local.optimize.enabled,
           parts: [
             {
               id: Identifier.ascending("part"),
