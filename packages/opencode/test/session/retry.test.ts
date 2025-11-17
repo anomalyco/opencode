@@ -51,11 +51,11 @@ describe("session.retry.delay", () => {
     expect(SessionRetry.delay(error, 1)).toBe(2000)
   })
 
-  test("returns undefined when retry-after exceeds 10 minutes with headers", () => {
+  test("uses retry-after values even when exceeding 10 minutes with headers", () => {
     const error = apiError({ "retry-after": "50" })
     expect(SessionRetry.delay(error, 1)).toBe(50000)
 
     const longError = apiError({ "retry-after-ms": "700000" })
-    expect(SessionRetry.delay(longError, 1)).toBeUndefined()
+    expect(SessionRetry.delay(longError, 1)).toBe(700000)
   })
 })
