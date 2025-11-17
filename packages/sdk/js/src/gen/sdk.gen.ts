@@ -33,6 +33,9 @@ import type {
   SessionCreateData,
   SessionCreateResponses,
   SessionCreateErrors,
+  SessionStatusData,
+  SessionStatusResponses,
+  SessionStatusErrors,
   SessionDeleteData,
   SessionDeleteResponses,
   SessionDeleteErrors,
@@ -372,6 +375,16 @@ class Session extends _HeyApiClient {
         "Content-Type": "application/json",
         ...options?.headers,
       },
+    })
+  }
+
+  /**
+   * Get session status
+   */
+  public status<ThrowOnError extends boolean = false>(options?: Options<SessionStatusData, ThrowOnError>) {
+    return (options?.client ?? this._client).get<SessionStatusResponses, SessionStatusErrors, ThrowOnError>({
+      url: "/session/status",
+      ...options,
     })
   }
 

@@ -57,14 +57,15 @@ export namespace Billing {
     )
   }
 
-  export const usages = async () => {
+  export const usages = async (page = 0, pageSize = 50) => {
     return await Database.use((tx) =>
       tx
         .select()
         .from(UsageTable)
         .where(eq(UsageTable.workspaceID, Actor.workspace()))
         .orderBy(sql`${UsageTable.timeCreated} DESC`)
-        .limit(100),
+        .limit(pageSize)
+        .offset(page * pageSize),
     )
   }
 

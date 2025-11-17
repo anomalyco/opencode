@@ -1,0 +1,11 @@
+{
+  "$schema": "https://opencode.ai/config.json",
+  "plugin": ["opencode-openai-codex-auth"],
+  "provider": {
+    "opencode": {
+      "options": {
+        // "baseURL": "http://localhost:8080",
+      },
+    },
+  },
+}

@@ -175,6 +175,22 @@ export namespace Provider {
         options: {},
       }
     },
+    "azure-cognitive-services": async () => {
+      const resourceName = process.env["AZURE_COGNITIVE_SERVICES_RESOURCE_NAME"]
+      return {
+        autoload: false,
+        async getModel(sdk: any, modelID: string, options?: Record<string, any>) {
+          if (options?.["useCompletionUrls"]) {
+            return sdk.chat(modelID)
+          } else {
+            return sdk.responses(modelID)
+          }
+        },
+        options: {
+          baseURL: resourceName ? `https://${resourceName}.cognitiveservices.azure.com/openai` : undefined,
+        },
+      }
+    },
     "amazon-bedrock": async () => {
       if (!process.env["AWS_PROFILE"] && !process.env["AWS_ACCESS_KEY_ID"] && !process.env["AWS_BEARER_TOKEN_BEDROCK"])
         return { autoload: false }
@@ -324,6 +340,17 @@ export namespace Provider {
         async getModel(sdk: ProviderSDK, modelID: string): Promise<LanguageModel> {
           const id = String(modelID).trim()
           return sdk.languageModel(id)
+        },
+      }
+    },
+    zenmux: async () => {
+      return {
+        autoload: false,
+        options: {
+          headers: {
+            "HTTP-Referer": "https://opencode.ai/",
+            "X-Title": "opencode",
+          },
         },
       }
     },

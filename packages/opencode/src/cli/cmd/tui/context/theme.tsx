@@ -13,6 +13,7 @@ import codesurfGreen from "./theme/codesurf-green.json" with { type: "json" }
 import codesurfRed from "./theme/codesurf-red.json" with { type: "json" }
 import dracula from "./theme/dracula.json" with { type: "json" }
 import everforest from "./theme/everforest.json" with { type: "json" }
+import flexoki from "./theme/flexoki.json" with { type: "json" }
 import github from "./theme/github.json" with { type: "json" }
 import gruvbox from "./theme/gruvbox.json" with { type: "json" }
 import kanagawa from "./theme/kanagawa.json" with { type: "json" }
@@ -113,6 +114,7 @@ export const DEFAULT_THEMES: Record<string, ThemeJson> = {
   "codesurf-red": codesurfRed,
   dracula,
   everforest,
+  flexoki,
   github,
   gruvbox,
   kanagawa,
@@ -138,8 +140,10 @@ export function resolveThemeColor(
   mode: "dark" | "light" = "dark",
 ): RGBA {
   if (value instanceof RGBA) return value
-  if (typeof value === "string")
+  if (typeof value === "string") {
+    if (value === "transparent" || value === "none") return RGBA.fromInts(0, 0, 0, 0)
     return value.startsWith("#") ? RGBA.fromHex(value) : resolveThemeColor(defs[value], defs, mode)
+  }
   return resolveThemeColor(value[mode], defs, mode)
 }
 
@@ -295,8 +299,8 @@ function generateSystem(colors: TerminalColors, mode: "dark" | "light"): ThemeJs
       text: fg,
       textMuted,
 
-      // Background colors
-      background: bg,
+      // Background colors - use 'none' to inherit terminal defaults and transparency
+      background: "none",
       backgroundPanel: grays[2],
       backgroundElement: grays[3],
 
@@ -886,18 +890,21 @@ function generateSyntax(theme: Theme) {
       scope: ["diff.plus"],
       style: {
         foreground: theme.diffAdded,
+        background: theme.diffAddedBg,
       },
     },
     {
       scope: ["diff.minus"],
       style: {
         foreground: theme.diffRemoved,
+        background: theme.diffRemovedBg,
       },
     },
     {
       scope: ["diff.delta"],
       style: {
         foreground: theme.diffContext,
+        background: theme.diffContextBg,
       },
     },
     {

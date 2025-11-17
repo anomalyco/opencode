@@ -20,3 +20,5 @@ dist
 /.claude.backup.*
 packages/opencode-kanban/
 /.claude/tsc-cache
+refs
+refs

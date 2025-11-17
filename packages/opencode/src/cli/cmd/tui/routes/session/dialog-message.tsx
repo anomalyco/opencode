@@ -3,6 +3,7 @@ import { useSync } from "@tui/context/sync"
 import { DialogSelect } from "@tui/ui/dialog-select"
 import { useSDK } from "@tui/context/sdk"
 import { useRoute } from "@tui/context/route"
+import { Clipboard } from "@tui/util/clipboard"
 import type { PromptInfo } from "@tui/component/prompt/history"
 import { useToast } from "../../ui/toast"
 import { Locale } from "@/util/locale"
@@ -82,6 +83,26 @@ export function DialogMessage(props: {
               props.setPrompt(promptInfo)
             }
 
+            dialog.clear()
+          },
+        },
+        {
+          title: "Copy",
+          value: "message.copy",
+          description: "copy message text to clipboard",
+          onSelect: async (dialog) => {
+            const msg = message()
+            if (!msg) return
+
+            const parts = sync.data.part[msg.id]
+            const text = parts.reduce((agg, part) => {
+              if (part.type === "text" && !part.synthetic) {
+                agg += part.text
+              }
+              return agg
+            }, "")
+
+            await Clipboard.copy(text)
             dialog.clear()
           },
         },
