@@ -752,12 +752,12 @@ export function Prompt(props: PromptProps) {
           <box backgroundColor={theme.backgroundElement} width={1} justifyContent="center" alignItems="center"></box>
         </box>
         <box flexDirection="row" justifyContent="space-between">
-          <box flexDirection="row" gap={2} flexShrink={0} wrapMode="none">
-            <text fg={theme.text}>
+          <box flexDirection="row" gap={2} flexShrink={0}>
+            <text fg={theme.text} flexShrink={0} wrapMode="none">
               <span style={{ fg: theme.textMuted }}>{local.model.parsed().provider}</span>{" "}
               <span style={{ bold: true }}>{local.model.parsed().model}</span>
             </text>
-            <text fg={theme.text}>
+            <text fg={theme.text} flexShrink={0} wrapMode="none">
               <span style={{ fg: theme.textMuted }}>OPTIMIZE:</span>{" "}
               <span style={{ bold: true, fg: local.optimize.enabled ? theme.success : theme.textMuted }}>
                 {local.optimize.enabled ? "ON" : "OFF"}
