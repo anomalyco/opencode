@@ -42,6 +42,15 @@ export type UserMessage = {
     body?: string
     diffs: Array<FileDiff>
   }
+  agent: string
+  model: {
+    providerID: string
+    modelID: string
+  }
+  system?: string
+  tools?: {
+    [key: string]: boolean
+  }
 }
 
 export type ProviderAuthError = {
@@ -114,6 +123,7 @@ export type AssistantMessage = {
       write: number
     }
   }
+  finish?: string
 }
 
 export type Message = UserMessage | AssistantMessage
@@ -348,6 +358,13 @@ export type RetryPart = {
   }
 }
 
+export type CompactionPart = {
+  id: string
+  sessionID: string
+  messageID: string
+  type: "compaction"
+}
+
 export type Part =
   | TextPart
   | ReasoningPart
@@ -359,6 +376,7 @@ export type Part =
   | PatchPart
   | AgentPart
   | RetryPart
+  | CompactionPart
 
 export type EventMessagePartUpdated = {
   type: "message.part.updated"
@@ -374,13 +392,6 @@ export type EventMessagePartRemoved = {
     sessionID: string
     messageID: string
     partID: string
-  }
-}
-
-export type EventSessionCompacted = {
-  type: "session.compacted"
-  properties: {
-    sessionID: string
   }
 }
 
@@ -411,6 +422,13 @@ export type EventPermissionReplied = {
     sessionID: string
     permissionID: string
     response: string
+  }
+}
+
+export type EventSessionCompacted = {
+  type: "session.compacted"
+  properties: {
+    sessionID: string
   }
 }
 
@@ -455,6 +473,27 @@ export type EventCommandExecuted = {
     sessionID: string
     arguments: string
     messageID: string
+  }
+}
+
+export type SessionStatus =
+  | {
+      type: "idle"
+    }
+  | {
+      type: "retry"
+      attempt: number
+      message: string
+    }
+  | {
+      type: "busy"
+    }
+
+export type EventSessionStatus = {
+  type: "session.status"
+  properties: {
+    sessionID: string
+    status: SessionStatus
   }
 }
 
@@ -598,12 +637,13 @@ export type Event =
   | EventMessageRemoved
   | EventMessagePartUpdated
   | EventMessagePartRemoved
-  | EventSessionCompacted
   | EventPermissionUpdated
   | EventPermissionReplied
+  | EventSessionCompacted
   | EventFileEdited
   | EventTodoUpdated
   | EventCommandExecuted
+  | EventSessionStatus
   | EventSessionIdle
   | EventSessionCreated
   | EventSessionUpdated
@@ -1612,6 +1652,35 @@ export type SessionCreateResponses = {
 }
 
 export type SessionCreateResponse = SessionCreateResponses[keyof SessionCreateResponses]
+
+export type SessionStatusData = {
+  body?: never
+  path?: never
+  query?: {
+    directory?: string
+  }
+  url: "/session/status"
+}
+
+export type SessionStatusErrors = {
+  /**
+   * Bad request
+   */
+  400: BadRequestError
+}
+
+export type SessionStatusError = SessionStatusErrors[keyof SessionStatusErrors]
+
+export type SessionStatusResponses = {
+  /**
+   * Get session status
+   */
+  200: {
+    [key: string]: SessionStatus
+  }
+}
+
+export type SessionStatusResponse = SessionStatusResponses[keyof SessionStatusResponses]
 
 export type SessionDeleteData = {
   body?: never

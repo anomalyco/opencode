@@ -20,7 +20,6 @@ import { useTheme } from "@tui/context/theme"
 import {
   BoxRenderable,
   ScrollBoxRenderable,
-  TextAttributes,
   addDefaultParsers,
   MacOSScrollAccel,
   type ScrollAcceleration,
@@ -65,7 +64,6 @@ import { Editor } from "../../util/editor"
 import { Global } from "@/global"
 import fs from "fs/promises"
 import stripAnsi from "strip-ansi"
-import { LSP } from "@/lsp/index.ts"
 
 addDefaultParsers(parsers.parsers)
 
@@ -101,7 +99,12 @@ export function Session() {
   const permissions = createMemo(() => sync.data.permission[route.sessionID] ?? [])
 
   const pending = createMemo(() => {
-    return messages().findLast((x) => x.role === "assistant" && !x.time?.completed)?.id
+    return messages().findLast((x) => x.role === "assistant" && !x.time.completed)?.id
+  })
+
+  const lastUserMessage = createMemo(() => {
+    const p = pending()
+    return messages().findLast((x) => x.role === "user" && (!p || x.id < p)) as UserMessage
   })
 
   const dimensions = useTerminalDimensions()
@@ -801,7 +804,7 @@ export function Session() {
                     </Match>
                     <Match when={message.role === "assistant"}>
                       <AssistantMessage
-                        last={index() === messages().length - 1}
+                        last={pending() === message.id}
                         message={message as AssistantMessage}
                         parts={sync.data.part[message.id] ?? []}
                       />
@@ -856,64 +859,84 @@ function UserMessage(props: {
   const queued = createMemo(() => props.pending && props.message.id > props.pending)
   const color = createMemo(() => (queued() ? theme.accent : theme.secondary))
 
+  const compaction = createMemo(() => props.parts.find((x) => x.type === "compaction"))
+
   return (
-    <Show when={text()}>
-      <box
-        id={props.message.id}
-        onMouseOver={() => {
-          setHover(true)
-        }}
-        onMouseOut={() => {
-          setHover(false)
-        }}
-        onMouseUp={props.onMouseUp}
-        border={["left"]}
-        paddingTop={1}
-        paddingBottom={1}
-        paddingLeft={2}
-        marginTop={props.index === 0 ? 0 : 1}
-        backgroundColor={hover() ? theme.backgroundElement : theme.backgroundPanel}
-        customBorderChars={SplitBorder.customBorderChars}
-        borderColor={color()}
-        flexShrink={0}
-      >
-        <text fg={theme.text}>{text()?.text}</text>
-        <Show when={files().length}>
-          <box flexDirection="row" paddingBottom={1} paddingTop={1} gap={1} flexWrap="wrap">
-            <For each={files()}>
-              {(file) => {
-                const bg = createMemo(() => {
-                  if (file.mime.startsWith("image/")) return theme.accent
-                  if (file.mime === "application/pdf") return theme.primary
-                  return theme.secondary
-                })
-                return (
-                  <text fg={theme.text}>
-                    <span style={{ bg: bg(), fg: theme.background }}> {MIME_BADGE[file.mime] ?? file.mime} </span>
-                    <span style={{ bg: theme.backgroundElement, fg: theme.textMuted }}> {file.filename} </span>
-                  </text>
-                )
-              }}
-            </For>
-          </box>
-        </Show>
-        <text fg={theme.text}>
-          {sync.data.config.username ?? "You"}{" "}
-          <Show
-            when={queued()}
-            fallback={<span style={{ fg: theme.textMuted }}>({Locale.time(props.message.time.created)})</span>}
-          >
-            <span style={{ bg: theme.accent, fg: theme.backgroundPanel, bold: true }}> QUEUED </span>
+    <>
+      <Show when={text()}>
+        <box
+          id={props.message.id}
+          onMouseOver={() => {
+            setHover(true)
+          }}
+          onMouseOut={() => {
+            setHover(false)
+          }}
+          onMouseUp={props.onMouseUp}
+          border={["left"]}
+          paddingTop={1}
+          paddingBottom={1}
+          paddingLeft={2}
+          marginTop={props.index === 0 ? 0 : 1}
+          backgroundColor={hover() ? theme.backgroundElement : theme.backgroundPanel}
+          customBorderChars={SplitBorder.customBorderChars}
+          borderColor={color()}
+          flexShrink={0}
+        >
+          <text fg={theme.text}>{text()?.text}</text>
+          <Show when={files().length}>
+            <box flexDirection="row" paddingBottom={1} paddingTop={1} gap={1} flexWrap="wrap">
+              <For each={files()}>
+                {(file) => {
+                  const bg = createMemo(() => {
+                    if (file.mime.startsWith("image/")) return theme.accent
+                    if (file.mime === "application/pdf") return theme.primary
+                    return theme.secondary
+                  })
+                  return (
+                    <text fg={theme.text}>
+                      <span style={{ bg: bg(), fg: theme.background }}> {MIME_BADGE[file.mime] ?? file.mime} </span>
+                      <span style={{ bg: theme.backgroundElement, fg: theme.textMuted }}> {file.filename} </span>
+                    </text>
+                  )
+                }}
+              </For>
+            </box>
           </Show>
-        </text>
-      </box>
-    </Show>
+          <text fg={theme.text}>
+            {sync.data.config.username ?? "You"}{" "}
+            <Show
+              when={queued()}
+              fallback={<span style={{ fg: theme.textMuted }}>({Locale.time(props.message.time.created)})</span>}
+            >
+              <span style={{ bg: theme.accent, fg: theme.backgroundPanel, bold: true }}> QUEUED </span>
+            </Show>
+          </text>
+        </box>
+      </Show>
+      <Show when={compaction()}>
+        <box
+          marginTop={1}
+          border={["top"]}
+          title=" Compaction "
+          titleAlignment="center"
+          borderColor={theme.borderActive}
+        />
+      </Show>
+    </>
   )
 }
 
 function AssistantMessage(props: { message: AssistantMessage; parts: Part[]; last: boolean }) {
   const local = useLocal()
   const { theme } = useTheme()
+  const sync = useSync()
+  const status = createMemo(
+    () =>
+      sync.data.session_status[props.message.sessionID] ?? {
+        type: "idle",
+      },
+  )
   return (
     <>
       <For each={props.parts}>
@@ -945,23 +968,15 @@ function AssistantMessage(props: { message: AssistantMessage; parts: Part[]; las
           <text fg={theme.textMuted}>{props.message.error?.data.message}</text>
         </box>
       </Show>
-      <Show
-        when={
-          !props.message.time.completed ||
-          (props.last && props.parts.some((item) => item.type === "step-finish" && item.reason === "tool-calls"))
-        }
-      >
-        <box
-          paddingLeft={2}
-          marginTop={1}
-          flexDirection="row"
-          gap={1}
-          border={["left"]}
-          customBorderChars={SplitBorder.customBorderChars}
-          borderColor={theme.backgroundElement}
-        >
+      <Show when={props.last && status().type !== "idle"}>
+        <box paddingLeft={3} flexDirection="row" gap={1} marginTop={1}>
           <text fg={local.agent.color(props.message.mode)}>{Locale.titlecase(props.message.mode)}</text>
-          <Shimmer text={`${props.message.modelID}`} color={theme.text} />
+          <Shimmer text={props.message.modelID} color={theme.text} />
+          <Show when={status().type === "retry"}>
+            <text fg={theme.error}>
+              {(status() as any).message} [attempt #{(status() as any).attempt}]
+            </text>
+          </Show>
         </box>
       </Show>
       <Show
