@@ -92,6 +92,7 @@ const LEFT_SIDEBAR_WIDTH_MAX = 60
 const RIGHT_SIDEBAR_WIDTH_DEFAULT = 40
 const RIGHT_SIDEBAR_WIDTH_MIN = 30
 const RIGHT_SIDEBAR_WIDTH_MAX = 60
+const MAX_TOOL_CHIPS = 30
 
 const context = createContext<{
   width: number
@@ -186,6 +187,132 @@ function SessionTabs(props: {
   )
 }
 
+type ToolChip = {
+  id: string
+  tool: string
+  status: ToolPart["state"]["status"]
+  label: string
+  message: AssistantMessage
+  part: ToolPart
+  title?: string
+}
+
+function getTaskStateTitle(state: unknown): string {
+  if (state && typeof state === "object") {
+    const record = state as Record<string, unknown>
+    const title = record["title"]
+    if (typeof title === "string") return title
+  }
+  return ""
+}
+
+function getToolChipLabel(part: ToolPart): string {
+  const { tool } = part
+  const { status } = part.state
+  if (status === "error") {
+    const error = part.state.error
+    return error?.trim() ? Locale.truncate(error.trim(), 60) : `${tool} error`
+  }
+  if (status === "completed") {
+    const title = typeof part.state.title === "string" ? part.state.title : undefined
+    if (title?.trim()) return Locale.truncate(title.trim(), 60)
+    const metadataTitle = typeof part.state.metadata?.title === "string" ? part.state.metadata?.title : undefined
+    if (metadataTitle?.trim()) return Locale.truncate(metadataTitle.trim(), 60)
+    const output = part.state.output
+    if (output?.trim()) return Locale.truncate(output.trim(), 60)
+  }
+  if (status === "pending") {
+    const description = part.state.input?.description
+    if (typeof description === "string" && description.trim()) {
+      return Locale.truncate(description.trim(), 60)
+    }
+  }
+  return `${Locale.titlecase(tool)} (${status})`
+}
+
+function getToolChipStatusColors(theme: ReturnType<typeof useTheme>["theme"], status: ToolPart["state"]["status"]) {
+  if (status === "error") return { fg: theme.background, bg: theme.error }
+  if (status === "completed") return { fg: theme.background, bg: theme.success }
+  if (status === "pending") return { fg: theme.background, bg: theme.accent }
+  return { fg: theme.text, bg: theme.border }
+}
+
+function ToolChipBar(props: { chips: ToolChip[]; selected?: string; onSelect: (chipID: string) => void }) {
+  const { theme } = useTheme()
+  const renderer = useRenderer()
+
+  return (
+    <box flexDirection="column" gap={1} paddingBottom={1} paddingLeft={1} paddingRight={1} flexShrink={0}>
+      <text fg={theme.textMuted}>Tool calls</text>
+      <box flexDirection="row" gap={1} flexWrap="wrap">
+        <For each={props.chips}>
+          {(chip) => {
+            const active = () => props.selected === chip.id
+            const statusColors = getToolChipStatusColors(theme, chip.status)
+            return (
+              <box
+                border={["left"]}
+                customBorderChars={SplitBorder.customBorderChars}
+                borderColor={statusColors.bg}
+                backgroundColor={active() ? theme.backgroundElement : theme.backgroundPanel}
+                paddingLeft={1}
+                paddingRight={1}
+                paddingTop={0}
+                paddingBottom={0}
+                onMouseUp={() => {
+                  if (renderer.getSelection()?.getSelectedText()) return
+                  props.onSelect(chip.id)
+                }}
+              >
+                <text fg={statusColors.bg}>●</text>
+                <text fg={theme.text} marginLeft={1} marginRight={1}>
+                  {Locale.titlecase(chip.tool)}
+                </text>
+                <text fg={theme.textMuted}>{chip.label}</text>
+                <Show when={active()}>
+                  <text fg={theme.textMuted}> (selected)</text>
+                </Show>
+              </box>
+            )
+          }}
+        </For>
+      </box>
+    </box>
+  )
+}
+
+function ToolChipDetails(props: { chip?: ToolChip }) {
+  const { theme } = useTheme()
+
+  return (
+    <Show when={props.chip} fallback={<></>}>
+      {(chip) => (
+        <box
+          marginBottom={1}
+          marginLeft={1}
+          marginRight={1}
+          border={["left"]}
+          customBorderChars={SplitBorder.customBorderChars}
+          borderColor={theme.border}
+          backgroundColor={theme.backgroundPanel}
+          paddingLeft={1}
+          paddingRight={1}
+          paddingTop={1}
+          paddingBottom={1}
+        >
+          <box flexDirection="row" gap={1} marginBottom={1}>
+            <text fg={theme.text}>
+              <b>{Locale.titlecase(chip().tool)}</b>
+            </text>
+            <text fg={theme.textMuted}>{chip().label}</text>
+          </box>
+          <ToolPart part={chip().part} message={chip().message} indent={0} />
+        </box>
+      )}
+    </Show>
+  )
+}
+
 export function Session() {
   const route = useRouteData("session")
   const router = useRoute()
@@ -277,6 +404,7 @@ export function Session() {
   const [leftSidebar, setLeftSidebar] = createSignal<"show" | "hide" | "auto">(kv.get("leftSidebar", "auto"))
   const [rightSidebar, setRightSidebar] = createSignal<"show" | "hide" | "auto">(kv.get("rightSidebar", "auto"))
   const [conceal, setConceal] = createSignal(true)
+  const [showSimpleMessageList, setShowSimpleMessageList] = createSignal(Boolean(kv.get("showSimpleMessageList", true)))
 
   const clampWidth = (value: number, min: number, max: number) => {
     if (value < min) return min
@@ -324,8 +452,71 @@ export function Session() {
   const [showCodeEditor, setShowCodeEditor] = createSignal(false)
   const [showFileViewer, setShowFileViewer] = createSignal(false)
   const [selectedFile, setSelectedFile] = createSignal<string | undefined>()
+  const initialSelectedToolChip = kv.get("selectedToolChip")
+  const [selectedToolChip, setSelectedToolChip] = createSignal<string | undefined>(
+    typeof initialSelectedToolChip === "string" ? initialSelectedToolChip : undefined,
+  )
+
+  const toolChips = createMemo(() => {
+    if (!showSimpleMessageList()) return [] as ToolChip[]
+    const list = messages()
+    const chips: ToolChip[] = []
+    for (let i = list.length - 1; i >= 0; i -= 1) {
+      const message = list[i]
+      if (message.role !== "assistant") continue
+      const parts = (sync.data.part[message.id] ?? []) as Part[]
+      for (let j = parts.length - 1; j >= 0; j -= 1) {
+        const part = parts[j]
+        if (part.type !== "tool") continue
+        const toolPart = part as ToolPart
+        chips.push({
+          id: `${message.id}:${toolPart.id}`,
+          tool: toolPart.tool,
+          status: toolPart.state.status,
+          label: getToolChipLabel(toolPart),
+          message: message as AssistantMessage,
+          part: toolPart,
+        })
+        if (chips.length >= MAX_TOOL_CHIPS) break
+      }
+      if (chips.length >= MAX_TOOL_CHIPS) break
+    }
+    return chips.reverse()
+  })
+
+  const selectedToolChipData = createMemo(() => {
+    const selected = selectedToolChip()
+    if (!selected) return
+    return toolChips().find((chip) => chip.id === selected)
+  })
+
+  createEffect(() => {
+    const simple = showSimpleMessageList()
+    const selected = selectedToolChip()
+    if (!simple && selected) {
+      kv.set("selectedToolChip", null)
+      setSelectedToolChip(undefined)
+      return
+    }
+    if (simple && selected) {
+      const exists = toolChips().some((chip) => chip.id === selected)
+      if (!exists) {
+        kv.set("selectedToolChip", null)
+        setSelectedToolChip(undefined)
+      }
+    }
+  })
+
+  const handleToolChipSelect = (chipID: string) => {
+    setSelectedToolChip((prev) => {
+      const next = prev === chipID ? undefined : chipID
+      kv.set("selectedToolChip", next ?? null)
+      return next
+    })
+  }
 
   // Detect if messages are currently streaming to disable sticky scroll
+
   const isStreaming = createMemo(() => {
     const msgs = messages()
     const lastMsg = msgs[msgs.length - 1]
@@ -723,6 +914,17 @@ export function Session() {
       },
     },
     {
+      title: showSimpleMessageList() ? "Hide simple messagelist" : "Show simple messagelist",
+      value: "session.message.simple",
+      category: "Session",
+      onSelect: (dialog) => {
+        const next = !showSimpleMessageList()
+        setShowSimpleMessageList(next)
+        kv.set("showSimpleMessageList", next)
+        dialog.clear()
+      },
+    },
+    {
       title: "Toggle left sidebar",
       value: "session.sidebar.left.toggle",
       keybind: "sidebar_left_toggle" as any,
@@ -1088,7 +1290,6 @@ export function Session() {
               <Header />
             </Show>
             <box flexGrow={1} flexShrink={1}>
-              {/* Non-scrolling load more banner */}
               <Show when={hasMoreMessages()}>
                 <box
                   paddingTop={1}
@@ -1389,7 +1590,10 @@ function PriorityCircles(props: {
       if (message.summary.body) fallback.push(message.summary.body)
       else if (message.summary.title) fallback.push(message.summary.title)
     }
-    const derived = fallback.map((text) => text?.toString().trim()).filter(Boolean).join("\n\n")
+    const derived = fallback
+      .map((text) => text?.toString().trim())
+      .filter(Boolean)
+      .join("\n\n")
     return derived || "(no content)"
   }
 
@@ -1417,7 +1621,7 @@ function PriorityCircles(props: {
         const message = messageList.find((m) => m.id === props.messageID)
         const text = buildMessageContext()
         const snippet = text.replace(/\s+/g, " ").trim()
-        const labelSource = snippet ? Locale.truncate(snippet, 24) : message?.role ?? "message"
+        const labelSource = snippet ? Locale.truncate(snippet, 24) : (message?.role ?? "message")
         const name = labelSource.toUpperCase()
         contextManager.upsertMessageContext({
           sessionID: props.sessionID,
@@ -1428,7 +1632,11 @@ function PriorityCircles(props: {
           active: true,
         })
       } else if (priority === "red") {
-        contextManager.setMessageContextActive({ sessionID: props.sessionID, messageID: props.messageID, active: false })
+        contextManager.setMessageContextActive({
+          sessionID: props.sessionID,
+          messageID: props.messageID,
+          active: false,
+        })
       } else if (priority === "none") {
         contextManager.removeMessageContext({ sessionID: props.sessionID, messageID: props.messageID })
       }
@@ -2669,6 +2877,27 @@ toolRegistry.register<typeof TaskTool>({
     const keybind = useKeybind()
     const { navigate } = useRoute()
     const renderer = useRenderer()
+    let scrollboxRef: ScrollBoxRenderable | undefined
+
+    const summarySignature = createMemo(() => {
+      const items = props.metadata.summary ?? []
+      return items
+        .map((task) => {
+          const title = "title" in task.state ? (task.state.title ?? "") : ""
+          return `${task.tool}:${task.state.status}:${title}`
+        })
+        .join("|")
+    })
+
+    createEffect(() => {
+      summarySignature()
+      props.metadata.sessionId
+      if (!scrollboxRef || props.collapsed) return
+      setTimeout(() => {
+        if (!scrollboxRef) return
+        scrollboxRef.scrollTo({ x: scrollboxRef.scrollLeft ?? 0, y: scrollboxRef.scrollHeight })
+      }, 50)
+    })
 
     return (
       <>
@@ -2687,38 +2916,53 @@ toolRegistry.register<typeof TaskTool>({
             [{props.input.subagent_type ?? "unknown"}] {props.input.description}
           </text>
         </ToolTitle>
-        <Show when={props.metadata.summary?.length}>
-          <box>
-            <For each={props.metadata.summary ?? []}>
-              {(task) => (
-                <text style={{ fg: theme.textMuted }}>
-                  ∟ {task.tool} {task.state.status === "completed" ? task.state.title : ""}
-                </text>
-              )}
-            </For>
-          </box>
+        <Show when={!props.collapsed}>
+          <scrollbox
+            height={15}
+            ref={(node) => {
+              scrollboxRef = node ?? undefined
+            }}
+            scrollbarOptions={{ visible: false }}
+          >
+            <box flexDirection="column" gap={1} paddingLeft={1}>
+              <Show when={props.metadata.summary?.length}>
+                <box>
+                  <For each={props.metadata.summary ?? []}>
+                    {(task) => {
+                      const title = "title" in task.state ? (task.state.title ?? "") : ""
+                      return (
+                        <text style={{ fg: theme.textMuted }}>
+                          ∟ {task.tool} {task.state.status === "completed" ? title : ""}
+                        </text>
+                      )
+                    }}
+                  </For>
+                </box>
+              </Show>
+              <Show when={props.metadata.sessionId}>
+                {(sessionId) => (
+                  <text
+                    fg={theme.accent}
+                    attributes={1}
+                    onMouseUp={() => {
+                      if (renderer.getSelection()?.getSelectedText()) return
+                      navigate({
+                        type: "session",
+                        sessionID: sessionId(),
+                      })
+                    }}
+                  >
+                    → Click to view subagent session
+                  </text>
+                )}
+              </Show>
+              <text fg={theme.text}>
+                {keybind.print("session_child_cycle")}, {keybind.print("session_child_cycle_reverse")}
+                <span style={{ fg: theme.textMuted }}> to navigate between subagent sessions</span>
+              </text>
+            </box>
+          </scrollbox>
         </Show>
-        <Show when={props.metadata.sessionId}>
-          {(sessionId) => (
-            <text
-              fg={theme.accent}
-              attributes={1}
-              onMouseUp={() => {
-                if (renderer.getSelection()?.getSelectedText()) return
-                navigate({
-                  type: "session",
-                  sessionID: sessionId(),
-                })
-              }}
-            >
-              → Click to view subagent session
-            </text>
-          )}
-        </Show>
-        <text fg={theme.text}>
-          {keybind.print("session_child_cycle")}, {keybind.print("session_child_cycle_reverse")}
-          <span style={{ fg: theme.textMuted }}> to navigate between subagent sessions</span>
-        </text>
       </>
     )
   },

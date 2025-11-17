@@ -97,7 +97,7 @@ export function CommandProvider(props: ParentProps) {
 
   useKeyboard((evt) => {
     if (value.suspended()) return
-    if (dialog.stack.length > 0) return
+    if (dialog.stack.length > 0 && dialog.stack.at(0)?.id !== "debug-panel") return
     if (evt.defaultPrevented) return
     if (keybind.match("command_list", evt)) {
       evt.preventDefault()

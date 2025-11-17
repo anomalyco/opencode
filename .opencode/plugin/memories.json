@@ -186,5 +186,30 @@
       "render-loop"
     ],
     "timestamp": "2025-11-16T19:51:49.930Z"
+  },
+  {
+    "id": "1763376786459",
+    "content": "User prefers plans via todowrite when asked to set up steps.",
+    "tags": [
+      "preference"
+    ],
+    "timestamp": "2025-11-17T10:53:06.459Z"
+  },
+  {
+    "id": "1763376791923",
+    "content": "Before making plans, user wants plan tool todowrite used.",
+    "tags": [
+      "preference"
+    ],
+    "timestamp": "2025-11-17T10:53:11.923Z"
+  },
+  {
+    "id": "1763377020975",
+    "content": "User specifically wants plans for tasks to have 4-5 steps including session route chip state, assistant message updates, command palette entry, and tests.",
+    "tags": [
+      "preference",
+      "plan"
+    ],
+    "timestamp": "2025-11-17T10:57:00.975Z"
   }
 ]

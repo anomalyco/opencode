@@ -16,6 +16,7 @@ const DAY_IN_MS = 24 * 60 * 60 * 1000
 const DATE_CATEGORY_ORDER = ["Today", "Yesterday", "This week", "Last week", "Older"] as const
 const RUNNING_SPINNER_FRAMES = ["⠋", "⠙", "⠹", "⠸", "⠼", "⠴", "⠦", "⠧", "⠇", "⠏"] as const
 const RUNNING_SPINNER_INTERVAL_MS = 120
+const STALE_SPINNER_TIMEOUT_MS = 15_000
 const HIDE_ICON = "⊖"
 const SHOW_ICON = "⊕"
 const OLDER_INITIAL_LIMIT = 12
@@ -225,10 +226,11 @@ export function LeftSidebar(props: {
     orchestration?: { status?: string }
     time?: { updated?: number }
   }): SessionIndicatorState => {
+    if (isSessionHidden(session.id)) return "idle"
     const orchestrationStatus = session.orchestration?.status
+    if (orchestrationStatus === "archived") return "idle"
     if (orchestrationStatus === "failed") return "error"
     if (orchestrationStatus === "paused") return "attention"
-    if (orchestrationStatus === "active") return "active"
 
     const pendingPermissions = (sync.data.permission?.[session.id]?.length ?? 0) > 0
     if (pendingPermissions) return "attention"
@@ -241,6 +243,13 @@ export function LeftSidebar(props: {
 
     const derivedStatus = sync.session.status(session.id)
     if (derivedStatus === "working" || derivedStatus === "compacting") return "active"
+
+    if (orchestrationStatus === "active") {
+      const lastUpdated = session.time?.updated ?? 0
+      if (clock() - lastUpdated < STALE_SPINNER_TIMEOUT_MS) {
+        return "active"
+      }
+    }
 
     return "idle"
   }
