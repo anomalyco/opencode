@@ -31,6 +31,7 @@ export const BatchTool = Tool.define("batch", async () => {
       return `Invalid parameters for tool 'batch':\n${formattedErrors}\n\nExpected payload format:\n  [{"tool": "tool_name", "parameters": {...}}, {...}]`
     },
     async execute(params, ctx) {
+      const { Session } = await import("../session")
       const { Identifier } = await import("../id/id")
 
       const toolCalls = params.tool_calls
@@ -39,26 +40,36 @@ export const BatchTool = Tool.define("batch", async () => {
       const availableTools = await ToolRegistry.tools("", "")
       const toolMap = new Map(availableTools.map((t) => [t.id, t]))
 
+      const partIDs = new Map<(typeof toolCalls)[0], string>()
       for (const call of toolCalls) {
-        if (DISALLOWED.has(call.tool)) {
-          throw new Error(
-            `tool '${call.tool}' is not allowed in batch. Disallowed tools: ${Array.from(DISALLOWED).join(", ")}`,
-          )
-        }
-        if (!toolMap.has(call.tool)) {
-          const allowed = Array.from(toolMap.keys()).filter((name) => !FILTERED_FROM_SUGGESTIONS.has(name))
-          throw new Error(`tool '${call.tool}' is not available. Available tools: ${allowed.join(", ")}`)
-        }
+        const partID = Identifier.ascending("part")
+        partIDs.set(call, partID)
+        Session.updatePart({
+          id: partID,
+          messageID: ctx.messageID,
+          sessionID: ctx.sessionID,
+          type: "tool",
+          tool: call.tool,
+          callID: partID,
+          state: {
+            status: "pending",
+            input: call.parameters,
+            raw: JSON.stringify(call),
+          },
+        })
       }
 
       const executeCall = async (call: (typeof toolCalls)[0]) => {
-        if (ctx.abort.aborted) {
-          return { success: false as const, tool: call.tool, error: new Error("Aborted") }
-        }
-
-        const partID = Identifier.ascending("part")
+        const callStartTime = Date.now()
+        const partID = partIDs.get(call)!
 
         try {
+          if (DISALLOWED.has(call.tool)) {
+            throw new Error(
+              `Tool '${call.tool}' is not allowed in batch. Disallowed tools: ${Array.from(DISALLOWED).join(", ")}`,
+            )
+          }
+
           const tool = toolMap.get(call.tool)
           if (!tool) {
             const availableToolsList = Array.from(toolMap.keys()).filter((name) => !FILTERED_FROM_SUGGESTIONS.has(name))
@@ -68,13 +79,53 @@ export const BatchTool = Tool.define("batch", async () => {
 
           const result = await tool.execute(validatedParams, { ...ctx, callID: partID })
 
+          await Session.updatePart({
+            id: partID,
+            messageID: ctx.messageID,
+            sessionID: ctx.sessionID,
+            type: "tool",
+            tool: call.tool,
+            callID: partID,
+            state: {
+              status: "completed",
+              input: call.parameters,
+              output: result.output,
+              title: result.title,
+              metadata: result.metadata,
+              attachments: result.attachments,
+              time: {
+                start: callStartTime,
+                end: Date.now(),
+              },
+            },
+          })
+
           return { success: true as const, tool: call.tool, result }
         } catch (error) {
+          await Session.updatePart({
+            id: partID,
+            messageID: ctx.messageID,
+            sessionID: ctx.sessionID,
+            type: "tool",
+            tool: call.tool,
+            callID: partID,
+            state: {
+              status: "error",
+              input: call.parameters,
+              error: error instanceof Error ? error.message : String(error),
+              time: {
+                start: callStartTime,
+                end: Date.now(),
+              },
+            },
+          })
+
           return { success: false as const, tool: call.tool, error }
         }
       }
 
-      const results = await Promise.all(toolCalls.flatMap((call) => executeCall(call)))
+      const results = await Promise.all(toolCalls.map((call) => executeCall(call)))
+
       const successfulCalls = results.filter((r) => r.success).length
       const failedCalls = toolCalls.length - successfulCalls
 

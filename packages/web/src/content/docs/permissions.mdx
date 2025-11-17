@@ -11,12 +11,14 @@ By default, OpenCode **allows all operations** without requiring explicit approv
   "permission": {
     "edit": "allow",
     "bash": "ask",
-    "webfetch": "deny"
+    "webfetch": "deny",
+    "doom_loop": "ask",
+    "external_directory": "ask"
   }
 }
 ```
 
-This lets you configure granular controls for the `edit`, `bash`, and `webfetch` tools.
+This lets you configure granular controls for the `edit`, `bash`, `webfetch`, `doom_loop`, and `external_directory` tools.
 
 - `"ask"` — Prompt for approval before running the tool
 - `"allow"` — Allow all operations without approval
@@ -26,7 +28,7 @@ This lets you configure granular controls for the `edit`, `bash`, and `webfetch`
 
 ## Tools
 
-Currently, the permissions for the `edit`, `bash`, and `webfetch` tools can be configured through the `permission` option.
+Currently, the permissions for the `edit`, `bash`, `webfetch`, `doom_loop`, and `external_directory` tools can be configured through the `permission` option.
 
 ---
 
@@ -139,6 +141,40 @@ Use the `permission.webfetch` key to control whether the LLM can fetch web pages
   "$schema": "https://opencode.ai/config.json",
   "permission": {
     "webfetch": "ask"
+  }
+}
+```
+
+---
+
+### doom_loop
+
+Use the `permission.doom_loop` key to control whether approval is required when a doom loop is detected. A doom loop occurs when the same tool is called 3 times in a row with identical arguments.
+
+This helps prevent infinite loops where the LLM repeatedly attempts the same action without making progress.
+
+```json title="opencode.json" {4}
+{
+  "$schema": "https://opencode.ai/config.json",
+  "permission": {
+    "doom_loop": "ask"
+  }
+}
+```
+
+---
+
+### external_directory
+
+Use the `permission.external_directory` key to control whether file operations require approval when accessing files outside the working directory.
+
+This provides an additional safety layer to prevent unintended modifications to files outside your project.
+
+```json title="opencode.json" {4}
+{
+  "$schema": "https://opencode.ai/config.json",
+  "permission": {
+    "external_directory": "ask"
   }
 }
 ```
