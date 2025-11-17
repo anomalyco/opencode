@@ -367,6 +367,15 @@ export type CompactionPart = {
 
 export type Part =
   | TextPart
+  | {
+      id: string
+      sessionID: string
+      messageID: string
+      type: "subtask"
+      prompt: string
+      description: string
+      agent: string
+    }
   | ReasoningPart
   | FilePart
   | ToolPart
@@ -425,6 +434,28 @@ export type EventPermissionReplied = {
   }
 }
 
+export type SessionStatus =
+  | {
+      type: "idle"
+    }
+  | {
+      type: "retry"
+      attempt: number
+      message: string
+      next: number
+    }
+  | {
+      type: "busy"
+    }
+
+export type EventSessionStatus = {
+  type: "session.status"
+  properties: {
+    sessionID: string
+    status: SessionStatus
+  }
+}
+
 export type EventSessionCompacted = {
   type: "session.compacted"
   properties: {
@@ -473,27 +504,6 @@ export type EventCommandExecuted = {
     sessionID: string
     arguments: string
     messageID: string
-  }
-}
-
-export type SessionStatus =
-  | {
-      type: "idle"
-    }
-  | {
-      type: "retry"
-      attempt: number
-      message: string
-    }
-  | {
-      type: "busy"
-    }
-
-export type EventSessionStatus = {
-  type: "session.status"
-  properties: {
-    sessionID: string
-    status: SessionStatus
   }
 }
 
@@ -639,11 +649,11 @@ export type Event =
   | EventMessagePartRemoved
   | EventPermissionUpdated
   | EventPermissionReplied
+  | EventSessionStatus
   | EventSessionCompacted
   | EventFileEdited
   | EventTodoUpdated
   | EventCommandExecuted
-  | EventSessionStatus
   | EventSessionIdle
   | EventSessionCreated
   | EventSessionUpdated
@@ -1246,6 +1256,14 @@ export type AgentPartInput = {
     start: number
     end: number
   }
+}
+
+export type SubtaskPartInput = {
+  id?: string
+  type: "subtask"
+  prompt: string
+  description: string
+  agent: string
 }
 
 export type Command = {
@@ -2142,7 +2160,7 @@ export type SessionPromptData = {
     tools?: {
       [key: string]: boolean
     }
-    parts: Array<TextPartInput | FilePartInput | AgentPartInput>
+    parts: Array<TextPartInput | FilePartInput | AgentPartInput | SubtaskPartInput>
   }
   path: {
     /**

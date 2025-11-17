@@ -325,16 +325,15 @@ export namespace SessionProcessor {
             const error = MessageV2.fromError(e, { providerID: input.providerID })
             if (error?.name === "APIError" && error.data.isRetryable) {
               attempt++
-              const delay = SessionRetry.getRetryDelayInMs(error, attempt)
-              if (delay) {
-                SessionStatus.set(input.sessionID, {
-                  type: "retry",
-                  attempt,
-                  message: error.data.message,
-                })
-                await SessionRetry.sleep(delay, input.abort).catch(() => {})
-                continue
-              }
+              const delay = SessionRetry.delay(error, attempt)
+              SessionStatus.set(input.sessionID, {
+                type: "retry",
+                attempt,
+                message: error.data.message,
+                next: Date.now() + delay,
+              })
+              await SessionRetry.sleep(delay, input.abort).catch(() => {})
+              continue
             }
             input.assistantMessage.error = error
             Bus.publish(Session.Event.Error, {

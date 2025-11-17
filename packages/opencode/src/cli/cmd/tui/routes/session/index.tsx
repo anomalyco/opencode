@@ -6,6 +6,8 @@ import {
   For,
   Match,
   on,
+  onCleanup,
+  onMount,
   Show,
   Switch,
   useContext,
@@ -972,11 +974,32 @@ function AssistantMessage(props: { message: AssistantMessage; parts: Part[]; las
         <box paddingLeft={3} flexDirection="row" gap={1} marginTop={1}>
           <text fg={local.agent.color(props.message.mode)}>{Locale.titlecase(props.message.mode)}</text>
           <Shimmer text={props.message.modelID} color={theme.text} />
-          <Show when={status().type === "retry"}>
-            <text fg={theme.error}>
-              {(status() as any).message} [attempt #{(status() as any).attempt}]
-            </text>
-          </Show>
+          {(() => {
+            const retry = createMemo(() => {
+              const s = status()
+              if (s.type !== "retry") return
+              return s
+            })
+            const [seconds, setSeconds] = createSignal(0)
+            onMount(() => {
+              const timer = setInterval(() => {
+                const next = retry()?.next
+                if (next) setSeconds(Math.round((next - Date.now()) / 1000))
+              }, 1000)
+
+              onCleanup(() => {
+                clearInterval(timer)
+              })
+            })
+            return (
+              <Show when={retry()}>
+                <text fg={theme.error}>
+                  {retry()!.message} [attempt #{retry()!.attempt}
+                  {seconds() > 0 ? `, retrying in ${seconds()}s` : ""}]
+                </text>
+              </Show>
+            )
+          })()}
         </box>
       </Show>
       <Show
