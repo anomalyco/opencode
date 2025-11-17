@@ -245,6 +245,11 @@ export function Autocomplete(props: {
           description: "jump to message",
           onSelect: () => command.trigger("session.timeline"),
         },
+        {
+          display: "/thinking",
+          description: "toggle thinking blocks",
+          onSelect: () => command.trigger("session.toggle.thinking"),
+        },
       )
       if (sync.data.config.share !== "disabled") {
         results.push({
