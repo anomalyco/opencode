@@ -53,15 +53,6 @@ export namespace SessionPrompt {
   const log = Log.create({ service: "session.prompt" })
   export const OUTPUT_TOKEN_MAX = 32_000
 
-  export const Event = {
-    Idle: Bus.event(
-      "session.idle",
-      z.object({
-        sessionID: z.string(),
-      }),
-    ),
-  }
-
   const state = Instance.state(
     () => {
       const data: Record<

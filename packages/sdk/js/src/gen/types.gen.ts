@@ -456,6 +456,13 @@ export type EventSessionStatus = {
   }
 }
 
+export type EventSessionIdle = {
+  type: "session.idle"
+  properties: {
+    sessionID: string
+  }
+}
+
 export type EventSessionCompacted = {
   type: "session.compacted"
   properties: {
@@ -504,13 +511,6 @@ export type EventCommandExecuted = {
     sessionID: string
     arguments: string
     messageID: string
-  }
-}
-
-export type EventSessionIdle = {
-  type: "session.idle"
-  properties: {
-    sessionID: string
   }
 }
 
@@ -650,11 +650,11 @@ export type Event =
   | EventPermissionUpdated
   | EventPermissionReplied
   | EventSessionStatus
+  | EventSessionIdle
   | EventSessionCompacted
   | EventFileEdited
   | EventTodoUpdated
   | EventCommandExecuted
-  | EventSessionIdle
   | EventSessionCreated
   | EventSessionUpdated
   | EventSessionDeleted
