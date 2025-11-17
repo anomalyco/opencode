@@ -177,6 +177,10 @@ export namespace ProviderTransform {
         return {
           ["anthropic" as string]: options,
         }
+      case "@ai-sdk/gateway":
+        return {
+          ["gateway" as string]: options,
+        }
       default:
         return {
           [providerID]: options,
