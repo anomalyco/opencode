@@ -248,7 +248,7 @@ export function Autocomplete(props: {
         {
           display: "/thinking",
           description: "toggle thinking blocks",
-          onSelect: () => command.trigger("session.toggle.conceal"),
+          onSelect: () => command.trigger("session.toggle.thinking"),
         },
       )
       if (sync.data.config.share !== "disabled") {

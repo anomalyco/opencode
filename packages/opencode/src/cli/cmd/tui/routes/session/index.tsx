@@ -112,6 +112,7 @@ export function Session() {
   const dimensions = useTerminalDimensions()
   const [sidebar, setSidebar] = createSignal<"show" | "hide" | "auto">(kv.get("sidebar", "auto"))
   const [conceal, setConceal] = createSignal(true)
+  const [showThinking, setShowThinking] = createSignal(true)
 
   const wide = createMemo(() => dimensions().width > 120)
   const sidebarVisible = createMemo(() => sidebar() === "show" || (sidebar() === "auto" && wide()))
@@ -382,6 +383,15 @@ export function Session() {
       category: "Session",
       onSelect: (dialog) => {
         setConceal((prev) => !prev)
+        dialog.clear()
+      },
+    },
+    {
+      title: "Toggle thinking blocks",
+      value: "session.toggle.thinking",
+      category: "Session",
+      onSelect: (dialog) => {
+        setShowThinking((prev) => !prev)
         dialog.clear()
       },
     },
@@ -674,6 +684,7 @@ export function Session() {
           return contentWidth()
         },
         conceal,
+        showThinking,
       }}
     >
       <box flexDirection="row" paddingBottom={1} paddingTop={1} paddingLeft={2} paddingRight={2} gap={2}>
@@ -1030,7 +1041,7 @@ function ReasoningPart(props: { last: boolean; part: ReasoningPart; message: Ass
   const ctx = use()
   const content = createMemo(() => props.part.text.trim())
   return (
-    <Show when={content()}>
+    <Show when={content() && ctx.showThinking()}>
       <box
         id={"text-" + props.part.id}
         paddingLeft={2}
