@@ -1938,7 +1938,7 @@ function UserMessage(props: {
             <Match when={!queued()}>
               <text fg={theme.text} marginTop={0} style={{ justifyContent: "space-between" }}>
                 <span>{displayName()}</span>
-                <span style={{ fg: theme.textMuted }}>({Locale.time(props.message.time.created)})</span>
+                <span style={{ fg: theme.textMuted }}> ({Locale.time(props.message.time.created)})</span>
               </text>
             </Match>
           </Switch>
@@ -2132,7 +2132,7 @@ function AssistantMessage(props: { message: AssistantMessage; parts: Part[]; las
       >
         <box
           paddingLeft={2}
-          marginTop={0}
+          marginTop={-1}
           flexDirection="row"
           gap={1}
           border={["left"]}
@@ -2145,12 +2145,13 @@ function AssistantMessage(props: { message: AssistantMessage; parts: Part[]; las
       </Show>
       <Show
         when={
+          props.last &&
           props.message.time.completed &&
           props.parts.some((item) => item.type === "step-finish" && item.reason !== "tool-calls")
         }
       >
         <box paddingLeft={3}>
-          <text marginTop={1}>
+          <text marginTop={0}>
             <span style={{ fg: local.agent.color(props.message.mode) }}>{Locale.titlecase(props.message.mode)}</span>{" "}
             <span style={{ fg: theme.textMuted }}>{props.message.modelID}</span>
           </text>
@@ -2194,17 +2195,12 @@ function ReasoningPart(props: { part: ReasoningPart; message: AssistantMessage; 
       .join("\n")
       .trim()
   })
-  const isFirstInMessage = createMemo(() => {
-    const parts = ((props.message as any).parts as Part[] | undefined) ?? []
-    const index = parts.findIndex((part) => part.id === props.part.id)
-    return index <= 0
-  })
   const borderColor = createMemo(() => theme.border)
   const highlight = createMemo(() => theme.warning ?? theme.accent)
   const showBody = createMemo(() => body().length > 0)
   return (
     <Show when={text()}>
-      <box id={"reasoning-" + props.part.id} marginTop={isFirstInMessage() ? 0 : 1} flexShrink={0}>
+      <box id={"reasoning-" + props.part.id} marginTop={1} flexShrink={0}>
         <box
           border={["left"]}
           customBorderChars={SplitBorder.customBorderChars}
@@ -2496,7 +2492,7 @@ function ToolPart(props: {
       const paddingLeft = isTaskTool ? 0 : basePaddingLeft
       return {
         border: ["left"] as const,
-        paddingTop: BLOCK_CONTAINER_PADDING,
+        paddingTop: 0,
         paddingBottom: BLOCK_CONTAINER_PADDING,
         paddingLeft,
         gap: collapsedState ? 0 : 1,
