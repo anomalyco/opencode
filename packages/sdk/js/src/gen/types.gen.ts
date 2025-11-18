@@ -1117,33 +1117,37 @@ export type Config = {
   mcp?: {
     [key: string]: McpLocalConfig | McpRemoteConfig
   }
-  formatter?: {
-    [key: string]: {
-      disabled?: boolean
-      command?: Array<string>
-      environment?: {
-        [key: string]: string
-      }
-      extensions?: Array<string>
-    }
-  }
-  lsp?: {
-    [key: string]:
-      | {
-          disabled: true
-        }
-      | {
-          command: Array<string>
-          extensions?: Array<string>
+  formatter?:
+    | false
+    | {
+        [key: string]: {
           disabled?: boolean
-          env?: {
+          command?: Array<string>
+          environment?: {
             [key: string]: string
           }
-          initialization?: {
-            [key: string]: unknown
-          }
+          extensions?: Array<string>
         }
-  }
+      }
+  lsp?:
+    | false
+    | {
+        [key: string]:
+          | {
+              disabled: true
+            }
+          | {
+              command: Array<string>
+              extensions?: Array<string>
+              disabled?: boolean
+              env?: {
+                [key: string]: string
+              }
+              initialization?: {
+                [key: string]: unknown
+              }
+            }
+      }
   /**
    * Additional instruction files or patterns to include
    */
