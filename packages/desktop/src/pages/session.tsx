@@ -52,6 +52,7 @@ import { useSession } from "@/context/session"
 import { StickyAccordionHeader } from "@/components/sticky-accordion-header"
 import { SessionReview } from "@/components/session-review"
 import { useLayout } from "@/context/layout"
+import { createSessionSeen } from "@/hooks/create-session-seen"
 
 export default function Page() {
   const layout = useLayout()
@@ -451,7 +452,9 @@ export default function Page() {
                         <For each={session.messages.user()}>
                           {(message) => {
                             const isActive = createMemo(() => session.messages.active()?.id === message.id)
-                            const [titled, setTitled] = createSignal(!!message.summary?.title)
+                            const titleSeen = createSessionSeen(`message-title-${message.id}`)
+                            const contentSeen = createSessionSeen(`message-content-${message.id}`)
+                            const [titled, setTitled] = createSignal(titleSeen())
                             const assistantMessages = createMemo(() => {
                               if (!session.id) return []
                               return sync.data.message[session.id]?.filter(
@@ -474,8 +477,9 @@ export default function Page() {
 
                             // allowing time for the animations to finish
                             createEffect(() => {
+                              if (titleSeen()) return
                               const title = message.summary?.title
-                              setTimeout(() => setTitled(!!title), 10_000)
+                              if (title) setTimeout(() => setTitled(true), 10_000)
                             })
                             createEffect(() => {
                               const completed = !working()
@@ -523,8 +527,7 @@ export default function Page() {
                                             <Markdown
                                               classList={{
                                                 "text-14-regular": !!message.summary?.diffs?.length,
-                                                "[&>*]:fade-up-text":
-                                                  !message.summary?.diffs?.length && !initialCompleted,
+                                                "[&>*]:fade-up-text": !message.summary?.diffs?.length && !contentSeen(),
                                               }}
                                               text={summary()}
                                             />
