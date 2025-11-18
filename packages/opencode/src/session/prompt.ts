@@ -191,8 +191,12 @@ export namespace SessionPrompt {
     const session = await Session.get(input.sessionID)
     await SessionRevert.cleanup(session)
 
-    await createUserMessage(input)
+    const message = await createUserMessage(input)
     await Session.touch(input.sessionID)
+
+    if (input.noReply) {
+      return message
+    }
 
     return loop(input.sessionID)
   })
