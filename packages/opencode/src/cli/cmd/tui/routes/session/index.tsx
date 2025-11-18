@@ -1891,7 +1891,7 @@ function UserMessage(props: {
         }}
         onMouseUp={props.onMouseUp}
         border={["left"]}
-        paddingTop={1}
+        paddingTop={0}
         paddingBottom={1}
         paddingLeft={2}
         marginTop={props.index === 0 ? 0 : 1}
@@ -1930,13 +1930,13 @@ function UserMessage(props: {
           </box>
           <Switch>
             <Match when={queued()}>
-              <text fg={theme.accent} marginTop={hasFiles() ? 0 : 1}>
+              <text fg={theme.accent} marginTop={0}>
                 <span style={{ bg: theme.accent, fg: theme.backgroundPanel, bold: true }}> QUEUED </span>{" "}
                 {displayName()}
               </text>
             </Match>
             <Match when={!queued()}>
-              <text fg={theme.text} marginTop={hasFiles() ? 0 : 1} style={{ justifyContent: "space-between" }}>
+              <text fg={theme.text} marginTop={0} style={{ justifyContent: "space-between" }}>
                 <span>{displayName()}</span>
                 <span style={{ fg: theme.textMuted }}>({Locale.time(props.message.time.created)})</span>
               </text>
@@ -2086,14 +2086,6 @@ function AssistantMessage(props: { message: AssistantMessage; parts: Part[]; las
 
   return (
     <>
-      <box paddingLeft={2} marginTop={1} flexDirection="row" justifyContent="flex-end" marginRight={2}>
-        <MessageControls
-          sessionID={props.message.sessionID}
-          messageID={props.message.id}
-          priority={props.message.priority}
-          inline
-        />
-      </box>
       <For each={partGroups()}>
         {(group) => (
           <Switch>
@@ -2140,7 +2132,7 @@ function AssistantMessage(props: { message: AssistantMessage; parts: Part[]; las
       >
         <box
           paddingLeft={2}
-          marginTop={1}
+          marginTop={0}
           flexDirection="row"
           gap={1}
           border={["left"]}
@@ -2202,12 +2194,17 @@ function ReasoningPart(props: { part: ReasoningPart; message: AssistantMessage; 
       .join("\n")
       .trim()
   })
+  const isFirstInMessage = createMemo(() => {
+    const parts = ((props.message as any).parts as Part[] | undefined) ?? []
+    const index = parts.findIndex((part) => part.id === props.part.id)
+    return index <= 0
+  })
   const borderColor = createMemo(() => theme.border)
   const highlight = createMemo(() => theme.warning ?? theme.accent)
   const showBody = createMemo(() => body().length > 0)
   return (
     <Show when={text()}>
-      <box id={"reasoning-" + props.part.id} marginTop={previousIsReasoning() ? 0 : 1} flexShrink={0}>
+      <box id={"reasoning-" + props.part.id} marginTop={isFirstInMessage() ? 0 : 1} flexShrink={0}>
         <box
           border={["left"]}
           customBorderChars={SplitBorder.customBorderChars}
@@ -2340,9 +2337,23 @@ function TextPart(props: { part: TextPart; message: AssistantMessage }) {
     ),
   )
 
+  const isFirstInMessage = createMemo(() => {
+    const parts = ((props.message as any).parts as Part[] | undefined) ?? []
+    const index = parts.findIndex((part) => part.id === props.part.id)
+    return index <= 0
+  })
+
   return (
     <Show when={props.part.text.trim()}>
-      <box id={partId()} paddingLeft={3} marginTop={1} flexShrink={0} flexDirection="column">
+      <box
+        id={partId()}
+        paddingLeft={3}
+        paddingTop={1}
+        paddingBottom={1}
+        marginTop={isFirstInMessage() ? 0 : 1}
+        flexShrink={0}
+        flexDirection="column"
+      >
         <For each={segments()}>
           {(segment) => (
             <Switch>
@@ -2422,7 +2433,7 @@ function TextPart(props: { part: TextPart; message: AssistantMessage }) {
 
 // Pending messages moved to individual tool pending functions
 
-const BLOCK_CONTAINER_MIN_HEIGHT = 1
+const BLOCK_CONTAINER_MIN_HEIGHT = 3
 const BLOCK_CONTAINER_PADDING = 1
 
 function ToolPart(props: {
@@ -2484,15 +2495,15 @@ function ToolPart(props: {
       const basePaddingLeft = 0
       const paddingLeft = isTaskTool ? 0 : basePaddingLeft
       return {
-        border: permissionIndex() === 0 ? (["left", "right"] as const) : (["left"] as const),
-        paddingTop: 0,
-        paddingBottom: 1,
+        border: ["left"] as const,
+        paddingTop: BLOCK_CONTAINER_PADDING,
+        paddingBottom: BLOCK_CONTAINER_PADDING,
         paddingLeft,
         gap: collapsedState ? 0 : 1,
         minHeight: BLOCK_CONTAINER_MIN_HEIGHT,
         backgroundColor: theme.backgroundPanel,
         customBorderChars: SplitBorder.customBorderChars,
-        borderColor: permissionIndex() === 0 ? theme.warning : theme.background,
+        borderColor: theme.background,
       } as BoxProps
     }
     return {
@@ -2500,8 +2511,8 @@ function ToolPart(props: {
       customBorderChars: SplitBorder.customBorderChars,
       borderColor: theme.background,
       paddingLeft: inlineIndent,
-      paddingTop: 0,
-      paddingBottom: 1,
+      paddingTop: BLOCK_CONTAINER_PADDING,
+      paddingBottom: BLOCK_CONTAINER_PADDING,
       minHeight: BLOCK_CONTAINER_MIN_HEIGHT,
       gap: collapsedState ? 0 : 1,
       backgroundColor: theme.backgroundPanel,
@@ -2517,9 +2528,6 @@ function ToolPart(props: {
         const el = this as BoxRenderable
         const parent = el.parent
         if (!parent) {
-          return
-        }
-        if (el.height > 1) {
           setMargin(0)
           return
         }
