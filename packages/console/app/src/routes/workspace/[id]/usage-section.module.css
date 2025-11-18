@@ -81,6 +81,12 @@
     cursor: pointer;
     transition: all 0.15s ease;
 
+    svg {
+      width: 16px;
+      height: 16px;
+      stroke-width: 2;
+    }
+
     &:hover:not(:disabled) {
       background: var(--color-bg-tertiary);
       border-color: var(--color-border-hover);

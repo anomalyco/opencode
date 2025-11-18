@@ -3,6 +3,7 @@ import { createAsync, query, useParams } from "@solidjs/router"
 import { createMemo, For, Show, createEffect } from "solid-js"
 import { formatDateUTC, formatDateForTable } from "../common"
 import { withActor } from "~/context/auth.withActor"
+import { IconChevronLeft, IconChevronRight } from "~/component/icon"
 import "./usage-section.module.css"
 import { createStore } from "solid-js/store"
 
@@ -92,10 +93,10 @@ export function UsageSection() {
           <Show when={canGoPrev() || canGoNext()}>
             <div data-slot="pagination">
               <button disabled={!canGoPrev()} onClick={goPrev}>
-                ←
+                <IconChevronLeft />
               </button>
               <button disabled={!canGoNext()} onClick={goNext}>
-                →
+                <IconChevronRight />
               </button>
             </div>
           </Show>
