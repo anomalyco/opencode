@@ -32,7 +32,6 @@ import { useRenderer } from "@opentui/solid"
 import { createStore, produce } from "solid-js/store"
 import { Global } from "@/global"
 import { Filesystem } from "@/util/filesystem"
-import { Log } from "@/util/log"
 
 type Theme = {
   primary: RGBA
