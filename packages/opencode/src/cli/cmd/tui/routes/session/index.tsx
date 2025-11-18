@@ -1702,9 +1702,9 @@ function MessageControls(props: {
   inline?: boolean
 }) {
   const { theme } = useTheme()
+  const inline = props.inline ?? false
   const dialog = useDialog()
   const renderer = useRenderer()
-  const inline = props.inline ?? false
 
   const openMenu = (event: ToolMouseEvent) => {
     event.stopPropagation?.()
@@ -2028,9 +2028,7 @@ function AssistantMessage(props: { message: AssistantMessage; parts: Part[]; las
           customBorderChars={SplitBorder.customBorderChars}
           borderColor={theme.backgroundElement}
         >
-          <text fg={local.agent.color(props.message.mode)}>
-            <span style={{ fg: theme.textMuted }}></span> {Locale.titlecase(props.message.mode)}
-          </text>
+          <text fg={local.agent.color(props.message.mode)}>{Locale.titlecase(props.message.mode)}</text>
           <Shimmer text={`${props.message.modelID}`} color={theme.text} />
         </box>
       </Show>
