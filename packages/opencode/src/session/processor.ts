@@ -147,7 +147,10 @@ export namespace SessionProcessor {
                       )
                     ) {
                       const permission = await Agent.get(input.assistantMessage.mode).then((x) => x.permission)
-                      if (permission.doom_loop === "ask") {
+                      // Secure default: only allow if explicitly set to "allow" or "ask"
+                      if (permission.doom_loop === "allow") {
+                        // Explicitly allowed, proceed
+                      } else if (permission.doom_loop === "ask") {
                         await Permission.ask({
                           type: "doom_loop",
                           pattern: value.toolName,
@@ -160,6 +163,11 @@ export namespace SessionProcessor {
                             input: value.input,
                           },
                         })
+                      } else {
+                        // Default deny for "deny", undefined, null, or any other value
+                        throw new Error(
+                          `Permission denied: Possible doom loop detected - "${value.toolName}" called ${DOOM_LOOP_THRESHOLD} times with identical arguments`,
+                        )
                       }
                     }
                   }

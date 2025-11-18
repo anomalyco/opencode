@@ -44,7 +44,10 @@ export const EditTool = Tool.define("edit", {
     const filePath = path.isAbsolute(params.filePath) ? params.filePath : path.join(Instance.directory, params.filePath)
     if (!Filesystem.contains(Instance.directory, filePath)) {
       const parentDir = path.dirname(filePath)
-      if (agent.permission.external_directory === "ask") {
+      // Secure default: only allow if explicitly set to "allow" or "ask"
+      if (agent.permission.external_directory === "allow") {
+        // Explicitly allowed, proceed
+      } else if (agent.permission.external_directory === "ask") {
         await Permission.ask({
           type: "external_directory",
           pattern: parentDir,
@@ -57,6 +60,9 @@ export const EditTool = Tool.define("edit", {
             parentDir,
           },
         })
+      } else {
+        // Default deny for "deny", undefined, null, or any other value
+        throw new Error(`Permission denied: Cannot edit file outside working directory: ${filePath}`)
       }
     }
 
@@ -67,7 +73,10 @@ export const EditTool = Tool.define("edit", {
       if (params.oldString === "") {
         contentNew = params.newString
         diff = trimDiff(createTwoFilesPatch(filePath, filePath, contentOld, contentNew))
-        if (agent.permission.edit === "ask") {
+        // Secure default: only allow if explicitly set to "allow" or "ask"
+        if (agent.permission.edit === "allow") {
+          // Explicitly allowed, proceed
+        } else if (agent.permission.edit === "ask") {
           await Permission.ask({
             type: "edit",
             sessionID: ctx.sessionID,
@@ -79,6 +88,9 @@ export const EditTool = Tool.define("edit", {
               diff,
             },
           })
+        } else {
+          // Default deny for "deny", undefined, null, or any other value
+          throw new Error(`Permission denied: Cannot edit file: ${filePath}`)
         }
         await Bun.write(filePath, params.newString)
         await Bus.publish(File.Event.Edited, {
@@ -98,7 +110,10 @@ export const EditTool = Tool.define("edit", {
       diff = trimDiff(
         createTwoFilesPatch(filePath, filePath, normalizeLineEndings(contentOld), normalizeLineEndings(contentNew)),
       )
-      if (agent.permission.edit === "ask") {
+      // Secure default: only allow if explicitly set to "allow" or "ask"
+      if (agent.permission.edit === "allow") {
+        // Explicitly allowed, proceed
+      } else if (agent.permission.edit === "ask") {
         await Permission.ask({
           type: "edit",
           sessionID: ctx.sessionID,
@@ -110,6 +125,9 @@ export const EditTool = Tool.define("edit", {
             diff,
           },
         })
+      } else {
+        // Default deny for "deny", undefined, null, or any other value
+        throw new Error(`Permission denied: Cannot edit file: ${filePath}`)
       }
 
       await file.write(contentNew)

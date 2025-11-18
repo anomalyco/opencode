@@ -1,10 +1,13 @@
-import { describe, expect, test } from "bun:test"
+import { describe, expect, test, mock } from "bun:test"
 import path from "path"
 import { PatchTool } from "../../src/tool/patch"
 import { Instance } from "../../src/project/instance"
 import { tmpdir } from "../fixture/fixture"
 import { Permission } from "../../src/permission"
 import * as fs from "fs/promises"
+import { Log } from "../../src/util/log"
+
+Log.init({ print: false })
 
 const ctx = {
   sessionID: "test",
@@ -48,20 +51,188 @@ describe("tool.patch", () => {
     })
   })
 
-  test.skip("should ask permission for files outside working directory", async () => {
-    await Instance.provide({
-      directory: "/tmp",
-      fn: async () => {
-        const maliciousPatch = `*** Begin Patch
+  test("should ask permission for files outside working directory (permission='ask', user denies)", async () => {
+    // Mock Permission.ask to verify it gets called with correct parameters
+    const permissionAskMock = mock(async (input: any) => {
+      // Verify the permission request has the right properties
+      expect(input.type).toBe("external_directory")
+      expect(input.title).toContain("/etc/passwd")
+      expect(input.sessionID).toBe(ctx.sessionID)
+      // Throw to simulate user denying permission
+      throw new Error("Permission denied by user")
+    })
+
+    const originalAsk = Permission.ask
+    Permission.ask = permissionAskMock
+
+    try {
+      await Instance.provide({
+        directory: "/tmp/opencode-test-" + Date.now(),
+        fn: async () => {
+          const patchTool = await PatchTool.init()
+          const maliciousPatch = `*** Begin Patch
 *** Add File: /etc/passwd
 +malicious content
 *** End Patch`
-        patchTool.execute({ patchText: maliciousPatch }, ctx)
-        // TODO: this sucks
-        await new Promise((resolve) => setTimeout(resolve, 1000))
-        expect(Permission.pending()[ctx.sessionID]).toBeDefined()
+
+          // Should throw because permission was denied
+          await expect(patchTool.execute({ patchText: maliciousPatch }, ctx)).rejects.toThrow(
+            "Permission denied by user",
+          )
+
+          // Verify Permission.ask was called
+          expect(permissionAskMock).toHaveBeenCalled()
+        },
+      })
+    } finally {
+      // Restore original Permission.ask
+      Permission.ask = originalAsk
+    }
+  })
+
+  test("should allow files outside working directory when permission='allow'", async () => {
+    const { Agent } = await import("../../src/agent/agent")
+    const originalGet = Agent.get
+
+    // Mock Agent.get to return agent with external_directory='allow'
+    Agent.get = mock(async () => ({
+      permission: {
+        edit: "allow" as const,
+        bash: { "*": "allow" as const },
+        webfetch: "allow" as const,
+        external_directory: "allow" as const,
+        doom_loop: "ask" as const,
       },
+    })) as any
+
+    const originalAsk = Permission.ask
+    const permissionAskMock = mock(async () => {})
+    Permission.ask = permissionAskMock
+
+    try {
+      await using fixture = await tmpdir()
+      await Instance.provide({
+        directory: fixture.path,
+        fn: async () => {
+          const patchTool = await PatchTool.init()
+          const externalPath = "/tmp/opencode-external-" + Date.now() + ".txt"
+          const patch = `*** Begin Patch
+*** Add File: ${externalPath}
++external content
+*** End Patch`
+
+          // Should succeed without asking
+          const result = await patchTool.execute({ patchText: patch }, ctx)
+          expect(result.output).toContain("Patch applied successfully")
+
+          // Verify Permission.ask was NOT called
+          expect(permissionAskMock).not.toHaveBeenCalled()
+
+          // Clean up
+          await fs.unlink(externalPath).catch(() => {})
+        },
+      })
+    } finally {
+      Agent.get = originalGet
+      Permission.ask = originalAsk
+    }
+  })
+
+  test("should deny files outside working directory when permission='deny'", async () => {
+    const { Agent } = await import("../../src/agent/agent")
+    const originalGet = Agent.get
+
+    // Mock Agent.get to return agent with external_directory='deny'
+    Agent.get = mock(async () => ({
+      permission: {
+        edit: "allow" as const,
+        bash: { "*": "allow" as const },
+        webfetch: "allow" as const,
+        external_directory: "deny" as const,
+        doom_loop: "ask" as const,
+      },
+    })) as any
+
+    const originalAsk = Permission.ask
+    const permissionAskMock = mock(async () => {})
+    Permission.ask = permissionAskMock
+
+    try {
+      await using fixture = await tmpdir()
+      await Instance.provide({
+        directory: fixture.path,
+        fn: async () => {
+          const patchTool = await PatchTool.init()
+          const externalPath = "/tmp/opencode-external-deny-test.txt"
+          const patch = `*** Begin Patch
+*** Add File: ${externalPath}
++external content
+*** End Patch`
+
+          // Should throw without asking
+          await expect(patchTool.execute({ patchText: patch }, ctx)).rejects.toThrow(
+            "Permission denied: Cannot patch file outside working directory",
+          )
+
+          // Verify Permission.ask was NOT called
+          expect(permissionAskMock).not.toHaveBeenCalled()
+        },
+      })
+    } finally {
+      Agent.get = originalGet
+      Permission.ask = originalAsk
+    }
+  })
+
+  test("should ask and allow files outside working directory when permission='ask' and user approves", async () => {
+    const { Agent } = await import("../../src/agent/agent")
+    const originalGet = Agent.get
+
+    // Mock Agent.get to return agent with external_directory='ask'
+    Agent.get = mock(async () => ({
+      permission: {
+        edit: "allow" as const,
+        bash: { "*": "allow" as const },
+        webfetch: "allow" as const,
+        external_directory: "ask" as const,
+        doom_loop: "ask" as const,
+      },
+    })) as any
+
+    const originalAsk = Permission.ask
+    const permissionAskMock = mock(async (input: any) => {
+      expect(input.type).toBe("external_directory")
+      // Resolve without throwing to simulate user approval
     })
+    Permission.ask = permissionAskMock
+
+    try {
+      await using fixture = await tmpdir()
+      await Instance.provide({
+        directory: fixture.path,
+        fn: async () => {
+          const patchTool = await PatchTool.init()
+          const externalPath = "/tmp/opencode-external-ask-" + Date.now() + ".txt"
+          const patch = `*** Begin Patch
+*** Add File: ${externalPath}
++external content
+*** End Patch`
+
+          // Should succeed after asking
+          const result = await patchTool.execute({ patchText: patch }, ctx)
+          expect(result.output).toContain("Patch applied successfully")
+
+          // Verify Permission.ask WAS called
+          expect(permissionAskMock).toHaveBeenCalled()
+
+          // Clean up
+          await fs.unlink(externalPath).catch(() => {})
+        },
+      })
+    } finally {
+      Agent.get = originalGet
+      Permission.ask = originalAsk
+    }
   })
 
   test("should handle simple add file operation", async () => {

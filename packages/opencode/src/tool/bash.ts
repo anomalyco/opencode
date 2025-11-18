@@ -108,12 +108,10 @@ export const BashTool = Tool.define("bash", {
       // always allow cd if it passes above check
       if (command[0] !== "cd") {
         const action = Wildcard.allStructured({ head: command[0], tail: command.slice(1) }, permissions)
-        if (action === "deny") {
-          throw new Error(
-            `The user has specifically restricted access to this command, you are not allowed to execute it. Here is the configuration: ${JSON.stringify(permissions)}`,
-          )
-        }
-        if (action === "ask") {
+        // Secure default: only allow if explicitly set to "allow" or "ask"
+        if (action === "allow") {
+          // Explicitly allowed, proceed
+        } else if (action === "ask") {
           const pattern = (() => {
             if (command.length === 0) return
             const head = command[0]
@@ -124,6 +122,11 @@ export const BashTool = Tool.define("bash", {
           if (pattern) {
             askPatterns.add(pattern)
           }
+        } else {
+          // Default deny for "deny", undefined, null, or any other value
+          throw new Error(
+            `Permission denied: Command not allowed by bash permissions. Command: ${command[0]}. Configuration: ${JSON.stringify(permissions)}`,
+          )
         }
       }
     }

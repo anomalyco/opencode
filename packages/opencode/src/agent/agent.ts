@@ -250,8 +250,8 @@ function mergeAgentPermissions(basePermission: any, overridePermission: any): Ag
     edit: merged.edit ?? "allow",
     webfetch: merged.webfetch ?? "allow",
     bash: mergedBash ?? { "*": "allow" },
-    doom_loop: merged.doom_loop,
-    external_directory: merged.external_directory,
+    doom_loop: merged.doom_loop ?? "ask",
+    external_directory: merged.external_directory ?? "ask",
   }
 
   return result

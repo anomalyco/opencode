@@ -33,7 +33,10 @@ export const ReadTool = Tool.define("read", {
 
     if (!ctx.extra?.["bypassCwdCheck"] && !Filesystem.contains(Instance.directory, filepath)) {
       const parentDir = path.dirname(filepath)
-      if (agent.permission.external_directory === "ask") {
+      // Secure default: only allow if explicitly set to "allow" or "ask"
+      if (agent.permission.external_directory === "allow") {
+        // Explicitly allowed, proceed
+      } else if (agent.permission.external_directory === "ask") {
         await Permission.ask({
           type: "external_directory",
           pattern: parentDir,
@@ -46,6 +49,9 @@ export const ReadTool = Tool.define("read", {
             parentDir,
           },
         })
+      } else {
+        // Default deny for "deny", undefined, null, or any other value
+        throw new Error(`Permission denied: Cannot access file outside working directory: ${filepath}`)
       }
     }
 
