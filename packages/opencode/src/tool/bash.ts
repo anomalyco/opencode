@@ -22,7 +22,7 @@ export const log = Log.create({ service: "bash-tool" })
 
 const resolveWasm = (asset: string) => {
   if (asset.startsWith("file://")) return fileURLToPath(asset)
-  if (asset.startsWith("/")) return asset
+  if (asset.startsWith("/") || /^[a-z]:/i.test(asset)) return asset
   const url = new URL(asset, import.meta.url)
   return fileURLToPath(url)
 }
