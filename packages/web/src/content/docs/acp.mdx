@@ -1,0 +1,116 @@
+---
+title: ACP Support
+description: Use OpenCode in any ACP-compatible editor.
+---
+
+OpenCode supports the [Agent Client Protocol](https://agentclientprotocol.com) or (ACP), allowing you to use it directly in compatible editors and IDEs.
+
+:::tip
+For a list of editors and tools that support ACP, check out the [ACP progress report](https://zed.dev/blog/acp-progress-report#available-now).
+:::
+
+ACP is an open protocol that standardizes communication between code editors and AI coding agents.
+
+---
+
+## Configure
+
+To use OpenCode via ACP, configure your editor to run the `opencode acp` command.
+
+The command starts OpenCode as an ACP-compatible subprocess that communicates with your editor over JSON-RPC via stdio.
+
+Below are examples for popular editors that support ACP.
+
+---
+
+### Zed
+
+Add to your [Zed](https://zed.dev) configuration (`~/.config/zed/settings.json`):
+
+```json title="~/.config/zed/settings.json"
+{
+  "agent_servers": {
+    "OpenCode": {
+      "command": "opencode",
+      "args": ["acp"]
+    }
+  }
+}
+```
+
+To open it, use the `agent: new thread` action in the **Command Palette**.
+
+You can also bind a keyboard shortcut by editing your `keymap.json`:
+
+```json title="keymap.json"
+[
+  {
+    "bindings": {
+      "cmd-alt-o": [
+        "agent::NewExternalAgentThread",
+        {
+          "agent": {
+            "custom": {
+              "name": "OpenCode",
+              "command": {
+                "command": "opencode",
+                "args": ["acp"]
+              }
+            }
+          }
+        }
+      ]
+    }
+  }
+]
+```
+
+---
+
+### Avante.nvim
+
+Add to your [Avante.nvim](https://github.com/yetone/avante.nvim) configuration:
+
+```lua
+{
+  acp_providers = {
+    ["opencode"] = {
+      command = "opencode",
+      args = { "acp" }
+    }
+  }
+}
+```
+
+If you need to pass environment variables:
+
+```lua {6-8}
+{
+  acp_providers = {
+    ["opencode"] = {
+      command = "opencode",
+      args = { "acp" },
+      env = {
+        OPENCODE_API_KEY = os.getenv("OPENCODE_API_KEY")
+      }
+    }
+  }
+}
+```
+
+---
+
+## Support
+
+OpenCode works the same via ACP as it does in the terminal. All features are supported:
+
+:::note
+Some built-in slash commands like `/undo` and `/redo` are currently unsupported.
+:::
+
+- Built-in tools (file operations, terminal commands, etc.)
+- Custom tools and slash commands
+- MCP servers configured in your OpenCode config
+- Project-specific rules from `AGENTS.md`
+- Custom formatters and linters
+- Agents and permissions system

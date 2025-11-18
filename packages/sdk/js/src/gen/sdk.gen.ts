@@ -2,6 +2,8 @@
 
 import type { Options as ClientOptions, TDataShape, Client } from "./client/index.js"
 import type {
+  GlobalEventData,
+  GlobalEventResponses,
   ProjectListData,
   ProjectListResponses,
   ProjectCurrentData,
@@ -24,6 +26,9 @@ import type {
   SessionCreateData,
   SessionCreateResponses,
   SessionCreateErrors,
+  SessionStatusData,
+  SessionStatusResponses,
+  SessionStatusErrors,
   SessionDeleteData,
   SessionDeleteResponses,
   SessionDeleteErrors,
@@ -55,6 +60,7 @@ import type {
   SessionShareErrors,
   SessionDiffData,
   SessionDiffResponses,
+  SessionDiffErrors,
   SessionSummarizeData,
   SessionSummarizeResponses,
   SessionSummarizeErrors,
@@ -105,6 +111,13 @@ import type {
   AppAgentsResponses,
   McpStatusData,
   McpStatusResponses,
+  McpAddData,
+  McpAddResponses,
+  McpAddErrors,
+  LspStatusData,
+  LspStatusResponses,
+  FormatterStatusData,
+  FormatterStatusResponses,
   TuiAppendPromptData,
   TuiAppendPromptResponses,
   TuiAppendPromptErrors,
@@ -125,6 +138,13 @@ import type {
   TuiExecuteCommandErrors,
   TuiShowToastData,
   TuiShowToastResponses,
+  TuiPublishData,
+  TuiPublishResponses,
+  TuiPublishErrors,
+  TuiControlNextData,
+  TuiControlNextResponses,
+  TuiControlResponseData,
+  TuiControlResponseResponses,
   AuthSetData,
   AuthSetResponses,
   AuthSetErrors,
@@ -157,6 +177,18 @@ class _HeyApiClient {
     if (args?.client) {
       this._client = args.client
     }
+  }
+}
+
+class Global extends _HeyApiClient {
+  /**
+   * Get events
+   */
+  public event<ThrowOnError extends boolean = false>(options?: Options<GlobalEventData, ThrowOnError>) {
+    return (options?.client ?? this._client).get.sse<GlobalEventResponses, unknown, ThrowOnError>({
+      url: "/global/event",
+      ...options,
+    })
   }
 }
 
@@ -278,6 +310,16 @@ class Session extends _HeyApiClient {
   }
 
   /**
+   * Get session status
+   */
+  public status<ThrowOnError extends boolean = false>(options?: Options<SessionStatusData, ThrowOnError>) {
+    return (options?.client ?? this._client).get<SessionStatusResponses, SessionStatusErrors, ThrowOnError>({
+      url: "/session/status",
+      ...options,
+    })
+  }
+
+  /**
    * Delete a session and all its data
    */
   public delete<ThrowOnError extends boolean = false>(options: Options<SessionDeleteData, ThrowOnError>) {
@@ -390,10 +432,10 @@ class Session extends _HeyApiClient {
   }
 
   /**
-   * Get the diff that resulted from this user message
+   * Get the diff for this session
    */
   public diff<ThrowOnError extends boolean = false>(options: Options<SessionDiffData, ThrowOnError>) {
-    return (options.client ?? this._client).get<SessionDiffResponses, unknown, ThrowOnError>({
+    return (options.client ?? this._client).get<SessionDiffResponses, SessionDiffErrors, ThrowOnError>({
       url: "/session/{id}/diff",
       ...options,
     })
@@ -612,6 +654,70 @@ class Mcp extends _HeyApiClient {
       ...options,
     })
   }
+
+  /**
+   * Add MCP server dynamically
+   */
+  public add<ThrowOnError extends boolean = false>(options?: Options<McpAddData, ThrowOnError>) {
+    return (options?.client ?? this._client).post<McpAddResponses, McpAddErrors, ThrowOnError>({
+      url: "/mcp",
+      ...options,
+      headers: {
+        "Content-Type": "application/json",
+        ...options?.headers,
+      },
+    })
+  }
+}
+
+class Lsp extends _HeyApiClient {
+  /**
+   * Get LSP server status
+   */
+  public status<ThrowOnError extends boolean = false>(options?: Options<LspStatusData, ThrowOnError>) {
+    return (options?.client ?? this._client).get<LspStatusResponses, unknown, ThrowOnError>({
+      url: "/lsp",
+      ...options,
+    })
+  }
+}
+
+class Formatter extends _HeyApiClient {
+  /**
+   * Get formatter status
+   */
+  public status<ThrowOnError extends boolean = false>(options?: Options<FormatterStatusData, ThrowOnError>) {
+    return (options?.client ?? this._client).get<FormatterStatusResponses, unknown, ThrowOnError>({
+      url: "/formatter",
+      ...options,
+    })
+  }
+}
+
+class Control extends _HeyApiClient {
+  /**
+   * Get the next TUI request from the queue
+   */
+  public next<ThrowOnError extends boolean = false>(options?: Options<TuiControlNextData, ThrowOnError>) {
+    return (options?.client ?? this._client).get<TuiControlNextResponses, unknown, ThrowOnError>({
+      url: "/tui/control/next",
+      ...options,
+    })
+  }
+
+  /**
+   * Submit a response to the TUI request queue
+   */
+  public response<ThrowOnError extends boolean = false>(options?: Options<TuiControlResponseData, ThrowOnError>) {
+    return (options?.client ?? this._client).post<TuiControlResponseResponses, unknown, ThrowOnError>({
+      url: "/tui/control/response",
+      ...options,
+      headers: {
+        "Content-Type": "application/json",
+        ...options?.headers,
+      },
+    })
+  }
 }
 
 class Tui extends _HeyApiClient {
@@ -716,6 +822,21 @@ class Tui extends _HeyApiClient {
       },
     })
   }
+
+  /**
+   * Publish a TUI event
+   */
+  public publish<ThrowOnError extends boolean = false>(options?: Options<TuiPublishData, ThrowOnError>) {
+    return (options?.client ?? this._client).post<TuiPublishResponses, TuiPublishErrors, ThrowOnError>({
+      url: "/tui/publish",
+      ...options,
+      headers: {
+        "Content-Type": "application/json",
+        ...options?.headers,
+      },
+    })
+  }
+  control = new Control({ client: this._client })
 }
 
 class Auth extends _HeyApiClient {
@@ -766,6 +887,7 @@ export class OpencodeClient extends _HeyApiClient {
       },
     })
   }
+  global = new Global({ client: this._client })
   project = new Project({ client: this._client })
   config = new Config({ client: this._client })
   tool = new Tool({ client: this._client })
@@ -776,6 +898,8 @@ export class OpencodeClient extends _HeyApiClient {
   file = new File({ client: this._client })
   app = new App({ client: this._client })
   mcp = new Mcp({ client: this._client })
+  lsp = new Lsp({ client: this._client })
+  formatter = new Formatter({ client: this._client })
   tui = new Tui({ client: this._client })
   auth = new Auth({ client: this._client })
   event = new Event({ client: this._client })

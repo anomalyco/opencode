@@ -1,4 +1,4 @@
-import z from "zod/v4"
+import z from "zod"
 
 export abstract class NamedError extends Error {
   abstract schema(): z.core.$ZodType
@@ -27,7 +27,7 @@ export abstract class NamedError extends Error {
       }
 
       static isInstance(input: any): input is InstanceType<typeof result> {
-        return "name" in input && input.name === name
+        return typeof input === "object" && "name" in input && input.name === name
       }
 
       schema() {

@@ -22,7 +22,9 @@ const removeProvider = action(async (form: FormData) => {
   if (!provider) return { error: "Provider is required" }
   const workspaceID = form.get("workspaceID")?.toString()
   if (!workspaceID) return { error: "Workspace ID is required" }
-  return json(await withActor(() => Provider.remove({ provider }), workspaceID), { revalidate: listProviders.key })
+  return json(await withActor(() => Provider.remove({ provider }), workspaceID), {
+    revalidate: listProviders.key,
+  })
 }, "provider.remove")
 
 const saveProvider = action(async (form: FormData) => {
@@ -52,7 +54,7 @@ const listProviders = query(async (workspaceID: string) => {
 
 function ProviderRow(props: { provider: Provider }) {
   const params = useParams()
-  const providers = createAsync(() => listProviders(params.id))
+  const providers = createAsync(() => listProviders(params.id!))
   const saveSubmission = useSubmission(saveProvider, ([fd]) => fd.get("provider")?.toString() === props.provider.key)
   const removeSubmission = useSubmission(
     removeProvider,

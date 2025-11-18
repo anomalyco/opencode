@@ -1,4 +1,4 @@
-import z from "zod/v4"
+import z from "zod"
 import { Tool } from "./tool"
 import { Ripgrep } from "../file/ripgrep"
 
@@ -20,7 +20,7 @@ export const GrepTool = Tool.define("grep", {
     const searchPath = params.path || Instance.directory
 
     const rgPath = await Ripgrep.filepath()
-    const args = ["-nH", "--field-match-separator=|", params.pattern]
+    const args = ["-nH", "--field-match-separator=|", "--regexp", params.pattern]
     if (params.include) {
       args.push("--glob", params.include)
     }

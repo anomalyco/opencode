@@ -18,7 +18,7 @@ export interface FilteredListProps<T> {
 export function useFilteredList<T>(props: FilteredListProps<T>) {
   const [store, setStore] = createStore<{ filter: string }>({ filter: "" })
 
-  const [grouped] = createResource(
+  const [grouped, { refetch }] = createResource(
     () => store.filter,
     async (filter) => {
       const needle = filter?.toLowerCase()
@@ -76,10 +76,11 @@ export function useFilteredList<T>(props: FilteredListProps<T>) {
   }
 
   return {
-    filter: () => store.filter,
     grouped,
+    filter: () => store.filter,
     flat,
     reset,
+    refetch,
     clear: () => setStore("filter", ""),
     onKeyDown,
     onInput,

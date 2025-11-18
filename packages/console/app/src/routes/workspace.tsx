@@ -19,7 +19,7 @@ const getUserEmail = query(async (workspaceID: string) => {
 
 export default function WorkspaceLayout(props: RouteSectionProps) {
   const params = useParams()
-  const userEmail = createAsync(() => getUserEmail(params.id))
+  const userEmail = createAsync(() => getUserEmail(params.id!))
   return (
     <main data-page="workspace">
       <Link rel="icon" type="image/svg+xml" href="/favicon-zen.svg" />

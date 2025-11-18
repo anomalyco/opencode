@@ -65,7 +65,7 @@ export default defineConfig({
         "providers",
         "enterprise",
         "troubleshooting",
-
+        "1-0",
         {
           label: "Usage",
           items: ["tui", "cli", "ide", "zen", "share", "github", "gitlab"],
@@ -85,6 +85,7 @@ export default defineConfig({
             "permissions",
             "lsp",
             "mcp-servers",
+            "acp",
             "custom-tools",
           ],
         },
@@ -107,9 +108,6 @@ export default defineConfig({
       ],
     }),
   ],
-  redirects: {
-    "/discord": "https://discord.gg/opencode",
-  },
 })
 
 function configSchema() {

@@ -1,4 +1,4 @@
-import z from "zod/v4"
+import z from "zod"
 import { Bus } from "../bus"
 import { Flag } from "../flag/flag"
 import { Instance } from "../project/instance"
@@ -63,7 +63,8 @@ export namespace FileWatcher {
       return { sub }
     },
     async (state) => {
-      state.sub?.unsubscribe()
+      if (!state.sub) return
+      await state.sub?.unsubscribe()
     },
   )
 

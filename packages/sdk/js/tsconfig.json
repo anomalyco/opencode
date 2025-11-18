@@ -8,5 +8,6 @@
     "moduleResolution": "nodenext",
     "lib": ["es2022", "dom", "dom.iterable"]
   },
-  "include": ["src"]
+  "include": ["src"],
+  "exclude": ["src/gen"]
 }

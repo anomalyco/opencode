@@ -1,13 +1,13 @@
 import { Tool } from "./tool"
 import DESCRIPTION from "./task.txt"
-import z from "zod/v4"
+import z from "zod"
 import { Session } from "../session"
 import { Bus } from "../bus"
 import { MessageV2 } from "../session/message-v2"
 import { Identifier } from "../id/id"
 import { Agent } from "../agent/agent"
-import { SessionLock } from "../session/lock"
 import { SessionPrompt } from "../session/prompt"
+import { defer } from "@/util/defer"
 
 export const TaskTool = Tool.define("task", async () => {
   const agents = await Agent.list().then((x) => x.filter((a) => a.mode !== "primary"))
@@ -31,8 +31,16 @@ export const TaskTool = Tool.define("task", async () => {
         parentID: ctx.sessionID,
         title: params.description + ` (@${agent.name} subagent)`,
       })
-      const msg = await Session.getMessage({ sessionID: ctx.sessionID, messageID: ctx.messageID })
+      const msg = await MessageV2.get({ sessionID: ctx.sessionID, messageID: ctx.messageID })
       if (msg.info.role !== "assistant") throw new Error("Not an assistant message")
+
+      ctx.metadata({
+        title: params.description,
+        metadata: {
+          sessionId: session.id,
+        },
+      })
+
       const messageID = Identifier.ascending("message")
       const parts: Record<string, MessageV2.ToolPart> = {}
       const unsub = Bus.subscribe(MessageV2.Event.PartUpdated, async (evt) => {
@@ -44,6 +52,7 @@ export const TaskTool = Tool.define("task", async () => {
           title: params.description,
           metadata: {
             summary: Object.values(parts).sort((a, b) => a.id?.localeCompare(b.id)),
+            sessionId: session.id,
           },
         })
       })
@@ -53,9 +62,12 @@ export const TaskTool = Tool.define("task", async () => {
         providerID: msg.info.providerID,
       }
 
-      ctx.abort.addEventListener("abort", () => {
-        SessionLock.abort(session.id)
-      })
+      function cancel() {
+        SessionPrompt.cancel(session.id)
+      }
+      ctx.abort.addEventListener("abort", cancel)
+      using _ = defer(() => ctx.abort.removeEventListener("abort", cancel))
+      const promptParts = await SessionPrompt.resolvePromptParts(params.prompt)
       const result = await SessionPrompt.prompt({
         messageID,
         sessionID: session.id,
@@ -70,23 +82,18 @@ export const TaskTool = Tool.define("task", async () => {
           task: false,
           ...agent.tools,
         },
-        parts: [
-          {
-            id: Identifier.ascending("part"),
-            type: "text",
-            text: params.prompt,
-          },
-        ],
+        parts: promptParts,
       })
       unsub()
       let all
-      all = await Session.messages(session.id)
+      all = await Session.messages({ sessionID: session.id })
       all = all.filter((x) => x.info.role === "assistant")
       all = all.flatMap((msg) => msg.parts.filter((x: any) => x.type === "tool") as MessageV2.ToolPart[])
       return {
         title: params.description,
         metadata: {
           summary: all,
+          sessionId: session.id,
         },
         output: (result.parts.findLast((x: any) => x.type === "text") as any)?.text ?? "",
       }

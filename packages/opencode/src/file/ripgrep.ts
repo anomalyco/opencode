@@ -2,14 +2,16 @@
 import path from "path"
 import { Global } from "../global"
 import fs from "fs/promises"
-import z from "zod/v4"
+import z from "zod"
 import { NamedError } from "../util/error"
 import { lazy } from "../util/lazy"
 import { $ } from "bun"
 
 import { ZipReader, BlobReader, BlobWriter } from "@zip.js/zip.js"
+import { Log } from "@/util/log"
 
 export namespace Ripgrep {
+  const log = Log.create({ service: "ripgrep" })
   const Stats = z.object({
     elapsed: z.object({
       secs: z.number(),
@@ -218,7 +220,7 @@ export namespace Ripgrep {
         code: "ENOENT",
         errno: -2,
         path: input.cwd,
-      });
+      })
     }
 
     const proc = Bun.spawn(args, {
@@ -254,6 +256,7 @@ export namespace Ripgrep {
   }
 
   export async function tree(input: { cwd: string; limit?: number }) {
+    log.info("tree", input)
     const files = await Array.fromAsync(Ripgrep.files({ cwd: input.cwd }))
     interface Node {
       path: string[]
@@ -367,6 +370,7 @@ export namespace Ripgrep {
       args.push(`--max-count=${input.limit}`)
     }
 
+    args.push("--")
     args.push(input.pattern)
 
     const command = args.join(" ")

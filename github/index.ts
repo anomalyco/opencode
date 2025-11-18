@@ -152,6 +152,9 @@ try {
     return session.id.slice(-8)
   })()
   console.log("opencode session", session.id)
+  if (shareId) {
+    console.log("Share link:", `${useShareUrl()}/s/${shareId}`)
+  }
 
   // Handle 3 cases
   // 1. Issue
@@ -730,12 +733,13 @@ async function updateComment(body: string) {
 async function createPR(base: string, branch: string, title: string, body: string) {
   console.log("Creating pull request...")
   const { repo } = useContext()
+  const truncatedTitle = title.length > 256 ? title.slice(0, 253) + "..." : title
   const pr = await octoRest.rest.pulls.create({
     owner: repo.owner,
     repo: repo.repo,
     head: branch,
     base,
-    title,
+    title: truncatedTitle,
     body,
   })
   return pr.data.number

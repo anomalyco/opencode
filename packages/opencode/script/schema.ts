@@ -1,6 +1,6 @@
 #!/usr/bin/env bun
 
-import { z } from "zod/v4"
+import { z } from "zod"
 import { Config } from "../src/config/config"
 
 const file = process.argv[2]

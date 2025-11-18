@@ -23,6 +23,10 @@ export function List<T>(props: ListProps<T>) {
     initialActive: props.current ? props.key(props.current) : undefined,
     loop: true,
   })
+
+  createEffect(() => {
+    if (props.current) list.setActive(props.key(props.current))
+  })
   // const resetSelection = () => {
   //   if (props.data.length === 0) return
   //   list.setActive(props.key(props.data[0]))

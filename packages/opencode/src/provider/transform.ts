@@ -3,21 +3,67 @@ import { unique } from "remeda"
 import type { JSONSchema } from "zod/v4/core"
 
 export namespace ProviderTransform {
-  function normalizeToolCallIds(msgs: ModelMessage[]): ModelMessage[] {
-    return msgs.map((msg) => {
-      if ((msg.role === "assistant" || msg.role === "tool") && Array.isArray(msg.content)) {
-        msg.content = msg.content.map((part) => {
-          if ((part.type === "tool-call" || part.type === "tool-result") && "toolCallId" in part) {
-            return {
-              ...part,
-              toolCallId: part.toolCallId.replace(/[^a-zA-Z0-9_-]/g, "_"),
+  function normalizeMessages(msgs: ModelMessage[], providerID: string, modelID: string): ModelMessage[] {
+    if (modelID.includes("claude")) {
+      return msgs.map((msg) => {
+        if ((msg.role === "assistant" || msg.role === "tool") && Array.isArray(msg.content)) {
+          msg.content = msg.content.map((part) => {
+            if ((part.type === "tool-call" || part.type === "tool-result") && "toolCallId" in part) {
+              return {
+                ...part,
+                toolCallId: part.toolCallId.replace(/[^a-zA-Z0-9_-]/g, "_"),
+              }
             }
-          }
-          return part
-        })
+            return part
+          })
+        }
+        return msg
+      })
+    }
+    if (providerID === "mistral" || modelID.toLowerCase().includes("mistral")) {
+      const result: ModelMessage[] = []
+      for (let i = 0; i < msgs.length; i++) {
+        const msg = msgs[i]
+        const prevMsg = msgs[i - 1]
+        const nextMsg = msgs[i + 1]
+
+        if ((msg.role === "assistant" || msg.role === "tool") && Array.isArray(msg.content)) {
+          msg.content = msg.content.map((part) => {
+            if ((part.type === "tool-call" || part.type === "tool-result") && "toolCallId" in part) {
+              // Mistral requires alphanumeric tool call IDs with exactly 9 characters
+              const normalizedId = part.toolCallId
+                .replace(/[^a-zA-Z0-9]/g, "") // Remove non-alphanumeric characters
+                .substring(0, 9) // Take first 9 characters
+                .padEnd(9, "0") // Pad with zeros if less than 9 characters
+
+              return {
+                ...part,
+                toolCallId: normalizedId,
+              }
+            }
+            return part
+          })
+        }
+
+        result.push(msg)
+
+        // Fix message sequence: tool messages cannot be followed by user messages
+        if (msg.role === "tool" && nextMsg?.role === "user") {
+          result.push({
+            role: "assistant",
+            content: [
+              {
+                type: "text",
+                text: "Done.",
+              },
+            ],
+          })
+        }
       }
-      return msg
-    })
+      return result
+    }
+
+    return msgs
   }
 
   function applyCaching(msgs: ModelMessage[], providerID: string): ModelMessage[] {
@@ -63,9 +109,7 @@ export namespace ProviderTransform {
   }
 
   export function message(msgs: ModelMessage[], providerID: string, modelID: string) {
-    if (modelID.includes("claude")) {
-      msgs = normalizeToolCallIds(msgs)
-    }
+    msgs = normalizeMessages(msgs, providerID, modelID)
     if (providerID === "anthropic" || modelID.includes("anthropic") || modelID.includes("claude")) {
       msgs = applyCaching(msgs, providerID)
     }
@@ -75,7 +119,7 @@ export namespace ProviderTransform {
 
   export function temperature(_providerID: string, modelID: string) {
     if (modelID.toLowerCase().includes("qwen")) return 0.55
-    if (modelID.toLowerCase().includes("claude")) return 1
+    if (modelID.toLowerCase().includes("claude")) return undefined
     return 0
   }
 
@@ -84,7 +128,12 @@ export namespace ProviderTransform {
     return undefined
   }
 
-  export function options(providerID: string, modelID: string, sessionID: string): Record<string, any> | undefined {
+  export function options(
+    providerID: string,
+    modelID: string,
+    npm: string,
+    sessionID: string,
+  ): Record<string, any> | undefined {
     const result: Record<string, any> = {}
 
     if (providerID === "openai") {
@@ -92,10 +141,16 @@ export namespace ProviderTransform {
     }
 
     if (modelID.includes("gpt-5") && !modelID.includes("gpt-5-chat")) {
-      if (!modelID.includes("codex")) result["reasoningEffort"] = "medium"
+      if (modelID.includes("codex")) {
+        result["store"] = false
+      }
 
-      if (providerID !== "azure") {
-        result["textVerbosity"] = modelID.includes("codex") ? "medium" : "low"
+      if (!modelID.includes("codex") && !modelID.includes("gpt-5-pro")) {
+        result["reasoningEffort"] = "medium"
+      }
+
+      if (modelID.endsWith("gpt-5.1") && providerID !== "azure") {
+        result["textVerbosity"] = "low"
       }
 
       if (providerID === "opencode") {
@@ -114,9 +169,17 @@ export namespace ProviderTransform {
         return {
           ["openai" as string]: options,
         }
+      case "@ai-sdk/amazon-bedrock":
+        return {
+          ["bedrock" as string]: options,
+        }
       case "@ai-sdk/anthropic":
         return {
           ["anthropic" as string]: options,
+        }
+      case "@ai-sdk/gateway":
+        return {
+          ["gateway" as string]: options,
         }
       default:
         return {
@@ -126,7 +189,7 @@ export namespace ProviderTransform {
   }
 
   export function maxOutputTokens(
-    providerID: string,
+    npm: string,
     options: Record<string, any>,
     modelLimit: number,
     globalLimit: number,
@@ -134,7 +197,7 @@ export namespace ProviderTransform {
     const modelCap = modelLimit || globalLimit
     const standardLimit = Math.min(modelCap, globalLimit)
 
-    if (providerID === "anthropic") {
+    if (npm === "@ai-sdk/anthropic") {
       const thinking = options?.["thinking"]
       const budgetTokens = typeof thinking?.["budgetTokens"] === "number" ? thinking["budgetTokens"] : 0
       const enabled = thinking?.["type"] === "enabled"

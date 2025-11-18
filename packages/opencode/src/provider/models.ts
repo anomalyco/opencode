@@ -1,7 +1,7 @@
 import { Global } from "../global"
 import { Log } from "../util/log"
 import path from "path"
-import z from "zod/v4"
+import z from "zod"
 import { data } from "./models-macro" with { type: "macro" }
 import { Installation } from "../installation"
 
@@ -23,6 +23,14 @@ export namespace ModelsDev {
         output: z.number(),
         cache_read: z.number().optional(),
         cache_write: z.number().optional(),
+        context_over_200k: z
+          .object({
+            input: z.number(),
+            output: z.number(),
+            cache_read: z.number().optional(),
+            cache_write: z.number().optional(),
+          })
+          .optional(),
       }),
       limit: z.object({
         context: z.number(),
@@ -35,8 +43,9 @@ export namespace ModelsDev {
         })
         .optional(),
       experimental: z.boolean().optional(),
-      status: z.enum(["alpha", "beta"]).optional(),
+      status: z.enum(["alpha", "beta", "deprecated"]).optional(),
       options: z.record(z.string(), z.any()),
+      headers: z.record(z.string(), z.string()).optional(),
       provider: z.object({ npm: z.string() }).optional(),
     })
     .meta({

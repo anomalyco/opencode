@@ -1,4 +1,4 @@
-import z from "zod/v4"
+import z from "zod"
 import * as fs from "fs"
 import * as path from "path"
 import { Tool } from "./tool"
@@ -9,6 +9,9 @@ import { Filesystem } from "../util/filesystem"
 import { Instance } from "../project/instance"
 import { Provider } from "../provider/provider"
 import { Identifier } from "../id/id"
+import { Permission } from "../permission"
+import { Agent } from "@/agent/agent"
+import { iife } from "@/util/iife"
 
 const DEFAULT_READ_LIMIT = 2000
 const MAX_LINE_LENGTH = 2000
@@ -26,9 +29,37 @@ export const ReadTool = Tool.define("read", {
       filepath = path.join(process.cwd(), filepath)
     }
     const title = path.relative(Instance.worktree, filepath)
+    const agent = await Agent.get(ctx.agent)
 
     if (!ctx.extra?.["bypassCwdCheck"] && !Filesystem.contains(Instance.directory, filepath)) {
-      throw new Error(`File ${filepath} is not in the current working directory`)
+      const parentDir = path.dirname(filepath)
+      if (agent.permission.external_directory === "ask") {
+        await Permission.ask({
+          type: "external_directory",
+          pattern: parentDir,
+          sessionID: ctx.sessionID,
+          messageID: ctx.messageID,
+          callID: ctx.callID,
+          title: `Access file outside working directory: ${filepath}`,
+          metadata: {
+            filepath,
+            parentDir,
+          },
+        })
+      }
+    }
+
+    const block = iife(() => {
+      const whitelist = [".env.sample", ".example"]
+
+      if (whitelist.some((w) => filepath.endsWith(w))) return false
+      if (filepath.includes(".env")) return true
+
+      return false
+    })
+
+    if (block) {
+      throw new Error(`The user has blocked you from reading ${filepath}, DO NOT make further attempts to read it`)
     }
 
     const file = Bun.file(filepath)
@@ -103,8 +134,14 @@ export const ReadTool = Tool.define("read", {
     let output = "<file>\n"
     output += content.join("\n")
 
-    if (lines.length > offset + content.length) {
-      output += `\n\n(File has more lines. Use 'offset' parameter to read beyond line ${offset + content.length})`
+    const totalLines = lines.length
+    const lastReadLine = offset + content.length
+    const hasMoreLines = totalLines > lastReadLine
+
+    if (hasMoreLines) {
+      output += `\n\n(File has more lines. Use 'offset' parameter to read beyond line ${lastReadLine})`
+    } else {
+      output += `\n\n(End of file - total ${totalLines} lines)`
     }
     output += "\n</file>"
 

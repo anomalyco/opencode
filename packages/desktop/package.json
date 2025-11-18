@@ -1,14 +1,14 @@
 {
   "name": "@opencode-ai/desktop",
-  "version": "0.15.16",
+  "version": "1.0.72",
   "description": "",
   "type": "module",
   "scripts": {
+    "typecheck": "tsgo --noEmit",
     "start": "vite",
     "dev": "vite",
     "build": "vite build",
-    "serve": "vite preview",
-    "typecheck": "tsgo --noEmit"
+    "serve": "vite preview"
   },
   "license": "MIT",
   "devDependencies": {
@@ -16,8 +16,8 @@
     "@tsconfig/bun": "1.0.9",
     "@types/luxon": "3.7.1",
     "@types/node": "catalog:",
-    "typescript": "catalog:",
     "@typescript/native-preview": "catalog:",
+    "typescript": "catalog:",
     "vite": "catalog:",
     "vite-plugin-icons-spritesheet": "3.0.1",
     "vite-plugin-solid": "catalog:"
@@ -31,6 +31,7 @@
     "@solid-primitives/event-bus": "1.1.2",
     "@solid-primitives/resize-observer": "2.1.3",
     "@solid-primitives/scroll": "2.1.3",
+    "@solid-primitives/storage": "4.3.3",
     "@solidjs/meta": "catalog:",
     "@solidjs/router": "0.15.3",
     "@thisbeyond/solid-dnd": "0.7.5",
@@ -45,9 +46,5 @@
     "solid-list": "catalog:",
     "tailwindcss": "catalog:",
     "virtua": "catalog:"
-  },
-  "prettier": {
-    "semi": false,
-    "printWidth": 120
   }
 }

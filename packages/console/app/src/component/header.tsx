@@ -1,11 +1,41 @@
 import logoLight from "../asset/logo-ornate-light.svg"
 import logoDark from "../asset/logo-ornate-dark.svg"
-import { A, createAsync } from "@solidjs/router"
+import copyLogoLight from "../asset/lander/logo-light.svg"
+import copyLogoDark from "../asset/lander/logo-dark.svg"
+import copyWordmarkLight from "../asset/lander/wordmark-light.svg"
+import copyWordmarkDark from "../asset/lander/wordmark-dark.svg"
+import copyBrandAssetsLight from "../asset/lander/brand-assets-light.svg"
+import copyBrandAssetsDark from "../asset/lander/brand-assets-dark.svg"
+
+// SVG files for copying (separate from button icons)
+// Replace these with your actual SVG files for copying
+import copyLogoSvgLight from "../asset/lander/opencode-logo-light.svg"
+import copyLogoSvgDark from "../asset/lander/opencode-logo-dark.svg"
+import copyWordmarkSvgLight from "../asset/lander/opencode-wordmark-light.svg"
+import copyWordmarkSvgDark from "../asset/lander/opencode-wordmark-dark.svg"
+import { A, createAsync, useNavigate } from "@solidjs/router"
 import { createMemo, Match, Show, Switch } from "solid-js"
 import { createStore } from "solid-js/store"
 import { github } from "~/lib/github"
+import { createEffect, onCleanup } from "solid-js"
+import { config } from "~/config"
+import "./header-context-menu.css"
+
+const isDarkMode = () => window.matchMedia("(prefers-color-scheme: dark)").matches
+
+const fetchSvgContent = async (svgPath: string): Promise<string> => {
+  try {
+    const response = await fetch(svgPath)
+    const svgText = await response.text()
+    return svgText
+  } catch (err) {
+    console.error("Failed to fetch SVG content:", err)
+    throw err
+  }
+}
 
 export function Header(props: { zen?: boolean }) {
+  const navigate = useNavigate()
   const githubData = createAsync(() => github())
   const starCount = createMemo(() =>
     githubData()?.stars
@@ -13,28 +43,121 @@ export function Header(props: { zen?: boolean }) {
           notation: "compact",
           compactDisplay: "short",
         }).format(githubData()?.stars!)
-      : "25K",
+      : config.github.starsFormatted.compact,
   )
 
   const [store, setStore] = createStore({
     mobileMenuOpen: false,
+    contextMenuOpen: false,
+    contextMenuPosition: { x: 0, y: 0 },
   })
+
+  createEffect(() => {
+    const handleClickOutside = () => {
+      setStore("contextMenuOpen", false)
+    }
+
+    const handleContextMenu = (event: MouseEvent) => {
+      event.preventDefault()
+      setStore("contextMenuOpen", false)
+    }
+
+    const handleKeyDown = (event: KeyboardEvent) => {
+      if (event.key === "Escape") {
+        setStore("contextMenuOpen", false)
+      }
+    }
+
+    if (store.contextMenuOpen) {
+      document.addEventListener("click", handleClickOutside)
+      document.addEventListener("contextmenu", handleContextMenu)
+      document.addEventListener("keydown", handleKeyDown)
+      onCleanup(() => {
+        document.removeEventListener("click", handleClickOutside)
+        document.removeEventListener("contextmenu", handleContextMenu)
+        document.removeEventListener("keydown", handleKeyDown)
+      })
+    }
+  })
+
+  const handleLogoContextMenu = (event: MouseEvent) => {
+    event.preventDefault()
+    const logoElement = (event.currentTarget as HTMLElement).querySelector("a")
+    if (logoElement) {
+      const rect = logoElement.getBoundingClientRect()
+      setStore("contextMenuPosition", {
+        x: rect.left - 16,
+        y: rect.bottom + 8,
+      })
+    }
+    setStore("contextMenuOpen", true)
+  }
+
+  const copyWordmarkToClipboard = async () => {
+    try {
+      const isDark = isDarkMode()
+      const wordmarkSvgPath = isDark ? copyWordmarkSvgDark : copyWordmarkSvgLight
+      const wordmarkSvg = await fetchSvgContent(wordmarkSvgPath)
+      await navigator.clipboard.writeText(wordmarkSvg)
+    } catch (err) {
+      console.error("Failed to copy wordmark to clipboard:", err)
+    }
+  }
+
+  const copyLogoToClipboard = async () => {
+    try {
+      const isDark = isDarkMode()
+      const logoSvgPath = isDark ? copyLogoSvgDark : copyLogoSvgLight
+      const logoSvg = await fetchSvgContent(logoSvgPath)
+      await navigator.clipboard.writeText(logoSvg)
+    } catch (err) {
+      console.error("Failed to copy logo to clipboard:", err)
+    }
+  }
 
   return (
     <section data-component="top">
-      <A href="/">
-        <img data-slot="logo light" src={logoLight} alt="opencode logo light" />
-        <img data-slot="logo dark" src={logoDark} alt="opencode logo dark" />
-      </A>
+      <div onContextMenu={handleLogoContextMenu}>
+        <A href="/">
+          <img data-slot="logo light" src={logoLight} alt="opencode logo light" />
+          <img data-slot="logo dark" src={logoDark} alt="opencode logo dark" />
+        </A>
+      </div>
+
+      <Show when={store.contextMenuOpen}>
+        <div
+          class="context-menu"
+          style={`left: ${store.contextMenuPosition.x}px; top: ${store.contextMenuPosition.y}px;`}
+        >
+          <button class="context-menu-item" onClick={copyLogoToClipboard}>
+            <img data-slot="copy light" src={copyLogoLight} alt="Logo" />
+            <img data-slot="copy dark" src={copyLogoDark} alt="Logo" />
+            Copy logo as SVG
+          </button>
+          <button class="context-menu-item" onClick={copyWordmarkToClipboard}>
+            <img data-slot="copy light" src={copyWordmarkLight} alt="Wordmark" />
+            <img data-slot="copy dark" src={copyWordmarkDark} alt="Wordmark" />
+            Copy wordmark as SVG
+          </button>
+          <button class="context-menu-item" onClick={() => navigate("/brand")}>
+            <img data-slot="copy light" src={copyBrandAssetsLight} alt="Brand Assets" />
+            <img data-slot="copy dark" src={copyBrandAssetsDark} alt="Brand Assets" />
+            Brand assets
+          </button>
+        </div>
+      </Show>
       <nav data-component="nav-desktop">
         <ul>
           <li>
-            <a href="https://github.com/sst/opencode" target="_blank">
+            <a href={config.github.repoUrl} target="_blank">
               GitHub <span>[{starCount()}]</span>
             </a>
           </li>
           <li>
             <a href="/docs">Docs</a>
+          </li>
+          <li>
+            <A href="/enterprise">Enterprise</A>
           </li>
           <li>
             <Switch>
@@ -100,12 +223,15 @@ export function Header(props: { zen?: boolean }) {
                   <A href="/">Home</A>
                 </li>
                 <li>
-                  <a href="https://github.com/sst/opencode" target="_blank">
+                  <a href={config.github.repoUrl} target="_blank">
                     GitHub <span>[{starCount()}]</span>
                   </a>
                 </li>
                 <li>
                   <a href="/docs">Docs</a>
+                </li>
+                <li>
+                  <A href="/enterprise">Enterprise</A>
                 </li>
                 <li>
                   <Switch>

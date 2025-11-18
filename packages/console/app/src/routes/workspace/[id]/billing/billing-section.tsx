@@ -1,60 +1,86 @@
-import { json, query, action, useParams, useAction, createAsync, useSubmission } from "@solidjs/router"
-import { createMemo, Match, Show, Switch } from "solid-js"
+import { action, useParams, useAction, createAsync, useSubmission, json } from "@solidjs/router"
+import { createMemo, Match, Show, Switch, createEffect } from "solid-js"
+import { createStore } from "solid-js/store"
 import { Billing } from "@opencode-ai/console-core/billing.js"
 import { withActor } from "~/context/auth.withActor"
 import { IconCreditCard, IconStripe } from "~/component/icon"
 import styles from "./billing-section.module.css"
-import { Database, eq } from "@opencode-ai/console-core/drizzle/index.js"
-import { BillingTable } from "@opencode-ai/console-core/schema/billing.sql.js"
-import { createCheckoutUrl } from "../../common"
-
-const reload = action(async (form: FormData) => {
-  "use server"
-  const workspaceID = form.get("workspaceID")?.toString()
-  if (!workspaceID) return { error: "Workspace ID is required" }
-  return json(await withActor(() => Billing.reload(), workspaceID), { revalidate: getBillingInfo.key })
-}, "billing.reload")
-
-const setReload = action(async (form: FormData) => {
-  "use server"
-  const workspaceID = form.get("workspaceID")?.toString()
-  if (!workspaceID) return { error: "Workspace ID is required" }
-  const reload = form.get("reload")?.toString() === "true"
-  return json(
-    await Database.use((tx) =>
-      tx
-        .update(BillingTable)
-        .set({
-          reload,
-        })
-        .where(eq(BillingTable.workspaceID, workspaceID)),
-    ),
-    { revalidate: getBillingInfo.key },
-  )
-}, "billing.setReload")
+import { createCheckoutUrl, formatBalance, queryBillingInfo } from "../../common"
 
 const createSessionUrl = action(async (workspaceID: string, returnUrl: string) => {
   "use server"
-  return withActor(() => Billing.generateSessionUrl({ returnUrl }), workspaceID)
+  return json(
+    await withActor(
+      () =>
+        Billing.generateSessionUrl({ returnUrl })
+          .then((data) => ({ error: undefined, data }))
+          .catch((e) => ({
+            error: e.message as string,
+            data: undefined,
+          })),
+      workspaceID,
+    ),
+    { revalidate: queryBillingInfo.key },
+  )
 }, "sessionUrl")
-
-const getBillingInfo = query(async (workspaceID: string) => {
-  "use server"
-  return withActor(async () => {
-    return await Billing.get()
-  }, workspaceID)
-}, "billing.get")
 
 export function BillingSection() {
   const params = useParams()
   // ORIGINAL CODE - COMMENTED OUT FOR TESTING
-  const balanceInfo = createAsync(() => getBillingInfo(params.id))
-  const createCheckoutUrlAction = useAction(createCheckoutUrl)
-  const createCheckoutUrlSubmission = useSubmission(createCheckoutUrl)
-  const createSessionUrlAction = useAction(createSessionUrl)
-  const createSessionUrlSubmission = useSubmission(createSessionUrl)
-  const setReloadSubmission = useSubmission(setReload)
-  const reloadSubmission = useSubmission(reload)
+  const billingInfo = createAsync(() => queryBillingInfo(params.id!))
+  const checkoutAction = useAction(createCheckoutUrl)
+  const checkoutSubmission = useSubmission(createCheckoutUrl)
+  const sessionAction = useAction(createSessionUrl)
+  const sessionSubmission = useSubmission(createSessionUrl)
+  const [store, setStore] = createStore({
+    showAddBalanceForm: false,
+    addBalanceAmount: billingInfo()?.reloadAmount.toString() ?? "",
+    checkoutRedirecting: false,
+    sessionRedirecting: false,
+  })
+
+  createEffect(() => {
+    const info = billingInfo()
+    if (info) {
+      setStore("addBalanceAmount", info.reloadAmount.toString())
+    }
+  })
+  const balance = createMemo(() => formatBalance(billingInfo()?.balance ?? 0))
+
+  async function onClickCheckout() {
+    const amount = parseInt(store.addBalanceAmount)
+    const baseUrl = window.location.href
+
+    const checkout = await checkoutAction(params.id!, amount, baseUrl, baseUrl)
+    if (checkout && checkout.data) {
+      setStore("checkoutRedirecting", true)
+      window.location.href = checkout.data
+    }
+  }
+
+  async function onClickSession() {
+    const baseUrl = window.location.href
+    const sessionUrl = await sessionAction(params.id!, baseUrl)
+    if (sessionUrl && sessionUrl.data) {
+      setStore("sessionRedirecting", true)
+      window.location.href = sessionUrl.data
+    }
+  }
+
+  function showAddBalanceForm() {
+    while (true) {
+      checkoutSubmission.clear()
+      if (!checkoutSubmission.result) break
+    }
+    setStore({
+      showAddBalanceForm: true,
+    })
+  }
+
+  function hideAddBalanceForm() {
+    setStore("showAddBalanceForm", false)
+    checkoutSubmission.clear()
+  }
 
   // DUMMY DATA FOR TESTING - UNCOMMENT ONE OF THE SCENARIOS BELOW
 
@@ -108,14 +134,6 @@ export function BillingSection() {
   //   timeReloadError: null as Date | null
   // })
 
-  const balanceAmount = createMemo(() => {
-    return ((balanceInfo()?.balance ?? 0) / 100000000).toFixed(2)
-  })
-
-  const hasBalance = createMemo(() => {
-    return (balanceInfo()?.balance ?? 0) > 0 && balanceAmount() !== "0.00"
-  })
-
   return (
     <section class={styles.root}>
       <div data-slot="section-title">
@@ -125,130 +143,97 @@ export function BillingSection() {
         </p>
       </div>
       <div data-slot="section-content">
-        <Show when={balanceInfo()?.reloadError}>
-          <div data-slot="reload-error">
-            <p>
-              Reload failed at{" "}
-              {balanceInfo()?.timeReloadError!.toLocaleString("en-US", {
-                month: "short",
-                day: "numeric",
-                hour: "numeric",
-                minute: "2-digit",
-                second: "2-digit",
-              })}
-              . Reason: {balanceInfo()?.reloadError?.replace(/\.$/, "")}. Please update your payment method and try
-              again.
-            </p>
-            <form action={reload} method="post" data-slot="create-form">
-              <input type="hidden" name="workspaceID" value={params.id} />
-              <button data-color="primary" type="submit" disabled={reloadSubmission.pending}>
-                {reloadSubmission.pending ? "Reloading..." : "Reload"}
-              </button>
-            </form>
+        <div data-slot="balance-display">
+          <div data-slot="balance-amount">
+            <span data-slot="balance-value">${balance()}</span>
+            <span data-slot="balance-label">Current Balance</span>
           </div>
-        </Show>
-        <div data-slot="payment">
-          <div data-slot="credit-card">
-            <div data-slot="card-icon">
-              <Switch fallback={<IconCreditCard style={{ width: "32px", height: "32px" }} />}>
-                <Match when={balanceInfo()?.paymentMethodType === "link"}>
-                  <IconStripe style={{ width: "32px", height: "32px" }} />
-                </Match>
-              </Switch>
-            </div>
-            <div data-slot="card-details">
-              <Switch
+          <Show when={billingInfo()?.customerID}>
+            <div data-slot="balance-right-section">
+              <Show
+                when={!store.showAddBalanceForm}
                 fallback={
-                  <Show when={balanceInfo()?.paymentMethodLast4} fallback={<span data-slot="number">----</span>}>
-                    <span data-slot="secret">••••</span>
-                    <span data-slot="number">{balanceInfo()?.paymentMethodLast4}</span>
-                  </Show>
+                  <div data-slot="add-balance-form-container">
+                    <div data-slot="add-balance-form">
+                      <label>Add $</label>
+                      <input
+                        data-component="input"
+                        type="number"
+                        min={billingInfo()?.reloadAmountMin.toString()}
+                        step="1"
+                        value={store.addBalanceAmount}
+                        onInput={(e) => {
+                          setStore("addBalanceAmount", e.currentTarget.value)
+                          checkoutSubmission.clear()
+                        }}
+                        placeholder="Enter amount"
+                      />
+                      <div data-slot="form-actions">
+                        <button data-color="ghost" type="button" onClick={() => hideAddBalanceForm()}>
+                          Cancel
+                        </button>
+                        <button
+                          data-color="primary"
+                          type="button"
+                          disabled={!store.addBalanceAmount || checkoutSubmission.pending || store.checkoutRedirecting}
+                          onClick={onClickCheckout}
+                        >
+                          {checkoutSubmission.pending || store.checkoutRedirecting ? "Loading..." : "Add"}
+                        </button>
+                      </div>
+                    </div>
+                    <Show when={checkoutSubmission.result && (checkoutSubmission.result as any).error}>
+                      {(err: any) => <div data-slot="form-error">{err()}</div>}
+                    </Show>
+                  </div>
                 }
               >
-                <Match when={balanceInfo()?.paymentMethodType === "link"}>
-                  <span data-slot="type">Linked to Stripe</span>
-                </Match>
-              </Switch>
-            </div>
-          </div>
-          <div data-slot="button-row">
-            <Show
-              when={balanceInfo()?.reload}
-              fallback={
-                <Show
-                  when={hasBalance()}
-                  fallback={
-                    <button
-                      data-color="primary"
-                      disabled={createCheckoutUrlSubmission.pending}
-                      onClick={async () => {
-                        const baseUrl = window.location.href
-                        const checkoutUrl = await createCheckoutUrlAction(params.id, baseUrl, baseUrl)
-                        if (checkoutUrl) {
-                          window.location.href = checkoutUrl
-                        }
-                      }}
-                    >
-                      {createCheckoutUrlSubmission.pending ? "Loading..." : "Enable Billing"}
-                    </button>
-                  }
-                >
-                  <form action={setReload} method="post" data-slot="create-form">
-                    <input type="hidden" name="workspaceID" value={params.id} />
-                    <input type="hidden" name="reload" value="true" />
-                    <button data-color="primary" type="submit" disabled={setReloadSubmission.pending}>
-                      {setReloadSubmission.pending ? "Enabling..." : "Enable Billing"}
-                    </button>
-                  </form>
-                </Show>
-              }
-            >
-              <button
-                data-color="primary"
-                disabled={createSessionUrlSubmission.pending}
-                onClick={async () => {
-                  const baseUrl = window.location.href
-                  const sessionUrl = await createSessionUrlAction(params.id, baseUrl)
-                  if (sessionUrl) {
-                    window.location.href = sessionUrl
-                  }
-                }}
-              >
-                {createSessionUrlSubmission.pending ? "Loading..." : "Manage Payment Methods"}
-              </button>
-              <form action={setReload} method="post" data-slot="create-form">
-                <input type="hidden" name="workspaceID" value={params.id} />
-                <input type="hidden" name="reload" value="false" />
-                <button data-color="ghost" type="submit" disabled={setReloadSubmission.pending}>
-                  {setReloadSubmission.pending ? "Disabling..." : "Disable"}
+                <button data-color="primary" onClick={() => showAddBalanceForm()}>
+                  Add Balance
                 </button>
-              </form>
-            </Show>
-          </div>
-        </div>
-        <div data-slot="usage">
-          <Show when={!balanceInfo()?.reload}>
-            <Show
-              when={hasBalance()}
-              fallback={
-                <p>
-                  We'll load <b>$20</b> (+$1.23 processing fee) and reload it when it reaches <b>$5</b>.
-                </p>
-              }
-            >
-              <p>
-                You have <b data-slot="value">${balanceAmount() === "-0.00" ? "0.00" : balanceAmount()}</b> remaining in
-                your account. You can continue using the API with your remaining balance.
-              </p>
-            </Show>
+              </Show>
+              <div data-slot="credit-card">
+                <div data-slot="card-icon">
+                  <Switch fallback={<IconCreditCard style={{ width: "24px", height: "24px" }} />}>
+                    <Match when={billingInfo()?.paymentMethodType === "link"}>
+                      <IconStripe style={{ width: "24px", height: "24px" }} />
+                    </Match>
+                  </Switch>
+                </div>
+                <div data-slot="card-details">
+                  <Switch>
+                    <Match when={billingInfo()?.paymentMethodType === "card"}>
+                      <Show when={billingInfo()?.paymentMethodLast4} fallback={<span data-slot="number">----</span>}>
+                        <span data-slot="secret">••••</span>
+                        <span data-slot="number">{billingInfo()?.paymentMethodLast4}</span>
+                      </Show>
+                    </Match>
+                    <Match when={billingInfo()?.paymentMethodType === "link"}>
+                      <span data-slot="type">Linked to Stripe</span>
+                    </Match>
+                  </Switch>
+                </div>
+                <button
+                  data-color="ghost"
+                  disabled={sessionSubmission.pending || store.sessionRedirecting}
+                  onClick={onClickSession}
+                >
+                  {sessionSubmission.pending || store.sessionRedirecting ? "Loading..." : "Manage"}
+                </button>
+              </div>
+            </div>
           </Show>
-          <Show when={balanceInfo()?.reload && !balanceInfo()?.reloadError}>
-            <p>
-              Your current balance is <b data-slot="value">${balanceAmount() === "-0.00" ? "0.00" : balanceAmount()}</b>
-              . We'll automatically reload <b>$20</b> (+$1.23 processing fee) when it reaches <b>$5</b>.
-            </p>
-          </Show>
         </div>
+        <Show when={!billingInfo()?.customerID}>
+          <button
+            data-slot="enable-billing-button"
+            data-color="primary"
+            disabled={checkoutSubmission.pending || store.checkoutRedirecting}
+            onClick={onClickCheckout}
+          >
+            {checkoutSubmission.pending || store.checkoutRedirecting ? "Loading..." : "Enable Billing"}
+          </button>
+        </Show>
       </div>
     </section>
   )

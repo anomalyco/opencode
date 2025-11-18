@@ -1,92 +1,71 @@
-import type { McpServer } from "@agentclientprotocol/sdk"
-import { Identifier } from "../id/id"
-import { Session } from "../session"
-import { Provider } from "../provider/provider"
+import { RequestError, type McpServer } from "@agentclientprotocol/sdk"
 import type { ACPSessionState } from "./types"
+import { Log } from "@/util/log"
+import type { OpencodeClient } from "@opencode-ai/sdk"
+
+const log = Log.create({ service: "acp-session-manager" })
 
 export class ACPSessionManager {
   private sessions = new Map<string, ACPSessionState>()
+  private sdk: OpencodeClient
 
-  async create(
-    cwd: string,
-    mcpServers: McpServer[],
-    model?: ACPSessionState["model"],
-  ): Promise<ACPSessionState> {
-    const sessionId = `acp_${Identifier.ascending("session")}`
-    const openCodeSession = await Session.create({ title: `ACP Session ${sessionId}` })
-    const resolvedModel = model ?? (await Provider.defaultModel())
+  constructor(sdk: OpencodeClient) {
+    this.sdk = sdk
+  }
+
+  async create(cwd: string, mcpServers: McpServer[], model?: ACPSessionState["model"]): Promise<ACPSessionState> {
+    const session = await this.sdk.session
+      .create({
+        body: {
+          title: `ACP Session ${crypto.randomUUID()}`,
+        },
+        query: {
+          directory: cwd,
+        },
+        throwOnError: true,
+      })
+      .then((x) => x.data)
+
+    const sessionId = session.id
+    const resolvedModel = model
 
     const state: ACPSessionState = {
       id: sessionId,
       cwd,
       mcpServers,
-      openCodeSessionId: openCodeSession.id,
       createdAt: new Date(),
       model: resolvedModel,
     }
+    log.info("creating_session", { state })
 
     this.sessions.set(sessionId, state)
     return state
   }
 
-  get(sessionId: string): ACPSessionState | undefined {
-    return this.sessions.get(sessionId)
-  }
-
-  async remove(sessionId: string): Promise<void> {
-    const state = this.sessions.get(sessionId)
-    if (!state) return
-
-    await Session.remove(state.openCodeSessionId).catch(() => {})
-    this.sessions.delete(sessionId)
-  }
-
-  has(sessionId: string): boolean {
-    return this.sessions.has(sessionId)
-  }
-
-  async load(
-    sessionId: string,
-    cwd: string,
-    mcpServers: McpServer[],
-    model?: ACPSessionState["model"],
-  ): Promise<ACPSessionState> {
-    const existing = this.sessions.get(sessionId)
-    if (existing) {
-      if (!existing.model) {
-        const resolved = model ?? (await Provider.defaultModel())
-        existing.model = resolved
-        this.sessions.set(sessionId, existing)
-      }
-      return existing
+  get(sessionId: string): ACPSessionState {
+    const session = this.sessions.get(sessionId)
+    if (!session) {
+      log.error("session not found", { sessionId })
+      throw RequestError.invalidParams(JSON.stringify({ error: `Session not found: ${sessionId}` }))
     }
-
-    const openCodeSession = await Session.create({ title: `ACP Session ${sessionId} (loaded)` })
-    const resolvedModel = model ?? (await Provider.defaultModel())
-
-    const state: ACPSessionState = {
-      id: sessionId,
-      cwd,
-      mcpServers,
-      openCodeSessionId: openCodeSession.id,
-      createdAt: new Date(),
-      model: resolvedModel,
-    }
-
-    this.sessions.set(sessionId, state)
-    return state
+    return session
   }
 
   getModel(sessionId: string) {
-    const session = this.sessions.get(sessionId)
-    if (!session) return
+    const session = this.get(sessionId)
     return session.model
   }
 
   setModel(sessionId: string, model: ACPSessionState["model"]) {
-    const session = this.sessions.get(sessionId)
-    if (!session) return
+    const session = this.get(sessionId)
     session.model = model
+    this.sessions.set(sessionId, session)
+    return session
+  }
+
+  setMode(sessionId: string, modeId: string) {
+    const session = this.get(sessionId)
+    session.modeId = modeId
     this.sessions.set(sessionId, session)
     return session
   }

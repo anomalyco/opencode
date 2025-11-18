@@ -361,7 +361,8 @@ func TestSessionPromptWithOptionalParams(t *testing.T) {
 				ModelID:    opencode.F("modelID"),
 				ProviderID: opencode.F("providerID"),
 			}),
-			System: opencode.F("system"),
+			NoReply: opencode.F(true),
+			System:  opencode.F("system"),
 			Tools: opencode.F(map[string]bool{
 				"foo": true,
 			}),

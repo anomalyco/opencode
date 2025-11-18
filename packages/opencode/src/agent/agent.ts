@@ -1,5 +1,5 @@
 import { Config } from "../config/config"
-import z from "zod/v4"
+import z from "zod"
 import { Provider } from "../provider/provider"
 import { generateObject, type ModelMessage } from "ai"
 import PROMPT_GENERATE from "./generate.txt"
@@ -12,14 +12,17 @@ export namespace Agent {
     .object({
       name: z.string(),
       description: z.string().optional(),
-      mode: z.union([z.literal("subagent"), z.literal("primary"), z.literal("all")]),
+      mode: z.enum(["subagent", "primary", "all"]),
       builtIn: z.boolean(),
       topP: z.number().optional(),
       temperature: z.number().optional(),
+      color: z.string().optional(),
       permission: z.object({
         edit: Config.Permission,
         bash: z.record(z.string(), Config.Permission),
         webfetch: Config.Permission.optional(),
+        doom_loop: Config.Permission.optional(),
+        external_directory: Config.Permission.optional(),
       }),
       model: z
         .object({
@@ -45,6 +48,8 @@ export namespace Agent {
         "*": "allow",
       },
       webfetch: "allow",
+      doom_loop: "ask",
+      external_directory: "ask",
     }
     const agentPermission = mergeAgentPermissions(defaultPermission, cfg.permission ?? {})
 
@@ -52,9 +57,6 @@ export namespace Agent {
       {
         edit: "deny",
         bash: {
-          "awk -i inplace*": "ask",
-          "awk --inplace*": "ask",
-          "awk*": "allow",
           "cut*": "allow",
           "diff*": "allow",
           "du*": "allow",
@@ -79,9 +81,6 @@ export namespace Agent {
           "more*": "allow",
           "pwd*": "allow",
           "rg*": "allow",
-          "sed --in-place*": "ask",
-          "sed -i*": "ask",
-          "sed -n *": "allow",
           "sort --output=*": "ask",
           "sort -o *": "ask",
           "sort*": "allow",
@@ -149,7 +148,7 @@ export namespace Agent {
           tools: {},
           builtIn: false,
         }
-      const { name, model, prompt, tools, description, temperature, top_p, mode, permission, ...extra } = value
+      const { name, model, prompt, tools, description, temperature, top_p, mode, permission, color, ...extra } = value
       item.options = {
         ...item.options,
         ...extra,
@@ -169,6 +168,7 @@ export namespace Agent {
       if (temperature != undefined) item.temperature = temperature
       if (top_p != undefined) item.topP = top_p
       if (mode) item.mode = mode
+      if (color) item.color = color
       // just here for consistency & to prevent it from being added as an option
       if (name) item.name = name
 
@@ -250,6 +250,8 @@ function mergeAgentPermissions(basePermission: any, overridePermission: any): Ag
     edit: merged.edit ?? "allow",
     webfetch: merged.webfetch ?? "allow",
     bash: mergedBash ?? { "*": "allow" },
+    doom_loop: merged.doom_loop,
+    external_directory: merged.external_directory,
   }
 
   return result

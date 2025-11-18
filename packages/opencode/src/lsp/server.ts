@@ -54,7 +54,17 @@ export namespace LSPServer {
 
   export const Deno: Info = {
     id: "deno",
-    root: NearestRoot(["deno.json", "deno.jsonc"]),
+    root: async (file) => {
+      const files = Filesystem.up({
+        targets: ["deno.json", "deno.jsonc"],
+        start: path.dirname(file),
+        stop: Instance.directory,
+      })
+      const first = await files.next()
+      await files.return()
+      if (!first.value) return undefined
+      return path.dirname(first.value)
+    },
     extensions: [".ts", ".tsx", ".js", ".jsx", ".mjs"],
     async spawn(root) {
       const deno = Bun.which("deno")
@@ -416,7 +426,7 @@ export namespace LSPServer {
           return
         }
 
-        const release = await releaseResponse.json()
+        const release = (await releaseResponse.json()) as any
 
         const platform = process.platform
         const arch = process.arch
@@ -537,6 +547,40 @@ export namespace LSPServer {
     },
   }
 
+  export const SourceKit: Info = {
+    id: "sourcekit-lsp",
+    extensions: [".swift", ".objc", "objcpp"],
+    root: NearestRoot(["Package.swift", "*.xcodeproj", "*.xcworkspace"]),
+    async spawn(root) {
+      // Check if sourcekit-lsp is available in the PATH
+      // This is installed with the Swift toolchain
+      const sourcekit = Bun.which("sourcekit-lsp")
+      if (sourcekit) {
+        return {
+          process: spawn(sourcekit, {
+            cwd: root,
+          }),
+        }
+      }
+
+      // If sourcekit-lsp not found, check if xcrun is available
+      // This is specific to macOS where sourcekit-lsp is typically installed with Xcode
+      if (!Bun.which("xcrun")) return
+
+      const lspLoc = await $`xcrun --find sourcekit-lsp`.quiet().nothrow()
+
+      if (lspLoc.exitCode !== 0) return
+
+      const bin = lspLoc.text().trim()
+
+      return {
+        process: spawn(bin, {
+          cwd: root,
+        }),
+      }
+    },
+  }
+
   export const RustAnalyzer: Info = {
     id: "rust",
     root: async (root) => {
@@ -588,73 +632,135 @@ export namespace LSPServer {
     root: NearestRoot(["compile_commands.json", "compile_flags.txt", ".clangd", "CMakeLists.txt", "Makefile"]),
     extensions: [".c", ".cpp", ".cc", ".cxx", ".c++", ".h", ".hpp", ".hh", ".hxx", ".h++"],
     async spawn(root) {
-      let bin = Bun.which("clangd", {
-        PATH: process.env["PATH"] + ":" + Global.Path.bin,
-      })
-      if (!bin) {
-        if (Flag.OPENCODE_DISABLE_LSP_DOWNLOAD) return
-        log.info("downloading clangd from GitHub releases")
-
-        const releaseResponse = await fetch("https://api.github.com/repos/clangd/clangd/releases/latest")
-        if (!releaseResponse.ok) {
-          log.error("Failed to fetch clangd release info")
-          return
+      const args = ["--background-index", "--clang-tidy"]
+      const fromPath = Bun.which("clangd")
+      if (fromPath) {
+        return {
+          process: spawn(fromPath, args, {
+            cwd: root,
+          }),
         }
-
-        const release = await releaseResponse.json()
-
-        const platform = process.platform
-        let assetName = ""
-
-        if (platform === "darwin") {
-          assetName = "clangd-mac-"
-        } else if (platform === "linux") {
-          assetName = "clangd-linux-"
-        } else if (platform === "win32") {
-          assetName = "clangd-windows-"
-        } else {
-          log.error(`Platform ${platform} is not supported by clangd auto-download`)
-          return
-        }
-
-        assetName += release.tag_name + ".zip"
-
-        const asset = release.assets.find((a: any) => a.name === assetName)
-        if (!asset) {
-          log.error(`Could not find asset ${assetName} in latest clangd release`)
-          return
-        }
-
-        const downloadUrl = asset.browser_download_url
-        const downloadResponse = await fetch(downloadUrl)
-        if (!downloadResponse.ok) {
-          log.error("Failed to download clangd")
-          return
-        }
-
-        const zipPath = path.join(Global.Path.bin, "clangd.zip")
-        await Bun.file(zipPath).write(downloadResponse)
-
-        await $`unzip -o -q ${zipPath}`.quiet().cwd(Global.Path.bin).nothrow()
-        await fs.rm(zipPath, { force: true })
-
-        const extractedDir = path.join(Global.Path.bin, assetName.replace(".zip", ""))
-        bin = path.join(extractedDir, "bin", "clangd" + (platform === "win32" ? ".exe" : ""))
-
-        if (!(await Bun.file(bin).exists())) {
-          log.error("Failed to extract clangd binary")
-          return
-        }
-
-        if (platform !== "win32") {
-          await $`chmod +x ${bin}`.nothrow()
-        }
-
-        log.info(`installed clangd`, { bin })
       }
 
+      const ext = process.platform === "win32" ? ".exe" : ""
+      const direct = path.join(Global.Path.bin, "clangd" + ext)
+      if (await Bun.file(direct).exists()) {
+        return {
+          process: spawn(direct, args, {
+            cwd: root,
+          }),
+        }
+      }
+
+      const entries = await fs.readdir(Global.Path.bin, { withFileTypes: true }).catch(() => [])
+      for (const entry of entries) {
+        if (!entry.isDirectory()) continue
+        if (!entry.name.startsWith("clangd_")) continue
+        const candidate = path.join(Global.Path.bin, entry.name, "bin", "clangd" + ext)
+        if (await Bun.file(candidate).exists()) {
+          return {
+            process: spawn(candidate, args, {
+              cwd: root,
+            }),
+          }
+        }
+      }
+
+      if (Flag.OPENCODE_DISABLE_LSP_DOWNLOAD) return
+      log.info("downloading clangd from GitHub releases")
+
+      const releaseResponse = await fetch("https://api.github.com/repos/clangd/clangd/releases/latest")
+      if (!releaseResponse.ok) {
+        log.error("Failed to fetch clangd release info")
+        return
+      }
+
+      const release: {
+        tag_name?: string
+        assets?: { name?: string; browser_download_url?: string }[]
+      } = await releaseResponse.json()
+
+      const tag = release.tag_name
+      if (!tag) {
+        log.error("clangd release did not include a tag name")
+        return
+      }
+      const platform = process.platform
+      const tokens: Record<string, string> = {
+        darwin: "mac",
+        linux: "linux",
+        win32: "windows",
+      }
+      const token = tokens[platform]
+      if (!token) {
+        log.error(`Platform ${platform} is not supported by clangd auto-download`)
+        return
+      }
+
+      const assets = release.assets ?? []
+      const valid = (item: { name?: string; browser_download_url?: string }) => {
+        if (!item.name) return false
+        if (!item.browser_download_url) return false
+        if (!item.name.includes(token)) return false
+        return item.name.includes(tag)
+      }
+
+      const asset =
+        assets.find((item) => valid(item) && item.name?.endsWith(".zip")) ??
+        assets.find((item) => valid(item) && item.name?.endsWith(".tar.xz")) ??
+        assets.find((item) => valid(item))
+      if (!asset?.name || !asset.browser_download_url) {
+        log.error("clangd could not match release asset", { tag, platform })
+        return
+      }
+
+      const name = asset.name
+      const downloadResponse = await fetch(asset.browser_download_url)
+      if (!downloadResponse.ok) {
+        log.error("Failed to download clangd")
+        return
+      }
+
+      const archive = path.join(Global.Path.bin, name)
+      const buf = await downloadResponse.arrayBuffer()
+      if (buf.byteLength === 0) {
+        log.error("Failed to write clangd archive")
+        return
+      }
+      await Bun.write(archive, buf)
+
+      const zip = name.endsWith(".zip")
+      const tar = name.endsWith(".tar.xz")
+      if (!zip && !tar) {
+        log.error("clangd encountered unsupported asset", { asset: name })
+        return
+      }
+
+      if (zip) {
+        await $`unzip -o -q ${archive}`.quiet().cwd(Global.Path.bin).nothrow()
+      }
+      if (tar) {
+        await $`tar -xf ${archive}`.cwd(Global.Path.bin).nothrow()
+      }
+      await fs.rm(archive, { force: true })
+
+      const bin = path.join(Global.Path.bin, "clangd_" + tag, "bin", "clangd" + ext)
+      if (!(await Bun.file(bin).exists())) {
+        log.error("Failed to extract clangd binary")
+        return
+      }
+
+      if (platform !== "win32") {
+        await $`chmod +x ${bin}`.nothrow()
+      }
+
+      await fs.unlink(path.join(Global.Path.bin, "clangd")).catch(() => {})
+      await fs.symlink(bin, path.join(Global.Path.bin, "clangd")).catch(() => {})
+
+      log.info(`installed clangd`, { bin })
+
       return {
-        process: spawn(bin, ["--background-index", "--clang-tidy"], {
+        process: spawn(bin, args, {
           cwd: root,
         }),
       }
@@ -835,6 +941,139 @@ export namespace LSPServer {
             cwd: root,
           },
         ),
+      }
+    },
+  }
+
+  export const LuaLS: Info = {
+    id: "lua-ls",
+    root: NearestRoot([
+      ".luarc.json",
+      ".luarc.jsonc",
+      ".luacheckrc",
+      ".stylua.toml",
+      "stylua.toml",
+      "selene.toml",
+      "selene.yml",
+    ]),
+    extensions: [".lua"],
+    async spawn(root) {
+      let bin = Bun.which("lua-language-server", {
+        PATH: process.env["PATH"] + ":" + Global.Path.bin,
+      })
+
+      if (!bin) {
+        if (Flag.OPENCODE_DISABLE_LSP_DOWNLOAD) return
+        log.info("downloading lua-language-server from GitHub releases")
+
+        const releaseResponse = await fetch("https://api.github.com/repos/LuaLS/lua-language-server/releases/latest")
+        if (!releaseResponse.ok) {
+          log.error("Failed to fetch lua-language-server release info")
+          return
+        }
+
+        const release = await releaseResponse.json()
+
+        const platform = process.platform
+        const arch = process.arch
+        let assetName = ""
+
+        let lualsArch: string = arch
+        if (arch === "arm64") lualsArch = "arm64"
+        else if (arch === "x64") lualsArch = "x64"
+        else if (arch === "ia32") lualsArch = "ia32"
+
+        let lualsPlatform: string = platform
+        if (platform === "darwin") lualsPlatform = "darwin"
+        else if (platform === "linux") lualsPlatform = "linux"
+        else if (platform === "win32") lualsPlatform = "win32"
+
+        const ext = platform === "win32" ? "zip" : "tar.gz"
+
+        assetName = `lua-language-server-${release.tag_name}-${lualsPlatform}-${lualsArch}.${ext}`
+
+        const supportedCombos = [
+          "darwin-arm64.tar.gz",
+          "darwin-x64.tar.gz",
+          "linux-x64.tar.gz",
+          "linux-arm64.tar.gz",
+          "win32-x64.zip",
+          "win32-ia32.zip",
+        ]
+
+        const assetSuffix = `${lualsPlatform}-${lualsArch}.${ext}`
+        if (!supportedCombos.includes(assetSuffix)) {
+          log.error(`Platform ${platform} and architecture ${arch} is not supported by lua-language-server`)
+          return
+        }
+
+        const asset = release.assets.find((a: any) => a.name === assetName)
+        if (!asset) {
+          log.error(`Could not find asset ${assetName} in latest lua-language-server release`)
+          return
+        }
+
+        const downloadUrl = asset.browser_download_url
+        const downloadResponse = await fetch(downloadUrl)
+        if (!downloadResponse.ok) {
+          log.error("Failed to download lua-language-server")
+          return
+        }
+
+        const tempPath = path.join(Global.Path.bin, assetName)
+        await Bun.file(tempPath).write(downloadResponse)
+
+        // Unlike zls which is a single self-contained binary,
+        // lua-language-server needs supporting files (meta/, locale/, etc.)
+        // Extract entire archive to dedicated directory to preserve all files
+        const installDir = path.join(Global.Path.bin, `lua-language-server-${lualsArch}-${lualsPlatform}`)
+
+        // Remove old installation if exists
+        const stats = await fs.stat(installDir).catch(() => undefined)
+        if (stats) {
+          await fs.rm(installDir, { force: true, recursive: true })
+        }
+
+        await fs.mkdir(installDir, { recursive: true })
+
+        if (ext === "zip") {
+          const ok = await $`unzip -o -q ${tempPath} -d ${installDir}`.quiet().catch((error) => {
+            log.error("Failed to extract lua-language-server archive", { error })
+          })
+          if (!ok) return
+        } else {
+          const ok = await $`tar -xzf ${tempPath} -C ${installDir}`.quiet().catch((error) => {
+            log.error("Failed to extract lua-language-server archive", { error })
+          })
+          if (!ok) return
+        }
+
+        await fs.rm(tempPath, { force: true })
+
+        // Binary is located in bin/ subdirectory within the extracted archive
+        bin = path.join(installDir, "bin", "lua-language-server" + (platform === "win32" ? ".exe" : ""))
+
+        if (!(await Bun.file(bin).exists())) {
+          log.error("Failed to extract lua-language-server binary")
+          return
+        }
+
+        if (platform !== "win32") {
+          const ok = await $`chmod +x ${bin}`.quiet().catch((error) => {
+            log.error("Failed to set executable permission for lua-language-server binary", {
+              error,
+            })
+          })
+          if (!ok) return
+        }
+
+        log.info(`installed lua-language-server`, { bin })
+      }
+
+      return {
+        process: spawn(bin, {
+          cwd: root,
+        }),
       }
     },
   }

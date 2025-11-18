@@ -13,6 +13,7 @@ import { Footer } from "~/component/footer"
 import { Legal } from "~/component/legal"
 import { github } from "~/lib/github"
 import { createMemo } from "solid-js"
+import { config } from "~/config"
 
 function CopyStatus() {
   return (
@@ -43,6 +44,7 @@ export default function Home() {
     <main data-page="opencode">
       <HttpHeader name="Cache-Control" value="public, max-age=1, s-maxage=3600, stale-while-revalidate=86400" />
       <Title>OpenCode | The AI coding agent built for the terminal</Title>
+      <Link rel="canonical" href={config.baseUrl} />
       <Link rel="icon" type="image/svg+xml" href="/favicon.svg" />
       <Meta property="og:image" content="/social-share.png" />
       <Meta name="twitter:image" content="/social-share.png" />
@@ -52,14 +54,10 @@ export default function Home() {
         <div data-component="content">
           <section data-component="hero">
             <div data-slot="hero-copy">
-              <a
-                data-slot="releases"
-                href={release()?.url ?? "https://github.com/sst/opencode/releases"}
-                target="_blank"
-              >
+              <a data-slot="releases" href={release()?.url ?? `${config.github.repoUrl}/releases`} target="_blank">
                 What’s new in {release()?.name ?? "the latest release"}
               </a>
-              <strong>The AI coding agent built for the terminal</strong>
+              <h1>The AI coding agent built for the terminal</h1>
               <p>
                 OpenCode is fully open source, giving you control and freedom to use any provider, any model, and any
                 editor.
@@ -219,9 +217,10 @@ export default function Home() {
               <div>
                 <span>[*]</span>
                 <p>
-                  With over <strong>26,000</strong> GitHub stars, <strong>188</strong> contributors, and almost{" "}
-                  <strong>3,000</strong> commits, OpenCode is used and trusted by over <strong>200,000</strong>{" "}
-                  developers every month.
+                  With over <strong>{config.github.starsFormatted.full}</strong> GitHub stars,{" "}
+                  <strong>{config.stats.contributors}</strong> contributors, and almost{" "}
+                  <strong>{config.stats.commits}</strong> commits, OpenCode is used and trusted by over{" "}
+                  <strong>{config.stats.monthlyUsers}</strong> developers every month.
                 </p>
               </div>
 
@@ -274,7 +273,7 @@ export default function Home() {
                     </svg>
                   </div>
                   <span>
-                    <figure>Fig 1.</figure> <strong>26K</strong> GitHub Stars
+                    <figure>Fig 1.</figure> <strong>{config.github.starsFormatted.compact}</strong> GitHub Stars
                   </span>
                 </div>
 
@@ -577,7 +576,7 @@ export default function Home() {
                     </svg>
                   </div>
                   <span>
-                    <figure>Fig 2.</figure> <strong>188</strong> Contributors
+                    <figure>Fig 2.</figure> <strong>{config.stats.contributors}</strong> Contributors
                   </span>
                 </div>
 
@@ -619,7 +618,7 @@ export default function Home() {
                     </svg>
                   </div>
                   <span>
-                    <figure>Fig 3.</figure> <strong>200K</strong> Monthly Devs
+                    <figure>Fig 3.</figure> <strong>{config.stats.monthlyUsers}</strong> Monthly Devs
                   </span>
                 </div>
               </div>
@@ -688,11 +687,11 @@ export default function Home() {
               <li>
                 <Faq question="Is OpenCode open source?">
                   Yes, OpenCode is fully open source. The source code is public on{" "}
-                  <a href="https://github.com/sst/opencode" target="_blank">
+                  <a href={config.github.repoUrl} target="_blank">
                     GitHub
                   </a>{" "}
                   under the{" "}
-                  <a href="https://github.com/sst/opencode?tab=MIT-1-ov-file#readme" target="_blank">
+                  <a href={`${config.github.repoUrl}?tab=MIT-1-ov-file#readme`} target="_blank">
                     MIT License
                   </a>
                   , meaning anyone can use, modify, or contribute to its development. Anyone from the community can file

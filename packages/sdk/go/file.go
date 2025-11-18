@@ -144,17 +144,23 @@ func (r FileNodeType) IsKnown() bool {
 }
 
 type FileReadResponse struct {
-	Content string                `json:"content,required"`
-	Diff    string                `json:"diff"`
-	Patch   FileReadResponsePatch `json:"patch"`
-	JSON    fileReadResponseJSON  `json:"-"`
+	Content  string                   `json:"content,required"`
+	Type     FileReadResponseType     `json:"type,required"`
+	Diff     string                   `json:"diff"`
+	Encoding FileReadResponseEncoding `json:"encoding"`
+	MimeType string                   `json:"mimeType"`
+	Patch    FileReadResponsePatch    `json:"patch"`
+	JSON     fileReadResponseJSON     `json:"-"`
 }
 
 // fileReadResponseJSON contains the JSON metadata for the struct
 // [FileReadResponse]
 type fileReadResponseJSON struct {
 	Content     apijson.Field
+	Type        apijson.Field
 	Diff        apijson.Field
+	Encoding    apijson.Field
+	MimeType    apijson.Field
 	Patch       apijson.Field
 	raw         string
 	ExtraFields map[string]apijson.Field
@@ -166,6 +172,34 @@ func (r *FileReadResponse) UnmarshalJSON(data []byte) (err error) {
 
 func (r fileReadResponseJSON) RawJSON() string {
 	return r.raw
+}
+
+type FileReadResponseType string
+
+const (
+	FileReadResponseTypeText FileReadResponseType = "text"
+)
+
+func (r FileReadResponseType) IsKnown() bool {
+	switch r {
+	case FileReadResponseTypeText:
+		return true
+	}
+	return false
+}
+
+type FileReadResponseEncoding string
+
+const (
+	FileReadResponseEncodingBase64 FileReadResponseEncoding = "base64"
+)
+
+func (r FileReadResponseEncoding) IsKnown() bool {
+	switch r {
+	case FileReadResponseEncodingBase64:
+		return true
+	}
+	return false
 }
 
 type FileReadResponsePatch struct {

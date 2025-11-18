@@ -1,51 +1,57 @@
-import { useLocal } from "@/context"
 import { Button, Icon, IconButton, Select, SelectDialog, Tooltip } from "@opencode-ai/ui"
 import { useFilteredList } from "@opencode-ai/ui/hooks"
-import { createEffect, on, Component, createMemo, Show, Switch, Match, For } from "solid-js"
+import { createEffect, on, Component, Show, For, onMount, onCleanup, Switch, Match } from "solid-js"
 import { createStore } from "solid-js/store"
 import { FileIcon } from "@/ui"
 import { getDirectory, getFilename } from "@/utils"
 import { createFocusSignal } from "@solid-primitives/active-element"
-import { TextSelection } from "@/context/local"
+import { useLocal } from "@/context/local"
 import { DateTime } from "luxon"
-
-interface PartBase {
-  content: string
-}
-
-interface TextPart extends PartBase {
-  type: "text"
-}
-
-interface FileAttachmentPart extends PartBase {
-  type: "file"
-  path: string
-  selection?: TextSelection
-}
-
-export type ContentPart = TextPart | FileAttachmentPart
+import { ContentPart, DEFAULT_PROMPT, isPromptEqual, Prompt, useSession } from "@/context/session"
+import { useSDK } from "@/context/sdk"
+import { useNavigate } from "@solidjs/router"
+import { useSync } from "@/context/sync"
 
 interface PromptInputProps {
-  onSubmit: (parts: ContentPart[]) => void
   class?: string
   ref?: (el: HTMLDivElement) => void
 }
 
 export const PromptInput: Component<PromptInputProps> = (props) => {
+  const navigate = useNavigate()
+  const sdk = useSDK()
+  const sync = useSync()
   const local = useLocal()
+  const session = useSession()
   let editorRef!: HTMLDivElement
 
-  const defaultParts = [{ type: "text", content: "" } as const]
   const [store, setStore] = createStore<{
-    contentParts: ContentPart[]
     popoverIsOpen: boolean
   }>({
-    contentParts: defaultParts,
     popoverIsOpen: false,
   })
 
-  const isEmpty = createMemo(() => isEqual(store.contentParts, defaultParts))
+  createEffect(() => {
+    session.id
+    editorRef.focus()
+  })
+
   const isFocused = createFocusSignal(() => editorRef)
+
+  const handlePaste = (event: ClipboardEvent) => {
+    event.preventDefault()
+    event.stopPropagation()
+    // @ts-expect-error
+    const plainText = (event.clipboardData || window.clipboardData)?.getData("text/plain") ?? ""
+    addPart({ type: "text", content: plainText, start: 0, end: 0 })
+  }
+
+  onMount(() => {
+    editorRef.addEventListener("paste", handlePaste)
+  })
+  onCleanup(() => {
+    editorRef.removeEventListener("paste", handlePaste)
+  })
 
   createEffect(() => {
     if (isFocused()) {
@@ -55,22 +61,28 @@ export const PromptInput: Component<PromptInputProps> = (props) => {
     }
   })
 
-  const { flat, active, onInput, onKeyDown } = useFilteredList<string>({
-    items: local.file.search,
+  const handleFileSelect = (path: string | undefined) => {
+    if (!path) return
+    addPart({ type: "file", path, content: "@" + getFilename(path), start: 0, end: 0 })
+  }
+
+  const { flat, active, onInput, onKeyDown, refetch } = useFilteredList<string>({
+    items: local.file.searchFilesAndDirectories,
     key: (x) => x,
-    onSelect: (path) => {
-      if (!path) return
-      addPart({ type: "file", path, content: "@" + getFilename(path) })
-      setStore("popoverIsOpen", false)
-    },
+    onSelect: handleFileSelect,
+  })
+
+  createEffect(() => {
+    local.model.recent()
+    refetch()
   })
 
   createEffect(
     on(
-      () => store.contentParts,
+      () => session.prompt.current(),
       (currentParts) => {
         const domParts = parseFromDOM()
-        if (isEqual(currentParts, domParts)) return
+        if (isPromptEqual(currentParts, domParts)) return
 
         const selection = window.getSelection()
         let cursorPosition: number | null = null
@@ -101,26 +113,35 @@ export const PromptInput: Component<PromptInputProps> = (props) => {
     ),
   )
 
-  const parseFromDOM = (): ContentPart[] => {
-    const newParts: ContentPart[] = []
+  const parseFromDOM = (): Prompt => {
+    const newParts: Prompt = []
+    let position = 0
     editorRef.childNodes.forEach((node) => {
       if (node.nodeType === Node.TEXT_NODE) {
-        if (node.textContent) newParts.push({ type: "text", content: node.textContent })
+        if (node.textContent) {
+          const content = node.textContent
+          newParts.push({ type: "text", content, start: position, end: position + content.length })
+          position += content.length
+        }
       } else if (node.nodeType === Node.ELEMENT_NODE && (node as HTMLElement).dataset.type) {
         switch ((node as HTMLElement).dataset.type) {
           case "file":
+            const content = node.textContent!
             newParts.push({
               type: "file",
               path: (node as HTMLElement).dataset.path!,
-              content: node.textContent!,
+              content,
+              start: position,
+              end: position + content.length,
             })
+            position += content.length
             break
           default:
             break
         }
       }
     })
-    if (newParts.length === 0) newParts.push(...defaultParts)
+    if (newParts.length === 0) newParts.push(...DEFAULT_PROMPT)
     return newParts
   }
 
@@ -137,93 +158,82 @@ export const PromptInput: Component<PromptInputProps> = (props) => {
       setStore("popoverIsOpen", false)
     }
 
-    setStore("contentParts", rawParts)
+    session.prompt.set(rawParts, cursorPosition)
   }
 
   const addPart = (part: ContentPart) => {
+    const selection = window.getSelection()
+    if (!selection || selection.rangeCount === 0) return
+
     const cursorPosition = getCursorPosition(editorRef)
-    const rawText = store.contentParts.map((p) => p.content).join("")
+    const prompt = session.prompt.current()
+    const rawText = prompt.map((p) => p.content).join("")
     const textBeforeCursor = rawText.substring(0, cursorPosition)
     const atMatch = textBeforeCursor.match(/@(\S*)$/)
-    if (!atMatch) return
 
-    const startIndex = atMatch.index!
-    const endIndex = cursorPosition
+    if (part.type === "file") {
+      const pill = document.createElement("span")
+      pill.textContent = part.content
+      pill.setAttribute("data-type", "file")
+      pill.setAttribute("data-path", part.path)
+      pill.setAttribute("contenteditable", "false")
+      pill.style.userSelect = "text"
+      pill.style.cursor = "default"
 
-    const {
-      parts: nextParts,
-      cursorIndex,
-      cursorOffset,
-      inserted,
-    } = store.contentParts.reduce(
-      (acc, item) => {
-        if (acc.inserted) {
-          acc.parts.push(item)
-          acc.runningIndex += item.content.length
-          return acc
+      const gap = document.createTextNode(" ")
+      const range = selection.getRangeAt(0)
+
+      if (atMatch) {
+        let node: Node | null = range.startContainer
+        let offset = range.startOffset
+        let runningLength = 0
+
+        const walker = document.createTreeWalker(editorRef, NodeFilter.SHOW_TEXT, null)
+        let currentNode = walker.nextNode()
+        while (currentNode) {
+          const textContent = currentNode.textContent || ""
+          if (runningLength + textContent.length >= atMatch.index!) {
+            const localStart = atMatch.index! - runningLength
+            const localEnd = cursorPosition - runningLength
+            if (currentNode === range.startContainer || runningLength + textContent.length >= cursorPosition) {
+              range.setStart(currentNode, localStart)
+              range.setEnd(currentNode, Math.min(localEnd, textContent.length))
+              break
+            }
+          }
+          runningLength += textContent.length
+          currentNode = walker.nextNode()
         }
-
-        const nextIndex = acc.runningIndex + item.content.length
-        if (nextIndex <= startIndex) {
-          acc.parts.push(item)
-          acc.runningIndex = nextIndex
-          return acc
-        }
-
-        if (item.type !== "text") {
-          acc.parts.push(item)
-          acc.runningIndex = nextIndex
-          return acc
-        }
-
-        const headLength = Math.max(0, startIndex - acc.runningIndex)
-        const tailLength = Math.max(0, endIndex - acc.runningIndex)
-        const head = item.content.slice(0, headLength)
-        const tail = item.content.slice(tailLength)
-
-        if (head) acc.parts.push({ type: "text", content: head })
-
-        acc.parts.push(part)
-
-        const rest = /^\s/.test(tail) ? tail : ` ${tail}`
-        if (rest) {
-          acc.cursorIndex = acc.parts.length
-          acc.cursorOffset = Math.min(1, rest.length)
-          acc.parts.push({ type: "text", content: rest })
-        }
-
-        acc.inserted = true
-        acc.runningIndex = nextIndex
-        return acc
-      },
-      {
-        parts: [] as ContentPart[],
-        runningIndex: 0,
-        inserted: false,
-        cursorIndex: null as number | null,
-        cursorOffset: 0,
-      },
-    )
-
-    if (!inserted || cursorIndex === null) return
-
-    setStore("contentParts", nextParts)
-    setStore("popoverIsOpen", false)
-
-    queueMicrotask(() => {
-      const node = editorRef.childNodes[cursorIndex]
-      if (node && node.nodeType === Node.TEXT_NODE) {
-        const range = document.createRange()
-        const selection = window.getSelection()
-        const length = node.textContent ? node.textContent.length : 0
-        const offset = cursorOffset > length ? length : cursorOffset
-        range.setStart(node, offset)
-        range.collapse(true)
-        selection?.removeAllRanges()
-        selection?.addRange(range)
       }
-    })
+
+      range.deleteContents()
+      range.insertNode(gap)
+      range.insertNode(pill)
+      range.setStartAfter(gap)
+      range.collapse(true)
+      selection.removeAllRanges()
+      selection.addRange(range)
+    } else if (part.type === "text") {
+      const textNode = document.createTextNode(part.content)
+      const range = selection.getRangeAt(0)
+      range.deleteContents()
+      range.insertNode(textNode)
+      range.setStartAfter(textNode)
+      range.collapse(true)
+      selection.removeAllRanges()
+      selection.addRange(range)
+    }
+
+    handleInput()
+    setStore("popoverIsOpen", false)
   }
+
+  const abort = () =>
+    sdk.client.session.abort({
+      path: {
+        id: session.id!,
+      },
+    })
 
   const handleKeyDown = (event: KeyboardEvent) => {
     if (store.popoverIsOpen && (event.key === "ArrowUp" || event.key === "ArrowDown" || event.key === "Enter")) {
@@ -234,48 +244,145 @@ export const PromptInput: Component<PromptInputProps> = (props) => {
     if (event.key === "Enter" && !event.shiftKey) {
       handleSubmit(event)
     }
-  }
-
-  const handleSubmit = (event: Event) => {
-    event.preventDefault()
-    if (store.contentParts.length > 0) {
-      props.onSubmit([...store.contentParts])
-      setStore("contentParts", defaultParts)
+    if (event.key === "Escape") {
+      if (store.popoverIsOpen) {
+        setStore("popoverIsOpen", false)
+      } else if (session.working()) {
+        abort()
+      }
     }
   }
 
+  const handleSubmit = async (event: Event) => {
+    event.preventDefault()
+    const prompt = session.prompt.current()
+    const text = prompt.map((part) => part.content).join("")
+    if (text.trim().length === 0) {
+      if (session.working()) abort()
+      return
+    }
+
+    let existing = session.info()
+    if (!existing) {
+      const created = await sdk.client.session.create()
+      existing = created.data ?? undefined
+      if (existing) navigate(`/session/${existing.id}`)
+    }
+    if (!existing) return
+
+    // if (!session.id) {
+    // session.layout.setOpenedTabs(
+    // session.layout.copyTabs("", session.id)
+    // }
+
+    const toAbsolutePath = (path: string) => (path.startsWith("/") ? path : sync.absolute(path))
+    const attachments = prompt.filter((part) => part.type === "file")
+
+    // const activeFile = local.context.active()
+    // if (activeFile) {
+    //   registerAttachment(
+    //     activeFile.path,
+    //     activeFile.selection,
+    //     activeFile.name ?? formatAttachmentLabel(activeFile.path, activeFile.selection),
+    //   )
+    // }
+
+    // for (const contextFile of local.context.all()) {
+    //   registerAttachment(
+    //     contextFile.path,
+    //     contextFile.selection,
+    //     formatAttachmentLabel(contextFile.path, contextFile.selection),
+    //   )
+    // }
+
+    const attachmentParts = attachments.map((attachment) => {
+      const absolute = toAbsolutePath(attachment.path)
+      const query = attachment.selection
+        ? `?start=${attachment.selection.startLine}&end=${attachment.selection.endLine}`
+        : ""
+      return {
+        type: "file" as const,
+        mime: "text/plain",
+        url: `file://${absolute}${query}`,
+        filename: getFilename(attachment.path),
+        source: {
+          type: "file" as const,
+          text: {
+            value: attachment.content,
+            start: attachment.start,
+            end: attachment.end,
+          },
+          path: absolute,
+        },
+      }
+    })
+
+    session.layout.setActiveTab(undefined)
+    session.messages.setActive(undefined)
+    // Clear the editor DOM directly to ensure it's empty
+    editorRef.innerHTML = ""
+    session.prompt.set([{ type: "text", content: "", start: 0, end: 0 }], 0)
+
+    sdk.client.session.prompt({
+      path: { id: existing.id },
+      body: {
+        agent: local.agent.current()!.name,
+        model: {
+          modelID: local.model.current()!.id,
+          providerID: local.model.current()!.provider.id,
+        },
+        parts: [
+          {
+            type: "text",
+            text,
+          },
+          ...attachmentParts,
+        ],
+      },
+    })
+  }
+
   return (
-    <div class="relative size-full max-w-[640px] _max-h-[320px] flex flex-col gap-3">
+    <div class="relative size-full _max-h-[320px] flex flex-col gap-3">
       <Show when={store.popoverIsOpen}>
-        <div class="absolute inset-x-0 -top-3 -translate-y-full origin-bottom-left max-h-[252px] min-h-10 overflow-y-auto flex flex-col p-2 pb-0 rounded-2xl border border-border-base bg-surface-raised-stronger-non-alpha shadow-md">
-          <For each={flat()}>
-            {(i) => (
-              <div
-                classList={{
-                  "w-full flex items-center justify-between rounded-md": true,
-                  "bg-surface-raised-base-hover": active() === i,
-                }}
-              >
-                <div class="flex items-center gap-x-2 grow min-w-0">
-                  <FileIcon node={{ path: i, type: "file" }} class="shrink-0 size-4" />
-                  <div class="flex items-center text-14-regular">
-                    <span class="text-text-weak whitespace-nowrap overflow-hidden overflow-ellipsis truncate min-w-0">
-                      {getDirectory(i)}/
-                    </span>
-                    <span class="text-text-strong whitespace-nowrap">{getFilename(i)}</span>
+        <div
+          class="absolute inset-x-0 -top-3 -translate-y-full origin-bottom-left max-h-[252px] min-h-10
+                 overflow-auto no-scrollbar flex flex-col p-2 pb-0 rounded-md
+                 border border-border-base bg-surface-raised-stronger-non-alpha shadow-md"
+        >
+          <Show when={flat().length > 0} fallback={<div class="text-text-weak px-2">No matching files</div>}>
+            <For each={flat()}>
+              {(i) => (
+                <button
+                  classList={{
+                    "w-full flex items-center justify-between rounded-md": true,
+                    "bg-surface-raised-base-hover": active() === i,
+                  }}
+                  onClick={() => handleFileSelect(i)}
+                >
+                  <div class="flex items-center gap-x-2 grow min-w-0">
+                    <FileIcon node={{ path: i, type: "file" }} class="shrink-0 size-4" />
+                    <div class="flex items-center text-14-regular">
+                      <span class="text-text-weak whitespace-nowrap overflow-hidden overflow-ellipsis truncate min-w-0">
+                        {getDirectory(i)}
+                      </span>
+                      <Show when={!i.endsWith("/")}>
+                        <span class="text-text-strong whitespace-nowrap">{getFilename(i)}</span>
+                      </Show>
+                    </div>
                   </div>
-                </div>
-                <div class="flex items-center gap-x-1 text-text-muted/40 shrink-0"></div>
-              </div>
-            )}
-          </For>
+                  <div class="flex items-center gap-x-1 text-text-muted/40 shrink-0"></div>
+                </button>
+              )}
+            </For>
+          </Show>
         </div>
       </Show>
       <form
         onSubmit={handleSubmit}
         classList={{
           "bg-surface-raised-stronger-non-alpha border border-border-strong-base": true,
-          "rounded-2xl overflow-clip focus-within:shadow-xs-border-selected": true,
+          "rounded-md overflow-clip focus-within:border-transparent focus-within:shadow-xs-border-select": true,
           [props.class ?? ""]: !!props.class,
         }}
       >
@@ -289,23 +396,24 @@ export const PromptInput: Component<PromptInputProps> = (props) => {
             onInput={handleInput}
             onKeyDown={handleKeyDown}
             classList={{
-              "w-full p-3 text-14-regular text-text-strong focus:outline-none whitespace-pre-wrap": true,
+              "w-full px-5 py-3 text-14-regular text-text-strong focus:outline-none whitespace-pre-wrap": true,
               "[&>[data-type=file]]:text-icon-info-active": true,
             }}
           />
-          <Show when={isEmpty()}>
-            <div class="absolute top-0 left-0 p-3 text-14-regular text-text-weak pointer-events-none">
+          <Show when={!session.prompt.dirty()}>
+            <div class="absolute top-0 left-0 px-5 py-3 text-14-regular text-text-weak pointer-events-none">
               Plan and build anything
             </div>
           </Show>
         </div>
-        <div class="p-3 flex items-center justify-between">
+        <div class="relative p-3 flex items-center justify-between">
           <div class="flex items-center justify-start gap-1">
             <Select
               options={local.agent.list().map((agent) => agent.name)}
               current={local.agent.current().name}
               onSelect={local.agent.set}
               class="capitalize"
+              variant="ghost"
             />
             <SelectDialog
               title="Select model"
@@ -315,16 +423,20 @@ export const PromptInput: Component<PromptInputProps> = (props) => {
               items={local.model.list()}
               current={local.model.current()}
               filterKeys={["provider.name", "name", "id"]}
-              groupBy={(x) => x.provider.name}
+              groupBy={(x) => (local.model.recent().includes(x) ? "Recent" : x.provider.name)}
               sortGroupsBy={(a, b) => {
                 const order = ["opencode", "anthropic", "github-copilot", "openai", "google", "openrouter", "vercel"]
+                if (a.category === "Recent" && b.category !== "Recent") return -1
+                if (b.category === "Recent" && a.category !== "Recent") return 1
                 const aProvider = a.items[0].provider.id
                 const bProvider = b.items[0].provider.id
                 if (order.includes(aProvider) && !order.includes(bProvider)) return -1
                 if (!order.includes(aProvider) && order.includes(bProvider)) return 1
                 return order.indexOf(aProvider) - order.indexOf(bProvider)
               }}
-              onSelect={(x) => local.model.set(x ? { modelID: x.id, providerID: x.provider.id } : undefined)}
+              onSelect={(x) =>
+                local.model.set(x ? { modelID: x.id, providerID: x.provider.id } : undefined, { recent: true })
+              }
               trigger={
                 <Button as="div" variant="ghost">
                   {local.model.current()?.name ?? "Select model"}
@@ -339,9 +451,11 @@ export const PromptInput: Component<PromptInputProps> = (props) => {
                     <img src={`https://models.dev/logos/${i.provider.id}.svg`} class="size-6 p-0.5 shrink-0 " />
                     <div class="flex gap-x-3 items-baseline flex-[1_0_0]">
                       <span class="text-14-medium text-text-strong overflow-hidden text-ellipsis">{i.name}</span>
-                      <span class="text-12-medium text-text-weak overflow-hidden text-ellipsis truncate min-w-0">
-                        {DateTime.fromFormat(i.release_date, "yyyy-MM-dd").toFormat("LLL yyyy")}
-                      </span>
+                      <Show when={i.release_date}>
+                        <span class="text-12-medium text-text-weak overflow-hidden text-ellipsis truncate min-w-0">
+                          {DateTime.fromFormat(i.release_date, "yyyy-MM-dd").toFormat("LLL yyyy")}
+                        </span>
+                      </Show>
                     </div>
                   </div>
                   <Show when={!i.cost || i.cost?.input === 0}>
@@ -351,27 +465,37 @@ export const PromptInput: Component<PromptInputProps> = (props) => {
               )}
             </SelectDialog>
           </div>
-          <IconButton type="submit" disabled={isEmpty()} icon="arrow-up" variant="primary" />
+          <Tooltip
+            placement="top"
+            value={
+              <Switch>
+                <Match when={session.working()}>
+                  <div class="flex items-center gap-2">
+                    <span>Stop</span>
+                    <span class="text-icon-base text-12-medium text-[10px]!">ESC</span>
+                  </div>
+                </Match>
+                <Match when={true}>
+                  <div class="flex items-center gap-2">
+                    <span>Send</span>
+                    <Icon name="enter" size="small" class="text-icon-base" />
+                  </div>
+                </Match>
+              </Switch>
+            }
+          >
+            <IconButton
+              type="submit"
+              disabled={!session.prompt.dirty() && !session.working()}
+              icon={session.working() ? "stop" : "arrow-up"}
+              variant="primary"
+              class="h-10 w-8 absolute right-2 bottom-2"
+            />
+          </Tooltip>
         </div>
       </form>
     </div>
   )
-}
-
-function isEqual(arrA: ContentPart[], arrB: ContentPart[]): boolean {
-  if (arrA.length !== arrB.length) return false
-  for (let i = 0; i < arrA.length; i++) {
-    const partA = arrA[i]
-    const partB = arrB[i]
-    if (partA.type !== partB.type) return false
-    if (partA.type === "text" && partA.content !== (partB as TextPart).content) {
-      return false
-    }
-    if (partA.type === "file" && partA.path !== (partB as FileAttachmentPart).path) {
-      return false
-    }
-  }
-  return true
 }
 
 function getCursorPosition(parent: HTMLElement): number {

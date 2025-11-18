@@ -1,4 +1,4 @@
-import z from "zod/v4"
+import z from "zod"
 import path from "path"
 import { Config } from "../config/config"
 import { mergeDeep, sortBy } from "remeda"
@@ -12,6 +12,7 @@ import { Auth } from "../auth"
 import { Instance } from "../project/instance"
 import { Global } from "../global"
 import { Flag } from "../flag/flag"
+import { iife } from "@/util/iife"
 
 export namespace Provider {
   const log = Log.create({ service: "provider" })
@@ -52,7 +53,7 @@ export namespace Provider {
 
       return {
         autoload: Object.keys(input.models).length > 0,
-        options: {},
+        options: hasKey ? {} : { apiKey: "public" },
       }
     },
     openai: async () => {
@@ -75,6 +76,22 @@ export namespace Provider {
           }
         },
         options: {},
+      }
+    },
+    "azure-cognitive-services": async () => {
+      const resourceName = process.env["AZURE_COGNITIVE_SERVICES_RESOURCE_NAME"]
+      return {
+        autoload: false,
+        async getModel(sdk: any, modelID: string, options?: Record<string, any>) {
+          if (options?.["useCompletionUrls"]) {
+            return sdk.chat(modelID)
+          } else {
+            return sdk.responses(modelID)
+          }
+        },
+        options: {
+          baseURL: resourceName ? `https://${resourceName}.cognitiveservices.azure.com/openai` : undefined,
+        },
       }
     },
     "amazon-bedrock": async () => {
@@ -101,7 +118,7 @@ export namespace Provider {
                 "nova-pro",
                 "nova-premier",
                 "claude",
-                "deepseek"
+                "deepseek",
               ].some((m) => modelID.includes(m))
               const isGovCloud = region.startsWith("us-gov")
               if (modelRequiresPrefix && !isGovCloud) {
@@ -112,6 +129,7 @@ export namespace Provider {
             case "eu": {
               const regionRequiresPrefix = [
                 "eu-west-1",
+                "eu-west-2",
                 "eu-west-3",
                 "eu-north-1",
                 "eu-central-1",
@@ -192,7 +210,7 @@ export namespace Provider {
     },
     "google-vertex-anthropic": async () => {
       const project = process.env["GOOGLE_CLOUD_PROJECT"] ?? process.env["GCP_PROJECT"] ?? process.env["GCLOUD_PROJECT"]
-      const location = process.env["GOOGLE_CLOUD_LOCATION"] ?? process.env["VERTEX_LOCATION"] ?? "us-east5"
+      const location = process.env["GOOGLE_CLOUD_LOCATION"] ?? process.env["VERTEX_LOCATION"] ?? "global"
       const autoload = Boolean(project)
       if (!autoload) return { autoload: false }
       return {
@@ -207,9 +225,21 @@ export namespace Provider {
         },
       }
     },
+    zenmux: async () => {
+      return {
+        autoload: false,
+        options: {
+          headers: {
+            "HTTP-Referer": "https://opencode.ai/",
+            "X-Title": "opencode",
+          },
+        },
+      }
+    },
   }
 
   const state = Instance.state(async () => {
+    using _ = log.time("state")
     const config = await Config.get()
     const database = await ModelsDev.get()
 
@@ -223,7 +253,13 @@ export namespace Provider {
     } = {}
     const models = new Map<
       string,
-      { providerID: string; modelID: string; info: ModelsDev.Model; language: LanguageModel; npm?: string }
+      {
+        providerID: string
+        modelID: string
+        info: ModelsDev.Model
+        language: LanguageModel
+        npm?: string
+      }
     >()
     const sdk = new Map<number, SDK>()
     // Maps `${provider}/${key}` to the provider’s actual model ID for custom aliases.
@@ -257,6 +293,18 @@ export namespace Provider {
 
     const configProviders = Object.entries(config.provider ?? {})
 
+    // Add GitHub Copilot Enterprise provider that inherits from GitHub Copilot
+    if (database["github-copilot"]) {
+      const githubCopilot = database["github-copilot"]
+      database["github-copilot-enterprise"] = {
+        ...githubCopilot,
+        id: "github-copilot-enterprise",
+        name: "GitHub Copilot Enterprise",
+        // Enterprise uses a different API endpoint - will be set dynamically based on auth
+        api: undefined,
+      }
+    }
+
     for (const [providerID, provider] of configProviders) {
       const existing = database[providerID]
       const parsed: ModelsDev.Provider = {
@@ -269,10 +317,15 @@ export namespace Provider {
       }
 
       for (const [modelID, model] of Object.entries(provider.models ?? {})) {
-        const existing = parsed.models[modelID]
+        const existing = parsed.models[model.id ?? modelID]
+        const name = iife(() => {
+          if (model.name) return model.name
+          if (model.id && model.id !== modelID) return modelID
+          return existing?.name ?? modelID
+        })
         const parsedModel: ModelsDev.Model = {
           id: modelID,
-          name: model.name ?? existing?.name ?? modelID,
+          name,
           release_date: model.release_date ?? existing?.release_date,
           attachment: model.attachment ?? existing?.attachment ?? false,
           reasoning: model.reasoning ?? existing?.reasoning ?? false,
@@ -306,6 +359,7 @@ export namespace Provider {
               input: ["text"],
               output: ["text"],
             },
+          headers: model.headers,
           provider: model.provider ?? existing?.provider,
         }
         if (model.id && model.id !== modelID) {
@@ -352,11 +406,41 @@ export namespace Provider {
       if (!plugin.auth) continue
       const providerID = plugin.auth.provider
       if (disabled.has(providerID)) continue
+
+      // For github-copilot plugin, check if auth exists for either github-copilot or github-copilot-enterprise
+      let hasAuth = false
       const auth = await Auth.get(providerID)
-      if (!auth) continue
+      if (auth) hasAuth = true
+
+      // Special handling for github-copilot: also check for enterprise auth
+      if (providerID === "github-copilot" && !hasAuth) {
+        const enterpriseAuth = await Auth.get("github-copilot-enterprise")
+        if (enterpriseAuth) hasAuth = true
+      }
+
+      if (!hasAuth) continue
       if (!plugin.auth.loader) continue
-      const options = await plugin.auth.loader(() => Auth.get(providerID) as any, database[plugin.auth.provider])
-      mergeProvider(plugin.auth.provider, options ?? {}, "custom")
+
+      // Load for the main provider if auth exists
+      if (auth) {
+        const options = await plugin.auth.loader(() => Auth.get(providerID) as any, database[plugin.auth.provider])
+        mergeProvider(plugin.auth.provider, options ?? {}, "custom")
+      }
+
+      // If this is github-copilot plugin, also register for github-copilot-enterprise if auth exists
+      if (providerID === "github-copilot") {
+        const enterpriseProviderID = "github-copilot-enterprise"
+        if (!disabled.has(enterpriseProviderID)) {
+          const enterpriseAuth = await Auth.get(enterpriseProviderID)
+          if (enterpriseAuth) {
+            const enterpriseOptions = await plugin.auth.loader(
+              () => Auth.get(enterpriseProviderID) as any,
+              database[enterpriseProviderID],
+            )
+            mergeProvider(enterpriseProviderID, enterpriseOptions ?? {}, "custom")
+          }
+        }
+      }
     }
 
     // load config
@@ -376,7 +460,8 @@ export namespace Provider {
           // Filter out experimental models
           .filter(
             ([, model]) =>
-              (!model.experimental && model.status !== "alpha") || Flag.OPENCODE_ENABLE_EXPERIMENTAL_MODELS,
+              ((!model.experimental && model.status !== "alpha") || Flag.OPENCODE_ENABLE_EXPERIMENTAL_MODELS) &&
+              model.status !== "deprecated",
           )
           // Filter by provider's whitelist/blacklist from config
           .filter(([modelID]) => {
@@ -388,6 +473,7 @@ export namespace Provider {
             )
           }),
       )
+
       provider.info.models = filteredModels
 
       if (Object.keys(provider.info.models).length === 0) {
@@ -423,7 +509,15 @@ export namespace Provider {
       const key = Bun.hash.xxHash32(JSON.stringify({ pkg, options }))
       const existing = s.sdk.get(key)
       if (existing) return existing
-      const installedPath = await BunProc.install(pkg, "latest")
+
+      let installedPath: string
+      if (!pkg.startsWith("file://")) {
+        installedPath = await BunProc.install(pkg, "latest")
+      } else {
+        log.info("loading local provider", { pkg })
+        installedPath = pkg
+      }
+
       // The `google-vertex-anthropic` provider points to the `@ai-sdk/google-vertex` package.
       // Ref: https://github.com/sst/models.dev/blob/0a87de42ab177bebad0620a889e2eb2b4a5dd4ab/providers/google-vertex-anthropic/provider.toml
       // However, the actual export is at the subpath `@ai-sdk/google-vertex/anthropic`.
@@ -433,18 +527,20 @@ export namespace Provider {
       const modPath =
         provider.id === "google-vertex-anthropic" ? `${installedPath}/dist/anthropic/index.mjs` : installedPath
       const mod = await import(modPath)
-      if (options["timeout"] !== undefined) {
-        // Only override fetch if user explicitly sets timeout
+      if (options["timeout"] !== undefined && options["timeout"] !== null) {
+        // Preserve custom fetch if it exists, wrap it with timeout logic
+        const customFetch = options["fetch"]
         options["fetch"] = async (input: any, init?: BunFetchRequestInit) => {
           const { signal, ...rest } = init ?? {}
 
           const signals: AbortSignal[] = []
           if (signal) signals.push(signal)
-          signals.push(AbortSignal.timeout(options["timeout"]))
+          if (options["timeout"] !== false) signals.push(AbortSignal.timeout(options["timeout"]))
 
           const combined = signals.length > 1 ? AbortSignal.any(signals) : signals[0]
 
-          return fetch(input, {
+          const fetchFn = customFetch ?? fetch
+          return fetchFn(input, {
             ...rest,
             signal: combined,
             // @ts-ignore see here: https://github.com/oven-sh/bun/issues/16682
@@ -528,14 +624,14 @@ export namespace Provider {
 
     const provider = await state().then((state) => state.providers[providerID])
     if (!provider) return
-    const priority = [
-      "claude-haiku-4-5",
-      "claude-haiku-4.5",
-      "3-5-haiku",
-      "3.5-haiku",
-      "gemini-2.5-flash",
-      "gpt-5-nano",
-    ]
+    let priority = ["claude-haiku-4-5", "claude-haiku-4.5", "3-5-haiku", "3.5-haiku", "gemini-2.5-flash", "gpt-5-nano"]
+    // claude-haiku-4.5 is considered a premium model in github copilot, we shouldn't use premium requests for title gen
+    if (providerID === "github-copilot") {
+      priority = priority.filter((m) => m !== "claude-haiku-4.5")
+    }
+    if (providerID === "opencode" || providerID === "local") {
+      priority = ["gpt-5-nano"]
+    }
     for (const item of priority) {
       for (const model of Object.keys(provider.info.models)) {
         if (model.includes(item)) return getModel(providerID, model)
@@ -543,7 +639,7 @@ export namespace Provider {
     }
   }
 
-  const priority = ["gemini-2.5-pro-preview", "gpt-5", "claude-sonnet-4"]
+  const priority = ["gemini-2.5-pro-preview", "gpt-5", "claude-sonnet-4", "big-pickle"]
   export function sort(models: ModelsDev.Model[]) {
     return sortBy(
       models,

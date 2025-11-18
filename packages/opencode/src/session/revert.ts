@@ -1,4 +1,4 @@
-import z from "zod/v4"
+import z from "zod"
 import { Identifier } from "../id/id"
 import { Snapshot } from "../snapshot"
 import { MessageV2 } from "./message-v2"
@@ -7,7 +7,7 @@ import { Log } from "../util/log"
 import { splitWhen } from "remeda"
 import { Storage } from "../storage/storage"
 import { Bus } from "../bus"
-import { SessionLock } from "./lock"
+import { SessionPrompt } from "./prompt"
 
 export namespace SessionRevert {
   const log = Log.create({ service: "session.revert" })
@@ -20,12 +20,8 @@ export namespace SessionRevert {
   export type RevertInput = z.infer<typeof RevertInput>
 
   export async function revert(input: RevertInput) {
-    SessionLock.assertUnlocked(input.sessionID)
-    using _ = SessionLock.acquire({
-      sessionID: input.sessionID,
-    })
-
-    const all = await Session.messages(input.sessionID)
+    SessionPrompt.assertNotBusy(input.sessionID)
+    const all = await Session.messages({ sessionID: input.sessionID })
     let lastUser: MessageV2.User | undefined
     const session = await Session.get(input.sessionID)
 
@@ -70,10 +66,7 @@ export namespace SessionRevert {
 
   export async function unrevert(input: { sessionID: string }) {
     log.info("unreverting", input)
-    SessionLock.assertUnlocked(input.sessionID)
-    using _ = SessionLock.acquire({
-      sessionID: input.sessionID,
-    })
+    SessionPrompt.assertNotBusy(input.sessionID)
     const session = await Session.get(input.sessionID)
     if (!session.revert) return session
     if (session.revert.snapshot) await Snapshot.restore(session.revert.snapshot)
@@ -86,7 +79,7 @@ export namespace SessionRevert {
   export async function cleanup(session: Session.Info) {
     if (!session.revert) return
     const sessionID = session.id
-    let msgs = await Session.messages(sessionID)
+    let msgs = await Session.messages({ sessionID })
     const messageID = session.revert.messageID
     const [preserve, remove] = splitWhen(msgs, (x) => x.info.id === messageID)
     msgs = preserve
