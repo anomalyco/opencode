@@ -9,7 +9,7 @@ import { createStore } from "solid-js/store"
 import { withActor } from "~/context/auth.withActor"
 import { Dropdown } from "~/component/dropdown"
 import { IconChevronLeft, IconChevronRight } from "~/component/icon"
-import "./graph-section.module.css"
+import styles from "./graph-section.module.css"
 import {
   Chart,
   BarController,
@@ -346,7 +346,7 @@ export function GraphSection() {
   onCleanup(() => chartInstance?.destroy())
 
   return (
-    <section>
+    <section class={styles.root}>
       <div data-slot="section-title">
         <h2>Cost</h2>
         <p>Usage costs broken down by model.</p>

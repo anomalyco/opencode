@@ -4,7 +4,7 @@ import { createMemo, For, Show, createEffect } from "solid-js"
 import { formatDateUTC, formatDateForTable } from "../common"
 import { withActor } from "~/context/auth.withActor"
 import { IconChevronLeft, IconChevronRight } from "~/component/icon"
-import "./usage-section.module.css"
+import styles from "./usage-section.module.css"
 import { createStore } from "solid-js/store"
 
 const PAGE_SIZE = 50
@@ -47,7 +47,7 @@ export function UsageSection() {
   }
 
   return (
-    <section>
+    <section class={styles.root}>
       <div data-slot="section-title">
         <h2>Usage History</h2>
         <p>Recent API usage and costs.</p>
