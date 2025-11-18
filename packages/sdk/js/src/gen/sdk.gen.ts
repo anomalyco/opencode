@@ -114,6 +114,9 @@ import type {
   McpAddData,
   McpAddResponses,
   McpAddErrors,
+  McpAddSessionScopedData,
+  McpAddSessionScopedResponses,
+  McpAddSessionScopedErrors,
   LspStatusData,
   LspStatusResponses,
   FormatterStatusData,
@@ -661,6 +664,26 @@ class Mcp extends _HeyApiClient {
   public add<ThrowOnError extends boolean = false>(options?: Options<McpAddData, ThrowOnError>) {
     return (options?.client ?? this._client).post<McpAddResponses, McpAddErrors, ThrowOnError>({
       url: "/mcp",
+      ...options,
+      headers: {
+        "Content-Type": "application/json",
+        ...options?.headers,
+      },
+    })
+  }
+
+  /**
+   * Add session-scoped MCP server dynamically
+   */
+  public addSessionScoped<ThrowOnError extends boolean = false>(
+    options?: Options<McpAddSessionScopedData, ThrowOnError>,
+  ) {
+    return (options?.client ?? this._client).post<
+      McpAddSessionScopedResponses,
+      McpAddSessionScopedErrors,
+      ThrowOnError
+    >({
+      url: "/mcp/session",
       ...options,
       headers: {
         "Content-Type": "application/json",

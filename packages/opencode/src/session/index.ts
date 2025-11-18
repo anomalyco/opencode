@@ -16,6 +16,7 @@ import { SessionPrompt } from "./prompt"
 import { fn } from "@/util/fn"
 import { Command } from "../command"
 import { Snapshot } from "@/snapshot"
+import { MCP } from "../mcp"
 
 export namespace Session {
   const log = Log.create({ service: "session" })
@@ -308,6 +309,10 @@ export namespace Session {
       for (const child of await children(sessionID)) {
         await remove(child.id)
       }
+      // Dispose session-scoped MCPs
+      await MCP.disposeSession(sessionID).catch((err) => {
+        log.error("Failed to dispose session-scoped MCPs", { sessionID, error: err })
+      })
       await unshare(sessionID).catch(() => {})
       for (const msg of await Storage.list(["message", sessionID])) {
         for (const part of await Storage.list(["part", msg.at(-1)!])) {

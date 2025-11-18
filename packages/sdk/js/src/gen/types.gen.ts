@@ -504,6 +504,24 @@ export type EventTodoUpdated = {
   }
 }
 
+export type EventMcpServerAdded = {
+  type: "mcp.server.added"
+  properties: {
+    name: string
+    scope: "instance" | "session"
+    sessionID?: string
+  }
+}
+
+export type EventMcpServerRemoved = {
+  type: "mcp.server.removed"
+  properties: {
+    name: string
+    scope: "instance" | "session"
+    sessionID?: string
+  }
+}
+
 export type EventCommandExecuted = {
   type: "command.executed"
   properties: {
@@ -654,6 +672,8 @@ export type Event =
   | EventSessionCompacted
   | EventFileEdited
   | EventTodoUpdated
+  | EventMcpServerAdded
+  | EventMcpServerRemoved
   | EventCommandExecuted
   | EventSessionCreated
   | EventSessionUpdated
@@ -2719,6 +2739,39 @@ export type McpAddResponses = {
 }
 
 export type McpAddResponse = McpAddResponses[keyof McpAddResponses]
+
+export type McpAddSessionScopedData = {
+  body?: {
+    sessionID: string
+    name: string
+    config: McpLocalConfig | McpRemoteConfig
+  }
+  path?: never
+  query?: {
+    directory?: string
+  }
+  url: "/mcp/session"
+}
+
+export type McpAddSessionScopedErrors = {
+  /**
+   * Bad request
+   */
+  400: BadRequestError
+}
+
+export type McpAddSessionScopedError = McpAddSessionScopedErrors[keyof McpAddSessionScopedErrors]
+
+export type McpAddSessionScopedResponses = {
+  /**
+   * Session-scoped MCP server added successfully
+   */
+  200: {
+    [key: string]: McpStatus
+  }
+}
+
+export type McpAddSessionScopedResponse = McpAddSessionScopedResponses[keyof McpAddSessionScopedResponses]
 
 export type LspStatusData = {
   body?: never

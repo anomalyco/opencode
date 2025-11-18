@@ -453,13 +453,33 @@ export namespace SessionPrompt {
         agent,
         system: lastUser.system,
       })
-      const tools = await resolveTools({
+      let tools = await resolveTools({
         agent,
         sessionID,
         model: lastUser.model,
         tools: lastUser.tools,
         processor,
       })
+
+      // Track if tools need refresh due to MCP changes
+      let toolsNeedRefresh = false
+
+      // Subscribe to MCP server additions
+      const mcpUnsub = Bus.subscribe(MCP.Event.ServerAdded, (evt) => {
+        // Only refresh if relevant to this session
+        if (evt.properties.scope === "session" && evt.properties.sessionID !== sessionID) {
+          return // Different session, ignore
+        }
+
+        log.info("MCP server added mid-turn, flagging tools for refresh", {
+          server: evt.properties.name,
+          scope: evt.properties.scope,
+          sessionID: sessionID,
+          step,
+        })
+        toolsNeedRefresh = true
+      })
+
       const params = await Plugin.trigger(
         "chat.params",
         {
@@ -489,99 +509,126 @@ export namespace SessionPrompt {
         })
       }
 
-      const result = await processor.process(() =>
-        streamText({
-          onError(error) {
-            log.error("stream error", {
-              error,
-            })
-          },
-          async experimental_repairToolCall(input) {
-            const lower = input.toolCall.toolName.toLowerCase()
-            if (lower !== input.toolCall.toolName && tools[lower]) {
-              log.info("repairing tool call", {
-                tool: input.toolCall.toolName,
-                repaired: lower,
+      // Refresh tools if MCP changed mid-turn
+      if (toolsNeedRefresh) {
+        log.info("refreshing tools after MCP server addition", {
+          sessionID: sessionID,
+          step,
+        })
+        tools = await resolveTools({
+          agent,
+          sessionID,
+          model: lastUser.model,
+          tools: lastUser.tools,
+          processor,
+        })
+        toolsNeedRefresh = false
+      }
+
+      try {
+        const result = await processor.process(() =>
+          streamText({
+            onError(error) {
+              log.error("stream error", {
+                error,
               })
+            },
+            async experimental_repairToolCall(input) {
+              const lower = input.toolCall.toolName.toLowerCase()
+              if (lower !== input.toolCall.toolName && tools[lower]) {
+                log.info("repairing tool call", {
+                  tool: input.toolCall.toolName,
+                  repaired: lower,
+                })
+                return {
+                  ...input.toolCall,
+                  toolName: lower,
+                }
+              }
               return {
                 ...input.toolCall,
-                toolName: lower,
+                input: JSON.stringify({
+                  tool: input.toolCall.toolName,
+                  error: input.error.message,
+                }),
+                toolName: "invalid",
               }
-            }
-            return {
-              ...input.toolCall,
-              input: JSON.stringify({
-                tool: input.toolCall.toolName,
-                error: input.error.message,
-              }),
-              toolName: "invalid",
-            }
-          },
-          headers: {
-            ...(model.providerID === "opencode"
-              ? {
-                  "x-opencode-session": sessionID,
-                  "x-opencode-request": lastUser.id,
-                }
-              : undefined),
-            ...model.info.headers,
-          },
-          // set to 0, we handle loop
-          maxRetries: 0,
-          activeTools: Object.keys(tools).filter((x) => x !== "invalid"),
-          maxOutputTokens: ProviderTransform.maxOutputTokens(
-            model.providerID,
-            params.options,
-            model.info.limit.output,
-            OUTPUT_TOKEN_MAX,
-          ),
-          abortSignal: abort,
-          providerOptions: ProviderTransform.providerOptions(model.npm, model.providerID, params.options),
-          stopWhen: stepCountIs(1),
-          temperature: params.temperature,
-          topP: params.topP,
-          messages: [
-            ...system.map(
-              (x): ModelMessage => ({
-                role: "system",
-                content: x,
-              }),
-            ),
-            ...MessageV2.toModelMessage(
-              msgs.filter((m) => {
-                if (m.info.role !== "assistant" || m.info.error === undefined) {
-                  return true
-                }
-                if (
-                  MessageV2.AbortedError.isInstance(m.info.error) &&
-                  m.parts.some((part) => part.type !== "step-start" && part.type !== "reasoning")
-                ) {
-                  return true
-                }
-
-                return false
-              }),
-            ),
-          ],
-          tools: model.info.tool_call === false ? undefined : tools,
-          model: wrapLanguageModel({
-            model: model.language,
-            middleware: [
-              {
-                async transformParams(args) {
-                  if (args.type === "stream") {
-                    // @ts-expect-error
-                    args.params.prompt = ProviderTransform.message(args.params.prompt, model.providerID, model.modelID)
+            },
+            headers: {
+              ...(model.providerID === "opencode"
+                ? {
+                    "x-opencode-session": sessionID,
+                    "x-opencode-request": lastUser.id,
                   }
-                  return args.params
-                },
-              },
+                : undefined),
+              ...model.info.headers,
+            },
+            // set to 0, we handle loop
+            maxRetries: 0,
+            activeTools: Object.keys(tools).filter((x) => x !== "invalid"),
+            maxOutputTokens: ProviderTransform.maxOutputTokens(
+              model.providerID,
+              params.options,
+              model.info.limit.output,
+              OUTPUT_TOKEN_MAX,
+            ),
+            abortSignal: abort,
+            providerOptions: ProviderTransform.providerOptions(model.npm, model.providerID, params.options),
+            stopWhen: stepCountIs(1),
+            temperature: params.temperature,
+            topP: params.topP,
+            messages: [
+              ...system.map(
+                (x): ModelMessage => ({
+                  role: "system",
+                  content: x,
+                }),
+              ),
+              ...MessageV2.toModelMessage(
+                msgs.filter((m) => {
+                  if (m.info.role !== "assistant" || m.info.error === undefined) {
+                    return true
+                  }
+                  if (
+                    MessageV2.AbortedError.isInstance(m.info.error) &&
+                    m.parts.some((part) => part.type !== "step-start" && part.type !== "reasoning")
+                  ) {
+                    return true
+                  }
+
+                  return false
+                }),
+              ),
             ],
+            tools: model.info.tool_call === false ? undefined : tools,
+            model: wrapLanguageModel({
+              model: model.language,
+              middleware: [
+                {
+                  async transformParams(args) {
+                    if (args.type === "stream") {
+                      // @ts-expect-error
+                      args.params.prompt = ProviderTransform.message(
+                        args.params.prompt,
+                        model.providerID,
+                        model.modelID,
+                      )
+                    }
+                    return args.params
+                  },
+                },
+              ],
+            }),
           }),
-        }),
-      )
-      if (result === "stop") break
-      continue
+        )
+        if (result === "stop") {
+          break
+        }
+        continue
+      } finally {
+        // Cleanup MCP subscription
+        mcpUnsub()
+      }
     }
     SessionCompaction.prune({ sessionID })
     for await (const item of MessageV2.stream(sessionID)) {
@@ -711,7 +758,7 @@ export namespace SessionPrompt {
       })
     }
 
-    for (const [key, item] of Object.entries(await MCP.tools())) {
+    for (const [key, item] of Object.entries(await MCP.tools(input.sessionID))) {
       if (Wildcard.all(key, enabledTools) === false) continue
       const execute = item.execute
       if (!execute) continue

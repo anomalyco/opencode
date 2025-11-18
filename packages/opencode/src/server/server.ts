@@ -41,6 +41,7 @@ import { Snapshot } from "@/snapshot"
 import { SessionSummary } from "@/session/summary"
 import { GlobalBus } from "@/bus/global"
 import { SessionStatus } from "@/session/status"
+import { Identifier } from "../id/id"
 
 const ERRORS = {
   400: {
@@ -1459,6 +1460,37 @@ export namespace Server {
         async (c) => {
           const { name, config } = c.req.valid("json")
           const result = await MCP.add(name, config)
+          return c.json(result.status)
+        },
+      )
+      .post(
+        "/mcp/session",
+        describeRoute({
+          description: "Add session-scoped MCP server dynamically",
+          operationId: "mcp.addSessionScoped",
+          responses: {
+            200: {
+              description: "Session-scoped MCP server added successfully",
+              content: {
+                "application/json": {
+                  schema: resolver(z.record(z.string(), MCP.Status)),
+                },
+              },
+            },
+            ...errors(400),
+          },
+        }),
+        validator(
+          "json",
+          z.object({
+            sessionID: Identifier.schema("session"),
+            name: z.string(),
+            config: Config.Mcp,
+          }),
+        ),
+        async (c) => {
+          const { sessionID, name, config } = c.req.valid("json")
+          const result = await MCP.addSessionScoped(sessionID, name, config)
           return c.json(result.status)
         },
       )
