@@ -2531,7 +2531,7 @@ function ToolPart(props: {
           return
         }
         if (previous.id.startsWith("text-")) {
-          setMargin(1)
+          setMargin(0)
           return
         }
         setMargin(0)
