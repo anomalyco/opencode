@@ -390,7 +390,7 @@ export namespace SessionPrompt {
 
       // pending compaction
       if (task?.type === "compaction") {
-        await SessionCompaction.process({
+        const result = await SessionCompaction.process({
           messages: msgs,
           parentID: lastUser.id,
           abort,
@@ -400,6 +400,7 @@ export namespace SessionPrompt {
           },
           sessionID,
         })
+        if (result === "stop") break
         continue
       }
 

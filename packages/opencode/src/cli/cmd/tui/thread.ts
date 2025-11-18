@@ -5,6 +5,7 @@ import { type rpc } from "./worker"
 import path from "path"
 import { UI } from "@/cli/ui"
 import { iife } from "@/util/iife"
+import { Log } from "@/util/log"
 
 declare global {
   const OPENCODE_WORKER_PATH: string
@@ -79,13 +80,15 @@ export const TuiThreadCommand = cmd({
         Object.entries(process.env).filter((entry): entry is [string, string] => entry[1] !== undefined),
       ),
     })
-    worker.onerror = console.error
+    worker.onerror = (e) => {
+      Log.Default.error(e)
+    }
     const client = Rpc.client<typeof rpc>(worker)
     process.on("uncaughtException", (e) => {
-      console.error(e)
+      Log.Default.error(e)
     })
     process.on("unhandledRejection", (e) => {
-      console.error(e)
+      Log.Default.error(e)
     })
     const server = await client.call("server", {
       port: args.port,
