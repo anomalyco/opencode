@@ -34,8 +34,8 @@ jobs:
 
       - name: Configure git
         run: |
-          git config --global user.email "opencode@sst.dev"
-          git config --global user.name "opencode"
+          git config --global user.email "action@github.com"
+          git config --global user.name "Github Action"
 
       - name: Update node_modules hash
         run: |
