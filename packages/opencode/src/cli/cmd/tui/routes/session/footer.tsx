@@ -15,6 +15,7 @@ import { useServerStatus } from "../../context/server-status"
 import { DialogSelect, type DialogSelectOption } from "@tui/ui/dialog-select"
 import { Bus } from "@/bus"
 import z from "zod"
+import { BackgroundWorkers } from "@/worker/background-workers"
 
 export function Footer() {
   const { theme } = useTheme()
@@ -74,6 +75,36 @@ export function Footer() {
     ]
 
     dialog.replace(() => <DialogSelect title="Server Management" options={options} />)
+  }
+
+  const showWorkerDialog = () => {
+    const workerConfig = BackgroundWorkers.getConfig()
+    const options: DialogSelectOption<string>[] = [
+      {
+        title: workerConfig?.validation.enabled ? "Disable Validation" : "Enable Validation",
+        value: "toggle-validation",
+        description: "Toggle background lint/typecheck/codereview",
+        onSelect: (ctx) => {
+          BackgroundWorkers.updateConfig({
+            validation: { enabled: !(workerConfig?.validation.enabled ?? false) },
+          })
+          ctx.clear()
+        },
+      },
+      {
+        title: workerConfig?.prefetch.enabled ? "Disable Prefetch" : "Enable Prefetch",
+        value: "toggle-prefetch",
+        description: "Toggle file prefetch caching",
+        onSelect: (ctx) => {
+          BackgroundWorkers.updateConfig({
+            prefetch: { enabled: !(workerConfig?.prefetch.enabled ?? false) },
+          })
+          ctx.clear()
+        },
+      },
+    ]
+
+    dialog.replace(() => <DialogSelect title="Worker Services" options={options} />)
   }
 
   return (
@@ -137,6 +168,10 @@ export function Footer() {
                   ? theme.accent
                   : theme.textMuted
             }
+            onMouseUp={() => {
+              if (renderer.getSelection()?.getSelectedText()) return
+              showWorkerDialog()
+            }}
           >
             {validationStatus() === "running" ? "●" : validationStatus() === "queued" ? "○" : "·"}
           </text>
@@ -149,6 +184,10 @@ export function Footer() {
                   ? theme.warning
                   : theme.textMuted
             }
+            onMouseUp={() => {
+              if (renderer.getSelection()?.getSelectedText()) return
+              showWorkerDialog()
+            }}
           >
             {prefetchStatus() === "loading" ? "●" : prefetchStatus() === "queued" ? "○" : "·"}
           </text>
@@ -167,9 +206,7 @@ export function Footer() {
 
           // Determine which agent to use for color
           const agentForColor =
-            currentAgent && rootAgent && currentAgent !== rootAgent
-              ? currentAgent
-              : (local.agent.current()?.name ?? "")
+            currentAgent && rootAgent && currentAgent !== rootAgent ? currentAgent : (local.agent.current()?.name ?? "")
 
           return (
             <>
