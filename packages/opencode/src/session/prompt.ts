@@ -1396,7 +1396,16 @@ export namespace SessionPrompt {
       ...small.info.options,
     }
     if (small.providerID === "openai" || small.modelID.includes("gpt-5")) {
-      options["reasoningEffort"] = "minimal"
+      if (small.modelID.includes("-5-") || small.modelID == "gpt-5") {
+        // gpt-5, support none,minimal/low/medium/high
+        options["reasoningEffort"] = "minimal"
+      } else if (small.modelID.includes("-5.1")) { 
+        // gpt-5.1, only support none/low/medium/high
+        options["reasoningEffort"] = "low"
+      } else {
+        // fallback to none
+        options["reasoningEffort"] = "none"
+      }
     }
     if (small.providerID === "google") {
       options["thinkingConfig"] = {
