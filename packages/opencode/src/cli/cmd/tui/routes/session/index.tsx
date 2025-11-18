@@ -2086,7 +2086,7 @@ function AssistantMessage(props: { message: AssistantMessage; parts: Part[]; las
 
   return (
     <>
-      <box paddingLeft={2} marginTop={0} flexDirection="row" justifyContent="flex-end" marginRight={2}>
+      <box paddingLeft={2} marginTop={1} flexDirection="row" justifyContent="flex-end" marginRight={2}>
         <MessageControls
           sessionID={props.message.sessionID}
           messageID={props.message.id}
@@ -2531,7 +2531,7 @@ function ToolPart(props: {
           return
         }
         if (previous.height > 1 || previous.id.startsWith("text-")) {
-          setMargin(2)
+          setMargin(1)
           return
         }
       }}
