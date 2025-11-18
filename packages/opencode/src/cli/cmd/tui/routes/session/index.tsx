@@ -2422,7 +2422,7 @@ function TextPart(props: { part: TextPart; message: AssistantMessage }) {
 
 // Pending messages moved to individual tool pending functions
 
-const BLOCK_CONTAINER_MIN_HEIGHT = 3
+const BLOCK_CONTAINER_MIN_HEIGHT = 1
 const BLOCK_CONTAINER_PADDING = 1
 
 function ToolPart(props: {
