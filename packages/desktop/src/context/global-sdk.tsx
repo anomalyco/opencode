@@ -18,8 +18,7 @@ export const { use: useGlobalSDK, provider: GlobalSDKProvider } = createSimpleCo
 
     sdk.global.event().then(async (events) => {
       for await (const event of events.stream) {
-        console.log("event", event)
-        // console.log("event", event.payload.type)
+        // console.log("event", event)
         emitter.emit(event.directory, event.payload)
       }
     })
