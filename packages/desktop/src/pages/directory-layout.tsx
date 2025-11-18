@@ -1,4 +1,4 @@
-import { createMemo, Show, type ParentProps } from "solid-js"
+import { createMemo, type ParentProps } from "solid-js"
 import { useParams } from "@solidjs/router"
 import { SDKProvider } from "@/context/sdk"
 import { SyncProvider } from "@/context/sync"

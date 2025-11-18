@@ -12,7 +12,7 @@ import { LayoutProvider } from "./context/layout"
 import { GlobalSDKProvider } from "./context/global-sdk"
 import { SessionProvider } from "./context/session"
 import { base64Encode } from "./utils"
-import { createMemo } from "solid-js"
+import { createMemo, Show } from "solid-js"
 
 const host = import.meta.env.VITE_OPENCODE_SERVER_HOST ?? "127.0.0.1"
 const port = import.meta.env.VITE_OPENCODE_SERVER_PORT ?? "4096"
@@ -51,10 +51,12 @@ render(
                   <Route path="/" component={() => <Navigate href="session" />} />
                   <Route
                     path="/session/:id?"
-                    component={() => (
-                      <SessionProvider>
-                        <Session />
-                      </SessionProvider>
+                    component={(p) => (
+                      <Show when={p.params.id || true} keyed>
+                        <SessionProvider>
+                          <Session />
+                        </SessionProvider>
+                      </Show>
                     )}
                   />
                 </Route>

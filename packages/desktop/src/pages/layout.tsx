@@ -122,7 +122,7 @@ export default function Layout(props: ParentProps) {
                                                   ?.replace(" hr.", "h")}
                                           </span>
                                         </div>
-                                        <div class="hidden flex justify-between items-center self-stretch">
+                                        <div class="hidden _flex justify-between items-center self-stretch">
                                           <span class="text-12-regular text-text-weak">{`${session.summary?.files || "No"} file${session.summary?.files !== 1 ? "s" : ""} changed`}</span>
                                           <Show when={session.summary}>
                                             {(summary) => <DiffChanges changes={summary()} />}
