@@ -1701,22 +1701,146 @@ function MessageControls(props: {
   priority?: "red" | "amber" | "green" | "none"
   inline?: boolean
 }) {
+  const sdk = useSDK()
+  const toast = useToast()
   const { theme } = useTheme()
-  const dialog = useDialog()
-  const renderer = useRenderer()
+  const sync = useSync()
+  const contextManager = useContextManager(true)
   const inline = props.inline ?? false
 
-  const openMenu = (event: ToolMouseEvent) => {
+  const buildMessageContext = () => {
+    const messageList = sync.data.message[props.sessionID] ?? []
+    const message = messageList.find((m) => m.id === props.messageID)
+    const partList = sync.data.part[props.messageID] ?? []
+    const main = messageText(pickMessageContentParts(partList)).trim()
+    if (main) return main
+
+    const fallback: string[] = []
+    for (const part of partList as any[]) {
+      if (!part || typeof part !== "object") continue
+      if (part.type === "file") {
+        const label = part.filename || part.source?.file?.path || part.url || part.id
+        fallback.push(`File: ${label}`)
+        continue
+      }
+      if (part.type === "tool") {
+        const state = part.state
+        if (state?.status === "completed") {
+          fallback.push(`Tool ${part.tool}: ${Locale.truncate(state.output ?? "", 400)}`)
+        } else if (state?.status === "error") {
+          fallback.push(`Tool ${part.tool} error: ${state.error}`)
+        }
+        continue
+      }
+      if (part.type === "input" && typeof part.text === "string") {
+        fallback.push(part.text)
+      }
+    }
+    if (message?.summary && typeof message.summary === "object") {
+      if (message.summary.body) fallback.push(message.summary.body)
+      else if (message.summary.title) fallback.push(message.summary.title)
+    }
+    const derived = fallback
+      .map((text) => text?.toString().trim())
+      .filter(Boolean)
+      .join("\n\n")
+    return derived || "(no content)"
+  }
+
+  const updateLocalPriority = (priority: "red" | "amber" | "green" | "none") => {
+    const messages = sync.data.message[props.sessionID]
+    if (!messages) return
+    const index = messages.findIndex((m) => m.id === props.messageID)
+    if (index === -1) return
+    sync.set("message", props.sessionID, index, "priority", priority)
+  }
+
+  const setPriority = async (event: any, priority: "red" | "amber" | "green" | "none") => {
     event.stopPropagation?.()
-    if (renderer.getSelection()?.getSelectedText()) return
-    dialog.replace(() => <DialogMessage messageID={props.messageID} sessionID={props.sessionID} />)
+    try {
+      await sdk.client.session.setMessagePriority({
+        path: {
+          id: props.sessionID,
+          messageID: props.messageID,
+        },
+        body: {
+          priority,
+        },
+      })
+      updateLocalPriority(priority)
+    } catch (error) {
+      const message = error instanceof Error ? error.message : "Unable to update priority"
+      toast.show({ message, variant: "error" })
+      return
+    }
+    const priorityLabels = {
+      green: "Always include",
+      amber: "Include when relevant",
+      red: "Exclude from context",
+      none: "No priority",
+    }
+    toast.show({ message: `Message marked as ${priorityLabels[priority]}`, variant: "success" })
+    if (contextManager) {
+      if (priority === "green" || priority === "amber") {
+        const messageList = sync.data.message[props.sessionID] ?? []
+        const message = messageList.find((m) => m.id === props.messageID)
+        const text = buildMessageContext()
+        const snippet = text.replace(/\s+/g, " ").trim()
+        const labelSource = snippet ? Locale.truncate(snippet, 24) : (message?.role ?? "message")
+        const name = labelSource.toUpperCase()
+        contextManager.upsertMessageContext({
+          sessionID: props.sessionID,
+          messageID: props.messageID,
+          name,
+          content: text,
+          mode: priority === "green" ? "always" : "conditional",
+          active: true,
+        })
+      } else if (priority === "red") {
+        contextManager.setMessageContextActive({
+          sessionID: props.sessionID,
+          messageID: props.messageID,
+          active: false,
+        })
+      } else if (priority === "none") {
+        contextManager.removeMessageContext({ sessionID: props.sessionID, messageID: props.messageID })
+      }
+    }
+  }
+
+  const order: Array<"none" | "green" | "amber" | "red"> = ["none", "green", "amber", "red"]
+  const nextPriority = (): "red" | "amber" | "green" | "none" => {
+    const current = props.priority ?? "none"
+    const index = order.indexOf(current)
+    return order[(index + 1) % order.length]
+  }
+
+  const colors: Record<"none" | "green" | "amber" | "red", string> = {
+    none: theme.textMuted,
+    green: theme.success,
+    amber: theme.accent,
+    red: theme.error,
   }
 
   return (
-    <box flexDirection="row" alignItems="center" gap={inline ? 1 : 0} onMouseUp={(event) => openMenu(event)}>
-      <box width={inline ? undefined : 9} justifyContent="flex-end" flexShrink={0} marginLeft={inline ? 1 : 0}>
-        <PriorityCircles sessionID={props.sessionID} messageID={props.messageID} priority={props.priority} compact />
-      </box>
+    <box
+      flexDirection="row"
+      justifyContent={inline ? undefined : "flex-end"}
+      alignItems="center"
+      gap={inline ? 1 : 0}
+      onMouseUp={(event) => {
+        const next = nextPriority()
+        setPriority(event, next)
+      }}
+      style={{ cursor: "pointer" }}
+    >
+      <text
+        fg={colors[props.priority ?? "none"]}
+        attributes={1}
+        style={{ fontSize: 18, lineHeight: 1 }}
+      >
+        {props.priority === "none" ? "☆" : "★"}
+      </text>
     </box>
   )
 }
@@ -1775,6 +1899,14 @@ function UserMessage(props: {
         flexShrink={0}
       >
         <box flexDirection="column" gap={hasFiles() ? 1 : 0} justifyContent="center">
+          <box flexDirection="row" justifyContent="flex-end" marginTop={-1} marginRight={2}>
+            <MessageControls
+              sessionID={props.message.sessionID}
+              messageID={props.message.id}
+              priority={props.message.priority}
+              inline
+            />
+          </box>
           <box flexDirection="row" alignItems="flex-start" justifyContent="space-between" gap={1}>
             <box flexDirection="column" flexGrow={1} gap={hasFiles() ? 1 : 0}>
               <Show when={!hasFiles()}>
@@ -1793,13 +1925,6 @@ function UserMessage(props: {
                 </box>
               </Show>
             </box>
-            <Show when={hasFiles()}>
-              <MessageControls
-                sessionID={props.message.sessionID}
-                messageID={props.message.id}
-                priority={props.message.priority}
-              />
-            </Show>
           </box>
           <Switch>
             <Match when={queued()}>
@@ -1961,17 +2086,16 @@ function AssistantMessage(props: { message: AssistantMessage; parts: Part[]; las
     return groups
   })
 
-  const priorityControls = (
-    <MessageControls
-      sessionID={props.message.sessionID}
-      messageID={props.message.id}
-      priority={props.message.priority}
-    />
-  )
-  const firstReasoningId = createMemo(() => props.parts.find((part) => part.type === "reasoning")?.id)
-
   return (
     <>
+      <box paddingLeft={2} marginTop={0} flexDirection="row" justifyContent="flex-end" marginRight={2}>
+        <MessageControls
+          sessionID={props.message.sessionID}
+          messageID={props.message.id}
+          priority={props.message.priority}
+          inline
+        />
+      </box>
       <For each={partGroups()}>
         {(group) => (
           <Switch>
@@ -1991,9 +2115,6 @@ function AssistantMessage(props: { message: AssistantMessage; parts: Part[]; las
                       component={component()}
                       part={g.part as any}
                       message={props.message}
-                      trailing={
-                        g.part.type === "reasoning" && g.part.id === firstReasoningId() ? priorityControls : undefined
-                      }
                     />
                   </Show>
                 )
@@ -2032,9 +2153,7 @@ function AssistantMessage(props: { message: AssistantMessage; parts: Part[]; las
           customBorderChars={SplitBorder.customBorderChars}
           borderColor={theme.backgroundElement}
         >
-          <text fg={local.agent.color(props.message.mode)}>
-            <span style={{ fg: theme.textMuted }}></span> {Locale.titlecase(props.message.mode)}
-          </text>
+          <text fg={local.agent.color(props.message.mode)}>{Locale.titlecase(props.message.mode)}</text>
           <Shimmer text={`${props.message.modelID}`} color={theme.text} />
         </box>
       </Show>
@@ -2334,11 +2453,11 @@ function ToolPart(props: {
     props.showPriorityControls === false
       ? undefined
       : (
-          <PriorityCircles
+          <MessageControls
             sessionID={props.message.sessionID}
             messageID={props.message.id}
             priority={props.message.priority}
-            compact
+            inline
           />
         )
 
@@ -2647,16 +2766,11 @@ function ToolTitle(props: ToolTitleProps) {
           </box>
         </Show>
       </box>
-      <box flexDirection="row" alignItems="center" gap={0} flexShrink={0}>
-        <Show when={props.trailing}>
+      <Show when={props.trailing}>
+        <box flexDirection="row" alignItems="center" gap={0} flexShrink={0}>
           <box alignItems="center">{props.trailing}</box>
-        </Show>
-        <box paddingLeft={props.trailing ? 1 : 0}>
-          <text fg={theme.textMuted} attributes={1} onMouseUp={(event) => showMenu(event)}>
-            ⋮{" "}
-          </text>
         </box>
-      </box>
+      </Show>
     </box>
   )
 }
