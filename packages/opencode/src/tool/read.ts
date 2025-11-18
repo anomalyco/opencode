@@ -46,6 +46,17 @@ export const ReadTool = Tool.define("read", {
             parentDir,
           },
         })
+      } else if (agent.permission.external_directory === "deny") {
+        throw new Permission.RejectedError(
+          ctx.sessionID,
+          "external_directory",
+          ctx.callID,
+          {
+            filepath: filepath,
+            parentDir,
+          },
+          `File ${filepath} is not in the current working directory`,
+        )
       }
     }
 

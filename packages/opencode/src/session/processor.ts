@@ -136,6 +136,7 @@ export namespace SessionProcessor {
 
                     const parts = await MessageV2.parts(input.assistantMessage.id)
                     const lastThree = parts.slice(-DOOM_LOOP_THRESHOLD)
+
                     if (
                       lastThree.length === DOOM_LOOP_THRESHOLD &&
                       lastThree.every(
@@ -160,6 +161,17 @@ export namespace SessionProcessor {
                             input: value.input,
                           },
                         })
+                      } else if (permission.doom_loop === "deny") {
+                        throw new Permission.RejectedError(
+                          input.assistantMessage.sessionID,
+                          "doom_loop",
+                          value.toolCallId,
+                          {
+                            tool: value.toolName,
+                            input: value.input,
+                          },
+                          `You seem to be stuck in a doom loop, please stop repeating the same action`,
+                        )
                       }
                     }
                   }
