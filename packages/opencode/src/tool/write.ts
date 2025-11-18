@@ -23,10 +23,7 @@ export const WriteTool = Tool.define("write", {
     const filepath = path.isAbsolute(params.filePath) ? params.filePath : path.join(Instance.directory, params.filePath)
     if (!Filesystem.contains(Instance.directory, filepath)) {
       const parentDir = path.dirname(filepath)
-      // Secure default: only allow if explicitly set to "allow" or "ask"
-      if (agent.permission.external_directory === "allow") {
-        // Explicitly allowed, proceed
-      } else if (agent.permission.external_directory === "ask") {
+      if (agent.permission.external_directory === "ask") {
         await Permission.ask({
           type: "external_directory",
           pattern: parentDir,
@@ -39,9 +36,6 @@ export const WriteTool = Tool.define("write", {
             parentDir,
           },
         })
-      } else {
-        // Default deny for "deny", undefined, null, or any other value
-        throw new Error(`Permission denied: Cannot write file outside working directory: ${filepath}`)
       }
     }
 
@@ -49,10 +43,7 @@ export const WriteTool = Tool.define("write", {
     const exists = await file.exists()
     if (exists) await FileTime.assert(ctx.sessionID, filepath)
 
-    // Secure default: only allow if explicitly set to "allow" or "ask"
-    if (agent.permission.edit === "allow") {
-      // Explicitly allowed, proceed
-    } else if (agent.permission.edit === "ask") {
+    if (agent.permission.edit === "ask")
       await Permission.ask({
         type: "write",
         sessionID: ctx.sessionID,
@@ -65,10 +56,6 @@ export const WriteTool = Tool.define("write", {
           exists,
         },
       })
-    } else {
-      // Default deny for "deny", undefined, null, or any other value
-      throw new Error(`Permission denied: Cannot write file: ${filepath}`)
-    }
 
     await Bun.write(filepath, params.content)
     await Bus.publish(File.Event.Edited, {
