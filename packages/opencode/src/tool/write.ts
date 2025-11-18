@@ -60,7 +60,6 @@ export const WriteTool = Tool.define("write", {
       })
 
     delegate?.write ? await delegate.write(filepath, params.content) : await Bun.write(filepath, params.content)
-
     await Bus.publish(File.Event.Edited, {
       file: filepath,
     })

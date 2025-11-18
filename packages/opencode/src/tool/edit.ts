@@ -95,7 +95,6 @@ export const EditTool = Tool.define("edit", {
       if (stats.isDirectory()) throw new Error(`Path is a directory, not a file: ${filePath}`)
       await FileTime.assert(ctx.sessionID, filePath)
       contentOld = delegate?.read ? await delegate.read(filePath) : await file.text()
-
       contentNew = replace(contentOld, params.oldString, params.newString, params.replaceAll)
 
       diff = trimDiff(
@@ -115,18 +114,11 @@ export const EditTool = Tool.define("edit", {
         })
       }
 
-      if (delegate?.write) {
-        await delegate.write(filePath, contentNew)
-        contentNew = delegate.read ? await delegate.read(filePath) : await Bun.file(filePath).text()
-      } else {
-        await Bun.write(filePath, contentNew)
-        contentNew = await file.text()
-      }
-
+      delegate?.write ? await delegate.write(filePath, contentNew) : await Bun.write(filePath, contentNew)
       await Bus.publish(File.Event.Edited, {
         file: filePath,
       })
-      contentNew = await file.text()
+      contentNew = delegate?.read ? await delegate.read(filePath) : await file.text()
       diff = trimDiff(
         createTwoFilesPatch(filePath, filePath, normalizeLineEndings(contentOld), normalizeLineEndings(contentNew)),
       )
