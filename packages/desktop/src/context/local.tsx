@@ -5,6 +5,7 @@ import type { FileContent, FileNode, Model, Provider, File as FileStatus } from 
 import { createSimpleContext } from "./helper"
 import { useSDK } from "./sdk"
 import { useSync } from "./sync"
+import { base64Encode } from "@/utils"
 
 export type LocalFile = FileNode &
   Partial<{
@@ -457,6 +458,7 @@ export const { use: useLocal, provider: LocalProvider } = createSimpleContext({
     })()
 
     const result = {
+      slug: createMemo(() => base64Encode(sdk.directory)),
       model,
       agent,
       file,

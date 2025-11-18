@@ -1,15 +1,18 @@
 /* @refresh reload */
 import "@/index.css"
 import { render } from "solid-js/web"
-import { Router, Route } from "@solidjs/router"
+import { Router, Route, Navigate } from "@solidjs/router"
 import { MetaProvider } from "@solidjs/meta"
 import { Fonts, MarkedProvider } from "@opencode-ai/ui"
-import { SDKProvider } from "./context/sdk"
-import { SyncProvider } from "./context/sync"
+import { GlobalSyncProvider, useGlobalSync } from "./context/global-sync"
 import Layout from "@/pages/layout"
-import SessionLayout from "@/pages/session-layout"
+import DirectoryLayout from "@/pages/directory-layout"
 import Session from "@/pages/session"
 import { LayoutProvider } from "./context/layout"
+import { GlobalSDKProvider } from "./context/global-sdk"
+import { SessionProvider } from "./context/session"
+import { base64Encode } from "./utils"
+import { createMemo } from "solid-js"
 
 const host = import.meta.env.VITE_OPENCODE_SERVER_HOST ?? "127.0.0.1"
 const port = import.meta.env.VITE_OPENCODE_SERVER_PORT ?? "4096"
@@ -30,20 +33,36 @@ if (import.meta.env.DEV && !(root instanceof HTMLElement)) {
 render(
   () => (
     <MarkedProvider>
-      <SDKProvider url={url}>
-        <SyncProvider>
+      <GlobalSDKProvider url={url}>
+        <GlobalSyncProvider>
           <LayoutProvider>
             <MetaProvider>
               <Fonts />
               <Router root={Layout}>
-                <Route path={["/", "/session"]} component={SessionLayout}>
-                  <Route path="/:id?" component={Session} />
+                <Route
+                  path="/"
+                  component={() => {
+                    const globalSync = useGlobalSync()
+                    const slug = createMemo(() => base64Encode(globalSync.data.defaultProject!.worktree))
+                    return <Navigate href={`${slug()}/session`} />
+                  }}
+                />
+                <Route path="/:dir" component={DirectoryLayout}>
+                  <Route path="/" component={() => <Navigate href="session" />} />
+                  <Route
+                    path="/session/:id?"
+                    component={() => (
+                      <SessionProvider>
+                        <Session />
+                      </SessionProvider>
+                    )}
+                  />
                 </Route>
               </Router>
             </MetaProvider>
           </LayoutProvider>
-        </SyncProvider>
-      </SDKProvider>
+        </GlobalSyncProvider>
+      </GlobalSDKProvider>
     </MarkedProvider>
   ),
   root!,

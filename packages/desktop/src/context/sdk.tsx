@@ -2,34 +2,31 @@ import { createOpencodeClient, type Event } from "@opencode-ai/sdk/client"
 import { createSimpleContext } from "./helper"
 import { createGlobalEmitter } from "@solid-primitives/event-bus"
 import { onCleanup } from "solid-js"
+import { useGlobalSDK } from "./global-sdk"
 
 export const { use: useSDK, provider: SDKProvider } = createSimpleContext({
   name: "SDK",
-  init: (props: { url: string; directory?: string }) => {
+  init: (props: { directory: string }) => {
+    const globalSDK = useGlobalSDK()
     const abort = new AbortController()
-    const sdk = createOpencodeClient(
-      {
-        baseUrl: props.url,
-        signal: abort.signal,
-      },
-      { directory: props.directory },
-    )
+    const sdk = createOpencodeClient({
+      baseUrl: globalSDK.url,
+      signal: abort.signal,
+      directory: props.directory,
+    })
 
     const emitter = createGlobalEmitter<{
       [key in Event["type"]]: Extract<Event, { type: key }>
     }>()
 
-    sdk.event.subscribe().then(async (events) => {
-      for await (const event of events.stream) {
-        console.log("event", event.type)
-        emitter.emit(event.type, event)
-      }
+    globalSDK.event.on(props.directory, async (event) => {
+      emitter.emit(event.type, event)
     })
 
     onCleanup(() => {
       abort.abort()
     })
 
-    return { url: props.url, directory: props.directory, client: sdk, event: emitter }
+    return { directory: props.directory, client: sdk, event: emitter }
   },
 })

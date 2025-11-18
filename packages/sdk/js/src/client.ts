@@ -5,7 +5,7 @@ import { createClient } from "./gen/client/client.gen.js"
 import { type Config } from "./gen/client/types.gen.js"
 import { OpencodeClient } from "./gen/sdk.gen.js"
 
-export function createOpencodeClient(config?: Config, options?: { directory?: string }) {
+export function createOpencodeClient(config?: Config & { directory?: string }) {
   if (!config?.fetch) {
     config = {
       ...config,
@@ -17,16 +17,13 @@ export function createOpencodeClient(config?: Config, options?: { directory?: st
     }
   }
 
-  const client = createClient(config)
-
-  if (options?.directory) {
-    async function middleware(request: Request) {
-      const url = new URL(request.url)
-      url.searchParams.set("directory", options!.directory!)
-      return new Request(url.toString(), request)
+  if (config?.directory) {
+    config.headers = {
+      ...config.headers,
+      "x-opencode-directory": config.directory,
     }
-    client.interceptors.request.use(middleware)
   }
 
+  const client = createClient(config)
   return new OpencodeClient({ client })
 }

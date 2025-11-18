@@ -1,135 +1,17 @@
-import type {
-  Message,
-  Agent,
-  Provider,
-  Session,
-  Part,
-  Config,
-  Path,
-  File,
-  FileNode,
-  Project,
-  FileDiff,
-  Todo,
-} from "@opencode-ai/sdk"
-import { createStore, produce, reconcile } from "solid-js/store"
+import type { Part } from "@opencode-ai/sdk"
+import { produce } from "solid-js/store"
 import { createMemo } from "solid-js"
 import { Binary } from "@/utils/binary"
 import { createSimpleContext } from "./helper"
+import { useGlobalSync } from "./global-sync"
 import { useSDK } from "./sdk"
 
 export const { use: useSync, provider: SyncProvider } = createSimpleContext({
   name: "Sync",
   init: () => {
-    const [store, setStore] = createStore<{
-      ready: boolean
-      provider: Provider[]
-      agent: Agent[]
-      project: Project
-      config: Config
-      path: Path
-      session: Session[]
-      session_diff: {
-        [sessionID: string]: FileDiff[]
-      }
-      todo: {
-        [sessionID: string]: Todo[]
-      }
-      limit: number
-      message: {
-        [sessionID: string]: Message[]
-      }
-      part: {
-        [messageID: string]: Part[]
-      }
-      node: FileNode[]
-      changes: File[]
-    }>({
-      project: { id: "", worktree: "", time: { created: 0, initialized: 0 } },
-      config: {},
-      path: { state: "", config: "", worktree: "", directory: "" },
-      ready: false,
-      agent: [],
-      provider: [],
-      session: [],
-      session_diff: {},
-      todo: {},
-      limit: 10,
-      message: {},
-      part: {},
-      node: [],
-      changes: [],
-    })
-
+    const globalSync = useGlobalSync()
     const sdk = useSDK()
-    sdk.event.listen((e) => {
-      // fetch the child store
-      // make a set store function that always rights to the child store
-      const event = e.details
-      switch (event.type) {
-        case "session.updated": {
-          const result = Binary.search(store.session, event.properties.info.id, (s) => s.id)
-          if (result.found) {
-            setStore("session", result.index, reconcile(event.properties.info))
-            break
-          }
-          setStore(
-            "session",
-            produce((draft) => {
-              draft.splice(result.index, 0, event.properties.info)
-            }),
-          )
-          break
-        }
-        case "session.diff":
-          setStore("session_diff", event.properties.sessionID, event.properties.diff)
-          break
-        case "todo.updated":
-          setStore("todo", event.properties.sessionID, event.properties.todos)
-          break
-        case "message.updated": {
-          const messages = store.message[event.properties.info.sessionID]
-          if (!messages) {
-            setStore("message", event.properties.info.sessionID, [event.properties.info])
-            break
-          }
-          const result = Binary.search(messages, event.properties.info.id, (m) => m.id)
-          if (result.found) {
-            setStore("message", event.properties.info.sessionID, result.index, reconcile(event.properties.info))
-            break
-          }
-          setStore(
-            "message",
-            event.properties.info.sessionID,
-            produce((draft) => {
-              draft.splice(result.index, 0, event.properties.info)
-            }),
-          )
-          break
-        }
-        case "message.part.updated": {
-          const part = sanitizePart(event.properties.part)
-          const parts = store.part[part.messageID]
-          if (!parts) {
-            setStore("part", part.messageID, [part])
-            break
-          }
-          const result = Binary.search(parts, part.id, (p) => p.id)
-          if (result.found) {
-            setStore("part", part.messageID, result.index, reconcile(part))
-            break
-          }
-          setStore(
-            "part",
-            part.messageID,
-            produce((draft) => {
-              draft.splice(result.index, 0, part)
-            }),
-          )
-          break
-        }
-      }
-    })
+    const [store, setStore] = globalSync.child(sdk.directory)
 
     const load = {
       project: () => sdk.client.project.current().then((x) => setStore("project", x.data!)),

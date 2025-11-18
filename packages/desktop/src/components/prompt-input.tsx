@@ -266,7 +266,7 @@ export const PromptInput: Component<PromptInputProps> = (props) => {
     if (!existing) {
       const created = await sdk.client.session.create()
       existing = created.data ?? undefined
-      if (existing) navigate(`/session/${existing.id}`)
+      if (existing) navigate(`${local.slug()}/session/${existing.id}`)
     }
     if (!existing) return
 

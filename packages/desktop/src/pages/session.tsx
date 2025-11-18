@@ -294,7 +294,7 @@ export default function Page() {
             <Tabs.List>
               <Tabs.Trigger value="chat">
                 <div class="flex gap-x-[17px] items-center">
-                  <div>Chat</div>
+                  <div>Session</div>
                   <Tooltip
                     value={`${new Intl.NumberFormat("en-US", {
                       notation: "compact",
@@ -364,88 +364,94 @@ export default function Page() {
                       }}
                     >
                       <Show when={session.messages.user().length > 1}>
-                        <ul
-                          role="list"
-                          classList={{
-                            "mr-8 shrink-0 flex flex-col items-start": true,
-                            "absolute right-full w-60 mt-3 @7xl:gap-2 @7xl:mt-1": layout.review.state() === "tab",
-                            "mt-3": layout.review.state() === "pane",
-                          }}
-                        >
-                          <For each={session.messages.user()}>
-                            {(message) => {
-                              const assistantMessages = createMemo(() => {
-                                if (!session.id) return []
-                                return sync.data.message[session.id]?.filter(
-                                  (m) => m.role === "assistant" && m.parentID == message.id,
-                                ) as AssistantMessageType[]
-                              })
-                              const error = createMemo(() => assistantMessages().find((m) => m?.error)?.error)
-                              const working = createMemo(() => !message.summary?.body && !error())
+                        {(_) => {
+                          const expanded = createMemo(() => layout.review.state() === "tab" || !session.diffs().length)
 
-                              const handleClick = () => session.messages.setActive(message.id)
+                          return (
+                            <ul
+                              role="list"
+                              classList={{
+                                "mr-8 shrink-0 flex flex-col items-start": true,
+                                "absolute right-full w-60 mt-3 @7xl:gap-2 @7xl:mt-1": expanded(),
+                                "mt-3": !expanded(),
+                              }}
+                            >
+                              <For each={session.messages.user()}>
+                                {(message) => {
+                                  const assistantMessages = createMemo(() => {
+                                    if (!session.id) return []
+                                    return sync.data.message[session.id]?.filter(
+                                      (m) => m.role === "assistant" && m.parentID == message.id,
+                                    ) as AssistantMessageType[]
+                                  })
+                                  const error = createMemo(() => assistantMessages().find((m) => m?.error)?.error)
+                                  const working = createMemo(() => !message.summary?.body && !error())
 
-                              return (
-                                <li
-                                  classList={{
-                                    "group/li flex items-center self-stretch justify-end": true,
-                                    "@7xl:justify-start": layout.review.state() === "tab",
-                                  }}
-                                >
-                                  <Tooltip
-                                    placement="right"
-                                    gutter={8}
-                                    value={
-                                      <div class="flex items-center gap-2">
-                                        <DiffChanges changes={message.summary?.diffs ?? []} variant="bars" />
-                                        {message.summary?.title}
-                                      </div>
-                                    }
-                                  >
-                                    <button
-                                      data-active={session.messages.active()?.id === message.id}
-                                      onClick={handleClick}
+                                  const handleClick = () => session.messages.setActive(message.id)
+
+                                  return (
+                                    <li
                                       classList={{
-                                        "group/tick flex items-center justify-start h-2 w-8 -mr-3": true,
-                                        "data-[active=true]:[&>div]:bg-icon-strong-base data-[active=true]:[&>div]:w-full": true,
-                                        "@7xl:hidden": layout.review.state() === "tab",
+                                        "group/li flex items-center self-stretch justify-end": true,
+                                        "@7xl:justify-start": expanded(),
                                       }}
                                     >
-                                      <div class="h-px w-5 bg-icon-base group-hover/tick:w-full group-hover/tick:bg-icon-strong-base" />
-                                    </button>
-                                  </Tooltip>
-                                  <button
-                                    classList={{
-                                      "hidden items-center self-stretch w-full gap-x-2 cursor-default": true,
-                                      "@7xl:flex": layout.review.state() === "tab",
-                                    }}
-                                    onClick={handleClick}
-                                  >
-                                    <Switch>
-                                      <Match when={working()}>
-                                        <Spinner class="text-text-base shrink-0 w-[18px] aspect-square" />
-                                      </Match>
-                                      <Match when={true}>
-                                        <DiffChanges changes={message.summary?.diffs ?? []} variant="bars" />
-                                      </Match>
-                                    </Switch>
-                                    <div
-                                      data-active={session.messages.active()?.id === message.id}
-                                      classList={{
-                                        "text-14-regular text-text-weak whitespace-nowrap truncate min-w-0": true,
-                                        "text-text-weak data-[active=true]:text-text-strong group-hover/li:text-text-base": true,
-                                      }}
-                                    >
-                                      <Show when={message.summary?.title} fallback="New message">
-                                        {message.summary?.title}
-                                      </Show>
-                                    </div>
-                                  </button>
-                                </li>
-                              )
-                            }}
-                          </For>
-                        </ul>
+                                      <Tooltip
+                                        placement="right"
+                                        gutter={8}
+                                        value={
+                                          <div class="flex items-center gap-2">
+                                            <DiffChanges changes={message.summary?.diffs ?? []} variant="bars" />
+                                            {message.summary?.title}
+                                          </div>
+                                        }
+                                      >
+                                        <button
+                                          data-active={session.messages.active()?.id === message.id}
+                                          onClick={handleClick}
+                                          classList={{
+                                            "group/tick flex items-center justify-start h-2 w-8 -mr-3": true,
+                                            "data-[active=true]:[&>div]:bg-icon-strong-base data-[active=true]:[&>div]:w-full": true,
+                                            "@7xl:hidden": expanded(),
+                                          }}
+                                        >
+                                          <div class="h-px w-5 bg-icon-base group-hover/tick:w-full group-hover/tick:bg-icon-strong-base" />
+                                        </button>
+                                      </Tooltip>
+                                      <button
+                                        classList={{
+                                          "hidden items-center self-stretch w-full gap-x-2 cursor-default": true,
+                                          "@7xl:flex": expanded(),
+                                        }}
+                                        onClick={handleClick}
+                                      >
+                                        <Switch>
+                                          <Match when={working()}>
+                                            <Spinner class="text-text-base shrink-0 w-[18px] aspect-square" />
+                                          </Match>
+                                          <Match when={true}>
+                                            <DiffChanges changes={message.summary?.diffs ?? []} variant="bars" />
+                                          </Match>
+                                        </Switch>
+                                        <div
+                                          data-active={session.messages.active()?.id === message.id}
+                                          classList={{
+                                            "text-14-regular text-text-weak whitespace-nowrap truncate min-w-0": true,
+                                            "text-text-weak data-[active=true]:text-text-strong group-hover/li:text-text-base": true,
+                                          }}
+                                        >
+                                          <Show when={message.summary?.title} fallback="New message">
+                                            {message.summary?.title}
+                                          </Show>
+                                        </div>
+                                      </button>
+                                    </li>
+                                  )
+                                }}
+                              </For>
+                            </ul>
+                          )
+                        }}
                       </Show>
                       <div ref={messageScrollElement} class="grow size-full min-w-0 overflow-y-auto no-scrollbar">
                         <For each={session.messages.user()}>
