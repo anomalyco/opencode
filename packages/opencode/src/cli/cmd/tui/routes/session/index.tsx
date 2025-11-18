@@ -2530,10 +2530,11 @@ function ToolPart(props: {
           setMargin(0)
           return
         }
-        if (previous.height > 1 || previous.id.startsWith("text-")) {
+        if (previous.id.startsWith("text-")) {
           setMargin(1)
           return
         }
+        setMargin(0)
       }}
     >
       {createMemo(() => {
