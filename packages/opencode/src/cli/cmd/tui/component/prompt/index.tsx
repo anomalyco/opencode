@@ -600,26 +600,54 @@ export function Prompt(props: PromptProps) {
     if (!matches.length) return
     dropProcessing = true
     try {
-      let updated = value
-      let modified = false
-      for (const match of matches) {
-        const rawPath = match[2]?.trim()
-        if (!rawPath) continue
-        const attached = await attachFilesFromCandidates([rawPath])
-        if (attached) {
-          updated = updated.replace(match[0], match[1] ?? "")
-          modified = true
+      // Process matches in reverse order to maintain indices during deletion
+      for (const match of matches.reverse()) {
+        const matchIndex = match.index!
+        const fullMatch = match[0]
+        const prefix = match[1] || ""
+        const pathStr = match[2]
+        const tokenStr = fullMatch.substring(prefix.length + pathStr.length)
+
+        const pathStart = matchIndex + prefix.length
+        const pathEnd = pathStart + pathStr.length
+        const tokenStart = pathEnd
+        const tokenEnd = matchIndex + fullMatch.length
+
+        // Check for existing extmark at the token position
+        const allExtmarks = input.extmarks.getAllForTypeId(promptPartTypeId)
+        const hasExtmark = allExtmarks.some((e: any) => e.start >= tokenStart && e.end <= tokenEnd)
+
+        const getPos = (offset: number) => {
+          const text = input.plainText
+          const prefix = text.slice(0, offset)
+          const rows = prefix.split("\n")
+          const row = rows.length - 1
+          const col = rows[rows.length - 1].length
+          return { row, col }
+        }
+
+        if (hasExtmark) {
+          // Double paste: delete path
+          const start = getPos(pathStart)
+          const end = getPos(pathEnd)
+          input.deleteRange(start.row, start.col, end.row, end.col)
+        } else {
+          // Text drop: delete match and attach
+          const rawPath = pathStr.trim()
+          if (!rawPath) continue
+
+          const start = getPos(pathStart)
+          const end = getPos(tokenEnd)
+          input.deleteRange(start.row, start.col, end.row, end.col)
+
+          input.cursorOffset = pathStart
+          await attachFilesFromCandidates([rawPath])
         }
       }
 
-      if (modified) {
-        const normalized = updated.replace(/\s{2,}/g, " ").trimStart()
-        input.setText(normalized, { history: false })
-        setStore("prompt", "input", normalized)
-        autocomplete.onInput(normalized)
-        syncExtmarksDebounced()
-        input.cursorOffset = normalized.length
-      }
+      setStore("prompt", "input", input.plainText)
+      autocomplete.onInput(input.plainText)
+      syncExtmarksDebounced()
     } finally {
       dropProcessing = false
     }
