@@ -1900,7 +1900,7 @@ function UserMessage(props: {
         borderColor={color()}
         flexShrink={0}
       >
-        <box flexDirection="column" gap={hasFiles() ? 1 : 0} justifyContent="center">
+        <box flexDirection="column" gap={hasFiles() ? 0 : 0} justifyContent="center">
           <box flexDirection="row" justifyContent="flex-end" marginTop={-1} marginRight={2}>
             <MessageControls
               sessionID={props.message.sessionID}
