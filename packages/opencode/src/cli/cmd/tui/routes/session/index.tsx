@@ -2342,7 +2342,7 @@ function TextPart(props: { part: TextPart; message: AssistantMessage }) {
 
   return (
     <Show when={props.part.text.trim()}>
-      <box id={partId()} paddingLeft={3} marginTop={0} flexShrink={0} flexDirection="column">
+      <box id={partId()} paddingLeft={3} marginTop={1} flexShrink={0} flexDirection="column">
         <For each={segments()}>
           {(segment) => (
             <Switch>
@@ -2485,8 +2485,8 @@ function ToolPart(props: {
       const paddingLeft = isTaskTool ? 0 : basePaddingLeft
       return {
         border: permissionIndex() === 0 ? (["left", "right"] as const) : (["left"] as const),
-        paddingTop: 1,
-        paddingBottom: 1,
+        paddingTop: 0,
+        paddingBottom: 0,
         paddingLeft,
         gap: collapsedState ? 0 : 1,
         minHeight: BLOCK_CONTAINER_MIN_HEIGHT,
@@ -2500,8 +2500,8 @@ function ToolPart(props: {
       customBorderChars: SplitBorder.customBorderChars,
       borderColor: theme.background,
       paddingLeft: inlineIndent,
-      paddingTop: 1,
-      paddingBottom: 1,
+      paddingTop: 0,
+      paddingBottom: 0,
       minHeight: BLOCK_CONTAINER_MIN_HEIGHT,
       gap: collapsedState ? 0 : 1,
       backgroundColor: theme.backgroundPanel,
