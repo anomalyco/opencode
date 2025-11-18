@@ -2342,7 +2342,7 @@ function TextPart(props: { part: TextPart; message: AssistantMessage }) {
 
   return (
     <Show when={props.part.text.trim()}>
-      <box id={partId()} paddingLeft={3} marginTop={1} flexShrink={0} flexDirection="column">
+      <box id={partId()} paddingLeft={3} marginTop={0} flexShrink={0} flexDirection="column">
         <For each={segments()}>
           {(segment) => (
             <Switch>
