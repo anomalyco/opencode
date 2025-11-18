@@ -1700,7 +1700,6 @@ function MessageControls(props: {
   messageID: string
   priority?: "red" | "amber" | "green" | "none"
   inline?: boolean
-  position?: "assistant" | "tool"
 }) {
   const sdk = useSDK()
   const toast = useToast()
@@ -1839,8 +1838,7 @@ function MessageControls(props: {
         fg={colors[props.priority ?? "none"]}
         attributes={1}
         paddingTop={1}
-        paddingRight={props.position === "tool" ? 0 : 1}
-        paddingLeft={props.position === "tool" ? 1 : 0}
+        paddingRight={1}
         style={{ fontSize: 18, lineHeight: 1 }}
       >
         {props.priority === "none" ? "☆" : "★"}
@@ -2094,7 +2092,6 @@ function AssistantMessage(props: { message: AssistantMessage; parts: Part[]; las
           messageID={props.message.id}
           priority={props.message.priority}
           inline
-          position="assistant"
         />
       </box>
       <For each={partGroups()}>
@@ -2453,7 +2450,6 @@ function ToolPart(props: {
         messageID={props.message.id}
         priority={props.message.priority}
         inline
-        position="tool"
       />
     )
 
