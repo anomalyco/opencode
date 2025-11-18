@@ -1,4 +1,4 @@
-import { streamText, type ModelMessage } from "ai"
+import { streamText, wrapLanguageModel, type ModelMessage } from "ai"
 import { Session } from "."
 import { Identifier } from "../id/id"
 import { Instance } from "../project/instance"
@@ -129,10 +129,17 @@ export namespace SessionCompaction {
     })
     const result = await processor.process(() =>
       streamText({
+        onError(error) {
+          log.error("stream error", {
+            error,
+          })
+        },
         // set to 0, we handle loop
         maxRetries: 0,
-        model: model.language,
-        providerOptions: ProviderTransform.providerOptions(model.npm, model.providerID, model.info.options),
+        providerOptions: ProviderTransform.providerOptions(model.npm, model.providerID, {
+          ...ProviderTransform.options(model.providerID, model.modelID, model.npm ?? "", input.sessionID),
+          ...model.info.options,
+        }),
         headers: model.info.headers,
         abortSignal: input.abort,
         tools: model.info.tool_call ? {} : undefined,
@@ -143,7 +150,21 @@ export namespace SessionCompaction {
               content: x,
             }),
           ),
-          ...MessageV2.toModelMessage(input.messages),
+          ...MessageV2.toModelMessage(
+            input.messages.filter((m) => {
+              if (m.info.role !== "assistant" || m.info.error === undefined) {
+                return true
+              }
+              if (
+                MessageV2.AbortedError.isInstance(m.info.error) &&
+                m.parts.some((part) => part.type !== "step-start" && part.type !== "reasoning")
+              ) {
+                return true
+              }
+
+              return false
+            }),
+          ),
           {
             role: "user",
             content: [
@@ -154,6 +175,20 @@ export namespace SessionCompaction {
             ],
           },
         ],
+        model: wrapLanguageModel({
+          model: model.language,
+          middleware: [
+            {
+              async transformParams(args) {
+                if (args.type === "stream") {
+                  // @ts-expect-error
+                  args.params.prompt = ProviderTransform.message(args.params.prompt, model.providerID, model.modelID)
+                }
+                return args.params
+              },
+            },
+          ],
+        }),
       }),
     )
     if (result === "continue") {
@@ -180,6 +215,7 @@ export namespace SessionCompaction {
         },
       })
     }
+    if (processor.message.error) return "stop"
     return "continue"
   }
 

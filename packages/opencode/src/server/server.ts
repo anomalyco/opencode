@@ -118,6 +118,7 @@ export namespace Server {
           timer.stop()
         }
       })
+      .use(cors())
       .get(
         "/global/event",
         describeRoute({
@@ -146,12 +147,6 @@ export namespace Server {
         async (c) => {
           log.info("global event connected")
           return streamSSE(c, async (stream) => {
-            stream.writeSSE({
-              data: JSON.stringify({
-                type: "server.connected",
-                properties: {},
-              }),
-            })
             async function handler(event: any) {
               await stream.writeSSE({
                 data: JSON.stringify(event),
@@ -169,7 +164,7 @@ export namespace Server {
         },
       )
       .use(async (c, next) => {
-        const directory = c.req.query("directory") ?? process.cwd()
+        const directory = c.req.query("directory") ?? c.req.header("x-opencode-directory") ?? process.cwd()
         return Instance.provide({
           directory,
           init: InstanceBootstrap,
@@ -178,7 +173,6 @@ export namespace Server {
           },
         })
       })
-      .use(cors())
       .get(
         "/doc",
         openAPIRouteHandler(app, {

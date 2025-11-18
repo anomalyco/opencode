@@ -3,7 +3,8 @@ import { createAsync, query, useParams } from "@solidjs/router"
 import { createMemo, For, Show, createEffect } from "solid-js"
 import { formatDateUTC, formatDateForTable } from "../common"
 import { withActor } from "~/context/auth.withActor"
-import "./usage-section.module.css"
+import { IconChevronLeft, IconChevronRight } from "~/component/icon"
+import styles from "./usage-section.module.css"
 import { createStore } from "solid-js/store"
 
 const PAGE_SIZE = 50
@@ -46,7 +47,7 @@ export function UsageSection() {
   }
 
   return (
-    <section>
+    <section class={styles.root}>
       <div data-slot="section-title">
         <h2>Usage History</h2>
         <p>Recent API usage and costs.</p>
@@ -92,10 +93,10 @@ export function UsageSection() {
           <Show when={canGoPrev() || canGoNext()}>
             <div data-slot="pagination">
               <button disabled={!canGoPrev()} onClick={goPrev}>
-                ←
+                <IconChevronLeft />
               </button>
               <button disabled={!canGoNext()} onClick={goNext}>
-                →
+                <IconChevronRight />
               </button>
             </div>
           </Show>
