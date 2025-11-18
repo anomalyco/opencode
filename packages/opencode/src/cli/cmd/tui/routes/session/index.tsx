@@ -2086,7 +2086,7 @@ function AssistantMessage(props: { message: AssistantMessage; parts: Part[]; las
 
   return (
     <>
-      <box paddingLeft={2} marginTop={0} flexDirection="row" justifyContent="flex-end" marginRight={2}>
+      <box paddingLeft={2} marginTop={1} flexDirection="row" justifyContent="flex-end" marginRight={2}>
         <MessageControls
           sessionID={props.message.sessionID}
           messageID={props.message.id}
@@ -2486,7 +2486,7 @@ function ToolPart(props: {
       return {
         border: permissionIndex() === 0 ? (["left", "right"] as const) : (["left"] as const),
         paddingTop: 0,
-        paddingBottom: 0,
+        paddingBottom: 1,
         paddingLeft,
         gap: collapsedState ? 0 : 1,
         minHeight: BLOCK_CONTAINER_MIN_HEIGHT,
@@ -2501,7 +2501,7 @@ function ToolPart(props: {
       borderColor: theme.background,
       paddingLeft: inlineIndent,
       paddingTop: 0,
-      paddingBottom: 0,
+      paddingBottom: 1,
       minHeight: BLOCK_CONTAINER_MIN_HEIGHT,
       gap: collapsedState ? 0 : 1,
       backgroundColor: theme.backgroundPanel,
