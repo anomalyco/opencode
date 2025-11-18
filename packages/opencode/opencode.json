@@ -7,6 +7,19 @@
     "file:///Users/jkneen/Documents/GitHub/flows/opencode-stt/packages/opencode/examples/plugin-sidebar-subagents/index.tsx",
     "file:///Users/jkneen/Documents/GitHub/flows/opencode-stt/packages/opencode/examples/plugin-steering-questions/index.tsx"
   ],
+  "backgroundValidation": {
+    "enabled": true,
+    "commands": ["bun run lint", "bun run typecheck"],
+    "debounceMs": 200,
+    "include": ["src/**/*.ts", "src/**/*.tsx"],
+    "exclude": ["**/node_modules/**", "**/dist/**"]
+  },
+  "prefetchWorker": {
+    "enabled": true,
+    "maxConcurrent": 2,
+    "maxCacheSize": 100000000,
+    "strategies": ["import", "related"]
+  },
   "favoriteTools": [
     "cc_computer_use",
     "grep",

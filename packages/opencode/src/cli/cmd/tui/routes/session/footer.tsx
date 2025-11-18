@@ -2,11 +2,17 @@ import { useTheme } from "@tui/context/theme"
 import { useDialog } from "@tui/ui/dialog"
 import { useRenderer } from "@opentui/solid"
 import { TextAttributes } from "@opentui/core"
-import { DialogSelect, type DialogSelectOption } from "@tui/ui/dialog-select"
-import { useServerStatus } from "../../context/server-status"
 import { useLocal } from "../../context/local"
-import { createSignal, createEffect, onCleanup } from "solid-js"
-import { BackgroundWorkers } from "@/worker/background-workers"
+import { Show, For, createSignal, onCleanup } from "solid-js"
+import { Installation } from "@/installation"
+import { Global } from "@/global"
+import { DialogAgent } from "@tui/component/dialog-agent"
+import { useRoute, type SessionRoute } from "@tui/context/route"
+import { useSync } from "@tui/context/sync"
+import { useUIExtensions } from "../../context/ui-extensions"
+import { PluginComponent } from "../../component/plugin-component"
+import { useServerStatus } from "../../context/server-status"
+import { DialogSelect, type DialogSelectOption } from "@tui/ui/dialog-select"
 import { Bus } from "@/bus"
 import z from "zod"
 
@@ -14,8 +20,11 @@ export function Footer() {
   const { theme } = useTheme()
   const dialog = useDialog()
   const renderer = useRenderer()
-  const serverStatus = useServerStatus()
   const local = useLocal()
+  const route = useRoute()
+  const sync = useSync()
+  const uiExtensions = useUIExtensions()
+  const serverStatus = useServerStatus()
   const [validationStatus, setValidationStatus] = createSignal("idle")
   const [prefetchStatus, setPrefetchStatus] = createSignal("idle")
 
@@ -69,30 +78,46 @@ export function Footer() {
 
   return (
     <box
-      position="absolute"
-      bottom={0}
-      left={0}
-      right={0}
       height={1}
+      backgroundColor={theme.backgroundPanel}
       flexDirection="row"
       justifyContent="space-between"
-      paddingLeft={2}
-      paddingRight={2}
-      backgroundColor={theme.backgroundPanel}
+      flexShrink={0}
     >
-      <text fg={theme.textMuted}>
-        Server:{" "}
-        <span
-          style={{
-            fg: serverStatus.status() === "connected" ? theme.success : theme.error,
-            attributes: TextAttributes.BOLD,
-          }}
-        >
-          {serverStatus.status() === "connected" ? "●" : "○"}
-        </span>{" "}
-        Port {serverStatus.port()}
-      </text>
-      <box flexDirection="row" gap={2} alignItems="center">
+      <box flexDirection="row">
+        <box flexDirection="row" backgroundColor={theme.backgroundElement} paddingLeft={1} paddingRight={1}>
+          <text fg={theme.textMuted}>code</text>
+          <text fg={theme.text} attributes={TextAttributes.BOLD}>
+            surf{" "}
+          </text>
+          <text fg={theme.textMuted}>v{Installation.VERSION}</text>
+        </box>
+        <box paddingLeft={1} paddingRight={1}>
+          <text fg={theme.textMuted}>{process.cwd().replace(Global.Path.home, "~")}</text>
+        </box>
+        <Show when={uiExtensions.extensions()?.statusItems}>
+          <For each={uiExtensions.extensions()?.statusItems ?? []}>
+            {(statusItem) => (
+              <box paddingLeft={1} paddingRight={1}>
+                <PluginComponent componentId={statusItem.id} context={{}} />
+              </box>
+            )}
+          </For>
+        </Show>
+      </box>
+      <box flexDirection="row" flexShrink={0} gap={2} alignItems="center">
+        {/* <text fg={theme.textMuted}>
+          Server:{" "}
+          <span
+            style={{
+              fg: serverStatus.status() === "connected" ? theme.success : theme.error,
+              attributes: TextAttributes.BOLD,
+            }}
+          >
+            {serverStatus.status() === "connected" ? "●" : "○"}
+          </span>{" "}
+          Port {serverStatus.port()}
+        </text>
         <text
           fg={theme.accent}
           onMouseUp={() => {
@@ -101,7 +126,7 @@ export function Footer() {
           }}
         >
           [Manage]
-        </text>
+        </text> */}
         <box flexDirection="row" gap={1} alignItems="center">
           <text fg={theme.textMuted}>Val:</text>
           <text
@@ -127,13 +152,52 @@ export function Footer() {
           >
             {prefetchStatus() === "loading" ? "●" : prefetchStatus() === "queued" ? "○" : "·"}
           </text>
-          <text fg={theme.textMuted} marginLeft={2}>
-            tab
-          </text>
-          <text fg={theme.accent} attributes={TextAttributes.BOLD} marginLeft={1}>
-            BUILD {local.agent.current()?.name?.toUpperCase() ?? "AGENT"} ◀
-          </text>
         </box>
+        <text fg={theme.textMuted} paddingRight={1}>
+          tab
+        </text>
+        {(() => {
+          const currentRoute = route.data
+          const session =
+            currentRoute?.type === "session"
+              ? sync.data.session.find((s: any) => s.id === (currentRoute as SessionRoute).sessionID)
+              : undefined
+          const rootAgent = (session as any)?.orchestration?.rootAgent
+          const currentAgent = (session as any)?.orchestration?.currentAgent
+
+          // Determine which agent to use for color
+          const agentForColor =
+            currentAgent && rootAgent && currentAgent !== rootAgent
+              ? currentAgent
+              : (local.agent.current()?.name ?? "")
+
+          return (
+            <>
+              <text bg={local.agent.color(agentForColor)}> </text>
+              <text
+                bg={local.agent.color(agentForColor)}
+                fg={theme.text}
+                wrapMode={undefined}
+                attributes={TextAttributes.BOLD | TextAttributes.UNDERLINE}
+                onMouseUp={() => {
+                  if (renderer.getSelection()?.getSelectedText()) return
+                  dialog.replace(() => <DialogAgent />)
+                }}
+              >
+                {(() => {
+                  // If switched (currentAgent differs from rootAgent), show hierarchy
+                  if (currentAgent && rootAgent && currentAgent !== rootAgent) {
+                    return `${rootAgent.toUpperCase()} > ${currentAgent.toUpperCase()} `
+                  }
+
+                  // Otherwise show current agent from local state
+                  const agent = local.agent.current()
+                  return (agent?.name.toUpperCase() ?? "LOADING") + " "
+                })()}
+              </text>
+            </>
+          )
+        })()}
       </box>
     </box>
   )

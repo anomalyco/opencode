@@ -488,9 +488,10 @@ export const TerminalLayout: Component<TerminalLayoutProps> = (props) => {
           }}
         >
           <span>
-            <span style={{ color: "#ffffff" }}>code</span>surf v0.0.0-dev-codesurf-202511101344{" "}
+            <span style={{ color: "#ffffff" }}>code</span>surf v0.0.0-dev-codesurf-202511101344
             ~/Documents/GitHub/flows/opencode-stt
           </span>
+
           <span>
             <span style={{ color: "#ffffff", "font-weight": "bold" }}>ctrl+p</span> commands{" "}
             <span style={{ color: "#ffffff", "font-weight": "bold" }}>tab</span>{" "}

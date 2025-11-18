@@ -2,9 +2,8 @@ import { render, useKeyboard, useRenderer, useTerminalDimensions } from "@opentu
 import { Clipboard } from "@tui/util/clipboard"
 import { TextAttributes } from "@opentui/core"
 import { RouteProvider, useRoute, type Route, type SessionRoute } from "@tui/context/route"
-import { Switch, Match, createEffect, untrack, ErrorBoundary, createSignal, For, Show, on } from "solid-js"
+import { Switch, Match, createEffect, untrack, ErrorBoundary, createSignal, on } from "solid-js"
 import { Installation } from "@/installation"
-import { Global } from "@/global"
 import { DialogProvider, useDialog } from "@tui/ui/dialog"
 import { SDKProvider, useSDK } from "@tui/context/sdk"
 import { SyncProvider, useSync } from "@tui/context/sync"
@@ -17,7 +16,6 @@ import { DialogHelp } from "./ui/dialog-help"
 import { CommandProvider, useCommandDialog } from "@tui/component/dialog-command"
 import { DialogKanban } from "./component/dialog-kanban"
 import { DialogAgent } from "@tui/component/dialog-agent"
-
 import { DialogAgentManager } from "@tui/component/dialog-agent-manager"
 import { DialogSessionList } from "@tui/component/dialog-session-list"
 // import { DialogSkillManager } from "@tui/component/dialog-skill-manager" // DISABLED: migrated to plugin
@@ -26,6 +24,7 @@ import { KeybindProvider } from "@tui/context/keybind"
 import { ThemeProvider, useTheme } from "@tui/context/theme"
 import { Home } from "@tui/routes/home"
 import { Session } from "@tui/routes/session"
+import { Footer } from "@tui/routes/session/footer"
 import { PromptHistoryProvider } from "./component/prompt/history"
 import { DialogAlert } from "./ui/dialog-alert"
 import { ToastProvider, useToast } from "./ui/toast"
@@ -34,7 +33,6 @@ import { Session as SessionApi } from "@/session"
 import { TuiEvent } from "./event"
 import { KVProvider, useKV } from "./context/kv"
 import { UIExtensionsProvider, useUIExtensions } from "./context/ui-extensions"
-import { PluginComponent } from "./component/plugin-component"
 import { ArgsProvider } from "./context/args"
 import { TransitionAnimation } from "./component/transition-animation"
 import { ContextProvider } from "./context/context"
@@ -195,11 +193,9 @@ function App() {
   const toast = useToast()
   const { theme, mode, setMode } = useTheme()
   const exit = useExit()
-  const uiExtensions = useUIExtensions()
 
   // Transition animation state
   const [isTransitioning, setIsTransitioning] = createSignal(false)
-  const [previousRoute, setPreviousRoute] = createSignal<string>("home")
   const [pendingSessionRoute, setPendingSessionRoute] = createSignal<string | null>(null)
 
   // Track route changes for animation
@@ -214,7 +210,6 @@ function App() {
           setIsTransitioning(true)
           // Route will actually change after animation completes
         }
-        setPreviousRoute(currentType)
       },
     ),
   )
@@ -533,82 +528,7 @@ function App() {
         </Switch>
         <TransitionAnimation active={isTransitioning()} onComplete={handleTransitionComplete} />
       </box>
-      <box
-        height={1}
-        backgroundColor={theme.backgroundPanel}
-        flexDirection="row"
-        justifyContent="space-between"
-        flexShrink={0}
-      >
-        <box flexDirection="row">
-          <box flexDirection="row" backgroundColor={theme.backgroundElement} paddingLeft={1} paddingRight={1}>
-            <text fg={theme.textMuted}>code</text>
-            <text fg={theme.text} attributes={TextAttributes.BOLD}>
-              surf{" "}
-            </text>
-            <text fg={theme.textMuted}>v{Installation.VERSION}</text>
-          </box>
-          <box paddingLeft={1} paddingRight={1}>
-            <text fg={theme.textMuted}>{process.cwd().replace(Global.Path.home, "~")}</text>
-          </box>
-          <Show when={uiExtensions.extensions()?.statusItems}>
-            <For each={uiExtensions.extensions()?.statusItems ?? []}>
-              {(statusItem) => (
-                <box paddingLeft={1} paddingRight={1}>
-                  <PluginComponent componentId={statusItem.id} context={{}} />
-                </box>
-              )}
-            </For>
-          </Show>
-        </box>
-        <box flexDirection="row" flexShrink={0}>
-          <text fg={theme.textMuted} paddingRight={1}>
-            tab
-          </text>
-          {(() => {
-            const currentRoute = route.data
-            const session =
-              currentRoute?.type === "session"
-                ? sync.data.session.find((s: any) => s.id === (currentRoute as SessionRoute).sessionID)
-                : undefined
-            const rootAgent = (session as any)?.orchestration?.rootAgent
-            const currentAgent = (session as any)?.orchestration?.currentAgent
-
-            // Determine which agent to use for color
-            const agentForColor =
-              currentAgent && rootAgent && currentAgent !== rootAgent
-                ? currentAgent
-                : (local.agent.current()?.name ?? "")
-
-            return (
-              <>
-                <text bg={local.agent.color(agentForColor)}> </text>
-                <text
-                  bg={local.agent.color(agentForColor)}
-                  fg={theme.text}
-                  wrapMode={undefined}
-                  attributes={TextAttributes.BOLD | TextAttributes.UNDERLINE}
-                  onMouseUp={() => {
-                    if (renderer.getSelection()?.getSelectedText()) return
-                    dialog.replace(() => <DialogAgent />)
-                  }}
-                >
-                  {(() => {
-                    // If switched (currentAgent differs from rootAgent), show hierarchy
-                    if (currentAgent && rootAgent && currentAgent !== rootAgent) {
-                      return `${rootAgent.toUpperCase()} > ${currentAgent.toUpperCase()} `
-                    }
-
-                    // Otherwise show current agent from local state
-                    const agent = local.agent.current()
-                    return (agent?.name.toUpperCase() ?? "LOADING") + " "
-                  })()}
-                </text>
-              </>
-            )
-          })()}
-        </box>
-      </box>
+      <Footer />
     </box>
   )
 }

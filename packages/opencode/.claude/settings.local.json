@@ -1,0 +1,11 @@
+{
+  "permissions": {
+    "allow": [
+      "Bash(npm run typecheck:*)",
+      "Bash(npm run build:*)",
+      "Bash(wait)"
+    ],
+    "deny": [],
+    "ask": []
+  }
+}
