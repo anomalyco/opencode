@@ -82,9 +82,7 @@ export const EditTool = Tool.define("edit", {
             },
           })
         }
-        delegate?.write
-          ? await delegate.write(filePath, params.newString)
-          : await Bun.write(filePath, params.newString)
+        delegate?.write ? await delegate.write(filePath, params.newString) : await Bun.write(filePath, params.newString)
         await Bus.publish(File.Event.Edited, {
           file: filePath,
         })

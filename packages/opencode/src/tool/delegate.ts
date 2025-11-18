@@ -1,4 +1,3 @@
-
 export interface FileSystemDelegate {
   read?(path: string, options?: { offset?: number; limit?: number }): Promise<string>
   write?(path: string, content: string): Promise<void>

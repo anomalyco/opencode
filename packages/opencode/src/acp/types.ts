@@ -1,6 +1,4 @@
-import type {
-  McpServer,
-} from "@agentclientprotocol/sdk"
+import type { McpServer } from "@agentclientprotocol/sdk"
 import type { OpencodeClient } from "@opencode-ai/sdk"
 
 export interface ACPSessionState {
