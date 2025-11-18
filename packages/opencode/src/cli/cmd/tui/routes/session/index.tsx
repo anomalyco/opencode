@@ -2422,7 +2422,7 @@ function TextPart(props: { part: TextPart; message: AssistantMessage }) {
 
 // Pending messages moved to individual tool pending functions
 
-const BLOCK_CONTAINER_MIN_HEIGHT = 1
+const BLOCK_CONTAINER_MIN_HEIGHT = 3
 const BLOCK_CONTAINER_PADDING = 1
 
 function ToolPart(props: {
@@ -2485,8 +2485,8 @@ function ToolPart(props: {
       const paddingLeft = isTaskTool ? 0 : basePaddingLeft
       return {
         border: permissionIndex() === 0 ? (["left", "right"] as const) : (["left"] as const),
-        paddingTop: 0,
-        paddingBottom: 0,
+        paddingTop: 1,
+        paddingBottom: 1,
         paddingLeft,
         gap: collapsedState ? 0 : 1,
         minHeight: BLOCK_CONTAINER_MIN_HEIGHT,
@@ -2500,8 +2500,8 @@ function ToolPart(props: {
       customBorderChars: SplitBorder.customBorderChars,
       borderColor: theme.background,
       paddingLeft: inlineIndent,
-      paddingTop: 0,
-      paddingBottom: 0,
+      paddingTop: 1,
+      paddingBottom: 1,
       minHeight: BLOCK_CONTAINER_MIN_HEIGHT,
       gap: collapsedState ? 0 : 1,
       backgroundColor: theme.backgroundPanel,
