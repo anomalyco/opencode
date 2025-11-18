@@ -2485,8 +2485,8 @@ function ToolPart(props: {
       const paddingLeft = isTaskTool ? 0 : basePaddingLeft
       return {
         border: permissionIndex() === 0 ? (["left", "right"] as const) : (["left"] as const),
-        paddingTop: BLOCK_CONTAINER_PADDING,
-        paddingBottom: BLOCK_CONTAINER_PADDING,
+        paddingTop: 1,
+        paddingBottom: 0,
         paddingLeft,
         gap: collapsedState ? 0 : 1,
         minHeight: BLOCK_CONTAINER_MIN_HEIGHT,
@@ -2500,8 +2500,8 @@ function ToolPart(props: {
       customBorderChars: SplitBorder.customBorderChars,
       borderColor: theme.background,
       paddingLeft: inlineIndent,
-      paddingTop: BLOCK_CONTAINER_PADDING,
-      paddingBottom: BLOCK_CONTAINER_PADDING,
+      paddingTop: 1,
+      paddingBottom: 0,
       minHeight: BLOCK_CONTAINER_MIN_HEIGHT,
       gap: collapsedState ? 0 : 1,
       backgroundColor: theme.backgroundPanel,
