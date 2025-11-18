@@ -19,7 +19,7 @@
       /*   color: var(--icon-weak-hover); */
       /* } */
       /* &:active:not(:disabled) { */
-      /*   color: var(--icon-string-active); */
+      /*   color: var(--icon-strong-active); */
       /* } */
     }
 
@@ -30,7 +30,7 @@
       background-color: var(--icon-strong-focus);
     }
     &:active:not(:disabled) {
-      background-color: var(--icon-string-active);
+      background-color: var(--icon-strong-active);
     }
     &:disabled {
       background-color: var(--icon-strong-disabled);
