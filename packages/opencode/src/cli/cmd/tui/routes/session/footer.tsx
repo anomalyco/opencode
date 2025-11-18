@@ -173,7 +173,7 @@ export function Footer() {
               showWorkerDialog()
             }}
           >
-            {validationStatus() === "running" ? "●" : validationStatus() === "queued" ? "○" : "·"}
+            {validationStatus() === "running" ? "●" : validationStatus() === "queued" ? "○" : "•"}
           </text>
           <text fg={theme.textMuted}>Pre:</text>
           <text
@@ -189,12 +189,13 @@ export function Footer() {
               showWorkerDialog()
             }}
           >
-            {prefetchStatus() === "loading" ? "●" : prefetchStatus() === "queued" ? "○" : "·"}
+            {prefetchStatus() === "loading" ? "●" : prefetchStatus() === "queued" ? "○" : "•  "}
           </text>
         </box>
         <text fg={theme.textMuted} paddingRight={1}>
           tab
         </text>
+
         {(() => {
           const currentRoute = route.data
           const session =
@@ -210,27 +211,28 @@ export function Footer() {
 
           return (
             <>
+             
               <text fg={local.agent.color(agentForColor)}></text>
-              <text bg={local.agent.color(agentForColor)}> </text>
               <text
                 bg={local.agent.color(agentForColor)}
-                fg={theme.text}
-                wrapMode={undefined}
-                attributes={TextAttributes.BOLD | TextAttributes.UNDERLINE}
+                fg={theme.background}
+                wrapMode="none"
+                attributes={TextAttributes.BOLD}
                 onMouseUp={() => {
                   if (renderer.getSelection()?.getSelectedText()) return
                   dialog.replace(() => <DialogAgent />)
                 }}
               >
+                 
                 {(() => {
-                  // If switched (currentAgent differs from rootAgent), show hierarchy
-                  if (currentAgent && rootAgent && currentAgent !== rootAgent) {
-                    return `${rootAgent.toUpperCase()} > ${currentAgent.toUpperCase()} `
-                  }
-
-                  // Otherwise show current agent from local state
-                  const agent = local.agent.current()
-                  return (agent?.name.toUpperCase() ?? "LOADING") + " "
+                  const agentName = (() => {
+                    if (currentAgent && rootAgent && currentAgent !== rootAgent) {
+                      return `${rootAgent.toUpperCase()} > ${currentAgent.toUpperCase()}`
+                    }
+                    const agent = local.agent.current()
+                    return agent?.name.toUpperCase() ?? "LOADING"
+                  })()
+                  return `${agentName} AGENT`
                 })()}
               </text>
             </>
