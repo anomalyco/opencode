@@ -4,9 +4,7 @@ import fs from "fs"
 
 const version = "@VERSION@"
 const pkg = path.join(process.cwd(), "packages/opencode")
-const parser = fs.realpathSync(
-  path.join(pkg, "./node_modules/@opentui/core/parser.worker.js"),
-)
+const parser = fs.realpathSync(path.join(pkg, "./node_modules/@opentui/core/parser.worker.js"))
 const worker = "./src/cli/cmd/tui/worker.ts"
 const target = process.env["BUN_COMPILE_TARGET"]
 
@@ -62,7 +60,7 @@ const result = await Bun.build({
   compile: {
     target,
     outfile: "opencode",
-    execArgv: ["--user-agent=opencode/" + version, "--env-file=\"\"", "--"],
+    execArgv: ["--user-agent=opencode/" + version, '--env-file=""', "--"],
     windows: {},
   },
 })

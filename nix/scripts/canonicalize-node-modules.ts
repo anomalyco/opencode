@@ -35,9 +35,11 @@ for (const entry of directories) {
   versions.set(slug, list)
 }
 
-const semverModule = (await import(join(bunRoot, "node_modules/semver"))) as SemverLike | {
-  default: SemverLike
-}
+const semverModule = (await import(join(bunRoot, "node_modules/semver"))) as
+  | SemverLike
+  | {
+      default: SemverLike
+    }
 const semver = "default" in semverModule ? semverModule.default : semverModule
 const selections = new Map<string, Entry>()
 

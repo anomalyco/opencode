@@ -7,14 +7,14 @@ on:
   workflow_dispatch:
   push:
     paths:
-      - 'bun.lock'
-      - 'package.json'
-      - 'packages/*/package.json'
+      - "bun.lock"
+      - "package.json"
+      - "packages/*/package.json"
   pull_request:
     paths:
-      - 'bun.lock'
-      - 'package.json'
-      - 'packages/*/package.json'
+      - "bun.lock"
+      - "package.json"
+      - "packages/*/package.json"
 
 jobs:
   update:
