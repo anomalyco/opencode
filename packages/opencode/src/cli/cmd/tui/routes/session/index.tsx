@@ -1841,7 +1841,7 @@ function MessageControls(props: {
         paddingRight={1}
         style={{ fontSize: 18, lineHeight: 1 }}
       >
-        {props.priority === "none" ? "" : ""}
+        {props.priority === "none" ? "☆" : "★"}
       </text>
     </box>
   )
@@ -2429,7 +2429,7 @@ function TextPart(props: { part: TextPart; message: AssistantMessage }) {
 
 // Pending messages moved to individual tool pending functions
 
-const BLOCK_CONTAINER_MIN_HEIGHT = 3
+const BLOCK_CONTAINER_MIN_HEIGHT = 2
 const BLOCK_CONTAINER_PADDING = 1
 
 function ToolPart(props: {

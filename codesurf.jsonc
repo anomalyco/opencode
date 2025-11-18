@@ -12,7 +12,7 @@
     "glob",
     "todowrite",
     "ripgrep",
-    "read"
+    "list"
   ],
   "$schema": "https://opencode.ai/config.json"
 }
