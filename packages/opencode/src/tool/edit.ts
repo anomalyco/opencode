@@ -17,7 +17,7 @@ import { Filesystem } from "../util/filesystem"
 import { Instance } from "../project/instance"
 import { Agent } from "../agent/agent"
 import { Snapshot } from "@/snapshot"
-import { ACPToolRegistry } from "@/acp/registry"
+import { FileSystemDelegate } from "./delegate"
 
 function normalizeLineEndings(text: string): string {
   return text.replaceAll("\r\n", "\n")
@@ -41,7 +41,7 @@ export const EditTool = Tool.define("edit", {
     }
 
     const agent = await Agent.get(ctx.agent)
-    const acpTools = ACPToolRegistry.get(ctx.sessionID)
+    const delegate = FileSystemDelegate.get(ctx.sessionID)
 
     const filePath = path.isAbsolute(params.filePath) ? params.filePath : path.join(Instance.directory, params.filePath)
     if (!Filesystem.contains(Instance.directory, filePath)) {
@@ -82,15 +82,9 @@ export const EditTool = Tool.define("edit", {
             },
           })
         }
-        if (acpTools?.writeTextFile) {
-          await acpTools.writeTextFile({
-            sessionId: ctx.sessionID,
-            path: filePath,
-            content: params.newString,
-          })
-        } else {
-          await Bun.write(filePath, params.newString)
-        }
+        delegate?.write
+          ? await delegate.write(filePath, params.newString)
+          : await Bun.write(filePath, params.newString)
         await Bus.publish(File.Event.Edited, {
           file: filePath,
         })
@@ -102,16 +96,7 @@ export const EditTool = Tool.define("edit", {
       if (!stats) throw new Error(`File ${filePath} not found`)
       if (stats.isDirectory()) throw new Error(`Path is a directory, not a file: ${filePath}`)
       await FileTime.assert(ctx.sessionID, filePath)
-      if (acpTools?.readTextFile) {
-        contentOld = (
-          await acpTools.readTextFile({
-            sessionId: ctx.sessionID,
-            path: filePath,
-          })
-        ).content
-      } else {
-        contentOld = await file.text()
-      }
+      contentOld = delegate?.read ? await delegate.read(filePath) : await file.text()
 
       contentNew = replace(contentOld, params.oldString, params.newString, params.replaceAll)
 
@@ -132,22 +117,9 @@ export const EditTool = Tool.define("edit", {
         })
       }
 
-      if (acpTools?.writeTextFile) {
-        await acpTools.writeTextFile({
-          sessionId: ctx.sessionID,
-          path: filePath,
-          content: contentNew,
-        })
-        if (acpTools.readTextFile) {
-          contentNew = (
-            await acpTools.readTextFile({
-              sessionId: ctx.sessionID,
-              path: filePath,
-            })
-          ).content
-        } else {
-          contentNew = await Bun.file(filePath).text()
-        }
+      if (delegate?.write) {
+        await delegate.write(filePath, contentNew)
+        contentNew = delegate.read ? await delegate.read(filePath) : await Bun.file(filePath).text()
       } else {
         await Bun.write(filePath, contentNew)
         contentNew = await file.text()

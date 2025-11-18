@@ -34,8 +34,7 @@ import { Todo } from "@/session/todo"
 import { z } from "zod"
 import { LoadAPIKeyError } from "ai"
 import type { OpencodeClient } from "@opencode-ai/sdk"
-import type { ACPTools } from "./types"
-import { ACPToolRegistry } from "./registry"
+import { FileSystemDelegate } from "../tool/delegate"
 
 export namespace ACP {
   const log = Log.create({ service: "acp-agent" })
@@ -68,11 +67,29 @@ export namespace ACP {
 
     private registerACPTools(sessionID: string) {
       const { readTextFile, writeTextFile } = this.clientCapabilities?.fs ?? {}
-      const acpTools: ACPTools = {
-        ...(readTextFile && { readTextFile: (params) => this.readTextFile(params) }),
-        ...(writeTextFile && { writeTextFile: (params) => this.writeTextFile(params) }),
+      const delegate: FileSystemDelegate = {
+        ...(readTextFile && {
+          read: async (path, options) => {
+            const res = await this.readTextFile({
+              sessionId: sessionID,
+              path,
+              line: options?.offset,
+              limit: options?.limit,
+            })
+            return res.content
+          },
+        }),
+        ...(writeTextFile && {
+          write: async (path, content) => {
+            await this.writeTextFile({
+              sessionId: sessionID,
+              path,
+              content,
+            })
+          },
+        }),
       }
-      ACPToolRegistry.set(sessionID, acpTools)
+      FileSystemDelegate.register(sessionID, delegate)
     }
 
     private setupEventSubscriptions(session: ACPSessionState) {

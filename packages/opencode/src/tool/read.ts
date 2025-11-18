@@ -10,7 +10,7 @@ import { Instance } from "../project/instance"
 import { Provider } from "../provider/provider"
 import { Identifier } from "../id/id"
 import { Permission } from "../permission"
-import { ACPToolRegistry } from "@/acp/registry"
+import { FileSystemDelegate } from "./delegate"
 import { Agent } from "@/agent/agent"
 import { iife } from "@/util/iife"
 
@@ -31,7 +31,7 @@ export const ReadTool = Tool.define("read", {
     }
     const title = path.relative(Instance.worktree, filepath)
     const agent = await Agent.get(ctx.agent)
-    const acpTools = ACPToolRegistry.get(ctx.sessionID)
+    const delegate = FileSystemDelegate.get(ctx.sessionID)
 
     if (!ctx.extra?.["bypassCwdCheck"] && !Filesystem.contains(Instance.directory, filepath)) {
       const parentDir = path.dirname(filepath)
@@ -125,18 +125,11 @@ export const ReadTool = Tool.define("read", {
     const limit = params.limit ?? DEFAULT_READ_LIMIT
     const offset = params.offset || 0
     let lines: string[]
-    if (acpTools?.readTextFile) {
-      const result = await acpTools.readTextFile({
-        sessionId: ctx.sessionID,
-        path: filepath,
-        line: offset,
-        limit,
-      })
-      lines = result.content.split("\n")
-    } else {
-      const allLines = (await file.text()).split("\n")
-      lines = allLines.slice(offset, offset + limit)
-    }
+      lines = (delegate?.read
+        ? await delegate.read(filepath, { offset, limit })
+        : await file.text()
+      ).split("\n")
+      if (!delegate?.read) lines = lines.slice(offset, offset + limit)
 
     const raw = lines.map((line) => {
       return line.length > MAX_LINE_LENGTH ? line.substring(0, MAX_LINE_LENGTH) + "..." : line

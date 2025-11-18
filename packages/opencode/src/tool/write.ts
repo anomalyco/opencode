@@ -10,7 +10,7 @@ import { FileTime } from "../file/time"
 import { Filesystem } from "../util/filesystem"
 import { Instance } from "../project/instance"
 import { Agent } from "../agent/agent"
-import { ACPToolRegistry } from "@/acp/registry"
+import { FileSystemDelegate } from "./delegate"
 
 export const WriteTool = Tool.define("write", {
   description: DESCRIPTION,
@@ -20,7 +20,7 @@ export const WriteTool = Tool.define("write", {
   }),
   async execute(params, ctx) {
     const agent = await Agent.get(ctx.agent)
-    const acpTools = ACPToolRegistry.get(ctx.sessionID)
+    const delegate = FileSystemDelegate.get(ctx.sessionID)
 
     const filepath = path.isAbsolute(params.filePath) ? params.filePath : path.join(Instance.directory, params.filePath)
     if (!Filesystem.contains(Instance.directory, filepath)) {
@@ -59,15 +59,7 @@ export const WriteTool = Tool.define("write", {
         },
       })
 
-    if (acpTools?.writeTextFile) {
-      await acpTools.writeTextFile({
-        sessionId: ctx.sessionID,
-        path: filepath,
-        content: params.content,
-      })
-    } else {
-      await Bun.write(filepath, params.content)
-    }
+    delegate?.write ? await delegate.write(filepath, params.content) : await Bun.write(filepath, params.content)
 
     await Bus.publish(File.Event.Edited, {
       file: filepath,
