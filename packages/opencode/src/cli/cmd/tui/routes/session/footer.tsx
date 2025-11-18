@@ -5,6 +5,10 @@ import { TextAttributes } from "@opentui/core"
 import { DialogSelect, type DialogSelectOption } from "@tui/ui/dialog-select"
 import { useServerStatus } from "../../context/server-status"
 import { useLocal } from "../../context/local"
+import { createSignal, createEffect, onCleanup } from "solid-js"
+import { BackgroundWorkers } from "@/worker/background-workers"
+import { Bus } from "@/bus"
+import z from "zod"
 
 export function Footer() {
   const { theme } = useTheme()
@@ -12,6 +16,28 @@ export function Footer() {
   const renderer = useRenderer()
   const serverStatus = useServerStatus()
   const local = useLocal()
+  const [validationStatus, setValidationStatus] = createSignal("idle")
+  const [prefetchStatus, setPrefetchStatus] = createSignal("idle")
+
+  // Subscribe to worker state updates
+  const validationUnsub = Bus.subscribe(Bus.event("validation.state.updated", z.any()), (event) => {
+    const state = event.properties
+    if (state.running) setValidationStatus("running")
+    else if (state.queue?.length > 0) setValidationStatus("queued")
+    else setValidationStatus("idle")
+  })
+
+  const prefetchUnsub = Bus.subscribe(Bus.event("prefetch.state.updated", z.any()), (event) => {
+    const state = event.properties
+    if (state.running) setPrefetchStatus("loading")
+    else if (state.queue?.length > 0) setPrefetchStatus("queued")
+    else setPrefetchStatus("idle")
+  })
+
+  onCleanup(() => {
+    validationUnsub()
+    prefetchUnsub()
+  })
 
   const showServerDialog = () => {
     const options: DialogSelectOption<string>[] = [
@@ -76,31 +102,37 @@ export function Footer() {
         >
           [Manage]
         </text>
-        <box flexDirection="row" alignItems="stretch">
-          <box
-            backgroundColor={theme.backgroundPanel}
-            paddingLeft={2}
-            paddingRight={2}
-            paddingTop={1}
-            paddingBottom={1}
-            borderTopLeftRadius={4}
-            borderBottomLeftRadius={4}
+        <box flexDirection="row" gap={1} alignItems="center">
+          <text fg={theme.textMuted}>Val:</text>
+          <text
+            fg={
+              validationStatus() === "running"
+                ? theme.success
+                : validationStatus() === "queued"
+                  ? theme.accent
+                  : theme.textMuted
+            }
           >
-            <text fg={theme.textMuted}>tab</text>
-          </box>
-          <box
-            backgroundColor={theme.accent}
-            paddingLeft={3}
-            paddingRight={3}
-            paddingTop={1}
-            paddingBottom={1}
-            borderTopRightRadius={4}
-            borderBottomRightRadius={4}
+            {validationStatus() === "running" ? "●" : validationStatus() === "queued" ? "○" : "·"}
+          </text>
+          <text fg={theme.textMuted}>Pre:</text>
+          <text
+            fg={
+              prefetchStatus() === "loading"
+                ? theme.accent
+                : prefetchStatus() === "queued"
+                  ? theme.warning
+                  : theme.textMuted
+            }
           >
-            <text fg={theme.background} attributes={TextAttributes.BOLD}>
-              BUILD {local.agent.current()?.name?.toUpperCase() ?? "AGENT"} ◀
-            </text>
-          </box>
+            {prefetchStatus() === "loading" ? "●" : prefetchStatus() === "queued" ? "○" : "·"}
+          </text>
+          <text fg={theme.textMuted} marginLeft={2}>
+            tab
+          </text>
+          <text fg={theme.accent} attributes={TextAttributes.BOLD} marginLeft={1}>
+            BUILD {local.agent.current()?.name?.toUpperCase() ?? "AGENT"} ◀
+          </text>
         </box>
       </box>
     </box>

@@ -3082,8 +3082,8 @@ toolRegistry.register<typeof TaskTool>({
               </Show>
               <text fg={theme.text}>
                 {keybind.print("session_child_cycle")}, {keybind.print("session_child_cycle_reverse")}
-                <span style={{ fg: theme.textMuted }}> to navigate between subagent sessions</span>
               </text>
+              <text fg={theme.textMuted}> to navigate between subagent sessions</text>
             </box>
           </scrollbox>
         </Show>
@@ -3319,7 +3319,7 @@ toolRegistry.register<typeof AddTaskTool>({
             [{taskInput.subagent_type ?? "unknown"}] {taskInput.description}
           </text>
         </ToolTitle>
-        <Show when={!props.collapsed}>
+          <Show when={!props.collapsed}>
           <Show when={props.metadata.sessionId}>
             {(sessionId) => (
               <text
@@ -3339,8 +3339,8 @@ toolRegistry.register<typeof AddTaskTool>({
           </Show>
           <text fg={theme.text}>
             {keybind.print("session_child_cycle")}, {keybind.print("session_child_cycle_reverse")}
-            <span style={{ fg: theme.textMuted }}> to navigate between subagent sessions</span>
           </text>
+          <text fg={theme.textMuted}> to navigate between subagent sessions</text>
         </Show>
       </>
     )

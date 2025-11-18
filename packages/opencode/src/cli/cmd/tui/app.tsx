@@ -38,6 +38,7 @@ import { PluginComponent } from "./component/plugin-component"
 import { ArgsProvider } from "./context/args"
 import { TransitionAnimation } from "./component/transition-animation"
 import { ContextProvider } from "./context/context"
+import { BackgroundWorkers } from "@/worker/background-workers"
 
 async function getTerminalBackgroundColor(): Promise<"dark" | "light"> {
   // can't set raw mode if not a TTY
@@ -446,6 +447,13 @@ function App() {
     })
   })
 
+  // Initialize background workers
+  createEffect(() => {
+    if (sync.ready) {
+      BackgroundWorkers.init({ validation: { enabled: true } })
+    }
+  })
+
   event.on(SessionApi.Event.Deleted.type, (evt) => {
     if (route.data.type === "session" && route.data.sessionID === evt.properties.info.id) {
       dialog.clear()
@@ -579,23 +587,22 @@ function App() {
                   bg={local.agent.color(agentForColor)}
                   fg={theme.text}
                   wrapMode={undefined}
+                  attributes={TextAttributes.BOLD | TextAttributes.UNDERLINE}
                   onMouseUp={() => {
                     if (renderer.getSelection()?.getSelectedText()) return
                     dialog.replace(() => <DialogAgent />)
                   }}
                 >
-                  <span style={{ bold: true, underline: true }}>
-                    {(() => {
-                      // If switched (currentAgent differs from rootAgent), show hierarchy
-                      if (currentAgent && rootAgent && currentAgent !== rootAgent) {
-                        return `${rootAgent.toUpperCase()} > ${currentAgent.toUpperCase()} `
-                      }
+                  {(() => {
+                    // If switched (currentAgent differs from rootAgent), show hierarchy
+                    if (currentAgent && rootAgent && currentAgent !== rootAgent) {
+                      return `${rootAgent.toUpperCase()} > ${currentAgent.toUpperCase()} `
+                    }
 
-                      // Otherwise show current agent from local state
-                      const agent = local.agent.current()
-                      return (agent?.name.toUpperCase() ?? "LOADING") + " "
-                    })()}
-                  </span>
+                    // Otherwise show current agent from local state
+                    const agent = local.agent.current()
+                    return (agent?.name.toUpperCase() ?? "LOADING") + " "
+                  })()}
                 </text>
               </>
             )

@@ -211,5 +211,13 @@
       "plan"
     ],
     "timestamp": "2025-11-17T10:57:00.975Z"
+  },
+  {
+    "id": "1763482852349",
+    "content": "User prefers plans written with todowrite and plan read with todoread instead of older instructions. Use todowrite to add tasks to plan when requested.",
+    "tags": [
+      "preference"
+    ],
+    "timestamp": "2025-11-18T16:20:52.349Z"
   }
 ]
