@@ -38,3 +38,10 @@ update-stainless-config.sh
 
 # ESLint reports
 eslint-report.json
+
+# Development files and screenshots
+.screenshots/
+src/agent/generate.txt
+
+# Worker logs
+/tmp/opencode-*.log
