@@ -225,6 +225,12 @@ export const { use: useSync, provider: SyncProvider } = createSimpleContext({
           sdk.client.lsp.status().then((x) => setStore("lsp", x.data!))
           break
         }
+
+        case "mcp.server.added":
+        case "mcp.server.removed": {
+          sdk.client.mcp.status().then((x) => setStore("mcp", x.data!))
+          break
+        }
       }
     })
 

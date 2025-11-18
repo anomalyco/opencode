@@ -81,6 +81,11 @@ export namespace MCP {
 
       await Promise.all(
         Object.entries(config).map(async ([key, mcp]) => {
+          // Only load MCPs that are enabled in config
+          if (mcp.enabled === false) {
+            log.info("mcp server disabled", { key })
+            return
+          }
           const result = await create(key, mcp).catch(() => undefined)
           if (!result) return
 
@@ -120,38 +125,46 @@ export namespace MCP {
     >()
   })
 
-  export async function add(name: string, mcp: Config.Mcp, sessionID?: string) {
-    const s = await state()
-    const result = await create(name, mcp, true) // Ignore enabled flag for dynamic loading
+  async function registerMCP(
+    name: string,
+    mcp: Config.Mcp,
+    scope: "instance" | "session",
+    storage: { clients: Record<string, Client>; status: Record<string, Status> },
+    sessionID?: string,
+  ) {
+    const result = await create(name, mcp)
     if (!result) {
       const status = {
         status: "failed" as const,
         error: "unknown error",
       }
-      s.status[name] = status
-      return {
-        status,
-      }
+      storage.status[name] = status
+      return { status }
     }
     if (!result.mcpClient) {
-      s.status[name] = result.status
-      return {
-        status: s.status,
-      }
+      storage.status[name] = result.status
+      return { status: storage.status }
     }
-    s.clients[name] = result.mcpClient
-    s.status[name] = result.status
+    storage.clients[name] = result.mcpClient
+    storage.status[name] = result.status
+
+    if (scope === "session" && sessionID) {
+      log.info("added session-scoped MCP", { sessionID, name })
+    }
 
     // Publish event so tools can be refreshed
     await Bus.publish(Event.ServerAdded, {
       name,
-      scope: "instance",
+      scope,
       sessionID,
     })
 
-    return {
-      status: s.status,
-    }
+    return { status: storage.status }
+  }
+
+  export async function add(name: string, mcp: Config.Mcp, sessionID?: string) {
+    const s = await state()
+    return registerMCP(name, mcp, "instance", s, sessionID)
   }
 
   export async function addSessionScoped(sessionID: string, name: string, mcp: Config.Mcp) {
@@ -165,38 +178,7 @@ export namespace MCP {
       sessions.set(sessionID, session)
     }
 
-    const result = await create(name, mcp, true) // Ignore enabled flag for dynamic loading
-    if (!result) {
-      const status = {
-        status: "failed" as const,
-        error: "unknown error",
-      }
-      session.status[name] = status
-      return {
-        status,
-      }
-    }
-    if (!result.mcpClient) {
-      session.status[name] = result.status
-      return {
-        status: session.status,
-      }
-    }
-    session.clients[name] = result.mcpClient
-    session.status[name] = result.status
-
-    log.info("added session-scoped MCP", { sessionID, name })
-
-    // Publish event so tools can be refreshed
-    await Bus.publish(Event.ServerAdded, {
-      name,
-      scope: "session",
-      sessionID,
-    })
-
-    return {
-      status: session.status,
-    }
+    return registerMCP(name, mcp, "session", session, sessionID)
   }
 
   export async function disposeSession(sessionID: string) {
@@ -226,11 +208,7 @@ export namespace MCP {
     sessions.delete(sessionID)
   }
 
-  async function create(key: string, mcp: Config.Mcp, ignoreEnabled = false) {
-    if (mcp.enabled === false && !ignoreEnabled) {
-      log.info("mcp server disabled", { key })
-      return
-    }
+  async function create(key: string, mcp: Config.Mcp) {
     log.info("found", { key, type: mcp.type })
     let mcpClient: MCPClient | undefined
     let status: Status | undefined = undefined
@@ -384,21 +362,25 @@ export namespace MCP {
     return state().then((state) => state.clients)
   }
 
-  export async function tools(sessionID?: string) {
+  async function retrieveToolsFromClients(
+    clients: Record<string, Client>,
+    storage: { clients: Record<string, Client>; status: Record<string, Status> },
+    context?: { sessionID?: string; scope?: string },
+  ) {
     const result: Record<string, Tool> = {}
-    const s = await state()
-    const clientsSnapshot = await clients()
-
-    // Add instance-scoped tools
-    for (const [clientName, client] of Object.entries(clientsSnapshot)) {
+    for (const [clientName, client] of Object.entries(clients)) {
       const tools = await client.tools().catch((e) => {
-        log.error("failed to get tools", { clientName, error: e.message })
+        const errorContext = context?.sessionID
+          ? { sessionID: context.sessionID, clientName, error: e.message }
+          : { clientName, error: e.message }
+        const errorMsg = context?.scope === "session" ? "failed to get session-scoped tools" : "failed to get tools"
+        log.error(errorMsg, errorContext)
         const failedStatus = {
           status: "failed" as const,
           error: e instanceof Error ? e.message : String(e),
         }
-        s.status[clientName] = failedStatus
-        delete s.clients[clientName]
+        storage.status[clientName] = failedStatus
+        delete storage.clients[clientName]
       })
       if (!tools) {
         continue
@@ -409,31 +391,28 @@ export namespace MCP {
         result[sanitizedClientName + "_" + sanitizedToolName] = tool
       }
     }
+    return result
+  }
+
+  export async function tools(sessionID?: string) {
+    const result: Record<string, Tool> = {}
+    const s = await state()
+    const clientsSnapshot = await clients()
+
+    // Add instance-scoped tools
+    const instanceTools = await retrieveToolsFromClients(clientsSnapshot, s)
+    Object.assign(result, instanceTools)
 
     // Add session-scoped tools if sessionID provided
     if (sessionID) {
       const sessions = await sessionState()
       const session = sessions.get(sessionID)
       if (session) {
-        for (const [clientName, client] of Object.entries(session.clients)) {
-          const tools = await client.tools().catch((e) => {
-            log.error("failed to get session-scoped tools", { sessionID, clientName, error: e.message })
-            const failedStatus = {
-              status: "failed" as const,
-              error: e instanceof Error ? e.message : String(e),
-            }
-            session.status[clientName] = failedStatus
-            delete session.clients[clientName]
-          })
-          if (!tools) {
-            continue
-          }
-          for (const [toolName, tool] of Object.entries(tools)) {
-            const sanitizedClientName = clientName.replace(/[^a-zA-Z0-9_-]/g, "_")
-            const sanitizedToolName = toolName.replace(/[^a-zA-Z0-9_-]/g, "_")
-            result[sanitizedClientName + "_" + sanitizedToolName] = tool
-          }
-        }
+        const sessionTools = await retrieveToolsFromClients(session.clients, session, {
+          sessionID,
+          scope: "session",
+        })
+        Object.assign(result, sessionTools)
       }
     }
 

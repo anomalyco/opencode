@@ -117,22 +117,22 @@ describe("session-scoped MCP", () => {
     })
   })
 
-  test("should load MCP dynamically even with enabled:false in config", async () => {
+  test("should load MCP dynamically regardless of enabled flag", async () => {
     await Instance.provide({
       directory: projectRoot,
       fn: async () => {
         const session = await Session.create({})
 
-        // Config has enabled: false, but dynamic loading should ignore this
+        // Dynamic loading bypasses the enabled flag (which only applies to config-file loading)
         const mockConfig = {
           type: "local" as const,
           command: ["/nonexistent/command"],
-          enabled: false, // Should be ignored for dynamic loading
+          enabled: false, // Ignored for dynamic loading
         }
 
         await MCP.addSessionScoped(session.id, "disabled-mcp", mockConfig)
 
-        // Should still be added (and fail to connect, but that's ok)
+        // Should be added (will fail to connect, but that's expected with invalid command)
         const status = await MCP.status(session.id)
         expect(status["disabled-mcp"]).toBeDefined()
 
