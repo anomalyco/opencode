@@ -459,8 +459,6 @@ export default function Page() {
                               ) as AssistantMessageType[]
                             })
                             const error = createMemo(() => assistantMessages().find((m) => m?.error)?.error)
-                            const initialCompleted = !!message.summary?.body || !!error()
-                            const [completed, setCompleted] = createSignal(initialCompleted)
                             const [detailsExpanded, setDetailsExpanded] = createSignal(false)
                             const parts = createMemo(() => sync.data.part[message.id])
                             const hasToolPart = createMemo(() =>
@@ -471,6 +469,8 @@ export default function Page() {
                             const working = createMemo(
                               () => message.id === session.messages.last()?.id && session.working(),
                             )
+                            const initialCompleted = !(message.id === session.messages.last()?.id && session.working())
+                            const [completed, setCompleted] = createSignal(initialCompleted)
 
                             // allowing time for the animations to finish
                             createEffect(() => {
@@ -478,9 +478,8 @@ export default function Page() {
                               setTimeout(() => setTitled(!!title), 10_000)
                             })
                             createEffect(() => {
-                              const summary = message.summary?.body
-                              const complete = !!summary || !!error()
-                              setTimeout(() => setCompleted(complete), 1200)
+                              const completed = !working()
+                              setTimeout(() => setCompleted(completed), 1200)
                             })
 
                             return (
