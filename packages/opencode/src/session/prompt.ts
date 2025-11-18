@@ -191,8 +191,12 @@ export namespace SessionPrompt {
     const session = await Session.get(input.sessionID)
     await SessionRevert.cleanup(session)
 
-    await createUserMessage(input)
+    const message = await createUserMessage(input)
     await Session.touch(input.sessionID)
+
+    if (input.noReply) {
+      return message
+    }
 
     return loop(input.sessionID)
   })
@@ -386,7 +390,7 @@ export namespace SessionPrompt {
 
       // pending compaction
       if (task?.type === "compaction") {
-        await SessionCompaction.process({
+        const result = await SessionCompaction.process({
           messages: msgs,
           parentID: lastUser.id,
           abort,
@@ -396,6 +400,7 @@ export namespace SessionPrompt {
           },
           sessionID,
         })
+        if (result === "stop") break
         continue
       }
 

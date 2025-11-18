@@ -3,7 +3,7 @@ title: Permissions
 description: Control which actions require approval to run.
 ---
 
-By default, OpenCode **allows all operations** without requiring explicit approval. You can configure this using the `permission` option.
+By default, OpenCode allows most operations without approval, except `doom_loop` and `external_directory` which default to `ask`. You can configure this using the `permission` option.
 
 ```json title="opencode.json"
 {

@@ -13,7 +13,6 @@ import {
   Code,
   Tooltip,
   ProgressCircle,
-  Button,
 } from "@opencode-ai/ui"
 import { FileIcon } from "@/ui"
 import { MessageProgress } from "@/components/message-progress"
@@ -52,8 +51,10 @@ import { Spinner } from "@/components/spinner"
 import { useSession } from "@/context/session"
 import { StickyAccordionHeader } from "@/components/sticky-accordion-header"
 import { SessionReview } from "@/components/session-review"
+import { useLayout } from "@/context/layout"
 
 export default function Page() {
+  const layout = useLayout()
   const local = useLocal()
   const sync = useSync()
   const session = useSession()
@@ -176,10 +177,16 @@ export default function Page() {
     setStore("activeDraggable", undefined)
   }
 
-  const FileVisual = (props: { file: LocalFile }): JSX.Element => {
+  const FileVisual = (props: { file: LocalFile; active?: boolean }): JSX.Element => {
     return (
       <div class="flex items-center gap-x-1.5">
-        <FileIcon node={props.file} class="grayscale-100 group-data-[selected]/tab:grayscale-0" />
+        <FileIcon
+          node={props.file}
+          classList={{
+            "grayscale-100 group-data-[selected]/tab:grayscale-0": !props.active,
+            "grayscale-0": props.active,
+          }}
+        />
         <span
           classList={{
             "text-14-medium": true,
@@ -287,7 +294,7 @@ export default function Page() {
             <Tabs.List>
               <Tabs.Trigger value="chat">
                 <div class="flex gap-x-[17px] items-center">
-                  <div>Chat</div>
+                  <div>Session</div>
                   <Tooltip
                     value={`${new Intl.NumberFormat("en-US", {
                       notation: "compact",
@@ -300,11 +307,11 @@ export default function Page() {
                   </Tooltip>
                 </div>
               </Tabs.Trigger>
-              <Show when={local.layout.review.state() === "tab" && session.diffs().length}>
+              <Show when={layout.review.state() === "tab" && session.diffs().length}>
                 <Tabs.Trigger
                   value="review"
                   closeButton={
-                    <IconButton icon="collapse" size="normal" variant="ghost" onClick={local.layout.review.pane} />
+                    <IconButton icon="collapse" size="normal" variant="ghost" onClick={layout.review.pane} />
                   }
                 >
                   <div class="flex items-center gap-3">
@@ -343,8 +350,8 @@ export default function Page() {
             <div
               classList={{
                 "w-full flex-1 min-h-0": true,
-                grid: local.layout.review.state() === "tab",
-                flex: local.layout.review.state() === "pane",
+                grid: layout.review.state() === "tab",
+                flex: layout.review.state() === "pane",
               }}
             >
               <div class="relative shrink-0 px-6 py-3 flex flex-col gap-6 flex-1 min-h-0 w-full max-w-xl mx-auto">
@@ -353,92 +360,92 @@ export default function Page() {
                     <div
                       classList={{
                         "flex-1 min-h-0 pb-20": true,
-                        "flex items-start justify-start": local.layout.review.state() === "pane",
+                        "flex items-start justify-start": layout.review.state() === "pane",
                       }}
                     >
                       <Show when={session.messages.user().length > 1}>
-                        <ul
-                          role="list"
-                          classList={{
-                            "mr-8 shrink-0 flex flex-col items-start": true,
-                            "absolute right-full w-60 mt-3 @7xl:gap-2 @7xl:mt-1": local.layout.review.state() === "tab",
-                            "mt-3": local.layout.review.state() === "pane",
-                          }}
-                        >
-                          <For each={session.messages.user()}>
-                            {(message) => {
-                              const assistantMessages = createMemo(() => {
-                                if (!session.id) return []
-                                return sync.data.message[session.id]?.filter(
-                                  (m) => m.role === "assistant" && m.parentID == message.id,
-                                ) as AssistantMessageType[]
-                              })
-                              const error = createMemo(() => assistantMessages().find((m) => m?.error)?.error)
-                              const working = createMemo(() => !message.summary?.body && !error())
+                        {(_) => {
+                          const expanded = createMemo(() => layout.review.state() === "tab" || !session.diffs().length)
 
-                              const handleClick = () => session.messages.setActive(message.id)
+                          return (
+                            <ul
+                              role="list"
+                              classList={{
+                                "mr-8 shrink-0 flex flex-col items-start": true,
+                                "absolute right-full w-60 mt-3 @7xl:gap-2 @7xl:mt-1": expanded(),
+                                "mt-3": !expanded(),
+                              }}
+                            >
+                              <For each={session.messages.user()}>
+                                {(message) => {
+                                  const working = createMemo(
+                                    () => message.id === session.messages.last()?.id && session.working(),
+                                  )
+                                  const handleClick = () => session.messages.setActive(message.id)
 
-                              return (
-                                <li
-                                  classList={{
-                                    "group/li flex items-center self-stretch justify-end": true,
-                                    "@7xl:justify-start": local.layout.review.state() === "tab",
-                                  }}
-                                >
-                                  <Tooltip
-                                    placement="right"
-                                    gutter={8}
-                                    value={
-                                      <div class="flex items-center gap-2">
-                                        <DiffChanges changes={message.summary?.diffs ?? []} variant="bars" />
-                                        {message.summary?.title}
-                                      </div>
-                                    }
-                                  >
-                                    <button
-                                      data-active={session.messages.active()?.id === message.id}
-                                      onClick={handleClick}
+                                  return (
+                                    <li
                                       classList={{
-                                        "group/tick flex items-center justify-start h-2 w-8 -mr-3": true,
-                                        "data-[active=true]:[&>div]:bg-icon-strong-base data-[active=true]:[&>div]:w-full": true,
-                                        "@7xl:hidden": local.layout.review.state() === "tab",
+                                        "group/li flex items-center self-stretch justify-end": true,
+                                        "@7xl:justify-start": expanded(),
                                       }}
                                     >
-                                      <div class="h-px w-5 bg-icon-base group-hover/tick:w-full group-hover/tick:bg-icon-strong-base" />
-                                    </button>
-                                  </Tooltip>
-                                  <button
-                                    classList={{
-                                      "hidden items-center self-stretch w-full gap-x-2 cursor-default": true,
-                                      "@7xl:flex": local.layout.review.state() === "tab",
-                                    }}
-                                    onClick={handleClick}
-                                  >
-                                    <Switch>
-                                      <Match when={working()}>
-                                        <Spinner class="text-text-base shrink-0 w-[18px] aspect-square" />
-                                      </Match>
-                                      <Match when={true}>
-                                        <DiffChanges changes={message.summary?.diffs ?? []} variant="bars" />
-                                      </Match>
-                                    </Switch>
-                                    <div
-                                      data-active={session.messages.active()?.id === message.id}
-                                      classList={{
-                                        "text-14-regular text-text-weak whitespace-nowrap truncate min-w-0": true,
-                                        "text-text-weak data-[active=true]:text-text-strong group-hover/li:text-text-base": true,
-                                      }}
-                                    >
-                                      <Show when={message.summary?.title} fallback="New message">
-                                        {message.summary?.title}
-                                      </Show>
-                                    </div>
-                                  </button>
-                                </li>
-                              )
-                            }}
-                          </For>
-                        </ul>
+                                      <Tooltip
+                                        placement="right"
+                                        gutter={8}
+                                        value={
+                                          <div class="flex items-center gap-2">
+                                            <DiffChanges changes={message.summary?.diffs ?? []} variant="bars" />
+                                            {message.summary?.title}
+                                          </div>
+                                        }
+                                      >
+                                        <button
+                                          data-active={session.messages.active()?.id === message.id}
+                                          onClick={handleClick}
+                                          classList={{
+                                            "group/tick flex items-center justify-start h-2 w-8 -mr-3": true,
+                                            "data-[active=true]:[&>div]:bg-icon-strong-base data-[active=true]:[&>div]:w-full": true,
+                                            "@7xl:hidden": expanded(),
+                                          }}
+                                        >
+                                          <div class="h-px w-5 bg-icon-base group-hover/tick:w-full group-hover/tick:bg-icon-strong-base" />
+                                        </button>
+                                      </Tooltip>
+                                      <button
+                                        classList={{
+                                          "hidden items-center self-stretch w-full gap-x-2 cursor-default": true,
+                                          "@7xl:flex": expanded(),
+                                        }}
+                                        onClick={handleClick}
+                                      >
+                                        <Switch>
+                                          <Match when={working()}>
+                                            <Spinner class="text-text-base shrink-0 w-[18px] aspect-square" />
+                                          </Match>
+                                          <Match when={true}>
+                                            <DiffChanges changes={message.summary?.diffs ?? []} variant="bars" />
+                                          </Match>
+                                        </Switch>
+                                        <div
+                                          data-active={session.messages.active()?.id === message.id}
+                                          classList={{
+                                            "text-14-regular text-text-weak whitespace-nowrap truncate min-w-0": true,
+                                            "text-text-weak data-[active=true]:text-text-strong group-hover/li:text-text-base": true,
+                                          }}
+                                        >
+                                          <Show when={message.summary?.title} fallback="New message">
+                                            {message.summary?.title}
+                                          </Show>
+                                        </div>
+                                      </button>
+                                    </li>
+                                  )
+                                }}
+                              </For>
+                            </ul>
+                          )
+                        }}
                       </Show>
                       <div ref={messageScrollElement} class="grow size-full min-w-0 overflow-y-auto no-scrollbar">
                         <For each={session.messages.user()}>
@@ -452,7 +459,8 @@ export default function Page() {
                               ) as AssistantMessageType[]
                             })
                             const error = createMemo(() => assistantMessages().find((m) => m?.error)?.error)
-                            const [completed, setCompleted] = createSignal(!!message.summary?.body || !!error())
+                            const initialCompleted = !!message.summary?.body || !!error()
+                            const [completed, setCompleted] = createSignal(initialCompleted)
                             const [detailsExpanded, setDetailsExpanded] = createSignal(false)
                             const parts = createMemo(() => sync.data.part[message.id])
                             const hasToolPart = createMemo(() =>
@@ -460,7 +468,9 @@ export default function Page() {
                                 ?.flatMap((m) => sync.data.part[m.id])
                                 .some((p) => p?.type === "tool"),
                             )
-                            const working = createMemo(() => !message.summary?.body && !error())
+                            const working = createMemo(
+                              () => message.id === session.messages.last()?.id && session.working(),
+                            )
 
                             // allowing time for the animations to finish
                             createEffect(() => {
@@ -514,7 +524,8 @@ export default function Page() {
                                             <Markdown
                                               classList={{
                                                 "text-14-regular": !!message.summary?.diffs?.length,
-                                                "[&>*]:fade-up-text": !message.summary?.diffs?.length,
+                                                "[&>*]:fade-up-text":
+                                                  !message.summary?.diffs?.length && !initialCompleted,
                                               }}
                                               text={summary()}
                                             />
@@ -654,7 +665,7 @@ export default function Page() {
                   />
                 </div>
               </div>
-              <Show when={local.layout.review.state() === "pane" && session.diffs().length}>
+              <Show when={layout.review.state() === "pane" && session.diffs().length}>
                 <div
                   classList={{
                     "relative grow px-6 py-3 flex-1 min-h-0 border-l border-border-weak-base": true,
@@ -665,7 +676,7 @@ export default function Page() {
               </Show>
             </div>
           </Tabs.Content>
-          <Show when={local.layout.review.state() === "tab" && session.diffs().length}>
+          <Show when={layout.review.state() === "tab" && session.diffs().length}>
             <Tabs.Content value="review" class="select-text flex flex-col h-full overflow-hidden">
               <div
                 classList={{
@@ -718,8 +729,8 @@ export default function Page() {
                 },
               )
               return (
-                <div class="relative px-3 h-10 flex items-center bg-background-base border-x border-border-weak-base border-b border-b-transparent">
-                  <Show when={file()}>{(f) => <FileVisual file={f()} />}</Show>
+                <div class="relative px-6 h-12 flex items-center bg-background-stronger border-x border-border-weak-base border-b border-b-transparent">
+                  <Show when={file()}>{(f) => <FileVisual active file={f()} />}</Show>
                 </div>
               )
             }}
@@ -769,7 +780,13 @@ export default function Page() {
           items={local.file.searchFiles}
           key={(x) => x}
           onOpenChange={(open) => setStore("fileSelectOpen", open)}
-          onSelect={(x) => (x ? session.layout.openTab("file://" + x) : undefined)}
+          onSelect={(x) => {
+            if (x) {
+              local.file.open(x)
+              return session.layout.openTab("file://" + x)
+            }
+            return undefined
+          }}
         >
           {(i) => (
             <div

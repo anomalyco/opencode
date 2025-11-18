@@ -158,10 +158,10 @@ export const { use: useLocal, provider: LocalProvider } = createSimpleContext({
           }
         }
         const provider = sync.data.provider[0]
-        const model = Object.values(provider.models)[0]
+        const model = sync.data.provider_default[provider.id] ?? Object.values(provider.models)[0].id
         return {
           providerID: provider.id,
-          modelID: model.id,
+          modelID: model,
         }
       })
 

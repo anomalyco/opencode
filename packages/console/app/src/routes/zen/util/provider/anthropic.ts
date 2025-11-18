@@ -30,6 +30,7 @@ export const anthropicHelper = {
       service_tier: "standard_only",
     }
   },
+  streamSeparator: "\n\n",
   createUsageParser: () => {
     let usage: Usage
 

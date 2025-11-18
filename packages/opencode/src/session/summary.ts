@@ -145,7 +145,7 @@ export namespace SessionSummary {
       messageID: Identifier.schema("message").optional(),
     }),
     async (input) => {
-      return Storage.read<Snapshot.FileDiff[]>(["session_diff", input.sessionID]) ?? []
+      return Storage.read<Snapshot.FileDiff[]>(["session_diff", input.sessionID]).catch(() => [])
     },
   )
 

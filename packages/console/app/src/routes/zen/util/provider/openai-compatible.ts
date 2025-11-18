@@ -33,6 +33,7 @@ export const oaCompatHelper = {
       ...(body.stream ? { stream_options: { include_usage: true } } : {}),
     }
   },
+  streamSeparator: "\n\n",
   createUsageParser: () => {
     let usage: Usage
 
