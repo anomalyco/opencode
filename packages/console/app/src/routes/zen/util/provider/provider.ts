@@ -26,9 +26,10 @@ import {
 
 export type ProviderHelper = {
   format: ZenData.Format
-  modifyUrl: (providerApi: string) => string
+  modifyUrl: (providerApi: string, model?: string, isStream?: boolean) => string
   modifyHeaders: (headers: Headers, body: Record<string, any>, apiKey: string) => void
   modifyBody: (body: Record<string, any>) => Record<string, any>
+  streamSeparator: string
   createUsageParser: () => {
     parse: (chunk: string) => void
     retrieve: () => any
