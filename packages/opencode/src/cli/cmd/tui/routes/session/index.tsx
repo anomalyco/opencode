@@ -1834,7 +1834,13 @@ function MessageControls(props: {
       }}
       style={{ cursor: "pointer" }}
     >
-      <text fg={colors[props.priority ?? "none"]} attributes={1} style={{ fontSize: 18, lineHeight: 1 }}>
+      <text
+        fg={colors[props.priority ?? "none"]}
+        attributes={1}
+        paddingTop={1}
+        paddingRight={1}
+        style={{ fontSize: 18, lineHeight: 1 }}
+      >
         {props.priority === "none" ? "☆" : "★"}
       </text>
     </box>
