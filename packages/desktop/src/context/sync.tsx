@@ -26,6 +26,7 @@ export const { use: useSync, provider: SyncProvider } = createSimpleContext({
             .slice(0, store.limit)
           setStore("session", sessions)
         }),
+      status: () => sdk.client.session.status().then((x) => setStore("session_status", x.data!)),
       config: () => sdk.client.config.get().then((x) => setStore("config", x.data!)),
       changes: () => sdk.client.file.status().then((x) => setStore("changes", x.data!)),
       node: () => sdk.client.file.list({ query: { path: "/" } }).then((x) => setStore("node", x.data!)),

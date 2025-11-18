@@ -11,6 +11,7 @@ import type {
   Project,
   FileDiff,
   Todo,
+  SessionStatus,
 } from "@opencode-ai/sdk"
 import { createStore, produce, reconcile } from "solid-js/store"
 import { Binary } from "@/utils/binary"
@@ -25,6 +26,9 @@ type State = {
   config: Config
   path: Path
   session: Session[]
+  session_status: {
+    [sessionID: string]: SessionStatus
+  }
   session_diff: {
     [sessionID: string]: FileDiff[]
   }
@@ -68,6 +72,7 @@ export const { use: useGlobalSync, provider: GlobalSyncProvider } = createSimple
           agent: [],
           provider: [],
           session: [],
+          session_status: {},
           session_diff: {},
           todo: {},
           limit: 10,
@@ -108,6 +113,10 @@ export const { use: useGlobalSync, provider: GlobalSyncProvider } = createSimple
         case "todo.updated":
           setStore("todo", event.properties.sessionID, event.properties.todos)
           break
+        case "session.status": {
+          setStore("session_status", event.properties.sessionID, event.properties.status)
+          break
+        }
         case "message.updated": {
           const messages = store.message[event.properties.info.sessionID]
           if (!messages) {

@@ -378,15 +378,9 @@ export default function Page() {
                             >
                               <For each={session.messages.user()}>
                                 {(message) => {
-                                  const assistantMessages = createMemo(() => {
-                                    if (!session.id) return []
-                                    return sync.data.message[session.id]?.filter(
-                                      (m) => m.role === "assistant" && m.parentID == message.id,
-                                    ) as AssistantMessageType[]
-                                  })
-                                  const error = createMemo(() => assistantMessages().find((m) => m?.error)?.error)
-                                  const working = createMemo(() => !message.summary?.body && !error())
-
+                                  const working = createMemo(
+                                    () => message.id === session.messages.last()?.id && session.working(),
+                                  )
                                   const handleClick = () => session.messages.setActive(message.id)
 
                                   return (
@@ -473,7 +467,9 @@ export default function Page() {
                                 ?.flatMap((m) => sync.data.part[m.id])
                                 .some((p) => p?.type === "tool"),
                             )
-                            const working = createMemo(() => !message.summary?.body && !error())
+                            const working = createMemo(
+                              () => message.id === session.messages.last()?.id && session.working(),
+                            )
 
                             // allowing time for the animations to finish
                             createEffect(() => {

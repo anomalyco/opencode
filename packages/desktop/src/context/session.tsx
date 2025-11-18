@@ -58,16 +58,13 @@ export const { use: useSession, provider: SessionProvider } = createSimpleContex
       if (!store.messageId) return lastUserMessage()
       return userMessages()?.find((m) => m.id === store.messageId)
     })
-    const working = createMemo(() => {
-      if (!params.id) return false
-      const last = lastUserMessage()
-      if (!last) return false
-      const assistantMessages = sync.data.message[params.id]?.filter(
-        (m) => m.role === "assistant" && m.parentID == last?.id,
-      ) as AssistantMessage[]
-      const error = assistantMessages?.find((m) => m?.error)?.error
-      return !last?.summary?.body && !error
-    })
+    const status = createMemo(
+      () =>
+        sync.data.session_status[params.id] ?? {
+          type: "idle",
+        },
+    )
+    const working = createMemo(() => status()?.type !== "idle")
 
     const cost = createMemo(() => {
       const total = pipe(
@@ -102,8 +99,11 @@ export const { use: useSession, provider: SessionProvider } = createSimpleContex
     })
 
     return {
-      id: params.id,
+      get id() {
+        return params.id
+      },
       info,
+      status,
       working,
       diffs,
       prompt: {

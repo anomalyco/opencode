@@ -14,12 +14,10 @@ export default function Layout(props: ParentProps) {
     return sync.data.projects.find((x) => x.worktree === decoded)?.worktree ?? "/"
   })
   return (
-    <Show when={params.id || true} keyed>
-      <SDKProvider directory={directory()}>
-        <SyncProvider>
-          <LocalProvider>{props.children}</LocalProvider>
-        </SyncProvider>
-      </SDKProvider>
-    </Show>
+    <SDKProvider directory={directory()}>
+      <SyncProvider>
+        <LocalProvider>{props.children}</LocalProvider>
+      </SyncProvider>
+    </SDKProvider>
   )
 }
