@@ -2530,10 +2530,6 @@ function ToolPart(props: {
           setMargin(0)
           return
         }
-        if (previous.id.startsWith("text-")) {
-          setMargin(0)
-          return
-        }
         setMargin(1)
       }}
     >
