@@ -155,11 +155,8 @@ export const buildUrl: Client["buildUrl"] = (options) =>
 
 export const mergeConfigs = (a: Config, b: Config): Config => {
   const config = { ...a, ...b }
-  if (config.baseUrl) {
-    const base =
-      typeof config.baseUrl === "string" ? config.baseUrl : String(config.baseUrl)
-    const trimmed = base.endsWith("/") ? base.substring(0, base.length - 1) : base
-    config.baseUrl = trimmed
+  if (config.baseUrl?.endsWith("/")) {
+    config.baseUrl = config.baseUrl.substring(0, config.baseUrl.length - 1)
   }
   config.headers = mergeHeaders(a.headers, b.headers)
   return config
