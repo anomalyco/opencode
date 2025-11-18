@@ -595,14 +595,14 @@ export function Sidebar(props: {
     }),
   )
 
-  // Favorite indicator circle based on level
+  // Favorite indicator star based on level
   const getStarIcon = (toolId: string): { icon: string; color: string } => {
     const level = getFavoriteLevel(toolId)
-    if (level === "global") return { icon: "●", color: "#FFFFFF" }
-    if (level === "project") return { icon: "●", color: "#B3B3B3" }
+    if (level === "global") return { icon: "★", color: "#FFFFFF" }
+    if (level === "project") return { icon: "★", color: "#B3B3B3" }
     const muted = theme.textMuted
     return {
-      icon: "○",
+      icon: "☆",
       color: typeof muted === "string" ? muted : muted.toString(),
     }
   }
