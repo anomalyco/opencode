@@ -114,30 +114,34 @@ export namespace Agent {
       cfg.permission ?? {},
     )
 
-    const result: Record<string, Info> = {
-      build: {
-        name: "build",
-        description:
-          "General-purpose agent for researching complex questions, searching for code, and executing multi-step tasks. When you are searching for a keyword or file and are not confident that you will find the right match in the first few tries use this agent to perform the search for you.",
-        roleDefinition: "Full-capability implementation agent with all tools",
-        tools: {
-          todoread: false,
-          todowrite: false,
-          switch_mode: true,
-          complete_task: true,
-          ...defaultTools,
-        },
-        options: {},
-        permission: agentPermission,
-        capabilities: {
-          canCreateSubtasks: true,
-          canSwitchModes: true,
-          canModifyFiles: true,
-          canExecuteCommands: true,
-        },
-        mode: "primary",
-        builtIn: true,
+    const createBuildAgent = (name: string): Info => ({
+      name,
+      description:
+        "General-purpose agent for researching complex questions, searching for code, and executing multi-step tasks. When you are searching for a keyword or file and are not confident that you will find the right match in the first few tries use this agent to perform the search for you.",
+      roleDefinition: "Full-capability implementation agent with all tools",
+      tools: {
+        todoread: true,
+        todowrite: true,
+        switch_mode: true,
+        complete_task: true,
+        ...defaultTools,
       },
+
+      options: {},
+      permission: agentPermission,
+      capabilities: {
+        canCreateSubtasks: true,
+        canSwitchModes: true,
+        canModifyFiles: true,
+        canExecuteCommands: true,
+      },
+      mode: "primary",
+      builtIn: true,
+    })
+
+    const result: Record<string, Info> = {
+      build: createBuildAgent("build"),
+      general: createBuildAgent("general"),
 
       plan: {
         name: "plan",
