@@ -143,6 +143,19 @@ async function processQueue() {
   state.running = task
   task.status = "running"
   broadcastState()
+  postMessage(
+    JSON.stringify({
+      type: "validation.state.update",
+      state: {
+        ...state,
+        running: task,
+      },
+      meta: {
+        event: "started",
+        files: task.files,
+      },
+    }),
+  )
 
   try {
     const results = await executeValidation(task)

@@ -210,6 +210,7 @@ export function Footer() {
 
           return (
             <>
+              <text fg={local.agent.color(agentForColor)}></text>
               <text bg={local.agent.color(agentForColor)}> </text>
               <text
                 bg={local.agent.color(agentForColor)}

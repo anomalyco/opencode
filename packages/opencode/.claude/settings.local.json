@@ -3,9 +3,11 @@
     "allow": [
       "Bash(npm run typecheck:*)",
       "Bash(npm run build:*)",
-      "Bash(wait)"
+      "Bash(wait)",
+      "Bash(bun:*)"
     ],
     "deny": [],
     "ask": []
-  }
+  },
+  "outputStyle": "default"
 }
