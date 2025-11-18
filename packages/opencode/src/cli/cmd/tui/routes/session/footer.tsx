@@ -76,16 +76,31 @@ export function Footer() {
         >
           [Manage]
         </text>
-        <box flexDirection="row" alignItems="center" gap={1}>
-          <text
-            fg={theme.background}
-            bg={theme.secondary}
-            attributes={TextAttributes.BOLD}
-            paddingLeft={1}
-            paddingRight={1}
+        <box flexDirection="row" alignItems="stretch">
+          <box
+            backgroundColor={theme.backgroundPanel}
+            paddingLeft={2}
+            paddingRight={2}
+            paddingTop={1}
+            paddingBottom={1}
+            borderTopLeftRadius={4}
+            borderBottomLeftRadius={4}
           >
-            {local.agent.current()?.name?.toUpperCase() ?? "DEFAULT"} AGENT ◀
-          </text>
+            <text fg={theme.textMuted}>tab</text>
+          </box>
+          <box
+            backgroundColor={theme.accent}
+            paddingLeft={3}
+            paddingRight={3}
+            paddingTop={1}
+            paddingBottom={1}
+            borderTopRightRadius={4}
+            borderBottomRightRadius={4}
+          >
+            <text fg={theme.background} attributes={TextAttributes.BOLD}>
+              BUILD {local.agent.current()?.name?.toUpperCase() ?? "AGENT"} ◀
+            </text>
+          </box>
         </box>
       </box>
     </box>

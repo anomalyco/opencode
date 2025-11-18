@@ -1702,9 +1702,9 @@ function MessageControls(props: {
   inline?: boolean
 }) {
   const { theme } = useTheme()
-  const inline = props.inline ?? false
   const dialog = useDialog()
   const renderer = useRenderer()
+  const inline = props.inline ?? false
 
   const openMenu = (event: ToolMouseEvent) => {
     event.stopPropagation?.()
@@ -1713,13 +1713,10 @@ function MessageControls(props: {
   }
 
   return (
-    <box flexDirection="row" alignItems="center" gap={inline ? 1 : 0}>
+    <box flexDirection="row" alignItems="center" gap={inline ? 1 : 0} onMouseUp={(event) => openMenu(event)}>
       <box width={inline ? undefined : 9} justifyContent="flex-end" flexShrink={0} marginLeft={inline ? 1 : 0}>
         <PriorityCircles sessionID={props.sessionID} messageID={props.messageID} priority={props.priority} compact />
       </box>
-      <text fg={theme.textMuted} attributes={1} marginLeft={-1} onMouseUp={(event) => openMenu(event)}>
-        ⋮
-      </text>
     </box>
   )
 }
@@ -1768,8 +1765,8 @@ function UserMessage(props: {
         }}
         onMouseUp={props.onMouseUp}
         border={["left"]}
-        paddingTop={0}
-        paddingBottom={0}
+        paddingTop={1}
+        paddingBottom={1}
         paddingLeft={2}
         marginTop={props.index === 0 ? 0 : 1}
         backgroundColor={hover() ? theme.backgroundElement : theme.backgroundPanel}
@@ -1777,7 +1774,7 @@ function UserMessage(props: {
         borderColor={color()}
         flexShrink={0}
       >
-        <box flexDirection="column" gap={0} justifyContent="center">
+        <box flexDirection="column" gap={hasFiles() ? 1 : 0} justifyContent="center">
           <box flexDirection="row" alignItems="flex-start" justifyContent="space-between" gap={1}>
             <box flexDirection="column" flexGrow={1} gap={hasFiles() ? 1 : 0}>
               <Show when={!hasFiles()}>
@@ -1796,11 +1793,13 @@ function UserMessage(props: {
                 </box>
               </Show>
             </box>
-            <MessageControls
-              sessionID={props.message.sessionID}
-              messageID={props.message.id}
-              priority={props.message.priority}
-            />
+            <Show when={hasFiles()}>
+              <MessageControls
+                sessionID={props.message.sessionID}
+                messageID={props.message.id}
+                priority={props.message.priority}
+              />
+            </Show>
           </box>
           <Switch>
             <Match when={queued()}>
@@ -1810,8 +1809,13 @@ function UserMessage(props: {
               </text>
             </Match>
             <Match when={!queued()}>
-              <text fg={theme.text} marginTop={hasFiles() ? 0 : 1}>
-                {displayName()} <span style={{ fg: theme.textMuted }}>({Locale.time(props.message.time.created)})</span>
+              <text
+                fg={theme.text}
+                marginTop={hasFiles() ? 0 : 1}
+                style={{ justifyContent: "space-between" }}
+              >
+                <span>{displayName()}</span>
+                <span style={{ fg: theme.textMuted }}>({Locale.time(props.message.time.created)})</span>
               </text>
             </Match>
           </Switch>
@@ -2028,7 +2032,9 @@ function AssistantMessage(props: { message: AssistantMessage; parts: Part[]; las
           customBorderChars={SplitBorder.customBorderChars}
           borderColor={theme.backgroundElement}
         >
-          <text fg={local.agent.color(props.message.mode)}>{Locale.titlecase(props.message.mode)}</text>
+          <text fg={local.agent.color(props.message.mode)}>
+            <span style={{ fg: theme.textMuted }}></span> {Locale.titlecase(props.message.mode)}
+          </text>
           <Shimmer text={`${props.message.modelID}`} color={theme.text} />
         </box>
       </Show>
@@ -2234,7 +2240,7 @@ function TextPart(props: { part: TextPart; message: AssistantMessage }) {
                   streaming={isStreaming()}
                   syntaxStyle={untrack(syntax)}
                   content={isStreaming() ? streamingText() : (segment as any).content}
-                  conceal={untrack(ctx.conceal)}
+                  conceal={ctx.conceal()}
                 />
               </Match>
               <Match when={segment.type === "widget"}>
