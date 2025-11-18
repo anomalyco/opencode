@@ -1841,7 +1841,7 @@ function MessageControls(props: {
         paddingRight={1}
         style={{ fontSize: 18, lineHeight: 1 }}
       >
-        {props.priority === "none" ? "☆" : "★"}
+        {props.priority === "none" ? "" : ""}
       </text>
     </box>
   )
