@@ -899,7 +899,7 @@ export namespace SessionPrompt {
                       abort: new AbortController().signal,
                       agent: input.agent!,
                       messageID: info.id,
-                      extra: { bypassCwdCheck: true },
+                      extra: { bypassCwdCheck: true, ...info.model },
                       metadata: async () => {},
                     })
                     pieces.push(
