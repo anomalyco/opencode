@@ -212,5 +212,19 @@ export default {
         ],
       },
     },
+    {
+      filetype: "swift",
+      wasm: "https://github.com/alex-pinkus/tree-sitter-swift/releases/download/0.7.1/tree-sitter-swift.wasm",
+      queries: {
+        highlights: [
+          // NOTE: Using parser repo queries instead of nvim-treesitter due to incompatible #lua-match? predicates
+          // "https://raw.githubusercontent.com/nvim-treesitter/nvim-treesitter/refs/heads/master/queries/highlights.scm
+          "https://raw.githubusercontent.com/alex-pinkus/tree-sitter-swift/main/queries/highlights.scm",
+        ],
+        locals: [
+          "https://raw.githubusercontent.com/nvim-treesitter/nvim-treesitter/refs/heads/master/queries/swift/locals.scm",
+        ],
+      },
+    },
   ],
 }
