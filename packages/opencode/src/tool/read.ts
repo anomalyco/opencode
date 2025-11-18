@@ -124,11 +124,7 @@ export const ReadTool = Tool.define("read", {
 
     const limit = params.limit ?? DEFAULT_READ_LIMIT
     const offset = params.offset || 0
-    let lines = (
-      delegate?.read
-        ? await delegate.read(filepath, { offset, limit })
-        : await file.text()
-    ).split("\n")
+    let lines = (delegate?.read ? await delegate.read(filepath, { offset, limit }) : await file.text()).split("\n")
     if (!delegate?.read) lines = lines.slice(offset, offset + limit)
     const raw = lines.map((line) => {
       return line.length > MAX_LINE_LENGTH ? line.substring(0, MAX_LINE_LENGTH) + "..." : line
