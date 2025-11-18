@@ -28,12 +28,16 @@ export namespace SessionCompaction {
     ),
   }
 
-  export function isOverflow(input: { tokens: MessageV2.Assistant["tokens"]; model: ModelsDev.Model }) {
+  export function isOverflow(input: { tokens: MessageV2.Assistant["tokens"]; model: ModelsDev.Model; modelID: string }) {
     if (Flag.OPENCODE_DISABLE_AUTOCOMPACT) return false
     const context = input.model.limit.context
     if (context === 0) return false
     const count = input.tokens.input + input.tokens.cache.read + input.tokens.output
-    const output = Math.min(input.model.limit.output, SessionPrompt.OUTPUT_TOKEN_MAX) || SessionPrompt.OUTPUT_TOKEN_MAX
+    const isGPT5 = input.modelID.includes("gpt-5")
+    const output = ( isGPT5 ?
+      Math.max(input.model.limit.output, SessionPrompt.OUTPUT_TOKEN_MAX) :
+      Math.min(input.model.limit.output, SessionPrompt.OUTPUT_TOKEN_MAX) )
+      || SessionPrompt.OUTPUT_TOKEN_MAX
     const usable = context - output
     return count > usable
   }

@@ -408,7 +408,7 @@ export namespace SessionPrompt {
       if (
         lastFinished &&
         lastFinished.summary !== true &&
-        SessionCompaction.isOverflow({ tokens: lastFinished.tokens, model: model.info })
+        SessionCompaction.isOverflow({ tokens: lastFinished.tokens, model: model.info, modelID: model.modelID })
       ) {
         await SessionCompaction.create({
           sessionID,
