@@ -459,7 +459,8 @@ export default function Page() {
                               ) as AssistantMessageType[]
                             })
                             const error = createMemo(() => assistantMessages().find((m) => m?.error)?.error)
-                            const [completed, setCompleted] = createSignal(!!message.summary?.body || !!error())
+                            const initialCompleted = !!message.summary?.body || !!error()
+                            const [completed, setCompleted] = createSignal(initialCompleted)
                             const [detailsExpanded, setDetailsExpanded] = createSignal(false)
                             const parts = createMemo(() => sync.data.part[message.id])
                             const hasToolPart = createMemo(() =>
@@ -523,7 +524,8 @@ export default function Page() {
                                             <Markdown
                                               classList={{
                                                 "text-14-regular": !!message.summary?.diffs?.length,
-                                                "[&>*]:fade-up-text": !message.summary?.diffs?.length,
+                                                "[&>*]:fade-up-text":
+                                                  !message.summary?.diffs?.length && !initialCompleted,
                                               }}
                                               text={summary()}
                                             />
