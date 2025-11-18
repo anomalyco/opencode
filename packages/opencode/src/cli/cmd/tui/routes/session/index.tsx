@@ -2486,7 +2486,7 @@ function ToolPart(props: {
       return {
         border: permissionIndex() === 0 ? (["left", "right"] as const) : (["left"] as const),
         paddingTop: 0,
-        paddingBottom: BLOCK_CONTAINER_PADDING,
+        paddingBottom: 0,
         paddingLeft,
         gap: collapsedState ? 0 : 1,
         minHeight: BLOCK_CONTAINER_MIN_HEIGHT,
@@ -2501,7 +2501,7 @@ function ToolPart(props: {
       borderColor: theme.background,
       paddingLeft: inlineIndent,
       paddingTop: 0,
-      paddingBottom: BLOCK_CONTAINER_PADDING,
+      paddingBottom: 0,
       minHeight: BLOCK_CONTAINER_MIN_HEIGHT,
       gap: collapsedState ? 0 : 1,
       backgroundColor: theme.backgroundPanel,
