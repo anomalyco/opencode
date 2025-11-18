@@ -1834,11 +1834,7 @@ function MessageControls(props: {
       }}
       style={{ cursor: "pointer" }}
     >
-      <text
-        fg={colors[props.priority ?? "none"]}
-        attributes={1}
-        style={{ fontSize: 18, lineHeight: 1 }}
-      >
+      <text fg={colors[props.priority ?? "none"]} attributes={1} style={{ fontSize: 18, lineHeight: 1 }}>
         {props.priority === "none" ? "☆" : "★"}
       </text>
     </box>
@@ -1934,11 +1930,7 @@ function UserMessage(props: {
               </text>
             </Match>
             <Match when={!queued()}>
-              <text
-                fg={theme.text}
-                marginTop={hasFiles() ? 0 : 1}
-                style={{ justifyContent: "space-between" }}
-              >
+              <text fg={theme.text} marginTop={hasFiles() ? 0 : 1} style={{ justifyContent: "space-between" }}>
                 <span>{displayName()}</span>
                 <span style={{ fg: theme.textMuted }}>({Locale.time(props.message.time.created)})</span>
               </text>
@@ -2111,11 +2103,7 @@ function AssistantMessage(props: { message: AssistantMessage; parts: Part[]; las
                 const component = createMemo(() => PART_MAPPING[g.part.type as keyof typeof PART_MAPPING])
                 return (
                   <Show when={component()}>
-                    <Dynamic
-                      component={component()}
-                      part={g.part as any}
-                      message={props.message}
-                    />
+                    <Dynamic component={component()} part={g.part as any} message={props.message} />
                   </Show>
                 )
               })()}
@@ -2450,16 +2438,14 @@ function ToolPart(props: {
   const input = props.part.state.input ?? {}
   const container = toolRegistry.container(props.part.tool)
   const priorityControls =
-    props.showPriorityControls === false
-      ? undefined
-      : (
-          <MessageControls
-            sessionID={props.message.sessionID}
-            messageID={props.message.id}
-            priority={props.message.priority}
-            inline
-          />
-        )
+    props.showPriorityControls === false ? undefined : (
+      <MessageControls
+        sessionID={props.message.sessionID}
+        messageID={props.message.id}
+        priority={props.message.priority}
+        inline
+      />
+    )
 
   // Make permissions reactive
   const permissions = createMemo(() => sync.data.permission[props.message.sessionID] ?? [])
@@ -2539,7 +2525,7 @@ function ToolPart(props: {
           return
         }
         if (previous.height > 1 || previous.id.startsWith("text-")) {
-          setMargin(1)
+          setMargin(2)
           return
         }
       }}
