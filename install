@@ -2,9 +2,8 @@
 set -euo pipefail
 APP=opencode
 
+MUTED='\033[0;2m'
 RED='\033[0;31m'
-GREEN='\033[0;32m'
-YELLOW='\033[1;33m'
 ORANGE='\033[38;2;255;140;0m'
 NC='\033[0m' # No Color
 
@@ -67,8 +66,8 @@ print_message() {
     local color=""
 
     case $level in
-        info) color="${GREEN}" ;;
-        warning) color="${YELLOW}" ;;
+        info) color="${NC}" ;;
+        warning) color="${NC}" ;;
         error) color="${RED}" ;;
     esac
 
@@ -86,18 +85,110 @@ check_version() {
         installed_version=$(echo $installed_version | awk '{print $2}')
 
         if [[ "$installed_version" != "$specific_version" ]]; then
-            print_message info "Installed version: ${YELLOW}$installed_version."
+            print_message info "${MUTED}Installed version: ${NC}$installed_version."
         else
-            print_message info "Version ${YELLOW}$specific_version${GREEN} already installed"
+            print_message info "${MUTED}Version ${NC}$specific_version${MUTED} already installed"
             exit 0
         fi
     fi
 }
 
+unbuffered_sed() {
+    if echo | sed -u >/dev/null 2>&1; then
+        sed -nu "$@"
+    elif echo | sed -l >/dev/null 2>&1; then
+        sed -nl "$@"
+    else
+        local pad="$(printf "\n%512s" "")"
+        sed -ne "s/$/\\${pad}/" "$@"
+    fi
+}
+
+print_progress() {
+    local bytes="$1"
+    local length="$2"
+    [ "$length" -gt 0 ] || return 0
+
+    local width=50
+    local percent=$(( bytes * 100 / length ))
+    [ "$percent" -gt 100 ] && percent=100
+    local on=$(( percent * width / 100 ))
+    local off=$(( width - on ))
+
+    local full_filled=$(printf "%.0s■" {1..50})
+    local full_empty=$(printf "%.0s･" {1..50})
+
+    printf "\r${ORANGE}%s%s %3d%%${NC}" "${full_filled:0:$on}" "${full_empty:0:$off}" "$percent" >&4
+}
+
+download_with_progress() {
+    local url="$1"
+    local output="$2"
+
+    if [ -t 2 ]; then
+        exec 4>&2
+    else
+        exec 4>/dev/null
+    fi
+
+    local tmp_dir=${TMPDIR:-/tmp}
+    local basename="${tmp_dir}/opencode_install_$$"
+    local tracefile="${basename}.trace"
+
+    rm -f "$tracefile"
+    mkfifo "$tracefile"
+
+    # Hide cursor
+    printf "\033[?25l" >&4
+
+    trap "trap - RETURN; rm -f \"$tracefile\"; printf '\033[?25h' >&4; exec 4>&-" RETURN
+
+    (
+        curl --trace-ascii "$tracefile" -s -L -o "$output" "$url"
+    ) &
+    local curl_pid=$!
+
+    unbuffered_sed \
+        -e 'y/ACDEGHLNORTV/acdeghlnortv/' \
+        -e '/^0000: content-length:/p' \
+        -e '/^<= recv data/p' \
+        "$tracefile" | \
+    {
+        local length=0
+        local bytes=0
+        
+        while IFS=" " read -r -a line; do
+            local tag="${line[0]} ${line[1]}"
+            
+            if [ "$tag" = "0000: content-length:" ]; then
+                length="${line[2]}"
+                length=$(echo "$length" | tr -d '\r')
+                bytes=0
+            elif [ "$tag" = "<= recv" ]; then
+                local size="${line[3]}"
+                bytes=$(( bytes + size ))
+                if [ "$length" -gt 0 ]; then
+                    print_progress "$bytes" "$length"
+                fi
+            fi
+        done
+    }
+
+    wait $curl_pid
+    local ret=$?
+    echo "" >&4
+    return $ret
+}
+
 download_and_install() {
-    print_message info "Downloading ${ORANGE}opencode ${GREEN}version: ${YELLOW}$specific_version ${GREEN}..."
+    print_message info "\n${MUTED}Installing ${NC}opencode ${MUTED}version: ${NC}$specific_version"
     mkdir -p opencodetmp && cd opencodetmp
-    curl -# -L -o "$filename" "$url"
+    
+    if ! download_with_progress "$url" "$filename"; then
+        # Fallback to standard curl if custom fails for some reason
+        curl -# -L -o "$filename" "$url"
+    fi
+
     unzip -q "$filename"
     mv opencode "$INSTALL_DIR"
     chmod 755 "${INSTALL_DIR}/opencode"
@@ -117,7 +208,7 @@ add_to_path() {
     elif [[ -w $config_file ]]; then
         echo -e "\n# opencode" >> "$config_file"
         echo "$command" >> "$config_file"
-        print_message info "Successfully added ${ORANGE}opencode ${GREEN}to \$PATH in $config_file"
+        print_message info "${MUTED}Successfully added ${NC}opencode ${MUTED}to \$PATH in ${NC}$config_file"
     else
         print_message warning "Manually add the directory to $config_file (or similar):"
         print_message info "  $command"
@@ -191,3 +282,20 @@ if [ -n "${GITHUB_ACTIONS-}" ] && [ "${GITHUB_ACTIONS}" == "true" ]; then
     echo "$INSTALL_DIR" >> $GITHUB_PATH
     print_message info "Added $INSTALL_DIR to \$GITHUB_PATH"
 fi
+
+echo -e ""
+echo -e "${MUTED}                    ${NC}             ▄     "
+echo -e "${MUTED}█▀▀█ █▀▀█ █▀▀█ █▀▀▄ ${NC}█▀▀▀ █▀▀█ █▀▀█ █▀▀█"
+echo -e "${MUTED}█░░█ █░░█ █▀▀▀ █░░█ ${NC}█░░░ █░░█ █░░█ █▀▀▀"
+echo -e "${MUTED}▀▀▀▀ █▀▀▀ ▀▀▀▀ ▀  ▀ ${NC}▀▀▀▀ ▀▀▀▀ ▀▀▀▀ ▀▀▀▀"
+echo -e ""
+echo -e ""
+echo -e "${MUTED}To get started, navigate to a project and run:${NC}"
+echo -e "opencode                   ${MUTED}Use free models${NC}"
+echo -e "opencode auth login        ${MUTED}Add paid provider API keys${NC}"
+echo -e "opencode help              ${MUTED}List commands and options${NC}"
+echo -e ""
+echo -e "${MUTED}For more information visit ${NC}https://opencode.ai/docs"
+echo -e ""
+echo -e ""
+
