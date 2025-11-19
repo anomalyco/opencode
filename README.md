@@ -28,9 +28,10 @@ curl -fsSL https://opencode.ai/install | bash
 npm i -g opencode-ai@latest        # or bun/pnpm/yarn
 scoop bucket add extras; scoop install extras/opencode  # Windows
 choco install opencode             # Windows
-brew install opencode      # macOS and Linux
+brew install opencode              # macOS and Linux
 paru -S opencode-bin               # Arch Linux
 mise use --pin -g ubi:sst/opencode # Any OS
+nix run nixpkgs#opencode           # or github:sst/opencode for latest dev branch
 ```
 
 > [!TIP]
@@ -50,6 +51,22 @@ The install script respects the following priority order for the installation pa
 OPENCODE_INSTALL_DIR=/usr/local/bin curl -fsSL https://opencode.ai/install | bash
 XDG_BIN_DIR=$HOME/.local/bin curl -fsSL https://opencode.ai/install | bash
 ```
+
+### Agents
+
+OpenCode includes two built-in agents you can switch between,
+you can switch between these using the `Tab` key.
+
+- **build** - Default, full access agent for development work
+- **plan** - Read-only agent for analysis and code exploration
+  - Denies file edits by default
+  - Asks permission before running bash commands
+  - Ideal for exploring unfamiliar codebases or planning changes
+
+Also, included is a **general** subagent for complex searches and multi-step tasks.
+This is used internally and can be invoked using `@general` in messages.
+
+Learn more about [agents](https://opencode.ai/docs/agents).
 
 ### Documentation
 

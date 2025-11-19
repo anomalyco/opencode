@@ -191,8 +191,12 @@ export namespace SessionPrompt {
     const session = await Session.get(input.sessionID)
     await SessionRevert.cleanup(session)
 
-    await createUserMessage(input)
+    const message = await createUserMessage(input)
     await Session.touch(input.sessionID)
+
+    if (input.noReply) {
+      return message
+    }
 
     return loop(input.sessionID)
   })
@@ -386,7 +390,7 @@ export namespace SessionPrompt {
 
       // pending compaction
       if (task?.type === "compaction") {
-        await SessionCompaction.process({
+        const result = await SessionCompaction.process({
           messages: msgs,
           parentID: lastUser.id,
           abort,
@@ -396,6 +400,7 @@ export namespace SessionPrompt {
           },
           sessionID,
         })
+        if (result === "stop") break
         continue
       }
 
@@ -894,7 +899,7 @@ export namespace SessionPrompt {
                       abort: new AbortController().signal,
                       agent: input.agent!,
                       messageID: info.id,
-                      extra: { bypassCwdCheck: true },
+                      extra: { bypassCwdCheck: true, ...info.model },
                       metadata: async () => {},
                     })
                     pieces.push(
@@ -1392,7 +1397,11 @@ export namespace SessionPrompt {
       ...small.info.options,
     }
     if (small.providerID === "openai" || small.modelID.includes("gpt-5")) {
-      options["reasoningEffort"] = "minimal"
+      if (small.modelID.includes("5.1")) {
+        options["reasoningEffort"] = "low"
+      } else {
+        options["reasoningEffort"] = "minimal"
+      }
     }
     if (small.providerID === "google") {
       options["thinkingConfig"] = {
