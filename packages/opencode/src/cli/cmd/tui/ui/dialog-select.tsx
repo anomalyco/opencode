@@ -54,8 +54,10 @@ export function DialogSelect<T>(props: DialogSelectProps<T>) {
 
   const filtered = createMemo(() => {
     const needle = store.filter.toLowerCase()
-    const result = pipe(props.options, (x) =>
-      !needle ? x : fuzzysort.go(needle, x, { keys: ["title", "category"] }).map((x) => x.obj),
+    const result = pipe(
+      props.options,
+      filter((x) => x.disabled !== true),
+      (x) => (!needle ? x : fuzzysort.go(needle, x, { keys: ["title", "category"] }).map((x) => x.obj)),
     )
     return result
   })
@@ -94,16 +96,6 @@ export function DialogSelect<T>(props: DialogSelectProps<T>) {
     let next = store.selected + direction
     if (next < 0) next = flat().length - 1
     if (next >= flat().length) next = 0
-
-    // Skip disabled options when flipping through agents
-    let attempts = 0
-    while (flat()[next]?.disabled && attempts < flat().length) {
-      next = next + direction
-      if (next < 0) next = flat().length - 1
-      if (next >= flat().length) next = 0
-      attempts++
-    }
-
     moveTo(next)
   }
 
@@ -134,7 +126,7 @@ export function DialogSelect<T>(props: DialogSelectProps<T>) {
     if (evt.name === "pagedown") move(10)
     if (evt.name === "return") {
       const option = selected()
-      if (option && !option.disabled) {
+      if (option) {
         // evt.preventDefault()
         if (option.onSelect) option.onSelect(dialog)
         props.onSelect?.(option)
@@ -144,7 +136,7 @@ export function DialogSelect<T>(props: DialogSelectProps<T>) {
     for (const item of props.keybind ?? []) {
       if (Keybind.match(item.keybind, keybind.parse(evt))) {
         const s = selected()
-        if (s && !s.disabled) {
+        if (s) {
           evt.preventDefault()
           item.onTrigger(s)
         }
@@ -216,19 +208,15 @@ export function DialogSelect<T>(props: DialogSelectProps<T>) {
                       id={JSON.stringify(option.value)}
                       flexDirection="row"
                       onMouseUp={() => {
-                        if (!option.disabled) {
-                          option.onSelect?.(dialog)
-                          props.onSelect?.(option)
-                        }
+                        option.onSelect?.(dialog)
+                        props.onSelect?.(option)
                       }}
                       onMouseOver={() => {
                         const index = filtered().findIndex((x) => isDeepEqual(x.value, option.value))
                         if (index === -1) return
                         moveTo(index)
                       }}
-                      backgroundColor={
-                        active() && !option.disabled ? (option.bg ?? theme.primary) : RGBA.fromInts(0, 0, 0, 0)
-                      }
+                      backgroundColor={active() ? (option.bg ?? theme.primary) : RGBA.fromInts(0, 0, 0, 0)}
                       paddingLeft={1}
                       paddingRight={1}
                       gap={1}
@@ -239,7 +227,6 @@ export function DialogSelect<T>(props: DialogSelectProps<T>) {
                         description={option.description !== category ? option.description : undefined}
                         active={active()}
                         current={isDeepEqual(option.value, props.current)}
-                        disabled={option.disabled}
                       />
                     </box>
                   )
@@ -269,22 +256,13 @@ function Option(props: {
   active?: boolean
   current?: boolean
   footer?: JSX.Element | string
-  disabled?: boolean
   onMouseOver?: () => void
 }) {
   const { theme } = useTheme()
 
-  const textColor = props.disabled
-    ? theme.textMuted
-    : props.active
-      ? theme.background
-      : props.current
-        ? theme.primary
-        : theme.text
-
   return (
     <>
-      <Show when={props.current && !props.disabled}>
+      <Show when={props.current}>
         <text
           flexShrink={0}
           fg={props.active ? theme.background : props.current ? theme.primary : theme.text}
@@ -293,17 +271,10 @@ function Option(props: {
           ●
         </text>
       </Show>
-      <Show when={props.disabled}>
-        <text flexShrink={0} fg={theme.textMuted} marginRight={0.5}>
-          ○
-        </text>
-      </Show>
       <text
         flexGrow={1}
         fg={props.active ? theme.background : props.current ? theme.primary : theme.text}
-        attributes={
-          props.active && !props.disabled ? TextAttributes.BOLD : props.disabled ? TextAttributes.DIM : undefined
-        }
+        attributes={props.active ? TextAttributes.BOLD : undefined}
         overflow="hidden"
         wrapMode="none"
       >

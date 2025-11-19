@@ -2,6 +2,7 @@ import { describe, expect, test } from "bun:test"
 import path from "path"
 import { BashTool } from "../../src/tool/bash"
 import { Instance } from "../../src/project/instance"
+import { Permission } from "../../src/permission"
 
 const ctx = {
   sessionID: "test",
@@ -33,19 +34,20 @@ describe("tool.bash", () => {
     })
   })
 
-  test("cd ../ should fail outside of project root", async () => {
+  test("cd ../ should ask for permission for external directory", async () => {
     await Instance.provide({
       directory: projectRoot,
       fn: async () => {
-        expect(
-          bash.execute(
-            {
-              command: "cd ../",
-              description: "Try to cd to parent directory",
-            },
-            ctx,
-          ),
-        ).rejects.toThrow("This command references paths outside of")
+        bash.execute(
+          {
+            command: "cd ../",
+            description: "Try to cd to parent directory",
+          },
+          ctx,
+        )
+        // Give time for permission to be asked
+        await new Promise((resolve) => setTimeout(resolve, 100))
+        expect(Permission.pending()[ctx.sessionID]).toBeDefined()
       },
     })
   })

@@ -2294,6 +2294,10 @@ export type SessionCommandResponse = SessionCommandResponses[keyof SessionComman
 export type SessionShellData = {
   body?: {
     agent: string
+    model?: {
+      providerID: string
+      modelID: string
+    }
     command: string
   }
   path: {
