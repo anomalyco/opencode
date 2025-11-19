@@ -185,6 +185,7 @@ export namespace ProviderTransform {
             thinkingConfig: {
               ...options.thinkingConfig,
               includeThoughts: true,
+              ...options?.thinkingConfig,
             },
           },
         }
