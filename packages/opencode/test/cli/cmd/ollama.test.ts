@@ -45,9 +45,7 @@ fi
 
     // Run the ollama init command
     const outputFile = path.join(tmp.path, "test-config.json")
-    await $`bun run ${path.join(__dirname, "../../../src/index.ts")} ollama init ${outputFile} -y`
-      .cwd(tmp.path)
-      .quiet()
+    await $`bun run ${path.join(__dirname, "../../../src/index.ts")} ollama init ${outputFile} -y`.cwd(tmp.path).quiet()
 
     // Verify the config file was created
     const configContent = await Bun.file(outputFile).text()
@@ -123,9 +121,7 @@ fi
       },
     })
 
-    await $`bun run ${path.join(__dirname, "../../../src/index.ts")} ollama init -y`
-      .cwd(tmp.path)
-      .quiet()
+    await $`bun run ${path.join(__dirname, "../../../src/index.ts")} ollama init -y`.cwd(tmp.path).quiet()
 
     // Verify default filename was used
     const defaultFile = path.join(tmp.path, "opencode.json")
@@ -235,9 +231,7 @@ fi
 
     const outputFile = path.join(tmp.path, "existing-config.json")
 
-    await $`bun run ${path.join(__dirname, "../../../src/index.ts")} ollama init ${outputFile} -y`
-      .cwd(tmp.path)
-      .quiet()
+    await $`bun run ${path.join(__dirname, "../../../src/index.ts")} ollama init ${outputFile} -y`.cwd(tmp.path).quiet()
 
     const configContent = await Bun.file(outputFile).text()
     const config = JSON.parse(configContent)
@@ -282,9 +276,7 @@ fi
     await fs.mkdir(testConfigDir, { recursive: true })
     process.env.XDG_CONFIG_HOME = path.join(tmp.path, ".config")
 
-    await $`bun run ${path.join(__dirname, "../../../src/index.ts")} ollama init --global -y`
-      .cwd(tmp.path)
-      .quiet()
+    await $`bun run ${path.join(__dirname, "../../../src/index.ts")} ollama init --global -y`.cwd(tmp.path).quiet()
 
     // Restore original XDG_CONFIG_HOME
     if (originalConfigHome) {

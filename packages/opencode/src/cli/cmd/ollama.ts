@@ -102,9 +102,7 @@ export const OllamaInitCommand = cmd({
 
     const onError = () => {
       prompts.log.error("Ollama not found in PATH")
-      prompts.log.info(
-        "Install Ollama from https://ollama.com or ensure it's in your PATH",
-      )
+      prompts.log.info("Install Ollama from https://ollama.com or ensure it's in your PATH")
       throw new UI.CancelledError()
     }
 
@@ -119,9 +117,7 @@ export const OllamaInitCommand = cmd({
     })
 
     const lines = result.split("\n").slice(1) // Skip header
-    const modelsList = lines
-      .map((line) => line.trim().split(/\s+/)[0])
-      .filter((name) => name && name.length > 0)
+    const modelsList = lines.map((line) => line.trim().split(/\s+/)[0]).filter((name) => name && name.length > 0)
 
     if (modelsList.length === 0) {
       prompts.log.warning("No models found from 'ollama list'")
