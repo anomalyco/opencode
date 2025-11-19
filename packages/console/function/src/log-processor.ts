@@ -12,7 +12,8 @@ export default {
       if (
         url.pathname !== "/zen/v1/chat/completions" &&
         url.pathname !== "/zen/v1/messages" &&
-        url.pathname !== "/zen/v1/responses"
+        url.pathname !== "/zen/v1/responses" &&
+        !url.pathname.startsWith("/zen/v1/models/")
       )
         return
 

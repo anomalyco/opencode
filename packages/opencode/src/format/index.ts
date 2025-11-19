@@ -28,6 +28,14 @@ export namespace Format {
     const cfg = await Config.get()
 
     const formatters: Record<string, Formatter.Info> = {}
+    if (cfg.formatter === false) {
+      log.info("all formatters are disabled")
+      return {
+        enabled,
+        formatters,
+      }
+    }
+
     for (const item of Object.values(Formatter)) {
       formatters[item.name] = item
     }

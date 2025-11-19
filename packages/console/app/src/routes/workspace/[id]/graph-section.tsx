@@ -1,4 +1,4 @@
-import { and, Database, eq, gte, inArray, isNull, lte, or, sql } from "@opencode-ai/console-core/drizzle/index.js"
+import { and, Database, eq, gte, inArray, isNull, lte, or, sql, sum } from "@opencode-ai/console-core/drizzle/index.js"
 import { UsageTable } from "@opencode-ai/console-core/schema/billing.sql.js"
 import { KeyTable } from "@opencode-ai/console-core/schema/key.sql.js"
 import { UserTable } from "@opencode-ai/console-core/schema/user.sql.js"
@@ -35,7 +35,7 @@ async function getCosts(workspaceID: string, year: number, month: number) {
         .select({
           date: sql<string>`DATE(${UsageTable.timeCreated})`,
           model: UsageTable.model,
-          totalCost: sql<number>`SUM(${UsageTable.cost})`,
+          totalCost: sum(UsageTable.cost),
           keyId: UsageTable.keyID,
         })
         .from(UsageTable)
@@ -46,7 +46,13 @@ async function getCosts(workspaceID: string, year: number, month: number) {
             lte(UsageTable.timeCreated, endDate),
           ),
         )
-        .groupBy(sql`DATE(${UsageTable.timeCreated})`, UsageTable.model, UsageTable.keyID),
+        .groupBy(sql`DATE(${UsageTable.timeCreated})`, UsageTable.model, UsageTable.keyID)
+        .then((x) =>
+          x.map((r) => ({
+            ...r,
+            totalCost: r.totalCost ? parseInt(r.totalCost) : 0,
+          })),
+        ),
     )
 
     // Get unique key IDs from usage
@@ -204,18 +210,16 @@ export function GraphSection() {
     const dates = getDates()
     if (!data?.usage?.length) return null
 
-    const filteredUsageResults = store.key ? data.usage.filter((row) => row.keyId === store.key) : data.usage
-
     const dailyData = new Map<string, Map<string, number>>()
     for (const dateKey of dates) dailyData.set(dateKey, new Map())
 
-    for (const row of filteredUsageResults) {
-      const dayMap = dailyData.get(row.date)
-      if (dayMap) {
-        const existing = dayMap.get(row.model) || 0
-        dayMap.set(row.model, existing + row.totalCost)
-      }
-    }
+    data.usage
+      .filter((row) => (store.key ? row.keyId === store.key : true))
+      .forEach((row) => {
+        const dayMap = dailyData.get(row.date)
+        if (!dayMap) return
+        dayMap.set(row.model, (dayMap.get(row.model) ?? 0) + row.totalCost)
+      })
 
     const filteredModels = store.model === null ? getModels() : [store.model]
 
@@ -223,7 +227,7 @@ export function GraphSection() {
       const color = getModelColor(model)
       return {
         label: model,
-        data: dates.map((date) => (dailyData.get(date)?.get(model) || 0) / 100000000),
+        data: dates.map((date) => (dailyData.get(date)?.get(model) || 0) / 100_000_000),
         backgroundColor: color,
         hoverBackgroundColor: color,
         borderWidth: 0,
