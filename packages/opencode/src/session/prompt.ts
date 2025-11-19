@@ -600,12 +600,9 @@ export namespace SessionPrompt {
     throw new Error("Impossible")
   })
 
-  async function resolveModel(input: { model: PromptInput["model"]; agent: Agent.Info }) {
-    if (input.model) {
-      return input.model
-    }
-    if (input.agent.model) {
-      return input.agent.model
+  async function lastModel(sessionID: string) {
+    for await (const item of MessageV2.stream(sessionID)) {
+      if (item.info.role === "user" && item.info.model) return item.info.model
     }
     return Provider.defaultModel()
   }
@@ -794,10 +791,7 @@ export namespace SessionPrompt {
       tools: input.tools,
       system: input.system,
       agent: agent.name,
-      model: await resolveModel({
-        model: input.model,
-        agent,
-      }),
+      model: input.model ?? agent.model ?? (await lastModel(input.sessionID)),
     }
 
     const parts = await Promise.all(
@@ -1091,6 +1085,12 @@ export namespace SessionPrompt {
   export const ShellInput = z.object({
     sessionID: Identifier.schema("session"),
     agent: z.string(),
+    model: z
+      .object({
+        providerID: z.string(),
+        modelID: z.string(),
+      })
+      .optional(),
     command: z.string(),
   })
   export type ShellInput = z.infer<typeof ShellInput>
@@ -1100,7 +1100,7 @@ export namespace SessionPrompt {
       SessionRevert.cleanup(session)
     }
     const agent = await Agent.get(input.agent)
-    const model = await resolveModel({ agent, model: undefined })
+    const model = input.model ?? agent.model ?? (await lastModel(input.sessionID))
     const userMsg: MessageV2.User = {
       id: Identifier.ascending("message"),
       sessionID: input.sessionID,
@@ -1338,10 +1338,8 @@ export namespace SessionPrompt {
           return cmdAgent.model
         }
       }
-      if (input.model) {
-        return Provider.parseModel(input.model)
-      }
-      return await Provider.defaultModel()
+      if (input.model) return Provider.parseModel(input.model)
+      return await lastModel(input.sessionID)
     })()
     const agent = await Agent.get(agentName)
 
