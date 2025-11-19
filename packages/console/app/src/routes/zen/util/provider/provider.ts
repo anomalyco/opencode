@@ -23,6 +23,7 @@ import {
   toOaCompatibleRequest,
   toOaCompatibleResponse,
 } from "./openai-compatible"
+import { gatewayzHelper } from "./gatewayz"
 
 export type ProviderHelper = {
   format: ZenData.Format
