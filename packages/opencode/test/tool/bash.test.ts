@@ -46,7 +46,7 @@ describe("tool.bash", () => {
           ctx,
         )
         // Give time for permission to be asked
-        await new Promise((resolve) => setTimeout(resolve, 100))
+        await new Promise((resolve) => setTimeout(resolve, 1000))
         expect(Permission.pending()[ctx.sessionID]).toBeDefined()
       },
     })
