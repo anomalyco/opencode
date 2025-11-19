@@ -51,7 +51,6 @@ export type UserMessage = {
   tools?: {
     [key: string]: boolean
   }
-  disabledMcps?: Array<string>
 }
 
 export type ProviderAuthError = {
@@ -2165,7 +2164,6 @@ export type SessionPromptData = {
     tools?: {
       [key: string]: boolean
     }
-    disabledMcps?: Array<string>
     parts: Array<TextPartInput | FilePartInput | AgentPartInput | SubtaskPartInput>
   }
   path: {

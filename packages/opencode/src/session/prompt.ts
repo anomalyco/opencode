@@ -92,7 +92,6 @@ export namespace SessionPrompt {
     noReply: z.boolean().optional(),
     system: z.string().optional(),
     tools: z.record(z.string(), z.boolean()).optional(),
-    disabledMcps: z.array(z.string()).optional(),
     parts: z.array(
       z.discriminatedUnion("type", [
         MessageV2.TextPart.omit({
@@ -464,7 +463,6 @@ export namespace SessionPrompt {
         sessionID,
         model: lastUser.model,
         tools: lastUser.tools,
-        disabledMcps: lastUser.disabledMcps,
         processor,
       })
       const params = await Plugin.trigger(
@@ -642,7 +640,6 @@ export namespace SessionPrompt {
     }
     sessionID: string
     tools?: Record<string, boolean>
-    disabledMcps?: string[]
     processor: SessionProcessor.Info
   }) {
     const tools: Record<string, AITool> = {}
@@ -719,7 +716,7 @@ export namespace SessionPrompt {
       })
     }
 
-    for (const [key, item] of Object.entries(await MCP.tools(input.disabledMcps))) {
+    for (const [key, item] of Object.entries(await MCP.tools())) {
       if (Wildcard.all(key, enabledTools) === false) continue
       const execute = item.execute
       if (!execute) continue

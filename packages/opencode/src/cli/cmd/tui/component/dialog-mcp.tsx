@@ -31,12 +31,12 @@ export function DialogMcp() {
   const [loading, setLoading] = createSignal<string | null>(null)
 
   const options = createMemo(() => {
-    // Track disabled list and loading state to trigger re-render when they change
-    const disabledList = local.mcp.list()
+    // Track sync data and loading state to trigger re-render when they change
+    const mcpData = sync.data.mcp
     const loadingMcp = loading()
 
     return pipe(
-      sync.data.mcp ?? {},
+      mcpData ?? {},
       entries(),
       sortBy(([name]) => name),
       map(([name, status]) => ({

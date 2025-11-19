@@ -460,7 +460,6 @@ export function Prompt(props: PromptProps) {
           messageID,
           agent: local.agent.current().name,
           model: local.model.current(),
-          disabledMcps: local.mcp.list(),
           parts: [
             {
               id: Identifier.ascending("part"),

@@ -244,50 +244,22 @@ export const { use: useLocal, provider: LocalProvider } = createSimpleContext({
       }
     })
 
-    const mcp = iife(() => {
-      const [mcpStore, setMcpStore] = createStore<{
-        disabled: string[]
-        initialized: boolean
-      }>({
-        disabled: [],
-        initialized: false,
-      })
-
-      // Initialize disabled list from sync data
-      createEffect(() => {
-        if (mcpStore.initialized) return
-        const disabledFromConfig = Object.entries(sync.data.mcp)
-          .filter(([, status]) => status.status === "disabled")
-          .map(([name]) => name)
-        if (disabledFromConfig.length > 0) {
-          setMcpStore("disabled", disabledFromConfig)
-          setMcpStore("initialized", true)
+    const mcp = {
+      isEnabled(name: string) {
+        const status = sync.data.mcp[name]
+        return status?.status === "connected"
+      },
+      async toggle(name: string) {
+        const status = sync.data.mcp[name]
+        if (status?.status === "disabled") {
+          // Enable: connect the MCP
+          await sdk.client.mcp.connect({ path: { name } })
+        } else {
+          // Disable: disconnect the MCP
+          await sdk.client.mcp.disconnect({ path: { name } })
         }
-      })
-
-      return {
-        isEnabled(name: string) {
-          return !mcpStore.disabled.includes(name)
-        },
-        async toggle(name: string) {
-          if (mcpStore.disabled.includes(name)) {
-            // Enable: connect the MCP
-            await sdk.client.mcp.connect({ path: { name } })
-            setMcpStore(
-              "disabled",
-              mcpStore.disabled.filter((x) => x !== name),
-            )
-          } else {
-            // Disable: disconnect the MCP
-            await sdk.client.mcp.disconnect({ path: { name } })
-            setMcpStore("disabled", [...mcpStore.disabled, name])
-          }
-        },
-        list() {
-          return mcpStore.disabled
-        },
-      }
-    })
+      },
+    }
 
     const result = {
       model,

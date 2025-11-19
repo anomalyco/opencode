@@ -314,15 +314,14 @@ export namespace MCP {
     }
   }
 
-  export async function tools(disabledMcps?: string[]) {
+  export async function tools() {
     const result: Record<string, Tool> = {}
     const s = await state()
     const clientsSnapshot = await clients()
-    const disabled = new Set(disabledMcps ?? [])
 
     for (const [clientName, client] of Object.entries(clientsSnapshot)) {
-      // Skip disabled MCPs
-      if (disabled.has(clientName)) {
+      // Only include tools from connected MCPs (skip disabled ones)
+      if (s.status[clientName]?.status !== "connected") {
         continue
       }
 
