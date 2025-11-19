@@ -800,9 +800,24 @@ export namespace SessionPrompt {
       }),
     }
 
+    const history = await MessageV2.filterCompacted(MessageV2.stream(input.sessionID))
+    const loaded = new Set<string>()
+    for (const msg of history) {
+      for (const part of msg.parts) {
+        if (part.type === "file") {
+          const filepath = fileURLToPath(part.url)
+          loaded.add(filepath)
+        }
+      }
+    }
+
     const parts = await Promise.all(
       input.parts.map(async (part): Promise<MessageV2.Part[]> => {
         if (part.type === "file") {
+          const filepath = fileURLToPath(part.url)
+          if (loaded.has(filepath)) return []
+          loaded.add(filepath)
+
           const url = new URL(part.url)
           switch (url.protocol) {
             case "data:":
@@ -841,6 +856,8 @@ export namespace SessionPrompt {
               const stat = await Bun.file(filepath).stat()
 
               if (stat.isDirectory()) {
+                if (loaded.has(filepath)) return []
+                loaded.add(filepath)
                 part.mime = "application/x-directory"
               }
 
@@ -880,7 +897,7 @@ export namespace SessionPrompt {
                   }
                 }
                 const args = { filePath: filepath, offset, limit }
-
+                
                 const pieces: MessageV2.Part[] = [
                   {
                     id: Identifier.ascending("part"),
@@ -979,6 +996,7 @@ export namespace SessionPrompt {
                 ]
               }
 
+              
               const file = Bun.file(filepath)
               FileTime.read(input.sessionID, filepath)
               return [
