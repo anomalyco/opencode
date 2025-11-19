@@ -137,6 +137,13 @@ export namespace ProviderTransform {
   ): Record<string, any> | undefined {
     const result: Record<string, any> = {}
 
+    // switch to providerID later, for now use this
+    if (npm === "@openrouter/ai-sdk-provider") {
+      result["usage"] = {
+        include: true,
+      }
+    }
+
     if (providerID === "openai") {
       result["promptCacheKey"] = sessionID
     }
@@ -191,6 +198,10 @@ export namespace ProviderTransform {
       case "@ai-sdk/gateway":
         return {
           ["gateway" as string]: options,
+        }
+      case "@openrouter/ai-sdk-provider":
+        return {
+          ["openrouter" as string]: options,
         }
       default:
         return {
