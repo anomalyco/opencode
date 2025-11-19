@@ -271,7 +271,7 @@ export const BashTool = Tool.define("bash", {
     }
 
     return {
-      title: params.command,
+      title: params.description,
       metadata: {
         output,
         exit: proc.exitCode,
