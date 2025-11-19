@@ -8,6 +8,26 @@ export namespace Locale {
     return date.toLocaleTimeString()
   }
 
+  export function datetime(input: number) {
+    const date = new Date(input)
+    return date.toLocaleString()
+  }
+
+  export function todayTimeOrDateTime(input: number) {
+    const date = new Date(input)
+    const now = new Date()
+    const isToday =
+      date.getFullYear() === now.getFullYear() &&
+      date.getMonth() === now.getMonth() &&
+      date.getDate() === now.getDate()
+
+    if (isToday) {
+      return time(input)
+    } else {
+      return datetime(input)
+    }
+  }
+
   export function number(num: number): string {
     if (num >= 1000000) {
       return (num / 1000000).toFixed(1) + "M"
