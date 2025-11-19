@@ -921,7 +921,9 @@ function UserMessage(props: {
             {sync.data.config.username ?? "You"}{" "}
             <Show
               when={queued()}
-              fallback={<span style={{ fg: theme.textMuted }}>({Locale.todayTimeOrDateTime(props.message.time.created)})</span>}
+              fallback={
+                <span style={{ fg: theme.textMuted }}>({Locale.todayTimeOrDateTime(props.message.time.created)})</span>
+              }
             >
               <span style={{ bg: theme.accent, fg: theme.backgroundPanel, bold: true }}> QUEUED </span>
             </Show>
@@ -1031,8 +1033,10 @@ function AssistantMessage(props: { message: AssistantMessage; parts: Part[]; las
         <box paddingLeft={3}>
           <text marginTop={1}>
             <span style={{ fg: local.agent.color(props.message.mode) }}>{Locale.titlecase(props.message.mode)}</span>{" "}
-            <span style={{ fg: theme.textMuted }}>{props.message.modelID}
-              {props.message.time.completed && ` (${Locale.todayTimeOrDateTime(props.message.time.completed)})`}</span>
+            <span style={{ fg: theme.textMuted }}>
+              {props.message.modelID}
+              {props.message.time.completed && ` (${Locale.todayTimeOrDateTime(props.message.time.completed)})`}
+            </span>
           </text>
         </box>
       </Show>

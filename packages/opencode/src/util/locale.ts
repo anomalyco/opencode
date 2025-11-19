@@ -17,9 +17,7 @@ export namespace Locale {
     const date = new Date(input)
     const now = new Date()
     const isToday =
-      date.getFullYear() === now.getFullYear() &&
-      date.getMonth() === now.getMonth() &&
-      date.getDate() === now.getDate()
+      date.getFullYear() === now.getFullYear() && date.getMonth() === now.getMonth() && date.getDate() === now.getDate()
 
     if (isToday) {
       return time(input)
