@@ -25,9 +25,7 @@ export function DialogMcp() {
   const local = useLocal()
   const sync = useSync()
   const sdk = useSDK()
-  const dialog = useDialog()
-  const keybind = useKeybind()
-  const [ref, setRef] = createSignal<DialogSelectRef<unknown>>()
+  const [, setRef] = createSignal<DialogSelectRef<unknown>>()
   const [loading, setLoading] = createSignal<string | null>(null)
 
   const options = createMemo(() => {
