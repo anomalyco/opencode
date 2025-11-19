@@ -856,8 +856,6 @@ export namespace SessionPrompt {
               const stat = await Bun.file(filepath).stat()
 
               if (stat.isDirectory()) {
-                if (loaded.has(filepath)) return []
-                loaded.add(filepath)
                 part.mime = "application/x-directory"
               }
 
