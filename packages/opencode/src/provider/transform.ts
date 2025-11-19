@@ -178,6 +178,15 @@ export namespace ProviderTransform {
         return {
           ["anthropic" as string]: options,
         }
+      case "@ai-sdk/google":
+        return {
+          ["google" as string]: {
+            ...options,
+            thinkingConfig: {
+              includeThoughts: true,
+            },
+          },
+        }
       case "@ai-sdk/gateway":
         return {
           ["gateway" as string]: options,
