@@ -15,72 +15,99 @@ import { logger } from "./logger"
 import { AuthError, CreditsError, MonthlyLimitError, UserLimitError, ModelError, RateLimitError } from "./error"
 import { createBodyConverter, createStreamPartConverter, createResponseConverter } from "./provider/provider"
 import { anthropicHelper } from "./provider/anthropic"
+import { googleHelper } from "./provider/google"
 import { openaiHelper } from "./provider/openai"
 import { oaCompatHelper } from "./provider/openai-compatible"
 import { createRateLimiter } from "./rateLimiter"
 
 type ZenData = Awaited<ReturnType<typeof ZenData.list>>
+type RetryOptions = {
+  excludeProviders: string[]
+  retryCount: number
+}
 
 export async function handler(
   input: APIEvent,
   opts: {
     format: ZenData.Format
     parseApiKey: (headers: Headers) => string | undefined
+    parseModel: (url: string, body: any) => string
+    parseIsStream: (url: string, body: any) => boolean
   },
 ) {
   type AuthInfo = Awaited<ReturnType<typeof authenticate>>
   type ModelInfo = Awaited<ReturnType<typeof validateModel>>
   type ProviderInfo = Awaited<ReturnType<typeof selectProvider>>
 
+  const MAX_RETRIES = 3
   const FREE_WORKSPACES = [
     "wrk_01K46JDFR0E75SG2Q8K172KF3Y", // frank
     "wrk_01K6W1A3VE0KMNVSCQT43BG2SX", // opencode bench
   ]
 
   try {
+    const url = input.request.url
     const body = await input.request.json()
     const ip = input.request.headers.get("x-real-ip") ?? ""
+    const model = opts.parseModel(url, body)
+    const isStream = opts.parseIsStream(url, body)
     logger.metric({
-      is_tream: !!body.stream,
+      is_tream: isStream,
       session: input.request.headers.get("x-opencode-session"),
       request: input.request.headers.get("x-opencode-request"),
     })
     const zenData = ZenData.list()
-    const modelInfo = validateModel(zenData, body.model)
-    const providerInfo = selectProvider(zenData, modelInfo, ip)
-    const authInfo = await authenticate(modelInfo, providerInfo)
+    const modelInfo = validateModel(zenData, model)
     const rateLimiter = createRateLimiter(modelInfo.id, modelInfo.rateLimit, ip)
     await rateLimiter?.check()
-    validateBilling(authInfo, modelInfo)
-    validateModelSettings(authInfo)
-    updateProviderKey(authInfo, providerInfo)
-    logger.metric({ provider: providerInfo.id })
 
-    // Request to model provider
-    const startTimestamp = Date.now()
-    const reqUrl = providerInfo.modifyUrl(providerInfo.api)
-    const reqBody = JSON.stringify(
-      providerInfo.modifyBody({
-        ...createBodyConverter(opts.format, providerInfo.format)(body),
-        model: providerInfo.model,
-      }),
-    )
-    logger.debug("REQUEST URL: " + reqUrl)
-    logger.debug("REQUEST: " + reqBody.substring(0, 300) + "...")
-    const res = await fetch(reqUrl, {
-      method: "POST",
-      headers: (() => {
-        const headers = input.request.headers
-        headers.delete("host")
-        headers.delete("content-length")
-        providerInfo.modifyHeaders(headers, body, providerInfo.apiKey)
-        Object.entries(providerInfo.headerMappings ?? {}).forEach(([k, v]) => {
-          headers.set(k, headers.get(v)!)
+    const retriableRequest = async (retry: RetryOptions = { excludeProviders: [], retryCount: 0 }) => {
+      const providerInfo = selectProvider(zenData, modelInfo, ip, retry)
+      const authInfo = await authenticate(modelInfo, providerInfo)
+      validateBilling(authInfo, modelInfo)
+      validateModelSettings(authInfo)
+      updateProviderKey(authInfo, providerInfo)
+      logger.metric({ provider: providerInfo.id })
+
+      const startTimestamp = Date.now()
+      const reqUrl = providerInfo.modifyUrl(providerInfo.api, providerInfo.model, isStream)
+      const reqBody = JSON.stringify(
+        providerInfo.modifyBody({
+          ...createBodyConverter(opts.format, providerInfo.format)(body),
+          model: providerInfo.model,
+        }),
+      )
+      logger.debug("REQUEST URL: " + reqUrl)
+      logger.debug("REQUEST: " + reqBody.substring(0, 300) + "...")
+      const res = await fetch(reqUrl, {
+        method: "POST",
+        headers: (() => {
+          const headers = new Headers(input.request.headers)
+          providerInfo.modifyHeaders(headers, body, providerInfo.apiKey)
+          Object.entries(providerInfo.headerMappings ?? {}).forEach(([k, v]) => {
+            headers.set(k, headers.get(v)!)
+          })
+          headers.delete("host")
+          headers.delete("content-length")
+          headers.delete("x-opencode-request")
+          headers.delete("x-opencode-session")
+          return headers
+        })(),
+        body: reqBody,
+      })
+
+      // Try another provider => stop retrying if using fallback provider
+      if (res.status !== 200 && modelInfo.fallbackProvider && providerInfo.id !== modelInfo.fallbackProvider) {
+        return retriableRequest({
+          excludeProviders: [...retry.excludeProviders, providerInfo.id],
+          retryCount: retry.retryCount + 1,
         })
-        return headers
-      })(),
-      body: reqBody,
-    })
+      }
+
+      return { providerInfo, authInfo, res, startTimestamp }
+    }
+
+    const { providerInfo, authInfo, res, startTimestamp } = await retriableRequest()
 
     // Scrub response headers
     const resHeaders = new Headers()
@@ -93,7 +120,7 @@ export async function handler(
     logger.debug("STATUS: " + res.status + " " + res.statusText)
 
     // Handle non-streaming response
-    if (!body.stream) {
+    if (!isStream) {
       const responseConverter = createResponseConverter(providerInfo.format, opts.format)
       const json = await res.json()
       const body = JSON.stringify(responseConverter(json))
@@ -148,7 +175,7 @@ export async function handler(
               responseLength += value.length
               buffer += decoder.decode(value, { stream: true })
 
-              const parts = buffer.split("\n\n")
+              const parts = buffer.split(providerInfo.streamSeparator)
               buffer = parts.pop() ?? ""
 
               for (let part of parts) {
@@ -236,19 +263,25 @@ export async function handler(
     return { id: modelId, ...modelData }
   }
 
-  function selectProvider(zenData: ZenData, modelInfo: ModelInfo, ip: string) {
-    const providers = modelInfo.providers
-      .filter((provider) => !provider.disabled)
-      .flatMap((provider) => Array<typeof provider>(provider.weight ?? 1).fill(provider))
+  function selectProvider(zenData: ZenData, modelInfo: ModelInfo, ip: string, retry: RetryOptions) {
+    const provider = (() => {
+      if (retry.retryCount === MAX_RETRIES) {
+        return modelInfo.providers.find((provider) => provider.id === modelInfo.fallbackProvider)
+      }
 
-    // Use the last 2 characters of IP address to select a provider
-    const lastChars = ip.slice(-2)
-    const index = parseInt(lastChars, 16) % providers.length
-    const provider = providers[index || 0]
+      const providers = modelInfo.providers
+        .filter((provider) => !provider.disabled)
+        .filter((provider) => !retry.excludeProviders.includes(provider.id))
+        .flatMap((provider) => Array<typeof provider>(provider.weight ?? 1).fill(provider))
 
-    if (!(provider.id in zenData.providers)) {
-      throw new ModelError(`Provider ${provider.id} not supported`)
-    }
+      // Use the last 2 characters of IP address to select a provider
+      const lastChars = ip.slice(-2)
+      const index = parseInt(lastChars, 16) % providers.length
+      return providers[index || 0]
+    })()
+
+    if (!provider) throw new ModelError("No provider available")
+    if (!(provider.id in zenData.providers)) throw new ModelError(`Provider ${provider.id} not supported`)
 
     return {
       ...provider,
@@ -256,6 +289,7 @@ export async function handler(
       ...(() => {
         const format = zenData.providers[provider.id].format
         if (format === "anthropic") return anthropicHelper
+        if (format === "google") return googleHelper
         if (format === "openai") return openaiHelper
         return oaCompatHelper
       })(),
@@ -264,7 +298,7 @@ export async function handler(
 
   async function authenticate(modelInfo: ModelInfo, providerInfo: ProviderInfo) {
     const apiKey = opts.parseApiKey(input.request.headers)
-    if (!apiKey) {
+    if (!apiKey || apiKey === "public") {
       if (modelInfo.allowAnonymous) return
       throw new AuthError("Missing API key.")
     }

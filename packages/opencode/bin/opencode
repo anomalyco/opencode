@@ -1,61 +1,84 @@
-#!/bin/sh
-set -e
+#!/usr/bin/env node
 
-if [ -n "$OPENCODE_BIN_PATH" ]; then
-    resolved="$OPENCODE_BIN_PATH"
-else
-    # Get the real path of this script, resolving any symlinks
-    script_path="$0"
-    while [ -L "$script_path" ]; do
-        link_target="$(readlink "$script_path")"
-        case "$link_target" in
-            /*) script_path="$link_target" ;;
-            *) script_path="$(dirname "$script_path")/$link_target" ;;
-        esac
-    done
-    script_dir="$(dirname "$script_path")"
-    script_dir="$(cd "$script_dir" && pwd)"
-    
-    # Map platform names
-    case "$(uname -s)" in
-        Darwin) platform="darwin" ;;
-        Linux) platform="linux" ;;
-        MINGW*|CYGWIN*|MSYS*) platform="win32" ;;
-        *) platform="$(uname -s | tr '[:upper:]' '[:lower:]')" ;;
-    esac
-    
-    # Map architecture names  
-    case "$(uname -m)" in
-        x86_64|amd64) arch="x64" ;;
-        aarch64) arch="arm64" ;;
-        armv7l) arch="arm" ;;
-        *) arch="$(uname -m)" ;;
-    esac
-    
-    name="opencode-${platform}-${arch}"
-    binary="opencode"
-    [ "$platform" = "win32" ] && binary="opencode.exe"
-    
-    # Search for the binary starting from real script location
-    resolved=""
-    current_dir="$script_dir"
-    while [ "$current_dir" != "/" ]; do
-        candidate="$current_dir/node_modules/$name/bin/$binary"
-        if [ -f "$candidate" ]; then
-            resolved="$candidate"
-            break
-        fi
-        current_dir="$(dirname "$current_dir")"
-    done
-    
-    if [ -z "$resolved" ]; then
-        printf "It seems that your package manager failed to install the right version of the opencode CLI for your platform. You can try manually installing the \"%s\" package\n" "$name" >&2
-        exit 1
-    fi
-fi
+const childProcess = require("child_process")
+const fs = require("fs")
+const path = require("path")
+const os = require("os")
 
-# Handle SIGINT gracefully
-trap '' INT
+function run(target) {
+  const result = childProcess.spawnSync(target, process.argv.slice(2), {
+    stdio: "inherit",
+  })
+  if (result.error) {
+    console.error(result.error.message)
+    process.exit(1)
+  }
+  const code = typeof result.status === "number" ? result.status : 0
+  process.exit(code)
+}
 
-# Execute the binary with all arguments
-exec "$resolved" "$@"
+const envPath = process.env.OPENCODE_BIN_PATH
+if (envPath) {
+  run(envPath)
+}
+
+const scriptPath = fs.realpathSync(__filename)
+const scriptDir = path.dirname(scriptPath)
+
+const platformMap = {
+  darwin: "darwin",
+  linux: "linux",
+  win32: "windows",
+}
+const archMap = {
+  x64: "x64",
+  arm64: "arm64",
+  arm: "arm",
+}
+
+let platform = platformMap[os.platform()]
+if (!platform) {
+  platform = os.platform()
+}
+let arch = archMap[os.arch()]
+if (!arch) {
+  arch = os.arch()
+}
+const base = "opencode-" + platform + "-" + arch
+const binary = platform === "windows" ? "opencode.exe" : "opencode"
+
+function findBinary(startDir) {
+  let current = startDir
+  for (;;) {
+    const modules = path.join(current, "node_modules")
+    if (fs.existsSync(modules)) {
+      const entries = fs.readdirSync(modules)
+      for (const entry of entries) {
+        if (!entry.startsWith(base)) {
+          continue
+        }
+        const candidate = path.join(modules, entry, "bin", binary)
+        if (fs.existsSync(candidate)) {
+          return candidate
+        }
+      }
+    }
+    const parent = path.dirname(current)
+    if (parent === current) {
+      return
+    }
+    current = parent
+  }
+}
+
+const resolved = findBinary(scriptDir)
+if (!resolved) {
+  console.error(
+    'It seems that your package manager failed to install the right version of the opencode CLI for your platform. You can try manually installing the "' +
+      base +
+      '" package',
+  )
+  process.exit(1)
+}
+
+run(resolved)

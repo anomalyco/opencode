@@ -3,43 +3,49 @@ import { createSimpleContext } from "./helper"
 import { batch, createEffect, createMemo } from "solid-js"
 import { useSync } from "./sync"
 import { makePersisted } from "@solid-primitives/storage"
-import { TextSelection, useLocal } from "./local"
+import { TextSelection } from "./local"
 import { pipe, sumBy } from "remeda"
 import { AssistantMessage } from "@opencode-ai/sdk"
+import { useParams } from "@solidjs/router"
+import { base64Encode } from "@/utils"
 
 export const { use: useSession, provider: SessionProvider } = createSimpleContext({
   name: "Session",
-  init: (props: { sessionId?: string }) => {
+  init: () => {
+    const params = useParams()
     const sync = useSync()
-    const local = useLocal()
+    const name = createMemo(
+      () => `___${base64Encode(sync.data.project.worktree)}/session${params.id ? "/" + params.id : ""}`,
+    )
 
     const [store, setStore] = makePersisted(
       createStore<{
-        prompt: Prompt
-        cursorPosition?: number
         messageId?: string
         tabs: {
           active?: string
           opened: string[]
         }
+        prompt: Prompt
+        cursor?: number
       }>({
-        prompt: [{ type: "text", content: "", start: 0, end: 0 }],
         tabs: {
           opened: [],
         },
+        prompt: clonePrompt(DEFAULT_PROMPT),
+        cursor: undefined,
       }),
       {
-        name: props.sessionId ?? "new-session",
+        name: name(),
       },
     )
 
     createEffect(() => {
-      if (!props.sessionId) return
-      sync.session.sync(props.sessionId)
+      if (!params.id) return
+      sync.session.sync(params.id)
     })
 
-    const info = createMemo(() => (props.sessionId ? sync.session.get(props.sessionId) : undefined))
-    const messages = createMemo(() => (props.sessionId ? (sync.data.message[props.sessionId] ?? []) : []))
+    const info = createMemo(() => (params.id ? sync.session.get(params.id) : undefined))
+    const messages = createMemo(() => (params.id ? (sync.data.message[params.id] ?? []) : []))
     const userMessages = createMemo(() =>
       messages()
         .filter((m) => m.role === "user")
@@ -52,16 +58,13 @@ export const { use: useSession, provider: SessionProvider } = createSimpleContex
       if (!store.messageId) return lastUserMessage()
       return userMessages()?.find((m) => m.id === store.messageId)
     })
-    const working = createMemo(() => {
-      if (!props.sessionId) return false
-      const last = lastUserMessage()
-      if (!last) return false
-      const assistantMessages = sync.data.message[props.sessionId]?.filter(
-        (m) => m.role === "assistant" && m.parentID == last?.id,
-      ) as AssistantMessage[]
-      const error = assistantMessages?.find((m) => m?.error)?.error
-      return !last?.summary?.body && !error
-    })
+    const status = createMemo(
+      () =>
+        sync.data.session_status[params.id] ?? {
+          type: "idle",
+        },
+    )
+    const working = createMemo(() => status()?.type !== "idle")
 
     const cost = createMemo(() => {
       const total = pipe(
@@ -80,7 +83,7 @@ export const { use: useSession, provider: SessionProvider } = createSimpleContex
     const model = createMemo(() =>
       last() ? sync.data.provider.find((x) => x.id === last().providerID)?.models[last().modelID] : undefined,
     )
-    const diffs = createMemo(() => (props.sessionId ? (sync.data.session_diff[props.sessionId] ?? []) : []))
+    const diffs = createMemo(() => (params.id ? (sync.data.session_diff[params.id] ?? []) : []))
 
     const tokens = createMemo(() => {
       if (!last()) return
@@ -96,18 +99,22 @@ export const { use: useSession, provider: SessionProvider } = createSimpleContex
     })
 
     return {
-      id: props.sessionId,
+      get id() {
+        return params.id
+      },
       info,
+      status,
       working,
       diffs,
       prompt: {
         current: createMemo(() => store.prompt),
-        cursor: createMemo(() => store.cursorPosition),
+        cursor: createMemo(() => store.cursor),
         dirty: createMemo(() => !isPromptEqual(store.prompt, DEFAULT_PROMPT)),
         set(prompt: Prompt, cursorPosition?: number) {
+          const next = clonePrompt(prompt)
           batch(() => {
-            setStore("prompt", prompt)
-            if (cursorPosition !== undefined) setStore("cursorPosition", cursorPosition)
+            setStore("prompt", next)
+            if (cursorPosition !== undefined) setStore("cursor", cursorPosition)
           })
         },
       },
@@ -137,9 +144,6 @@ export const { use: useSession, provider: SessionProvider } = createSimpleContex
           if (tab === "chat") {
             setStore("tabs", "active", undefined)
             return
-          }
-          if (tab.startsWith("file://")) {
-            await local.file.open(tab.replace("file://", ""))
           }
           if (tab !== "review") {
             if (!store.tabs.opened.includes(tab)) {
@@ -172,7 +176,6 @@ export const { use: useSession, provider: SessionProvider } = createSimpleContex
               opened.splice(to, 0, opened.splice(index, 1)[0])
             }),
           )
-          // setStore("node", path, "pinned", true)
         },
       },
     }
@@ -214,4 +217,21 @@ export function isPromptEqual(promptA: Prompt, promptB: Prompt): boolean {
     }
   }
   return true
+}
+
+function cloneSelection(selection?: TextSelection) {
+  if (!selection) return undefined
+  return { ...selection }
+}
+
+function clonePart(part: ContentPart): ContentPart {
+  if (part.type === "text") return { ...part }
+  return {
+    ...part,
+    selection: cloneSelection(part.selection),
+  }
+}
+
+function clonePrompt(prompt: Prompt): Prompt {
+  return prompt.map(clonePart)
 }

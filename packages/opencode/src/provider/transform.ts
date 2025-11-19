@@ -120,6 +120,7 @@ export namespace ProviderTransform {
   export function temperature(_providerID: string, modelID: string) {
     if (modelID.toLowerCase().includes("qwen")) return 0.55
     if (modelID.toLowerCase().includes("claude")) return undefined
+    if (modelID.toLowerCase().includes("gemini-3-pro")) return 1.0
     return 0
   }
 
@@ -128,11 +129,22 @@ export namespace ProviderTransform {
     return undefined
   }
 
-  export function options(providerID: string, modelID: string, sessionID: string): Record<string, any> | undefined {
+  export function options(
+    providerID: string,
+    modelID: string,
+    npm: string,
+    sessionID: string,
+  ): Record<string, any> | undefined {
     const result: Record<string, any> = {}
 
     if (providerID === "openai") {
       result["promptCacheKey"] = sessionID
+    }
+
+    if (providerID === "google") {
+      result["thinkingConfig"] = {
+        includeThoughts: true,
+      }
     }
 
     if (modelID.includes("gpt-5") && !modelID.includes("gpt-5-chat")) {
@@ -142,6 +154,10 @@ export namespace ProviderTransform {
 
       if (!modelID.includes("codex") && !modelID.includes("gpt-5-pro")) {
         result["reasoningEffort"] = "medium"
+      }
+
+      if (modelID.endsWith("gpt-5.1") && providerID !== "azure") {
+        result["textVerbosity"] = "low"
       }
 
       if (providerID === "opencode") {
@@ -168,6 +184,14 @@ export namespace ProviderTransform {
         return {
           ["anthropic" as string]: options,
         }
+      case "@ai-sdk/google":
+        return {
+          ["google" as string]: options,
+        }
+      case "@ai-sdk/gateway":
+        return {
+          ["gateway" as string]: options,
+        }
       default:
         return {
           [providerID]: options,
@@ -176,7 +200,7 @@ export namespace ProviderTransform {
   }
 
   export function maxOutputTokens(
-    providerID: string,
+    npm: string,
     options: Record<string, any>,
     modelLimit: number,
     globalLimit: number,
@@ -184,7 +208,7 @@ export namespace ProviderTransform {
     const modelCap = modelLimit || globalLimit
     const standardLimit = Math.min(modelCap, globalLimit)
 
-    if (providerID === "anthropic") {
+    if (npm === "@ai-sdk/anthropic") {
       const thinking = options?.["thinking"]
       const budgetTokens = typeof thinking?.["budgetTokens"] === "number" ? thinking["budgetTokens"] : 0
       const enabled = thinking?.["type"] === "enabled"

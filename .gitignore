@@ -13,3 +13,7 @@ dist
 .turbo
 **/.serena
 .serena/
+/result
+refs
+Session.vim
+opencode.json

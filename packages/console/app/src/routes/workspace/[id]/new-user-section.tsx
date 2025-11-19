@@ -21,8 +21,8 @@ const listKeys = query(async (workspaceID: string) => {
 export function NewUserSection() {
   const params = useParams()
   const [copiedKey, setCopiedKey] = createSignal(false)
-  const keys = createAsync(() => listKeys(params.id))
-  const usage = createAsync(() => getUsageInfo(params.id))
+  const keys = createAsync(() => listKeys(params.id!))
+  const usage = createAsync(() => getUsageInfo(params.id!))
   const isNew = createMemo(() => {
     const keysList = keys()
     const usageList = usage()

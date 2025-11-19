@@ -12,6 +12,7 @@ import { Auth } from "../auth"
 import { Instance } from "../project/instance"
 import { Global } from "../global"
 import { Flag } from "../flag/flag"
+import { iife } from "@/util/iife"
 
 export namespace Provider {
   const log = Log.create({ service: "provider" })
@@ -52,7 +53,7 @@ export namespace Provider {
 
       return {
         autoload: Object.keys(input.models).length > 0,
-        options: {},
+        options: hasKey ? {} : { apiKey: "public" },
       }
     },
     openai: async () => {
@@ -75,6 +76,22 @@ export namespace Provider {
           }
         },
         options: {},
+      }
+    },
+    "azure-cognitive-services": async () => {
+      const resourceName = process.env["AZURE_COGNITIVE_SERVICES_RESOURCE_NAME"]
+      return {
+        autoload: false,
+        async getModel(sdk: any, modelID: string, options?: Record<string, any>) {
+          if (options?.["useCompletionUrls"]) {
+            return sdk.chat(modelID)
+          } else {
+            return sdk.responses(modelID)
+          }
+        },
+        options: {
+          baseURL: resourceName ? `https://${resourceName}.cognitiveservices.azure.com/openai` : undefined,
+        },
       }
     },
     "amazon-bedrock": async () => {
@@ -354,10 +371,15 @@ export namespace Provider {
       }
 
       for (const [modelID, model] of Object.entries(provider.models ?? {})) {
-        const existing = parsed.models[modelID]
+        const existing = parsed.models[model.id ?? modelID]
+        const name = iife(() => {
+          if (model.name) return model.name
+          if (model.id && model.id !== modelID) return modelID
+          return existing?.name ?? modelID
+        })
         const parsedModel: ModelsDev.Model = {
           id: modelID,
-          name: model.name ?? existing?.name ?? modelID,
+          name,
           release_date: model.release_date ?? existing?.release_date,
           attachment: model.attachment ?? existing?.attachment ?? false,
           reasoning: model.reasoning ?? existing?.reasoning ?? false,
@@ -543,7 +565,15 @@ export namespace Provider {
       const key = Bun.hash.xxHash32(JSON.stringify({ pkg, options }))
       const existing = s.sdk.get(key)
       if (existing) return existing
-      const installedPath = await BunProc.install(pkg, "latest")
+
+      let installedPath: string
+      if (!pkg.startsWith("file://")) {
+        installedPath = await BunProc.install(pkg, "latest")
+      } else {
+        log.info("loading local provider", { pkg })
+        installedPath = pkg
+      }
+
       // The `google-vertex-anthropic` provider points to the `@ai-sdk/google-vertex` package.
       // Ref: https://github.com/sst/models.dev/blob/0a87de42ab177bebad0620a889e2eb2b4a5dd4ab/providers/google-vertex-anthropic/provider.toml
       // However, the actual export is at the subpath `@ai-sdk/google-vertex/anthropic`.
@@ -655,6 +685,9 @@ export namespace Provider {
     if (providerID === "github-copilot") {
       priority = priority.filter((m) => m !== "claude-haiku-4.5")
     }
+    if (providerID === "opencode" || providerID === "local") {
+      priority = ["gpt-5-nano"]
+    }
     for (const item of priority) {
       for (const model of Object.keys(provider.info.models)) {
         if (model.includes(item)) return getModel(providerID, model)
@@ -662,7 +695,7 @@ export namespace Provider {
     }
   }
 
-  const priority = ["gemini-2.5-pro-preview", "gpt-5", "claude-sonnet-4"]
+  const priority = ["gpt-5", "claude-sonnet-4", "big-pickle", "gemini-3-pro"]
   export function sort(models: ModelsDev.Model[]) {
     return sortBy(
       models,
@@ -675,42 +708,6 @@ export namespace Provider {
   export async function defaultModel() {
     const cfg = await Config.get()
     if (cfg.model) return parseModel(cfg.model)
-
-    // this will be adjusted when migration to opentui is complete,
-    // for now we just read the tui state toml file directly
-    //
-    // NOTE: cannot just import file as toml without cleaning due to lack of
-    // support for date/time references in Bun toml parser: https://github.com/oven-sh/bun/issues/22426
-    const lastused = await Bun.file(path.join(Global.Path.state, "tui"))
-      .text()
-      .then((text) => {
-        // remove the date/time references since Bun toml parser doesn't support yet
-        const cleaned = text
-          .split("\n")
-          .filter((line) => !line.trim().startsWith("last_used ="))
-          .join("\n")
-        const state = Bun.TOML.parse(cleaned) as {
-          recently_used_models?: {
-            provider_id: string
-            model_id: string
-          }[]
-        }
-        const [model] = state?.recently_used_models ?? []
-        if (model) {
-          return {
-            providerID: model.provider_id,
-            modelID: model.model_id,
-          }
-        }
-      })
-      .catch((error) => {
-        log.error("failed to find last used model", {
-          error,
-        })
-        return undefined
-      })
-
-    if (lastused) return lastused
 
     const provider = await list()
       .then((val) => Object.values(val))

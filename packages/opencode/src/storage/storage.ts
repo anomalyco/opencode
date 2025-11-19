@@ -170,7 +170,8 @@ export namespace Storage {
     const target = path.join(dir, ...key) + ".json"
     return withErrorHandling(async () => {
       using _ = await Lock.read(target)
-      return Bun.file(target).json() as Promise<T>
+      const result = await Bun.file(target).json()
+      return result as T
     })
   }
 
@@ -178,7 +179,7 @@ export namespace Storage {
     const dir = await state().then((x) => x.dir)
     const target = path.join(dir, ...key) + ".json"
     return withErrorHandling(async () => {
-      using _ = await Lock.write("storage")
+      using _ = await Lock.write(target)
       const content = await Bun.file(target).json()
       fn(content)
       await Bun.write(target, JSON.stringify(content, null, 2))
@@ -190,7 +191,7 @@ export namespace Storage {
     const dir = await state().then((x) => x.dir)
     const target = path.join(dir, ...key) + ".json"
     return withErrorHandling(async () => {
-      using _ = await Lock.write("storage")
+      using _ = await Lock.write(target)
       await Bun.write(target, JSON.stringify(content, null, 2))
     })
   }

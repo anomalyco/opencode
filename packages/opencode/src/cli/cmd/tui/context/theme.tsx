@@ -1,5 +1,6 @@
 import { SyntaxStyle, RGBA, type TerminalColors } from "@opentui/core"
-import { createMemo } from "solid-js"
+import path from "path"
+import { createEffect, createMemo, onMount } from "solid-js"
 import { useSync } from "@tui/context/sync"
 import { createSimpleContext } from "./helper"
 import aura from "./theme/aura.json" with { type: "json" }
@@ -8,6 +9,7 @@ import catppuccin from "./theme/catppuccin.json" with { type: "json" }
 import cobalt2 from "./theme/cobalt2.json" with { type: "json" }
 import dracula from "./theme/dracula.json" with { type: "json" }
 import everforest from "./theme/everforest.json" with { type: "json" }
+import flexoki from "./theme/flexoki.json" with { type: "json" }
 import github from "./theme/github.json" with { type: "json" }
 import gruvbox from "./theme/gruvbox.json" with { type: "json" }
 import kanagawa from "./theme/kanagawa.json" with { type: "json" }
@@ -27,7 +29,9 @@ import vesper from "./theme/vesper.json" with { type: "json" }
 import zenburn from "./theme/zenburn.json" with { type: "json" }
 import { useKV } from "./kv"
 import { useRenderer } from "@opentui/solid"
-import { createStore } from "solid-js/store"
+import { createStore, produce } from "solid-js/store"
+import { Global } from "@/global"
+import { Filesystem } from "@/util/filesystem"
 
 type Theme = {
   primary: RGBA
@@ -102,6 +106,7 @@ export const DEFAULT_THEMES: Record<string, ThemeJson> = {
   cobalt2,
   dracula,
   everforest,
+  flexoki,
   github,
   gruvbox,
   kanagawa,
@@ -125,7 +130,19 @@ function resolveTheme(theme: ThemeJson, mode: "dark" | "light") {
   const defs = theme.defs ?? {}
   function resolveColor(c: ColorValue): RGBA {
     if (c instanceof RGBA) return c
-    if (typeof c === "string") return c.startsWith("#") ? RGBA.fromHex(c) : resolveColor(defs[c])
+    if (typeof c === "string") {
+      if (c === "transparent" || c === "none") return RGBA.fromInts(0, 0, 0, 0)
+
+      if (c.startsWith("#")) return RGBA.fromHex(c)
+
+      if (defs[c]) {
+        return resolveColor(defs[c])
+      } else if (theme.theme[c as keyof Theme]) {
+        return resolveColor(theme.theme[c as keyof Theme])
+      } else {
+        throw new Error(`Color reference "${c}" not found in defs or theme`)
+      }
+    }
     return resolveColor(c[mode])
   }
   return Object.fromEntries(
@@ -144,6 +161,17 @@ export const { use: useTheme, provider: ThemeProvider } = createSimpleContext({
       themes: DEFAULT_THEMES,
       mode: props.mode,
       active: (sync.data.config.theme ?? kv.get("theme", "opencode")) as string,
+      ready: false,
+    })
+
+    createEffect(async () => {
+      const custom = await getCustomThemes()
+      setStore(
+        produce((draft) => {
+          Object.assign(draft.themes, custom)
+          draft.ready = true
+        }),
+      )
     })
 
     const renderer = useRenderer()
@@ -187,11 +215,38 @@ export const { use: useTheme, provider: ThemeProvider } = createSimpleContext({
         kv.set("theme", theme)
       },
       get ready() {
-        return sync.ready
+        return store.ready
       },
     }
   },
 })
+
+const CUSTOM_THEME_GLOB = new Bun.Glob("themes/*.json")
+async function getCustomThemes() {
+  const directories = [
+    Global.Path.config,
+    ...(await Array.fromAsync(
+      Filesystem.up({
+        targets: [".opencode"],
+        start: process.cwd(),
+      }),
+    )),
+  ]
+
+  const result: Record<string, ThemeJson> = {}
+  for (const dir of directories) {
+    for await (const item of CUSTOM_THEME_GLOB.scan({
+      absolute: true,
+      followSymlinks: true,
+      dot: true,
+      cwd: dir,
+    })) {
+      const name = path.basename(item, ".json")
+      result[name] = await Bun.file(item).json()
+    }
+  }
+  return result
+}
 
 function generateSystem(colors: TerminalColors, mode: "dark" | "light"): ThemeJson {
   const bg = RGBA.fromHex(colors.defaultBackground ?? colors.palette[0]!)
@@ -823,18 +878,21 @@ function generateSyntax(theme: Theme) {
       scope: ["diff.plus"],
       style: {
         foreground: theme.diffAdded,
+        background: theme.diffAddedBg,
       },
     },
     {
       scope: ["diff.minus"],
       style: {
         foreground: theme.diffRemoved,
+        background: theme.diffRemovedBg,
       },
     },
     {
       scope: ["diff.delta"],
       style: {
         foreground: theme.diffContext,
+        background: theme.diffContextBg,
       },
     },
     {

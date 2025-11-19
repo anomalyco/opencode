@@ -9,7 +9,7 @@ import {
   fg,
   type KeyBinding,
 } from "@opentui/core"
-import { createEffect, createMemo, Match, Switch, type JSX, onMount, batch } from "solid-js"
+import { createEffect, createMemo, Match, Switch, type JSX, onMount } from "solid-js"
 import { useLocal } from "@tui/context/local"
 import { useTheme } from "@tui/context/theme"
 import { SplitBorder } from "@tui/component/border"
@@ -101,16 +101,81 @@ export function Prompt(props: PromptProps) {
         value: "prompt.editor",
         onSelect: async (dialog, trigger) => {
           dialog.clear()
-          const value = trigger === "prompt" ? "" : input.plainText
+
+          // replace summarized text parts with the actual text
+          const text = store.prompt.parts
+            .filter((p) => p.type === "text")
+            .reduce((acc, p) => {
+              if (!p.source) return acc
+              return acc.replace(p.source.text.value, p.text)
+            }, store.prompt.input)
+
+          const nonTextParts = store.prompt.parts.filter((p) => p.type !== "text")
+
+          const value = trigger === "prompt" ? "" : text
           const content = await Editor.open({ value, renderer })
-          if (content) {
-            input.setText(content, { history: false })
-            setStore("prompt", {
-              input: content,
-              parts: [],
+          if (!content) return
+
+          input.setText(content, { history: false })
+
+          // Update positions for nonTextParts based on their location in new content
+          // Filter out parts whose virtual text was deleted
+          // this handles a case where the user edits the text in the editor
+          // such that the virtual text moves around or is deleted
+          const updatedNonTextParts = nonTextParts
+            .map((part) => {
+              let virtualText = ""
+              if (part.type === "file" && part.source?.text) {
+                virtualText = part.source.text.value
+              } else if (part.type === "agent" && part.source) {
+                virtualText = part.source.value
+              }
+
+              if (!virtualText) return part
+
+              const newStart = content.indexOf(virtualText)
+              // if the virtual text is deleted, remove the part
+              if (newStart === -1) return null
+
+              const newEnd = newStart + virtualText.length
+
+              if (part.type === "file" && part.source?.text) {
+                return {
+                  ...part,
+                  source: {
+                    ...part.source,
+                    text: {
+                      ...part.source.text,
+                      start: newStart,
+                      end: newEnd,
+                    },
+                  },
+                }
+              }
+
+              if (part.type === "agent" && part.source) {
+                return {
+                  ...part,
+                  source: {
+                    ...part.source,
+                    start: newStart,
+                    end: newEnd,
+                  },
+                }
+              }
+
+              return part
             })
-            input.cursorOffset = Bun.stringWidth(content)
-          }
+            .filter((part) => part !== null)
+
+          setStore("prompt", {
+            input: content,
+            // keep only the non-text parts because the text parts were
+            // already expanded inline
+            parts: updatedNonTextParts,
+          })
+          restoreExtmarksFromParts(updatedNonTextParts)
+          input.cursorOffset = Bun.stringWidth(content)
         },
       },
       {
@@ -163,11 +228,21 @@ export function Prompt(props: PromptProps) {
           if (!props.sessionID) return
           if (autocomplete.visible) return
           if (!input.focused) return
-          sdk.client.session.abort({
-            path: {
-              id: props.sessionID,
-            },
-          })
+
+          setStore("interrupt", store.interrupt + 1)
+
+          setTimeout(() => {
+            setStore("interrupt", 0)
+          }, 5000)
+
+          if (store.interrupt >= 2) {
+            sdk.client.session.abort({
+              path: {
+                id: props.sessionID,
+              },
+            })
+            setStore("interrupt", 0)
+          }
           dialog.clear()
         },
       },
@@ -187,6 +262,7 @@ export function Prompt(props: PromptProps) {
     prompt: PromptInfo
     mode: "normal" | "shell"
     extmarkToPartIndex: Map<number, number>
+    interrupt: number
   }>({
     prompt: {
       input: "",
@@ -194,6 +270,7 @@ export function Prompt(props: PromptProps) {
     },
     mode: "normal",
     extmarkToPartIndex: new Map(),
+    interrupt: 0,
   })
 
   createEffect(() => {
@@ -348,6 +425,10 @@ export function Prompt(props: PromptProps) {
         },
         body: {
           agent: local.agent.current().name,
+          model: {
+            providerID: local.model.current().providerID,
+            modelID: local.model.current().modelID,
+          },
           command: inputText,
         },
       })
@@ -513,8 +594,7 @@ export function Prompt(props: PromptProps) {
                 syncExtmarksWithPromptParts()
               }}
               keyBindings={textareaKeybindings()}
-              // TODO: fix this any
-              onKeyDown={async (e: any) => {
+              onKeyDown={async (e) => {
                 if (props.disabled) {
                   e.preventDefault()
                   return
@@ -588,7 +668,11 @@ export function Prompt(props: PromptProps) {
                   return
                 }
 
-                const pastedContent = event.text.trim()
+                // Normalize line endings at the boundary
+                // Windows ConPTY/Terminal often sends CR-only newlines in bracketed paste
+                // Replace CRLF first, then any remaining CR
+                const normalizedText = event.text.replace(/\r\n/g, "\n").replace(/\r/g, "\n")
+                const pastedContent = normalizedText.trim()
                 if (!pastedContent) {
                   command.trigger("prompt.paste")
                   return
@@ -681,8 +765,11 @@ export function Prompt(props: PromptProps) {
             </Match>
             <Match when={status() === "working"}>
               <box flexDirection="row" gap={1}>
-                <text fg={theme.text}>
-                  esc <span style={{ fg: theme.textMuted }}>interrupt</span>
+                <text fg={store.interrupt > 0 ? theme.primary : theme.text}>
+                  esc{" "}
+                  <span style={{ fg: store.interrupt > 0 ? theme.primary : theme.textMuted }}>
+                    {store.interrupt > 0 ? "again to interrupt" : "interrupt"}
+                  </span>
                 </text>
               </box>
             </Match>

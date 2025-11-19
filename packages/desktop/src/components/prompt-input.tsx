@@ -64,7 +64,6 @@ export const PromptInput: Component<PromptInputProps> = (props) => {
   const handleFileSelect = (path: string | undefined) => {
     if (!path) return
     addPart({ type: "file", path, content: "@" + getFilename(path), start: 0, end: 0 })
-    setStore("popoverIsOpen", false)
   }
 
   const { flat, active, onInput, onKeyDown, refetch } = useFilteredList<string>({
@@ -110,16 +109,6 @@ export const PromptInput: Component<PromptInputProps> = (props) => {
         if (cursorPosition !== null) {
           setCursorPosition(editorRef, cursorPosition)
         }
-      },
-    ),
-  )
-
-  createEffect(
-    on(
-      () => session.prompt.cursor(),
-      (cursor) => {
-        if (cursor === undefined) return
-        queueMicrotask(() => setCursorPosition(editorRef, cursor))
       },
     ),
   )
@@ -173,118 +162,70 @@ export const PromptInput: Component<PromptInputProps> = (props) => {
   }
 
   const addPart = (part: ContentPart) => {
+    const selection = window.getSelection()
+    if (!selection || selection.rangeCount === 0) return
+
     const cursorPosition = getCursorPosition(editorRef)
     const prompt = session.prompt.current()
     const rawText = prompt.map((p) => p.content).join("")
     const textBeforeCursor = rawText.substring(0, cursorPosition)
     const atMatch = textBeforeCursor.match(/@(\S*)$/)
 
-    const startIndex = atMatch ? atMatch.index! : cursorPosition
-    const endIndex = atMatch ? cursorPosition : cursorPosition
+    if (part.type === "file") {
+      const pill = document.createElement("span")
+      pill.textContent = part.content
+      pill.setAttribute("data-type", "file")
+      pill.setAttribute("data-path", part.path)
+      pill.setAttribute("contenteditable", "false")
+      pill.style.userSelect = "text"
+      pill.style.cursor = "default"
 
-    const pushText = (acc: { parts: ContentPart[]; runningIndex: number }, value: string) => {
-      if (!value) return
-      const last = acc.parts[acc.parts.length - 1]
-      if (last && last.type === "text") {
-        acc.parts[acc.parts.length - 1] = {
-          type: "text",
-          content: last.content + value,
-          start: last.start,
-          end: last.end + value.length,
+      const gap = document.createTextNode(" ")
+      const range = selection.getRangeAt(0)
+
+      if (atMatch) {
+        let node: Node | null = range.startContainer
+        let offset = range.startOffset
+        let runningLength = 0
+
+        const walker = document.createTreeWalker(editorRef, NodeFilter.SHOW_TEXT, null)
+        let currentNode = walker.nextNode()
+        while (currentNode) {
+          const textContent = currentNode.textContent || ""
+          if (runningLength + textContent.length >= atMatch.index!) {
+            const localStart = atMatch.index! - runningLength
+            const localEnd = cursorPosition - runningLength
+            if (currentNode === range.startContainer || runningLength + textContent.length >= cursorPosition) {
+              range.setStart(currentNode, localStart)
+              range.setEnd(currentNode, Math.min(localEnd, textContent.length))
+              break
+            }
+          }
+          runningLength += textContent.length
+          currentNode = walker.nextNode()
         }
-        return
       }
-      acc.parts.push({ type: "text", content: value, start: acc.runningIndex, end: acc.runningIndex + value.length })
+
+      range.deleteContents()
+      range.insertNode(gap)
+      range.insertNode(pill)
+      range.setStartAfter(gap)
+      range.collapse(true)
+      selection.removeAllRanges()
+      selection.addRange(range)
+    } else if (part.type === "text") {
+      const textNode = document.createTextNode(part.content)
+      const range = selection.getRangeAt(0)
+      range.deleteContents()
+      range.insertNode(textNode)
+      range.setStartAfter(textNode)
+      range.collapse(true)
+      selection.removeAllRanges()
+      selection.addRange(range)
     }
 
-    const {
-      parts: nextParts,
-      inserted,
-      cursorPositionAfter,
-    } = prompt.reduce(
-      (acc, item) => {
-        if (acc.inserted) {
-          acc.parts.push({ ...item, start: acc.runningIndex, end: acc.runningIndex + item.content.length })
-          acc.runningIndex += item.content.length
-          return acc
-        }
-
-        const nextIndex = acc.runningIndex + item.content.length
-        if (nextIndex <= startIndex) {
-          acc.parts.push({ ...item, start: acc.runningIndex, end: acc.runningIndex + item.content.length })
-          acc.runningIndex = nextIndex
-          return acc
-        }
-
-        if (item.type !== "text") {
-          acc.parts.push({ ...item, start: acc.runningIndex, end: acc.runningIndex + item.content.length })
-          acc.runningIndex = nextIndex
-          return acc
-        }
-
-        const headLength = Math.max(0, startIndex - acc.runningIndex)
-        const tailLength = Math.max(0, endIndex - acc.runningIndex)
-        const head = item.content.slice(0, headLength)
-        const tail = item.content.slice(tailLength)
-
-        pushText(acc, head)
-        acc.runningIndex += head.length
-
-        if (part.type === "text") {
-          pushText(acc, part.content)
-          acc.runningIndex += part.content.length
-        }
-        if (part.type !== "text") {
-          acc.parts.push({ ...part, start: acc.runningIndex, end: acc.runningIndex + part.content.length })
-          acc.runningIndex += part.content.length
-        }
-
-        const needsGap = Boolean(atMatch)
-        const rest = needsGap ? (tail ? (/^\s/.test(tail) ? tail : ` ${tail}`) : " ") : tail
-        pushText(acc, rest)
-        acc.runningIndex += rest.length
-
-        const baseCursor = startIndex + part.content.length
-        const cursorAddition = needsGap && rest.length > 0 ? 1 : 0
-        acc.cursorPositionAfter = baseCursor + cursorAddition
-
-        acc.inserted = true
-        return acc
-      },
-      {
-        parts: [] as ContentPart[],
-        runningIndex: 0,
-        inserted: false,
-        cursorPositionAfter: cursorPosition + part.content.length,
-      },
-    )
-
-    if (!inserted) {
-      const baseParts = prompt.filter((item) => !(item.type === "text" && item.content === ""))
-      const runningIndex = baseParts.reduce((sum, p) => sum + p.content.length, 0)
-      const appendedAcc = { parts: [...baseParts] as ContentPart[], runningIndex }
-      if (part.type === "text") {
-        pushText(appendedAcc, part.content)
-      }
-      if (part.type !== "text") {
-        appendedAcc.parts.push({
-          ...part,
-          start: appendedAcc.runningIndex,
-          end: appendedAcc.runningIndex + part.content.length,
-        })
-      }
-      const next = appendedAcc.parts.length > 0 ? appendedAcc.parts : DEFAULT_PROMPT
-      const nextCursor = rawText.length + part.content.length
-      session.prompt.set(next, nextCursor)
-      setStore("popoverIsOpen", false)
-      queueMicrotask(() => setCursorPosition(editorRef, nextCursor))
-      return
-    }
-
-    session.prompt.set(nextParts, cursorPositionAfter)
+    handleInput()
     setStore("popoverIsOpen", false)
-
-    queueMicrotask(() => setCursorPosition(editorRef, cursorPositionAfter))
   }
 
   const abort = () =>
@@ -325,7 +266,7 @@ export const PromptInput: Component<PromptInputProps> = (props) => {
     if (!existing) {
       const created = await sdk.client.session.create()
       existing = created.data ?? undefined
-      if (existing) navigate(`/session/${existing.id}`)
+      if (existing) navigate(existing.id)
     }
     if (!existing) return
 
@@ -378,7 +319,9 @@ export const PromptInput: Component<PromptInputProps> = (props) => {
 
     session.layout.setActiveTab(undefined)
     session.messages.setActive(undefined)
-    session.prompt.set(DEFAULT_PROMPT, 0)
+    // Clear the editor DOM directly to ensure it's empty
+    editorRef.innerHTML = ""
+    session.prompt.set([{ type: "text", content: "", start: 0, end: 0 }], 0)
 
     sdk.client.session.prompt({
       path: { id: existing.id },
@@ -402,7 +345,11 @@ export const PromptInput: Component<PromptInputProps> = (props) => {
   return (
     <div class="relative size-full _max-h-[320px] flex flex-col gap-3">
       <Show when={store.popoverIsOpen}>
-        <div class="absolute inset-x-0 -top-3 -translate-y-full origin-bottom-left max-h-[252px] min-h-10 overflow-y-auto flex flex-col p-2 pb-0 rounded-2xl border border-border-base bg-surface-raised-stronger-non-alpha shadow-md">
+        <div
+          class="absolute inset-x-0 -top-3 -translate-y-full origin-bottom-left max-h-[252px] min-h-10
+                 overflow-auto no-scrollbar flex flex-col p-2 pb-0 rounded-md
+                 border border-border-base bg-surface-raised-stronger-non-alpha shadow-md"
+        >
           <Show when={flat().length > 0} fallback={<div class="text-text-weak px-2">No matching files</div>}>
             <For each={flat()}>
               {(i) => (
@@ -419,7 +366,9 @@ export const PromptInput: Component<PromptInputProps> = (props) => {
                       <span class="text-text-weak whitespace-nowrap overflow-hidden overflow-ellipsis truncate min-w-0">
                         {getDirectory(i)}
                       </span>
-                      <span class="text-text-strong whitespace-nowrap">{getFilename(i)}</span>
+                      <Show when={!i.endsWith("/")}>
+                        <span class="text-text-strong whitespace-nowrap">{getFilename(i)}</span>
+                      </Show>
                     </div>
                   </div>
                   <div class="flex items-center gap-x-1 text-text-muted/40 shrink-0"></div>
@@ -433,7 +382,7 @@ export const PromptInput: Component<PromptInputProps> = (props) => {
         onSubmit={handleSubmit}
         classList={{
           "bg-surface-raised-stronger-non-alpha border border-border-strong-base": true,
-          "rounded-2xl overflow-clip focus-within:border-transparent focus-within:shadow-xs-border-select": true,
+          "rounded-md overflow-clip focus-within:border-transparent focus-within:shadow-xs-border-select": true,
           [props.class ?? ""]: !!props.class,
         }}
       >
@@ -447,17 +396,17 @@ export const PromptInput: Component<PromptInputProps> = (props) => {
             onInput={handleInput}
             onKeyDown={handleKeyDown}
             classList={{
-              "w-full p-3 text-14-regular text-text-strong focus:outline-none whitespace-pre-wrap": true,
+              "w-full px-5 py-3 text-14-regular text-text-strong focus:outline-none whitespace-pre-wrap": true,
               "[&>[data-type=file]]:text-icon-info-active": true,
             }}
           />
           <Show when={!session.prompt.dirty()}>
-            <div class="absolute top-0 left-0 p-3 text-14-regular text-text-weak pointer-events-none">
+            <div class="absolute top-0 left-0 px-5 py-3 text-14-regular text-text-weak pointer-events-none">
               Plan and build anything
             </div>
           </Show>
         </div>
-        <div class="p-3 flex items-center justify-between">
+        <div class="relative p-3 flex items-center justify-between">
           <div class="flex items-center justify-start gap-1">
             <Select
               options={local.agent.list().map((agent) => agent.name)}
@@ -540,7 +489,7 @@ export const PromptInput: Component<PromptInputProps> = (props) => {
               disabled={!session.prompt.dirty() && !session.working()}
               icon={session.working() ? "stop" : "arrow-up"}
               variant="primary"
-              class="rounded-full"
+              class="h-10 w-8 absolute right-2 bottom-2"
             />
           </Tooltip>
         </div>

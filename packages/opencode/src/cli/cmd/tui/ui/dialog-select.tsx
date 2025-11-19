@@ -259,10 +259,15 @@ function Option(props: {
   onMouseOver?: () => void
 }) {
   const { theme } = useTheme()
+
   return (
     <>
-      <Show when={props.current && !props.active}>
-        <text flexShrink={0} fg={theme.primary} marginRight={0.5}>
+      <Show when={props.current}>
+        <text
+          flexShrink={0}
+          fg={props.active ? theme.background : props.current ? theme.primary : theme.text}
+          marginRight={0.5}
+        >
           ●
         </text>
       </Show>

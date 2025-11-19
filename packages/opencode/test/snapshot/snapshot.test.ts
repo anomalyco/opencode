@@ -469,6 +469,115 @@ test("snapshot state isolation between projects", async () => {
   })
 })
 
+test("patch detects changes in secondary worktree", async () => {
+  await using tmp = await bootstrap()
+  const worktreePath = `${tmp.path}-worktree`
+  await $`git worktree add ${worktreePath} HEAD`.cwd(tmp.path).quiet()
+
+  try {
+    await Instance.provide({
+      directory: tmp.path,
+      fn: async () => {
+        expect(await Snapshot.track()).toBeTruthy()
+      },
+    })
+
+    await Instance.provide({
+      directory: worktreePath,
+      fn: async () => {
+        const before = await Snapshot.track()
+        expect(before).toBeTruthy()
+
+        const worktreeFile = `${worktreePath}/worktree.txt`
+        await Bun.write(worktreeFile, "worktree content")
+
+        const patch = await Snapshot.patch(before!)
+        expect(patch.files).toContain(worktreeFile)
+      },
+    })
+  } finally {
+    await $`git worktree remove --force ${worktreePath}`.cwd(tmp.path).quiet().nothrow()
+    await $`rm -rf ${worktreePath}`.quiet()
+  }
+})
+
+test("revert only removes files in invoking worktree", async () => {
+  await using tmp = await bootstrap()
+  const worktreePath = `${tmp.path}-worktree`
+  await $`git worktree add ${worktreePath} HEAD`.cwd(tmp.path).quiet()
+
+  try {
+    await Instance.provide({
+      directory: tmp.path,
+      fn: async () => {
+        expect(await Snapshot.track()).toBeTruthy()
+      },
+    })
+    const primaryFile = `${tmp.path}/worktree.txt`
+    await Bun.write(primaryFile, "primary content")
+
+    await Instance.provide({
+      directory: worktreePath,
+      fn: async () => {
+        const before = await Snapshot.track()
+        expect(before).toBeTruthy()
+
+        const worktreeFile = `${worktreePath}/worktree.txt`
+        await Bun.write(worktreeFile, "worktree content")
+
+        const patch = await Snapshot.patch(before!)
+        await Snapshot.revert([patch])
+
+        expect(await Bun.file(worktreeFile).exists()).toBe(false)
+      },
+    })
+
+    expect(await Bun.file(primaryFile).text()).toBe("primary content")
+  } finally {
+    await $`git worktree remove --force ${worktreePath}`.cwd(tmp.path).quiet().nothrow()
+    await $`rm -rf ${worktreePath}`.quiet()
+    await $`rm -f ${tmp.path}/worktree.txt`.quiet()
+  }
+})
+
+test("diff reports worktree-only/shared edits and ignores primary-only", async () => {
+  await using tmp = await bootstrap()
+  const worktreePath = `${tmp.path}-worktree`
+  await $`git worktree add ${worktreePath} HEAD`.cwd(tmp.path).quiet()
+
+  try {
+    await Instance.provide({
+      directory: tmp.path,
+      fn: async () => {
+        expect(await Snapshot.track()).toBeTruthy()
+      },
+    })
+
+    await Instance.provide({
+      directory: worktreePath,
+      fn: async () => {
+        const before = await Snapshot.track()
+        expect(before).toBeTruthy()
+
+        await Bun.write(`${worktreePath}/worktree-only.txt`, "worktree diff content")
+        await Bun.write(`${worktreePath}/shared.txt`, "worktree edit")
+        await Bun.write(`${tmp.path}/shared.txt`, "primary edit")
+        await Bun.write(`${tmp.path}/primary-only.txt`, "primary change")
+
+        const diff = await Snapshot.diff(before!)
+        expect(diff).toContain("worktree-only.txt")
+        expect(diff).toContain("shared.txt")
+        expect(diff).not.toContain("primary-only.txt")
+      },
+    })
+  } finally {
+    await $`git worktree remove --force ${worktreePath}`.cwd(tmp.path).quiet().nothrow()
+    await $`rm -rf ${worktreePath}`.quiet()
+    await $`rm -f ${tmp.path}/shared.txt`.quiet()
+    await $`rm -f ${tmp.path}/primary-only.txt`.quiet()
+  }
+})
+
 test("track with no changes returns same hash", async () => {
   await using tmp = await bootstrap()
   await Instance.provide({

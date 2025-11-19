@@ -212,3 +212,19 @@ export function IconStealth(props: JSX.SvgSVGAttributes<SVGSVGElement>) {
     </svg>
   )
 }
+
+export function IconChevronLeft(props: JSX.SvgSVGAttributes<SVGSVGElement>) {
+  return (
+    <svg {...props} viewBox="0 0 20 20" fill="none">
+      <path d="M12 15L7 10L12 5" stroke="currentColor" stroke-linecap="round" stroke-linejoin="round" />
+    </svg>
+  )
+}
+
+export function IconChevronRight(props: JSX.SvgSVGAttributes<SVGSVGElement>) {
+  return (
+    <svg {...props} viewBox="0 0 20 20" fill="none">
+      <path d="M8 5L13 10L8 15" stroke="currentColor" stroke-linecap="round" stroke-linejoin="round" />
+    </svg>
+  )
+}

@@ -312,7 +312,7 @@ function App() {
     {
       title: "Exit the app",
       value: "app.exit",
-      onSelect: exit,
+      onSelect: () => exit(),
       category: "System",
     },
     {
@@ -487,6 +487,8 @@ function ErrorComponent(props: { error: Error; reset: () => void; onExit: () => 
       "```\n" + props.error.stack.substring(0, 6000 - issueURL.toString().length) + "...\n```",
     )
   }
+
+  issueURL.searchParams.set("opencode-version", Installation.VERSION)
 
   const copyIssueURL = () => {
     Clipboard.copy(issueURL.toString()).then(() => {
