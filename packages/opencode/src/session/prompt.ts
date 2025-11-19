@@ -1405,6 +1405,7 @@ export namespace SessionPrompt {
     }
     if (small.providerID === "google") {
       options["thinkingConfig"] = {
+        ...options["thinkingConfig"],
         thinkingBudget: 0,
       }
     }
