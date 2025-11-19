@@ -336,11 +336,15 @@ You can customize TUI behavior through your OpenCode config file.
 {
   "$schema": "https://opencode.ai/config.json",
   "tui": {
-    "scroll_speed": 3
+    "scroll_speed": 3,
+    "scroll_acceleration": {
+      "enabled": true
+    }
   }
 }
 ```
 
 ### Options
 
-- `scroll_speed` - Controls how fast the TUI scrolls when using scroll commands (default: `2`, minimum: `1`)
+- `scroll_acceleration` - Enable macOS-style scroll acceleration for smooth, natural scrolling. When enabled, scroll speed increases with rapid scrolling gestures and stays precise for slower movements. **This setting takes precedence over `scroll_speed` and overrides it when enabled.**
+- `scroll_speed` - Controls how fast the TUI scrolls when using scroll commands (default: `1`, minimum: `1`). **Note: This is ignored if `scroll_acceleration.enabled` is set to `true`.**

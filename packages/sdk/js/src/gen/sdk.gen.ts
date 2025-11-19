@@ -2,6 +2,8 @@
 
 import type { Options as ClientOptions, TDataShape, Client } from "./client/index.js"
 import type {
+  GlobalEventData,
+  GlobalEventResponses,
   ProjectListData,
   ProjectListResponses,
   ProjectCurrentData,
@@ -24,6 +26,9 @@ import type {
   SessionCreateData,
   SessionCreateResponses,
   SessionCreateErrors,
+  SessionStatusData,
+  SessionStatusResponses,
+  SessionStatusErrors,
   SessionDeleteData,
   SessionDeleteResponses,
   SessionDeleteErrors,
@@ -175,6 +180,18 @@ class _HeyApiClient {
   }
 }
 
+class Global extends _HeyApiClient {
+  /**
+   * Get events
+   */
+  public event<ThrowOnError extends boolean = false>(options?: Options<GlobalEventData, ThrowOnError>) {
+    return (options?.client ?? this._client).get.sse<GlobalEventResponses, unknown, ThrowOnError>({
+      url: "/global/event",
+      ...options,
+    })
+  }
+}
+
 class Project extends _HeyApiClient {
   /**
    * List all projects
@@ -289,6 +306,16 @@ class Session extends _HeyApiClient {
         "Content-Type": "application/json",
         ...options?.headers,
       },
+    })
+  }
+
+  /**
+   * Get session status
+   */
+  public status<ThrowOnError extends boolean = false>(options?: Options<SessionStatusData, ThrowOnError>) {
+    return (options?.client ?? this._client).get<SessionStatusResponses, SessionStatusErrors, ThrowOnError>({
+      url: "/session/status",
+      ...options,
     })
   }
 
@@ -860,6 +887,7 @@ export class OpencodeClient extends _HeyApiClient {
       },
     })
   }
+  global = new Global({ client: this._client })
   project = new Project({ client: this._client })
   config = new Config({ client: this._client })
   tool = new Tool({ client: this._client })

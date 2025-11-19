@@ -11,6 +11,7 @@ import { Provider } from "../provider/provider"
 import { Identifier } from "../id/id"
 import { Permission } from "../permission"
 import { Agent } from "@/agent/agent"
+import { iife } from "@/util/iife"
 
 const DEFAULT_READ_LIMIT = 2000
 const MAX_LINE_LENGTH = 2000
@@ -45,7 +46,31 @@ export const ReadTool = Tool.define("read", {
             parentDir,
           },
         })
+      } else if (agent.permission.external_directory === "deny") {
+        throw new Permission.RejectedError(
+          ctx.sessionID,
+          "external_directory",
+          ctx.callID,
+          {
+            filepath: filepath,
+            parentDir,
+          },
+          `File ${filepath} is not in the current working directory`,
+        )
       }
+    }
+
+    const block = iife(() => {
+      const whitelist = [".env.sample", ".example"]
+
+      if (whitelist.some((w) => filepath.endsWith(w))) return false
+      if (filepath.includes(".env")) return true
+
+      return false
+    })
+
+    if (block) {
+      throw new Error(`The user has blocked you from reading ${filepath}, DO NOT make further attempts to read it`)
     }
 
     const file = Bun.file(filepath)
@@ -120,8 +145,14 @@ export const ReadTool = Tool.define("read", {
     let output = "<file>\n"
     output += content.join("\n")
 
-    if (lines.length > offset + content.length) {
-      output += `\n\n(File has more lines. Use 'offset' parameter to read beyond line ${offset + content.length})`
+    const totalLines = lines.length
+    const lastReadLine = offset + content.length
+    const hasMoreLines = totalLines > lastReadLine
+
+    if (hasMoreLines) {
+      output += `\n\n(File has more lines. Use 'offset' parameter to read beyond line ${lastReadLine})`
+    } else {
+      output += `\n\n(End of file - total ${totalLines} lines)`
     }
     output += "\n</file>"
 

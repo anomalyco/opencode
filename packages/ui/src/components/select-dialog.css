@@ -7,7 +7,7 @@
   gap: 12px;
   align-self: stretch;
 
-  border-radius: 8px;
+  border-radius: var(--radius-md);
   background: var(--surface-base);
 
   [data-slot="input-container"] {
@@ -100,7 +100,7 @@
         align-items: center;
 
         &[data-active="true"] {
-          border-radius: 8px;
+          border-radius: var(--radius-md);
           background: var(--surface-raised-base-hover);
         }
       }

@@ -61,6 +61,72 @@ export const MyPlugin: Plugin = async ({ project, client, $, directory, worktree
 
 ---
 
+### Events
+
+Plugins can subscribe to events as seen below in the Examples section. Here is a list of the different events available.
+
+#### Command Events
+
+- `command.executed`
+
+#### File Events
+
+- `file.edited`
+- `file.watcher.updated`
+
+#### Installation Events
+
+- `installation.updated`
+
+#### LSP Events
+
+- `lsp.client.diagnostics`
+- `lsp.updated`
+
+#### Message Events
+
+- `message.part.removed`
+- `message.part.updated`
+- `message.removed`
+- `message.updated`
+
+#### Permission Events
+
+- `permission.replied`
+- `permission.updated`
+
+#### Server Events
+
+- `server.connected`
+
+#### Session Events
+
+- `session.created`
+- `session.compacted`
+- `session.deleted`
+- `session.diff`
+- `session.error`
+- `session.idle`
+- `session.status`
+- `session.updated`
+
+#### Todo Events
+
+- `todo.updated`
+
+#### Tool Events
+
+- `tool.execute.after`
+- `tool.execute.before`
+
+#### TUI Events
+
+- `tui.prompt.append`
+- `tui.command.execute`
+- `tui.toast.show`
+
+---
+
 ## Examples
 
 Here are some examples of plugins you can use to extend opencode.

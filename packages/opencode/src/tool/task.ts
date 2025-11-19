@@ -6,9 +6,9 @@ import { Bus } from "../bus"
 import { MessageV2 } from "../session/message-v2"
 import { Identifier } from "../id/id"
 import { Agent } from "../agent/agent"
-import { SessionLock } from "../session/lock"
 import { SessionPrompt } from "../session/prompt"
 import { iife } from "@/util/iife"
+import { defer } from "@/util/defer"
 
 export const TaskTool = Tool.define("task", async () => {
   const agents = await Agent.list().then((x) => x.filter((a) => a.mode !== "primary"))
@@ -71,9 +71,12 @@ export const TaskTool = Tool.define("task", async () => {
         providerID: msg.info.providerID,
       }
 
-      ctx.abort.addEventListener("abort", () => {
-        SessionLock.abort(session.id)
-      })
+      function cancel() {
+        SessionPrompt.cancel(session.id)
+      }
+      ctx.abort.addEventListener("abort", cancel)
+      using _ = defer(() => ctx.abort.removeEventListener("abort", cancel))
+      const promptParts = await SessionPrompt.resolvePromptParts(params.prompt)
       const result = await SessionPrompt.prompt({
         messageID,
         sessionID: session.id,
@@ -88,13 +91,7 @@ export const TaskTool = Tool.define("task", async () => {
           task: false,
           ...agent.tools,
         },
-        parts: [
-          {
-            id: Identifier.ascending("part"),
-            type: "text",
-            text: params.prompt,
-          },
-        ],
+        parts: promptParts,
       })
       unsub()
       let all

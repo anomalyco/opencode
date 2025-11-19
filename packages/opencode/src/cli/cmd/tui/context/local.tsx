@@ -90,6 +90,8 @@ export const { use: useLocal, provider: LocalProvider } = createSimpleContext({
           })
         },
         color(name: string) {
+          const agent = agents().find((x) => x.name === name)
+          if (agent?.color) return agent.color
           const index = agents().findIndex((x) => x.name === name)
           return colors()[index % colors().length]
         },
@@ -156,10 +158,10 @@ export const { use: useLocal, provider: LocalProvider } = createSimpleContext({
           }
         }
         const provider = sync.data.provider[0]
-        const model = Object.values(provider.models)[0]
+        const model = sync.data.provider_default[provider.id] ?? Object.values(provider.models)[0].id
         return {
           providerID: provider.id,
-          modelID: model.id,
+          modelID: model,
         }
       })
 

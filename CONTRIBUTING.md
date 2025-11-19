@@ -42,6 +42,38 @@ Want to take on an issue? Leave a comment and a maintainer may assign it to you 
 > [!NOTE]
 > After touching `packages/opencode/src/server/server.ts`, run "./packages/sdk/js/script/build.ts" to regenerate the JS sdk.
 
+### Setting up a Debugger
+
+Bun debugging is currently rough around the edges. We hope this guide helps you get set up and avoid some pain points.
+
+The most reliable way to debug OpenCode is to run it manually in a terminal via `bun run --inspect=<url> dev ...` and attach
+your debugger via that URL. Other methods can result in breakpoints being mapped incorrectly, at least in VSCode (YMMV).
+
+Caveats:
+
+- `*.tsx` files won't have their breakpoints correctly mapped. This seems due to Bun currently not supporting source maps on code transformed
+  via `BunPlugin`s (currently necessary due to our dependency on `@opentui/solid`). Currently, the best you can do in terms of debugging `*.tsx`
+  files is writing a `debugger;` statement. Debugging facilities like stepping won't work, but at least you will be informed if a specific code
+  is triggered.
+- If you want to run the OpenCode TUI and have breakpoints triggered in the server code, you might need to run `bun dev spawn` instead of
+  the usual `bun dev`. This is because `bun dev` runs the server in a worker thread and breakpoints might not work there.
+
+Other tips and tricks:
+
+- You might want to use `--inspect-wait` or `--inspect-brk` instead of `--inspect`, depending on your workflow
+- Specifying `--inspect=ws://localhost:6499/` on every invocation can be tiresome, you may want to `export BUN_OPTIONS=--inspect=ws://localhost:6499/` instead
+
+#### VSCode Setup
+
+If you use VSCode, you can use our example configurations [.vscode/settings.example.json](.vscode/settings.example.json) and [.vscode/launch.example.json](.vscode/launch.example.json).
+
+Some debug methods that can be problematic:
+
+- Debug configurations with `"request": "launch"` can have breakpoints incorrectly mapped and thus unusable
+- The same problem arises when running OpenCode in the VSCode `JavaScript Debug Terminal`
+
+With that said, you may want to try these methods, as they might work for you.
+
 ## Pull Request Expectations
 
 - Try to keep pull requests small and focused.
