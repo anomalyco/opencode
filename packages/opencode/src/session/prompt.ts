@@ -895,7 +895,7 @@ export namespace SessionPrompt {
                   }
                 }
                 const args = { filePath: filepath, offset, limit }
-                
+
                 const pieces: MessageV2.Part[] = [
                   {
                     id: Identifier.ascending("part"),
@@ -994,7 +994,6 @@ export namespace SessionPrompt {
                 ]
               }
 
-              
               const file = Bun.file(filepath)
               FileTime.read(input.sessionID, filepath)
               return [
