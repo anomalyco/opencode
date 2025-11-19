@@ -183,9 +183,8 @@ export namespace ProviderTransform {
           ["google" as string]: {
             ...options,
             thinkingConfig: {
-              ...options.thinkingConfig,
-              includeThoughts: true,
               ...options?.thinkingConfig,
+              includeThoughts: true,
             },
           },
         }
