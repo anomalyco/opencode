@@ -10,11 +10,13 @@ import { createSimpleContext } from "./helper"
 import { useToast } from "../ui/toast"
 import { Provider } from "@/provider/provider"
 import { useArgs } from "./args"
+import { useSDK } from "./sdk"
 
 export const { use: useLocal, provider: LocalProvider } = createSimpleContext({
   name: "Local",
   init: () => {
     const sync = useSync()
+    const sdk = useSDK()
     const toast = useToast()
 
     function isModelValid(model: { providerID: string; modelID: string }) {
@@ -182,6 +184,17 @@ export const { use: useLocal, provider: LocalProvider } = createSimpleContext({
         recent() {
           return modelStore.recent
         },
+        list() {
+          return sync.data.provider.flatMap((provider) =>
+            Object.entries(provider.models).map(([modelID, model]) => ({
+              ...model,
+              providerID: provider.id,
+              modelID,
+              name: model.name ?? modelID,
+              provider,
+            })),
+          )
+        },
         parsed: createMemo(() => {
           const value = currentModel()
           const provider = sync.data.provider.find((x) => x.id === value.providerID)!
@@ -231,9 +244,55 @@ export const { use: useLocal, provider: LocalProvider } = createSimpleContext({
       }
     })
 
+    const mcp = iife(() => {
+      const [mcpStore, setMcpStore] = createStore<{
+        disabled: string[]
+        initialized: boolean
+      }>({
+        disabled: [],
+        initialized: false,
+      })
+
+      // Initialize disabled list from sync data
+      createEffect(() => {
+        if (mcpStore.initialized) return
+        const disabledFromConfig = Object.entries(sync.data.mcp)
+          .filter(([, status]) => status.status === "disabled")
+          .map(([name]) => name)
+        if (disabledFromConfig.length > 0) {
+          setMcpStore("disabled", disabledFromConfig)
+          setMcpStore("initialized", true)
+        }
+      })
+
+      return {
+        isEnabled(name: string) {
+          return !mcpStore.disabled.includes(name)
+        },
+        async toggle(name: string) {
+          if (mcpStore.disabled.includes(name)) {
+            // Enable: connect the MCP
+            await sdk.client.mcp.connect({ path: { name } })
+            setMcpStore(
+              "disabled",
+              mcpStore.disabled.filter((x) => x !== name),
+            )
+          } else {
+            // Disable: disconnect the MCP
+            await sdk.client.mcp.disconnect({ path: { name } })
+            setMcpStore("disabled", [...mcpStore.disabled, name])
+          }
+        },
+        list() {
+          return mcpStore.disabled
+        },
+      }
+    })
+
     const result = {
       model,
       agent,
+      mcp,
     }
     return result
   },

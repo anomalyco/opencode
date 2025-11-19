@@ -114,6 +114,10 @@ import type {
   McpAddData,
   McpAddResponses,
   McpAddErrors,
+  McpDisconnectData,
+  McpDisconnectResponses,
+  McpConnectData,
+  McpConnectResponses,
   LspStatusData,
   LspStatusResponses,
   FormatterStatusData,
@@ -666,6 +670,26 @@ class Mcp extends _HeyApiClient {
         "Content-Type": "application/json",
         ...options?.headers,
       },
+    })
+  }
+
+  /**
+   * Disconnect an MCP server
+   */
+  public disconnect<ThrowOnError extends boolean = false>(options: Options<McpDisconnectData, ThrowOnError>) {
+    return (options.client ?? this._client).post<McpDisconnectResponses, unknown, ThrowOnError>({
+      url: "/mcp/{name}/disconnect",
+      ...options,
+    })
+  }
+
+  /**
+   * Connect an MCP server
+   */
+  public connect<ThrowOnError extends boolean = false>(options: Options<McpConnectData, ThrowOnError>) {
+    return (options.client ?? this._client).post<McpConnectResponses, unknown, ThrowOnError>({
+      url: "/mcp/{name}/connect",
+      ...options,
     })
   }
 }
