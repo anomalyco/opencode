@@ -41,6 +41,7 @@ export type PromptRef = {
   reset(): void
   blur(): void
   focus(): void
+  submit(): void
 }
 
 export function Prompt(props: PromptProps) {
@@ -398,11 +399,14 @@ export function Prompt(props: PromptProps) {
       })
       setStore("extmarkToPartIndex", new Map())
     },
+    submit() {
+      submit()
+    },
   })
 
   async function submit() {
     if (props.disabled) return
-    if (autocomplete.visible) return
+    if (autocomplete?.visible) return
     if (!store.prompt.input) return
     const selectedModel = local.model.current()
     if (!selectedModel) {
