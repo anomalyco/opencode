@@ -91,30 +91,6 @@ To disable a specific LSP server, set `disabled` to `true`:
 
 ---
 
-### Intelephense Configuration (PHP)
-
-For PHP projects, you can configure Intelephense with a license key if you have a paid subscription:
-
-```json title="opencode.json" {4-8}
-{
-  "$schema": "https://opencode.ai/config.json",
-  "lsp": {
-    "php intelephense": {
-      "initialization": {
-        "licenceKey": "your-license-key-here"
-      }
-    }
-  }
-}
-```
-
-Alternatively, you can place your license key in a file at:
-
-- **macOS/Linux**: `~/.config/intelephense/licence.txt`
-- **Windows**: `%USERPROFILE%\.config\intelephense\licence.txt`
-
----
-
 ### Custom LSP servers
 
 You can add custom LSP servers by specifying the command and file extensions:
