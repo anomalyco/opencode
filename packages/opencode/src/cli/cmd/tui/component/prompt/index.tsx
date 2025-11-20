@@ -9,7 +9,7 @@ import {
   fg,
   type KeyBinding,
 } from "@opentui/core"
-import { createEffect, createMemo, Match, Switch, type JSX, onMount, batch } from "solid-js"
+import { createEffect, createMemo, Match, Switch, type JSX, onMount } from "solid-js"
 import { useLocal } from "@tui/context/local"
 import { useTheme } from "@tui/context/theme"
 import { SplitBorder } from "@tui/component/border"
@@ -425,6 +425,10 @@ export function Prompt(props: PromptProps) {
         },
         body: {
           agent: local.agent.current().name,
+          model: {
+            providerID: local.model.current().providerID,
+            modelID: local.model.current().modelID,
+          },
           command: inputText,
         },
       })
