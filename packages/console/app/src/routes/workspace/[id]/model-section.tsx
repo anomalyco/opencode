@@ -10,6 +10,7 @@ import { IconAlibaba, IconAnthropic, IconMoonshotAI, IconOpenAI, IconStealth, Ic
 const getModelLab = (modelId: string) => {
   if (modelId.startsWith("claude")) return "Anthropic"
   if (modelId.startsWith("gpt")) return "OpenAI"
+  if (modelId.startsWith("gemini")) return "Google"
   if (modelId.startsWith("kimi")) return "Moonshot AI"
   if (modelId.startsWith("glm")) return "Z.ai"
   if (modelId.startsWith("qwen")) return "Alibaba"
@@ -24,7 +25,17 @@ const getModelsInfo = query(async (workspaceID: string) => {
       all: Object.entries(ZenData.list().models)
         .filter(([id, _model]) => !["claude-3-5-haiku"].includes(id))
         .filter(([id, _model]) => !id.startsWith("alpha-"))
-        .sort(([_idA, modelA], [_idB, modelB]) => modelA.name.localeCompare(modelB.name))
+        .sort(([idA, modelA], [idB, modelB]) => {
+          const priority = ["big-pickle", "grok", "claude", "gpt", "gemini"]
+          const getPriority = (id: string) => {
+            const index = priority.findIndex((p) => id.startsWith(p))
+            return index === -1 ? Infinity : index
+          }
+          const pA = getPriority(idA)
+          const pB = getPriority(idB)
+          if (pA !== pB) return pA - pB
+          return modelA.name.localeCompare(modelB.name)
+        })
         .map(([id, model]) => ({ id, name: model.name })),
       disabled: await Model.listDisabled(),
     }
