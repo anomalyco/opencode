@@ -5,7 +5,16 @@ import { withActor } from "~/context/auth.withActor"
 import { ZenData } from "@opencode-ai/console-core/model.js"
 import styles from "./model-section.module.css"
 import { querySessionInfo } from "../common"
-import { IconAlibaba, IconAnthropic, IconMoonshotAI, IconOpenAI, IconStealth, IconXai, IconZai } from "~/component/icon"
+import {
+  IconAlibaba,
+  IconAnthropic,
+  IconGoogle,
+  IconMoonshotAI,
+  IconOpenAI,
+  IconStealth,
+  IconXai,
+  IconZai,
+} from "~/component/icon"
 
 const getModelLab = (modelId: string) => {
   if (modelId.startsWith("claude")) return "Anthropic"
@@ -107,6 +116,8 @@ export function ModelSection() {
                                   return <IconOpenAI width={16} height={16} />
                                 case "Anthropic":
                                   return <IconAnthropic width={16} height={16} />
+                                case "Google":
+                                  return <IconGoogle width={16} height={16} />
                                 case "Moonshot AI":
                                   return <IconMoonshotAI width={16} height={16} />
                                 case "Z.ai":
