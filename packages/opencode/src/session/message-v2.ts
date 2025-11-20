@@ -567,7 +567,7 @@ export namespace MessageV2 {
         }
         result.push(userMessage)
         for (const part of msg.parts) {
-          if (part.type === "text"  && !part.userSynthetic)
+          if (part.type === "text" && !part.userSynthetic)
             userMessage.parts.push({
               type: "text",
               text: part.text,
