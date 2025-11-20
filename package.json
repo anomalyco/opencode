@@ -32,7 +32,7 @@
       "@solidjs/meta": "0.29.4",
       "@tailwindcss/vite": "4.1.11",
       "diff": "8.0.2",
-      "ai": "5.0.8",
+      "ai": "5.0.97",
       "hono": "4.7.10",
       "fuzzysort": "3.1.0",
       "luxon": "3.6.1",
