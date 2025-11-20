@@ -16,7 +16,7 @@ import { Flag } from "@/flag/flag.ts"
 
 const DEFAULT_MAX_OUTPUT_LENGTH = 30_000
 const MAX_OUTPUT_LENGTH = (() => {
-  const parsed = Number(Flag.OPENCODE_MAX_OUTPUT_LENGTH)
+  const parsed = Number(Flag.OPENCODE_BASH_MAX_OUTPUT_LENGTH)
   return Number.isInteger(parsed) && parsed > 0 ? parsed : DEFAULT_MAX_OUTPUT_LENGTH
 })()
 const DEFAULT_TIMEOUT = 1 * 60 * 1000
