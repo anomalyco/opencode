@@ -357,6 +357,42 @@ Or if you already have an API key, you can select **Manually enter API Key** and
 
 ---
 
+### Cortecs
+
+1. Head over to the [Cortecs console](https://cortecs.ai/), create an account, and generate an API key.
+
+2. Run `opencode auth login` and select **Cortecs**.
+
+   ```bash
+   $ opencode auth login
+
+   ┌  Add credential
+   │
+   ◆  Select provider
+   │  ● Cortecs
+   │  ...
+   └
+   ```
+
+3. Enter your Cortecs API key.
+
+   ```bash
+   $ opencode auth login
+
+   ┌  Add credential
+   │
+   ◇  Select provider
+   │  Cortecs
+   │
+   ◇  Enter your API key
+   │  _
+   └
+   ```
+
+4. Run the `/models` command to select a model like _Kimi K2 Instruct_.
+
+---
+
 ### DeepSeek
 
 1. Head over to the [DeepSeek console](https://platform.deepseek.com/), create an account, and click **Create new API key**.
