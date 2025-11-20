@@ -12,9 +12,14 @@ import { Filesystem } from "@/util/filesystem"
 import { Wildcard } from "@/util/wildcard"
 import { Permission } from "@/permission"
 import { fileURLToPath } from "url"
+import { Flag } from "@/flag/flag.ts"
 import path from "path"
 
-const MAX_OUTPUT_LENGTH = 30_000
+const DEFAULT_MAX_OUTPUT_LENGTH = 30_000
+const MAX_OUTPUT_LENGTH = (() => {
+  const parsed = Number(Flag.OPENCODE_EXPERIMENTAL_BASH_MAX_OUTPUT_LENGTH)
+  return Number.isInteger(parsed) && parsed > 0 ? parsed : DEFAULT_MAX_OUTPUT_LENGTH
+})()
 const DEFAULT_TIMEOUT = 1 * 60 * 1000
 const MAX_TIMEOUT = 10 * 60 * 1000
 const SIGKILL_TIMEOUT_MS = 200
