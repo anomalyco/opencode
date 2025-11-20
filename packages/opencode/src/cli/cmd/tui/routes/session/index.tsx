@@ -142,8 +142,28 @@ export function Session() {
   })
 
   const toast = useToast()
-
   const sdk = useSDK()
+
+  // Auto-navigate to whichever session currently needs permission input
+  createEffect(() => {
+    const currentSession = session()
+    const currentPermissions = permissions()
+    let targetID = currentPermissions.length > 0 ? currentSession.id : undefined
+
+    if (!targetID) {
+      const child = sync.data.session.find(
+        (x) => x.parentID === currentSession.id && (sync.data.permission[x.id]?.length ?? 0) > 0,
+      )
+      if (child) targetID = child.id
+    }
+
+    if (targetID && targetID !== currentSession.id) {
+      navigate({
+        type: "session",
+        sessionID: targetID,
+      })
+    }
+  })
 
   let scroll: ScrollBoxRenderable
   let prompt: PromptRef
