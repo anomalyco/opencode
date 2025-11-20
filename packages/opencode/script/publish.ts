@@ -8,7 +8,6 @@ const dir = fileURLToPath(new URL("..", import.meta.url))
 process.chdir(dir)
 
 const { binaries } = await import("./build.ts")
-const dryRun = Boolean(process.env["DRY_RUN"])
 {
   const name = `${pkg.name}-${process.platform}-${process.arch}`
   console.log(`smoke test: running dist/${name}/bin/opencode --version`)
@@ -42,23 +41,14 @@ for (const [name] of Object.entries(binaries)) {
     if (process.platform !== "win32") {
       await $`chmod 755 -R .`
     }
-    if (dryRun) {
-      console.log(`DRY_RUN: skipping publish for ${name}`)
-      continue
-    }
     await $`bun publish --access public --tag ${Script.channel}`
   } finally {
     process.chdir(dir)
   }
 }
-if (dryRun) {
-  console.log(`DRY_RUN: skipping publish for ${pkg.name}-ai`)
-}
-if (!dryRun) {
-  await $`cd ./dist/${pkg.name} && bun publish --access public --tag ${Script.channel}`
-}
+await $`cd ./dist/${pkg.name} && bun publish --access public --tag ${Script.channel}`
 
-if (!Script.preview && !dryRun) {
+if (!Script.preview) {
   const major = Script.version.split(".")[0]
   const majorTag = `latest-${major}`
   for (const [name] of Object.entries(binaries)) {
@@ -67,7 +57,7 @@ if (!Script.preview && !dryRun) {
   await $`cd ./dist/${pkg.name} && npm dist-tag add ${pkg.name}-ai@${Script.version} ${majorTag}`
 }
 
-if (!Script.preview && !dryRun) {
+if (!Script.preview) {
   for (const key of Object.keys(binaries)) {
     await $`cd dist/${key}/bin && zip -r ../../${key}.zip *`
   }
