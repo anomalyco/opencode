@@ -583,9 +583,8 @@ export function Session() {
             transcript += `---\n\n`
           }
 
-          // Save to file in data directory
-          const exportDir = path.join(Global.Path.data, "exports")
-          await fs.mkdir(exportDir, { recursive: true })
+          // Save to file in current working directory
+          const exportDir = process.cwd()
 
           const timestamp = new Date().toISOString().replace(/[:.]/g, "-")
           const filename = `session-${sessionData.id.slice(0, 8)}-${timestamp}.md`
