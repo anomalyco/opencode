@@ -982,59 +982,62 @@ function AssistantMessage(props: { message: AssistantMessage; parts: Part[]; las
           <text fg={theme.textMuted}>{props.message.error?.data.message}</text>
         </box>
       </Show>
-      <Show when={props.last && status().type !== "idle"}>
-        <box paddingLeft={3} flexDirection="row" gap={1} marginTop={1}>
-          <text fg={local.agent.color(props.message.mode)}>{Locale.titlecase(props.message.mode)}</text>
-          <Shimmer text={props.message.modelID} color={theme.text} />
-          {(() => {
-            const retry = createMemo(() => {
-              const s = status()
-              if (s.type !== "retry") return
-              return s
-            })
-            const message = createMemo(() => {
-              const r = retry()
-              if (!r) return
-              if (r.message.includes("exceeded your current quota") && r.message.includes("gemini"))
-                return "gemini 3 way too hot right now"
-              if (r.message.length > 50) return r.message.slice(0, 50) + "..."
-              return r.message
-            })
-            const [seconds, setSeconds] = createSignal(0)
-            onMount(() => {
-              const timer = setInterval(() => {
-                const next = retry()?.next
-                if (next) setSeconds(Math.round((next - Date.now()) / 1000))
-              }, 1000)
-
-              onCleanup(() => {
-                clearInterval(timer)
+      <Switch>
+        <Match when={props.last && status().type !== "idle"}>
+          <box paddingLeft={3} flexDirection="row" gap={1} marginTop={1}>
+            <text fg={local.agent.color(props.message.mode)}>{Locale.titlecase(props.message.mode)}</text>
+            <Shimmer text={props.message.modelID} color={theme.text} />
+            {(() => {
+              const retry = createMemo(() => {
+                const s = status()
+                if (s.type !== "retry") return
+                return s
               })
-            })
-            return (
-              <Show when={retry()}>
-                <text fg={theme.error}>
-                  {message()} [retrying {seconds() > 0 ? `in ${seconds()}s ` : ""}
-                  attempt #{retry()!.attempt}]
-                </text>
-              </Show>
-            )
-          })()}
-        </box>
-      </Show>
-      <Show
-        when={
-          props.message.time.completed &&
-          props.parts.some((item) => item.type === "step-finish" && item.reason !== "tool-calls")
-        }
-      >
-        <box paddingLeft={3}>
-          <text marginTop={1}>
-            <span style={{ fg: local.agent.color(props.message.mode) }}>{Locale.titlecase(props.message.mode)}</span>{" "}
-            <span style={{ fg: theme.textMuted }}>{props.message.modelID}</span>
-          </text>
-        </box>
-      </Show>
+              const message = createMemo(() => {
+                const r = retry()
+                if (!r) return
+                if (r.message.includes("exceeded your current quota") && r.message.includes("gemini"))
+                  return "gemini 3 way too hot right now"
+                if (r.message.length > 50) return r.message.slice(0, 50) + "..."
+                return r.message
+              })
+              const [seconds, setSeconds] = createSignal(0)
+              onMount(() => {
+                const timer = setInterval(() => {
+                  const next = retry()?.next
+                  if (next) setSeconds(Math.round((next - Date.now()) / 1000))
+                }, 1000)
+
+                onCleanup(() => {
+                  clearInterval(timer)
+                })
+              })
+              return (
+                <Show when={retry()}>
+                  <text fg={theme.error}>
+                    {message()} [retrying {seconds() > 0 ? `in ${seconds()}s ` : ""}
+                    attempt #{retry()!.attempt}]
+                  </text>
+                </Show>
+              )
+            })()}
+          </box>
+        </Match>
+        <Match
+          when={
+            (props.message.time.completed &&
+              props.parts.some((item) => item.type === "step-finish" && item.reason !== "tool-calls")) ||
+            props.last
+          }
+        >
+          <box paddingLeft={3}>
+            <text marginTop={1}>
+              <span style={{ fg: local.agent.color(props.message.mode) }}>{Locale.titlecase(props.message.mode)}</span>{" "}
+              <span style={{ fg: theme.textMuted }}>{props.message.modelID}</span>
+            </text>
+          </box>
+        </Match>
+      </Switch>
     </>
   )
 }
