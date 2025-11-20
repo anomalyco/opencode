@@ -250,12 +250,12 @@ export namespace LSPServer {
     },
   }
 
-  export const RubyLsp: Info = {
+  export const Rubocop: Info = {
     id: "ruby-lsp",
     root: NearestRoot(["Gemfile"]),
     extensions: [".rb", ".rake", ".gemspec", ".ru"],
     async spawn(root) {
-      let bin = Bun.which("ruby-lsp", {
+      let bin = Bun.which("rubocop", {
         PATH: process.env["PATH"] + ":" + Global.Path.bin,
       })
       if (!bin) {
@@ -266,25 +266,25 @@ export namespace LSPServer {
           return
         }
         if (Flag.OPENCODE_DISABLE_LSP_DOWNLOAD) return
-        log.info("installing ruby-lsp")
+        log.info("installing rubocop")
         const proc = Bun.spawn({
-          cmd: ["gem", "install", "ruby-lsp", "--bindir", Global.Path.bin],
+          cmd: ["gem", "install", "rubocop", "--bindir", Global.Path.bin],
           stdout: "pipe",
           stderr: "pipe",
           stdin: "pipe",
         })
         const exit = await proc.exited
         if (exit !== 0) {
-          log.error("Failed to install ruby-lsp")
+          log.error("Failed to install rubocop")
           return
         }
-        bin = path.join(Global.Path.bin, "ruby-lsp" + (process.platform === "win32" ? ".exe" : ""))
-        log.info(`installed ruby-lsp`, {
+        bin = path.join(Global.Path.bin, "rubocop" + (process.platform === "win32" ? ".exe" : ""))
+        log.info(`installed rubocop`, {
           bin,
         })
       }
       return {
-        process: spawn(bin!, ["--stdio"], {
+        process: spawn(bin!, ["--lsp"], {
           cwd: root,
         }),
       }

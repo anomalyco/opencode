@@ -11,27 +11,27 @@ OpenCode integrates with your Language Server Protocol (LSP) to help the LLM int
 
 OpenCode comes with several built-in LSP servers for popular languages:
 
-| LSP Server       | Extensions                                           | Requirements                                                 |
-| ---------------- | ---------------------------------------------------- | ------------------------------------------------------------ |
-| typescript       | .ts, .tsx, .js, .jsx, .mjs, .cjs, .mts, .cts         | `typescript` dependency in project                           |
-| deno             | .ts, .tsx, .js, .jsx, .mjs                           | `deno` command available (auto-detects deno.json/deno.jsonc) |
-| eslint           | .ts, .tsx, .js, .jsx, .mjs, .cjs, .mts, .cts, .vue   | `eslint` dependency in project                               |
-| gopls            | .go                                                  | `go` command available                                       |
-| ruby-lsp         | .rb, .rake, .gemspec, .ru                            | `ruby` and `gem` commands available                          |
-| pyright          | .py, .pyi                                            | `pyright` dependency installed                               |
-| elixir-ls        | .ex, .exs                                            | `elixir` command available                                   |
-| zls              | .zig, .zon                                           | `zig` command available                                      |
-| csharp           | .cs                                                  | `.NET SDK` installed                                         |
-| vue              | .vue                                                 | Auto-installs for Vue projects                               |
-| rust             | .rs                                                  | `rust-analyzer` command available                            |
-| clangd           | .c, .cpp, .cc, .cxx, .c++, .h, .hpp, .hh, .hxx, .h++ | Auto-installs for C/C++ projects                             |
-| svelte           | .svelte                                              | Auto-installs for Svelte projects                            |
-| astro            | .astro                                               | Auto-installs for Astro projects                             |
-| yaml-ls          | .yaml, .yml                                          | Auto-installs Red Hat yaml-language-server                   |
-| jdtls            | .java                                                | `Java SDK (version 21+)` installed                           |
-| lua-ls           | .lua                                                 | Auto-installs for Lua projects                               |
-| sourcekit-lsp    | .swift, .objc, .objcpp                               | `swift` installed (`xcode` on macOS)                         |
-| php intelephense | .php                                                 | Auto-installs for PHP projects                               |
+| LSP Server         | Extensions                                           | Requirements                                                 |
+| ------------------ | ---------------------------------------------------- | ------------------------------------------------------------ |
+| typescript         | .ts, .tsx, .js, .jsx, .mjs, .cjs, .mts, .cts         | `typescript` dependency in project                           |
+| deno               | .ts, .tsx, .js, .jsx, .mjs                           | `deno` command available (auto-detects deno.json/deno.jsonc) |
+| eslint             | .ts, .tsx, .js, .jsx, .mjs, .cjs, .mts, .cts, .vue   | `eslint` dependency in project                               |
+| gopls              | .go                                                  | `go` command available                                       |
+| ruby-lsp (rubocop) | .rb, .rake, .gemspec, .ru                            | `ruby` and `gem` commands available                          |
+| pyright            | .py, .pyi                                            | `pyright` dependency installed                               |
+| elixir-ls          | .ex, .exs                                            | `elixir` command available                                   |
+| zls                | .zig, .zon                                           | `zig` command available                                      |
+| csharp             | .cs                                                  | `.NET SDK` installed                                         |
+| vue                | .vue                                                 | Auto-installs for Vue projects                               |
+| rust               | .rs                                                  | `rust-analyzer` command available                            |
+| clangd             | .c, .cpp, .cc, .cxx, .c++, .h, .hpp, .hh, .hxx, .h++ | Auto-installs for C/C++ projects                             |
+| svelte             | .svelte                                              | Auto-installs for Svelte projects                            |
+| astro              | .astro                                               | Auto-installs for Astro projects                             |
+| yaml-ls            | .yaml, .yml                                          | Auto-installs Red Hat yaml-language-server                   |
+| jdtls              | .java                                                | `Java SDK (version 21+)` installed                           |
+| lua-ls             | .lua                                                 | Auto-installs for Lua projects                               |
+| sourcekit-lsp      | .swift, .objc, .objcpp                               | `swift` installed (`xcode` on macOS)                         |
+| php intelephense   | .php                                                 | Auto-installs for PHP projects                               |
 
 LSP servers are automatically enabled when one of the above file extensions are detected and the requirements are met.
 
@@ -114,7 +114,7 @@ You can add custom LSP servers by specifying the command and file extensions:
 
 ### PHP Intelephense
 
-PHP Intelephense offers premium features through a license key. Uou can provide a license key by placing (only) the key in a text file at:
+PHP Intelephense offers premium features through a license key. You can provide a license key by placing (only) the key in a text file at:
 
 - On macOS/Linux: `$HOME/intelephense/licence.txt`
 - On Windows: `%USERPROFILE%/intelephense/licence.txt`
