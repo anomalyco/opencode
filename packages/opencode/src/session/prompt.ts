@@ -717,64 +717,77 @@ export namespace SessionPrompt {
       if (Wildcard.all(key, enabledTools) === false) continue
       const execute = item.execute
       if (!execute) continue
-      item.execute = async (args, opts) => {
-        await Plugin.trigger(
-          "tool.execute.before",
-          {
-            tool: key,
-            sessionID: input.sessionID,
-            callID: opts.toolCallId,
-          },
-          {
-            args,
-          },
-        )
-        const result = await execute(args, opts)
 
-        await Plugin.trigger(
-          "tool.execute.after",
-          {
-            tool: key,
-            sessionID: input.sessionID,
-            callID: opts.toolCallId,
-          },
-          result,
-        )
+      // Transform the schema for provider compatibility (e.g., convert integer enums to string enums for Google)
+      const transformedSchema = ProviderTransform.schema(
+        input.model.providerID,
+        input.model.modelID,
+        // @ts-expect-error - accessing internal schema property
+        item.inputSchema ?? item.parameters ?? {},
+      )
 
-        const textParts: string[] = []
-        const attachments: MessageV2.FilePart[] = []
-
-        for (const item of result.content) {
-          if (item.type === "text") {
-            textParts.push(item.text)
-          } else if (item.type === "image") {
-            attachments.push({
-              id: Identifier.ascending("part"),
+      tools[key] = tool({
+        id: key as any,
+        description: item.description ?? "",
+        inputSchema: jsonSchema(transformedSchema as any),
+        async execute(args, opts) {
+          await Plugin.trigger(
+            "tool.execute.before",
+            {
+              tool: key,
               sessionID: input.sessionID,
-              messageID: input.processor.message.id,
-              type: "file",
-              mime: item.mimeType,
-              url: `data:${item.mimeType};base64,${item.data}`,
-            })
-          }
-          // Add support for other types if needed
-        }
+              callID: opts.toolCallId,
+            },
+            {
+              args,
+            },
+          )
+          const result = await execute(args, opts)
 
-        return {
-          title: "",
-          metadata: result.metadata ?? {},
-          output: textParts.join("\n\n"),
-          attachments,
-          content: result.content, // directly return content to preserve ordering when outputting to model
-        }
-      }
-      item.toModelOutput = (result) => {
-        return {
-          type: "text",
-          value: result.output,
-        }
-      }
-      tools[key] = item
+          await Plugin.trigger(
+            "tool.execute.after",
+            {
+              tool: key,
+              sessionID: input.sessionID,
+              callID: opts.toolCallId,
+            },
+            result,
+          )
+
+          const textParts: string[] = []
+          const attachments: MessageV2.FilePart[] = []
+
+          for (const contentItem of result.content) {
+            if (contentItem.type === "text") {
+              textParts.push(contentItem.text)
+            } else if (contentItem.type === "image") {
+              attachments.push({
+                id: Identifier.ascending("part"),
+                sessionID: input.sessionID,
+                messageID: input.processor.message.id,
+                type: "file",
+                mime: contentItem.mimeType,
+                url: `data:${contentItem.mimeType};base64,${contentItem.data}`,
+              })
+            }
+            // Add support for other types if needed
+          }
+
+          return {
+            title: "",
+            metadata: result.metadata ?? {},
+            output: textParts.join("\n\n"),
+            attachments,
+            content: result.content, // directly return content to preserve ordering when outputting to model
+          }
+        },
+        toModelOutput(result) {
+          return {
+            type: "text",
+            value: result.output,
+          }
+        },
+      })
     }
     return tools
   }
