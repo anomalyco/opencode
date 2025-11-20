@@ -54,6 +54,7 @@ import { DialogMessage } from "./dialog-message"
 import type { PromptInfo } from "../../component/prompt/history"
 import { iife } from "@/util/iife"
 import { DialogConfirm } from "@tui/ui/dialog-confirm"
+import { DialogPrompt } from "@tui/ui/dialog-prompt"
 import { DialogTimeline } from "./dialog-timeline"
 import { DialogSessionRename } from "../../component/dialog-session-rename"
 import { Sidebar } from "./sidebar"
@@ -583,11 +584,19 @@ export function Session() {
             transcript += `---\n\n`
           }
 
+          // Prompt for optional filename
+          const customFilename = await DialogPrompt.show(
+            dialog,
+            "Export filename",
+            `session-${sessionData.id.slice(0, 8)}.md`,
+          )
+
+          // Cancel if user pressed escape
+          if (customFilename === null) return
+
           // Save to file in current working directory
           const exportDir = process.cwd()
-
-          const timestamp = new Date().toISOString().replace(/[:.]/g, "-")
-          const filename = `session-${sessionData.id.slice(0, 8)}-${timestamp}.md`
+          const filename = customFilename.trim()
           const filepath = path.join(exportDir, filename)
 
           await Bun.write(filepath, transcript)
