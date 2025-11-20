@@ -1,6 +1,6 @@
 {
   "$schema": "https://json.schemastore.org/package.json",
-  "version": "1.0.78",
+  "version": "1.0.79",
   "name": "opencode",
   "type": "module",
   "private": true,
@@ -44,6 +44,7 @@
     "@actions/core": "1.11.1",
     "@actions/github": "6.0.1",
     "@agentclientprotocol/sdk": "0.5.1",
+    "@ai-sdk/mcp": "0.0.8",
     "@clack/prompts": "1.0.0-alpha.1",
     "@hono/standard-validator": "0.1.5",
     "@hono/zod-validator": "catalog:",
@@ -62,7 +63,6 @@
     "@standard-schema/spec": "1.0.0",
     "@zip.js/zip.js": "2.7.62",
     "ai": "catalog:",
-    "@ai-sdk/mcp": "0.0.8",
     "chokidar": "4.0.3",
     "clipboardy": "4.0.0",
     "decimal.js": "10.5.0",
