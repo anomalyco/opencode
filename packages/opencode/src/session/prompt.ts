@@ -394,6 +394,7 @@ export namespace SessionPrompt {
           messages: msgs,
           parentID: lastUser.id,
           abort,
+          agent: lastUser.agent,
           model: {
             providerID: model.providerID,
             modelID: model.modelID,
@@ -412,6 +413,7 @@ export namespace SessionPrompt {
       ) {
         await SessionCompaction.create({
           sessionID,
+          agent: lastUser.agent,
           model: lastUser.model,
         })
         continue
