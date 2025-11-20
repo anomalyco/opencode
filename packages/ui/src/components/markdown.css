@@ -1,8 +1,7 @@
 [data-component="markdown"] {
   min-width: 0;
   max-width: 100%;
-  overflow: auto;
-  scrollbar-width: none;
+  overflow: hidden;
   color: var(--text-base);
   text-wrap: pretty;
 
@@ -13,10 +12,6 @@
   font-weight: var(--font-weight-regular);
   line-height: var(--line-height-large); /* 166.667% */
   letter-spacing: var(--letter-spacing-normal);
-
-  &::-webkit-scrollbar {
-    display: none;
-  }
 
   h1,
   h2,
@@ -40,5 +35,16 @@
     margin-top: 8px;
     margin-bottom: 16px;
     border-color: var(--border-weaker-base);
+  }
+
+  pre {
+    margin-top: 2rem;
+    margin-bottom: 2rem;
+    overflow: auto;
+
+    scrollbar-width: none;
+    &::-webkit-scrollbar {
+      display: none;
+    }
   }
 }

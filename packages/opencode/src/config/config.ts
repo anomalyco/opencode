@@ -542,36 +542,43 @@ export namespace Config {
         .describe("Custom provider configurations and model overrides"),
       mcp: z.record(z.string(), Mcp).optional().describe("MCP (Model Context Protocol) server configurations"),
       formatter: z
-        .record(
-          z.string(),
-          z.object({
-            disabled: z.boolean().optional(),
-            command: z.array(z.string()).optional(),
-            environment: z.record(z.string(), z.string()).optional(),
-            extensions: z.array(z.string()).optional(),
-          }),
-        )
+        .union([
+          z.literal(false),
+          z.record(
+            z.string(),
+            z.object({
+              disabled: z.boolean().optional(),
+              command: z.array(z.string()).optional(),
+              environment: z.record(z.string(), z.string()).optional(),
+              extensions: z.array(z.string()).optional(),
+            }),
+          ),
+        ])
         .optional(),
       lsp: z
-        .record(
-          z.string(),
-          z.union([
-            z.object({
-              disabled: z.literal(true),
-            }),
-            z.object({
-              command: z.array(z.string()),
-              extensions: z.array(z.string()).optional(),
-              disabled: z.boolean().optional(),
-              env: z.record(z.string(), z.string()).optional(),
-              initialization: z.record(z.string(), z.any()).optional(),
-            }),
-          ]),
-        )
+        .union([
+          z.literal(false),
+          z.record(
+            z.string(),
+            z.union([
+              z.object({
+                disabled: z.literal(true),
+              }),
+              z.object({
+                command: z.array(z.string()),
+                extensions: z.array(z.string()).optional(),
+                disabled: z.boolean().optional(),
+                env: z.record(z.string(), z.string()).optional(),
+                initialization: z.record(z.string(), z.any()).optional(),
+              }),
+            ]),
+          ),
+        ])
         .optional()
         .refine(
           (data) => {
             if (!data) return true
+            if (typeof data === "boolean") return true
             const serverIds = new Set(Object.values(LSPServer).map((s) => s.id))
 
             return Object.entries(data).every(([id, config]) => {

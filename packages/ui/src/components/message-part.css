@@ -22,6 +22,8 @@
 }
 
 [data-component="text-part"] {
+  width: 100%;
+
   [data-component="markdown"] {
     margin-top: 32px;
   }
