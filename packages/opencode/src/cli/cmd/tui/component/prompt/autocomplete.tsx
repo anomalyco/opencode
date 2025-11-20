@@ -124,9 +124,10 @@ export function Autocomplete(props: {
             (item): AutocompleteOption => ({
               display: Locale.truncateMiddle(item, width),
               onSelect: () => {
+                const mime = Bun.file(item).type || "text/plain"
                 insertPart(item, {
                   type: "file",
-                  mime: "text/plain",
+                  mime,
                   filename: item,
                   url: `file://${process.cwd()}/${item}`,
                   source: {
