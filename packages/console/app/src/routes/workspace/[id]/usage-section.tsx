@@ -3,7 +3,7 @@ import { createAsync, query, useParams } from "@solidjs/router"
 import { createMemo, For, Show, createEffect, createSignal } from "solid-js"
 import { formatDateUTC, formatDateForTable } from "../common"
 import { withActor } from "~/context/auth.withActor"
-import { IconChevronLeft, IconChevronRight } from "~/component/icon"
+import { IconChevronLeft, IconChevronRight, IconBreakdown } from "~/component/icon"
 import styles from "./usage-section.module.css"
 import { createStore } from "solid-js/store"
 
@@ -113,10 +113,7 @@ export function UsageSection() {
                               setOpenBreakdownId(isOpen() ? null : breakdownId)
                             }}
                           >
-                            <svg width="16" height="16" viewBox="0 0 16 16" fill="none">
-                              <circle cx="8" cy="8" r="7" stroke="currentColor" stroke-width="1.5" />
-                              <path d="M8 4V8L11 11" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" />
-                            </svg>
+                            <IconBreakdown />
                           </button>
                           <span onClick={() => setOpenBreakdownId(null)}>{totalInputTokens()}</span>
                           <Show when={isOpen()}>

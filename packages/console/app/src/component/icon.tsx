@@ -236,3 +236,14 @@ export function IconChevronRight(props: JSX.SvgSVGAttributes<SVGSVGElement>) {
     </svg>
   )
 }
+
+export function IconBreakdown(props: JSX.SvgSVGAttributes<SVGSVGElement>) {
+  return (
+    <svg {...props} width="16" height="16" viewBox="0 0 16 16" fill="none">
+      <path d="M2 12L2 8" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" />
+      <path d="M6 12L6 4" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" />
+      <path d="M10 12L10 6" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" />
+      <path d="M14 12L14 9" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" />
+    </svg>
+  )
+}
