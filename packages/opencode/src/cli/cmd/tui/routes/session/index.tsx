@@ -106,11 +106,6 @@ export function Session() {
     return messages().findLast((x) => x.role === "assistant" && !x.time.completed)?.id
   })
 
-  const lastUserMessage = createMemo(() => {
-    const p = pending()
-    return messages().findLast((x) => x.role === "user" && (!p || x.id < p)) as UserMessage
-  })
-
   const dimensions = useTerminalDimensions()
   const [sidebar, setSidebar] = createSignal<"show" | "hide" | "auto">(kv.get("sidebar", "auto"))
   const [conceal, setConceal] = createSignal(true)
