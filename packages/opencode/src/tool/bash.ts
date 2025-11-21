@@ -183,7 +183,7 @@ export const BashTool = Tool.define("bash", {
     }
 
     const proc = spawn(params.command, {
-      shell: true,
+      shell: process.env.SHELL ?? true, // $SHELL if set, otherwise default shell
       cwd: Instance.directory,
       env: {
         ...process.env,
