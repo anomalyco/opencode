@@ -268,7 +268,7 @@ function Option(props: {
       <Show when={props.current}>
         <text
           flexShrink={0}
-          fg={props.active ? theme.primaryText : props.current ? theme.primary : theme.text}
+          fg={props.active ? theme.selectedListItemText : props.current ? theme.primary : theme.text}
           marginRight={0.5}
         >
           ◆
@@ -276,18 +276,18 @@ function Option(props: {
       </Show>
       <text
         flexGrow={1}
-        fg={props.active ? theme.primaryText : props.current ? theme.primary : theme.text}
+        fg={props.active ? theme.selectedListItemText : props.current ? theme.primary : theme.text}
         attributes={props.active ? TextAttributes.BOLD : undefined}
         overflow="hidden"
         wrapMode="none"
         paddingLeft={3}
       >
         {Locale.truncate(props.title, 62)}
-        <span style={{ fg: props.active ? theme.primaryText : theme.textMuted }}> {props.description}</span>
+        <span style={{ fg: props.active ? theme.selectedListItemText : theme.textMuted }}> {props.description}</span>
       </text>
       <Show when={props.footer}>
         <box flexShrink={0}>
-          <text fg={props.active ? theme.primaryText : theme.textMuted}>{props.footer}</text>
+          <text fg={props.active ? theme.selectedListItemText : theme.textMuted}>{props.footer}</text>
         </box>
       </Show>
     </>

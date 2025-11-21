@@ -43,7 +43,7 @@ type Theme = {
   info: RGBA
   text: RGBA
   textMuted: RGBA
-  primaryText: RGBA
+  selectedListItemText: RGBA
   background: RGBA
   backgroundPanel: RGBA
   backgroundElement: RGBA
@@ -97,8 +97,8 @@ type ColorValue = HexColor | RefName | Variant | RGBA
 type ThemeJson = {
   $schema?: string
   defs?: Record<string, HexColor | RefName>
-  theme: Omit<Record<keyof Theme, ColorValue>, "primaryText"> & {
-    primaryText?: ColorValue
+  theme: Omit<Record<keyof Theme, ColorValue>, "selectedListItemText"> & {
+    selectedListItemText?: ColorValue
   }
 }
 
@@ -151,19 +151,19 @@ function resolveTheme(theme: ThemeJson, mode: "dark" | "light") {
 
   const resolved = Object.fromEntries(
     Object.entries(theme.theme)
-      .filter(([key]) => key !== "primaryText")
+      .filter(([key]) => key !== "selectedListItemText")
       .map(([key, value]) => {
         return [key, resolveColor(value)]
       }),
   ) as Partial<Theme>
 
-  // Handle primaryText separately since it's optional
-  if (theme.theme.primaryText !== undefined) {
-    resolved.primaryText = resolveColor(theme.theme.primaryText)
+  // Handle selectedListItemText separately since it's optional
+  if (theme.theme.selectedListItemText !== undefined) {
+    resolved.selectedListItemText = resolveColor(theme.theme.selectedListItemText)
   } else {
-    // Backward compatibility: if primaryText is not defined, use background color
+    // Backward compatibility: if selectedListItemText is not defined, use background color
     // This preserves the current behavior for all existing themes
-    resolved.primaryText = resolved.background
+    resolved.selectedListItemText = resolved.background
   }
 
   return resolved as Theme
@@ -303,7 +303,7 @@ function generateSystem(colors: TerminalColors, mode: "dark" | "light"): ThemeJs
       // Text colors
       text: fg,
       textMuted,
-      primaryText: bg,
+      selectedListItemText: bg,
 
       // Background colors
       background: bg,
