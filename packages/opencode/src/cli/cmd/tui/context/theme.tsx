@@ -43,6 +43,7 @@ type Theme = {
   info: RGBA
   text: RGBA
   textMuted: RGBA
+  primaryText: RGBA
   background: RGBA
   backgroundPanel: RGBA
   backgroundElement: RGBA
@@ -96,7 +97,9 @@ type ColorValue = HexColor | RefName | Variant | RGBA
 type ThemeJson = {
   $schema?: string
   defs?: Record<string, HexColor | RefName>
-  theme: Record<keyof Theme, ColorValue>
+  theme: Omit<Record<keyof Theme, ColorValue>, "primaryText"> & {
+    primaryText?: ColorValue
+  }
 }
 
 export const DEFAULT_THEMES: Record<string, ThemeJson> = {
@@ -145,11 +148,20 @@ function resolveTheme(theme: ThemeJson, mode: "dark" | "light") {
     }
     return resolveColor(c[mode])
   }
-  return Object.fromEntries(
+
+  const resolved = Object.fromEntries(
     Object.entries(theme.theme).map(([key, value]) => {
       return [key, resolveColor(value)]
     }),
-  ) as Theme
+  ) as Partial<Theme>
+
+  // Backward compatibility: if primaryText is not defined, use background color
+  // This preserves the current behavior for all existing themes
+  if (!theme.theme.primaryText) {
+    resolved.primaryText = resolved.background
+  }
+
+  return resolved as Theme
 }
 
 export const { use: useTheme, provider: ThemeProvider } = createSimpleContext({
@@ -286,6 +298,7 @@ function generateSystem(colors: TerminalColors, mode: "dark" | "light"): ThemeJs
       // Text colors
       text: fg,
       textMuted,
+      primaryText: bg,
 
       // Background colors
       background: bg,

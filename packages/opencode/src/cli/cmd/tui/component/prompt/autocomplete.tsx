@@ -471,11 +471,11 @@ export function Autocomplete(props: {
               backgroundColor={index() === store.selected ? theme.primary : undefined}
               flexDirection="row"
             >
-              <text fg={index() === store.selected ? theme.background : theme.text} flexShrink={0}>
+              <text fg={index() === store.selected ? theme.primaryText : theme.text} flexShrink={0}>
                 {option.display}
               </text>
               <Show when={option.description}>
-                <text fg={index() === store.selected ? theme.background : theme.textMuted} wrapMode="none">
+                <text fg={index() === store.selected ? theme.primaryText : theme.textMuted} wrapMode="none">
                   {option.description}
                 </text>
               </Show>
