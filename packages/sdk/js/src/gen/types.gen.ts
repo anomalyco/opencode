@@ -1097,6 +1097,8 @@ export type Config = {
           }
         }
       }
+      whitelist?: Array<string>
+      blacklist?: Array<string>
       options?: {
         apiKey?: string
         baseURL?: string
