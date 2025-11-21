@@ -70,19 +70,20 @@ import stripAnsi from "strip-ansi"
 addDefaultParsers(parsers.parsers)
 
 class CustomSpeedScroll implements ScrollAcceleration {
-  constructor(private speed: number) {}
+  constructor(private speed: number) { }
 
   tick(_now?: number): number {
     return this.speed
   }
 
-  reset(): void {}
+  reset(): void { }
 }
 
 const context = createContext<{
   width: number
   conceal: () => boolean
   showThinking: () => boolean
+  showTimestamps: () => boolean
 }>()
 
 function use() {
@@ -114,6 +115,7 @@ export function Session() {
   const [sidebar, setSidebar] = createSignal<"show" | "hide" | "auto">(kv.get("sidebar", "auto"))
   const [conceal, setConceal] = createSignal(true)
   const [showThinking, setShowThinking] = createSignal(true)
+  const [showTimestamps, setShowTimestamps] = createSignal(kv.get("timestamps", "hide") === "show")
 
   const wide = createMemo(() => dimensions().width > 120)
   const sidebarVisible = createMemo(() => sidebar() === "show" || (sidebar() === "auto" && wide()))
@@ -254,30 +256,30 @@ export function Session() {
     },
     ...(sync.data.config.share !== "disabled"
       ? [
-          {
-            title: "Share session",
-            value: "session.share",
-            keybind: "session_share" as const,
-            disabled: !!session()?.share?.url,
-            category: "Session",
-            onSelect: async (dialog: any) => {
-              await sdk.client.session
-                .share({
-                  path: {
-                    id: route.sessionID,
-                  },
-                })
-                .then((res) =>
-                  Clipboard.copy(res.data!.share!.url).catch(() =>
-                    toast.show({ message: "Failed to copy URL to clipboard", variant: "error" }),
-                  ),
-                )
-                .then(() => toast.show({ message: "Share URL copied to clipboard!", variant: "success" }))
-                .catch(() => toast.show({ message: "Failed to share session", variant: "error" }))
-              dialog.clear()
-            },
+        {
+          title: "Share session",
+          value: "session.share",
+          keybind: "session_share" as const,
+          disabled: !!session()?.share?.url,
+          category: "Session",
+          onSelect: async (dialog: any) => {
+            await sdk.client.session
+              .share({
+                path: {
+                  id: route.sessionID,
+                },
+              })
+              .then((res) =>
+                Clipboard.copy(res.data!.share!.url).catch(() =>
+                  toast.show({ message: "Failed to copy URL to clipboard", variant: "error" }),
+                ),
+              )
+              .then(() => toast.show({ message: "Share URL copied to clipboard!", variant: "success" }))
+              .catch(() => toast.show({ message: "Failed to share session", variant: "error" }))
+            dialog.clear()
           },
-        ]
+        },
+      ]
       : []),
     {
       title: "Unshare session",
@@ -384,6 +386,19 @@ export function Session() {
       category: "Session",
       onSelect: (dialog) => {
         setConceal((prev) => !prev)
+        dialog.clear()
+      },
+    },
+    {
+      title: "Toggle timestamps",
+      value: "session.toggle.timestamps",
+      category: "Session",
+      onSelect: (dialog) => {
+        setShowTimestamps((prev) => {
+          const next = !prev
+          kv.set("timestamps", next ? "show" : "hide")
+          return next
+        })
         dialog.clear()
       },
     },
@@ -686,6 +701,7 @@ export function Session() {
         },
         conceal,
         showThinking,
+        showTimestamps,
       }}
     >
       <box flexDirection="row" paddingBottom={1} paddingTop={1} paddingLeft={2} paddingRight={2} gap={2}>
@@ -865,6 +881,7 @@ function UserMessage(props: {
   index: number
   pending?: string
 }) {
+  const ctx = use()
   const text = createMemo(() => props.parts.flatMap((x) => (x.type === "text" && !x.synthetic ? [x] : []))[0])
   const files = createMemo(() => props.parts.flatMap((x) => (x.type === "file" ? [x] : [])))
   const sync = useSync()
@@ -917,14 +934,11 @@ function UserMessage(props: {
               </For>
             </box>
           </Show>
-          <text fg={theme.text}>
+          <text fg={theme.textMuted}>
             {sync.data.config.username ?? "You"}{" "}
             <Show
               when={queued()}
-              fallback={
-                <span style={{ fg: theme.textMuted }}>({Locale.todayTimeOrDateTime(props.message.time.created)})</span>
-              }
-            >
+              fallback={<span style={{ fg: theme.textMuted }}>{ctx.showTimestamps() ? `· ${Locale.todayTimeOrDateTime(props.message.time.created)}` : `· ${Locale.time(props.message.time.created)}`}</span>}>
               <span style={{ bg: theme.accent, fg: theme.backgroundPanel, bold: true }}> QUEUED </span>
             </Show>
           </text>
@@ -947,6 +961,7 @@ function AssistantMessage(props: { message: AssistantMessage; parts: Part[]; las
   const local = useLocal()
   const { theme } = useTheme()
   const sync = useSync()
+  const ctx = use()
   const status = createMemo(
     () =>
       sync.data.session_status[props.message.sessionID] ?? {
@@ -1035,7 +1050,7 @@ function AssistantMessage(props: { message: AssistantMessage; parts: Part[]; las
             <span style={{ fg: local.agent.color(props.message.mode) }}>{Locale.titlecase(props.message.mode)}</span>{" "}
             <span style={{ fg: theme.textMuted }}>
               {props.message.modelID}
-              {props.message.time.completed && ` (${Locale.todayTimeOrDateTime(props.message.time.completed)})`}
+              {ctx.showTimestamps() && props.message.time.completed && ` · ${Locale.todayTimeOrDateTime(props.message.time.completed)}`}
             </span>
           </text>
         </box>
@@ -1117,19 +1132,19 @@ function ToolPart(props: { last: boolean; part: ToolPart; message: AssistantMess
     const style: BoxProps =
       container === "block" || permission
         ? {
-            border: permissionIndex === 0 ? (["left", "right"] as const) : (["left"] as const),
-            paddingTop: 1,
-            paddingBottom: 1,
-            paddingLeft: 2,
-            marginTop: 1,
-            gap: 1,
-            backgroundColor: theme.backgroundPanel,
-            customBorderChars: SplitBorder.customBorderChars,
-            borderColor: permissionIndex === 0 ? theme.warning : theme.background,
-          }
+          border: permissionIndex === 0 ? (["left", "right"] as const) : (["left"] as const),
+          paddingTop: 1,
+          paddingBottom: 1,
+          paddingLeft: 2,
+          marginTop: 1,
+          gap: 1,
+          backgroundColor: theme.backgroundPanel,
+          customBorderChars: SplitBorder.customBorderChars,
+          borderColor: permissionIndex === 0 ? theme.warning : theme.background,
+        }
         : {
-            paddingLeft: 3,
-          }
+          paddingLeft: 3,
+        }
 
     return (
       <box

@@ -3,17 +3,19 @@ export namespace Locale {
     return str.replace(/\b\w/g, (c) => c.toUpperCase())
   }
 
-  export function time(input: number) {
+  export function time(input: number): string {
     const date = new Date(input)
-    return date.toLocaleTimeString()
+    return date.toLocaleTimeString(undefined, { timeStyle: "short" })
   }
 
-  export function datetime(input: number) {
+  export function datetime(input: number): string {
     const date = new Date(input)
-    return date.toLocaleString()
+    const localTime = time(input)
+    const localDate = date.toLocaleDateString()
+    return `${localTime} · ${localDate}`
   }
 
-  export function todayTimeOrDateTime(input: number) {
+  export function todayTimeOrDateTime(input: number): string {
     const date = new Date(input)
     const now = new Date()
     const isToday =
