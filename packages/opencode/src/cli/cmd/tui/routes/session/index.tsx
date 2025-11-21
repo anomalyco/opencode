@@ -653,44 +653,50 @@ export function Session() {
     },
   ])
 
+  const revertInfo = createMemo(() => session()?.revert)
+  const revertMessageID = createMemo(() => revertInfo()?.messageID)
+
+  const revertDiffFiles = createMemo(() => {
+    const diffText = revertInfo()?.diff ?? ""
+    if (!diffText) return []
+
+    try {
+      const patches = parsePatch(diffText)
+      return patches.map((patch) => {
+        const filename = patch.newFileName || patch.oldFileName || "unknown"
+        const cleanFilename = filename.replace(/^[ab]\//, "")
+        return {
+          filename: cleanFilename,
+          additions: patch.hunks.reduce(
+            (sum, hunk) => sum + hunk.lines.filter((line) => line.startsWith("+")).length,
+            0,
+          ),
+          deletions: patch.hunks.reduce(
+            (sum, hunk) => sum + hunk.lines.filter((line) => line.startsWith("-")).length,
+            0,
+          ),
+        }
+      })
+    } catch (error) {
+      return []
+    }
+  })
+
+  const revertRevertedMessages = createMemo(() => {
+    const messageID = revertMessageID()
+    if (!messageID) return []
+    return messages().filter((x) => x.id >= messageID && x.role === "user")
+  })
+
   const revert = createMemo(() => {
-    const s = session()
-    if (!s) return
-    const messageID = s.revert?.messageID
-    if (!messageID) return
-    const reverted = messages().filter((x) => x.id >= messageID && x.role === "user")
-
-    const diffFiles = (() => {
-      const diffText = s.revert?.diff || ""
-      if (!diffText) return []
-
-      try {
-        const patches = parsePatch(diffText)
-        return patches.map((patch) => {
-          const filename = patch.newFileName || patch.oldFileName || "unknown"
-          const cleanFilename = filename.replace(/^[ab]\//, "")
-          return {
-            filename: cleanFilename,
-            additions: patch.hunks.reduce(
-              (sum, hunk) => sum + hunk.lines.filter((line) => line.startsWith("+")).length,
-              0,
-            ),
-            deletions: patch.hunks.reduce(
-              (sum, hunk) => sum + hunk.lines.filter((line) => line.startsWith("-")).length,
-              0,
-            ),
-          }
-        })
-      } catch (error) {
-        return []
-      }
-    })()
-
+    const info = revertInfo()
+    if (!info) return
+    if (!info.messageID) return
     return {
-      messageID,
-      reverted,
-      diff: s.revert!.diff,
-      diffFiles,
+      messageID: info.messageID,
+      reverted: revertRevertedMessages(),
+      diff: info.diff,
+      diffFiles: revertDiffFiles(),
     }
   })
 
