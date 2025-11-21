@@ -33,7 +33,7 @@ import { createStore, produce } from "solid-js/store"
 import { Global } from "@/global"
 import { Filesystem } from "@/util/filesystem"
 
-type Theme = {
+type ThemeColors = {
   primary: RGBA
   secondary: RGBA
   accent: RGBA
@@ -44,7 +44,6 @@ type Theme = {
   text: RGBA
   textMuted: RGBA
   selectedListItemText: RGBA
-  _hasSelectedListItemText: boolean
   background: RGBA
   backgroundPanel: RGBA
   backgroundElement: RGBA
@@ -88,6 +87,10 @@ type Theme = {
   syntaxPunctuation: RGBA
 }
 
+type Theme = ThemeColors & {
+  _hasSelectedListItemText: boolean
+}
+
 export function selectedForeground(theme: Theme): RGBA {
   // If theme explicitly defines selectedListItemText, use it
   if (theme._hasSelectedListItemText) {
@@ -115,7 +118,7 @@ type ColorValue = HexColor | RefName | Variant | RGBA
 type ThemeJson = {
   $schema?: string
   defs?: Record<string, HexColor | RefName>
-  theme: Omit<Record<keyof Theme, ColorValue>, "selectedListItemText" | "_hasSelectedListItemText"> & {
+  theme: Omit<Record<keyof ThemeColors, ColorValue>, "selectedListItemText"> & {
     selectedListItemText?: ColorValue
   }
 }
@@ -158,8 +161,8 @@ function resolveTheme(theme: ThemeJson, mode: "dark" | "light") {
 
       if (defs[c]) {
         return resolveColor(defs[c])
-      } else if (theme.theme[c as keyof Theme] !== undefined) {
-        return resolveColor(theme.theme[c as keyof Theme]!)
+      } else if (theme.theme[c as keyof ThemeColors] !== undefined) {
+        return resolveColor(theme.theme[c as keyof ThemeColors]!)
       } else {
         throw new Error(`Color reference "${c}" not found in defs or theme`)
       }
@@ -173,20 +176,22 @@ function resolveTheme(theme: ThemeJson, mode: "dark" | "light") {
       .map(([key, value]) => {
         return [key, resolveColor(value)]
       }),
-  ) as Partial<Theme>
+  ) as Partial<ThemeColors>
 
   // Handle selectedListItemText separately since it's optional
-  if (theme.theme.selectedListItemText !== undefined) {
-    resolved.selectedListItemText = resolveColor(theme.theme.selectedListItemText)
-    resolved._hasSelectedListItemText = true
+  const hasSelectedListItemText = theme.theme.selectedListItemText !== undefined
+  if (hasSelectedListItemText) {
+    resolved.selectedListItemText = resolveColor(theme.theme.selectedListItemText!)
   } else {
     // Backward compatibility: if selectedListItemText is not defined, use background color
     // This preserves the current behavior for all existing themes
     resolved.selectedListItemText = resolved.background
-    resolved._hasSelectedListItemText = false
   }
 
-  return resolved as Theme
+  return {
+    ...resolved,
+    _hasSelectedListItemText: hasSelectedListItemText,
+  } as Theme
 }
 
 export const { use: useTheme, provider: ThemeProvider } = createSimpleContext({
