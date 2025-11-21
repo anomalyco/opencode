@@ -27,7 +27,6 @@ import { Global } from "../global"
 import { ProjectRoute } from "./project"
 import { ToolRegistry } from "../tool/registry"
 import { zodToJsonSchema } from "zod-to-json-schema"
-import { SessionLock } from "../session/lock"
 import { SessionPrompt } from "../session/prompt"
 import { SessionCompaction } from "../session/compaction"
 import { SessionRevert } from "../session/revert"
@@ -42,6 +41,10 @@ import { Snapshot } from "@/snapshot"
 import { SessionSummary } from "@/session/summary"
 import { isConfigHotReloadEnabled } from "../config/hot-reload"
 import { GlobalBus } from "@/bus/global"
+import { SessionStatus } from "@/session/status"
+
+// @ts-ignore This global is needed to prevent ai-sdk from logging warnings to stdout https://github.com/vercel/ai/blob/2dc67e0ef538307f21368db32d5a12345d98831b/packages/ai/src/logger/log-warnings.ts#L85
+globalThis.AI_SDK_LOG_WARNINGS = false
 
 const ERRORS = {
   400: {
@@ -51,7 +54,7 @@ const ERRORS = {
         schema: resolver(
           z
             .object({
-              data: z.any().nullable(),
+              data: z.any(),
               errors: z.array(z.record(z.string(), z.any())),
               success: z.literal(false),
             })
@@ -135,6 +138,7 @@ export namespace Server {
           timer.stop()
         }
       })
+      .use(cors())
       .get(
         "/global/event",
         describeRoute({
@@ -163,12 +167,6 @@ export namespace Server {
         async (c) => {
           log.info("global event connected")
           return streamSSE(c, async (stream) => {
-            stream.writeSSE({
-              data: JSON.stringify({
-                type: "server.connected",
-                properties: {},
-              }),
-            })
             async function handler(event: any) {
               await stream.writeSSE({
                 data: JSON.stringify(event),
@@ -186,7 +184,7 @@ export namespace Server {
         },
       )
       .use(async (c, next) => {
-        const directory = c.req.query("directory") ?? process.cwd()
+        const directory = c.req.query("directory") ?? c.req.header("x-opencode-directory") ?? process.cwd()
         return Instance.provide({
           directory,
           init: InstanceBootstrap,
@@ -195,7 +193,6 @@ export namespace Server {
           },
         })
       })
-      .use(cors())
       .get(
         "/doc",
         openAPIRouteHandler(app, {
@@ -431,6 +428,28 @@ export namespace Server {
           const sessions = await Array.fromAsync(Session.list())
           sessions.sort((a, b) => b.time.updated - a.time.updated)
           return c.json(sessions)
+        },
+      )
+      .get(
+        "/session/status",
+        describeRoute({
+          description: "Get session status",
+          operationId: "session.status",
+          responses: {
+            200: {
+              description: "Get session status",
+              content: {
+                "application/json": {
+                  schema: resolver(z.record(z.string(), SessionStatus.Info)),
+                },
+              },
+            },
+            ...errors(400),
+          },
+        }),
+        async (c) => {
+          const result = SessionStatus.list()
+          return c.json(result)
         },
       )
       .get(
@@ -703,7 +722,8 @@ export namespace Server {
           }),
         ),
         async (c) => {
-          return c.json(SessionLock.abort(c.req.valid("param").id))
+          SessionPrompt.cancel(c.req.valid("param").id)
+          return c.json(true)
         },
       )
       .post(
@@ -837,7 +857,14 @@ export namespace Server {
         async (c) => {
           const id = c.req.valid("param").id
           const body = c.req.valid("json")
-          await SessionCompaction.run({ ...body, sessionID: id })
+          await SessionCompaction.create({
+            sessionID: id,
+            model: {
+              providerID: body.providerID,
+              modelID: body.modelID,
+            },
+          })
+          await SessionPrompt.loop(id)
           return c.json(true)
         },
       )

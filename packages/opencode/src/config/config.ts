@@ -410,7 +410,7 @@ export namespace Config {
   export const Mcp = z.discriminatedUnion("type", [McpLocal, McpRemote])
   export type Mcp = z.infer<typeof Mcp>
 
-  export const Permission = z.union([z.literal("ask"), z.literal("allow"), z.literal("deny")])
+  export const Permission = z.enum(["ask", "allow", "deny"])
   export type Permission = z.infer<typeof Permission>
 
   export const Command = z.object({
@@ -431,7 +431,7 @@ export namespace Config {
       tools: z.record(z.string(), z.boolean()).optional(),
       disable: z.boolean().optional(),
       description: z.string().optional().describe("Description of when to use the agent"),
-      mode: z.union([z.literal("subagent"), z.literal("primary"), z.literal("all")]).optional(),
+      mode: z.enum(["subagent", "primary", "all"]).optional(),
       color: z
         .string()
         .regex(/^#[0-9a-fA-F]{6}$/, "Invalid hex color format")
@@ -501,8 +501,8 @@ export namespace Config {
       input_newline: z.string().optional().default("shift+return,ctrl+j").describe("Insert newline in input"),
       history_previous: z.string().optional().default("up").describe("Previous history item"),
       history_next: z.string().optional().default("down").describe("Next history item"),
-      session_child_cycle: z.string().optional().default("ctrl+right").describe("Next child session"),
-      session_child_cycle_reverse: z.string().optional().default("ctrl+left").describe("Previous child session"),
+      session_child_cycle: z.string().optional().default("<leader>right").describe("Next child session"),
+      session_child_cycle_reverse: z.string().optional().default("<leader>left").describe("Previous child session"),
     })
     .strict()
     .meta({
@@ -510,7 +510,7 @@ export namespace Config {
     })
 
   export const TUI = z.object({
-    scroll_speed: z.number().min(1).optional().default(1).describe("TUI scroll speed"),
+    scroll_speed: z.number().min(0.001).optional().default(1).describe("TUI scroll speed"),
     scroll_acceleration: z
       .object({
         enabled: z.boolean().describe("Enable scroll acceleration"),
@@ -615,36 +615,43 @@ export namespace Config {
         .describe("Custom provider configurations and model overrides"),
       mcp: z.record(z.string(), Mcp).optional().describe("MCP (Model Context Protocol) server configurations"),
       formatter: z
-        .record(
-          z.string(),
-          z.object({
-            disabled: z.boolean().optional(),
-            command: z.array(z.string()).optional(),
-            environment: z.record(z.string(), z.string()).optional(),
-            extensions: z.array(z.string()).optional(),
-          }),
-        )
+        .union([
+          z.literal(false),
+          z.record(
+            z.string(),
+            z.object({
+              disabled: z.boolean().optional(),
+              command: z.array(z.string()).optional(),
+              environment: z.record(z.string(), z.string()).optional(),
+              extensions: z.array(z.string()).optional(),
+            }),
+          ),
+        ])
         .optional(),
       lsp: z
-        .record(
-          z.string(),
-          z.union([
-            z.object({
-              disabled: z.literal(true),
-            }),
-            z.object({
-              command: z.array(z.string()),
-              extensions: z.array(z.string()).optional(),
-              disabled: z.boolean().optional(),
-              env: z.record(z.string(), z.string()).optional(),
-              initialization: z.record(z.string(), z.any()).optional(),
-            }),
-          ]),
-        )
+        .union([
+          z.literal(false),
+          z.record(
+            z.string(),
+            z.union([
+              z.object({
+                disabled: z.literal(true),
+              }),
+              z.object({
+                command: z.array(z.string()),
+                extensions: z.array(z.string()).optional(),
+                disabled: z.boolean().optional(),
+                env: z.record(z.string(), z.string()).optional(),
+                initialization: z.record(z.string(), z.any()).optional(),
+              }),
+            ]),
+          ),
+        ])
         .optional()
         .refine(
           (data) => {
             if (!data) return true
+            if (typeof data === "boolean") return true
             const serverIds = new Set(Object.values(LSPServer).map((s) => s.id))
 
             return Object.entries(data).every(([id, config]) => {

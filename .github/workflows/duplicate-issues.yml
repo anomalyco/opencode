@@ -27,12 +27,12 @@ jobs:
             {
               "bash": {
                 "gh issue*": "allow",
-                "*": "deny" 
-              }, 
+                "*": "deny"
+              },
               "webfetch": "deny"
             }
         run: |
-          opencode run -m anthropic/claude-sonnet-4-20250514 "A new issue has been created:'
+          opencode run -m opencode/claude-haiku-4-5 "A new issue has been created:'
 
           Issue number:
           ${{ github.event.issue.number }}

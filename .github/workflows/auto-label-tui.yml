@@ -28,14 +28,14 @@ jobs:
             const versionPattern = /[v]?1\.0\./i;
             const isVersionRelated = versionPattern.test(title) || versionPattern.test(description);
 
+            // Check for "nix" keyword
+            const nixPattern = /\bnix\b/i;
+            const isNixRelated = nixPattern.test(title) || nixPattern.test(description);
+
+            const labels = [];
+
             if (isWebRelated) {
-              // Add web label
-              await github.rest.issues.addLabels({
-                owner: context.repo.owner,
-                repo: context.repo.repo,
-                issue_number: issue.number,
-                labels: ['web']
-              });
+              labels.push('web');
               
               // Assign to adamdotdevin
               await github.rest.issues.addAssignees({
@@ -46,10 +46,18 @@ jobs:
               });
             } else if (isVersionRelated) {
               // Only add opentui if NOT web-related
+              labels.push('opentui');
+            }
+
+            if (isNixRelated) {
+              labels.push('nix');
+            }
+
+            if (labels.length > 0) {
               await github.rest.issues.addLabels({
                 owner: context.repo.owner,
                 repo: context.repo.repo,
                 issue_number: issue.number,
-                labels: ['opentui']
+                labels: labels
               });
             }

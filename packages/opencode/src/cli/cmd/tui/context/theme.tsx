@@ -132,7 +132,16 @@ function resolveTheme(theme: ThemeJson, mode: "dark" | "light") {
     if (c instanceof RGBA) return c
     if (typeof c === "string") {
       if (c === "transparent" || c === "none") return RGBA.fromInts(0, 0, 0, 0)
-      return c.startsWith("#") ? RGBA.fromHex(c) : resolveColor(defs[c])
+
+      if (c.startsWith("#")) return RGBA.fromHex(c)
+
+      if (defs[c]) {
+        return resolveColor(defs[c])
+      } else if (theme.theme[c as keyof Theme]) {
+        return resolveColor(theme.theme[c as keyof Theme])
+      } else {
+        throw new Error(`Color reference "${c}" not found in defs or theme`)
+      }
     }
     return resolveColor(c[mode])
   }

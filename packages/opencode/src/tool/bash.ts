@@ -11,28 +11,44 @@ import { $ } from "bun"
 import { Filesystem } from "@/util/filesystem"
 import { Wildcard } from "@/util/wildcard"
 import { Permission } from "@/permission"
+import { fileURLToPath } from "url"
+import { Flag } from "@/flag/flag.ts"
+import path from "path"
 
-const MAX_OUTPUT_LENGTH = 30_000
+const DEFAULT_MAX_OUTPUT_LENGTH = 30_000
+const MAX_OUTPUT_LENGTH = (() => {
+  const parsed = Number(Flag.OPENCODE_EXPERIMENTAL_BASH_MAX_OUTPUT_LENGTH)
+  return Number.isInteger(parsed) && parsed > 0 ? parsed : DEFAULT_MAX_OUTPUT_LENGTH
+})()
 const DEFAULT_TIMEOUT = 1 * 60 * 1000
 const MAX_TIMEOUT = 10 * 60 * 1000
 const SIGKILL_TIMEOUT_MS = 200
 
 export const log = Log.create({ service: "bash-tool" })
 
+const resolveWasm = (asset: string) => {
+  if (asset.startsWith("file://")) return fileURLToPath(asset)
+  if (asset.startsWith("/") || /^[a-z]:/i.test(asset)) return asset
+  const url = new URL(asset, import.meta.url)
+  return fileURLToPath(url)
+}
+
 const parser = lazy(async () => {
   const { Parser } = await import("web-tree-sitter")
   const { default: treeWasm } = await import("web-tree-sitter/tree-sitter.wasm" as string, {
     with: { type: "wasm" },
   })
+  const treePath = resolveWasm(treeWasm)
   await Parser.init({
     locateFile() {
-      return treeWasm
+      return treePath
     },
   })
   const { default: bashWasm } = await import("tree-sitter-bash/tree-sitter-bash.wasm" as string, {
     with: { type: "wasm" },
   })
-  const bashLanguage = await Language.load(bashWasm)
+  const bashPath = resolveWasm(bashWasm)
+  const bashLanguage = await Language.load(bashPath)
   const p = new Parser()
   p.setLanguage(bashLanguage)
   return p
@@ -58,7 +74,8 @@ export const BashTool = Tool.define("bash", {
     if (!tree) {
       throw new Error("Failed to parse command")
     }
-    const permissions = await Agent.get(ctx.agent).then((x) => x.permission.bash)
+    const agent = await Agent.get(ctx.agent)
+    const permissions = agent.permission.bash
 
     const askPatterns = new Set<string>()
     for (const node of tree.rootNode.descendantsOfType("command")) {
@@ -89,10 +106,39 @@ export const BashTool = Tool.define("bash", {
             .text()
             .then((x) => x.trim())
           log.info("resolved path", { arg, resolved })
-          if (resolved && !Filesystem.contains(Instance.directory, resolved)) {
-            throw new Error(
-              `This command references paths outside of ${Instance.directory} so it is not allowed to be executed.`,
-            )
+          if (resolved) {
+            // Git Bash on Windows returns Unix-style paths like /c/Users/...
+            const normalized =
+              process.platform === "win32" && resolved.match(/^\/[a-z]\//)
+                ? resolved.replace(/^\/([a-z])\//, (_, drive) => `${drive.toUpperCase()}:\\`).replace(/\//g, "\\")
+                : resolved
+
+            if (!Filesystem.contains(Instance.directory, normalized)) {
+              const parentDir = path.dirname(normalized)
+              if (agent.permission.external_directory === "ask") {
+                await Permission.ask({
+                  type: "external_directory",
+                  pattern: [parentDir, path.join(parentDir, "*")],
+                  sessionID: ctx.sessionID,
+                  messageID: ctx.messageID,
+                  callID: ctx.callID,
+                  title: `This command references paths outside of ${Instance.directory}`,
+                  metadata: {
+                    command: params.command,
+                  },
+                })
+              } else if (agent.permission.external_directory === "deny") {
+                throw new Permission.RejectedError(
+                  ctx.sessionID,
+                  "external_directory",
+                  ctx.callID,
+                  {
+                    command: params.command,
+                  },
+                  `This command references paths outside of ${Instance.directory} so it is not allowed to be executed.`,
+                )
+              }
+            }
           }
         }
       }
@@ -253,7 +299,7 @@ export const BashTool = Tool.define("bash", {
     }
 
     return {
-      title: params.command,
+      title: params.description,
       metadata: {
         output,
         exit: proc.exitCode,

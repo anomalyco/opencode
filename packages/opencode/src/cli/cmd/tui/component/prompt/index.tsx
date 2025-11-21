@@ -9,7 +9,7 @@ import {
   fg,
   type KeyBinding,
 } from "@opentui/core"
-import { createEffect, createMemo, Match, Switch, type JSX, onMount, batch } from "solid-js"
+import { createEffect, createMemo, Match, Switch, type JSX, onMount } from "solid-js"
 import { useLocal } from "@tui/context/local"
 import { useTheme } from "@tui/context/theme"
 import { SplitBorder } from "@tui/component/border"
@@ -425,6 +425,10 @@ export function Prompt(props: PromptProps) {
         },
         body: {
           agent: local.agent.current().name,
+          model: {
+            providerID: local.model.current().providerID,
+            modelID: local.model.current().modelID,
+          },
           command: inputText,
         },
       })
@@ -590,8 +594,7 @@ export function Prompt(props: PromptProps) {
                 syncExtmarksWithPromptParts()
               }}
               keyBindings={textareaKeybindings()}
-              // TODO: fix this any
-              onKeyDown={async (e: any) => {
+              onKeyDown={async (e) => {
                 if (props.disabled) {
                   e.preventDefault()
                   return
@@ -665,7 +668,11 @@ export function Prompt(props: PromptProps) {
                   return
                 }
 
-                const pastedContent = event.text.trim()
+                // Normalize line endings at the boundary
+                // Windows ConPTY/Terminal often sends CR-only newlines in bracketed paste
+                // Replace CRLF first, then any remaining CR
+                const normalizedText = event.text.replace(/\r\n/g, "\n").replace(/\r/g, "\n")
+                const pastedContent = normalizedText.trim()
                 if (!pastedContent) {
                   command.trigger("prompt.paste")
                   return
