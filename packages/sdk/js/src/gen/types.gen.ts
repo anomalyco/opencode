@@ -162,6 +162,7 @@ export type TextPart = {
   type: "text"
   text: string
   synthetic?: boolean
+  ignored?: boolean
   time?: {
     start: number
     end?: number
@@ -1246,6 +1247,7 @@ export type TextPartInput = {
   type: "text"
   text: string
   synthetic?: boolean
+  ignored?: boolean
   time?: {
     start: number
     end?: number
