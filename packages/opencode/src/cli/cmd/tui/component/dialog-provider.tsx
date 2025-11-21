@@ -17,7 +17,6 @@ const PROVIDER_PRIORITY: Record<string, number> = {
   openai: 3,
   google: 4,
   openrouter: 5,
-  vercel: 6,
 }
 
 export function createDialogProviderOptions() {

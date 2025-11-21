@@ -1,7 +1,7 @@
 import { createMemo, createSignal } from "solid-js"
 import { useLocal } from "@tui/context/local"
 import { useSync } from "@tui/context/sync"
-import { map, pipe, flatMap, entries, filter, isDeepEqual, sortBy } from "remeda"
+import { map, pipe, flatMap, entries, filter, isDeepEqual, sortBy, take } from "remeda"
 import { DialogSelect, type DialogSelectRef } from "@tui/ui/dialog-select"
 import { useDialog } from "@tui/ui/dialog"
 import { useTheme } from "../context/theme"
@@ -111,8 +111,7 @@ export function DialogModel() {
                 category: "Popular providers",
               }
             }),
-            filter((x) => PROVIDER_PRIORITY[x.value] !== undefined),
-            sortBy((x) => PROVIDER_PRIORITY[x.value] ?? 99),
+            take(6),
           )
         : []),
     ]
