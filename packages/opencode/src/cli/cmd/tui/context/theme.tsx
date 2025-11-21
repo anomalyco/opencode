@@ -44,6 +44,7 @@ type Theme = {
   text: RGBA
   textMuted: RGBA
   selectedListItemText: RGBA
+  _hasSelectedListItemText: boolean
   background: RGBA
   backgroundPanel: RGBA
   backgroundElement: RGBA
@@ -88,11 +89,19 @@ type Theme = {
 }
 
 export function selectedForeground(theme: Theme): RGBA {
+  // If theme explicitly defines selectedListItemText, use it
+  if (theme._hasSelectedListItemText) {
+    return theme.selectedListItemText
+  }
+
+  // For transparent backgrounds, calculate contrast based on primary color
   if (theme.background.a === 0) {
     const { r, g, b } = theme.primary
-    const luminance  = 0.299 * r + 0.587 * g + 0.114 * b
-    return luminance  > 0.5 ? RGBA.fromInts(0, 0, 0) : RGBA.fromInts(255, 255, 255)
+    const luminance = 0.299 * r + 0.587 * g + 0.114 * b
+    return luminance > 0.5 ? RGBA.fromInts(0, 0, 0) : RGBA.fromInts(255, 255, 255)
   }
+
+  // Fall back to background color
   return theme.background
 }
 
@@ -106,7 +115,7 @@ type ColorValue = HexColor | RefName | Variant | RGBA
 type ThemeJson = {
   $schema?: string
   defs?: Record<string, HexColor | RefName>
-  theme: Omit<Record<keyof Theme, ColorValue>, "selectedListItemText"> & {
+  theme: Omit<Record<keyof Theme, ColorValue>, "selectedListItemText" | "_hasSelectedListItemText"> & {
     selectedListItemText?: ColorValue
   }
 }
@@ -169,10 +178,12 @@ function resolveTheme(theme: ThemeJson, mode: "dark" | "light") {
   // Handle selectedListItemText separately since it's optional
   if (theme.theme.selectedListItemText !== undefined) {
     resolved.selectedListItemText = resolveColor(theme.theme.selectedListItemText)
+    resolved._hasSelectedListItemText = true
   } else {
     // Backward compatibility: if selectedListItemText is not defined, use background color
     // This preserves the current behavior for all existing themes
     resolved.selectedListItemText = resolved.background
+    resolved._hasSelectedListItemText = false
   }
 
   return resolved as Theme
