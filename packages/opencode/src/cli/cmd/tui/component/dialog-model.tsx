@@ -70,6 +70,7 @@ export function DialogModel() {
               title: info.name ?? model,
               description: connected() ? provider.name : undefined,
               category: connected() ? provider.name : undefined,
+              disabled: provider.id === "opencode" && model.includes("-nano"),
               footer: info.cost?.input === 0 && provider.id === "opencode" ? "Free" : undefined,
               onSelect() {
                 dialog.clear()
