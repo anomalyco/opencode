@@ -202,6 +202,14 @@ export function IconZai(props: JSX.SvgSVGAttributes<SVGSVGElement>) {
   )
 }
 
+export function IconGoogle(props: JSX.SvgSVGAttributes<SVGSVGElement>) {
+  return (
+    <svg {...props} viewBox="0 0 50 50" fill="currentColor" xmlns="http://www.w3.org/2000/svg">
+      <path d="M49.04,24.001l-1.082-0.043h-0.001C36.134,23.492,26.508,13.866,26.042,2.043L25.999,0.96C25.978,0.424,25.537,0,25,0	s-0.978,0.424-0.999,0.96l-0.043,1.083C23.492,13.866,13.866,23.492,2.042,23.958L0.96,24.001C0.424,24.022,0,24.463,0,25	c0,0.537,0.424,0.978,0.961,0.999l1.082,0.042c11.823,0.467,21.449,10.093,21.915,21.916l0.043,1.083C24.022,49.576,24.463,50,25,50	s0.978-0.424,0.999-0.96l0.043-1.083c0.466-11.823,10.092-21.449,21.915-21.916l1.082-0.042C49.576,25.978,50,25.537,50,25	C50,24.463,49.576,24.022,49.04,24.001z"></path>
+    </svg>
+  )
+}
+
 export function IconStealth(props: JSX.SvgSVGAttributes<SVGSVGElement>) {
   return (
     <svg {...props} xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 18" fill="none">
@@ -209,6 +217,33 @@ export function IconStealth(props: JSX.SvgSVGAttributes<SVGSVGElement>) {
         d="M24 15.5L18.1816 14.2871L18.1328 14.3115C16.9036 11.7879 15.6135 9.29301 14.2607 6.82812C14.0172 6.38435 13.771 5.94188 13.5234 5.5C13.6911 5.97998 13.8606 6.45942 14.0322 6.9375C14.9902 9.60529 16.012 12.2429 17.0947 14.8516L12 17.5L6.9043 14.8516C7.98712 12.2428 9.00977 9.6054 9.96777 6.9375C10.1394 6.45942 10.3089 5.97998 10.4766 5.5C10.229 5.94188 9.98281 6.38435 9.73926 6.82812C8.38629 9.29339 7.09557 11.7884 5.86621 14.3125L5.81738 14.2871L0 15.5L12 0.5L24 15.5Z"
         fill="currentColor"
       />
+    </svg>
+  )
+}
+
+export function IconChevronLeft(props: JSX.SvgSVGAttributes<SVGSVGElement>) {
+  return (
+    <svg {...props} viewBox="0 0 20 20" fill="none">
+      <path d="M12 15L7 10L12 5" stroke="currentColor" stroke-linecap="round" stroke-linejoin="round" />
+    </svg>
+  )
+}
+
+export function IconChevronRight(props: JSX.SvgSVGAttributes<SVGSVGElement>) {
+  return (
+    <svg {...props} viewBox="0 0 20 20" fill="none">
+      <path d="M8 5L13 10L8 15" stroke="currentColor" stroke-linecap="round" stroke-linejoin="round" />
+    </svg>
+  )
+}
+
+export function IconBreakdown(props: JSX.SvgSVGAttributes<SVGSVGElement>) {
+  return (
+    <svg {...props} width="16" height="16" viewBox="0 0 16 16" fill="none">
+      <path d="M2 12L2 8" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" />
+      <path d="M6 12L6 4" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" />
+      <path d="M10 12L10 6" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" />
+      <path d="M14 12L14 9" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" />
     </svg>
   )
 }

@@ -62,10 +62,21 @@ export namespace LSP {
     async () => {
       const clients: LSPClient.Info[] = []
       const servers: Record<string, LSPServer.Info> = {}
+      const cfg = await Config.get()
+
+      if (cfg.lsp === false) {
+        log.info("all LSPs are disabled")
+        return {
+          broken: new Set<string>(),
+          servers,
+          clients,
+          spawning: new Map<string, Promise<LSPClient.Info | undefined>>(),
+        }
+      }
+
       for (const server of Object.values(LSPServer)) {
         servers[server.id] = server
       }
-      const cfg = await Config.get()
       for (const [name, item] of Object.entries(cfg.lsp ?? {})) {
         const existing = servers[name]
         if (item.disabled) {

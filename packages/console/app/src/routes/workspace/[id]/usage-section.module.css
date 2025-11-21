@@ -1,24 +1,23 @@
 .root {
+  /* Empty state */
   [data-component="empty-state"] {
     padding: var(--space-20) var(--space-6);
     text-align: center;
     border: 1px dashed var(--color-border);
     border-radius: var(--border-radius-sm);
-    display: flex;
-    flex-direction: column;
-    gap: var(--space-2);
 
     p {
-      line-height: 1.5;
       font-size: var(--font-size-sm);
       color: var(--color-text-muted);
     }
   }
 
+  /* Table container */
   [data-slot="usage-table"] {
     overflow-x: auto;
   }
 
+  /* Table element */
   [data-slot="usage-table-element"] {
     width: 100%;
     border-collapse: collapse;
@@ -48,7 +47,6 @@
 
       &[data-slot="usage-model"] {
         font-family: var(--font-sans);
-        font-weight: 400;
         color: var(--color-text-secondary);
         max-width: 200px;
         word-break: break-word;
@@ -56,33 +54,133 @@
 
       &[data-slot="usage-cost"] {
         color: var(--color-text);
+        font-weight: 500;
+      }
+
+      [data-slot="tokens-with-breakdown"] {
+        position: relative;
+        display: flex;
+        align-items: center;
+        gap: var(--space-2);
+      }
+
+      [data-slot="breakdown-button"] {
+        display: inline-flex;
+        align-items: center;
+        justify-content: center;
+        padding: 0;
+        background: transparent;
+        border: none;
+        color: var(--color-text-muted);
+        cursor: pointer;
+        transition: color 0.15s ease;
+
+        &:hover {
+          color: var(--color-text);
+        }
+
+        svg {
+          width: 16px;
+          height: 16px;
+        }
+      }
+
+      [data-slot="breakdown-popup"] {
+        position: absolute;
+        left: 0;
+        top: 100%;
+        margin-top: var(--space-2);
+        background: var(--color-bg);
+        border: 1px solid var(--color-border);
+        border-radius: var(--border-radius-sm);
+        padding: var(--space-2);
+        z-index: 10;
+        min-width: 180px;
+        box-shadow: 0 2px 8px rgba(0, 0, 0, 0.1);
+        font-size: var(--font-size-xs);
+
+        @media (prefers-color-scheme: dark) {
+          box-shadow: 0 2px 8px rgba(0, 0, 0, 0.3);
+        }
       }
     }
 
-    tbody tr {
-      &:last-child td {
-        border-bottom: none;
+    tbody tr:last-child td {
+      border-bottom: none;
+    }
+  }
+
+  /* Pagination */
+  [data-slot="pagination"] {
+    display: flex;
+    justify-content: flex-end;
+    gap: var(--space-2);
+    padding: var(--space-4) 0;
+    border-top: 1px solid var(--color-border-muted);
+    margin-top: var(--space-2);
+
+    button {
+      padding: var(--space-2) var(--space-4);
+      background: var(--color-bg-secondary);
+      border: 1px solid var(--color-border);
+      border-radius: var(--border-radius-sm);
+      color: var(--color-text);
+      font-size: var(--font-size-sm);
+      cursor: pointer;
+      transition: all 0.15s ease;
+
+      svg {
+        width: 16px;
+        height: 16px;
+        stroke-width: 2;
+      }
+
+      &:hover:not(:disabled) {
+        background: var(--color-bg-tertiary);
+        border-color: var(--color-border-hover);
+      }
+
+      &:disabled {
+        opacity: 0.5;
+        cursor: not-allowed;
       }
     }
+  }
 
-    @media (max-width: 40rem) {
+  /* Mobile responsive */
+  @media (max-width: 40rem) {
+    [data-slot="usage-table-element"] {
       th,
       td {
         padding: var(--space-2) var(--space-3);
         font-size: var(--font-size-xs);
       }
 
-      th {
-        &:nth-child(2) /* Model */ {
-          display: none;
-        }
-      }
-
-      td {
-        &:nth-child(2) /* Model */ {
-          display: none;
-        }
+      /* Hide Model column on mobile */
+      th:nth-child(2),
+      td:nth-child(2) {
+        display: none;
       }
     }
+  }
+
+  /* Breakdown popup content */
+  [data-slot="breakdown-row"] {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    gap: var(--space-4);
+    padding: var(--space-1) 0;
+  }
+
+  [data-slot="breakdown-label"] {
+    color: var(--color-text-muted);
+    font-size: var(--font-size-xs);
+  }
+
+  [data-slot="breakdown-value"] {
+    color: var(--color-text);
+    font-weight: 500;
+    font-size: var(--font-size-xs);
   }
 }

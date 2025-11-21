@@ -53,15 +53,7 @@ export function Autocomplete(props: {
     // Track props.value to make memo reactive to text changes
     props.value // <- there surely is a better way to do this, like making .input() reactive
 
-    const val = props.input().getTextRange(store.index + 1, props.input().cursorOffset + 1)
-
-    // If the filter contains a space, hide the autocomplete
-    if (val.includes(" ")) {
-      hide()
-      return undefined
-    }
-
-    return val
+    return props.input().getTextRange(store.index + 1, props.input().cursorOffset)
   })
 
   function insertPart(text: string, part: PromptInfo["parts"][number]) {
@@ -245,6 +237,11 @@ export function Autocomplete(props: {
           description: "jump to message",
           onSelect: () => command.trigger("session.timeline"),
         },
+        {
+          display: "/thinking",
+          description: "toggle thinking blocks",
+          onSelect: () => command.trigger("session.toggle.thinking"),
+        },
       )
       if (sync.data.config.share !== "disabled") {
         results.push({
@@ -382,16 +379,18 @@ export function Autocomplete(props: {
       get visible() {
         return store.visible
       },
-      onInput() {
+      onInput(value) {
         if (store.visible) {
-          if (props.input().cursorOffset <= store.index) {
+          if (
+            // Typed text before the trigger
+            props.input().cursorOffset <= store.index ||
+            // There is a space between the trigger and the cursor
+            props.input().getTextRange(store.index, props.input().cursorOffset).match(/\s/) ||
+            // "/<command>" is not the sole content
+            (store.visible === "/" && value.match(/^\S+\s+\S+\s*$/))
+          ) {
             hide()
             return
-          }
-          // Check if a space was typed after the trigger character
-          const currentText = props.input().getTextRange(store.index + 1, props.input().cursorOffset + 1)
-          if (currentText.includes(" ")) {
-            hide()
           }
         }
       },

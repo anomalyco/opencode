@@ -26,7 +26,7 @@ export const WriteTool = Tool.define("write", {
       if (agent.permission.external_directory === "ask") {
         await Permission.ask({
           type: "external_directory",
-          pattern: parentDir,
+          pattern: [parentDir, path.join(parentDir, "*")],
           sessionID: ctx.sessionID,
           messageID: ctx.messageID,
           callID: ctx.callID,
@@ -36,6 +36,17 @@ export const WriteTool = Tool.define("write", {
             parentDir,
           },
         })
+      } else if (agent.permission.external_directory === "deny") {
+        throw new Permission.RejectedError(
+          ctx.sessionID,
+          "external_directory",
+          ctx.callID,
+          {
+            filepath: filepath,
+            parentDir,
+          },
+          `File ${filepath} is not in the current working directory`,
+        )
       }
     }
 

@@ -3,6 +3,7 @@ import { EditTool } from "./edit"
 import { GlobTool } from "./glob"
 import { GrepTool } from "./grep"
 import { ListTool } from "./ls"
+import { BatchTool } from "./batch"
 import { ReadTool } from "./read"
 import { TaskTool } from "./task"
 import { TodoWriteTool, TodoReadTool } from "./todo"
@@ -81,19 +82,22 @@ export namespace ToolRegistry {
 
   async function all(): Promise<Tool.Info[]> {
     const custom = await state().then((x) => x.custom)
+    const config = await Config.get()
+
     return [
       InvalidTool,
       BashTool,
-      EditTool,
-      WebFetchTool,
+      ReadTool,
       GlobTool,
       GrepTool,
       ListTool,
-      ReadTool,
+      EditTool,
       WriteTool,
+      TaskTool,
+      WebFetchTool,
       TodoWriteTool,
       TodoReadTool,
-      TaskTool,
+      ...(config.experimental?.batch_tool === true ? [BatchTool] : []),
       ...(Flag.OPENCODE_EXPERIMENTAL_EXA ? [WebSearchTool, CodeSearchTool] : []),
       ...custom,
     ]

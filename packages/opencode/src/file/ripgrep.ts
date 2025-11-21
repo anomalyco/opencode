@@ -8,8 +8,10 @@ import { lazy } from "../util/lazy"
 import { $ } from "bun"
 
 import { ZipReader, BlobReader, BlobWriter } from "@zip.js/zip.js"
+import { Log } from "@/util/log"
 
 export namespace Ripgrep {
+  const log = Log.create({ service: "ripgrep" })
   const Stats = z.object({
     elapsed: z.object({
       secs: z.number(),
@@ -254,6 +256,7 @@ export namespace Ripgrep {
   }
 
   export async function tree(input: { cwd: string; limit?: number }) {
+    log.info("tree", input)
     const files = await Array.fromAsync(Ripgrep.files({ cwd: input.cwd }))
     interface Node {
       path: string[]

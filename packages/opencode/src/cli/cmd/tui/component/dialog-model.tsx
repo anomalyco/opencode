@@ -17,7 +17,6 @@ export function DialogModel() {
   const sync = useSync()
   const dialog = useDialog()
   const [ref, setRef] = createSignal<DialogSelectRef<unknown>>()
-  const { theme } = useTheme()
 
   const options = createMemo(() => {
     const query = ref()?.filter
@@ -126,6 +125,14 @@ export function DialogModel() {
               if (inRecents) return false
               return true
             }),
+              },
+              title: info.name ?? model,
+              description: provider.name,
+              category: provider.name,
+              footer: info.cost?.input === 0 && provider.id === "opencode" ? <Free /> : undefined,
+            })),
+            filter((x) => Boolean(ref()?.filter) || !local.model.recent().find((y) => isDeepEqual(y, x.value))),
+            sortBy((x) => x.title),
           ),
         ),
       ),

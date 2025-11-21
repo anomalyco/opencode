@@ -42,6 +42,15 @@ export type UserMessage = {
     body?: string
     diffs: Array<FileDiff>
   }
+  agent: string
+  model: {
+    providerID: string
+    modelID: string
+  }
+  system?: string
+  tools?: {
+    [key: string]: boolean
+  }
 }
 
 export type ProviderAuthError = {
@@ -114,6 +123,7 @@ export type AssistantMessage = {
       write: number
     }
   }
+  finish?: string
 }
 
 export type Message = UserMessage | AssistantMessage
@@ -348,8 +358,24 @@ export type RetryPart = {
   }
 }
 
+export type CompactionPart = {
+  id: string
+  sessionID: string
+  messageID: string
+  type: "compaction"
+}
+
 export type Part =
   | TextPart
+  | {
+      id: string
+      sessionID: string
+      messageID: string
+      type: "subtask"
+      prompt: string
+      description: string
+      agent: string
+    }
   | ReasoningPart
   | FilePart
   | ToolPart
@@ -359,6 +385,7 @@ export type Part =
   | PatchPart
   | AgentPart
   | RetryPart
+  | CompactionPart
 
 export type EventMessagePartUpdated = {
   type: "message.part.updated"
@@ -374,13 +401,6 @@ export type EventMessagePartRemoved = {
     sessionID: string
     messageID: string
     partID: string
-  }
-}
-
-export type EventSessionCompacted = {
-  type: "session.compacted"
-  properties: {
-    sessionID: string
   }
 }
 
@@ -411,6 +431,42 @@ export type EventPermissionReplied = {
     sessionID: string
     permissionID: string
     response: string
+  }
+}
+
+export type SessionStatus =
+  | {
+      type: "idle"
+    }
+  | {
+      type: "retry"
+      attempt: number
+      message: string
+      next: number
+    }
+  | {
+      type: "busy"
+    }
+
+export type EventSessionStatus = {
+  type: "session.status"
+  properties: {
+    sessionID: string
+    status: SessionStatus
+  }
+}
+
+export type EventSessionIdle = {
+  type: "session.idle"
+  properties: {
+    sessionID: string
+  }
+}
+
+export type EventSessionCompacted = {
+  type: "session.compacted"
+  properties: {
+    sessionID: string
   }
 }
 
@@ -455,13 +511,6 @@ export type EventCommandExecuted = {
     sessionID: string
     arguments: string
     messageID: string
-  }
-}
-
-export type EventSessionIdle = {
-  type: "session.idle"
-  properties: {
-    sessionID: string
   }
 }
 
@@ -598,13 +647,14 @@ export type Event =
   | EventMessageRemoved
   | EventMessagePartUpdated
   | EventMessagePartRemoved
-  | EventSessionCompacted
   | EventPermissionUpdated
   | EventPermissionReplied
+  | EventSessionStatus
+  | EventSessionIdle
+  | EventSessionCompacted
   | EventFileEdited
   | EventTodoUpdated
   | EventCommandExecuted
-  | EventSessionIdle
   | EventSessionCreated
   | EventSessionUpdated
   | EventSessionDeleted
@@ -1026,6 +1076,12 @@ export type Config = {
             output: number
             cache_read?: number
             cache_write?: number
+            context_over_200k?: {
+              input: number
+              output: number
+              cache_read?: number
+              cache_write?: number
+            }
           }
           limit?: {
             context: number
@@ -1069,33 +1125,37 @@ export type Config = {
   mcp?: {
     [key: string]: McpLocalConfig | McpRemoteConfig
   }
-  formatter?: {
-    [key: string]: {
-      disabled?: boolean
-      command?: Array<string>
-      environment?: {
-        [key: string]: string
-      }
-      extensions?: Array<string>
-    }
-  }
-  lsp?: {
-    [key: string]:
-      | {
-          disabled: true
-        }
-      | {
-          command: Array<string>
-          extensions?: Array<string>
+  formatter?:
+    | false
+    | {
+        [key: string]: {
           disabled?: boolean
-          env?: {
+          command?: Array<string>
+          environment?: {
             [key: string]: string
           }
-          initialization?: {
-            [key: string]: unknown
-          }
+          extensions?: Array<string>
         }
-  }
+      }
+  lsp?:
+    | false
+    | {
+        [key: string]:
+          | {
+              disabled: true
+            }
+          | {
+              command: Array<string>
+              extensions?: Array<string>
+              disabled?: boolean
+              env?: {
+                [key: string]: string
+              }
+              initialization?: {
+                [key: string]: unknown
+              }
+            }
+      }
   /**
    * Additional instruction files or patterns to include
    */
@@ -1137,11 +1197,15 @@ export type Config = {
      */
     chatMaxRetries?: number
     disable_paste_summary?: boolean
+    /**
+     * Enable the batch tool
+     */
+    batch_tool?: boolean
   }
 }
 
 export type BadRequestError = {
-  data: unknown | null
+  data: unknown
   errors: Array<{
     [key: string]: unknown
   }>
@@ -1206,6 +1270,14 @@ export type AgentPartInput = {
   }
 }
 
+export type SubtaskPartInput = {
+  id?: string
+  type: "subtask"
+  prompt: string
+  description: string
+  agent: string
+}
+
 export type Command = {
   name: string
   description?: string
@@ -1228,6 +1300,12 @@ export type Model = {
     output: number
     cache_read?: number
     cache_write?: number
+    context_over_200k?: {
+      input: number
+      output: number
+      cache_read?: number
+      cache_write?: number
+    }
   }
   limit: {
     context: number
@@ -1604,6 +1682,35 @@ export type SessionCreateResponses = {
 }
 
 export type SessionCreateResponse = SessionCreateResponses[keyof SessionCreateResponses]
+
+export type SessionStatusData = {
+  body?: never
+  path?: never
+  query?: {
+    directory?: string
+  }
+  url: "/session/status"
+}
+
+export type SessionStatusErrors = {
+  /**
+   * Bad request
+   */
+  400: BadRequestError
+}
+
+export type SessionStatusError = SessionStatusErrors[keyof SessionStatusErrors]
+
+export type SessionStatusResponses = {
+  /**
+   * Get session status
+   */
+  200: {
+    [key: string]: SessionStatus
+  }
+}
+
+export type SessionStatusResponse = SessionStatusResponses[keyof SessionStatusResponses]
 
 export type SessionDeleteData = {
   body?: never
@@ -2065,7 +2172,7 @@ export type SessionPromptData = {
     tools?: {
       [key: string]: boolean
     }
-    parts: Array<TextPartInput | FilePartInput | AgentPartInput>
+    parts: Array<TextPartInput | FilePartInput | AgentPartInput | SubtaskPartInput>
   }
   path: {
     /**
@@ -2195,6 +2302,10 @@ export type SessionCommandResponse = SessionCommandResponses[keyof SessionComman
 export type SessionShellData = {
   body?: {
     agent: string
+    model?: {
+      providerID: string
+      modelID: string
+    }
     command: string
   }
   path: {

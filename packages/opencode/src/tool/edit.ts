@@ -18,6 +18,10 @@ import { Instance } from "../project/instance"
 import { Agent } from "../agent/agent"
 import { Snapshot } from "@/snapshot"
 
+function normalizeLineEndings(text: string): string {
+  return text.replaceAll("\r\n", "\n")
+}
+
 export const EditTool = Tool.define("edit", {
   description: DESCRIPTION,
   parameters: z.object({
@@ -43,7 +47,7 @@ export const EditTool = Tool.define("edit", {
       if (agent.permission.external_directory === "ask") {
         await Permission.ask({
           type: "external_directory",
-          pattern: parentDir,
+          pattern: [parentDir, path.join(parentDir, "*")],
           sessionID: ctx.sessionID,
           messageID: ctx.messageID,
           callID: ctx.callID,
@@ -53,6 +57,17 @@ export const EditTool = Tool.define("edit", {
             parentDir,
           },
         })
+      } else if (agent.permission.external_directory === "deny") {
+        throw new Permission.RejectedError(
+          ctx.sessionID,
+          "external_directory",
+          ctx.callID,
+          {
+            filepath: filePath,
+            parentDir,
+          },
+          `File ${filePath} is not in the current working directory`,
+        )
       }
     }
 
@@ -91,7 +106,9 @@ export const EditTool = Tool.define("edit", {
       contentOld = await file.text()
       contentNew = replace(contentOld, params.oldString, params.newString, params.replaceAll)
 
-      diff = trimDiff(createTwoFilesPatch(filePath, filePath, contentOld, contentNew))
+      diff = trimDiff(
+        createTwoFilesPatch(filePath, filePath, normalizeLineEndings(contentOld), normalizeLineEndings(contentNew)),
+      )
       if (agent.permission.edit === "ask") {
         await Permission.ask({
           type: "edit",
@@ -111,7 +128,9 @@ export const EditTool = Tool.define("edit", {
         file: filePath,
       })
       contentNew = await file.text()
-      diff = trimDiff(createTwoFilesPatch(filePath, filePath, contentOld, contentNew))
+      diff = trimDiff(
+        createTwoFilesPatch(filePath, filePath, normalizeLineEndings(contentOld), normalizeLineEndings(contentNew)),
+      )
     })()
 
     FileTime.read(ctx.sessionID, filePath)
