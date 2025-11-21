@@ -24,7 +24,6 @@ export namespace ProviderTransform {
       const result: ModelMessage[] = []
       for (let i = 0; i < msgs.length; i++) {
         const msg = msgs[i]
-        const prevMsg = msgs[i - 1]
         const nextMsg = msgs[i + 1]
 
         if ((msg.role === "assistant" || msg.role === "tool") && Array.isArray(msg.content)) {
@@ -148,7 +147,7 @@ export namespace ProviderTransform {
       result["promptCacheKey"] = sessionID
     }
 
-    if (providerID === "google") {
+    if (providerID === "google" || (providerID === "opencode" && modelID.includes("gemini-3"))) {
       result["thinkingConfig"] = {
         includeThoughts: true,
       }

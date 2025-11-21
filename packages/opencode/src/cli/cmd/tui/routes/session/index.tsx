@@ -54,6 +54,7 @@ import { DialogMessage } from "./dialog-message"
 import type { PromptInfo } from "../../component/prompt/history"
 import { iife } from "@/util/iife"
 import { DialogConfirm } from "@tui/ui/dialog-confirm"
+import { DialogPrompt } from "@tui/ui/dialog-prompt"
 import { DialogTimeline } from "./dialog-timeline"
 import { DialogSessionRename } from "../../component/dialog-session-rename"
 import { Sidebar } from "./sidebar"
@@ -70,13 +71,13 @@ import stripAnsi from "strip-ansi"
 addDefaultParsers(parsers.parsers)
 
 class CustomSpeedScroll implements ScrollAcceleration {
-  constructor(private speed: number) {}
+  constructor(private speed: number) { }
 
   tick(_now?: number): number {
     return this.speed
   }
 
-  reset(): void {}
+  reset(): void { }
 }
 
 const context = createContext<{
@@ -104,11 +105,6 @@ export function Session() {
 
   const pending = createMemo(() => {
     return messages().findLast((x) => x.role === "assistant" && !x.time.completed)?.id
-  })
-
-  const lastUserMessage = createMemo(() => {
-    const p = pending()
-    return messages().findLast((x) => x.role === "user" && (!p || x.id < p)) as UserMessage
   })
 
   const dimensions = useTerminalDimensions()
@@ -148,8 +144,29 @@ export function Session() {
   })
 
   const toast = useToast()
-
   const sdk = useSDK()
+
+  // Auto-navigate to whichever session currently needs permission input
+  createEffect(() => {
+    const currentSession = session()
+    if (!currentSession) return
+    const currentPermissions = permissions()
+    let targetID = currentPermissions.length > 0 ? currentSession.id : undefined
+
+    if (!targetID) {
+      const child = sync.data.session.find(
+        (x) => x.parentID === currentSession.id && (sync.data.permission[x.id]?.length ?? 0) > 0,
+      )
+      if (child) targetID = child.id
+    }
+
+    if (targetID && targetID !== currentSession.id) {
+      navigate({
+        type: "session",
+        sessionID: targetID,
+      })
+    }
+  })
 
   let scroll: ScrollBoxRenderable
   let prompt: PromptRef
@@ -256,30 +273,30 @@ export function Session() {
     },
     ...(sync.data.config.share !== "disabled"
       ? [
-          {
-            title: "Share session",
-            value: "session.share",
-            keybind: "session_share" as const,
-            disabled: !!session()?.share?.url,
-            category: "Session",
-            onSelect: async (dialog: any) => {
-              await sdk.client.session
-                .share({
-                  path: {
-                    id: route.sessionID,
-                  },
-                })
-                .then((res) =>
-                  Clipboard.copy(res.data!.share!.url).catch(() =>
-                    toast.show({ message: "Failed to copy URL to clipboard", variant: "error" }),
-                  ),
-                )
-                .then(() => toast.show({ message: "Share URL copied to clipboard!", variant: "success" }))
-                .catch(() => toast.show({ message: "Failed to share session", variant: "error" }))
-              dialog.clear()
-            },
+        {
+          title: "Share session",
+          value: "session.share",
+          keybind: "session_share" as const,
+          disabled: !!session()?.share?.url,
+          category: "Session",
+          onSelect: async (dialog: any) => {
+            await sdk.client.session
+              .share({
+                path: {
+                  id: route.sessionID,
+                },
+              })
+              .then((res) =>
+                Clipboard.copy(res.data!.share!.url).catch(() =>
+                  toast.show({ message: "Failed to copy URL to clipboard", variant: "error" }),
+                ),
+              )
+              .then(() => toast.show({ message: "Share URL copied to clipboard!", variant: "success" }))
+              .catch(() => toast.show({ message: "Failed to share session", variant: "error" }))
+            dialog.clear()
           },
-        ]
+        },
+      ]
       : []),
     {
       title: "Unshare session",
@@ -598,12 +615,17 @@ export function Session() {
             transcript += `---\n\n`
           }
 
-          // Save to file in data directory
-          const exportDir = path.join(Global.Path.data, "exports")
-          await fs.mkdir(exportDir, { recursive: true })
+          // Prompt for optional filename
+          const customFilename = await DialogPrompt.show(dialog, "Export filename", {
+            value: `session-${sessionData.id.slice(0, 8)}.md`,
+          })
 
-          const timestamp = new Date().toISOString().replace(/[:.]/g, "-")
-          const filename = `session-${sessionData.id.slice(0, 8)}-${timestamp}.md`
+          // Cancel if user pressed escape
+          if (customFilename === null) return
+
+          // Save to file in current working directory
+          const exportDir = process.cwd()
+          const filename = customFilename.trim()
           const filepath = path.join(exportDir, filename)
 
           await Bun.write(filepath, transcript)
@@ -897,58 +919,61 @@ function UserMessage(props: {
       <Show when={text()}>
         <box
           id={props.message.id}
-          onMouseOver={() => {
-            setHover(true)
-          }}
-          onMouseOut={() => {
-            setHover(false)
-          }}
-          onMouseUp={props.onMouseUp}
           border={["left"]}
-          paddingTop={1}
-          paddingBottom={1}
-          paddingLeft={2}
-          marginTop={props.index === 0 ? 0 : 1}
-          backgroundColor={hover() ? theme.backgroundElement : theme.backgroundPanel}
-          customBorderChars={SplitBorder.customBorderChars}
           borderColor={color()}
-          flexShrink={0}
+          customBorderChars={SplitBorder.customBorderChars}
+          marginTop={props.index === 0 ? 0 : 1}
         >
-          <text fg={theme.text}>{text()?.text}</text>
-          <Show when={files().length}>
-            <box flexDirection="row" paddingBottom={1} paddingTop={1} gap={1} flexWrap="wrap">
-              <For each={files()}>
-                {(file) => {
-                  const bg = createMemo(() => {
-                    if (file.mime.startsWith("image/")) return theme.accent
-                    if (file.mime === "application/pdf") return theme.primary
-                    return theme.secondary
-                  })
-                  return (
-                    <text fg={theme.text}>
-                      <span style={{ bg: bg(), fg: theme.background }}> {MIME_BADGE[file.mime] ?? file.mime} </span>
-                      <span style={{ bg: theme.backgroundElement, fg: theme.textMuted }}> {file.filename} </span>
-                    </text>
-                  )
-                }}
-              </For>
-            </box>
-          </Show>
-          <text fg={theme.textMuted}>
-            {sync.data.config.username ?? "You"}{" "}
-            <Show
-              when={queued()}
-              fallback={
-                <span style={{ fg: theme.textMuted }}>
-                  {ctx.showTimestamps()
-                    ? `· ${Locale.todayTimeOrDateTime(props.message.time.created)}`
-                    : `· ${Locale.time(props.message.time.created)}`}
-                </span>
-              }
-            >
-              <span style={{ bg: theme.accent, fg: theme.backgroundPanel, bold: true }}> QUEUED </span>
+          <box
+            onMouseOver={() => {
+              setHover(true)
+            }}
+            onMouseOut={() => {
+              setHover(false)
+            }}
+            onMouseUp={props.onMouseUp}
+            paddingTop={1}
+            paddingBottom={1}
+            paddingLeft={1}
+            backgroundColor={hover() ? theme.backgroundElement : theme.backgroundPanel}
+            flexShrink={0}
+          >
+            <text fg={theme.text}>{text()?.text}</text>
+            <Show when={files().length}>
+              <box flexDirection="row" paddingBottom={1} paddingTop={1} gap={1} flexWrap="wrap">
+                <For each={files()}>
+                  {(file) => {
+                    const bg = createMemo(() => {
+                      if (file.mime.startsWith("image/")) return theme.accent
+                      if (file.mime === "application/pdf") return theme.primary
+                      return theme.secondary
+                    })
+                    return (
+                      <text fg={theme.text}>
+                        <span style={{ bg: bg(), fg: theme.background }}> {MIME_BADGE[file.mime] ?? file.mime} </span>
+                        <span style={{ bg: theme.backgroundElement, fg: theme.textMuted }}> {file.filename} </span>
+                      </text>
+                    )
+                  }}
+                </For>
+              </box>
             </Show>
-          </text>
+            <text fg={theme.textMuted}>
+              {sync.data.config.username ?? "You"}{" "}
+              <Show
+                when={queued()}
+                fallback={
+                  <span style={{ fg: theme.textMuted }}>
+                    {ctx.showTimestamps()
+                      ? `· ${Locale.todayTimeOrDateTime(props.message.time.created)}`
+                      : `· ${Locale.time(props.message.time.created)}`}
+                  </span>
+                }
+              >
+                <span style={{ bg: theme.accent, fg: theme.backgroundPanel, bold: true }}> QUEUED </span>
+              </Show>
+            </text>
+          </box>
         </box>
       </Show>
       <Show when={compaction()}>
@@ -1006,64 +1031,67 @@ function AssistantMessage(props: { message: AssistantMessage; parts: Part[]; las
           <text fg={theme.textMuted}>{props.message.error?.data.message}</text>
         </box>
       </Show>
-      <Show when={props.last && status().type !== "idle"}>
-        <box paddingLeft={3} flexDirection="row" gap={1} marginTop={1}>
-          <text fg={local.agent.color(props.message.mode)}>{Locale.titlecase(props.message.mode)}</text>
-          <Shimmer text={props.message.modelID} color={theme.text} />
-          {(() => {
-            const retry = createMemo(() => {
-              const s = status()
-              if (s.type !== "retry") return
-              return s
-            })
-            const message = createMemo(() => {
-              const r = retry()
-              if (!r) return
-              if (r.message.includes("exceeded your current quota") && r.message.includes("gemini"))
-                return "gemini 3 way too hot right now"
-              if (r.message.length > 50) return r.message.slice(0, 50) + "..."
-              return r.message
-            })
-            const [seconds, setSeconds] = createSignal(0)
-            onMount(() => {
-              const timer = setInterval(() => {
-                const next = retry()?.next
-                if (next) setSeconds(Math.round((next - Date.now()) / 1000))
-              }, 1000)
-
-              onCleanup(() => {
-                clearInterval(timer)
+      <Switch>
+        <Match when={props.last && status().type !== "idle" && false}>
+          <box paddingLeft={3} flexDirection="row" gap={1} marginTop={1}>
+            <text fg={local.agent.color(props.message.mode)}>{Locale.titlecase(props.message.mode)}</text>
+            <Shimmer text={props.message.modelID} color={theme.text} />
+            {(() => {
+              const retry = createMemo(() => {
+                const s = status()
+                if (s.type !== "retry") return
+                return s
               })
-            })
-            return (
-              <Show when={retry()}>
-                <text fg={theme.error}>
-                  {message()} [retrying {seconds() > 0 ? `in ${seconds()}s ` : ""}
-                  attempt #{retry()!.attempt}]
-                </text>
-              </Show>
-            )
-          })()}
-        </box>
-      </Show>
-      <Show
-        when={
-          props.message.time.completed &&
-          props.parts.some((item) => item.type === "step-finish" && item.reason !== "tool-calls")
-        }
-      >
-        <box paddingLeft={3}>
-          <text marginTop={1}>
-            <span style={{ fg: local.agent.color(props.message.mode) }}>{Locale.titlecase(props.message.mode)}</span>{" "}
-            <span style={{ fg: theme.textMuted }}>
-              {props.message.modelID}
-              {ctx.showTimestamps() &&
-                props.message.time.completed &&
-                ` · ${Locale.todayTimeOrDateTime(props.message.time.completed)}`}
-            </span>
-          </text>
-        </box>
-      </Show>
+              const message = createMemo(() => {
+                const r = retry()
+                if (!r) return
+                if (r.message.includes("exceeded your current quota") && r.message.includes("gemini"))
+                  return "gemini 3 way too hot right now"
+                if (r.message.length > 50) return r.message.slice(0, 50) + "..."
+                return r.message
+              })
+              const [seconds, setSeconds] = createSignal(0)
+              onMount(() => {
+                const timer = setInterval(() => {
+                  const next = retry()?.next
+                  if (next) setSeconds(Math.round((next - Date.now()) / 1000))
+                }, 1000)
+
+                onCleanup(() => {
+                  clearInterval(timer)
+                })
+              })
+              return (
+                <Show when={retry()}>
+                  <text fg={theme.error}>
+                    {message()} [retrying {seconds() > 0 ? `in ${seconds()}s ` : ""}
+                    attempt #{retry()!.attempt}]
+                  </text>
+                </Show>
+              )
+            })()}
+          </box>
+        </Match >
+        <Match
+          when={
+            (props.message.time.completed &&
+              props.parts.some((item) => item.type === "step-finish" && item.reason !== "tool-calls")) ||
+            props.last
+          }
+        >
+          <box paddingLeft={3}>
+            <text marginTop={1}>
+              <span style={{ fg: local.agent.color(props.message.mode) }}>{Locale.titlecase(props.message.mode)}</span>{" "}
+              <span style={{ fg: theme.textMuted }}>
+                {props.message.modelID}
+                {ctx.showTimestamps() &&
+                  props.message.time.completed &&
+                  ` · ${Locale.todayTimeOrDateTime(props.message.time.completed)}`}
+              </span>
+            </text>
+          </box>
+        </Match>
+      </Switch >
     </>
   )
 }
@@ -1141,19 +1169,19 @@ function ToolPart(props: { last: boolean; part: ToolPart; message: AssistantMess
     const style: BoxProps =
       container === "block" || permission
         ? {
-            border: permissionIndex === 0 ? (["left", "right"] as const) : (["left"] as const),
-            paddingTop: 1,
-            paddingBottom: 1,
-            paddingLeft: 2,
-            marginTop: 1,
-            gap: 1,
-            backgroundColor: theme.backgroundPanel,
-            customBorderChars: SplitBorder.customBorderChars,
-            borderColor: permissionIndex === 0 ? theme.warning : theme.background,
-          }
+          border: permissionIndex === 0 ? (["left", "right"] as const) : (["left"] as const),
+          paddingTop: 1,
+          paddingBottom: 1,
+          paddingLeft: 2,
+          marginTop: 1,
+          gap: 1,
+          backgroundColor: theme.backgroundPanel,
+          customBorderChars: SplitBorder.customBorderChars,
+          borderColor: permissionIndex === 0 ? theme.warning : theme.background,
+        }
         : {
-            paddingLeft: 3,
-          }
+          paddingLeft: 3,
+        }
 
     return (
       <box
@@ -1312,7 +1340,10 @@ ToolRegistry.register<typeof WriteTool>({
   container: "block",
   render(props) {
     const { theme, syntax } = useTheme()
-    const lines = createMemo(() => props.input.content?.split("\n") ?? [], [] as string[])
+    const lines = createMemo(
+      () => (typeof props.input.content === "string" ? props.input.content.split("\n") : []),
+      [] as string[],
+    )
     const code = createMemo(() => {
       if (!props.input.content) return ""
       const text = props.input.content

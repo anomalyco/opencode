@@ -18,7 +18,6 @@ export const { use: useSDK, provider: SDKProvider } = createSimpleContext({
 
     sdk.event.subscribe().then(async (events) => {
       for await (const event of events.stream) {
-        console.log("event", event.type)
         emitter.emit(event.type, event)
       }
     })
