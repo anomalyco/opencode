@@ -15,6 +15,12 @@ export namespace Editor {
     await Bun.write(filepath, opts.value)
     opts.renderer.suspend()
     opts.renderer.currentRenderBuffer.clear()
+    
+    // Explicitly disable raw mode to ensure editor can read input properly
+    if (process.stdin.isTTY && process.stdin.setRawMode) {
+      process.stdin.setRawMode(false)
+    }
+
     const parts = editor.split(" ")
     const proc = Bun.spawn({
       cmd: [...parts, filepath],
@@ -24,6 +30,12 @@ export namespace Editor {
     })
     await proc.exited
     const content = await Bun.file(filepath).text()
+
+    // Re-enable raw mode after editor exits
+    if (process.stdin.isTTY && process.stdin.setRawMode) {
+      process.stdin.setRawMode(true)
+    }
+    
     opts.renderer.currentRenderBuffer.clear()
     opts.renderer.resume()
     opts.renderer.requestRender()
