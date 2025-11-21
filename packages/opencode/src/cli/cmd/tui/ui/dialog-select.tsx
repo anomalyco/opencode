@@ -157,7 +157,7 @@ export function DialogSelect<T>(props: DialogSelectProps<T>) {
 
   return (
     <box gap={1}>
-      <box paddingLeft={3} paddingRight={2}>
+      <box paddingLeft={4} paddingRight={4}>
         <box flexDirection="row" justifyContent="space-between">
           <text fg={theme.text} attributes={TextAttributes.BOLD}>
             {props.title}
@@ -184,8 +184,8 @@ export function DialogSelect<T>(props: DialogSelectProps<T>) {
         </box>
       </box>
       <scrollbox
-        paddingLeft={2}
-        paddingRight={2}
+        paddingLeft={1}
+        paddingRight={1}
         scrollbarOptions={{ visible: false }}
         ref={(r: ScrollBoxRenderable) => (scroll = r)}
         maxHeight={height()}
@@ -194,7 +194,7 @@ export function DialogSelect<T>(props: DialogSelectProps<T>) {
           {([category, options], index) => (
             <>
               <Show when={category}>
-                <box paddingTop={index() > 0 ? 1 : 0} paddingLeft={1}>
+                <box paddingTop={index() > 0 ? 1 : 0} paddingLeft={3}>
                   <text fg={theme.accent} attributes={TextAttributes.BOLD}>
                     {category}
                   </text>
@@ -203,6 +203,7 @@ export function DialogSelect<T>(props: DialogSelectProps<T>) {
               <For each={options}>
                 {(option) => {
                   const active = createMemo(() => isDeepEqual(option.value, selected()?.value))
+                  const current = createMemo(() => isDeepEqual(option.value, props.current))
                   return (
                     <box
                       id={JSON.stringify(option.value)}
@@ -217,8 +218,8 @@ export function DialogSelect<T>(props: DialogSelectProps<T>) {
                         moveTo(index)
                       }}
                       backgroundColor={active() ? (option.bg ?? theme.primary) : RGBA.fromInts(0, 0, 0, 0)}
-                      paddingLeft={1}
-                      paddingRight={1}
+                      paddingLeft={current() ? 1 : 3}
+                      paddingRight={3}
                       gap={1}
                     >
                       <Option
@@ -226,7 +227,7 @@ export function DialogSelect<T>(props: DialogSelectProps<T>) {
                         footer={option.footer}
                         description={option.description !== category ? option.description : undefined}
                         active={active()}
-                        current={isDeepEqual(option.value, props.current)}
+                        current={current()}
                       />
                     </box>
                   )
@@ -236,12 +237,14 @@ export function DialogSelect<T>(props: DialogSelectProps<T>) {
           )}
         </For>
       </scrollbox>
-      <box paddingRight={2} paddingLeft={3} flexDirection="row" paddingBottom={1} gap={1}>
+      <box paddingRight={2} paddingLeft={4} flexDirection="row" paddingBottom={1} gap={1}>
         <For each={props.keybind ?? []}>
           {(item) => (
             <text>
-              <span style={{ fg: theme.text, attributes: TextAttributes.BOLD }}>{Keybind.toString(item.keybind)}</span>
-              <span style={{ fg: theme.textMuted }}> {item.title}</span>
+              <span style={{ fg: theme.text }}>
+                <b>{item.title}</b>{" "}
+              </span>
+              <span style={{ fg: theme.textMuted }}>{Keybind.toString(item.keybind)}</span>
             </text>
           )}
         </For>
@@ -268,7 +271,7 @@ function Option(props: {
           fg={props.active ? theme.background : props.current ? theme.primary : theme.text}
           marginRight={0.5}
         >
-          ●
+          ◆
         </text>
       </Show>
       <text
@@ -277,6 +280,7 @@ function Option(props: {
         attributes={props.active ? TextAttributes.BOLD : undefined}
         overflow="hidden"
         wrapMode="none"
+        paddingLeft={3}
       >
         {Locale.truncate(props.title, 62)}
         <span style={{ fg: props.active ? theme.background : theme.textMuted }}> {props.description}</span>
