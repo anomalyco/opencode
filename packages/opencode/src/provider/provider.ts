@@ -448,10 +448,11 @@ export namespace Provider {
         // TODO: set this in models.dev, not set due to breaking issues on older OC versions
         // u have to set include usage to true w/ this provider, setting in models.dev would cause undefined issue when accessing usage in older versions
         if (providerID === "openrouter") {
-          provider.info.npm = "@openrouter/ai-sdk-provider"
+          const p = providers[providerID]
+          if (p) p.info.npm = "@openrouter/ai-sdk-provider"
         }
 
-        log.info("found", { providerID, npm: provider.info.npm })
+        log.info("found", { providerID, npm: providers[providerID]?.info.npm })
       }
 
       for (const [providerID, provider] of Object.entries(providers)) {
