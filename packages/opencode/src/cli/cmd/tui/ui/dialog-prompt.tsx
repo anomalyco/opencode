@@ -1,11 +1,13 @@
 import { TextareaRenderable, TextAttributes } from "@opentui/core"
 import { useTheme } from "../context/theme"
 import { useDialog, type DialogContext } from "./dialog"
-import { onMount } from "solid-js"
+import { onMount, type JSX } from "solid-js"
 import { useKeyboard } from "@opentui/solid"
 
 export type DialogPromptProps = {
   title: string
+  description?: () => JSX.Element
+  placeholder?: string
   value?: string
   onConfirm?: (value: string) => void
   onCancel?: () => void
@@ -19,12 +21,11 @@ export function DialogPrompt(props: DialogPromptProps) {
   useKeyboard((evt) => {
     if (evt.name === "return") {
       props.onConfirm?.(textarea.plainText)
-      dialog.clear()
     }
   })
 
   onMount(() => {
-    dialog.setSize("large")
+    dialog.setSize("medium")
     setTimeout(() => {
       textarea.focus()
     }, 1)
@@ -37,35 +38,36 @@ export function DialogPrompt(props: DialogPromptProps) {
         <text attributes={TextAttributes.BOLD}>{props.title}</text>
         <text fg={theme.textMuted}>esc</text>
       </box>
-      <box>
+      <box gap={1}>
+        {props.description}
         <textarea
           onSubmit={() => {
             props.onConfirm?.(textarea.plainText)
-            dialog.clear()
           }}
+          height={3}
           keyBindings={[{ name: "return", action: "submit" }]}
           ref={(val: TextareaRenderable) => (textarea = val)}
           initialValue={props.value}
-          placeholder="Enter text"
+          placeholder={props.placeholder ?? "Enter text"}
         />
       </box>
-      <box paddingBottom={1}>
-        <text fg={theme.textMuted}>Press enter to confirm, esc to cancel</text>
+      <box paddingBottom={1} gap={1} flexDirection="row">
+        <text fg={theme.text}>
+          enter <span style={{ fg: theme.textMuted }}>submit</span>
+        </text>
+        <text fg={theme.text}>
+          esc <span style={{ fg: theme.textMuted }}>cancel</span>
+        </text>
       </box>
     </box>
   )
 }
 
-DialogPrompt.show = (dialog: DialogContext, title: string, value?: string) => {
+DialogPrompt.show = (dialog: DialogContext, title: string, options?: Omit<DialogPromptProps, "title">) => {
   return new Promise<string | null>((resolve) => {
     dialog.replace(
       () => (
-        <DialogPrompt
-          title={title}
-          value={value}
-          onConfirm={(value) => resolve(value)}
-          onCancel={() => resolve(null)}
-        />
+        <DialogPrompt title={title} {...options} onConfirm={(value) => resolve(value)} onCancel={() => resolve(null)} />
       ),
       () => resolve(null),
     )
