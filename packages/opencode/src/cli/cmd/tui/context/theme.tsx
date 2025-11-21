@@ -434,28 +434,26 @@ function generateSyntax(theme: Theme) {
 
 function generateSubtleSyntax(theme: Theme) {
   const rules = getSyntaxRules(theme)
-  const bg = theme.background
   return SyntaxStyle.fromTheme(
     rules.map((rule) => {
       if (rule.style.foreground) {
+        const fg = rule.style.foreground
         return {
           ...rule,
           style: {
             ...rule.style,
-            foreground: blend(rule.style.foreground, bg, 0.9),
+            foreground: RGBA.fromInts(
+              Math.round(fg.r * 255),
+              Math.round(fg.g * 255),
+              Math.round(fg.b * 255),
+              100,
+            ),
           },
         }
       }
       return rule
     }),
   )
-}
-
-function blend(fg: RGBA, bg: RGBA, alpha: number): RGBA {
-  const r = fg.r * alpha + bg.r * (1 - alpha)
-  const g = fg.g * alpha + bg.g * (1 - alpha)
-  const b = fg.b * alpha + bg.b * (1 - alpha)
-  return RGBA.fromInts(Math.round(r * 255), Math.round(g * 255), Math.round(b * 255))
 }
 
 function getSyntaxRules(theme: Theme) {
