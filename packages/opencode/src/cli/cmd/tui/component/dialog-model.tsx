@@ -5,10 +5,20 @@ import { map, pipe, flatMap, entries, filter, isDeepEqual, sortBy } from "remeda
 import { DialogSelect, type DialogSelectRef } from "@tui/ui/dialog-select"
 import { useDialog } from "@tui/ui/dialog"
 import { useTheme } from "../context/theme"
+import { createDialogProviderOptions, DialogProvider } from "./dialog-provider"
 
 function Free() {
   const { theme } = useTheme()
-  return <span style={{ fg: theme.secondary }}>Free</span>
+  return <span style={{ fg: theme.text }}>Free</span>
+}
+const PROVIDER_PRIORITY: Record<string, number> = {
+  opencode: 0,
+  anthropic: 1,
+  "github-copilot": 2,
+  openai: 3,
+  google: 4,
+  openrouter: 5,
+  vercel: 6,
 }
 
 export function DialogModel() {
@@ -17,9 +27,16 @@ export function DialogModel() {
   const dialog = useDialog()
   const [ref, setRef] = createSignal<DialogSelectRef<unknown>>()
 
+  const connected = createMemo(() =>
+    sync.data.provider.some((x) => x.id !== "opencode" || Object.values(x.models).some((y) => y.cost?.input !== 0)),
+  )
+
+  const showRecent = createMemo(() => !ref()?.filter && local.model.recent().length > 0 && connected())
+  const providers = createDialogProviderOptions()
+
   const options = createMemo(() => {
     return [
-      ...(!ref()?.filter
+      ...(showRecent()
         ? local.model.recent().flatMap((item) => {
             const provider = sync.data.provider.find((x) => x.id === item.providerID)!
             if (!provider) return []
@@ -35,7 +52,17 @@ export function DialogModel() {
                 title: model.name ?? item.modelID,
                 description: provider.name,
                 category: "Recent",
-                footer: model.cost?.input === 0 && provider.id === "opencode" ? <Free /> : undefined,
+                footer: model.cost?.input === 0 && provider.id === "opencode" ? "Free" : undefined,
+                onSelect: () => {
+                  dialog.clear()
+                  local.model.set(
+                    {
+                      providerID: provider.id,
+                      modelID: model.id,
+                    },
+                    { recent: true },
+                  )
+                },
               },
             ]
           })
@@ -56,28 +83,56 @@ export function DialogModel() {
                 modelID: model,
               },
               title: info.name ?? model,
-              description: provider.name,
-              category: provider.name,
-              footer: info.cost?.input === 0 && provider.id === "opencode" ? <Free /> : undefined,
+              description: connected() ? provider.name : undefined,
+              category: connected() ? provider.name : undefined,
+              footer: info.cost?.input === 0 && provider.id === "opencode" ? "Free" : undefined,
+              onSelect() {
+                dialog.clear()
+                local.model.set(
+                  {
+                    providerID: provider.id,
+                    modelID: model,
+                  },
+                  { recent: true },
+                )
+              },
             })),
-            filter((x) => Boolean(ref()?.filter) || !local.model.recent().find((y) => isDeepEqual(y, x.value))),
+            filter((x) => !showRecent() || !local.model.recent().find((y) => isDeepEqual(y, x.value))),
             sortBy((x) => x.title),
           ),
         ),
       ),
+      ...(!connected()
+        ? pipe(
+            providers(),
+            map((option) => {
+              return {
+                ...option,
+                category: "Popular providers",
+              }
+            }),
+            filter((x) => PROVIDER_PRIORITY[x.value] !== undefined),
+            sortBy((x) => PROVIDER_PRIORITY[x.value] ?? 99),
+          )
+        : []),
     ]
   })
 
   return (
     <DialogSelect
+      keybind={[
+        {
+          keybind: { ctrl: true, name: "a", meta: false, shift: false, leader: false },
+          title: connected() ? "Connect provider" : "More providers",
+          onTrigger() {
+            dialog.replace(() => <DialogProvider />)
+          },
+        },
+      ]}
       ref={setRef}
       title="Select model"
       current={local.model.current()}
       options={options()}
-      onSelect={(option) => {
-        dialog.clear()
-        local.model.set(option.value, { recent: true })
-      }}
     />
   )
 }

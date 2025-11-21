@@ -1333,6 +1333,17 @@ export type Provider = {
   }
 }
 
+export type ProviderAuthMethod = {
+  type: "oauth" | "api"
+  label: string
+}
+
+export type ProviderAuthAuthorization = {
+  url: string
+  method: "auto" | "code"
+  instructions: string
+}
+
 export type Symbol = {
   name: string
   kind: number
@@ -1610,6 +1621,24 @@ export type ToolListResponses = {
 }
 
 export type ToolListResponse = ToolListResponses[keyof ToolListResponses]
+
+export type InstanceDisposeData = {
+  body?: never
+  path?: never
+  query?: {
+    directory?: string
+  }
+  url: "/instance/dispose"
+}
+
+export type InstanceDisposeResponses = {
+  /**
+   * Instance disposed
+   */
+  200: boolean
+}
+
+export type InstanceDisposeResponse = InstanceDisposeResponses[keyof InstanceDisposeResponses]
 
 export type PathGetData = {
   body?: never
@@ -2483,6 +2512,128 @@ export type ConfigProvidersResponses = {
 }
 
 export type ConfigProvidersResponse = ConfigProvidersResponses[keyof ConfigProvidersResponses]
+
+export type ProviderListData = {
+  body?: never
+  path?: never
+  query?: {
+    directory?: string
+  }
+  url: "/provider"
+}
+
+export type ProviderListResponses = {
+  /**
+   * List of providers
+   */
+  200: {
+    all: Array<Provider>
+    default: {
+      [key: string]: string
+    }
+    connected: Array<string>
+  }
+}
+
+export type ProviderListResponse = ProviderListResponses[keyof ProviderListResponses]
+
+export type ProviderAuthData = {
+  body?: never
+  path?: never
+  query?: {
+    directory?: string
+  }
+  url: "/provider/auth"
+}
+
+export type ProviderAuthResponses = {
+  /**
+   * Provider auth methods
+   */
+  200: {
+    [key: string]: Array<ProviderAuthMethod>
+  }
+}
+
+export type ProviderAuthResponse = ProviderAuthResponses[keyof ProviderAuthResponses]
+
+export type ProviderOauthAuthorizeData = {
+  body?: {
+    /**
+     * Auth method index
+     */
+    method: number
+  }
+  path: {
+    /**
+     * Provider ID
+     */
+    id: string
+  }
+  query?: {
+    directory?: string
+  }
+  url: "/provider/{id}/oauth/authorize"
+}
+
+export type ProviderOauthAuthorizeErrors = {
+  /**
+   * Bad request
+   */
+  400: BadRequestError
+}
+
+export type ProviderOauthAuthorizeError = ProviderOauthAuthorizeErrors[keyof ProviderOauthAuthorizeErrors]
+
+export type ProviderOauthAuthorizeResponses = {
+  /**
+   * Authorization URL and method
+   */
+  200: ProviderAuthAuthorization
+}
+
+export type ProviderOauthAuthorizeResponse = ProviderOauthAuthorizeResponses[keyof ProviderOauthAuthorizeResponses]
+
+export type ProviderOauthCallbackData = {
+  body?: {
+    /**
+     * Auth method index
+     */
+    method: number
+    /**
+     * OAuth authorization code
+     */
+    code?: string
+  }
+  path: {
+    /**
+     * Provider ID
+     */
+    id: string
+  }
+  query?: {
+    directory?: string
+  }
+  url: "/provider/{id}/oauth/callback"
+}
+
+export type ProviderOauthCallbackErrors = {
+  /**
+   * Bad request
+   */
+  400: BadRequestError
+}
+
+export type ProviderOauthCallbackError = ProviderOauthCallbackErrors[keyof ProviderOauthCallbackErrors]
+
+export type ProviderOauthCallbackResponses = {
+  /**
+   * OAuth callback processed successfully
+   */
+  200: boolean
+}
+
+export type ProviderOauthCallbackResponse = ProviderOauthCallbackResponses[keyof ProviderOauthCallbackResponses]
 
 export type FindTextData = {
   body?: never

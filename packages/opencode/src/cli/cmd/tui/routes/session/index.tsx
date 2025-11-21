@@ -601,11 +601,9 @@ export function Session() {
           }
 
           // Prompt for optional filename
-          const customFilename = await DialogPrompt.show(
-            dialog,
-            "Export filename",
-            `session-${sessionData.id.slice(0, 8)}.md`,
-          )
+          const customFilename = await DialogPrompt.show(dialog, "Export filename", {
+            value: `session-${sessionData.id.slice(0, 8)}.md`,
+          })
 
           // Cancel if user pressed escape
           if (customFilename === null) return
@@ -904,52 +902,55 @@ function UserMessage(props: {
       <Show when={text()}>
         <box
           id={props.message.id}
-          onMouseOver={() => {
-            setHover(true)
-          }}
-          onMouseOut={() => {
-            setHover(false)
-          }}
-          onMouseUp={props.onMouseUp}
           border={["left"]}
-          paddingTop={1}
-          paddingBottom={1}
-          paddingLeft={2}
-          marginTop={props.index === 0 ? 0 : 1}
-          backgroundColor={hover() ? theme.backgroundElement : theme.backgroundPanel}
-          customBorderChars={SplitBorder.customBorderChars}
           borderColor={color()}
-          flexShrink={0}
+          customBorderChars={SplitBorder.customBorderChars}
+          marginTop={props.index === 0 ? 0 : 1}
         >
-          <text fg={theme.text}>{text()?.text}</text>
-          <Show when={files().length}>
-            <box flexDirection="row" paddingBottom={1} paddingTop={1} gap={1} flexWrap="wrap">
-              <For each={files()}>
-                {(file) => {
-                  const bg = createMemo(() => {
-                    if (file.mime.startsWith("image/")) return theme.accent
-                    if (file.mime === "application/pdf") return theme.primary
-                    return theme.secondary
-                  })
-                  return (
-                    <text fg={theme.text}>
-                      <span style={{ bg: bg(), fg: theme.background }}> {MIME_BADGE[file.mime] ?? file.mime} </span>
-                      <span style={{ bg: theme.backgroundElement, fg: theme.textMuted }}> {file.filename} </span>
-                    </text>
-                  )
-                }}
-              </For>
-            </box>
-          </Show>
-          <text fg={theme.text}>
-            {sync.data.config.username ?? "You"}{" "}
-            <Show
-              when={queued()}
-              fallback={<span style={{ fg: theme.textMuted }}>({Locale.time(props.message.time.created)})</span>}
-            >
-              <span style={{ bg: theme.accent, fg: theme.backgroundPanel, bold: true }}> QUEUED </span>
+          <box
+            onMouseOver={() => {
+              setHover(true)
+            }}
+            onMouseOut={() => {
+              setHover(false)
+            }}
+            onMouseUp={props.onMouseUp}
+            paddingTop={1}
+            paddingBottom={1}
+            paddingLeft={1}
+            backgroundColor={hover() ? theme.backgroundElement : theme.backgroundPanel}
+            flexShrink={0}
+          >
+            <text fg={theme.text}>{text()?.text}</text>
+            <Show when={files().length}>
+              <box flexDirection="row" paddingBottom={1} paddingTop={1} gap={1} flexWrap="wrap">
+                <For each={files()}>
+                  {(file) => {
+                    const bg = createMemo(() => {
+                      if (file.mime.startsWith("image/")) return theme.accent
+                      if (file.mime === "application/pdf") return theme.primary
+                      return theme.secondary
+                    })
+                    return (
+                      <text fg={theme.text}>
+                        <span style={{ bg: bg(), fg: theme.background }}> {MIME_BADGE[file.mime] ?? file.mime} </span>
+                        <span style={{ bg: theme.backgroundElement, fg: theme.textMuted }}> {file.filename} </span>
+                      </text>
+                    )
+                  }}
+                </For>
+              </box>
             </Show>
-          </text>
+            <text fg={theme.textMuted}>
+              {sync.data.config.username ?? "You"}{" "}
+              <Show
+                when={queued()}
+                fallback={<span style={{ fg: theme.textMuted }}>{Locale.time(props.message.time.created)}</span>}
+              >
+                <span style={{ bg: theme.accent, fg: theme.backgroundPanel, bold: true }}> QUEUED </span>
+              </Show>
+            </text>
+          </box>
         </box>
       </Show>
       <Show when={compaction()}>
@@ -1007,7 +1008,7 @@ function AssistantMessage(props: { message: AssistantMessage; parts: Part[]; las
         </box>
       </Show>
       <Switch>
-        <Match when={props.last && status().type !== "idle"}>
+        <Match when={props.last && status().type !== "idle" && false}>
           <box paddingLeft={3} flexDirection="row" gap={1} marginTop={1}>
             <text fg={local.agent.color(props.message.mode)}>{Locale.titlecase(props.message.mode)}</text>
             <Shimmer text={props.message.modelID} color={theme.text} />

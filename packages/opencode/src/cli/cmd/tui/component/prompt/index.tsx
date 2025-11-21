@@ -1,18 +1,8 @@
-import {
-  TextAttributes,
-  BoxRenderable,
-  TextareaRenderable,
-  MouseEvent,
-  PasteEvent,
-  t,
-  dim,
-  fg,
-  type KeyBinding,
-} from "@opentui/core"
-import { createEffect, createMemo, Match, Switch, type JSX, onMount } from "solid-js"
+import { BoxRenderable, TextareaRenderable, MouseEvent, PasteEvent, t, dim, fg, type KeyBinding } from "@opentui/core"
+import { createEffect, createMemo, type JSX, onMount, createSignal, onCleanup, Show, Switch, Match } from "solid-js"
 import { useLocal } from "@tui/context/local"
 import { useTheme } from "@tui/context/theme"
-import { SplitBorder } from "@tui/component/border"
+import { EmptyBorder } from "@tui/component/border"
 import { useSDK } from "@tui/context/sdk"
 import { useRoute } from "@tui/context/route"
 import { useSync } from "@tui/context/sync"
@@ -29,6 +19,8 @@ import { Clipboard } from "../../util/clipboard"
 import type { FilePart } from "@opencode-ai/sdk"
 import { TuiEvent } from "../../event"
 import { iife } from "@/util/iife"
+import { Locale } from "@/util/locale"
+import { Shimmer } from "../../ui/shimmer"
 
 export type PromptProps = {
   sessionID?: string
@@ -57,7 +49,7 @@ export function Prompt(props: PromptProps) {
   const sdk = useSDK()
   const route = useRoute()
   const sync = useSync()
-  const status = createMemo(() => (props.sessionID ? sync.session.status(props.sessionID) : "idle"))
+  const status = createMemo(() => sync.data.session_status[props.sessionID ?? ""] ?? { type: "idle" })
   const history = usePromptHistory()
   const command = useCommandDialog()
   const renderer = useRenderer()
@@ -222,12 +214,17 @@ export function Prompt(props: PromptProps) {
         title: "Interrupt session",
         value: "session.interrupt",
         keybind: "session_interrupt",
-        disabled: status() !== "working",
+        disabled: status().type === "idle",
         category: "Session",
         onSelect: (dialog) => {
-          if (!props.sessionID) return
           if (autocomplete.visible) return
           if (!input.focused) return
+          // TODO: this should be its own command
+          if (store.mode === "shell") {
+            setStore("mode", "normal")
+            return
+          }
+          if (!props.sessionID) return
 
           setStore("interrupt", store.interrupt + 1)
 
@@ -542,6 +539,16 @@ export function Prompt(props: PromptProps) {
     return
   }
 
+  const highlight = createMemo(() => {
+    if (keybind.leader) return theme.border
+    if (store.mode === "shell") return theme.primary
+    return local.agent.color(local.agent.current().name)
+  })
+
+  createEffect(() => {
+    renderer.setCursorColor(highlight())
+  })
+
   return (
     <>
       <Autocomplete
@@ -566,17 +573,22 @@ export function Prompt(props: PromptProps) {
       />
       <box ref={(r) => (anchor = r)}>
         <box
-          flexDirection="row"
-          {...SplitBorder}
-          borderColor={keybind.leader ? theme.accent : store.mode === "shell" ? theme.secondary : theme.border}
-          justifyContent="space-evenly"
+          border={["left"]}
+          borderColor={highlight()}
+          customBorderChars={{
+            ...EmptyBorder,
+            vertical: "┃",
+            bottomLeft: "╹",
+          }}
         >
-          <box backgroundColor={theme.backgroundElement} width={3} height="100%" alignItems="center" paddingTop={1}>
-            <text attributes={TextAttributes.BOLD} fg={theme.primary}>
-              {store.mode === "normal" ? ">" : "!"}
-            </text>
-          </box>
-          <box paddingTop={1} paddingBottom={1} backgroundColor={theme.backgroundElement} flexGrow={1}>
+          <box
+            paddingLeft={2}
+            paddingRight={1}
+            paddingTop={1}
+            flexShrink={0}
+            backgroundColor={theme.backgroundElement}
+            flexGrow={1}
+          >
             <textarea
               placeholder={
                 props.showPlaceholder
@@ -751,35 +763,114 @@ export function Prompt(props: PromptProps) {
               cursorColor={theme.primary}
               syntaxStyle={syntax()}
             />
+            <box flexDirection="row" flexShrink={0} paddingTop={1} gap={1}>
+              <text fg={highlight()}>
+                {store.mode === "shell" ? "Shell" : Locale.titlecase(local.agent.current().name)}{" "}
+              </text>
+              <Show when={store.mode === "normal"}>
+                <box flexDirection="row" gap={1}>
+                  <text fg={theme.textMuted}>{local.model.parsed().provider}</text>
+                  <text flexShrink={0} fg={theme.text}>
+                    {local.model.parsed().model}
+                  </text>
+                </box>
+              </Show>
+            </box>
           </box>
-          <box backgroundColor={theme.backgroundElement} width={1} justifyContent="center" alignItems="center"></box>
+        </box>
+        <box
+          height={1}
+          border={["left"]}
+          borderColor={highlight()}
+          customBorderChars={{
+            ...EmptyBorder,
+            vertical: "╹",
+          }}
+        >
+          <box
+            height={1}
+            border={["bottom"]}
+            borderColor={theme.backgroundElement}
+            customBorderChars={{
+              ...EmptyBorder,
+              horizontal: "▀",
+            }}
+          />
         </box>
         <box flexDirection="row" justifyContent="space-between">
-          <text flexShrink={0} wrapMode="none" fg={theme.text}>
-            <span style={{ fg: theme.textMuted }}>{local.model.parsed().provider}</span>{" "}
-            <span style={{ bold: true }}>{local.model.parsed().model}</span>
-          </text>
-          <Switch>
-            <Match when={status() === "compacting"}>
-              <text fg={theme.textMuted}>compacting...</text>
-            </Match>
-            <Match when={status() === "working"}>
-              <box flexDirection="row" gap={1}>
-                <text fg={store.interrupt > 0 ? theme.primary : theme.text}>
-                  esc{" "}
-                  <span style={{ fg: store.interrupt > 0 ? theme.primary : theme.textMuted }}>
-                    {store.interrupt > 0 ? "again to interrupt" : "interrupt"}
-                  </span>
-                </text>
+          <Show when={status().type !== "idle"} fallback={<text />}>
+            <box
+              flexDirection="row"
+              gap={1}
+              flexGrow={1}
+              justifyContent={status().type === "retry" ? "space-between" : "flex-start"}
+            >
+              <box flexShrink={0} flexDirection="row" gap={1}>
+                <Shimmer text="Working" color={theme.text} />
+                <box flexDirection="row" gap={1} flexShrink={0}>
+                  {(() => {
+                    const retry = createMemo(() => {
+                      const s = status()
+                      if (s.type !== "retry") return
+                      return s
+                    })
+                    const message = createMemo(() => {
+                      const r = retry()
+                      if (!r) return
+                      if (r.message.includes("exceeded your current quota") && r.message.includes("gemini"))
+                        return "gemini 3 way too hot right now"
+                      if (r.message.length > 50) return r.message.slice(0, 50) + "..."
+                      return r.message
+                    })
+                    const [seconds, setSeconds] = createSignal(0)
+                    onMount(() => {
+                      const timer = setInterval(() => {
+                        const next = retry()?.next
+                        if (next) setSeconds(Math.round((next - Date.now()) / 1000))
+                      }, 1000)
+
+                      onCleanup(() => {
+                        clearInterval(timer)
+                      })
+                    })
+                    return (
+                      <Show when={retry()}>
+                        <text fg={theme.error}>
+                          {message()} [retrying {seconds() > 0 ? `in ${seconds()}s ` : ""}
+                          attempt #{retry()!.attempt}]
+                        </text>
+                      </Show>
+                    )
+                  })()}
+                </box>
               </box>
-            </Match>
-            <Match when={props.hint}>{props.hint!}</Match>
-            <Match when={true}>
-              <text fg={theme.text}>
-                {keybind.print("command_list")} <span style={{ fg: theme.textMuted }}>commands</span>
+              <text fg={store.interrupt > 0 ? theme.primary : theme.text}>
+                esc{" "}
+                <span style={{ fg: store.interrupt > 0 ? theme.primary : theme.textMuted }}>
+                  {store.interrupt > 0 ? "again to interrupt" : "interrupt"}
+                </span>
               </text>
-            </Match>
-          </Switch>
+            </box>
+          </Show>
+          <Show when={status().type !== "retry"}>
+            <box gap={2} flexDirection="row">
+              <Switch>
+                <Match when={store.mode === "normal"}>
+                  <text fg={theme.text}>
+                    {keybind.print("agent_cycle")} <span style={{ fg: theme.textMuted }}>switch agent</span>
+                  </text>
+                  <text fg={theme.text}>
+                    {keybind.print("command_list")} <span style={{ fg: theme.textMuted }}>commands</span>
+                  </text>
+                </Match>
+                <Match when={store.mode === "shell"}>
+                  <text fg={theme.text}>
+                    esc <span style={{ fg: theme.textMuted }}>exit shell mode</span>
+                  </text>
+                </Match>
+              </Switch>
+            </box>
+          </Show>
         </box>
       </box>
     </>
