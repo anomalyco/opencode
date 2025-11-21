@@ -245,6 +245,15 @@ export namespace Provider {
       const config = await Config.get()
       const database = await ModelsDev.get()
 
+      const disabled = new Set(config.disabled_providers ?? [])
+      const enabled = config.enabled_providers ? new Set(config.enabled_providers) : null
+
+      function isProviderAllowed(providerID: string): boolean {
+        if (enabled && !enabled.has(providerID)) return false
+        if (disabled.has(providerID)) return false
+        return true
+      }
+
       const providers: {
         [providerID: string]: {
           source: Source
@@ -264,7 +273,7 @@ export namespace Provider {
         }
       >()
       const sdk = new Map<number, SDK>()
-      // Maps `${provider}/${key}` to the provider’s actual model ID for custom aliases.
+      // Maps `${provider}/${key}` to the provider's actual model ID for custom aliases.
       const realIdByKey = new Map<string, string>()
 
       log.info("init")
@@ -367,7 +376,6 @@ export namespace Provider {
         database[providerID] = parsed
       }
 
-      const disabled = await Config.get().then((cfg) => new Set(cfg.disabled_providers ?? []))
       // load env
       for (const [providerID, provider] of Object.entries(database)) {
         if (disabled.has(providerID)) continue
@@ -454,6 +462,12 @@ export namespace Provider {
       }
 
       for (const [providerID, provider] of Object.entries(providers)) {
+        if (!isProviderAllowed(providerID)) {
+          delete providers[providerID]
+          continue
+        }
+
+        const configProvider = config.provider?.[providerID]
         const filteredModels = Object.fromEntries(
           Object.entries(provider.info.models)
             // Filter out blacklisted models
@@ -466,7 +480,16 @@ export namespace Provider {
               ([, model]) =>
                 ((!model.experimental && model.status !== "alpha") || Flag.OPENCODE_ENABLE_EXPERIMENTAL_MODELS) &&
                 model.status !== "deprecated",
-            ),
+            )
+            // Filter by provider's whitelist/blacklist from config
+            .filter(([modelID]) => {
+              if (!configProvider) return true
+
+              return (
+                (!configProvider.blacklist || !configProvider.blacklist.includes(modelID)) &&
+                (!configProvider.whitelist || configProvider.whitelist.includes(modelID))
+              )
+            }),
         )
         provider.info.models = filteredModels
 
