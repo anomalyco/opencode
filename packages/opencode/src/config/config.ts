@@ -482,6 +482,10 @@ export namespace Config {
         .describe("@deprecated Use 'share' field instead. Share newly created sessions automatically"),
       autoupdate: z.boolean().optional().describe("Automatically update to the latest version"),
       disabled_providers: z.array(z.string()).optional().describe("Disable providers that are loaded automatically"),
+      enabled_providers: z
+        .array(z.string())
+        .optional()
+        .describe("When set, ONLY these providers will be enabled. All other providers will be ignored"),
       model: z.string().describe("Model to use in the format of provider/model, eg anthropic/claude-2").optional(),
       small_model: z
         .string()
@@ -513,6 +517,8 @@ export namespace Config {
           z.string(),
           ModelsDev.Provider.partial()
             .extend({
+              whitelist: z.array(z.string()).optional(),
+              blacklist: z.array(z.string()).optional(),
               models: z.record(z.string(), ModelsDev.Model.partial()).optional(),
               options: z
                 .object({
