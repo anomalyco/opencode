@@ -185,8 +185,8 @@ download_and_install() {
     print_message info "\n${MUTED}Installing ${NC}opencode ${MUTED}version: ${NC}$specific_version"
     mkdir -p opencodetmp && cd opencodetmp
     
-    if ! download_with_progress "$url" "$filename"; then
-        # Fallback to standard curl if custom fails for some reason
+    if [[ "$os" == "windows" ]] || ! download_with_progress "$url" "$filename"; then
+        # Fallback to standard curl on Windows or if custom progress fails
         curl -# -L -o "$filename" "$url"
     fi
 
