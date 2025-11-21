@@ -7,8 +7,31 @@ import { MessageV2 } from "../session/message-v2"
 import { Identifier } from "../id/id"
 import { Agent } from "../agent/agent"
 import { SessionPrompt } from "../session/prompt"
+import { Provider } from "../provider/provider"
 import { iife } from "@/util/iife"
 import { defer } from "@/util/defer"
+
+function aggregateTokensAndCost(messages: MessageV2.WithParts[]) {
+  let tokens = {
+    input: 0,
+    output: 0,
+    reasoning: 0,
+    cache: { read: 0, write: 0 },
+  }
+  let cost = 0
+  for (const msg of messages) {
+    if (msg.info.role !== "assistant") continue
+    const info = msg.info as MessageV2.Assistant
+    tokens = {
+      input: info.tokens.input,
+      output: info.tokens.output,
+      reasoning: info.tokens.reasoning,
+      cache: { read: info.tokens.cache.read, write: info.tokens.cache.write },
+    }
+    cost += info.cost
+  }
+  return { tokens, cost }
+}
 
 export const TaskTool = Tool.define("task", async () => {
   const agents = await Agent.list().then((x) => x.filter((a) => a.mode !== "primary"))
@@ -31,7 +54,7 @@ export const TaskTool = Tool.define("task", async () => {
       if (!agent) throw new Error(`Unknown agent type: ${params.subagent_type} is not a valid agent type`)
       const session = await iife(async () => {
         if (params.session_id) {
-          const found = await Session.get(params.session_id).catch(() => {})
+          const found = await Session.get(params.session_id).catch(() => { })
           if (found) return found
         }
 
@@ -94,13 +117,53 @@ export const TaskTool = Tool.define("task", async () => {
         parts: promptParts,
       })
       unsub()
-      let all
-      all = await Session.messages({ sessionID: session.id })
-      all = all.filter((x) => x.info.role === "assistant")
-      all = all.flatMap((msg) => msg.parts.filter((x: any) => x.type === "tool") as MessageV2.ToolPart[])
+
+      const subagentMessages = await Session.messages({ sessionID: session.id })
+      const aggregated = aggregateTokensAndCost(subagentMessages)
+      const modelInfo = await Provider.getModel(model.providerID, model.modelID)
+      const contextLimit = modelInfo.info.limit.context
+      const t = aggregated.tokens
+      const total = t.input + t.output + t.reasoning + t.cache.read + t.cache.write
+      const contextPercentage = contextLimit > 0 ? Math.round((total / contextLimit) * 100) : 0
+      const parentMsg = await MessageV2.get({ sessionID: ctx.sessionID, messageID: ctx.messageID })
+      if (parentMsg.info.role === "assistant") {
+        const assistant = parentMsg.info
+        await Session.updateMessage({
+          ...assistant,
+          tokens: {
+            input: assistant.tokens.input + aggregated.tokens.input,
+            output: assistant.tokens.output + aggregated.tokens.output,
+            reasoning: assistant.tokens.reasoning + aggregated.tokens.reasoning,
+            cache: {
+              read: assistant.tokens.cache.read + aggregated.tokens.cache.read,
+              write: assistant.tokens.cache.write + aggregated.tokens.cache.write,
+            },
+          },
+          cost: assistant.cost + aggregated.cost,
+        })
+      }
+
+      const all = subagentMessages
+        .filter((x) => x.info.role === "assistant")
+        .flatMap((m) => m.parts.filter((x: any) => x.type === "tool") as MessageV2.ToolPart[])
       const text = result.parts.findLast((x) => x.type === "text")?.text ?? ""
 
-      const output = text + "\n\n" + ["<task_metadata>", `session_id: ${session.id}`, "</task_metadata>"].join("\n")
+      const output =
+        text +
+        "\n\n" +
+        [
+          "<task_metadata>",
+          `session_id: ${session.id}`,
+          `tokens_input: ${aggregated.tokens.input}`,
+          `tokens_output: ${aggregated.tokens.output}`,
+          `tokens_reasoning: ${aggregated.tokens.reasoning}`,
+          `tokens_cache_read: ${aggregated.tokens.cache.read}`,
+          `tokens_cache_write: ${aggregated.tokens.cache.write}`,
+          `cost: ${aggregated.cost}`,
+          `context_limit: ${contextLimit}`,
+          `context_percentage: ${contextPercentage}`,
+          "</task_metadata>",
+        ].join("\n")
 
       return {
         title: params.description,
