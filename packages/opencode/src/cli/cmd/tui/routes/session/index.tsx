@@ -54,6 +54,7 @@ import { DialogMessage } from "./dialog-message"
 import type { PromptInfo } from "../../component/prompt/history"
 import { iife } from "@/util/iife"
 import { DialogConfirm } from "@tui/ui/dialog-confirm"
+import { DialogPrompt } from "@tui/ui/dialog-prompt"
 import { DialogTimeline } from "./dialog-timeline"
 import { DialogSessionRename } from "../../component/dialog-session-rename"
 import { Sidebar } from "./sidebar"
@@ -105,11 +106,6 @@ export function Session() {
     return messages().findLast((x) => x.role === "assistant" && !x.time.completed)?.id
   })
 
-  const lastUserMessage = createMemo(() => {
-    const p = pending()
-    return messages().findLast((x) => x.role === "user" && (!p || x.id < p)) as UserMessage
-  })
-
   const dimensions = useTerminalDimensions()
   const [sidebar, setSidebar] = createSignal<"show" | "hide" | "auto">(kv.get("sidebar", "auto"))
   const [conceal, setConceal] = createSignal(true)
@@ -146,8 +142,28 @@ export function Session() {
   })
 
   const toast = useToast()
-
   const sdk = useSDK()
+
+  // Auto-navigate to whichever session currently needs permission input
+  createEffect(() => {
+    const currentSession = session()
+    const currentPermissions = permissions()
+    let targetID = currentPermissions.length > 0 ? currentSession.id : undefined
+
+    if (!targetID) {
+      const child = sync.data.session.find(
+        (x) => x.parentID === currentSession.id && (sync.data.permission[x.id]?.length ?? 0) > 0,
+      )
+      if (child) targetID = child.id
+    }
+
+    if (targetID && targetID !== currentSession.id) {
+      navigate({
+        type: "session",
+        sessionID: targetID,
+      })
+    }
+  })
 
   let scroll: ScrollBoxRenderable
   let prompt: PromptRef
@@ -583,12 +599,19 @@ export function Session() {
             transcript += `---\n\n`
           }
 
-          // Save to file in data directory
-          const exportDir = path.join(Global.Path.data, "exports")
-          await fs.mkdir(exportDir, { recursive: true })
+          // Prompt for optional filename
+          const customFilename = await DialogPrompt.show(
+            dialog,
+            "Export filename",
+            `session-${sessionData.id.slice(0, 8)}.md`,
+          )
 
-          const timestamp = new Date().toISOString().replace(/[:.]/g, "-")
-          const filename = `session-${sessionData.id.slice(0, 8)}-${timestamp}.md`
+          // Cancel if user pressed escape
+          if (customFilename === null) return
+
+          // Save to file in current working directory
+          const exportDir = process.cwd()
+          const filename = customFilename.trim()
           const filepath = path.join(exportDir, filename)
 
           await Bun.write(filepath, transcript)
@@ -982,59 +1005,62 @@ function AssistantMessage(props: { message: AssistantMessage; parts: Part[]; las
           <text fg={theme.textMuted}>{props.message.error?.data.message}</text>
         </box>
       </Show>
-      <Show when={props.last && status().type !== "idle"}>
-        <box paddingLeft={3} flexDirection="row" gap={1} marginTop={1}>
-          <text fg={local.agent.color(props.message.mode)}>{Locale.titlecase(props.message.mode)}</text>
-          <Shimmer text={props.message.modelID} color={theme.text} />
-          {(() => {
-            const retry = createMemo(() => {
-              const s = status()
-              if (s.type !== "retry") return
-              return s
-            })
-            const message = createMemo(() => {
-              const r = retry()
-              if (!r) return
-              if (r.message.includes("exceeded your current quota") && r.message.includes("gemini"))
-                return "gemini 3 way too hot right now"
-              if (r.message.length > 50) return r.message.slice(0, 50) + "..."
-              return r.message
-            })
-            const [seconds, setSeconds] = createSignal(0)
-            onMount(() => {
-              const timer = setInterval(() => {
-                const next = retry()?.next
-                if (next) setSeconds(Math.round((next - Date.now()) / 1000))
-              }, 1000)
-
-              onCleanup(() => {
-                clearInterval(timer)
+      <Switch>
+        <Match when={props.last && status().type !== "idle"}>
+          <box paddingLeft={3} flexDirection="row" gap={1} marginTop={1}>
+            <text fg={local.agent.color(props.message.mode)}>{Locale.titlecase(props.message.mode)}</text>
+            <Shimmer text={props.message.modelID} color={theme.text} />
+            {(() => {
+              const retry = createMemo(() => {
+                const s = status()
+                if (s.type !== "retry") return
+                return s
               })
-            })
-            return (
-              <Show when={retry()}>
-                <text fg={theme.error}>
-                  {message()} [retrying {seconds() > 0 ? `in ${seconds()}s ` : ""}
-                  attempt #{retry()!.attempt}]
-                </text>
-              </Show>
-            )
-          })()}
-        </box>
-      </Show>
-      <Show
-        when={
-          props.message.time.completed &&
-          props.parts.some((item) => item.type === "step-finish" && item.reason !== "tool-calls")
-        }
-      >
-        <box paddingLeft={3}>
-          <text marginTop={1}>
-            <span style={{ fg: local.agent.color(props.message.mode) }}>{Locale.titlecase(props.message.mode)}</span>{" "}
-            <span style={{ fg: theme.textMuted }}>{props.message.modelID}</span>
-          </text>
-        </box>
-      </Show>
+              const message = createMemo(() => {
+                const r = retry()
+                if (!r) return
+                if (r.message.includes("exceeded your current quota") && r.message.includes("gemini"))
+                  return "gemini 3 way too hot right now"
+                if (r.message.length > 50) return r.message.slice(0, 50) + "..."
+                return r.message
+              })
+              const [seconds, setSeconds] = createSignal(0)
+              onMount(() => {
+                const timer = setInterval(() => {
+                  const next = retry()?.next
+                  if (next) setSeconds(Math.round((next - Date.now()) / 1000))
+                }, 1000)
+
+                onCleanup(() => {
+                  clearInterval(timer)
+                })
+              })
+              return (
+                <Show when={retry()}>
+                  <text fg={theme.error}>
+                    {message()} [retrying {seconds() > 0 ? `in ${seconds()}s ` : ""}
+                    attempt #{retry()!.attempt}]
+                  </text>
+                </Show>
+              )
+            })()}
+          </box>
+        </Match>
+        <Match
+          when={
+            (props.message.time.completed &&
+              props.parts.some((item) => item.type === "step-finish" && item.reason !== "tool-calls")) ||
+            props.last
+          }
+        >
+          <box paddingLeft={3}>
+            <text marginTop={1}>
+              <span style={{ fg: local.agent.color(props.message.mode) }}>{Locale.titlecase(props.message.mode)}</span>{" "}
+              <span style={{ fg: theme.textMuted }}>{props.message.modelID}</span>
+            </text>
+          </box>
+        </Match>
+      </Switch>
     </>
   )
 }

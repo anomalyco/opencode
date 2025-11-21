@@ -38,7 +38,9 @@ export function Toast() {
               {current().title}
             </text>
           </Show>
-          <text fg={theme.text}>{current().message}</text>
+          <text fg={theme.text} wrapMode="word" width="100%">
+            {current().message}
+          </text>
         </box>
       )}
     </Show>

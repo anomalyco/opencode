@@ -468,7 +468,14 @@ export namespace Provider {
         delete providers[providerID]
         continue
       }
-      log.info("found", { providerID })
+
+      // TODO: set this in models.dev, not set due to breaking issues on older OC versions
+      // u have to set include usage to true w/ this provider, setting in models.dev would cause undefined issue when accessing usage in older versions
+      if (providerID === "openrouter") {
+        provider.info.npm = "@openrouter/ai-sdk-provider"
+      }
+
+      log.info("found", { providerID, npm: provider.info.npm })
     }
 
     return {
@@ -494,6 +501,7 @@ export namespace Provider {
       if (pkg.includes("@ai-sdk/openai-compatible") && options["includeUsage"] === undefined) {
         options["includeUsage"] = true
       }
+
       const key = Bun.hash.xxHash32(JSON.stringify({ pkg, options }))
       const existing = s.sdk.get(key)
       if (existing) return existing
@@ -515,26 +523,29 @@ export namespace Provider {
       const modPath =
         provider.id === "google-vertex-anthropic" ? `${installedPath}/dist/anthropic/index.mjs` : installedPath
       const mod = await import(modPath)
-      if (options["timeout"] !== undefined && options["timeout"] !== null) {
-        // Preserve custom fetch if it exists, wrap it with timeout logic
-        const customFetch = options["fetch"]
-        options["fetch"] = async (input: any, init?: BunFetchRequestInit) => {
-          const { signal, ...rest } = init ?? {}
 
+      const customFetch = options["fetch"]
+
+      options["fetch"] = async (input: any, init?: BunFetchRequestInit) => {
+        // Preserve custom fetch if it exists, wrap it with timeout logic
+        const fetchFn = customFetch ?? fetch
+        const opts = init ?? {}
+
+        if (options["timeout"] !== undefined && options["timeout"] !== null) {
           const signals: AbortSignal[] = []
-          if (signal) signals.push(signal)
+          if (opts.signal) signals.push(opts.signal)
           if (options["timeout"] !== false) signals.push(AbortSignal.timeout(options["timeout"]))
 
           const combined = signals.length > 1 ? AbortSignal.any(signals) : signals[0]
 
-          const fetchFn = customFetch ?? fetch
-          return fetchFn(input, {
-            ...rest,
-            signal: combined,
-            // @ts-ignore see here: https://github.com/oven-sh/bun/issues/16682
-            timeout: false,
-          })
+          opts.signal = combined
         }
+
+        return fetchFn(input, {
+          ...opts,
+          // @ts-ignore see here: https://github.com/oven-sh/bun/issues/16682
+          timeout: false,
+        })
       }
       const fn = mod[Object.keys(mod).find((key) => key.startsWith("create"))!]
       const loaded = fn({
