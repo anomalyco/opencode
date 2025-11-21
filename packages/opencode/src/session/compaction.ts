@@ -92,6 +92,7 @@ export namespace SessionCompaction {
       providerID: string
       modelID: string
     }
+    agent: string
     abort: AbortSignal
   }) {
     const model = await Provider.getModel(input.model.providerID, input.model.modelID)
@@ -101,7 +102,7 @@ export namespace SessionCompaction {
       role: "assistant",
       parentID: input.parentID,
       sessionID: input.sessionID,
-      mode: "build",
+      mode: input.agent,
       summary: true,
       path: {
         cwd: Instance.directory,
@@ -199,7 +200,7 @@ export namespace SessionCompaction {
         time: {
           created: Date.now(),
         },
-        agent: "build",
+        agent: input.agent,
         model: input.model,
       })
       await Session.updatePart({
@@ -222,6 +223,7 @@ export namespace SessionCompaction {
   export const create = fn(
     z.object({
       sessionID: Identifier.schema("session"),
+      agent: z.string(),
       model: z.object({
         providerID: z.string(),
         modelID: z.string(),
@@ -233,7 +235,7 @@ export namespace SessionCompaction {
         role: "user",
         model: input.model,
         sessionID: input.sessionID,
-        agent: "build",
+        agent: input.agent,
         time: {
           created: Date.now(),
         },

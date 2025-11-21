@@ -49,6 +49,9 @@ import { SessionProcessor } from "./processor"
 import { TaskTool } from "@/tool/task"
 import { SessionStatus } from "./status"
 
+// @ts-ignore
+globalThis.AI_SDK_LOG_WARNINGS = false
+
 export namespace SessionPrompt {
   const log = Log.create({ service: "session.prompt" })
   export const OUTPUT_TOKEN_MAX = 32_000
@@ -239,6 +242,7 @@ export namespace SessionPrompt {
 
     let step = 0
     while (true) {
+      SessionStatus.set(sessionID, { type: "busy" })
       log.info("loop", { step, sessionID })
       if (abort.aborted) break
       let msgs = await MessageV2.filterCompacted(MessageV2.stream(sessionID))
@@ -394,6 +398,7 @@ export namespace SessionPrompt {
           messages: msgs,
           parentID: lastUser.id,
           abort,
+          agent: lastUser.agent,
           model: {
             providerID: model.providerID,
             modelID: model.modelID,
@@ -412,6 +417,7 @@ export namespace SessionPrompt {
       ) {
         await SessionCompaction.create({
           sessionID,
+          agent: lastUser.agent,
           model: lastUser.model,
         })
         continue

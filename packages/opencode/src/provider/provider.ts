@@ -1,5 +1,5 @@
 import z from "zod"
-import path from "path"
+import fuzzysort from "fuzzysort"
 import { Config } from "../config/config"
 import { mergeDeep, sortBy } from "remeda"
 import { NoSuchModelError, type LanguageModel, type Provider as SDK } from "ai"
@@ -10,7 +10,6 @@ import { ModelsDev } from "./models"
 import { NamedError } from "../util/error"
 import { Auth } from "../auth"
 import { Instance } from "../project/instance"
-import { Global } from "../global"
 import { Flag } from "../flag/flag"
 import { iife } from "@/util/iife"
 
@@ -243,6 +242,15 @@ export namespace Provider {
     const config = await Config.get()
     const database = await ModelsDev.get()
 
+    const disabled = new Set(config.disabled_providers ?? [])
+    const enabled = config.enabled_providers ? new Set(config.enabled_providers) : null
+
+    function isProviderAllowed(providerID: string): boolean {
+      if (enabled && !enabled.has(providerID)) return false
+      if (disabled.has(providerID)) return false
+      return true
+    }
+
     const providers: {
       [providerID: string]: {
         source: Source
@@ -367,10 +375,10 @@ export namespace Provider {
         }
         parsed.models[modelID] = parsedModel
       }
+
       database[providerID] = parsed
     }
 
-    const disabled = await Config.get().then((cfg) => new Set(cfg.disabled_providers ?? []))
     // load env
     for (const [providerID, provider] of Object.entries(database)) {
       if (disabled.has(providerID)) continue
@@ -448,6 +456,12 @@ export namespace Provider {
     }
 
     for (const [providerID, provider] of Object.entries(providers)) {
+      if (!isProviderAllowed(providerID)) {
+        delete providers[providerID]
+        continue
+      }
+
+      const configProvider = config.provider?.[providerID]
       const filteredModels = Object.fromEntries(
         Object.entries(provider.info.models)
           // Filter out blacklisted models
@@ -460,8 +474,18 @@ export namespace Provider {
             ([, model]) =>
               ((!model.experimental && model.status !== "alpha") || Flag.OPENCODE_ENABLE_EXPERIMENTAL_MODELS) &&
               model.status !== "deprecated",
-          ),
+          )
+          // Filter by provider's whitelist/blacklist from config
+          .filter(([modelID]) => {
+            if (!configProvider) return true
+
+            return (
+              (!configProvider.blacklist || !configProvider.blacklist.includes(modelID)) &&
+              (!configProvider.whitelist || configProvider.whitelist.includes(modelID))
+            )
+          }),
       )
+
       provider.info.models = filteredModels
 
       if (Object.keys(provider.info.models).length === 0) {
@@ -574,9 +598,21 @@ export namespace Provider {
     })
 
     const provider = s.providers[providerID]
-    if (!provider) throw new ModelNotFoundError({ providerID, modelID })
+    if (!provider) {
+      const availableProviders = Object.keys(s.providers)
+      const matches = fuzzysort.go(providerID, availableProviders, { limit: 3, threshold: -10000 })
+      const suggestions = matches.map((m) => m.target)
+      throw new ModelNotFoundError({ providerID, modelID, suggestions })
+    }
+
     const info = provider.info.models[modelID]
-    if (!info) throw new ModelNotFoundError({ providerID, modelID })
+    if (!info) {
+      const availableModels = Object.keys(provider.info.models)
+      const matches = fuzzysort.go(modelID, availableModels, { limit: 3, threshold: -10000 })
+      const suggestions = matches.map((m) => m.target)
+      throw new ModelNotFoundError({ providerID, modelID, suggestions })
+    }
+
     const sdk = await getSDK(provider.info, info)
 
     try {
@@ -677,6 +713,7 @@ export namespace Provider {
     z.object({
       providerID: z.string(),
       modelID: z.string(),
+      suggestions: z.array(z.string()).optional(),
     }),
   )
 
