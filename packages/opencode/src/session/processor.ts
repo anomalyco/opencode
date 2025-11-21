@@ -14,6 +14,16 @@ import { SessionStatus } from "./status"
 
 export namespace SessionProcessor {
   const DOOM_LOOP_THRESHOLD = 3
+  const NO_RESPONSE_PATTERNS = new Set([
+    "No response requested.",
+    "No response requested",
+    "No response needed.",
+    "No response needed",
+    "No response required.",
+    "No response required",
+    "No response.",
+    "No response",
+  ])
   const log = Log.create({ service: "session.processor" })
 
   export type Info = Awaited<ReturnType<typeof create>>
@@ -313,6 +323,15 @@ export namespace SessionProcessor {
                       end: Date.now(),
                     }
                     if (value.providerMetadata) currentText.metadata = value.providerMetadata
+
+                    // Treat no-response messages as if reasoning ended
+                    if (NO_RESPONSE_PATTERNS.has(currentText.text)) {
+                      log.info("no-response detected, ending processing")
+                      input.assistantMessage.time.completed = Date.now()
+                      await Session.updateMessage(input.assistantMessage)
+                      return
+                    }
+
                     await Session.updatePart(currentText)
                   }
                   currentText = undefined
