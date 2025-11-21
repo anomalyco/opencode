@@ -94,9 +94,9 @@ check_version() {
 }
 
 unbuffered_sed() {
-    if echo | sed -u >/dev/null 2>&1; then
+    if echo | sed -u -e "" >/dev/null 2>&1; then
         sed -nu "$@"
-    elif echo | sed -l >/dev/null 2>&1; then
+    elif echo | sed -l -e "" >/dev/null 2>&1; then
         sed -nl "$@"
     else
         local pad="$(printf "\n%512s" "")"
@@ -158,6 +158,7 @@ download_with_progress() {
         local bytes=0
         
         while IFS=" " read -r -a line; do
+            [ "${#line[@]}" -lt 2 ] && continue
             local tag="${line[0]} ${line[1]}"
             
             if [ "$tag" = "0000: content-length:" ]; then
