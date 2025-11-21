@@ -144,6 +144,53 @@ export function Session() {
   const toast = useToast()
   const sdk = useSDK()
 
+  const status = createMemo(
+    () =>
+      sync.data.session_status[route.sessionID] ?? {
+        type: "idle" as const,
+      },
+  )
+
+  const [prevStatusType, setPrevStatusType] = createSignal(status().type)
+  const [prevPermissionCount, setPrevPermissionCount] = createSignal(permissions().length)
+
+  createEffect(
+    on(
+      () => route.sessionID,
+      () => {
+        setPrevStatusType(status().type)
+        setPrevPermissionCount(permissions().length)
+      },
+    ),
+  )
+
+  createEffect(() => {
+    const current = status().type
+    const previous = prevStatusType()
+
+    if (previous !== "idle" && current === "idle") {
+      toast.show({
+        title: "Agent finished",
+        message: "Session is now idle",
+        variant: "info",
+      })
+    }
+    setPrevStatusType(current)
+  })
+
+  createEffect(() => {
+    const current = permissions().length
+    const previous = prevPermissionCount()
+    if (previous === 0 && current > 0) {
+      toast.show({
+        title: "Permission required",
+        message: "Review and approve requested actions",
+        variant: "warning",
+      })
+    }
+    setPrevPermissionCount(current)
+  })
+
   // Auto-navigate to whichever session currently needs permission input
   createEffect(() => {
     const currentSession = session()
@@ -665,20 +712,24 @@ export function Session() {
       if (!diffText) return []
 
       try {
-        const patches = parsePatch(diffText)
+        const patches = parsePatch(diffText) as Array<{
+          newFileName?: string
+          oldFileName?: string
+          hunks: Array<{
+            lines: string[]
+          }>
+        }>
         return patches.map((patch) => {
           const filename = patch.newFileName || patch.oldFileName || "unknown"
           const cleanFilename = filename.replace(/^[ab]\//, "")
           return {
             filename: cleanFilename,
-            additions: patch.hunks.reduce(
-              (sum, hunk) => sum + hunk.lines.filter((line) => line.startsWith("+")).length,
-              0,
-            ),
-            deletions: patch.hunks.reduce(
-              (sum, hunk) => sum + hunk.lines.filter((line) => line.startsWith("-")).length,
-              0,
-            ),
+            additions: patch.hunks.reduce((sum, hunk) => {
+              return sum + hunk.lines.filter((line) => line.startsWith("+")).length
+            }, 0),
+            deletions: patch.hunks.reduce((sum, hunk) => {
+              return sum + hunk.lines.filter((line) => line.startsWith("-")).length
+            }, 0),
           }
         })
       } catch (error) {

@@ -107,10 +107,10 @@ export function tui(input: { url: string; args: Args; onExit?: () => Promise<voi
             <ArgsProvider {...input.args}>
               <ExitProvider onExit={onExit}>
                 <KVProvider>
-                  <ToastProvider>
-                    <RouteProvider>
-                      <SDKProvider url={input.url}>
-                        <SyncProvider>
+                  <RouteProvider>
+                    <SDKProvider url={input.url}>
+                      <SyncProvider>
+                        <ToastProvider>
                           <ThemeProvider mode={mode}>
                             <LocalProvider>
                               <KeybindProvider>
@@ -124,10 +124,10 @@ export function tui(input: { url: string; args: Args; onExit?: () => Promise<voi
                               </KeybindProvider>
                             </LocalProvider>
                           </ThemeProvider>
-                        </SyncProvider>
-                      </SDKProvider>
-                    </RouteProvider>
-                  </ToastProvider>
+                        </ToastProvider>
+                      </SyncProvider>
+                    </SDKProvider>
+                  </RouteProvider>
                 </KVProvider>
               </ExitProvider>
             </ArgsProvider>

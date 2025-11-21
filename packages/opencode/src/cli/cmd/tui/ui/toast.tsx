@@ -1,11 +1,13 @@
 import { createContext, useContext, type ParentProps, Show } from "solid-js"
 import { createStore } from "solid-js/store"
 import { useTheme } from "@tui/context/theme"
+import { useSync } from "@tui/context/sync"
 import { useTerminalDimensions } from "@opentui/solid"
 import { SplitBorder } from "../component/border"
 import { TextAttributes } from "@opentui/core"
 import z from "zod"
 import { TuiEvent } from "../event"
+import { osc9 } from "../util/osc"
 
 export type ToastOptions = z.infer<typeof TuiEvent.ToastShow.properties>
 
@@ -51,14 +53,24 @@ function init() {
   const [store, setStore] = createStore({
     currentToast: null as ToastOptions | null,
   })
+  const sync = useSync()
 
-  let timeoutHandle: NodeJS.Timeout | null = null
+  let timeoutHandle: ReturnType<typeof setTimeout> | null = null
+
+  const sendDesktopNotification = (summary: string) => {
+    const config = sync.data.config as { tui?: { notifications?: { desktop?: boolean } } }
+    const enabled = config.tui?.notifications?.desktop ?? true
+    if (!enabled) return
+
+    osc9(summary)
+  }
 
   const toast = {
     show(options: ToastOptions) {
       const parsedOptions = TuiEvent.ToastShow.properties.parse(options)
       const { duration, ...currentToast } = parsedOptions
       setStore("currentToast", currentToast)
+      sendDesktopNotification(parsedOptions.title ?? "Notification")
       if (timeoutHandle) clearTimeout(timeoutHandle)
       timeoutHandle = setTimeout(() => {
         setStore("currentToast", null)
