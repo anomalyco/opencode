@@ -140,8 +140,8 @@ function resolveTheme(theme: ThemeJson, mode: "dark" | "light") {
 
       if (defs[c]) {
         return resolveColor(defs[c])
-      } else if (theme.theme[c as keyof Theme]) {
-        return resolveColor(theme.theme[c as keyof Theme])
+      } else if (theme.theme[c as keyof Theme] !== undefined) {
+        return resolveColor(theme.theme[c as keyof Theme]!)
       } else {
         throw new Error(`Color reference "${c}" not found in defs or theme`)
       }
@@ -150,14 +150,19 @@ function resolveTheme(theme: ThemeJson, mode: "dark" | "light") {
   }
 
   const resolved = Object.fromEntries(
-    Object.entries(theme.theme).map(([key, value]) => {
-      return [key, resolveColor(value)]
-    }),
+    Object.entries(theme.theme)
+      .filter(([key]) => key !== "primaryText")
+      .map(([key, value]) => {
+        return [key, resolveColor(value)]
+      }),
   ) as Partial<Theme>
 
-  // Backward compatibility: if primaryText is not defined, use background color
-  // This preserves the current behavior for all existing themes
-  if (!theme.theme.primaryText) {
+  // Handle primaryText separately since it's optional
+  if (theme.theme.primaryText !== undefined) {
+    resolved.primaryText = resolveColor(theme.theme.primaryText)
+  } else {
+    // Backward compatibility: if primaryText is not defined, use background color
+    // This preserves the current behavior for all existing themes
     resolved.primaryText = resolved.background
   }
 
