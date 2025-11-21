@@ -1310,7 +1310,10 @@ ToolRegistry.register<typeof WriteTool>({
   container: "block",
   render(props) {
     const { theme, syntax } = useTheme()
-    const lines = createMemo(() => props.input.content?.split("\n") ?? [], [] as string[])
+    const lines = createMemo(
+      () => (typeof props.input.content === "string" ? props.input.content.split("\n") : []),
+      [] as string[],
+    )
     const code = createMemo(() => {
       if (!props.input.content) return ""
       const text = props.input.content
