@@ -4,22 +4,7 @@ import { useSync } from "@tui/context/sync"
 import { map, pipe, flatMap, entries, filter, isDeepEqual, sortBy, take } from "remeda"
 import { DialogSelect, type DialogSelectRef } from "@tui/ui/dialog-select"
 import { useDialog } from "@tui/ui/dialog"
-import { useTheme } from "../context/theme"
 import { createDialogProviderOptions, DialogProvider } from "./dialog-provider"
-
-function Free() {
-  const { theme } = useTheme()
-  return <span style={{ fg: theme.text }}>Free</span>
-}
-const PROVIDER_PRIORITY: Record<string, number> = {
-  opencode: 0,
-  anthropic: 1,
-  "github-copilot": 2,
-  openai: 3,
-  google: 4,
-  openrouter: 5,
-  vercel: 6,
-}
 
 export function DialogModel() {
   const local = useLocal()

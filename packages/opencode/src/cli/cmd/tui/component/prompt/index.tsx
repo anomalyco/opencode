@@ -806,7 +806,7 @@ export function Prompt(props: PromptProps) {
               justifyContent={status().type === "retry" ? "space-between" : "flex-start"}
             >
               <box flexShrink={0} flexDirection="row" gap={1}>
-                <Shimmer text="Working" color={theme.text} />
+                <Loader />
                 <box flexDirection="row" gap={1} flexShrink={0}>
                   {(() => {
                     const retry = createMemo(() => {
@@ -875,4 +875,39 @@ export function Prompt(props: PromptProps) {
       </box>
     </>
   )
+}
+
+function Loader() {
+  const FRAMES = [
+    "▱▱▱▱▱▱▱",
+    "▱▱▱▱▱▱▱",
+    "▱▱▱▱▱▱▱",
+    "▱▱▱▱▱▱▱",
+    "▰▱▱▱▱▱▱",
+    "▰▰▱▱▱▱▱",
+    "▰▰▰▱▱▱▱",
+    "▱▰▰▰▱▱▱",
+    "▱▱▰▰▰▱▱",
+    "▱▱▱▰▰▰▱",
+    "▱▱▱▱▰▰▰",
+    "▱▱▱▱▱▰▰",
+    "▱▱▱▱▱▱▰",
+    "▱▱▱▱▱▱▱",
+    "▱▱▱▱▱▱▱",
+    "▱▱▱▱▱▱▱",
+    "▱▱▱▱▱▱▱",
+  ]
+  const [frame, setFrame] = createSignal(0)
+
+  onMount(() => {
+    const timer = setInterval(() => {
+      setFrame((frame() + 1) % FRAMES.length)
+    }, 100)
+    onCleanup(() => {
+      clearInterval(timer)
+    })
+  })
+
+  const { theme } = useTheme()
+  return <text fg={theme.diffAdded}>{FRAMES[frame()]}</text>
 }
