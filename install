@@ -44,6 +44,11 @@ case "$filename" in
     ;;
 esac
 
+if ! command -v unzip >/dev/null 2>&1; then
+    echo -e "${RED}Error: 'unzip' is required but not installed.${NC}"
+    exit 1
+fi
+
 INSTALL_DIR=$HOME/.opencode/bin
 mkdir -p "$INSTALL_DIR"
 
