@@ -147,10 +147,7 @@ export const BashTool = Tool.define("bash", {
     }
 
     const proc = spawn(params.command, {
-      shell:
-        process.platform === "win32"
-          ? true // process.env.ComSpec on Windows
-          : (process.env.SHELL ?? true), // $SHELL - *default shell for new sessions* if set, otherwise /bin/sh
+      shell: process.env.SHELL ?? true, // $SHELL if set, otherwise default shell
       cwd: Instance.directory,
       stdio: ["ignore", "pipe", "pipe"],
       detached: process.platform !== "win32",
