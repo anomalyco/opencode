@@ -1017,6 +1017,10 @@ export type Config = {
    */
   disabled_providers?: Array<string>
   /**
+   * When set, ONLY these providers will be enabled. All other providers will be ignored
+   */
+  enabled_providers?: Array<string>
+  /**
    * Model to use in the format of provider/model, eg anthropic/claude-2
    */
   model?: string
