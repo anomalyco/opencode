@@ -2,7 +2,7 @@ import z from "zod"
 import { Tool } from "./tool"
 import DESCRIPTION from "./batch.txt"
 
-const DISALLOWED = new Set(["batch", "edit", "todoread"])
+const DISALLOWED = new Set(["batch", "edit", "multiedit", "todoread"])
 const FILTERED_FROM_SUGGESTIONS = new Set(["invalid", "patch", ...DISALLOWED])
 
 export const BatchTool = Tool.define("batch", async () => {
