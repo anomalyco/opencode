@@ -846,7 +846,7 @@ export type KeybindsConfig = {
    */
   session_child_cycle_reverse?: string
   /**
-   * List child sessions
+   * List subagent sessions
    */
   session_child_list?: string
 }
