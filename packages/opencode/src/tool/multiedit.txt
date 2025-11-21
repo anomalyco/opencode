@@ -1,41 +1,60 @@
-This is a tool for making multiple edits to a single file in one operation. It is built on top of the Edit tool and allows you to perform multiple find-and-replace operations efficiently. Prefer this tool over the Edit tool when you need to make multiple edits to the same file.
+SCOPE: Use ONLY for 2+ edits to single file. For single edits, use Edit tool.
 
-Before using this tool:
+PROTOCOL: Built on Edit tool with exact-match requirements. Multiple edit() calls to same file = violation.
 
-1. Use the Read tool to understand the file's contents and context
-2. Verify the directory path is correct
+PROHIBITED:
 
-To make multiple file edits, provide the following:
-1. file_path: The absolute path to the file to modify (must be absolute, not relative)
-2. edits: An array of edit operations to perform, where each edit contains:
-   - oldString: The text to replace (must match the file contents exactly, including all whitespace and indentation)
-   - newString: The edited text to replace the oldString
-   - replaceAll: Replace all occurrences of oldString. This parameter is optional and defaults to false.
+Multiple edit() calls to same file
+   First edit() adds header, second adds footer
+   Result: File read/written multiple times, wasted tokens
 
-IMPORTANT:
-- All edits are applied in sequence, in the order they are provided
-- Each edit operates on the result of the previous edit
-- All edits must be valid for the operation to succeed - if any edit fails, none will be applied
-- This tool is ideal when you need to make several changes to different parts of the same file
+Using multiedit() for single edit
+   Unnecessary complexity
+   Use edit() tool for single changes
 
-CRITICAL REQUIREMENTS:
-1. All edits follow the same requirements as the single Edit tool
-2. The edits are atomic - either all succeed or none are applied
-3. Plan your edits carefully to avoid conflicts between sequential operations
+Using multiedit() in batch tool
+   Batch rejects multiedit operations
+   Call multiedit directly
 
-WARNING:
-- The tool will fail if edits.oldString doesn't match the file contents exactly (including whitespace)
-- The tool will fail if edits.oldString and edits.newString are the same
-- Since edits are applied in sequence, ensure that earlier edits don't affect the text that later edits are trying to find
+CORRECT:
 
-When making edits:
-- Ensure all edits result in idiomatic, correct code
-- Do not leave the code in a broken state
-- Always use absolute file paths (starting with /)
-- Only use emojis if the user explicitly requests it. Avoid adding emojis to files unless asked.
-- Use replaceAll for replacing and renaming strings across the file. This parameter is useful if you want to rename a variable for instance.
+Single multiedit() with 2+ changes
+   One call with array of edits
+   Result: File read/written once, optimal tokens
 
-If you want to create a new file, use:
-- A new file path, including dir name if needed
-- First edit: empty oldString and the new file's contents as newString
-- Subsequent edits: normal edit operations on the created content
+Single edit() for one change
+   Simple, direct edit
+   No array structure needed
+
+PREREQUISITES:
+1. Read file to understand contents
+2. Verify directory path
+
+PARAMETERS:
+1. file_path: Absolute path (not relative)
+2. edits: Array of operations:
+   - oldString: Text to replace (exact match including whitespace)
+   - newString: Replacement text
+   - replaceAll: Replace all occurrences (optional, default false)
+
+EXECUTION:
+- Edits applied sequentially in order
+- Each edit operates on previous edit result
+- All edits must be valid - any failure aborts all
+- Atomic operation
+
+FAILURES:
+- oldString doesn't match file exactly
+- oldString equals newString
+- Earlier edits affect later edit targets
+
+CONSTRAINTS:
+- Produce idiomatic, correct code
+- Do not break code state
+- Use absolute paths (start with /)
+- Emojis only if user requests
+- Use replaceAll for variable renaming
+
+FILE CREATION:
+- First edit: empty oldString, file contents as newString
+- Subsequent edits: normal operations
