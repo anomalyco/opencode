@@ -142,7 +142,7 @@ export namespace SessionSummary {
                 content: x,
               }),
             ),
-            ...MessageV2.toModelMessage(messages),
+            ...(await MessageV2.toModelMessage(messages)),
             {
               role: "user",
               content: `Summarize the above conversation according to your system prompts.`,

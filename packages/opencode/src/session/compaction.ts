@@ -129,6 +129,21 @@ export namespace SessionCompaction {
       model: model.info,
       abort: input.abort,
     })
+    const modelMessages = await MessageV2.toModelMessage(
+      input.messages.filter((m) => {
+        if (m.info.role !== "assistant" || m.info.error === undefined) {
+          return true
+        }
+        if (
+          MessageV2.AbortedError.isInstance(m.info.error) &&
+          m.parts.some((part) => part.type !== "step-start" && part.type !== "reasoning")
+        ) {
+          return true
+        }
+
+        return false
+      }),
+    )
     const result = await processor.process(() =>
       streamText({
         onError(error) {
@@ -157,21 +172,7 @@ export namespace SessionCompaction {
               content: x,
             }),
           ),
-          ...MessageV2.toModelMessage(
-            input.messages.filter((m) => {
-              if (m.info.role !== "assistant" || m.info.error === undefined) {
-                return true
-              }
-              if (
-                MessageV2.AbortedError.isInstance(m.info.error) &&
-                m.parts.some((part) => part.type !== "step-start" && part.type !== "reasoning")
-              ) {
-                return true
-              }
-
-              return false
-            }),
-          ),
+          ...modelMessages,
           {
             role: "user",
             content: [

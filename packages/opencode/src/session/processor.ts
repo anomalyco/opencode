@@ -3,6 +3,7 @@ import { MessageV2 } from "./message-v2"
 import { type StreamTextResult, type Tool as AITool, APICallError } from "ai"
 import { Log } from "@/util/log"
 import { Identifier } from "@/id/id"
+import { ulid } from "ulid"
 import { Session } from "."
 import { Agent } from "@/agent/agent"
 import { Permission } from "@/permission"
@@ -101,7 +102,7 @@ export namespace SessionProcessor {
                     sessionID: input.assistantMessage.sessionID,
                     type: "tool",
                     tool: value.toolName,
-                    callID: value.id,
+                    callID: value.id || ulid(),
                     state: {
                       status: "pending",
                       input: {},

@@ -9,6 +9,7 @@ import { Snapshot } from "@/snapshot"
 import { fn } from "@/util/fn"
 import { Storage } from "@/storage/storage"
 import { ProviderTransform } from "@/provider/transform"
+import { ulid } from "ulid"
 
 export namespace MessageV2 {
   export const OutputLengthError = NamedError.create("MessageOutputLengthError", z.object({}))
@@ -549,12 +550,12 @@ export namespace MessageV2 {
     throw new Error("unknown message type")
   }
 
-  export function toModelMessage(
+  export async function toModelMessage(
     input: {
       info: Info
       parts: Part[]
     }[],
-  ): ModelMessage[] {
+  ): Promise<ModelMessage[]> {
     const result: UIMessage[] = []
 
     for (const msg of input) {
@@ -616,6 +617,11 @@ export namespace MessageV2 {
               type: "step-start",
             })
           if (part.type === "tool") {
+            // Fix empty callID from providers that don't generate tool call IDs (e.g. Gemini)
+            if (!part.callID) {
+              part.callID = ulid()
+              await Storage.write(["part", part.messageID, part.id], part)
+            }
             if (part.state.status === "completed") {
               if (part.state.attachments?.length) {
                 result.push({
