@@ -1080,7 +1080,7 @@ const PART_MAPPING = {
 }
 
 function ReasoningPart(props: { last: boolean; part: ReasoningPart; message: AssistantMessage }) {
-  const { theme, syntax } = useTheme()
+  const { theme, subtleSyntax } = useTheme()
   const ctx = use()
   const content = createMemo(() => props.part.text.trim())
   return (
@@ -1098,10 +1098,10 @@ function ReasoningPart(props: { last: boolean; part: ReasoningPart; message: Ass
           filetype="markdown"
           drawUnstyledText={false}
           streaming={true}
-          syntaxStyle={syntax()}
+          syntaxStyle={subtleSyntax()}
           content={"_Thinking:_ " + content()}
           conceal={ctx.conceal()}
-          fg={theme.text}
+          fg={theme.textMuted}
         />
       </box>
     </Show>
