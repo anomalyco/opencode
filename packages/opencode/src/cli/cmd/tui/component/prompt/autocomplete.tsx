@@ -277,6 +277,11 @@ export function Autocomplete(props: {
         onSelect: () => command.trigger("session.list"),
       },
       {
+        display: "/subagent-sessions",
+        description: "list subagent sessions",
+        onSelect: () => command.trigger("session.child.list"),
+      },
+      {
         display: "/status",
         aliases: ["/mcp"],
         description: "show status",

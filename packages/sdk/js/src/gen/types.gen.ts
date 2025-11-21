@@ -845,6 +845,10 @@ export type KeybindsConfig = {
    * Previous child session
    */
   session_child_cycle_reverse?: string
+  /**
+   * List child sessions
+   */
+  session_child_list?: string
 }
 
 export type AgentConfig = {

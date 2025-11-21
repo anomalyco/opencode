@@ -1425,7 +1425,9 @@ ToolRegistry.register<typeof TaskTool>({
         </Show>
         <text fg={theme.text}>
           {keybind.print("session_child_cycle")}, {keybind.print("session_child_cycle_reverse")}
-          <span style={{ fg: theme.textMuted }}> to navigate between subagent sessions</span>
+          <span style={{ fg: theme.textMuted }}> to navigate </span>
+          {keybind.print("session_child_list")}
+          <span style={{ fg: theme.textMuted }}> to list subagent sessions</span>
         </text>
       </>
     )
