@@ -25,7 +25,7 @@ export function DialogChildSessionList() {
 
     return allSessions.map((x) => {
       const isParent = x.id === parentID
-      const label = isParent ? "Parent" : "Child"
+      const label = isParent ? "Main" : "Subagent"
 
       return {
         title: `${x.title}`,
