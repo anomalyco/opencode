@@ -115,10 +115,12 @@ print_progress() {
     local on=$(( percent * width / 100 ))
     local off=$(( width - on ))
 
-    local full_filled=$(printf "%.0s■" {1..50})
-    local full_empty=$(printf "%.0s･" {1..50})
+    local filled=$(printf "%*s" "$on" "")
+    filled=${filled// /■}
+    local empty=$(printf "%*s" "$off" "")
+    empty=${empty// /･}
 
-    printf "\r${ORANGE}%s%s %3d%%${NC}" "${full_filled:0:$on}" "${full_empty:0:$off}" "$percent" >&4
+    printf "\r${ORANGE}%s%s %3d%%${NC}" "$filled" "$empty" "$percent" >&4
 }
 
 download_with_progress() {
