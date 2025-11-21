@@ -468,7 +468,14 @@ export namespace Provider {
         delete providers[providerID]
         continue
       }
-      log.info("found", { providerID })
+
+      // TODO: set this in models.dev, not set due to breaking issues on older OC versions
+      // u have to set include usage to true w/ this provider, setting in models.dev would cause undefined issue when accessing usage in older versions
+      if (providerID === "openrouter") {
+        provider.info.npm = "@openrouter/ai-sdk-provider"
+      }
+
+      log.info("found", { providerID, npm: provider.info.npm })
     }
 
     return {
