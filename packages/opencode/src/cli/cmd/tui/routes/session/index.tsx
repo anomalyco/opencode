@@ -147,6 +147,7 @@ export function Session() {
   // Auto-navigate to whichever session currently needs permission input
   createEffect(() => {
     const currentSession = session()
+    if (!currentSession) return
     const currentPermissions = permissions()
     let targetID = currentPermissions.length > 0 ? currentSession.id : undefined
 
