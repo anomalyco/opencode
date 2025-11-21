@@ -12,7 +12,7 @@ export function FormatError(input: unknown) {
     )
   }
   if (Config.ConfigDirectoryTypoError.isInstance(input)) {
-    return `Directory "${input.data.dir}" in ${input.data.path} is not valid. Use "${input.data.suggestion}" instead. This is a common typo.`
+    return `Directory "${input.data.dir}" in ${input.data.path} is not valid. Rename the directory to "${input.data.suggestion}" or remove it. This is a common typo.`
   }
   if (ConfigMarkdown.FrontmatterError.isInstance(input)) {
     return `Failed to parse frontmatter in ${input.data.path}:\n${input.data.message}`
