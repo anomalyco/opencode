@@ -87,6 +87,15 @@ type Theme = {
   syntaxPunctuation: RGBA
 }
 
+export function selectedForeground(theme: Theme): RGBA {
+  if (theme.background.a === 0) {
+    const { r, g, b } = theme.primary
+    const luminance  = 0.299 * r + 0.587 * g + 0.114 * b
+    return luminance  > 0.5 ? RGBA.fromInts(0, 0, 0) : RGBA.fromInts(255, 255, 255)
+  }
+  return theme.background
+}
+
 type HexColor = `#${string}`
 type RefName = string
 type Variant = {
