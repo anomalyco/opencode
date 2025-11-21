@@ -446,7 +446,7 @@ function generateSubtleSyntax(theme: Theme) {
               Math.round(fg.r * 255),
               Math.round(fg.g * 255),
               Math.round(fg.b * 255),
-              100,
+              Math.round(0.4 * 255),
             ),
           },
         }
