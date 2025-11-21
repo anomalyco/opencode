@@ -599,77 +599,20 @@ export namespace Provider {
 
     const provider = s.providers[providerID]
     if (!provider) {
-      let suggestions: string[] = []
-      const normalize = (str: string) => str.toLowerCase().replace(/[^a-z0-9]/g, "")
-      const levenshtein = (a: string, b: string) => {
-        const m = a.length,
-          n = b.length
-        const dp = Array.from({ length: m + 1 }, () => new Array<number>(n + 1).fill(0))
-        for (let i = 0; i <= m; i++) dp[i][0] = i
-        for (let j = 0; j <= n; j++) dp[0][j] = j
-        for (let i = 1; i <= m; i++) {
-          for (let j = 1; j <= n; j++) {
-            const cost = a[i - 1] === b[j - 1] ? 0 : 1
-            dp[i][j] = Math.min(dp[i - 1][j] + 1, dp[i][j - 1] + 1, dp[i - 1][j - 1] + cost)
-          }
-        }
-        return dp[m][n]
-      }
-      if (!modelID || modelID.trim() === "") {
-        // Treat single-token input as an unqualified model; search across all providers' models.
-        const q = normalize(providerID)
-        const entries: { combo: string; norm: string }[] = []
-        for (const [pid, prov] of Object.entries(s.providers)) {
-          for (const mid of Object.keys(prov.info.models)) {
-            entries.push({ combo: pid + "/" + mid, norm: normalize(mid) })
-          }
-        }
-        const byNorm = fuzzysort.go(q, entries as any, { limit: 5, key: "norm" }).map((r: any) => r.obj.combo)
-        const combos = entries.map((e) => e.combo)
-        const byRaw = fuzzysort.go(providerID, combos, { limit: 5 }).map((r) => r.target)
-        let merged = Array.from(new Set([...byNorm, ...byRaw]))
-        if (merged.length === 0) {
-          // fallback to edit distance on normalized mid
-          const scored = entries
-            .map((e) => ({ combo: e.combo, d: levenshtein(q, e.norm) }))
-            .sort((a, b) => a.d - b.d)
-            .slice(0, 3)
-            .map((x) => x.combo)
-          merged = scored
-        }
-        suggestions = merged.slice(0, 3)
-      } else {
-        const pcands = Object.keys(s.providers)
-        const corpus = pcands.map((raw) => ({ raw, norm: normalize(raw) }))
-        const q = normalize(providerID)
-        const hits = fuzzysort.go(q, corpus as any, { limit: 5, key: "norm" })
-        let ranked = hits.map((r: any) => r.obj.raw)
-        if (ranked.length === 0) {
-          ranked = pcands
-            .map((p) => ({ p, d: levenshtein(q, normalize(p)) }))
-            .sort((a, b) => a.d - b.d)
-            .slice(0, 3)
-            .map((x) => x.p)
-        }
-        const providerSuggestions = ranked.map((r) => r + "/" + modelID)
-        suggestions = providerSuggestions
-      }
+      const availableProviders = Object.keys(s.providers)
+      const matches = fuzzysort.go(providerID, availableProviders, { limit: 3, threshold: -10000 })
+      const suggestions = matches.map((m) => m.target)
       throw new ModelNotFoundError({ providerID, modelID, suggestions })
     }
+
     const info = provider.info.models[modelID]
     if (!info) {
-      const candidates = Object.keys(provider.info.models)
-      // Normalize punctuation differences like '-' vs '.' by stripping non-alphanumerics
-      const normalize = (s: string) => s.toLowerCase().replace(/[^a-z0-9]/g, "")
-      const corpus = candidates.map((raw) => ({ raw, norm: normalize(raw) }))
-      const query = normalize(modelID)
-      const results = fuzzysort.go(query, corpus as any, { limit: 5, key: "norm" })
-      const ranked = results.map((r) => ("obj" in r ? (r as any).obj.raw : (r as any).target)) as string[]
-      const fallback = fuzzysort.go(modelID, candidates, { limit: 5 }).map((r) => r.target)
-      const merged = Array.from(new Set([...ranked, ...fallback]))
-      const suggestions = merged.slice(0, 3).map((m) => providerID + "/" + m)
+      const availableModels = Object.keys(provider.info.models)
+      const matches = fuzzysort.go(modelID, availableModels, { limit: 3, threshold: -10000 })
+      const suggestions = matches.map((m) => m.target)
       throw new ModelNotFoundError({ providerID, modelID, suggestions })
     }
+
     const sdk = await getSDK(provider.info, info)
 
     try {
