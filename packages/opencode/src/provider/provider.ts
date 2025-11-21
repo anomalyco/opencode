@@ -1,4 +1,5 @@
 import z from "zod"
+import fuzzysort from "fuzzysort"
 import { Config } from "../config/config"
 import { mergeDeep, sortBy } from "remeda"
 import { NoSuchModelError, type LanguageModel, type Provider as SDK } from "ai"
@@ -597,9 +598,21 @@ export namespace Provider {
     })
 
     const provider = s.providers[providerID]
-    if (!provider) throw new ModelNotFoundError({ providerID, modelID })
+    if (!provider) {
+      const availableProviders = Object.keys(s.providers)
+      const matches = fuzzysort.go(providerID, availableProviders, { limit: 3, threshold: -10000 })
+      const suggestions = matches.map((m) => m.target)
+      throw new ModelNotFoundError({ providerID, modelID, suggestions })
+    }
+
     const info = provider.info.models[modelID]
-    if (!info) throw new ModelNotFoundError({ providerID, modelID })
+    if (!info) {
+      const availableModels = Object.keys(provider.info.models)
+      const matches = fuzzysort.go(modelID, availableModels, { limit: 3, threshold: -10000 })
+      const suggestions = matches.map((m) => m.target)
+      throw new ModelNotFoundError({ providerID, modelID, suggestions })
+    }
+
     const sdk = await getSDK(provider.info, info)
 
     try {
@@ -700,6 +713,7 @@ export namespace Provider {
     z.object({
       providerID: z.string(),
       modelID: z.string(),
+      suggestions: z.array(z.string()).optional(),
     }),
   )
 

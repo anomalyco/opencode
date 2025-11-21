@@ -90,4 +90,10 @@ class Resource:
     class ZEN_MODELS2:
         type: str
         value: str
+    class ZEN_MODELS3:
+        type: str
+        value: str
+    class ZEN_MODELS4:
+        type: str
+        value: str
 
