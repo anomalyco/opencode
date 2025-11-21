@@ -128,6 +128,23 @@ This tool performs precise edits to files by replacing exact text matches. It's 
 
 ---
 
+### multiedit
+
+Make multiple changes to a file efficiently in a single operation.
+
+```json title="opencode.json" {4}
+{
+  "$schema": "https://opencode.ai/config.json",
+  "tools": {
+    "multiedit": true
+  }
+}
+```
+
+When you need to make several changes to the same file, this tool combines them into one operation for efficiency. Use `edit` for single changes, and `multiedit` when you have multiple modifications to make together.
+
+---
+
 ### write
 
 Create new files or overwrite existing ones.
