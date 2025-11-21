@@ -70,13 +70,13 @@ import stripAnsi from "strip-ansi"
 addDefaultParsers(parsers.parsers)
 
 class CustomSpeedScroll implements ScrollAcceleration {
-  constructor(private speed: number) { }
+  constructor(private speed: number) {}
 
   tick(_now?: number): number {
     return this.speed
   }
 
-  reset(): void { }
+  reset(): void {}
 }
 
 const context = createContext<{
@@ -256,30 +256,30 @@ export function Session() {
     },
     ...(sync.data.config.share !== "disabled"
       ? [
-        {
-          title: "Share session",
-          value: "session.share",
-          keybind: "session_share" as const,
-          disabled: !!session()?.share?.url,
-          category: "Session",
-          onSelect: async (dialog: any) => {
-            await sdk.client.session
-              .share({
-                path: {
-                  id: route.sessionID,
-                },
-              })
-              .then((res) =>
-                Clipboard.copy(res.data!.share!.url).catch(() =>
-                  toast.show({ message: "Failed to copy URL to clipboard", variant: "error" }),
-                ),
-              )
-              .then(() => toast.show({ message: "Share URL copied to clipboard!", variant: "success" }))
-              .catch(() => toast.show({ message: "Failed to share session", variant: "error" }))
-            dialog.clear()
+          {
+            title: "Share session",
+            value: "session.share",
+            keybind: "session_share" as const,
+            disabled: !!session()?.share?.url,
+            category: "Session",
+            onSelect: async (dialog: any) => {
+              await sdk.client.session
+                .share({
+                  path: {
+                    id: route.sessionID,
+                  },
+                })
+                .then((res) =>
+                  Clipboard.copy(res.data!.share!.url).catch(() =>
+                    toast.show({ message: "Failed to copy URL to clipboard", variant: "error" }),
+                  ),
+                )
+                .then(() => toast.show({ message: "Share URL copied to clipboard!", variant: "success" }))
+                .catch(() => toast.show({ message: "Failed to share session", variant: "error" }))
+              dialog.clear()
+            },
           },
-        },
-      ]
+        ]
       : []),
     {
       title: "Unshare session",
@@ -938,7 +938,14 @@ function UserMessage(props: {
             {sync.data.config.username ?? "You"}{" "}
             <Show
               when={queued()}
-              fallback={<span style={{ fg: theme.textMuted }}>{ctx.showTimestamps() ? `· ${Locale.todayTimeOrDateTime(props.message.time.created)}` : `· ${Locale.time(props.message.time.created)}`}</span>}>
+              fallback={
+                <span style={{ fg: theme.textMuted }}>
+                  {ctx.showTimestamps()
+                    ? `· ${Locale.todayTimeOrDateTime(props.message.time.created)}`
+                    : `· ${Locale.time(props.message.time.created)}`}
+                </span>
+              }
+            >
               <span style={{ bg: theme.accent, fg: theme.backgroundPanel, bold: true }}> QUEUED </span>
             </Show>
           </text>
@@ -1050,7 +1057,9 @@ function AssistantMessage(props: { message: AssistantMessage; parts: Part[]; las
             <span style={{ fg: local.agent.color(props.message.mode) }}>{Locale.titlecase(props.message.mode)}</span>{" "}
             <span style={{ fg: theme.textMuted }}>
               {props.message.modelID}
-              {ctx.showTimestamps() && props.message.time.completed && ` · ${Locale.todayTimeOrDateTime(props.message.time.completed)}`}
+              {ctx.showTimestamps() &&
+                props.message.time.completed &&
+                ` · ${Locale.todayTimeOrDateTime(props.message.time.completed)}`}
             </span>
           </text>
         </box>
@@ -1132,19 +1141,19 @@ function ToolPart(props: { last: boolean; part: ToolPart; message: AssistantMess
     const style: BoxProps =
       container === "block" || permission
         ? {
-          border: permissionIndex === 0 ? (["left", "right"] as const) : (["left"] as const),
-          paddingTop: 1,
-          paddingBottom: 1,
-          paddingLeft: 2,
-          marginTop: 1,
-          gap: 1,
-          backgroundColor: theme.backgroundPanel,
-          customBorderChars: SplitBorder.customBorderChars,
-          borderColor: permissionIndex === 0 ? theme.warning : theme.background,
-        }
+            border: permissionIndex === 0 ? (["left", "right"] as const) : (["left"] as const),
+            paddingTop: 1,
+            paddingBottom: 1,
+            paddingLeft: 2,
+            marginTop: 1,
+            gap: 1,
+            backgroundColor: theme.backgroundPanel,
+            customBorderChars: SplitBorder.customBorderChars,
+            borderColor: permissionIndex === 0 ? theme.warning : theme.background,
+          }
         : {
-          paddingLeft: 3,
-        }
+            paddingLeft: 3,
+          }
 
     return (
       <box
