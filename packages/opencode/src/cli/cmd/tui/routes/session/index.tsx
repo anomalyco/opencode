@@ -1187,6 +1187,7 @@ function ToolPart(props: { last: boolean; part: ToolPart; message: AssistantMess
           metadata={metadata}
           permission={permission?.metadata ?? {}}
           output={props.part.state.status === "completed" ? props.part.state.output : undefined}
+          title={props.part.state.status === "completed" ? props.part.state.title : undefined}
         />
         {props.part.state.status === "error" && (
           <box paddingLeft={2}>
@@ -1225,6 +1226,7 @@ type ToolProps<T extends Tool.Info> = {
   permission: Record<string, any>
   tool: string
   output?: string
+  title?: string
 }
 function GenericTool(props: ToolProps<any>) {
   return (
@@ -1440,6 +1442,18 @@ ToolRegistry.register<typeof WebFetchTool>({
     return (
       <ToolTitle icon="%" fallback="Fetching from the web..." when={(props.input as any).url}>
         WebFetch {(props.input as any).url}
+      </ToolTitle>
+    )
+  },
+})
+
+ToolRegistry.register({
+  name: "multiedit_edit",
+  container: "inline",
+  render(props) {
+    return (
+      <ToolTitle icon="→" fallback="Editing..." when={props.title}>
+        {props.title || "edit"}
       </ToolTitle>
     )
   },
