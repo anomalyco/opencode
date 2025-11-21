@@ -23,6 +23,7 @@ import { Instance } from "../project/instance"
 import { Agent } from "../agent/agent"
 import { Auth } from "../auth"
 import { Command } from "../command"
+import { ProviderAuth } from "../provider/auth"
 import { Global } from "../global"
 import { ProjectRoute } from "./project"
 import { ToolRegistry } from "../tool/registry"
@@ -304,6 +305,27 @@ export namespace Server {
               parameters: (t.parameters as any)?._def ? zodToJsonSchema(t.parameters as any) : t.parameters,
             })),
           )
+        },
+      )
+      .post(
+        "/instance/dispose",
+        describeRoute({
+          description: "Dispose the current instance",
+          operationId: "instance.dispose",
+          responses: {
+            200: {
+              description: "Instance disposed",
+              content: {
+                "application/json": {
+                  schema: resolver(z.boolean()),
+                },
+              },
+            },
+          },
+        }),
+        async (c) => {
+          await Instance.dispose()
+          return c.json(true)
         },
       )
       .get(
@@ -1161,6 +1183,138 @@ export namespace Server {
             providers: Object.values(providers),
             default: mapValues(providers, (item) => Provider.sort(Object.values(item.models))[0].id),
           })
+        },
+      )
+      .get(
+        "/provider",
+        describeRoute({
+          description: "List all providers",
+          operationId: "provider.list",
+          responses: {
+            200: {
+              description: "List of providers",
+              content: {
+                "application/json": {
+                  schema: resolver(
+                    z.object({
+                      all: ModelsDev.Provider.array(),
+                      default: z.record(z.string(), z.string()),
+                      connected: z.array(z.string()),
+                    }),
+                  ),
+                },
+              },
+            },
+          },
+        }),
+        async (c) => {
+          const providers = await ModelsDev.get()
+          const connected = await Provider.list().then((x) => Object.keys(x))
+          return c.json({
+            all: Object.values(providers),
+            default: mapValues(providers, (item) => Provider.sort(Object.values(item.models))[0].id),
+            connected,
+          })
+        },
+      )
+      .get(
+        "/provider/auth",
+        describeRoute({
+          description: "Get provider authentication methods",
+          operationId: "provider.auth",
+          responses: {
+            200: {
+              description: "Provider auth methods",
+              content: {
+                "application/json": {
+                  schema: resolver(z.record(z.string(), z.array(ProviderAuth.Method))),
+                },
+              },
+            },
+          },
+        }),
+        async (c) => {
+          return c.json(await ProviderAuth.methods())
+        },
+      )
+      .post(
+        "/provider/:id/oauth/authorize",
+        describeRoute({
+          description: "Authorize a provider using OAuth",
+          operationId: "provider.oauth.authorize",
+          responses: {
+            200: {
+              description: "Authorization URL and method",
+              content: {
+                "application/json": {
+                  schema: resolver(ProviderAuth.Authorization.optional()),
+                },
+              },
+            },
+            ...errors(400),
+          },
+        }),
+        validator(
+          "param",
+          z.object({
+            id: z.string().meta({ description: "Provider ID" }),
+          }),
+        ),
+        validator(
+          "json",
+          z.object({
+            method: z.number().meta({ description: "Auth method index" }),
+          }),
+        ),
+        async (c) => {
+          const id = c.req.valid("param").id
+          const { method } = c.req.valid("json")
+          const result = await ProviderAuth.authorize({
+            providerID: id,
+            method,
+          })
+          return c.json(result)
+        },
+      )
+      .post(
+        "/provider/:id/oauth/callback",
+        describeRoute({
+          description: "Handle OAuth callback for a provider",
+          operationId: "provider.oauth.callback",
+          responses: {
+            200: {
+              description: "OAuth callback processed successfully",
+              content: {
+                "application/json": {
+                  schema: resolver(z.boolean()),
+                },
+              },
+            },
+            ...errors(400),
+          },
+        }),
+        validator(
+          "param",
+          z.object({
+            id: z.string().meta({ description: "Provider ID" }),
+          }),
+        ),
+        validator(
+          "json",
+          z.object({
+            method: z.number().meta({ description: "Auth method index" }),
+            code: z.string().optional().meta({ description: "OAuth authorization code" }),
+          }),
+        ),
+        async (c) => {
+          const id = c.req.valid("param").id
+          const { method, code } = c.req.valid("json")
+          await ProviderAuth.callback({
+            providerID: id,
+            method,
+            code,
+          })
+          return c.json(true)
         },
       )
       .get(
