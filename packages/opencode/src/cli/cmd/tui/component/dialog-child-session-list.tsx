@@ -42,7 +42,7 @@ export function DialogChildSessionList() {
 
   return (
     <DialogSelect
-      title="Child Sessions"
+      title="Subagent Sessions"
       options={options()}
       current={currentSessionID()}
       onSelect={(option) => {

@@ -222,7 +222,7 @@ function App() {
       },
     },
     {
-      title: "List child sessions",
+      title: "List subagent sessions",
       value: "session.child.list",
       keybind: "session_child_list",
       category: "Session",
