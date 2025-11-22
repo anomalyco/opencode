@@ -860,11 +860,6 @@ export function Session() {
                     </Match>
                     <Match when={message.role === "assistant"}>
                       <AssistantMessage
-                        user={
-                          messages().findLast(
-                            (item) => item.id === (message as AssistantMessage).parentID,
-                          ) as UserMessage
-                        }
                         last={lastAssistant()?.id === message.id}
                         message={message as AssistantMessage}
                         parts={sync.data.part[message.id] ?? []}
@@ -998,10 +993,19 @@ function UserMessage(props: {
   )
 }
 
-function AssistantMessage(props: { message: AssistantMessage; parts: Part[]; last: boolean; user: UserMessage }) {
+function AssistantMessage(props: { message: AssistantMessage; parts: Part[]; last: boolean }) {
   const local = useLocal()
   const { theme } = useTheme()
-  const ctx = use()
+  const sync = useSync()
+  const messages = createMemo(() => sync.data.message[props.message.sessionID] ?? [])
+
+  const duration = createMemo(() => {
+    if (!props.message.time.completed) return 0
+    const user = messages().find((x) => x.role === "user" && x.id === props.message.parentID)
+    if (!user) return 0
+    return props.message.time.completed - user.time.created
+  })
+
   return (
     <>
       <For each={props.parts}>
@@ -1047,10 +1051,7 @@ function AssistantMessage(props: { message: AssistantMessage; parts: Part[]; las
               <span style={{ fg: theme.text }}>{Locale.titlecase(props.message.mode)}</span>{" "}
               <span style={{ fg: theme.textMuted }}>⬝{props.message.modelID}</span>
               <Show when={props.message.time.completed}>
-                <span style={{ fg: theme.textMuted }}>
-                  {" "}
-                  ⬝{Locale.duration(props.message.time.completed! - props.user.time.created)}
-                </span>
+                <span style={{ fg: theme.textMuted }}> ⬝{Locale.duration(duration())}</span>
               </Show>
             </text>
           </box>
