@@ -969,8 +969,8 @@ function UserMessage(props: {
                 fallback={
                   <span style={{ fg: theme.textMuted }}>
                     {ctx.showTimestamps()
-                      ? `· ${Locale.todayTimeOrDateTime(props.message.time.created)}`
-                      : `· ${Locale.time(props.message.time.created)}`}
+                      ? Locale.todayTimeOrDateTime(props.message.time.created)
+                      : Locale.time(props.message.time.created)}
                   </span>
                 }
               >
@@ -1041,7 +1041,9 @@ function AssistantMessage(props: { message: AssistantMessage; parts: Part[]; las
         <Match
           when={
             (props.message.time.completed &&
-              props.parts.some((item) => item.type === "step-finish" && item.reason !== "tool-calls")) ||
+              props.parts.some(
+                (item) => item.type === "step-finish" && !["tool-calls", "unknown"].includes(item.reason),
+              )) ||
             props.last
           }
         >

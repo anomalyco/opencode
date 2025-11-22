@@ -907,22 +907,32 @@ export namespace SessionPrompt {
                       extra: { bypassCwdCheck: true, ...info.model },
                       metadata: async () => {},
                     })
-                    pieces.push(
-                      {
-                        id: Identifier.ascending("part"),
-                        messageID: info.id,
-                        sessionID: input.sessionID,
-                        type: "text",
-                        synthetic: true,
-                        text: result.output,
-                      },
-                      {
+                    pieces.push({
+                      id: Identifier.ascending("part"),
+                      messageID: info.id,
+                      sessionID: input.sessionID,
+                      type: "text",
+                      synthetic: true,
+                      text: result.output,
+                    })
+                    if (result.attachments?.length) {
+                      pieces.push(
+                        ...result.attachments.map((attachment) => ({
+                          ...attachment,
+                          synthetic: true,
+                          filename: attachment.filename ?? part.filename,
+                          messageID: info.id,
+                          sessionID: input.sessionID,
+                        })),
+                      )
+                    } else {
+                      pieces.push({
                         ...part,
                         id: part.id ?? Identifier.ascending("part"),
                         messageID: info.id,
                         sessionID: input.sessionID,
-                      },
-                    )
+                      })
+                    }
                   })
                   .catch((error) => {
                     log.error("failed to read file", { error })
