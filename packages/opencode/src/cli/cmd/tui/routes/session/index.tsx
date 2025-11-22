@@ -969,8 +969,8 @@ function UserMessage(props: {
                 fallback={
                   <span style={{ fg: theme.textMuted }}>
                     {ctx.showTimestamps()
-                      ? `· ${Locale.todayTimeOrDateTime(props.message.time.created)}`
-                      : `· ${Locale.time(props.message.time.created)}`}
+                      ? Locale.todayTimeOrDateTime(props.message.time.created)
+                      : Locale.time(props.message.time.created)}
                   </span>
                 }
               >
