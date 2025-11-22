@@ -182,6 +182,7 @@
         "@typescript/native-preview": "catalog:",
         "tailwindcss": "catalog:",
         "typescript": "catalog:",
+        "vite": "catalog:",
       },
     },
     "packages/function": {

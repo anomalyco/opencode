@@ -28,7 +28,8 @@
     "@typescript/native-preview": "catalog:",
     "@types/luxon": "catalog:",
     "tailwindcss": "catalog:",
-    "typescript": "catalog:"
+    "typescript": "catalog:",
+    "vite": "catalog:"
   },
   "engines": {
     "node": ">=22"
