@@ -108,9 +108,11 @@ for (const item of targets) {
     plugins: [solidPlugin],
     sourcemap: "external",
     compile: {
+      autoloadBunfig: false,
+      autoloadDotenv: false,
       target: name.replace(pkg.name, "bun") as any,
       outfile: `dist/${name}/bin/opencode`,
-      execArgv: [`--user-agent=opencode/${Script.version}`, `--env-file=""`, `--`],
+      execArgv: [`--user-agent=opencode/${Script.version}`],
       windows: {},
     },
     entrypoints: ["./src/index.ts", parserWorker, workerPath],
