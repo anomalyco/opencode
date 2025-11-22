@@ -12,7 +12,7 @@
     "allowJs": true,
     "strict": true,
     "noEmit": true,
-    "types": ["vinxi/types/client"],
+    "types": ["vite/client"],
     "isolatedModules": true,
     "paths": {
       "~/*": ["./src/*"]
