@@ -69,8 +69,9 @@ stdenvNoCC.mkDerivation (finalAttrs: {
     mkdir -p $out/lib/opencode
     cp -r dist $out/lib/opencode/
 
-    worker_file=$(find "$out/lib/opencode/dist" -type f \( -path '*/tui/worker.*' -o -name 'worker.*' \) -print -quit)
-    parser_worker_file=$(find "$out/lib/opencode/dist" -type f -name 'parser.worker.*' -print -quit)
+    # Select bundled worker assets deterministically (sorted find output)
+    worker_file=$(find "$out/lib/opencode/dist" -type f \( -path '*/tui/worker.*' -o -name 'worker.*' \) | sort | head -n1)
+    parser_worker_file=$(find "$out/lib/opencode/dist" -type f -name 'parser.worker.*' | sort | head -n1)
     if [ -z "$worker_file" ]; then
       echo "ERROR: bundled worker not found"
       exit 1
@@ -82,20 +83,8 @@ stdenvNoCC.mkDerivation (finalAttrs: {
       [ -z "$patch_file" ] && continue
       [ ! -f "$patch_file" ] && continue
       if [ -n "$wasm_list" ] && grep -q 'tree-sitter' "$patch_file"; then
-        for wasm in $wasm_list; do
-          name=$(basename "$wasm")
-          bun --bun -e 'import fs from "fs"; const [file, wasmPath, wasmName] = process.argv.slice(2); const src = fs.readFileSync(file, "utf8"); const next = src.replaceAll(wasmName, wasmPath); if (next !== src) fs.writeFileSync(file, next);' "$patch_file" "$wasm" "$name"
-        done
-        if [ -n "$main_wasm" ]; then
-          if grep -q 'web-tree-sitter/tree-sitter.wasm' "$patch_file"; then
-            substituteInPlace "$patch_file" \
-              --replace-fail 'web-tree-sitter/tree-sitter.wasm' "$main_wasm"
-          fi
-          if grep -q 'tree-sitter.wasm' "$patch_file"; then
-            substituteInPlace "$patch_file" \
-              --replace-fail 'tree-sitter.wasm' "$main_wasm"
-          fi
-        fi
+        # Rewrite wasm references to absolute store paths to avoid runtime resolve failures.
+        bun --bun ${scripts + "/patch-wasm.ts"} "$patch_file" "$main_wasm" $wasm_list
       fi
     done
 

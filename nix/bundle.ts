@@ -23,6 +23,7 @@ const result = await Bun.build({
   define: {
     OPENCODE_VERSION: `'${version}'`,
     OPENCODE_CHANNEL: `'${channel}'`,
+    // Leave undefined so runtime picks bundled/dist worker or fallback in code.
     OPENCODE_WORKER_PATH: "undefined",
     OTUI_TREE_SITTER_WORKER_PATH: 'new URL("./cli/cmd/tui/parser.worker.js", import.meta.url).href',
   },
