@@ -68,6 +68,7 @@ stdenvNoCC.mkDerivation (finalAttrs: {
 
     mkdir -p $out/lib/opencode
     cp -r dist $out/lib/opencode/
+    chmod -R u+w $out/lib/opencode/dist
 
     # Select bundled worker assets deterministically (sorted find output)
     worker_file=$(find "$out/lib/opencode/dist" -type f \( -path '*/tui/worker.*' -o -name 'worker.*' \) | sort | head -n1)
