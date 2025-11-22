@@ -1,0 +1,6 @@
+[data-component="spinner"] {
+  color: var(--text-base);
+  flex-shrink: 0;
+  width: 18px;
+  aspect-ratio: 1;
+}

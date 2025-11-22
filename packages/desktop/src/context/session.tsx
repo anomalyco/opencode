@@ -1,5 +1,5 @@
 import { createStore, produce } from "solid-js/store"
-import { createSimpleContext } from "./helper"
+import { createSimpleContext } from "@opencode-ai/ui/context"
 import { batch, createEffect, createMemo } from "solid-js"
 import { useSync } from "./sync"
 import { makePersisted } from "@solid-primitives/storage"
@@ -60,7 +60,7 @@ export const { use: useSession, provider: SessionProvider } = createSimpleContex
     })
     const status = createMemo(
       () =>
-        sync.data.session_status[params.id] ?? {
+        sync.data.session_status[params.id ?? ""] ?? {
           type: "idle",
         },
     )
