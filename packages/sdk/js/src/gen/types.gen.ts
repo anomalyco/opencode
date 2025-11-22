@@ -19,6 +19,13 @@ export type EventConfigUpdated = {
   }
 }
 
+export type EventInstallationUpdateAvailable = {
+  type: "installation.update-available"
+  properties: {
+    version: string
+  }
+}
+
 export type EventLspClientDiagnostics = {
   type: "lsp.client.diagnostics"
   properties: {
@@ -655,6 +662,7 @@ export type EventFileWatcherUpdated = {
 export type Event =
   | EventInstallationUpdated
   | EventConfigUpdated
+  | EventInstallationUpdateAvailable
   | EventLspClientDiagnostics
   | EventLspUpdated
   | EventMessageUpdated
@@ -859,6 +867,10 @@ export type KeybindsConfig = {
    * Previous child session
    */
   session_child_cycle_reverse?: string
+  /**
+   * Suspend terminal
+   */
+  terminal_suspend?: string
 }
 
 export type AgentConfig = {
