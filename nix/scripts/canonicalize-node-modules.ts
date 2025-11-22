@@ -24,15 +24,13 @@ for (const entry of directories) {
   if (!info.isDirectory()) {
     continue
   }
-  const marker = entry.lastIndexOf("@")
-  if (marker <= 0) {
+  const parsed = parseEntry(entry)
+  if (!parsed) {
     continue
   }
-  const slug = entry.slice(0, marker).replace(/\+/g, "/")
-  const version = entry.slice(marker + 1)
-  const list = versions.get(slug) ?? []
-  list.push({ dir: full, version, label: entry })
-  versions.set(slug, list)
+  const list = versions.get(parsed.name) ?? []
+  list.push({ dir: full, version: parsed.version, label: entry })
+  versions.set(parsed.name, list)
 }
 
 const semverModule = (await import(join(bunRoot, "node_modules/semver"))) as
@@ -79,6 +77,12 @@ for (const [slug, entry] of Array.from(selections.entries()).sort((a, b) => a[0]
   await mkdir(parent, { recursive: true })
   const linkPath = join(parent, leaf)
   const desired = join(entry.dir, "node_modules", slug)
+  const exists = await lstat(desired)
+    .then(info => info.isDirectory())
+    .catch(() => false)
+  if (!exists) {
+    continue
+  }
   const relativeTarget = relative(parent, desired)
   const resolved = relativeTarget.length === 0 ? "." : relativeTarget
   await rm(linkPath, { recursive: true, force: true })
@@ -93,4 +97,17 @@ for (const line of rewrites.slice(0, 20)) {
 }
 if (rewrites.length > 20) {
   console.log("  ...")
+}
+
+function parseEntry(label: string) {
+  const marker = label.startsWith("@") ? label.indexOf("@", 1) : label.indexOf("@")
+  if (marker <= 0) {
+    return null
+  }
+  const name = label.slice(0, marker).replace(/\+/g, "/")
+  const version = label.slice(marker + 1)
+  if (!name || !version) {
+    return null
+  }
+  return { name, version }
 }
