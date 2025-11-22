@@ -26,6 +26,7 @@ export function DialogThemeList() {
     <DialogSelect
       title="Themes"
       options={options}
+      current={initial}
       onMove={(opt) => {
         theme.set(opt.value)
       }}
