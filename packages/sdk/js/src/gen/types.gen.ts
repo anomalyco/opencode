@@ -846,6 +846,10 @@ export type KeybindsConfig = {
    * Previous child session
    */
   session_child_cycle_reverse?: string
+  /**
+   * Suspend terminal
+   */
+  terminal_suspend?: string
 }
 
 export type AgentConfig = {
