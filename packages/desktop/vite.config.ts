@@ -9,7 +9,7 @@ export default defineConfig({
       "@": path.resolve(__dirname, "./src"),
     },
   },
-  plugins: [tailwindcss(), solidPlugin()],
+  plugins: [tailwindcss(), solidPlugin()] as any,
   server: {
     host: "0.0.0.0",
     allowedHosts: true,
