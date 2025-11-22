@@ -860,6 +860,11 @@ export function Session() {
                     </Match>
                     <Match when={message.role === "assistant"}>
                       <AssistantMessage
+                        user={
+                          messages().findLast(
+                            (item) => item.id === (message as AssistantMessage).parentID,
+                          ) as UserMessage
+                        }
                         last={lastAssistant()?.id === message.id}
                         message={message as AssistantMessage}
                         parts={sync.data.part[message.id] ?? []}
@@ -993,7 +998,7 @@ function UserMessage(props: {
   )
 }
 
-function AssistantMessage(props: { message: AssistantMessage; parts: Part[]; last: boolean }) {
+function AssistantMessage(props: { message: AssistantMessage; parts: Part[]; last: boolean; user: UserMessage }) {
   const local = useLocal()
   const { theme } = useTheme()
   const ctx = use()
@@ -1038,13 +1043,15 @@ function AssistantMessage(props: { message: AssistantMessage; parts: Part[]; las
         >
           <box paddingLeft={3}>
             <text marginTop={1}>
-              <span style={{ fg: local.agent.color(props.message.mode) }}>{Locale.titlecase(props.message.mode)}</span>{" "}
-              <span style={{ fg: theme.textMuted }}>
-                {props.message.modelID}
-                {ctx.showTimestamps() &&
-                  props.message.time.completed &&
-                  ` · ${Locale.todayTimeOrDateTime(props.message.time.completed)}`}
-              </span>
+              <span style={{ fg: local.agent.color(props.message.mode) }}>▣</span>{" "}
+              <span style={{ fg: theme.text }}>{Locale.titlecase(props.message.mode)}</span>{" "}
+              <span style={{ fg: theme.textMuted }}>⬝{props.message.modelID}</span>
+              <Show when={props.message.time.completed}>
+                <span style={{ fg: theme.textMuted }}>
+                  {" "}
+                  ⬝{Locale.duration(props.message.time.completed! - props.user.time.created)}
+                </span>
+              </Show>
             </text>
           </box>
         </Match>
