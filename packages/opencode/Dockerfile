@@ -5,6 +5,6 @@ FROM alpine
 ARG BUN_RUNTIME_TRANSPILER_CACHE_PATH=0
 ENV BUN_RUNTIME_TRANSPILER_CACHE_PATH=${BUN_RUNTIME_TRANSPILER_CACHE_PATH}
 RUN apk add libgcc libstdc++
-ADD ./dist/opencode-linux-x64-baseline-musl/bin/opencode .
-RUN ./opencode --version
+ADD ./dist/opencode-linux-x64-baseline-musl/bin/opencode /usr/local/bin/opencode
+RUN opencode --version
 
