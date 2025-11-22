@@ -999,7 +999,12 @@ function AssistantMessage(props: { message: AssistantMessage; parts: Part[]; las
   const sync = useSync()
   const messages = createMemo(() => sync.data.message[props.message.sessionID] ?? [])
 
+  const final = createMemo(() => {
+    return props.message.finish && !["tool-calls", "unknown"].includes(props.message.finish)
+  })
+
   const duration = createMemo(() => {
+    if (!final()) return 0
     if (!props.message.time.completed) return 0
     const user = messages().find((x) => x.role === "user" && x.id === props.message.parentID)
     if (!user) return 0
@@ -1038,21 +1043,13 @@ function AssistantMessage(props: { message: AssistantMessage; parts: Part[]; las
         </box>
       </Show>
       <Switch>
-        <Match
-          when={
-            (props.message.time.completed &&
-              props.parts.some(
-                (item) => item.type === "step-finish" && !["tool-calls", "unknown"].includes(item.reason),
-              )) ||
-            props.last
-          }
-        >
+        <Match when={props.last || final()}>
           <box paddingLeft={3}>
             <text marginTop={1}>
               <span style={{ fg: local.agent.color(props.message.mode) }}>▣</span>{" "}
               <span style={{ fg: theme.text }}>{Locale.titlecase(props.message.mode)}</span>{" "}
               <span style={{ fg: theme.textMuted }}>⬝{props.message.modelID}</span>
-              <Show when={props.message.time.completed}>
+              <Show when={duration()}>
                 <span style={{ fg: theme.textMuted }}> ⬝{Locale.duration(duration())}</span>
               </Show>
             </text>
