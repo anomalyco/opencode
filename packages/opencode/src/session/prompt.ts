@@ -11,6 +11,7 @@ import { Agent } from "../agent/agent"
 import { Provider } from "../provider/provider"
 import { type Tool as AITool, tool, jsonSchema } from "ai"
 import { SessionCompaction } from "./compaction"
+import { SessionLock } from "./lock"
 import { Instance } from "../project/instance"
 import { Bus } from "../bus"
 import { ProviderTransform } from "../provider/transform"
@@ -228,6 +229,22 @@ export namespace SessionPrompt {
     return
   }
 
+  function lock(sessionID: string) {
+    const handle = SessionLock.acquire({ sessionID })
+    log.info("locking", { sessionID })
+    return {
+      signal: handle.signal,
+      abort: handle.abort,
+      async [Symbol.dispose]() {
+        handle[Symbol.dispose]()
+        log.info("unlocking", { sessionID })
+        const session = await Session.get(sessionID)
+        if (session.parentID) return
+        cancel(sessionID)
+      },
+    }
+  }
+
   export const loop = fn(Identifier.schema("session"), async (sessionID) => {
     const abort = start(sessionID)
     if (!abort) {
@@ -237,6 +254,7 @@ export namespace SessionPrompt {
       })
     }
 
+    using _lock = lock(sessionID)
     using _ = defer(() => cancel(sessionID))
 
     let step = 0
