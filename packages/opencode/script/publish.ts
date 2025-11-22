@@ -59,12 +59,16 @@ if (!Script.preview) {
 
 if (!Script.preview) {
   for (const key of Object.keys(binaries)) {
-    await $`cd dist/${key}/bin && zip -r ../../${key}.zip *`
+    if (key.includes("linux")) {
+      await $`cd dist/${key}/bin && tar -czf ../../${key}.tar.gz *`
+    } else {
+      await $`cd dist/${key}/bin && zip -r ../../${key}.zip *`
+    }
   }
 
   // Calculate SHA values
-  const arm64Sha = await $`sha256sum ./dist/opencode-linux-arm64.zip | cut -d' ' -f1`.text().then((x) => x.trim())
-  const x64Sha = await $`sha256sum ./dist/opencode-linux-x64.zip | cut -d' ' -f1`.text().then((x) => x.trim())
+  const arm64Sha = await $`sha256sum ./dist/opencode-linux-arm64.tar.gz | cut -d' ' -f1`.text().then((x) => x.trim())
+  const x64Sha = await $`sha256sum ./dist/opencode-linux-x64.tar.gz | cut -d' ' -f1`.text().then((x) => x.trim())
   const macX64Sha = await $`sha256sum ./dist/opencode-darwin-x64.zip | cut -d' ' -f1`.text().then((x) => x.trim())
   const macArm64Sha = await $`sha256sum ./dist/opencode-darwin-arm64.zip | cut -d' ' -f1`.text().then((x) => x.trim())
 
@@ -88,10 +92,10 @@ if (!Script.preview) {
     "conflicts=('opencode')",
     "depends=('fzf' 'ripgrep')",
     "",
-    `source_aarch64=("\${pkgname}_\${pkgver}_aarch64.zip::https://github.com/sst/opencode/releases/download/v\${pkgver}\${_subver}/opencode-linux-arm64.zip")`,
+    `source_aarch64=("\${pkgname}_\${pkgver}_aarch64.tar.gz::https://github.com/sst/opencode/releases/download/v\${pkgver}\${_subver}/opencode-linux-arm64.tar.gz")`,
     `sha256sums_aarch64=('${arm64Sha}')`,
-    "",
-    `source_x86_64=("\${pkgname}_\${pkgver}_x86_64.zip::https://github.com/sst/opencode/releases/download/v\${pkgver}\${_subver}/opencode-linux-x64.zip")`,
+
+    `source_x86_64=("\${pkgname}_\${pkgver}_x86_64.tar.gz::https://github.com/sst/opencode/releases/download/v\${pkgver}\${_subver}/opencode-linux-x64.tar.gz")`,
     `sha256sums_x86_64=('${x64Sha}')`,
     "",
     "package() {",
@@ -216,14 +220,14 @@ if (!Script.preview) {
     "",
     "  on_linux do",
     "    if Hardware::CPU.intel? and Hardware::CPU.is_64_bit?",
-    `      url "https://github.com/sst/opencode/releases/download/v${Script.version}/opencode-linux-x64.zip"`,
+    `      url "https://github.com/sst/opencode/releases/download/v${Script.version}/opencode-linux-x64.tar.gz"`,
     `      sha256 "${x64Sha}"`,
     "      def install",
     '        bin.install "opencode"',
     "      end",
     "    end",
     "    if Hardware::CPU.arm? and Hardware::CPU.is_64_bit?",
-    `      url "https://github.com/sst/opencode/releases/download/v${Script.version}/opencode-linux-arm64.zip"`,
+    `      url "https://github.com/sst/opencode/releases/download/v${Script.version}/opencode-linux-arm64.tar.gz"`,
     `      sha256 "${arm64Sha}"`,
     "      def install",
     '        bin.install "opencode"',
