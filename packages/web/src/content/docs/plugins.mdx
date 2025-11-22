@@ -135,7 +135,7 @@ Here are some examples of plugins you can use to extend opencode.
 
 ### Send notifications
 
-Send notifications when certain events occur:
+Send notifications when certain events occur, with parentID to distinguish between agent and subagent sessions:
 
 ```js title=".opencode/plugin/notification.js"
 export const NotificationPlugin = async ({ project, client, $, directory, worktree }) => {
@@ -143,14 +143,21 @@ export const NotificationPlugin = async ({ project, client, $, directory, worktr
     event: async ({ event }) => {
       // Send notification on session completion
       if (event.type === "session.idle") {
-        await $`osascript -e 'display notification "Session completed!" with title "opencode"'`
+        // Extract parentID from different event structures
+        const parentID = event.properties.info?.parentID || event.properties.parentID;
+        
+        if (parentID) {
+          await $`osascript -e 'display notification "Subagent session completed!" with title "opencode"'`
+        } else {
+          await $`osascript -e 'display notification "Agent session completed!" with title "opencode"'`
+        }
       }
     },
   }
 }
 ```
 
-We are using `osascript` to run AppleScript on macOS. Here we are using it to send notifications.
+We are using `osascript` to run AppleScript on macOS. Here we are using it to send notifications with different messages for agent vs subagent sessions.
 
 ---
 

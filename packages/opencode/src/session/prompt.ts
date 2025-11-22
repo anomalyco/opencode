@@ -934,11 +934,13 @@ export namespace SessionPrompt {
                       })
                     }
                   })
-                  .catch((error) => {
+                  .catch(async (error) => {
                     log.error("failed to read file", { error })
                     const message = error instanceof Error ? error.message : error.toString()
+                    const session = await Session.get(input.sessionID)
                     Bus.publish(Session.Event.Error, {
                       sessionID: input.sessionID,
+                      parentID: session.parentID,
                       error: new NamedError.Unknown({
                         message,
                       }).toObject(),

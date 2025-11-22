@@ -1,5 +1,6 @@
 import { Bus } from "@/bus"
 import { Instance } from "@/project/instance"
+import { Session } from "@/session"
 import z from "zod"
 
 export namespace SessionStatus {
@@ -28,6 +29,7 @@ export namespace SessionStatus {
       "session.status",
       z.object({
         sessionID: z.string(),
+        parentID: z.string().optional(),
         status: Info,
       }),
     ),
@@ -36,6 +38,7 @@ export namespace SessionStatus {
       "session.idle",
       z.object({
         sessionID: z.string(),
+        parentID: z.string().optional(),
       }),
     ),
   }
@@ -57,15 +60,19 @@ export namespace SessionStatus {
     return Object.values(state())
   }
 
-  export function set(sessionID: string, status: Info) {
+  export async function set(sessionID: string, status: Info) {
+    const session = await Session.get(sessionID)
     Bus.publish(Event.Status, {
       sessionID,
+      parentID: session.parentID,
       status,
     })
     if (status.type === "idle") {
       // deprecated
+      const session = await Session.get(sessionID)
       Bus.publish(Event.Idle, {
         sessionID,
+        parentID: session.parentID,
       })
       delete state()[sessionID]
       return

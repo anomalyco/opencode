@@ -53,8 +53,10 @@ export namespace SessionSummary {
       }
     })
     await Storage.write(["session_diff", input.sessionID], diffs)
+    const session = await Session.get(input.sessionID)
     Bus.publish(Session.Event.Diff, {
       sessionID: input.sessionID,
+      parentID: session.parentID,
       diff: diffs,
     })
   }

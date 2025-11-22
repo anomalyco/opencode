@@ -107,6 +107,7 @@ export namespace Session {
       "session.diff",
       z.object({
         sessionID: z.string(),
+        parentID: z.string().optional(),
         diff: Snapshot.FileDiff.array(),
       }),
     ),
@@ -114,6 +115,7 @@ export namespace Session {
       "session.error",
       z.object({
         sessionID: z.string().optional(),
+        parentID: z.string().optional(),
         error: MessageV2.Assistant.shape.error,
       }),
     ),

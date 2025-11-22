@@ -453,6 +453,7 @@ export type EventSessionStatus = {
   type: "session.status"
   properties: {
     sessionID: string
+    parentID?: string
     status: SessionStatus
   }
 }
@@ -461,6 +462,7 @@ export type EventSessionIdle = {
   type: "session.idle"
   properties: {
     sessionID: string
+    parentID?: string
   }
 }
 
@@ -468,6 +470,7 @@ export type EventSessionCompacted = {
   type: "session.compacted"
   properties: {
     sessionID: string
+    parentID?: string
   }
 }
 
@@ -569,6 +572,7 @@ export type EventSessionDiff = {
   type: "session.diff"
   properties: {
     sessionID: string
+    parentID?: string
     diff: Array<FileDiff>
   }
 }
@@ -577,6 +581,7 @@ export type EventSessionError = {
   type: "session.error"
   properties: {
     sessionID?: string
+    parentID?: string
     error?: ProviderAuthError | UnknownError | MessageOutputLengthError | MessageAbortedError | ApiError
   }
 }

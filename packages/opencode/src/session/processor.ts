@@ -346,8 +346,10 @@ export namespace SessionProcessor {
               continue
             }
             input.assistantMessage.error = error
+            const session = await Session.get(input.assistantMessage.sessionID)
             Bus.publish(Session.Event.Error, {
               sessionID: input.assistantMessage.sessionID,
+              parentID: session.parentID,
               error: input.assistantMessage.error,
             })
           }

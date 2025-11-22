@@ -25,6 +25,7 @@ export namespace SessionCompaction {
       "session.compacted",
       z.object({
         sessionID: z.string(),
+        parentID: z.string().optional(),
       }),
     ),
   }
@@ -223,6 +224,14 @@ export namespace SessionCompaction {
       })
     }
     if (processor.message.error) return "stop"
+    
+    // Publish compaction completed event
+    const session = await Session.get(input.sessionID)
+    Bus.publish(Event.Compacted, {
+      sessionID: input.sessionID,
+      parentID: session.parentID,
+    })
+    
     return "continue"
   }
 
