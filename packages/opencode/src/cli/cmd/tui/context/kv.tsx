@@ -39,9 +39,9 @@ export const { use: useKV, provider: KVProvider } = createSimpleContext({
       get(key: string, defaultValue?: any) {
         return kvStore[key] ?? defaultValue
       },
-      set(key: string, value: any) {
+      async set(key: string, value: any) {
         setKvStore(key, value)
-        Bun.write(file, JSON.stringify(kvStore, null, 2))
+        await Bun.write(file, JSON.stringify(kvStore, null, 2)).catch(() => {})
       },
     }
     return result

@@ -261,7 +261,8 @@ export const { use: useLocal, provider: LocalProvider } = createSimpleContext({
           )
           save()
         },
-        set(model: { providerID: string; modelID: string }, options?: { recent?: boolean }) {
+        async set(model: { providerID: string; modelID: string }, options?: { recent?: boolean }) {
+          let shouldWrite = false
           batch(() => {
             if (!isModelValid(model)) {
               toast.show({
@@ -275,13 +276,18 @@ export const { use: useLocal, provider: LocalProvider } = createSimpleContext({
             if (options?.recent) {
               const uniq = uniqueBy([model, ...modelStore.recent], (x) => `${x.providerID}/${x.modelID}`)
               if (uniq.length > 10) uniq.pop()
-              setModelStore(
-                "recent",
-                uniq.map((x) => ({ providerID: x.providerID, modelID: x.modelID })),
-              )
-              save()
+              setModelStore("recent", uniq)
+              shouldWrite = true
             }
           })
+          if (shouldWrite) {
+            await Bun.write(
+              file,
+              JSON.stringify({
+                recent: modelStore.recent,
+              }),
+            ).catch(() => {})
+          }
         },
         toggleFavorite(model: { providerID: string; modelID: string }) {
           batch(() => {
