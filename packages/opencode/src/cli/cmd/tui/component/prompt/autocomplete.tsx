@@ -455,7 +455,7 @@ export function Autocomplete(props: {
       {...SplitBorder}
       borderColor={theme.border}
     >
-      <box backgroundColor={theme.backgroundElement} height={height()}>
+      <box backgroundColor={theme.backgroundMenu} height={height()}>
         <For
           each={options()}
           fallback={

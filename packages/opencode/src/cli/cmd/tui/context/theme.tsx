@@ -46,6 +46,7 @@ type Theme = {
   background: RGBA
   backgroundPanel: RGBA
   backgroundElement: RGBA
+  backgroundMenu: RGBA
   border: RGBA
   borderActive: RGBA
   borderSubtle: RGBA
@@ -89,8 +90,8 @@ type Theme = {
 export function selectedForeground(theme: Theme): RGBA {
   if (theme.background.a === 0) {
     const { r, g, b } = theme.primary
-    const luminance  = 0.299 * r + 0.587 * g + 0.114 * b
-    return luminance  > 0.5 ? RGBA.fromInts(0, 0, 0) : RGBA.fromInts(255, 255, 255)
+    const luminance = 0.299 * r + 0.587 * g + 0.114 * b
+    return luminance > 0.5 ? RGBA.fromInts(0, 0, 0) : RGBA.fromInts(255, 255, 255)
   }
   return theme.background
 }
@@ -154,11 +155,13 @@ function resolveTheme(theme: ThemeJson, mode: "dark" | "light") {
     }
     return resolveColor(c[mode])
   }
-  return Object.fromEntries(
+  const resolved = Object.fromEntries(
     Object.entries(theme.theme).map(([key, value]) => {
       return [key, resolveColor(value)]
     }),
   ) as Theme
+  if (!theme.theme.backgroundMenu) resolved.backgroundMenu = resolved.backgroundElement
+  return resolved
 }
 
 export const { use: useTheme, provider: ThemeProvider } = createSimpleContext({
@@ -300,6 +303,7 @@ function generateSystem(colors: TerminalColors, mode: "dark" | "light"): ThemeJs
       background: bg,
       backgroundPanel: grays[2],
       backgroundElement: grays[3],
+      backgroundMenu: grays[3],
 
       // Border colors
       borderSubtle: grays[6],
