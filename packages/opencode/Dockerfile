@@ -7,4 +7,4 @@ ENV BUN_RUNTIME_TRANSPILER_CACHE_PATH=${BUN_RUNTIME_TRANSPILER_CACHE_PATH}
 RUN apk add libgcc libstdc++
 ADD ./dist/opencode-linux-x64-baseline-musl/bin/opencode /usr/local/bin/opencode
 RUN opencode --version
-
+ENTRYPOINT ["opencode"]
