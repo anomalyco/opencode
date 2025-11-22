@@ -20,7 +20,6 @@
     "luxon": "catalog:",
     "nitro": "3.0.1-alpha.1",
     "solid-js": "catalog:",
-    "vinxi": "^0.5.7",
     "zod": "catalog:"
   },
   "devDependencies": {
