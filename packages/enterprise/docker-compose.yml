@@ -1,0 +1,49 @@
+services:
+  minio:
+    image: minio/minio:latest
+    container_name: opencode-minio
+    ports:
+      - "9000:9000"
+      - "9001:9001"
+    environment:
+      MINIO_ROOT_USER: minioadmin
+      MINIO_ROOT_PASSWORD: minioadmin
+    command: server /data --console-address ":9001"
+    volumes:
+      - minio-data:/data
+    healthcheck:
+      test: ["CMD", "mc", "ready", "local"]
+      interval: 5s
+      timeout: 5s
+      retries: 5
+
+  createbucket:
+    image: minio/mc:latest
+    depends_on:
+      minio:
+        condition: service_healthy
+    entrypoint: >
+      /bin/sh -c "
+      mc alias set myminio http://minio:9000 minioadmin minioadmin;
+      mc mb myminio/opencode || true;
+      mc anonymous set public myminio/opencode;
+      exit 0;
+      "
+
+  enterprise:
+    image: ghcr.io/sst/opencode-enterprise:latest
+    container_name: opencode-enterprise
+    ports:
+      - "3000:3000"
+    environment:
+      OPENCODE_STORAGE_ADAPTER: s3
+      OPENCODE_STORAGE_BUCKET: opencode
+      OPENCODE_STORAGE_REGION: us-east-1
+      OPENCODE_STORAGE_ACCESS_KEY_ID: minioadmin
+      OPENCODE_STORAGE_SECRET_ACCESS_KEY: minioadmin
+      OPENCODE_STORAGE_ENDPOINT: http://minio:9000
+    depends_on:
+      - createbucket
+
+volumes:
+  minio-data:
