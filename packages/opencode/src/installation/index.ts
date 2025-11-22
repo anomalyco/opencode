@@ -22,6 +22,12 @@ export namespace Installation {
         version: z.string(),
       }),
     ),
+    UpdateAvailable: Bus.event(
+      "installation.update-available",
+      z.object({
+        version: z.string(),
+      }),
+    ),
   }
 
   export const Info = z
