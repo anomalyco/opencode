@@ -1,4 +1,4 @@
-import { useSession } from "vinxi/http"
+import { useSession } from "@solidjs/start/http"
 
 export interface AuthSession {
   account?: Record<

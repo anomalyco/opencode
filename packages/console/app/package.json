@@ -4,10 +4,10 @@
   "type": "module",
   "scripts": {
     "typecheck": "tsgo --noEmit",
-    "dev": "vinxi dev --host 0.0.0.0",
+    "dev": "vite dev --host 0.0.0.0",
     "dev:remote": "VITE_AUTH_URL=https://auth.dev.opencode.ai bun sst shell --stage=dev bun dev",
     "build": "./script/generate-sitemap.ts && vite build && ../../opencode/script/schema.ts ./.output/public/config.json",
-    "start": "vinxi start"
+    "start": "vite start"
   },
   "dependencies": {
     "@cloudflare/vite-plugin": "1.15.2",
