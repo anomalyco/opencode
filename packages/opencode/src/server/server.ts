@@ -42,7 +42,6 @@ import { Snapshot } from "@/snapshot"
 import { SessionSummary } from "@/session/summary"
 import { GlobalBus } from "@/bus/global"
 import { SessionStatus } from "@/session/status"
-import { upgrade } from "@/cli/upgrade"
 import { ShareNext } from "@/share/share-next"
 
 // @ts-ignore This global is needed to prevent ai-sdk from logging warnings to stdout https://github.com/vercel/ai/blob/2dc67e0ef538307f21368db32d5a12345d98831b/packages/ai/src/logger/log-warnings.ts#L85
@@ -1985,9 +1984,6 @@ export namespace Server {
                 data: JSON.stringify(event),
               })
             })
-            setTimeout(() => {
-              upgrade()
-            }, 1000)            
             await new Promise<void>((resolve) => {
               stream.onAbort(() => {
                 unsub()

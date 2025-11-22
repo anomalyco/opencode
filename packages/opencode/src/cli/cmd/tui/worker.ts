@@ -3,6 +3,7 @@ import { Server } from "@/server/server"
 import { Log } from "@/util/log"
 import { Instance } from "@/project/instance"
 import { Rpc } from "@/util/rpc"
+import { upgrade } from "@/cli/upgrade"
 
 await Log.init({
   print: process.argv.includes("--print-logs"),
@@ -39,6 +40,14 @@ export const rpc = {
       console.error(e)
       throw e
     }
+  },
+  async checkUpgrade(input: { directory: string }) {
+    await Instance.provide({
+      directory: input.directory,
+      fn: async () => {
+        await upgrade().catch(() => {})
+      },
+    })
   },
   async shutdown() {
     Log.Default.info("worker shutting down")

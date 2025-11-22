@@ -99,7 +99,9 @@ export const TuiThreadCommand = cmd({
       if (!args.prompt) return piped
       return piped ? piped + "\n" + args.prompt : args.prompt
     })
-    await tui({
+    
+    // Start TUI
+    const tuiPromise = tui({
       url: server.url,
       args: {
         continue: args.continue,
@@ -112,5 +114,13 @@ export const TuiThreadCommand = cmd({
         await client.call("shutdown", undefined)
       },
     })
+    
+    // Check for updates after TUI connects (without blocking)
+    setTimeout(() => {
+      client.call("checkUpgrade", { directory: cwd }).catch(() => {})
+    }, 1000)
+    
+    // Wait for TUI to exit
+    await tuiPromise
   },
 })
