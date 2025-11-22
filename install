@@ -5,6 +5,7 @@ APP=opencode
 MUTED='\033[0;2m'
 RED='\033[0;31m'
 ORANGE='\033[38;2;255;140;0m'
+FORGE_ORANGE='\033[38;2;255;102;0m'
 NC='\033[0m' # No Color
 
 requested_version=${VERSION:-}
@@ -307,11 +308,14 @@ if [ -n "${GITHUB_ACTIONS-}" ] && [ "${GITHUB_ACTIONS}" == "true" ]; then
     print_message info "Added $INSTALL_DIR to \$GITHUB_PATH"
 fi
 
-echo -e ""
-echo -e "${MUTED}                    ${NC}             ▄     "
-echo -e "${MUTED}█▀▀█ █▀▀█ █▀▀█ █▀▀▄ ${NC}█▀▀▀ █▀▀█ █▀▀█ █▀▀█"
-echo -e "${MUTED}█░░█ █░░█ █▀▀▀ █░░█ ${NC}█░░░ █░░█ █░░█ █▀▀▀"
-echo -e "${MUTED}▀▀▀▀ █▀▀▀ ▀▀▀▀ ▀  ▀ ${NC}▀▀▀▀ ▀▀▀▀ ▀▀▀▀ ▀▀▀▀"
+echo -e "${FORGE_ORANGE} ███████████    ███████    ███████████     █████████  ██████████${NC}"
+echo -e "${FORGE_ORANGE}░░███░░░░░░█  ███░░░░░███ ░░███░░░░░███   ███░░░░░███░░███░░░░░█${NC}"
+echo -e "${FORGE_ORANGE} ░███   █ ░  ███     ░░███ ░███    ░███  ███     ░░░  ░███  █ ░ ${NC}"
+echo -e "${FORGE_ORANGE} ░███████   ░███      ░███ ░██████████  ░███          ░██████   ${NC}"
+echo -e "${FORGE_ORANGE} ░███░░░█   ░███      ░███ ░███░░░░░███ ░███    █████ ░███░░█   ${NC}"
+echo -e "${FORGE_ORANGE} ░███  ░    ░░███     ███  ░███    ░███ ░░███  ░░███  ░███ ░   █${NC}"
+echo -e "${FORGE_ORANGE} █████       ░░░███████░   █████   █████ ░░█████████  ██████████${NC}"
+echo -e "${FORGE_ORANGE}░░░░░          ░░░░░░░    ░░░░░   ░░░░░   ░░░░░░░░░  ░░░░░░░░░░ ${NC}"
 echo -e ""
 echo -e ""
 echo -e "${MUTED}To get started, navigate to a project and run:${NC}"

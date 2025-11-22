@@ -1,4 +1,5 @@
 import { Server } from "../../server/server"
+import { ACPOrchestrator } from "../../acp/orchestrator"
 import { cmd } from "./cmd"
 
 export const ServeCommand = cmd({
@@ -25,6 +26,18 @@ export const ServeCommand = cmd({
       hostname,
     })
     console.log(`opencode server listening on http://${server.hostname}:${server.port}`)
+
+    // Cleanup ACP subprocesses on shutdown
+    const cleanup = async () => {
+      console.log("Cleaning up ACP sessions...")
+      await ACPOrchestrator.cleanupAll()
+      await server.stop()
+      process.exit(0)
+    }
+
+    process.on("SIGTERM", cleanup)
+    process.on("SIGINT", cleanup)
+
     await new Promise(() => {})
     await server.stop()
   },

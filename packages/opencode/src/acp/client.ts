@@ -1,0 +1,305 @@
+import {
+  ClientSideConnection,
+  type Agent,
+  type Client,
+  type InitializeRequest,
+  type InitializeResponse,
+  type NewSessionRequest,
+  type NewSessionResponse,
+  type PromptRequest,
+  type PromptResponse,
+  type SessionNotification,
+  type RequestPermissionRequest,
+  type RequestPermissionResponse,
+  PROTOCOL_VERSION,
+  ndJsonStream,
+} from "@agentclientprotocol/sdk"
+import { Log } from "@/util/log"
+import type { Subprocess } from "bun"
+
+const log = Log.create({ service: "acp-client" })
+
+export namespace ACPClient {
+  /**
+   * Configuration for creating an ACP client
+   *
+   * NOTE: claude-code-acp does NOT support loadSession capability.
+   * Sessions exist only in memory during subprocess lifetime. When the subprocess
+   * dies, the session is gone. This is by design for the MVP - no persistence needed.
+   */
+  export type Config = {
+    /**
+     * Path to the claude-code-acp executable
+     */
+    command: string
+    /**
+     * Arguments to pass to the subprocess
+     */
+    args?: string[]
+    /**
+     * Environment variables for the subprocess
+     */
+    env?: Record<string, string>
+    /**
+     * Current working directory
+     */
+    cwd: string
+    /**
+     * Client capabilities to advertise
+     */
+    capabilities?: {
+      fs?: {
+        readTextFile?: boolean
+        writeTextFile?: boolean
+      }
+    }
+    /**
+     * Callback for session updates (text chunks, tool calls, etc.)
+     */
+    onSessionUpdate?: (update: SessionNotification) => void
+    /**
+     * Callback for permission requests
+     */
+    onPermissionRequest?: (
+      request: RequestPermissionRequest,
+    ) => Promise<RequestPermissionResponse>
+  }
+
+  /**
+   * ACP Client interface
+   */
+  export interface Instance {
+    /**
+     * Initialize the connection with the agent
+     */
+    initialize(): Promise<InitializeResponse>
+    /**
+     * Create a new session
+     */
+    createSession(): Promise<NewSessionResponse>
+    /**
+     * Send a prompt to the agent
+     */
+    sendPrompt(sessionId: string, text: string): Promise<PromptResponse>
+    /**
+     * Get the underlying agent connection
+     */
+    get agent(): Agent
+    /**
+     * Check if connected
+     */
+    isConnected(): boolean
+    /**
+     * Dispose the client and cleanup resources
+     */
+    dispose(): Promise<void>
+  }
+
+  /**
+   * Create an ACP client
+   */
+  export async function create(config: Config): Promise<Instance> {
+    log.info("creating ACP client", { command: config.command, cwd: config.cwd })
+
+    // Spawn the subprocess directly - we need raw access to stdin/stdout for the SDK
+    let proc: Subprocess<"pipe", "pipe", "pipe">
+    try {
+      proc = Bun.spawn([config.command, ...(config.args ?? [])], {
+        stdin: "pipe",
+        stdout: "pipe",
+        stderr: "pipe",
+        env: {
+          ...process.env,
+          ...config.env,
+        },
+        cwd: config.cwd,
+      })
+
+      log.info("subprocess spawned", { pid: proc.pid })
+    } catch (error) {
+      const err = error instanceof Error ? error : new Error(String(error))
+      log.error("failed to spawn subprocess", { error: err.message })
+      throw err
+    }
+
+    // Handle stderr in background
+    void (async () => {
+      try {
+        for await (const chunk of proc.stderr as unknown as AsyncIterable<Uint8Array>) {
+          const text = new TextDecoder().decode(chunk)
+          log.debug("agent stderr", { text })
+        }
+      } catch (error) {
+        // Ignore stderr errors
+      }
+    })()
+
+    // Handle process exit in background
+    void (async () => {
+      try {
+        const exitCode = await proc.exited
+        log.info("agent exited", { exitCode })
+      } catch (error) {
+        const err = error instanceof Error ? error : new Error(String(error))
+        log.error("agent error", { error: err.message })
+      }
+    })()
+
+    // Create Client implementation
+    const clientImpl: Client = {
+      async sessionUpdate(params: SessionNotification): Promise<void> {
+        log.debug("session update", { update: params.update.sessionUpdate })
+        config.onSessionUpdate?.(params)
+      },
+
+      async requestPermission(
+        params: RequestPermissionRequest,
+      ): Promise<RequestPermissionResponse> {
+        log.info("permission request", { toolCall: params.toolCall.title })
+
+        if (config.onPermissionRequest) {
+          return await config.onPermissionRequest(params)
+        }
+
+        // Default: reject all permissions
+        log.warn("no permission handler configured, rejecting")
+        return {
+          outcome: {
+            outcome: "selected",
+            optionId: "reject",
+          },
+        }
+      },
+    }
+
+    // Convert Bun streams to Web streams for ndJsonStream
+    // Bun's proc.stdout is already a ReadableStream
+    // Bun's proc.stdin is a FileSink (WritableStreamSink) that we need to wrap
+
+    // Create a WritableStream that writes to proc.stdin
+    const stdinWritable = new WritableStream<Uint8Array>({
+      write(chunk) {
+        proc.stdin.write(chunk)
+      },
+      close() {
+        proc.stdin.end()
+      },
+      abort(reason) {
+        proc.stdin.end()
+      },
+    })
+
+    // proc.stdout is already a ReadableStream
+    const stdoutReadable = proc.stdout
+
+    // Create the stream for bidirectional communication
+    // ndJsonStream expects: output (where we write), input (where we read)
+    const stream = ndJsonStream(stdinWritable, stdoutReadable)
+
+    // Create the client-side connection
+    const connection = new ClientSideConnection((_agent: Agent) => clientImpl, stream)
+
+    log.info("connection created")
+
+    // Track initialization state
+    let initialized = false
+    let currentSessionId: string | undefined
+
+    const instance: Instance = {
+      async initialize(): Promise<InitializeResponse> {
+        if (initialized) {
+          throw new Error("Already initialized")
+        }
+
+        log.info("initializing connection")
+
+        const request: InitializeRequest = {
+          protocolVersion: PROTOCOL_VERSION,
+          clientCapabilities: {
+            fs: config.capabilities?.fs ?? {},
+          },
+        }
+
+        const response = await connection.initialize(request)
+        initialized = true
+
+        log.info("initialized", {
+          protocolVersion: response.protocolVersion,
+          agentName: response.agentInfo?.name,
+          agentVersion: response.agentInfo?.version,
+        })
+
+        return response
+      },
+
+      async createSession(): Promise<NewSessionResponse> {
+        if (!initialized) {
+          throw new Error("Must initialize before creating session")
+        }
+
+        log.info("creating session", { cwd: config.cwd })
+
+        const request: NewSessionRequest = {
+          cwd: config.cwd,
+          mcpServers: [],
+        }
+
+        const response = await connection.newSession(request)
+        currentSessionId = response.sessionId
+
+        log.info("session created", { sessionId: response.sessionId })
+
+        return response
+      },
+
+      async sendPrompt(sessionId: string, text: string): Promise<PromptResponse> {
+        if (!initialized) {
+          throw new Error("Must initialize before sending prompts")
+        }
+
+        log.info("sending prompt", { sessionId, textLength: text.length })
+
+        const request: PromptRequest = {
+          sessionId,
+          prompt: [
+            {
+              type: "text",
+              text,
+            },
+          ],
+        }
+
+        const response = await connection.prompt(request)
+
+        log.info("prompt completed", { sessionId, stopReason: response.stopReason })
+
+        return response
+      },
+
+      get agent(): Agent {
+        return connection
+      },
+
+      isConnected(): boolean {
+        return initialized && !connection.signal.aborted
+      },
+
+      async dispose(): Promise<void> {
+        log.info("disposing client")
+        try {
+          proc.kill("SIGTERM")
+          await Bun.sleep(200)
+          if (!proc.killed) {
+            proc.kill("SIGKILL")
+          }
+        } catch (error) {
+          log.error("error killing subprocess", {
+            error: error instanceof Error ? error.message : String(error),
+          })
+        }
+      },
+    }
+
+    return instance
+  }
+}

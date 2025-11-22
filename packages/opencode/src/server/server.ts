@@ -29,6 +29,7 @@ import { ProjectRoute } from "./project"
 import { ToolRegistry } from "../tool/registry"
 import { zodToJsonSchema } from "zod-to-json-schema"
 import { SessionPrompt } from "../session/prompt"
+import { SessionPromptACP } from "../session/prompt-acp"
 import { SessionCompaction } from "../session/compaction"
 import { SessionRevert } from "../session/revert"
 import { lazy } from "../util/lazy"
@@ -967,14 +968,14 @@ export namespace Server {
             id: z.string().meta({ description: "Session ID" }),
           }),
         ),
-        validator("json", SessionPrompt.PromptInput.omit({ sessionID: true })),
+        validator("json", SessionPromptACP.PromptInput.omit({ sessionID: true })),
         async (c) => {
           c.status(200)
           c.header("Content-Type", "application/json")
           return stream(c, async (stream) => {
             const sessionID = c.req.valid("param").id
             const body = c.req.valid("json")
-            const msg = await SessionPrompt.prompt({ ...body, sessionID })
+            const msg = await SessionPromptACP.prompt({ ...body, sessionID })
             stream.write(JSON.stringify(msg))
           })
         },
