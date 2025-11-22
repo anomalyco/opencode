@@ -6,6 +6,7 @@ import (
 	"context"
 	"net/http"
 	"net/url"
+	"slices"
 
 	"github.com/sst/opencode-sdk-go/internal/apijson"
 	"github.com/sst/opencode-sdk-go/internal/apiquery"
@@ -35,7 +36,7 @@ func NewCommandService(opts ...option.RequestOption) (r *CommandService) {
 
 // List all commands
 func (r *CommandService) List(ctx context.Context, query CommandListParams, opts ...option.RequestOption) (res *[]Command, err error) {
-	opts = append(r.Options[:], opts...)
+	opts = slices.Concat(r.Options, opts)
 	path := "command"
 	err = requestconfig.ExecuteNewRequest(ctx, http.MethodGet, path, query, &res, opts...)
 	return

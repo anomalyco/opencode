@@ -3,7 +3,7 @@ title: Troubleshooting
 description: Common issues and how to resolve them.
 ---
 
-To debug any issues with opencode, you can check the logs or the session data
+To debug any issues with OpenCode, you can check the logs or the session data
 that it stores locally.
 
 ---
@@ -40,7 +40,7 @@ This directory contains:
 
 ## Getting help
 
-If you're experiencing issues with opencode:
+If you're experiencing issues with OpenCode:
 
 1. **Report issues on GitHub**
 
@@ -85,6 +85,18 @@ Here are some common issues and how to resolve them.
 1. Check that you've authenticated with the provider
 2. Verify the model name in your config is correct
 3. Some models may require specific access or subscriptions
+
+If you encounter `ProviderModelNotFoundError` you are most likely incorrectly
+referencing a model somewhere.
+Models should be referenced like so: `<providerId>/<modelId>`
+
+Examples:
+
+- `openai/gpt-4.1`
+- `openrouter/google/gemini-2.5-flash`
+- `opencode/kimi-k2`
+
+To figure out what models you have access to, run `opencode models`
 
 ---
 

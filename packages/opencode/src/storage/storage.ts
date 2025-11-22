@@ -5,16 +5,29 @@ import { Global } from "../global"
 import { lazy } from "../util/lazy"
 import { Lock } from "../util/lock"
 import { $ } from "bun"
+import { NamedError } from "@/util/error"
+import z from "zod"
 
 export namespace Storage {
   const log = Log.create({ service: "storage" })
 
   type Migration = (dir: string) => Promise<void>
 
+  export const NotFoundError = NamedError.create(
+    "NotFoundError",
+    z.object({
+      message: z.string(),
+    }),
+  )
+
   const MIGRATIONS: Migration[] = [
     async (dir) => {
       const project = path.resolve(dir, "../project")
-      for await (const projectDir of new Bun.Glob("*").scan({ cwd: project, onlyFiles: false })) {
+      if (!fs.exists(project)) return
+      for await (const projectDir of new Bun.Glob("*").scan({
+        cwd: project,
+        onlyFiles: false,
+      })) {
         log.info(`migrating project ${projectDir}`)
         let projectID = projectDir
         const fullProjectDir = path.join(project, projectDir)
@@ -104,6 +117,27 @@ export namespace Storage {
         }
       }
     },
+    async (dir) => {
+      for await (const item of new Bun.Glob("session/*/*.json").scan({
+        cwd: dir,
+        absolute: true,
+      })) {
+        const session = await Bun.file(item).json()
+        if (!session.projectID) continue
+        if (!session.summary?.diffs) continue
+        const { diffs } = session.summary
+        await Bun.file(path.join(dir, "session_diff", session.id + ".json")).write(JSON.stringify(diffs))
+        await Bun.file(path.join(dir, "session", session.projectID, session.id + ".json")).write(
+          JSON.stringify({
+            ...session,
+            summary: {
+              additions: diffs.reduce((sum: any, x: any) => sum + x.additions, 0),
+              deletions: diffs.reduce((sum: any, x: any) => sum + x.deletions, 0),
+            },
+          }),
+        )
+      }
+    },
   ]
 
   const state = lazy(async () => {
@@ -115,9 +149,7 @@ export namespace Storage {
     for (let index = migration; index < MIGRATIONS.length; index++) {
       log.info("running migration", { index })
       const migration = MIGRATIONS[index]
-      await migration(dir).catch((e) => {
-        log.error("failed to run migration", { error: e, index })
-      })
+      await migration(dir).catch(() => log.error("failed to run migration", { index }))
       await Bun.write(path.join(dir, "migration"), (index + 1).toString())
     }
     return {
@@ -128,31 +160,51 @@ export namespace Storage {
   export async function remove(key: string[]) {
     const dir = await state().then((x) => x.dir)
     const target = path.join(dir, ...key) + ".json"
-    await fs.unlink(target).catch(() => {})
+    return withErrorHandling(async () => {
+      await fs.unlink(target).catch(() => {})
+    })
   }
 
   export async function read<T>(key: string[]) {
     const dir = await state().then((x) => x.dir)
     const target = path.join(dir, ...key) + ".json"
-    using _ = await Lock.read(target)
-    return Bun.file(target).json() as Promise<T>
+    return withErrorHandling(async () => {
+      using _ = await Lock.read(target)
+      const result = await Bun.file(target).json()
+      return result as T
+    })
   }
 
   export async function update<T>(key: string[], fn: (draft: T) => void) {
     const dir = await state().then((x) => x.dir)
     const target = path.join(dir, ...key) + ".json"
-    using _ = await Lock.write("storage")
-    const content = await Bun.file(target).json()
-    fn(content)
-    await Bun.write(target, JSON.stringify(content, null, 2))
-    return content as T
+    return withErrorHandling(async () => {
+      using _ = await Lock.write(target)
+      const content = await Bun.file(target).json()
+      fn(content)
+      await Bun.write(target, JSON.stringify(content, null, 2))
+      return content as T
+    })
   }
 
   export async function write<T>(key: string[], content: T) {
     const dir = await state().then((x) => x.dir)
     const target = path.join(dir, ...key) + ".json"
-    using _ = await Lock.write("storage")
-    await Bun.write(target, JSON.stringify(content, null, 2))
+    return withErrorHandling(async () => {
+      using _ = await Lock.write(target)
+      await Bun.write(target, JSON.stringify(content, null, 2))
+    })
+  }
+
+  async function withErrorHandling<T>(body: () => Promise<T>) {
+    return body().catch((e) => {
+      if (!(e instanceof Error)) throw e
+      const errnoException = e as NodeJS.ErrnoException
+      if (errnoException.code === "ENOENT") {
+        throw new NotFoundError({ message: `Resource not found: ${errnoException.path}` })
+      }
+      throw e
+    })
   }
 
   const glob = new Bun.Glob("**/*")

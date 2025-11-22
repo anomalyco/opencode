@@ -1,0 +1,324 @@
+[data-component="session-timeline"] {
+  /* flex: 1; */
+  min-height: 0;
+  display: flex;
+  align-items: flex-start;
+  justify-content: flex-start;
+
+  [data-slot="session-timeline-timeline-list"] {
+    margin-right: 32px;
+    flex-shrink: 0;
+    display: flex;
+    flex-direction: column;
+    align-items: flex-start;
+    margin-top: 12px;
+
+    &[data-expanded="true"] {
+      position: absolute;
+      right: 100%;
+      width: 240px;
+      margin-top: 12px;
+
+      @media (min-width: 80rem) {
+        gap: 8px;
+        margin-top: 4px;
+      }
+    }
+  }
+
+  [data-slot="session-timeline-timeline-item"] {
+    display: flex;
+    align-items: center;
+    align-self: stretch;
+    justify-content: flex-end;
+
+    &[data-expanded="true"] {
+      @media (min-width: 80rem) {
+        justify-content: flex-start;
+      }
+    }
+  }
+
+  [data-slot="session-timeline-tick-button"] {
+    display: flex;
+    align-items: center;
+    justify-content: flex-start;
+    height: 8px;
+    width: 32px;
+    margin-right: -12px;
+    cursor: pointer;
+    border: none;
+    background: none;
+    padding: 0;
+
+    &[data-active="true"] [data-slot="session-timeline-tick-line"] {
+      background-color: var(--icon-strong-base);
+      width: 100%;
+    }
+
+    &[data-expanded="true"] {
+      @media (min-width: 80rem) {
+        display: none;
+      }
+    }
+  }
+
+  [data-slot="session-timeline-tick-line"] {
+    height: 1px;
+    width: 20px;
+    background-color: var(--icon-base);
+    transition:
+      width 0.2s,
+      background-color 0.2s;
+  }
+
+  [data-slot="session-timeline-tick-button"]:hover [data-slot="session-timeline-tick-line"] {
+    width: 100%;
+    background-color: var(--icon-strong-base);
+  }
+
+  [data-slot="session-timeline-message-button"] {
+    display: none;
+    align-items: center;
+    align-self: stretch;
+    width: 100%;
+    column-gap: 8px;
+    cursor: default;
+    border: none;
+    background: none;
+    padding: 0;
+
+    &[data-expanded="true"] {
+      @media (min-width: 80rem) {
+        display: flex;
+      }
+    }
+  }
+
+  [data-slot="session-timeline-message-title-preview"] {
+    font-size: 14px; /* text-14-regular */
+    color: var(--text-weak);
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    min-width: 0;
+    text-align: left;
+
+    &[data-active="true"] {
+      color: var(--text-strong);
+    }
+  }
+
+  [data-slot="session-timeline-timeline-item"]:hover [data-slot="session-timeline-message-title-preview"] {
+    color: var(--text-base);
+  }
+
+  [data-slot="session-timeline-content"] {
+    flex-grow: 1;
+    width: 100%;
+    height: 100%;
+    min-width: 0;
+    overflow-y: auto;
+    scrollbar-width: none;
+  }
+
+  [data-slot="session-timeline-content"]::-webkit-scrollbar {
+    display: none;
+  }
+
+  [data-slot="session-timeline-message-container"] {
+    display: flex;
+    flex-direction: column;
+    align-items: flex-start;
+    align-self: stretch;
+    gap: 32px;
+  }
+
+  [data-slot="session-timeline-message-header"] {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    align-self: stretch;
+    position: sticky;
+    top: 0;
+    background-color: var(--background-stronger);
+    z-index: 20;
+    height: 32px;
+  }
+
+  [data-slot="session-timeline-message-content"] {
+    margin-top: -24px;
+  }
+
+  [data-slot="session-timeline-message-title"] {
+    width: 100%;
+    font-size: 14px; /* text-14-medium */
+    font-weight: 500;
+    color: var(--text-strong);
+    overflow: hidden;
+    text-overflow: ellipsis;
+    min-width: 0;
+    white-space: nowrap;
+  }
+
+  [data-slot="session-timeline-message-title"] h1 {
+    overflow: hidden;
+    text-overflow: ellipsis;
+    min-width: 0;
+    white-space: nowrap;
+    font-size: inherit;
+    font-weight: inherit;
+  }
+
+  [data-slot="session-timeline-typewriter"] {
+    overflow: hidden;
+    text-overflow: ellipsis;
+    min-width: 0;
+    white-space: nowrap;
+  }
+
+  [data-slot="session-timeline-summary-section"] {
+    width: 100%;
+    display: flex;
+    flex-direction: column;
+    gap: 24px;
+    align-items: flex-start;
+    align-self: stretch;
+  }
+
+  [data-slot="session-timeline-summary-header"] {
+    display: flex;
+    flex-direction: column;
+    align-items: flex-start;
+    gap: 4px;
+    align-self: stretch;
+  }
+
+  [data-slot="session-timeline-summary-title"] {
+    font-size: 12px; /* text-12-medium */
+    font-weight: 500;
+    color: var(--text-weak);
+  }
+
+  [data-slot="session-timeline-markdown"] {
+    &[data-diffs="true"] {
+      font-size: 14px; /* text-14-regular */
+    }
+
+    &[data-fade="true"] > * {
+      animation: fade-up-text 0.3s ease-out forwards;
+    }
+  }
+
+  [data-slot="session-timeline-accordion"] {
+    width: 100%;
+  }
+
+  [data-component="sticky-accordion-header"] {
+    top: 40px;
+
+    &[data-expanded]::before {
+      top: -40px;
+    }
+  }
+
+  [data-slot="session-timeline-accordion-trigger-content"] {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    width: 100%;
+    gap: 20px;
+  }
+
+  [data-slot="session-timeline-file-info"] {
+    flex-grow: 1;
+    display: flex;
+    align-items: center;
+    gap: 20px;
+    min-width: 0;
+  }
+
+  [data-slot="session-timeline-file-icon"] {
+    flex-shrink: 0;
+    width: 16px;
+    height: 16px;
+  }
+
+  [data-slot="session-timeline-file-path"] {
+    display: flex;
+    flex-grow: 1;
+    min-width: 0;
+  }
+
+  [data-slot="session-timeline-directory"] {
+    color: var(--text-base);
+    text-overflow: ellipsis;
+    overflow: hidden;
+    white-space: nowrap;
+    direction: rtl;
+    text-align: left;
+  }
+
+  [data-slot="session-timeline-filename"] {
+    color: var(--text-strong);
+    flex-shrink: 0;
+  }
+
+  [data-slot="session-timeline-accordion-actions"] {
+    flex-shrink: 0;
+    display: flex;
+    gap: 16px;
+    align-items: center;
+    justify-content: flex-end;
+  }
+
+  [data-slot="session-timeline-accordion-content"] {
+    max-height: 240px; /* max-h-60 */
+    overflow-y: auto;
+    scrollbar-width: none;
+  }
+
+  [data-slot="session-timeline-accordion-content"]::-webkit-scrollbar {
+    display: none;
+  }
+
+  [data-slot="session-timeline-response-section"] {
+    width: 100%;
+  }
+
+  [data-slot="session-timeline-collapsible-trigger-content"] {
+    color: var(--text-weak);
+    cursor: pointer;
+    background: none;
+    border: none;
+    padding: 0;
+    display: flex;
+    align-items: center;
+
+    &:hover {
+      color: var(--text-strong);
+    }
+    display: flex;
+    align-items: center;
+    gap: 4px;
+    align-self: stretch;
+  }
+
+  [data-slot="session-timeline-details-text"] {
+    font-size: 12px; /* text-12-medium */
+    font-weight: 500;
+  }
+
+  .error-card {
+    color: var(--text-on-critical-base);
+  }
+
+  [data-slot="session-timeline-collapsible-content-inner"] {
+    width: 100%;
+    display: flex;
+    flex-direction: column;
+    align-items: flex-start;
+    align-self: stretch;
+    gap: 12px;
+  }
+}

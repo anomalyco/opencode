@@ -6,7 +6,7 @@
       "devDependencies": {
         "@types/mocha": "^10.0.10",
         "@types/node": "20.x",
-        "@types/vscode": "^1.102.0",
+        "@types/vscode": "^1.94.0",
         "@typescript-eslint/eslint-plugin": "^8.31.1",
         "@typescript-eslint/parser": "^8.31.1",
         "@vscode/test-cli": "^0.0.11",

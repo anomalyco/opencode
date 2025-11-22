@@ -1,7 +1,7 @@
 import path from "path"
 import { Global } from "../global"
 import fs from "fs/promises"
-import z from "zod/v4"
+import z from "zod"
 
 export namespace Auth {
   export const Oauth = z
@@ -10,6 +10,7 @@ export namespace Auth {
       refresh: z.string(),
       access: z.string(),
       expires: z.number(),
+      enterpriseUrl: z.string().optional(),
     })
     .meta({ ref: "OAuth" })
 

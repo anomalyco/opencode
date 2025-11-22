@@ -9,6 +9,7 @@ import (
 	"net/http"
 	"net/url"
 	"reflect"
+	"slices"
 
 	"github.com/sst/opencode-sdk-go/internal/apijson"
 	"github.com/sst/opencode-sdk-go/internal/apiquery"
@@ -40,7 +41,7 @@ func NewSessionPermissionService(opts ...option.RequestOption) (r *SessionPermis
 
 // Respond to a permission request
 func (r *SessionPermissionService) Respond(ctx context.Context, id string, permissionID string, params SessionPermissionRespondParams, opts ...option.RequestOption) (res *bool, err error) {
-	opts = append(r.Options[:], opts...)
+	opts = slices.Concat(r.Options, opts)
 	if id == "" {
 		err = errors.New("missing required id parameter")
 		return

@@ -4,18 +4,22 @@ import { BillingTable, PaymentTable, UsageTable } from "./schema/billing.sql"
 import { Actor } from "./actor"
 import { fn } from "./util/fn"
 import { z } from "zod"
-import { User } from "./user"
-import { Resource } from "@opencode/console-resource"
+import { Resource } from "@opencode-ai/console-resource"
 import { Identifier } from "./identifier"
 import { centsToMicroCents } from "./util/price"
+import { User } from "./user"
 
 export namespace Billing {
-  export const CHARGE_AMOUNT = 2000 // $20
-  export const CHARGE_FEE = 123 // Stripe fee 4.4% + $0.30
-  export const CHARGE_THRESHOLD = 500 // $5
+  export const ITEM_CREDIT_NAME = "opencode credits"
+  export const ITEM_FEE_NAME = "processing fee"
+  export const RELOAD_AMOUNT = 20
+  export const RELOAD_AMOUNT_MIN = 10
+  export const RELOAD_TRIGGER = 5
+  export const RELOAD_TRIGGER_MIN = 5
   export const stripe = () =>
     new Stripe(Resource.STRIPE_SECRET_KEY.value, {
       apiVersion: "2025-03-31.basil",
+      httpClient: Stripe.createFetchHttpClient(),
     })
 
   export const get = async () => {
@@ -24,9 +28,12 @@ export namespace Billing {
         .select({
           customerID: BillingTable.customerID,
           paymentMethodID: BillingTable.paymentMethodID,
+          paymentMethodType: BillingTable.paymentMethodType,
           paymentMethodLast4: BillingTable.paymentMethodLast4,
           balance: BillingTable.balance,
           reload: BillingTable.reload,
+          reloadAmount: BillingTable.reloadAmount,
+          reloadTrigger: BillingTable.reloadTrigger,
           monthlyLimit: BillingTable.monthlyLimit,
           monthlyUsage: BillingTable.monthlyUsage,
           timeMonthlyUsageUpdated: BillingTable.timeMonthlyUsageUpdated,
@@ -50,45 +57,74 @@ export namespace Billing {
     )
   }
 
-  export const usages = async () => {
+  export const usages = async (page = 0, pageSize = 50) => {
     return await Database.use((tx) =>
       tx
         .select()
         .from(UsageTable)
         .where(eq(UsageTable.workspaceID, Actor.workspace()))
         .orderBy(sql`${UsageTable.timeCreated} DESC`)
-        .limit(100),
+        .limit(pageSize)
+        .offset(page * pageSize),
     )
   }
 
+  export const calculateFeeInCents = (x: number) => {
+    // math: x = total - (total * 0.044 + 0.30)
+    // math: x = total * (1-0.044) - 0.30
+    // math: (x + 0.30) / 0.956 = total
+    return Math.round(((x + 30) / 0.956) * 0.044 + 30)
+  }
+
   export const reload = async () => {
-    const { customerID, paymentMethodID } = await Database.use((tx) =>
+    const billing = await Database.use((tx) =>
       tx
         .select({
           customerID: BillingTable.customerID,
           paymentMethodID: BillingTable.paymentMethodID,
+          reloadAmount: BillingTable.reloadAmount,
         })
         .from(BillingTable)
         .where(eq(BillingTable.workspaceID, Actor.workspace()))
         .then((rows) => rows[0]),
     )
+    const customerID = billing.customerID
+    const paymentMethodID = billing.paymentMethodID
+    const amountInCents = (billing.reloadAmount ?? Billing.RELOAD_AMOUNT) * 100
     const paymentID = Identifier.create("payment")
-    let charge
+    let invoice
     try {
-      charge = await Billing.stripe().paymentIntents.create(
-        {
-          amount: Billing.CHARGE_AMOUNT + Billing.CHARGE_FEE,
-          currency: "usd",
-          customer: customerID!,
-          payment_method: paymentMethodID!,
-          off_session: true,
-          confirm: true,
-        },
-        { idempotencyKey: paymentID },
-      )
-
-      if (charge.status !== "succeeded") throw new Error(charge.last_payment_error?.message)
+      const draft = await Billing.stripe().invoices.create({
+        customer: customerID!,
+        auto_advance: false,
+        default_payment_method: paymentMethodID!,
+        collection_method: "charge_automatically",
+        currency: "usd",
+      })
+      await Billing.stripe().invoiceItems.create({
+        amount: amountInCents,
+        currency: "usd",
+        customer: customerID!,
+        invoice: draft.id!,
+        description: ITEM_CREDIT_NAME,
+      })
+      await Billing.stripe().invoiceItems.create({
+        amount: calculateFeeInCents(amountInCents),
+        currency: "usd",
+        customer: customerID!,
+        invoice: draft.id!,
+        description: ITEM_FEE_NAME,
+      })
+      await Billing.stripe().invoices.finalizeInvoice(draft.id!)
+      invoice = await Billing.stripe().invoices.pay(draft.id!, {
+        off_session: true,
+        payment_method: paymentMethodID!,
+        expand: ["payments"],
+      })
+      if (invoice.status !== "paid" || invoice.payments?.data.length !== 1)
+        throw new Error(invoice.last_finalization_error?.message)
     } catch (e: any) {
+      console.error(e)
       await Database.use((tx) =>
         tx
           .update(BillingTable)
@@ -105,7 +141,7 @@ export namespace Billing {
       await tx
         .update(BillingTable)
         .set({
-          balance: sql`${BillingTable.balance} + ${centsToMicroCents(CHARGE_AMOUNT)}`,
+          balance: sql`${BillingTable.balance} + ${centsToMicroCents(amountInCents)}`,
           reloadError: null,
           timeReloadError: null,
         })
@@ -113,22 +149,12 @@ export namespace Billing {
       await tx.insert(PaymentTable).values({
         workspaceID: Actor.workspace(),
         id: paymentID,
-        amount: centsToMicroCents(CHARGE_AMOUNT),
-        paymentID: charge.id,
+        amount: centsToMicroCents(amountInCents),
+        invoiceID: invoice.id!,
+        paymentID: invoice.payments?.data[0].payment.payment_intent as string,
         customerID,
       })
     })
-  }
-
-  export const disableReload = async () => {
-    return await Database.use((tx) =>
-      tx
-        .update(BillingTable)
-        .set({
-          reload: false,
-        })
-        .where(eq(BillingTable.workspaceID, Actor.workspace())),
-    )
   }
 
   export const setMonthlyLimit = fn(z.number(), async (input) => {
@@ -146,55 +172,68 @@ export namespace Billing {
     z.object({
       successUrl: z.string(),
       cancelUrl: z.string(),
+      amount: z.number().optional(),
     }),
     async (input) => {
-      const account = Actor.assert("user")
-      const { successUrl, cancelUrl } = input
+      const user = Actor.assert("user")
+      const { successUrl, cancelUrl, amount } = input
 
-      const user = await User.fromID(account.properties.userID)
+      if (amount !== undefined && amount < Billing.RELOAD_AMOUNT_MIN) {
+        throw new Error(`Amount must be at least $${Billing.RELOAD_AMOUNT_MIN}`)
+      }
+
+      const email = await User.getAuthEmail(user.properties.userID)
       const customer = await Billing.get()
+      const amountInCents = (amount ?? customer.reloadAmount ?? Billing.RELOAD_AMOUNT) * 100
       const session = await Billing.stripe().checkout.sessions.create({
         mode: "payment",
+        billing_address_collection: "required",
         line_items: [
           {
             price_data: {
               currency: "usd",
-              product_data: {
-                name: "opencode credits",
-              },
-              unit_amount: CHARGE_AMOUNT,
+              product_data: { name: ITEM_CREDIT_NAME },
+              unit_amount: amountInCents,
             },
             quantity: 1,
           },
           {
             price_data: {
               currency: "usd",
-              product_data: {
-                name: "processing fee",
-              },
-              unit_amount: CHARGE_FEE,
+              product_data: { name: ITEM_FEE_NAME },
+              unit_amount: calculateFeeInCents(amountInCents),
             },
             quantity: 1,
           },
         ],
-        payment_intent_data: {
-          setup_future_usage: "on_session",
-        },
         ...(customer.customerID
           ? {
               customer: customer.customerID,
+              customer_update: {
+                name: "auto",
+              },
             }
           : {
-              customer_email: user.email,
+              customer_email: email!,
               customer_creation: "always",
             }),
-        metadata: {
-          workspaceID: Actor.workspace(),
-        },
         currency: "usd",
+        invoice_creation: {
+          enabled: true,
+        },
+        payment_intent_data: {
+          setup_future_usage: "on_session",
+        },
         payment_method_types: ["card"],
         payment_method_data: {
           allow_redisplay: "always",
+        },
+        tax_id_collection: {
+          enabled: true,
+        },
+        metadata: {
+          workspaceID: Actor.workspace(),
+          amount: amountInCents.toString(),
         },
         success_url: successUrl,
         cancel_url: cancelUrl,

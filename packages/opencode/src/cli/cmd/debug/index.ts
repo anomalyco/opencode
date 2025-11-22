@@ -1,6 +1,7 @@
 import { Global } from "../../../global"
 import { bootstrap } from "../../bootstrap"
 import { cmd } from "../cmd"
+import { ConfigCommand } from "./config"
 import { FileCommand } from "./file"
 import { LSPCommand } from "./lsp"
 import { RipgrepCommand } from "./ripgrep"
@@ -11,6 +12,7 @@ export const DebugCommand = cmd({
   command: "debug",
   builder: (yargs) =>
     yargs
+      .command(ConfigCommand)
       .command(LSPCommand)
       .command(RipgrepCommand)
       .command(FileCommand)

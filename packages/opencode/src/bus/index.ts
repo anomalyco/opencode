@@ -1,7 +1,8 @@
-import z from "zod/v4"
-import type { ZodType } from "zod/v4"
+import z from "zod"
+import type { ZodType } from "zod"
 import { Log } from "../util/log"
 import { Instance } from "../project/instance"
+import { GlobalBus } from "./global"
 
 export namespace Bus {
   const log = Log.create({ service: "bus" })
@@ -29,22 +30,26 @@ export namespace Bus {
   }
 
   export function payloads() {
-    return z.discriminatedUnion(
-      "type",
-      registry
-        .entries()
-        .map(([type, def]) => {
-          return z
-            .object({
-              type: z.literal(type),
-              properties: def.properties,
-            })
-            .meta({
-              ref: "Event" + "." + def.type,
-            })
-        })
-        .toArray() as any,
-    )
+    return z
+      .discriminatedUnion(
+        "type",
+        registry
+          .entries()
+          .map(([type, def]) => {
+            return z
+              .object({
+                type: z.literal(type),
+                properties: def.properties,
+              })
+              .meta({
+                ref: "Event" + "." + def.type,
+              })
+          })
+          .toArray() as any,
+      )
+      .meta({
+        ref: "Event",
+      })
   }
 
   export async function publish<Definition extends EventDefinition>(
@@ -65,6 +70,10 @@ export namespace Bus {
         pending.push(sub(payload))
       }
     }
+    GlobalBus.emit("event", {
+      directory: Instance.directory,
+      payload,
+    })
     return Promise.all(pending)
   }
 

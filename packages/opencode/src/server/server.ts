@@ -3,9 +3,10 @@ import { Bus } from "../bus"
 import { describeRoute, generateSpecs, validator, resolver, openAPIRouteHandler } from "hono-openapi"
 import { Hono } from "hono"
 import { cors } from "hono/cors"
-import { streamSSE } from "hono/streaming"
+import { stream, streamSSE } from "hono/streaming"
+import { proxy } from "hono/proxy"
 import { Session } from "../session"
-import z from "zod/v4"
+import z from "zod"
 import { Provider } from "../provider/provider"
 import { mapValues } from "remeda"
 import { NamedError } from "../util/error"
@@ -14,13 +15,15 @@ import { Ripgrep } from "../file/ripgrep"
 import { Config } from "../config/config"
 import { File } from "../file"
 import { LSP } from "../lsp"
+import { Format } from "../format"
 import { MessageV2 } from "../session/message-v2"
-import { callTui, TuiRoute } from "./tui"
+import { TuiRoute } from "./tui"
 import { Permission } from "../permission"
 import { Instance } from "../project/instance"
 import { Agent } from "../agent/agent"
 import { Auth } from "../auth"
 import { Command } from "../command"
+import { ProviderAuth } from "../provider/auth"
 import { Global } from "../global"
 import { ProjectRoute } from "./project"
 import { ToolRegistry } from "../tool/registry"
@@ -29,7 +32,20 @@ import { SessionPrompt } from "../session/prompt"
 import { SessionCompaction } from "../session/compaction"
 import { SessionRevert } from "../session/revert"
 import { lazy } from "../util/lazy"
+import { Todo } from "../session/todo"
 import { InstanceBootstrap } from "../project/bootstrap"
+import { MCP } from "../mcp"
+import { Storage } from "../storage/storage"
+import type { ContentfulStatusCode } from "hono/utils/http-status"
+import { TuiEvent } from "@/cli/cmd/tui/event"
+import { Snapshot } from "@/snapshot"
+import { SessionSummary } from "@/session/summary"
+import { GlobalBus } from "@/bus/global"
+import { SessionStatus } from "@/session/status"
+import { ShareNext } from "@/share/share-next"
+
+// @ts-ignore This global is needed to prevent ai-sdk from logging warnings to stdout https://github.com/vercel/ai/blob/2dc67e0ef538307f21368db32d5a12345d98831b/packages/ai/src/logger/log-warnings.ts#L85
+globalThis.AI_SDK_LOG_WARNINGS = false
 
 const ERRORS = {
   400: {
@@ -39,16 +55,30 @@ const ERRORS = {
         schema: resolver(
           z
             .object({
-              data: z.record(z.string(), z.any()),
+              data: z.any(),
+              errors: z.array(z.record(z.string(), z.any())),
+              success: z.literal(false),
             })
             .meta({
-              ref: "Error",
+              ref: "BadRequestError",
             }),
         ),
       },
     },
   },
+  404: {
+    description: "Not found",
+    content: {
+      "application/json": {
+        schema: resolver(Storage.NotFoundError.Schema),
+      },
+    },
+  },
 } as const
+
+function errors(...codes: number[]) {
+  return Object.fromEntries(codes.map((code) => [code, ERRORS[code as keyof typeof ERRORS]]))
+}
 
 export namespace Server {
   const log = Log.create({ service: "server" })
@@ -65,12 +95,15 @@ export namespace Server {
           error: err,
         })
         if (err instanceof NamedError) {
-          return c.json(err.toObject(), {
-            status: 400,
-          })
+          let status: ContentfulStatusCode
+          if (err instanceof Storage.NotFoundError) status = 404
+          else if (err instanceof Provider.ModelNotFoundError) status = 400
+          else status = 500
+          return c.json(err.toObject(), { status })
         }
-        return c.json(new NamedError.Unknown({ message: err.toString() }).toObject(), {
-          status: 400,
+        const message = err instanceof Error && err.stack ? err.stack : err.toString()
+        return c.json(new NamedError.Unknown({ message }).toObject(), {
+          status: 500,
         })
       })
       .use(async (c, next) => {
@@ -81,16 +114,62 @@ export namespace Server {
             path: c.req.path,
           })
         }
-        const start = Date.now()
+        const timer = log.time("request", {
+          method: c.req.method,
+          path: c.req.path,
+        })
         await next()
         if (!skipLogging) {
-          log.info("response", {
-            duration: Date.now() - start,
-          })
+          timer.stop()
         }
       })
+      .use(cors())
+      .get(
+        "/global/event",
+        describeRoute({
+          description: "Get events",
+          operationId: "global.event",
+          responses: {
+            200: {
+              description: "Event stream",
+              content: {
+                "text/event-stream": {
+                  schema: resolver(
+                    z
+                      .object({
+                        directory: z.string(),
+                        payload: Bus.payloads(),
+                      })
+                      .meta({
+                        ref: "GlobalEvent",
+                      }),
+                  ),
+                },
+              },
+            },
+          },
+        }),
+        async (c) => {
+          log.info("global event connected")
+          return streamSSE(c, async (stream) => {
+            async function handler(event: any) {
+              await stream.writeSSE({
+                data: JSON.stringify(event),
+              })
+            }
+            GlobalBus.on("event", handler)
+            await new Promise<void>((resolve) => {
+              stream.onAbort(() => {
+                GlobalBus.off("event", handler)
+                resolve()
+                log.info("global event disconnected")
+              })
+            })
+          })
+        },
+      )
       .use(async (c, next) => {
-        const directory = c.req.query("directory") ?? process.cwd()
+        const directory = c.req.query("directory") ?? c.req.header("x-opencode-directory") ?? process.cwd()
         return Instance.provide({
           directory,
           init: InstanceBootstrap,
@@ -99,7 +178,6 @@ export namespace Server {
           },
         })
       })
-      .use(cors())
       .get(
         "/doc",
         openAPIRouteHandler(app, {
@@ -135,6 +213,31 @@ export namespace Server {
           return c.json(await Config.get())
         },
       )
+
+      .patch(
+        "/config",
+        describeRoute({
+          description: "Update config",
+          operationId: "config.update",
+          responses: {
+            200: {
+              description: "Successfully updated config",
+              content: {
+                "application/json": {
+                  schema: resolver(Config.Info),
+                },
+              },
+            },
+            ...errors(400),
+          },
+        }),
+        validator("json", Config.Info),
+        async (c) => {
+          const config = c.req.valid("json")
+          await Config.update(config)
+          return c.json(config)
+        },
+      )
       .get(
         "/experimental/tool/ids",
         describeRoute({
@@ -149,7 +252,7 @@ export namespace Server {
                 },
               },
             },
-            ...ERRORS,
+            ...errors(400),
           },
         }),
         async (c) => {
@@ -182,7 +285,7 @@ export namespace Server {
                 },
               },
             },
-            ...ERRORS,
+            ...errors(400),
           },
         }),
         validator(
@@ -203,6 +306,27 @@ export namespace Server {
               parameters: (t.parameters as any)?._def ? zodToJsonSchema(t.parameters as any) : t.parameters,
             })),
           )
+        },
+      )
+      .post(
+        "/instance/dispose",
+        describeRoute({
+          description: "Dispose the current instance",
+          operationId: "instance.dispose",
+          responses: {
+            200: {
+              description: "Instance disposed",
+              content: {
+                "application/json": {
+                  schema: resolver(z.boolean()),
+                },
+              },
+            },
+          },
+        }),
+        async (c) => {
+          await Instance.dispose()
+          return c.json(true)
         },
       )
       .get(
@@ -264,6 +388,28 @@ export namespace Server {
         },
       )
       .get(
+        "/session/status",
+        describeRoute({
+          description: "Get session status",
+          operationId: "session.status",
+          responses: {
+            200: {
+              description: "Get session status",
+              content: {
+                "application/json": {
+                  schema: resolver(z.record(z.string(), SessionStatus.Info)),
+                },
+              },
+            },
+            ...errors(400),
+          },
+        }),
+        async (c) => {
+          const result = SessionStatus.list()
+          return c.json(result)
+        },
+      )
+      .get(
         "/session/:id",
         describeRoute({
           description: "Get session",
@@ -277,12 +423,13 @@ export namespace Server {
                 },
               },
             },
+            ...errors(400, 404),
           },
         }),
         validator(
           "param",
           z.object({
-            id: z.string(),
+            id: Session.get.schema,
           }),
         ),
         async (c) => {
@@ -305,12 +452,13 @@ export namespace Server {
                 },
               },
             },
+            ...errors(400, 404),
           },
         }),
         validator(
           "param",
           z.object({
-            id: z.string(),
+            id: Session.children.schema,
           }),
         ),
         async (c) => {
@@ -319,13 +467,42 @@ export namespace Server {
           return c.json(session)
         },
       )
+      .get(
+        "/session/:id/todo",
+        describeRoute({
+          description: "Get the todo list for a session",
+          operationId: "session.todo",
+          responses: {
+            200: {
+              description: "Todo list",
+              content: {
+                "application/json": {
+                  schema: resolver(Todo.Info.array()),
+                },
+              },
+            },
+            ...errors(400, 404),
+          },
+        }),
+        validator(
+          "param",
+          z.object({
+            id: z.string().meta({ description: "Session ID" }),
+          }),
+        ),
+        async (c) => {
+          const sessionID = c.req.valid("param").id
+          const todos = await Todo.get(sessionID)
+          return c.json(todos)
+        },
+      )
       .post(
         "/session",
         describeRoute({
           description: "Create a new session",
           operationId: "session.create",
           responses: {
-            ...ERRORS,
+            ...errors(400),
             200: {
               description: "Successfully created session",
               content: {
@@ -336,18 +513,10 @@ export namespace Server {
             },
           },
         }),
-        validator(
-          "json",
-          z
-            .object({
-              parentID: z.string().optional(),
-              title: z.string().optional(),
-            })
-            .optional(),
-        ),
+        validator("json", Session.create.schema.optional()),
         async (c) => {
           const body = c.req.valid("json") ?? {}
-          const session = await Session.create(body.parentID, body.title)
+          const session = await Session.create(body)
           return c.json(session)
         },
       )
@@ -365,16 +534,21 @@ export namespace Server {
                 },
               },
             },
+            ...errors(400, 404),
           },
         }),
         validator(
           "param",
           z.object({
-            id: z.string(),
+            id: Session.remove.schema,
           }),
         ),
         async (c) => {
-          await Session.remove(c.req.valid("param").id)
+          const sessionID = c.req.valid("param").id
+          await Session.remove(sessionID)
+          await Bus.publish(TuiEvent.CommandExecute, {
+            command: "session.list",
+          })
           return c.json(true)
         },
       )
@@ -392,6 +566,7 @@ export namespace Server {
                 },
               },
             },
+            ...errors(400, 404),
           },
         }),
         validator(
@@ -433,6 +608,7 @@ export namespace Server {
                 },
               },
             },
+            ...errors(400, 404),
           },
         }),
         validator(
@@ -441,19 +617,42 @@ export namespace Server {
             id: z.string().meta({ description: "Session ID" }),
           }),
         ),
-        validator(
-          "json",
-          z.object({
-            messageID: z.string(),
-            providerID: z.string(),
-            modelID: z.string(),
-          }),
-        ),
+        validator("json", Session.initialize.schema.omit({ sessionID: true })),
         async (c) => {
           const sessionID = c.req.valid("param").id
           const body = c.req.valid("json")
           await Session.initialize({ ...body, sessionID })
           return c.json(true)
+        },
+      )
+      .post(
+        "/session/:id/fork",
+        describeRoute({
+          description: "Fork an existing session at a specific message",
+          operationId: "session.fork",
+          responses: {
+            200: {
+              description: "200",
+              content: {
+                "application/json": {
+                  schema: resolver(Session.Info),
+                },
+              },
+            },
+          },
+        }),
+        validator(
+          "param",
+          z.object({
+            id: Session.fork.schema.shape.sessionID,
+          }),
+        ),
+        validator("json", Session.fork.schema.omit({ sessionID: true })),
+        async (c) => {
+          const sessionID = c.req.valid("param").id
+          const body = c.req.valid("json")
+          const result = await Session.fork({ ...body, sessionID })
+          return c.json(result)
         },
       )
       .post(
@@ -470,6 +669,7 @@ export namespace Server {
                 },
               },
             },
+            ...errors(400, 404),
           },
         }),
         validator(
@@ -479,7 +679,8 @@ export namespace Server {
           }),
         ),
         async (c) => {
-          return c.json(SessionPrompt.abort(c.req.valid("param").id))
+          SessionPrompt.cancel(c.req.valid("param").id)
+          return c.json(true)
         },
       )
       .post(
@@ -496,6 +697,7 @@ export namespace Server {
                 },
               },
             },
+            ...errors(400, 404),
           },
         }),
         validator(
@@ -509,6 +711,44 @@ export namespace Server {
           await Session.share(id)
           const session = await Session.get(id)
           return c.json(session)
+        },
+      )
+      .get(
+        "/session/:id/diff",
+        describeRoute({
+          description: "Get the diff that resulted from this user message",
+          operationId: "session.diff",
+          responses: {
+            200: {
+              description: "Successfully retrieved diff",
+              content: {
+                "application/json": {
+                  schema: resolver(Snapshot.FileDiff.array()),
+                },
+              },
+            },
+          },
+        }),
+        validator(
+          "param",
+          z.object({
+            id: SessionSummary.diff.schema.shape.sessionID,
+          }),
+        ),
+        validator(
+          "query",
+          z.object({
+            messageID: SessionSummary.diff.schema.shape.messageID,
+          }),
+        ),
+        async (c) => {
+          const query = c.req.valid("query")
+          const params = c.req.valid("param")
+          const result = await SessionSummary.diff({
+            sessionID: params.id,
+            messageID: query.messageID,
+          })
+          return c.json(result)
         },
       )
       .delete(
@@ -525,12 +765,13 @@ export namespace Server {
                 },
               },
             },
+            ...errors(400, 404),
           },
         }),
         validator(
           "param",
           z.object({
-            id: z.string(),
+            id: Session.unshare.schema,
           }),
         ),
         async (c) => {
@@ -554,6 +795,7 @@ export namespace Server {
                 },
               },
             },
+            ...errors(400, 404),
           },
         }),
         validator(
@@ -572,7 +814,24 @@ export namespace Server {
         async (c) => {
           const id = c.req.valid("param").id
           const body = c.req.valid("json")
-          await SessionCompaction.run({ ...body, sessionID: id })
+          const msgs = await Session.messages({ sessionID: id })
+          let currentAgent = "build"
+          for (let i = msgs.length - 1; i >= 0; i--) {
+            const info = msgs[i].info
+            if (info.role === "user") {
+              currentAgent = info.agent || "build"
+              break
+            }
+          }
+          await SessionCompaction.create({
+            sessionID: id,
+            agent: currentAgent,
+            model: {
+              providerID: body.providerID,
+              modelID: body.modelID,
+            },
+          })
+          await SessionPrompt.loop(id)
           return c.json(true)
         },
       )
@@ -590,6 +849,45 @@ export namespace Server {
                 },
               },
             },
+            ...errors(400, 404),
+          },
+        }),
+        validator(
+          "param",
+          z.object({
+            id: z.string().meta({ description: "Session ID" }),
+          }),
+        ),
+        validator(
+          "query",
+          z.object({
+            limit: z.coerce.number().optional(),
+          }),
+        ),
+        async (c) => {
+          const query = c.req.valid("query")
+          const messages = await Session.messages({
+            sessionID: c.req.valid("param").id,
+            limit: query.limit,
+          })
+          return c.json(messages)
+        },
+      )
+      .get(
+        "/session/:id/diff",
+        describeRoute({
+          description: "Get the diff for this session",
+          operationId: "session.diff",
+          responses: {
+            200: {
+              description: "List of diffs",
+              content: {
+                "application/json": {
+                  schema: resolver(Snapshot.FileDiff.array()),
+                },
+              },
+            },
+            ...errors(400, 404),
           },
         }),
         validator(
@@ -599,8 +897,8 @@ export namespace Server {
           }),
         ),
         async (c) => {
-          const messages = await Session.messages(c.req.valid("param").id)
-          return c.json(messages)
+          const diff = await Session.diff(c.req.valid("param").id)
+          return c.json(diff)
         },
       )
       .get(
@@ -622,6 +920,7 @@ export namespace Server {
                 },
               },
             },
+            ...errors(400, 404),
           },
         }),
         validator(
@@ -633,7 +932,10 @@ export namespace Server {
         ),
         async (c) => {
           const params = c.req.valid("param")
-          const message = await Session.getMessage(params.id, params.messageID)
+          const message = await MessageV2.get({
+            sessionID: params.id,
+            messageID: params.messageID,
+          })
           return c.json(message)
         },
       )
@@ -656,6 +958,7 @@ export namespace Server {
                 },
               },
             },
+            ...errors(400, 404),
           },
         }),
         validator(
@@ -666,10 +969,14 @@ export namespace Server {
         ),
         validator("json", SessionPrompt.PromptInput.omit({ sessionID: true })),
         async (c) => {
-          const sessionID = c.req.valid("param").id
-          const body = c.req.valid("json")
-          const msg = await SessionPrompt.prompt({ ...body, sessionID })
-          return c.json(msg)
+          c.status(200)
+          c.header("Content-Type", "application/json")
+          return stream(c, async (stream) => {
+            const sessionID = c.req.valid("param").id
+            const body = c.req.valid("json")
+            const msg = await SessionPrompt.prompt({ ...body, sessionID })
+            stream.write(JSON.stringify(msg))
+          })
         },
       )
       .post(
@@ -691,6 +998,7 @@ export namespace Server {
                 },
               },
             },
+            ...errors(400, 404),
           },
         }),
         validator(
@@ -721,6 +1029,7 @@ export namespace Server {
                 },
               },
             },
+            ...errors(400, 404),
           },
         }),
         validator(
@@ -751,6 +1060,7 @@ export namespace Server {
                 },
               },
             },
+            ...errors(400, 404),
           },
         }),
         validator(
@@ -763,7 +1073,10 @@ export namespace Server {
         async (c) => {
           const id = c.req.valid("param").id
           log.info("revert", c.req.valid("json"))
-          const session = await SessionRevert.revert({ sessionID: id, ...c.req.valid("json") })
+          const session = await SessionRevert.revert({
+            sessionID: id,
+            ...c.req.valid("json"),
+          })
           return c.json(session)
         },
       )
@@ -781,6 +1094,7 @@ export namespace Server {
                 },
               },
             },
+            ...errors(400, 404),
           },
         }),
         validator(
@@ -808,6 +1122,7 @@ export namespace Server {
                 },
               },
             },
+            ...errors(400, 404),
           },
         }),
         validator(
@@ -822,7 +1137,11 @@ export namespace Server {
           const params = c.req.valid("param")
           const id = params.id
           const permissionID = params.permissionID
-          Permission.respond({ sessionID: id, permissionID, response: c.req.valid("json").response })
+          Permission.respond({
+            sessionID: id,
+            permissionID,
+            response: c.req.valid("json").response,
+          })
           return c.json(true)
         },
       )
@@ -869,11 +1188,144 @@ export namespace Server {
           },
         }),
         async (c) => {
+          using _ = log.time("providers")
           const providers = await Provider.list().then((x) => mapValues(x, (item) => item.info))
           return c.json({
             providers: Object.values(providers),
             default: mapValues(providers, (item) => Provider.sort(Object.values(item.models))[0].id),
           })
+        },
+      )
+      .get(
+        "/provider",
+        describeRoute({
+          description: "List all providers",
+          operationId: "provider.list",
+          responses: {
+            200: {
+              description: "List of providers",
+              content: {
+                "application/json": {
+                  schema: resolver(
+                    z.object({
+                      all: ModelsDev.Provider.array(),
+                      default: z.record(z.string(), z.string()),
+                      connected: z.array(z.string()),
+                    }),
+                  ),
+                },
+              },
+            },
+          },
+        }),
+        async (c) => {
+          const providers = await ModelsDev.get()
+          const connected = await Provider.list().then((x) => Object.keys(x))
+          return c.json({
+            all: Object.values(providers),
+            default: mapValues(providers, (item) => Provider.sort(Object.values(item.models))[0].id),
+            connected,
+          })
+        },
+      )
+      .get(
+        "/provider/auth",
+        describeRoute({
+          description: "Get provider authentication methods",
+          operationId: "provider.auth",
+          responses: {
+            200: {
+              description: "Provider auth methods",
+              content: {
+                "application/json": {
+                  schema: resolver(z.record(z.string(), z.array(ProviderAuth.Method))),
+                },
+              },
+            },
+          },
+        }),
+        async (c) => {
+          return c.json(await ProviderAuth.methods())
+        },
+      )
+      .post(
+        "/provider/:id/oauth/authorize",
+        describeRoute({
+          description: "Authorize a provider using OAuth",
+          operationId: "provider.oauth.authorize",
+          responses: {
+            200: {
+              description: "Authorization URL and method",
+              content: {
+                "application/json": {
+                  schema: resolver(ProviderAuth.Authorization.optional()),
+                },
+              },
+            },
+            ...errors(400),
+          },
+        }),
+        validator(
+          "param",
+          z.object({
+            id: z.string().meta({ description: "Provider ID" }),
+          }),
+        ),
+        validator(
+          "json",
+          z.object({
+            method: z.number().meta({ description: "Auth method index" }),
+          }),
+        ),
+        async (c) => {
+          const id = c.req.valid("param").id
+          const { method } = c.req.valid("json")
+          const result = await ProviderAuth.authorize({
+            providerID: id,
+            method,
+          })
+          return c.json(result)
+        },
+      )
+      .post(
+        "/provider/:id/oauth/callback",
+        describeRoute({
+          description: "Handle OAuth callback for a provider",
+          operationId: "provider.oauth.callback",
+          responses: {
+            200: {
+              description: "OAuth callback processed successfully",
+              content: {
+                "application/json": {
+                  schema: resolver(z.boolean()),
+                },
+              },
+            },
+            ...errors(400),
+          },
+        }),
+        validator(
+          "param",
+          z.object({
+            id: z.string().meta({ description: "Provider ID" }),
+          }),
+        ),
+        validator(
+          "json",
+          z.object({
+            method: z.number().meta({ description: "Auth method index" }),
+            code: z.string().optional().meta({ description: "OAuth authorization code" }),
+          }),
+        ),
+        async (c) => {
+          const id = c.req.valid("param").id
+          const { method, code } = c.req.valid("json")
+          await ProviderAuth.callback({
+            providerID: id,
+            method,
+            code,
+          })
+          return c.json(true)
         },
       )
       .get(
@@ -928,16 +1380,18 @@ export namespace Server {
           "query",
           z.object({
             query: z.string(),
+            dirs: z.enum(["true", "false"]).optional(),
           }),
         ),
         async (c) => {
           const query = c.req.valid("query").query
-          const result = await Ripgrep.files({
-            cwd: Instance.directory,
+          const dirs = c.req.valid("query").dirs
+          const results = await File.search({
             query,
             limit: 10,
+            dirs: dirs !== "false",
           })
-          return c.json(result)
+          return c.json(results)
         },
       )
       .get(
@@ -963,9 +1417,12 @@ export namespace Server {
           }),
         ),
         async (c) => {
+          /*
           const query = c.req.valid("query").query
           const result = await LSP.workspaceSymbol(query)
           return c.json(result)
+          */
+          return c.json([])
         },
       )
       .get(
@@ -1059,6 +1516,7 @@ export namespace Server {
                 },
               },
             },
+            ...errors(400),
           },
         }),
         validator(
@@ -1116,6 +1574,96 @@ export namespace Server {
           return c.json(modes)
         },
       )
+      .get(
+        "/mcp",
+        describeRoute({
+          description: "Get MCP server status",
+          operationId: "mcp.status",
+          responses: {
+            200: {
+              description: "MCP server status",
+              content: {
+                "application/json": {
+                  schema: resolver(z.record(z.string(), MCP.Status)),
+                },
+              },
+            },
+          },
+        }),
+        async (c) => {
+          return c.json(await MCP.status())
+        },
+      )
+      .post(
+        "/mcp",
+        describeRoute({
+          description: "Add MCP server dynamically",
+          operationId: "mcp.add",
+          responses: {
+            200: {
+              description: "MCP server added successfully",
+              content: {
+                "application/json": {
+                  schema: resolver(z.record(z.string(), MCP.Status)),
+                },
+              },
+            },
+            ...errors(400),
+          },
+        }),
+        validator(
+          "json",
+          z.object({
+            name: z.string(),
+            config: Config.Mcp,
+          }),
+        ),
+        async (c) => {
+          const { name, config } = c.req.valid("json")
+          const result = await MCP.add(name, config)
+          return c.json(result.status)
+        },
+      )
+      .get(
+        "/lsp",
+        describeRoute({
+          description: "Get LSP server status",
+          operationId: "lsp.status",
+          responses: {
+            200: {
+              description: "LSP server status",
+              content: {
+                "application/json": {
+                  schema: resolver(LSP.Status.array()),
+                },
+              },
+            },
+          },
+        }),
+        async (c) => {
+          return c.json(await LSP.status())
+        },
+      )
+      .get(
+        "/formatter",
+        describeRoute({
+          description: "Get formatter status",
+          operationId: "formatter.status",
+          responses: {
+            200: {
+              description: "Formatter status",
+              content: {
+                "application/json": {
+                  schema: resolver(Format.Status.array()),
+                },
+              },
+            },
+          },
+        }),
+        async (c) => {
+          return c.json(await Format.status())
+        },
+      )
       .post(
         "/tui/append-prompt",
         describeRoute({
@@ -1130,15 +1678,14 @@ export namespace Server {
                 },
               },
             },
+            ...errors(400),
           },
         }),
-        validator(
-          "json",
-          z.object({
-            text: z.string(),
-          }),
-        ),
-        async (c) => c.json(await callTui(c)),
+        validator("json", TuiEvent.PromptAppend.properties),
+        async (c) => {
+          await Bus.publish(TuiEvent.PromptAppend, c.req.valid("json"))
+          return c.json(true)
+        },
       )
       .post(
         "/tui/open-help",
@@ -1156,7 +1703,10 @@ export namespace Server {
             },
           },
         }),
-        async (c) => c.json(await callTui(c)),
+        async (c) => {
+          // TODO: open dialog
+          return c.json(true)
+        },
       )
       .post(
         "/tui/open-sessions",
@@ -1174,7 +1724,12 @@ export namespace Server {
             },
           },
         }),
-        async (c) => c.json(await callTui(c)),
+        async (c) => {
+          await Bus.publish(TuiEvent.CommandExecute, {
+            command: "session.list",
+          })
+          return c.json(true)
+        },
       )
       .post(
         "/tui/open-themes",
@@ -1192,7 +1747,12 @@ export namespace Server {
             },
           },
         }),
-        async (c) => c.json(await callTui(c)),
+        async (c) => {
+          await Bus.publish(TuiEvent.CommandExecute, {
+            command: "session.list",
+          })
+          return c.json(true)
+        },
       )
       .post(
         "/tui/open-models",
@@ -1210,7 +1770,12 @@ export namespace Server {
             },
           },
         }),
-        async (c) => c.json(await callTui(c)),
+        async (c) => {
+          await Bus.publish(TuiEvent.CommandExecute, {
+            command: "model.list",
+          })
+          return c.json(true)
+        },
       )
       .post(
         "/tui/submit-prompt",
@@ -1228,7 +1793,12 @@ export namespace Server {
             },
           },
         }),
-        async (c) => c.json(await callTui(c)),
+        async (c) => {
+          await Bus.publish(TuiEvent.CommandExecute, {
+            command: "prompt.submit",
+          })
+          return c.json(true)
+        },
       )
       .post(
         "/tui/clear-prompt",
@@ -1246,7 +1816,12 @@ export namespace Server {
             },
           },
         }),
-        async (c) => c.json(await callTui(c)),
+        async (c) => {
+          await Bus.publish(TuiEvent.CommandExecute, {
+            command: "prompt.clear",
+          })
+          return c.json(true)
+        },
       )
       .post(
         "/tui/execute-command",
@@ -1262,15 +1837,30 @@ export namespace Server {
                 },
               },
             },
+            ...errors(400),
           },
         }),
-        validator(
-          "json",
-          z.object({
-            command: z.string(),
-          }),
-        ),
-        async (c) => c.json(await callTui(c)),
+        validator("json", z.object({ command: z.string() })),
+        async (c) => {
+          const command = c.req.valid("json").command
+          await Bus.publish(TuiEvent.CommandExecute, {
+            // @ts-expect-error
+            command: {
+              session_new: "session.new",
+              session_share: "session.share",
+              session_interrupt: "session.interrupt",
+              session_compact: "session.compact",
+              messages_page_up: "session.page.up",
+              messages_page_down: "session.page.down",
+              messages_half_page_up: "session.half.page.up",
+              messages_half_page_down: "session.half.page.down",
+              messages_first: "session.first",
+              messages_last: "session.last",
+              agent_cycle: "agent.cycle",
+            }[command],
+          })
+          return c.json(true)
+        },
       )
       .post(
         "/tui/show-toast",
@@ -1288,15 +1878,49 @@ export namespace Server {
             },
           },
         }),
+        validator("json", TuiEvent.ToastShow.properties),
+        async (c) => {
+          await Bus.publish(TuiEvent.ToastShow, c.req.valid("json"))
+          return c.json(true)
+        },
+      )
+      .post(
+        "/tui/publish",
+        describeRoute({
+          description: "Publish a TUI event",
+          operationId: "tui.publish",
+          responses: {
+            200: {
+              description: "Event published successfully",
+              content: {
+                "application/json": {
+                  schema: resolver(z.boolean()),
+                },
+              },
+            },
+            ...errors(400),
+          },
+        }),
         validator(
           "json",
-          z.object({
-            title: z.string().optional(),
-            message: z.string(),
-            variant: z.enum(["info", "success", "warning", "error"]),
-          }),
+          z.union(
+            Object.values(TuiEvent).map((def) => {
+              return z
+                .object({
+                  type: z.literal(def.type),
+                  properties: def.properties,
+                })
+                .meta({
+                  ref: "Event" + "." + def.type,
+                })
+            }),
+          ),
         ),
-        async (c) => c.json(await callTui(c)),
+        async (c) => {
+          const evt = c.req.valid("json")
+          await Bus.publish(Object.values(TuiEvent).find((def) => def.type === evt.type)!, evt.properties)
+          return c.json(true)
+        },
       )
       .route("/tui/control", TuiRoute)
       .put(
@@ -1313,7 +1937,7 @@ export namespace Server {
                 },
               },
             },
-            ...ERRORS,
+            ...errors(400),
           },
         }),
         validator(
@@ -1340,11 +1964,7 @@ export namespace Server {
               description: "Event stream",
               content: {
                 "text/event-stream": {
-                  schema: resolver(
-                    Bus.payloads().meta({
-                      ref: "Event",
-                    }),
-                  ),
+                  schema: resolver(Bus.payloads()),
                 },
               },
             },
@@ -1373,7 +1993,15 @@ export namespace Server {
             })
           })
         },
-      ),
+      )
+      .all("/*", async (c) => {
+        return proxy(`https://desktop.dev.opencode.ai${c.req.path}`, {
+          ...c.req,
+          headers: {
+            host: "desktop.dev.opencode.ai",
+          },
+        })
+      }),
   )
 
   export async function openapi() {

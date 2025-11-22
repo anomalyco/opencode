@@ -1,0 +1,29 @@
+site_name: Opencode Python SDK
+site_description: Official Python SDK for the Opencode API
+site_url: https://opencode.ai
+repo_url: https://github.com/sst/opencode
+repo_name: sst/opencode
+edit_uri: ""
+theme:
+  name: material
+  features:
+    - navigation.tabs
+    - navigation.sections
+    - content.code.copy
+markdown_extensions:
+  - admonition
+  - codehilite
+  - toc:
+      permalink: true
+nav:
+  - Overview: index.md
+  - Installation: installation.md
+  - Quickstart: quickstart.md
+  - Usage:
+      - Configuration: usage/configuration.md
+      - Sessions: usage/sessions.md
+      - Files & Projects: usage/files_projects.md
+      - Streaming (SSE): usage/streaming.md
+  - Generation: generation.md
+  - Testing: testing.md
+  - Publishing (maintainers): publishing.md

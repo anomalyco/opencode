@@ -1,5 +1,5 @@
-import { WebhookEndpoint } from "pulumi-stripe"
 import { domain } from "./stage"
+import { EMAILOCTOPUS_API_KEY } from "./app"
 
 ////////////////
 // DATABASE
@@ -68,13 +68,14 @@ export const auth = new sst.cloudflare.Worker("AuthApi", {
 // GATEWAY
 ////////////////
 
-export const stripeWebhook = new WebhookEndpoint("StripeWebhookEndpoint", {
+export const stripeWebhook = new stripe.WebhookEndpoint("StripeWebhookEndpoint", {
   url: $interpolate`https://${domain}/stripe/webhook`,
   enabledEvents: [
     "checkout.session.async_payment_failed",
     "checkout.session.async_payment_succeeded",
     "checkout.session.completed",
     "checkout.session.expired",
+    "charge.refunded",
     "customer.created",
     "customer.deleted",
     "customer.updated",
@@ -93,13 +94,15 @@ export const stripeWebhook = new WebhookEndpoint("StripeWebhookEndpoint", {
     "customer.subscription.resumed",
     "customer.subscription.trial_will_end",
     "customer.subscription.updated",
-    "customer.tax_id.created",
-    "customer.tax_id.deleted",
-    "customer.tax_id.updated",
   ],
 })
 
-const ZEN_MODELS = new sst.Secret("ZEN_MODELS")
+const ZEN_MODELS = [
+  new sst.Secret("ZEN_MODELS1"),
+  new sst.Secret("ZEN_MODELS2"),
+  new sst.Secret("ZEN_MODELS3"),
+  new sst.Secret("ZEN_MODELS4"),
+]
 const STRIPE_SECRET_KEY = new sst.Secret("STRIPE_SECRET_KEY")
 const AUTH_API_URL = new sst.Linkable("AUTH_API_URL", {
   properties: { value: auth.url.apply((url) => url!) },
@@ -107,10 +110,14 @@ const AUTH_API_URL = new sst.Linkable("AUTH_API_URL", {
 const STRIPE_WEBHOOK_SECRET = new sst.Linkable("STRIPE_WEBHOOK_SECRET", {
   properties: { value: stripeWebhook.secret },
 })
+const gatewayKv = new sst.cloudflare.Kv("GatewayKv")
 
 ////////////////
 // CONSOLE
 ////////////////
+
+const AWS_SES_ACCESS_KEY_ID = new sst.Secret("AWS_SES_ACCESS_KEY_ID")
+const AWS_SES_SECRET_ACCESS_KEY = new sst.Secret("AWS_SES_SECRET_ACCESS_KEY")
 
 let logProcessor
 if ($app.stage === "production" || $app.stage === "frank") {
@@ -124,7 +131,23 @@ if ($app.stage === "production" || $app.stage === "frank") {
 new sst.cloudflare.x.SolidStart("Console", {
   domain,
   path: "packages/console/app",
-  link: [database, AUTH_API_URL, STRIPE_WEBHOOK_SECRET, STRIPE_SECRET_KEY, ZEN_MODELS],
+  link: [
+    database,
+    AUTH_API_URL,
+    STRIPE_WEBHOOK_SECRET,
+    STRIPE_SECRET_KEY,
+    EMAILOCTOPUS_API_KEY,
+    AWS_SES_ACCESS_KEY_ID,
+    AWS_SES_SECRET_ACCESS_KEY,
+    ...ZEN_MODELS,
+    ...($dev
+      ? [
+          new sst.Secret("CLOUDFLARE_DEFAULT_ACCOUNT_ID", process.env.CLOUDFLARE_DEFAULT_ACCOUNT_ID!),
+          new sst.Secret("CLOUDFLARE_API_TOKEN", process.env.CLOUDFLARE_API_TOKEN!),
+        ]
+      : []),
+    gatewayKv,
+  ],
   environment: {
     //VITE_DOCS_URL: web.url.apply((url) => url!),
     //VITE_API_URL: gateway.url.apply((url) => url!),

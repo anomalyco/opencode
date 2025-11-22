@@ -1,12 +1,15 @@
-import z from "zod/v4"
+import z from "zod"
 import { Bus } from "../bus"
 import { $ } from "bun"
+import type { BunFile } from "bun"
 import { formatPatch, structuredPatch } from "diff"
 import path from "path"
 import fs from "fs"
 import ignore from "ignore"
 import { Log } from "../util/log"
 import { Instance } from "../project/instance"
+import { Ripgrep } from "./ripgrep"
+import fuzzysort from "fuzzysort"
 
 export namespace File {
   const log = Log.create({ service: "file" })
@@ -39,6 +42,7 @@ export namespace File {
 
   export const Content = z
     .object({
+      type: z.literal("text"),
       content: z.string(),
       diff: z.string().optional(),
       patch: z
@@ -59,11 +63,52 @@ export namespace File {
           index: z.string().optional(),
         })
         .optional(),
+      encoding: z.literal("base64").optional(),
+      mimeType: z.string().optional(),
     })
     .meta({
       ref: "FileContent",
     })
   export type Content = z.infer<typeof Content>
+
+  async function shouldEncode(file: BunFile): Promise<boolean> {
+    const type = file.type?.toLowerCase()
+    if (!type) return false
+
+    if (type.startsWith("text/")) return false
+    if (type.includes("charset=")) return false
+
+    const parts = type.split("/", 2)
+    const top = parts[0]
+    const rest = parts[1] ?? ""
+    const sub = rest.split(";", 1)[0]
+
+    const tops = ["image", "audio", "video", "font", "model", "multipart"]
+    if (tops.includes(top)) return true
+
+    if (type === "application/octet-stream") return true
+
+    const bins = [
+      "zip",
+      "gzip",
+      "bzip",
+      "compressed",
+      "binary",
+      "stream",
+      "pdf",
+      "msword",
+      "powerpoint",
+      "excel",
+      "ogg",
+      "exe",
+      "dmg",
+      "iso",
+      "rar",
+    ]
+    if (bins.some((mark) => sub.includes(mark))) return true
+
+    return false
+  }
 
   export const Event = {
     Edited: Bus.event(
@@ -72,6 +117,48 @@ export namespace File {
         file: z.string(),
       }),
     ),
+  }
+
+  const state = Instance.state(async () => {
+    type Entry = { files: string[]; dirs: string[] }
+    let cache: Entry = { files: [], dirs: [] }
+    let fetching = false
+    const fn = async (result: Entry) => {
+      fetching = true
+      const set = new Set<string>()
+      for await (const file of Ripgrep.files({ cwd: Instance.directory })) {
+        result.files.push(file)
+        let current = file
+        while (true) {
+          const dir = path.dirname(current)
+          if (dir === ".") break
+          if (dir === current) break
+          current = dir
+          if (set.has(dir)) continue
+          set.add(dir)
+          result.dirs.push(dir + "/")
+        }
+      }
+      cache = result
+      fetching = false
+    }
+    fn(cache)
+
+    return {
+      async files() {
+        if (!fetching) {
+          fn({
+            files: [],
+            dirs: [],
+          })
+        }
+        return cache
+      },
+    }
+  })
+
+  export function init() {
+    state()
   }
 
   export async function status() {
@@ -144,14 +231,30 @@ export namespace File {
     }))
   }
 
-  export async function read(file: string) {
+  export async function read(file: string): Promise<Content> {
     using _ = log.time("read", { file })
     const project = Instance.project
     const full = path.join(Instance.directory, file)
-    const content = await Bun.file(full)
+    const bunFile = Bun.file(full)
+
+    if (!(await bunFile.exists())) {
+      return { type: "text", content: "" }
+    }
+
+    const encode = await shouldEncode(bunFile)
+
+    if (encode) {
+      const buffer = await bunFile.arrayBuffer().catch(() => new ArrayBuffer(0))
+      const content = Buffer.from(buffer).toString("base64")
+      const mimeType = bunFile.type || "application/octet-stream"
+      return { type: "text", content, mimeType, encoding: "base64" }
+    }
+
+    const content = await bunFile
       .text()
       .catch(() => "")
       .then((x) => x.trim())
+
     if (project.vcs === "git") {
       let diff = await $`git diff ${file}`.cwd(Instance.directory).quiet().nothrow().text()
       if (!diff.trim()) diff = await $`git diff --staged ${file}`.cwd(Instance.directory).quiet().nothrow().text()
@@ -162,10 +265,10 @@ export namespace File {
           ignoreWhitespace: true,
         })
         const diff = formatPatch(patch)
-        return { content, patch, diff }
+        return { type: "text", content, patch, diff }
       }
     }
-    return { content }
+    return { type: "text", content }
   }
 
   export async function list(dir?: string) {
@@ -181,7 +284,9 @@ export namespace File {
     }
     const resolved = dir ? path.join(Instance.directory, dir) : Instance.directory
     const nodes: Node[] = []
-    for (const entry of await fs.promises.readdir(resolved, { withFileTypes: true })) {
+    for (const entry of await fs.promises.readdir(resolved, {
+      withFileTypes: true,
+    })) {
       if (exclude.includes(entry.name)) continue
       const fullPath = path.join(resolved, entry.name)
       const relativePath = path.relative(Instance.directory, fullPath)
@@ -200,5 +305,17 @@ export namespace File {
       }
       return a.name.localeCompare(b.name)
     })
+  }
+
+  export async function search(input: { query: string; limit?: number; dirs?: boolean }) {
+    log.info("search", { query: input.query })
+    const limit = input.limit ?? 100
+    const result = await state().then((x) => x.files())
+    if (!input.query)
+      return input.dirs !== false ? result.dirs.toSorted().slice(0, limit) : result.files.slice(0, limit)
+    const items = input.dirs !== false ? [...result.files, ...result.dirs] : result.files
+    const sorted = fuzzysort.go(input.query, items, { limit: limit }).map((r) => r.target)
+    log.info("search", { query: input.query, results: sorted.length })
+    return sorted
   }
 }

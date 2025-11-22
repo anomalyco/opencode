@@ -9,7 +9,7 @@ $ ./scripts/build
 
 This will install all the required dependencies and build the SDK.
 
-You can also [install go 1.18+ manually](https://go.dev/doc/install).
+You can also [install go 1.22+ manually](https://go.dev/doc/install).
 
 ## Modifying/Adding code
 

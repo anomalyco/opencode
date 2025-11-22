@@ -1,64 +1,37 @@
+import { query, createAsync, RouteSectionProps, useParams, A } from "@solidjs/router"
 import "./workspace.css"
-import { useAuthSession } from "~/context/auth.session"
-import { IconLogo } from "../component/icon"
+import { IconWorkspaceLogo } from "../component/icon"
+import { WorkspacePicker } from "./workspace-picker"
+import { UserMenu } from "./user-menu"
 import { withActor } from "~/context/auth.withActor"
-import {
-  query,
-  action,
-  redirect,
-  createAsync,
-  RouteSectionProps,
-  Navigate,
-  useNavigate,
-  useParams,
-  A,
-} from "@solidjs/router"
-import { User } from "@opencode/console-core/user.js"
-import { Actor } from "@opencode/console-core/actor.js"
-import { getRequestEvent } from "solid-js/web"
+import { User } from "@opencode-ai/console-core/user.js"
+import { Actor } from "@opencode-ai/console-core/actor.js"
+import { Link } from "@solidjs/meta"
 
-const getUserInfo = query(async (workspaceID: string) => {
+const getUserEmail = query(async (workspaceID: string) => {
   "use server"
   return withActor(async () => {
     const actor = Actor.assert("user")
-    return await User.fromID(actor.properties.userID)
+    const email = await User.getAuthEmail(actor.properties.userID)
+    return email
   }, workspaceID)
-}, "userInfo")
-
-const logout = action(async () => {
-  "use server"
-  const auth = await useAuthSession()
-  const event = getRequestEvent()
-  const current = auth.data.current
-  if (current)
-    await auth.update((val) => {
-      delete val.account?.[current]
-      const first = Object.keys(val.account ?? {})[0]
-      val.current = first
-      event!.locals.actor = undefined
-      return val
-    })
-  throw redirect("/")
-})
+}, "userEmail")
 
 export default function WorkspaceLayout(props: RouteSectionProps) {
   const params = useParams()
-  const userInfo = createAsync(() => getUserInfo(params.id))
+  const userEmail = createAsync(() => getUserEmail(params.id!))
   return (
     <main data-page="workspace">
+      <Link rel="icon" type="image/svg+xml" href="/favicon-zen.svg" />
       <header data-component="workspace-header">
         <div data-slot="header-brand">
           <A href="/" data-component="site-title">
-            <IconLogo />
+            <IconWorkspaceLogo />
           </A>
+          <WorkspacePicker />
         </div>
         <div data-slot="header-actions">
-          <span data-slot="user">{userInfo()?.email}</span>
-          <form action={logout} method="post">
-            <button type="submit" formaction={logout}>
-              Logout
-            </button>
-          </form>
+          <UserMenu email={userEmail()} />
         </div>
       </header>
       <div>{props.children}</div>

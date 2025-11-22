@@ -1,22 +1,22 @@
 ---
 title: Config
-description: Using the opencode JSON config.
+description: Using the OpenCode JSON config.
 ---
 
-You can configure opencode using a JSON config file.
+You can configure OpenCode using a JSON config file.
 
 ---
 
 ## Format
 
-opencode supports both **JSON** and **JSONC** (JSON with Comments) formats.
+OpenCode supports both **JSON** and **JSONC** (JSON with Comments) formats.
 
 ```jsonc title="opencode.jsonc"
 {
   "$schema": "https://opencode.ai/config.json",
   // Theme configuration
   "theme": "opencode",
-  "model": "anthropic/claude-sonnet-4-20250514",
+  "model": "anthropic/claude-sonnet-4-5",
   "autoupdate": true,
 }
 ```
@@ -28,23 +28,29 @@ opencode supports both **JSON** and **JSONC** (JSON with Comments) formats.
 You can place your config in a couple of different locations and they have a
 different order of precedence.
 
+:::note[Config Merging]
+Configuration files are **merged together**, not replaced. Settings from all config locations are combined using a deep merge strategy, where later configs override earlier ones only for conflicting keys. Non-conflicting settings from all configs are preserved.
+
+For example, if your global config sets `theme: "opencode"` and `autoupdate: true`, and your project config sets `model: "anthropic/claude-sonnet-4-5"`, the final configuration will include all three settings.
+:::
+
 ---
 
 ### Global
 
-Place your global opencode config in `~/.config/opencode/opencode.json`. You'll want to use the global config for things like themes, providers, or keybinds.
+Place your global OpenCode config in `~/.config/opencode/opencode.json`. You'll want to use the global config for things like themes, providers, or keybinds.
 
 ---
 
 ### Per project
 
-You can also add a `opencode.json` in your project. It takes precedence over the global config. This is useful for configuring providers or modes specific to your project.
+You can also add a `opencode.json` in your project. Settings from this config are merged with and can override the global config. This is useful for configuring providers or modes specific to your project.
 
 :::tip
 Place project specific config in the root of your project.
 :::
 
-When opencode starts up, it looks for a config file in the current directory or traverse up to the nearest Git directory.
+When OpenCode starts up, it looks for a config file in the current directory or traverse up to the nearest Git directory.
 
 This is also safe to be checked into Git and uses the same schema as the global one.
 
@@ -52,12 +58,28 @@ This is also safe to be checked into Git and uses the same schema as the global 
 
 ### Custom path
 
-You can also specify a custom config file path using the `OPENCODE_CONFIG` environment variable. This takes precedence over the global and project configs.
+You can also specify a custom config file path using the `OPENCODE_CONFIG` environment variable. Settings from this config are merged with and can override the global and project configs.
 
 ```bash
 export OPENCODE_CONFIG=/path/to/my/custom-config.json
 opencode run "Hello world"
 ```
+
+---
+
+### Custom directory
+
+You can specify a custom config directory using the `OPENCODE_CONFIG_DIR`
+environment variable. This directory will be searched for agents, commands,
+modes, and plugins just like the standard `.opencode` directory, and should
+follow the same structure.
+
+```bash
+export OPENCODE_CONFIG_DIR=/path/to/my/config-directory
+opencode run "Hello world"
+```
+
+Note: The custom directory is loaded after the global config and `.opencode` directories, so it can override their settings.
 
 ---
 
@@ -69,20 +91,63 @@ Your editor should be able to validate and autocomplete based on the schema.
 
 ---
 
+### TUI
+
+You can configure TUI-specific settings through the `tui` option.
+
+```json title="opencode.json"
+{
+  "$schema": "https://opencode.ai/config.json",
+  "tui": {
+    "scroll_speed": 3,
+    "scroll_acceleration": {
+      "enabled": true
+    }
+  }
+}
+```
+
+Available options:
+
+- `scroll_acceleration.enabled` - Enable macOS-style scroll acceleration. **Takes precedence over `scroll_speed`.**
+- `scroll_speed` - Custom scroll speed multiplier (default: `1`, minimum: `1`). Ignored if `scroll_acceleration.enabled` is `true`.
+
+[Learn more about using the TUI here](/docs/tui).
+
+---
+
+### Tools
+
+You can manage the tools an LLM can use through the `tools` option.
+
+```json title="opencode.json"
+{
+  "$schema": "https://opencode.ai/config.json",
+  "tools": {
+    "write": false,
+    "bash": false
+  }
+}
+```
+
+[Learn more about tools here](/docs/tools).
+
+---
+
 ### Models
 
-You can configure the providers and models you want to use in your opencode config through the `provider`, `model` and `small_model` options.
+You can configure the providers and models you want to use in your OpenCode config through the `provider`, `model` and `small_model` options.
 
 ```json title="opencode.json"
 {
   "$schema": "https://opencode.ai/config.json",
   "provider": {},
-  "model": "anthropic/claude-sonnet-4-20250514",
-  "small_model": "anthropic/claude-3-5-haiku-20241022"
+  "model": "anthropic/claude-sonnet-4-5",
+  "small_model": "anthropic/claude-haiku-4-5"
 }
 ```
 
-The `small_model` option configures a separate model for lightweight tasks like title generation. By default, opencode tries to use a cheaper model if one is available from your provider, otherwise it falls back to your main model.
+The `small_model` option configures a separate model for lightweight tasks like title generation. By default, OpenCode tries to use a cheaper model if one is available from your provider, otherwise it falls back to your main model.
 
 You can also configure [local models](/docs/models#local). [Learn more](/docs/models).
 
@@ -90,7 +155,7 @@ You can also configure [local models](/docs/models#local). [Learn more](/docs/mo
 
 ### Themes
 
-You can configure the theme you want to use in your opencode config through the `theme` option.
+You can configure the theme you want to use in your OpenCode config through the `theme` option.
 
 ```json title="opencode.json"
 {
@@ -113,7 +178,7 @@ You can configure specialized agents for specific tasks through the `agent` opti
   "agent": {
     "code-reviewer": {
       "description": "Reviews code for best practices and potential issues",
-      "model": "anthropic/claude-sonnet-4-20250514",
+      "model": "anthropic/claude-sonnet-4-5",
       "prompt": "You are a code reviewer. Focus on security, performance, and maintainability.",
       "tools": {
         // Disable file modification tools for review-only agent
@@ -162,7 +227,7 @@ You can configure custom commands for repetitive tasks through the `command` opt
       "template": "Run the full test suite with coverage report and show any failures.\nFocus on the failing tests and suggest fixes.",
       "description": "Run tests with coverage",
       "agent": "build",
-      "model": "anthropic/claude-3-5-sonnet-20241022",
+      "model": "anthropic/claude-haiku-4-5",
     },
     "component": {
       "template": "Create a new React component named $ARGUMENTS with TypeScript support.\nInclude proper typing and basic structure.",
@@ -193,7 +258,7 @@ You can customize your keybinds through the `keybinds` option.
 
 ### Autoupdate
 
-opencode will automatically download any new updates when it starts up. You can disable this with the `autoupdate` option.
+OpenCode will automatically download any new updates when it starts up. You can disable this with the `autoupdate` option.
 
 ```json title="opencode.json"
 {
@@ -232,7 +297,9 @@ You can configure code formatters through the `formatter` option.
 
 ### Permissions
 
-You can configure permissions to control what AI agents can do in your codebase through the `permission` option.
+By default, opencode **allows all operations** without requiring explicit approval. You can change this using the `permission` option.
+
+For example, to ensure that the `edit` and `bash` tools require user approval:
 
 ```json title="opencode.json"
 {
@@ -243,11 +310,6 @@ You can configure permissions to control what AI agents can do in your codebase 
   }
 }
 ```
-
-This allows you to configure explicit approval requirements for sensitive operations:
-
-- `edit` - Controls whether file editing operations require user approval (`"ask"` or `"allow"`)
-- `bash` - Controls whether bash commands require user approval (can be `"ask"`/`"allow"` or a pattern map)
 
 [Learn more about permissions here](/docs/permissions).
 

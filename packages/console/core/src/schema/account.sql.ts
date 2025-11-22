@@ -1,4 +1,4 @@
-import { mysqlTable, uniqueIndex, varchar } from "drizzle-orm/mysql-core"
+import { mysqlTable, primaryKey } from "drizzle-orm/mysql-core"
 import { id, timestamps } from "../drizzle/types"
 
 export const AccountTable = mysqlTable(
@@ -6,7 +6,6 @@ export const AccountTable = mysqlTable(
   {
     id: id(),
     ...timestamps,
-    email: varchar("email", { length: 255 }).notNull(),
   },
-  (table) => [uniqueIndex("email").on(table.email)],
+  (table) => [primaryKey({ columns: [table.id] })],
 )

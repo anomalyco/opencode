@@ -42,13 +42,13 @@ Use the command by typing `/` followed by the command name.
 
 ## Configure
 
-You can add custom commands through the opencode config or by creating markdown files in the `command/` directory.
+You can add custom commands through the OpenCode config or by creating markdown files in the `command/` directory.
 
 ---
 
 ### JSON
 
-Use the `command` option in your opencode [config](/docs/config):
+Use the `command` option in your OpenCode [config](/docs/config):
 
 ```json title="opencode.jsonc" {4-12}
 {
@@ -128,6 +128,36 @@ Run the command with arguments:
 ```
 
 And `$ARGUMENTS` will be replaced with `Button`.
+
+You can also access individual arguments using positional parameters:
+
+- `$1` - First argument
+- `$2` - Second argument
+- `$3` - Third argument
+- And so on...
+
+For example:
+
+```md title=".opencode/command/create-file.md"
+---
+description: Create a new file with content
+---
+
+Create a file named $1 in the directory $2
+with the following content: $3
+```
+
+Run the command:
+
+```bash frame="none"
+/create-file config.json src "{ \"key\": \"value\" }"
+```
+
+This replaces:
+
+- `$1` with `config.json`
+- `$2` with `src`
+- `$3` with `{ "key": "value" }`
 
 ---
 
@@ -247,7 +277,8 @@ This is an **optional** config option. If not specified, defaults to your curren
 ### Subtask
 
 Use the `subtask` boolean to force the command to trigger a [subagent](/docs/agents/#subagents) invocation.
-This useful if you want the command to not pollute your primary context.
+This useful if you want the command to not pollute your primary context and will **force** the agent to act as a subagent,
+even if `mode` is set to `primary` on the [agent](/docs/agents) configuration.
 
 ```json title="opencode.json"
 {

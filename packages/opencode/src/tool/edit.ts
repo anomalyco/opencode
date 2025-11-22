@@ -3,11 +3,11 @@
 // https://github.com/google-gemini/gemini-cli/blob/main/packages/core/src/utils/editCorrector.ts
 // https://github.com/cline/cline/blob/main/evals/diff-edits/diff-apply/diff-06-26-25.ts
 
-import z from "zod/v4"
+import z from "zod"
 import * as path from "path"
 import { Tool } from "./tool"
 import { LSP } from "../lsp"
-import { createTwoFilesPatch } from "diff"
+import { createTwoFilesPatch, diffLines } from "diff"
 import { Permission } from "../permission"
 import DESCRIPTION from "./edit.txt"
 import { File } from "../file"
@@ -16,6 +16,11 @@ import { FileTime } from "../file/time"
 import { Filesystem } from "../util/filesystem"
 import { Instance } from "../project/instance"
 import { Agent } from "../agent/agent"
+import { Snapshot } from "@/snapshot"
+
+function normalizeLineEndings(text: string): string {
+  return text.replaceAll("\r\n", "\n")
+}
 
 export const EditTool = Tool.define("edit", {
   description: DESCRIPTION,
@@ -34,12 +39,38 @@ export const EditTool = Tool.define("edit", {
       throw new Error("oldString and newString must be different")
     }
 
+    const agent = await Agent.get(ctx.agent)
+
     const filePath = path.isAbsolute(params.filePath) ? params.filePath : path.join(Instance.directory, params.filePath)
     if (!Filesystem.contains(Instance.directory, filePath)) {
-      throw new Error(`File ${filePath} is not in the current working directory`)
+      const parentDir = path.dirname(filePath)
+      if (agent.permission.external_directory === "ask") {
+        await Permission.ask({
+          type: "external_directory",
+          pattern: [parentDir, path.join(parentDir, "*")],
+          sessionID: ctx.sessionID,
+          messageID: ctx.messageID,
+          callID: ctx.callID,
+          title: `Edit file outside working directory: ${filePath}`,
+          metadata: {
+            filepath: filePath,
+            parentDir,
+          },
+        })
+      } else if (agent.permission.external_directory === "deny") {
+        throw new Permission.RejectedError(
+          ctx.sessionID,
+          "external_directory",
+          ctx.callID,
+          {
+            filepath: filePath,
+            parentDir,
+          },
+          `File ${filePath} is not in the current working directory`,
+        )
+      }
     }
 
-    const agent = await Agent.get(ctx.agent)
     let diff = ""
     let contentOld = ""
     let contentNew = ""
@@ -75,7 +106,9 @@ export const EditTool = Tool.define("edit", {
       contentOld = await file.text()
       contentNew = replace(contentOld, params.oldString, params.newString, params.replaceAll)
 
-      diff = trimDiff(createTwoFilesPatch(filePath, filePath, contentOld, contentNew))
+      diff = trimDiff(
+        createTwoFilesPatch(filePath, filePath, normalizeLineEndings(contentOld), normalizeLineEndings(contentNew)),
+      )
       if (agent.permission.edit === "ask") {
         await Permission.ask({
           type: "edit",
@@ -95,7 +128,9 @@ export const EditTool = Tool.define("edit", {
         file: filePath,
       })
       contentNew = await file.text()
-      diff = trimDiff(createTwoFilesPatch(filePath, filePath, contentOld, contentNew))
+      diff = trimDiff(
+        createTwoFilesPatch(filePath, filePath, normalizeLineEndings(contentOld), normalizeLineEndings(contentNew)),
+      )
     })()
 
     FileTime.read(ctx.sessionID, filePath)
@@ -114,10 +149,23 @@ export const EditTool = Tool.define("edit", {
       }
     }
 
+    const filediff: Snapshot.FileDiff = {
+      file: filePath,
+      before: contentOld,
+      after: contentNew,
+      additions: 0,
+      deletions: 0,
+    }
+    for (const change of diffLines(contentOld, contentNew)) {
+      if (change.added) filediff.additions += change.count || 0
+      if (change.removed) filediff.deletions += change.count || 0
+    }
+
     return {
       metadata: {
         diagnostics,
         diff,
+        filediff,
       },
       title: `${path.relative(Instance.worktree, filePath)}`,
       output,
@@ -550,7 +598,7 @@ export const ContextAwareReplacer: Replacer = function* (content, find) {
   }
 }
 
-function trimDiff(diff: string): string {
+export function trimDiff(diff: string): string {
   const lines = diff.split("\n")
   const contentLines = lines.filter(
     (line) =>
@@ -596,13 +644,13 @@ export function replace(content: string, oldString: string, newString: string, r
   for (const replacer of [
     SimpleReplacer,
     LineTrimmedReplacer,
-    // BlockAnchorReplacer,
+    BlockAnchorReplacer,
     WhitespaceNormalizedReplacer,
     IndentationFlexibleReplacer,
     EscapeNormalizedReplacer,
-    // TrimmedBoundaryReplacer,
-    // ContextAwareReplacer,
-    // MultiOccurrenceReplacer,
+    TrimmedBoundaryReplacer,
+    ContextAwareReplacer,
+    MultiOccurrenceReplacer,
   ]) {
     for (const search of replacer(content, oldString)) {
       const index = content.indexOf(search)
@@ -621,6 +669,6 @@ export function replace(content: string, oldString: string, newString: string, r
     throw new Error("oldString not found in content")
   }
   throw new Error(
-    "oldString found multiple times and requires more code context to uniquely identify the intended match",
+    "Found multiple matches for oldString. Provide more surrounding lines in oldString to identify the correct match.",
   )
 }

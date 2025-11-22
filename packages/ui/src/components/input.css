@@ -1,0 +1,23 @@
+[data-component="input"] {
+  /* [data-slot="input-label"] {} */
+
+  [data-slot="input-input"] {
+    color: var(--text-strong);
+
+    /* text-14-regular */
+    font-family: var(--font-family-sans);
+    font-size: 14px;
+    font-style: normal;
+    font-weight: var(--font-weight-regular);
+    line-height: var(--line-height-large); /* 142.857% */
+    letter-spacing: var(--letter-spacing-normal);
+
+    &:focus {
+      outline: none;
+    }
+
+    &::placeholder {
+      color: var(--text-weak);
+    }
+  }
+}
