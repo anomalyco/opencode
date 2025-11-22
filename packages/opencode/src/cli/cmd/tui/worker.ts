@@ -26,7 +26,6 @@ process.on("uncaughtException", (e) => {
   })
 })
 
-
 let server: Bun.Server<undefined>
 export const rpc = {
   async server(input: { port: number; hostname: string }) {
