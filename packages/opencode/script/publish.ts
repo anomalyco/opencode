@@ -245,4 +245,10 @@ if (!Script.preview) {
   await $`cd ./dist/homebrew-tap && git add opencode.rb`
   await $`cd ./dist/homebrew-tap && git commit -m "Update to v${Script.version}"`
   await $`cd ./dist/homebrew-tap && git push`
+
+  const image = "ghcr.io/sst/opencode"
+  await $`docker build -t ${image}:${Script.version} .`
+  await $`docker push ${image}:${Script.version}`
+  await $`docker tag ${image}:${Script.version} ${image}:latest`
+  await $`docker push ${image}:latest`
 }
