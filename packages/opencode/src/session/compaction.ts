@@ -15,6 +15,7 @@ import { Log } from "../util/log"
 import { ProviderTransform } from "@/provider/transform"
 import { SessionProcessor } from "./processor"
 import { fn } from "@/util/fn"
+import { mergeDeep, pipe } from "remeda"
 
 export namespace SessionCompaction {
   const log = Log.create({ service: "session.compaction" })
@@ -96,7 +97,7 @@ export namespace SessionCompaction {
     abort: AbortSignal
   }) {
     const model = await Provider.getModel(input.model.providerID, input.model.modelID)
-    const system = [...SystemPrompt.summarize(model.providerID)]
+    const system = [...SystemPrompt.compaction(model.providerID)]
     const msg = (await Session.updateMessage({
       id: Identifier.ascending("message"),
       role: "assistant",
@@ -137,10 +138,15 @@ export namespace SessionCompaction {
         },
         // set to 0, we handle loop
         maxRetries: 0,
-        providerOptions: ProviderTransform.providerOptions(model.npm, model.providerID, {
-          ...ProviderTransform.options(model.providerID, model.modelID, model.npm ?? "", input.sessionID),
-          ...model.info.options,
-        }),
+        providerOptions: ProviderTransform.providerOptions(
+          model.npm,
+          model.providerID,
+          pipe(
+            {},
+            mergeDeep(ProviderTransform.options(model.providerID, model.modelID, model.npm ?? "", input.sessionID)),
+            mergeDeep(model.info.options),
+          ),
+        ),
         headers: model.info.headers,
         abortSignal: input.abort,
         tools: model.info.tool_call ? {} : undefined,

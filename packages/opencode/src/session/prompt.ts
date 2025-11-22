@@ -489,11 +489,12 @@ export namespace SessionPrompt {
             ? (agent.temperature ?? ProviderTransform.temperature(model.providerID, model.modelID))
             : undefined,
           topP: agent.topP ?? ProviderTransform.topP(model.providerID, model.modelID),
-          options: {
-            ...ProviderTransform.options(model.providerID, model.modelID, model.npm ?? "", sessionID),
-            ...model.info.options,
-            ...agent.options,
-          },
+          options: pipe(
+            {},
+            mergeDeep(ProviderTransform.options(model.providerID, model.modelID, model.npm ?? "", sessionID)),
+            mergeDeep(model.info.options),
+            mergeDeep(agent.options),
+          ),
         },
       )
 
@@ -1384,7 +1385,6 @@ export namespace SessionPrompt {
     return result
   }
 
-  // TODO: wire this back up
   async function ensureTitle(input: {
     session: Session.Info
     message: MessageV2.WithParts
@@ -1398,24 +1398,13 @@ export namespace SessionPrompt {
       input.history.filter((m) => m.info.role === "user" && !m.parts.every((p) => "synthetic" in p && p.synthetic))
         .length === 1
     if (!isFirst) return
-    const small =
-      (await Provider.getSmallModel(input.providerID)) ?? (await Provider.getModel(input.providerID, input.modelID))
-    const options = {
-      ...ProviderTransform.options(small.providerID, small.modelID, small.npm ?? "", input.session.id),
-      ...small.info.options,
-    }
-    if (small.providerID === "openai" || small.modelID.includes("gpt-5")) {
-      if (small.modelID.includes("5.1")) {
-        options["reasoningEffort"] = "low"
-      } else {
-        options["reasoningEffort"] = "minimal"
-      }
-    }
-    if (small.providerID === "google") {
-      options["thinkingConfig"] = {
-        thinkingBudget: 0,
-      }
-    }
+    const small = await Provider.getSmallModel(input.providerID)
+    const options = pipe(
+      {},
+      mergeDeep(ProviderTransform.options(small.providerID, small.modelID, small.npm ?? "", input.session.id)),
+      mergeDeep(ProviderTransform.smallOptions({ providerID: small.providerID, modelID: small.modelID })),
+      mergeDeep(small.info.options),
+    )
     await generateText({
       maxOutputTokens: small.info.reasoning ? 1500 : 20,
       providerOptions: ProviderTransform.providerOptions(small.npm, small.providerID, options),
