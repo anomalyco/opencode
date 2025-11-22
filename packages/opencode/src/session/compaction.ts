@@ -225,7 +225,6 @@ export namespace SessionCompaction {
     }
     if (processor.message.error) return "stop"
 
-    // Publish compaction completed event
     const session = await Session.get(input.sessionID)
     Bus.publish(Event.Compacted, {
       sessionID: input.sessionID,
