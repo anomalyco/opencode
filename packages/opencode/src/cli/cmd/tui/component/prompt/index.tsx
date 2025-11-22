@@ -430,6 +430,18 @@ export function Prompt(props: PromptProps) {
         },
       })
       setStore("mode", "normal")
+    } else if (inputText.startsWith("/compact")) {
+      const args = inputText.slice("/compact".length).trim()
+      sdk.client.session.summarize({
+        path: {
+          id: sessionID,
+        },
+        body: {
+          modelID: local.model.current().modelID,
+          providerID: local.model.current().providerID,
+          context: args || undefined,
+        },
+      })
     } else if (
       inputText.startsWith("/") &&
       iife(() => {

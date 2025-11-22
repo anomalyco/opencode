@@ -691,6 +691,11 @@ export namespace ACP {
           await this.config.sdk.session.summarize({
             path: { id: sessionID },
             throwOnError: true,
+            body: {
+              providerID: model.providerID,
+              modelID: model.modelID,
+              context: cmd.args || undefined,
+            },
             query: {
               directory,
             },

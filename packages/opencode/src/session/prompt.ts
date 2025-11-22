@@ -400,7 +400,7 @@ export namespace SessionPrompt {
       if (task?.type === "compaction") {
         const result = await SessionCompaction.process({
           messages: msgs,
-          parentID: lastUser.id,
+          parentID: task.messageID,
           abort,
           agent: lastUser.agent,
           model: {
@@ -408,6 +408,7 @@ export namespace SessionPrompt {
             modelID: model.modelID,
           },
           sessionID,
+          context: task.context,
         })
         if (result === "stop") break
         continue

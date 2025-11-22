@@ -209,7 +209,13 @@ export function Autocomplete(props: {
           display: "/compact",
           aliases: ["/summarize"],
           description: "compact the session",
-          onSelect: () => command.trigger("session.compact"),
+          onSelect: () => {
+            const newText = "/compact "
+            const cursor = props.input().logicalCursor
+            props.input().deleteRange(0, 0, cursor.row, cursor.col)
+            props.input().insertText(newText)
+            props.input().cursorOffset = Bun.stringWidth(newText)
+          },
         },
         {
           display: "/unshare",
