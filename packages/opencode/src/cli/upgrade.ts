@@ -9,7 +9,6 @@ export async function upgrade() {
   if (!latest) return
   if (Installation.VERSION === latest) return
   
-  // If auto-update is disabled, notify user to update manually
   if (config.autoupdate === false || Flag.OPENCODE_DISABLE_AUTOUPDATE) {
     await Bus.publish(Installation.Event.UpdateAvailable, { version: latest })
     return
