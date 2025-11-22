@@ -3,9 +3,10 @@
   "version": "1.0.90",
   "type": "module",
   "exports": {
-    ".": "./src/components/index.ts",
     "./*": "./src/components/*.tsx",
     "./hooks": "./src/hooks/index.ts",
+    "./context": "./src/context/index.ts",
+    "./context/*": "./src/context/*.tsx",
     "./styles": "./src/styles/index.css",
     "./styles/tailwind": "./src/styles/tailwind/index.css",
     "./fonts/*": "./src/assets/fonts/*"
@@ -13,6 +14,7 @@
   "scripts": {
     "typecheck": "tsgo --noEmit",
     "dev": "vite",
+    "build": "vite build",
     "generate:tailwind": "bun run script/tailwind.ts"
   },
   "devDependencies": {
@@ -20,6 +22,7 @@
     "@tsconfig/node22": "catalog:",
     "typescript": "catalog:",
     "vite": "catalog:",
+    "vite-plugin-icons-spritesheet": "3.0.1",
     "vite-plugin-solid": "catalog:",
     "tailwindcss": "catalog:",
     "@tailwindcss/vite": "catalog:"
@@ -27,6 +30,7 @@
   "dependencies": {
     "@kobalte/core": "catalog:",
     "@opencode-ai/sdk": "workspace:*",
+    "@opencode-ai/util": "workspace:*",
     "@pierre/precision-diffs": "catalog:",
     "@shikijs/transformers": "3.9.2",
     "@solidjs/meta": "catalog:",

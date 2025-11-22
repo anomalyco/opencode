@@ -10,20 +10,20 @@
   border-radius: var(--radius-md);
   background: var(--surface-base);
 
-  [data-slot="input-container"] {
+  [data-slot="select-dialog-input-container"] {
     display: flex;
     align-items: center;
     gap: 12px;
     flex: 1 0 0;
 
-    /* [data-slot="icon"] {} */
+    /* [data-slot="select-dialog-icon"] {} */
 
-    [data-slot="input"] {
+    [data-slot="select-dialog-input"] {
       width: 100%;
     }
   }
 
-  /* [data-slot="clear-button"] {} */
+  /* [data-slot="select-dialog-clear-button"] {} */
 }
 
 [data-component="select-dialog"] {
@@ -31,7 +31,7 @@
   flex-direction: column;
   gap: 8px;
 
-  [data-slot="empty-state"] {
+  [data-slot="select-dialog-empty-state"] {
     display: flex;
     padding: 32px 160px;
     flex-direction: column;
@@ -40,7 +40,7 @@
     gap: 8px;
     align-self: stretch;
 
-    [data-slot="message"] {
+    [data-slot="select-dialog-message"] {
       display: flex;
       justify-content: center;
       align-items: center;
@@ -57,17 +57,17 @@
       letter-spacing: var(--letter-spacing-normal);
     }
 
-    [data-slot="filter"] {
+    [data-slot="select-dialog-filter"] {
       color: var(--text-strong);
     }
   }
 
-  [data-slot="group"] {
+  [data-slot="select-dialog-group"] {
     display: flex;
     flex-direction: column;
     gap: 4px;
 
-    [data-slot="header"] {
+    [data-slot="select-dialog-header"] {
       display: flex;
       padding: 4px 8px;
       justify-content: space-between;
@@ -85,14 +85,14 @@
       letter-spacing: var(--letter-spacing-normal);
     }
 
-    [data-slot="list"] {
+    [data-slot="select-dialog-list"] {
       display: flex;
       flex-direction: column;
       align-items: flex-start;
       gap: 4px;
       align-self: stretch;
 
-      [data-slot="item"] {
+      [data-slot="select-dialog-item"] {
         display: flex;
         width: 100%;
         height: 32px;

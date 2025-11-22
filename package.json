@@ -9,7 +9,8 @@
     "dev": "bun run --cwd packages/opencode --conditions=browser src/index.ts",
     "typecheck": "bun turbo typecheck",
     "prepare": "husky",
-    "random": "echo 'Random script'"
+    "random": "echo 'Random script'",
+    "hello": "echo 'Hello World!'"
   },
   "workspaces": {
     "packages": [
@@ -23,29 +24,33 @@
       "@hono/zod-validator": "0.4.2",
       "ulid": "3.0.1",
       "@kobalte/core": "0.13.11",
+      "@types/luxon": "3.7.1",
       "@types/node": "22.13.9",
       "@tsconfig/node22": "22.0.2",
       "@tsconfig/bun": "1.0.9",
       "@cloudflare/workers-types": "4.20251008.0",
       "@openauthjs/openauth": "0.0.0-20250322224806",
-      "@pierre/precision-diffs": "0.4.4",
-      "@solidjs/meta": "0.29.4",
+      "@pierre/precision-diffs": "0.5.4",
       "@tailwindcss/vite": "4.1.11",
       "diff": "8.0.2",
       "ai": "5.0.97",
       "hono": "4.7.10",
+      "hono-openapi": "1.1.1",
       "fuzzysort": "3.1.0",
       "luxon": "3.6.1",
       "typescript": "5.8.2",
       "@typescript/native-preview": "7.0.0-dev.20251014.1",
       "zod": "4.1.8",
       "remeda": "2.26.0",
-      "solid-js": "1.9.9",
       "solid-list": "0.3.0",
       "tailwindcss": "4.1.11",
       "virtua": "0.42.3",
       "vite": "7.1.4",
-      "vite-plugin-solid": "2.11.8"
+      "@solidjs/meta": "0.29.4",
+      "@solidjs/router": "0.15.4",
+      "@solidjs/start": "1.2.0",
+      "solid-js": "1.9.10",
+      "vite-plugin-solid": "2.11.10"
     }
   },
   "devDependencies": {
@@ -56,6 +61,7 @@
     "turbo": "2.5.6"
   },
   "dependencies": {
+    "@aws-sdk/client-s3": "3.933.0",
     "@opencode-ai/script": "workspace:*",
     "@opencode-ai/sdk": "workspace:*"
   },

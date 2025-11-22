@@ -1,13 +1,13 @@
 {
   "name": "@opencode-ai/console-app",
+  "version": "1.0.90",
   "type": "module",
   "scripts": {
     "typecheck": "tsgo --noEmit",
     "dev": "vinxi dev --host 0.0.0.0",
     "dev:remote": "VITE_AUTH_URL=https://auth.dev.opencode.ai bun sst shell --stage=dev bun dev",
     "build": "./script/generate-sitemap.ts && vinxi build && ../../opencode/script/schema.ts ./.output/public/config.json",
-    "start": "vinxi start",
-    "version": "1.0.90"
+    "start": "vinxi start"
   },
   "dependencies": {
     "@ibm/plex": "6.4.1",
@@ -17,9 +17,9 @@
     "@opencode-ai/console-core": "workspace:*",
     "@opencode-ai/console-mail": "workspace:*",
     "@opencode-ai/console-resource": "workspace:*",
-    "@solidjs/meta": "^0.29.4",
-    "@solidjs/router": "^0.15.0",
-    "@solidjs/start": "^1.1.0",
+    "@solidjs/meta": "catalog:",
+    "@solidjs/router": "catalog:",
+    "@solidjs/start": "catalog:",
     "chart.js": "4.5.1",
     "solid-js": "catalog:",
     "vinxi": "^0.5.7",

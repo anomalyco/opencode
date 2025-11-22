@@ -1,12 +1,13 @@
 import { For, JSXElement, Match, Show, Switch, createEffect, createMemo, createSignal, onCleanup } from "solid-js"
-import { Part } from "@opencode-ai/ui"
-import { useSync } from "@/context/sync"
-import type { AssistantMessage as AssistantMessageType, ToolPart } from "@opencode-ai/sdk"
+import { Part } from "./message-part"
 import { Spinner } from "./spinner"
+import { useData } from "../context/data"
+import type { AssistantMessage as AssistantMessageType, ToolPart } from "@opencode-ai/sdk"
+import "./message-progress.css"
 
 export function MessageProgress(props: { assistantMessages: () => AssistantMessageType[]; done?: boolean }) {
-  const sync = useSync()
-  const parts = createMemo(() => props.assistantMessages().flatMap((m) => sync.data.part[m.id]))
+  const data = useData()
+  const parts = createMemo(() => props.assistantMessages().flatMap((m) => data.part[m.id]))
   const done = createMemo(() => props.done ?? false)
   const currentTask = createMemo(
     () =>
@@ -26,25 +27,27 @@ export function MessageProgress(props: { assistantMessages: () => AssistantMessa
     let resolved = parts()
     const task = currentTask()
     if (task && task.state && "metadata" in task.state && task.state.metadata?.sessionId) {
-      const messages = sync.data.message[task.state.metadata.sessionId as string]?.filter((m) => m.role === "assistant")
-      resolved = messages?.flatMap((m) => sync.data.part[m.id]) ?? parts()
+      const messages = data.message[task.state.metadata.sessionId as string]?.filter((m) => m.role === "assistant")
+      resolved = messages?.flatMap((m) => data.part[m.id]) ?? parts()
     }
     return resolved
   })
-  // const currentText = createMemo(
-  //   () =>
-  //     resolvedParts().findLast((p) => p?.type === "text")?.text ||
-  //     resolvedParts().findLast((p) => p?.type === "reasoning")?.text,
-  // )
+
   const eligibleItems = createMemo(() => {
     return resolvedParts().filter((p) => p?.type === "tool" && p?.state.status === "completed") as ToolPart[]
   })
   const finishedItems = createMemo<(JSXElement | ToolPart)[]>(() => [
-    <div class="h-8 w-full" />,
-    <div class="h-8 w-full" />,
-    <div class="h-8 w-full" />,
+    <div data-slot="message-progress-item" />,
+    <div data-slot="message-progress-item" />,
+    <div data-slot="message-progress-item" />,
     ...eligibleItems(),
-    ...(done() ? [<div class="h-8 w-full" />, <div class="h-8 w-full" />, <div class="h-8 w-full" />] : []),
+    ...(done()
+      ? [
+          <div data-slot="message-progress-item" />,
+          <div data-slot="message-progress-item" />,
+          <div data-slot="message-progress-item" />,
+        ]
+      : []),
   ])
 
   const delay = createMemo(() => (done() ? 220 : 400))
@@ -132,31 +135,13 @@ export function MessageProgress(props: { assistantMessages: () => AssistantMessa
   })
 
   return (
-    <div class="flex flex-col gap-3">
-      {/* <Show when={currentText()}> */}
-      {/*   {(text) => ( */}
-      {/*     <div */}
-      {/*       class="h-20 flex flex-col justify-end overflow-hidden py-3 */}
-      {/*              mask-alpha mask-t-from-80% mask-t-from-background-base mask-t-to-transparent" */}
-      {/*     > */}
-      {/*       <Markdown text={text()} class="w-full shrink-0 overflow-visible" /> */}
-      {/*     </div> */}
-      {/*   )} */}
-      {/* </Show> */}
-      <div class="flex items-center gap-x-5 pl-3 border border-transparent text-text-base">
-        <Spinner /> <span class="text-12-medium">{status() ?? "Considering next steps..."}</span>
+    <div data-component="message-progress">
+      <div data-slot="message-progress-status">
+        <Spinner /> <span data-slot="message-progress-status-text">{status() ?? "Considering next steps..."}</span>
       </div>
       <Show when={eligibleItems().length > 0}>
-        <div
-          class="h-30 overflow-hidden pointer-events-none pb-1 
-               mask-alpha mask-t-from-33% mask-t-from-background-base mask-t-to-transparent
-               mask-b-from-95% mask-b-from-background-base mask-b-to-transparent"
-        >
-          <div
-            class="w-full flex flex-col items-start self-stretch gap-2 py-8
-                 transform transition-transform duration-500 ease-[cubic-bezier(0.22,1,0.36,1)]"
-            style={{ transform: `translateY(${translateY()})` }}
-          >
+        <div data-slot="message-progress-list-container">
+          <div data-slot="message-progress-list" style={{ transform: `translateY(${translateY()})` }}>
             <For each={finishedItems()}>
               {(part) => (
                 <Switch>
@@ -164,17 +149,17 @@ export function MessageProgress(props: { assistantMessages: () => AssistantMessa
                     {(p) => {
                       const part = p() as ToolPart
                       const message = createMemo(() =>
-                        sync.data.message[part.sessionID].find((m) => m.id === part.messageID),
+                        data.message[part.sessionID].find((m) => m.id === part.messageID),
                       )
                       return (
-                        <div class="h-8 flex items-center w-full">
+                        <div data-slot="message-progress-item">
                           <Part message={message()!} part={part} />
                         </div>
                       )
                     }}
                   </Match>
                   <Match when={true}>
-                    <div class="h-8 flex items-center w-full">{part as JSXElement}</div>
+                    <div data-slot="message-progress-item">{part as JSXElement}</div>
                   </Match>
                 </Switch>
               )}

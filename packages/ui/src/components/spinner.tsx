@@ -12,8 +12,8 @@ export function Spinner(props: { class?: string; classList?: ComponentProps<"div
   return (
     <svg
       viewBox="0 0 15 15"
+      data-component="spinner"
       classList={{
-        "size-4": true,
         ...(props.classList ?? {}),
         [props.class ?? ""]: !!props.class,
       }}

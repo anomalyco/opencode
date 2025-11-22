@@ -1,0 +1,35 @@
+{
+  "name": "@opencode-ai/enterprise",
+  "version": "0.0.0",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "typecheck": "tsgo --noEmit",
+    "dev": "vinxi dev",
+    "build": "vinxi build",
+    "start": "vinxi start"
+  },
+  "dependencies": {
+    "@opencode-ai/util": "workspace:*",
+    "@opencode-ai/ui": "workspace:*",
+    "@solidjs/router": "catalog:",
+    "@solidjs/start": "catalog:",
+    "@solidjs/meta": "catalog:",
+    "hono": "catalog:",
+    "hono-openapi": "catalog:",
+    "luxon": "catalog:",
+    "solid-js": "catalog:",
+    "vinxi": "^0.5.7",
+    "zod": "catalog:"
+  },
+  "devDependencies": {
+    "@tailwindcss/vite": "catalog:",
+    "@typescript/native-preview": "catalog:",
+    "@types/luxon": "catalog:",
+    "tailwindcss": "catalog:",
+    "typescript": "catalog:"
+  },
+  "engines": {
+    "node": ">=22"
+  }
+}
