@@ -75,6 +75,9 @@ import type {
   SessionMessageData,
   SessionMessageResponses,
   SessionMessageErrors,
+  SessionEphemeralData,
+  SessionEphemeralResponses,
+  SessionEphemeralErrors,
   SessionCommandData,
   SessionCommandResponses,
   SessionCommandErrors,
@@ -510,6 +513,20 @@ class Session extends _HeyApiClient {
     return (options.client ?? this._client).get<SessionMessageResponses, SessionMessageErrors, ThrowOnError>({
       url: "/session/{id}/message/{messageID}",
       ...options,
+    })
+  }
+
+  /**
+   * Run an ephemeral model request using session context
+   */
+  public ephemeral<ThrowOnError extends boolean = false>(options: Options<SessionEphemeralData, ThrowOnError>) {
+    return (options.client ?? this._client).post<SessionEphemeralResponses, SessionEphemeralErrors, ThrowOnError>({
+      url: "/session/{id}/ephemeral",
+      ...options,
+      headers: {
+        "Content-Type": "application/json",
+        ...options.headers,
+      },
     })
   }
 

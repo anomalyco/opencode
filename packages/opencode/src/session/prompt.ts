@@ -142,6 +142,34 @@ export namespace SessionPrompt {
   })
   export type PromptInput = z.infer<typeof PromptInput>
 
+  export const EphemeralInput = z.object({
+    sessionID: Identifier.schema("session"),
+    model: z
+      .object({
+        providerID: z.string(),
+        modelID: z.string(),
+      })
+      .optional(),
+    agent: z.string().optional(),
+    system: z.string().optional(),
+    tools: z.record(z.string(), z.boolean()).optional(),
+    message: z
+      .array(
+        MessageV2.TextPart.omit({
+          messageID: true,
+          sessionID: true,
+        })
+          .partial({
+            id: true,
+          })
+          .meta({
+            ref: "EphemeralTextPartInput",
+          }),
+      )
+      .optional(),
+  })
+  export type EphemeralInput = z.infer<typeof EphemeralInput>
+
   export async function resolvePromptParts(template: string): Promise<PromptInput["parts"]> {
     const parts: PromptInput["parts"] = [
       {
@@ -202,6 +230,82 @@ export namespace SessionPrompt {
     }
 
     return loop(input.sessionID)
+  })
+
+  export const ephemeral = fn(EphemeralInput, async (input) => {
+    const session = await Session.get(input.sessionID)
+    await SessionRevert.cleanup(session)
+
+    const msgs = await MessageV2.filterCompacted(MessageV2.stream(input.sessionID))
+
+    let lastUser: MessageV2.User | undefined
+    for (let index = msgs.length - 1; index >= 0; index--) {
+      const item = msgs[index]
+      if (item.info.role === "user") {
+        lastUser = item.info as MessageV2.User
+        break
+      }
+    }
+
+    if (!lastUser) {
+      throw new Error("No user message found in stream.")
+    }
+
+    const agent = await Agent.get(input.agent ?? lastUser.agent)
+    const baseModel = input.model ?? lastUser.model
+    const model = await Provider.getModel(baseModel.providerID, baseModel.modelID)
+
+    const system = await resolveSystemPrompt({
+      providerID: model.providerID,
+      modelID: model.info.id,
+      agent,
+      system: input.system ?? lastUser.system,
+    })
+
+    const historyMessages = MessageV2.toModelMessage(msgs)
+
+    const messageParts = (input.message ?? []).filter((part) => part.type === "text")
+    const messageMessages: ModelMessage[] = []
+    if (messageParts.length > 0) {
+      const content = messageParts.map((part) => part.text).join("\n\n")
+      messageMessages.push({
+        role: "user",
+        content,
+      })
+    }
+
+    const options = ProviderTransform.options(model.providerID, model.modelID, model.npm ?? "", input.sessionID) ?? {}
+    const maxOutputTokens = ProviderTransform.maxOutputTokens(
+      model.providerID,
+      options,
+      model.info.limit.output,
+      OUTPUT_TOKEN_MAX,
+    )
+
+    const result = await generateText({
+      model: model.language,
+      messages: [
+        ...system.map(
+          (x): ModelMessage => ({
+            role: "system",
+            content: x,
+          }),
+        ),
+        ...historyMessages,
+        ...messageMessages,
+      ],
+      headers: model.info.headers,
+      providerOptions: ProviderTransform.providerOptions(
+        model.npm,
+        model.providerID,
+        options as Record<string, unknown>,
+      ),
+      maxOutputTokens,
+    })
+
+    return {
+      text: result.text,
+    }
   })
 
   function start(sessionID: string) {

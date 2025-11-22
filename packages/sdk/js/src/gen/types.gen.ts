@@ -1235,6 +1235,25 @@ export type NotFoundError = {
   }
 }
 
+export type EphemeralResponse = {
+  text: string
+}
+
+export type EphemeralTextPartInput = {
+  id?: string
+  type: "text"
+  text: string
+  synthetic?: boolean
+  ignored?: boolean
+  time?: {
+    start: number
+    end?: number
+  }
+  metadata?: {
+    [key: string]: unknown
+  }
+}
+
 export type TextPartInput = {
   id?: string
   type: "text"
@@ -2282,6 +2301,53 @@ export type SessionMessageResponses = {
 }
 
 export type SessionMessageResponse = SessionMessageResponses[keyof SessionMessageResponses]
+
+export type SessionEphemeralData = {
+  body?: {
+    model?: {
+      providerID: string
+      modelID: string
+    }
+    agent?: string
+    system?: string
+    tools?: {
+      [key: string]: boolean
+    }
+    message?: Array<EphemeralTextPartInput>
+  }
+  path: {
+    /**
+     * Session ID
+     */
+    id: string
+  }
+  query?: {
+    directory?: string
+  }
+  url: "/session/{id}/ephemeral"
+}
+
+export type SessionEphemeralErrors = {
+  /**
+   * Bad request
+   */
+  400: BadRequestError
+  /**
+   * Not found
+   */
+  404: NotFoundError
+}
+
+export type SessionEphemeralError = SessionEphemeralErrors[keyof SessionEphemeralErrors]
+
+export type SessionEphemeralResponses = {
+  /**
+   * Ephemeral response
+   */
+  200: EphemeralResponse
+}
+
+export type SessionEphemeralResponse = SessionEphemeralResponses[keyof SessionEphemeralResponses]
 
 export type SessionCommandData = {
   body?: {

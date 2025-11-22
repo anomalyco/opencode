@@ -939,7 +939,45 @@ export namespace Server {
         },
       )
       .post(
+        "/session/:id/ephemeral",
+        describeRoute({
+          description: "Run an ephemeral model request using session context",
+          operationId: "session.ephemeral",
+          responses: {
+            200: {
+              description: "Ephemeral response",
+              content: {
+                "application/json": {
+                  schema: resolver(
+                    z
+                      .object({
+                        text: z.string(),
+                      })
+                      .meta({ ref: "EphemeralResponse" }),
+                  ),
+                },
+              },
+            },
+            ...errors(400, 404),
+          },
+        }),
+        validator(
+          "param",
+          z.object({
+            id: z.string().meta({ description: "Session ID" }),
+          }),
+        ),
+        validator("json", SessionPrompt.EphemeralInput.omit({ sessionID: true })),
+        async (c) => {
+          const sessionID = c.req.valid("param").id
+          const body = c.req.valid("json")
+          const result = await SessionPrompt.ephemeral({ ...body, sessionID })
+          return c.json(result)
+        },
+      )
+      .post(
         "/session/:id/message",
+
         describeRoute({
           description: "Create and send a new message to a session",
           operationId: "session.prompt",
