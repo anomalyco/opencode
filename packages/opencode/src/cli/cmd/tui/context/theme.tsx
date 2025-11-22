@@ -47,6 +47,7 @@ type ThemeColors = {
   background: RGBA
   backgroundPanel: RGBA
   backgroundElement: RGBA
+  backgroundMenu: RGBA
   border: RGBA
   borderActive: RGBA
   borderSubtle: RGBA
@@ -118,8 +119,9 @@ type ColorValue = HexColor | RefName | Variant | RGBA
 type ThemeJson = {
   $schema?: string
   defs?: Record<string, HexColor | RefName>
-  theme: Omit<Record<keyof ThemeColors, ColorValue>, "selectedListItemText"> & {
+  theme: Omit<Record<keyof ThemeColors, ColorValue>, "selectedListItemText" | "backgroundMenu"> & {
     selectedListItemText?: ColorValue
+    backgroundMenu?: ColorValue
   }
 }
 
@@ -172,7 +174,7 @@ function resolveTheme(theme: ThemeJson, mode: "dark" | "light") {
 
   const resolved = Object.fromEntries(
     Object.entries(theme.theme)
-      .filter(([key]) => key !== "selectedListItemText")
+      .filter(([key]) => key !== "selectedListItemText" && key !== "backgroundMenu")
       .map(([key, value]) => {
         return [key, resolveColor(value)]
       }),
@@ -186,6 +188,13 @@ function resolveTheme(theme: ThemeJson, mode: "dark" | "light") {
     // Backward compatibility: if selectedListItemText is not defined, use background color
     // This preserves the current behavior for all existing themes
     resolved.selectedListItemText = resolved.background
+  }
+
+  // Handle backgroundMenu - optional with fallback to backgroundElement
+  if (theme.theme.backgroundMenu !== undefined) {
+    resolved.backgroundMenu = resolveColor(theme.theme.backgroundMenu)
+  } else {
+    resolved.backgroundMenu = resolved.backgroundElement
   }
 
   return {
@@ -334,6 +343,7 @@ function generateSystem(colors: TerminalColors, mode: "dark" | "light"): ThemeJs
       background: bg,
       backgroundPanel: grays[2],
       backgroundElement: grays[3],
+      backgroundMenu: grays[3],
 
       // Border colors
       borderSubtle: grays[6],
