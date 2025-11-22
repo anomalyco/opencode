@@ -611,6 +611,11 @@ export namespace Config {
         })
         .optional(),
       tools: z.record(z.string(), z.boolean()).optional(),
+      enterprise: z
+        .object({
+          url: z.string().optional().describe("Enterprise URL"),
+        })
+        .optional(),
       experimental: z
         .object({
           hook: z

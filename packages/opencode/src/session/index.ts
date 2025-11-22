@@ -16,6 +16,7 @@ import { SessionPrompt } from "./prompt"
 import { fn } from "@/util/fn"
 import { Command } from "../command"
 import { Snapshot } from "@/snapshot"
+import { ShareNext } from "@/share/share-next"
 
 export namespace Session {
   const log = Log.create({ service: "session" })
@@ -221,6 +222,15 @@ export namespace Session {
       throw new Error("Sharing is disabled in configuration")
     }
 
+    if (cfg.enterprise?.url) {
+      const share = await ShareNext.create(id)
+      await update(id, (draft) => {
+        draft.share = {
+          url: share.url,
+        }
+      })
+    }
+
     const session = await get(id)
     if (session.share) return session.share
     const share = await Share.create(id)
@@ -241,6 +251,13 @@ export namespace Session {
   })
 
   export const unshare = fn(Identifier.schema("session"), async (id) => {
+    const cfg = await Config.get()
+    if (cfg.enterprise?.url) {
+      await ShareNext.remove(id)
+      await update(id, (draft) => {
+        draft.share = undefined
+      })
+    }
     const share = await getShare(id)
     if (!share) return
     await Storage.remove(["share", id])

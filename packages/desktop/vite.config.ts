@@ -2,7 +2,6 @@ import { defineConfig } from "vite"
 import solidPlugin from "vite-plugin-solid"
 import tailwindcss from "@tailwindcss/vite"
 import path from "path"
-import { iconsSpritesheet } from "vite-plugin-icons-spritesheet"
 
 export default defineConfig({
   resolve: {
@@ -10,18 +9,10 @@ export default defineConfig({
       "@": path.resolve(__dirname, "./src"),
     },
   },
-  plugins: [
-    tailwindcss(),
-    solidPlugin(),
-    iconsSpritesheet({
-      withTypes: true,
-      inputDir: "src/assets/file-icons",
-      outputDir: "src/ui/file-icons",
-      formatter: "prettier",
-    }),
-  ],
+  plugins: [tailwindcss(), solidPlugin()],
   server: {
     host: "0.0.0.0",
+    allowedHosts: true,
     port: 3000,
   },
   build: {

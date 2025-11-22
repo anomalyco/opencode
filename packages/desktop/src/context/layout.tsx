@@ -1,6 +1,6 @@
 import { createStore } from "solid-js/store"
 import { createMemo } from "solid-js"
-import { createSimpleContext } from "./helper"
+import { createSimpleContext } from "@opencode-ai/ui/context"
 import { makePersisted } from "@solid-primitives/storage"
 import { useGlobalSync } from "./global-sync"
 

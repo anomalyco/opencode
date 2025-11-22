@@ -25,7 +25,11 @@ elif [[ "$arch" == "x86_64" ]]; then
   arch="x64"
 fi
 
-filename="$APP-$os-$arch.zip"
+if [ "$os" = "linux" ]; then
+    filename="$APP-$os-$arch.tar.gz"
+else
+    filename="$APP-$os-$arch.zip"
+fi
 
 
 case "$filename" in
@@ -44,9 +48,16 @@ case "$filename" in
     ;;
 esac
 
-if ! command -v unzip >/dev/null 2>&1; then
-    echo -e "${RED}Error: 'unzip' is required but not installed.${NC}"
-    exit 1
+if [ "$os" = "linux" ]; then
+    if ! command -v tar >/dev/null 2>&1; then
+         echo -e "${RED}Error: 'tar' is required but not installed.${NC}"
+         exit 1
+    fi
+else
+    if ! command -v unzip >/dev/null 2>&1; then
+        echo -e "${RED}Error: 'unzip' is required but not installed.${NC}"
+        exit 1
+    fi
 fi
 
 INSTALL_DIR=$HOME/.opencode/bin
@@ -197,7 +208,12 @@ download_and_install() {
         curl -# -L -o "$filename" "$url"
     fi
 
-    unzip -q "$filename"
+    if [ "$os" = "linux" ]; then
+        tar -xzf "$filename"
+    else
+        unzip -q "$filename"
+    fi
+    
     mv opencode "$INSTALL_DIR"
     chmod 755 "${INSTALL_DIR}/opencode"
     cd .. && rm -rf opencodetmp
