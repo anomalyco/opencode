@@ -6,8 +6,6 @@ import {
   For,
   Match,
   on,
-  onCleanup,
-  onMount,
   Show,
   Switch,
   useContext,
@@ -45,7 +43,6 @@ import type { TaskTool } from "@/tool/task"
 import { useKeyboard, useRenderer, useTerminalDimensions, type BoxProps, type JSX } from "@opentui/solid"
 import { useSDK } from "@tui/context/sdk"
 import { useCommandDialog } from "@tui/component/dialog-command"
-import { Shimmer } from "@tui/ui/shimmer"
 import { useKeybind } from "@tui/context/keybind"
 import { Header } from "./header"
 import { parsePatch } from "diff"
@@ -64,20 +61,18 @@ import { Clipboard } from "../../util/clipboard"
 import { Toast, useToast } from "../../ui/toast"
 import { useKV } from "../../context/kv.tsx"
 import { Editor } from "../../util/editor"
-import { Global } from "@/global"
-import fs from "fs/promises"
 import stripAnsi from "strip-ansi"
 
 addDefaultParsers(parsers.parsers)
 
 class CustomSpeedScroll implements ScrollAcceleration {
-  constructor(private speed: number) {}
+  constructor(private speed: number) { }
 
   tick(_now?: number): number {
     return this.speed
   }
 
-  reset(): void {}
+  reset(): void { }
 }
 
 const context = createContext<{
@@ -105,6 +100,10 @@ export function Session() {
 
   const pending = createMemo(() => {
     return messages().findLast((x) => x.role === "assistant" && !x.time.completed)?.id
+  })
+
+  const lastAssistant = createMemo(() => {
+    return messages().findLast((x) => x.role === "assistant")
   })
 
   const dimensions = useTerminalDimensions()
@@ -273,30 +272,30 @@ export function Session() {
     },
     ...(sync.data.config.share !== "disabled"
       ? [
-          {
-            title: "Share session",
-            value: "session.share",
-            keybind: "session_share" as const,
-            disabled: !!session()?.share?.url,
-            category: "Session",
-            onSelect: async (dialog: any) => {
-              await sdk.client.session
-                .share({
-                  path: {
-                    id: route.sessionID,
-                  },
-                })
-                .then((res) =>
-                  Clipboard.copy(res.data!.share!.url).catch(() =>
-                    toast.show({ message: "Failed to copy URL to clipboard", variant: "error" }),
-                  ),
-                )
-                .then(() => toast.show({ message: "Share URL copied to clipboard!", variant: "success" }))
-                .catch(() => toast.show({ message: "Failed to share session", variant: "error" }))
-              dialog.clear()
-            },
+        {
+          title: "Share session",
+          value: "session.share",
+          keybind: "session_share" as const,
+          disabled: !!session()?.share?.url,
+          category: "Session",
+          onSelect: async (dialog: any) => {
+            await sdk.client.session
+              .share({
+                path: {
+                  id: route.sessionID,
+                },
+              })
+              .then((res) =>
+                Clipboard.copy(res.data!.share!.url).catch(() =>
+                  toast.show({ message: "Failed to copy URL to clipboard", variant: "error" }),
+                ),
+              )
+              .then(() => toast.show({ message: "Share URL copied to clipboard!", variant: "success" }))
+              .catch(() => toast.show({ message: "Failed to share session", variant: "error" }))
+            dialog.clear()
           },
-        ]
+        },
+      ]
       : []),
     {
       title: "Unshare session",
@@ -528,7 +527,6 @@ export function Session() {
           return
         }
 
-        console.log(text)
         const base64 = Buffer.from(text).toString("base64")
         const osc52 = `\x1b]52;c;${base64}\x07`
         const finalOsc52 = process.env["TMUX"] ? `\x1bPtmux;\x1b${osc52}\x1b\\` : osc52
@@ -668,44 +666,50 @@ export function Session() {
     },
   ])
 
+  const revertInfo = createMemo(() => session()?.revert)
+  const revertMessageID = createMemo(() => revertInfo()?.messageID)
+
+  const revertDiffFiles = createMemo(() => {
+    const diffText = revertInfo()?.diff ?? ""
+    if (!diffText) return []
+
+    try {
+      const patches = parsePatch(diffText)
+      return patches.map((patch) => {
+        const filename = patch.newFileName || patch.oldFileName || "unknown"
+        const cleanFilename = filename.replace(/^[ab]\//, "")
+        return {
+          filename: cleanFilename,
+          additions: patch.hunks.reduce(
+            (sum, hunk) => sum + hunk.lines.filter((line) => line.startsWith("+")).length,
+            0,
+          ),
+          deletions: patch.hunks.reduce(
+            (sum, hunk) => sum + hunk.lines.filter((line) => line.startsWith("-")).length,
+            0,
+          ),
+        }
+      })
+    } catch (error) {
+      return []
+    }
+  })
+
+  const revertRevertedMessages = createMemo(() => {
+    const messageID = revertMessageID()
+    if (!messageID) return []
+    return messages().filter((x) => x.id >= messageID && x.role === "user")
+  })
+
   const revert = createMemo(() => {
-    const s = session()
-    if (!s) return
-    const messageID = s.revert?.messageID
-    if (!messageID) return
-    const reverted = messages().filter((x) => x.id >= messageID && x.role === "user")
-
-    const diffFiles = (() => {
-      const diffText = s.revert?.diff || ""
-      if (!diffText) return []
-
-      try {
-        const patches = parsePatch(diffText)
-        return patches.map((patch) => {
-          const filename = patch.newFileName || patch.oldFileName || "unknown"
-          const cleanFilename = filename.replace(/^[ab]\//, "")
-          return {
-            filename: cleanFilename,
-            additions: patch.hunks.reduce(
-              (sum, hunk) => sum + hunk.lines.filter((line) => line.startsWith("+")).length,
-              0,
-            ),
-            deletions: patch.hunks.reduce(
-              (sum, hunk) => sum + hunk.lines.filter((line) => line.startsWith("-")).length,
-              0,
-            ),
-          }
-        })
-      } catch (error) {
-        return []
-      }
-    })()
-
+    const info = revertInfo()
+    if (!info) return
+    if (!info.messageID) return
     return {
-      messageID,
-      reverted,
-      diff: s.revert!.diff,
-      diffFiles,
+      messageID: info.messageID,
+      reverted: revertRevertedMessages(),
+      diff: info.diff,
+      diffFiles: revertDiffFiles(),
     }
   })
 
@@ -856,7 +860,7 @@ export function Session() {
                     </Match>
                     <Match when={message.role === "assistant"}>
                       <AssistantMessage
-                        last={pending() === message.id}
+                        last={lastAssistant()?.id === message.id}
                         message={message as AssistantMessage}
                         parts={sync.data.part[message.id] ?? []}
                       />
@@ -992,14 +996,7 @@ function UserMessage(props: {
 function AssistantMessage(props: { message: AssistantMessage; parts: Part[]; last: boolean }) {
   const local = useLocal()
   const { theme } = useTheme()
-  const sync = useSync()
   const ctx = use()
-  const status = createMemo(
-    () =>
-      sync.data.session_status[props.message.sessionID] ?? {
-        type: "idle",
-      },
-  )
   return (
     <>
       <For each={props.parts}>
@@ -1032,46 +1029,6 @@ function AssistantMessage(props: { message: AssistantMessage; parts: Part[]; las
         </box>
       </Show>
       <Switch>
-        <Match when={props.last && status().type !== "idle" && false}>
-          <box paddingLeft={3} flexDirection="row" gap={1} marginTop={1}>
-            <text fg={local.agent.color(props.message.mode)}>{Locale.titlecase(props.message.mode)}</text>
-            <Shimmer text={props.message.modelID} color={theme.text} />
-            {(() => {
-              const retry = createMemo(() => {
-                const s = status()
-                if (s.type !== "retry") return
-                return s
-              })
-              const message = createMemo(() => {
-                const r = retry()
-                if (!r) return
-                if (r.message.includes("exceeded your current quota") && r.message.includes("gemini"))
-                  return "gemini 3 way too hot right now"
-                if (r.message.length > 50) return r.message.slice(0, 50) + "..."
-                return r.message
-              })
-              const [seconds, setSeconds] = createSignal(0)
-              onMount(() => {
-                const timer = setInterval(() => {
-                  const next = retry()?.next
-                  if (next) setSeconds(Math.round((next - Date.now()) / 1000))
-                }, 1000)
-
-                onCleanup(() => {
-                  clearInterval(timer)
-                })
-              })
-              return (
-                <Show when={retry()}>
-                  <text fg={theme.error}>
-                    {message()} [retrying {seconds() > 0 ? `in ${seconds()}s ` : ""}
-                    attempt #{retry()!.attempt}]
-                  </text>
-                </Show>
-              )
-            })()}
-          </box>
-        </Match>
         <Match
           when={
             (props.message.time.completed &&
@@ -1103,7 +1060,7 @@ const PART_MAPPING = {
 }
 
 function ReasoningPart(props: { last: boolean; part: ReasoningPart; message: AssistantMessage }) {
-  const { theme, syntax } = useTheme()
+  const { theme, subtleSyntax } = useTheme()
   const ctx = use()
   const content = createMemo(() => props.part.text.trim())
   return (
@@ -1121,10 +1078,10 @@ function ReasoningPart(props: { last: boolean; part: ReasoningPart; message: Ass
           filetype="markdown"
           drawUnstyledText={false}
           streaming={true}
-          syntaxStyle={syntax()}
+          syntaxStyle={subtleSyntax()}
           content={"_Thinking:_ " + content()}
           conceal={ctx.conceal()}
-          fg={theme.text}
+          fg={theme.textMuted}
         />
       </box>
     </Show>
@@ -1169,19 +1126,19 @@ function ToolPart(props: { last: boolean; part: ToolPart; message: AssistantMess
     const style: BoxProps =
       container === "block" || permission
         ? {
-            border: permissionIndex === 0 ? (["left", "right"] as const) : (["left"] as const),
-            paddingTop: 1,
-            paddingBottom: 1,
-            paddingLeft: 2,
-            marginTop: 1,
-            gap: 1,
-            backgroundColor: theme.backgroundPanel,
-            customBorderChars: SplitBorder.customBorderChars,
-            borderColor: permissionIndex === 0 ? theme.warning : theme.background,
-          }
+          border: permissionIndex === 0 ? (["left", "right"] as const) : (["left"] as const),
+          paddingTop: 1,
+          paddingBottom: 1,
+          paddingLeft: 2,
+          marginTop: 1,
+          gap: 1,
+          backgroundColor: theme.backgroundPanel,
+          customBorderChars: SplitBorder.customBorderChars,
+          borderColor: permissionIndex === 0 ? theme.warning : theme.background,
+        }
         : {
-            paddingLeft: 3,
-          }
+          paddingLeft: 3,
+        }
 
     return (
       <box
@@ -1558,7 +1515,6 @@ ToolRegistry.register<typeof EditTool>({
 
     const ft = createMemo(() => filetype(props.input.filePath))
 
-    createEffect(() => console.log(props.metadata.diagnostics))
     const diagnostics = createMemo(() => {
       const arr = props.metadata.diagnostics?.[props.input.filePath ?? ""] ?? []
       return arr.filter((x) => x.severity === 1).slice(0, 3)

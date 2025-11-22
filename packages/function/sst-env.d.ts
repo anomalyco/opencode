@@ -94,6 +94,14 @@ declare module "sst" {
       type: "sst.sst.Secret"
       value: string
     }
+    ZEN_MODELS3: {
+      type: "sst.sst.Secret"
+      value: string
+    }
+    ZEN_MODELS4: {
+      type: "sst.sst.Secret"
+      value: string
+    }
   }
 }
 // cloudflare

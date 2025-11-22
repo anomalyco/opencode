@@ -147,7 +147,7 @@ export namespace ProviderTransform {
       result["promptCacheKey"] = sessionID
     }
 
-    if (providerID === "google" || (providerID === "opencode" && modelID.includes("gemini-3"))) {
+    if (providerID === "google" || (providerID.startsWith("opencode") && modelID.includes("gemini-3"))) {
       result["thinkingConfig"] = {
         includeThoughts: true,
       }
@@ -166,7 +166,7 @@ export namespace ProviderTransform {
         result["textVerbosity"] = "low"
       }
 
-      if (providerID === "opencode") {
+      if (providerID.startsWith("opencode")) {
         result["promptCacheKey"] = sessionID
         result["include"] = ["reasoning.encrypted_content"]
         result["reasoningSummary"] = "auto"

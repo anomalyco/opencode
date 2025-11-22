@@ -1,7 +1,8 @@
 import { Select as Kobalte } from "@kobalte/core/select"
 import { createMemo, type ComponentProps } from "solid-js"
-import { Icon, Button, type ButtonProps } from "@opencode-ai/ui"
 import { pipe, groupBy, entries, map } from "remeda"
+import { Button, ButtonProps } from "./button"
+import { Icon } from "./icon"
 
 export interface SelectProps<T> {
   placeholder?: string
@@ -37,21 +38,21 @@ export function Select<T>(props: SelectProps<T> & ButtonProps) {
       optionGroupChildren="options"
       placeholder={props.placeholder}
       sectionComponent={(props) => (
-        <Kobalte.Section data-slot="section">{props.section.rawValue.category}</Kobalte.Section>
+        <Kobalte.Section data-slot="select-section">{props.section.rawValue.category}</Kobalte.Section>
       )}
       itemComponent={(itemProps) => (
         <Kobalte.Item
-          data-slot="select-item"
+          data-slot="select-select-item"
           classList={{
             ...(props.classList ?? {}),
             [props.class ?? ""]: !!props.class,
           }}
           {...itemProps}
         >
-          <Kobalte.ItemLabel data-slot="select-item-label">
+          <Kobalte.ItemLabel data-slot="select-select-item-label">
             {props.label ? props.label(itemProps.item.rawValue) : (itemProps.item.rawValue as string)}
           </Kobalte.ItemLabel>
-          <Kobalte.ItemIndicator data-slot="select-item-indicator">
+          <Kobalte.ItemIndicator data-slot="select-select-item-indicator">
             <Icon name="check-small" size="small" />
           </Kobalte.ItemIndicator>
         </Kobalte.Item>
@@ -61,7 +62,7 @@ export function Select<T>(props: SelectProps<T> & ButtonProps) {
       }}
     >
       <Kobalte.Trigger
-        data-slot="select-trigger"
+        data-slot="select-select-trigger"
         as={Button}
         size={props.size}
         variant={props.variant}
@@ -70,7 +71,7 @@ export function Select<T>(props: SelectProps<T> & ButtonProps) {
           [props.class ?? ""]: !!props.class,
         }}
       >
-        <Kobalte.Value<T> data-slot="select-trigger-value">
+        <Kobalte.Value<T> data-slot="select-select-trigger-value">
           {(state) => {
             const selected = state.selectedOption() ?? props.current
             if (!selected) return props.placeholder || ""
@@ -78,7 +79,7 @@ export function Select<T>(props: SelectProps<T> & ButtonProps) {
             return selected as string
           }}
         </Kobalte.Value>
-        <Kobalte.Icon data-slot="select-trigger-icon">
+        <Kobalte.Icon data-slot="select-select-trigger-icon">
           <Icon name="chevron-down" size="small" />
         </Kobalte.Icon>
       </Kobalte.Trigger>
@@ -90,7 +91,7 @@ export function Select<T>(props: SelectProps<T> & ButtonProps) {
           }}
           data-component="select-content"
         >
-          <Kobalte.Listbox data-slot="select-content-list" />
+          <Kobalte.Listbox data-slot="select-select-content-list" />
         </Kobalte.Content>
       </Kobalte.Portal>
     </Kobalte>
