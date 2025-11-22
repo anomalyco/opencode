@@ -7,6 +7,13 @@ export type EventInstallationUpdated = {
   }
 }
 
+export type EventInstallationUpdateAvailable = {
+  type: "installation.update-available"
+  properties: {
+    version: string
+  }
+}
+
 export type EventConfigUpdated = {
   type: "config.updated"
   properties: {
@@ -16,13 +23,6 @@ export type EventConfigUpdated = {
     before: unknown
     after: unknown
     diff: unknown
-  }
-}
-
-export type EventInstallationUpdateAvailable = {
-  type: "installation.update-available"
-  properties: {
-    version: string
   }
 }
 
@@ -661,8 +661,8 @@ export type EventFileWatcherUpdated = {
 
 export type Event =
   | EventInstallationUpdated
-  | EventConfigUpdated
   | EventInstallationUpdateAvailable
+  | EventConfigUpdated
   | EventLspClientDiagnostics
   | EventLspUpdated
   | EventMessageUpdated
