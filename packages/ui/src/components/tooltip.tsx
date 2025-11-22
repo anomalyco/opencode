@@ -1,5 +1,5 @@
 import { Tooltip as KobalteTooltip } from "@kobalte/core/tooltip"
-import { children, createEffect, createSignal, Match, splitProps, Switch, type JSX } from "solid-js"
+import { children, createSignal, Match, onMount, splitProps, Switch, type JSX } from "solid-js"
 import type { ComponentProps } from "solid-js"
 
 export interface TooltipProps extends ComponentProps<typeof KobalteTooltip> {
@@ -14,7 +14,7 @@ export function Tooltip(props: TooltipProps) {
 
   const c = children(() => local.children)
 
-  createEffect(() => {
+  onMount(() => {
     const childElements = c()
     if (childElements instanceof HTMLElement) {
       childElements.addEventListener("focus", () => setOpen(true))
@@ -40,7 +40,7 @@ export function Tooltip(props: TooltipProps) {
           <KobalteTooltip.Portal>
             <KobalteTooltip.Content data-component="tooltip" data-placement={props.placement}>
               {others.value}
-              {/* <KobalteTooltip.Arrow data-slot="arrow" /> */}
+              {/* <KobalteTooltip.Arrow data-slot="tooltip-arrow" /> */}
             </KobalteTooltip.Content>
           </KobalteTooltip.Portal>
         </KobalteTooltip>
