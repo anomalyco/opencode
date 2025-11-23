@@ -654,7 +654,7 @@ export namespace Provider {
     }
   }
 
-  export async function getSmallModel(providerID: string) {
+  export async function getSmallModel(providerID: string, fallbackModel?: { providerID: string; modelID: string }) {
     const cfg = await Config.get()
 
     if (cfg.small_model) {
@@ -685,7 +685,20 @@ export namespace Provider {
         }
       }
     }
-    return getModel("opencode", "gpt-5-nano")
+
+    // Check if opencode provider is available before using it
+    const opencodeProvider = await state().then((state) => state.providers["opencode"])
+    if (opencodeProvider && opencodeProvider.info.models["gpt-5-nano"]) {
+      return getModel("opencode", "gpt-5-nano")
+    }
+
+    // Use fallback model if provided
+    if (fallbackModel) {
+      return getModel(fallbackModel.providerID, fallbackModel.modelID)
+    }
+
+    // No fallback available
+    throw new Error("No small model available")
   }
 
   const priority = ["gpt-5", "claude-sonnet-4", "big-pickle", "gemini-3-pro"]
