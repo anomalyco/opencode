@@ -707,17 +707,13 @@ export namespace Provider {
     const provider = await list()
       .then((val) => Object.values(val))
       .then((x) => x.find((p) => !cfg.provider || Object.keys(cfg.provider).includes(p.info.id)))
-    if (!provider)
-      return {
-        providerID: "offline",
-        modelID: "offline-model",
-      }
+    if (!provider) {
+      throw new Error("No providers configured; unable to select a default model")
+    }
     const [model] = sort(Object.values(provider.info.models))
-    if (!model)
-      return {
-        providerID: provider.info.id,
-        modelID: "offline-model",
-      }
+    if (!model) {
+      throw new Error(`Provider ${provider.info.id} has no models available`)
+    }
     return {
       providerID: provider.info.id,
       modelID: model.id,

@@ -147,7 +147,6 @@ describe("End-to-End Trajectory Recording", () => {
           enabled: true,
           outputPath: path.join(tmp.path, "trajectories"),
           filenameTemplate: "test.jsonl",
-          captureToolDetails: true,
         })
 
         const session = await Session.create({})

@@ -26,12 +26,6 @@ export namespace Plugin {
       directory: Instance.directory,
       $: Bun.$,
     }
-    if (process.env.OPENCODE_OFFLINE === "1") {
-      return {
-        hooks,
-        input,
-      }
-    }
     const plugins = [...(config.plugin ?? [])]
     if (!Flag.OPENCODE_DISABLE_DEFAULT_PLUGINS) {
       plugins.push("opencode-copilot-auth@0.0.5")
@@ -43,9 +37,17 @@ export namespace Plugin {
         const lastAtIndex = plugin.lastIndexOf("@")
         const pkg = lastAtIndex > 0 ? plugin.substring(0, lastAtIndex) : plugin
         const version = lastAtIndex > 0 ? plugin.substring(lastAtIndex + 1) : "latest"
-        plugin = await BunProc.install(pkg, version)
+        plugin = await BunProc.install(pkg, version).catch((error) => {
+          log.warn("plugin install failed, skipping", { pkg, version, error })
+          return ""
+        })
       }
-      const mod = await import(plugin)
+      if (!plugin) continue
+      const mod = await import(plugin).catch((error) => {
+        log.warn("plugin load failed, skipping", { plugin, error })
+        return undefined
+      })
+      if (!mod) continue
       for (const [_name, fn] of Object.entries<PluginInstance>(mod)) {
         const init = await fn(input)
         hooks.push(init)

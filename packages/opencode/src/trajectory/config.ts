@@ -11,7 +11,6 @@ export namespace TrajectoryConfig {
     bufferSize: number
     flushStrategy: "immediate" | "end_of_stream" | "buffered"
     captureStreamEvents: boolean
-    captureToolDetails: boolean
   }
 
   const DEFAULTS: Options = {
@@ -21,7 +20,6 @@ export namespace TrajectoryConfig {
     bufferSize: 100,
     flushStrategy: "end_of_stream",
     captureStreamEvents: true,
-    captureToolDetails: true,
   }
 
   const configs = new Map<
@@ -101,7 +99,6 @@ export namespace TrajectoryConfig {
     if (cfg.bufferSize !== undefined) next.bufferSize = cfg.bufferSize
     if (cfg.flushStrategy) next.flushStrategy = cfg.flushStrategy
     if (cfg.captureStreamEvents !== undefined) next.captureStreamEvents = cfg.captureStreamEvents
-    if (cfg.captureToolDetails !== undefined) next.captureToolDetails = cfg.captureToolDetails
     return next
   }
 

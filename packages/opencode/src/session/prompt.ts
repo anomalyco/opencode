@@ -1430,23 +1430,39 @@ export namespace SessionPrompt {
         input: acc.input + (msg.info.tokens?.input ?? 0),
         output: acc.output + (msg.info.tokens?.output ?? 0),
         reasoning: acc.reasoning + (msg.info.tokens?.reasoning ?? 0),
+        cacheRead: acc.cacheRead + (msg.info.tokens?.cache.read ?? 0),
+        cacheWrite: acc.cacheWrite + (msg.info.tokens?.cache.write ?? 0),
       }),
-      { input: 0, output: 0, reasoning: 0 },
+      { input: 0, output: 0, reasoning: 0, cacheRead: 0, cacheWrite: 0 },
     )
     const duration = Date.now() - session.time.created
+    const lastAssistant = assistants.at(-1)?.info as MessageV2.Assistant | undefined
+    const aborted = state()[input.sessionID]?.abort?.aborted ?? false
+    const success = !aborted && !lastAssistant?.error
+    const exitReason = aborted ? "aborted" : lastAssistant?.error ? lastAssistant.error.name : "completed"
     await TrajectoryRecorder.record(input.sessionID, {
       type: "session_end",
       timestamp: Date.now(),
       sessionID: input.sessionID,
-      success: true,
-      exitReason: "completed",
+      success,
+      exitReason,
       summary: {
         totalSteps: input.steps,
         totalLLMCalls: input.llmCalls,
         totalToolCalls: input.toolCalls,
-        totalTokens: tokenTotals,
+        totalTokens: {
+          input: tokenTotals.input + tokenTotals.cacheRead,
+          output: tokenTotals.output + tokenTotals.cacheWrite,
+          reasoning: tokenTotals.reasoning,
+        },
         totalDuration: duration,
       },
+      error: lastAssistant?.error
+        ? {
+            message: lastAssistant.error.message,
+            type: lastAssistant.error.name,
+          }
+        : undefined,
     })
     await TrajectoryRecorder.stop(input.sessionID)
   }
@@ -1909,12 +1925,7 @@ export namespace SessionPrompt {
     if (!cfg.enabled) return
     if (TrajectoryRecorder.isRecording(input.sessionID)) return
     const session = await Session.get(input.sessionID).catch(() => undefined)
-    const model =
-      input.model ??
-      session?.model ?? {
-        providerID: "offline",
-        modelID: "offline-model",
-      }
+    const model = input.model ?? session?.model ?? (await Provider.defaultModel())
     const agentName = input.agent ?? session?.agent ?? "general-purpose"
     const now = Date.now()
     const dir = path.isAbsolute(cfg.outputPath) ? cfg.outputPath : path.join(Instance.directory, cfg.outputPath)
