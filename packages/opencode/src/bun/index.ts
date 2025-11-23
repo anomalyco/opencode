@@ -4,6 +4,7 @@ import { Log } from "../util/log"
 import path from "path"
 import { NamedError } from "../util/error"
 import { readableStreamToText } from "bun"
+import { Lock } from "../util/lock"
 
 export namespace BunProc {
   const log = Log.create({ service: "bun" })
@@ -58,6 +59,9 @@ export namespace BunProc {
   )
 
   export async function install(pkg: string, version = "latest") {
+    // Use lock to ensure only one install at a time
+    using _ = await Lock.write("bun-install")
+
     const mod = path.join(Global.Path.cache, "node_modules", pkg)
     const pkgjson = Bun.file(path.join(Global.Path.cache, "package.json"))
     const parsed = await pkgjson.json().catch(async () => {

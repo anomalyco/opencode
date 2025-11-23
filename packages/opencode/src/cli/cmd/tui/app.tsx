@@ -426,6 +426,15 @@ function App() {
     })
   })
 
+  event.on(Installation.Event.UpdateAvailable.type, (evt) => {
+    toast.show({
+      variant: "info",
+      title: "Update Available",
+      message: `OpenCode v${evt.properties.version} is available. Run 'opencode upgrade' to update manually.`,
+      duration: 10000,
+    })
+  })
+
   return (
     <box
       width={dimensions().width}
