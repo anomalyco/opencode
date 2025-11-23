@@ -62,7 +62,22 @@ async function main() {
     console.log("Initializing connection...")
     const initResponse = await client.initialize()
     console.log(`✓ Initialized with ${initResponse.agentInfo?.name} v${initResponse.agentInfo?.version}`)
-    console.log(`  Protocol version: ${initResponse.protocolVersion}\n`)
+    console.log(`  Protocol version: ${initResponse.protocolVersion}`)
+
+    // Display available auth methods
+    const authMethods = client.getAuthMethods()
+    if (authMethods.length > 0) {
+      console.log(`  Auth methods available: ${authMethods.length}`)
+      authMethods.forEach((method) => {
+        console.log(`    - ${method.name} (${method.id})`)
+        if (method.description) {
+          console.log(`      ${method.description}`)
+        }
+      })
+    } else {
+      console.log(`  No authentication required`)
+    }
+    console.log()
 
     // 2. Create session
     console.log("Creating session...")

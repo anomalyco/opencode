@@ -11,11 +11,13 @@ import {
   type SessionNotification,
   type RequestPermissionRequest,
   type RequestPermissionResponse,
+  type AuthMethod,
   PROTOCOL_VERSION,
   ndJsonStream,
 } from "@agentclientprotocol/sdk"
 import { Log } from "@/util/log"
 import type { Subprocess } from "bun"
+import { AuthenticationRequiredError } from "./types"
 
 const log = Log.create({ service: "acp-client" })
 
@@ -73,6 +75,14 @@ export namespace ACPClient {
      * Initialize the connection with the agent
      */
     initialize(): Promise<InitializeResponse>
+    /**
+     * Authenticate with the agent using the specified method
+     */
+    authenticate(methodId: string): Promise<void>
+    /**
+     * Get available authentication methods (populated after initialize)
+     */
+    getAuthMethods(): AuthMethod[]
     /**
      * Create a new session
      */
@@ -204,6 +214,7 @@ export namespace ACPClient {
     // Track initialization state
     let initialized = false
     let currentSessionId: string | undefined
+    let authMethods: AuthMethod[] = []
 
     const instance: Instance = {
       async initialize(): Promise<InitializeResponse> {
@@ -223,13 +234,41 @@ export namespace ACPClient {
         const response = await connection.initialize(request)
         initialized = true
 
+        // Store auth methods from response
+        authMethods = response.authMethods ?? []
+
         log.info("initialized", {
           protocolVersion: response.protocolVersion,
           agentName: response.agentInfo?.name,
           agentVersion: response.agentInfo?.version,
+          authMethodsCount: authMethods.length,
         })
 
         return response
+      },
+
+      async authenticate(methodId: string): Promise<void> {
+        if (!initialized) {
+          throw new Error("Must initialize before authenticating")
+        }
+
+        // Validate methodId is in available methods
+        const method = authMethods.find((m) => m.id === methodId)
+        if (!method) {
+          throw new Error(
+            `Invalid methodId: ${methodId}. Available methods: ${authMethods.map((m) => m.id).join(", ")}`,
+          )
+        }
+
+        log.info("authenticating", { methodId, methodName: method.name })
+
+        await connection.authenticate({ methodId })
+
+        log.info("authentication successful", { methodId })
+      },
+
+      getAuthMethods(): AuthMethod[] {
+        return [...authMethods]
       },
 
       async createSession(): Promise<NewSessionResponse> {
@@ -244,12 +283,29 @@ export namespace ACPClient {
           mcpServers: [],
         }
 
-        const response = await connection.newSession(request)
-        currentSessionId = response.sessionId
+        try {
+          const response = await connection.newSession(request)
+          currentSessionId = response.sessionId
 
-        log.info("session created", { sessionId: response.sessionId })
+          log.info("session created", { sessionId: response.sessionId })
 
-        return response
+          return response
+        } catch (error) {
+          // Check if this is an auth_required error (JSON-RPC error code -32000)
+          if (
+            error &&
+            typeof error === "object" &&
+            "code" in error &&
+            error.code === -32000
+          ) {
+            log.warn("authentication required", { authMethodsCount: authMethods.length })
+            throw new AuthenticationRequiredError(
+              "Agent requires authentication. Call authenticate() with a valid methodId.",
+              authMethods,
+            )
+          }
+          throw error
+        }
       },
 
       async sendPrompt(sessionId: string, text: string): Promise<PromptResponse> {

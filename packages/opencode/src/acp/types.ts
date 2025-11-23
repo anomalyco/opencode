@@ -1,4 +1,4 @@
-import type { McpServer } from "@agentclientprotocol/sdk"
+import type { McpServer, AuthMethod } from "@agentclientprotocol/sdk"
 import type { OpencodeClient } from "@opencode-ai/sdk"
 
 export interface ACPSessionState {
@@ -18,5 +18,18 @@ export interface ACPConfig {
   defaultModel?: {
     providerID: string
     modelID: string
+  }
+}
+
+/**
+ * Error thrown when an agent requires authentication before allowing operations
+ */
+export class AuthenticationRequiredError extends Error {
+  constructor(
+    message: string,
+    public readonly authMethods: AuthMethod[],
+  ) {
+    super(message)
+    this.name = "AuthenticationRequiredError"
   }
 }

@@ -5,6 +5,7 @@ import { Instance } from "../project/instance"
 import { MessageV2 } from "../session/message-v2"
 import { Session } from "../session"
 import { Identifier } from "../id/id"
+import { AuthenticationRequiredError } from "./types"
 
 const log = Log.create({ service: "acp-orchestrator" })
 
@@ -138,10 +139,60 @@ export namespace ACPOrchestrator {
       sessionID,
       agentName: initResult.agentInfo?.name,
       agentVersion: initResult.agentInfo?.version,
+      authMethodsCount: initResult.authMethods?.length ?? 0,
     })
 
-    // Create ACP session
-    const acpSession = await client.createSession()
+    // Create ACP session (may require authentication)
+    let acpSession
+    try {
+      acpSession = await client.createSession()
+    } catch (error) {
+      if (error instanceof AuthenticationRequiredError) {
+        log.info("authentication required, attempting to authenticate", {
+          sessionID,
+          authMethodsCount: error.authMethods.length,
+        })
+
+        // For now, automatically use the first auth method
+        // TODO: In the future, this should prompt the user to select an auth method
+        if (error.authMethods.length === 0) {
+          throw new Error("Agent requires authentication but provided no auth methods")
+        }
+
+        const authMethod = error.authMethods[0]
+        log.info("using auth method", {
+          sessionID,
+          methodId: authMethod.id,
+          methodName: authMethod.name,
+        })
+
+        // If terminal-auth metadata exists, log instructions for the user
+        if (authMethod._meta?.["terminal-auth"]) {
+          const terminalAuth = authMethod._meta["terminal-auth"] as {
+            command?: string
+            args?: string[]
+            label?: string
+          }
+          log.info("terminal authentication required", {
+            sessionID,
+            command: terminalAuth.command,
+            args: terminalAuth.args,
+          })
+          // TODO: Execute the terminal command or prompt user to do so
+          throw new Error(
+            `Authentication required: Please run '${terminalAuth.command} ${(terminalAuth.args ?? []).join(" ")}' in your terminal`,
+          )
+        }
+
+        // Attempt authentication with the selected method
+        await client.authenticate(authMethod.id)
+
+        // Retry session creation after authentication
+        acpSession = await client.createSession()
+      } else {
+        throw error
+      }
+    }
 
     log.info("ACP session created", {
       sessionID,
