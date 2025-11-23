@@ -548,28 +548,60 @@ export namespace Provider {
         provider.id === "google-vertex-anthropic" ? `${installedPath}/dist/anthropic/index.mjs` : installedPath
       const mod = await import(modPath)
 
-      const customFetch = options["fetch"]
+      // Check if corporate networking is required (proxy or custom TLS)
+      const needsCorporateFetch = options["proxy"] || options["tls"]
 
-      options["fetch"] = async (input: any, init?: BunFetchRequestInit) => {
-        // Preserve custom fetch if it exists, wrap it with timeout logic
-        const fetchFn = customFetch ?? fetch
-        const opts = init ?? {}
+      if (needsCorporateFetch) {
+        // Use corporate-aware fetch with proxy and TLS support
+        const { createCorporateFetch } = await import("./corporate-fetch.js")
 
-        if (options["timeout"] !== undefined && options["timeout"] !== null) {
-          const signals: AbortSignal[] = []
-          if (opts.signal) signals.push(opts.signal)
-          if (options["timeout"] !== false) signals.push(AbortSignal.timeout(options["timeout"]))
+        // Determine target URL for proxy detection
+        const targetUrl = options["baseURL"] || provider.api || "https://api.openai.com"
 
-          const combined = signals.length > 1 ? AbortSignal.any(signals) : signals[0]
-
-          opts.signal = combined
-        }
-
-        return fetchFn(input, {
-          ...opts,
-          // @ts-ignore see here: https://github.com/oven-sh/bun/issues/16682
-          timeout: false,
+        const corporateFetch = await createCorporateFetch({
+          proxy:
+            options["proxy"] === "auto"
+              ? "auto"
+              : options["proxy"]
+                ? {
+                    url: options["proxy"],
+                    username: options["proxyAuth"]?.username,
+                    password: options["proxyAuth"]?.password,
+                  }
+                : false,
+          tls: options["tls"],
+          timeout: options["timeout"],
+          interactive: true, // Enable prompts for proxy authentication
+          targetUrl,
         })
+
+        // Replace with corporate fetch
+        options["fetch"] = corporateFetch
+      } else {
+        // Use standard timeout-wrapped fetch
+        const customFetch = options["fetch"]
+
+        options["fetch"] = async (input: any, init?: BunFetchRequestInit) => {
+          // Preserve custom fetch if it exists, wrap it with timeout logic
+          const fetchFn = customFetch ?? fetch
+          const opts = init ?? {}
+
+          if (options["timeout"] !== undefined && options["timeout"] !== null) {
+            const signals: AbortSignal[] = []
+            if (opts.signal) signals.push(opts.signal)
+            if (options["timeout"] !== false) signals.push(AbortSignal.timeout(options["timeout"]))
+
+            const combined = signals.length > 1 ? AbortSignal.any(signals) : signals[0]
+
+            opts.signal = combined
+          }
+
+          return fetchFn(input, {
+            ...opts,
+            // @ts-ignore see here: https://github.com/oven-sh/bun/issues/16682
+            timeout: false,
+          })
+        }
       }
       const fn = mod[Object.keys(mod).find((key) => key.startsWith("create"))!]
       const loaded = fn({

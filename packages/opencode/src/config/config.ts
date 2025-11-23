@@ -538,6 +538,46 @@ export namespace Config {
                     .describe(
                       "Timeout in milliseconds for requests to this provider. Default is 300000 (5 minutes). Set to false to disable timeout.",
                     ),
+                  proxy: z
+                    .union([
+                      z.string().describe("Proxy URL (e.g., http://proxy.company.com:8080)"),
+                      z.literal("auto").describe("Auto-detect proxy from environment variables and system settings"),
+                      z.literal(false).describe("Explicitly disable proxy"),
+                    ])
+                    .optional()
+                    .describe(
+                      "HTTP/HTTPS proxy configuration. Use 'auto' to detect from HTTP_PROXY/HTTPS_PROXY environment variables or system settings.",
+                    ),
+                  proxyAuth: z
+                    .object({
+                      username: z.string().describe("Proxy username (supports {env:VAR} substitution)"),
+                      password: z.string().describe("Proxy password (supports {env:VAR} substitution)"),
+                    })
+                    .optional()
+                    .describe("Proxy authentication credentials"),
+                  tls: z
+                    .object({
+                      ca: z
+                        .union([
+                          z.string().describe("Path to CA certificate file (can contain multiple certificates in a bundle)"),
+                          z.array(z.string()).describe("Array of paths to CA certificate files"),
+                        ])
+                        .optional()
+                        .describe("Custom CA certificates for validating the server certificate"),
+                      cert: z
+                        .string()
+                        .optional()
+                        .describe("Path to client certificate file (for mutual TLS authentication)"),
+                      key: z.string().optional().describe("Path to client private key file (for mutual TLS authentication)"),
+                      rejectUnauthorized: z
+                        .boolean()
+                        .optional()
+                        .describe(
+                          "If true, validate server certificate against CAs (default: true). Set to false only for testing with self-signed certificates.",
+                        ),
+                    })
+                    .optional()
+                    .describe("TLS/SSL certificate configuration for secure connections"),
                 })
                 .catchall(z.any())
                 .optional(),
