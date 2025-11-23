@@ -7,6 +7,7 @@ console.log(SECRET.R2AccessKey.value, SECRET.R2SecretKey.value)
 const enterprise = new sst.cloudflare.x.SolidStart("Enterprise", {
   domain: "enterprise." + domain,
   environment: {
+    OPENCODE_DEPLOYMENT_TARGET: "cloudflare",
     OPENCODE_STORAGE_ADAPTER: "r2",
     OPENCODE_STORAGE_ACCOUNT_ID: sst.cloudflare.DEFAULT_ACCOUNT_ID,
     OPENCODE_STORAGE_ACCESS_KEY_ID: SECRET.R2AccessKey.value,
