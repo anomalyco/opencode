@@ -230,7 +230,10 @@
         "@opencode-ai/script": "workspace:*",
         "@opencode-ai/sdk": "workspace:*",
         "@opencode-ai/util": "workspace:*",
+<<<<<<< HEAD
         "@openrouter/ai-sdk-provider": "1.2.5",
+=======
+>>>>>>> dev
         "@opentui/core": "0.1.49",
         "@opentui/solid": "0.1.49",
         "@parcel/watcher": "2.5.1",
