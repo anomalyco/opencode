@@ -6,8 +6,6 @@ import {
   For,
   Match,
   on,
-  onCleanup,
-  onMount,
   Show,
   Switch,
   useContext,
@@ -45,7 +43,6 @@ import type { TaskTool } from "@/tool/task"
 import { useKeyboard, useRenderer, useTerminalDimensions, type BoxProps, type JSX } from "@opentui/solid"
 import { useSDK } from "@tui/context/sdk"
 import { useCommandDialog } from "@tui/component/dialog-command"
-import { Shimmer } from "@tui/ui/shimmer"
 import { useKeybind } from "@tui/context/keybind"
 import { Header } from "./header"
 import { parsePatch } from "diff"
@@ -64,8 +61,6 @@ import { Clipboard } from "../../util/clipboard"
 import { Toast, useToast } from "../../ui/toast"
 import { useKV } from "../../context/kv.tsx"
 import { Editor } from "../../util/editor"
-import { Global } from "@/global"
-import fs from "fs/promises"
 import stripAnsi from "strip-ansi"
 
 addDefaultParsers(parsers.parsers)
@@ -84,6 +79,7 @@ const context = createContext<{
   width: number
   conceal: () => boolean
   showThinking: () => boolean
+  showTimestamps: () => boolean
 }>()
 
 function use() {
@@ -106,10 +102,15 @@ export function Session() {
     return messages().findLast((x) => x.role === "assistant" && !x.time.completed)?.id
   })
 
+  const lastAssistant = createMemo(() => {
+    return messages().findLast((x) => x.role === "assistant")
+  })
+
   const dimensions = useTerminalDimensions()
   const [sidebar, setSidebar] = createSignal<"show" | "hide" | "auto">(kv.get("sidebar", "auto"))
   const [conceal, setConceal] = createSignal(true)
   const [showThinking, setShowThinking] = createSignal(true)
+  const [showTimestamps, setShowTimestamps] = createSignal(kv.get("timestamps", "hide") === "show")
 
   const wide = createMemo(() => dimensions().width > 120)
   const sidebarVisible = createMemo(() => sidebar() === "show" || (sidebar() === "auto" && wide()))
@@ -176,6 +177,7 @@ export function Session() {
     const first = permissions()[0]
     if (first) {
       const response = iife(() => {
+        if (evt.ctrl || evt.meta) return
         if (evt.name === "return") return "once"
         if (evt.name === "a") return "always"
         if (evt.name === "d") return "reject"
@@ -405,6 +407,19 @@ export function Session() {
       },
     },
     {
+      title: "Toggle timestamps",
+      value: "session.toggle.timestamps",
+      category: "Session",
+      onSelect: (dialog) => {
+        setShowTimestamps((prev) => {
+          const next = !prev
+          kv.set("timestamps", next ? "show" : "hide")
+          return next
+        })
+        dialog.clear()
+      },
+    },
+    {
       title: "Toggle thinking blocks",
       value: "session.toggle.thinking",
       category: "Session",
@@ -513,7 +528,6 @@ export function Session() {
           return
         }
 
-        console.log(text)
         const base64 = Buffer.from(text).toString("base64")
         const osc52 = `\x1b]52;c;${base64}\x07`
         const finalOsc52 = process.env["TMUX"] ? `\x1bPtmux;\x1b${osc52}\x1b\\` : osc52
@@ -653,44 +667,50 @@ export function Session() {
     },
   ])
 
+  const revertInfo = createMemo(() => session()?.revert)
+  const revertMessageID = createMemo(() => revertInfo()?.messageID)
+
+  const revertDiffFiles = createMemo(() => {
+    const diffText = revertInfo()?.diff ?? ""
+    if (!diffText) return []
+
+    try {
+      const patches = parsePatch(diffText)
+      return patches.map((patch) => {
+        const filename = patch.newFileName || patch.oldFileName || "unknown"
+        const cleanFilename = filename.replace(/^[ab]\//, "")
+        return {
+          filename: cleanFilename,
+          additions: patch.hunks.reduce(
+            (sum, hunk) => sum + hunk.lines.filter((line) => line.startsWith("+")).length,
+            0,
+          ),
+          deletions: patch.hunks.reduce(
+            (sum, hunk) => sum + hunk.lines.filter((line) => line.startsWith("-")).length,
+            0,
+          ),
+        }
+      })
+    } catch (error) {
+      return []
+    }
+  })
+
+  const revertRevertedMessages = createMemo(() => {
+    const messageID = revertMessageID()
+    if (!messageID) return []
+    return messages().filter((x) => x.id >= messageID && x.role === "user")
+  })
+
   const revert = createMemo(() => {
-    const s = session()
-    if (!s) return
-    const messageID = s.revert?.messageID
-    if (!messageID) return
-    const reverted = messages().filter((x) => x.id >= messageID && x.role === "user")
-
-    const diffFiles = (() => {
-      const diffText = s.revert?.diff || ""
-      if (!diffText) return []
-
-      try {
-        const patches = parsePatch(diffText)
-        return patches.map((patch) => {
-          const filename = patch.newFileName || patch.oldFileName || "unknown"
-          const cleanFilename = filename.replace(/^[ab]\//, "")
-          return {
-            filename: cleanFilename,
-            additions: patch.hunks.reduce(
-              (sum, hunk) => sum + hunk.lines.filter((line) => line.startsWith("+")).length,
-              0,
-            ),
-            deletions: patch.hunks.reduce(
-              (sum, hunk) => sum + hunk.lines.filter((line) => line.startsWith("-")).length,
-              0,
-            ),
-          }
-        })
-      } catch (error) {
-        return []
-      }
-    })()
-
+    const info = revertInfo()
+    if (!info) return
+    if (!info.messageID) return
     return {
-      messageID,
-      reverted,
-      diff: s.revert!.diff,
-      diffFiles,
+      messageID: info.messageID,
+      reverted: revertRevertedMessages(),
+      diff: info.diff,
+      diffFiles: revertDiffFiles(),
     }
   })
 
@@ -708,6 +728,7 @@ export function Session() {
         },
         conceal,
         showThinking,
+        showTimestamps,
       }}
     >
       <box flexDirection="row" paddingBottom={1} paddingTop={1} paddingLeft={2} paddingRight={2} gap={2}>
@@ -840,7 +861,7 @@ export function Session() {
                     </Match>
                     <Match when={message.role === "assistant"}>
                       <AssistantMessage
-                        last={pending() === message.id}
+                        last={lastAssistant()?.id === message.id}
                         message={message as AssistantMessage}
                         parts={sync.data.part[message.id] ?? []}
                       />
@@ -887,6 +908,7 @@ function UserMessage(props: {
   index: number
   pending?: string
 }) {
+  const ctx = use()
   const text = createMemo(() => props.parts.flatMap((x) => (x.type === "text" && !x.synthetic ? [x] : []))[0])
   const files = createMemo(() => props.parts.flatMap((x) => (x.type === "file" ? [x] : [])))
   const sync = useSync()
@@ -945,7 +967,13 @@ function UserMessage(props: {
               {sync.data.config.username ?? "You"}{" "}
               <Show
                 when={queued()}
-                fallback={<span style={{ fg: theme.textMuted }}>{Locale.time(props.message.time.created)}</span>}
+                fallback={
+                  <span style={{ fg: theme.textMuted }}>
+                    {ctx.showTimestamps()
+                      ? Locale.todayTimeOrDateTime(props.message.time.created)
+                      : Locale.time(props.message.time.created)}
+                  </span>
+                }
               >
                 <span style={{ bg: theme.accent, fg: theme.backgroundPanel, bold: true }}> QUEUED </span>
               </Show>
@@ -970,12 +998,20 @@ function AssistantMessage(props: { message: AssistantMessage; parts: Part[]; las
   const local = useLocal()
   const { theme } = useTheme()
   const sync = useSync()
-  const status = createMemo(
-    () =>
-      sync.data.session_status[props.message.sessionID] ?? {
-        type: "idle",
-      },
-  )
+  const messages = createMemo(() => sync.data.message[props.message.sessionID] ?? [])
+
+  const final = createMemo(() => {
+    return props.message.finish && !["tool-calls", "unknown"].includes(props.message.finish)
+  })
+
+  const duration = createMemo(() => {
+    if (!final()) return 0
+    if (!props.message.time.completed) return 0
+    const user = messages().find((x) => x.role === "user" && x.id === props.message.parentID)
+    if (!user) return 0
+    return props.message.time.completed - user.time.created
+  })
+
   return (
     <>
       <For each={props.parts}>
@@ -1008,57 +1044,15 @@ function AssistantMessage(props: { message: AssistantMessage; parts: Part[]; las
         </box>
       </Show>
       <Switch>
-        <Match when={props.last && status().type !== "idle" && false}>
-          <box paddingLeft={3} flexDirection="row" gap={1} marginTop={1}>
-            <text fg={local.agent.color(props.message.mode)}>{Locale.titlecase(props.message.mode)}</text>
-            <Shimmer text={props.message.modelID} color={theme.text} />
-            {(() => {
-              const retry = createMemo(() => {
-                const s = status()
-                if (s.type !== "retry") return
-                return s
-              })
-              const message = createMemo(() => {
-                const r = retry()
-                if (!r) return
-                if (r.message.includes("exceeded your current quota") && r.message.includes("gemini"))
-                  return "gemini 3 way too hot right now"
-                if (r.message.length > 50) return r.message.slice(0, 50) + "..."
-                return r.message
-              })
-              const [seconds, setSeconds] = createSignal(0)
-              onMount(() => {
-                const timer = setInterval(() => {
-                  const next = retry()?.next
-                  if (next) setSeconds(Math.round((next - Date.now()) / 1000))
-                }, 1000)
-
-                onCleanup(() => {
-                  clearInterval(timer)
-                })
-              })
-              return (
-                <Show when={retry()}>
-                  <text fg={theme.error}>
-                    {message()} [retrying {seconds() > 0 ? `in ${seconds()}s ` : ""}
-                    attempt #{retry()!.attempt}]
-                  </text>
-                </Show>
-              )
-            })()}
-          </box>
-        </Match>
-        <Match
-          when={
-            (props.message.time.completed &&
-              props.parts.some((item) => item.type === "step-finish" && item.reason !== "tool-calls")) ||
-            props.last
-          }
-        >
+        <Match when={props.last || final()}>
           <box paddingLeft={3}>
             <text marginTop={1}>
-              <span style={{ fg: local.agent.color(props.message.mode) }}>{Locale.titlecase(props.message.mode)}</span>{" "}
-              <span style={{ fg: theme.textMuted }}>{props.message.modelID}</span>
+              <span style={{ fg: local.agent.color(props.message.mode) }}>▣</span>{" "}
+              <span style={{ fg: theme.text }}>{Locale.titlecase(props.message.mode)}</span>{" "}
+              <span style={{ fg: theme.textMuted }}>⬝{props.message.modelID}</span>
+              <Show when={duration()}>
+                <span style={{ fg: theme.textMuted }}> ⬝{Locale.duration(duration())}</span>
+              </Show>
             </text>
           </box>
         </Match>
@@ -1074,7 +1068,7 @@ const PART_MAPPING = {
 }
 
 function ReasoningPart(props: { last: boolean; part: ReasoningPart; message: AssistantMessage }) {
-  const { theme, syntax } = useTheme()
+  const { theme, subtleSyntax } = useTheme()
   const ctx = use()
   const content = createMemo(() => props.part.text.trim())
   return (
@@ -1092,10 +1086,10 @@ function ReasoningPart(props: { last: boolean; part: ReasoningPart; message: Ass
           filetype="markdown"
           drawUnstyledText={false}
           streaming={true}
-          syntaxStyle={syntax()}
+          syntaxStyle={subtleSyntax()}
           content={"_Thinking:_ " + content()}
           conceal={ctx.conceal()}
-          fg={theme.text}
+          fg={theme.textMuted}
         />
       </box>
     </Show>
@@ -1104,7 +1098,7 @@ function ReasoningPart(props: { last: boolean; part: ReasoningPart; message: Ass
 
 function TextPart(props: { last: boolean; part: TextPart; message: AssistantMessage }) {
   const ctx = use()
-  const { syntax } = useTheme()
+  const { theme, syntax } = useTheme()
   return (
     <Show when={props.part.text.trim()}>
       <box id={"text-" + props.part.id} paddingLeft={3} marginTop={1} flexShrink={0}>
@@ -1115,6 +1109,7 @@ function TextPart(props: { last: boolean; part: TextPart; message: AssistantMess
           syntaxStyle={syntax()}
           content={props.part.text.trim()}
           conceal={ctx.conceal()}
+          fg={theme.text}
         />
       </box>
     </Show>
@@ -1529,7 +1524,6 @@ ToolRegistry.register<typeof EditTool>({
 
     const ft = createMemo(() => filetype(props.input.filePath))
 
-    createEffect(() => console.log(props.metadata.diagnostics))
     const diagnostics = createMemo(() => {
       const arr = props.metadata.diagnostics?.[props.input.filePath ?? ""] ?? []
       return arr.filter((x) => x.severity === 1).slice(0, 3)
