@@ -33,7 +33,6 @@
         "@solidjs/router": "catalog:",
         "@solidjs/start": "catalog:",
         "chart.js": "4.5.1",
-        "h3": "2.0.1-rc.4",
         "nitro": "3.0.1-alpha.1",
         "solid-js": "catalog:",
         "vite": "catalog:",
