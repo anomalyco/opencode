@@ -5,124 +5,140 @@
 
 declare module "sst" {
   export interface Resource {
-    ADMIN_SECRET: {
-      type: "sst.sst.Secret"
-      value: string
+    "ADMIN_SECRET": {
+      "type": "sst.sst.Secret"
+      "value": string
     }
-    AUTH_API_URL: {
-      type: "sst.sst.Linkable"
-      value: string
+    "AUTH_API_URL": {
+      "type": "sst.sst.Linkable"
+      "value": string
     }
-    AWS_SES_ACCESS_KEY_ID: {
-      type: "sst.sst.Secret"
-      value: string
+    "AWS_SES_ACCESS_KEY_ID": {
+      "type": "sst.sst.Secret"
+      "value": string
     }
-    AWS_SES_SECRET_ACCESS_KEY: {
-      type: "sst.sst.Secret"
-      value: string
+    "AWS_SES_SECRET_ACCESS_KEY": {
+      "type": "sst.sst.Secret"
+      "value": string
     }
-    Api: {
-      type: "sst.cloudflare.Worker"
-      url: string
+    "Api": {
+      "type": "sst.cloudflare.Worker"
+      "url": string
     }
-    AuthApi: {
-      type: "sst.cloudflare.Worker"
-      url: string
+    "AuthApi": {
+      "type": "sst.cloudflare.Worker"
+      "url": string
     }
-    AuthStorage: {
-      namespaceId: string
-      type: "sst.cloudflare.Kv"
+    "AuthStorage": {
+      "namespaceId": string
+      "type": "sst.cloudflare.Kv"
     }
-    Bucket: {
-      name: string
-      type: "sst.cloudflare.Bucket"
+    "Bucket": {
+      "name": string
+      "type": "sst.cloudflare.Bucket"
     }
-    CLOUDFLARE_API_TOKEN: {
-      type: "sst.sst.Secret"
-      value: string
+    "CLOUDFLARE_API_TOKEN": {
+      "type": "sst.sst.Secret"
+      "value": string
     }
-    CLOUDFLARE_DEFAULT_ACCOUNT_ID: {
-      type: "sst.sst.Secret"
-      value: string
+    "CLOUDFLARE_DEFAULT_ACCOUNT_ID": {
+      "type": "sst.sst.Secret"
+      "value": string
     }
-    Console: {
-      type: "sst.cloudflare.SolidStart"
-      url: string
+    "Console": {
+      "type": "sst.cloudflare.SolidStart"
+      "url": string
     }
-    Database: {
-      database: string
-      host: string
-      password: string
-      port: number
-      type: "sst.sst.Linkable"
-      username: string
+    "ConsoleData": {
+      "name": string
+      "type": "sst.cloudflare.Bucket"
     }
-    Desktop: {
-      type: "sst.cloudflare.StaticSite"
-      url: string
+    "Database": {
+      "database": string
+      "host": string
+      "password": string
+      "port": number
+      "type": "sst.sst.Linkable"
+      "username": string
     }
-    EMAILOCTOPUS_API_KEY: {
-      type: "sst.sst.Secret"
-      value: string
+    "Desktop": {
+      "type": "sst.cloudflare.StaticSite"
+      "url": string
     }
-    GITHUB_APP_ID: {
-      type: "sst.sst.Secret"
-      value: string
+    "EMAILOCTOPUS_API_KEY": {
+      "type": "sst.sst.Secret"
+      "value": string
     }
-    GITHUB_APP_PRIVATE_KEY: {
-      type: "sst.sst.Secret"
-      value: string
+    "EnterpriseStorage": {
+      "name": string
+      "type": "sst.cloudflare.Bucket"
     }
-    GITHUB_CLIENT_ID_CONSOLE: {
-      type: "sst.sst.Secret"
-      value: string
+    "GITHUB_APP_ID": {
+      "type": "sst.sst.Secret"
+      "value": string
     }
-    GITHUB_CLIENT_SECRET_CONSOLE: {
-      type: "sst.sst.Secret"
-      value: string
+    "GITHUB_APP_PRIVATE_KEY": {
+      "type": "sst.sst.Secret"
+      "value": string
     }
-    GOOGLE_CLIENT_ID: {
-      type: "sst.sst.Secret"
-      value: string
+    "GITHUB_CLIENT_ID_CONSOLE": {
+      "type": "sst.sst.Secret"
+      "value": string
     }
-    GatewayKv: {
-      namespaceId: string
-      type: "sst.cloudflare.Kv"
+    "GITHUB_CLIENT_SECRET_CONSOLE": {
+      "type": "sst.sst.Secret"
+      "value": string
     }
-    HONEYCOMB_API_KEY: {
-      type: "sst.sst.Secret"
-      value: string
+    "GOOGLE_CLIENT_ID": {
+      "type": "sst.sst.Secret"
+      "value": string
     }
-    LogProcessor: {
-      type: "sst.cloudflare.Worker"
+    "GatewayKv": {
+      "namespaceId": string
+      "type": "sst.cloudflare.Kv"
     }
-    STRIPE_SECRET_KEY: {
-      type: "sst.sst.Secret"
-      value: string
+    "HONEYCOMB_API_KEY": {
+      "type": "sst.sst.Secret"
+      "value": string
     }
-    STRIPE_WEBHOOK_SECRET: {
-      type: "sst.sst.Linkable"
-      value: string
+    "LogProcessor": {
+      "type": "sst.cloudflare.Worker"
     }
-    Web: {
-      type: "sst.cloudflare.Astro"
-      url: string
+    "R2AccessKey": {
+      "type": "sst.sst.Secret"
+      "value": string
     }
-    ZEN_MODELS1: {
-      type: "sst.sst.Secret"
-      value: string
+    "R2SecretKey": {
+      "type": "sst.sst.Secret"
+      "value": string
     }
-    ZEN_MODELS2: {
-      type: "sst.sst.Secret"
-      value: string
+    "STRIPE_SECRET_KEY": {
+      "type": "sst.sst.Secret"
+      "value": string
     }
-    ZEN_MODELS3: {
-      type: "sst.sst.Secret"
-      value: string
+    "STRIPE_WEBHOOK_SECRET": {
+      "type": "sst.sst.Linkable"
+      "value": string
     }
-    ZEN_MODELS4: {
-      type: "sst.sst.Secret"
-      value: string
+    "Web": {
+      "type": "sst.cloudflare.Astro"
+      "url": string
+    }
+    "ZEN_MODELS1": {
+      "type": "sst.sst.Secret"
+      "value": string
+    }
+    "ZEN_MODELS2": {
+      "type": "sst.sst.Secret"
+      "value": string
+    }
+    "ZEN_MODELS3": {
+      "type": "sst.sst.Secret"
+      "value": string
+    }
+    "ZEN_MODELS4": {
+      "type": "sst.sst.Secret"
+      "value": string
     }
   }
 }

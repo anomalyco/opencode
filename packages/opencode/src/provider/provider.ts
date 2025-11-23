@@ -676,7 +676,7 @@ export namespace Provider {
       if (providerID === "github-copilot") {
         priority = priority.filter((m) => m !== "claude-haiku-4.5")
       }
-      if (providerID === "opencode" || providerID === "local") {
+      if (providerID.startsWith("opencode")) {
         priority = ["gpt-5-nano"]
       }
       for (const item of priority) {
