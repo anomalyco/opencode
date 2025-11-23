@@ -5,10 +5,15 @@ import { Installation } from "@/installation"
 
 export async function upgrade() {
   const config = await Config.global()
-  if (config.autoupdate === false || Flag.OPENCODE_DISABLE_AUTOUPDATE) return
   const latest = await Installation.latest().catch(() => {})
   if (!latest) return
   if (Installation.VERSION === latest) return
+
+  if (config.autoupdate === false || Flag.OPENCODE_DISABLE_AUTOUPDATE) {
+    await Bus.publish(Installation.Event.UpdateAvailable, { version: latest })
+    return
+  }
+
   const method = await Installation.method()
   if (method === "unknown") return
   await Installation.upgrade(method, latest)

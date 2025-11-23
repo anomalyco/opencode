@@ -45,9 +45,9 @@ export function DialogRoot(props: DialogProps) {
       <Kobalte.Portal>
         <Kobalte.Overlay data-component="dialog-overlay" />
         <div data-component="dialog">
-          <div data-slot="container">
+          <div data-slot="dialog-container">
             <Kobalte.Content
-              data-slot="content"
+              data-slot="dialog-content"
               classList={{
                 ...(local.classList ?? {}),
                 [local.class ?? ""]: !!local.class,
@@ -63,23 +63,23 @@ export function DialogRoot(props: DialogProps) {
 }
 
 function DialogHeader(props: ComponentProps<"div">) {
-  return <div data-slot="header" {...props} />
+  return <div data-slot="dialog-header" {...props} />
 }
 
 function DialogBody(props: ComponentProps<"div">) {
-  return <div data-slot="body" {...props} />
+  return <div data-slot="dialog-body" {...props} />
 }
 
 function DialogTitle(props: DialogTitleProps & ComponentProps<"h2">) {
-  return <Kobalte.Title data-slot="title" {...props} />
+  return <Kobalte.Title data-slot="dialog-title" {...props} />
 }
 
 function DialogDescription(props: DialogDescriptionProps & ComponentProps<"p">) {
-  return <Kobalte.Description data-slot="description" {...props} />
+  return <Kobalte.Description data-slot="dialog-description" {...props} />
 }
 
 function DialogCloseButton(props: DialogCloseButtonProps & ComponentProps<"button">) {
-  return <Kobalte.CloseButton data-slot="close-button" as={IconButton} icon="close" {...props} />
+  return <Kobalte.CloseButton data-slot="dialog-close-button" as={IconButton} icon="close" {...props} />
 }
 
 export const Dialog = Object.assign(DialogRoot, {

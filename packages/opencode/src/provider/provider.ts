@@ -530,13 +530,18 @@ export namespace Provider {
       const existing = s.sdk.get(key)
       if (existing) return existing
 
-      let installedPath: string
-      if (!pkg.startsWith("file://")) {
-        installedPath = await BunProc.install(pkg, "latest")
-      } else {
-        log.info("loading local provider", { pkg })
-        installedPath = pkg
-      }
+      const installedPath = await (async () => {
+        if (pkg.startsWith("file://")) {
+          log.info("loading local provider", { pkg })
+          return pkg
+        }
+        const resolved = await BunProc.resolve(pkg)
+        if (resolved) {
+          log.info("using preinstalled provider", { providerID: provider.id, pkg })
+          return resolved
+        }
+        return BunProc.install(pkg, "latest")
+      })()
 
       // The `google-vertex-anthropic` provider points to the `@ai-sdk/google-vertex` package.
       // Ref: https://github.com/sst/models.dev/blob/0a87de42ab177bebad0620a889e2eb2b4a5dd4ab/providers/google-vertex-anthropic/provider.toml
@@ -658,20 +663,29 @@ export namespace Provider {
     }
 
     const provider = await state().then((state) => state.providers[providerID])
-    if (!provider) return
-    let priority = ["claude-haiku-4-5", "claude-haiku-4.5", "3-5-haiku", "3.5-haiku", "gemini-2.5-flash", "gpt-5-nano"]
-    // claude-haiku-4.5 is considered a premium model in github copilot, we shouldn't use premium requests for title gen
-    if (providerID === "github-copilot") {
-      priority = priority.filter((m) => m !== "claude-haiku-4.5")
-    }
-    if (providerID === "opencode" || providerID === "local") {
-      priority = ["gpt-5-nano"]
-    }
-    for (const item of priority) {
-      for (const model of Object.keys(provider.info.models)) {
-        if (model.includes(item)) return getModel(providerID, model)
+    if (provider) {
+      let priority = [
+        "claude-haiku-4-5",
+        "claude-haiku-4.5",
+        "3-5-haiku",
+        "3.5-haiku",
+        "gemini-2.5-flash",
+        "gpt-5-nano",
+      ]
+      // claude-haiku-4.5 is considered a premium model in github copilot, we shouldn't use premium requests for title gen
+      if (providerID === "github-copilot") {
+        priority = priority.filter((m) => m !== "claude-haiku-4.5")
+      }
+      if (providerID.startsWith("opencode")) {
+        priority = ["gpt-5-nano"]
+      }
+      for (const item of priority) {
+        for (const model of Object.keys(provider.info.models)) {
+          if (model.includes(item)) return getModel(providerID, model)
+        }
       }
     }
+    return getModel("opencode", "gpt-5-nano")
   }
 
   const priority = ["gpt-5", "claude-sonnet-4", "big-pickle", "gemini-3-pro"]

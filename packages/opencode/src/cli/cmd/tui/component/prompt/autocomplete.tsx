@@ -5,7 +5,7 @@ import { createMemo, createResource, createEffect, onMount, For, Show } from "so
 import { createStore } from "solid-js/store"
 import { useSDK } from "@tui/context/sdk"
 import { useSync } from "@tui/context/sync"
-import { useTheme } from "@tui/context/theme"
+import { useTheme, selectedForeground } from "@tui/context/theme"
 import { SplitBorder } from "@tui/component/border"
 import { useCommandDialog } from "@tui/component/dialog-command"
 import { Locale } from "@/util/locale"
@@ -455,7 +455,7 @@ export function Autocomplete(props: {
       {...SplitBorder}
       borderColor={theme.border}
     >
-      <box backgroundColor={theme.backgroundElement} height={height()}>
+      <box backgroundColor={theme.backgroundMenu} height={height()}>
         <For
           each={options()}
           fallback={
@@ -471,11 +471,11 @@ export function Autocomplete(props: {
               backgroundColor={index() === store.selected ? theme.primary : undefined}
               flexDirection="row"
             >
-              <text fg={index() === store.selected ? theme.background : theme.text} flexShrink={0}>
+              <text fg={index() === store.selected ? selectedForeground(theme) : theme.text} flexShrink={0}>
                 {option.display}
               </text>
               <Show when={option.description}>
-                <text fg={index() === store.selected ? theme.background : theme.textMuted} wrapMode="none">
+                <text fg={index() === store.selected ? selectedForeground(theme) : theme.textMuted} wrapMode="none">
                   {option.description}
                 </text>
               </Show>
