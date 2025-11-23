@@ -342,6 +342,21 @@ function App() {
         dialog.clear()
       },
     },
+    {
+      title: "Suspend terminal",
+      value: "terminal.suspend",
+      keybind: "terminal_suspend",
+      category: "System",
+      onSelect: () => {
+        process.once("SIGCONT", () => {
+          renderer.resume()
+        })
+
+        renderer.suspend()
+        // pid=0 means send the signal to all processes in the process group
+        process.kill(0, "SIGTSTP")
+      },
+    },
   ])
 
   createEffect(() => {
@@ -408,6 +423,15 @@ function App() {
       title: "Update Complete",
       message: `OpenCode updated to v${evt.properties.version}`,
       duration: 5000,
+    })
+  })
+
+  event.on(Installation.Event.UpdateAvailable.type, (evt) => {
+    toast.show({
+      variant: "info",
+      title: "Update Available",
+      message: `OpenCode v${evt.properties.version} is available. Run 'opencode upgrade' to update manually.`,
+      duration: 10000,
     })
   })
 

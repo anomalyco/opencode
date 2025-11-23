@@ -79,6 +79,7 @@ const context = createContext<{
   width: number
   conceal: () => boolean
   showThinking: () => boolean
+  showTimestamps: () => boolean
 }>()
 
 function use() {
@@ -109,6 +110,7 @@ export function Session() {
   const [sidebar, setSidebar] = createSignal<"show" | "hide" | "auto">(kv.get("sidebar", "auto"))
   const [conceal, setConceal] = createSignal(true)
   const [showThinking, setShowThinking] = createSignal(true)
+  const [showTimestamps, setShowTimestamps] = createSignal(kv.get("timestamps", "hide") === "show")
 
   const wide = createMemo(() => dimensions().width > 120)
   const sidebarVisible = createMemo(() => sidebar() === "show" || (sidebar() === "auto" && wide()))
@@ -401,6 +403,19 @@ export function Session() {
       category: "Session",
       onSelect: (dialog) => {
         setConceal((prev) => !prev)
+        dialog.clear()
+      },
+    },
+    {
+      title: "Toggle timestamps",
+      value: "session.toggle.timestamps",
+      category: "Session",
+      onSelect: (dialog) => {
+        setShowTimestamps((prev) => {
+          const next = !prev
+          kv.set("timestamps", next ? "show" : "hide")
+          return next
+        })
         dialog.clear()
       },
     },
@@ -713,6 +728,7 @@ export function Session() {
         },
         conceal,
         showThinking,
+        showTimestamps,
       }}
     >
       <box flexDirection="row" paddingBottom={1} paddingTop={1} paddingLeft={2} paddingRight={2} gap={2}>
@@ -892,6 +908,7 @@ function UserMessage(props: {
   index: number
   pending?: string
 }) {
+  const ctx = use()
   const text = createMemo(() => props.parts.flatMap((x) => (x.type === "text" && !x.synthetic ? [x] : []))[0])
   const files = createMemo(() => props.parts.flatMap((x) => (x.type === "file" ? [x] : [])))
   const sync = useSync()
@@ -950,7 +967,13 @@ function UserMessage(props: {
               {sync.data.config.username ?? "You"}{" "}
               <Show
                 when={queued()}
-                fallback={<span style={{ fg: theme.textMuted }}>{Locale.time(props.message.time.created)}</span>}
+                fallback={
+                  <span style={{ fg: theme.textMuted }}>
+                    {ctx.showTimestamps()
+                      ? Locale.todayTimeOrDateTime(props.message.time.created)
+                      : Locale.time(props.message.time.created)}
+                  </span>
+                }
               >
                 <span style={{ bg: theme.accent, fg: theme.backgroundPanel, bold: true }}> QUEUED </span>
               </Show>
@@ -974,6 +997,21 @@ function UserMessage(props: {
 function AssistantMessage(props: { message: AssistantMessage; parts: Part[]; last: boolean }) {
   const local = useLocal()
   const { theme } = useTheme()
+  const sync = useSync()
+  const messages = createMemo(() => sync.data.message[props.message.sessionID] ?? [])
+
+  const final = createMemo(() => {
+    return props.message.finish && !["tool-calls", "unknown"].includes(props.message.finish)
+  })
+
+  const duration = createMemo(() => {
+    if (!final()) return 0
+    if (!props.message.time.completed) return 0
+    const user = messages().find((x) => x.role === "user" && x.id === props.message.parentID)
+    if (!user) return 0
+    return props.message.time.completed - user.time.created
+  })
+
   return (
     <>
       <For each={props.parts}>
@@ -1006,17 +1044,15 @@ function AssistantMessage(props: { message: AssistantMessage; parts: Part[]; las
         </box>
       </Show>
       <Switch>
-        <Match
-          when={
-            (props.message.time.completed &&
-              props.parts.some((item) => item.type === "step-finish" && item.reason !== "tool-calls")) ||
-            props.last
-          }
-        >
+        <Match when={props.last || final()}>
           <box paddingLeft={3}>
             <text marginTop={1}>
-              <span style={{ fg: local.agent.color(props.message.mode) }}>{Locale.titlecase(props.message.mode)}</span>{" "}
-              <span style={{ fg: theme.textMuted }}>{props.message.modelID}</span>
+              <span style={{ fg: local.agent.color(props.message.mode) }}>▣</span>{" "}
+              <span style={{ fg: theme.text }}>{Locale.titlecase(props.message.mode)}</span>{" "}
+              <span style={{ fg: theme.textMuted }}>⬝{props.message.modelID}</span>
+              <Show when={duration()}>
+                <span style={{ fg: theme.textMuted }}> ⬝{Locale.duration(duration())}</span>
+              </Show>
             </text>
           </box>
         </Match>

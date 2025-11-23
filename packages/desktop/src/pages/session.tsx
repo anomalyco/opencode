@@ -1,4 +1,4 @@
-import { For, onCleanup, onMount, Show, Match, Switch, createResource } from "solid-js"
+import { For, onCleanup, onMount, Show, Match, Switch, createResource, createMemo } from "solid-js"
 import { useLocal, type LocalFile } from "@/context/local"
 import { createStore } from "solid-js/store"
 import { getDirectory, getFilename } from "@/utils"
@@ -12,7 +12,8 @@ import { DiffChanges } from "@opencode-ai/ui/diff-changes"
 import { ProgressCircle } from "@opencode-ai/ui/progress-circle"
 import { Tabs } from "@opencode-ai/ui/tabs"
 import { Code } from "@opencode-ai/ui/code"
-import { SessionTimeline } from "@opencode-ai/ui/session-timeline"
+import { SessionTurn } from "@opencode-ai/ui/session-turn"
+import { MessageNav } from "@opencode-ai/ui/message-nav"
 import { SessionReview } from "@opencode-ai/ui/session-review"
 import { SelectDialog } from "@opencode-ai/ui/select-dialog"
 import {
@@ -255,6 +256,8 @@ export default function Page() {
     return typeof draggable.id === "string" ? draggable.id : undefined
   }
 
+  const wide = createMemo(() => layout.review.state() === "tab" || !session.diffs().length)
+
   return (
     <div class="relative bg-background-base size-full overflow-x-hidden">
       <DragDropProvider
@@ -330,14 +333,26 @@ export default function Page() {
                 flex: layout.review.state() === "pane",
               }}
             >
-              <div class="relative shrink-0 px-6 py-3 flex flex-col gap-6 flex-1 min-h-0 w-full max-w-xl mx-auto">
+              <div class="relative shrink-0 px-6 py-3 flex flex-col gap-6 flex-1 min-h-0 w-full max-w-2xl mx-auto">
                 <Switch>
                   <Match when={session.id}>
-                    <SessionTimeline
-                      sessionID={session.id!}
-                      expanded={layout.review.state() === "tab" || !session.diffs().length}
-                      classes={{ root: "pb-20", container: "pb-20" }}
-                    />
+                    <div class="flex items-start justify-start h-full min-h-0">
+                      <Show when={session.messages.user().length > 1}>
+                        <MessageNav
+                          classList={{ "mt-1.5 mr-3": wide(), "mt-3 mr-8": !wide() }}
+                          messages={session.messages.user()}
+                          current={session.messages.active()}
+                          onMessageSelect={session.messages.setActive}
+                          size={wide() ? "normal" : "compact"}
+                          working={session.working()}
+                        />
+                      </Show>
+                      <SessionTurn
+                        sessionID={session.id!}
+                        messageID={session.messages.active()?.id!}
+                        classes={{ root: "pb-20 flex-1 min-w-0", content: "pb-20" }}
+                      />
+                    </div>
                   </Match>
                   <Match when={true}>
                     <div class="size-full flex flex-col pb-45 justify-end items-start gap-4 flex-[1_0_0] self-stretch">
@@ -456,7 +471,7 @@ export default function Page() {
         </DragOverlay>
       </DragDropProvider>
       <Show when={session.layout.tabs.active}>
-        <div class="absolute inset-x-0 px-6 max-w-2xl flex flex-col justify-center items-center z-50 mx-auto bottom-6">
+        <div class="absolute inset-x-0 px-6 max-w-2xl flex flex-col justify-center items-center z-50 mx-auto bottom-8">
           <PromptInput
             ref={(el) => {
               inputRef = el
