@@ -29,7 +29,7 @@ export async function GET(input: APIEvent) {
       current: id,
     }
   })
-  return redirect("/auth/status", {
+  return redirect("/auth", {
     status: 302,
     headers: getResponseHeaders(),
   })
