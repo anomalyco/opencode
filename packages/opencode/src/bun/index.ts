@@ -59,6 +59,7 @@ export namespace BunProc {
   )
 
   export async function install(pkg: string, version = "latest") {
+    if (process.env.OPENCODE_OFFLINE === "1") return path.join(Global.Path.cache, "node_modules", pkg)
     // Use lock to ensure only one install at a time
     using _ = await Lock.write("bun-install")
 

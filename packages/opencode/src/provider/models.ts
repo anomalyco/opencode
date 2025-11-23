@@ -69,15 +69,56 @@ export namespace ModelsDev {
   export type Provider = z.infer<typeof Provider>
 
   export async function get() {
+    if (process.env.OPENCODE_OFFLINE === "1") {
+      const cached = await Bun.file(filepath)
+        .json()
+        .catch(() => undefined)
+      if (cached) return cached as Record<string, Provider>
+      const fallbackRaw = await Promise.resolve(data()).catch(() => "{}")
+      const fallback = typeof fallbackRaw === "string" ? fallbackRaw : "{}"
+      const parsed = JSON.parse(fallback ?? "{}") as Record<string, Provider>
+      if (Object.keys(parsed).length > 0) return parsed
+      const offlineModel: Model = {
+        id: "offline-model",
+        name: "Offline Model",
+        release_date: new Date().toISOString(),
+        attachment: false,
+        reasoning: false,
+        temperature: true,
+        tool_call: false,
+        cost: {
+          input: 0,
+          output: 0,
+        },
+        limit: {
+          context: 1024,
+          output: 256,
+        },
+        options: {},
+      }
+      return {
+        offline: {
+          api: "",
+          name: "offline",
+          env: [],
+          id: "offline",
+          models: {
+            [offlineModel.id]: offlineModel,
+          },
+        },
+      }
+    }
     refresh()
     const file = Bun.file(filepath)
     const result = await file.json().catch(() => {})
     if (result) return result as Record<string, Provider>
-    const json = await data()
+    const jsonRaw = await Promise.resolve(data()).catch(() => "{}")
+    const json = typeof jsonRaw === "string" ? jsonRaw : "{}"
     return JSON.parse(json) as Record<string, Provider>
   }
 
   export async function refresh() {
+    if (process.env.OPENCODE_OFFLINE === "1") return
     const file = Bun.file(filepath)
     log.info("refreshing", {
       file,
@@ -87,12 +128,15 @@ export namespace ModelsDev {
         "User-Agent": Installation.USER_AGENT,
       },
       signal: AbortSignal.timeout(10 * 1000),
-    }).catch((e) => {
+    }).catch((error) => {
       log.error("Failed to fetch models.dev", {
-        error: e,
+        error,
       })
+      return undefined
     })
-    if (result && result.ok) await Bun.write(file, await result.text())
+    if (!result) return
+    if (!result.ok) return
+    await Bun.write(file, await result.text())
   }
 }
 

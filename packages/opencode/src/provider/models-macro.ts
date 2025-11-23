@@ -6,6 +6,7 @@ export async function data() {
       return await file.text()
     }
   }
+  if (Bun.env.OPENCODE_OFFLINE === "1") return "{}"
   const json = await fetch("https://models.dev/api.json").then((x) => x.text())
   return json
 }

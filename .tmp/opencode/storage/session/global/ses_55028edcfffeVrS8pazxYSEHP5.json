@@ -1,0 +1,16 @@
+{
+  "id": "ses_55028edcfffeVrS8pazxYSEHP5",
+  "version": "local",
+  "projectID": "global",
+  "directory": "/var/folders/zc/3yckx3k910gc0mq3_5znfgjh0000gn/T/tmp.YFtounhnei",
+  "agent": "test-agent",
+  "model": {
+    "providerID": "anthropic",
+    "modelID": "claude-4"
+  },
+  "title": "New session - 2025-11-23T08:31:39.057Z",
+  "time": {
+    "created": 1763886699057,
+    "updated": 1763886699057
+  }
+}

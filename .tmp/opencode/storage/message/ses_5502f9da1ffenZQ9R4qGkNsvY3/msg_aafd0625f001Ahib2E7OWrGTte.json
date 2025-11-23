@@ -1,0 +1,13 @@
+{
+  "id": "msg_aafd0625f001Ahib2E7OWrGTte",
+  "sessionID": "ses_5502f9da1ffenZQ9R4qGkNsvY3",
+  "role": "user",
+  "time": {
+    "created": 1763886260831
+  },
+  "agent": "build",
+  "model": {
+    "providerID": "offline",
+    "modelID": "offline-model"
+  }
+}

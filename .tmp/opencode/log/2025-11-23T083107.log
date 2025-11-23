@@ -1,0 +1,104 @@
+INFO  2025-11-23T08:31:07 +67ms service=default directory=/private/var/folders/zc/3yckx3k910gc0mq3_5znfgjh0000gn/T/opencode-test-m53kd1dzhvp creating instance
+INFO  2025-11-23T08:31:07 +1ms service=project directory=/private/var/folders/zc/3yckx3k910gc0mq3_5znfgjh0000gn/T/opencode-test-m53kd1dzhvp fromDirectory
+INFO  2025-11-23T08:31:07 +0ms service=project status=started git.rev-parse
+INFO  2025-11-23T08:31:07 +10ms service=project status=completed duration=10 git.rev-parse
+INFO  2025-11-23T08:31:07 +9ms service=session id=ses_550296938ffeZfrSCFQsuSM9zC version=local projectID=cd28c018791b4e460170fc7c240040413ea16cee directory=/private/var/folders/zc/3yckx3k910gc0mq3_5znfgjh0000gn/T/opencode-test-m53kd1dzhvp agent=general-purpose title=New session - 2025-11-23T08:31:07.463Z time={"created":1763886667463,"updated":1763886667463} created
+INFO  2025-11-23T08:31:07 +1ms service=bus type=session.created publishing
+INFO  2025-11-23T08:31:07 +1ms service=config path=/Users/michael/opencode/.tmp/opencode/config.json loading
+INFO  2025-11-23T08:31:07 +0ms service=config path=/Users/michael/opencode/.tmp/opencode/opencode.json loading
+INFO  2025-11-23T08:31:07 +0ms service=config path=/Users/michael/opencode/.tmp/opencode/opencode.jsonc loading
+INFO  2025-11-23T08:31:07 +2ms service=bus type=session.updated publishing
+INFO  2025-11-23T08:31:07 +2ms service=bus type=message.updated publishing
+INFO  2025-11-23T08:31:07 +1ms service=bus type=message.part.updated publishing
+INFO  2025-11-23T08:31:07 +1ms service=bus type=session.updated publishing
+INFO  2025-11-23T08:31:07 +2ms service=bus type=session.deleted publishing
+INFO  2025-11-23T08:31:07 +29ms service=default directory=/private/var/folders/zc/3yckx3k910gc0mq3_5znfgjh0000gn/T/opencode-test-pqfwpi4vrrn creating instance
+INFO  2025-11-23T08:31:07 +0ms service=project directory=/private/var/folders/zc/3yckx3k910gc0mq3_5znfgjh0000gn/T/opencode-test-pqfwpi4vrrn fromDirectory
+INFO  2025-11-23T08:31:07 +0ms service=project status=started git.rev-parse
+INFO  2025-11-23T08:31:07 +10ms service=project status=completed duration=10 git.rev-parse
+INFO  2025-11-23T08:31:07 +9ms service=session id=ses_5502968feffer7Z59QdcG2ql1S version=local projectID=1f7a06780c93a9635609ccd76f1505ef348d4d01 directory=/private/var/folders/zc/3yckx3k910gc0mq3_5znfgjh0000gn/T/opencode-test-pqfwpi4vrrn title=New session - 2025-11-23T08:31:07.521Z time={"created":1763886667521,"updated":1763886667521} created
+INFO  2025-11-23T08:31:07 +0ms service=bus type=session.created publishing
+INFO  2025-11-23T08:31:07 +0ms service=bus type=session.updated publishing
+INFO  2025-11-23T08:31:07 +1ms service=bus type=session.deleted publishing
+INFO  2025-11-23T08:31:07 +29ms service=default directory=/private/var/folders/zc/3yckx3k910gc0mq3_5znfgjh0000gn/T/opencode-test-2ddw2nej0va creating instance
+INFO  2025-11-23T08:31:07 +0ms service=project directory=/private/var/folders/zc/3yckx3k910gc0mq3_5znfgjh0000gn/T/opencode-test-2ddw2nej0va fromDirectory
+INFO  2025-11-23T08:31:07 +0ms service=project status=started git.rev-parse
+INFO  2025-11-23T08:31:07 +9ms service=project status=completed duration=9 git.rev-parse
+INFO  2025-11-23T08:31:07 +8ms service=session id=ses_5502968cfffen6BwlYAAGgfzcV version=local projectID=7671e062d9d6b82ac0b4734a6e4094bb94e135fb directory=/private/var/folders/zc/3yckx3k910gc0mq3_5znfgjh0000gn/T/opencode-test-2ddw2nej0va title=New session - 2025-11-23T08:31:07.568Z time={"created":1763886667568,"updated":1763886667568} created
+INFO  2025-11-23T08:31:07 +0ms service=bus type=session.created publishing
+INFO  2025-11-23T08:31:07 +1ms service=bus type=session.updated publishing
+INFO  2025-11-23T08:31:07 +0ms service=bus type=session.deleted publishing
+INFO  2025-11-23T08:31:07 +30ms service=default directory=/private/var/folders/zc/3yckx3k910gc0mq3_5znfgjh0000gn/T/opencode-test-uae6em4jm5 creating instance
+INFO  2025-11-23T08:31:07 +0ms service=project directory=/private/var/folders/zc/3yckx3k910gc0mq3_5znfgjh0000gn/T/opencode-test-uae6em4jm5 fromDirectory
+INFO  2025-11-23T08:31:07 +0ms service=project status=started git.rev-parse
+INFO  2025-11-23T08:31:07 +9ms service=project status=completed duration=9 git.rev-parse
+INFO  2025-11-23T08:31:07 +8ms service=session id=ses_55029689fffe1FpQgJYv8w5dnd version=local projectID=522fd7813a85515ddc4e067ec2268b2b8fdf27fb directory=/private/var/folders/zc/3yckx3k910gc0mq3_5znfgjh0000gn/T/opencode-test-uae6em4jm5 title=New session - 2025-11-23T08:31:07.616Z time={"created":1763886667616,"updated":1763886667616} created
+INFO  2025-11-23T08:31:07 +0ms service=bus type=session.created publishing
+INFO  2025-11-23T08:31:07 +1ms service=bus type=session.updated publishing
+INFO  2025-11-23T08:31:07 +0ms service=bus type=session.deleted publishing
+INFO  2025-11-23T08:31:07 +29ms service=default directory=/private/var/folders/zc/3yckx3k910gc0mq3_5znfgjh0000gn/T/opencode-test-w6pwrjdyoj creating instance
+INFO  2025-11-23T08:31:07 +0ms service=project directory=/private/var/folders/zc/3yckx3k910gc0mq3_5znfgjh0000gn/T/opencode-test-w6pwrjdyoj fromDirectory
+INFO  2025-11-23T08:31:07 +0ms service=project status=started git.rev-parse
+INFO  2025-11-23T08:31:07 +9ms service=project status=completed duration=9 git.rev-parse
+INFO  2025-11-23T08:31:07 +8ms service=session id=ses_550296870ffeeFCP47kuQQ1ulg version=local projectID=1e149a0e21393ca627f2644ed528dd4c677ae6fd directory=/private/var/folders/zc/3yckx3k910gc0mq3_5znfgjh0000gn/T/opencode-test-w6pwrjdyoj title=New session - 2025-11-23T08:31:07.663Z time={"created":1763886667663,"updated":1763886667663} created
+INFO  2025-11-23T08:31:07 +1ms service=bus type=session.created publishing
+INFO  2025-11-23T08:31:07 +0ms service=bus type=session.updated publishing
+INFO  2025-11-23T08:31:07 +0ms service=bus type=session.deleted publishing
+INFO  2025-11-23T08:31:07 +29ms service=default directory=/private/var/folders/zc/3yckx3k910gc0mq3_5znfgjh0000gn/T/opencode-test-arzdmhwvlac creating instance
+INFO  2025-11-23T08:31:07 +0ms service=project directory=/private/var/folders/zc/3yckx3k910gc0mq3_5znfgjh0000gn/T/opencode-test-arzdmhwvlac fromDirectory
+INFO  2025-11-23T08:31:07 +0ms service=project status=started git.rev-parse
+INFO  2025-11-23T08:31:07 +9ms service=project status=completed duration=9 git.rev-parse
+INFO  2025-11-23T08:31:07 +8ms service=session id=ses_550296841ffefwmXh8t2oTJ68f version=local projectID=df02ede6c9952a9539b878b7aa396322b4a20e75 directory=/private/var/folders/zc/3yckx3k910gc0mq3_5znfgjh0000gn/T/opencode-test-arzdmhwvlac title=New session - 2025-11-23T08:31:07.710Z time={"created":1763886667710,"updated":1763886667710} created
+INFO  2025-11-23T08:31:07 +0ms service=bus type=session.created publishing
+INFO  2025-11-23T08:31:07 +1ms service=bus type=session.updated publishing
+INFO  2025-11-23T08:31:07 +0ms service=bus type=session.deleted publishing
+INFO  2025-11-23T08:31:07 +29ms service=default directory=/private/var/folders/zc/3yckx3k910gc0mq3_5znfgjh0000gn/T/opencode-test-82zhuq6w73 creating instance
+INFO  2025-11-23T08:31:07 +0ms service=project directory=/private/var/folders/zc/3yckx3k910gc0mq3_5znfgjh0000gn/T/opencode-test-82zhuq6w73 fromDirectory
+INFO  2025-11-23T08:31:07 +0ms service=project status=started git.rev-parse
+INFO  2025-11-23T08:31:07 +9ms service=project status=completed duration=9 git.rev-parse
+INFO  2025-11-23T08:31:07 +9ms service=session id=ses_550296811ffeXD0IHk2bPtVSaT version=local projectID=2dd3f65c8c9b9e1af7a450d405e6d955c99c7467 directory=/private/var/folders/zc/3yckx3k910gc0mq3_5znfgjh0000gn/T/opencode-test-82zhuq6w73 title=New session - 2025-11-23T08:31:07.758Z time={"created":1763886667758,"updated":1763886667758} created
+INFO  2025-11-23T08:31:07 +0ms service=bus type=session.created publishing
+INFO  2025-11-23T08:31:07 +0ms service=bus type=session.updated publishing
+INFO  2025-11-23T08:31:07 +1ms service=bus type=session.deleted publishing
+INFO  2025-11-23T08:31:07 +31ms service=default directory=/private/var/folders/zc/3yckx3k910gc0mq3_5znfgjh0000gn/T/opencode-test-7wyolgl6cyr creating instance
+INFO  2025-11-23T08:31:07 +0ms service=project directory=/private/var/folders/zc/3yckx3k910gc0mq3_5znfgjh0000gn/T/opencode-test-7wyolgl6cyr fromDirectory
+INFO  2025-11-23T08:31:07 +0ms service=project status=started git.rev-parse
+INFO  2025-11-23T08:31:07 +9ms service=project status=completed duration=9 git.rev-parse
+INFO  2025-11-23T08:31:07 +8ms service=session id=ses_5502967e0ffeDvgXV36YGbu6bz version=local projectID=de970f140fa62be14836ac1e5e074b8bc88367ac directory=/private/var/folders/zc/3yckx3k910gc0mq3_5znfgjh0000gn/T/opencode-test-7wyolgl6cyr title=New session - 2025-11-23T08:31:07.807Z time={"created":1763886667807,"updated":1763886667807} created
+INFO  2025-11-23T08:31:07 +0ms service=bus type=session.created publishing
+INFO  2025-11-23T08:31:07 +1ms service=bus type=session.updated publishing
+INFO  2025-11-23T08:31:07 +0ms service=bus type=session.deleted publishing
+INFO  2025-11-23T08:31:07 +29ms service=default directory=/private/var/folders/zc/3yckx3k910gc0mq3_5znfgjh0000gn/T/opencode-test-fejxi7yckf9 creating instance
+INFO  2025-11-23T08:31:07 +0ms service=project directory=/private/var/folders/zc/3yckx3k910gc0mq3_5znfgjh0000gn/T/opencode-test-fejxi7yckf9 fromDirectory
+INFO  2025-11-23T08:31:07 +0ms service=project status=started git.rev-parse
+INFO  2025-11-23T08:31:07 +9ms service=project status=completed duration=9 git.rev-parse
+INFO  2025-11-23T08:31:07 +9ms service=session id=ses_5502967b0ffeyyl0hBXOVEIqYq version=local projectID=0dfc9ffc55f6f2dd7e2e14de3a33811f66398bfb directory=/private/var/folders/zc/3yckx3k910gc0mq3_5znfgjh0000gn/T/opencode-test-fejxi7yckf9 agent=test-agent title=New session - 2025-11-23T08:31:07.855Z time={"created":1763886667855,"updated":1763886667855} created
+INFO  2025-11-23T08:31:07 +0ms service=bus type=session.created publishing
+INFO  2025-11-23T08:31:07 +0ms service=bus type=session.updated publishing
+INFO  2025-11-23T08:31:07 +1ms service=bus type=message.updated publishing
+INFO  2025-11-23T08:31:07 +0ms service=bus type=message.part.updated publishing
+INFO  2025-11-23T08:31:07 +0ms service=bus type=session.updated publishing
+INFO  2025-11-23T08:31:07 +31ms service=default directory=/private/var/folders/zc/3yckx3k910gc0mq3_5znfgjh0000gn/T/opencode-test-0xnlwsfkzd7i creating instance
+INFO  2025-11-23T08:31:07 +0ms service=project directory=/private/var/folders/zc/3yckx3k910gc0mq3_5znfgjh0000gn/T/opencode-test-0xnlwsfkzd7i fromDirectory
+INFO  2025-11-23T08:31:07 +0ms service=project status=started git.rev-parse
+INFO  2025-11-23T08:31:07 +9ms service=project status=completed duration=9 git.rev-parse
+INFO  2025-11-23T08:31:07 +8ms service=session id=ses_55029677fffe34eQuKKy5LwQOK version=local projectID=4ae2aa4dac772a12643ca92dd8093d07b6173a16 directory=/private/var/folders/zc/3yckx3k910gc0mq3_5znfgjh0000gn/T/opencode-test-0xnlwsfkzd7i title=New session - 2025-11-23T08:31:07.904Z time={"created":1763886667904,"updated":1763886667904} created
+INFO  2025-11-23T08:31:07 +0ms service=bus type=session.created publishing
+INFO  2025-11-23T08:31:07 +0ms service=bus type=session.updated publishing
+INFO  2025-11-23T08:31:07 +1ms service=bus type=session.deleted publishing
+INFO  2025-11-23T08:31:07 +28ms service=default directory=/private/var/folders/zc/3yckx3k910gc0mq3_5znfgjh0000gn/T/opencode-test-3gku24xyw8e creating instance
+INFO  2025-11-23T08:31:07 +0ms service=project directory=/private/var/folders/zc/3yckx3k910gc0mq3_5znfgjh0000gn/T/opencode-test-3gku24xyw8e fromDirectory
+INFO  2025-11-23T08:31:07 +0ms service=project status=started git.rev-parse
+INFO  2025-11-23T08:31:07 +9ms service=project status=completed duration=9 git.rev-parse
+INFO  2025-11-23T08:31:07 +8ms service=session id=ses_550296751ffeOqoqdukJkLaKbO version=local projectID=9e990256a892640656078bd7404c61afa2aab7c8 directory=/private/var/folders/zc/3yckx3k910gc0mq3_5znfgjh0000gn/T/opencode-test-3gku24xyw8e title=New session - 2025-11-23T08:31:07.950Z time={"created":1763886667950,"updated":1763886667950} created
+INFO  2025-11-23T08:31:07 +0ms service=bus type=session.created publishing
+INFO  2025-11-23T08:31:07 +0ms service=bus type=session.updated publishing
+INFO  2025-11-23T08:31:07 +0ms service=bus type=session.deleted publishing
+INFO  2025-11-23T08:31:07 +13ms service=default directory=/private/var/folders/zc/3yckx3k910gc0mq3_5znfgjh0000gn/T/opencode-test-jpowhrpta8n creating instance
+INFO  2025-11-23T08:31:07 +0ms service=project directory=/private/var/folders/zc/3yckx3k910gc0mq3_5znfgjh0000gn/T/opencode-test-jpowhrpta8n fromDirectory
+INFO  2025-11-23T08:31:07 +0ms service=default directory=/private/var/folders/zc/3yckx3k910gc0mq3_5znfgjh0000gn/T/opencode-test-1ij39jszdrx creating instance
+INFO  2025-11-23T08:31:07 +0ms service=project directory=/private/var/folders/zc/3yckx3k910gc0mq3_5znfgjh0000gn/T/opencode-test-1ij39jszdrx fromDirectory
+INFO  2025-11-23T08:31:07 +1ms service=default directory=/private/var/folders/zc/3yckx3k910gc0mq3_5znfgjh0000gn/T/opencode-test-vbvj3jwgn6 creating instance
+INFO  2025-11-23T08:31:07 +0ms service=project directory=/private/var/folders/zc/3yckx3k910gc0mq3_5znfgjh0000gn/T/opencode-test-vbvj3jwgn6 fromDirectory
+INFO  2025-11-23T08:31:07 +0ms service=default directory=/private/var/folders/zc/3yckx3k910gc0mq3_5znfgjh0000gn/T/opencode-test-3nz688d5tol creating instance
+INFO  2025-11-23T08:31:07 +0ms service=project directory=/private/var/folders/zc/3yckx3k910gc0mq3_5znfgjh0000gn/T/opencode-test-3nz688d5tol fromDirectory

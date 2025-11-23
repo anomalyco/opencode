@@ -11,6 +11,9 @@ import { SessionSummary } from "./summary"
 import { Bus } from "@/bus"
 import { SessionRetry } from "./retry"
 import { SessionStatus } from "./status"
+import { TrajectoryRecorder } from "../trajectory/recorder"
+import { TrajectoryConfig } from "../trajectory/config"
+import type { Trajectory } from "../trajectory/types"
 
 export namespace SessionProcessor {
   const DOOM_LOOP_THRESHOLD = 3
@@ -25,6 +28,7 @@ export namespace SessionProcessor {
     providerID: string
     model: ModelsDev.Model
     abort: AbortSignal
+    step?: number
   }) {
     const toolcalls: Record<string, MessageV2.ToolPart> = {}
     let snapshot: string | undefined
@@ -35,11 +39,29 @@ export namespace SessionProcessor {
       get message() {
         return input.assistantMessage
       },
+      step: input.step ?? 0,
       partFromToolCall(toolCallID: string) {
         return toolcalls[toolCallID]
       },
       async process(fn: () => StreamTextResult<Record<string, AITool>, never>) {
         log.info("process")
+        const streamRecording =
+          TrajectoryRecorder.isRecording(input.sessionID) && TrajectoryConfig.get().captureStreamEvents
+        const recordStream = async (
+          eventType: Trajectory.StreamEvent["eventType"],
+          data: Trajectory.StreamEvent["data"],
+        ) => {
+          if (!streamRecording) return
+          await TrajectoryRecorder.record(input.sessionID, {
+            type: "stream_event",
+            timestamp: Date.now(),
+            sessionID: input.sessionID,
+            messageID: input.assistantMessage.id,
+            step: input.step ?? 0,
+            eventType,
+            data,
+          })
+        }
         while (true) {
           try {
             let currentText: MessageV2.TextPart | undefined
@@ -51,6 +73,7 @@ export namespace SessionProcessor {
               switch (value.type) {
                 case "start":
                   SessionStatus.set(input.sessionID, { type: "busy" })
+                  await recordStream("start", {})
                   break
 
                 case "reasoning-start":
@@ -68,6 +91,7 @@ export namespace SessionProcessor {
                     },
                     metadata: value.providerMetadata,
                   }
+                  await recordStream("reasoning-delta", { reasoning: "" })
                   break
 
                 case "reasoning-delta":
@@ -77,6 +101,9 @@ export namespace SessionProcessor {
                     if (value.providerMetadata) part.metadata = value.providerMetadata
                     if (part.text) await Session.updatePart({ part, delta: value.text })
                   }
+                  await recordStream("reasoning-delta", {
+                    reasoning: value.text,
+                  })
                   break
 
                 case "reasoning-end":
@@ -92,6 +119,7 @@ export namespace SessionProcessor {
                     await Session.updatePart(part)
                     delete reasoningMap[value.id]
                   }
+                  await recordStream("reasoning-delta", { reasoning: "" })
                   break
 
                 case "tool-input-start":
@@ -109,6 +137,11 @@ export namespace SessionProcessor {
                     },
                   })
                   toolcalls[value.id] = part as MessageV2.ToolPart
+                  await recordStream("tool-call", {
+                    toolName: value.toolName,
+                    toolCallId: value.id,
+                    input: {},
+                  })
                   break
 
                 case "tool-input-delta":
@@ -175,6 +208,11 @@ export namespace SessionProcessor {
                       }
                     }
                   }
+                  await recordStream("tool-call", {
+                    toolName: value.toolName,
+                    toolCallId: value.toolCallId,
+                    input: value.input,
+                  })
                   break
                 }
                 case "tool-result": {
@@ -198,6 +236,10 @@ export namespace SessionProcessor {
 
                     delete toolcalls[value.toolCallId]
                   }
+                  await recordStream("tool-result", {
+                    toolCallId: value.toolCallId,
+                    output: value.output.output,
+                  })
                   break
                 }
 
@@ -223,6 +265,10 @@ export namespace SessionProcessor {
                     }
                     delete toolcalls[value.toolCallId]
                   }
+                  await recordStream("tool-result", {
+                    toolCallId: value.toolCallId,
+                    output: (value.error as any)?.toString?.(),
+                  })
                   break
                 }
                 case "error":
@@ -237,6 +283,7 @@ export namespace SessionProcessor {
                     snapshot,
                     type: "step-start",
                   })
+                  await recordStream("start", {})
                   break
 
                 case "finish-step":
@@ -277,6 +324,10 @@ export namespace SessionProcessor {
                     sessionID: input.sessionID,
                     messageID: input.assistantMessage.parentID,
                   })
+                  await recordStream("step-finish", {
+                    finishReason: value.finishReason,
+                    usage,
+                  })
                   break
 
                 case "text-start":
@@ -291,6 +342,7 @@ export namespace SessionProcessor {
                     },
                     metadata: value.providerMetadata,
                   }
+                  await recordStream("text-delta", { text: "" })
                   break
 
                 case "text-delta":
@@ -303,6 +355,7 @@ export namespace SessionProcessor {
                         delta: value.text,
                       })
                   }
+                  await recordStream("text-delta", { text: value.text })
                   break
 
                 case "text-end":
@@ -319,6 +372,7 @@ export namespace SessionProcessor {
                   break
 
                 case "finish":
+                  await recordStream("finish", {})
                   break
 
                 default:

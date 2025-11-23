@@ -1,0 +1,13 @@
+{
+  "id": "msg_aafd473ce001T2moPOfqtQo47N",
+  "sessionID": "ses_5502b8c32ffe0hwNGrPvGqQTpU",
+  "role": "user",
+  "time": {
+    "created": 1763886527438
+  },
+  "agent": "test-agent",
+  "model": {
+    "providerID": "anthropic",
+    "modelID": "claude-sonnet-4"
+  }
+}

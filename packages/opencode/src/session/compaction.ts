@@ -16,9 +16,13 @@ import { ProviderTransform } from "@/provider/transform"
 import { SessionProcessor } from "./processor"
 import { fn } from "@/util/fn"
 import { mergeDeep, pipe } from "remeda"
+import { TrajectoryRecorder } from "../trajectory/recorder"
+import { TrajectoryConfig } from "../trajectory/config"
+import type { Trajectory } from "../trajectory/types"
 
 export namespace SessionCompaction {
   const log = Log.create({ service: "session.compaction" })
+  const shouldRecord = (sessionID: string) => TrajectoryConfig.get().enabled && TrajectoryRecorder.isRecording(sessionID)
 
   export const Event = {
     Compacted: Bus.event(
@@ -48,6 +52,14 @@ export namespace SessionCompaction {
   export async function prune(input: { sessionID: string }) {
     if (Flag.OPENCODE_DISABLE_PRUNE) return
     log.info("pruning")
+    if (shouldRecord(input.sessionID)) {
+      await TrajectoryRecorder.record(input.sessionID, {
+        type: "compaction",
+        timestamp: Date.now(),
+        sessionID: input.sessionID,
+        action: "prune",
+      })
+    }
     const msgs = await Session.messages({ sessionID: input.sessionID })
     let total = 0
     let pruned = 0
@@ -82,6 +94,19 @@ export namespace SessionCompaction {
         }
       }
       log.info("pruned", { count: toPrune.length })
+      if (shouldRecord(input.sessionID)) {
+        await TrajectoryRecorder.record(input.sessionID, {
+          type: "compaction",
+          timestamp: Date.now(),
+          sessionID: input.sessionID,
+          action: "prune",
+          pruneDetails: {
+            toolsPruned: toPrune.length,
+            tokensSaved: pruned,
+            oldestCompactedMessageID: toPrune.at(-1)?.messageID ?? "",
+          },
+        })
+      }
     }
   }
 
@@ -98,6 +123,33 @@ export namespace SessionCompaction {
   }) {
     const model = await Provider.getModel(input.model.providerID, input.model.modelID)
     const system = [...SystemPrompt.compaction(model.providerID)]
+    if (shouldRecord(input.sessionID)) {
+      const tokenCount = input.messages
+        .filter((m) => m.info.role === "assistant")
+        .reduce((sum, msg) => {
+          const info = msg.info as MessageV2.Assistant
+          return (
+            sum +
+            (info.tokens?.input ?? 0) +
+            (info.tokens?.output ?? 0) +
+            (info.tokens?.cache.read ?? 0) +
+            (info.tokens?.cache.write ?? 0)
+          )
+        }, 0)
+      await TrajectoryRecorder.record(input.sessionID, {
+        type: "compaction",
+        timestamp: Date.now(),
+        sessionID: input.sessionID,
+        action: "start",
+        trigger: {
+          reason: "context_overflow",
+          messageCount: input.messages.length,
+          tokenCount,
+          contextLimit: model.info.limit.context,
+        },
+      })
+      TrajectoryRecorder.markStreamStart(input.sessionID)
+    }
     const msg = (await Session.updateMessage({
       id: Identifier.ascending("message"),
       role: "assistant",
@@ -128,7 +180,40 @@ export namespace SessionCompaction {
       providerID: input.model.providerID,
       model: model.info,
       abort: input.abort,
+      step: 0,
     })
+    const compactionMessages: ModelMessage[] = [
+      ...system.map(
+        (x): ModelMessage => ({
+          role: "system",
+          content: x,
+        }),
+      ),
+      ...MessageV2.toModelMessage(
+        input.messages.filter((m) => {
+          if (m.info.role !== "assistant" || m.info.error === undefined) {
+            return true
+          }
+          if (
+            MessageV2.AbortedError.isInstance(m.info.error) &&
+            m.parts.some((part) => part.type !== "step-start" && part.type !== "reasoning")
+          ) {
+            return true
+          }
+
+          return false
+        }),
+      ),
+      {
+        role: "user",
+        content: [
+          {
+            type: "text",
+            text: "Provide a detailed but concise summary of our conversation above. Focus on information that would be helpful for continuing the conversation, including what we did, what we're doing, which files we're working on, and what we're going to do next.",
+          },
+        ],
+      },
+    ]
     const result = await processor.process(() =>
       streamText({
         onError(error) {
@@ -150,38 +235,7 @@ export namespace SessionCompaction {
         headers: model.info.headers,
         abortSignal: input.abort,
         tools: model.info.tool_call ? {} : undefined,
-        messages: [
-          ...system.map(
-            (x): ModelMessage => ({
-              role: "system",
-              content: x,
-            }),
-          ),
-          ...MessageV2.toModelMessage(
-            input.messages.filter((m) => {
-              if (m.info.role !== "assistant" || m.info.error === undefined) {
-                return true
-              }
-              if (
-                MessageV2.AbortedError.isInstance(m.info.error) &&
-                m.parts.some((part) => part.type !== "step-start" && part.type !== "reasoning")
-              ) {
-                return true
-              }
-
-              return false
-            }),
-          ),
-          {
-            role: "user",
-            content: [
-              {
-                type: "text",
-                text: "Provide a detailed but concise summary of our conversation above. Focus on information that would be helpful for continuing the conversation, including what we did, what we're doing, which files we're working on, and what we're going to do next.",
-              },
-            ],
-          },
-        ],
+        messages: compactionMessages,
         model: wrapLanguageModel({
           model: model.language,
           middleware: [
@@ -198,6 +252,62 @@ export namespace SessionCompaction {
         }),
       }),
     )
+    const parts = await MessageV2.parts(msg.id)
+    if (shouldRecord(input.sessionID)) {
+      const now = Date.now()
+      await TrajectoryRecorder.record(input.sessionID, {
+        type: "llm_interaction",
+        timestamp: now,
+        sessionID: input.sessionID,
+        messageID: msg.id,
+        step: 0,
+        interactionType: "stream",
+        purpose: "compaction",
+        input: {
+          systemPrompts: system,
+          messages: compactionMessages,
+          toolCount: 0,
+          toolNames: [],
+          parameters: {},
+        },
+        response: {
+          finishReason: msg.finish ?? "unknown",
+          usage: {
+            inputTokens: msg.tokens.input,
+            outputTokens: msg.tokens.output,
+            reasoningTokens: msg.tokens.reasoning,
+            cacheReadTokens: msg.tokens.cache.read,
+            cacheWriteTokens: msg.tokens.cache.write,
+            totalInputTokens: msg.tokens.input + msg.tokens.cache.read,
+            totalOutputTokens: msg.tokens.output + msg.tokens.cache.write,
+            totalCacheTokens: msg.tokens.cache.read + msg.tokens.cache.write,
+          },
+          textLength: parts
+            .filter((p) => p.type === "text")
+            .reduce((sum, p) => sum + (p as MessageV2.TextPart).text.length, 0),
+          reasoningLength: parts
+            .filter((p) => p.type === "reasoning")
+            .reduce((sum, p) => sum + (p as MessageV2.ReasoningPart).text.length, 0),
+          hasHiddenReasoning: msg.tokens.reasoning > 0 && parts.filter((p) => p.type === "reasoning").length === 0,
+          toolCallCount: parts.filter((p) => p.type === "tool").length,
+        },
+        startTime: msg.time.created,
+        endTime: now,
+        duration: now - msg.time.created,
+      })
+      await TrajectoryRecorder.markStreamEnd(input.sessionID)
+      await TrajectoryRecorder.record(input.sessionID, {
+        type: "compaction",
+        timestamp: now,
+        sessionID: input.sessionID,
+        action: "end",
+        result: {
+          success: result !== "stop",
+          newMessageCount: await Session.messages({ sessionID: input.sessionID }).then((all) => all.length),
+          tokenReduction: 0,
+        },
+      })
+    }
     if (result === "continue") {
       const continueMsg = await Session.updateMessage({
         id: Identifier.ascending("message"),

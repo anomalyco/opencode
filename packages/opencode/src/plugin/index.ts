@@ -26,6 +26,12 @@ export namespace Plugin {
       directory: Instance.directory,
       $: Bun.$,
     }
+    if (process.env.OPENCODE_OFFLINE === "1") {
+      return {
+        hooks,
+        input,
+      }
+    }
     const plugins = [...(config.plugin ?? [])]
     if (!Flag.OPENCODE_DISABLE_DEFAULT_PLUGINS) {
       plugins.push("opencode-copilot-auth@0.0.5")
