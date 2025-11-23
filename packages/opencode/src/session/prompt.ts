@@ -198,6 +198,9 @@ export namespace SessionPrompt {
     await Session.touch(input.sessionID)
 
     if (input.noReply === true) {
+      if (SessionStatus.get(input.sessionID)?.type === "idle") {
+        loop(input.sessionID)
+      }
       return message
     }
 
