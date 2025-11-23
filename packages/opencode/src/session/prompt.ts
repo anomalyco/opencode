@@ -1416,7 +1416,8 @@ export namespace SessionPrompt {
       mergeDeep(small.info.options),
     )
     await generateText({
-      maxOutputTokens: small.info.reasoning ? 1500 : 20,
+      // use higher # for reasoning models since reasoning tokens eat up a lot of the budget
+      maxOutputTokens: small.info.reasoning ? 3000 : 20,
       providerOptions: ProviderTransform.providerOptions(small.npm, small.providerID, options),
       messages: [
         ...SystemPrompt.title(small.providerID).map(
@@ -1426,10 +1427,8 @@ export namespace SessionPrompt {
           }),
         ),
         {
-          role: "user" as const,
-          content: `
-              The following is the text to summarize:
-            `,
+          role: "user",
+          content: "Generate a title for this conversation:\n",
         },
         ...MessageV2.toModelMessage([
           {
