@@ -1,5 +1,5 @@
 {
-  "name": "@opencode-ai/util",
+  "name": "@forge/util",
   "version": "1.0.92",
   "private": true,
   "type": "module",
