@@ -53,7 +53,7 @@ export function DialogSelect<T>(props: DialogSelectProps<T>) {
   // Initialize selection based on current prop if provided
   createEffect(() => {
     if (props.current) {
-      const currentIndex = flat().findIndex(opt => isDeepEqual(opt.value, props.current))
+      const currentIndex = flat().findIndex((opt) => isDeepEqual(opt.value, props.current))
       if (currentIndex >= 0) {
         setStore("selected", currentIndex)
       }
@@ -103,7 +103,7 @@ export function DialogSelect<T>(props: DialogSelectProps<T>) {
       setStore("selected", 0)
     } else if (props.current) {
       // When filter is cleared, find and select the current value
-      const currentIndex = flat().findIndex(opt => isDeepEqual(opt.value, props.current))
+      const currentIndex = flat().findIndex((opt) => isDeepEqual(opt.value, props.current))
       if (currentIndex >= 0) {
         setStore("selected", currentIndex)
       }
