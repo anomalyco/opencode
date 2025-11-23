@@ -4,10 +4,12 @@ import { Log } from "../util/log"
 import path from "path"
 import { NamedError } from "../util/error"
 import { readableStreamToText } from "bun"
+import { createRequire } from "module"
 import { Lock } from "../util/lock"
 
 export namespace BunProc {
   const log = Log.create({ service: "bun" })
+  const req = createRequire(import.meta.url)
 
   export async function run(cmd: string[], options?: Bun.SpawnOptions.OptionsObject<any, any, any>) {
     log.info("running", {
@@ -128,5 +130,23 @@ export namespace BunProc {
     parsed.dependencies[pkg] = version
     await Bun.write(pkgjson.name!, JSON.stringify(parsed, null, 2))
     return mod
+  }
+
+  export async function resolve(pkg: string) {
+    const local = workspace(pkg)
+    if (local) return local
+    const dir = path.join(Global.Path.cache, "node_modules", pkg)
+    const pkgjson = Bun.file(path.join(dir, "package.json"))
+    const exists = await pkgjson.exists()
+    if (exists) return dir
+  }
+
+  function workspace(pkg: string) {
+    try {
+      const target = req.resolve(`${pkg}/package.json`)
+      return path.dirname(target)
+    } catch {
+      return
+    }
   }
 }
