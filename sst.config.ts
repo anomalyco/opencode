@@ -9,7 +9,7 @@ export default $config({
       home: "cloudflare",
       providers: {
         stripe: {
-          apiKey: process.env.STRIPE_SECRET_KEY,
+          apiKey: process.env.STRIPE_SECRET_KEY!,
         },
         planetscale: "0.4.1",
       },

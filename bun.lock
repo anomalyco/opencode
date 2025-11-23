@@ -177,6 +177,7 @@
         "zod": "catalog:",
       },
       "devDependencies": {
+        "@cloudflare/workers-types": "catalog:",
         "@tailwindcss/vite": "catalog:",
         "@types/luxon": "catalog:",
         "@typescript/native-preview": "catalog:",
