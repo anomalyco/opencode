@@ -3,6 +3,7 @@ import { getRequestEvent } from "solid-js/web"
 import { useAuthSession } from "~/context/auth.session"
 import { Dropdown } from "~/component/dropdown"
 import "./user-menu.css"
+import { getResponseHeaders } from "@solidjs/start/http"
 
 const logout = action(async () => {
   "use server"
@@ -17,7 +18,10 @@ const logout = action(async () => {
       event!.locals.actor = undefined
       return val
     })
-  throw redirect("/zen")
+  throw redirect("/zen", {
+    status: 302,
+    headers: getResponseHeaders(),
+  })
 })
 
 export function UserMenu(props: { email: string | null | undefined }) {
