@@ -82,9 +82,6 @@
     "tree-sitter-bash",
     "web-tree-sitter"
   ],
-  "patchedDependencies": {
-    "@solidjs/start@1.1.7": "patches/@solidjs%2Fstart@1.1.7.patch"
-  },
   "overrides": {
     "@types/bun": "catalog:",
     "@types/node": "catalog:"
