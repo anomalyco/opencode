@@ -92,21 +92,36 @@ type Theme = ThemeColors & {
   _hasSelectedListItemText: boolean
 }
 
-export function selectedForeground(theme: Theme): RGBA {
-  // If theme explicitly defines selectedListItemText, use it
-  if (theme._hasSelectedListItemText) {
-    return theme.selectedListItemText
-  }
+function invert(color: RGBA) {
+  return RGBA.fromInts(
+    Math.round((1 - color.r) * 255),
+    Math.round((1 - color.g) * 255),
+    Math.round((1 - color.b) * 255),
+    Math.round((color.a ?? 1) * 255),
+  )
+}
 
-  // For transparent backgrounds, calculate contrast based on primary color
+export function selectedForeground(theme: Theme): RGBA {
+  const color = theme._hasSelectedListItemText ? theme.selectedListItemText : theme.background
+  if (color.a === 0) return invert(theme.text)
   if (theme.background.a === 0) {
     const { r, g, b } = theme.primary
     const luminance = 0.299 * r + 0.587 * g + 0.114 * b
-    return luminance > 0.5 ? RGBA.fromInts(0, 0, 0) : RGBA.fromInts(255, 255, 255)
+    if (luminance > 0.5) return RGBA.fromInts(0, 0, 0)
+    return RGBA.fromInts(255, 255, 255)
   }
+  return color
+}
 
-  // Fall back to background color
-  return theme.background
+export function highlightText(theme: Theme) {
+  return selectedForeground(theme)
+}
+
+export function highlightTextMuted(theme: Theme) {
+  const color = theme._hasSelectedListItemText ? theme.selectedListItemText : theme.background
+  if (color.a === 0) return selectedForeground(theme)
+  if (theme.background.a === 0) return selectedForeground(theme)
+  return theme.textMuted
 }
 
 type HexColor = `#${string}`

@@ -1,5 +1,5 @@
 import { InputRenderable, RGBA, ScrollBoxRenderable, TextAttributes } from "@opentui/core"
-import { useTheme, selectedForeground } from "@tui/context/theme"
+import { useTheme, highlightText, highlightTextMuted } from "@tui/context/theme"
 import { entries, filter, flatMap, groupBy, pipe, take } from "remeda"
 import { batch, createEffect, createMemo, For, Show, type JSX } from "solid-js"
 import { createStore } from "solid-js/store"
@@ -262,29 +262,32 @@ function Option(props: {
   onMouseOver?: () => void
 }) {
   const { theme } = useTheme()
-  const fg = selectedForeground(theme)
 
   return (
     <>
       <Show when={props.current}>
-        <text flexShrink={0} fg={props.active ? fg : props.current ? theme.primary : theme.text} marginRight={0.5}>
-          ●
+        <text
+          flexShrink={0}
+          fg={props.active ? highlightText(theme) : props.current ? theme.primary : theme.text}
+          marginRight={0.5}
+        >
+          ◆
         </text>
       </Show>
       <text
         flexGrow={1}
-        fg={props.active ? fg : props.current ? theme.primary : theme.text}
+        fg={props.active ? highlightText(theme) : props.current ? theme.primary : theme.text}
         attributes={props.active ? TextAttributes.BOLD : undefined}
         overflow="hidden"
         wrapMode="none"
         paddingLeft={3}
       >
         {Locale.truncate(props.title, 62)}
-        <span style={{ fg: props.active ? fg : theme.textMuted }}> {props.description}</span>
+        <span style={{ fg: props.active ? highlightTextMuted(theme) : theme.textMuted }}> {props.description}</span>
       </text>
       <Show when={props.footer}>
         <box flexShrink={0}>
-          <text fg={props.active ? fg : theme.textMuted}>{props.footer}</text>
+          <text fg={props.active ? highlightTextMuted(theme) : theme.textMuted}>{props.footer}</text>
         </box>
       </Show>
     </>

@@ -18,7 +18,7 @@ import { CommandProvider, useCommandDialog } from "@tui/component/dialog-command
 import { DialogAgent } from "@tui/component/dialog-agent"
 import { DialogSessionList } from "@tui/component/dialog-session-list"
 import { KeybindProvider } from "@tui/context/keybind"
-import { ThemeProvider, useTheme } from "@tui/context/theme"
+import { ThemeProvider, useTheme, highlightText } from "@tui/context/theme"
 import { Home } from "@tui/routes/home"
 import { Session } from "@tui/routes/session"
 import { PromptHistoryProvider } from "./component/prompt/history"
@@ -490,7 +490,7 @@ function App() {
               tab
             </text>
             <text fg={local.agent.color(local.agent.current().name)}>{""}</text>
-            <text bg={local.agent.color(local.agent.current().name)} fg={theme.background} wrapMode={undefined}>
+            <text bg={local.agent.color(local.agent.current().name)} fg={highlightText(theme)} wrapMode={undefined}>
               <span style={{ bold: true }}> {local.agent.current().name.toUpperCase()}</span>
               <span> AGENT </span>
             </text>
