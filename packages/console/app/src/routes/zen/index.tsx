@@ -26,7 +26,7 @@ const checkLoggedIn = query(async () => {
 }, "checkLoggedIn.get")
 
 export default function Home() {
-  createAsync(() => checkLoggedIn())
+  const loggedin = createAsync(() => checkLoggedIn())
   return (
     <main data-page="zen">
       {/*<HttpHeader name="Cache-Control" value="public, max-age=1, s-maxage=3600, stale-while-revalidate=86400" />*/}
@@ -35,6 +35,7 @@ export default function Home() {
       <Link rel="icon" type="image/svg+xml" href="/favicon-zen.svg" />
       <Meta property="og:image" content="/social-share-zen.png" />
       <Meta name="twitter:image" content="/social-share-zen.png" />
+      <Meta name="opencode:auth" content={loggedin() ? "true" : "false"} />
 
       <div data-component="container">
         <Header zen />
