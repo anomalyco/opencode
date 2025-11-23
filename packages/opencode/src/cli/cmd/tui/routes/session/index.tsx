@@ -177,6 +177,7 @@ export function Session() {
     const first = permissions()[0]
     if (first) {
       const response = iife(() => {
+        if (evt.ctrl || evt.meta) return
         if (evt.name === "return") return "once"
         if (evt.name === "a") return "always"
         if (evt.name === "d") return "reject"
