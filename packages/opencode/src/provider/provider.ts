@@ -1,4 +1,5 @@
 import z from "zod"
+import fuzzysort from "fuzzysort"
 import { Config } from "../config/config"
 import { mergeDeep, sortBy } from "remeda"
 import { NoSuchModelError, type LanguageModel, type Provider as SDK } from "ai"
@@ -597,9 +598,21 @@ export namespace Provider {
     })
 
     const provider = s.providers[providerID]
-    if (!provider) throw new ModelNotFoundError({ providerID, modelID })
+    if (!provider) {
+      const availableProviders = Object.keys(s.providers)
+      const matches = fuzzysort.go(providerID, availableProviders, { limit: 3, threshold: -10000 })
+      const suggestions = matches.map((m) => m.target)
+      throw new ModelNotFoundError({ providerID, modelID, suggestions })
+    }
+
     const info = provider.info.models[modelID]
-    if (!info) throw new ModelNotFoundError({ providerID, modelID })
+    if (!info) {
+      const availableModels = Object.keys(provider.info.models)
+      const matches = fuzzysort.go(modelID, availableModels, { limit: 3, threshold: -10000 })
+      const suggestions = matches.map((m) => m.target)
+      throw new ModelNotFoundError({ providerID, modelID, suggestions })
+    }
+
     const sdk = await getSDK(provider.info, info)
 
     try {
@@ -645,20 +658,29 @@ export namespace Provider {
     }
 
     const provider = await state().then((state) => state.providers[providerID])
-    if (!provider) return
-    let priority = ["claude-haiku-4-5", "claude-haiku-4.5", "3-5-haiku", "3.5-haiku", "gemini-2.5-flash", "gpt-5-nano"]
-    // claude-haiku-4.5 is considered a premium model in github copilot, we shouldn't use premium requests for title gen
-    if (providerID === "github-copilot") {
-      priority = priority.filter((m) => m !== "claude-haiku-4.5")
-    }
-    if (providerID === "opencode" || providerID === "local") {
-      priority = ["gpt-5-nano"]
-    }
-    for (const item of priority) {
-      for (const model of Object.keys(provider.info.models)) {
-        if (model.includes(item)) return getModel(providerID, model)
+    if (provider) {
+      let priority = [
+        "claude-haiku-4-5",
+        "claude-haiku-4.5",
+        "3-5-haiku",
+        "3.5-haiku",
+        "gemini-2.5-flash",
+        "gpt-5-nano",
+      ]
+      // claude-haiku-4.5 is considered a premium model in github copilot, we shouldn't use premium requests for title gen
+      if (providerID === "github-copilot") {
+        priority = priority.filter((m) => m !== "claude-haiku-4.5")
+      }
+      if (providerID === "opencode" || providerID === "local") {
+        priority = ["gpt-5-nano"]
+      }
+      for (const item of priority) {
+        for (const model of Object.keys(provider.info.models)) {
+          if (model.includes(item)) return getModel(providerID, model)
+        }
       }
     }
+    return getModel("opencode", "gpt-5-nano")
   }
 
   const priority = ["gpt-5", "claude-sonnet-4", "big-pickle", "gemini-3-pro"]
@@ -700,6 +722,7 @@ export namespace Provider {
     z.object({
       providerID: z.string(),
       modelID: z.string(),
+      suggestions: z.array(z.string()).optional(),
     }),
   )
 

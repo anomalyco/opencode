@@ -240,6 +240,7 @@ export const { use: useTheme, provider: ThemeProvider } = createSimpleContext({
     })
 
     const syntax = createMemo(() => generateSyntax(values()))
+    const subtleSyntax = createMemo(() => generateSubtleSyntax(values()))
 
     return {
       theme: new Proxy(values(), {
@@ -255,6 +256,7 @@ export const { use: useTheme, provider: ThemeProvider } = createSimpleContext({
         return store.themes
       },
       syntax,
+      subtleSyntax,
       mode() {
         return store.mode
       },
@@ -480,7 +482,35 @@ function generateMutedTextColor(bg: RGBA, isDark: boolean): RGBA {
 }
 
 function generateSyntax(theme: Theme) {
-  return SyntaxStyle.fromTheme([
+  return SyntaxStyle.fromTheme(getSyntaxRules(theme))
+}
+
+function generateSubtleSyntax(theme: Theme) {
+  const rules = getSyntaxRules(theme)
+  return SyntaxStyle.fromTheme(
+    rules.map((rule) => {
+      if (rule.style.foreground) {
+        const fg = rule.style.foreground
+        return {
+          ...rule,
+          style: {
+            ...rule.style,
+            foreground: RGBA.fromInts(
+              Math.round(fg.r * 255),
+              Math.round(fg.g * 255),
+              Math.round(fg.b * 255),
+              Math.round(0.6 * 255),
+            ),
+          },
+        }
+      }
+      return rule
+    }),
+  )
+}
+
+function getSyntaxRules(theme: Theme) {
+  return [
     {
       scope: ["prompt"],
       style: {
@@ -974,5 +1004,5 @@ function generateSyntax(theme: Theme) {
         foreground: theme.textMuted,
       },
     },
-  ])
+  ]
 }
