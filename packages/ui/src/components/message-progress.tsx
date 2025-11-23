@@ -3,7 +3,6 @@ import { Part } from "./message-part"
 import { Spinner } from "./spinner"
 import { useData } from "../context/data"
 import type { AssistantMessage as AssistantMessageType, ToolPart } from "@opencode-ai/sdk"
-import "./message-progress.css"
 
 export function MessageProgress(props: { assistantMessages: () => AssistantMessageType[]; done?: boolean }) {
   const data = useData()
