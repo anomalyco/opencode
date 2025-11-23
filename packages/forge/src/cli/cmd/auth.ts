@@ -146,14 +146,14 @@ export const AuthLoginCommand = cmd({
             const method = await prompts.select({
               message: "Login method",
               options: [
-                ...plugin.auth.methods.map((x, index) => ({
+                ...plugin.auth.methods.map((x: any, index: number) => ({
                   label: x.label,
                   value: index.toString(),
                 })),
               ],
             })
             if (prompts.isCancel(method)) throw new UI.CancelledError()
-            index = parseInt(method)
+            index = parseInt(method as string)
           }
           const method = plugin.auth.methods[index]
 
@@ -171,7 +171,7 @@ export const AuthLoginCommand = cmd({
                   options: prompt.options,
                 })
                 if (prompts.isCancel(value)) throw new UI.CancelledError()
-                inputs[prompt.key] = value
+                inputs[prompt.key] = value as string
               } else {
                 const value = await prompts.text({
                   message: prompt.message,
@@ -179,7 +179,7 @@ export const AuthLoginCommand = cmd({
                   validate: prompt.validate ? (v) => prompt.validate!(v ?? "") : undefined,
                 })
                 if (prompts.isCancel(value)) throw new UI.CancelledError()
-                inputs[prompt.key] = value
+                inputs[prompt.key] = value as string
               }
             }
           }

@@ -3,7 +3,7 @@ import { Plugin } from "../plugin"
 import { map, filter, pipe, fromEntries, mapValues } from "remeda"
 import z from "zod"
 import { fn } from "@/util/fn"
-import type { AuthOuathResult, Hooks } from "@forge/plugin"
+import type { AuthOuathResult, Hooks } from "../plugin/types/plugin"
 import { NamedError } from "@/util/error"
 import { Auth } from "@/auth"
 
@@ -32,7 +32,7 @@ export namespace ProviderAuth {
     const s = await state().then((x) => x.methods)
     return mapValues(s, (x) =>
       x.methods.map(
-        (y): Method => ({
+        (y: any): Method => ({
           type: y.type,
           label: y.label,
         }),
