@@ -122,9 +122,6 @@ export namespace ACPOrchestrator {
     const client = await ACPClient.create({
       command: "claude-code-acp",
       cwd: Instance.directory,
-      env: {
-        ANTHROPIC_API_KEY: process.env.ANTHROPIC_API_KEY || "",
-      },
       onSessionUpdate: async (notification) => {
         log.debug("received ACP notification", {
           sessionID,
