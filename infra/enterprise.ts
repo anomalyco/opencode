@@ -3,6 +3,7 @@ import { domain } from "./stage"
 
 const storage = new sst.cloudflare.Bucket("EnterpriseStorage")
 
+console.log(SECRET.R2AccessKey.value, SECRET.R2SecretKey.value)
 const enterprise = new sst.cloudflare.x.SolidStart("Enterprise", {
   domain: "enterprise." + domain,
   environment: {
