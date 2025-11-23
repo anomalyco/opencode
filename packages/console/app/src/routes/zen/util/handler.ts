@@ -52,8 +52,8 @@ export async function handler(
     const model = opts.parseModel(url, body)
     const isStream = opts.parseIsStream(url, body)
     const ip = input.request.headers.get("x-real-ip") ?? ""
-    const sessionId = input.request.headers.get("x-opencode-session")
-    const requestId = input.request.headers.get("x-opencode-request")
+    const sessionId = input.request.headers.get("x-opencode-session") ?? ""
+    const requestId = input.request.headers.get("x-opencode-request") ?? ""
     logger.metric({
       is_tream: isStream,
       session: sessionId,
