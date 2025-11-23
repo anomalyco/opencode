@@ -197,7 +197,7 @@ export namespace SessionPrompt {
     const message = await createUserMessage(input)
     await Session.touch(input.sessionID)
 
-    if (input.noReply) {
+    if (input.noReply === true) {
       return message
     }
 
