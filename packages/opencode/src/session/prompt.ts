@@ -281,6 +281,8 @@ export namespace SessionPrompt {
       }
 
       await recordAgentStep({
+        type: "agent_step",
+        timestamp: Date.now(),
         sessionID,
         step,
         action: "loop_start",
@@ -298,6 +300,8 @@ export namespace SessionPrompt {
         lastUser.id < lastAssistant.id
       ) {
         await recordAgentStep({
+          type: "agent_step",
+          timestamp: Date.now(),
           sessionID,
           step,
           action: "exit_check",
@@ -332,6 +336,8 @@ export namespace SessionPrompt {
       // TODO: centralize "invoke tool" logic
       if (task?.type === "subtask") {
         await recordAgentStep({
+          type: "agent_step",
+          timestamp: Date.now(),
           sessionID,
           step,
           action: "subtask",
@@ -511,6 +517,8 @@ export namespace SessionPrompt {
       // pending compaction
       if (task?.type === "compaction") {
         await recordAgentStep({
+          type: "agent_step",
+          timestamp: Date.now(),
           sessionID,
           step,
           action: "compaction",
@@ -546,6 +554,8 @@ export namespace SessionPrompt {
         SessionCompaction.isOverflow({ tokens: lastFinished.tokens, model: model.info })
       ) {
         await recordAgentStep({
+          type: "agent_step",
+          timestamp: Date.now(),
           sessionID,
           step,
           action: "compaction",
@@ -640,6 +650,8 @@ export namespace SessionPrompt {
       )
 
       await recordAgentStep({
+        type: "agent_step",
+        timestamp: Date.now(),
         sessionID,
         step,
         action: "llm_call",
@@ -808,6 +820,8 @@ export namespace SessionPrompt {
       totalLLM++
       totalTool += parts.filter((p) => p.type === "tool").length
       await recordAgentStep({
+        type: "agent_step",
+        timestamp: Date.now(),
         sessionID,
         step,
         action: "loop_end",
@@ -1029,14 +1043,15 @@ export namespace SessionPrompt {
             args,
           },
         )
-        const result = await execute(args, opts).catch(async (error) => {
+        const result = await execute(args, opts).catch(async (error: unknown) => {
+          const message = error instanceof Error ? error.message : String(error)
           await recordTool({
             ...baseEvent,
             status: "error",
             endTime: Date.now(),
             duration: Date.now() - startTime,
             error: {
-              message: error instanceof Error ? error.message : String(error),
+              message,
             },
           })
           throw error
@@ -1051,7 +1066,7 @@ export namespace SessionPrompt {
             title: result.title ?? "",
             output: result.output ?? "",
             metadata: result.metadata,
-            attachments: result.attachments?.map((file) => ({
+            attachments: result.attachments?.map((file: { mime?: string; filename?: string; url?: string }) => ({
               type: file.mime ?? "file",
               path: file.filename ?? file.url ?? "",
             })),
@@ -1426,18 +1441,21 @@ export namespace SessionPrompt {
     const messages = await Session.messages({ sessionID: input.sessionID })
     const assistants = messages.filter((m) => m.info.role === "assistant")
     const tokenTotals = assistants.reduce(
-      (acc, msg) => ({
-        input: acc.input + (msg.info.tokens?.input ?? 0),
-        output: acc.output + (msg.info.tokens?.output ?? 0),
-        reasoning: acc.reasoning + (msg.info.tokens?.reasoning ?? 0),
-        cacheRead: acc.cacheRead + (msg.info.tokens?.cache.read ?? 0),
-        cacheWrite: acc.cacheWrite + (msg.info.tokens?.cache.write ?? 0),
-      }),
+      (acc, msg) => {
+        const info = msg.info as MessageV2.Assistant
+        return {
+          input: acc.input + (info.tokens?.input ?? 0),
+          output: acc.output + (info.tokens?.output ?? 0),
+          reasoning: acc.reasoning + (info.tokens?.reasoning ?? 0),
+          cacheRead: acc.cacheRead + (info.tokens?.cache.read ?? 0),
+          cacheWrite: acc.cacheWrite + (info.tokens?.cache.write ?? 0),
+        }
+      },
       { input: 0, output: 0, reasoning: 0, cacheRead: 0, cacheWrite: 0 },
     )
     const duration = Date.now() - session.time.created
     const lastAssistant = assistants.at(-1)?.info as MessageV2.Assistant | undefined
-    const aborted = state()[input.sessionID]?.abort?.aborted ?? false
+    const aborted = state()[input.sessionID]?.abort?.signal.aborted ?? false
     const success = !aborted && !lastAssistant?.error
     const exitReason = aborted ? "aborted" : lastAssistant?.error ? lastAssistant.error.name : "completed"
     await TrajectoryRecorder.record(input.sessionID, {
@@ -1459,8 +1477,8 @@ export namespace SessionPrompt {
       },
       error: lastAssistant?.error
         ? {
-            message: lastAssistant.error.message,
-            type: lastAssistant.error.name,
+            message: (lastAssistant.error as any)?.message ?? String(lastAssistant.error),
+            type: (lastAssistant.error as any)?.name ?? "UnknownError",
           }
         : undefined,
     })
@@ -1871,6 +1889,11 @@ export namespace SessionPrompt {
       if (!titleResult.usage) {
         throw new Error("Missing usage for title generation; cannot record trajectory accurately")
       }
+      const inputTokens = titleResult.usage.inputTokens ?? 0
+      const outputTokens = titleResult.usage.outputTokens ?? 0
+      const reasoningTokens = titleResult.usage.reasoningTokens ?? 0
+      const cacheReadTokens = (titleResult.usage as any).cacheReadTokens ?? 0
+      const cacheWriteTokens = (titleResult.usage as any).cacheWriteTokens ?? 0
       const now = Date.now()
       await TrajectoryRecorder.record(input.session.id, {
         type: "llm_interaction",
@@ -1892,14 +1915,14 @@ export namespace SessionPrompt {
         response: {
           finishReason: titleResult.finishReason ?? "stop",
           usage: {
-            inputTokens: titleResult.usage.inputTokens,
-            outputTokens: titleResult.usage.outputTokens,
-            reasoningTokens: titleResult.usage.reasoningTokens ?? 0,
-            cacheReadTokens: titleResult.usage.cacheReadTokens ?? 0,
-            cacheWriteTokens: titleResult.usage.cacheWriteTokens ?? 0,
-            totalInputTokens: (titleResult.usage.inputTokens ?? 0) + (titleResult.usage.cacheReadTokens ?? 0),
-            totalOutputTokens: (titleResult.usage.outputTokens ?? 0) + (titleResult.usage.cacheWriteTokens ?? 0),
-            totalCacheTokens: (titleResult.usage.cacheReadTokens ?? 0) + (titleResult.usage.cacheWriteTokens ?? 0),
+            inputTokens,
+            outputTokens,
+            reasoningTokens,
+            cacheReadTokens,
+            cacheWriteTokens,
+            totalInputTokens: inputTokens + cacheReadTokens,
+            totalOutputTokens: outputTokens + cacheWriteTokens,
+            totalCacheTokens: cacheReadTokens + cacheWriteTokens,
           },
           textLength: titleResult.text?.length ?? 0,
           reasoningLength: 0,

@@ -183,8 +183,8 @@ describe("End-to-End Trajectory Recording", () => {
         // This test would:
         // 1. Execute a conversation
         // 2. Verify stream_event entries for:
-        //    - text-delta events (assembling response text)
-        //    - reasoning-delta events (if using Claude thinking)
+        //    - response events (full response text)
+        //    - reasoning events (if using Claude thinking)
         //    - tool-call events (when LLM calls tools)
         //    - tool-result events (when tools return)
         //    - step-finish events (with token usage)

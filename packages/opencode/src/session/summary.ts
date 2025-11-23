@@ -254,17 +254,22 @@ export namespace SessionSummary {
     if (!input.result) return
     const usage = input.result.usage
     if (!usage) throw new Error(`Missing usage for ${input.purpose} generation`)
+    const inputTokens = usage.inputTokens ?? 0
+    const outputTokens = usage.outputTokens ?? 0
+    const reasoningTokens = usage.reasoningTokens ?? 0
+    const cacheReadTokens = (usage as any).cacheReadTokens ?? 0
+    const cacheWriteTokens = (usage as any).cacheWriteTokens ?? 0
     const response = {
       finishReason: (input.result as any).finishReason ?? "stop",
       usage: {
-        inputTokens: usage.inputTokens,
-        outputTokens: usage.outputTokens,
-        reasoningTokens: usage.reasoningTokens ?? 0,
-        cacheReadTokens: usage.cacheReadTokens ?? 0,
-        cacheWriteTokens: usage.cacheWriteTokens ?? 0,
-        totalInputTokens: (usage.inputTokens ?? 0) + (usage.cacheReadTokens ?? 0),
-        totalOutputTokens: (usage.outputTokens ?? 0) + (usage.cacheWriteTokens ?? 0),
-        totalCacheTokens: (usage.cacheReadTokens ?? 0) + (usage.cacheWriteTokens ?? 0),
+        inputTokens,
+        outputTokens,
+        reasoningTokens,
+        cacheReadTokens,
+        cacheWriteTokens,
+        totalInputTokens: inputTokens + cacheReadTokens,
+        totalOutputTokens: outputTokens + cacheWriteTokens,
+        totalCacheTokens: cacheReadTokens + cacheWriteTokens,
       },
       textLength: input.result.text?.length ?? 0,
       reasoningLength: 0,

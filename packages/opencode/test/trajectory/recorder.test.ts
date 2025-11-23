@@ -119,7 +119,7 @@ describe("TrajectoryRecorder", () => {
       sessionID,
       messageID: "msg_1",
       step: 1,
-      eventType: "text-delta",
+      eventType: "response",
       data: { text: "Hello" },
     })
 
@@ -129,7 +129,7 @@ describe("TrajectoryRecorder", () => {
       sessionID,
       messageID: "msg_1",
       step: 1,
-      eventType: "text-delta",
+      eventType: "response",
       data: { text: " world" },
     })
 

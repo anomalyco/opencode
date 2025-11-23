@@ -91,7 +91,6 @@ export namespace SessionProcessor {
                     },
                     metadata: value.providerMetadata,
                   }
-                  await recordStream("reasoning-delta", { reasoning: "" })
                   break
 
                 case "reasoning-delta":
@@ -101,9 +100,6 @@ export namespace SessionProcessor {
                     if (value.providerMetadata) part.metadata = value.providerMetadata
                     if (part.text) await Session.updatePart({ part, delta: value.text })
                   }
-                  await recordStream("reasoning-delta", {
-                    reasoning: value.text,
-                  })
                   break
 
                 case "reasoning-end":
@@ -117,9 +113,9 @@ export namespace SessionProcessor {
                     }
                     if (value.providerMetadata) part.metadata = value.providerMetadata
                     await Session.updatePart(part)
+                    await recordStream("reasoning", { reasoning: part.text })
                     delete reasoningMap[value.id]
                   }
-                  await recordStream("reasoning-delta", { reasoning: "" })
                   break
 
                 case "tool-input-start":
@@ -342,7 +338,6 @@ export namespace SessionProcessor {
                     },
                     metadata: value.providerMetadata,
                   }
-                  await recordStream("text-delta", { text: "" })
                   break
 
                 case "text-delta":
@@ -355,7 +350,6 @@ export namespace SessionProcessor {
                         delta: value.text,
                       })
                   }
-                  await recordStream("text-delta", { text: value.text })
                   break
 
                 case "text-end":
@@ -367,6 +361,7 @@ export namespace SessionProcessor {
                     }
                     if (value.providerMetadata) currentText.metadata = value.providerMetadata
                     await Session.updatePart(currentText)
+                    await recordStream("response", { text: currentText.text })
                   }
                   currentText = undefined
                   break

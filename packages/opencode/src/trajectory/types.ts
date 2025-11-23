@@ -63,7 +63,7 @@ export namespace Trajectory {
     sessionID: string
     messageID: string
     step: number
-    eventType: "start" | "text-delta" | "reasoning-delta" | "tool-call" | "tool-result" | "step-finish" | "finish"
+    eventType: "start" | "reasoning" | "response" | "tool-call" | "tool-result" | "step-finish" | "finish"
     data: {
       text?: string
       reasoning?: string
