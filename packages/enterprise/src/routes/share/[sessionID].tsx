@@ -3,7 +3,7 @@ import { SessionTurn } from "@opencode-ai/ui/session-turn"
 import { SessionReview } from "@opencode-ai/ui/session-review"
 import { DataProvider } from "@opencode-ai/ui/context"
 import { createAsync, query, RouteDefinition, useParams } from "@solidjs/router"
-import { createMemo, ErrorBoundary, Show } from "solid-js"
+import { createMemo, ErrorBoundary, For, Match, Show, Switch } from "solid-js"
 import { Share } from "~/core/share"
 import { Logo, Mark } from "@opencode-ai/ui/logo"
 import { IconButton } from "@opencode-ai/ui/icon-button"
@@ -15,6 +15,7 @@ import { MessageNav } from "@opencode-ai/ui/message-nav"
 import { createStore } from "solid-js/store"
 import z from "zod"
 import NotFound from "../[...404]"
+import { Tabs } from "@opencode-ai/ui/tabs"
 
 const SessionDataMissingError = NamedError.create(
   "SessionDataMissingError",
@@ -140,7 +141,7 @@ export default function () {
               const model = createMemo(() => data().model[params.sessionID!]?.find((m) => m.id === modelID()))
               const diffs = createMemo(() => data().session_diff[params.sessionID!] ?? [])
 
-              const title = (
+              const title = () => (
                 <div class="flex flex-col gap-4 shrink-0">
                   <div class="h-8 flex gap-4 items-center justify-start self-stretch">
                     <div class="pl-[2.5px] pr-2 flex items-center gap-1.75 bg-surface-strong shadow-xs-border-base">
@@ -156,6 +157,30 @@ export default function () {
                     </div>
                   </div>
                   <div class="text-left text-16-medium text-text-strong">{info().title}</div>
+                </div>
+              )
+
+              const turns = () => (
+                <div class="relative mt-2 pt-6 pb-8 px-4 min-w-0 w-full h-full overflow-y-auto no-scrollbar">
+                  {title()}
+                  <div class="flex flex-col gap-15 items-start justify-start mt-4">
+                    <For each={messages()}>
+                      {(message) => (
+                        <SessionTurn
+                          sessionID={params.sessionID!}
+                          messageID={message.id}
+                          classes={{
+                            root: "min-w-0 w-full relative",
+                            content:
+                              "flex flex-col justify-between !overflow-visible [&_[data-slot=session-turn-message-header]]:top-[-32px]",
+                          }}
+                        />
+                      )}
+                    </For>
+                  </div>
+                  <div class="flex items-center justify-center pt-20 pb-8 shrink-0">
+                    <Logo class="w-58.5 opacity-12" />
+                  </div>
                 </div>
               )
 
@@ -185,7 +210,7 @@ export default function () {
                     </div>
                   </header>
                   <div class="select-text flex flex-col flex-1 min-h-0">
-                    <div class="w-full flex-1 min-h-0 flex">
+                    <div class="hidden md:flex w-full flex-1 min-h-0">
                       <div
                         classList={{
                           "@container relative shrink-0 pt-14 flex flex-col gap-10 min-h-0 w-full mx-auto": true,
@@ -193,7 +218,7 @@ export default function () {
                           "px-6 max-w-2xl": diffs().length === 0,
                         }}
                       >
-                        {title}
+                        {title()}
                         <div class="flex items-start justify-start h-full min-h-0">
                           <Show when={messages().length > 1}>
                             <>
@@ -252,6 +277,31 @@ export default function () {
                         </div>
                       </Show>
                     </div>
+                    <Switch>
+                      <Match when={diffs().length}>
+                        <Tabs class="md:hidden">
+                          <Tabs.List>
+                            <Tabs.Trigger value="session" class="w-1/2" classes={{ button: "w-full" }}>
+                              Session
+                            </Tabs.Trigger>
+                            <Tabs.Trigger value="review" class="w-1/2" classes={{ button: "w-full" }}>
+                              5 Files Changed
+                            </Tabs.Trigger>
+                          </Tabs.List>
+                          <Tabs.Content value="session" class="!overflow-hidden">
+                            {turns()}
+                          </Tabs.Content>
+                          <Tabs.Content value="review" class="!overflow-hidden">
+                            <div class="relative px-4 pt-8 h-full overflow-y-auto no-scrollbar">
+                              <SessionReview diffs={diffs()} class="pb-20" />
+                            </div>
+                          </Tabs.Content>
+                        </Tabs>
+                      </Match>
+                      <Match when={true}>
+                        <div class="md:hidden !overflow-hidden">{turns()}</div>
+                      </Match>
+                    </Switch>
                   </div>
                 </div>
               )

@@ -2,7 +2,6 @@ import { UserMessage } from "@opencode-ai/sdk"
 import { ComponentProps, createMemo, For, Match, Show, splitProps, Switch } from "solid-js"
 import { DiffChanges } from "./diff-changes"
 import { Spinner } from "./spinner"
-import { HoverCard } from "@kobalte/core/hover-card"
 import { Tooltip } from "@kobalte/core/tooltip"
 
 export function MessageNav(
@@ -19,7 +18,7 @@ export function MessageNav(
     return local.messages?.at(0)
   })
 
-  const content = (
+  const content = () => (
     <ul role="list" data-component="message-nav" data-size={local.size} {...others}>
       <For each={local.messages}>
         {(message) => {
@@ -66,7 +65,7 @@ export function MessageNav(
     <Switch>
       <Match when={local.size === "compact"}>
         <Tooltip openDelay={0} closeDelay={0} placement="top-start" gutter={-65} shift={-16} overlap>
-          <Tooltip.Trigger as="div">{content}</Tooltip.Trigger>
+          <Tooltip.Trigger as="div">{content()}</Tooltip.Trigger>
           <Tooltip.Portal>
             <Tooltip.Content data-slot="message-nav-tooltip">
               <div data-slot="message-nav-tooltip-content">
@@ -76,7 +75,7 @@ export function MessageNav(
           </Tooltip.Portal>
         </Tooltip>
       </Match>
-      <Match when={local.size === "normal"}>{content}</Match>
+      <Match when={local.size === "normal"}>{content()}</Match>
     </Switch>
   )
 }
