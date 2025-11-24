@@ -46,12 +46,7 @@ describe("End-to-End Trajectory Recording", () => {
         })
 
         // Verify JSONL file was created
-        const trajectoryFile = path.join(
-          tmp.path,
-          ".opencode",
-          "trajectories",
-          `session_${session.id}.jsonl`,
-        )
+        const trajectoryFile = path.join(tmp.path, ".opencode", "trajectories", `session_${session.id}.jsonl`)
 
         const exists = await fs
           .access(trajectoryFile)
@@ -67,9 +62,7 @@ describe("End-to-End Trajectory Recording", () => {
         const events = lines.map((line) => JSON.parse(line) as Trajectory.Event)
 
         // Must have session_start event
-        const sessionStart = events.find(
-          (e) => e.type === "session_start",
-        ) as Trajectory.SessionStartEvent | undefined
+        const sessionStart = events.find((e) => e.type === "session_start") as Trajectory.SessionStartEvent | undefined
 
         expect(sessionStart).toBeDefined()
         expect(sessionStart?.sessionID).toBe(session.id)

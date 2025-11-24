@@ -22,7 +22,8 @@ import type { Trajectory } from "../trajectory/types"
 
 export namespace SessionCompaction {
   const log = Log.create({ service: "session.compaction" })
-  const shouldRecord = (sessionID: string) => TrajectoryConfig.get().enabled && TrajectoryRecorder.isRecording(sessionID)
+  const shouldRecord = (sessionID: string) =>
+    TrajectoryConfig.get().enabled && TrajectoryRecorder.isRecording(sessionID)
 
   export const Event = {
     Compacted: Bus.event(
