@@ -32,7 +32,7 @@ export default function Home() {
       {/*<HttpHeader name="Cache-Control" value="public, max-age=1, s-maxage=3600, stale-while-revalidate=86400" />*/}
       <Title>OpenCode Zen | A curated set of reliable optimized models for coding agents</Title>
       <Link rel="canonical" href={`${config.baseUrl}/zen`} />
-      <Link rel="icon" type="image/svg+xml" href="/favicon-zen.svg" />
+      <Link rel="shortcut icon" type="image/svg+xml" href="/favicon-zen.svg" />
       <Meta property="og:image" content="/social-share-zen.png" />
       <Meta name="twitter:image" content="/social-share-zen.png" />
       <Meta name="opencode:auth" content={loggedin() ? "true" : "false"} />
