@@ -40,6 +40,13 @@ export namespace Session {
       projectID: z.string(),
       directory: z.string(),
       parentID: Identifier.schema("session").optional(),
+      agent: z.string().optional(),
+      model: z
+        .object({
+          providerID: z.string(),
+          modelID: z.string(),
+        })
+        .optional(),
       summary: z
         .object({
           additions: z.number(),
@@ -124,6 +131,9 @@ export namespace Session {
       .object({
         parentID: Identifier.schema("session").optional(),
         title: z.string().optional(),
+        agent: z.string().optional(),
+        provider: z.string().optional(),
+        model: z.string().optional(),
       })
       .optional(),
     async (input) => {
@@ -131,6 +141,9 @@ export namespace Session {
         parentID: input?.parentID,
         directory: Instance.directory,
         title: input?.title,
+        agent: input?.agent,
+        provider: input?.provider,
+        model: input?.model,
       })
     },
   )
@@ -172,13 +185,29 @@ export namespace Session {
     })
   })
 
-  export async function createNext(input: { id?: string; title?: string; parentID?: string; directory: string }) {
+  export async function createNext(input: {
+    id?: string
+    title?: string
+    parentID?: string
+    directory: string
+    agent?: string
+    provider?: string
+    model?: string
+  }) {
     const result: Info = {
       id: Identifier.descending("session", input.id),
       version: Installation.VERSION,
       projectID: Instance.project.id,
       directory: input.directory,
       parentID: input.parentID,
+      agent: input.agent,
+      model:
+        input.provider || input.model
+          ? {
+              providerID: input.provider ?? "",
+              modelID: input.model ?? "",
+            }
+          : undefined,
       title: input.title ?? createDefaultTitle(!!input.parentID),
       time: {
         created: Date.now(),

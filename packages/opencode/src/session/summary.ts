@@ -14,6 +14,9 @@ import { Instance } from "@/project/instance"
 import { Storage } from "@/storage/storage"
 import { Bus } from "@/bus"
 import { mergeDeep, pipe } from "remeda"
+import { TrajectoryRecorder } from "../trajectory/recorder"
+import { TrajectoryConfig } from "../trajectory/config"
+import type { Trajectory } from "../trajectory/types"
 
 export namespace SessionSummary {
   const log = Log.create({ service: "session.summary" })
@@ -83,32 +86,51 @@ export namespace SessionSummary {
 
     const textPart = msgWithParts.parts.find((p) => p.type === "text" && !p.synthetic) as MessageV2.TextPart
     if (textPart && !userMsg.summary?.title) {
-      const result = await generateText({
-        maxOutputTokens: small.info.reasoning ? 1500 : 20,
-        providerOptions: ProviderTransform.providerOptions(small.npm, small.providerID, options),
-        messages: [
-          ...SystemPrompt.title(small.providerID).map(
-            (x): ModelMessage => ({
-              role: "system",
-              content: x,
-            }),
-          ),
-          {
-            role: "user" as const,
-            content: `
+      const titleMessages: ModelMessage[] = [
+        ...SystemPrompt.title(small.providerID).map(
+          (x): ModelMessage => ({
+            role: "system",
+            content: x,
+          }),
+        ),
+        {
+          role: "user" as const,
+          content: `
               The following is the text to summarize:
               <text>
               ${textPart?.text ?? ""}
               </text>
             `,
-          },
-        ],
+        },
+      ]
+      const titleStart = Date.now()
+      await recordGenerateInteraction({
+        sessionID: userMsg.sessionID,
+        messageID: userMsg.id,
+        purpose: "title",
+        messages: titleMessages,
+        maxOutputTokens: small.info.reasoning ? 1500 : 20,
+        startTime: titleStart,
+      })
+      const result = await generateText({
+        maxOutputTokens: small.info.reasoning ? 1500 : 20,
+        providerOptions: ProviderTransform.providerOptions(small.npm, small.providerID, options),
+        messages: titleMessages,
         headers: small.info.headers,
         model: small.language,
       })
       log.info("title", { title: result.text })
       userMsg.summary.title = result.text
       await Session.updateMessage(userMsg)
+      await recordGenerateInteraction({
+        sessionID: userMsg.sessionID,
+        messageID: userMsg.id,
+        purpose: "title",
+        messages: titleMessages,
+        maxOutputTokens: small.info.reasoning ? 1500 : 20,
+        startTime: titleStart,
+        result,
+      })
     }
 
     if (
@@ -128,26 +150,47 @@ export namespace SessionSummary {
             }
           }
         }
+        const summaryMessages: ModelMessage[] = [
+          ...SystemPrompt.summarize(small.providerID).map(
+            (x): ModelMessage => ({
+              role: "system",
+              content: x,
+            }),
+          ),
+          ...MessageV2.toModelMessage(messages),
+          {
+            role: "user",
+            content: `Summarize the above conversation according to your system prompts.`,
+          },
+        ]
+        const summaryStart = Date.now()
+        await recordGenerateInteraction({
+          sessionID: userMsg.sessionID,
+          messageID: assistantMsg.id,
+          purpose: "summary",
+          messages: summaryMessages,
+          maxOutputTokens: 100,
+          startTime: summaryStart,
+        })
         const result = await generateText({
           model: small.language,
           maxOutputTokens: 100,
           providerOptions: ProviderTransform.providerOptions(small.npm, small.providerID, options),
-          messages: [
-            ...SystemPrompt.summarize(small.providerID).map(
-              (x): ModelMessage => ({
-                role: "system",
-                content: x,
-              }),
-            ),
-            ...MessageV2.toModelMessage(messages),
-            {
-              role: "user",
-              content: `Summarize the above conversation according to your system prompts.`,
-            },
-          ],
+          messages: summaryMessages,
           headers: small.info.headers,
         }).catch(() => {})
         if (result) summary = result.text
+        if (result) {
+          await recordGenerateInteraction({
+            sessionID: userMsg.sessionID,
+            messageID: assistantMsg.id,
+            purpose: "summary",
+            messages: summaryMessages,
+            maxOutputTokens: 100,
+            startTime: summaryStart,
+            result,
+          })
+        }
       }
       userMsg.summary.body = summary
       log.info("body", { body: summary })
@@ -191,5 +234,70 @@ export namespace SessionSummary {
 
     if (from && to) return Snapshot.diffFull(from, to)
     return []
+  }
+
+  function shouldRecord(sessionID: string) {
+    if (!TrajectoryConfig.get().enabled) return false
+    return TrajectoryRecorder.isRecording(sessionID)
+  }
+
+  async function recordGenerateInteraction(input: {
+    sessionID: string
+    messageID: string
+    purpose: Trajectory.LLMInteractionEvent["purpose"]
+    messages: ModelMessage[]
+    maxOutputTokens: number
+    startTime: number
+    result?: Awaited<ReturnType<typeof generateText>>
+  }) {
+    if (!shouldRecord(input.sessionID)) return
+    if (!input.result) return
+    const usage = input.result.usage
+    if (!usage) throw new Error(`Missing usage for ${input.purpose} generation`)
+    const inputTokens = usage.inputTokens ?? 0
+    const outputTokens = usage.outputTokens ?? 0
+    const reasoningTokens = usage.reasoningTokens ?? 0
+    const cacheReadTokens = (usage as any).cacheReadTokens ?? 0
+    const cacheWriteTokens = (usage as any).cacheWriteTokens ?? 0
+    const response = {
+      finishReason: (input.result as any).finishReason ?? "stop",
+      usage: {
+        inputTokens,
+        outputTokens,
+        reasoningTokens,
+        cacheReadTokens,
+        cacheWriteTokens,
+        totalInputTokens: inputTokens + cacheReadTokens,
+        totalOutputTokens: outputTokens + cacheWriteTokens,
+        totalCacheTokens: cacheReadTokens + cacheWriteTokens,
+      },
+      textLength: input.result.text?.length ?? 0,
+      reasoningLength: 0,
+      hasHiddenReasoning: false,
+      toolCallCount: 0,
+    }
+    const end = input.result ? Date.now() : input.startTime
+    await TrajectoryRecorder.record(input.sessionID, {
+      type: "llm_interaction",
+      timestamp: end,
+      sessionID: input.sessionID,
+      messageID: input.messageID,
+      step: 0,
+      interactionType: "generate",
+      purpose: input.purpose,
+      input: {
+        systemPrompts: [],
+        messages: input.messages,
+        toolCount: 0,
+        toolNames: [],
+        parameters: {
+          maxOutputTokens: input.maxOutputTokens,
+        },
+      },
+      response,
+      startTime: input.startTime,
+      endTime: end,
+      duration: end - input.startTime,
+    })
   }
 }

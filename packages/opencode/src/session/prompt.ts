@@ -48,6 +48,9 @@ import { fn } from "@/util/fn"
 import { SessionProcessor } from "./processor"
 import { TaskTool } from "@/tool/task"
 import { SessionStatus } from "./status"
+import type { Trajectory } from "../trajectory/types"
+import { TrajectoryRecorder } from "../trajectory/recorder"
+import { TrajectoryConfig } from "../trajectory/config"
 
 // @ts-ignore
 globalThis.AI_SDK_LOG_WARNINGS = false
@@ -194,7 +197,18 @@ export namespace SessionPrompt {
     const session = await Session.get(input.sessionID)
     await SessionRevert.cleanup(session)
 
-    const message = await createUserMessage(input)
+    const message = await createUserMessage(
+      {
+        ...input,
+        model: input.model ?? session.model,
+      },
+      session,
+    )
+    await recordSessionStart({
+      sessionID: input.sessionID,
+      agent: session.agent ?? message.info.agent,
+      model: session.model ?? message.info.model,
+    })
     await Session.touch(input.sessionID)
 
     if (input.noReply) {
@@ -241,6 +255,8 @@ export namespace SessionPrompt {
     using _ = defer(() => cancel(sessionID))
 
     let step = 0
+    let totalLLM = 0
+    let totalTool = 0
     while (true) {
       SessionStatus.set(sessionID, { type: "busy" })
       log.info("loop", { step, sessionID })
@@ -264,12 +280,41 @@ export namespace SessionPrompt {
         }
       }
 
+      await recordAgentStep({
+        type: "agent_step",
+        timestamp: Date.now(),
+        sessionID,
+        step,
+        action: "loop_start",
+        state: {
+          messageCount: msgs.length,
+          hasSnapshot: false,
+          contextOverflow: false,
+        },
+      })
+
       if (!lastUser) throw new Error("No user message found in stream. This should never happen.")
       if (
         lastAssistant?.finish &&
         !["tool-calls", "unknown"].includes(lastAssistant.finish) &&
         lastUser.id < lastAssistant.id
       ) {
+        await recordAgentStep({
+          type: "agent_step",
+          timestamp: Date.now(),
+          sessionID,
+          step,
+          action: "exit_check",
+          state: {
+            messageCount: msgs.length,
+            hasSnapshot: false,
+            contextOverflow: false,
+          },
+          decision: {
+            type: "exit",
+            reason: lastAssistant.finish,
+          },
+        })
         log.info("exiting loop", { sessionID })
         break
       }
@@ -290,6 +335,22 @@ export namespace SessionPrompt {
       // pending subtask
       // TODO: centralize "invoke tool" logic
       if (task?.type === "subtask") {
+        await recordAgentStep({
+          type: "agent_step",
+          timestamp: Date.now(),
+          sessionID,
+          step,
+          action: "subtask",
+          state: {
+            messageCount: msgs.length,
+            hasSnapshot: false,
+            contextOverflow: false,
+          },
+          decision: {
+            type: "subtask",
+            reason: "pending_subtask",
+          },
+        })
         const taskTool = await TaskTool.init()
         const assistantMessage = (await Session.updateMessage({
           id: Identifier.ascending("message"),
@@ -333,6 +394,23 @@ export namespace SessionPrompt {
             },
           },
         })) as MessageV2.ToolPart
+        const subtaskStart = Date.now()
+        await recordTool({
+          type: "tool_execution",
+          timestamp: subtaskStart,
+          sessionID,
+          messageID: assistantMessage.id,
+          step,
+          tool: TaskTool.id,
+          callID: part.callID,
+          input: {
+            prompt: task.prompt,
+            description: task.description,
+            subagent_type: task.agent,
+          },
+          status: "running",
+          startTime: subtaskStart,
+        })
         const result = await taskTool
           .execute(
             {
@@ -362,6 +440,29 @@ export namespace SessionPrompt {
         assistantMessage.time.completed = Date.now()
         await Session.updateMessage(assistantMessage)
         if (result && part.state.status === "running") {
+          await recordTool({
+            type: "tool_execution",
+            timestamp: Date.now(),
+            sessionID,
+            messageID: assistantMessage.id,
+            step,
+            tool: TaskTool.id,
+            callID: part.callID,
+            input: part.state.input,
+            status: "completed",
+            startTime: subtaskStart,
+            endTime: Date.now(),
+            duration: Date.now() - subtaskStart,
+            result: {
+              title: result.title,
+              output: result.output,
+              metadata: result.metadata,
+              attachments: result.attachments?.map((file) => ({
+                type: file.mime ?? "file",
+                path: file.filename ?? file.url ?? "",
+              })),
+            },
+          })
           await Session.updatePart({
             ...part,
             state: {
@@ -379,6 +480,23 @@ export namespace SessionPrompt {
           } satisfies MessageV2.ToolPart)
         }
         if (!result) {
+          await recordTool({
+            type: "tool_execution",
+            timestamp: Date.now(),
+            sessionID,
+            messageID: assistantMessage.id,
+            step,
+            tool: TaskTool.id,
+            callID: part.callID,
+            input: part.state.input,
+            status: "error",
+            startTime: subtaskStart,
+            endTime: Date.now(),
+            duration: Date.now() - subtaskStart,
+            error: {
+              message: "Tool execution failed",
+            },
+          })
           await Session.updatePart({
             ...part,
             state: {
@@ -398,6 +516,22 @@ export namespace SessionPrompt {
 
       // pending compaction
       if (task?.type === "compaction") {
+        await recordAgentStep({
+          type: "agent_step",
+          timestamp: Date.now(),
+          sessionID,
+          step,
+          action: "compaction",
+          state: {
+            messageCount: msgs.length,
+            hasSnapshot: false,
+            contextOverflow: false,
+          },
+          decision: {
+            type: "compact",
+            reason: "pending_compaction",
+          },
+        })
         const result = await SessionCompaction.process({
           messages: msgs,
           parentID: lastUser.id,
@@ -419,6 +553,22 @@ export namespace SessionPrompt {
         lastFinished.summary !== true &&
         SessionCompaction.isOverflow({ tokens: lastFinished.tokens, model: model.info })
       ) {
+        await recordAgentStep({
+          type: "agent_step",
+          timestamp: Date.now(),
+          sessionID,
+          step,
+          action: "compaction",
+          state: {
+            messageCount: msgs.length,
+            hasSnapshot: false,
+            contextOverflow: true,
+          },
+          decision: {
+            type: "compact",
+            reason: "context_overflow",
+          },
+        })
         await SessionCompaction.create({
           sessionID,
           agent: lastUser.agent,
@@ -461,6 +611,7 @@ export namespace SessionPrompt {
         model: model.info,
         providerID: model.providerID,
         abort,
+        step,
       })
       const system = await resolveSystemPrompt({
         providerID: model.providerID,
@@ -498,6 +649,19 @@ export namespace SessionPrompt {
         },
       )
 
+      await recordAgentStep({
+        type: "agent_step",
+        timestamp: Date.now(),
+        sessionID,
+        step,
+        action: "llm_call",
+        state: {
+          messageCount: msgs.length,
+          hasSnapshot: false,
+          contextOverflow: false,
+        },
+      })
+
       if (step === 1) {
         SessionSummary.summarize({
           sessionID: sessionID,
@@ -505,6 +669,40 @@ export namespace SessionPrompt {
         })
       }
 
+      const maxOutputTokens = ProviderTransform.maxOutputTokens(
+        model.providerID,
+        params.options,
+        model.info.limit.output,
+        OUTPUT_TOKEN_MAX,
+      )
+
+      const modelMessages: ModelMessage[] = [
+        ...system.map(
+          (x): ModelMessage => ({
+            role: "system",
+            content: x,
+          }),
+        ),
+        ...MessageV2.toModelMessage(
+          msgs.filter((m) => {
+            if (m.info.role !== "assistant" || m.info.error === undefined) {
+              return true
+            }
+            if (
+              MessageV2.AbortedError.isInstance(m.info.error) &&
+              m.parts.some((part) => part.type !== "step-start" && part.type !== "reasoning")
+            ) {
+              return true
+            }
+
+            return false
+          }),
+        ),
+      ]
+
+      if (TrajectoryRecorder.isRecording(sessionID)) {
+        TrajectoryRecorder.markStreamStart(sessionID)
+      }
       const result = await processor.process(() =>
         streamText({
           onError(error) {
@@ -545,40 +743,13 @@ export namespace SessionPrompt {
           // set to 0, we handle loop
           maxRetries: 0,
           activeTools: Object.keys(tools).filter((x) => x !== "invalid"),
-          maxOutputTokens: ProviderTransform.maxOutputTokens(
-            model.providerID,
-            params.options,
-            model.info.limit.output,
-            OUTPUT_TOKEN_MAX,
-          ),
+          maxOutputTokens,
           abortSignal: abort,
           providerOptions: ProviderTransform.providerOptions(model.npm, model.providerID, params.options),
           stopWhen: stepCountIs(1),
           temperature: params.temperature,
           topP: params.topP,
-          messages: [
-            ...system.map(
-              (x): ModelMessage => ({
-                role: "system",
-                content: x,
-              }),
-            ),
-            ...MessageV2.toModelMessage(
-              msgs.filter((m) => {
-                if (m.info.role !== "assistant" || m.info.error === undefined) {
-                  return true
-                }
-                if (
-                  MessageV2.AbortedError.isInstance(m.info.error) &&
-                  m.parts.some((part) => part.type !== "step-start" && part.type !== "reasoning")
-                ) {
-                  return true
-                }
-
-                return false
-              }),
-            ),
-          ],
+          messages: modelMessages,
           tools: model.info.tool_call === false ? undefined : tools,
           model: wrapLanguageModel({
             model: model.language,
@@ -596,10 +767,58 @@ export namespace SessionPrompt {
           }),
         }),
       )
+      const parts = await MessageV2.parts(processor.message.id)
+      await TrajectoryRecorder.captureInteraction(sessionID, {
+        messageID: processor.message.id,
+        step,
+        input: {
+          systemPrompts: system,
+          messages: modelMessages,
+          tools: tools,
+          parameters: {
+            temperature: params.temperature,
+            topP: params.topP,
+            maxOutputTokens,
+          },
+        },
+        response: {
+          finishReason: processor.message.finish,
+          tokens: processor.message.tokens,
+          parts: parts,
+        },
+        timing: {
+          startTime: processor.message.time.created,
+          endTime: Date.now(),
+        },
+      })
+      totalLLM++
+      totalTool += parts.filter((p) => p.type === "tool").length
+      await recordAgentStep({
+        type: "agent_step",
+        timestamp: Date.now(),
+        sessionID,
+        step,
+        action: "loop_end",
+        state: {
+          messageCount: msgs.length,
+          hasSnapshot: false,
+          contextOverflow: false,
+        },
+        decision: {
+          type: "continue",
+          reason: "agent_step_complete",
+        },
+      })
       if (result === "stop") break
       continue
     }
     SessionCompaction.prune({ sessionID })
+    await recordSessionEnd({
+      sessionID,
+      steps: step,
+      llmCalls: totalLLM,
+      toolCalls: totalTool,
+    })
     for await (const item of MessageV2.stream(sessionID)) {
       if (item.info.role === "user") continue
       const queued = state()[sessionID]?.callbacks ?? []
@@ -668,6 +887,20 @@ export namespace SessionPrompt {
         description: item.description,
         inputSchema: jsonSchema(schema as any),
         async execute(args, options) {
+          const startTime = Date.now()
+          const baseEvent: Trajectory.ToolExecutionEvent = {
+            type: "tool_execution",
+            timestamp: startTime,
+            sessionID: input.sessionID,
+            messageID: input.processor.message.id,
+            step: input.processor.step ?? 0,
+            tool: item.id,
+            callID: options.toolCallId ?? "",
+            input: args,
+            status: "running",
+            startTime,
+          }
+          await recordTool(baseEvent)
           await Plugin.trigger(
             "tool.execute.before",
             {
@@ -679,41 +912,71 @@ export namespace SessionPrompt {
               args,
             },
           )
-          const result = await item.execute(args, {
-            sessionID: input.sessionID,
-            abort: options.abortSignal!,
-            messageID: input.processor.message.id,
-            callID: options.toolCallId,
-            extra: input.model,
-            agent: input.agent.name,
-            metadata: async (val) => {
-              const match = input.processor.partFromToolCall(options.toolCallId)
-              if (match && match.state.status === "running") {
-                await Session.updatePart({
-                  ...match,
-                  state: {
-                    title: val.title,
-                    metadata: val.metadata,
-                    status: "running",
-                    input: args,
-                    time: {
-                      start: Date.now(),
-                    },
-                  },
-                })
-              }
-            },
-          })
-          await Plugin.trigger(
-            "tool.execute.after",
-            {
-              tool: item.id,
+          return item
+            .execute(args, {
               sessionID: input.sessionID,
+              abort: options.abortSignal!,
+              messageID: input.processor.message.id,
               callID: options.toolCallId,
-            },
-            result,
-          )
-          return result
+              extra: input.model,
+              agent: input.agent.name,
+              metadata: async (val) => {
+                const match = input.processor.partFromToolCall(options.toolCallId)
+                if (match && match.state.status === "running") {
+                  await Session.updatePart({
+                    ...match,
+                    state: {
+                      title: val.title,
+                      metadata: val.metadata,
+                      status: "running",
+                      input: args,
+                      time: {
+                        start: Date.now(),
+                      },
+                    },
+                  })
+                }
+              },
+            })
+            .then(async (result) => {
+              await Plugin.trigger(
+                "tool.execute.after",
+                {
+                  tool: item.id,
+                  sessionID: input.sessionID,
+                  callID: options.toolCallId,
+                },
+                result,
+              )
+              await recordTool({
+                ...baseEvent,
+                status: "completed",
+                endTime: Date.now(),
+                duration: Date.now() - startTime,
+                result: {
+                  title: result.title,
+                  output: result.output,
+                  metadata: result.metadata,
+                  attachments: result.attachments?.map((file) => ({
+                    type: file.mime ?? "file",
+                    path: file.filename ?? file.url ?? "",
+                  })),
+                },
+              })
+              return result
+            })
+            .catch(async (error) => {
+              await recordTool({
+                ...baseEvent,
+                status: "error",
+                endTime: Date.now(),
+                duration: Date.now() - startTime,
+                error: {
+                  message: error instanceof Error ? error.message : String(error),
+                },
+              })
+              throw error
+            })
         },
         toModelOutput(result) {
           return {
@@ -729,6 +992,20 @@ export namespace SessionPrompt {
       const execute = item.execute
       if (!execute) continue
       item.execute = async (args, opts) => {
+        const startTime = Date.now()
+        const baseEvent: Trajectory.ToolExecutionEvent = {
+          type: "tool_execution",
+          timestamp: startTime,
+          sessionID: input.sessionID,
+          messageID: input.processor.message.id,
+          step: input.processor.step ?? 0,
+          tool: key,
+          callID: opts.toolCallId ?? "",
+          input: args,
+          status: "running",
+          startTime,
+        }
+        await recordTool(baseEvent)
         await Plugin.trigger(
           "tool.execute.before",
           {
@@ -740,7 +1017,35 @@ export namespace SessionPrompt {
             args,
           },
         )
-        const result = await execute(args, opts)
+        const result = await execute(args, opts).catch(async (error: unknown) => {
+          const message = error instanceof Error ? error.message : String(error)
+          await recordTool({
+            ...baseEvent,
+            status: "error",
+            endTime: Date.now(),
+            duration: Date.now() - startTime,
+            error: {
+              message,
+            },
+          })
+          throw error
+        })
+
+        await recordTool({
+          ...baseEvent,
+          status: "completed",
+          endTime: Date.now(),
+          duration: Date.now() - startTime,
+          result: {
+            title: result.title ?? "",
+            output: result.output ?? "",
+            metadata: result.metadata,
+            attachments: result.attachments?.map((file: { mime?: string; filename?: string; url?: string }) => ({
+              type: file.mime ?? "file",
+              path: file.filename ?? file.url ?? "",
+            })),
+          },
+        })
 
         await Plugin.trigger(
           "tool.execute.after",
@@ -790,8 +1095,16 @@ export namespace SessionPrompt {
     return tools
   }
 
-  async function createUserMessage(input: PromptInput) {
-    const agent = await Agent.get(input.agent ?? "build")
+  async function createUserMessage(input: PromptInput, session: Session.Info) {
+    const agentName = input.agent ?? session.agent ?? "general-purpose"
+    const agent = await Agent.get(agentName).catch(() => undefined)
+    const modelInfo =
+      input.model ??
+      session.model ??
+      agent?.model ?? {
+        providerID: "anthropic",
+        modelID: "claude-sonnet-4",
+      }
     const info: MessageV2.Info = {
       id: input.messageID ?? Identifier.ascending("message"),
       role: "user",
@@ -801,8 +1114,8 @@ export namespace SessionPrompt {
       },
       tools: input.tools,
       system: input.system,
-      agent: agent.name,
-      model: input.model ?? agent.model ?? (await lastModel(input.sessionID)),
+      agent: agentName,
+      model: modelInfo,
     }
 
     const parts = await Promise.all(
@@ -1074,6 +1387,32 @@ export namespace SessionPrompt {
       info,
       parts,
     }
+  }
+
+  function shouldRecord(sessionID: string) {
+    if (!TrajectoryConfig.get().enabled) return false
+    return TrajectoryRecorder.isRecording(sessionID)
+  }
+
+  async function recordAgentStep(input: Trajectory.AgentStepEvent) {
+    if (!shouldRecord(input.sessionID)) return
+    await TrajectoryRecorder.record(input.sessionID, input)
+  }
+
+  async function recordSessionEnd(input: {
+    sessionID: string
+    steps: number
+    llmCalls: number
+    toolCalls: number
+  }) {
+    const active = TrajectoryRecorder.isRecording(input.sessionID)
+    if (!TrajectoryConfig.get().enabled || !active) return
+    await TrajectoryRecorder.stop(input.sessionID)
+  }
+
+  async function recordTool(input: Trajectory.ToolExecutionEvent) {
+    if (!shouldRecord(input.sessionID)) return
+    await TrajectoryRecorder.record(input.sessionID, input)
   }
 
   function insertReminders(input: { messages: MessageV2.WithParts[]; agent: Agent.Info }) {
@@ -1415,60 +1754,154 @@ export namespace SessionPrompt {
       mergeDeep(ProviderTransform.smallOptions({ providerID: small.providerID, modelID: small.modelID })),
       mergeDeep(small.info.options),
     )
-    await generateText({
-      maxOutputTokens: small.info.reasoning ? 1500 : 20,
-      providerOptions: ProviderTransform.providerOptions(small.npm, small.providerID, options),
-      messages: [
-        ...SystemPrompt.title(small.providerID).map(
-          (x): ModelMessage => ({
-            role: "system",
-            content: x,
-          }),
-        ),
-        {
-          role: "user" as const,
-          content: `
+    const titleMessages: ModelMessage[] = [
+      ...SystemPrompt.title(small.providerID).map(
+        (x): ModelMessage => ({
+          role: "system",
+          content: x,
+        }),
+      ),
+      {
+        role: "user" as const,
+        content: `
               The following is the text to summarize:
             `,
-        },
-        ...MessageV2.toModelMessage([
-          {
-            info: {
-              id: Identifier.ascending("message"),
-              role: "user",
-              sessionID: input.session.id,
-              time: {
-                created: Date.now(),
-              },
-              agent: input.message.info.role === "user" ? input.message.info.agent : "build",
-              model: {
-                providerID: input.providerID,
-                modelID: input.modelID,
-              },
+      },
+      ...MessageV2.toModelMessage([
+        {
+          info: {
+            id: Identifier.ascending("message"),
+            role: "user",
+            sessionID: input.session.id,
+            time: {
+              created: Date.now(),
             },
-            parts: input.message.parts,
+            agent: input.message.info.role === "user" ? input.message.info.agent : "build",
+            model: {
+              providerID: input.providerID,
+              modelID: input.modelID,
+            },
           },
-        ]),
-      ],
+          parts: input.message.parts,
+        },
+      ]),
+    ]
+    const titleStart = Date.now()
+    const titleResult = await generateText({
+      maxOutputTokens: small.info.reasoning ? 1500 : 20,
+      providerOptions: ProviderTransform.providerOptions(small.npm, small.providerID, options),
+      messages: titleMessages,
       headers: small.info.headers,
       model: small.language,
+    }).catch((error) => {
+      log.error("failed to generate title", { error, model: small.info.id })
+      return undefined
     })
-      .then((result) => {
-        if (result.text)
-          return Session.update(input.session.id, (draft) => {
-            const cleaned = result.text
-              .replace(/<think>[\s\S]*?<\/think>\s*/g, "")
-              .split("\n")
-              .map((line) => line.trim())
-              .find((line) => line.length > 0)
-            if (!cleaned) return
+    if (titleResult?.text) {
+      await Session.update(input.session.id, (draft) => {
+        const cleaned = titleResult.text
+          .replace(/<think>[\s\S]*?<\/think>\s*/g, "")
+          .split("\n")
+          .map((line) => line.trim())
+          .find((line) => line.length > 0)
+        if (!cleaned) return
 
-            const title = cleaned.length > 100 ? cleaned.substring(0, 97) + "..." : cleaned
-            draft.title = title
-          })
+        const title = cleaned.length > 100 ? cleaned.substring(0, 97) + "..." : cleaned
+        draft.title = title
       })
-      .catch((error) => {
-        log.error("failed to generate title", { error, model: small.info.id })
+    }
+    if (TrajectoryRecorder.isRecording(input.session.id) && titleResult) {
+      if (!titleResult.usage) {
+        throw new Error("Missing usage for title generation; cannot record trajectory accurately")
+      }
+      const inputTokens = titleResult.usage.inputTokens ?? 0
+      const outputTokens = titleResult.usage.outputTokens ?? 0
+      const reasoningTokens = titleResult.usage.reasoningTokens ?? 0
+      const cacheReadTokens = (titleResult.usage as any).cacheReadTokens ?? 0
+      const cacheWriteTokens = (titleResult.usage as any).cacheWriteTokens ?? 0
+      const now = Date.now()
+      await TrajectoryRecorder.record(input.session.id, {
+        type: "llm_interaction",
+        timestamp: now,
+        sessionID: input.session.id,
+        messageID: input.message.info.id,
+        step: 0,
+        interactionType: "generate",
+        purpose: "title",
+        input: {
+          systemPrompts: SystemPrompt.title(small.providerID),
+          messages: titleMessages,
+          toolCount: 0,
+          toolNames: [],
+          parameters: {
+            maxOutputTokens: small.info.reasoning ? 1500 : 20,
+          },
+        },
+        response: {
+          finishReason: titleResult.finishReason ?? "stop",
+          usage: {
+            inputTokens,
+            outputTokens,
+            reasoningTokens,
+            cacheReadTokens,
+            cacheWriteTokens,
+            totalInputTokens: inputTokens + cacheReadTokens,
+            totalOutputTokens: outputTokens + cacheWriteTokens,
+            totalCacheTokens: cacheReadTokens + cacheWriteTokens,
+          },
+          textLength: titleResult.text?.length ?? 0,
+          reasoningLength: 0,
+          hasHiddenReasoning: false,
+          toolCallCount: 0,
+        },
+        startTime: titleStart,
+        endTime: now,
+        duration: now - titleStart,
       })
+    }
+  }
+
+  async function recordSessionStart(input: {
+    sessionID: string
+    agent?: string
+    model?: {
+      providerID: string
+      modelID: string
+    }
+  }) {
+    const cfg = TrajectoryConfig.get()
+    if (!cfg.enabled) return
+    if (TrajectoryRecorder.isRecording(input.sessionID)) return
+    const session = await Session.get(input.sessionID).catch(() => undefined)
+    const model = input.model ?? session?.model ?? (await Provider.defaultModel())
+    const agentName = input.agent ?? session?.agent ?? "general-purpose"
+    const now = Date.now()
+    const created = session?.time.created ?? now
+    const dir = path.isAbsolute(cfg.outputPath) ? cfg.outputPath : path.join(Instance.directory, cfg.outputPath)
+    const filename = TrajectoryConfig.resolveFilename(input.sessionID, {
+      agent: agentName,
+      model: session?.model?.modelID ?? model.modelID,
+      timestamp: created,
+    })
+    const filePath = path.join(dir, filename)
+    TrajectoryRecorder.start(input.sessionID, {
+      agent: agentName,
+      model: {
+        provider: model.providerID,
+        id: model.modelID,
+      },
+      filePath,
+    })
+    await TrajectoryRecorder.record(input.sessionID, {
+      type: "session_start",
+      timestamp: created,
+      sessionID: input.sessionID,
+      agent: agentName,
+      model: {
+        provider: model.providerID,
+        id: model.modelID,
+      },
+      workingDirectory: Instance.directory,
+    })
   }
 }
