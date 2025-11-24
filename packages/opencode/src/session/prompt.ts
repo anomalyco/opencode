@@ -768,55 +768,29 @@ export namespace SessionPrompt {
         }),
       )
       const parts = await MessageV2.parts(processor.message.id)
-      if (TrajectoryRecorder.isRecording(sessionID)) {
-        await TrajectoryRecorder.record(sessionID, {
-          type: "llm_interaction",
-          timestamp: Date.now(),
-          sessionID,
-          messageID: processor.message.id,
-          step,
-          interactionType: "stream",
-          purpose: "agent_step",
-          input: {
-            systemPrompts: system,
-            messages: modelMessages,
-            toolCount: Object.keys(tools).length,
-            toolNames: Object.keys(tools),
-            parameters: {
-              temperature: params.temperature,
-              topP: params.topP,
-              maxOutputTokens,
-            },
+      await TrajectoryRecorder.captureInteraction(sessionID, {
+        messageID: processor.message.id,
+        step,
+        input: {
+          systemPrompts: system,
+          messages: modelMessages,
+          tools: tools,
+          parameters: {
+            temperature: params.temperature,
+            topP: params.topP,
+            maxOutputTokens,
           },
-          response: {
-            finishReason: processor.message.finish ?? "unknown",
-            usage: {
-              inputTokens: processor.message.tokens.input,
-              outputTokens: processor.message.tokens.output,
-              reasoningTokens: processor.message.tokens.reasoning,
-              cacheReadTokens: processor.message.tokens.cache.read,
-              cacheWriteTokens: processor.message.tokens.cache.write,
-              totalInputTokens: processor.message.tokens.input + processor.message.tokens.cache.read,
-              totalOutputTokens: processor.message.tokens.output + processor.message.tokens.cache.write,
-              totalCacheTokens: processor.message.tokens.cache.read + processor.message.tokens.cache.write,
-            },
-            textLength: parts
-              .filter((p) => p.type === "text")
-              .reduce((sum, p) => sum + (p as MessageV2.TextPart).text.length, 0),
-            reasoningLength: parts
-              .filter((p) => p.type === "reasoning")
-              .reduce((sum, p) => sum + (p as MessageV2.ReasoningPart).text.length, 0),
-            hasHiddenReasoning:
-              processor.message.tokens.reasoning > 0 &&
-              parts.filter((p) => p.type === "reasoning").length === 0,
-            toolCallCount: parts.filter((p) => p.type === "tool").length,
-          },
+        },
+        response: {
+          finishReason: processor.message.finish,
+          tokens: processor.message.tokens,
+          parts: parts,
+        },
+        timing: {
           startTime: processor.message.time.created,
           endTime: Date.now(),
-          duration: Date.now() - processor.message.time.created,
-        })
-        await TrajectoryRecorder.markStreamEnd(sessionID)
-      }
+        },
+      })
       totalLLM++
       totalTool += parts.filter((p) => p.type === "tool").length
       await recordAgentStep({

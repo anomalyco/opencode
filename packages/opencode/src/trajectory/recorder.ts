@@ -1,4 +1,4 @@
-import fs from "fs"
+import fs from "fs/promises"
 import path from "path"
 import type { Trajectory } from "./types"
 import { TrajectoryConfig } from "./config"
@@ -73,6 +73,88 @@ export namespace TrajectoryRecorder {
     }
   }
 
+  export async function captureInteraction(
+    sessionID: string,
+    data: {
+      messageID: string
+      step: number
+      input: {
+        systemPrompts: string[]
+        messages: unknown[]
+        tools: Record<string, unknown>
+        parameters: {
+          temperature?: number
+          topP?: number
+          maxOutputTokens?: number
+        }
+      }
+      response: {
+        finishReason?: string
+        tokens: {
+          input: number
+          output: number
+          reasoning: number
+          cache: { read: number; write: number }
+        }
+        parts: Array<{ type: string; text?: string }>
+      }
+      timing: {
+        startTime: number
+        endTime: number
+      }
+    },
+  ) {
+    if (!isRecording(sessionID)) return
+
+    const { input, response, timing } = data
+    const toolNames = Object.keys(input.tools)
+
+    const event: Trajectory.LLMInteractionEvent = {
+      type: "llm_interaction",
+      timestamp: Date.now(),
+      sessionID,
+      messageID: data.messageID,
+      step: data.step,
+      interactionType: "stream",
+      purpose: "agent_step",
+      input: {
+        systemPrompts: input.systemPrompts,
+        messages: input.messages,
+        toolCount: toolNames.length,
+        toolNames: toolNames,
+        parameters: input.parameters,
+      },
+      response: {
+        finishReason: response.finishReason ?? "unknown",
+        usage: {
+          inputTokens: response.tokens.input,
+          outputTokens: response.tokens.output,
+          reasoningTokens: response.tokens.reasoning,
+          cacheReadTokens: response.tokens.cache.read,
+          cacheWriteTokens: response.tokens.cache.write,
+          totalInputTokens: response.tokens.input + response.tokens.cache.read,
+          totalOutputTokens: response.tokens.output + response.tokens.cache.write,
+          totalCacheTokens: response.tokens.cache.read + response.tokens.cache.write,
+        },
+        textLength: response.parts
+          .filter((p) => p.type === "text")
+          .reduce((sum, p) => sum + (p.text?.length ?? 0), 0),
+        reasoningLength: response.parts
+          .filter((p) => p.type === "reasoning")
+          .reduce((sum, p) => sum + (p.text?.length ?? 0), 0),
+        hasHiddenReasoning:
+          response.tokens.reasoning > 0 && response.parts.filter((p) => p.type === "reasoning").length === 0,
+        toolCallCount: response.parts.filter((p) => p.type === "tool").length,
+      },
+      startTime: timing.startTime,
+      endTime: timing.endTime,
+      duration: timing.endTime - timing.startTime,
+    }
+
+    await record(sessionID, event)
+    await markStreamEnd(sessionID)
+  }
+
   function resolvePath(
     sessionID: string,
     agent: string,
@@ -88,12 +170,6 @@ export namespace TrajectoryRecorder {
     return path.join(base, filename)
   }
 
-  function createFile(filePath: string) {
-    const dir = path.dirname(filePath)
-    fs.mkdirSync(dir, { recursive: true })
-    fs.writeFileSync(filePath, "", { flag: "a" })
-  }
-
   function shouldFlush(rec: Recorder) {
     if (rec.options.flushStrategy === "immediate") return true
     if (!rec.stream && rec.options.flushStrategy === "end_of_stream") return true
@@ -102,10 +178,17 @@ export namespace TrajectoryRecorder {
 
   async function flush(rec: Recorder) {
     if (rec.buffer.length === 0) return
-    createFile(rec.path)
     const lines = rec.buffer.map((item) => JSON.stringify(item))
-    rec.buffer.length = 0
     const chunk = lines.join("\n") + "\n"
-    await fs.promises.appendFile(rec.path, chunk)
+    
+    try {
+      await fs.mkdir(path.dirname(rec.path), { recursive: true })
+      await fs.appendFile(rec.path, chunk)
+      // Only clear buffer after successful write
+      rec.buffer = []
+    } catch (error) {
+      // Keep buffer intact on failure to retry later
+      console.error("Failed to flush trajectory buffer", error)
+    }
   }
 }
