@@ -17,6 +17,7 @@ import PROMPT_COMPACTION from "./prompt/compaction.txt"
 import PROMPT_SUMMARIZE from "./prompt/summarize.txt"
 import PROMPT_TITLE from "./prompt/title.txt"
 import PROMPT_CODEX from "./prompt/codex.txt"
+import PROMPT_GLM from "./prompt/glm.txt"
 
 export namespace SystemPrompt {
   export function header(providerID: string) {
@@ -25,11 +26,14 @@ export namespace SystemPrompt {
   }
 
   export function provider(modelID: string) {
-    if (modelID.includes("gpt-5")) return [PROMPT_CODEX]
-    if (modelID.includes("gpt-") || modelID.includes("o1") || modelID.includes("o3")) return [PROMPT_BEAST]
-    if (modelID.includes("gemini-")) return [PROMPT_GEMINI]
-    if (modelID.includes("claude")) return [PROMPT_ANTHROPIC]
-    if (modelID.includes("polaris-alpha")) return [PROMPT_POLARIS]
+    const id = modelID.toLowerCase()
+
+    if (id.includes("glm")) return [PROMPT_GLM]
+    if (id.includes("gpt-5")) return [PROMPT_CODEX]
+    if (id.includes("gpt-") || id.includes("o1") || id.includes("o3")) return [PROMPT_BEAST]
+    if (id.includes("gemini-")) return [PROMPT_GEMINI]
+    if (id.includes("claude")) return [PROMPT_ANTHROPIC]
+    if (id.includes("polaris-alpha")) return [PROMPT_POLARIS]
     return [PROMPT_ANTHROPIC_WITHOUT_TODO]
   }
 
