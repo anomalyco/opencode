@@ -325,7 +325,7 @@ export namespace Session {
       for (const child of await children(sessionID)) {
         await remove(child.id)
       }
-      await unshare(sessionID).catch(() => {})
+      await unshare(sessionID).catch(() => { })
       for (const msg of await Storage.list(["message", sessionID])) {
         for (const part of await Storage.list(["part", msg.at(-1)!])) {
           await Storage.remove(part)
@@ -394,27 +394,52 @@ export namespace Session {
       metadata: z.custom<ProviderMetadata>().optional(),
     }),
     (input) => {
-      const cachedInputTokens = input.usage.cachedInputTokens ?? 0
+      const rawUsage = input.usage as Record<string, unknown>
+
+      // Extract anthropic/bedrock metadata usage (ZAI puts real tokens here)
+      const anthropicUsage = input.metadata?.["anthropic"]?.["usage"] as Record<string, unknown> | undefined
+      const bedrockUsage = input.metadata?.["bedrock"]?.["usage"] as Record<string, unknown> | undefined
+
+      // Handle both underscore (ZAI) and camelCase (standard) field names
+      // Also handle nested usage object
+      const usage = (rawUsage.usage as Record<string, unknown>) || rawUsage
+
+      // CRITICAL: ZAI/Anthropic puts the real token counts in metadata.anthropic.usage
+      // The top-level usage.inputTokens is often 0, so we need to fallback to metadata
+      const inputTokens =
+        ((usage.input_tokens ?? usage.inputTokens) as number) ||
+        ((anthropicUsage?.input_tokens ?? bedrockUsage?.input_tokens) as number) ||
+        0
+      const outputTokens =
+        ((usage.output_tokens ?? usage.outputTokens) as number) ||
+        ((anthropicUsage?.output_tokens ?? bedrockUsage?.output_tokens) as number) ||
+        0
+      const cachedInputTokens =
+        ((usage.cache_read_input_tokens ?? usage.cachedInputTokens) as number) ||
+        ((anthropicUsage?.cache_read_input_tokens ?? bedrockUsage?.cache_read_input_tokens) as number) ||
+        0
+      const reasoningTokens = (usage.reasoning_tokens ?? usage.reasoningTokens ?? 0) as number
+
       const excludesCachedTokens = !!(input.metadata?.["anthropic"] || input.metadata?.["bedrock"])
-      const adjustedInputTokens = excludesCachedTokens
-        ? (input.usage.inputTokens ?? 0)
-        : (input.usage.inputTokens ?? 0) - cachedInputTokens
+      const adjustedInputTokens = excludesCachedTokens ? inputTokens : inputTokens - cachedInputTokens
+
       const safe = (value: number) => {
         if (!Number.isFinite(value)) return 0
         return value
       }
 
+      const cacheWriteTokens =
+        (input.metadata?.["anthropic"]?.["cacheCreationInputTokens"] ??
+          // @ts-expect-error
+          input.metadata?.["bedrock"]?.["usage"]?.["cacheWriteInputTokens"] ??
+          0) as number
+
       const tokens = {
         input: safe(adjustedInputTokens),
-        output: safe(input.usage.outputTokens ?? 0),
-        reasoning: safe(input.usage?.reasoningTokens ?? 0),
+        output: safe(outputTokens),
+        reasoning: safe(reasoningTokens),
         cache: {
-          write: safe(
-            (input.metadata?.["anthropic"]?.["cacheCreationInputTokens"] ??
-              // @ts-expect-error
-              input.metadata?.["bedrock"]?.["usage"]?.["cacheWriteInputTokens"] ??
-              0) as number,
-          ),
+          write: safe(cacheWriteTokens),
           read: safe(cachedInputTokens),
         },
       }

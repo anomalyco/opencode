@@ -268,6 +268,29 @@ export namespace SessionPrompt {
       }
 
       if (!lastUser) throw new Error("No user message found in stream. This should never happen.")
+
+      // Get model info early for compaction check
+      const model = await Provider.getModel(lastUser.model.providerID, lastUser.model.modelID)
+
+      // Check for context overflow BEFORE deciding to exit
+      // This ensures compaction triggers even when conversation is idle
+      // Skip if there's already a pending compaction task to avoid infinite loop
+      const hasPendingCompaction = tasks.some((t) => t.type === "compaction")
+      if (
+        !hasPendingCompaction &&
+        lastFinished &&
+        lastFinished.summary !== true &&
+        SessionCompaction.isOverflow({ tokens: lastFinished.tokens, model: model.info })
+      ) {
+        await SessionCompaction.create({
+          sessionID,
+          agent: lastUser.agent,
+          model: lastUser.model,
+          auto: true,
+        })
+        continue
+      }
+
       if (
         lastAssistant?.finish &&
         !["tool-calls", "unknown"].includes(lastAssistant.finish) &&
@@ -287,7 +310,6 @@ export namespace SessionPrompt {
           history: msgs,
         })
 
-      const model = await Provider.getModel(lastUser.model.providerID, lastUser.model.modelID)
       const task = tasks.pop()
 
       // pending subtask
@@ -414,21 +436,6 @@ export namespace SessionPrompt {
           auto: task.auto,
         })
         if (result === "stop") break
-        continue
-      }
-
-      // context overflow, needs compaction
-      if (
-        lastFinished &&
-        lastFinished.summary !== true &&
-        SessionCompaction.isOverflow({ tokens: lastFinished.tokens, model: model.info })
-      ) {
-        await SessionCompaction.create({
-          sessionID,
-          agent: lastUser.agent,
-          model: lastUser.model,
-          auto: true,
-        })
         continue
       }
 
