@@ -17,7 +17,7 @@ export namespace TrajectoryConfig {
     enabled: true,
     outputPath: ".opencode/trajectories",
     filenameTemplate: "trajectory_{sessionID}_{timestamp}.jsonl",
-    bufferSize: 100,
+    bufferSize: 1000,
     flushStrategy: "end_of_stream",
     captureStreamEvents: true,
   }

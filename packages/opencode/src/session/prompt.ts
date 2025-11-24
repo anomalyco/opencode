@@ -1431,57 +1431,8 @@ export namespace SessionPrompt {
     llmCalls: number
     toolCalls: number
   }) {
-    if (!shouldRecord(input.sessionID)) {
-      if (TrajectoryRecorder.isRecording(input.sessionID)) {
-        await TrajectoryRecorder.stop(input.sessionID)
-      }
-      return
-    }
-    const session = await Session.get(input.sessionID)
-    const messages = await Session.messages({ sessionID: input.sessionID })
-    const assistants = messages.filter((m) => m.info.role === "assistant")
-    const tokenTotals = assistants.reduce(
-      (acc, msg) => {
-        const info = msg.info as MessageV2.Assistant
-        return {
-          input: acc.input + (info.tokens?.input ?? 0),
-          output: acc.output + (info.tokens?.output ?? 0),
-          reasoning: acc.reasoning + (info.tokens?.reasoning ?? 0),
-          cacheRead: acc.cacheRead + (info.tokens?.cache.read ?? 0),
-          cacheWrite: acc.cacheWrite + (info.tokens?.cache.write ?? 0),
-        }
-      },
-      { input: 0, output: 0, reasoning: 0, cacheRead: 0, cacheWrite: 0 },
-    )
-    const duration = Date.now() - session.time.created
-    const lastAssistant = assistants.at(-1)?.info as MessageV2.Assistant | undefined
-    const aborted = state()[input.sessionID]?.abort?.signal.aborted ?? false
-    const success = !aborted && !lastAssistant?.error
-    const exitReason = aborted ? "aborted" : lastAssistant?.error ? lastAssistant.error.name : "completed"
-    await TrajectoryRecorder.record(input.sessionID, {
-      type: "session_end",
-      timestamp: Date.now(),
-      sessionID: input.sessionID,
-      success,
-      exitReason,
-      summary: {
-        totalSteps: input.steps,
-        totalLLMCalls: input.llmCalls,
-        totalToolCalls: input.toolCalls,
-        totalTokens: {
-          input: tokenTotals.input + tokenTotals.cacheRead,
-          output: tokenTotals.output + tokenTotals.cacheWrite,
-          reasoning: tokenTotals.reasoning,
-        },
-        totalDuration: duration,
-      },
-      error: lastAssistant?.error
-        ? {
-            message: (lastAssistant.error as any)?.message ?? String(lastAssistant.error),
-            type: (lastAssistant.error as any)?.name ?? "UnknownError",
-          }
-        : undefined,
-    })
+    const active = TrajectoryRecorder.isRecording(input.sessionID)
+    if (!TrajectoryConfig.get().enabled || !active) return
     await TrajectoryRecorder.stop(input.sessionID)
   }
 
@@ -1951,11 +1902,12 @@ export namespace SessionPrompt {
     const model = input.model ?? session?.model ?? (await Provider.defaultModel())
     const agentName = input.agent ?? session?.agent ?? "general-purpose"
     const now = Date.now()
+    const created = session?.time.created ?? now
     const dir = path.isAbsolute(cfg.outputPath) ? cfg.outputPath : path.join(Instance.directory, cfg.outputPath)
     const filename = TrajectoryConfig.resolveFilename(input.sessionID, {
       agent: agentName,
       model: session?.model?.modelID ?? model.modelID,
-      timestamp: now,
+      timestamp: created,
     })
     const filePath = path.join(dir, filename)
     TrajectoryRecorder.start(input.sessionID, {
@@ -1968,7 +1920,7 @@ export namespace SessionPrompt {
     })
     await TrajectoryRecorder.record(input.sessionID, {
       type: "session_start",
-      timestamp: now,
+      timestamp: created,
       sessionID: input.sessionID,
       agent: agentName,
       model: {

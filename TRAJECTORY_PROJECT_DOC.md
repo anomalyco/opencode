@@ -33,7 +33,6 @@
   - `tool_execution`: start/completed/error with full args, outputs, metadata, timing; includes MCP and TaskTool subtasks.
   - `stream_event`: optional per-delta events from `streamText` (text, reasoning, tool-call/result, step-finish, finish).
   - `compaction`: start/prune/summarize/end details and resulting summary text.
-  - `session_end`: final status (completed/aborted/error), totals (tokens, costs, counts, steps), and any error info.
 - **Token accounting**:
   - Each interaction includes `totalInputTokens`, `totalOutputTokens`, `totalCacheTokens` in addition to per-part fields.
   - Session totals accumulate actual usage only; zeros are not acceptable defaults.

@@ -73,7 +73,7 @@ export namespace SessionProcessor {
               switch (value.type) {
                 case "start":
                   SessionStatus.set(input.sessionID, { type: "busy" })
-                  await recordStream("start", {})
+                  await recordStream("start", { phase: "turn" })
                   break
 
                 case "reasoning-start":
@@ -279,7 +279,7 @@ export namespace SessionProcessor {
                     snapshot,
                     type: "step-start",
                   })
-                  await recordStream("start", {})
+                  await recordStream("step-start", { phase: "step" })
                   break
 
                 case "finish-step":
@@ -355,8 +355,9 @@ export namespace SessionProcessor {
                 case "text-end":
                   if (currentText) {
                     currentText.text = currentText.text.trimEnd()
+                    const startTime = currentText.time?.start ?? Date.now()
                     currentText.time = {
-                      start: Date.now(),
+                      start: startTime,
                       end: Date.now(),
                     }
                     if (value.providerMetadata) currentText.metadata = value.providerMetadata

@@ -225,37 +225,6 @@ describe("End-to-End Trajectory Recording", () => {
     })
   })
 
-  test("should record session_end with complete summary stats", async () => {
-    await using tmp = await tmpdir({ git: true })
-
-    await Instance.provide({
-      directory: tmp.path,
-      fn: async () => {
-        TrajectoryConfig.set({
-          enabled: true,
-          outputPath: path.join(tmp.path, "trajectories"),
-          filenameTemplate: "test.jsonl",
-        })
-
-        const session = await Session.create({})
-
-        // This test would:
-        // 1. Execute a complete conversation
-        // 2. Verify session_end event is last event in file
-        // 3. Verify summary contains:
-        //    - totalSteps (matches agent_step events)
-        //    - totalLLMCalls (matches llm_interaction events)
-        //    - totalToolCalls (matches tool_execution events)
-        //    - totalTokens (sum of all usage)
-        //    - totalDuration (end time - start time)
-
-        // TODO: Requires full conversation execution
-
-        await Session.remove(session.id)
-      },
-    })
-  })
-
   test("should maintain valid JSONL format throughout session", async () => {
     await using tmp = await tmpdir({ git: true })
 

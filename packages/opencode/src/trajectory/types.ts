@@ -63,8 +63,17 @@ export namespace Trajectory {
     sessionID: string
     messageID: string
     step: number
-    eventType: "start" | "reasoning" | "response" | "tool-call" | "tool-result" | "step-finish" | "finish"
+    eventType:
+      | "start"
+      | "step-start"
+      | "reasoning"
+      | "response"
+      | "tool-call"
+      | "tool-result"
+      | "step-finish"
+      | "finish"
     data: {
+      phase?: "turn" | "step"
       text?: string
       reasoning?: string
       toolName?: string
@@ -146,29 +155,6 @@ export namespace Trajectory {
     }
   }
 
-  export interface SessionEndEvent {
-    type: "session_end"
-    timestamp: number
-    sessionID: string
-    success: boolean
-    exitReason: string
-    summary: {
-      totalSteps: number
-      totalLLMCalls: number
-      totalToolCalls: number
-      totalTokens: {
-        input: number
-        output: number
-        reasoning: number
-      }
-      totalDuration: number
-    }
-    error?: {
-      message: string
-      type: string
-    }
-  }
-
   export type Event =
     | SessionStartEvent
     | LLMInteractionEvent
@@ -176,5 +162,4 @@ export namespace Trajectory {
     | ToolExecutionEvent
     | AgentStepEvent
     | CompactionEvent
-    | SessionEndEvent
 }

@@ -31,17 +31,15 @@ describe("TrajectoryRecorder", () => {
     })
 
     await TrajectoryRecorder.record(sessionID, {
-      type: "session_end",
+      type: "agent_step",
       timestamp: Date.now(),
       sessionID,
-      success: true,
-      exitReason: "completed",
-      summary: {
-        totalSteps: 1,
-        totalLLMCalls: 1,
-        totalToolCalls: 0,
-        totalTokens: { input: 100, output: 50, reasoning: 0 },
-        totalDuration: 1000,
+      step: 1,
+      action: "loop_start",
+      state: {
+        messageCount: 1,
+        hasSnapshot: false,
+        contextOverflow: false,
       },
     })
 
@@ -55,7 +53,7 @@ describe("TrajectoryRecorder", () => {
     // Each line should be valid JSON
     const events = lines.map((line) => JSON.parse(line) as Trajectory.Event)
     expect(events[0].type).toBe("session_start")
-    expect(events[1].type).toBe("session_end")
+    expect(events[1].type).toBe("agent_step")
   })
 
   test("should maintain valid JSONL format with multiple events", async () => {

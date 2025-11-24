@@ -52,14 +52,6 @@ export namespace SessionCompaction {
   export async function prune(input: { sessionID: string }) {
     if (Flag.OPENCODE_DISABLE_PRUNE) return
     log.info("pruning")
-    if (shouldRecord(input.sessionID)) {
-      await TrajectoryRecorder.record(input.sessionID, {
-        type: "compaction",
-        timestamp: Date.now(),
-        sessionID: input.sessionID,
-        action: "prune",
-      })
-    }
     const msgs = await Session.messages({ sessionID: input.sessionID })
     let total = 0
     let pruned = 0

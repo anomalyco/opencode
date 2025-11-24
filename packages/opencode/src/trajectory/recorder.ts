@@ -103,8 +103,9 @@ export namespace TrajectoryRecorder {
   async function flush(rec: Recorder) {
     if (rec.buffer.length === 0) return
     createFile(rec.path)
-    const chunk = rec.buffer.map((item) => JSON.stringify(item)).join("\n") + "\n"
+    const lines = rec.buffer.map((item) => JSON.stringify(item))
     rec.buffer.length = 0
+    const chunk = lines.join("\n") + "\n"
     await fs.promises.appendFile(rec.path, chunk)
   }
 }
