@@ -562,10 +562,6 @@ export function Prompt(props: PromptProps) {
     }
   })
 
-  createEffect(() => {
-    renderer.setCursorColor(highlight())
-  })
-
   return (
     <>
       <Autocomplete
@@ -777,7 +773,7 @@ export function Prompt(props: PromptProps) {
               ref={(r: TextareaRenderable) => (input = r)}
               onMouseDown={(r: MouseEvent) => r.target?.focus()}
               focusedBackgroundColor={theme.backgroundElement}
-              cursorColor={theme.primary}
+              cursorColor={highlight()}
               syntaxStyle={syntax()}
             />
             <box flexDirection="row" flexShrink={0} paddingTop={1} gap={1}>
