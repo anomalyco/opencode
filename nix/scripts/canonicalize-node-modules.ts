@@ -78,7 +78,7 @@ for (const [slug, entry] of Array.from(selections.entries()).sort((a, b) => a[0]
   const linkPath = join(parent, leaf)
   const desired = join(entry.dir, "node_modules", slug)
   const exists = await lstat(desired)
-    .then(info => info.isDirectory())
+    .then((info) => info.isDirectory())
     .catch(() => false)
   if (!exists) {
     continue
