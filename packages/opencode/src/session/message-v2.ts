@@ -737,9 +737,14 @@ export namespace MessageV2 {
           { cause: e },
         ).toObject()
       case APICallError.isInstance(e):
+        let message = e.message
+        if (ctx.providerID === "github-copilot" && message.includes("The requested model is not supported")) {
+          message +=
+            "\n\nMake sure the model is enabled in your copilot settings: https://github.com/settings/copilot/features"
+        }
         return new MessageV2.APIError(
           {
-            message: e.message,
+            message,
             statusCode: e.statusCode,
             isRetryable: e.isRetryable,
             responseHeaders: e.responseHeaders,
