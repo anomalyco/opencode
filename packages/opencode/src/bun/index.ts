@@ -64,72 +64,72 @@ export namespace BunProc {
     // Use lock to ensure only one install at a time
     using _ = await Lock.write("bun-install")
 
-    const mod = path.join(Global.Path.cache, "node_modules", pkg)
-    const pkgjson = Bun.file(path.join(Global.Path.cache, "package.json"))
-    const parsed = await pkgjson.json().catch(async () => {
-      const result = { dependencies: {} }
-      await Bun.write(pkgjson.name!, JSON.stringify(result, null, 2))
-      return result
-    })
-    if (parsed.dependencies[pkg] === version) return mod
+        const mod = path.join(Global.Path.cache, "node_modules", pkg)
+        const pkgjson = Bun.file(path.join(Global.Path.cache, "package.json"))
+        const parsed = await pkgjson.json().catch(async () => {
+          const result = { dependencies: {} }
+          await Bun.write(pkgjson.name!, JSON.stringify(result, null, 2))
+          return result
+        })
+        if (parsed.dependencies[pkg] === version) return mod
 
-    // Build command arguments
-    const args = ["add", "--force", "--exact", "--cwd", Global.Path.cache, pkg + "@" + version]
+        // Build command arguments
+        const args = ["add", "--force", "--exact", "--backend=copyfile", "--cwd", Global.Path.cache, pkg + "@" + version]
 
-    // Let Bun handle registry resolution:
-    // - If .npmrc files exist, Bun will use them automatically
-    // - If no .npmrc files exist, Bun will default to https://registry.npmjs.org
-    // - No need to pass --registry flag
-    log.info("installing package using Bun's default registry resolution", {
-      pkg,
-      version,
-    })
-
-    const total = 3
-    const wait = 500
-
-    const runInstall = async (count: number = 1): Promise<void> => {
-      log.info("bun install attempt", {
-        pkg,
-        version,
-        attempt: count,
-        total,
-      })
-      await BunProc.run(args, {
-        cwd: Global.Path.cache,
-      }).catch(async (error) => {
-        log.warn("bun install failed", {
+        // Let Bun handle registry resolution:
+        // - If .npmrc files exist, Bun will use them automatically
+        // - If no .npmrc files exist, Bun will default to https://registry.npmjs.org
+        // - No need to pass --registry flag
+        log.info("installing package using Bun's default registry resolution", {
           pkg,
           version,
-          attempt: count,
-          total,
-          error,
         })
-        if (count >= total) {
-          throw new InstallFailedError(
-            { pkg, version },
-            {
-              cause: error,
-            },
-          )
+
+        const total = 3
+        const wait = 500
+
+        const runInstall = async (count: number = 1): Promise<void> => {
+          log.info("bun install attempt", {
+            pkg,
+            version,
+            attempt: count,
+            total,
+          })
+          await BunProc.run(args, {
+            cwd: Global.Path.cache,
+          }).catch(async (error) => {
+            log.warn("bun install failed", {
+              pkg,
+              version,
+              attempt: count,
+              total,
+              error,
+            })
+            if (count >= total) {
+              throw new InstallFailedError(
+                { pkg, version },
+                {
+                  cause: error,
+                },
+              )
+            }
+            const delay = wait * count
+            log.info("bun install retrying", {
+              pkg,
+              version,
+              next: count + 1,
+              delay,
+            })
+            await Bun.sleep(delay)
+            return runInstall(count + 1)
+          })
         }
-        const delay = wait * count
-        log.info("bun install retrying", {
-          pkg,
-          version,
-          next: count + 1,
-          delay,
-        })
-        await Bun.sleep(delay)
-        return runInstall(count + 1)
-      })
-    }
 
-    await runInstall()
+        await runInstall()
 
-    parsed.dependencies[pkg] = version
-    await Bun.write(pkgjson.name!, JSON.stringify(parsed, null, 2))
-    return mod
+        parsed.dependencies[pkg] = version
+        await Bun.write(pkgjson.name!, JSON.stringify(parsed, null, 2))
+        return mod
   }
 
   export async function resolve(pkg: string) {
