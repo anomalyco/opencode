@@ -654,7 +654,7 @@ export namespace Provider {
     }
   }
 
-  export async function getSmallModel(providerID: string, fallbackModel?: { providerID: string; modelID: string }) {
+  export async function getSmallModel(providerID: string) {
     const cfg = await Config.get()
 
     if (cfg.small_model) {
@@ -692,13 +692,7 @@ export namespace Provider {
       return getModel("opencode", "gpt-5-nano")
     }
 
-    // Use fallback model if provided
-    if (fallbackModel) {
-      return getModel(fallbackModel.providerID, fallbackModel.modelID)
-    }
-
-    // No fallback available
-    throw new Error("No small model available")
+    return undefined
   }
 
   const priority = ["gpt-5", "claude-sonnet-4", "big-pickle", "gemini-3-pro"]
