@@ -184,6 +184,8 @@ export default function () {
                 </div>
               )
 
+              const wide = createMemo(() => diffs().length === 0)
+
               return (
                 <div class="relative bg-background-stronger w-screen h-screen overflow-hidden flex flex-col">
                   <header class="h-12 px-6 py-2 flex items-center justify-between self-stretch bg-background-base border-b border-border-weak-base">
@@ -214,48 +216,39 @@ export default function () {
                       <div
                         classList={{
                           "@container relative shrink-0 pt-14 flex flex-col gap-10 min-h-0 w-full mx-auto": true,
-                          "px-21 @4xl:px-6 max-w-2xl": diffs().length > 0,
-                          "px-6 max-w-2xl": diffs().length === 0,
+                          "px-21 @4xl:px-6 max-w-2xl": !wide(),
+                          "px-6 max-w-2xl": wide(),
                         }}
                       >
                         {title()}
                         <div class="flex items-start justify-start h-full min-h-0">
                           <Show when={messages().length > 1}>
                             <>
-                              <div
-                                classList={{
-                                  "xl:hidden": true,
-                                  "absolute right-[90%]": diffs().length > 0,
-                                  "absolute right-full": diffs().length === 0,
-                                }}
-                              >
+                              <div class="xl:hidden absolute right-full">
                                 <MessageNav
-                                  classList={{
-                                    "mt-0.5 mr-8": diffs().length === 0,
-                                    "mt-2.5 mr-3": diffs().length > 0,
-                                  }}
+                                  class="mt-2 mr-3"
                                   messages={messages()}
                                   current={activeMessage()}
                                   onMessageSelect={setActiveMessage}
-                                  size={!diffs().length ? "normal" : "compact"}
+                                  size="compact"
                                 />
                               </div>
                               <div
                                 classList={{
                                   "hidden xl:block": true,
-                                  "absolute right-[90%]": diffs().length > 0,
-                                  "absolute right-full": diffs().length === 0,
+                                  "absolute right-[90%]": !wide(),
+                                  "absolute right-full": wide(),
                                 }}
                               >
                                 <MessageNav
                                   classList={{
-                                    "mt-0.5 mr-8": diffs().length === 0,
-                                    "mt-2.5 mr-3": diffs().length > 0,
+                                    "mt-2.5 mr-3": !wide(),
+                                    "mt-0.5 mr-8": wide(),
                                   }}
                                   messages={messages()}
                                   current={activeMessage()}
                                   onMessageSelect={setActiveMessage}
-                                  size={!diffs().length ? "normal" : "compact"}
+                                  size={wide() ? "normal" : "compact"}
                                 />
                               </div>
                             </>
@@ -271,14 +264,14 @@ export default function () {
                           </SessionTurn>
                         </div>
                       </div>
-                      <Show when={diffs().length}>
+                      <Show when={diffs().length > 0}>
                         <div class="relative grow px-6 pt-14 flex-1 min-h-0 border-l border-border-weak-base">
                           <SessionReview diffs={diffs()} class="pb-20" />
                         </div>
                       </Show>
                     </div>
                     <Switch>
-                      <Match when={diffs().length}>
+                      <Match when={diffs().length > 0}>
                         <Tabs class="md:hidden">
                           <Tabs.List>
                             <Tabs.Trigger value="session" class="w-1/2" classes={{ button: "w-full" }}>

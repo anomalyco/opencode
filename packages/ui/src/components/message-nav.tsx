@@ -64,12 +64,12 @@ export function MessageNav(
   return (
     <Switch>
       <Match when={local.size === "compact"}>
-        <Tooltip openDelay={0} closeDelay={0} placement="top-start" gutter={-65} shift={-16} overlap>
+        <Tooltip openDelay={0} closeDelay={0} placement="left-start" gutter={-65} shift={-16} overlap>
           <Tooltip.Trigger as="div">{content()}</Tooltip.Trigger>
           <Tooltip.Portal>
             <Tooltip.Content data-slot="message-nav-tooltip">
               <div data-slot="message-nav-tooltip-content">
-                <MessageNav {...props} size="normal" />
+                <MessageNav {...props} size="normal" class="" />
               </div>
             </Tooltip.Content>
           </Tooltip.Portal>
