@@ -44,6 +44,10 @@ export function Home() {
     if (once) return
     if (args.prompt) {
       prompt.set({ input: args.prompt, parts: [] })
+      // Auto-submit the prompt after a short delay to ensure it's properly set
+      setTimeout(() => {
+        prompt.submit()
+      }, 100)
       once = true
     }
   })

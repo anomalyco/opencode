@@ -38,6 +38,7 @@ export type PromptRef = {
   reset(): void
   blur(): void
   focus(): void
+  submit(): void
 }
 
 export function Prompt(props: PromptProps) {
@@ -357,33 +358,6 @@ export function Prompt(props: PromptProps) {
     )
   }
 
-  props.ref?.({
-    get focused() {
-      return input.focused
-    },
-    focus() {
-      input.focus()
-    },
-    blur() {
-      input.blur()
-    },
-    set(prompt) {
-      input.setText(prompt.input, { history: false })
-      setStore("prompt", prompt)
-      restoreExtmarksFromParts(prompt.parts)
-      input.gotoBufferEnd()
-    },
-    reset() {
-      input.clear()
-      input.extmarks.clear()
-      setStore("prompt", {
-        input: "",
-        parts: [],
-      })
-      setStore("extmarkToPartIndex", new Map())
-    },
-  })
-
   async function submit() {
     if (props.disabled) return
     if (autocomplete.visible) return
@@ -495,6 +469,37 @@ export function Prompt(props: PromptProps) {
       }, 50)
     input.clear()
   }
+
+  props.ref?.({
+    get focused() {
+      return input.focused
+    },
+    focus() {
+      input.focus()
+    },
+    blur() {
+      input.blur()
+    },
+    set(prompt) {
+      input.setText(prompt.input, { history: false })
+      setStore("prompt", prompt)
+      restoreExtmarksFromParts(prompt.parts)
+      input.gotoBufferEnd()
+    },
+    reset() {
+      input.clear()
+      input.extmarks.clear()
+      setStore("prompt", {
+        input: "",
+        parts: [],
+      })
+      setStore("extmarkToPartIndex", new Map())
+    },
+    submit() {
+      submit()
+    },
+  })
+
   const exit = useExit()
 
   async function pasteImage(file: { filename?: string; content: string; mime: string }) {
