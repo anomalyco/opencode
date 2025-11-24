@@ -18,6 +18,9 @@ export function Sidebar(props: { sessionID: string }) {
   const [todoExpanded, setTodoExpanded] = createSignal(true)
   const [lspExpanded, setLspExpanded] = createSignal(true)
 
+  // Sort MCP servers alphabetically for consistent display order
+  const mcpEntries = createMemo(() => Object.entries(sync.data.mcp).sort(([a], [b]) => a.localeCompare(b)))
+
   const cost = createMemo(() => {
     const total = messages().reduce((sum, x) => sum + (x.role === "assistant" ? x.cost : 0), 0)
     return new Intl.NumberFormat("en-US", {
@@ -58,22 +61,22 @@ export function Sidebar(props: { sessionID: string }) {
             <text fg={theme.textMuted}>{context()?.percentage ?? 0}% used</text>
             <text fg={theme.textMuted}>{cost()} spent</text>
           </box>
-          <Show when={Object.keys(sync.data.mcp).length > 0}>
+          <Show when={mcpEntries().length > 0}>
             <box>
               <box
                 flexDirection="row"
                 gap={1}
-                onMouseDown={() => Object.keys(sync.data.mcp).length > 2 && setMcpExpanded(!mcpExpanded())}
+                onMouseDown={() => mcpEntries().length > 2 && setMcpExpanded(!mcpExpanded())}
               >
-                <Show when={Object.keys(sync.data.mcp).length > 2}>
+                <Show when={mcpEntries().length > 2}>
                   <text fg={theme.text}>{mcpExpanded() ? "▼" : "▶"}</text>
                 </Show>
                 <text fg={theme.text}>
                   <b>MCP</b>
                 </text>
               </box>
-              <Show when={Object.keys(sync.data.mcp).length <= 2 || mcpExpanded()}>
-                <For each={Object.entries(sync.data.mcp)}>
+              <Show when={mcpEntries().length <= 2 || mcpExpanded()}>
+                <For each={mcpEntries()}>
                   {([key, item]) => (
                     <box flexDirection="row" gap={1}>
                       <text
