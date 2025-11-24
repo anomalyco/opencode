@@ -696,20 +696,28 @@ export function Prompt(props: PromptProps) {
                 console.log(pastedContent, filepath)
                 try {
                   const file = Bun.file(filepath)
-                  if (file.type.startsWith("image/")) {
-                    event.preventDefault()
-                    const content = await file
-                      .arrayBuffer()
-                      .then((buffer) => Buffer.from(buffer).toString("base64"))
-                      .catch(console.error)
-                    if (content) {
-                      await pasteImage({
-                        filename: file.name,
-                        mime: file.type,
-                        content,
-                      })
-                      return
-                    }
+                  if (!file.type.startsWith("image/")) throw new Error("Pasted file is not image")
+
+                  event.preventDefault()
+
+                  const doesFileExist = await file.exists()
+                  let buffer: ArrayBuffer | undefined
+
+                  if (doesFileExist) {
+                    buffer = await file.arrayBuffer()
+                  } else {
+                    const response = await fetch(filepath)
+                    buffer = await response.arrayBuffer()
+                  }
+
+                  if (buffer) {
+                    const content = Buffer.from(buffer).toString("base64")
+                    await pasteImage({
+                      filename: file.name,
+                      mime: file.type,
+                      content,
+                    })
+                    return
                   }
                 } catch {}
 
