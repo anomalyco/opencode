@@ -1,8 +1,6 @@
-import { Button, Icon, IconButton, Select, SelectDialog, Tooltip } from "@opencode-ai/ui"
 import { useFilteredList } from "@opencode-ai/ui/hooks"
 import { createEffect, on, Component, Show, For, onMount, onCleanup, Switch, Match } from "solid-js"
 import { createStore } from "solid-js/store"
-import { FileIcon } from "@/ui"
 import { getDirectory, getFilename } from "@/utils"
 import { createFocusSignal } from "@solid-primitives/active-element"
 import { useLocal } from "@/context/local"
@@ -11,6 +9,13 @@ import { ContentPart, DEFAULT_PROMPT, isPromptEqual, Prompt, useSession } from "
 import { useSDK } from "@/context/sdk"
 import { useNavigate } from "@solidjs/router"
 import { useSync } from "@/context/sync"
+import { FileIcon } from "@opencode-ai/ui/file-icon"
+import { SelectDialog } from "@opencode-ai/ui/select-dialog"
+import { Button } from "@opencode-ai/ui/button"
+import { Icon } from "@opencode-ai/ui/icon"
+import { Tooltip } from "@opencode-ai/ui/tooltip"
+import { IconButton } from "@opencode-ai/ui/icon-button"
+import { Select } from "@opencode-ai/ui/select"
 
 interface PromptInputProps {
   class?: string
@@ -184,8 +189,8 @@ export const PromptInput: Component<PromptInputProps> = (props) => {
       const range = selection.getRangeAt(0)
 
       if (atMatch) {
-        let node: Node | null = range.startContainer
-        let offset = range.startOffset
+        // let node: Node | null = range.startContainer
+        // let offset = range.startOffset
         let runningLength = 0
 
         const walker = document.createTreeWalker(editorRef, NodeFilter.SHOW_TEXT, null)
@@ -448,7 +453,7 @@ export const PromptInput: Component<PromptInputProps> = (props) => {
               {(i) => (
                 <div class="w-full flex items-center justify-between gap-x-3">
                   <div class="flex items-center gap-x-2.5 text-text-muted grow min-w-0">
-                    <img src={`https://models.dev/logos/${i.provider.id}.svg`} class="size-6 p-0.5 shrink-0 " />
+                    <img src={`https://models.dev/logos/${i.provider.id}.svg`} class="size-6 p-0.5 shrink-0" />
                     <div class="flex gap-x-3 items-baseline flex-[1_0_0]">
                       <span class="text-14-medium text-text-strong overflow-hidden text-ellipsis">{i.name}</span>
                       <Show when={i.release_date}>

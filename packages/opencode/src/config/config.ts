@@ -428,8 +428,9 @@ export namespace Config {
       input_newline: z.string().optional().default("shift+return,ctrl+j").describe("Insert newline in input"),
       history_previous: z.string().optional().default("up").describe("Previous history item"),
       history_next: z.string().optional().default("down").describe("Next history item"),
-      session_child_cycle: z.string().optional().default("ctrl+right").describe("Next child session"),
-      session_child_cycle_reverse: z.string().optional().default("ctrl+left").describe("Previous child session"),
+      session_child_cycle: z.string().optional().default("<leader>right").describe("Next child session"),
+      session_child_cycle_reverse: z.string().optional().default("<leader>left").describe("Previous child session"),
+      terminal_suspend: z.string().optional().default("ctrl+z").describe("Suspend terminal"),
     })
     .strict()
     .meta({
@@ -480,6 +481,10 @@ export namespace Config {
         .describe("@deprecated Use 'share' field instead. Share newly created sessions automatically"),
       autoupdate: z.boolean().optional().describe("Automatically update to the latest version"),
       disabled_providers: z.array(z.string()).optional().describe("Disable providers that are loaded automatically"),
+      enabled_providers: z
+        .array(z.string())
+        .optional()
+        .describe("When set, ONLY these providers will be enabled. All other providers will be ignored"),
       model: z.string().describe("Model to use in the format of provider/model, eg anthropic/claude-2").optional(),
       small_model: z
         .string()
@@ -511,6 +516,8 @@ export namespace Config {
           z.string(),
           ModelsDev.Provider.partial()
             .extend({
+              whitelist: z.array(z.string()).optional(),
+              blacklist: z.array(z.string()).optional(),
               models: z.record(z.string(), ModelsDev.Model.partial()).optional(),
               options: z
                 .object({
@@ -603,6 +610,11 @@ export namespace Config {
         })
         .optional(),
       tools: z.record(z.string(), z.boolean()).optional(),
+      enterprise: z
+        .object({
+          url: z.string().optional().describe("Enterprise URL"),
+        })
+        .optional(),
       experimental: z
         .object({
           hook: z

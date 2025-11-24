@@ -13,6 +13,7 @@ import path from "path"
 import { Instance } from "@/project/instance"
 import { Storage } from "@/storage/storage"
 import { Bus } from "@/bus"
+import { mergeDeep, pipe } from "remeda"
 
 export namespace SessionSummary {
   const log = Log.create({ service: "session.summary" })
@@ -73,13 +74,18 @@ export namespace SessionSummary {
 
     const assistantMsg = messages.find((m) => m.info.role === "assistant")!.info as MessageV2.Assistant
     const small = await Provider.getSmallModel(assistantMsg.providerID)
-    if (!small) return
+    const options = pipe(
+      {},
+      mergeDeep(ProviderTransform.options(small.providerID, small.modelID, small.npm ?? "", assistantMsg.sessionID)),
+      mergeDeep(ProviderTransform.smallOptions({ providerID: small.providerID, modelID: small.modelID })),
+      mergeDeep(small.info.options),
+    )
 
     const textPart = msgWithParts.parts.find((p) => p.type === "text" && !p.synthetic) as MessageV2.TextPart
     if (textPart && !userMsg.summary?.title) {
       const result = await generateText({
         maxOutputTokens: small.info.reasoning ? 1500 : 20,
-        providerOptions: ProviderTransform.providerOptions(small.npm, small.providerID, {}),
+        providerOptions: ProviderTransform.providerOptions(small.npm, small.providerID, options),
         messages: [
           ...SystemPrompt.title(small.providerID).map(
             (x): ModelMessage => ({
@@ -115,18 +121,28 @@ export namespace SessionSummary {
         .findLast((m) => m.info.role === "assistant")
         ?.parts.findLast((p) => p.type === "text")?.text
       if (!summary || diffs.length > 0) {
+        for (const msg of messages) {
+          for (const part of msg.parts) {
+            if (part.type === "tool" && part.state.status === "completed") {
+              part.state.output = "[TOOL OUTPUT PRUNED]"
+            }
+          }
+        }
         const result = await generateText({
           model: small.language,
           maxOutputTokens: 100,
+          providerOptions: ProviderTransform.providerOptions(small.npm, small.providerID, options),
           messages: [
+            ...SystemPrompt.summarize(small.providerID).map(
+              (x): ModelMessage => ({
+                role: "system",
+                content: x,
+              }),
+            ),
+            ...MessageV2.toModelMessage(messages),
             {
               role: "user",
-              content: `
-            Summarize the following conversation into 2 sentences MAX explaining what the assistant did and why. Do not explain the user's input. Do not speak in the third person about the assistant.
-            <conversation>
-            ${JSON.stringify(MessageV2.toModelMessage(messages))}
-            </conversation>
-            `,
+              content: `Summarize the above conversation according to your system prompts.`,
             },
           ],
           headers: small.info.headers,
