@@ -1,6 +1,6 @@
 #!/usr/bin/env bun
 
-import solidPlugin from "@opentui/solid/scripts/solid-plugin"
+import solidPlugin from "../../../node_modules/@opentui/solid/scripts/solid-plugin"
 import path from "path"
 import fs from "fs"
 import { $ } from "bun"
@@ -99,7 +99,7 @@ for (const item of targets) {
   console.log(`building ${name}`)
   await $`mkdir -p dist/${name}/bin`
 
-  const parserWorker = fs.realpathSync(path.resolve(dir, "./node_modules/@opentui/core/parser.worker.js"))
+  const parserWorker = fs.realpathSync(path.resolve(dir, "../../node_modules/@opentui/core/parser.worker.js"))
   const workerPath = "./src/cli/cmd/tui/worker.ts"
 
   await Bun.build({
