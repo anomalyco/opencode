@@ -13,8 +13,31 @@ import { Instance } from "../project/instance"
 import { Flag } from "../flag/flag"
 import { iife } from "@/util/iife"
 
+// Direct imports for bundled providers
+import { createAmazonBedrock } from "@ai-sdk/amazon-bedrock"
+import { createAnthropic } from "@ai-sdk/anthropic"
+import { createAzure } from "@ai-sdk/azure"
+import { createGoogleGenerativeAI } from "@ai-sdk/google"
+import { createVertex } from "@ai-sdk/google-vertex"
+import { createVertexAnthropic } from "@ai-sdk/google-vertex/anthropic"
+import { createOpenAI } from "@ai-sdk/openai"
+import { createOpenAICompatible } from "@ai-sdk/openai-compatible"
+import { createOpenRouter } from "@openrouter/ai-sdk-provider"
+
 export namespace Provider {
   const log = Log.create({ service: "provider" })
+
+  const BUNDLED_PROVIDERS: Record<string, (options: any) => SDK> = {
+    "@ai-sdk/amazon-bedrock": createAmazonBedrock,
+    "@ai-sdk/anthropic": createAnthropic,
+    "@ai-sdk/azure": createAzure,
+    "@ai-sdk/google": createGoogleGenerativeAI,
+    "@ai-sdk/google-vertex": createVertex,
+    "@ai-sdk/google-vertex/anthropic": createVertexAnthropic,
+    "@ai-sdk/openai": createOpenAI,
+    "@ai-sdk/openai-compatible": createOpenAICompatible,
+    "@openrouter/ai-sdk-provider": createOpenRouter,
+  }
 
   type CustomLoader = (provider: ModelsDev.Provider) => Promise<{
     autoload: boolean
@@ -530,29 +553,6 @@ export namespace Provider {
       const existing = s.sdk.get(key)
       if (existing) return existing
 
-      const installedPath = await (async () => {
-        if (pkg.startsWith("file://")) {
-          log.info("loading local provider", { pkg })
-          return pkg
-        }
-        const resolved = await BunProc.resolve(pkg)
-        if (resolved) {
-          log.info("using preinstalled provider", { providerID: provider.id, pkg })
-          return resolved
-        }
-        return BunProc.install(pkg, "latest")
-      })()
-
-      // The `google-vertex-anthropic` provider points to the `@ai-sdk/google-vertex` package.
-      // Ref: https://github.com/sst/models.dev/blob/0a87de42ab177bebad0620a889e2eb2b4a5dd4ab/providers/google-vertex-anthropic/provider.toml
-      // However, the actual export is at the subpath `@ai-sdk/google-vertex/anthropic`.
-      // Ref: https://ai-sdk.dev/providers/ai-sdk-providers/google-vertex#google-vertex-anthropic-provider-usage
-      // In addition, Bun's dynamic import logic does not support subpath imports,
-      // so we patch the import path to load directly from `dist`.
-      const modPath =
-        provider.id === "google-vertex-anthropic" ? `${installedPath}/dist/anthropic/index.mjs` : installedPath
-      const mod = await import(modPath)
-
       const customFetch = options["fetch"]
 
       options["fetch"] = async (input: any, init?: BunFetchRequestInit) => {
@@ -576,6 +576,30 @@ export namespace Provider {
           timeout: false,
         })
       }
+
+      // Special case: google-vertex-anthropic uses a subpath import
+      const bundledKey = provider.id === "google-vertex-anthropic" ? "@ai-sdk/google-vertex/anthropic" : pkg
+      const bundledFn = BUNDLED_PROVIDERS[bundledKey]
+      if (bundledFn) {
+        log.info("using bundled provider", { providerID: provider.id, pkg: bundledKey })
+        const loaded = bundledFn({
+          name: provider.id,
+          ...options,
+        })
+        s.sdk.set(key, loaded)
+        return loaded as SDK
+      }
+
+      let installedPath: string
+      if (!pkg.startsWith("file://")) {
+        installedPath = await BunProc.install(pkg, "latest")
+      } else {
+        log.info("loading local provider", { pkg })
+        installedPath = pkg
+      }
+
+      const mod = await import(installedPath)
+
       const fn = mod[Object.keys(mod).find((key) => key.startsWith("create"))!]
       const loaded = fn({
         name: provider.id,
