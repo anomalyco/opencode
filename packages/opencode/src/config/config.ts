@@ -479,7 +479,12 @@ export namespace Config {
         .boolean()
         .optional()
         .describe("@deprecated Use 'share' field instead. Share newly created sessions automatically"),
-      autoupdate: z.boolean().optional().describe("Automatically update to the latest version"),
+      autoupdate: z
+        .union([z.boolean(), z.literal("notify")])
+        .optional()
+        .describe(
+          "Automatically update to the latest version. Set to true to auto-update, false to disable, or 'notify' to show update notifications",
+        ),
       disabled_providers: z.array(z.string()).optional().describe("Disable providers that are loaded automatically"),
       enabled_providers: z
         .array(z.string())
