@@ -16,7 +16,7 @@ export const WriteTool = Tool.define("write", {
   parameters: z.object({
     content: z.preprocess(
       (val) => {
-        if (typeof val === 'string') {
+        if (typeof val === "string") {
           return val
         }
         if (Array.isArray(val)) {
