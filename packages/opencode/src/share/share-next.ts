@@ -1,5 +1,7 @@
 import { Bus } from "@/bus"
 import { Config } from "@/config/config"
+import type { ModelsDev } from "@/provider/models"
+import { Provider } from "@/provider/provider"
 import { Session } from "@/session"
 import { MessageV2 } from "@/session/message-v2"
 import { Storage } from "@/storage/storage"
@@ -26,6 +28,18 @@ export namespace ShareNext {
           data: evt.properties.info,
         },
       ])
+      if (evt.properties.info.role === "user") {
+        await sync(evt.properties.info.sessionID, [
+          {
+            type: "model",
+            data: [
+              await Provider.getModel(evt.properties.info.model.providerID, evt.properties.info.model.modelID).then(
+                (m) => m.info,
+              ),
+            ],
+          },
+        ])
+      }
     })
     Bus.subscribe(MessageV2.Event.PartUpdated, async (evt) => {
       await sync(evt.properties.part.sessionID, [
@@ -90,6 +104,10 @@ export namespace ShareNext {
         type: "session_diff"
         data: SDK.FileDiff[]
       }
+    | {
+        type: "model"
+        data: ModelsDev.Model[]
+      }
 
   async function sync(sessionID: string, data: Data[]) {
     const url = await Config.get().then((x) => x.enterprise!.url)
@@ -129,6 +147,12 @@ export namespace ShareNext {
     const session = await Session.get(sessionID)
     const diffs = await Session.diff(sessionID)
     const messages = await Array.fromAsync(MessageV2.stream(sessionID))
+    const models = await Promise.all(
+      messages
+        .filter((m) => m.info.role === "user")
+        .map((m) => (m.info as SDK.UserMessage).model)
+        .map((m) => Provider.getModel(m.providerID, m.modelID).then((m) => m.info)),
+    )
     await sync(sessionID, [
       {
         type: "session",
@@ -142,6 +166,10 @@ export namespace ShareNext {
       {
         type: "session_diff",
         data: diffs,
+      },
+      {
+        type: "model",
+        data: models,
       },
     ])
   }

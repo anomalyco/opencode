@@ -18,6 +18,7 @@ import { Legal } from "~/component/legal"
 import { Footer } from "~/component/footer"
 import { Header } from "~/component/header"
 import { getLastSeenWorkspaceID } from "../workspace/common"
+import { IconGemini } from "~/component/icon"
 
 const checkLoggedIn = query(async () => {
   "use server"
@@ -32,7 +33,7 @@ export default function Home() {
       {/*<HttpHeader name="Cache-Control" value="public, max-age=1, s-maxage=3600, stale-while-revalidate=86400" />*/}
       <Title>OpenCode Zen | A curated set of reliable optimized models for coding agents</Title>
       <Link rel="canonical" href={`${config.baseUrl}/zen`} />
-      <Link rel="icon" type="image/svg+xml" href="/favicon-zen.svg" />
+      <Link rel="shortcut icon" type="image/svg+xml" href="/favicon-zen.svg" />
       <Meta property="og:image" content="/social-share-zen.png" />
       <Meta name="twitter:image" content="/social-share-zen.png" />
       <Meta name="opencode:auth" content={loggedin() ? "true" : "false"} />
@@ -81,6 +82,9 @@ export default function Home() {
                       fill="currentColor"
                     />
                   </svg>
+                </div>
+                <div>
+                  <IconGemini width="24" height="24" />
                 </div>
                 <div>
                   <svg width="24" height="24" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg">
