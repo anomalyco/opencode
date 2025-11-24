@@ -338,14 +338,28 @@ export default function Page() {
                   <Match when={session.id}>
                     <div class="flex items-start justify-start h-full min-h-0">
                       <Show when={session.messages.user().length > 1}>
-                        <MessageNav
-                          classList={{ "mt-0.5 mr-3 absolute right-full": wide(), "mt-3 mr-8": !wide() }}
-                          messages={session.messages.user()}
-                          current={session.messages.active()}
-                          onMessageSelect={session.messages.setActive}
-                          size={wide() ? "normal" : "compact"}
-                          working={session.working()}
-                        />
+                        <>
+                          <MessageNav
+                            class="@6xl:hidden mt-3 mr-8"
+                            messages={session.messages.user()}
+                            current={session.messages.active()}
+                            onMessageSelect={session.messages.setActive}
+                            size="compact"
+                            working={session.working()}
+                          />
+                          <MessageNav
+                            classList={{
+                              "hidden @6xl:block": true,
+                              "mt-0.5 mr-3 absolute right-full": wide(),
+                              "mt-3 mr-8": !wide(),
+                            }}
+                            messages={session.messages.user()}
+                            current={session.messages.active()}
+                            onMessageSelect={session.messages.setActive}
+                            size={wide() ? "normal" : "compact"}
+                            working={session.working()}
+                          />
+                        </>
                       </Show>
                       <SessionTurn
                         sessionID={session.id!}
