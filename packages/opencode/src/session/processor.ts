@@ -11,6 +11,7 @@ import { SessionSummary } from "./summary"
 import { Bus } from "@/bus"
 import { SessionRetry } from "./retry"
 import { SessionStatus } from "./status"
+import { Token } from "@/util/token"
 
 export namespace SessionProcessor {
   const DOOM_LOOP_THRESHOLD = 3
@@ -248,6 +249,7 @@ export namespace SessionProcessor {
                   input.assistantMessage.finish = value.finishReason
                   input.assistantMessage.cost += usage.cost
                   input.assistantMessage.tokens = usage.tokens
+                  input.assistantMessage.outputEstimate = undefined
                   await Session.updatePart({
                     id: Identifier.ascending("part"),
                     reason: value.finishReason,
@@ -297,11 +299,17 @@ export namespace SessionProcessor {
                   if (currentText) {
                     currentText.text += value.text
                     if (value.providerMetadata) currentText.metadata = value.providerMetadata
-                    if (currentText.text)
+                    if (currentText.text) {
+                      const estimate = Token.estimate(currentText.text)
+                      if (input.assistantMessage.outputEstimate !== estimate) {
+                        input.assistantMessage.outputEstimate = estimate
+                        await Session.updateMessage(input.assistantMessage)
+                      }
                       await Session.updatePart({
                         part: currentText,
                         delta: value.text,
                       })
+                    }
                   }
                   break
 

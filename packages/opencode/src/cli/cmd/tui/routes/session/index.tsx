@@ -1048,6 +1048,12 @@ function AssistantMessage(props: { message: AssistantMessage; parts: Part[]; las
   })
 
   const individualTokens = createMemo(() => props.message.tokens.output)
+  const outputEstimate = createMemo(() => props.message.outputEstimate)
+  const outputDisplay = createMemo(() => {
+    const estimate = outputEstimate()
+    if (estimate !== undefined) return "~" + estimate.toLocaleString()
+    return individualTokens().toLocaleString()
+  })
   const cumulativeTokens = createMemo(
     () => props.message.tokens.input + props.message.tokens.cache.read + props.message.tokens.cache.write,
   )
@@ -1098,11 +1104,14 @@ function AssistantMessage(props: { message: AssistantMessage; parts: Part[]; las
               <Show when={duration()}>
                 <span style={{ fg: theme.textMuted }}> ⬝{Locale.duration(duration())}</span>
               </Show>
-              <Show when={ctx.showTokens() && individualTokens() > 0}>
+              <Show when={ctx.showTokens() && (individualTokens() > 0 || outputEstimate() !== undefined)}>
                 <span style={{ fg: theme.textMuted }}>
                   {" "}
-                  ⬝{individualTokens().toLocaleString()} tok · {cumulativeTokens().toLocaleString()} context (
-                  {percentage()}%)
+                  ⬝{outputDisplay()} tok
+                  <Show when={cumulativeTokens() > 0}>
+                    {" "}
+                    · {cumulativeTokens().toLocaleString()} context ({percentage()}%)
+                  </Show>
                 </span>
               </Show>
             </text>

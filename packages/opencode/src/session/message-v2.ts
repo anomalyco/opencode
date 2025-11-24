@@ -360,6 +360,7 @@ export namespace MessageV2 {
         write: z.number(),
       }),
     }),
+    outputEstimate: z.number().optional(),
     finish: z.string().optional(),
   }).meta({
     ref: "AssistantMessage",
