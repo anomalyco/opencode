@@ -1,6 +1,6 @@
 {
   "$schema": "https://json.schemastore.org/package.json",
-  "version": "1.0.105",
+  "version": "1.0.108",
   "name": "opencode",
   "type": "module",
   "private": true,
@@ -82,6 +82,7 @@
     "jsonc-parser": "3.3.1",
     "minimatch": "10.0.3",
     "open": "10.1.2",
+    "opentui-spinner": "0.0.5",
     "partial-json": "0.1.7",
     "remeda": "catalog:",
     "solid-js": "catalog:",

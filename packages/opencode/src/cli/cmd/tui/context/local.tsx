@@ -94,6 +94,7 @@ export const { use: useLocal, provider: LocalProvider } = createSimpleContext({
           const agent = agents().find((x) => x.name === name)
           if (agent?.color) return RGBA.fromHex(agent.color)
           const index = agents().findIndex((x) => x.name === name)
+          if (index === -1) return colors()[0]
           return colors()[index % colors().length]
         },
       }

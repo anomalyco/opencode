@@ -1008,7 +1008,7 @@ function AssistantMessage(props: { message: AssistantMessage; parts: Part[]; las
     if (!final()) return 0
     if (!props.message.time.completed) return 0
     const user = messages().find((x) => x.role === "user" && x.id === props.message.parentID)
-    if (!user) return 0
+    if (!user || !user.time) return 0
     return props.message.time.completed - user.time.created
   })
 

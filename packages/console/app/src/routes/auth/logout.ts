@@ -1,6 +1,5 @@
 import { redirect } from "@solidjs/router"
 import { APIEvent } from "@solidjs/start"
-import { getResponseHeaders } from "@solidjs/start/http"
 import { useAuthSession } from "~/context/auth.session"
 
 export async function GET(event: APIEvent) {
@@ -14,8 +13,5 @@ export async function GET(event: APIEvent) {
       event!.locals.actor = undefined
       return val
     })
-  return redirect("/zen", {
-    status: 302,
-    headers: getResponseHeaders(),
-  })
+  return redirect("/zen")
 }

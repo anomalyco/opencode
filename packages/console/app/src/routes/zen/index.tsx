@@ -21,7 +21,7 @@ import { getLastSeenWorkspaceID } from "../workspace/common"
 
 const checkLoggedIn = query(async () => {
   "use server"
-  const workspaceID = await getLastSeenWorkspaceID()
+  const workspaceID = await getLastSeenWorkspaceID().catch(() => {})
   if (workspaceID) throw redirect(`/workspace/${workspaceID}`)
 }, "checkLoggedIn.get")
 
