@@ -597,11 +597,7 @@ export namespace SessionPrompt {
                         // Transform the inputSchema for provider compatibility
                         return {
                           ...tool,
-                          inputSchema: ProviderTransform.schema(
-                            model.providerID,
-                            model.modelID,
-                            tool.inputSchema,
-                          ),
+                          inputSchema: ProviderTransform.schema(model.providerID, model.modelID, tool.inputSchema),
                         }
                       }
                       // If no inputSchema, return tool unchanged
