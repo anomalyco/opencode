@@ -1,4 +1,5 @@
-import { experimental_createMCPClient, type Tool } from "ai"
+import { type Tool } from "ai"
+import { experimental_createMCPClient } from "@ai-sdk/mcp"
 import { StreamableHTTPClientTransport } from "@modelcontextprotocol/sdk/client/streamableHttp.js"
 import { SSEClientTransport } from "@modelcontextprotocol/sdk/client/sse.js"
 import { StdioClientTransport } from "@modelcontextprotocol/sdk/client/stdio.js"

@@ -2,10 +2,11 @@ import { render, useKeyboard, useRenderer, useTerminalDimensions } from "@opentu
 import { Clipboard } from "@tui/util/clipboard"
 import { TextAttributes } from "@opentui/core"
 import { RouteProvider, useRoute } from "@tui/context/route"
-import { Switch, Match, createEffect, untrack, ErrorBoundary, createSignal, onMount, batch } from "solid-js"
+import { Switch, Match, createEffect, untrack, ErrorBoundary, createSignal, onMount, batch, Show } from "solid-js"
 import { Installation } from "@/installation"
 import { Global } from "@/global"
 import { DialogProvider, useDialog } from "@tui/ui/dialog"
+import { DialogProvider as DialogProviderList } from "@tui/component/dialog-provider"
 import { SDKProvider, useSDK } from "@tui/context/sdk"
 import { SyncProvider, useSync } from "@tui/context/sync"
 import { LocalProvider, useLocal } from "@tui/context/local"
@@ -303,6 +304,14 @@ function App() {
       category: "System",
     },
     {
+      title: "Connect provider",
+      value: "provider.connect",
+      onSelect: () => {
+        dialog.replace(() => <DialogProviderList />)
+      },
+      category: "System",
+    },
+    {
       title: `Switch to ${mode() === "dark" ? "light" : "dark"} mode`,
       value: "theme.switch_mode",
       onSelect: () => {
@@ -340,6 +349,21 @@ function App() {
       onSelect: (dialog) => {
         renderer.console.toggle()
         dialog.clear()
+      },
+    },
+    {
+      title: "Suspend terminal",
+      value: "terminal.suspend",
+      keybind: "terminal_suspend",
+      category: "System",
+      onSelect: () => {
+        process.once("SIGCONT", () => {
+          renderer.resume()
+        })
+
+        renderer.suspend()
+        // pid=0 means send the signal to all processes in the process group
+        process.kill(0, "SIGTSTP")
       },
     },
   ])
@@ -411,6 +435,15 @@ function App() {
     })
   })
 
+  event.on(Installation.Event.UpdateAvailable.type, (evt) => {
+    toast.show({
+      variant: "info",
+      title: "Update Available",
+      message: `OpenCode v${evt.properties.version} is available. Run 'opencode upgrade' to update manually.`,
+      duration: 10000,
+    })
+  })
+
   return (
     <box
       width={dimensions().width}
@@ -460,16 +493,18 @@ function App() {
             <text fg={theme.textMuted}>{process.cwd().replace(Global.Path.home, "~")}</text>
           </box>
         </box>
-        <box flexDirection="row" flexShrink={0}>
-          <text fg={theme.textMuted} paddingRight={1}>
-            tab
-          </text>
-          <text fg={local.agent.color(local.agent.current().name)}>{""}</text>
-          <text bg={local.agent.color(local.agent.current().name)} fg={theme.background} wrapMode={undefined}>
-            <span style={{ bold: true }}> {local.agent.current().name.toUpperCase()}</span>
-            <span> AGENT </span>
-          </text>
-        </box>
+        <Show when={false}>
+          <box flexDirection="row" flexShrink={0}>
+            <text fg={theme.textMuted} paddingRight={1}>
+              tab
+            </text>
+            <text fg={local.agent.color(local.agent.current().name)}>{""}</text>
+            <text bg={local.agent.color(local.agent.current().name)} fg={theme.background} wrapMode={undefined}>
+              <span style={{ bold: true }}> {local.agent.current().name.toUpperCase()}</span>
+              <span> AGENT </span>
+            </text>
+          </box>
+        </Show>
       </box>
     </box>
   )

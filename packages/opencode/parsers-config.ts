@@ -168,6 +168,15 @@ export default {
       },
     },
     {
+      filetype: "yaml",
+      wasm: "https://github.com/tree-sitter-grammars/tree-sitter-yaml/releases/download/v0.7.2/tree-sitter-yaml.wasm",
+      queries: {
+        highlights: [
+          "https://raw.githubusercontent.com/nvim-treesitter/nvim-treesitter/refs/heads/master/queries/yaml/highlights.scm",
+        ],
+      },
+    },
+    {
       filetype: "haskell",
       wasm: "https://github.com/tree-sitter/tree-sitter-haskell/releases/download/v0.23.1/tree-sitter-haskell.wasm",
       queries: {

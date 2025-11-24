@@ -37,6 +37,11 @@ jobs:
           git config --global user.email "action@github.com"
           git config --global user.name "Github Action"
 
+      - name: Update flake.lock
+        run: |
+          set -euo pipefail
+          nix flake update
+
       - name: Update node_modules hash
         run: |
           set -euo pipefail
@@ -62,7 +67,7 @@ jobs:
             echo "" >> "$GITHUB_STEP_SUMMARY"
           }
 
-          FILES=(flake.nix nix/node-modules.nix nix/hashes.json)
+          FILES=(flake.lock flake.nix nix/node-modules.nix nix/hashes.json)
           STATUS="$(git status --short -- "${FILES[@]}" || true)"
           if [ -z "$STATUS" ]; then
             summarize "no changes"
@@ -71,7 +76,7 @@ jobs:
           fi
 
           git add "${FILES[@]}"
-          git commit -m "Update Nix hashes"
+          git commit -m "Update Nix flake.lock and hashes"
 
           BRANCH="${TARGET_BRANCH:-${GITHUB_REF_NAME}}"
           git push origin HEAD:"$BRANCH"

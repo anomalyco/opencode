@@ -11,6 +11,7 @@ import { useToast } from "../ui/toast"
 import { Provider } from "@/provider/provider"
 import { useArgs } from "./args"
 import { useSDK } from "./sdk"
+import { RGBA } from "@opentui/core"
 
 export const { use: useLocal, provider: LocalProvider } = createSimpleContext({
   name: "Local",
@@ -93,8 +94,9 @@ export const { use: useLocal, provider: LocalProvider } = createSimpleContext({
         },
         color(name: string) {
           const agent = agents().find((x) => x.name === name)
-          if (agent?.color) return agent.color
+          if (agent?.color) return RGBA.fromHex(agent.color)
           const index = agents().findIndex((x) => x.name === name)
+          if (index === -1) return colors()[0]
           return colors()[index % colors().length]
         },
       }

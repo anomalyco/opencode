@@ -25,7 +25,11 @@ elif [[ "$arch" == "x86_64" ]]; then
   arch="x64"
 fi
 
-filename="$APP-$os-$arch.zip"
+if [ "$os" = "linux" ]; then
+    filename="$APP-$os-$arch.tar.gz"
+else
+    filename="$APP-$os-$arch.zip"
+fi
 
 
 case "$filename" in
@@ -43,6 +47,18 @@ case "$filename" in
         exit 1
     ;;
 esac
+
+if [ "$os" = "linux" ]; then
+    if ! command -v tar >/dev/null 2>&1; then
+         echo -e "${RED}Error: 'tar' is required but not installed.${NC}"
+         exit 1
+    fi
+else
+    if ! command -v unzip >/dev/null 2>&1; then
+        echo -e "${RED}Error: 'unzip' is required but not installed.${NC}"
+        exit 1
+    fi
+fi
 
 INSTALL_DIR=$HOME/.opencode/bin
 mkdir -p "$INSTALL_DIR"
@@ -94,9 +110,9 @@ check_version() {
 }
 
 unbuffered_sed() {
-    if echo | sed -u >/dev/null 2>&1; then
+    if echo | sed -u -e "" >/dev/null 2>&1; then
         sed -nu "$@"
-    elif echo | sed -l >/dev/null 2>&1; then
+    elif echo | sed -l -e "" >/dev/null 2>&1; then
         sed -nl "$@"
     else
         local pad="$(printf "\n%512s" "")"
@@ -115,10 +131,12 @@ print_progress() {
     local on=$(( percent * width / 100 ))
     local off=$(( width - on ))
 
-    local full_filled=$(printf "%.0s■" {1..50})
-    local full_empty=$(printf "%.0s･" {1..50})
+    local filled=$(printf "%*s" "$on" "")
+    filled=${filled// /■}
+    local empty=$(printf "%*s" "$off" "")
+    empty=${empty// /･}
 
-    printf "\r${ORANGE}%s%s %3d%%${NC}" "${full_filled:0:$on}" "${full_empty:0:$off}" "$percent" >&4
+    printf "\r${ORANGE}%s%s %3d%%${NC}" "$filled" "$empty" "$percent" >&4
 }
 
 download_with_progress() {
@@ -158,6 +176,7 @@ download_with_progress() {
         local bytes=0
         
         while IFS=" " read -r -a line; do
+            [ "${#line[@]}" -lt 2 ] && continue
             local tag="${line[0]} ${line[1]}"
             
             if [ "$tag" = "0000: content-length:" ]; then
@@ -184,12 +203,17 @@ download_and_install() {
     print_message info "\n${MUTED}Installing ${NC}opencode ${MUTED}version: ${NC}$specific_version"
     mkdir -p opencodetmp && cd opencodetmp
     
-    if ! download_with_progress "$url" "$filename"; then
-        # Fallback to standard curl if custom fails for some reason
+    if [[ "$os" == "windows" ]] || ! download_with_progress "$url" "$filename"; then
+        # Fallback to standard curl on Windows or if custom progress fails
         curl -# -L -o "$filename" "$url"
     fi
 
-    unzip -q "$filename"
+    if [ "$os" = "linux" ]; then
+        tar -xzf "$filename"
+    else
+        unzip -q "$filename"
+    fi
+    
     mv opencode "$INSTALL_DIR"
     chmod 755 "${INSTALL_DIR}/opencode"
     cd .. && rm -rf opencodetmp
