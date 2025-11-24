@@ -339,7 +339,7 @@ export default function Page() {
                     <div class="flex items-start justify-start h-full min-h-0">
                       <Show when={session.messages.user().length > 1}>
                         <MessageNav
-                          classList={{ "mt-1.5 mr-3": wide(), "mt-3 mr-8": !wide() }}
+                          classList={{ "mt-0.5 mr-3 absolute right-full": wide(), "mt-3 mr-8": !wide() }}
                           messages={session.messages.user()}
                           current={session.messages.active()}
                           onMessageSelect={session.messages.setActive}
