@@ -39,6 +39,9 @@ class Resource:
     class Console:
         type: str
         url: str
+    class ConsoleData:
+        name: str
+        type: str
     class Database:
         database: str
         host: str
@@ -52,6 +55,9 @@ class Resource:
     class EMAILOCTOPUS_API_KEY:
         type: str
         value: str
+    class EnterpriseStorage:
+        name: str
+        type: str
     class GITHUB_APP_ID:
         type: str
         value: str
@@ -75,6 +81,12 @@ class Resource:
         value: str
     class LogProcessor:
         type: str
+    class R2AccessKey:
+        type: str
+        value: str
+    class R2SecretKey:
+        type: str
+        value: str
     class STRIPE_SECRET_KEY:
         type: str
         value: str
@@ -88,6 +100,12 @@ class Resource:
         type: str
         value: str
     class ZEN_MODELS2:
+        type: str
+        value: str
+    class ZEN_MODELS3:
+        type: str
+        value: str
+    class ZEN_MODELS4:
         type: str
         value: str
 

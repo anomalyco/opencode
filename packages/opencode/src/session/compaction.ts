@@ -15,6 +15,7 @@ import { Log } from "../util/log"
 import { ProviderTransform } from "@/provider/transform"
 import { SessionProcessor } from "./processor"
 import { fn } from "@/util/fn"
+import { mergeDeep, pipe } from "remeda"
 
 export namespace SessionCompaction {
   const log = Log.create({ service: "session.compaction" })
@@ -92,16 +93,17 @@ export namespace SessionCompaction {
       providerID: string
       modelID: string
     }
+    agent: string
     abort: AbortSignal
   }) {
     const model = await Provider.getModel(input.model.providerID, input.model.modelID)
-    const system = [...SystemPrompt.summarize(model.providerID)]
+    const system = [...SystemPrompt.compaction(model.providerID)]
     const msg = (await Session.updateMessage({
       id: Identifier.ascending("message"),
       role: "assistant",
       parentID: input.parentID,
       sessionID: input.sessionID,
-      mode: "build",
+      mode: input.agent,
       summary: true,
       path: {
         cwd: Instance.directory,
@@ -136,10 +138,15 @@ export namespace SessionCompaction {
         },
         // set to 0, we handle loop
         maxRetries: 0,
-        providerOptions: ProviderTransform.providerOptions(model.npm, model.providerID, {
-          ...ProviderTransform.options(model.providerID, model.modelID, model.npm ?? "", input.sessionID),
-          ...model.info.options,
-        }),
+        providerOptions: ProviderTransform.providerOptions(
+          model.npm,
+          model.providerID,
+          pipe(
+            {},
+            mergeDeep(ProviderTransform.options(model.providerID, model.modelID, model.npm ?? "", input.sessionID)),
+            mergeDeep(model.info.options),
+          ),
+        ),
         headers: model.info.headers,
         abortSignal: input.abort,
         tools: model.info.tool_call ? {} : undefined,
@@ -199,7 +206,7 @@ export namespace SessionCompaction {
         time: {
           created: Date.now(),
         },
-        agent: "build",
+        agent: input.agent,
         model: input.model,
       })
       await Session.updatePart({
@@ -222,6 +229,7 @@ export namespace SessionCompaction {
   export const create = fn(
     z.object({
       sessionID: Identifier.schema("session"),
+      agent: z.string(),
       model: z.object({
         providerID: z.string(),
         modelID: z.string(),
@@ -233,7 +241,7 @@ export namespace SessionCompaction {
         role: "user",
         model: input.model,
         sessionID: input.sessionID,
-        agent: "build",
+        agent: input.agent,
         time: {
           created: Date.now(),
         },

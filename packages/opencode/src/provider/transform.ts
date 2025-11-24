@@ -24,7 +24,6 @@ export namespace ProviderTransform {
       const result: ModelMessage[] = []
       for (let i = 0; i < msgs.length; i++) {
         const msg = msgs[i]
-        const prevMsg = msgs[i - 1]
         const nextMsg = msgs[i + 1]
 
         if ((msg.role === "assistant" || msg.role === "tool") && Array.isArray(msg.content)) {
@@ -129,12 +128,7 @@ export namespace ProviderTransform {
     return undefined
   }
 
-  export function options(
-    providerID: string,
-    modelID: string,
-    npm: string,
-    sessionID: string,
-  ): Record<string, any> | undefined {
+  export function options(providerID: string, modelID: string, npm: string, sessionID: string): Record<string, any> {
     const result: Record<string, any> = {}
 
     // switch to providerID later, for now use this
@@ -148,7 +142,7 @@ export namespace ProviderTransform {
       result["promptCacheKey"] = sessionID
     }
 
-    if (providerID === "google") {
+    if (providerID === "google" || (providerID.startsWith("opencode") && modelID.includes("gemini-3"))) {
       result["thinkingConfig"] = {
         includeThoughts: true,
       }
@@ -167,13 +161,32 @@ export namespace ProviderTransform {
         result["textVerbosity"] = "low"
       }
 
-      if (providerID === "opencode") {
+      if (providerID.startsWith("opencode")) {
         result["promptCacheKey"] = sessionID
         result["include"] = ["reasoning.encrypted_content"]
         result["reasoningSummary"] = "auto"
       }
     }
     return result
+  }
+
+  export function smallOptions(input: { providerID: string; modelID: string }) {
+    const options: Record<string, any> = {}
+
+    if (input.providerID === "openai" || input.modelID.includes("gpt-5")) {
+      if (input.modelID.includes("5.1")) {
+        options["reasoningEffort"] = "low"
+      } else {
+        options["reasoningEffort"] = "minimal"
+      }
+    }
+    if (input.providerID === "google") {
+      options["thinkingConfig"] = {
+        thinkingBudget: 0,
+      }
+    }
+
+    return options
   }
 
   export function providerOptions(npm: string | undefined, providerID: string, options: { [x: string]: any }) {

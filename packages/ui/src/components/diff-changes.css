@@ -4,7 +4,7 @@
   justify-content: flex-end;
   align-items: center;
 
-  [data-slot="additions"] {
+  [data-slot="diff-changes-additions"] {
     font-family: var(--font-family-mono);
     font-size: var(--font-size-small);
     font-style: normal;
@@ -15,7 +15,7 @@
     color: var(--text-diff-add-base);
   }
 
-  [data-slot="deletions"] {
+  [data-slot="diff-changes-deletions"] {
     font-family: var(--font-family-mono);
     font-size: var(--font-size-small);
     font-style: normal;

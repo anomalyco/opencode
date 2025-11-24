@@ -141,16 +141,16 @@ PART_MAPPING["tool"] = function ToolPartDisplay(props) {
             return (
               <Card variant="error">
                 <div data-component="tool-error">
-                  <Icon name="circle-ban-sign" size="small" data-slot="tool-error-icon" />
+                  <Icon name="circle-ban-sign" size="small" data-slot="message-part-tool-error-icon" />
                   <Switch>
                     <Match when={title && title.length < 30}>
-                      <div data-slot="tool-error-content">
-                        <div data-slot="tool-error-title">{title}</div>
-                        <span data-slot="tool-error-message">{rest.join(": ")}</span>
+                      <div data-slot="message-part-tool-error-content">
+                        <div data-slot="message-part-tool-error-title">{title}</div>
+                        <span data-slot="message-part-tool-error-message">{rest.join(": ")}</span>
                       </div>
                     </Match>
                     <Match when={true}>
-                      <span data-slot="tool-error-message">{cleaned}</span>
+                      <span data-slot="message-part-tool-error-message">{cleaned}</span>
                     </Match>
                   </Switch>
                 </div>
@@ -340,16 +340,16 @@ ToolRegistry.register({
         icon="code-lines"
         trigger={
           <div data-component="edit-trigger">
-            <div data-slot="title-area">
-              <div data-slot="title">Edit</div>
-              <div data-slot="path">
+            <div data-slot="message-part-title-area">
+              <div data-slot="message-part-title">Edit</div>
+              <div data-slot="message-part-path">
                 <Show when={props.input.filePath?.includes("/")}>
-                  <span data-slot="directory">{getDirectory(props.input.filePath!)}</span>
+                  <span data-slot="message-part-directory">{getDirectory(props.input.filePath!)}</span>
                 </Show>
-                <span data-slot="filename">{getFilename(props.input.filePath ?? "")}</span>
+                <span data-slot="message-part-filename">{getFilename(props.input.filePath ?? "")}</span>
               </div>
             </div>
-            <div data-slot="actions">
+            <div data-slot="message-part-actions">
               <Show when={props.metadata.filediff}>
                 <DiffChanges changes={props.metadata.filediff} />
               </Show>
@@ -384,16 +384,16 @@ ToolRegistry.register({
         icon="code-lines"
         trigger={
           <div data-component="write-trigger">
-            <div data-slot="title-area">
-              <div data-slot="title">Write</div>
-              <div data-slot="path">
+            <div data-slot="message-part-title-area">
+              <div data-slot="message-part-title">Write</div>
+              <div data-slot="message-part-path">
                 <Show when={props.input.filePath?.includes("/")}>
-                  <span data-slot="directory">{getDirectory(props.input.filePath!)}</span>
+                  <span data-slot="message-part-directory">{getDirectory(props.input.filePath!)}</span>
                 </Show>
-                <span data-slot="filename">{getFilename(props.input.filePath ?? "")}</span>
+                <span data-slot="message-part-filename">{getFilename(props.input.filePath ?? "")}</span>
               </div>
             </div>
-            <div data-slot="actions">{/* <DiffChanges diff={diff} /> */}</div>
+            <div data-slot="message-part-actions">{/* <DiffChanges diff={diff} /> */}</div>
           </div>
         }
       >
@@ -421,7 +421,7 @@ ToolRegistry.register({
             <For each={props.input.todos}>
               {(todo: any) => (
                 <Checkbox readOnly checked={todo.status === "completed"}>
-                  <div data-slot="todo-content" data-completed={todo.status === "completed"}>
+                  <div data-slot="message-part-todo-content" data-completed={todo.status === "completed"}>
                     {todo.content}
                   </div>
                 </Checkbox>

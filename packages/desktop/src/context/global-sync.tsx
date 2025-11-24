@@ -14,8 +14,8 @@ import type {
   SessionStatus,
 } from "@opencode-ai/sdk"
 import { createStore, produce, reconcile } from "solid-js/store"
-import { Binary } from "@/utils/binary"
-import { createSimpleContext } from "./helper"
+import { Binary } from "@opencode-ai/util/binary"
+import { createSimpleContext } from "@opencode-ai/ui/context"
 import { useGlobalSDK } from "./global-sdk"
 
 type State = {
