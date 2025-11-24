@@ -14,7 +14,19 @@ import { Agent } from "../agent/agent"
 export const WriteTool = Tool.define("write", {
   description: DESCRIPTION,
   parameters: z.object({
-    content: z.string().describe("The content to write to the file"),
+    content: z.preprocess(
+      (val) => {
+        if (typeof val === 'string') {
+          return val
+        }
+        if (Array.isArray(val)) {
+          // Join array elements with newlines
+          return val.map(item => String(item)).join('\n')
+        }
+        return String(val)
+      },
+      z.string()
+    ).describe("The content to write to the file"),
     filePath: z.string().describe("The absolute path to the file to write (must be absolute, not relative)"),
   }),
   async execute(params, ctx) {
