@@ -1,0 +1,53 @@
+name: Build and Release
+run-name: "Build and Release ${{ inputs.version }}"
+
+on:
+  workflow_dispatch:
+    inputs:
+      version:
+        description: "Version to release (e.g., 1.0.105-fork1)"
+        required: true
+        type: string
+
+permissions:
+  contents: write
+
+jobs:
+  build-and-release:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v3
+
+      - uses: ./.github/actions/setup-bun
+
+      - name: Build binaries
+        run: |
+          cd packages/opencode
+          bun run ./script/build.ts
+        env:
+          OPENCODE_VERSION: ${{ inputs.version }}
+          OPENCODE_CHANNEL: fork
+
+      - name: Create archives
+        run: |
+          cd packages/opencode/dist
+
+          # Create zip files for macOS
+          cd opencode-darwin-arm64/bin && zip -r ../../opencode-darwin-arm64.zip * && cd ../..
+          cd opencode-darwin-x64/bin && zip -r ../../opencode-darwin-x64.zip * && cd ../..
+
+          # Create tar.gz files for Linux
+          cd opencode-linux-arm64/bin && tar -czf ../../opencode-linux-arm64.tar.gz * && cd ../..
+          cd opencode-linux-x64/bin && tar -czf ../../opencode-linux-x64.tar.gz * && cd ../..
+
+      - name: Create GitHub Release
+        run: |
+          gh release create v${{ inputs.version }} \
+            --title "v${{ inputs.version }}" \
+            --notes "Fork release v${{ inputs.version }}" \
+            packages/opencode/dist/opencode-darwin-arm64.zip \
+            packages/opencode/dist/opencode-darwin-x64.zip \
+            packages/opencode/dist/opencode-linux-arm64.tar.gz \
+            packages/opencode/dist/opencode-linux-x64.tar.gz
+        env:
+          GH_TOKEN: ${{ github.token }}
