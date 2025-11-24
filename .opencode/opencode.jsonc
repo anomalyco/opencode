@@ -1,9 +1,11 @@
 {
   "$schema": "https://opencode.ai/config.json",
-  "plugin": ["opencode-openai-codex-auth"],
-  // "enterprise": {
-  //   "url": "http://localhost:3000",
-  // },
+  "plugin": [
+    "opencode-openai-codex-auth"
+  ],
+  "enterprise": {
+    "url": "http://localhost:3000",
+  },
   "provider": {
     "opencode": {
       "options": {

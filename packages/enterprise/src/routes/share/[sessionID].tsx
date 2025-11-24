@@ -1,7 +1,7 @@
-import { FileDiff, Message, Part, Session, SessionStatus, UserMessage } from "@opencode-ai/sdk"
+import { FileDiff, Message, Model, Part, Session, SessionStatus, UserMessage } from "@opencode-ai/sdk"
 import { SessionTurn } from "@opencode-ai/ui/session-turn"
 import { SessionReview } from "@opencode-ai/ui/session-review"
-import { DataProvider, useData } from "@opencode-ai/ui/context"
+import { DataProvider } from "@opencode-ai/ui/context"
 import { createAsync, query, RouteDefinition, useParams } from "@solidjs/router"
 import { createMemo, Show } from "solid-js"
 import { Share } from "~/core/share"
@@ -29,6 +29,9 @@ const getData = query(async (sessionID) => {
     part: {
       [messageID: string]: Part[]
     }
+    model: {
+      [sessionID: string]: Model[]
+    }
   } = {
     session: [],
     session_diff: {
@@ -41,6 +44,7 @@ const getData = query(async (sessionID) => {
     },
     message: {},
     part: {},
+    model: {},
   }
   for (const item of data) {
     switch (item.type) {
@@ -60,6 +64,9 @@ const getData = query(async (sessionID) => {
       case "part":
         result.part[item.data.messageID] = result.part[item.data.messageID] ?? []
         result.part[item.data.messageID].push(item.data)
+        break
+      case "model":
+        result.model[sessionID] = item.data
         break
     }
   }
@@ -82,15 +89,14 @@ export default function () {
       {(data) => (
         <DataProvider data={data()}>
           {iife(() => {
-            const data = useData()
             const [store, setStore] = createStore({
               messageId: undefined as string | undefined,
             })
-            const match = createMemo(() => Binary.search(data.session, params.sessionID!, (s) => s.id))
+            const match = createMemo(() => Binary.search(data().session, params.sessionID!, (s) => s.id))
             if (!match().found) throw new Error(`Session ${params.sessionID} not found`)
-            const info = createMemo(() => data.session[match().index])
+            const info = createMemo(() => data().session[match().index])
             const messages = createMemo(() =>
-              params.sessionID ? (data.message[params.sessionID]?.filter((m) => m.role === "user") ?? []) : [],
+              params.sessionID ? (data().message[params.sessionID]?.filter((m) => m.role === "user") ?? []) : [],
             )
             const firstUserMessage = createMemo(() => messages().at(0))
             const activeMessage = createMemo(
@@ -104,8 +110,9 @@ export default function () {
               }
             }
             const provider = createMemo(() => activeMessage()?.model?.providerID)
-            const model = createMemo(() => activeMessage()?.model?.modelID)
-            const diffs = createMemo(() => data.session_diff[params.sessionID!] ?? [])
+            const modelID = createMemo(() => activeMessage()?.model?.modelID)
+            const model = createMemo(() => data().model[params.sessionID!]?.find((m) => m.id === modelID()))
+            const diffs = createMemo(() => data().session_diff[params.sessionID!] ?? [])
 
             return (
               <div class="relative bg-background-stronger w-screen h-screen overflow-hidden flex flex-col">
@@ -152,7 +159,7 @@ export default function () {
                               src={`https://models.dev/logos/${provider()}.svg`}
                               class="size-4 shrink-0 dark:invert"
                             />
-                            <div class="text-12-regular text-text-base">{model()}</div>
+                            <div class="text-12-regular text-text-base">{model()?.name ?? modelID()}</div>
                           </div>
                           <div class="text-12-regular text-text-weaker">
                             {DateTime.fromMillis(info().time.created).toFormat("dd MMM yyyy, HH:mm")}
@@ -163,7 +170,7 @@ export default function () {
                       <div class="flex items-start justify-start h-full min-h-0">
                         <Show when={messages().length > 1}>
                           <MessageNav
-                            classList={{ "mt-3 mr-3": true }}
+                            classList={{ "mt-2 mr-3": true }}
                             messages={messages()}
                             current={activeMessage()}
                             onMessageSelect={setActiveMessage}

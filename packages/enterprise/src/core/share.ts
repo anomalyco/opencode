@@ -1,4 +1,4 @@
-import { FileDiff, Message, Part, Session, SessionStatus } from "@opencode-ai/sdk"
+import { FileDiff, Message, Model, Part, Session, SessionStatus } from "@opencode-ai/sdk"
 import { fn } from "@opencode-ai/util/fn"
 import { iife } from "@opencode-ai/util/iife"
 import z from "zod"
@@ -31,6 +31,10 @@ export namespace Share {
     z.object({
       type: z.literal("session_status"),
       data: z.custom<SessionStatus>(),
+    }),
+    z.object({
+      type: z.literal("model"),
+      data: z.custom<Model[]>(),
     }),
   ])
   export type Data = z.infer<typeof Data>
@@ -110,6 +114,9 @@ export namespace Share {
                 break
               case "session_status":
                 await Storage.write(["share_data", input.share.id, "session_status"], item.data)
+                break
+              case "model":
+                await Storage.write(["share_data", input.share.id, "model"], item.data)
                 break
             }
           }),
