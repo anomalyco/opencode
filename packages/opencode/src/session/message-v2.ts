@@ -361,6 +361,7 @@ export namespace MessageV2 {
       }),
     }),
     outputEstimate: z.number().optional(),
+    reasoningEstimate: z.number().optional(),
     finish: z.string().optional(),
   }).meta({
     ref: "AssistantMessage",

@@ -456,6 +456,8 @@ export namespace SessionPrompt {
             created: Date.now(),
           },
           sessionID,
+          outputEstimate: lastAssistant?.outputEstimate,
+          reasoningEstimate: lastAssistant?.reasoningEstimate,
         })) as MessageV2.Assistant,
         sessionID: sessionID,
         model: model.info,

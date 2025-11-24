@@ -11,7 +11,6 @@ import { SessionSummary } from "./summary"
 import { Bus } from "@/bus"
 import { SessionRetry } from "./retry"
 import { SessionStatus } from "./status"
-import { Token } from "@/util/token"
 
 export namespace SessionProcessor {
   const DOOM_LOOP_THRESHOLD = 3
@@ -41,6 +40,9 @@ export namespace SessionProcessor {
       },
       async process(fn: () => StreamTextResult<Record<string, AITool>, never>) {
         log.info("process")
+        // Initialize from existing estimates (reverse the /4 calculation) to accumulate across multiple process() calls
+        let reasoningTotal = (input.assistantMessage.reasoningEstimate ?? 0) * 4
+        let textTotal = (input.assistantMessage.outputEstimate ?? 0) * 4
         while (true) {
           try {
             let currentText: MessageV2.TextPart | undefined
@@ -76,7 +78,15 @@ export namespace SessionProcessor {
                     const part = reasoningMap[value.id]
                     part.text += value.text
                     if (value.providerMetadata) part.metadata = value.providerMetadata
-                    if (part.text) await Session.updatePart({ part, delta: value.text })
+                    if (part.text) {
+                      const active = Object.values(reasoningMap).reduce((sum, p) => sum + p.text.length, 0)
+                      const estimate = Math.round(Math.max(0, (reasoningTotal + active) / 4))
+                      if (input.assistantMessage.reasoningEstimate !== estimate) {
+                        input.assistantMessage.reasoningEstimate = estimate
+                        await Session.updateMessage(input.assistantMessage)
+                      }
+                      await Session.updatePart({ part, delta: value.text })
+                    }
                   }
                   break
 
@@ -90,6 +100,7 @@ export namespace SessionProcessor {
                       end: Date.now(),
                     }
                     if (value.providerMetadata) part.metadata = value.providerMetadata
+                    reasoningTotal += part.text.length
                     await Session.updatePart(part)
                     delete reasoningMap[value.id]
                   }
@@ -249,7 +260,6 @@ export namespace SessionProcessor {
                   input.assistantMessage.finish = value.finishReason
                   input.assistantMessage.cost += usage.cost
                   input.assistantMessage.tokens = usage.tokens
-                  input.assistantMessage.outputEstimate = undefined
                   await Session.updatePart({
                     id: Identifier.ascending("part"),
                     reason: value.finishReason,
@@ -300,7 +310,7 @@ export namespace SessionProcessor {
                     currentText.text += value.text
                     if (value.providerMetadata) currentText.metadata = value.providerMetadata
                     if (currentText.text) {
-                      const estimate = Token.estimate(currentText.text)
+                      const estimate = Math.round(Math.max(0, (textTotal + currentText.text.length) / 4))
                       if (input.assistantMessage.outputEstimate !== estimate) {
                         input.assistantMessage.outputEstimate = estimate
                         await Session.updateMessage(input.assistantMessage)
@@ -321,6 +331,7 @@ export namespace SessionProcessor {
                       end: Date.now(),
                     }
                     if (value.providerMetadata) currentText.metadata = value.providerMetadata
+                    textTotal += currentText.text.length
                     await Session.updatePart(currentText)
                   }
                   currentText = undefined
