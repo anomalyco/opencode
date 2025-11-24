@@ -18,6 +18,7 @@ import {
 import { Log } from "@/util/log"
 import type { Subprocess } from "bun"
 import { AuthenticationRequiredError } from "./types"
+import { Permission } from "../permission"
 
 const log = Log.create({ service: "acp-client" })
 
@@ -158,26 +159,82 @@ export namespace ACPClient {
     // Create Client implementation
     const clientImpl: Client = {
       async sessionUpdate(params: SessionNotification): Promise<void> {
-        log.debug("session update", { update: params.update.sessionUpdate })
-        config.onSessionUpdate?.(params)
+        const startTime = Date.now()
+        const notifType = params.update.sessionUpdate
+        log.info("┌─ [NOTIFY START]", {
+          type: notifType,
+          sessionId: params.sessionId,
+          timestamp: new Date().toISOString()
+        })
+
+        try {
+          await config.onSessionUpdate?.(params)
+          const duration = Date.now() - startTime
+          log.info("└─ [NOTIFY END]", {
+            type: notifType,
+            duration: `${duration}ms`,
+            timestamp: new Date().toISOString()
+          })
+        } catch (error) {
+          const duration = Date.now() - startTime
+          log.error("└─ [NOTIFY ERROR]", {
+            type: notifType,
+            duration: `${duration}ms`,
+            error: error instanceof Error ? error.message : String(error),
+            timestamp: new Date().toISOString()
+          })
+          throw error
+        }
       },
 
       async requestPermission(
         params: RequestPermissionRequest,
       ): Promise<RequestPermissionResponse> {
-        log.info("permission request", { toolCall: params.toolCall.title })
+        log.info("permission request", {
+          sessionId: params.sessionId,
+          toolCallId: params.toolCall.toolCallId,
+          title: params.toolCall.title,
+        })
 
         if (config.onPermissionRequest) {
           return await config.onPermissionRequest(params)
         }
 
-        // Default: reject all permissions
-        log.warn("no permission handler configured, rejecting")
-        return {
-          outcome: {
-            outcome: "selected",
-            optionId: "reject",
-          },
+        // Use Permission.ask() system to prompt user
+        try {
+          await Permission.ask({
+            type: "acp_tool",
+            pattern: params.toolCall.kind || params.toolCall.title || "tool",
+            sessionID: params.sessionId,
+            messageID: "", // ACP doesn't provide messageID in permission request
+            callID: params.toolCall.toolCallId,
+            title: params.toolCall.title || "Tool permission required",
+            metadata: {
+              toolCall: params.toolCall,
+              options: params.options,
+            },
+          })
+
+          // Permission granted - find appropriate allow option
+          // TODO: Track if user selected "always" to return allow_always
+          // For now, return allow_once
+          const allowOption = params.options.find(o => o.kind === "allow_once") || params.options.find(o => o.kind === "allow_always")
+          return {
+            outcome: {
+              outcome: "selected",
+              optionId: allowOption?.optionId || "allow_once",
+            },
+          }
+        } catch (error) {
+          // Permission rejected (RejectedError thrown) - find appropriate reject option
+          log.warn("permission rejected", { error })
+          const rejectOption = params.options.find(o => o.kind === "reject_once") || params.options.find(o => o.kind === "reject_always")
+          return {
+            outcome: {
+              outcome: "selected",
+              optionId: rejectOption?.optionId || "reject_once",
+            },
+          }
         }
       },
     }

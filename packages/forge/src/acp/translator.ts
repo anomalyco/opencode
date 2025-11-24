@@ -1,10 +1,10 @@
 import type { SessionNotification } from "@agentclientprotocol/sdk"
 import { Bus } from "../bus"
-import { MessageV2 } from "../session/message-v2"
-import { Session } from "../session"
 import { TuiEvent } from "../cli/cmd/tui/event"
 import { Identifier } from "../id/id"
 import { Log } from "../util/log"
+import * as TextTranslator from "./translation/text"
+import * as ToolTranslator from "./translation/tool"
 
 const log = Log.create({ service: "acp-translator" })
 
@@ -19,6 +19,8 @@ export namespace ACPTranslator {
     messageID: string
     partID: string
     textAccumulator: string
+    // Map ACP toolCallId -> partID for tracking tool calls
+    toolCallMap: Map<string, string>
   }
 
   const states = new Map<string, TranslatorState>()
@@ -31,6 +33,7 @@ export namespace ACPTranslator {
         messageID: Identifier.ascending("message"),
         partID: Identifier.ascending("part"),
         textAccumulator: "",
+        toolCallMap: new Map(),
       }
       states.set(sessionID, state)
     }
@@ -43,69 +46,55 @@ export namespace ACPTranslator {
    * For MVP, we only handle text chunks. Unknown content types are shown as debug toasts.
    */
   export async function translate(sessionID: string, notification: SessionNotification): Promise<void> {
+    const startTime = Date.now()
+    const notifType = notification.update.sessionUpdate
+    log.info("  ┌─ [TRANSLATE START]", {
+      type: notifType,
+      sessionID,
+      timestamp: new Date().toISOString()
+    })
+
     const state = getOrCreateState(sessionID)
 
-    switch (notification.update.sessionUpdate) {
+    try {
+      switch (notification.update.sessionUpdate) {
       case "agent_message_chunk": {
-        if (notification.update.content.type !== "text") {
-          await showDebugToast("Unknown agent_message_chunk content type", notification)
-          return
-        }
-
-        const delta = notification.update.content.text
-        state.textAccumulator += delta
-
-        const part: MessageV2.TextPart = {
-          id: state.partID,
-          sessionID: state.sessionID,
-          messageID: state.messageID,
-          type: "text",
-          text: state.textAccumulator,
-          time: {
-            start: Date.now(),
-          },
-        }
-
-        // Save part to storage AND publish Bus event
-        log.debug("attempting to save part", { partID: part.id, messageID: part.messageID, deltaLength: delta.length })
-        try {
-          await Session.updatePart({ part, delta })
-          log.debug("successfully saved part", { partID: part.id })
-        } catch (error) {
-          // Log the actual error details
-          const err = error instanceof Error ? error : new Error(String(error))
-          log.error("failed to save part", {
-            error: err.message,
-            stack: err.stack,
-            partID: part.id,
-            messageID: part.messageID,
-          })
-        }
-
-        log.info("translated agent_message_chunk", {
+        await TextTranslator.handleAgentMessageChunk(
           sessionID,
-          delta: delta.substring(0, 50),
-          totalLength: state.textAccumulator.length,
-        })
+          state.messageID,
+          state.partID,
+          notification,
+          { current: state.textAccumulator },
+        )
+        // Update accumulator after handler runs
+        if (notification.update.content.type === "text") {
+          state.textAccumulator += notification.update.content.text
+        }
         break
       }
 
       case "agent_thought_chunk": {
-        // For MVP, we could either skip reasoning or show it
-        // For now, let's show it as a debug toast
-        if (notification.update.content.type === "text") {
-          log.info("received agent_thought_chunk (skipping for MVP)", {
-            sessionID,
-            text: notification.update.content.text.substring(0, 50),
-          })
-        }
+        await TextTranslator.handleAgentThoughtChunk(sessionID, notification)
         break
       }
 
-      case "tool_call":
+      case "tool_call": {
+        await ToolTranslator.handleToolCall(
+          sessionID,
+          state.messageID,
+          notification,
+          state.toolCallMap,
+        )
+        break
+      }
+
       case "tool_call_update": {
-        // For MVP, we're not handling tools yet
-        await showDebugToast(`Tool call: ${notification.update.toolCallId}`, notification)
+        await ToolTranslator.handleToolCallUpdate(
+          sessionID,
+          state.messageID,
+          notification,
+          state.toolCallMap,
+        )
         break
       }
 
@@ -141,6 +130,23 @@ export namespace ACPTranslator {
         await showDebugToast("Unknown ACP notification type", notification)
         break
       }
+      }
+
+      const duration = Date.now() - startTime
+      log.info("  └─ [TRANSLATE END]", {
+        type: notifType,
+        duration: `${duration}ms`,
+        timestamp: new Date().toISOString()
+      })
+    } catch (error) {
+      const duration = Date.now() - startTime
+      log.error("  └─ [TRANSLATE ERROR]", {
+        type: notifType,
+        duration: `${duration}ms`,
+        error: error instanceof Error ? error.message : String(error),
+        timestamp: new Date().toISOString()
+      })
+      throw error
     }
   }
 
@@ -179,6 +185,7 @@ export namespace ACPTranslator {
     state.messageID = messageID
     state.partID = Identifier.ascending("part")
     state.textAccumulator = ""
+    state.toolCallMap.clear()
     log.info("started new message", { sessionID, messageID: state.messageID })
   }
 }

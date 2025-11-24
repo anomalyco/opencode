@@ -6,6 +6,7 @@ import { MessageV2 } from "../session/message-v2"
 import { Session } from "../session"
 import { Identifier } from "../id/id"
 import { AuthenticationRequiredError } from "./types"
+import { Permission } from "../permission"
 
 const log = Log.create({ service: "acp-orchestrator" })
 
@@ -124,11 +125,63 @@ export namespace ACPOrchestrator {
       command: "claude-code-acp",
       cwd: Instance.directory,
       onSessionUpdate: async (notification) => {
-        log.debug("received ACP notification", {
+        log.info("  ┌─ [ORCHESTRATOR] received notification", {
           sessionID,
           type: notification.update.sessionUpdate,
+          timestamp: new Date().toISOString()
         })
         await ACPTranslator.translate(sessionID, notification)
+        log.info("  └─ [ORCHESTRATOR] translate complete", {
+          type: notification.update.sessionUpdate,
+          timestamp: new Date().toISOString()
+        })
+      },
+      onPermissionRequest: async (params) => {
+        // CRITICAL: Use the forge sessionID, not the ACP sessionID
+        // The UI looks up permissions by forge sessionID
+        log.info("  ┌─ [ORCHESTRATOR] permission request", {
+          forgeSessionID: sessionID,
+          acpSessionID: params.sessionId,
+          toolCallId: params.toolCall.toolCallId,
+          title: params.toolCall.title,
+        })
+
+        try {
+          await Permission.ask({
+            type: "acp_tool",
+            pattern: params.toolCall.kind || params.toolCall.title || "tool",
+            sessionID: sessionID, // Use forge sessionID, not params.sessionId!
+            messageID: "", // ACP doesn't provide messageID
+            callID: params.toolCall.toolCallId,
+            title: params.toolCall.title || "Tool permission required",
+            metadata: {
+              toolCall: params.toolCall,
+              options: params.options,
+            },
+          })
+
+          log.info("  └─ [ORCHESTRATOR] permission granted")
+
+          // Permission granted
+          const allowOption = params.options.find(o => o.kind === "allow_once") || params.options.find(o => o.kind === "allow_always")
+          return {
+            outcome: {
+              outcome: "selected",
+              optionId: allowOption?.optionId || "allow_once",
+            },
+          }
+        } catch (error) {
+          log.warn("  └─ [ORCHESTRATOR] permission rejected", { error })
+
+          // Permission rejected
+          const rejectOption = params.options.find(o => o.kind === "reject_once") || params.options.find(o => o.kind === "reject_always")
+          return {
+            outcome: {
+              outcome: "selected",
+              optionId: rejectOption?.optionId || "reject_once",
+            },
+          }
+        }
       },
     })
 
