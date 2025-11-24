@@ -857,7 +857,7 @@ export type KeybindsConfig = {
   /**
    * List subagent sessions
    */
-  session_child_list?: string,
+  session_child_list?: string
   /**
    * Suspend terminal
    */
