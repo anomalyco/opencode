@@ -1,7 +1,7 @@
 [data-component="input"] {
-  /* [data-slot="label"] {} */
+  /* [data-slot="input-label"] {} */
 
-  [data-slot="input"] {
+  [data-slot="input-input"] {
     color: var(--text-strong);
 
     /* text-14-regular */

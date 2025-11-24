@@ -1,8 +1,8 @@
 import type { Part } from "@opencode-ai/sdk"
 import { produce } from "solid-js/store"
 import { createMemo } from "solid-js"
-import { Binary } from "@/utils/binary"
-import { createSimpleContext } from "./helper"
+import { Binary } from "@opencode-ai/util/binary"
+import { createSimpleContext } from "@opencode-ai/ui/context"
 import { useGlobalSync } from "./global-sync"
 import { useSDK } from "./sdk"
 

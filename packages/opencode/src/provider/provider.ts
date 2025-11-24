@@ -1,5 +1,5 @@
 import z from "zod"
-import path from "path"
+import fuzzysort from "fuzzysort"
 import { Config } from "../config/config"
 import { mergeDeep, sortBy } from "remeda"
 import { NoSuchModelError, type LanguageModel, type Provider as SDK } from "ai"
@@ -10,7 +10,6 @@ import { ModelsDev } from "./models"
 import { NamedError } from "../util/error"
 import { Auth } from "../auth"
 import { Instance } from "../project/instance"
-import { Global } from "../global"
 import { Flag } from "../flag/flag"
 import { iife } from "@/util/iife"
 
@@ -243,6 +242,15 @@ export namespace Provider {
     const config = await Config.get()
     const database = await ModelsDev.get()
 
+    const disabled = new Set(config.disabled_providers ?? [])
+    const enabled = config.enabled_providers ? new Set(config.enabled_providers) : null
+
+    function isProviderAllowed(providerID: string): boolean {
+      if (enabled && !enabled.has(providerID)) return false
+      if (disabled.has(providerID)) return false
+      return true
+    }
+
     const providers: {
       [providerID: string]: {
         source: Source
@@ -367,10 +375,10 @@ export namespace Provider {
         }
         parsed.models[modelID] = parsedModel
       }
+
       database[providerID] = parsed
     }
 
-    const disabled = await Config.get().then((cfg) => new Set(cfg.disabled_providers ?? []))
     // load env
     for (const [providerID, provider] of Object.entries(database)) {
       if (disabled.has(providerID)) continue
@@ -448,6 +456,12 @@ export namespace Provider {
     }
 
     for (const [providerID, provider] of Object.entries(providers)) {
+      if (!isProviderAllowed(providerID)) {
+        delete providers[providerID]
+        continue
+      }
+
+      const configProvider = config.provider?.[providerID]
       const filteredModels = Object.fromEntries(
         Object.entries(provider.info.models)
           // Filter out blacklisted models
@@ -460,15 +474,32 @@ export namespace Provider {
             ([, model]) =>
               ((!model.experimental && model.status !== "alpha") || Flag.OPENCODE_ENABLE_EXPERIMENTAL_MODELS) &&
               model.status !== "deprecated",
-          ),
+          )
+          // Filter by provider's whitelist/blacklist from config
+          .filter(([modelID]) => {
+            if (!configProvider) return true
+
+            return (
+              (!configProvider.blacklist || !configProvider.blacklist.includes(modelID)) &&
+              (!configProvider.whitelist || configProvider.whitelist.includes(modelID))
+            )
+          }),
       )
+
       provider.info.models = filteredModels
 
       if (Object.keys(provider.info.models).length === 0) {
         delete providers[providerID]
         continue
       }
-      log.info("found", { providerID })
+
+      // TODO: set this in models.dev, not set due to breaking issues on older OC versions
+      // u have to set include usage to true w/ this provider, setting in models.dev would cause undefined issue when accessing usage in older versions
+      if (providerID === "openrouter") {
+        provider.info.npm = "@openrouter/ai-sdk-provider"
+      }
+
+      log.info("found", { providerID, npm: provider.info.npm })
     }
 
     return {
@@ -499,13 +530,18 @@ export namespace Provider {
       const existing = s.sdk.get(key)
       if (existing) return existing
 
-      let installedPath: string
-      if (!pkg.startsWith("file://")) {
-        installedPath = await BunProc.install(pkg, "latest")
-      } else {
-        log.info("loading local provider", { pkg })
-        installedPath = pkg
-      }
+      const installedPath = await (async () => {
+        if (pkg.startsWith("file://")) {
+          log.info("loading local provider", { pkg })
+          return pkg
+        }
+        const resolved = await BunProc.resolve(pkg)
+        if (resolved) {
+          log.info("using preinstalled provider", { providerID: provider.id, pkg })
+          return resolved
+        }
+        return BunProc.install(pkg, "latest")
+      })()
 
       // The `google-vertex-anthropic` provider points to the `@ai-sdk/google-vertex` package.
       // Ref: https://github.com/sst/models.dev/blob/0a87de42ab177bebad0620a889e2eb2b4a5dd4ab/providers/google-vertex-anthropic/provider.toml
@@ -567,9 +603,21 @@ export namespace Provider {
     })
 
     const provider = s.providers[providerID]
-    if (!provider) throw new ModelNotFoundError({ providerID, modelID })
+    if (!provider) {
+      const availableProviders = Object.keys(s.providers)
+      const matches = fuzzysort.go(providerID, availableProviders, { limit: 3, threshold: -10000 })
+      const suggestions = matches.map((m) => m.target)
+      throw new ModelNotFoundError({ providerID, modelID, suggestions })
+    }
+
     const info = provider.info.models[modelID]
-    if (!info) throw new ModelNotFoundError({ providerID, modelID })
+    if (!info) {
+      const availableModels = Object.keys(provider.info.models)
+      const matches = fuzzysort.go(modelID, availableModels, { limit: 3, threshold: -10000 })
+      const suggestions = matches.map((m) => m.target)
+      throw new ModelNotFoundError({ providerID, modelID, suggestions })
+    }
+
     const sdk = await getSDK(provider.info, info)
 
     try {
@@ -615,20 +663,36 @@ export namespace Provider {
     }
 
     const provider = await state().then((state) => state.providers[providerID])
-    if (!provider) return
-    let priority = ["claude-haiku-4-5", "claude-haiku-4.5", "3-5-haiku", "3.5-haiku", "gemini-2.5-flash", "gpt-5-nano"]
-    // claude-haiku-4.5 is considered a premium model in github copilot, we shouldn't use premium requests for title gen
-    if (providerID === "github-copilot") {
-      priority = priority.filter((m) => m !== "claude-haiku-4.5")
-    }
-    if (providerID === "opencode" || providerID === "local") {
-      priority = ["gpt-5-nano"]
-    }
-    for (const item of priority) {
-      for (const model of Object.keys(provider.info.models)) {
-        if (model.includes(item)) return getModel(providerID, model)
+    if (provider) {
+      let priority = [
+        "claude-haiku-4-5",
+        "claude-haiku-4.5",
+        "3-5-haiku",
+        "3.5-haiku",
+        "gemini-2.5-flash",
+        "gpt-5-nano",
+      ]
+      // claude-haiku-4.5 is considered a premium model in github copilot, we shouldn't use premium requests for title gen
+      if (providerID === "github-copilot") {
+        priority = priority.filter((m) => m !== "claude-haiku-4.5")
+      }
+      if (providerID.startsWith("opencode")) {
+        priority = ["gpt-5-nano"]
+      }
+      for (const item of priority) {
+        for (const model of Object.keys(provider.info.models)) {
+          if (model.includes(item)) return getModel(providerID, model)
+        }
       }
     }
+
+    // Check if opencode provider is available before using it
+    const opencodeProvider = await state().then((state) => state.providers["opencode"])
+    if (opencodeProvider && opencodeProvider.info.models["gpt-5-nano"]) {
+      return getModel("opencode", "gpt-5-nano")
+    }
+
+    return undefined
   }
 
   const priority = ["gpt-5", "claude-sonnet-4", "big-pickle", "gemini-3-pro"]
@@ -670,6 +734,7 @@ export namespace Provider {
     z.object({
       providerID: z.string(),
       modelID: z.string(),
+      suggestions: z.array(z.string()).optional(),
     }),
   )
 
