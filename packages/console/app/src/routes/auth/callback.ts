@@ -1,5 +1,4 @@
 import { redirect } from "@solidjs/router"
-import { getResponseHeaders } from "@solidjs/start/http"
 import type { APIEvent } from "@solidjs/start/server"
 import { AuthClient } from "~/context/auth"
 import { useAuthSession } from "~/context/auth.session"
@@ -29,8 +28,5 @@ export async function GET(input: APIEvent) {
       current: id,
     }
   })
-  return redirect("/auth", {
-    status: 302,
-    headers: getResponseHeaders(),
-  })
+  return redirect("/auth")
 }
