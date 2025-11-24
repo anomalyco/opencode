@@ -74,7 +74,7 @@ export namespace BunProc {
     if (parsed.dependencies[pkg] === version) return mod
 
     // Build command arguments
-    const args = ["add", "--force", "--exact", "--cwd", Global.Path.cache, pkg + "@" + version]
+    const args = ["add", "--force", "--exact", "--backend=copyfile", "--cwd", Global.Path.cache, pkg + "@" + version]
 
     // Let Bun handle registry resolution:
     // - If .npmrc files exist, Bun will use them automatically
