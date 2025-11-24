@@ -21,7 +21,12 @@ export const WriteTool = Tool.define("write", {
         }
         if (Array.isArray(val)) {
           // Join array elements with newlines
-          return val.map(item => String(item)).join('\n')
+          // Handle edge cases: null/undefined -> "", objects -> JSON.stringify, others -> String
+          return val.map(item => {
+            if (item === null || item === undefined) return "";
+            if (typeof item === "object") return JSON.stringify(item);
+            return String(item);
+          }).join('\n')
         }
         return String(val)
       },
