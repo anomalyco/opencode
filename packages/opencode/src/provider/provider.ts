@@ -37,15 +37,8 @@ export namespace Provider {
       }
     },
     async opencode(input) {
-      if (!input) {
-        return {
-          autoload: false,
-          options: {},
-        }
-      }
-      const envVars = input.env ?? []
       const hasKey = await (async () => {
-        if (envVars.some((item) => process.env[item])) return true
+        if (input.env.some((item) => process.env[item])) return true
         if (await Auth.get(input.id)) return true
         return false
       })()
@@ -707,13 +700,9 @@ export namespace Provider {
     const provider = await list()
       .then((val) => Object.values(val))
       .then((x) => x.find((p) => !cfg.provider || Object.keys(cfg.provider).includes(p.info.id)))
-    if (!provider) {
-      throw new Error("No providers configured; unable to select a default model")
-    }
+    if (!provider) throw new Error("no providers found")
     const [model] = sort(Object.values(provider.info.models))
-    if (!model) {
-      throw new Error(`Provider ${provider.info.id} has no models available`)
-    }
+    if (!model) throw new Error("no models found")
     return {
       providerID: provider.info.id,
       modelID: model.id,

@@ -73,8 +73,7 @@ export namespace ModelsDev {
     const file = Bun.file(filepath)
     const result = await file.json().catch(() => {})
     if (result) return result as Record<string, Provider>
-    const jsonRaw = await Promise.resolve(data()).catch(() => "{}")
-    const json = typeof jsonRaw === "string" ? jsonRaw : "{}"
+    const json = await data()
     return JSON.parse(json) as Record<string, Provider>
   }
 
@@ -88,15 +87,12 @@ export namespace ModelsDev {
         "User-Agent": Installation.USER_AGENT,
       },
       signal: AbortSignal.timeout(10 * 1000),
-    }).catch((error) => {
+    }).catch((e) => {
       log.error("Failed to fetch models.dev", {
-        error,
+        error: e,
       })
-      return undefined
     })
-    if (!result) return
-    if (!result.ok) return
-    await Bun.write(file, await result.text())
+    if (result && result.ok) await Bun.write(file, await result.text())
   }
 }
 
