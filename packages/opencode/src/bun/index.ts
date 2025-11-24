@@ -11,9 +11,10 @@ export namespace BunProc {
   const log = Log.create({ service: "bun" })
   const req = createRequire(import.meta.url)
 
-  export async function run(cmd: string[], options?: Bun.SpawnOptions.OptionsObject<any, any, any>) {
+  export async function run(cmd: string[], options?: Bun.SpawnOptions.OptionsObject<any, any, any>, timeout = 5_000) {
     log.info("running", {
       cmd: [which(), ...cmd],
+      timeout,
       ...options,
     })
     const result = Bun.spawn([which(), ...cmd], {
@@ -26,7 +27,15 @@ export namespace BunProc {
         BUN_BE_BUN: "1",
       },
     })
-    const code = await result.exited
+
+    const timeoutPromise = new Promise<never>((_, reject) => {
+      setTimeout(() => {
+        result.kill()
+        reject(new Error(`Command timed out after ${timeout}ms`))
+      }, timeout)
+    })
+
+    const code = await Promise.race([result.exited, timeoutPromise])
     const stdout = result.stdout
       ? typeof result.stdout === "number"
         ? result.stdout
@@ -95,9 +104,15 @@ export namespace BunProc {
         attempt: count,
         total,
       })
-      await BunProc.run(args, {
-        cwd: Global.Path.cache,
-      }).catch(async (error) => {
+      // Increase timeout on each retry: 5s, 10s, 20s
+      const timeout = 5_000 * Math.pow(2, count - 1)
+      await BunProc.run(
+        args,
+        {
+          cwd: Global.Path.cache,
+        },
+        timeout,
+      ).catch(async (error) => {
         log.warn("bun install failed", {
           pkg,
           version,
