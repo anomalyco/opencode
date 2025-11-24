@@ -29,7 +29,6 @@ export const ModelsCommand = cmd({
     if (args.refresh) {
       await ModelsDev.refresh()
       UI.println(UI.Style.TEXT_SUCCESS_BOLD + "Models cache refreshed" + UI.Style.TEXT_NORMAL)
-      return
     }
 
     await Instance.provide({
