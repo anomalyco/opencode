@@ -188,6 +188,7 @@ export function Sidebar(props: { sessionID: string }) {
                       const splits = item.file.split(path.sep).filter(Boolean)
                       const last = splits.at(-1)!
                       const rest = splits.slice(0, -1).join(path.sep)
+                      if (!rest) return last
                       return Locale.truncateMiddle(rest, 30 - last.length) + "/" + last
                     })
                     return (
