@@ -1098,8 +1098,7 @@ export namespace SessionPrompt {
   async function createUserMessage(input: PromptInput, session: Session.Info) {
     const agentName = input.agent ?? session.agent ?? "general-purpose"
     const agent = await Agent.get(agentName).catch(() => undefined)
-    const modelInfo =
-      input.model ??
+    const modelInfo = input.model ??
       session.model ??
       agent?.model ?? {
         providerID: "anthropic",
@@ -1399,12 +1398,7 @@ export namespace SessionPrompt {
     await TrajectoryRecorder.record(input.sessionID, input)
   }
 
-  async function recordSessionEnd(input: {
-    sessionID: string
-    steps: number
-    llmCalls: number
-    toolCalls: number
-  }) {
+  async function recordSessionEnd(input: { sessionID: string; steps: number; llmCalls: number; toolCalls: number }) {
     const active = TrajectoryRecorder.isRecording(input.sessionID)
     if (!TrajectoryConfig.get().enabled || !active) return
     await TrajectoryRecorder.stop(input.sessionID)

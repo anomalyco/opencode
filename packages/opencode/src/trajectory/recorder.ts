@@ -136,9 +136,7 @@ export namespace TrajectoryRecorder {
           totalOutputTokens: response.tokens.output + response.tokens.cache.write,
           totalCacheTokens: response.tokens.cache.read + response.tokens.cache.write,
         },
-        textLength: response.parts
-          .filter((p) => p.type === "text")
-          .reduce((sum, p) => sum + (p.text?.length ?? 0), 0),
+        textLength: response.parts.filter((p) => p.type === "text").reduce((sum, p) => sum + (p.text?.length ?? 0), 0),
         reasoningLength: response.parts
           .filter((p) => p.type === "reasoning")
           .reduce((sum, p) => sum + (p.text?.length ?? 0), 0),
@@ -180,7 +178,7 @@ export namespace TrajectoryRecorder {
     if (rec.buffer.length === 0) return
     const lines = rec.buffer.map((item) => JSON.stringify(item))
     const chunk = lines.join("\n") + "\n"
-    
+
     try {
       await fs.mkdir(path.dirname(rec.path), { recursive: true })
       await fs.appendFile(rec.path, chunk)
