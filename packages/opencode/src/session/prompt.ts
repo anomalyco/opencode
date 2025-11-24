@@ -578,6 +578,25 @@ export namespace SessionPrompt {
                     // @ts-expect-error
                     args.params.prompt = ProviderTransform.message(args.params.prompt, model.providerID, model.modelID)
                   }
+                  // Transform tool schemas for provider compatibility
+                  if (args.params.tools && Array.isArray(args.params.tools)) {
+                    args.params.tools = args.params.tools.map((tool: any) => {
+                      // Tools at middleware level have inputSchema, not parameters
+                      if (tool.inputSchema && typeof tool.inputSchema === "object") {
+                        // Transform the inputSchema for provider compatibility
+                        return {
+                          ...tool,
+                          inputSchema: ProviderTransform.schema(
+                            model.providerID,
+                            model.modelID,
+                            tool.inputSchema,
+                          ),
+                        }
+                      }
+                      // If no inputSchema, return tool unchanged
+                      return tool
+                    })
+                  }
                   return args.params
                 },
               },
@@ -718,76 +737,65 @@ export namespace SessionPrompt {
       const execute = item.execute
       if (!execute) continue
 
-      // Transform the schema for provider compatibility (e.g., convert integer enums to string enums for Google)
-      const transformedSchema = ProviderTransform.schema(
-        input.model.providerID,
-        input.model.modelID,
-        // @ts-expect-error - accessing internal schema property
-        item.inputSchema ?? item.parameters ?? {},
-      )
+      // Wrap execute to add plugin hooks and format output
+      item.execute = async (args, opts) => {
+        await Plugin.trigger(
+          "tool.execute.before",
+          {
+            tool: key,
+            sessionID: input.sessionID,
+            callID: opts.toolCallId,
+          },
+          {
+            args,
+          },
+        )
+        const result = await execute(args, opts)
 
-      tools[key] = tool({
-        id: key as any,
-        description: item.description ?? "",
-        inputSchema: jsonSchema(transformedSchema as any),
-        async execute(args, opts) {
-          await Plugin.trigger(
-            "tool.execute.before",
-            {
-              tool: key,
+        await Plugin.trigger(
+          "tool.execute.after",
+          {
+            tool: key,
+            sessionID: input.sessionID,
+            callID: opts.toolCallId,
+          },
+          result,
+        )
+
+        const textParts: string[] = []
+        const attachments: MessageV2.FilePart[] = []
+
+        for (const contentItem of result.content) {
+          if (contentItem.type === "text") {
+            textParts.push(contentItem.text)
+          } else if (contentItem.type === "image") {
+            attachments.push({
+              id: Identifier.ascending("part"),
               sessionID: input.sessionID,
-              callID: opts.toolCallId,
-            },
-            {
-              args,
-            },
-          )
-          const result = await execute(args, opts)
-
-          await Plugin.trigger(
-            "tool.execute.after",
-            {
-              tool: key,
-              sessionID: input.sessionID,
-              callID: opts.toolCallId,
-            },
-            result,
-          )
-
-          const textParts: string[] = []
-          const attachments: MessageV2.FilePart[] = []
-
-          for (const contentItem of result.content) {
-            if (contentItem.type === "text") {
-              textParts.push(contentItem.text)
-            } else if (contentItem.type === "image") {
-              attachments.push({
-                id: Identifier.ascending("part"),
-                sessionID: input.sessionID,
-                messageID: input.processor.message.id,
-                type: "file",
-                mime: contentItem.mimeType,
-                url: `data:${contentItem.mimeType};base64,${contentItem.data}`,
-              })
-            }
-            // Add support for other types if needed
+              messageID: input.processor.message.id,
+              type: "file",
+              mime: contentItem.mimeType,
+              url: `data:${contentItem.mimeType};base64,${contentItem.data}`,
+            })
           }
+          // Add support for other types if needed
+        }
 
-          return {
-            title: "",
-            metadata: result.metadata ?? {},
-            output: textParts.join("\n\n"),
-            attachments,
-            content: result.content, // directly return content to preserve ordering when outputting to model
-          }
-        },
-        toModelOutput(result) {
-          return {
-            type: "text",
-            value: result.output,
-          }
-        },
-      })
+        return {
+          title: "",
+          metadata: result.metadata ?? {},
+          output: textParts.join("\n\n"),
+          attachments,
+          content: result.content, // directly return content to preserve ordering when outputting to model
+        }
+      }
+      item.toModelOutput = (result) => {
+        return {
+          type: "text",
+          value: result.output,
+        }
+      }
+      tools[key] = item
     }
     return tools
   }
