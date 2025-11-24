@@ -49,6 +49,9 @@ import { SessionProcessor } from "./processor"
 import { TaskTool } from "@/tool/task"
 import { SessionStatus } from "./status"
 
+// @ts-ignore
+globalThis.AI_SDK_LOG_WARNINGS = false
+
 export namespace SessionPrompt {
   const log = Log.create({ service: "session.prompt" })
   export const OUTPUT_TOKEN_MAX = 32_000
@@ -194,7 +197,7 @@ export namespace SessionPrompt {
     const message = await createUserMessage(input)
     await Session.touch(input.sessionID)
 
-    if (input.noReply) {
+    if (input.noReply === true) {
       return message
     }
 
@@ -239,6 +242,7 @@ export namespace SessionPrompt {
 
     let step = 0
     while (true) {
+      SessionStatus.set(sessionID, { type: "busy" })
       log.info("loop", { step, sessionID })
       if (abort.aborted) break
       let msgs = await MessageV2.filterCompacted(MessageV2.stream(sessionID))
@@ -261,7 +265,11 @@ export namespace SessionPrompt {
       }
 
       if (!lastUser) throw new Error("No user message found in stream. This should never happen.")
-      if (lastAssistant?.finish && lastAssistant.finish !== "tool-calls" && lastUser.id < lastAssistant.id) {
+      if (
+        lastAssistant?.finish &&
+        !["tool-calls", "unknown"].includes(lastAssistant.finish) &&
+        lastUser.id < lastAssistant.id
+      ) {
         log.info("exiting loop", { sessionID })
         break
       }
@@ -394,6 +402,7 @@ export namespace SessionPrompt {
           messages: msgs,
           parentID: lastUser.id,
           abort,
+          agent: lastUser.agent,
           model: {
             providerID: model.providerID,
             modelID: model.modelID,
@@ -412,6 +421,7 @@ export namespace SessionPrompt {
       ) {
         await SessionCompaction.create({
           sessionID,
+          agent: lastUser.agent,
           model: lastUser.model,
         })
         continue
@@ -479,11 +489,12 @@ export namespace SessionPrompt {
             ? (agent.temperature ?? ProviderTransform.temperature(model.providerID, model.modelID))
             : undefined,
           topP: agent.topP ?? ProviderTransform.topP(model.providerID, model.modelID),
-          options: {
-            ...ProviderTransform.options(model.providerID, model.modelID, model.npm ?? "", sessionID),
-            ...model.info.options,
-            ...agent.options,
-          },
+          options: pipe(
+            {},
+            mergeDeep(ProviderTransform.options(model.providerID, model.modelID, model.npm ?? "", sessionID)),
+            mergeDeep(model.info.options),
+            mergeDeep(agent.options),
+          ),
         },
       )
 
@@ -523,7 +534,7 @@ export namespace SessionPrompt {
             }
           },
           headers: {
-            ...(model.providerID === "opencode"
+            ...(model.providerID.startsWith("opencode")
               ? {
                   "x-opencode-session": sessionID,
                   "x-opencode-request": lastUser.id,
@@ -896,22 +907,32 @@ export namespace SessionPrompt {
                       extra: { bypassCwdCheck: true, ...info.model },
                       metadata: async () => {},
                     })
-                    pieces.push(
-                      {
-                        id: Identifier.ascending("part"),
-                        messageID: info.id,
-                        sessionID: input.sessionID,
-                        type: "text",
-                        synthetic: true,
-                        text: result.output,
-                      },
-                      {
+                    pieces.push({
+                      id: Identifier.ascending("part"),
+                      messageID: info.id,
+                      sessionID: input.sessionID,
+                      type: "text",
+                      synthetic: true,
+                      text: result.output,
+                    })
+                    if (result.attachments?.length) {
+                      pieces.push(
+                        ...result.attachments.map((attachment) => ({
+                          ...attachment,
+                          synthetic: true,
+                          filename: attachment.filename ?? part.filename,
+                          messageID: info.id,
+                          sessionID: input.sessionID,
+                        })),
+                      )
+                    } else {
+                      pieces.push({
                         ...part,
                         id: part.id ?? Identifier.ascending("part"),
                         messageID: info.id,
                         sessionID: input.sessionID,
-                      },
-                    )
+                      })
+                    }
                   })
                   .catch((error) => {
                     log.error("failed to read file", { error })
@@ -1374,7 +1395,6 @@ export namespace SessionPrompt {
     return result
   }
 
-  // TODO: wire this back up
   async function ensureTitle(input: {
     session: Session.Info
     message: MessageV2.WithParts
@@ -1390,24 +1410,15 @@ export namespace SessionPrompt {
     if (!isFirst) return
     const small =
       (await Provider.getSmallModel(input.providerID)) ?? (await Provider.getModel(input.providerID, input.modelID))
-    const options = {
-      ...ProviderTransform.options(small.providerID, small.modelID, small.npm ?? "", input.session.id),
-      ...small.info.options,
-    }
-    if (small.providerID === "openai" || small.modelID.includes("gpt-5")) {
-      if (small.modelID.includes("5.1")) {
-        options["reasoningEffort"] = "low"
-      } else {
-        options["reasoningEffort"] = "minimal"
-      }
-    }
-    if (small.providerID === "google") {
-      options["thinkingConfig"] = {
-        thinkingBudget: 0,
-      }
-    }
+    const options = pipe(
+      {},
+      mergeDeep(ProviderTransform.options(small.providerID, small.modelID, small.npm ?? "", input.session.id)),
+      mergeDeep(ProviderTransform.smallOptions({ providerID: small.providerID, modelID: small.modelID })),
+      mergeDeep(small.info.options),
+    )
     await generateText({
-      maxOutputTokens: small.info.reasoning ? 1500 : 20,
+      // use higher # for reasoning models since reasoning tokens eat up a lot of the budget
+      maxOutputTokens: small.info.reasoning ? 3000 : 20,
       providerOptions: ProviderTransform.providerOptions(small.npm, small.providerID, options),
       messages: [
         ...SystemPrompt.title(small.providerID).map(
@@ -1417,10 +1428,8 @@ export namespace SessionPrompt {
           }),
         ),
         {
-          role: "user" as const,
-          content: `
-              The following is the text to summarize:
-            `,
+          role: "user",
+          content: "Generate a title for this conversation:\n",
         },
         ...MessageV2.toModelMessage([
           {

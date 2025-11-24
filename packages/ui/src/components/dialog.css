@@ -21,7 +21,7 @@
   align-items: center;
   justify-content: center;
 
-  [data-slot="container"] {
+  [data-slot="dialog-container"] {
     position: relative;
     z-index: 50;
     width: min(calc(100vw - 16px), 624px);
@@ -31,7 +31,7 @@
     align-items: center;
     justify-items: start;
 
-    [data-slot="content"] {
+    [data-slot="dialog-content"] {
       display: flex;
       flex-direction: column;
       align-items: flex-start;
@@ -56,7 +56,7 @@
       /*   animation: contentShow 300ms ease-out; */
       /* } */
 
-      [data-slot="header"] {
+      [data-slot="dialog-header"] {
         display: flex;
         height: 40px;
         padding: 4px 4px 4px 8px;
@@ -65,7 +65,7 @@
         flex-shrink: 0;
         align-self: stretch;
 
-        [data-slot="title"] {
+        [data-slot="dialog-title"] {
           color: var(--text-strong);
 
           /* text-16-medium */
@@ -76,10 +76,10 @@
           line-height: var(--line-height-x-large); /* 150% */
           letter-spacing: var(--letter-spacing-tight);
         }
-        /* [data-slot="close-button"] {} */
+        /* [data-slot="dialog-close-button"] {} */
       }
-      /* [data-slot="description"] {} */
-      [data-slot="body"] {
+      /* [data-slot="dialog-description"] {} */
+      [data-slot="dialog-body"] {
         width: 100%;
         position: relative;
         display: flex;

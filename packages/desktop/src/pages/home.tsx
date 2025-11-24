@@ -2,7 +2,7 @@ import { useGlobalSync } from "@/context/global-sync"
 import { base64Encode, getFilename } from "@/utils"
 import { For } from "solid-js"
 import { A } from "@solidjs/router"
-import { Button } from "@opencode-ai/ui"
+import { Button } from "@opencode-ai/ui/button"
 
 export default function Home() {
   const sync = useGlobalSync()

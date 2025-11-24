@@ -8,6 +8,7 @@ import { LSP } from "../lsp"
 import { Snapshot } from "@/snapshot"
 import { fn } from "@/util/fn"
 import { Storage } from "@/storage/storage"
+import { ProviderTransform } from "@/provider/transform"
 
 export namespace MessageV2 {
   export const OutputLengthError = NamedError.create("MessageOutputLengthError", z.object({}))
@@ -58,6 +59,7 @@ export namespace MessageV2 {
     type: z.literal("text"),
     text: z.string(),
     synthetic: z.boolean().optional(),
+    ignored: z.boolean().optional(),
     time: z
       .object({
         start: z.number(),
@@ -566,7 +568,7 @@ export namespace MessageV2 {
         }
         result.push(userMessage)
         for (const part of msg.parts) {
-          if (part.type === "text")
+          if (part.type === "text" && !part.ignored)
             userMessage.parts.push({
               type: "text",
               text: part.text,
@@ -736,9 +738,10 @@ export namespace MessageV2 {
           { cause: e },
         ).toObject()
       case APICallError.isInstance(e):
+        const message = ProviderTransform.error(ctx.providerID, e.message)
         return new MessageV2.APIError(
           {
-            message: e.message,
+            message,
             statusCode: e.statusCode,
             isRetryable: e.isRetryable,
             responseHeaders: e.responseHeaders,

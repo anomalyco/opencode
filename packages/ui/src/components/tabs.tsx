@@ -29,7 +29,7 @@ function TabsList(props: TabsListProps) {
   return (
     <Kobalte.List
       {...rest}
-      data-slot="tabs-list"
+      data-slot="tabs-tabs-list"
       classList={{
         ...(split.classList ?? {}),
         [split.class ?? ""]: !!split.class,
@@ -42,18 +42,18 @@ function TabsTrigger(props: ParentProps<TabsTriggerProps>) {
   const [split, rest] = splitProps(props, ["class", "classList", "children", "closeButton", "hideCloseButton"])
   return (
     <div
-      data-slot="tabs-trigger-wrapper"
+      data-slot="tabs-tabs-trigger-wrapper"
       classList={{
         ...(split.classList ?? {}),
         [split.class ?? ""]: !!split.class,
       }}
     >
-      <Kobalte.Trigger {...rest} data-slot="tabs-trigger" class="group/tab">
+      <Kobalte.Trigger {...rest} data-slot="tabs-tabs-trigger" class="group/tab">
         {split.children}
       </Kobalte.Trigger>
       <Show when={split.closeButton}>
         {(closeButton) => (
-          <div data-slot="tabs-trigger-close-button" data-hidden={split.hideCloseButton}>
+          <div data-slot="tabs-tabs-trigger-close-button" data-hidden={split.hideCloseButton}>
             {closeButton()}
           </div>
         )}
@@ -67,7 +67,7 @@ function TabsContent(props: ParentProps<TabsContentProps>) {
   return (
     <Kobalte.Content
       {...rest}
-      data-slot="tabs-content"
+      data-slot="tabs-tabs-content"
       classList={{
         ...(split.classList ?? {}),
         [split.class ?? ""]: !!split.class,

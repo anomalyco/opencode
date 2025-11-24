@@ -7,6 +7,13 @@ export type EventInstallationUpdated = {
   }
 }
 
+export type EventInstallationUpdateAvailable = {
+  type: "installation.update-available"
+  properties: {
+    version: string
+  }
+}
+
 export type EventLspClientDiagnostics = {
   type: "lsp.client.diagnostics"
   properties: {
@@ -150,6 +157,7 @@ export type TextPart = {
   type: "text"
   text: string
   synthetic?: boolean
+  ignored?: boolean
   time?: {
     start: number
     end?: number
@@ -641,6 +649,7 @@ export type EventFileWatcherUpdated = {
 
 export type Event =
   | EventInstallationUpdated
+  | EventInstallationUpdateAvailable
   | EventLspClientDiagnostics
   | EventLspUpdated
   | EventMessageUpdated
@@ -848,7 +857,11 @@ export type KeybindsConfig = {
   /**
    * List subagent sessions
    */
-  session_child_list?: string
+  session_child_list?: string,
+  /**
+   * Suspend terminal
+   */
+  terminal_suspend?: string
 }
 
 export type AgentConfig = {
@@ -1020,6 +1033,10 @@ export type Config = {
    */
   disabled_providers?: Array<string>
   /**
+   * When set, ONLY these providers will be enabled. All other providers will be ignored
+   */
+  enabled_providers?: Array<string>
+  /**
    * Model to use in the format of provider/model, eg anthropic/claude-2
    */
   model?: string
@@ -1100,6 +1117,8 @@ export type Config = {
           }
         }
       }
+      whitelist?: Array<string>
+      blacklist?: Array<string>
       options?: {
         apiKey?: string
         baseURL?: string
@@ -1171,6 +1190,12 @@ export type Config = {
   tools?: {
     [key: string]: boolean
   }
+  enterprise?: {
+    /**
+     * Enterprise URL
+     */
+    url?: string
+  }
   experimental?: {
     hook?: {
       file_edited?: {
@@ -1237,6 +1262,7 @@ export type TextPartInput = {
   type: "text"
   text: string
   synthetic?: boolean
+  ignored?: boolean
   time?: {
     start: number
     end?: number
@@ -1333,6 +1359,17 @@ export type Provider = {
   models: {
     [key: string]: Model
   }
+}
+
+export type ProviderAuthMethod = {
+  type: "oauth" | "api"
+  label: string
+}
+
+export type ProviderAuthAuthorization = {
+  url: string
+  method: "auto" | "code"
+  instructions: string
 }
 
 export type Symbol = {
@@ -1612,6 +1649,24 @@ export type ToolListResponses = {
 }
 
 export type ToolListResponse = ToolListResponses[keyof ToolListResponses]
+
+export type InstanceDisposeData = {
+  body?: never
+  path?: never
+  query?: {
+    directory?: string
+  }
+  url: "/instance/dispose"
+}
+
+export type InstanceDisposeResponses = {
+  /**
+   * Instance disposed
+   */
+  200: boolean
+}
+
+export type InstanceDisposeResponse = InstanceDisposeResponses[keyof InstanceDisposeResponses]
 
 export type PathGetData = {
   body?: never
@@ -2485,6 +2540,128 @@ export type ConfigProvidersResponses = {
 }
 
 export type ConfigProvidersResponse = ConfigProvidersResponses[keyof ConfigProvidersResponses]
+
+export type ProviderListData = {
+  body?: never
+  path?: never
+  query?: {
+    directory?: string
+  }
+  url: "/provider"
+}
+
+export type ProviderListResponses = {
+  /**
+   * List of providers
+   */
+  200: {
+    all: Array<Provider>
+    default: {
+      [key: string]: string
+    }
+    connected: Array<string>
+  }
+}
+
+export type ProviderListResponse = ProviderListResponses[keyof ProviderListResponses]
+
+export type ProviderAuthData = {
+  body?: never
+  path?: never
+  query?: {
+    directory?: string
+  }
+  url: "/provider/auth"
+}
+
+export type ProviderAuthResponses = {
+  /**
+   * Provider auth methods
+   */
+  200: {
+    [key: string]: Array<ProviderAuthMethod>
+  }
+}
+
+export type ProviderAuthResponse = ProviderAuthResponses[keyof ProviderAuthResponses]
+
+export type ProviderOauthAuthorizeData = {
+  body?: {
+    /**
+     * Auth method index
+     */
+    method: number
+  }
+  path: {
+    /**
+     * Provider ID
+     */
+    id: string
+  }
+  query?: {
+    directory?: string
+  }
+  url: "/provider/{id}/oauth/authorize"
+}
+
+export type ProviderOauthAuthorizeErrors = {
+  /**
+   * Bad request
+   */
+  400: BadRequestError
+}
+
+export type ProviderOauthAuthorizeError = ProviderOauthAuthorizeErrors[keyof ProviderOauthAuthorizeErrors]
+
+export type ProviderOauthAuthorizeResponses = {
+  /**
+   * Authorization URL and method
+   */
+  200: ProviderAuthAuthorization
+}
+
+export type ProviderOauthAuthorizeResponse = ProviderOauthAuthorizeResponses[keyof ProviderOauthAuthorizeResponses]
+
+export type ProviderOauthCallbackData = {
+  body?: {
+    /**
+     * Auth method index
+     */
+    method: number
+    /**
+     * OAuth authorization code
+     */
+    code?: string
+  }
+  path: {
+    /**
+     * Provider ID
+     */
+    id: string
+  }
+  query?: {
+    directory?: string
+  }
+  url: "/provider/{id}/oauth/callback"
+}
+
+export type ProviderOauthCallbackErrors = {
+  /**
+   * Bad request
+   */
+  400: BadRequestError
+}
+
+export type ProviderOauthCallbackError = ProviderOauthCallbackErrors[keyof ProviderOauthCallbackErrors]
+
+export type ProviderOauthCallbackResponses = {
+  /**
+   * OAuth callback processed successfully
+   */
+  200: boolean
+}
+
+export type ProviderOauthCallbackResponse = ProviderOauthCallbackResponses[keyof ProviderOauthCallbackResponses]
 
 export type FindTextData = {
   body?: never

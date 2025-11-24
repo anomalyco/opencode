@@ -74,6 +74,14 @@ declare module "sst" {
       type: "sst.sst.Secret"
       value: string
     }
+    R2AccessKey: {
+      type: "sst.sst.Secret"
+      value: string
+    }
+    R2SecretKey: {
+      type: "sst.sst.Secret"
+      value: string
+    }
     STRIPE_SECRET_KEY: {
       type: "sst.sst.Secret"
       value: string
@@ -94,6 +102,14 @@ declare module "sst" {
       type: "sst.sst.Secret"
       value: string
     }
+    ZEN_MODELS3: {
+      type: "sst.sst.Secret"
+      value: string
+    }
+    ZEN_MODELS4: {
+      type: "sst.sst.Secret"
+      value: string
+    }
   }
 }
 // cloudflare
@@ -104,6 +120,8 @@ declare module "sst" {
     AuthApi: cloudflare.Service
     AuthStorage: cloudflare.KVNamespace
     Bucket: cloudflare.R2Bucket
+    ConsoleData: cloudflare.R2Bucket
+    EnterpriseStorage: cloudflare.R2Bucket
     GatewayKv: cloudflare.KVNamespace
     LogProcessor: cloudflare.Service
   }

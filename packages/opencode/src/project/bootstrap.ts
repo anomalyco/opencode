@@ -10,11 +10,13 @@ import { Bus } from "../bus"
 import { Command } from "../command"
 import { Instance } from "./instance"
 import { Log } from "@/util/log"
+import { ShareNext } from "@/share/share-next"
 
 export async function InstanceBootstrap() {
   Log.Default.info("bootstrapping", { directory: Instance.directory })
   await Plugin.init()
   Share.init()
+  ShareNext.init()
   Format.init()
   await LSP.init()
   FileWatcher.init()
