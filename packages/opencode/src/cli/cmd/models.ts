@@ -20,15 +20,15 @@ export const ModelsCommand = cmd({
         describe: "use more verbose model output (includes metadata like costs)",
         type: "boolean",
       })
-      .option("clear", {
-        describe: "clear the models cache by refreshing it",
+      .option("refresh", {
+        describe: "refresh the models cache from models.dev",
         type: "boolean",
       })
   },
   handler: async (args) => {
-    if (args.clear) {
+    if (args.refresh) {
       await ModelsDev.refresh()
-      UI.println(UI.Style.TEXT_SUCCESS_BOLD + "Models cache cleared" + UI.Style.TEXT_NORMAL)
+      UI.println(UI.Style.TEXT_SUCCESS_BOLD + "Models cache refreshed" + UI.Style.TEXT_NORMAL)
       return
     }
 
