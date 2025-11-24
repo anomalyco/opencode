@@ -1039,30 +1039,50 @@ function AssistantMessage(props: { message: AssistantMessage; parts: Part[]; las
     return props.message.finish && !["tool-calls", "unknown"].includes(props.message.finish)
   })
 
+  // Find the parent user message (reused by duration and token calculations)
+  const user = createMemo(() => messages().find((x) => x.role === "user" && x.id === props.message.parentID))
+
   const duration = createMemo(() => {
     if (!final()) return 0
     if (!props.message.time.completed) return 0
-    const user = messages().find((x) => x.role === "user" && x.id === props.message.parentID)
-    if (!user || !user.time) return 0
-    return props.message.time.completed - user.time.created
+    const u = user()
+    if (!u || !u.time) return 0
+    return props.message.time.completed - u.time.created
   })
 
-  // Output tokens
-  const outputTokens = createMemo(() => props.message.tokens.output)
-  const outputEstimate = createMemo(() => props.message.outputEstimate)
+  // OUT tokens (sent TO API) - includes user text + tool results from previous assistant
+  const outEstimate = createMemo(() => props.message.sentEstimate)
 
-  // Reasoning tokens (must be defined BEFORE outputDisplay)
+  // IN tokens (from API TO computer)
+  const inTokens = createMemo(() => props.message.tokens.output)
+  const inEstimate = createMemo(() => props.message.outputEstimate)
+
+  // Reasoning tokens (must be defined BEFORE inDisplay)
   const reasoningTokens = createMemo(() => props.message.tokens.reasoning)
   const reasoningEstimate = createMemo(() => props.message.reasoningEstimate)
 
-  const outputDisplay = createMemo(() => {
-    const estimate = outputEstimate()
+  const outDisplay = createMemo(() => {
+    const estimate = outEstimate()
     if (estimate !== undefined) return "~" + estimate.toLocaleString()
-    const tokens = outputTokens()
+    const tokens = props.message.tokens.input
+    if (tokens > 0) return tokens.toLocaleString()
+    return "0"
+  })
+
+  const inDisplay = createMemo(() => {
+    const estimate = inEstimate()
+    if (estimate !== undefined) return "~" + estimate.toLocaleString()
+    const tokens = inTokens()
     if (tokens > 0) return tokens.toLocaleString()
     // Show ~0 during streaming when we have reasoning but no output yet
     if (reasoningEstimate() !== undefined || reasoningTokens() > 0) return "~0"
     return undefined
+  })
+
+  const tokensDisplay = createMemo(() => {
+    const inVal = inDisplay()
+    if (!inVal) return undefined
+    return `${inVal}↓/${outDisplay()}↑`
   })
 
   const reasoningDisplay = createMemo(() => {
@@ -1072,9 +1092,14 @@ function AssistantMessage(props: { message: AssistantMessage; parts: Part[]; las
     if (tokens > 0) return tokens.toLocaleString()
     return undefined
   })
-  const cumulativeTokens = createMemo(
-    () => props.message.tokens.input + props.message.tokens.cache.read + props.message.tokens.cache.write,
-  )
+
+  const contextEstimate = createMemo(() => props.message.contextEstimate)
+
+  const cumulativeTokens = createMemo(() => {
+    const estimate = contextEstimate()
+    if (estimate !== undefined) return estimate
+    return props.message.tokens.input + props.message.tokens.cache.read + props.message.tokens.cache.write
+  })
 
   const percentage = createMemo(() => {
     if (!props.contextLimit) return 0
@@ -1122,16 +1147,16 @@ function AssistantMessage(props: { message: AssistantMessage; parts: Part[]; las
               <Show when={duration()}>
                 <span style={{ fg: theme.textMuted }}> ⬝{Locale.duration(duration())}</span>
               </Show>
-              <Show when={ctx.showTokens() && (outputDisplay() || reasoningDisplay())}>
+              <Show when={ctx.showTokens() && (tokensDisplay() || reasoningDisplay())}>
                 <span style={{ fg: theme.textMuted }}>
                   {" "}
-                  ⬝ {outputDisplay()} tok
+                  ⬝ {tokensDisplay()} tok
                   <Show when={reasoningDisplay()}>
                     {" · "}
                     {reasoningDisplay()} think
                   </Show>
                   <Show
-                    when={cumulativeTokens() > 0 || outputEstimate() !== undefined || reasoningEstimate() !== undefined}
+                    when={cumulativeTokens() > 0 || inEstimate() !== undefined || reasoningEstimate() !== undefined}
                   >
                     {" · "}
                     {cumulativeTokens().toLocaleString()} context ({percentage()}%)

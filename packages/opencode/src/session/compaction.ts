@@ -98,6 +98,9 @@ export namespace SessionCompaction {
   }) {
     const model = await Provider.getModel(input.model.providerID, input.model.modelID)
     const system = [...SystemPrompt.compaction(model.providerID)]
+    const lastFinished = input.messages.find((m) => m.info.role === "assistant" && m.info.finish)?.info as
+      | MessageV2.Assistant
+      | undefined
     const msg = (await Session.updateMessage({
       id: Identifier.ascending("message"),
       role: "assistant",
@@ -121,6 +124,10 @@ export namespace SessionCompaction {
       time: {
         created: Date.now(),
       },
+      outputEstimate: lastFinished?.outputEstimate,
+      reasoningEstimate: lastFinished?.reasoningEstimate,
+      contextEstimate: lastFinished?.contextEstimate,
+      sentEstimate: lastFinished?.sentEstimate,
     })) as MessageV2.Assistant
     const processor = SessionProcessor.create({
       assistantMessage: msg,

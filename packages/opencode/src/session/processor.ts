@@ -11,6 +11,7 @@ import { SessionSummary } from "./summary"
 import { Bus } from "@/bus"
 import { SessionRetry } from "./retry"
 import { SessionStatus } from "./status"
+import { Token } from "@/util/token"
 
 export namespace SessionProcessor {
   const DOOM_LOOP_THRESHOLD = 3
@@ -40,9 +41,9 @@ export namespace SessionProcessor {
       },
       async process(fn: () => StreamTextResult<Record<string, AITool>, never>) {
         log.info("process")
-        // Initialize from existing estimates (reverse the /4 calculation) to accumulate across multiple process() calls
-        let reasoningTotal = (input.assistantMessage.reasoningEstimate ?? 0) * 4
-        let textTotal = (input.assistantMessage.outputEstimate ?? 0) * 4
+        // Initialize from existing estimates (convert tokens to characters) to accumulate across multiple process() calls
+        let reasoningTotal = Token.toCharCount(input.assistantMessage.reasoningEstimate ?? 0)
+        let textTotal = Token.toCharCount(input.assistantMessage.outputEstimate ?? 0)
         while (true) {
           try {
             let currentText: MessageV2.TextPart | undefined
@@ -80,7 +81,7 @@ export namespace SessionProcessor {
                     if (value.providerMetadata) part.metadata = value.providerMetadata
                     if (part.text) {
                       const active = Object.values(reasoningMap).reduce((sum, p) => sum + p.text.length, 0)
-                      const estimate = Math.round(Math.max(0, (reasoningTotal + active) / 4))
+                      const estimate = Token.toTokenEstimate(Math.max(0, reasoningTotal + active))
                       if (input.assistantMessage.reasoningEstimate !== estimate) {
                         input.assistantMessage.reasoningEstimate = estimate
                         await Session.updateMessage(input.assistantMessage)
@@ -260,6 +261,8 @@ export namespace SessionProcessor {
                   input.assistantMessage.finish = value.finishReason
                   input.assistantMessage.cost += usage.cost
                   input.assistantMessage.tokens = usage.tokens
+                  input.assistantMessage.contextEstimate =
+                    usage.tokens.input + usage.tokens.cache.read + usage.tokens.cache.write
                   await Session.updatePart({
                     id: Identifier.ascending("part"),
                     reason: value.finishReason,
@@ -310,7 +313,7 @@ export namespace SessionProcessor {
                     currentText.text += value.text
                     if (value.providerMetadata) currentText.metadata = value.providerMetadata
                     if (currentText.text) {
-                      const estimate = Math.round(Math.max(0, (textTotal + currentText.text.length) / 4))
+                      const estimate = Token.toTokenEstimate(Math.max(0, textTotal + currentText.text.length))
                       if (input.assistantMessage.outputEstimate !== estimate) {
                         input.assistantMessage.outputEstimate = estimate
                         await Session.updateMessage(input.assistantMessage)

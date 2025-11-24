@@ -48,6 +48,7 @@ import { fn } from "@/util/fn"
 import { SessionProcessor } from "./processor"
 import { TaskTool } from "@/tool/task"
 import { SessionStatus } from "./status"
+import { Token } from "@/util/token"
 
 // @ts-ignore
 globalThis.AI_SDK_LOG_WARNINGS = false
@@ -313,71 +314,50 @@ export namespace SessionPrompt {
           time: {
             created: Date.now(),
           },
+          outputEstimate: lastFinished?.outputEstimate,
+          reasoningEstimate: lastFinished?.reasoningEstimate,
+          contextEstimate: lastFinished?.contextEstimate,
+          sentEstimate: (lastAssistant?.sentEstimate || 0) + (lastUser.sentEstimate || 0),
         })) as MessageV2.Assistant
-        let part = (await Session.updatePart({
+
+        const part: MessageV2.ToolPart = {
+          type: "tool",
           id: Identifier.ascending("part"),
           messageID: assistantMessage.id,
-          sessionID: assistantMessage.sessionID,
-          type: "tool",
+          sessionID,
+          tool: "task",
           callID: ulid(),
-          tool: TaskTool.id,
           state: {
             status: "running",
+            time: {
+              start: Date.now(),
+            },
             input: {
               prompt: task.prompt,
               description: task.description,
               subagent_type: task.agent,
             },
-            time: {
-              start: Date.now(),
-            },
           },
-        })) as MessageV2.ToolPart
-        const result = await taskTool
-          .execute(
-            {
-              prompt: task.prompt,
-              description: task.description,
-              subagent_type: task.agent,
-            },
-            {
-              agent: task.agent,
-              messageID: assistantMessage.id,
-              sessionID: sessionID,
-              abort,
-              async metadata(input) {
-                await Session.updatePart({
-                  ...part,
-                  type: "tool",
-                  state: {
-                    ...part.state,
-                    ...input,
-                  },
-                } satisfies MessageV2.ToolPart)
-              },
-            },
-          )
-          .catch(() => {})
-        assistantMessage.finish = "tool-calls"
-        assistantMessage.time.completed = Date.now()
-        await Session.updateMessage(assistantMessage)
-        if (result && part.state.status === "running") {
-          await Session.updatePart({
-            ...part,
-            state: {
-              status: "completed",
-              input: part.state.input,
-              title: result.title,
-              metadata: result.metadata,
-              output: result.output,
-              attachments: result.attachments,
-              time: {
-                ...part.state.time,
-                end: Date.now(),
-              },
-            },
-          } satisfies MessageV2.ToolPart)
         }
+        await Session.updatePart(part)
+
+        const result = await taskTool.execute(
+          {
+            prompt: task.prompt,
+            description: task.description,
+            subagent_type: task.agent,
+          },
+          {
+            sessionID,
+            abort,
+            agent: lastUser.agent,
+            messageID: assistantMessage.id,
+            callID: part.callID,
+            extra: { providerID: model.providerID, modelID: model.modelID },
+            metadata: async () => {},
+          },
+        )
+
         if (!result) {
           await Session.updatePart({
             ...part,
@@ -433,6 +413,17 @@ export namespace SessionPrompt {
         messages: msgs,
         agent,
       })
+
+      // Calculate tokens for tool results from previous assistant that will be sent in this API call
+      // Reuse parts from already-loaded messages to avoid redundant query
+      let toolResultTokens = 0
+      if (lastAssistant && step > 1) {
+        const assistantMessage = msgs.find((m) => m.info.id === lastAssistant.id)
+        if (assistantMessage) {
+          toolResultTokens = Token.calculateToolResultTokens(assistantMessage.parts)
+        }
+      }
+
       const processor = SessionProcessor.create({
         assistantMessage: (await Session.updateMessage({
           id: Identifier.ascending("message"),
@@ -456,8 +447,10 @@ export namespace SessionPrompt {
             created: Date.now(),
           },
           sessionID,
-          outputEstimate: lastAssistant?.outputEstimate,
-          reasoningEstimate: lastAssistant?.reasoningEstimate,
+          outputEstimate: lastFinished?.outputEstimate,
+          reasoningEstimate: lastFinished?.reasoningEstimate,
+          contextEstimate: lastFinished?.contextEstimate,
+          sentEstimate: (lastAssistant?.sentEstimate || 0) + (lastUser.sentEstimate || 0) + toolResultTokens,
         })) as MessageV2.Assistant,
         sessionID: sessionID,
         model: model.info,
@@ -1067,6 +1060,25 @@ export namespace SessionPrompt {
       },
     )
 
+    const userText = parts
+      .filter((p) => p.type === "text" && !(p as MessageV2.TextPart).synthetic)
+      .map((p) => (p as MessageV2.TextPart).text)
+      .join("")
+
+    // Calculate user message tokens
+    let sentTokens = Token.estimate(userText)
+
+    // Add tokens from tool results that will be sent with this message
+    // Tool results from the previous assistant message are included in the API request
+    const msgs = await MessageV2.filterCompacted(MessageV2.stream(input.sessionID))
+    const lastAssistant = msgs.findLast((m) => m.info.role === "assistant")
+    if (lastAssistant) {
+      sentTokens += Token.calculateToolResultTokens(lastAssistant.parts)
+    }
+
+    info.sentEstimate = sentTokens
+    info.contextEstimate = sentTokens
+
     await Session.updateMessage(info)
     for (const part of parts) {
       await Session.updatePart(part)
@@ -1136,6 +1148,8 @@ export namespace SessionPrompt {
         providerID: model.providerID,
         modelID: model.modelID,
       },
+      sentEstimate: 0,
+      contextEstimate: 0,
     }
     await Session.updateMessage(userMsg)
     const userPart: MessageV2.Part = {
@@ -1147,6 +1161,12 @@ export namespace SessionPrompt {
       synthetic: true,
     }
     await Session.updatePart(userPart)
+
+    const msgs = await MessageV2.filterCompacted(MessageV2.stream(input.sessionID))
+    const lastFinished = msgs.find((m) => m.info.role === "assistant" && m.info.finish)?.info as
+      | MessageV2.Assistant
+      | undefined
+    const lastAssistant = msgs.find((m) => m.info.role === "assistant")?.info as MessageV2.Assistant | undefined
 
     const msg: MessageV2.Assistant = {
       id: Identifier.ascending("message"),
@@ -1170,6 +1190,10 @@ export namespace SessionPrompt {
       },
       modelID: model.modelID,
       providerID: model.providerID,
+      outputEstimate: lastFinished?.outputEstimate,
+      reasoningEstimate: lastFinished?.reasoningEstimate,
+      contextEstimate: lastFinished?.contextEstimate,
+      sentEstimate: (lastAssistant?.sentEstimate || 0) + (userMsg.sentEstimate || 0),
     }
     await Session.updateMessage(msg)
     const part: MessageV2.Part = {
