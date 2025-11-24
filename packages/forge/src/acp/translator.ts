@@ -19,7 +19,8 @@ export namespace ACPTranslator {
     messageID: string
     partID: string
     textAccumulator: string
-    // Map ACP toolCallId -> partID for tracking tool calls
+    reasoningPartID: string
+    reasoningAccumulator: string
     toolCallMap: Map<string, string>
   }
 
@@ -33,6 +34,8 @@ export namespace ACPTranslator {
         messageID: Identifier.ascending("message"),
         partID: Identifier.ascending("part"),
         textAccumulator: "",
+        reasoningPartID: Identifier.ascending("part"),
+        reasoningAccumulator: "",
         toolCallMap: new Map(),
       }
       states.set(sessionID, state)
@@ -51,92 +54,84 @@ export namespace ACPTranslator {
     log.info("  ┌─ [TRANSLATE START]", {
       type: notifType,
       sessionID,
-      timestamp: new Date().toISOString()
+      timestamp: new Date().toISOString(),
     })
 
     const state = getOrCreateState(sessionID)
 
     try {
-      switch (notification.update.sessionUpdate) {
-      case "agent_message_chunk": {
-        await TextTranslator.handleAgentMessageChunk(
-          sessionID,
-          state.messageID,
-          state.partID,
-          notification,
-          { current: state.textAccumulator },
-        )
-        // Update accumulator after handler runs
-        if (notification.update.content.type === "text") {
-          state.textAccumulator += notification.update.content.text
+      switch (notifType) {
+        case "agent_message_chunk": {
+          await TextTranslator.handleAgentMessageChunk(sessionID, state.messageID, state.partID, notification, {
+            current: state.textAccumulator,
+          })
+          // Update accumulator after handler runs
+          if (notification.update.content.type === "text") {
+            state.textAccumulator += notification.update.content.text
+          }
+          break
         }
-        break
-      }
 
-      case "agent_thought_chunk": {
-        await TextTranslator.handleAgentThoughtChunk(sessionID, notification)
-        break
-      }
+        case "agent_thought_chunk": {
+          await TextTranslator.handleAgentThoughtChunk(sessionID, state.messageID, state.reasoningPartID, notification, {
+            current: state.reasoningAccumulator,
+          })
+          // Update accumulator after handler runs
+          if (notification.update.content.type === "text") {
+            state.reasoningAccumulator += notification.update.content.text
+          }
+          break
+        }
 
-      case "tool_call": {
-        await ToolTranslator.handleToolCall(
-          sessionID,
-          state.messageID,
-          notification,
-          state.toolCallMap,
-        )
-        break
-      }
+        case "tool_call": {
+          await ToolTranslator.handleToolCall(sessionID, state.messageID, notification, state.toolCallMap)
+          break
+        }
 
-      case "tool_call_update": {
-        await ToolTranslator.handleToolCallUpdate(
-          sessionID,
-          state.messageID,
-          notification,
-          state.toolCallMap,
-        )
-        break
-      }
+        case "tool_call_update": {
+          await ToolTranslator.handleToolCallUpdate(sessionID, state.messageID, notification, state.toolCallMap)
+          break
+        }
 
-      case "plan": {
-        // For MVP, we're not handling plans yet
-        await showDebugToast("Plan update received", notification)
-        break
-      }
+        case "plan": {
+          // For MVP, we're not handling plans yet
+          await showDebugToast("Plan update received", notification)
+          break
+        }
 
-      case "user_message_chunk": {
-        // Usually we don't need to handle user messages from ACP, but log it
-        log.info("received user_message_chunk", { sessionID })
-        break
-      }
+        case "user_message_chunk": {
+          // Usually we don't need to handle user messages from ACP, but log it
+          log.info("received user_message_chunk", { sessionID })
+          break
+        }
 
-      case "available_commands_update": {
-        log.info("received available_commands_update", {
-          sessionID,
-          commands: notification.update.availableCommands.length,
-        })
-        break
-      }
+        case "available_commands_update": {
+          log.info("received available_commands_update", {
+            sessionID,
+            commands: notification.update.availableCommands.length,
+          })
+          break
+        }
 
-      case "current_mode_update": {
-        log.info("received current_mode_update", {
-          sessionID,
-          modeId: notification.update.currentModeId,
-        })
-        break
-      }
+        case "current_mode_update": {
+          log.info("received current_mode_update", {
+            sessionID,
+            modeId: notification.update.currentModeId,
+          })
+          break
+        }
 
-      default: {
-        await showDebugToast("Unknown ACP notification type", notification)
-        break
-      }
+        default: {
+          await showDebugToast("Unknown ACP notification type", notification)
+          break
+        }
       }
 
       const duration = Date.now() - startTime
       log.info("  └─ [TRANSLATE END]", {
         type: notifType,
         duration: `${duration}ms`,
-        timestamp: new Date().toISOString()
+        timestamp: new Date().toISOString(),
       })
     } catch (error) {
       const duration = Date.now() - startTime
@@ -144,7 +139,7 @@ export namespace ACPTranslator {
         type: notifType,
         duration: `${duration}ms`,
         error: error instanceof Error ? error.message : String(error),
-        timestamp: new Date().toISOString()
+        timestamp: new Date().toISOString(),
       })
       throw error
     }
@@ -185,6 +180,8 @@ export namespace ACPTranslator {
     state.messageID = messageID
     state.partID = Identifier.ascending("part")
     state.textAccumulator = ""
+    state.reasoningPartID = Identifier.ascending("part")
+    state.reasoningAccumulator = ""
     state.toolCallMap.clear()
     log.info("started new message", { sessionID, messageID: state.messageID })
   }

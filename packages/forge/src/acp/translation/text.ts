@@ -66,14 +66,53 @@ export async function handleAgentMessageChunk(
  */
 export async function handleAgentThoughtChunk(
   sessionID: string,
+  messageID: string,
+  partID: string,
   notification: SessionNotification,
+  thoughtAccumulator: { current: string },
 ): Promise<void> {
   if (notification.update.sessionUpdate !== "agent_thought_chunk") return
-  // For MVP, we skip reasoning chunks
-  if (notification.update.content.type === "text") {
-    log.info("received agent_thought_chunk (skipping for MVP)", {
+  if (notification.update.content.type !== "text") {
+    log.warn("non-text agent_thought_chunk received", {
       sessionID,
-      text: notification.update.content.text.substring(0, 50),
+      contentType: notification.update.content.type,
+    })
+    return
+  }
+
+  const delta = notification.update.content.text
+  thoughtAccumulator.current += delta
+
+  const part: MessageV2.ReasoningPart = {
+    id: partID,
+    sessionID,
+    messageID,
+    type: "reasoning",
+    text: thoughtAccumulator.current,
+    time: {
+      start: Date.now(),
+    },
+  }
+
+  // Save part to storage AND publish Bus event
+  log.debug("attempting to save reasoning part", { partID: part.id, messageID: part.messageID, deltaLength: delta.length })
+  try {
+    await Session.updatePart({ part, delta })
+    log.debug("successfully saved reasoning part", { partID: part.id })
+  } catch (error) {
+    // Log the actual error details
+    const err = error instanceof Error ? error : new Error(String(error))
+    log.error("failed to save reasoning part", {
+      error: err.message,
+      stack: err.stack,
+      partID: part.id,
+      messageID: part.messageID,
     })
   }
+
+  log.info("translated agent_thought_chunk", {
+    sessionID,
+    delta: delta.substring(0, 50),
+    totalLength: thoughtAccumulator.current.length,
+  })
 }
