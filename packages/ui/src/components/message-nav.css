@@ -1,6 +1,4 @@
 [data-component="message-nav"] {
-  /* margin-right: 32px; */
-  /* margin-top: 12px; */
   flex-shrink: 0;
   display: flex;
   flex-direction: column;
@@ -9,15 +7,8 @@
   list-style: none;
 
   &[data-size="normal"] {
-    position: absolute;
-    right: 100%;
     width: 240px;
-    /* margin-top: 12px; */
-
-    @media (min-width: 80rem) {
-      gap: 8px;
-      /* margin-top: 4px; */
-    }
+    gap: 4px;
   }
 }
 
@@ -36,10 +27,8 @@
   display: flex;
   align-items: center;
   justify-content: flex-start;
-  height: 8px;
-  width: 32px;
-  /* margin-right: -12px; */
-  cursor: pointer;
+  height: 12px;
+  width: 24px;
   border: none;
   background: none;
   padding: 0;
@@ -52,7 +41,7 @@
 
 [data-slot="message-nav-tick-line"] {
   height: 1px;
-  width: 20px;
+  width: 16px;
   background-color: var(--icon-base);
   transition:
     width 0.2s,
@@ -69,11 +58,12 @@
   align-items: center;
   align-self: stretch;
   width: 100%;
-  column-gap: 8px;
+  column-gap: 12px;
   cursor: default;
   border: none;
   background: none;
-  padding: 0;
+  padding: 4px 12px;
+  border-radius: var(--radius-sm);
 }
 
 [data-slot="message-nav-title-preview"] {
@@ -90,6 +80,37 @@
   }
 }
 
-[data-slot="message-nav-item"]:hover [data-slot="message-nav-title-preview"] {
+[data-slot="message-nav-item"]:hover [data-slot="message-nav-message-button"] {
+  background-color: var(--surface-base);
+}
+[data-slot="message-nav-item"]:active [data-slot="message-nav-message-button"] {
+  background-color: var(--surface-base-active);
+}
+
+[data-slot="message-nav-item"]:active [data-slot="message-nav-title-preview"] {
   color: var(--text-base);
+}
+
+[data-slot="message-nav-tooltip"] {
+  z-index: 1000;
+}
+
+[data-slot="message-nav-tooltip-content"] {
+  display: flex;
+  padding: 4px 4px 6px 4px;
+  justify-content: center;
+  align-items: center;
+  border-radius: var(--radius-md);
+  background: var(--surface-raised-stronger-non-alpha);
+
+  /* border/shadow-xs/base */
+  box-shadow:
+    0 0 0 1px var(--border-weak-base, rgba(17, 0, 0, 0.12)),
+    0 1px 2px -1px rgba(19, 16, 16, 0.04),
+    0 1px 2px 0 rgba(19, 16, 16, 0.06),
+    0 1px 3px 0 rgba(19, 16, 16, 0.08);
+
+  * {
+    margin: 0 !important;
+  }
 }

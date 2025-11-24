@@ -50,6 +50,10 @@ export function UsageSection() {
     return u.inputTokens + (u.cacheReadTokens ?? 0) + (u.cacheWrite5mTokens ?? 0) + (u.cacheWrite1hTokens ?? 0)
   }
 
+  const calculateTotalOutputTokens = (u: Awaited<ReturnType<typeof getUsageInfo>>[0]) => {
+    return u.outputTokens + (u.reasoningTokens ?? 0)
+  }
+
   const goPrev = async () => {
     const usage = await getUsageInfo(params.id!, store.page - 1)
     setStore({
@@ -95,8 +99,11 @@ export function UsageSection() {
                 {(usage, index) => {
                   const date = createMemo(() => new Date(usage.timeCreated))
                   const totalInputTokens = createMemo(() => calculateTotalInputTokens(usage))
-                  const breakdownId = `breakdown-${index()}`
-                  const isOpen = createMemo(() => openBreakdownId() === breakdownId)
+                  const totalOutputTokens = createMemo(() => calculateTotalOutputTokens(usage))
+                  const inputBreakdownId = `input-breakdown-${index()}`
+                  const outputBreakdownId = `output-breakdown-${index()}`
+                  const isInputOpen = createMemo(() => openBreakdownId() === inputBreakdownId)
+                  const isOutputOpen = createMemo(() => openBreakdownId() === outputBreakdownId)
                   const isClaude = usage.model.toLowerCase().includes("claude")
                   return (
                     <tr>
@@ -110,13 +117,13 @@ export function UsageSection() {
                             data-slot="breakdown-button"
                             onClick={(e) => {
                               e.stopPropagation()
-                              setOpenBreakdownId(isOpen() ? null : breakdownId)
+                              setOpenBreakdownId(isInputOpen() ? null : inputBreakdownId)
                             }}
                           >
                             <IconBreakdown />
                           </button>
                           <span onClick={() => setOpenBreakdownId(null)}>{totalInputTokens()}</span>
-                          <Show when={isOpen()}>
+                          <Show when={isInputOpen()}>
                             <div data-slot="breakdown-popup" onClick={(e) => e.stopPropagation()}>
                               <div data-slot="breakdown-row">
                                 <span data-slot="breakdown-label">Input</span>
@@ -136,7 +143,32 @@ export function UsageSection() {
                           </Show>
                         </div>
                       </td>
-                      <td data-slot="usage-tokens">{usage.outputTokens}</td>
+                      <td data-slot="usage-tokens">
+                        <div data-slot="tokens-with-breakdown" onClick={(e) => e.stopPropagation()}>
+                          <button
+                            data-slot="breakdown-button"
+                            onClick={(e) => {
+                              e.stopPropagation()
+                              setOpenBreakdownId(isOutputOpen() ? null : outputBreakdownId)
+                            }}
+                          >
+                            <IconBreakdown />
+                          </button>
+                          <span onClick={() => setOpenBreakdownId(null)}>{totalOutputTokens()}</span>
+                          <Show when={isOutputOpen()}>
+                            <div data-slot="breakdown-popup" onClick={(e) => e.stopPropagation()}>
+                              <div data-slot="breakdown-row">
+                                <span data-slot="breakdown-label">Output</span>
+                                <span data-slot="breakdown-value">{usage.outputTokens}</span>
+                              </div>
+                              <div data-slot="breakdown-row">
+                                <span data-slot="breakdown-label">Reasoning</span>
+                                <span data-slot="breakdown-value">{usage.reasoningTokens ?? 0}</span>
+                              </div>
+                            </div>
+                          </Show>
+                        </div>
+                      </td>
                       <td data-slot="usage-cost">${((usage.cost ?? 0) / 100000000).toFixed(4)}</td>
                     </tr>
                   )

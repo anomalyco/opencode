@@ -5,6 +5,9 @@ import type { ComponentProps, ParentProps } from "solid-js"
 export interface TabsProps extends ComponentProps<typeof Kobalte> {}
 export interface TabsListProps extends ComponentProps<typeof Kobalte.List> {}
 export interface TabsTriggerProps extends ComponentProps<typeof Kobalte.Trigger> {
+  classes?: {
+    button?: string
+  }
   hideCloseButton?: boolean
   closeButton?: JSX.Element
 }
@@ -39,7 +42,14 @@ function TabsList(props: TabsListProps) {
 }
 
 function TabsTrigger(props: ParentProps<TabsTriggerProps>) {
-  const [split, rest] = splitProps(props, ["class", "classList", "children", "closeButton", "hideCloseButton"])
+  const [split, rest] = splitProps(props, [
+    "class",
+    "classList",
+    "classes",
+    "children",
+    "closeButton",
+    "hideCloseButton",
+  ])
   return (
     <div
       data-slot="tabs-tabs-trigger-wrapper"
@@ -48,7 +58,11 @@ function TabsTrigger(props: ParentProps<TabsTriggerProps>) {
         [split.class ?? ""]: !!split.class,
       }}
     >
-      <Kobalte.Trigger {...rest} data-slot="tabs-tabs-trigger" class="group/tab">
+      <Kobalte.Trigger
+        {...rest}
+        data-slot="tabs-tabs-trigger"
+        classList={{ "group/tab": true, [split.classes?.button ?? ""]: split.classes?.button }}
+      >
         {split.children}
       </Kobalte.Trigger>
       <Show when={split.closeButton}>

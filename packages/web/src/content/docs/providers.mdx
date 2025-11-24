@@ -762,6 +762,54 @@ If tool calls aren't working, try increasing `num_ctx` in Ollama. Start around 1
 
 ---
 
+### Ollama Cloud
+
+To use Ollama Cloud with OpenCode:
+
+1. Head over to [https://ollama.com/](https://ollama.com/) and sign in or create an account.
+
+2. Navigate to **Settings** > **Keys** and click **Add API Key** to generate a new API key.
+
+3. Copy the API key for use in OpenCode.
+
+4. Run `opencode auth login` and select **Ollama Cloud**.
+
+   ```bash
+   $ opencode auth login
+
+   ┌  Add credential
+   │
+   ◆  Select provider
+   │  ● Ollama Cloud
+   │  ...
+   └
+   ```
+
+5. Enter your Ollama Cloud API key.
+
+   ```bash
+   $ opencode auth login
+
+   ┌  Add credential
+   │
+   ◇  Select provider
+   │  Ollama Cloud
+   │
+   ◇  Enter your API key
+   │  _
+   └
+   ```
+
+6. **Important**: Before using cloud models in OpenCode, you must pull the model information locally:
+
+   ```bash
+   ollama pull gpt-oss:20b-cloud
+   ```
+
+7. Run the `/models` command to select your Ollama Cloud model.
+
+---
+
 ### OpenAI
 
 1. Head over to the [OpenAI Platform console](https://platform.openai.com/api-keys), click **Create new secret key**, and copy the key.

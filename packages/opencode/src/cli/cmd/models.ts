@@ -1,6 +1,7 @@
 import type { Argv } from "yargs"
 import { Instance } from "../../project/instance"
 import { Provider } from "../../provider/provider"
+import { ModelsDev } from "../../provider/models"
 import { cmd } from "./cmd"
 import { UI } from "../ui"
 import { EOL } from "os"
@@ -19,8 +20,17 @@ export const ModelsCommand = cmd({
         describe: "use more verbose model output (includes metadata like costs)",
         type: "boolean",
       })
+      .option("refresh", {
+        describe: "refresh the models cache from models.dev",
+        type: "boolean",
+      })
   },
   handler: async (args) => {
+    if (args.refresh) {
+      await ModelsDev.refresh()
+      UI.println(UI.Style.TEXT_SUCCESS_BOLD + "Models cache refreshed" + UI.Style.TEXT_NORMAL)
+    }
+
     await Instance.provide({
       directory: process.cwd(),
       async fn() {
