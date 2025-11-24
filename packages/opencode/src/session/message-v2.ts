@@ -8,6 +8,7 @@ import { LSP } from "../lsp"
 import { Snapshot } from "@/snapshot"
 import { fn } from "@/util/fn"
 import { Storage } from "@/storage/storage"
+import { ProviderTransform } from "@/provider/transform"
 
 export namespace MessageV2 {
   export const OutputLengthError = NamedError.create("MessageOutputLengthError", z.object({}))
@@ -737,11 +738,7 @@ export namespace MessageV2 {
           { cause: e },
         ).toObject()
       case APICallError.isInstance(e):
-        let message = e.message
-        if (ctx.providerID === "github-copilot" && message.includes("The requested model is not supported")) {
-          message +=
-            "\n\nMake sure the model is enabled in your copilot settings: https://github.com/settings/copilot/features"
-        }
+        const message = ProviderTransform.error(ctx.providerID, e.message)
         return new MessageV2.APIError(
           {
             message,
