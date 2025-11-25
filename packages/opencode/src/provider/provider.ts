@@ -23,6 +23,7 @@ import { createVertexAnthropic } from "@ai-sdk/google-vertex/anthropic"
 import { createOpenAI } from "@ai-sdk/openai"
 import { createOpenAICompatible } from "@ai-sdk/openai-compatible"
 import { createOpenRouter } from "@openrouter/ai-sdk-provider"
+import { createGitLab } from "@ai-sdk/gitlab"
 
 export namespace Provider {
   const log = Log.create({ service: "provider" })
@@ -37,6 +38,7 @@ export namespace Provider {
     "@ai-sdk/openai": createOpenAI,
     "@ai-sdk/openai-compatible": createOpenAICompatible,
     "@openrouter/ai-sdk-provider": createOpenRouter,
+    "@ai-sdk/gitlab": createGitLab,
   }
 
   type CustomLoader = (provider: ModelsDev.Provider) => Promise<{
@@ -258,6 +260,20 @@ export namespace Provider {
         },
       }
     },
+    gitlab: async () => {
+      // GitLab Duo provider - supports PAT (Personal Access Token) authentication
+      const instanceUrl = process.env["GITLAB_INSTANCE_URL"] ?? "https://gitlab.com"
+      return {
+        autoload: false,
+        options: {
+          instanceUrl,
+        },
+        async getModel(sdk: any, modelID: string) {
+          // GitLab provider uses the chat() method to create language models
+          return sdk.chat(modelID)
+        },
+      }
+    },
   }
 
   const state = Instance.state(async () => {
@@ -333,6 +349,43 @@ export namespace Provider {
         name: "GitHub Copilot Enterprise",
         // Enterprise uses a different API endpoint - will be set dynamically based on auth
         api: undefined,
+      }
+    }
+
+    // Add GitLab Duo provider with default model metadata
+    if (!database["gitlab"]) {
+      database["gitlab"] = {
+        id: "gitlab",
+        name: "GitLab Duo",
+        npm: "@ai-sdk/gitlab",
+        env: ["GITLAB_API_TOKEN"],
+        api: "https://gitlab.com",
+        models: {
+          "duo-chat": {
+            id: "duo-chat",
+            name: "GitLab Duo Chat",
+            release_date: "2024-01-01",
+            attachment: false,
+            reasoning: false,
+            temperature: true,
+            tool_call: true,
+            cost: {
+              input: 0,
+              output: 0,
+              cache_read: 0,
+              cache_write: 0,
+            },
+            options: {},
+            limit: {
+              context: 128000,
+              output: 4096,
+            },
+            modalities: {
+              input: ["text"],
+              output: ["text"],
+            },
+          },
+        },
       }
     }
 
