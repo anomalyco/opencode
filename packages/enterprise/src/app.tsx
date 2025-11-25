@@ -4,17 +4,20 @@ import { Fonts } from "@opencode-ai/ui/fonts"
 import { MetaProvider } from "@solidjs/meta"
 import { MarkedProvider } from "@opencode-ai/ui/context/marked"
 import "./app.css"
+import { Suspense } from "solid-js"
 
 export default function App() {
   return (
     <Router
       root={(props) => (
-        <MarkedProvider>
-          <MetaProvider>
-            <Fonts />
-            {props.children}
-          </MetaProvider>
-        </MarkedProvider>
+        <Suspense>
+          <MarkedProvider>
+            <MetaProvider>
+              <Fonts />
+              {props.children}
+            </MetaProvider>
+          </MarkedProvider>
+        </Suspense>
       )}
     >
       <FileRoutes />
