@@ -263,7 +263,7 @@ export default function () {
                         <div class="flex items-start justify-start h-full min-h-0">
                           <Show when={messages().length > 1}>
                             <>
-                              <div class="xl:hidden absolute right-full">
+                              <div class="md:hidden absolute right-full">
                                 <MessageNav
                                   class="mt-2 mr-3"
                                   messages={messages()}
@@ -274,7 +274,7 @@ export default function () {
                               </div>
                               <div
                                 classList={{
-                                  "hidden xl:block": true,
+                                  "hidden md:block": true,
                                   "absolute right-[90%]": !wide(),
                                   "absolute right-full": wide(),
                                 }}
@@ -316,14 +316,14 @@ export default function () {
                             <Tabs.Trigger value="session" class="w-1/2" classes={{ button: "w-full" }}>
                               Session
                             </Tabs.Trigger>
-                            <Tabs.Trigger value="review" class="w-1/2" classes={{ button: "w-full" }}>
+                            <Tabs.Trigger value="review" class="w-1/2 !border-r-0" classes={{ button: "w-full" }}>
                               5 Files Changed
                             </Tabs.Trigger>
                           </Tabs.List>
                           <Tabs.Content value="session" class="!overflow-hidden">
                             {turns()}
                           </Tabs.Content>
-                          <Tabs.Content value="review" class="!overflow-hidden">
+                          <Tabs.Content forceMount value="review" class="!overflow-hidden hidden data-[selected]:block">
                             <div class="relative px-4 pt-8 h-full overflow-y-auto no-scrollbar">
                               <SessionReview diffs={diffs()} class="pb-20" />
                             </div>
