@@ -339,7 +339,7 @@ export namespace SessionProcessor {
               SessionStatus.set(input.sessionID, {
                 type: "retry",
                 attempt,
-                message: error.data.message,
+                message: error.data.message.includes("Overloaded") ? "Provider is overloaded" : error.data.message,
                 next: Date.now() + delay,
               })
               await SessionRetry.sleep(delay, input.abort).catch(() => {})
