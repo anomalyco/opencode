@@ -3,7 +3,7 @@ import { SessionTurn } from "@opencode-ai/ui/session-turn"
 import { SessionReview } from "@opencode-ai/ui/session-review"
 import { DataProvider } from "@opencode-ai/ui/context"
 import { createAsync, query, RouteDefinition, useParams } from "@solidjs/router"
-import { createMemo, ErrorBoundary, For, Match, Show, Switch } from "solid-js"
+import { createEffect, createMemo, ErrorBoundary, For, Match, Show, Switch } from "solid-js"
 import { Share } from "~/core/share"
 import { Logo, Mark } from "@opencode-ai/ui/logo"
 import { IconButton } from "@opencode-ai/ui/icon-button"
@@ -85,7 +85,6 @@ const getData = query(async (shareID) => {
   }
   const match = Binary.search(result.session, share.sessionID, (s) => s.id)
   if (!match.found) throw new SessionDataMissingError({ sessionID: share.sessionID })
-  console.log(result)
   return result
 }, "getShareData")
 
@@ -98,6 +97,10 @@ export default function () {
   const data = createAsync(async () => {
     if (!params.shareID) throw new Error("Missing sessionID")
     return getData(params.shareID)
+  })
+
+  createEffect(() => {
+    console.log(data())
   })
 
   return (
