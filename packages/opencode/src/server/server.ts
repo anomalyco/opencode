@@ -980,6 +980,35 @@ export namespace Server {
         },
       )
       .post(
+        "/session/:id/prompt_async",
+        describeRoute({
+          description: "Create and send a new message to a session, start if needed and return immediately",
+          operationId: "session.prompt_async",
+          responses: {
+            204: {
+              description: "Prompt accepted",
+            },
+            ...errors(400, 404),
+          },
+        }),
+        validator(
+          "param",
+          z.object({
+            id: z.string().meta({ description: "Session ID" }),
+          }),
+        ),
+        validator("json", SessionPrompt.PromptInput.omit({ sessionID: true })),
+        async (c) => {
+          c.status(204)
+          c.header("Content-Type", "application/json")
+          return stream(c, async (stream) => {
+            const sessionID = c.req.valid("param").id
+            const body = c.req.valid("json")
+            SessionPrompt.prompt({ ...body, sessionID })
+          })
+        },
+      )
+      .post(
         "/session/:id/command",
         describeRoute({
           description: "Send a new command to a session",
