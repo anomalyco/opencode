@@ -3,7 +3,7 @@ import { SessionTurn } from "@opencode-ai/ui/session-turn"
 import { SessionReview } from "@opencode-ai/ui/session-review"
 import { DataProvider } from "@opencode-ai/ui/context"
 import { createAsync, query, RouteDefinition, useParams } from "@solidjs/router"
-import { createEffect, createMemo, ErrorBoundary, For, Match, Show, Switch } from "solid-js"
+import { createEffect, createMemo, ErrorBoundary, For, Match, Show, Suspense, Switch } from "solid-js"
 import { Share } from "~/core/share"
 import { Logo, Mark } from "@opencode-ai/ui/logo"
 import { IconButton } from "@opencode-ai/ui/icon-button"
@@ -26,6 +26,7 @@ const SessionDataMissingError = NamedError.create(
 )
 
 const getData = query(async (shareID) => {
+  "use server"
   const share = await Share.get(shareID)
   if (!share) throw new SessionDataMissingError({ sessionID: shareID })
   const data = await Share.data(shareID)
@@ -88,14 +89,10 @@ const getData = query(async (shareID) => {
   return result
 }, "getShareData")
 
-export const route = {
-  preload: ({ params }) => getData(params.shareID),
-} satisfies RouteDefinition
-
 export default function () {
   const params = useParams()
   const data = createAsync(async () => {
-    if (!params.shareID) throw new Error("Missing sessionID")
+    if (!params.shareID) throw new Error("Missing shareID")
     return getData(params.shareID)
   })
 
