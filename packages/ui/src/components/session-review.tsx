@@ -9,13 +9,14 @@ import { getDirectory, getFilename } from "@opencode-ai/util/path"
 import { For, Match, Show, Switch, type JSX, splitProps } from "solid-js"
 import { createStore } from "solid-js/store"
 import { type FileDiff } from "@opencode-ai/sdk"
+import { PreloadMultiFileDiffResult } from "@pierre/precision-diffs/ssr"
 
 export interface SessionReviewProps {
   split?: boolean
   class?: string
   classList?: Record<string, boolean | undefined>
   actions?: JSX.Element
-  diffs: FileDiff[]
+  diffs: (FileDiff & { preloaded?: PreloadMultiFileDiffResult<any> })[]
 }
 
 export const SessionReview = (props: SessionReviewProps) => {
@@ -38,7 +39,7 @@ export const SessionReview = (props: SessionReviewProps) => {
     }
   }
 
-  const [split, rest] = splitProps(props, ["class", "classList"])
+  const [split] = splitProps(props, ["class", "classList"])
 
   return (
     <div
@@ -63,7 +64,7 @@ export const SessionReview = (props: SessionReviewProps) => {
       <Accordion multiple value={store.open} onChange={handleChange}>
         <For each={props.diffs}>
           {(diff) => (
-            <Accordion.Item value={diff.file}>
+            <Accordion.Item forceMount value={diff.file} data-slot="session-review-accordion-item">
               <StickyAccordionHeader>
                 <Accordion.Trigger>
                   <div data-slot="session-review-trigger-content">
@@ -83,8 +84,9 @@ export const SessionReview = (props: SessionReviewProps) => {
                   </div>
                 </Accordion.Trigger>
               </StickyAccordionHeader>
-              <Accordion.Content>
+              <Accordion.Content data-slot="session-review-accordion-content">
                 <Diff
+                  preloadedDiff={diff.preloaded}
                   diffStyle={props.split ? "split" : "unified"}
                   before={{
                     name: diff.file!,

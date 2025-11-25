@@ -13,6 +13,7 @@
   "dependencies": {
     "@opencode-ai/util": "workspace:*",
     "@opencode-ai/ui": "workspace:*",
+    "@pierre/precision-diffs": "catalog:",
     "@solidjs/router": "catalog:",
     "@solidjs/start": "catalog:",
     "@solidjs/meta": "catalog:",
