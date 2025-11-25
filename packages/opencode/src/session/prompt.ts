@@ -43,7 +43,7 @@ import { Command } from "../command"
 import { $, fileURLToPath } from "bun"
 import { ConfigMarkdown } from "../config/markdown"
 import { SessionSummary } from "./summary"
-import { NamedError } from "@/util/error"
+import { NamedError } from "@opencode-ai/util/error"
 import { fn } from "@/util/fn"
 import { SessionProcessor } from "./processor"
 import { TaskTool } from "@/tool/task"
@@ -408,6 +408,7 @@ export namespace SessionPrompt {
             modelID: model.modelID,
           },
           sessionID,
+          auto: task.auto,
         })
         if (result === "stop") break
         continue
@@ -423,6 +424,7 @@ export namespace SessionPrompt {
           sessionID,
           agent: lastUser.agent,
           model: lastUser.model,
+          auto: true,
         })
         continue
       }
@@ -1425,7 +1427,8 @@ export namespace SessionPrompt {
       input.history.filter((m) => m.info.role === "user" && !m.parts.every((p) => "synthetic" in p && p.synthetic))
         .length === 1
     if (!isFirst) return
-    const small = await Provider.getSmallModel(input.providerID)
+    const small =
+      (await Provider.getSmallModel(input.providerID)) ?? (await Provider.getModel(input.providerID, input.modelID))
     const options = pipe(
       {},
       mergeDeep(ProviderTransform.options(small.providerID, small.modelID, small.npm ?? "", input.session.id)),

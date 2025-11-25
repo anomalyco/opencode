@@ -50,6 +50,15 @@ export function DialogSelect<T>(props: DialogSelectProps<T>) {
     filter: "",
   })
 
+  createEffect(() => {
+    if (props.current) {
+      const currentIndex = flat().findIndex((opt) => isDeepEqual(opt.value, props.current))
+      if (currentIndex >= 0) {
+        setStore("selected", currentIndex)
+      }
+    }
+  })
+
   let input: InputRenderable
 
   const filtered = createMemo(() => {
@@ -88,7 +97,14 @@ export function DialogSelect<T>(props: DialogSelectProps<T>) {
 
   createEffect(() => {
     store.filter
-    setStore("selected", 0)
+    if (store.filter.length > 0) {
+      setStore("selected", 0)
+    } else if (props.current) {
+      const currentIndex = flat().findIndex((opt) => isDeepEqual(opt.value, props.current))
+      if (currentIndex >= 0) {
+        setStore("selected", currentIndex)
+      }
+    }
     scroll.scrollTo(0)
   })
 

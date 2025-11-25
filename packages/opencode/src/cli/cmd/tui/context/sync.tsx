@@ -144,7 +144,7 @@ export const { use: useSync, provider: SyncProvider } = createSimpleContext({
           }
           break
         }
-        case "session.updated":
+        case "session.updated": {
           const result = Binary.search(store.session, event.properties.info.id, (s) => s.id)
           if (result.found) {
             setStore("session", result.index, reconcile(event.properties.info))
@@ -157,6 +157,7 @@ export const { use: useSync, provider: SyncProvider } = createSimpleContext({
             }),
           )
           break
+        }
 
         case "session.status": {
           setStore("session_status", event.properties.sessionID, event.properties.status)
@@ -288,6 +289,7 @@ export const { use: useSync, provider: SyncProvider } = createSimpleContext({
       bootstrap()
     })
 
+    const fullSyncedSessions = new Set<string>()
     const result = {
       data: store,
       set: setStore,
@@ -314,16 +316,13 @@ export const { use: useSync, provider: SyncProvider } = createSimpleContext({
           return last.time.completed ? "idle" : "working"
         },
         async sync(sessionID: string) {
-          if (store.message[sessionID]) return
-          const now = Date.now()
-          console.log("syncing", sessionID)
+          if (fullSyncedSessions.has(sessionID)) return
           const [session, messages, todo, diff] = await Promise.all([
             sdk.client.session.get({ path: { id: sessionID }, throwOnError: true }),
             sdk.client.session.messages({ path: { id: sessionID }, query: { limit: 100 } }),
             sdk.client.session.todo({ path: { id: sessionID } }),
             sdk.client.session.diff({ path: { id: sessionID } }),
           ])
-          console.log("fetched in " + (Date.now() - now), sessionID)
           setStore(
             produce((draft) => {
               const match = Binary.search(draft.session, sessionID, (s) => s.id)
@@ -337,7 +336,7 @@ export const { use: useSync, provider: SyncProvider } = createSimpleContext({
               draft.session_diff[sessionID] = diff.data ?? []
             }),
           )
-          console.log("synced in " + (Date.now() - now), sessionID)
+          fullSyncedSessions.add(sessionID)
         },
       },
       bootstrap,

@@ -371,6 +371,7 @@ export type CompactionPart = {
   sessionID: string
   messageID: string
   type: "compaction"
+  auto: boolean
 }
 
 export type Part =
@@ -1021,9 +1022,9 @@ export type Config = {
    */
   autoshare?: boolean
   /**
-   * Automatically update to the latest version
+   * Automatically update to the latest version. Set to true to auto-update, false to disable, or 'notify' to show update notifications
    */
-  autoupdate?: boolean
+  autoupdate?: boolean | "notify"
   /**
    * Disable providers that are loaded automatically
    */
@@ -2300,6 +2301,55 @@ export type SessionMessageResponses = {
 }
 
 export type SessionMessageResponse = SessionMessageResponses[keyof SessionMessageResponses]
+
+export type SessionPromptAsyncData = {
+  body?: {
+    messageID?: string
+    model?: {
+      providerID: string
+      modelID: string
+    }
+    agent?: string
+    noReply?: boolean
+    system?: string
+    tools?: {
+      [key: string]: boolean
+    }
+    parts: Array<TextPartInput | FilePartInput | AgentPartInput | SubtaskPartInput>
+  }
+  path: {
+    /**
+     * Session ID
+     */
+    id: string
+  }
+  query?: {
+    directory?: string
+  }
+  url: "/session/{id}/prompt_async"
+}
+
+export type SessionPromptAsyncErrors = {
+  /**
+   * Bad request
+   */
+  400: BadRequestError
+  /**
+   * Not found
+   */
+  404: NotFoundError
+}
+
+export type SessionPromptAsyncError = SessionPromptAsyncErrors[keyof SessionPromptAsyncErrors]
+
+export type SessionPromptAsyncResponses = {
+  /**
+   * Prompt accepted
+   */
+  204: void
+}
+
+export type SessionPromptAsyncResponse = SessionPromptAsyncResponses[keyof SessionPromptAsyncResponses]
 
 export type SessionCommandData = {
   body?: {

@@ -124,7 +124,8 @@ export function Session() {
     if (tui?.scroll_speed) {
       return new CustomSpeedScroll(tui.scroll_speed)
     }
-    return undefined
+
+    return new CustomSpeedScroll(process.platform === "win32" ? 3 : 1)
   })
 
   createEffect(async () => {
@@ -318,7 +319,9 @@ export function Session() {
       value: "session.undo",
       keybind: "messages_undo",
       category: "Session",
-      onSelect: (dialog) => {
+      onSelect: async (dialog) => {
+        const status = sync.data.session_status[route.sessionID]
+        if (status?.type !== "idle") await sdk.client.session.abort({ path: { id: route.sessionID } }).catch(() => {})
         const revert = session().revert?.messageID
         const message = messages().findLast((x) => (!revert || x.id < revert) && x.role === "user")
         if (!message) return
@@ -939,7 +942,7 @@ function UserMessage(props: {
             onMouseUp={props.onMouseUp}
             paddingTop={1}
             paddingBottom={1}
-            paddingLeft={1}
+            paddingLeft={2}
             backgroundColor={hover() ? theme.backgroundElement : theme.backgroundPanel}
             flexShrink={0}
           >
@@ -1008,7 +1011,7 @@ function AssistantMessage(props: { message: AssistantMessage; parts: Part[]; las
     if (!final()) return 0
     if (!props.message.time.completed) return 0
     const user = messages().find((x) => x.role === "user" && x.id === props.message.parentID)
-    if (!user) return 0
+    if (!user || !user.time) return 0
     return props.message.time.completed - user.time.created
   })
 
@@ -1047,11 +1050,11 @@ function AssistantMessage(props: { message: AssistantMessage; parts: Part[]; las
         <Match when={props.last || final()}>
           <box paddingLeft={3}>
             <text marginTop={1}>
-              <span style={{ fg: local.agent.color(props.message.mode) }}>▣</span>{" "}
-              <span style={{ fg: theme.text }}>{Locale.titlecase(props.message.mode)}</span>{" "}
-              <span style={{ fg: theme.textMuted }}>⬝{props.message.modelID}</span>
+              <span style={{ fg: local.agent.color(props.message.mode) }}>▣ </span>{" "}
+              <span style={{ fg: theme.text }}>{Locale.titlecase(props.message.mode)}</span>
+              <span style={{ fg: theme.textMuted }}> · {props.message.modelID}</span>
               <Show when={duration()}>
-                <span style={{ fg: theme.textMuted }}> ⬝{Locale.duration(duration())}</span>
+                <span style={{ fg: theme.textMuted }}> · {Locale.duration(duration())}</span>
               </Show>
             </text>
           </box>
