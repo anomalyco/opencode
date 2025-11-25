@@ -57,22 +57,26 @@ export function SessionTurn(
           {(msg) => {
             const titleSeen = createMemo(() => true)
             const contentSeen = createMemo(() => true)
-
+            const [detailsExpanded, setDetailsExpanded] = createSignal(false)
             const [titled, setTitled] = createSignal(titleSeen())
+
             const assistantMessages = createMemo(() => {
               return messages()?.filter((m) => m.role === "assistant" && m.parentID == msg().id) as AssistantMessage[]
             })
+            const assistantMessageParts = createMemo(() => assistantMessages()?.flatMap((m) => data.part[m.id]))
             const error = createMemo(() => assistantMessages().find((m) => m?.error)?.error)
-            const [detailsExpanded, setDetailsExpanded] = createSignal(false)
             const parts = createMemo(() => data.part[msg().id])
-            const hasToolPart = createMemo(() =>
-              assistantMessages()
-                ?.flatMap((m) => data.part[m.id])
-                .some((p) => p?.type === "tool"),
+            const lastTextPart = createMemo(() =>
+              assistantMessageParts()
+                .filter((p) => p.type === "text")
+                ?.at(-1),
             )
+            const hasToolPart = createMemo(() => assistantMessageParts().some((p) => p?.type === "tool"))
             const messageWorking = createMemo(() => msg().id === lastUserMessage()?.id && working())
             const initialCompleted = !(msg().id === lastUserMessage()?.id && working())
             const [completed, setCompleted] = createSignal(initialCompleted)
+            const summary = createMemo(() => msg().summary?.body ?? lastTextPart()?.text)
+            const lastTextPartShown = createMemo(() => !msg().summary?.body && (lastTextPart()?.text?.length ?? 0) > 0)
 
             // allowing time for the animations to finish
             createEffect(() => {
@@ -111,7 +115,7 @@ export function SessionTurn(
                           <Match when={true}>Response</Match>
                         </Switch>
                       </h2>
-                      <Show when={msg().summary?.body}>
+                      <Show when={summary()}>
                         {(summary) => (
                           <Markdown
                             data-slot="session-turn-markdown"
@@ -195,6 +199,19 @@ export function SessionTurn(
                             <For each={assistantMessages()}>
                               {(assistantMessage) => {
                                 const parts = createMemo(() => data.part[assistantMessage.id])
+                                const last = createMemo(() =>
+                                  parts()
+                                    .filter((p) => p.type === "text")
+                                    .at(-1),
+                                )
+                                if (lastTextPartShown() && lastTextPart()?.id === last()?.id) {
+                                  return (
+                                    <Message
+                                      message={assistantMessage}
+                                      parts={parts().filter((p) => p.id !== last()?.id)}
+                                    />
+                                  )
+                                }
                                 return <Message message={assistantMessage} parts={parts()} />
                               }}
                             </For>
