@@ -967,6 +967,11 @@ export type McpRemoteConfig = {
  */
 export type LayoutConfig = "auto" | "stretch"
 
+/**
+ * Control diff rendering style: 'auto' adapts to terminal width, 'stacked' always shows single column
+ */
+export type DiffStyleConfig = "auto" | "stacked"
+
 export type Config = {
   /**
    * JSON schema reference for configuration validation
@@ -1218,6 +1223,7 @@ export type Config = {
      * Enable the batch tool
      */
     batch_tool?: boolean
+    diff_style?: DiffStyleConfig
   }
 }
 

@@ -452,6 +452,11 @@ export namespace Config {
   })
   export type Layout = z.infer<typeof Layout>
 
+  export const DiffStyle = z.enum(["auto", "stacked"]).meta({
+    ref: "DiffStyleConfig",
+  })
+  export type DiffStyle = z.infer<typeof DiffStyle>
+
   export const Info = z
     .object({
       $schema: z.string().optional().describe("JSON schema reference for configuration validation"),
@@ -647,6 +652,9 @@ export namespace Config {
           chatMaxRetries: z.number().optional().describe("Number of retries for chat completions on failure"),
           disable_paste_summary: z.boolean().optional(),
           batch_tool: z.boolean().optional().describe("Enable the batch tool"),
+          diff_style: DiffStyle.optional().describe(
+            "Control diff rendering style: 'auto' adapts to terminal width, 'stacked' always shows single column",
+          ),
         })
         .optional(),
     })
