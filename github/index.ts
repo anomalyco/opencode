@@ -253,7 +253,13 @@ async function assertOpencodeConnected() {
   let connected = false
   do {
     try {
-      await client.app.get<true>()
+      await client.app.log<true>({
+        body: {
+          "service": "github-workflow",
+          "level": "info",
+          "message": "Prepare to react to Github Workflow event",
+        },
+      })
       connected = true
       break
     } catch (e) {}
