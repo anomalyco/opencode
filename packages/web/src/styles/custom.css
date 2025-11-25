@@ -394,3 +394,15 @@ nav.sidebar ul.top-level > li > details > summary .group-label > span {
     text-decoration: var(--shiki-dark-text-decoration) !important;
   }
 }
+
+/* Table responsive styles */
+.sl-markdown-content table th,
+.sl-markdown-content table td {
+  white-space: nowrap;
+}
+
+@media (max-width: 768px) {
+  .sl-markdown-content table {
+    font-size: 12px;
+  }
+}
