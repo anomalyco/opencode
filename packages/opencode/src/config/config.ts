@@ -26,7 +26,8 @@ export namespace Config {
     const merged = mergeDeep(target, source)
     // If both configs have plugin arrays, concatenate them instead of replacing
     if (target.plugin && source.plugin) {
-      merged.plugin = [...target.plugin, ...source.plugin]
+      const pluginSet = new Set([...target.plugin, ...source.plugin])
+      merged.plugin = Array.from(pluginSet)
     }
     return merged
   }
