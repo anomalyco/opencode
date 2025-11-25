@@ -2301,6 +2301,55 @@ export type SessionMessageResponses = {
 
 export type SessionMessageResponse = SessionMessageResponses[keyof SessionMessageResponses]
 
+export type SessionPromptAsyncData = {
+  body?: {
+    messageID?: string
+    model?: {
+      providerID: string
+      modelID: string
+    }
+    agent?: string
+    noReply?: boolean
+    system?: string
+    tools?: {
+      [key: string]: boolean
+    }
+    parts: Array<TextPartInput | FilePartInput | AgentPartInput | SubtaskPartInput>
+  }
+  path: {
+    /**
+     * Session ID
+     */
+    id: string
+  }
+  query?: {
+    directory?: string
+  }
+  url: "/session/{id}/prompt_async"
+}
+
+export type SessionPromptAsyncErrors = {
+  /**
+   * Bad request
+   */
+  400: BadRequestError
+  /**
+   * Not found
+   */
+  404: NotFoundError
+}
+
+export type SessionPromptAsyncError = SessionPromptAsyncErrors[keyof SessionPromptAsyncErrors]
+
+export type SessionPromptAsyncResponses = {
+  /**
+   * Prompt accepted
+   */
+  204: void
+}
+
+export type SessionPromptAsyncResponse = SessionPromptAsyncResponses[keyof SessionPromptAsyncResponses]
+
 export type SessionCommandData = {
   body?: {
     messageID?: string

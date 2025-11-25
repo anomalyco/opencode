@@ -75,6 +75,9 @@ import type {
   SessionMessageData,
   SessionMessageResponses,
   SessionMessageErrors,
+  SessionPromptAsyncData,
+  SessionPromptAsyncResponses,
+  SessionPromptAsyncErrors,
   SessionCommandData,
   SessionCommandResponses,
   SessionCommandErrors,
@@ -510,6 +513,20 @@ class Session extends _HeyApiClient {
     return (options.client ?? this._client).get<SessionMessageResponses, SessionMessageErrors, ThrowOnError>({
       url: "/session/{id}/message/{messageID}",
       ...options,
+    })
+  }
+
+  /**
+   * Create and send a new message to a session, start if needed and return immediately
+   */
+  public promptAsync<ThrowOnError extends boolean = false>(options: Options<SessionPromptAsyncData, ThrowOnError>) {
+    return (options.client ?? this._client).post<SessionPromptAsyncResponses, SessionPromptAsyncErrors, ThrowOnError>({
+      url: "/session/{id}/prompt_async",
+      ...options,
+      headers: {
+        "Content-Type": "application/json",
+        ...options.headers,
+      },
     })
   }
 
