@@ -24,7 +24,7 @@ export function createOpencodeClient(config?: Config & { directory?: string }) {
     }
   }
 
-  if (config?.baseUrl) {
+  if (config?.baseUrl && /^https?:\/\//.test(config.baseUrl)) {
     const baseUrl = new URL(config.baseUrl)
     if (baseUrl.username || baseUrl.password) {
       config.headers = {
