@@ -25,9 +25,12 @@ const SessionDataMissingError = NamedError.create(
   }),
 )
 
-const getData = query(async (sessionID) => {
-  const data = await Share.data(sessionID)
+const getData = query(async (shareID) => {
+  const share = await Share.get(shareID)
+  if (!share) throw new SessionDataMissingError({ sessionID: shareID })
+  const data = await Share.data(shareID)
   const result: {
+    sessionID: string
     session: Session[]
     session_diff: {
       [sessionID: string]: FileDiff[]
@@ -45,12 +48,13 @@ const getData = query(async (sessionID) => {
       [sessionID: string]: Model[]
     }
   } = {
+    sessionID: share.sessionID,
     session: [],
     session_diff: {
-      [sessionID]: [],
+      [share.sessionID]: [],
     },
     session_status: {
-      [sessionID]: {
+      [share.sessionID]: {
         type: "idle",
       },
     },
@@ -64,10 +68,7 @@ const getData = query(async (sessionID) => {
         result.session.push(item.data)
         break
       case "session_diff":
-        result.session_diff[sessionID] = item.data
-        break
-      case "session_status":
-        result.session_status[sessionID] = item.data
+        result.session_diff[share.sessionID] = item.data
         break
       case "message":
         result.message[item.data.sessionID] = result.message[item.data.sessionID] ?? []
@@ -78,24 +79,25 @@ const getData = query(async (sessionID) => {
         result.part[item.data.messageID].push(item.data)
         break
       case "model":
-        result.model[sessionID] = item.data
+        result.model[share.sessionID] = item.data
         break
     }
   }
-  const match = Binary.search(result.session, sessionID!, (s) => s.id)
-  if (!match.found) throw new SessionDataMissingError({ sessionID })
+  const match = Binary.search(result.session, share.sessionID, (s) => s.id)
+  if (!match.found) throw new SessionDataMissingError({ sessionID: share.sessionID })
+  console.log(result)
   return result
 }, "getShareData")
 
 export const route = {
-  preload: ({ params }) => getData(params.sessionID),
+  preload: ({ params }) => getData(params.shareID),
 } satisfies RouteDefinition
 
 export default function () {
   const params = useParams()
   const data = createAsync(async () => {
-    if (!params.sessionID) throw new Error("Missing sessionID")
-    return getData(params.sessionID)
+    if (!params.shareID) throw new Error("Missing sessionID")
+    return getData(params.shareID)
   })
 
   return (
@@ -115,12 +117,12 @@ export default function () {
               const [store, setStore] = createStore({
                 messageId: undefined as string | undefined,
               })
-              const match = createMemo(() => Binary.search(data().session, params.sessionID!, (s) => s.id))
-              if (!match().found) throw new Error(`Session ${params.sessionID} not found`)
+              const match = createMemo(() => Binary.search(data().session, data().sessionID, (s) => s.id))
+              if (!match().found) throw new Error(`Session ${data().sessionID} not found`)
               const info = createMemo(() => data().session[match().index])
               const messages = createMemo(() =>
-                params.sessionID
-                  ? (data().message[params.sessionID]?.filter((m) => m.role === "user") ?? []).sort(
+                data().sessionID
+                  ? (data().message[data().sessionID]?.filter((m) => m.role === "user") ?? []).sort(
                       (a, b) => b.time.created - a.time.created,
                     )
                   : [],
@@ -138,8 +140,8 @@ export default function () {
               }
               const provider = createMemo(() => activeMessage()?.model?.providerID)
               const modelID = createMemo(() => activeMessage()?.model?.modelID)
-              const model = createMemo(() => data().model[params.sessionID!]?.find((m) => m.id === modelID()))
-              const diffs = createMemo(() => data().session_diff[params.sessionID!] ?? [])
+              const model = createMemo(() => data().model[data().sessionID]?.find((m) => m.id === modelID()))
+              const diffs = createMemo(() => data().session_diff[data().sessionID] ?? [])
 
               const title = () => (
                 <div class="flex flex-col gap-4 shrink-0">
@@ -167,7 +169,7 @@ export default function () {
                     <For each={messages()}>
                       {(message) => (
                         <SessionTurn
-                          sessionID={params.sessionID!}
+                          sessionID={data().sessionID}
                           messageID={message.id}
                           classes={{
                             root: "min-w-0 w-full relative",
@@ -254,7 +256,7 @@ export default function () {
                             </>
                           </Show>
                           <SessionTurn
-                            sessionID={params.sessionID!}
+                            sessionID={data().sessionID}
                             messageID={store.messageId ?? firstUserMessage()!.id!}
                             classes={{ root: "grow", content: "flex flex-col justify-between", container: "pb-20" }}
                           >
