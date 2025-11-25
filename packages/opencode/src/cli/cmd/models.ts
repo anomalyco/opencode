@@ -38,7 +38,8 @@ export const ModelsCommand = cmd({
 
         function printModels(providerID: string, verbose?: boolean) {
           const provider = providers[providerID]
-          for (const [modelID, model] of Object.entries(provider.info.models)) {
+          const sortedModels = Object.entries(provider.info.models).sort(([a], [b]) => a.localeCompare(b))
+          for (const [modelID, model] of sortedModels) {
             process.stdout.write(`${providerID}/${modelID}`)
             process.stdout.write(EOL)
             if (verbose) {
@@ -59,7 +60,15 @@ export const ModelsCommand = cmd({
           return
         }
 
-        for (const providerID of Object.keys(providers)) {
+        const providerIDs = Object.keys(providers).sort((a, b) => {
+          const aIsOpencode = a.startsWith("opencode")
+          const bIsOpencode = b.startsWith("opencode")
+          if (aIsOpencode && !bIsOpencode) return -1
+          if (!aIsOpencode && bIsOpencode) return 1
+          return a.localeCompare(b)
+        })
+
+        for (const providerID of providerIDs) {
           printModels(providerID, args.verbose)
         }
       },

@@ -310,7 +310,6 @@ export function Prompt(props: PromptProps) {
         const extmarkId = input.extmarks.create({
           start,
           end,
-          virtual: true,
           styleId,
           typeId: promptPartTypeId,
         })

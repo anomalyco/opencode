@@ -21,7 +21,7 @@ export default function Layout(props: ParentProps) {
         {iife(() => {
           const sync = useSync()
           return (
-            <DataProvider data={sync.data}>
+            <DataProvider data={sync.data} directory={directory()}>
               <LocalProvider>{props.children}</LocalProvider>
             </DataProvider>
           )

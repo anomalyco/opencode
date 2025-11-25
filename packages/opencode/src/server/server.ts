@@ -830,6 +830,7 @@ export namespace Server {
               providerID: body.providerID,
               modelID: body.modelID,
             },
+            auto: false,
           })
           await SessionPrompt.loop(id)
           return c.json(true)
