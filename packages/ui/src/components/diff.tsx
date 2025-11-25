@@ -24,41 +24,32 @@ export function Diff<T>(props: DiffProps<T>) {
   let fileDiffInstance: FileDiff<T> | undefined
   const cleanupFunctions: Array<() => void> = []
 
+  const defaultOptions: FileDiffOptions<T> = {
+    theme: "OpenCode",
+    themeType: "system",
+    disableLineNumbers: false,
+    overflow: "wrap",
+    diffStyle: "unified",
+    diffIndicators: "bars",
+    disableBackground: false,
+    expansionLineCount: 20,
+    lineDiffType: "word-alt",
+    maxLineDiffLength: 1000,
+    maxLineLengthForHighlighting: 1000,
+    disableFileHeader: true,
+  }
+
   createEffect(() => {
-    // Create FileDiff instance and connect to existing server-rendered DOM.
-    // Don't call hydrate() - that would re-render content and cause duplication.
-    // Instead, just set the fileContainer reference to attach event handlers.
     if (props.preloadedDiff) return
     container.innerHTML = ""
     if (!fileDiffInstance) {
       fileDiffInstance = new FileDiff<T>({
-        theme: "OpenCode",
-        themeType: "system",
-        disableLineNumbers: false,
-        overflow: "wrap",
-        diffStyle: "unified",
-        diffIndicators: "bars",
-        disableBackground: false,
-        expansionLineCount: 20,
-        lineDiffType: "word-alt",
-        maxLineDiffLength: 1000,
-        maxLineLengthForHighlighting: 1000,
-        disableFileHeader: true,
-        // You can optionally pass a render function for rendering out line
-        // annotations.  Just return the dom node to render
-        // renderAnnotation(annotation: DiffLineAnnotation<T>): HTMLElement {
-        //   // Despite the diff itself being rendered in the shadow dom,
-        //   // annotations are inserted via the web components 'slots' api and you
-        //   // can use all your normal normal css and styling for them
-        //   const element = document.createElement("div")
-        //   element.innerText = annotation.metadata.threadId
-        //   return element
-        // },
+        ...defaultOptions,
         ...others,
         ...(props.preloadedDiff ?? {}),
       })
     }
-    fileDiffInstance?.render({
+    fileDiffInstance.render({
       oldFile: local.before,
       newFile: local.after,
       lineAnnotations: local.annotations,
@@ -68,20 +59,8 @@ export function Diff<T>(props: DiffProps<T>) {
 
   onMount(() => {
     if (isServer) return
-
     fileDiffInstance = new FileDiff<T>({
-      theme: "OpenCode",
-      themeType: "system",
-      disableLineNumbers: false,
-      overflow: "wrap",
-      diffStyle: "unified",
-      diffIndicators: "bars",
-      disableBackground: false,
-      expansionLineCount: 20,
-      lineDiffType: "word-alt",
-      maxLineDiffLength: 1000,
-      maxLineLengthForHighlighting: 1000,
-      disableFileHeader: true,
+      ...defaultOptions,
       // You can optionally pass a render function for rendering out line
       // annotations.  Just return the dom node to render
       // renderAnnotation(annotation: DiffLineAnnotation<T>): HTMLElement {
