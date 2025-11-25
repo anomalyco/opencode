@@ -34,45 +34,60 @@ export function DialogModel() {
         ]
       : recents
 
+    const isCurrent = (item: { providerID: string; modelID: string }) =>
+      currentModel && item.providerID === currentModel.providerID && item.modelID === currentModel.modelID
+
+    const currentIsFavorite = currentModel && favorites.some((fav) => isCurrent(fav))
+
     const recentList = orderedRecents.filter(
       (item) => !favorites.some((fav) => fav.providerID === item.providerID && fav.modelID === item.modelID),
     )
 
-    const favoriteOptions = !query
-      ? favorites.flatMap((item) => {
-          const provider = sync.data.provider.find((x) => x.id === item.providerID)
-          if (!provider) return []
-          const model = provider.models[item.modelID]
-          if (!model) return []
-          return [
-            {
-              key: item,
-              value: {
-                providerID: provider.id,
-                modelID: model.id,
+    const orderedFavorites = currentModel
+      ? [...favorites.filter((item) => isCurrent(item)), ...favorites.filter((item) => !isCurrent(item))]
+      : favorites
+
+    const orderedRecentList =
+      currentModel && !currentIsFavorite
+        ? [...recentList.filter((item) => isCurrent(item)), ...recentList.filter((item) => !isCurrent(item))]
+        : recentList
+
+    const favoriteOptions =
+      !query && favorites.length > 0
+        ? orderedFavorites.flatMap((item) => {
+            const provider = sync.data.provider.find((x) => x.id === item.providerID)
+            if (!provider) return []
+            const model = provider.models[item.modelID]
+            if (!model) return []
+            return [
+              {
+                key: item,
+                value: {
+                  providerID: provider.id,
+                  modelID: model.id,
+                },
+                title: model.name ?? item.modelID,
+                description: `${provider.name} ★`,
+                category: "Favorites",
+                disabled: provider.id === "opencode" && model.id.includes("-nano"),
+                footer: model.cost?.input === 0 && provider.id === "opencode" ? "Free" : undefined,
+                onSelect: () => {
+                  dialog.clear()
+                  local.model.set(
+                    {
+                      providerID: provider.id,
+                      modelID: model.id,
+                    },
+                    { recent: true },
+                  )
+                },
               },
-              title: model.name ?? item.modelID,
-              description: `${provider.name} ★`,
-              category: "Favorites",
-              disabled: provider.id === "opencode" && model.id.includes("-nano"),
-              footer: model.cost?.input === 0 && provider.id === "opencode" ? "Free" : undefined,
-              onSelect: () => {
-                dialog.clear()
-                local.model.set(
-                  {
-                    providerID: provider.id,
-                    modelID: model.id,
-                  },
-                  { recent: true },
-                )
-              },
-            },
-          ]
-        })
-      : []
+            ]
+          })
+        : []
 
     const recentOptions = !query
-      ? recentList.flatMap((item) => {
+      ? orderedRecentList.flatMap((item) => {
           const provider = sync.data.provider.find((x) => x.id === item.providerID)
           if (!provider) return []
           const model = provider.models[item.modelID]
