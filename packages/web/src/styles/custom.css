@@ -215,6 +215,11 @@ site-search > button span {
   .starlight-aside__content {
     margin-top: 0;
   }
+
+  @media (max-width: 768px) {
+    flex-direction: column;
+    gap: 6px;
+  }
 }
 
 site-search > button > kbd {
