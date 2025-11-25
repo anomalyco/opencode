@@ -124,7 +124,7 @@ export function Session() {
     if (tui?.scroll_speed) {
       return new CustomSpeedScroll(tui.scroll_speed)
     }
-    return undefined;
+    return undefined
   })
 
   createEffect(async () => {
