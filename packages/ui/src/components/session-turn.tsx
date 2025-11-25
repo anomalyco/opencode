@@ -2,7 +2,7 @@ import { AssistantMessage } from "@opencode-ai/sdk"
 import { useData } from "../context"
 import { Binary } from "@opencode-ai/util/binary"
 import { getDirectory, getFilename } from "@opencode-ai/util/path"
-import { createEffect, createMemo, createSignal, For, Match, ParentProps, Show, Switch } from "solid-js"
+import { createEffect, createMemo, createSignal, For, Match, onMount, ParentProps, Show, Switch } from "solid-js"
 import { DiffChanges } from "./diff-changes"
 import { Typewriter } from "./typewriter"
 import { Message } from "./message-part"
@@ -55,10 +55,11 @@ export function SessionTurn(
       <div data-slot="session-turn-content" class={props.classes?.content}>
         <Show when={message()}>
           {(msg) => {
-            const titleSeen = createMemo(() => true)
-            const contentSeen = createMemo(() => true)
+            const titleKey = `app:seen:session:${props.sessionID}:${msg().id}:title`
+            const contentKey = `app:seen:session:${props.sessionID}:${msg().id}:content`
             const [detailsExpanded, setDetailsExpanded] = createSignal(false)
-            const [titled, setTitled] = createSignal(titleSeen())
+            const [titled, setTitled] = createSignal(true)
+            const [faded, setFaded] = createSignal(true)
 
             const assistantMessages = createMemo(() => {
               return messages()?.filter((m) => m.role === "assistant" && m.parentID == msg().id) as AssistantMessage[]
@@ -68,7 +69,7 @@ export function SessionTurn(
             const parts = createMemo(() => data.part[msg().id])
             const lastTextPart = createMemo(() =>
               assistantMessageParts()
-                .filter((p) => p.type === "text")
+                .filter((p) => p?.type === "text")
                 ?.at(-1),
             )
             const hasToolPart = createMemo(() => assistantMessageParts().some((p) => p?.type === "tool"))
@@ -79,11 +80,23 @@ export function SessionTurn(
             const lastTextPartShown = createMemo(() => !msg().summary?.body && (lastTextPart()?.text?.length ?? 0) > 0)
 
             // allowing time for the animations to finish
-            createEffect(() => {
-              if (titleSeen()) return
-              const title = msg().summary?.title
-              if (title) setTimeout(() => setTitled(true), 10_000)
+            onMount(() => {
+              const titleSeen = sessionStorage.getItem(titleKey) === "true"
+              const contentSeen = sessionStorage.getItem(contentKey) === "true"
+
+              if (!titleSeen) {
+                setTitled(false)
+                const title = msg().summary?.title
+                if (title) setTimeout(() => setTitled(true), 10_000)
+                setTimeout(() => sessionStorage.setItem(titleKey, "true"), 1000)
+              }
+
+              if (!contentSeen) {
+                setFaded(false)
+                setTimeout(() => sessionStorage.setItem(contentKey, "true"), 1000)
+              }
             })
+
             createEffect(() => {
               const completed = !messageWorking()
               setTimeout(() => setCompleted(completed), 1200)
@@ -120,7 +133,7 @@ export function SessionTurn(
                           <Markdown
                             data-slot="session-turn-markdown"
                             data-diffs={!!msg().summary?.diffs?.length}
-                            data-fade={!msg().summary?.diffs?.length && !contentSeen()}
+                            data-fade={!msg().summary?.diffs?.length && !faded()}
                             text={summary()}
                           />
                         )}
@@ -201,14 +214,14 @@ export function SessionTurn(
                                 const parts = createMemo(() => data.part[assistantMessage.id])
                                 const last = createMemo(() =>
                                   parts()
-                                    .filter((p) => p.type === "text")
+                                    .filter((p) => p?.type === "text")
                                     .at(-1),
                                 )
                                 if (lastTextPartShown() && lastTextPart()?.id === last()?.id) {
                                   return (
                                     <Message
                                       message={assistantMessage}
-                                      parts={parts().filter((p) => p.id !== last()?.id)}
+                                      parts={parts().filter((p) => p?.id !== last()?.id)}
                                     />
                                   )
                                 }
