@@ -444,9 +444,7 @@ test("merges plugin arrays from global and local configs", async () => {
       expect(plugins.some((p) => p.includes("local-plugin-1"))).toBe(true)
 
       // Should have all 3 plugins (not replaced, but merged)
-      const pluginNames = plugins.filter(
-        (p) => p.includes("global-plugin") || p.includes("local-plugin"),
-      )
+      const pluginNames = plugins.filter((p) => p.includes("global-plugin") || p.includes("local-plugin"))
       expect(pluginNames.length).toBeGreaterThanOrEqual(3)
     },
   })
