@@ -724,6 +724,10 @@ export type KeybindsConfig = {
    */
   sidebar_toggle?: string
   /**
+   * Toggle username visibility
+   */
+  username_toggle?: string
+  /**
    * View status
    */
   status_view?: string
