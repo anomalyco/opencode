@@ -34,13 +34,12 @@ export function DialogModel() {
         ]
       : recents
 
-    const favoriteList = favorites.filter(
-      (item) =>
-        !orderedRecents.some((recent) => recent.providerID === item.providerID && recent.modelID === item.modelID),
+    const recentList = orderedRecents.filter(
+      (item) => !favorites.some((fav) => fav.providerID === item.providerID && fav.modelID === item.modelID),
     )
 
     const favoriteOptions = !query
-      ? favoriteList.flatMap((item) => {
+      ? favorites.flatMap((item) => {
           const provider = sync.data.provider.find((x) => x.id === item.providerID)
           if (!provider) return []
           const model = provider.models[item.modelID]
@@ -73,12 +72,11 @@ export function DialogModel() {
       : []
 
     const recentOptions = !query
-      ? orderedRecents.flatMap((item) => {
+      ? recentList.flatMap((item) => {
           const provider = sync.data.provider.find((x) => x.id === item.providerID)
           if (!provider) return []
           const model = provider.models[item.modelID]
           if (!model) return []
-          const favorite = favorites.some((fav) => fav.providerID === item.providerID && fav.modelID === item.modelID)
           return [
             {
               key: item,
@@ -87,7 +85,7 @@ export function DialogModel() {
                 modelID: model.id,
               },
               title: model.name ?? item.modelID,
-              description: `${provider.name}${favorite ? " ★" : ""}`,
+              description: provider.name,
               category: "Recent",
               disabled: provider.id === "opencode" && model.id.includes("-nano"),
               footer: model.cost?.input === 0 && provider.id === "opencode" ? "Free" : undefined,
@@ -107,8 +105,8 @@ export function DialogModel() {
       : []
 
     return [
-      ...recentOptions,
       ...favoriteOptions,
+      ...recentOptions,
       ...pipe(
         sync.data.provider,
         sortBy(
@@ -190,7 +188,7 @@ export function DialogModel() {
         },
         {
           keybind: Keybind.parse("ctrl+f")[0],
-          title: "favorite",
+          title: "Favorite",
           onTrigger: (option) => {
             local.model.toggleFavorite(option.value as { providerID: string; modelID: string })
           },
