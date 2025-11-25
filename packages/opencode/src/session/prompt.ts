@@ -492,7 +492,9 @@ export namespace SessionPrompt {
           topP: agent.topP ?? ProviderTransform.topP(model.providerID, model.modelID),
           options: pipe(
             {},
-            mergeDeep(ProviderTransform.options(model.providerID, model.modelID, model.npm ?? "", sessionID, provider?.options)),
+            mergeDeep(
+              ProviderTransform.options(model.providerID, model.modelID, model.npm ?? "", sessionID, provider?.options),
+            ),
             mergeDeep(model.info.options),
             mergeDeep(agent.options),
           ),
@@ -1414,7 +1416,15 @@ export namespace SessionPrompt {
     const provider = await Provider.getProvider(small.providerID)
     const options = pipe(
       {},
-      mergeDeep(ProviderTransform.options(small.providerID, small.modelID, small.npm ?? "", input.session.id, provider?.options)),
+      mergeDeep(
+        ProviderTransform.options(
+          small.providerID,
+          small.modelID,
+          small.npm ?? "",
+          input.session.id,
+          provider?.options,
+        ),
+      ),
       mergeDeep(ProviderTransform.smallOptions({ providerID: small.providerID, modelID: small.modelID })),
       mergeDeep(small.info.options),
     )
