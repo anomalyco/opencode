@@ -450,7 +450,7 @@ export namespace SessionPrompt {
           outputEstimate: lastFinished?.outputEstimate,
           reasoningEstimate: lastFinished?.reasoningEstimate,
           contextEstimate: lastFinished?.contextEstimate,
-          sentEstimate: (lastAssistant?.sentEstimate || 0) + (lastUser.sentEstimate || 0) + toolResultTokens,
+          sentEstimate: (lastAssistant?.sentEstimate || 0) + (lastUser.sentEstimate || 0),
         })) as MessageV2.Assistant,
         sessionID: sessionID,
         model: model.info,
@@ -1061,7 +1061,7 @@ export namespace SessionPrompt {
     )
 
     const userText = parts
-      .filter((p) => p.type === "text" && !(p as MessageV2.TextPart).synthetic)
+      .filter((p) => p.type === "text" && !p.ignored)
       .map((p) => (p as MessageV2.TextPart).text)
       .join("")
 

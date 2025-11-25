@@ -29,17 +29,21 @@ export namespace Token {
     let tokens = 0
     for (const part of parts) {
       if (part.type === "tool") {
-        // Tool input is sent in both completed and error states
-        tokens += estimate(JSON.stringify(part.state.input))
+        // Add null check for part.state
+        if (!part.state) continue
+
+        // Safe access to input
+        if (part.state.input) {
+          tokens += estimate(JSON.stringify(part.state.input))
+        }
 
         if (part.state.status === "completed") {
-          // Tool result output - check if compacted
-          const output = part.state.time.compacted ? "[Old tool result content cleared]" : part.state.output
+          // Use optional chaining for compacted check
+          const output = part.state.time?.compacted ? "[Old tool result content cleared]" : (part.state.output ?? "")
           tokens += estimate(output)
         }
 
-        if (part.state.status === "error") {
-          // Tool error text is sent back to the API
+        if (part.state.status === "error" && part.state.error) {
           tokens += estimate(part.state.error)
         }
       }
