@@ -19,6 +19,7 @@ import { googleHelper } from "./provider/google"
 import { openaiHelper } from "./provider/openai"
 import { oaCompatHelper } from "./provider/openai-compatible"
 import { createRateLimiter } from "./rateLimiter"
+import { createDataDumper } from "./dataDumper"
 
 type ZenData = Awaited<ReturnType<typeof ZenData.list>>
 type RetryOptions = {
@@ -48,21 +49,24 @@ export async function handler(
   try {
     const url = input.request.url
     const body = await input.request.json()
-    const ip = input.request.headers.get("x-real-ip") ?? ""
     const model = opts.parseModel(url, body)
     const isStream = opts.parseIsStream(url, body)
+    const ip = input.request.headers.get("x-real-ip") ?? ""
+    const sessionId = input.request.headers.get("x-opencode-session") ?? ""
+    const requestId = input.request.headers.get("x-opencode-request") ?? ""
     logger.metric({
       is_tream: isStream,
-      session: input.request.headers.get("x-opencode-session"),
-      request: input.request.headers.get("x-opencode-request"),
+      session: sessionId,
+      request: requestId,
     })
     const zenData = ZenData.list()
     const modelInfo = validateModel(zenData, model)
+    const dataDumper = createDataDumper(sessionId, requestId)
     const rateLimiter = createRateLimiter(modelInfo.id, modelInfo.rateLimit, ip)
     await rateLimiter?.check()
 
     const retriableRequest = async (retry: RetryOptions = { excludeProviders: [], retryCount: 0 }) => {
-      const providerInfo = selectProvider(zenData, modelInfo, ip, retry)
+      const providerInfo = selectProvider(zenData, modelInfo, sessionId, retry)
       const authInfo = await authenticate(modelInfo, providerInfo)
       validateBilling(authInfo, modelInfo)
       validateModelSettings(authInfo)
@@ -104,10 +108,14 @@ export async function handler(
         })
       }
 
-      return { providerInfo, authInfo, res, startTimestamp }
+      return { providerInfo, authInfo, reqBody, res, startTimestamp }
     }
 
-    const { providerInfo, authInfo, res, startTimestamp } = await retriableRequest()
+    const { providerInfo, authInfo, reqBody, res, startTimestamp } = await retriableRequest()
+
+    // Store model request
+    dataDumper?.provideModel(providerInfo.storeModel)
+    dataDumper?.provideRequest(reqBody)
 
     // Scrub response headers
     const resHeaders = new Headers()
@@ -126,6 +134,8 @@ export async function handler(
       const body = JSON.stringify(responseConverter(json))
       logger.metric({ response_length: body.length })
       logger.debug("RESPONSE: " + body)
+      dataDumper?.provideResponse(body)
+      dataDumper?.flush()
       await rateLimiter?.track()
       await trackUsage(authInfo, modelInfo, providerInfo, json.usage)
       await reload(authInfo)
@@ -155,6 +165,7 @@ export async function handler(
                   response_length: responseLength,
                   "timestamp.last_byte": Date.now(),
                 })
+                dataDumper?.flush()
                 await rateLimiter?.track()
                 const usage = usageParser.retrieve()
                 if (usage) {
@@ -174,6 +185,7 @@ export async function handler(
               }
               responseLength += value.length
               buffer += decoder.decode(value, { stream: true })
+              dataDumper?.provideStream(buffer)
 
               const parts = buffer.split(providerInfo.streamSeparator)
               buffer = parts.pop() ?? ""
@@ -263,7 +275,7 @@ export async function handler(
     return { id: modelId, ...modelData }
   }
 
-  function selectProvider(zenData: ZenData, modelInfo: ModelInfo, ip: string, retry: RetryOptions) {
+  function selectProvider(zenData: ZenData, modelInfo: ModelInfo, sessionId: string, retry: RetryOptions) {
     const provider = (() => {
       if (retry.retryCount === MAX_RETRIES) {
         return modelInfo.providers.find((provider) => provider.id === modelInfo.fallbackProvider)
@@ -274,9 +286,13 @@ export async function handler(
         .filter((provider) => !retry.excludeProviders.includes(provider.id))
         .flatMap((provider) => Array<typeof provider>(provider.weight ?? 1).fill(provider))
 
-      // Use the last 2 characters of IP address to select a provider
-      const lastChars = ip.slice(-2)
-      const index = parseInt(lastChars, 16) % providers.length
+      // Use the last 4 characters of session ID to select a provider
+      let h = 0
+      const l = sessionId.length
+      for (let i = l - 4; i < l; i++) {
+        h = (h * 31 + sessionId.charCodeAt(i)) | 0 // 32-bit int
+      }
+      const index = (h >>> 0) % providers.length // make unsigned + range 0..length-1
       return providers[index || 0]
     })()
 

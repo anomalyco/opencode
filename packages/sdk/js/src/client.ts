@@ -24,6 +24,19 @@ export function createOpencodeClient(config?: Config & { directory?: string }) {
     }
   }
 
+  if (config?.baseUrl) {
+    const baseUrl = new URL(config.baseUrl)
+    if (baseUrl.username || baseUrl.password) {
+      config.headers = {
+        ...config.headers,
+        Authorization: `Basic ${btoa(`${baseUrl.username}:${baseUrl.password}`)}`,
+      }
+      baseUrl.username = ""
+      baseUrl.password = ""
+      config.baseUrl = baseUrl.toString()
+    }
+  }
+
   const client = createClient(config)
   return new OpencodeClient({ client })
 }

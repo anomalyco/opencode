@@ -5,7 +5,7 @@ import { Global } from "../global"
 import { lazy } from "../util/lazy"
 import { Lock } from "../util/lock"
 import { $ } from "bun"
-import { NamedError } from "@/util/error"
+import { NamedError } from "@opencode-ai/util/error"
 import z from "zod"
 
 export namespace Storage {

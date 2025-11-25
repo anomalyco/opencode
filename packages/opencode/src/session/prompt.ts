@@ -43,7 +43,7 @@ import { Command } from "../command"
 import { $, fileURLToPath } from "bun"
 import { ConfigMarkdown } from "../config/markdown"
 import { SessionSummary } from "./summary"
-import { NamedError } from "@/util/error"
+import { NamedError } from "@opencode-ai/util/error"
 import { fn } from "@/util/fn"
 import { SessionProcessor } from "./processor"
 import { TaskTool } from "@/tool/task"
@@ -534,7 +534,7 @@ export namespace SessionPrompt {
             }
           },
           headers: {
-            ...(model.providerID === "opencode"
+            ...(model.providerID.startsWith("opencode")
               ? {
                   "x-opencode-session": sessionID,
                   "x-opencode-request": lastUser.id,
@@ -1408,7 +1408,8 @@ export namespace SessionPrompt {
       input.history.filter((m) => m.info.role === "user" && !m.parts.every((p) => "synthetic" in p && p.synthetic))
         .length === 1
     if (!isFirst) return
-    const small = await Provider.getSmallModel(input.providerID)
+    const small =
+      (await Provider.getSmallModel(input.providerID)) ?? (await Provider.getModel(input.providerID, input.modelID))
     const options = pipe(
       {},
       mergeDeep(ProviderTransform.options(small.providerID, small.modelID, small.npm ?? "", input.session.id)),
@@ -1416,7 +1417,8 @@ export namespace SessionPrompt {
       mergeDeep(small.info.options),
     )
     await generateText({
-      maxOutputTokens: small.info.reasoning ? 1500 : 20,
+      // use higher # for reasoning models since reasoning tokens eat up a lot of the budget
+      maxOutputTokens: small.info.reasoning ? 3000 : 20,
       providerOptions: ProviderTransform.providerOptions(small.npm, small.providerID, options),
       messages: [
         ...SystemPrompt.title(small.providerID).map(
@@ -1426,10 +1428,8 @@ export namespace SessionPrompt {
           }),
         ),
         {
-          role: "user" as const,
-          content: `
-              The following is the text to summarize:
-            `,
+          role: "user",
+          content: "Generate a title for this conversation:\n",
         },
         ...MessageV2.toModelMessage([
           {

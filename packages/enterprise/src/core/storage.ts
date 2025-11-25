@@ -19,7 +19,6 @@ export namespace Storage {
     return {
       async read(path: string): Promise<string | undefined> {
         try {
-          console.log("reading", bucket, path)
           const command = new GetObjectCommand({
             Bucket: bucket,
             Key: path,

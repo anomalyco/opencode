@@ -1,5 +1,6 @@
 import { BoxRenderable, TextareaRenderable, MouseEvent, PasteEvent, t, dim, fg, type KeyBinding } from "@opentui/core"
 import { createEffect, createMemo, type JSX, onMount, createSignal, onCleanup, Show, Switch, Match } from "solid-js"
+import "opentui-spinner/solid"
 import { useLocal } from "@tui/context/local"
 import { useTheme } from "@tui/context/theme"
 import { EmptyBorder } from "@tui/component/border"
@@ -20,7 +21,7 @@ import type { FilePart } from "@opencode-ai/sdk"
 import { TuiEvent } from "../../event"
 import { iife } from "@/util/iife"
 import { Locale } from "@/util/locale"
-import { Shimmer } from "../../ui/shimmer"
+import { createColors, createFrames } from "../../ui/spinner.ts"
 
 export type PromptProps = {
   sessionID?: string
@@ -545,8 +546,20 @@ export function Prompt(props: PromptProps) {
     return local.agent.color(local.agent.current().name)
   })
 
-  createEffect(() => {
-    renderer.setCursorColor(highlight())
+  const spinnerDef = createMemo(() => {
+    const color = local.agent.color(local.agent.current().name)
+    return {
+      frames: createFrames({
+        color,
+        style: "blocks",
+        inactiveFactor: 0.25,
+      }),
+      color: createColors({
+        color,
+        style: "blocks",
+        inactiveFactor: 0.25,
+      }),
+    }
   })
 
   return (
@@ -760,7 +773,7 @@ export function Prompt(props: PromptProps) {
               ref={(r: TextareaRenderable) => (input = r)}
               onMouseDown={(r: MouseEvent) => r.target?.focus()}
               focusedBackgroundColor={theme.backgroundElement}
-              cursorColor={theme.primary}
+              cursorColor={highlight()}
               syntaxStyle={syntax()}
             />
             <box flexDirection="row" flexShrink={0} paddingTop={1} gap={1}>
@@ -813,7 +826,7 @@ export function Prompt(props: PromptProps) {
               justifyContent={status().type === "retry" ? "space-between" : "flex-start"}
             >
               <box flexShrink={0} flexDirection="row" gap={1}>
-                <Loader />
+                <spinner color={spinnerDef().color} frames={spinnerDef().frames} interval={40} />
                 <box flexDirection="row" gap={1} flexShrink={0}>
                   {(() => {
                     const retry = createMemo(() => {
@@ -882,39 +895,4 @@ export function Prompt(props: PromptProps) {
       </box>
     </>
   )
-}
-
-function Loader() {
-  const FRAMES = [
-    "▱▱▱▱▱▱▱",
-    "▱▱▱▱▱▱▱",
-    "▱▱▱▱▱▱▱",
-    "▱▱▱▱▱▱▱",
-    "▰▱▱▱▱▱▱",
-    "▰▰▱▱▱▱▱",
-    "▰▰▰▱▱▱▱",
-    "▱▰▰▰▱▱▱",
-    "▱▱▰▰▰▱▱",
-    "▱▱▱▰▰▰▱",
-    "▱▱▱▱▰▰▰",
-    "▱▱▱▱▱▰▰",
-    "▱▱▱▱▱▱▰",
-    "▱▱▱▱▱▱▱",
-    "▱▱▱▱▱▱▱",
-    "▱▱▱▱▱▱▱",
-    "▱▱▱▱▱▱▱",
-  ]
-  const [frame, setFrame] = createSignal(0)
-
-  onMount(() => {
-    const timer = setInterval(() => {
-      setFrame((frame() + 1) % FRAMES.length)
-    }, 100)
-    onCleanup(() => {
-      clearInterval(timer)
-    })
-  })
-
-  const { theme } = useTheme()
-  return <text fg={theme.diffAdded}>{FRAMES[frame()]}</text>
 }

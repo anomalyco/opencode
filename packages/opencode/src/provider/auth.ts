@@ -4,7 +4,7 @@ import { map, filter, pipe, fromEntries, mapValues } from "remeda"
 import z from "zod"
 import { fn } from "@/util/fn"
 import type { AuthOuathResult, Hooks } from "@opencode-ai/plugin"
-import { NamedError } from "@/util/error"
+import { NamedError } from "@opencode-ai/util/error"
 import { Auth } from "@/auth"
 
 export namespace ProviderAuth {

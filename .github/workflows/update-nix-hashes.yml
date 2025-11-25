@@ -28,6 +28,7 @@ jobs:
         with:
           token: ${{ secrets.GITHUB_TOKEN }}
           fetch-depth: 0
+          ref: ${{ github.head_ref || github.ref_name }}
 
       - name: Setup Nix
         uses: DeterminateSystems/nix-installer-action@v20
@@ -79,6 +80,7 @@ jobs:
           git commit -m "Update Nix flake.lock and hashes"
 
           BRANCH="${TARGET_BRANCH:-${GITHUB_REF_NAME}}"
+          git pull --rebase origin "$BRANCH"
           git push origin HEAD:"$BRANCH"
 
           summarize "committed $(git rev-parse --short HEAD)"
