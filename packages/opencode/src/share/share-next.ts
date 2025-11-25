@@ -1,5 +1,6 @@
 import { Bus } from "@/bus"
 import { Config } from "@/config/config"
+import { ulid } from "ulid"
 import type { ModelsDev } from "@/provider/models"
 import { Provider } from "@/provider/provider"
 import { Session } from "@/session"
@@ -10,6 +11,7 @@ import type * as SDK from "@opencode-ai/sdk"
 
 export namespace ShareNext {
   const log = Log.create({ service: "share-next" })
+
   export async function init() {
     const config = await Config.get()
     if (!config.enterprise) return
@@ -70,11 +72,8 @@ export namespace ShareNext {
       body: JSON.stringify({ sessionID: sessionID }),
     })
       .then((x) => x.json())
-      .then((x) => x as { url: string; secret: string })
-    await Storage.write(["session_share", sessionID], {
-      id: sessionID,
-      ...result,
-    })
+      .then((x) => x as { id: string; url: string; secret: string })
+    await Storage.write(["session_share", sessionID], result)
     fullSync(sessionID)
     return result
   }
@@ -109,20 +108,41 @@ export namespace ShareNext {
         data: ModelsDev.Model[]
       }
 
+  const queue = new Map<string, { timeout: NodeJS.Timeout; data: Map<string, Data> }>()
   async function sync(sessionID: string, data: Data[]) {
-    const url = await Config.get().then((x) => x.enterprise!.url)
-    const share = await get(sessionID)
-    if (!share) return
-    await fetch(`${url}/api/share/${share.id}/sync`, {
-      method: "POST",
-      headers: {
-        "Content-Type": "application/json",
-      },
-      body: JSON.stringify({
-        secret: share.secret,
-        data,
-      }),
-    })
+    const existing = queue.get(sessionID)
+    if (existing) {
+      for (const item of data) {
+        existing.data.set("id" in item ? (item.id as string) : ulid(), item)
+      }
+      return
+    }
+
+    const dataMap = new Map<string, Data>()
+    for (const item of data) {
+      dataMap.set("id" in item ? (item.id as string) : ulid(), item)
+    }
+
+    const timeout = setTimeout(async () => {
+      const queued = queue.get(sessionID)
+      if (!queued) return
+      queue.delete(sessionID)
+      const url = await Config.get().then((x) => x.enterprise!.url)
+      const share = await get(sessionID)
+      if (!share) return
+
+      await fetch(`${url}/api/share/${share.id}/sync`, {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+        },
+        body: JSON.stringify({
+          secret: share.secret,
+          data: Array.from(queued.data.values()),
+        }),
+      })
+    }, 1000)
+    queue.set(sessionID, { timeout, data: dataMap })
   }
 
   export async function remove(sessionID: string) {

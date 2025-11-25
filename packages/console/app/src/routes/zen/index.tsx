@@ -18,7 +18,7 @@ import { Legal } from "~/component/legal"
 import { Footer } from "~/component/footer"
 import { Header } from "~/component/header"
 import { getLastSeenWorkspaceID } from "../workspace/common"
-import { IconGemini } from "~/component/icon"
+import { IconGemini, IconZai } from "~/component/icon"
 
 const checkLoggedIn = query(async () => {
   "use server"
@@ -115,6 +115,9 @@ export default function Home() {
                       fill="currentColor"
                     />
                   </svg>
+                </div>
+                <div>
+                  <IconZai width="24" height="24" />
                 </div>
               </div>
               <a href="/auth">

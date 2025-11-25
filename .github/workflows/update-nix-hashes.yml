@@ -41,18 +41,24 @@ jobs:
       - name: Update flake.lock
         run: |
           set -euo pipefail
+          echo "📦 Updating flake.lock..."
           nix flake update
+          echo "✅ flake.lock updated successfully"
 
       - name: Update node_modules hash
         run: |
           set -euo pipefail
+          echo "🔄 Updating node_modules hash..."
           nix/scripts/update-hashes.sh
+          echo "✅ node_modules hash updated successfully"
 
       - name: Commit hash changes
         env:
           TARGET_BRANCH: ${{ github.head_ref || github.ref_name }}
         run: |
           set -euo pipefail
+
+          echo "🔍 Checking for changes in tracked Nix files..."
 
           summarize() {
             local status="$1"
@@ -71,16 +77,24 @@ jobs:
           FILES=(flake.lock flake.nix nix/node-modules.nix nix/hashes.json)
           STATUS="$(git status --short -- "${FILES[@]}" || true)"
           if [ -z "$STATUS" ]; then
+            echo "✅ No changes detected. Hashes are already up to date."
             summarize "no changes"
-            echo "No changes to tracked Nix files. Hashes are already up to date."
             exit 0
           fi
 
+          echo "📝 Changes detected:"
+          echo "$STATUS"
+          echo "🔗 Staging files..."
           git add "${FILES[@]}"
+          echo "💾 Committing changes..."
           git commit -m "Update Nix flake.lock and hashes"
+          echo "✅ Changes committed"
 
           BRANCH="${TARGET_BRANCH:-${GITHUB_REF_NAME}}"
+          echo "🌳 Pulling latest from branch: $BRANCH"
           git pull --rebase origin "$BRANCH"
+          echo "🚀 Pushing changes to branch: $BRANCH"
           git push origin HEAD:"$BRANCH"
+          echo "✅ Changes pushed successfully"
 
           summarize "committed $(git rev-parse --short HEAD)"
