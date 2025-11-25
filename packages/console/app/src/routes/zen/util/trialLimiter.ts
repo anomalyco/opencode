@@ -4,6 +4,7 @@ import { UsageInfo } from "./provider/provider"
 
 export function createTrialLimiter(limit: number | undefined, ip: string) {
   if (!limit) return
+  if (!ip) return
 
   let trial: boolean
 
