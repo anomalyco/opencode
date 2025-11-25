@@ -31,21 +31,15 @@ export const { use: useLocal, provider: LocalProvider } = createSimpleContext({
       }
     }
 
-    // Automatically update model when agent changes
+    // Show warning for invalid hardcoded agent models
     createEffect(() => {
       const value = agent.current()
-      if (value.model) {
-        if (isModelValid(value.model))
-          model.set({
-            providerID: value.model.providerID,
-            modelID: value.model.modelID,
-          })
-        else
-          toast.show({
-            variant: "warning",
-            message: `Agent ${value.name}'s configured model ${value.model.providerID}/${value.model.modelID} is not valid`,
-            duration: 3000,
-          })
+      if (value.model && !isModelValid(value.model)) {
+        toast.show({
+          variant: "warning",
+          message: `Agent ${value.name}'s configured model ${value.model.providerID}/${value.model.modelID} is not valid`,
+          duration: 3000,
+        })
       }
     })
 
@@ -131,6 +125,7 @@ export const { use: useLocal, provider: LocalProvider } = createSimpleContext({
         Bun.write(
           file,
           JSON.stringify({
+            model: modelStore.model,
             recent: modelStore.recent,
             favorite: modelStore.favorite,
           }),
@@ -140,6 +135,7 @@ export const { use: useLocal, provider: LocalProvider } = createSimpleContext({
       file
         .json()
         .then((x) => {
+          if (x.model && typeof x.model === "object") setModelStore("model", x.model)
           if (Array.isArray(x.recent)) setModelStore("recent", x.recent)
           if (Array.isArray(x.favorite)) setModelStore("favorite", x.favorite)
         })
@@ -186,8 +182,8 @@ export const { use: useLocal, provider: LocalProvider } = createSimpleContext({
       const currentModel = createMemo(() => {
         const a = agent.current()
         return getFirstValidModel(
-          () => modelStore.model[a.name],
           () => a.model,
+          () => modelStore.model[a.name],
           fallbackModel,
         )!
       })
@@ -224,6 +220,7 @@ export const { use: useLocal, provider: LocalProvider } = createSimpleContext({
           const val = recent[next]
           if (!val) return
           setModelStore("model", agent.current().name, { ...val })
+          save()
         },
         cycleFavorite(direction: 1 | -1) {
           const favorites = modelStore.favorite.filter((item) => isModelValid(item))
@@ -267,8 +264,8 @@ export const { use: useLocal, provider: LocalProvider } = createSimpleContext({
               const uniq = uniqueBy([model, ...modelStore.recent], (x) => x.providerID + x.modelID)
               if (uniq.length > 10) uniq.pop()
               setModelStore("recent", uniq)
-              save()
             }
+            save()
           })
         },
         toggleFavorite(model: { providerID: string; modelID: string }) {
