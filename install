@@ -11,42 +11,81 @@ requested_version=${VERSION:-}
 
 raw_os=$(uname -s)
 os=$(echo "$raw_os" | tr '[:upper:]' '[:lower:]')
-# Normalize various Unix-like identifiers
 case "$raw_os" in
   Darwin*) os="darwin" ;;
   Linux*) os="linux" ;;
   MINGW*|MSYS*|CYGWIN*) os="windows" ;;
- esac
-arch=$(uname -m)
+esac
 
+arch=$(uname -m)
 if [[ "$arch" == "aarch64" ]]; then
   arch="arm64"
-elif [[ "$arch" == "x86_64" ]]; then
+fi
+if [[ "$arch" == "x86_64" ]]; then
   arch="x64"
 fi
 
-if [ "$os" = "linux" ]; then
-    filename="$APP-$os-$arch.tar.gz"
-else
-    filename="$APP-$os-$arch.zip"
+if [ "$os" = "darwin" ] && [ "$arch" = "x64" ]; then
+  rosetta_flag=$(sysctl -n sysctl.proc_translated 2>/dev/null || echo 0)
+  if [ "$rosetta_flag" = "1" ]; then
+    arch="arm64"
+  fi
 fi
 
-
-case "$filename" in
-    *"-linux-"*)
-        [[ "$arch" == "x64" || "$arch" == "arm64" ]] || exit 1
+combo="$os-$arch"
+case "$combo" in
+  linux-x64|linux-arm64|darwin-x64|darwin-arm64|windows-x64)
     ;;
-    *"-darwin-"*)
-        [[ "$arch" == "x64" || "$arch" == "arm64" ]] || exit 1
-    ;;
-    *"-windows-"*)
-        [[ "$arch" == "x64" ]] || exit 1
-    ;;
-    *)
-        echo -e "${RED}Unsupported OS/Arch: $os/$arch${NC}"
-        exit 1
+  *)
+    echo -e "${RED}Unsupported OS/Arch: $os/$arch${NC}"
+    exit 1
     ;;
 esac
+
+archive_ext=".zip"
+if [ "$os" = "linux" ]; then
+  archive_ext=".tar.gz"
+fi
+
+is_musl=false
+if [ "$os" = "linux" ]; then
+  if [ -f /etc/alpine-release ]; then
+    is_musl=true
+  fi
+
+  if command -v ldd >/dev/null 2>&1; then
+    if ldd --version 2>&1 | grep -qi musl; then
+      is_musl=true
+    fi
+  fi
+fi
+
+needs_baseline=false
+if [ "$arch" = "x64" ]; then
+  if [ "$os" = "linux" ]; then
+    if ! grep -qi avx2 /proc/cpuinfo 2>/dev/null; then
+      needs_baseline=true
+    fi
+  fi
+
+  if [ "$os" = "darwin" ]; then
+    avx2=$(sysctl -n hw.optional.avx2_0 2>/dev/null || echo 0)
+    if [ "$avx2" != "1" ]; then
+      needs_baseline=true
+    fi
+  fi
+fi
+
+target="$os-$arch"
+if [ "$needs_baseline" = "true" ]; then
+  target="$target-baseline"
+fi
+if [ "$is_musl" = "true" ]; then
+  target="$target-musl"
+fi
+
+filename="$APP-$target$archive_ext"
+
 
 if [ "$os" = "linux" ]; then
     if ! command -v tar >/dev/null 2>&1; then
