@@ -39,9 +39,9 @@ export function DialogModel() {
 
     const currentIsFavorite = currentModel && favorites.some((fav) => isCurrent(fav))
 
-    const recentList = orderedRecents.filter(
-      (item) => !favorites.some((fav) => fav.providerID === item.providerID && fav.modelID === item.modelID),
-    )
+    const recentList = orderedRecents
+      .filter((item) => !favorites.some((fav) => fav.providerID === item.providerID && fav.modelID === item.modelID))
+      .slice(0, 5)
 
     const orderedFavorites = currentModel
       ? [...favorites.filter((item) => isCurrent(item)), ...favorites.filter((item) => !isCurrent(item))]
