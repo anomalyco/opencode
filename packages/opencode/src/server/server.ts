@@ -985,18 +985,8 @@ export namespace Server {
           description: "Create and send a new message to a session, start if needed and return immediately",
           operationId: "session.prompt_async",
           responses: {
-            200: {
-              description: "Created message",
-              content: {
-                "application/json": {
-                  schema: resolver(
-                    z.object({
-                      info: MessageV2.Assistant,
-                      parts: MessageV2.Part.array(),
-                    }),
-                  ),
-                },
-              },
+            204: {
+              description: "Prompt accepted",
             },
             ...errors(400, 404),
           },

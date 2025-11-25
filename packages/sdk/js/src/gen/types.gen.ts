@@ -2343,12 +2343,9 @@ export type SessionPromptAsyncError = SessionPromptAsyncErrors[keyof SessionProm
 
 export type SessionPromptAsyncResponses = {
   /**
-   * Created message
+   * Prompt accepted
    */
-  200: {
-    info: AssistantMessage
-    parts: Array<Part>
-  }
+  204: void
 }
 
 export type SessionPromptAsyncResponse = SessionPromptAsyncResponses[keyof SessionPromptAsyncResponses]
