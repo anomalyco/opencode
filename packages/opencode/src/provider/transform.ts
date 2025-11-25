@@ -128,7 +128,13 @@ export namespace ProviderTransform {
     return undefined
   }
 
-  export function options(providerID: string, modelID: string, npm: string, sessionID: string): Record<string, any> {
+  export function options(
+    providerID: string,
+    modelID: string,
+    npm: string,
+    sessionID: string,
+    providerOptions?: Record<string, any>,
+  ): Record<string, any> | undefined {
     const result: Record<string, any> = {}
 
     // switch to providerID later, for now use this
@@ -138,7 +144,7 @@ export namespace ProviderTransform {
       }
     }
 
-    if (providerID === "openai") {
+    if (providerID === "openai" || providerOptions?.setCacheKey) {
       result["promptCacheKey"] = sessionID
     }
 
