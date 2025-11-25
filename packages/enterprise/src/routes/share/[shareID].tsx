@@ -91,7 +91,7 @@ const getData = query(async (shareID) => {
                 diffIndicators: "bars",
                 disableBackground: false,
                 expansionLineCount: 20,
-                lineDiffType: "word-alt",
+                lineDiffType: "none",
                 maxLineDiffLength: 1000,
                 maxLineLengthForHighlighting: 1000,
                 disableFileHeader: true,

@@ -33,7 +33,7 @@ export function Diff<T>(props: DiffProps<T>) {
     diffIndicators: "bars",
     disableBackground: false,
     expansionLineCount: 20,
-    lineDiffType: "word-alt",
+    lineDiffType: props.diffStyle === "split" ? "word-alt" : "none",
     maxLineDiffLength: 1000,
     maxLineLengthForHighlighting: 1000,
     disableFileHeader: true,
