@@ -171,6 +171,7 @@
         "@solidjs/meta": "catalog:",
         "@solidjs/router": "catalog:",
         "@solidjs/start": "catalog:",
+        "aws4fetch": "^1.0.20",
         "hono": "catalog:",
         "hono-openapi": "catalog:",
         "luxon": "catalog:",
