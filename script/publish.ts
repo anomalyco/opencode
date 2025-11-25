@@ -35,7 +35,7 @@ if (!Script.preview) {
       body: {
         model: {
           providerID: "opencode",
-          modelID: "kimi-k2",
+          modelID: "claude-haiku-4-5",
         },
         parts: [
           {
