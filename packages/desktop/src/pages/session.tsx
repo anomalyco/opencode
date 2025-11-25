@@ -349,7 +349,7 @@ export default function Page() {
                           />
                           <MessageNav
                             classList={{
-                              "hidden @6xl:block": true,
+                              "hidden @6xl:flex": true,
                               "mt-0.5 mr-3 absolute right-full": wide(),
                               "mt-3 mr-8": !wide(),
                             }}
