@@ -186,8 +186,13 @@ export namespace Permission {
       public readonly permissionID: string,
       public readonly toolCallID?: string,
       public readonly metadata?: Record<string, any>,
+      public readonly reason?: string,
     ) {
-      super(`The user rejected permission to use this specific tool call. You may try again with different parameters.`)
+      super(
+        reason !== undefined
+          ? reason
+          : `The user rejected permission to use this specific tool call. You may try again with different parameters.`,
+      )
     }
   }
 }

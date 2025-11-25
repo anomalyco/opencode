@@ -21,6 +21,7 @@ export const openaiHelper = {
   modifyBody: (body: Record<string, any>) => {
     return body
   },
+  streamSeparator: "\n\n",
   createUsageParser: () => {
     let usage: Usage
 

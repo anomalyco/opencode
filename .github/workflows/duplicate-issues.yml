@@ -21,18 +21,18 @@ jobs:
 
       - name: Check for duplicate issues
         env:
-          ANTHROPIC_API_KEY: ${{ secrets.ANTHROPIC_API_KEY }}
+          OPENCODE_API_KEY: ${{ secrets.OPENCODE_API_KEY }}
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
           OPENCODE_PERMISSION: |
             {
               "bash": {
                 "gh issue*": "allow",
-                "*": "deny" 
-              }, 
+                "*": "deny"
+              },
               "webfetch": "deny"
             }
         run: |
-          opencode run -m anthropic/claude-sonnet-4-20250514 "A new issue has been created:'
+          opencode run -m opencode/claude-haiku-4-5 "A new issue has been created:'
 
           Issue number:
           ${{ github.event.issue.number }}

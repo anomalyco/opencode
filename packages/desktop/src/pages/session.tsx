@@ -1,39 +1,21 @@
-import {
-  SelectDialog,
-  IconButton,
-  Tabs,
-  Icon,
-  Accordion,
-  Diff,
-  Collapsible,
-  DiffChanges,
-  Message,
-  Typewriter,
-  Card,
-  Code,
-  Tooltip,
-  ProgressCircle,
-  Button,
-} from "@opencode-ai/ui"
-import { FileIcon } from "@/ui"
-import { MessageProgress } from "@/components/message-progress"
-import {
-  For,
-  onCleanup,
-  onMount,
-  Show,
-  Match,
-  Switch,
-  createSignal,
-  createEffect,
-  createMemo,
-  createResource,
-} from "solid-js"
+import { For, onCleanup, onMount, Show, Match, Switch, createResource, createMemo } from "solid-js"
 import { useLocal, type LocalFile } from "@/context/local"
 import { createStore } from "solid-js/store"
 import { getDirectory, getFilename } from "@/utils"
 import { PromptInput } from "@/components/prompt-input"
 import { DateTime } from "luxon"
+import { FileIcon } from "@opencode-ai/ui/file-icon"
+import { IconButton } from "@opencode-ai/ui/icon-button"
+import { Icon } from "@opencode-ai/ui/icon"
+import { Tooltip } from "@opencode-ai/ui/tooltip"
+import { DiffChanges } from "@opencode-ai/ui/diff-changes"
+import { ProgressCircle } from "@opencode-ai/ui/progress-circle"
+import { Tabs } from "@opencode-ai/ui/tabs"
+import { Code } from "@opencode-ai/ui/code"
+import { SessionTurn } from "@opencode-ai/ui/session-turn"
+import { MessageNav } from "@opencode-ai/ui/message-nav"
+import { SessionReview } from "@opencode-ai/ui/session-review"
+import { SelectDialog } from "@opencode-ai/ui/select-dialog"
 import {
   DragDropProvider,
   DragDropSensors,
@@ -46,14 +28,11 @@ import {
 import type { DragEvent, Transformer } from "@thisbeyond/solid-dnd"
 import type { JSX } from "solid-js"
 import { useSync } from "@/context/sync"
-import { type AssistantMessage as AssistantMessageType } from "@opencode-ai/sdk"
-import { Markdown } from "@opencode-ai/ui"
-import { Spinner } from "@/components/spinner"
 import { useSession } from "@/context/session"
-import { StickyAccordionHeader } from "@/components/sticky-accordion-header"
-import { SessionReview } from "@/components/session-review"
+import { useLayout } from "@/context/layout"
 
 export default function Page() {
+  const layout = useLayout()
   const local = useLocal()
   const sync = useSync()
   const session = useSession()
@@ -63,7 +42,6 @@ export default function Page() {
     activeDraggable: undefined as string | undefined,
   })
   let inputRef!: HTMLDivElement
-  let messageScrollElement!: HTMLDivElement
 
   const MOD = typeof navigator === "object" && /(Mac|iPod|iPhone|iPad)/.test(navigator.platform) ? "Meta" : "Control"
 
@@ -176,10 +154,16 @@ export default function Page() {
     setStore("activeDraggable", undefined)
   }
 
-  const FileVisual = (props: { file: LocalFile }): JSX.Element => {
+  const FileVisual = (props: { file: LocalFile; active?: boolean }): JSX.Element => {
     return (
       <div class="flex items-center gap-x-1.5">
-        <FileIcon node={props.file} class="grayscale-100 group-data-[selected]/tab:grayscale-0" />
+        <FileIcon
+          node={props.file}
+          classList={{
+            "grayscale-100 group-data-[selected]/tab:grayscale-0": !props.active,
+            "grayscale-0": props.active,
+          }}
+        />
         <span
           classList={{
             "text-14-medium": true,
@@ -272,6 +256,8 @@ export default function Page() {
     return typeof draggable.id === "string" ? draggable.id : undefined
   }
 
+  const wide = createMemo(() => layout.review.state() === "tab" || !session.diffs().length)
+
   return (
     <div class="relative bg-background-base size-full overflow-x-hidden">
       <DragDropProvider
@@ -287,7 +273,7 @@ export default function Page() {
             <Tabs.List>
               <Tabs.Trigger value="chat">
                 <div class="flex gap-x-[17px] items-center">
-                  <div>Chat</div>
+                  <div>Session</div>
                   <Tooltip
                     value={`${new Intl.NumberFormat("en-US", {
                       notation: "compact",
@@ -300,11 +286,11 @@ export default function Page() {
                   </Tooltip>
                 </div>
               </Tabs.Trigger>
-              <Show when={local.layout.review.state() === "tab" && session.diffs().length}>
+              <Show when={layout.review.state() === "tab" && session.diffs().length}>
                 <Tabs.Trigger
                   value="review"
                   closeButton={
-                    <IconButton icon="collapse" size="normal" variant="ghost" onClick={local.layout.review.pane} />
+                    <IconButton icon="collapse" size="normal" variant="ghost" onClick={layout.review.pane} />
                   }
                 >
                   <div class="flex items-center gap-3">
@@ -343,285 +329,43 @@ export default function Page() {
             <div
               classList={{
                 "w-full flex-1 min-h-0": true,
-                grid: local.layout.review.state() === "tab",
-                flex: local.layout.review.state() === "pane",
+                grid: layout.review.state() === "tab",
+                flex: layout.review.state() === "pane",
               }}
             >
-              <div class="relative shrink-0 px-6 py-3 flex flex-col gap-6 flex-1 min-h-0 w-full max-w-xl mx-auto">
+              <div class="relative shrink-0 px-6 py-3 flex flex-col gap-6 flex-1 min-h-0 w-full max-w-2xl mx-auto">
                 <Switch>
                   <Match when={session.id}>
-                    <div
-                      classList={{
-                        "flex-1 min-h-0 pb-20": true,
-                        "flex items-start justify-start": local.layout.review.state() === "pane",
-                      }}
-                    >
+                    <div class="flex items-start justify-start h-full min-h-0">
                       <Show when={session.messages.user().length > 1}>
-                        <ul
-                          role="list"
-                          classList={{
-                            "mr-8 shrink-0 flex flex-col items-start": true,
-                            "absolute right-full w-60 mt-3 @7xl:gap-2 @7xl:mt-1": local.layout.review.state() === "tab",
-                            "mt-3": local.layout.review.state() === "pane",
-                          }}
-                        >
-                          <For each={session.messages.user()}>
-                            {(message) => {
-                              const assistantMessages = createMemo(() => {
-                                if (!session.id) return []
-                                return sync.data.message[session.id]?.filter(
-                                  (m) => m.role === "assistant" && m.parentID == message.id,
-                                ) as AssistantMessageType[]
-                              })
-                              const error = createMemo(() => assistantMessages().find((m) => m?.error)?.error)
-                              const working = createMemo(() => !message.summary?.body && !error())
-
-                              const handleClick = () => session.messages.setActive(message.id)
-
-                              return (
-                                <li
-                                  classList={{
-                                    "group/li flex items-center self-stretch justify-end": true,
-                                    "@7xl:justify-start": local.layout.review.state() === "tab",
-                                  }}
-                                >
-                                  <Tooltip
-                                    placement="right"
-                                    gutter={8}
-                                    value={
-                                      <div class="flex items-center gap-2">
-                                        <DiffChanges changes={message.summary?.diffs ?? []} variant="bars" />
-                                        {message.summary?.title}
-                                      </div>
-                                    }
-                                  >
-                                    <button
-                                      data-active={session.messages.active()?.id === message.id}
-                                      onClick={handleClick}
-                                      classList={{
-                                        "group/tick flex items-center justify-start h-2 w-8 -mr-3": true,
-                                        "data-[active=true]:[&>div]:bg-icon-strong-base data-[active=true]:[&>div]:w-full": true,
-                                        "@7xl:hidden": local.layout.review.state() === "tab",
-                                      }}
-                                    >
-                                      <div class="h-px w-5 bg-icon-base group-hover/tick:w-full group-hover/tick:bg-icon-strong-base" />
-                                    </button>
-                                  </Tooltip>
-                                  <button
-                                    classList={{
-                                      "hidden items-center self-stretch w-full gap-x-2 cursor-default": true,
-                                      "@7xl:flex": local.layout.review.state() === "tab",
-                                    }}
-                                    onClick={handleClick}
-                                  >
-                                    <Switch>
-                                      <Match when={working()}>
-                                        <Spinner class="text-text-base shrink-0 w-[18px] aspect-square" />
-                                      </Match>
-                                      <Match when={true}>
-                                        <DiffChanges changes={message.summary?.diffs ?? []} variant="bars" />
-                                      </Match>
-                                    </Switch>
-                                    <div
-                                      data-active={session.messages.active()?.id === message.id}
-                                      classList={{
-                                        "text-14-regular text-text-weak whitespace-nowrap truncate min-w-0": true,
-                                        "text-text-weak data-[active=true]:text-text-strong group-hover/li:text-text-base": true,
-                                      }}
-                                    >
-                                      <Show when={message.summary?.title} fallback="New message">
-                                        {message.summary?.title}
-                                      </Show>
-                                    </div>
-                                  </button>
-                                </li>
-                              )
+                        <>
+                          <MessageNav
+                            class="@6xl:hidden mt-3 mr-8"
+                            messages={session.messages.user()}
+                            current={session.messages.active()}
+                            onMessageSelect={session.messages.setActive}
+                            size="compact"
+                            working={session.working()}
+                          />
+                          <MessageNav
+                            classList={{
+                              "hidden @6xl:flex": true,
+                              "mt-0.5 mr-3 absolute right-full": wide(),
+                              "mt-3 mr-8": !wide(),
                             }}
-                          </For>
-                        </ul>
+                            messages={session.messages.user()}
+                            current={session.messages.active()}
+                            onMessageSelect={session.messages.setActive}
+                            size={wide() ? "normal" : "compact"}
+                            working={session.working()}
+                          />
+                        </>
                       </Show>
-                      <div ref={messageScrollElement} class="grow size-full min-w-0 overflow-y-auto no-scrollbar">
-                        <For each={session.messages.user()}>
-                          {(message) => {
-                            const isActive = createMemo(() => session.messages.active()?.id === message.id)
-                            const [titled, setTitled] = createSignal(!!message.summary?.title)
-                            const assistantMessages = createMemo(() => {
-                              if (!session.id) return []
-                              return sync.data.message[session.id]?.filter(
-                                (m) => m.role === "assistant" && m.parentID == message.id,
-                              ) as AssistantMessageType[]
-                            })
-                            const error = createMemo(() => assistantMessages().find((m) => m?.error)?.error)
-                            const [completed, setCompleted] = createSignal(!!message.summary?.body || !!error())
-                            const [detailsExpanded, setDetailsExpanded] = createSignal(false)
-                            const parts = createMemo(() => sync.data.part[message.id])
-                            const hasToolPart = createMemo(() =>
-                              assistantMessages()
-                                ?.flatMap((m) => sync.data.part[m.id])
-                                .some((p) => p?.type === "tool"),
-                            )
-                            const working = createMemo(() => !message.summary?.body && !error())
-
-                            // allowing time for the animations to finish
-                            createEffect(() => {
-                              const title = message.summary?.title
-                              setTimeout(() => setTitled(!!title), 10_000)
-                            })
-                            createEffect(() => {
-                              const summary = message.summary?.body
-                              const complete = !!summary || !!error()
-                              setTimeout(() => setCompleted(complete), 1200)
-                            })
-
-                            return (
-                              <Show when={isActive()}>
-                                <div
-                                  data-message={message.id}
-                                  class="flex flex-col items-start self-stretch gap-8 pb-20"
-                                >
-                                  {/* Title */}
-                                  <div class="flex items-center gap-2 self-stretch sticky top-0 bg-background-stronger z-20 h-8">
-                                    <div class="w-full text-14-medium text-text-strong">
-                                      <Show
-                                        when={titled()}
-                                        fallback={
-                                          <Typewriter
-                                            as="h1"
-                                            text={message.summary?.title}
-                                            class="overflow-hidden text-ellipsis min-w-0 text-nowrap"
-                                          />
-                                        }
-                                      >
-                                        <h1 class="overflow-hidden text-ellipsis min-w-0 text-nowrap">
-                                          {message.summary?.title}
-                                        </h1>
-                                      </Show>
-                                    </div>
-                                  </div>
-                                  <Message message={message} parts={parts()} />
-                                  {/* Summary */}
-                                  <Show when={completed()}>
-                                    <div class="w-full flex flex-col gap-6 items-start self-stretch">
-                                      <div class="flex flex-col items-start gap-1 self-stretch">
-                                        <h2 class="text-12-medium text-text-weak">
-                                          <Switch>
-                                            <Match when={message.summary?.diffs?.length}>Summary</Match>
-                                            <Match when={true}>Response</Match>
-                                          </Switch>
-                                        </h2>
-                                        <Show when={message.summary?.body}>
-                                          {(summary) => (
-                                            <Markdown
-                                              classList={{
-                                                "text-14-regular": !!message.summary?.diffs?.length,
-                                                "[&>*]:fade-up-text": !message.summary?.diffs?.length,
-                                              }}
-                                              text={summary()}
-                                            />
-                                          )}
-                                        </Show>
-                                      </div>
-                                      <Accordion class="w-full" multiple>
-                                        <For each={message.summary?.diffs ?? []}>
-                                          {(diff) => (
-                                            <Accordion.Item value={diff.file}>
-                                              <StickyAccordionHeader class="top-10 data-expanded:before:-top-10">
-                                                <Accordion.Trigger>
-                                                  <div class="flex items-center justify-between w-full gap-5">
-                                                    <div class="grow flex items-center gap-5 min-w-0">
-                                                      <FileIcon
-                                                        node={{ path: diff.file, type: "file" }}
-                                                        class="shrink-0 size-4"
-                                                      />
-                                                      <div class="flex grow min-w-0">
-                                                        <Show when={diff.file.includes("/")}>
-                                                          <span class="text-text-base truncate-start">
-                                                            {getDirectory(diff.file)}&lrm;
-                                                          </span>
-                                                        </Show>
-                                                        <span class="text-text-strong shrink-0">
-                                                          {getFilename(diff.file)}
-                                                        </span>
-                                                      </div>
-                                                    </div>
-                                                    <div class="shrink-0 flex gap-4 items-center justify-end">
-                                                      <DiffChanges changes={diff} />
-                                                      <Icon name="chevron-grabber-vertical" size="small" />
-                                                    </div>
-                                                  </div>
-                                                </Accordion.Trigger>
-                                              </StickyAccordionHeader>
-                                              <Accordion.Content class="max-h-60 overflow-y-auto no-scrollbar">
-                                                <Diff
-                                                  before={{
-                                                    name: diff.file!,
-                                                    contents: diff.before!,
-                                                  }}
-                                                  after={{
-                                                    name: diff.file!,
-                                                    contents: diff.after!,
-                                                  }}
-                                                />
-                                              </Accordion.Content>
-                                            </Accordion.Item>
-                                          )}
-                                        </For>
-                                      </Accordion>
-                                    </div>
-                                  </Show>
-                                  <Show when={error() && !detailsExpanded()}>
-                                    <Card variant="error" class="text-text-on-critical-base">
-                                      {error()?.data?.message as string}
-                                    </Card>
-                                  </Show>
-                                  {/* Response */}
-                                  <div class="w-full">
-                                    <Switch>
-                                      <Match when={!completed()}>
-                                        <MessageProgress assistantMessages={assistantMessages} done={!working()} />
-                                      </Match>
-                                      <Match when={completed() && hasToolPart()}>
-                                        <Collapsible
-                                          variant="ghost"
-                                          open={detailsExpanded()}
-                                          onOpenChange={setDetailsExpanded}
-                                        >
-                                          <Collapsible.Trigger class="text-text-weak hover:text-text-strong">
-                                            <div class="flex items-center gap-1 self-stretch">
-                                              <div class="text-12-medium">
-                                                <Switch>
-                                                  <Match when={detailsExpanded()}>Hide details</Match>
-                                                  <Match when={!detailsExpanded()}>Show details</Match>
-                                                </Switch>
-                                              </div>
-                                              <Collapsible.Arrow />
-                                            </div>
-                                          </Collapsible.Trigger>
-                                          <Collapsible.Content>
-                                            <div class="w-full flex flex-col items-start self-stretch gap-3">
-                                              <For each={assistantMessages()}>
-                                                {(assistantMessage) => {
-                                                  const parts = createMemo(() => sync.data.part[assistantMessage.id])
-                                                  return <Message message={assistantMessage} parts={parts()} />
-                                                }}
-                                              </For>
-                                              <Show when={error()}>
-                                                <Card variant="error" class="text-text-on-critical-base">
-                                                  {error()?.data?.message as string}
-                                                </Card>
-                                              </Show>
-                                            </div>
-                                          </Collapsible.Content>
-                                        </Collapsible>
-                                      </Match>
-                                    </Switch>
-                                  </div>
-                                </div>
-                              </Show>
-                            )
-                          }}
-                        </For>
-                      </div>
+                      <SessionTurn
+                        sessionID={session.id!}
+                        messageID={session.messages.active()?.id!}
+                        classes={{ root: "pb-20 flex-1 min-w-0", content: "pb-20" }}
+                      />
                     </div>
                   </Match>
                   <Match when={true}>
@@ -654,25 +398,39 @@ export default function Page() {
                   />
                 </div>
               </div>
-              <Show when={local.layout.review.state() === "pane" && session.diffs().length}>
+              <Show when={layout.review.state() === "pane" && session.diffs().length}>
                 <div
                   classList={{
                     "relative grow px-6 py-3 flex-1 min-h-0 border-l border-border-weak-base": true,
                   }}
                 >
-                  <SessionReview />
+                  <SessionReview
+                    diffs={session.diffs()}
+                    actions={
+                      <Tooltip value="Open in tab">
+                        <IconButton
+                          icon="expand"
+                          variant="ghost"
+                          onClick={() => {
+                            layout.review.tab()
+                            session.layout.setActiveTab("review")
+                          }}
+                        />
+                      </Tooltip>
+                    }
+                  />
                 </div>
               </Show>
             </div>
           </Tabs.Content>
-          <Show when={local.layout.review.state() === "tab" && session.diffs().length}>
+          <Show when={layout.review.state() === "tab" && session.diffs().length}>
             <Tabs.Content value="review" class="select-text flex flex-col h-full overflow-hidden">
               <div
                 classList={{
                   "relative px-6 py-3 flex-1 min-h-0 overflow-hidden": true,
                 }}
               >
-                <SessionReview split hideExpand class="pb-40" />
+                <SessionReview diffs={session.diffs()} split class="pb-40" />
               </div>
             </Tabs.Content>
           </Show>
@@ -718,8 +476,8 @@ export default function Page() {
                 },
               )
               return (
-                <div class="relative px-3 h-10 flex items-center bg-background-base border-x border-border-weak-base border-b border-b-transparent">
-                  <Show when={file()}>{(f) => <FileVisual file={f()} />}</Show>
+                <div class="relative px-6 h-12 flex items-center bg-background-stronger border-x border-border-weak-base border-b border-b-transparent">
+                  <Show when={file()}>{(f) => <FileVisual active file={f()} />}</Show>
                 </div>
               )
             }}
@@ -727,7 +485,7 @@ export default function Page() {
         </DragOverlay>
       </DragDropProvider>
       <Show when={session.layout.tabs.active}>
-        <div class="absolute inset-x-0 px-6 max-w-2xl flex flex-col justify-center items-center z-50 mx-auto bottom-6">
+        <div class="absolute inset-x-0 px-6 max-w-2xl flex flex-col justify-center items-center z-50 mx-auto bottom-8">
           <PromptInput
             ref={(el) => {
               inputRef = el
@@ -769,7 +527,13 @@ export default function Page() {
           items={local.file.searchFiles}
           key={(x) => x}
           onOpenChange={(open) => setStore("fileSelectOpen", open)}
-          onSelect={(x) => (x ? session.layout.openTab("file://" + x) : undefined)}
+          onSelect={(x) => {
+            if (x) {
+              local.file.open(x)
+              return session.layout.openTab("file://" + x)
+            }
+            return undefined
+          }}
         >
           {(i) => (
             <div

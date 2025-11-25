@@ -1,5 +1,5 @@
 import z from "zod"
-import path from "path"
+import fuzzysort from "fuzzysort"
 import { Config } from "../config/config"
 import { mergeDeep, sortBy } from "remeda"
 import { NoSuchModelError, type LanguageModel, type Provider as SDK } from "ai"
@@ -7,15 +7,37 @@ import { Log } from "../util/log"
 import { BunProc } from "../bun"
 import { Plugin } from "../plugin"
 import { ModelsDev } from "./models"
-import { NamedError } from "../util/error"
+import { NamedError } from "@opencode-ai/util/error"
 import { Auth } from "../auth"
 import { Instance } from "../project/instance"
-import { Global } from "../global"
 import { Flag } from "../flag/flag"
 import { iife } from "@/util/iife"
 
+// Direct imports for bundled providers
+import { createAmazonBedrock } from "@ai-sdk/amazon-bedrock"
+import { createAnthropic } from "@ai-sdk/anthropic"
+import { createAzure } from "@ai-sdk/azure"
+import { createGoogleGenerativeAI } from "@ai-sdk/google"
+import { createVertex } from "@ai-sdk/google-vertex"
+import { createVertexAnthropic } from "@ai-sdk/google-vertex/anthropic"
+import { createOpenAI } from "@ai-sdk/openai"
+import { createOpenAICompatible } from "@ai-sdk/openai-compatible"
+import { createOpenRouter } from "@openrouter/ai-sdk-provider"
+
 export namespace Provider {
   const log = Log.create({ service: "provider" })
+
+  const BUNDLED_PROVIDERS: Record<string, (options: any) => SDK> = {
+    "@ai-sdk/amazon-bedrock": createAmazonBedrock,
+    "@ai-sdk/anthropic": createAnthropic,
+    "@ai-sdk/azure": createAzure,
+    "@ai-sdk/google": createGoogleGenerativeAI,
+    "@ai-sdk/google-vertex": createVertex,
+    "@ai-sdk/google-vertex/anthropic": createVertexAnthropic,
+    "@ai-sdk/openai": createOpenAI,
+    "@ai-sdk/openai-compatible": createOpenAICompatible,
+    "@openrouter/ai-sdk-provider": createOpenRouter,
+  }
 
   type CustomLoader = (provider: ModelsDev.Provider) => Promise<{
     autoload: boolean
@@ -76,6 +98,22 @@ export namespace Provider {
           }
         },
         options: {},
+      }
+    },
+    "azure-cognitive-services": async () => {
+      const resourceName = process.env["AZURE_COGNITIVE_SERVICES_RESOURCE_NAME"]
+      return {
+        autoload: false,
+        async getModel(sdk: any, modelID: string, options?: Record<string, any>) {
+          if (options?.["useCompletionUrls"]) {
+            return sdk.chat(modelID)
+          } else {
+            return sdk.responses(modelID)
+          }
+        },
+        options: {
+          baseURL: resourceName ? `https://${resourceName}.cognitiveservices.azure.com/openai` : undefined,
+        },
       }
     },
     "amazon-bedrock": async () => {
@@ -209,12 +247,32 @@ export namespace Provider {
         },
       }
     },
+    zenmux: async () => {
+      return {
+        autoload: false,
+        options: {
+          headers: {
+            "HTTP-Referer": "https://opencode.ai/",
+            "X-Title": "opencode",
+          },
+        },
+      }
+    },
   }
 
   const state = Instance.state(async () => {
     using _ = log.time("state")
     const config = await Config.get()
     const database = await ModelsDev.get()
+
+    const disabled = new Set(config.disabled_providers ?? [])
+    const enabled = config.enabled_providers ? new Set(config.enabled_providers) : null
+
+    function isProviderAllowed(providerID: string): boolean {
+      if (enabled && !enabled.has(providerID)) return false
+      if (disabled.has(providerID)) return false
+      return true
+    }
 
     const providers: {
       [providerID: string]: {
@@ -340,10 +398,10 @@ export namespace Provider {
         }
         parsed.models[modelID] = parsedModel
       }
+
       database[providerID] = parsed
     }
 
-    const disabled = await Config.get().then((cfg) => new Set(cfg.disabled_providers ?? []))
     // load env
     for (const [providerID, provider] of Object.entries(database)) {
       if (disabled.has(providerID)) continue
@@ -421,6 +479,12 @@ export namespace Provider {
     }
 
     for (const [providerID, provider] of Object.entries(providers)) {
+      if (!isProviderAllowed(providerID)) {
+        delete providers[providerID]
+        continue
+      }
+
+      const configProvider = config.provider?.[providerID]
       const filteredModels = Object.fromEntries(
         Object.entries(provider.info.models)
           // Filter out blacklisted models
@@ -433,15 +497,26 @@ export namespace Provider {
             ([, model]) =>
               ((!model.experimental && model.status !== "alpha") || Flag.OPENCODE_ENABLE_EXPERIMENTAL_MODELS) &&
               model.status !== "deprecated",
-          ),
+          )
+          // Filter by provider's whitelist/blacklist from config
+          .filter(([modelID]) => {
+            if (!configProvider) return true
+
+            return (
+              (!configProvider.blacklist || !configProvider.blacklist.includes(modelID)) &&
+              (!configProvider.whitelist || configProvider.whitelist.includes(modelID))
+            )
+          }),
       )
+
       provider.info.models = filteredModels
 
       if (Object.keys(provider.info.models).length === 0) {
         delete providers[providerID]
         continue
       }
-      log.info("found", { providerID })
+
+      log.info("found", { providerID, npm: provider.info.npm })
     }
 
     return {
@@ -467,9 +542,47 @@ export namespace Provider {
       if (pkg.includes("@ai-sdk/openai-compatible") && options["includeUsage"] === undefined) {
         options["includeUsage"] = true
       }
+
       const key = Bun.hash.xxHash32(JSON.stringify({ pkg, options }))
       const existing = s.sdk.get(key)
       if (existing) return existing
+
+      const customFetch = options["fetch"]
+
+      options["fetch"] = async (input: any, init?: BunFetchRequestInit) => {
+        // Preserve custom fetch if it exists, wrap it with timeout logic
+        const fetchFn = customFetch ?? fetch
+        const opts = init ?? {}
+
+        if (options["timeout"] !== undefined && options["timeout"] !== null) {
+          const signals: AbortSignal[] = []
+          if (opts.signal) signals.push(opts.signal)
+          if (options["timeout"] !== false) signals.push(AbortSignal.timeout(options["timeout"]))
+
+          const combined = signals.length > 1 ? AbortSignal.any(signals) : signals[0]
+
+          opts.signal = combined
+        }
+
+        return fetchFn(input, {
+          ...opts,
+          // @ts-ignore see here: https://github.com/oven-sh/bun/issues/16682
+          timeout: false,
+        })
+      }
+
+      // Special case: google-vertex-anthropic uses a subpath import
+      const bundledKey = provider.id === "google-vertex-anthropic" ? "@ai-sdk/google-vertex/anthropic" : pkg
+      const bundledFn = BUNDLED_PROVIDERS[bundledKey]
+      if (bundledFn) {
+        log.info("using bundled provider", { providerID: provider.id, pkg: bundledKey })
+        const loaded = bundledFn({
+          name: provider.id,
+          ...options,
+        })
+        s.sdk.set(key, loaded)
+        return loaded as SDK
+      }
 
       let installedPath: string
       if (!pkg.startsWith("file://")) {
@@ -479,36 +592,8 @@ export namespace Provider {
         installedPath = pkg
       }
 
-      // The `google-vertex-anthropic` provider points to the `@ai-sdk/google-vertex` package.
-      // Ref: https://github.com/sst/models.dev/blob/0a87de42ab177bebad0620a889e2eb2b4a5dd4ab/providers/google-vertex-anthropic/provider.toml
-      // However, the actual export is at the subpath `@ai-sdk/google-vertex/anthropic`.
-      // Ref: https://ai-sdk.dev/providers/ai-sdk-providers/google-vertex#google-vertex-anthropic-provider-usage
-      // In addition, Bun's dynamic import logic does not support subpath imports,
-      // so we patch the import path to load directly from `dist`.
-      const modPath =
-        provider.id === "google-vertex-anthropic" ? `${installedPath}/dist/anthropic/index.mjs` : installedPath
-      const mod = await import(modPath)
-      if (options["timeout"] !== undefined && options["timeout"] !== null) {
-        // Preserve custom fetch if it exists, wrap it with timeout logic
-        const customFetch = options["fetch"]
-        options["fetch"] = async (input: any, init?: BunFetchRequestInit) => {
-          const { signal, ...rest } = init ?? {}
+      const mod = await import(installedPath)
 
-          const signals: AbortSignal[] = []
-          if (signal) signals.push(signal)
-          if (options["timeout"] !== false) signals.push(AbortSignal.timeout(options["timeout"]))
-
-          const combined = signals.length > 1 ? AbortSignal.any(signals) : signals[0]
-
-          const fetchFn = customFetch ?? fetch
-          return fetchFn(input, {
-            ...rest,
-            signal: combined,
-            // @ts-ignore see here: https://github.com/oven-sh/bun/issues/16682
-            timeout: false,
-          })
-        }
-      }
       const fn = mod[Object.keys(mod).find((key) => key.startsWith("create"))!]
       const loaded = fn({
         name: provider.id,
@@ -536,9 +621,21 @@ export namespace Provider {
     })
 
     const provider = s.providers[providerID]
-    if (!provider) throw new ModelNotFoundError({ providerID, modelID })
+    if (!provider) {
+      const availableProviders = Object.keys(s.providers)
+      const matches = fuzzysort.go(providerID, availableProviders, { limit: 3, threshold: -10000 })
+      const suggestions = matches.map((m) => m.target)
+      throw new ModelNotFoundError({ providerID, modelID, suggestions })
+    }
+
     const info = provider.info.models[modelID]
-    if (!info) throw new ModelNotFoundError({ providerID, modelID })
+    if (!info) {
+      const availableModels = Object.keys(provider.info.models)
+      const matches = fuzzysort.go(modelID, availableModels, { limit: 3, threshold: -10000 })
+      const suggestions = matches.map((m) => m.target)
+      throw new ModelNotFoundError({ providerID, modelID, suggestions })
+    }
+
     const sdk = await getSDK(provider.info, info)
 
     try {
@@ -584,23 +681,39 @@ export namespace Provider {
     }
 
     const provider = await state().then((state) => state.providers[providerID])
-    if (!provider) return
-    let priority = ["claude-haiku-4-5", "claude-haiku-4.5", "3-5-haiku", "3.5-haiku", "gemini-2.5-flash", "gpt-5-nano"]
-    // claude-haiku-4.5 is considered a premium model in github copilot, we shouldn't use premium requests for title gen
-    if (providerID === "github-copilot") {
-      priority = priority.filter((m) => m !== "claude-haiku-4.5")
-    }
-    if (providerID === "opencode" || providerID === "local") {
-      priority = ["gpt-5-nano"]
-    }
-    for (const item of priority) {
-      for (const model of Object.keys(provider.info.models)) {
-        if (model.includes(item)) return getModel(providerID, model)
+    if (provider) {
+      let priority = [
+        "claude-haiku-4-5",
+        "claude-haiku-4.5",
+        "3-5-haiku",
+        "3.5-haiku",
+        "gemini-2.5-flash",
+        "gpt-5-nano",
+      ]
+      // claude-haiku-4.5 is considered a premium model in github copilot, we shouldn't use premium requests for title gen
+      if (providerID === "github-copilot") {
+        priority = priority.filter((m) => m !== "claude-haiku-4.5")
+      }
+      if (providerID.startsWith("opencode")) {
+        priority = ["gpt-5-nano"]
+      }
+      for (const item of priority) {
+        for (const model of Object.keys(provider.info.models)) {
+          if (model.includes(item)) return getModel(providerID, model)
+        }
       }
     }
+
+    // Check if opencode provider is available before using it
+    const opencodeProvider = await state().then((state) => state.providers["opencode"])
+    if (opencodeProvider && opencodeProvider.info.models["gpt-5-nano"]) {
+      return getModel("opencode", "gpt-5-nano")
+    }
+
+    return undefined
   }
 
-  const priority = ["gemini-2.5-pro-preview", "gpt-5", "claude-sonnet-4"]
+  const priority = ["gpt-5", "claude-sonnet-4", "big-pickle", "gemini-3-pro"]
   export function sort(models: ModelsDev.Model[]) {
     return sortBy(
       models,
@@ -613,42 +726,6 @@ export namespace Provider {
   export async function defaultModel() {
     const cfg = await Config.get()
     if (cfg.model) return parseModel(cfg.model)
-
-    // this will be adjusted when migration to opentui is complete,
-    // for now we just read the tui state toml file directly
-    //
-    // NOTE: cannot just import file as toml without cleaning due to lack of
-    // support for date/time references in Bun toml parser: https://github.com/oven-sh/bun/issues/22426
-    const lastused = await Bun.file(path.join(Global.Path.state, "tui"))
-      .text()
-      .then((text) => {
-        // remove the date/time references since Bun toml parser doesn't support yet
-        const cleaned = text
-          .split("\n")
-          .filter((line) => !line.trim().startsWith("last_used ="))
-          .join("\n")
-        const state = Bun.TOML.parse(cleaned) as {
-          recently_used_models?: {
-            provider_id: string
-            model_id: string
-          }[]
-        }
-        const [model] = state?.recently_used_models ?? []
-        if (model) {
-          return {
-            providerID: model.provider_id,
-            modelID: model.model_id,
-          }
-        }
-      })
-      .catch((error) => {
-        log.error("failed to find last used model", {
-          error,
-        })
-        return undefined
-      })
-
-    if (lastused) return lastused
 
     const provider = await list()
       .then((val) => Object.values(val))
@@ -675,6 +752,7 @@ export namespace Provider {
     z.object({
       providerID: z.string(),
       modelID: z.string(),
+      suggestions: z.array(z.string()).optional(),
     }),
   )
 

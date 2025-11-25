@@ -5,7 +5,7 @@ import { createMemo, createResource, createEffect, onMount, For, Show } from "so
 import { createStore } from "solid-js/store"
 import { useSDK } from "@tui/context/sdk"
 import { useSync } from "@tui/context/sync"
-import { useTheme } from "@tui/context/theme"
+import { useTheme, selectedForeground } from "@tui/context/theme"
 import { SplitBorder } from "@tui/component/border"
 import { useCommandDialog } from "@tui/component/dialog-command"
 import { Locale } from "@/util/locale"
@@ -53,15 +53,7 @@ export function Autocomplete(props: {
     // Track props.value to make memo reactive to text changes
     props.value // <- there surely is a better way to do this, like making .input() reactive
 
-    const val = props.input().getTextRange(store.index + 1, props.input().cursorOffset + 1)
-
-    // If the filter contains a space, hide the autocomplete
-    if (val.includes(" ")) {
-      hide()
-      return undefined
-    }
-
-    return val
+    return props.input().getTextRange(store.index + 1, props.input().cursorOffset)
   })
 
   function insertPart(text: string, part: PromptInfo["parts"][number]) {
@@ -89,7 +81,6 @@ export function Autocomplete(props: {
     const extmarkId = input.extmarks.create({
       start: extmarkStart,
       end: extmarkEnd,
-      virtual: true,
       styleId,
       typeId: props.promptPartTypeId(),
     })
@@ -245,6 +236,11 @@ export function Autocomplete(props: {
           description: "jump to message",
           onSelect: () => command.trigger("session.timeline"),
         },
+        {
+          display: "/thinking",
+          description: "toggle thinking blocks",
+          onSelect: () => command.trigger("session.toggle.thinking"),
+        },
       )
       if (sync.data.config.share !== "disabled") {
         results.push({
@@ -382,16 +378,18 @@ export function Autocomplete(props: {
       get visible() {
         return store.visible
       },
-      onInput() {
+      onInput(value) {
         if (store.visible) {
-          if (props.input().cursorOffset <= store.index) {
+          if (
+            // Typed text before the trigger
+            props.input().cursorOffset <= store.index ||
+            // There is a space between the trigger and the cursor
+            props.input().getTextRange(store.index, props.input().cursorOffset).match(/\s/) ||
+            // "/<command>" is not the sole content
+            (store.visible === "/" && value.match(/^\S+\s+\S+\s*$/))
+          ) {
             hide()
             return
-          }
-          // Check if a space was typed after the trigger character
-          const currentText = props.input().getTextRange(store.index + 1, props.input().cursorOffset + 1)
-          if (currentText.includes(" ")) {
-            hide()
           }
         }
       },
@@ -456,7 +454,7 @@ export function Autocomplete(props: {
       {...SplitBorder}
       borderColor={theme.border}
     >
-      <box backgroundColor={theme.backgroundElement} height={height()}>
+      <box backgroundColor={theme.backgroundMenu} height={height()}>
         <For
           each={options()}
           fallback={
@@ -472,11 +470,11 @@ export function Autocomplete(props: {
               backgroundColor={index() === store.selected ? theme.primary : undefined}
               flexDirection="row"
             >
-              <text fg={index() === store.selected ? theme.background : theme.text} flexShrink={0}>
+              <text fg={index() === store.selected ? selectedForeground(theme) : theme.text} flexShrink={0}>
                 {option.display}
               </text>
               <Show when={option.description}>
-                <text fg={index() === store.selected ? theme.background : theme.textMuted} wrapMode="none">
+                <text fg={index() === store.selected ? selectedForeground(theme) : theme.textMuted} wrapMode="none">
                   {option.description}
                 </text>
               </Show>

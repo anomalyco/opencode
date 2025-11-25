@@ -18,6 +18,9 @@ export function Sidebar(props: { sessionID: string }) {
   const [todoExpanded, setTodoExpanded] = createSignal(true)
   const [lspExpanded, setLspExpanded] = createSignal(true)
 
+  // Sort MCP servers alphabetically for consistent display order
+  const mcpEntries = createMemo(() => Object.entries(sync.data.mcp).sort(([a], [b]) => a.localeCompare(b)))
+
   const cost = createMemo(() => {
     const total = messages().reduce((sum, x) => sum + (x.role === "assistant" ? x.cost : 0), 0)
     return new Intl.NumberFormat("en-US", {
@@ -58,16 +61,22 @@ export function Sidebar(props: { sessionID: string }) {
             <text fg={theme.textMuted}>{context()?.percentage ?? 0}% used</text>
             <text fg={theme.textMuted}>{cost()} spent</text>
           </box>
-          <Show when={Object.keys(sync.data.mcp).length > 0}>
+          <Show when={mcpEntries().length > 0}>
             <box>
-              <box flexDirection="row" gap={1} onMouseDown={() => setMcpExpanded(!mcpExpanded())}>
-                <text fg={theme.text}>{mcpExpanded() ? "▼" : "▶"}</text>
+              <box
+                flexDirection="row"
+                gap={1}
+                onMouseDown={() => mcpEntries().length > 2 && setMcpExpanded(!mcpExpanded())}
+              >
+                <Show when={mcpEntries().length > 2}>
+                  <text fg={theme.text}>{mcpExpanded() ? "▼" : "▶"}</text>
+                </Show>
                 <text fg={theme.text}>
                   <b>MCP</b>
                 </text>
               </box>
-              <Show when={mcpExpanded()}>
-                <For each={Object.entries(sync.data.mcp)}>
+              <Show when={mcpEntries().length <= 2 || mcpExpanded()}>
+                <For each={mcpEntries()}>
                   {([key, item]) => (
                     <box flexDirection="row" gap={1}>
                       <text
@@ -100,13 +109,19 @@ export function Sidebar(props: { sessionID: string }) {
           </Show>
           <Show when={sync.data.lsp.length > 0}>
             <box>
-              <box flexDirection="row" gap={1} onMouseDown={() => setLspExpanded(!lspExpanded())}>
-                <text fg={theme.text}>{lspExpanded() ? "▼" : "▶"}</text>
+              <box
+                flexDirection="row"
+                gap={1}
+                onMouseDown={() => sync.data.lsp.length > 2 && setLspExpanded(!lspExpanded())}
+              >
+                <Show when={sync.data.lsp.length > 2}>
+                  <text fg={theme.text}>{lspExpanded() ? "▼" : "▶"}</text>
+                </Show>
                 <text fg={theme.text}>
                   <b>LSP</b>
                 </text>
               </box>
-              <Show when={lspExpanded()}>
+              <Show when={sync.data.lsp.length <= 2 || lspExpanded()}>
                 <For each={sync.data.lsp}>
                   {(item) => (
                     <box flexDirection="row" gap={1}>
@@ -132,13 +147,19 @@ export function Sidebar(props: { sessionID: string }) {
           </Show>
           <Show when={todo().length > 0}>
             <box>
-              <box flexDirection="row" gap={1} onMouseDown={() => setTodoExpanded(!todoExpanded())}>
-                <text fg={theme.text}>{todoExpanded() ? "▼" : "▶"}</text>
+              <box
+                flexDirection="row"
+                gap={1}
+                onMouseDown={() => todo().length > 2 && setTodoExpanded(!todoExpanded())}
+              >
+                <Show when={todo().length > 2}>
+                  <text fg={theme.text}>{todoExpanded() ? "▼" : "▶"}</text>
+                </Show>
                 <text fg={theme.text}>
                   <b>Todo</b>
                 </text>
               </box>
-              <Show when={todoExpanded()}>
+              <Show when={todo().length <= 2 || todoExpanded()}>
                 <For each={todo()}>
                   {(todo) => (
                     <text style={{ fg: todo.status === "in_progress" ? theme.success : theme.textMuted }}>
@@ -151,19 +172,26 @@ export function Sidebar(props: { sessionID: string }) {
           </Show>
           <Show when={diff().length > 0}>
             <box>
-              <box flexDirection="row" gap={1} onMouseDown={() => setDiffExpanded(!diffExpanded())}>
-                <text fg={theme.text}>{diffExpanded() ? "▼" : "▶"}</text>
+              <box
+                flexDirection="row"
+                gap={1}
+                onMouseDown={() => diff().length > 2 && setDiffExpanded(!diffExpanded())}
+              >
+                <Show when={diff().length > 2}>
+                  <text fg={theme.text}>{diffExpanded() ? "▼" : "▶"}</text>
+                </Show>
                 <text fg={theme.text}>
                   <b>Modified Files</b>
                 </text>
               </box>
-              <Show when={diffExpanded()}>
+              <Show when={diff().length <= 2 || diffExpanded()}>
                 <For each={diff() || []}>
                   {(item) => {
                     const file = createMemo(() => {
                       const splits = item.file.split(path.sep).filter(Boolean)
                       const last = splits.at(-1)!
                       const rest = splits.slice(0, -1).join(path.sep)
+                      if (!rest) return last
                       return Locale.truncateMiddle(rest, 30 - last.length) + "/" + last
                     })
                     return (

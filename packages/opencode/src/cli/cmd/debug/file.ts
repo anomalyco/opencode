@@ -2,6 +2,7 @@ import { EOL } from "os"
 import { File } from "../../../file"
 import { bootstrap } from "../../bootstrap"
 import { cmd } from "../cmd"
+import { Ripgrep } from "@/file/ripgrep"
 
 const FileSearchCommand = cmd({
   command: "search <query>",
@@ -62,6 +63,20 @@ const FileListCommand = cmd({
   },
 })
 
+const FileTreeCommand = cmd({
+  command: "tree [dir]",
+  builder: (yargs) =>
+    yargs.positional("dir", {
+      type: "string",
+      description: "Directory to tree",
+      default: process.cwd(),
+    }),
+  async handler(args) {
+    const files = await Ripgrep.tree({ cwd: args.dir, limit: 200 })
+    console.log(files)
+  },
+})
+
 export const FileCommand = cmd({
   command: "file",
   builder: (yargs) =>
@@ -70,6 +85,7 @@ export const FileCommand = cmd({
       .command(FileStatusCommand)
       .command(FileListCommand)
       .command(FileSearchCommand)
+      .command(FileTreeCommand)
       .demandCommand(),
   async handler() {},
 })

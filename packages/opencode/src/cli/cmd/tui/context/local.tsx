@@ -10,6 +10,7 @@ import { createSimpleContext } from "./helper"
 import { useToast } from "../ui/toast"
 import { Provider } from "@/provider/provider"
 import { useArgs } from "./args"
+import { RGBA } from "@opentui/core"
 
 export const { use: useLocal, provider: LocalProvider } = createSimpleContext({
   name: "Local",
@@ -91,8 +92,9 @@ export const { use: useLocal, provider: LocalProvider } = createSimpleContext({
         },
         color(name: string) {
           const agent = agents().find((x) => x.name === name)
-          if (agent?.color) return agent.color
+          if (agent?.color) return RGBA.fromHex(agent.color)
           const index = agents().findIndex((x) => x.name === name)
+          if (index === -1) return colors()[0]
           return colors()[index % colors().length]
         },
       }
@@ -158,10 +160,10 @@ export const { use: useLocal, provider: LocalProvider } = createSimpleContext({
           }
         }
         const provider = sync.data.provider[0]
-        const model = Object.values(provider.models)[0]
+        const model = sync.data.provider_default[provider.id] ?? Object.values(provider.models)[0].id
         return {
           providerID: provider.id,
-          modelID: model.id,
+          modelID: model,
         }
       })
 

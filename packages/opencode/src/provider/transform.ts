@@ -24,7 +24,6 @@ export namespace ProviderTransform {
       const result: ModelMessage[] = []
       for (let i = 0; i < msgs.length; i++) {
         const msg = msgs[i]
-        const prevMsg = msgs[i - 1]
         const nextMsg = msgs[i + 1]
 
         if ((msg.role === "assistant" || msg.role === "tool") && Array.isArray(msg.content)) {
@@ -120,6 +119,7 @@ export namespace ProviderTransform {
   export function temperature(_providerID: string, modelID: string) {
     if (modelID.toLowerCase().includes("qwen")) return 0.55
     if (modelID.toLowerCase().includes("claude")) return undefined
+    if (modelID.toLowerCase().includes("gemini-3-pro")) return 1.0
     return 0
   }
 
@@ -128,16 +128,24 @@ export namespace ProviderTransform {
     return undefined
   }
 
-  export function options(
-    providerID: string,
-    modelID: string,
-    npm: string,
-    sessionID: string,
-  ): Record<string, any> | undefined {
+  export function options(providerID: string, modelID: string, npm: string, sessionID: string): Record<string, any> {
     const result: Record<string, any> = {}
 
-    if (providerID === "openai" || npm.includes("openai")) {
+    // switch to providerID later, for now use this
+    if (npm === "@openrouter/ai-sdk-provider") {
+      result["usage"] = {
+        include: true,
+      }
+    }
+
+    if (providerID === "openai") {
       result["promptCacheKey"] = sessionID
+    }
+
+    if (providerID === "google" || (providerID.startsWith("opencode") && modelID.includes("gemini-3"))) {
+      result["thinkingConfig"] = {
+        includeThoughts: true,
+      }
     }
 
     if (modelID.includes("gpt-5") && !modelID.includes("gpt-5-chat")) {
@@ -153,13 +161,32 @@ export namespace ProviderTransform {
         result["textVerbosity"] = "low"
       }
 
-      if (providerID === "opencode") {
+      if (providerID.startsWith("opencode")) {
         result["promptCacheKey"] = sessionID
         result["include"] = ["reasoning.encrypted_content"]
         result["reasoningSummary"] = "auto"
       }
     }
     return result
+  }
+
+  export function smallOptions(input: { providerID: string; modelID: string }) {
+    const options: Record<string, any> = {}
+
+    if (input.providerID === "openai" || input.modelID.includes("gpt-5")) {
+      if (input.modelID.includes("5.1")) {
+        options["reasoningEffort"] = "low"
+      } else {
+        options["reasoningEffort"] = "minimal"
+      }
+    }
+    if (input.providerID === "google") {
+      options["thinkingConfig"] = {
+        thinkingBudget: 0,
+      }
+    }
+
+    return options
   }
 
   export function providerOptions(npm: string | undefined, providerID: string, options: { [x: string]: any }) {
@@ -176,6 +203,18 @@ export namespace ProviderTransform {
       case "@ai-sdk/anthropic":
         return {
           ["anthropic" as string]: options,
+        }
+      case "@ai-sdk/google":
+        return {
+          ["google" as string]: options,
+        }
+      case "@ai-sdk/gateway":
+        return {
+          ["gateway" as string]: options,
+        }
+      case "@openrouter/ai-sdk-provider":
+        return {
+          ["openrouter" as string]: options,
         }
       default:
         return {
@@ -232,5 +271,13 @@ export namespace ProviderTransform {
     */
 
     return schema
+  }
+
+  export function error(providerID: string, message: string) {
+    if (providerID === "github-copilot" && message.includes("The requested model is not supported")) {
+      message +=
+        "\n\nMake sure the model is enabled in your copilot settings: https://github.com/settings/copilot/features"
+    }
+    return message
   }
 }

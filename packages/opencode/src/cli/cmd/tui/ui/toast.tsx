@@ -1,6 +1,7 @@
 import { createContext, useContext, type ParentProps, Show } from "solid-js"
 import { createStore } from "solid-js/store"
 import { useTheme } from "@tui/context/theme"
+import { useTerminalDimensions } from "@opentui/solid"
 import { SplitBorder } from "../component/border"
 import { TextAttributes } from "@opentui/core"
 import z from "zod"
@@ -11,6 +12,7 @@ export type ToastOptions = z.infer<typeof TuiEvent.ToastShow.properties>
 export function Toast() {
   const toast = useToast()
   const { theme } = useTheme()
+  const dimensions = useTerminalDimensions()
 
   return (
     <Show when={toast.currentToast}>
@@ -21,6 +23,7 @@ export function Toast() {
           alignItems="flex-start"
           top={2}
           right={2}
+          maxWidth={Math.min(60, dimensions().width - 6)}
           paddingLeft={2}
           paddingRight={2}
           paddingTop={1}
@@ -35,7 +38,9 @@ export function Toast() {
               {current().title}
             </text>
           </Show>
-          <text fg={theme.text}>{current().message}</text>
+          <text fg={theme.text} wrapMode="word" width="100%">
+            {current().message}
+          </text>
         </box>
       )}
     </Show>

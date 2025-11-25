@@ -8,7 +8,7 @@ import { mergeDeep, pipe } from "remeda"
 import { Global } from "../global"
 import fs from "fs/promises"
 import { lazy } from "../util/lazy"
-import { NamedError } from "../util/error"
+import { NamedError } from "@opencode-ai/util/error"
 import { Flag } from "../flag/flag"
 import { Auth } from "../auth"
 import { type ParseError as JsoncParseError, parse as parseJsonc, printParseErrorCode } from "jsonc-parser"
@@ -21,25 +21,36 @@ import { ConfigMarkdown } from "./markdown"
 export namespace Config {
   const log = Log.create({ service: "config" })
 
+  // Custom merge function that concatenates plugin arrays instead of replacing them
+  function mergeConfigWithPlugins(target: Info, source: Info): Info {
+    const merged = mergeDeep(target, source)
+    // If both configs have plugin arrays, concatenate them instead of replacing
+    if (target.plugin && source.plugin) {
+      const pluginSet = new Set([...target.plugin, ...source.plugin])
+      merged.plugin = Array.from(pluginSet)
+    }
+    return merged
+  }
+
   export const state = Instance.state(async () => {
     const auth = await Auth.all()
     let result = await global()
 
     // Override with custom config if provided
     if (Flag.OPENCODE_CONFIG) {
-      result = mergeDeep(result, await loadFile(Flag.OPENCODE_CONFIG))
+      result = mergeConfigWithPlugins(result, await loadFile(Flag.OPENCODE_CONFIG))
       log.debug("loaded custom config", { path: Flag.OPENCODE_CONFIG })
     }
 
     for (const file of ["opencode.jsonc", "opencode.json"]) {
       const found = await Filesystem.findUp(file, Instance.directory, Instance.worktree)
       for (const resolved of found.toReversed()) {
-        result = mergeDeep(result, await loadFile(resolved))
+        result = mergeConfigWithPlugins(result, await loadFile(resolved))
       }
     }
 
     if (Flag.OPENCODE_CONFIG_CONTENT) {
-      result = mergeDeep(result, JSON.parse(Flag.OPENCODE_CONFIG_CONTENT))
+      result = mergeConfigWithPlugins(result, JSON.parse(Flag.OPENCODE_CONFIG_CONTENT))
       log.debug("loaded custom config from OPENCODE_CONFIG_CONTENT")
     }
 
@@ -47,7 +58,7 @@ export namespace Config {
       if (value.type === "wellknown") {
         process.env[value.key] = value.token
         const wellknown = (await fetch(`${key}/.well-known/opencode`).then((x) => x.json())) as any
-        result = mergeDeep(result, await load(JSON.stringify(wellknown.config ?? {}), process.cwd()))
+        result = mergeConfigWithPlugins(result, await load(JSON.stringify(wellknown.config ?? {}), process.cwd()))
       }
     }
 
@@ -75,10 +86,10 @@ export namespace Config {
     for (const dir of directories) {
       await assertValid(dir)
 
-      if (dir.endsWith(".opencode")) {
+      if (dir.endsWith(".opencode") || dir === Flag.OPENCODE_CONFIG_DIR) {
         for (const file of ["opencode.jsonc", "opencode.json"]) {
           log.debug(`loading config from ${path.join(dir, file)}`)
-          result = mergeDeep(result, await loadFile(path.join(dir, file)))
+          result = mergeConfigWithPlugins(result, await loadFile(path.join(dir, file)))
           // to satisy the type checker
           result.agent ??= {}
           result.mode ??= {}
@@ -337,7 +348,7 @@ export namespace Config {
   export const Mcp = z.discriminatedUnion("type", [McpLocal, McpRemote])
   export type Mcp = z.infer<typeof Mcp>
 
-  export const Permission = z.union([z.literal("ask"), z.literal("allow"), z.literal("deny")])
+  export const Permission = z.enum(["ask", "allow", "deny"])
   export type Permission = z.infer<typeof Permission>
 
   export const Command = z.object({
@@ -358,7 +369,7 @@ export namespace Config {
       tools: z.record(z.string(), z.boolean()).optional(),
       disable: z.boolean().optional(),
       description: z.string().optional().describe("Description of when to use the agent"),
-      mode: z.union([z.literal("subagent"), z.literal("primary"), z.literal("all")]).optional(),
+      mode: z.enum(["subagent", "primary", "all"]).optional(),
       color: z
         .string()
         .regex(/^#[0-9a-fA-F]{6}$/, "Invalid hex color format")
@@ -428,8 +439,9 @@ export namespace Config {
       input_newline: z.string().optional().default("shift+return,ctrl+j").describe("Insert newline in input"),
       history_previous: z.string().optional().default("up").describe("Previous history item"),
       history_next: z.string().optional().default("down").describe("Next history item"),
-      session_child_cycle: z.string().optional().default("ctrl+right").describe("Next child session"),
-      session_child_cycle_reverse: z.string().optional().default("ctrl+left").describe("Previous child session"),
+      session_child_cycle: z.string().optional().default("<leader>right").describe("Next child session"),
+      session_child_cycle_reverse: z.string().optional().default("<leader>left").describe("Previous child session"),
+      terminal_suspend: z.string().optional().default("ctrl+z").describe("Suspend terminal"),
     })
     .strict()
     .meta({
@@ -437,7 +449,7 @@ export namespace Config {
     })
 
   export const TUI = z.object({
-    scroll_speed: z.number().min(1).optional().default(1).describe("TUI scroll speed"),
+    scroll_speed: z.number().min(0.001).optional().describe("TUI scroll speed"),
     scroll_acceleration: z
       .object({
         enabled: z.boolean().describe("Enable scroll acceleration"),
@@ -478,8 +490,17 @@ export namespace Config {
         .boolean()
         .optional()
         .describe("@deprecated Use 'share' field instead. Share newly created sessions automatically"),
-      autoupdate: z.boolean().optional().describe("Automatically update to the latest version"),
+      autoupdate: z
+        .union([z.boolean(), z.literal("notify")])
+        .optional()
+        .describe(
+          "Automatically update to the latest version. Set to true to auto-update, false to disable, or 'notify' to show update notifications",
+        ),
       disabled_providers: z.array(z.string()).optional().describe("Disable providers that are loaded automatically"),
+      enabled_providers: z
+        .array(z.string())
+        .optional()
+        .describe("When set, ONLY these providers will be enabled. All other providers will be ignored"),
       model: z.string().describe("Model to use in the format of provider/model, eg anthropic/claude-2").optional(),
       small_model: z
         .string()
@@ -511,6 +532,8 @@ export namespace Config {
           z.string(),
           ModelsDev.Provider.partial()
             .extend({
+              whitelist: z.array(z.string()).optional(),
+              blacklist: z.array(z.string()).optional(),
               models: z.record(z.string(), ModelsDev.Model.partial()).optional(),
               options: z
                 .object({
@@ -542,36 +565,43 @@ export namespace Config {
         .describe("Custom provider configurations and model overrides"),
       mcp: z.record(z.string(), Mcp).optional().describe("MCP (Model Context Protocol) server configurations"),
       formatter: z
-        .record(
-          z.string(),
-          z.object({
-            disabled: z.boolean().optional(),
-            command: z.array(z.string()).optional(),
-            environment: z.record(z.string(), z.string()).optional(),
-            extensions: z.array(z.string()).optional(),
-          }),
-        )
+        .union([
+          z.literal(false),
+          z.record(
+            z.string(),
+            z.object({
+              disabled: z.boolean().optional(),
+              command: z.array(z.string()).optional(),
+              environment: z.record(z.string(), z.string()).optional(),
+              extensions: z.array(z.string()).optional(),
+            }),
+          ),
+        ])
         .optional(),
       lsp: z
-        .record(
-          z.string(),
-          z.union([
-            z.object({
-              disabled: z.literal(true),
-            }),
-            z.object({
-              command: z.array(z.string()),
-              extensions: z.array(z.string()).optional(),
-              disabled: z.boolean().optional(),
-              env: z.record(z.string(), z.string()).optional(),
-              initialization: z.record(z.string(), z.any()).optional(),
-            }),
-          ]),
-        )
+        .union([
+          z.literal(false),
+          z.record(
+            z.string(),
+            z.union([
+              z.object({
+                disabled: z.literal(true),
+              }),
+              z.object({
+                command: z.array(z.string()),
+                extensions: z.array(z.string()).optional(),
+                disabled: z.boolean().optional(),
+                env: z.record(z.string(), z.string()).optional(),
+                initialization: z.record(z.string(), z.any()).optional(),
+              }),
+            ]),
+          ),
+        ])
         .optional()
         .refine(
           (data) => {
             if (!data) return true
+            if (typeof data === "boolean") return true
             const serverIds = new Set(Object.values(LSPServer).map((s) => s.id))
 
             return Object.entries(data).every(([id, config]) => {
@@ -596,6 +626,11 @@ export namespace Config {
         })
         .optional(),
       tools: z.record(z.string(), z.boolean()).optional(),
+      enterprise: z
+        .object({
+          url: z.string().optional().describe("Enterprise URL"),
+        })
+        .optional(),
       experimental: z
         .object({
           hook: z
@@ -622,6 +657,7 @@ export namespace Config {
             .optional(),
           chatMaxRetries: z.number().optional().describe("Number of retries for chat completions on failure"),
           disable_paste_summary: z.boolean().optional(),
+          batch_tool: z.boolean().optional().describe("Enable the batch tool"),
         })
         .optional(),
     })

@@ -26,8 +26,6 @@ process.on("uncaughtException", (e) => {
   })
 })
 
-upgrade()
-
 let server: Bun.Server<undefined>
 export const rpc = {
   async server(input: { port: number; hostname: string }) {
@@ -41,6 +39,14 @@ export const rpc = {
       console.error(e)
       throw e
     }
+  },
+  async checkUpgrade(input: { directory: string }) {
+    await Instance.provide({
+      directory: input.directory,
+      fn: async () => {
+        await upgrade().catch(() => {})
+      },
+    })
   },
   async shutdown() {
     Log.Default.info("worker shutting down")

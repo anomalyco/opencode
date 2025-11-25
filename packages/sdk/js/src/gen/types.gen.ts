@@ -7,6 +7,13 @@ export type EventInstallationUpdated = {
   }
 }
 
+export type EventInstallationUpdateAvailable = {
+  type: "installation.update-available"
+  properties: {
+    version: string
+  }
+}
+
 export type EventLspClientDiagnostics = {
   type: "lsp.client.diagnostics"
   properties: {
@@ -41,6 +48,15 @@ export type UserMessage = {
     title?: string
     body?: string
     diffs: Array<FileDiff>
+  }
+  agent: string
+  model: {
+    providerID: string
+    modelID: string
+  }
+  system?: string
+  tools?: {
+    [key: string]: boolean
   }
 }
 
@@ -114,6 +130,7 @@ export type AssistantMessage = {
       write: number
     }
   }
+  finish?: string
 }
 
 export type Message = UserMessage | AssistantMessage
@@ -140,6 +157,7 @@ export type TextPart = {
   type: "text"
   text: string
   synthetic?: boolean
+  ignored?: boolean
   time?: {
     start: number
     end?: number
@@ -348,8 +366,25 @@ export type RetryPart = {
   }
 }
 
+export type CompactionPart = {
+  id: string
+  sessionID: string
+  messageID: string
+  type: "compaction"
+  auto: boolean
+}
+
 export type Part =
   | TextPart
+  | {
+      id: string
+      sessionID: string
+      messageID: string
+      type: "subtask"
+      prompt: string
+      description: string
+      agent: string
+    }
   | ReasoningPart
   | FilePart
   | ToolPart
@@ -359,6 +394,7 @@ export type Part =
   | PatchPart
   | AgentPart
   | RetryPart
+  | CompactionPart
 
 export type EventMessagePartUpdated = {
   type: "message.part.updated"
@@ -374,13 +410,6 @@ export type EventMessagePartRemoved = {
     sessionID: string
     messageID: string
     partID: string
-  }
-}
-
-export type EventSessionCompacted = {
-  type: "session.compacted"
-  properties: {
-    sessionID: string
   }
 }
 
@@ -411,6 +440,42 @@ export type EventPermissionReplied = {
     sessionID: string
     permissionID: string
     response: string
+  }
+}
+
+export type SessionStatus =
+  | {
+      type: "idle"
+    }
+  | {
+      type: "retry"
+      attempt: number
+      message: string
+      next: number
+    }
+  | {
+      type: "busy"
+    }
+
+export type EventSessionStatus = {
+  type: "session.status"
+  properties: {
+    sessionID: string
+    status: SessionStatus
+  }
+}
+
+export type EventSessionIdle = {
+  type: "session.idle"
+  properties: {
+    sessionID: string
+  }
+}
+
+export type EventSessionCompacted = {
+  type: "session.compacted"
+  properties: {
+    sessionID: string
   }
 }
 
@@ -455,13 +520,6 @@ export type EventCommandExecuted = {
     sessionID: string
     arguments: string
     messageID: string
-  }
-}
-
-export type EventSessionIdle = {
-  type: "session.idle"
-  properties: {
-    sessionID: string
   }
 }
 
@@ -592,19 +650,21 @@ export type EventFileWatcherUpdated = {
 
 export type Event =
   | EventInstallationUpdated
+  | EventInstallationUpdateAvailable
   | EventLspClientDiagnostics
   | EventLspUpdated
   | EventMessageUpdated
   | EventMessageRemoved
   | EventMessagePartUpdated
   | EventMessagePartRemoved
-  | EventSessionCompacted
   | EventPermissionUpdated
   | EventPermissionReplied
+  | EventSessionStatus
+  | EventSessionIdle
+  | EventSessionCompacted
   | EventFileEdited
   | EventTodoUpdated
   | EventCommandExecuted
-  | EventSessionIdle
   | EventSessionCreated
   | EventSessionUpdated
   | EventSessionDeleted
@@ -795,6 +855,10 @@ export type KeybindsConfig = {
    * Previous child session
    */
   session_child_cycle_reverse?: string
+  /**
+   * Suspend terminal
+   */
+  terminal_suspend?: string
 }
 
 export type AgentConfig = {
@@ -958,13 +1022,17 @@ export type Config = {
    */
   autoshare?: boolean
   /**
-   * Automatically update to the latest version
+   * Automatically update to the latest version. Set to true to auto-update, false to disable, or 'notify' to show update notifications
    */
-  autoupdate?: boolean
+  autoupdate?: boolean | "notify"
   /**
    * Disable providers that are loaded automatically
    */
   disabled_providers?: Array<string>
+  /**
+   * When set, ONLY these providers will be enabled. All other providers will be ignored
+   */
+  enabled_providers?: Array<string>
   /**
    * Model to use in the format of provider/model, eg anthropic/claude-2
    */
@@ -1018,6 +1086,12 @@ export type Config = {
             output: number
             cache_read?: number
             cache_write?: number
+            context_over_200k?: {
+              input: number
+              output: number
+              cache_read?: number
+              cache_write?: number
+            }
           }
           limit?: {
             context: number
@@ -1040,6 +1114,8 @@ export type Config = {
           }
         }
       }
+      whitelist?: Array<string>
+      blacklist?: Array<string>
       options?: {
         apiKey?: string
         baseURL?: string
@@ -1061,33 +1137,37 @@ export type Config = {
   mcp?: {
     [key: string]: McpLocalConfig | McpRemoteConfig
   }
-  formatter?: {
-    [key: string]: {
-      disabled?: boolean
-      command?: Array<string>
-      environment?: {
-        [key: string]: string
-      }
-      extensions?: Array<string>
-    }
-  }
-  lsp?: {
-    [key: string]:
-      | {
-          disabled: true
-        }
-      | {
-          command: Array<string>
-          extensions?: Array<string>
+  formatter?:
+    | false
+    | {
+        [key: string]: {
           disabled?: boolean
-          env?: {
+          command?: Array<string>
+          environment?: {
             [key: string]: string
           }
-          initialization?: {
-            [key: string]: unknown
-          }
+          extensions?: Array<string>
         }
-  }
+      }
+  lsp?:
+    | false
+    | {
+        [key: string]:
+          | {
+              disabled: true
+            }
+          | {
+              command: Array<string>
+              extensions?: Array<string>
+              disabled?: boolean
+              env?: {
+                [key: string]: string
+              }
+              initialization?: {
+                [key: string]: unknown
+              }
+            }
+      }
   /**
    * Additional instruction files or patterns to include
    */
@@ -1106,6 +1186,12 @@ export type Config = {
   }
   tools?: {
     [key: string]: boolean
+  }
+  enterprise?: {
+    /**
+     * Enterprise URL
+     */
+    url?: string
   }
   experimental?: {
     hook?: {
@@ -1129,11 +1215,15 @@ export type Config = {
      */
     chatMaxRetries?: number
     disable_paste_summary?: boolean
+    /**
+     * Enable the batch tool
+     */
+    batch_tool?: boolean
   }
 }
 
 export type BadRequestError = {
-  data: unknown | null
+  data: unknown
   errors: Array<{
     [key: string]: unknown
   }>
@@ -1169,6 +1259,7 @@ export type TextPartInput = {
   type: "text"
   text: string
   synthetic?: boolean
+  ignored?: boolean
   time?: {
     start: number
     end?: number
@@ -1198,6 +1289,14 @@ export type AgentPartInput = {
   }
 }
 
+export type SubtaskPartInput = {
+  id?: string
+  type: "subtask"
+  prompt: string
+  description: string
+  agent: string
+}
+
 export type Command = {
   name: string
   description?: string
@@ -1220,6 +1319,12 @@ export type Model = {
     output: number
     cache_read?: number
     cache_write?: number
+    context_over_200k?: {
+      input: number
+      output: number
+      cache_read?: number
+      cache_write?: number
+    }
   }
   limit: {
     context: number
@@ -1251,6 +1356,17 @@ export type Provider = {
   models: {
     [key: string]: Model
   }
+}
+
+export type ProviderAuthMethod = {
+  type: "oauth" | "api"
+  label: string
+}
+
+export type ProviderAuthAuthorization = {
+  url: string
+  method: "auto" | "code"
+  instructions: string
 }
 
 export type Symbol = {
@@ -1531,6 +1647,24 @@ export type ToolListResponses = {
 
 export type ToolListResponse = ToolListResponses[keyof ToolListResponses]
 
+export type InstanceDisposeData = {
+  body?: never
+  path?: never
+  query?: {
+    directory?: string
+  }
+  url: "/instance/dispose"
+}
+
+export type InstanceDisposeResponses = {
+  /**
+   * Instance disposed
+   */
+  200: boolean
+}
+
+export type InstanceDisposeResponse = InstanceDisposeResponses[keyof InstanceDisposeResponses]
+
 export type PathGetData = {
   body?: never
   path?: never
@@ -1596,6 +1730,35 @@ export type SessionCreateResponses = {
 }
 
 export type SessionCreateResponse = SessionCreateResponses[keyof SessionCreateResponses]
+
+export type SessionStatusData = {
+  body?: never
+  path?: never
+  query?: {
+    directory?: string
+  }
+  url: "/session/status"
+}
+
+export type SessionStatusErrors = {
+  /**
+   * Bad request
+   */
+  400: BadRequestError
+}
+
+export type SessionStatusError = SessionStatusErrors[keyof SessionStatusErrors]
+
+export type SessionStatusResponses = {
+  /**
+   * Get session status
+   */
+  200: {
+    [key: string]: SessionStatus
+  }
+}
+
+export type SessionStatusResponse = SessionStatusResponses[keyof SessionStatusResponses]
 
 export type SessionDeleteData = {
   body?: never
@@ -2057,7 +2220,7 @@ export type SessionPromptData = {
     tools?: {
       [key: string]: boolean
     }
-    parts: Array<TextPartInput | FilePartInput | AgentPartInput>
+    parts: Array<TextPartInput | FilePartInput | AgentPartInput | SubtaskPartInput>
   }
   path: {
     /**
@@ -2139,6 +2302,55 @@ export type SessionMessageResponses = {
 
 export type SessionMessageResponse = SessionMessageResponses[keyof SessionMessageResponses]
 
+export type SessionPromptAsyncData = {
+  body?: {
+    messageID?: string
+    model?: {
+      providerID: string
+      modelID: string
+    }
+    agent?: string
+    noReply?: boolean
+    system?: string
+    tools?: {
+      [key: string]: boolean
+    }
+    parts: Array<TextPartInput | FilePartInput | AgentPartInput | SubtaskPartInput>
+  }
+  path: {
+    /**
+     * Session ID
+     */
+    id: string
+  }
+  query?: {
+    directory?: string
+  }
+  url: "/session/{id}/prompt_async"
+}
+
+export type SessionPromptAsyncErrors = {
+  /**
+   * Bad request
+   */
+  400: BadRequestError
+  /**
+   * Not found
+   */
+  404: NotFoundError
+}
+
+export type SessionPromptAsyncError = SessionPromptAsyncErrors[keyof SessionPromptAsyncErrors]
+
+export type SessionPromptAsyncResponses = {
+  /**
+   * Prompt accepted
+   */
+  204: void
+}
+
+export type SessionPromptAsyncResponse = SessionPromptAsyncResponses[keyof SessionPromptAsyncResponses]
+
 export type SessionCommandData = {
   body?: {
     messageID?: string
@@ -2187,6 +2399,10 @@ export type SessionCommandResponse = SessionCommandResponses[keyof SessionComman
 export type SessionShellData = {
   body?: {
     agent: string
+    model?: {
+      providerID: string
+      modelID: string
+    }
     command: string
   }
   path: {
@@ -2370,6 +2586,128 @@ export type ConfigProvidersResponses = {
 }
 
 export type ConfigProvidersResponse = ConfigProvidersResponses[keyof ConfigProvidersResponses]
+
+export type ProviderListData = {
+  body?: never
+  path?: never
+  query?: {
+    directory?: string
+  }
+  url: "/provider"
+}
+
+export type ProviderListResponses = {
+  /**
+   * List of providers
+   */
+  200: {
+    all: Array<Provider>
+    default: {
+      [key: string]: string
+    }
+    connected: Array<string>
+  }
+}
+
+export type ProviderListResponse = ProviderListResponses[keyof ProviderListResponses]
+
+export type ProviderAuthData = {
+  body?: never
+  path?: never
+  query?: {
+    directory?: string
+  }
+  url: "/provider/auth"
+}
+
+export type ProviderAuthResponses = {
+  /**
+   * Provider auth methods
+   */
+  200: {
+    [key: string]: Array<ProviderAuthMethod>
+  }
+}
+
+export type ProviderAuthResponse = ProviderAuthResponses[keyof ProviderAuthResponses]
+
+export type ProviderOauthAuthorizeData = {
+  body?: {
+    /**
+     * Auth method index
+     */
+    method: number
+  }
+  path: {
+    /**
+     * Provider ID
+     */
+    id: string
+  }
+  query?: {
+    directory?: string
+  }
+  url: "/provider/{id}/oauth/authorize"
+}
+
+export type ProviderOauthAuthorizeErrors = {
+  /**
+   * Bad request
+   */
+  400: BadRequestError
+}
+
+export type ProviderOauthAuthorizeError = ProviderOauthAuthorizeErrors[keyof ProviderOauthAuthorizeErrors]
+
+export type ProviderOauthAuthorizeResponses = {
+  /**
+   * Authorization URL and method
+   */
+  200: ProviderAuthAuthorization
+}
+
+export type ProviderOauthAuthorizeResponse = ProviderOauthAuthorizeResponses[keyof ProviderOauthAuthorizeResponses]
+
+export type ProviderOauthCallbackData = {
+  body?: {
+    /**
+     * Auth method index
+     */
+    method: number
+    /**
+     * OAuth authorization code
+     */
+    code?: string
+  }
+  path: {
+    /**
+     * Provider ID
+     */
+    id: string
+  }
+  query?: {
+    directory?: string
+  }
+  url: "/provider/{id}/oauth/callback"
+}
+
+export type ProviderOauthCallbackErrors = {
+  /**
+   * Bad request
+   */
+  400: BadRequestError
+}
+
+export type ProviderOauthCallbackError = ProviderOauthCallbackErrors[keyof ProviderOauthCallbackErrors]
+
+export type ProviderOauthCallbackResponses = {
+  /**
+   * OAuth callback processed successfully
+   */
+  200: boolean
+}
+
+export type ProviderOauthCallbackResponse = ProviderOauthCallbackResponses[keyof ProviderOauthCallbackResponses]
 
 export type FindTextData = {
   body?: never

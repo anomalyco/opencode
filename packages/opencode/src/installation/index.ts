@@ -1,7 +1,7 @@
 import path from "path"
 import { $ } from "bun"
 import z from "zod"
-import { NamedError } from "../util/error"
+import { NamedError } from "@opencode-ai/util/error"
 import { Bus } from "../bus"
 import { Log } from "../util/log"
 
@@ -18,6 +18,12 @@ export namespace Installation {
   export const Event = {
     Updated: Bus.event(
       "installation.updated",
+      z.object({
+        version: z.string(),
+      }),
+    ),
+    UpdateAvailable: Bus.event(
+      "installation.update-available",
       z.object({
         version: z.string(),
       }),
