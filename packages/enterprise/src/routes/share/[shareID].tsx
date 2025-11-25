@@ -16,7 +16,7 @@ import { createStore } from "solid-js/store"
 import z from "zod"
 import NotFound from "../[...404]"
 import { Tabs } from "@opencode-ai/ui/tabs"
-import { HunkData, preloadMultiFileDiff, PreloadMultiFileDiffResult } from "@pierre/precision-diffs/ssr"
+import { preloadMultiFileDiff, PreloadMultiFileDiffResult } from "@pierre/precision-diffs/ssr"
 
 const SessionDataMissingError = NamedError.create(
   "SessionDataMissingError",
@@ -304,8 +304,15 @@ export default function () {
                         </div>
                       </div>
                       <Show when={diffs().length > 0}>
-                        <div class="relative grow px-6 pt-14 flex-1 min-h-0 border-l border-border-weak-base">
-                          <SessionReview diffs={diffs()} class="pb-20" />
+                        <div class="relative grow pt-14 flex-1 min-h-0 border-l border-border-weak-base">
+                          <SessionReview
+                            diffs={diffs()}
+                            classes={{
+                              root: "pb-20",
+                              header: "px-6",
+                              container: "px-6",
+                            }}
+                          />
                         </div>
                       </Show>
                     </div>
@@ -324,8 +331,15 @@ export default function () {
                             {turns()}
                           </Tabs.Content>
                           <Tabs.Content forceMount value="review" class="!overflow-hidden hidden data-[selected]:block">
-                            <div class="relative px-4 pt-8 h-full overflow-y-auto no-scrollbar">
-                              <SessionReview diffs={diffs()} class="pb-20" />
+                            <div class="relative h-full pt-8 overflow-y-auto no-scrollbar">
+                              <SessionReview
+                                diffs={diffs()}
+                                classes={{
+                                  root: "pb-20",
+                                  header: "px-4",
+                                  container: "px-4",
+                                }}
+                              />
                             </div>
                           </Tabs.Content>
                         </Tabs>
