@@ -21,6 +21,8 @@ jobs:
       - name: Checkout repository
         uses: actions/checkout@v4
 
+      - uses: ./.github/actions/setup-bun
+
       - name: Run opencode
         uses: sst/opencode/github@latest
         env:

@@ -2,8 +2,8 @@ import { FileDiff, Message, Model, Part, Session, SessionStatus, UserMessage } f
 import { SessionTurn } from "@opencode-ai/ui/session-turn"
 import { SessionReview } from "@opencode-ai/ui/session-review"
 import { DataProvider } from "@opencode-ai/ui/context"
-import { createAsync, query, RouteDefinition, useParams } from "@solidjs/router"
-import { createEffect, createMemo, ErrorBoundary, For, Match, Show, Suspense, Switch } from "solid-js"
+import { createAsync, query, useParams } from "@solidjs/router"
+import { createEffect, createMemo, ErrorBoundary, For, Match, Show, Switch } from "solid-js"
 import { Share } from "~/core/share"
 import { Logo, Mark } from "@opencode-ai/ui/logo"
 import { IconButton } from "@opencode-ai/ui/icon-button"
@@ -16,6 +16,7 @@ import { createStore } from "solid-js/store"
 import z from "zod"
 import NotFound from "../[...404]"
 import { Tabs } from "@opencode-ai/ui/tabs"
+import { HunkData, preloadMultiFileDiff, PreloadMultiFileDiffResult } from "@pierre/precision-diffs/ssr"
 
 const SessionDataMissingError = NamedError.create(
   "SessionDataMissingError",
@@ -36,6 +37,9 @@ const getData = query(async (shareID) => {
     session_diff: {
       [sessionID: string]: FileDiff[]
     }
+    session_diff_preload: {
+      [sessionID: string]: PreloadMultiFileDiffResult<any>[]
+    }
     session_status: {
       [sessionID: string]: SessionStatus
     }
@@ -54,6 +58,9 @@ const getData = query(async (shareID) => {
     session_diff: {
       [share.sessionID]: [],
     },
+    session_diff_preload: {
+      [share.sessionID]: [],
+    },
     session_status: {
       [share.sessionID]: {
         type: "idle",
@@ -70,6 +77,29 @@ const getData = query(async (shareID) => {
         break
       case "session_diff":
         result.session_diff[share.sessionID] = item.data
+        result.session_diff_preload[share.sessionID] = await Promise.all(
+          item.data.map(async (diff) =>
+            preloadMultiFileDiff<any>({
+              oldFile: { name: diff.file, contents: diff.before },
+              newFile: { name: diff.file, contents: diff.after },
+              options: {
+                theme: "OpenCode",
+                themeType: "system",
+                disableLineNumbers: false,
+                overflow: "wrap",
+                diffStyle: "unified",
+                diffIndicators: "bars",
+                disableBackground: false,
+                expansionLineCount: 20,
+                lineDiffType: "word-alt",
+                maxLineDiffLength: 1000,
+                maxLineLengthForHighlighting: 1000,
+                disableFileHeader: true,
+              },
+              // annotations,
+            }),
+          ),
+        )
         break
       case "message":
         result.message[item.data.sessionID] = result.message[item.data.sessionID] ?? []
@@ -141,7 +171,14 @@ export default function () {
               const provider = createMemo(() => activeMessage()?.model?.providerID)
               const modelID = createMemo(() => activeMessage()?.model?.modelID)
               const model = createMemo(() => data().model[data().sessionID]?.find((m) => m.id === modelID()))
-              const diffs = createMemo(() => data().session_diff[data().sessionID] ?? [])
+              const diffs = createMemo(() => {
+                const diffs = data().session_diff[data().sessionID] ?? []
+                const preloaded = data().session_diff_preload[data().sessionID] ?? []
+                return diffs.map((diff) => ({
+                  ...diff,
+                  preloaded: preloaded.find((d) => d.newFile.name === diff.file),
+                }))
+              })
 
               const title = () => (
                 <div class="flex flex-col gap-4 shrink-0">

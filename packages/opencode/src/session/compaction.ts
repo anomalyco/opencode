@@ -95,6 +95,7 @@ export namespace SessionCompaction {
     }
     agent: string
     abort: AbortSignal
+    auto: boolean
   }) {
     const model = await Provider.getModel(input.model.providerID, input.model.modelID)
     const system = [...SystemPrompt.compaction(model.providerID)]
@@ -198,7 +199,7 @@ export namespace SessionCompaction {
         }),
       }),
     )
-    if (result === "continue") {
+    if (result === "continue" && input.auto) {
       const continueMsg = await Session.updateMessage({
         id: Identifier.ascending("message"),
         role: "user",
@@ -234,6 +235,7 @@ export namespace SessionCompaction {
         providerID: z.string(),
         modelID: z.string(),
       }),
+      auto: z.boolean(),
     }),
     async (input) => {
       const msg = await Session.updateMessage({
@@ -251,6 +253,7 @@ export namespace SessionCompaction {
         messageID: msg.id,
         sessionID: msg.sessionID,
         type: "compaction",
+        auto: input.auto,
       })
     },
   )

@@ -50,6 +50,17 @@
     background-color: var(--background-stronger) !important;
   }
 
+  [data-slot="accordion-item"] {
+    [data-slot="accordion-content"] {
+      display: none;
+    }
+    &[data-expanded] {
+      [data-slot="accordion-content"] {
+        display: block;
+      }
+    }
+  }
+
   [data-slot="session-review-trigger-content"] {
     display: flex;
     align-items: center;
