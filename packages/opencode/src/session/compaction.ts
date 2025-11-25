@@ -224,6 +224,7 @@ export namespace SessionCompaction {
       })
     }
     if (processor.message.error) return "stop"
+    Bus.publish(Event.Compacted, { sessionID: input.sessionID })
     return "continue"
   }
 

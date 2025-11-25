@@ -368,6 +368,10 @@ nav.sidebar ul.top-level > li > details > summary .group-label > span {
 
 .content-panel {
   padding: 2rem 3rem !important;
+
+  @media (max-width: 768px) {
+    padding: 1rem 1.5rem !important;
+  }
 }
 
 .expressive-code {
