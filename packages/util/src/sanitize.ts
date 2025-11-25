@@ -1,4 +1,4 @@
-import { Part } from "@opencode-ai/sdk"
+import type { Part } from "@opencode-ai/sdk/client"
 
 export const sanitize = (text: string | undefined, remove?: RegExp) => (remove ? text?.replace(remove, "") : text) ?? ""
 
