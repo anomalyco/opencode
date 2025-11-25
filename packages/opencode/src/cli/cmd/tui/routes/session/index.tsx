@@ -124,7 +124,8 @@ export function Session() {
     if (tui?.scroll_speed) {
       return new CustomSpeedScroll(tui.scroll_speed)
     }
-    return undefined
+
+    return new CustomSpeedScroll(process.platform === "win32" ? 3 : 1)
   })
 
   createEffect(async () => {
