@@ -342,7 +342,7 @@ export namespace SessionProcessor {
                 message: error.data.message.includes("Overloaded") ? "Provider is overloaded" : error.data.message,
                 next: Date.now() + delay,
               })
-              await SessionRetry.sleep(delay, input.abort).catch(() => { })
+              await SessionRetry.sleep(delay, input.abort).catch(() => {})
               continue
             }
             input.assistantMessage.error = error
