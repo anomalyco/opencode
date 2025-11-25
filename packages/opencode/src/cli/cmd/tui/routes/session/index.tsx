@@ -124,8 +124,7 @@ export function Session() {
     if (tui?.scroll_speed) {
       return new CustomSpeedScroll(tui.scroll_speed)
     }
-
-    return new CustomSpeedScroll(process.platform === "win32" ? 3 : 1)
+    return undefined;
   })
 
   createEffect(async () => {
@@ -940,7 +939,7 @@ function UserMessage(props: {
             onMouseUp={props.onMouseUp}
             paddingTop={1}
             paddingBottom={1}
-            paddingLeft={2}
+            paddingLeft={1}
             backgroundColor={hover() ? theme.backgroundElement : theme.backgroundPanel}
             flexShrink={0}
           >
