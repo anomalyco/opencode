@@ -9,6 +9,13 @@ import { Agent } from "../agent/agent"
 import { SessionPrompt } from "../session/prompt"
 import { iife } from "@/util/iife"
 import { defer } from "@/util/defer"
+import { Wildcard } from "@/util/wildcard"
+
+export { DESCRIPTION as TASK_DESCRIPTION }
+
+export function filterSubagents(agents: Agent.Info[], subagents: Record<string, boolean>) {
+  return agents.filter((a) => Wildcard.all(a.name, subagents) !== false)
+}
 
 export const TaskTool = Tool.define("task", async () => {
   const agents = await Agent.list().then((x) => x.filter((a) => a.mode !== "primary"))
@@ -29,6 +36,9 @@ export const TaskTool = Tool.define("task", async () => {
     async execute(params, ctx) {
       const agent = await Agent.get(params.subagent_type)
       if (!agent) throw new Error(`Unknown agent type: ${params.subagent_type} is not a valid agent type`)
+      const calling = await Agent.get(ctx.agent)
+      if (calling && Wildcard.all(params.subagent_type, calling.subagents) === false)
+        throw new Error(`Agent '${params.subagent_type}' is not available to ${ctx.agent}`)
       const session = await iife(async () => {
         if (params.session_id) {
           const found = await Session.get(params.session_id).catch(() => {})
