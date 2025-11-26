@@ -113,6 +113,8 @@ stdenvNoCC.mkDerivation (finalAttrs: {
     done
   '';
 
+  dontFixup = true;
+
   meta = {
     description = "AI coding agent built for the terminal";
     longDescription = ''

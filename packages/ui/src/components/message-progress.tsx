@@ -6,6 +6,7 @@ import type { AssistantMessage as AssistantMessageType, ToolPart } from "@openco
 
 export function MessageProgress(props: { assistantMessages: () => AssistantMessageType[]; done?: boolean }) {
   const data = useData()
+  const sanitizer = createMemo(() => (data.directory ? new RegExp(`${data.directory}/`, "g") : undefined))
   const parts = createMemo(() => props.assistantMessages().flatMap((m) => data.part[m.id]))
   const done = createMemo(() => props.done ?? false)
   const currentTask = createMemo(
@@ -152,7 +153,7 @@ export function MessageProgress(props: { assistantMessages: () => AssistantMessa
                       )
                       return (
                         <div data-slot="message-progress-item">
-                          <Part message={message()!} part={part} />
+                          <Part message={message()!} part={part} sanitize={sanitizer()} />
                         </div>
                       )
                     }}
