@@ -88,9 +88,7 @@ export namespace LSPServer {
     ),
     extensions: [".ts", ".tsx", ".js", ".jsx", ".mjs", ".cjs", ".mts", ".cts"],
     async spawn(root) {
-      const tsserver = await Bun.resolve("typescript/lib/tsserver.js", Instance.directory).catch(() => {})
-      if (!tsserver) return
-      const proc = spawn(BunProc.which(), ["x", "typescript-language-server", "--stdio"], {
+      const proc = spawn(BunProc.which(), ["x", "@vtsls/language-server", "--stdio"], {
         cwd: root,
         env: {
           ...process.env,
@@ -99,11 +97,6 @@ export namespace LSPServer {
       })
       return {
         process: proc,
-        initialization: {
-          tsserver: {
-            path: tsserver,
-          },
-        },
       }
     },
   }

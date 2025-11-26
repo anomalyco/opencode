@@ -80,6 +80,7 @@ const context = createContext<{
   conceal: () => boolean
   showThinking: () => boolean
   showTimestamps: () => boolean
+  sync: ReturnType<typeof useSync>
 }>()
 
 function use() {
@@ -124,7 +125,8 @@ export function Session() {
     if (tui?.scroll_speed) {
       return new CustomSpeedScroll(tui.scroll_speed)
     }
-    return undefined
+
+    return new CustomSpeedScroll(process.platform === "win32" ? 3 : 1)
   })
 
   createEffect(async () => {
@@ -318,7 +320,9 @@ export function Session() {
       value: "session.undo",
       keybind: "messages_undo",
       category: "Session",
-      onSelect: (dialog) => {
+      onSelect: async (dialog) => {
+        const status = sync.data.session_status[route.sessionID]
+        if (status?.type !== "idle") await sdk.client.session.abort({ path: { id: route.sessionID } }).catch(() => {})
         const revert = session().revert?.messageID
         const message = messages().findLast((x) => (!revert || x.id < revert) && x.role === "user")
         if (!message) return
@@ -729,6 +733,7 @@ export function Session() {
         conceal,
         showThinking,
         showTimestamps,
+        sync,
       }}
     >
       <box flexDirection="row" paddingBottom={1} paddingTop={1} paddingLeft={2} paddingRight={2} gap={2}>
@@ -939,7 +944,7 @@ function UserMessage(props: {
             onMouseUp={props.onMouseUp}
             paddingTop={1}
             paddingBottom={1}
-            paddingLeft={1}
+            paddingLeft={2}
             backgroundColor={hover() ? theme.backgroundElement : theme.backgroundPanel}
             flexShrink={0}
           >
@@ -1047,11 +1052,11 @@ function AssistantMessage(props: { message: AssistantMessage; parts: Part[]; las
         <Match when={props.last || final()}>
           <box paddingLeft={3}>
             <text marginTop={1}>
-              <span style={{ fg: local.agent.color(props.message.mode) }}>▣</span>{" "}
-              <span style={{ fg: theme.text }}>{Locale.titlecase(props.message.mode)}</span>{" "}
-              <span style={{ fg: theme.textMuted }}>⬝{props.message.modelID}</span>
+              <span style={{ fg: local.agent.color(props.message.mode) }}>▣ </span>{" "}
+              <span style={{ fg: theme.text }}>{Locale.titlecase(props.message.mode)}</span>
+              <span style={{ fg: theme.textMuted }}> · {props.message.modelID}</span>
               <Show when={duration()}>
-                <span style={{ fg: theme.textMuted }}> ⬝{Locale.duration(duration())}</span>
+                <span style={{ fg: theme.textMuted }}> · {Locale.duration(duration())}</span>
               </Show>
             </text>
           </box>
@@ -1444,6 +1449,34 @@ ToolRegistry.register<typeof WebFetchTool>({
   },
 })
 
+ToolRegistry.register({
+  name: "codesearch",
+  container: "inline",
+  render(props: ToolProps<any>) {
+    const input = props.input as any
+    const metadata = props.metadata as any
+    return (
+      <ToolTitle icon="◇" fallback="Searching code..." when={input.query}>
+        Exa Code Search "{input.query}" <Show when={metadata.results}>({metadata.results} results)</Show>
+      </ToolTitle>
+    )
+  },
+})
+
+ToolRegistry.register({
+  name: "websearch",
+  container: "inline",
+  render(props: ToolProps<any>) {
+    const input = props.input as any
+    const metadata = props.metadata as any
+    return (
+      <ToolTitle icon="◈" fallback="Searching web..." when={input.query}>
+        Exa Web Search "{input.query}" <Show when={metadata.numResults}>({metadata.numResults} results)</Show>
+      </ToolTitle>
+    )
+  },
+})
+
 ToolRegistry.register<typeof EditTool>({
   name: "edit",
   container: "block",
@@ -1451,7 +1484,12 @@ ToolRegistry.register<typeof EditTool>({
     const ctx = use()
     const { theme, syntax } = useTheme()
 
-    const style = createMemo(() => (ctx.width > 120 ? "split" : "stacked"))
+    const style = createMemo(() => {
+      const diffStyle = ctx.sync.data.config.tui?.diff_style
+      if (diffStyle === "stacked") return "stacked"
+      // Default to "auto" behavior
+      return ctx.width > 120 ? "split" : "stacked"
+    })
 
     const diff = createMemo(() => {
       const diff = props.metadata.diff ?? props.permission["diff"]

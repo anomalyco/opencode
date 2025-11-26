@@ -1,6 +1,6 @@
 import z from "zod"
 import { Bus } from "../bus"
-import { NamedError } from "../util/error"
+import { NamedError } from "@opencode-ai/util/error"
 import { Message } from "./message"
 import { APICallError, convertToModelMessages, LoadAPIKeyError, type ModelMessage, type UIMessage } from "ai"
 import { Identifier } from "../id/id"
@@ -146,6 +146,7 @@ export namespace MessageV2 {
 
   export const CompactionPart = PartBase.extend({
     type: z.literal("compaction"),
+    auto: z.boolean(),
   }).meta({
     ref: "CompactionPart",
   })

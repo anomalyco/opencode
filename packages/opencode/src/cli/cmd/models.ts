@@ -1,6 +1,7 @@
 import type { Argv } from "yargs"
 import { Instance } from "../../project/instance"
 import { Provider } from "../../provider/provider"
+import { ModelsDev } from "../../provider/models"
 import { cmd } from "./cmd"
 import { UI } from "../ui"
 import { EOL } from "os"
@@ -19,8 +20,17 @@ export const ModelsCommand = cmd({
         describe: "use more verbose model output (includes metadata like costs)",
         type: "boolean",
       })
+      .option("refresh", {
+        describe: "refresh the models cache from models.dev",
+        type: "boolean",
+      })
   },
   handler: async (args) => {
+    if (args.refresh) {
+      await ModelsDev.refresh()
+      UI.println(UI.Style.TEXT_SUCCESS_BOLD + "Models cache refreshed" + UI.Style.TEXT_NORMAL)
+    }
+
     await Instance.provide({
       directory: process.cwd(),
       async fn() {
@@ -28,7 +38,8 @@ export const ModelsCommand = cmd({
 
         function printModels(providerID: string, verbose?: boolean) {
           const provider = providers[providerID]
-          for (const [modelID, model] of Object.entries(provider.info.models)) {
+          const sortedModels = Object.entries(provider.info.models).sort(([a], [b]) => a.localeCompare(b))
+          for (const [modelID, model] of sortedModels) {
             process.stdout.write(`${providerID}/${modelID}`)
             process.stdout.write(EOL)
             if (verbose) {
@@ -49,7 +60,15 @@ export const ModelsCommand = cmd({
           return
         }
 
-        for (const providerID of Object.keys(providers)) {
+        const providerIDs = Object.keys(providers).sort((a, b) => {
+          const aIsOpencode = a.startsWith("opencode")
+          const bIsOpencode = b.startsWith("opencode")
+          if (aIsOpencode && !bIsOpencode) return -1
+          if (!aIsOpencode && bIsOpencode) return 1
+          return a.localeCompare(b)
+        })
+
+        for (const providerID of providerIDs) {
           printModels(providerID, args.verbose)
         }
       },

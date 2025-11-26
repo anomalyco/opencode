@@ -1,6 +1,6 @@
 import { spawn } from "bun"
 import z from "zod"
-import { NamedError } from "../util/error"
+import { NamedError } from "@opencode-ai/util/error"
 import { Log } from "../util/log"
 import { Bus } from "../bus"
 

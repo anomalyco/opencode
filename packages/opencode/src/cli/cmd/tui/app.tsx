@@ -187,16 +187,13 @@ function App() {
     })
   })
 
+  let continued = false
   createEffect(() => {
-    if (sync.status !== "complete") return
-    if (args.continue) {
-      const match = sync.data.session.at(0)?.id
-      if (match) {
-        route.navigate({
-          type: "session",
-          sessionID: match,
-        })
-      }
+    if (continued || sync.status !== "complete" || !args.continue) return
+    const match = sync.data.session.at(0)?.id
+    if (match) {
+      continued = true
+      route.navigate({ type: "session", sessionID: match })
     }
   })
 
@@ -490,7 +487,10 @@ function App() {
             <text fg={theme.textMuted}>v{Installation.VERSION}</text>
           </box>
           <box paddingLeft={1} paddingRight={1}>
-            <text fg={theme.textMuted}>{process.cwd().replace(Global.Path.home, "~")}</text>
+            <text fg={theme.textMuted}>
+              {process.cwd().replace(Global.Path.home, "~")}
+              {sync.data.vcs?.vcs?.branch ? `:${sync.data.vcs.vcs.branch}` : ""}
+            </text>
           </box>
         </box>
         <Show when={false}>

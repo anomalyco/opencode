@@ -371,6 +371,7 @@ export type CompactionPart = {
   sessionID: string
   messageID: string
   type: "compaction"
+  auto: boolean
 }
 
 export type Part =
@@ -588,6 +589,13 @@ export type EventSessionError = {
   }
 }
 
+export type EventVcsBranchUpdated = {
+  type: "vcs.branch.updated"
+  properties: {
+    branch?: string
+  }
+}
+
 export type EventTuiPromptAppend = {
   type: "tui.prompt.append"
   properties: {
@@ -669,6 +677,7 @@ export type Event =
   | EventSessionDeleted
   | EventSessionDiff
   | EventSessionError
+  | EventVcsBranchUpdated
   | EventTuiPromptAppend
   | EventTuiCommandExecute
   | EventTuiToastShow
@@ -994,6 +1003,10 @@ export type Config = {
        */
       enabled: boolean
     }
+    /**
+     * Control diff rendering style: 'auto' adapts to terminal width, 'stacked' always shows single column
+     */
+    diff_style?: "auto" | "stacked"
   }
   /**
    * Command configuration, see https://opencode.ai/docs/commands
@@ -1021,9 +1034,9 @@ export type Config = {
    */
   autoshare?: boolean
   /**
-   * Automatically update to the latest version
+   * Automatically update to the latest version. Set to true to auto-update, false to disable, or 'notify' to show update notifications
    */
-  autoupdate?: boolean
+  autoupdate?: boolean | "notify"
   /**
    * Disable providers that are loaded automatically
    */
@@ -1123,10 +1136,14 @@ export type Config = {
          */
         enterpriseUrl?: string
         /**
+         * Enable promptCacheKey for this provider (default false)
+         */
+        setCacheKey?: boolean
+        /**
          * Timeout in milliseconds for requests to this provider. Default is 300000 (5 minutes). Set to false to disable timeout.
          */
         timeout?: number | false
-        [key: string]: unknown | string | (number | false) | undefined
+        [key: string]: unknown | string | boolean | (number | false) | undefined
       }
     }
   }
@@ -1244,6 +1261,15 @@ export type Path = {
   config: string
   worktree: string
   directory: string
+}
+
+export type VcsInfo = {
+  worktree: string
+  directory: string
+  projectID: string
+  vcs?: {
+    branch: string
+  }
 }
 
 export type NotFoundError = {
@@ -1681,6 +1707,24 @@ export type PathGetResponses = {
 }
 
 export type PathGetResponse = PathGetResponses[keyof PathGetResponses]
+
+export type VcsGetData = {
+  body?: never
+  path?: never
+  query?: {
+    directory?: string
+  }
+  url: "/vcs"
+}
+
+export type VcsGetResponses = {
+  /**
+   * VCS info
+   */
+  200: VcsInfo
+}
+
+export type VcsGetResponse = VcsGetResponses[keyof VcsGetResponses]
 
 export type SessionListData = {
   body?: never
@@ -2300,6 +2344,55 @@ export type SessionMessageResponses = {
 }
 
 export type SessionMessageResponse = SessionMessageResponses[keyof SessionMessageResponses]
+
+export type SessionPromptAsyncData = {
+  body?: {
+    messageID?: string
+    model?: {
+      providerID: string
+      modelID: string
+    }
+    agent?: string
+    noReply?: boolean
+    system?: string
+    tools?: {
+      [key: string]: boolean
+    }
+    parts: Array<TextPartInput | FilePartInput | AgentPartInput | SubtaskPartInput>
+  }
+  path: {
+    /**
+     * Session ID
+     */
+    id: string
+  }
+  query?: {
+    directory?: string
+  }
+  url: "/session/{id}/prompt_async"
+}
+
+export type SessionPromptAsyncErrors = {
+  /**
+   * Bad request
+   */
+  400: BadRequestError
+  /**
+   * Not found
+   */
+  404: NotFoundError
+}
+
+export type SessionPromptAsyncError = SessionPromptAsyncErrors[keyof SessionPromptAsyncErrors]
+
+export type SessionPromptAsyncResponses = {
+  /**
+   * Prompt accepted
+   */
+  204: void
+}
+
+export type SessionPromptAsyncResponse = SessionPromptAsyncResponses[keyof SessionPromptAsyncResponses]
 
 export type SessionCommandData = {
   body?: {

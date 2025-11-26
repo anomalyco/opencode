@@ -128,7 +128,13 @@ export namespace ProviderTransform {
     return undefined
   }
 
-  export function options(providerID: string, modelID: string, npm: string, sessionID: string): Record<string, any> {
+  export function options(
+    providerID: string,
+    modelID: string,
+    npm: string,
+    sessionID: string,
+    providerOptions?: Record<string, any>,
+  ): Record<string, any> {
     const result: Record<string, any> = {}
 
     // switch to providerID later, for now use this
@@ -138,7 +144,7 @@ export namespace ProviderTransform {
       }
     }
 
-    if (providerID === "openai") {
+    if (providerID === "openai" || providerOptions?.setCacheKey) {
       result["promptCacheKey"] = sessionID
     }
 
@@ -248,7 +254,7 @@ export namespace ProviderTransform {
     return standardLimit
   }
 
-  export function schema(_providerID: string, _modelID: string, schema: JSONSchema.BaseSchema) {
+  export function schema(providerID: string, modelID: string, schema: JSONSchema.BaseSchema) {
     /*
     if (["openai", "azure"].includes(providerID)) {
       if (schema.type === "object" && schema.properties) {
@@ -265,10 +271,39 @@ export namespace ProviderTransform {
         }
       }
     }
-
-    if (providerID === "google") {
-    }
     */
+
+    // Convert integer enums to string enums for Google/Gemini
+    if (providerID === "google" || modelID.includes("gemini")) {
+      const convertIntEnumsToStrings = (obj: any): any => {
+        if (obj === null || typeof obj !== "object") {
+          return obj
+        }
+
+        if (Array.isArray(obj)) {
+          return obj.map(convertIntEnumsToStrings)
+        }
+
+        const result: any = {}
+        for (const [key, value] of Object.entries(obj)) {
+          if (key === "enum" && Array.isArray(value)) {
+            // Convert all enum values to strings
+            result[key] = value.map((v) => String(v))
+            // If we have integer type with enum, change type to string
+            if (result.type === "integer" || result.type === "number") {
+              result.type = "string"
+            }
+          } else if (typeof value === "object" && value !== null) {
+            result[key] = convertIntEnumsToStrings(value)
+          } else {
+            result[key] = value
+          }
+        }
+        return result
+      }
+
+      schema = convertIntEnumsToStrings(schema)
+    }
 
     return schema
   }
