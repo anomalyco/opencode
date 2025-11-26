@@ -333,7 +333,7 @@ export default function Page() {
                 flex: layout.review.state() === "pane",
               }}
             >
-              <div class="relative shrink-0 px-6 py-3 flex flex-col gap-6 flex-1 min-h-0 w-full max-w-2xl mx-auto">
+              <div class="relative shrink-0 py-3 flex flex-col gap-6 flex-1 min-h-0 w-full max-w-2xl mx-auto">
                 <Switch>
                   <Match when={session.id}>
                     <div class="flex items-start justify-start h-full min-h-0">
@@ -364,7 +364,7 @@ export default function Page() {
                       <SessionTurn
                         sessionID={session.id!}
                         messageID={session.messages.active()?.id!}
-                        classes={{ root: "pb-20 flex-1 min-w-0", content: "pb-20" }}
+                        classes={{ root: "pb-20 flex-1 min-w-0", content: "pb-20", container: "px-6" }}
                       />
                     </div>
                   </Match>
