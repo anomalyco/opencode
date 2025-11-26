@@ -3,7 +3,7 @@ import { createSignal } from "solid-js"
 import "./index.css"
 import { Button } from "./components/button"
 import { Select } from "./components/select"
-import { Fonts } from "./components/fonts"
+import { Font } from "./components/font"
 import { Accordion } from "./components/accordion"
 import { Tabs } from "./components/tabs"
 import { Tooltip } from "./components/tooltip"
@@ -279,7 +279,7 @@ const Demo: Component = () => {
 
   return (
     <>
-      <Fonts />
+      <Font />
       <main>
         <Content />
         <Content dark />

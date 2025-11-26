@@ -63,6 +63,17 @@
 
 [data-component="tool-output"] {
   white-space: pre;
+  padding: 8px 12px;
+  height: fit-content;
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  justify-content: flex-start;
+
+  pre {
+    margin: 0;
+    padding: 0;
+  }
 }
 
 [data-component="edit-trigger"],

@@ -13,13 +13,20 @@ import { ModelTable } from "@opencode-ai/console-core/schema/model.sql.js"
 import { ProviderTable } from "@opencode-ai/console-core/schema/provider.sql.js"
 import { logger } from "./logger"
 import { AuthError, CreditsError, MonthlyLimitError, UserLimitError, ModelError, RateLimitError } from "./error"
-import { createBodyConverter, createStreamPartConverter, createResponseConverter } from "./provider/provider"
+import {
+  createBodyConverter,
+  createStreamPartConverter,
+  createResponseConverter,
+  ProviderHelper,
+  UsageInfo,
+} from "./provider/provider"
 import { anthropicHelper } from "./provider/anthropic"
 import { googleHelper } from "./provider/google"
 import { openaiHelper } from "./provider/openai"
 import { oaCompatHelper } from "./provider/openai-compatible"
 import { createRateLimiter } from "./rateLimiter"
 import { createDataDumper } from "./dataDumper"
+import { createTrialLimiter } from "./trialLimiter"
 
 type ZenData = Awaited<ReturnType<typeof ZenData.list>>
 type RetryOptions = {
@@ -62,11 +69,13 @@ export async function handler(
     const zenData = ZenData.list()
     const modelInfo = validateModel(zenData, model)
     const dataDumper = createDataDumper(sessionId, requestId)
+    const trialLimiter = createTrialLimiter(modelInfo.trial?.limit, ip)
+    const isTrial = await trialLimiter?.isTrial()
     const rateLimiter = createRateLimiter(modelInfo.id, modelInfo.rateLimit, ip)
     await rateLimiter?.check()
 
     const retriableRequest = async (retry: RetryOptions = { excludeProviders: [], retryCount: 0 }) => {
-      const providerInfo = selectProvider(zenData, modelInfo, sessionId, retry)
+      const providerInfo = selectProvider(zenData, modelInfo, sessionId, isTrial ?? false, retry)
       const authInfo = await authenticate(modelInfo, providerInfo)
       validateBilling(authInfo, modelInfo)
       validateModelSettings(authInfo)
@@ -136,8 +145,10 @@ export async function handler(
       logger.debug("RESPONSE: " + body)
       dataDumper?.provideResponse(body)
       dataDumper?.flush()
+      const tokensInfo = providerInfo.normalizeUsage(json.usage)
+      await trialLimiter?.track(tokensInfo)
       await rateLimiter?.track()
-      await trackUsage(authInfo, modelInfo, providerInfo, json.usage)
+      await trackUsage(authInfo, modelInfo, providerInfo, tokensInfo)
       await reload(authInfo)
       return new Response(body, {
         status: res.status,
@@ -169,7 +180,9 @@ export async function handler(
                 await rateLimiter?.track()
                 const usage = usageParser.retrieve()
                 if (usage) {
-                  await trackUsage(authInfo, modelInfo, providerInfo, usage)
+                  const tokensInfo = providerInfo.normalizeUsage(usage)
+                  await trialLimiter?.track(tokensInfo)
+                  await trackUsage(authInfo, modelInfo, providerInfo, tokensInfo)
                   await reload(authInfo)
                 }
                 c.close()
@@ -275,8 +288,19 @@ export async function handler(
     return { id: modelId, ...modelData }
   }
 
-  function selectProvider(zenData: ZenData, modelInfo: ModelInfo, sessionId: string, retry: RetryOptions) {
+  function selectProvider(
+    zenData: ZenData,
+    modelInfo: ModelInfo,
+    sessionId: string,
+    isTrial: boolean,
+    retry: RetryOptions,
+  ) {
     const provider = (() => {
+      // temporarily commment out
+      //if (isTrial) {
+      //  return modelInfo.providers.find((provider) => provider.id === modelInfo.trial!.provider)
+      //}
+
       if (retry.retryCount === MAX_RETRIES) {
         return modelInfo.providers.find((provider) => provider.id === modelInfo.fallbackProvider)
       }
@@ -432,9 +456,14 @@ export async function handler(
     providerInfo.apiKey = authInfo.provider.credentials
   }
 
-  async function trackUsage(authInfo: AuthInfo, modelInfo: ModelInfo, providerInfo: ProviderInfo, usage: any) {
+  async function trackUsage(
+    authInfo: AuthInfo,
+    modelInfo: ModelInfo,
+    providerInfo: ProviderInfo,
+    usageInfo: UsageInfo,
+  ) {
     const { inputTokens, outputTokens, reasoningTokens, cacheReadTokens, cacheWrite5mTokens, cacheWrite1hTokens } =
-      providerInfo.normalizeUsage(usage)
+      usageInfo
 
     const modelCost =
       modelInfo.cost200K &&

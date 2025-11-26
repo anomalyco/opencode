@@ -31,6 +31,7 @@ export function SessionTurn(
   const match = Binary.search(data.session, props.sessionID, (s) => s.id)
   if (!match.found) throw new Error(`Session ${props.sessionID} not found`)
 
+  const sanitizer = createMemo(() => (data.directory ? new RegExp(`${data.directory}/`, "g") : undefined))
   const messages = createMemo(() => (props.sessionID ? (data.message[props.sessionID] ?? []) : []))
   const userMessages = createMemo(() =>
     messages()
@@ -116,7 +117,7 @@ export function SessionTurn(
                   </div>
                 </div>
                 <div data-slot="session-turn-message-content">
-                  <Message message={msg()} parts={parts()} />
+                  <Message message={msg()} parts={parts()} sanitize={sanitizer()} />
                 </div>
                 {/* Summary */}
                 <Show when={completed()}>
@@ -222,10 +223,11 @@ export function SessionTurn(
                                     <Message
                                       message={assistantMessage}
                                       parts={parts().filter((p) => p?.id !== last()?.id)}
+                                      sanitize={sanitizer()}
                                     />
                                   )
                                 }
-                                return <Message message={assistantMessage} parts={parts()} />
+                                return <Message message={assistantMessage} parts={parts()} sanitize={sanitizer()} />
                               }}
                             </For>
                             <Show when={error()}>

@@ -55,6 +55,9 @@ class Resource:
     class EMAILOCTOPUS_API_KEY:
         type: str
         value: str
+    class Enterprise:
+        type: str
+        url: str
     class EnterpriseStorage:
         name: str
         type: str

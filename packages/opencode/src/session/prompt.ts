@@ -408,6 +408,7 @@ export namespace SessionPrompt {
             modelID: model.modelID,
           },
           sessionID,
+          auto: task.auto,
         })
         if (result === "stop") break
         continue
@@ -423,6 +424,7 @@ export namespace SessionPrompt {
           sessionID,
           agent: lastUser.agent,
           model: lastUser.model,
+          auto: true,
         })
         continue
       }
@@ -475,13 +477,14 @@ export namespace SessionPrompt {
         tools: lastUser.tools,
         processor,
       })
+      const provider = await Provider.getProvider(model.providerID)
       const params = await Plugin.trigger(
         "chat.params",
         {
           sessionID: sessionID,
           agent: lastUser.agent,
           model: model.info,
-          provider: await Provider.getProvider(model.providerID),
+          provider,
           message: lastUser,
         },
         {
@@ -491,7 +494,9 @@ export namespace SessionPrompt {
           topP: agent.topP ?? ProviderTransform.topP(model.providerID, model.modelID),
           options: pipe(
             {},
-            mergeDeep(ProviderTransform.options(model.providerID, model.modelID, model.npm ?? "", sessionID)),
+            mergeDeep(
+              ProviderTransform.options(model.providerID, model.modelID, model.npm ?? "", sessionID, provider?.options),
+            ),
             mergeDeep(model.info.options),
             mergeDeep(agent.options),
           ),
@@ -1410,9 +1415,18 @@ export namespace SessionPrompt {
     if (!isFirst) return
     const small =
       (await Provider.getSmallModel(input.providerID)) ?? (await Provider.getModel(input.providerID, input.modelID))
+    const provider = await Provider.getProvider(small.providerID)
     const options = pipe(
       {},
-      mergeDeep(ProviderTransform.options(small.providerID, small.modelID, small.npm ?? "", input.session.id)),
+      mergeDeep(
+        ProviderTransform.options(
+          small.providerID,
+          small.modelID,
+          small.npm ?? "",
+          input.session.id,
+          provider?.options,
+        ),
+      ),
       mergeDeep(ProviderTransform.smallOptions({ providerID: small.providerID, modelID: small.modelID })),
       mergeDeep(small.info.options),
     )
