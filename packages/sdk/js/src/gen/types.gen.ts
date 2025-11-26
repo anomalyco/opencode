@@ -1013,6 +1013,10 @@ export type Config = {
   plugin?: Array<string>
   snapshot?: boolean
   /**
+   * Display LLM API call counter in the session header. Disabled by default.
+   */
+  llm_counter?: boolean
+  /**
    * Control sharing behavior:'manual' allows manual sharing via commands, 'auto' enables automatic sharing, 'disabled' disables all sharing
    */
   share?: "manual" | "auto" | "disabled"

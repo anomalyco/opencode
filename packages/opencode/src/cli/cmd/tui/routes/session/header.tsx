@@ -16,12 +16,17 @@ const Title = (props: { session: Accessor<Session> }) => {
   )
 }
 
-const ContextInfo = (props: { context: Accessor<string | undefined>; cost: Accessor<string>; llmCalls: Accessor<number> }) => {
+const ContextInfo = (props: {
+  context: Accessor<string | undefined>
+  cost: Accessor<string>
+  llmCalls: Accessor<number>
+  showLlmCalls: Accessor<boolean>
+}) => {
   const { theme } = useTheme()
   return (
     <Show when={props.context()}>
       <text fg={theme.textMuted} wrapMode="none" flexShrink={0}>
-        {props.context()} ({props.cost()}) ({props.llmCalls()} calls)
+        {props.context()} ({props.cost()}){props.showLlmCalls() ? ` (${props.llmCalls()} calls)` : ""}
       </text>
     </Show>
   )
@@ -33,6 +38,7 @@ export function Header() {
   const session = createMemo(() => sync.session.get(route.sessionID)!)
   const messages = createMemo(() => sync.data.message[route.sessionID] ?? [])
   const shareEnabled = createMemo(() => sync.data.config.share !== "disabled")
+  const showLlmCalls = createMemo(() => sync.data.config.llm_counter === true)
 
   const cost = createMemo(() => {
     const total = pipe(
@@ -83,7 +89,7 @@ export function Header() {
         fallback={
           <box flexDirection="row" justifyContent="space-between" gap={1}>
             <Title session={session} />
-            <ContextInfo context={context} cost={cost} llmCalls={llmCalls} />
+            <ContextInfo context={context} cost={cost} llmCalls={llmCalls} showLlmCalls={showLlmCalls} />
           </box>
         }
       >
@@ -103,7 +109,7 @@ export function Header() {
               </Match>
             </Switch>
           </box>
-          <ContextInfo context={context} cost={cost} llmCalls={llmCalls} />
+          <ContextInfo context={context} cost={cost} llmCalls={llmCalls} showLlmCalls={showLlmCalls} />
         </box>
       </Show>
     </box>

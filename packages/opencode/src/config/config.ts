@@ -469,6 +469,10 @@ export namespace Config {
         .optional(),
       plugin: z.string().array().optional(),
       snapshot: z.boolean().optional(),
+      llm_counter: z
+        .boolean()
+        .optional()
+        .describe("Display LLM API call counter in the session header. Disabled by default."),
       share: z
         .enum(["manual", "auto", "disabled"])
         .optional()
