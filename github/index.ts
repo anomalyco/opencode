@@ -5,7 +5,7 @@ import { graphql } from "@octokit/graphql"
 import * as core from "@actions/core"
 import * as github from "@actions/github"
 import type { Context as GitHubContext } from "@actions/github/lib/context"
-import type { IssueCommentEvent, PullRequestReviewCommentEvent } from "@octokit/webhooks-types"
+import type { IssueCommentEvent } from "@octokit/webhooks-types"
 import { createOpencodeClient } from "@opencode-ai/sdk"
 import { spawn } from "node:child_process"
 
@@ -124,7 +124,7 @@ let exitCode = 0
 type PromptFiles = Awaited<ReturnType<typeof getUserPrompt>>["promptFiles"]
 
 try {
-  assertContextEvent("issue_comment", "pull_request_review_comment")
+  assertContextEvent("issue_comment")
   assertPayloadKeyword()
   await assertOpencodeConnected()
 
@@ -241,28 +241,10 @@ function createOpencode() {
 }
 
 function assertPayloadKeyword() {
-  const payload = useContext().payload as IssueCommentEvent | PullRequestReviewCommentEvent
+  const payload = useContext().payload as IssueCommentEvent
   const body = payload.comment.body.trim()
   if (!body.match(/(?:^|\s)(?:\/opencode|\/oc)(?=$|\s)/)) {
     throw new Error("Comments must mention `/opencode` or `/oc`")
-  }
-}
-
-function getReviewCommentContext() {
-  const context = useContext()
-  if (context.eventName !== "pull_request_review_comment") {
-    return null
-  }
-
-  const payload = context.payload as PullRequestReviewCommentEvent
-  return {
-    file: payload.comment.path,
-    diffHunk: payload.comment.diff_hunk,
-    line: payload.comment.line,
-    originalLine: payload.comment.original_line,
-    position: payload.comment.position,
-    commitId: payload.comment.commit_id,
-    originalCommitId: payload.comment.original_commit_id,
   }
 }
 
@@ -271,13 +253,7 @@ async function assertOpencodeConnected() {
   let connected = false
   do {
     try {
-      await client.app.log<true>({
-        body: {
-          service: "github-workflow",
-          level: "info",
-          message: "Prepare to react to Github Workflow event",
-        },
-      })
+      await client.app.get<true>()
       connected = true
       break
     } catch (e) {}
@@ -407,24 +383,11 @@ async function createComment() {
 }
 
 async function getUserPrompt() {
-  const context = useContext()
-  const payload = context.payload as IssueCommentEvent | PullRequestReviewCommentEvent
-  const reviewContext = getReviewCommentContext()
-
   let prompt = (() => {
+    const payload = useContext().payload as IssueCommentEvent
     const body = payload.comment.body.trim()
-    if (body === "/opencode" || body === "/oc") {
-      if (reviewContext) {
-        return `Review this code change and suggest improvements for the commented lines:\n\nFile: ${reviewContext.file}\nLines: ${reviewContext.line}\n\n${reviewContext.diffHunk}`
-      }
-      return "Summarize this thread"
-    }
-    if (body.includes("/opencode") || body.includes("/oc")) {
-      if (reviewContext) {
-        return `${body}\n\nContext: You are reviewing a comment on file "${reviewContext.file}" at line ${reviewContext.line}.\n\nDiff context:\n${reviewContext.diffHunk}`
-      }
-      return body
-    }
+    if (body === "/opencode" || body === "/oc") return "Summarize this thread"
+    if (body.includes("/opencode") || body.includes("/oc")) return body
     throw new Error("Comments must mention `/opencode` or `/oc`")
   })()
 

@@ -7,7 +7,7 @@ import { graphql } from "@octokit/graphql"
 import * as core from "@actions/core"
 import * as github from "@actions/github"
 import type { Context } from "@actions/github/lib/context"
-import type { IssueCommentEvent, PullRequestReviewCommentEvent } from "@octokit/webhooks-types"
+import type { IssueCommentEvent } from "@octokit/webhooks-types"
 import { UI } from "../ui"
 import { cmd } from "./cmd"
 import { ModelsDev } from "../../provider/models"
@@ -328,8 +328,6 @@ export const GithubInstallCommand = cmd({
 on:
   issue_comment:
     types: [created]
-  pull_request_review_comment:
-    types: [created]
 
 jobs:
   opencode:
@@ -380,7 +378,7 @@ export const GithubRunCommand = cmd({
       const isMock = args.token || args.event
 
       const context = isMock ? (JSON.parse(args.event!) as Context) : github.context
-      if (context.eventName !== "issue_comment" && context.eventName !== "pull_request_review_comment") {
+      if (context.eventName !== "issue_comment") {
         core.setFailed(`Unsupported event type: ${context.eventName}`)
         process.exit(1)
       }
@@ -389,13 +387,9 @@ export const GithubRunCommand = cmd({
       const runId = normalizeRunId()
       const share = normalizeShare()
       const { owner, repo } = context.repo
-      const payload = context.payload as IssueCommentEvent | PullRequestReviewCommentEvent
+      const payload = context.payload as IssueCommentEvent
       const actor = context.actor
-
-      const issueId =
-        context.eventName === "pull_request_review_comment"
-          ? (payload as PullRequestReviewCommentEvent).pull_request.number
-          : (payload as IssueCommentEvent).issue.number
+      const issueId = payload.issue.number
       const runUrl = `/${owner}/${repo}/actions/runs/${runId}`
       const shareBaseUrl = isMock ? "https://dev.opencode.ai" : "https://opencode.ai"
 
@@ -537,39 +531,11 @@ export const GithubRunCommand = cmd({
         throw new Error(`Invalid share value: ${value}. Share must be a boolean.`)
       }
 
-      function getReviewCommentContext() {
-        if (context.eventName !== "pull_request_review_comment") {
-          return null
-        }
-
-        const reviewPayload = payload as PullRequestReviewCommentEvent
-        return {
-          file: reviewPayload.comment.path,
-          diffHunk: reviewPayload.comment.diff_hunk,
-          line: reviewPayload.comment.line,
-          originalLine: reviewPayload.comment.original_line,
-          position: reviewPayload.comment.position,
-          commitId: reviewPayload.comment.commit_id,
-          originalCommitId: reviewPayload.comment.original_commit_id,
-        }
-      }
-
       async function getUserPrompt() {
-        const reviewContext = getReviewCommentContext()
         let prompt = (() => {
           const body = payload.comment.body.trim()
-          if (body === "/opencode" || body === "/oc") {
-            if (reviewContext) {
-              return `Review this code change and suggest improvements for the commented lines:\n\nFile: ${reviewContext.file}\nLines: ${reviewContext.line}\n\n${reviewContext.diffHunk}`
-            }
-            return "Summarize this thread"
-          }
-          if (body.includes("/opencode") || body.includes("/oc")) {
-            if (reviewContext) {
-              return `${body}\n\nContext: You are reviewing a comment on file "${reviewContext.file}" at line ${reviewContext.line}.\n\nDiff context:\n${reviewContext.diffHunk}`
-            }
-            return body
-          }
+          if (body === "/opencode" || body === "/oc") return "Summarize this thread"
+          if (body.includes("/opencode") || body.includes("/oc")) return body
           throw new Error("Comments must mention `/opencode` or `/oc`")
         })()
 
