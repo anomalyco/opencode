@@ -448,11 +448,6 @@ export namespace Config {
       ref: "KeybindsConfig",
     })
 
-  export const DiffStyle = z.enum(["auto", "stacked"]).meta({
-    ref: "DiffStyleConfig",
-  })
-  export type DiffStyle = z.infer<typeof DiffStyle>
-
   export const TUI = z.object({
     scroll_speed: z.number().min(0.001).optional().describe("TUI scroll speed"),
     scroll_acceleration: z
@@ -461,9 +456,10 @@ export namespace Config {
       })
       .optional()
       .describe("Scroll acceleration settings"),
-    diff_style: DiffStyle.optional().describe(
-      "Control diff rendering style: 'auto' adapts to terminal width, 'stacked' always shows single column",
-    ),
+    diff_style: z
+      .enum(["auto", "stacked"])
+      .optional()
+      .describe("Control diff rendering style: 'auto' adapts to terminal width, 'stacked' always shows single column"),
   })
 
   export const Layout = z.enum(["auto", "stretch"]).meta({
