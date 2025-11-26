@@ -80,6 +80,7 @@ const context = createContext<{
   conceal: () => boolean
   showThinking: () => boolean
   showTimestamps: () => boolean
+  sync: ReturnType<typeof useSync>
 }>()
 
 function use() {
@@ -319,7 +320,9 @@ export function Session() {
       value: "session.undo",
       keybind: "messages_undo",
       category: "Session",
-      onSelect: (dialog) => {
+      onSelect: async (dialog) => {
+        const status = sync.data.session_status[route.sessionID]
+        if (status?.type !== "idle") await sdk.client.session.abort({ path: { id: route.sessionID } }).catch(() => {})
         const revert = session().revert?.messageID
         const message = messages().findLast((x) => (!revert || x.id < revert) && x.role === "user")
         if (!message) return
@@ -730,6 +733,7 @@ export function Session() {
         conceal,
         showThinking,
         showTimestamps,
+        sync,
       }}
     >
       <box flexDirection="row" paddingBottom={1} paddingTop={1} paddingLeft={2} paddingRight={2} gap={2}>
@@ -1445,6 +1449,34 @@ ToolRegistry.register<typeof WebFetchTool>({
   },
 })
 
+ToolRegistry.register({
+  name: "codesearch",
+  container: "inline",
+  render(props: ToolProps<any>) {
+    const input = props.input as any
+    const metadata = props.metadata as any
+    return (
+      <ToolTitle icon="◇" fallback="Searching code..." when={input.query}>
+        Exa Code Search "{input.query}" <Show when={metadata.results}>({metadata.results} results)</Show>
+      </ToolTitle>
+    )
+  },
+})
+
+ToolRegistry.register({
+  name: "websearch",
+  container: "inline",
+  render(props: ToolProps<any>) {
+    const input = props.input as any
+    const metadata = props.metadata as any
+    return (
+      <ToolTitle icon="◈" fallback="Searching web..." when={input.query}>
+        Exa Web Search "{input.query}" <Show when={metadata.numResults}>({metadata.numResults} results)</Show>
+      </ToolTitle>
+    )
+  },
+})
+
 ToolRegistry.register<typeof EditTool>({
   name: "edit",
   container: "block",
@@ -1452,7 +1484,12 @@ ToolRegistry.register<typeof EditTool>({
     const ctx = use()
     const { theme, syntax } = useTheme()
 
-    const style = createMemo(() => (ctx.width > 120 ? "split" : "stacked"))
+    const style = createMemo(() => {
+      const diffStyle = ctx.sync.data.config.tui?.diff_style
+      if (diffStyle === "stacked") return "stacked"
+      // Default to "auto" behavior
+      return ctx.width > 120 ? "split" : "stacked"
+    })
 
     const diff = createMemo(() => {
       const diff = props.metadata.diff ?? props.permission["diff"]

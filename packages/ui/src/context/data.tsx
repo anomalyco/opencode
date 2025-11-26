@@ -23,7 +23,7 @@ type Data = {
 
 export const { use: useData, provider: DataProvider } = createSimpleContext({
   name: "Data",
-  init: (props: { data: Data }) => {
-    return props.data
+  init: (props: { data: Data; directory: string }) => {
+    return { ...props.data, directory: props.directory }
   },
 })

@@ -1,7 +1,8 @@
 import { type FileContents, FileDiff, type DiffLineAnnotation, FileDiffOptions } from "@pierre/precision-diffs"
 import { PreloadMultiFileDiffResult } from "@pierre/precision-diffs/ssr"
-import { ComponentProps, createEffect, onCleanup, onMount, splitProps } from "solid-js"
+import { ComponentProps, createEffect, onCleanup, onMount, Show, splitProps } from "solid-js"
 import { isServer } from "solid-js/web"
+import { createDefaultOptions, styleVariables } from "./pierre"
 
 export type DiffProps<T = {}> = FileDiffOptions<T> & {
   preloadedDiff?: PreloadMultiFileDiffResult<T>
@@ -15,6 +16,8 @@ export type DiffProps<T = {}> = FileDiffOptions<T> & {
 // interface ThreadMetadata {
 //   threadId: string
 // }
+//
+//
 
 export function Diff<T>(props: DiffProps<T>) {
   let container!: HTMLDivElement
@@ -24,27 +27,12 @@ export function Diff<T>(props: DiffProps<T>) {
   let fileDiffInstance: FileDiff<T> | undefined
   const cleanupFunctions: Array<() => void> = []
 
-  const defaultOptions: FileDiffOptions<T> = {
-    theme: "OpenCode",
-    themeType: "system",
-    disableLineNumbers: false,
-    overflow: "wrap",
-    diffStyle: "unified",
-    diffIndicators: "bars",
-    disableBackground: false,
-    expansionLineCount: 20,
-    lineDiffType: props.diffStyle === "split" ? "word-alt" : "none",
-    maxLineDiffLength: 1000,
-    maxLineLengthForHighlighting: 1000,
-    disableFileHeader: true,
-  }
-
   createEffect(() => {
     if (props.preloadedDiff) return
     container.innerHTML = ""
     if (!fileDiffInstance) {
       fileDiffInstance = new FileDiff<T>({
-        ...defaultOptions,
+        ...createDefaultOptions(props.diffStyle),
         ...others,
         ...(props.preloadedDiff ?? {}),
       })
@@ -60,22 +48,19 @@ export function Diff<T>(props: DiffProps<T>) {
   onMount(() => {
     if (isServer) return
     fileDiffInstance = new FileDiff<T>({
-      ...defaultOptions,
-      // You can optionally pass a render function for rendering out line
-      // annotations.  Just return the dom node to render
-      // renderAnnotation(annotation: DiffLineAnnotation<T>): HTMLElement {
-      //   // Despite the diff itself being rendered in the shadow dom,
-      //   // annotations are inserted via the web components 'slots' api and you
-      //   // can use all your normal normal css and styling for them
-      //   const element = document.createElement("div")
-      //   element.innerText = annotation.metadata.threadId
-      //   return element
-      // },
+      ...createDefaultOptions(props.diffStyle),
       ...others,
       ...(props.preloadedDiff ?? {}),
     })
     // @ts-expect-error - fileContainer is private but needed for SSR hydration
     fileDiffInstance.fileContainer = fileDiffRef
+    fileDiffInstance.hydrate({
+      oldFile: local.before,
+      newFile: local.after,
+      lineAnnotations: local.annotations,
+      fileContainer: fileDiffRef,
+      containerWrapper: container,
+    })
 
     // Hydrate annotation slots with interactive SolidJS components
     // if (props.annotations.length > 0 && props.renderAnnotation != null) {
@@ -108,38 +93,11 @@ export function Diff<T>(props: DiffProps<T>) {
   })
 
   return (
-    <div
-      data-component="diff"
-      style={{
-        "--pjs-font-family": "var(--font-family-mono)",
-        "--pjs-font-size": "var(--font-size-small)",
-        "--pjs-line-height": "24px",
-        "--pjs-tab-size": 2,
-        "--pjs-font-features": "var(--font-family-mono--font-feature-settings)",
-        "--pjs-header-font-family": "var(--font-family-sans)",
-        "--pjs-gap-block": 0,
-        "--pjs-min-number-column-width": "4ch",
-      }}
-      ref={container}
-    >
+    <div data-component="diff" style={styleVariables} ref={container}>
       <file-diff ref={fileDiffRef} id="ssr-diff">
-        {/* Only render on server - client hydrates the existing content */}
-        {isServer && props.preloadedDiff && (
-          <>
-            {/* Declarative Shadow DOM - browsers parse this and create a shadow root */}
-            <template shadowrootmode="open">
-              <div innerHTML={props.preloadedDiff!.prerenderedHTML} />
-            </template>
-            {/* Render static annotation slots on server.
-                Client will clear these and mount interactive components. */}
-            {/* <For each={props.annotations}> */}
-            {/*   {(annotation) => { */}
-            {/*     const slotName = `annotation-${annotation.side}-${annotation.lineNumber}` */}
-            {/*     return <div slot={slotName}>{props.renderAnnotation?.(annotation)}</div> */}
-            {/*   }} */}
-            {/* </For> */}
-          </>
-        )}
+        <Show when={isServer && props.preloadedDiff}>
+          {(preloadedDiff) => <template shadowrootmode="open" innerHTML={preloadedDiff().prerenderedHTML} />}
+        </Show>
       </file-diff>
     </div>
   )

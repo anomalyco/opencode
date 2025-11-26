@@ -1,7 +1,6 @@
 import { For, onCleanup, onMount, Show, Match, Switch, createResource, createMemo } from "solid-js"
 import { useLocal, type LocalFile } from "@/context/local"
 import { createStore } from "solid-js/store"
-import { getDirectory, getFilename } from "@/utils"
 import { PromptInput } from "@/components/prompt-input"
 import { DateTime } from "luxon"
 import { FileIcon } from "@opencode-ai/ui/file-icon"
@@ -30,6 +29,7 @@ import type { JSX } from "solid-js"
 import { useSync } from "@/context/sync"
 import { useSession } from "@/context/session"
 import { useLayout } from "@/context/layout"
+import { getDirectory, getFilename } from "@opencode-ai/util/path"
 
 export default function Page() {
   const layout = useLayout()
@@ -401,10 +401,15 @@ export default function Page() {
               <Show when={layout.review.state() === "pane" && session.diffs().length}>
                 <div
                   classList={{
-                    "relative grow px-6 py-3 flex-1 min-h-0 border-l border-border-weak-base": true,
+                    "relative grow pt-3 flex-1 min-h-0 border-l border-border-weak-base": true,
                   }}
                 >
                   <SessionReview
+                    classes={{
+                      root: "pb-20",
+                      header: "px-6",
+                      container: "px-6",
+                    }}
                     diffs={session.diffs()}
                     actions={
                       <Tooltip value="Open in tab">
@@ -427,10 +432,18 @@ export default function Page() {
             <Tabs.Content value="review" class="select-text flex flex-col h-full overflow-hidden">
               <div
                 classList={{
-                  "relative px-6 py-3 flex-1 min-h-0 overflow-hidden": true,
+                  "relative pt-3 flex-1 min-h-0 overflow-hidden": true,
                 }}
               >
-                <SessionReview diffs={session.diffs()} split class="pb-40" />
+                <SessionReview
+                  classes={{
+                    root: "pb-40",
+                    header: "px-6",
+                    container: "px-6",
+                  }}
+                  diffs={session.diffs()}
+                  split
+                />
               </div>
             </Tabs.Content>
           </Show>

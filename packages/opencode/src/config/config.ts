@@ -456,6 +456,10 @@ export namespace Config {
       })
       .optional()
       .describe("Scroll acceleration settings"),
+    diff_style: z
+      .enum(["auto", "stacked"])
+      .optional()
+      .describe("Control diff rendering style: 'auto' adapts to terminal width, 'stacked' always shows single column"),
   })
 
   export const Layout = z.enum(["auto", "stretch"]).meta({
@@ -540,6 +544,10 @@ export namespace Config {
                   apiKey: z.string().optional(),
                   baseURL: z.string().optional(),
                   enterpriseUrl: z.string().optional().describe("GitHub Enterprise URL for copilot authentication"),
+                  setCacheKey: z
+                    .boolean()
+                    .optional()
+                    .describe("Enable promptCacheKey for this provider (default false)"),
                   timeout: z
                     .union([
                       z
