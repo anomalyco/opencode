@@ -346,6 +346,76 @@ You can also use wildcards to control multiple tools at once. For example, to di
 
 ---
 
+### Subagents
+
+Control which subagents this agent can invoke via the Task tool with the `subagents` config.
+
+By default, all subagents are available. Set a subagent to `false` to hide it from this agent.
+
+```json title="opencode.json"
+{
+  "$schema": "https://opencode.ai/config.json",
+  "agent": {
+    "build": {
+      "subagents": {
+        "code-reviewer": false
+      }
+    }
+  }
+}
+```
+
+You can also use wildcards to control multiple subagents at once:
+
+```json title="opencode.json"
+{
+  "$schema": "https://opencode.ai/config.json",
+  "agent": {
+    "build": {
+      "subagents": {
+        "orchestrator-*": false
+      }
+    }
+  }
+}
+```
+
+Longer patterns take precedence over shorter ones. This allows you to exclude a group while keeping specific exceptions:
+
+```json title="opencode.json"
+{
+  "$schema": "https://opencode.ai/config.json",
+  "agent": {
+    "build": {
+      "subagents": {
+        "orchestrator-*": false,
+        "orchestrator-fast": true
+      }
+    }
+  }
+}
+```
+
+You can also configure subagents in Markdown agents:
+
+```markdown title="~/.config/opencode/agent/focused.md"
+---
+description: Agent with limited subagent access
+mode: primary
+subagents:
+  general: true
+  orchestrator-*: false
+---
+
+You are a focused agent with limited subagent access.
+```
+
+:::note
+Filtered subagents will not appear in the Task tool description and cannot be invoked.
+:::
+
+---
+
 ### Permissions
 
 You can configure permissions to manage what actions an agent can take. Currently, the permissions for the `edit`, `bash`, and `webfetch` tools can be configured to:
