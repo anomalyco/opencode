@@ -12,7 +12,7 @@ export namespace Project {
     .object({
       id: z.string(),
       worktree: z.string(),
-      gitDir: z.string().optional(),
+      vcsDir: z.string().optional(),
       vcs: z.literal("git").optional(),
       time: z.object({
         created: z.number(),
@@ -81,7 +81,7 @@ export namespace Project {
       .cwd(worktree)
       .text()
       .then((x) => x.trim())
-    const gitDir = await $`git rev-parse --path-format=absolute --git-dir`
+    const vcsDir = await $`git rev-parse --path-format=absolute --git-dir`
       .quiet()
       .nothrow()
       .cwd(worktree)
@@ -90,7 +90,7 @@ export namespace Project {
     const project: Info = {
       id,
       worktree,
-      gitDir,
+      vcsDir,
       vcs: "git",
       time: {
         created: Date.now(),

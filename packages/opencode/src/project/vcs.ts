@@ -39,16 +39,16 @@ export namespace Vcs {
 
   const state = Instance.state(
     async () => {
-      const gitDir = Instance.project.gitDir
-      if (Instance.project.vcs !== "git" || !gitDir) {
+      const vcsDir = Instance.project.vcsDir
+      if (Instance.project.vcs !== "git" || !vcsDir) {
         return { branch: async () => undefined, unsubscribe: undefined }
       }
       let current = await currentBranch()
       log.info("initialized", { branch: current })
 
-      const gitHead = path.join(gitDir, "HEAD")
+      const head = path.join(vcsDir, "HEAD")
       const unsubscribe = Bus.subscribe(FileWatcher.Event.Updated, async (evt) => {
-        if (evt.properties.file !== gitHead) return
+        if (evt.properties.file !== head) return
         const next = await currentBranch()
         if (next !== current) {
           log.info("branch changed", { from: current, to: next })

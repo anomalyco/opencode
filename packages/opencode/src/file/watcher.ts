@@ -64,10 +64,10 @@ export namespace FileWatcher {
         }),
       )
 
-      const gitDir = Instance.project.gitDir
-      if (gitDir && !cfgIgnores.includes(".git") && !cfgIgnores.includes(gitDir)) {
+      const vcsDir = Instance.project.vcsDir
+      if (vcsDir && !cfgIgnores.includes(".git") && !cfgIgnores.includes(vcsDir)) {
         subs.push(
-          await watcher().subscribe(gitDir, subscribe, {
+          await watcher().subscribe(vcsDir, subscribe, {
             ignore: ["hooks", "info", "logs", "objects", "refs", "worktrees", "modules", "lfs"],
             backend,
           }),
