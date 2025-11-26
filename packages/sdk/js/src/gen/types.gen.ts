@@ -1124,10 +1124,14 @@ export type Config = {
          */
         enterpriseUrl?: string
         /**
+         * Enable promptCacheKey for this provider (default false)
+         */
+        setCacheKey?: boolean
+        /**
          * Timeout in milliseconds for requests to this provider. Default is 300000 (5 minutes). Set to false to disable timeout.
          */
         timeout?: number | false
-        [key: string]: unknown | string | (number | false) | undefined
+        [key: string]: unknown | string | boolean | (number | false) | undefined
       }
     }
   }
