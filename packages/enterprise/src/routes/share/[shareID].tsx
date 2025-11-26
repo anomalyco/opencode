@@ -7,6 +7,7 @@ import { createEffect, createMemo, ErrorBoundary, For, Match, Show, Switch } fro
 import { Share } from "~/core/share"
 import { Logo, Mark } from "@opencode-ai/ui/logo"
 import { IconButton } from "@opencode-ai/ui/icon-button"
+import { createDefaultOptions } from "@opencode-ai/ui/pierre"
 import { iife } from "@opencode-ai/util/iife"
 import { Binary } from "@opencode-ai/util/binary"
 import { NamedError } from "@opencode-ai/util/error"
@@ -82,20 +83,7 @@ const getData = query(async (shareID) => {
             preloadMultiFileDiff<any>({
               oldFile: { name: diff.file, contents: diff.before },
               newFile: { name: diff.file, contents: diff.after },
-              options: {
-                theme: "OpenCode",
-                themeType: "system",
-                disableLineNumbers: false,
-                overflow: "wrap",
-                diffStyle: "unified",
-                diffIndicators: "bars",
-                disableBackground: false,
-                expansionLineCount: 20,
-                lineDiffType: "none",
-                maxLineDiffLength: 1000,
-                maxLineLengthForHighlighting: 1000,
-                disableFileHeader: true,
-              },
+              options: createDefaultOptions("unified"),
               // annotations,
             }),
           ),
