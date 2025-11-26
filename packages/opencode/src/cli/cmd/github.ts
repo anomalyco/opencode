@@ -390,6 +390,7 @@ export const GithubRunCommand = cmd({
       const share = normalizeShare()
       const { owner, repo } = context.repo
       const payload = context.payload as IssueCommentEvent | PullRequestReviewCommentEvent
+      const issueEvent = isIssueCommentEvent(payload) ? payload : undefined
       const actor = context.actor
 
       const issueId =
@@ -440,7 +441,7 @@ export const GithubRunCommand = cmd({
         // 1. Issue
         // 2. Local PR
         // 3. Fork PR
-        if (payload.issue.pull_request) {
+        if (context.eventName === "pull_request_review_comment" || issueEvent?.issue.pull_request) {
           const prData = await fetchPR()
           // Local PR
           if (prData.headRepository.nameWithOwner === prData.baseRepository.nameWithOwner) {
@@ -535,6 +536,12 @@ export const GithubRunCommand = cmd({
         if (value === "true") return true
         if (value === "false") return false
         throw new Error(`Invalid share value: ${value}. Share must be a boolean.`)
+      }
+
+      function isIssueCommentEvent(
+        event: IssueCommentEvent | PullRequestReviewCommentEvent,
+      ): event is IssueCommentEvent {
+        return "issue" in event
       }
 
       function getReviewCommentContext() {
@@ -686,7 +693,10 @@ export const GithubRunCommand = cmd({
         try {
           return await chat(`Summarize the following in less than 40 characters:\n\n${response}`)
         } catch (e) {
-          return `Fix issue: ${payload.issue.title}`
+          const title = issueEvent
+            ? issueEvent.issue.title
+            : (payload as PullRequestReviewCommentEvent).pull_request.title
+          return `Fix issue: ${title}`
         }
       }
 
