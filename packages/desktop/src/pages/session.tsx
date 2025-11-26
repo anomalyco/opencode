@@ -1,7 +1,6 @@
 import { For, onCleanup, onMount, Show, Match, Switch, createResource, createMemo } from "solid-js"
 import { useLocal, type LocalFile } from "@/context/local"
 import { createStore } from "solid-js/store"
-import { getDirectory, getFilename } from "@/utils"
 import { PromptInput } from "@/components/prompt-input"
 import { DateTime } from "luxon"
 import { FileIcon } from "@opencode-ai/ui/file-icon"
@@ -30,6 +29,7 @@ import type { JSX } from "solid-js"
 import { useSync } from "@/context/sync"
 import { useSession } from "@/context/session"
 import { useLayout } from "@/context/layout"
+import { getDirectory, getFilename } from "@opencode-ai/util/path"
 
 export default function Page() {
   const layout = useLayout()

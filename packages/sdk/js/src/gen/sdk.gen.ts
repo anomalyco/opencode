@@ -23,6 +23,8 @@ import type {
   InstanceDisposeResponses,
   PathGetData,
   PathGetResponses,
+  VcsGetData,
+  VcsGetResponses,
   SessionListData,
   SessionListResponses,
   SessionCreateData,
@@ -306,6 +308,18 @@ class Path extends _HeyApiClient {
   public get<ThrowOnError extends boolean = false>(options?: Options<PathGetData, ThrowOnError>) {
     return (options?.client ?? this._client).get<PathGetResponses, unknown, ThrowOnError>({
       url: "/path",
+      ...options,
+    })
+  }
+}
+
+class Vcs extends _HeyApiClient {
+  /**
+   * Get VCS info for the current instance
+   */
+  public get<ThrowOnError extends boolean = false>(options?: Options<VcsGetData, ThrowOnError>) {
+    return (options?.client ?? this._client).get<VcsGetResponses, unknown, ThrowOnError>({
+      url: "/vcs",
       ...options,
     })
   }
@@ -995,6 +1009,7 @@ export class OpencodeClient extends _HeyApiClient {
   tool = new Tool({ client: this._client })
   instance = new Instance({ client: this._client })
   path = new Path({ client: this._client })
+  vcs = new Vcs({ client: this._client })
   session = new Session({ client: this._client })
   command = new Command({ client: this._client })
   provider = new Provider({ client: this._client })
