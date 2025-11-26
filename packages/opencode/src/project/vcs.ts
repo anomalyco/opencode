@@ -50,6 +50,8 @@ export namespace Vcs {
 
       const gitHead = path.join(gitDir, "HEAD")
       let watcher: FSWatcher | undefined
+      // we should probably centralize file watching (see watcher.ts)
+      // but parcel still marked experimental rn
       try {
         watcher = watch(gitHead, async () => {
           const next = await currentBranch()
