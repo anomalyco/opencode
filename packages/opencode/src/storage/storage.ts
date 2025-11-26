@@ -207,12 +207,11 @@ export namespace Storage {
     })
   }
 
-  const glob = new Bun.Glob("**/*")
   export async function list(prefix: string[]) {
     const dir = await state().then((x) => x.dir)
     try {
       const result = await Array.fromAsync(
-        glob.scan({
+        new Bun.Glob("**/*").scan({
           cwd: path.join(dir, ...prefix),
           onlyFiles: true,
         }),
