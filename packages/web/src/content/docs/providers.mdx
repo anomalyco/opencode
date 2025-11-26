@@ -652,6 +652,78 @@ The `global` region improves availability and reduces errors at no extra cost. U
 
 ---
 
+### IO.NET
+
+[IO.NET](https://io.net/) is the world's largest decentralized GPU network, providing access to powerful open-source LLMs with competitive pricing and enterprise-grade reliability. The platform leverages distributed computing to deliver high-performance inference with full OpenAI API compatibility, making it easy to integrate into existing workflows.
+
+1. Head over to [IO.NET Intelligence](https://ai.io.net/login?r=%2Fai%2Fmodels), create an account, and navigate to **API Keys**.
+
+2. Click **Create New Secret Key** and configure:
+   - **Name**: A descriptive name for your key
+   - **Project**: Select your project, "io.intelligence"
+   - **Permissions**: Choose from All, Read, or Write
+   - **Expiration**: Select 30, 60, 90, or 180 days
+
+3. Copy and securely store your API key.
+
+4. Run `opencode auth login` and select **IO.NET**.
+
+   ```bash
+   $ opencode auth login
+
+   ┌  Add credential
+   │
+   ◆  Select provider
+   │  ● IO.NET
+   │  ...
+   └
+   ```
+
+5. Enter your IO.NET API key.
+
+   ```bash
+   $ opencode auth login
+
+   ┌  Add credential
+   │
+   ◇  Select provider
+   │  IO.NET
+   │
+   ◇  Enter your API key
+   │  _
+   └
+   ```
+
+6. Run the `/models` command to select from 17 available models.
+
+##### Available Models
+
+IO.NET offers 17 models optimized for various use cases:
+
+- **DeepSeek R1 0528** - Advanced reasoning (128K context)
+- **DeepSeek V3** - High-performance general purpose (64K context)
+- **GLM-4.6** - Multilingual reasoning (128K context)
+- **Intel Qwen3 Coder 480B** - Enterprise coding (106K context)
+- **Kimi K2 Thinking** - Reasoning with prompt caching (400K context)
+- **Llama 3.1 70B Instruct** - General purpose (128K context)
+- **Llama 3.3 70B Instruct** - Enhanced general purpose (128K context)
+- **Llama 4 Maverick 17B 128E** - Extended context with vision (430K context)
+- **Mistral Large 2411** - Flagship model with vision (128K context)
+- **Nvidia Llama 3.1 Nemotron 70B** - Enterprise-grade (128K context)
+- **Qwen 3 235B** - Large-scale reasoning (106K context)
+- **Qwen 3 Coder 480B** - Advanced coding (106K context)
+- **Qwen 3 Coder 480B GPTQ** - Quantized coding (106K context)
+- **Qwen 3 Next** - Latest generation (128K context)
+- **Qwen 3.5 Turbo** - Fast general purpose (128K context)
+- **Qwen 4 Turbo** - Next-gen turbo model (128K context)
+- **Yi Lightning 3** - High-speed inference (131K context)
+
+:::tip
+IO.NET's decentralized GPU network delivers cost-effective inference with high availability and scalability, powered by thousands of GPUs worldwide.
+:::
+
+---
+
 ### LM Studio
 
 You can configure opencode to use local models through LM Studio.
