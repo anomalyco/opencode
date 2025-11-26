@@ -269,7 +269,12 @@ export namespace Provider {
           instanceUrl,
         },
         async getModel(sdk: any, modelID: string) {
-          // GitLab provider uses the chat() method to create language models
+          // Use anthropicChat which connects to GitLab's Anthropic proxy
+          // This provides native Claude tool calling support
+          if (sdk.anthropicChat) {
+            return sdk.anthropicChat(modelID)
+          }
+          // Fallback to legacy chat (limited tools)
           return sdk.chat(modelID)
         },
       }
