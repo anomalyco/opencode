@@ -480,7 +480,7 @@ function App() {
           <box paddingLeft={1} paddingRight={1}>
             <text fg={theme.textMuted}>
               {process.cwd().replace(Global.Path.home, "~")}
-              {sync.data.vcs?.vcs?.branch ? `:${sync.data.vcs.vcs.branch}` : ""}
+              {sync.data.vcs?.branch ? `:${sync.data.vcs.branch}` : ""}
             </text>
           </box>
         </box>

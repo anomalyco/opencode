@@ -18,6 +18,15 @@ export namespace Vcs {
     ),
   }
 
+  export const Info = z
+    .object({
+      branch: z.string(),
+    })
+    .meta({
+      ref: "VcsInfo",
+    })
+  export type Info = z.infer<typeof Info>
+
   async function currentBranch() {
     return $`git rev-parse --abbrev-ref HEAD`
       .quiet()

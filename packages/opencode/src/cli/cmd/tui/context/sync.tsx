@@ -244,7 +244,7 @@ export const { use: useSync, provider: SyncProvider } = createSimpleContext({
         }
 
         case "vcs.branch.updated": {
-          setStore("vcs", "vcs", { branch: event.properties.branch })
+          setStore("vcs", { branch: event.properties.branch })
           break
         }
       }
