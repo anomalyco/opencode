@@ -7,6 +7,7 @@ import { Config } from "../config/config"
 // @ts-ignore
 import { createWrapper } from "@parcel/watcher/wrapper"
 import { lazy } from "@/util/lazy"
+import type ParcelWatcher from "@parcel/watcher"
 
 export namespace FileWatcher {
   const log = Log.create({ service: "file.watcher" })
@@ -43,27 +44,41 @@ export namespace FileWatcher {
         return {}
       }
       log.info("watcher backend", { platform: process.platform, backend })
-      const sub = await watcher().subscribe(
-        Instance.directory,
-        (err, evts) => {
-          if (err) return
-          for (const evt of evts) {
-            log.info("event", evt)
-            if (evt.type === "create") Bus.publish(Event.Updated, { file: evt.path, event: "add" })
-            if (evt.type === "update") Bus.publish(Event.Updated, { file: evt.path, event: "change" })
-            if (evt.type === "delete") Bus.publish(Event.Updated, { file: evt.path, event: "unlink" })
-          }
-        },
-        {
-          ignore: [...FileIgnore.PATTERNS, "!.git/HEAD", ...(cfg.watcher?.ignore ?? [])],
+      const subscribe: ParcelWatcher.SubscribeCallback = (err, evts) => {
+        if (err) return
+        for (const evt of evts) {
+          log.info("event", evt)
+          if (evt.type === "create") Bus.publish(Event.Updated, { file: evt.path, event: "add" })
+          if (evt.type === "update") Bus.publish(Event.Updated, { file: evt.path, event: "change" })
+          if (evt.type === "delete") Bus.publish(Event.Updated, { file: evt.path, event: "unlink" })
+        }
+      }
+
+      const subs = []
+      const cfgIgnores = cfg.watcher?.ignore ?? []
+
+      subs.push(
+        await watcher().subscribe(Instance.directory, subscribe, {
+          ignore: [...FileIgnore.PATTERNS, ...cfgIgnores],
           backend,
-        },
+        }),
       )
-      return { sub }
+
+      const gitDir = Instance.project.gitDir
+      if (gitDir && !cfgIgnores.includes(".git") && !cfgIgnores.includes(gitDir)) {
+        subs.push(
+          await watcher().subscribe(gitDir, subscribe, {
+            ignore: ["hooks", "info", "logs", "objects", "refs", "worktrees", "modules", "lfs"],
+            backend,
+          }),
+        )
+      }
+
+      return { subs }
     },
     async (state) => {
-      if (!state.sub) return
-      await state.sub?.unsubscribe()
+      if (!state.subs) return
+      await Promise.all(state.subs.map((sub) => sub?.unsubscribe()))
     },
   )
 
