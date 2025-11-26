@@ -296,10 +296,9 @@ export async function handler(
     retry: RetryOptions,
   ) {
     const provider = (() => {
-      // temporarily commment out
-      //if (isTrial) {
-      //  return modelInfo.providers.find((provider) => provider.id === modelInfo.trial!.provider)
-      //}
+      if (isTrial) {
+        return modelInfo.providers.find((provider) => provider.id === modelInfo.trial!.provider)
+      }
 
       if (retry.retryCount === MAX_RETRIES) {
         return modelInfo.providers.find((provider) => provider.id === modelInfo.fallbackProvider)
