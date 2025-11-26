@@ -20,6 +20,7 @@ import { ConfigMarkdown } from "./markdown"
 
 export namespace Config {
   const log = Log.create({ service: "config" })
+  const configs = ["opencode.jsonc", "opencode.json", "config.json"]
 
   // Custom merge function that concatenates plugin arrays instead of replacing them
   function mergeConfigWithPlugins(target: Info, source: Info): Info {
@@ -87,7 +88,7 @@ export namespace Config {
       await assertValid(dir)
 
       if (dir.endsWith(".opencode") || dir === Flag.OPENCODE_CONFIG_DIR) {
-        for (const file of ["opencode.jsonc", "opencode.json"]) {
+        for (const file of configs) {
           log.debug(`loading config from ${path.join(dir, file)}`)
           result = mergeConfigWithPlugins(result, await loadFile(path.join(dir, file)))
           // to satisy the type checker
