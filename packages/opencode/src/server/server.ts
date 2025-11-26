@@ -366,6 +366,47 @@ export namespace Server {
         },
       )
       .get(
+        "/vcs",
+        describeRoute({
+          description: "Get VCS info for the current instance",
+          operationId: "vcs.get",
+          responses: {
+            200: {
+              description: "VCS info",
+              content: {
+                "application/json": {
+                  schema: resolver(
+                    z
+                      .object({
+                        worktree: z.string(),
+                        directory: z.string(),
+                        projectID: z.string(),
+                        vcs: z
+                          .object({
+                            branch: z.string(),
+                          })
+                          .optional(),
+                      })
+                      .meta({
+                        ref: "VcsInfo",
+                      }),
+                  ),
+                },
+              },
+            },
+          },
+        }),
+        async (c) => {
+          const branch = await Instance.branch()
+          return c.json({
+            worktree: Instance.worktree,
+            directory: Instance.directory,
+            projectID: Instance.project.id,
+            vcs: Instance.project.vcs ? { branch } : undefined,
+          })
+        },
+      )
+      .get(
         "/session",
         describeRoute({
           description: "List all sessions",

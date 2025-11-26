@@ -1251,6 +1251,15 @@ export type Path = {
   directory: string
 }
 
+export type VcsInfo = {
+  worktree: string
+  directory: string
+  projectID: string
+  vcs?: {
+    branch: string
+  }
+}
+
 export type NotFoundError = {
   name: "NotFoundError"
   data: {
@@ -1686,6 +1695,24 @@ export type PathGetResponses = {
 }
 
 export type PathGetResponse = PathGetResponses[keyof PathGetResponses]
+
+export type VcsGetData = {
+  body?: never
+  path?: never
+  query?: {
+    directory?: string
+  }
+  url: "/vcs"
+}
+
+export type VcsGetResponses = {
+  /**
+   * VCS info
+   */
+  200: VcsInfo
+}
+
+export type VcsGetResponse = VcsGetResponses[keyof VcsGetResponses]
 
 export type SessionListData = {
   body?: never
