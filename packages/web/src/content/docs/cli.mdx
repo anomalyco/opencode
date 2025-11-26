@@ -69,6 +69,45 @@ This command will guide you through creating a new agent with a custom system pr
 
 ---
 
+### attach
+
+Attach to a running opencode server with a full terminal interface.
+
+```bash
+opencode attach <url>
+```
+
+This command connects to an existing `opencode serve` or `opencode spawn` instance and provides the full TUI experience, allowing you to interact with the server as if you started opencode directly.
+
+```bash
+# Start a headless server in one terminal
+opencode serve
+
+# In another terminal, attach with the TUI
+opencode attach http://localhost:4096
+```
+
+This is useful when you want to:
+
+- Connect to a long-running opencode server
+- Avoid MCP server cold boot times
+- Share a server instance across multiple sessions
+
+#### Flags
+
+| Flag         | Short | Description                                                        |
+| ------------ | ----- | ------------------------------------------------------------------ |
+| `--dir`      |       | Directory to run in                                                |
+| `--model`    | `-m`  | Model to use in the form of provider/model                         |
+| `--continue` | `-c`  | Continue the last session                                          |
+| `--session`  | `-s`  | Session ID to continue                                             |
+| `--prompt`   | `-p`  | Prompt to use                                                      |
+| `--agent`    |       | Agent to use                                                       |
+| `--title`    |       | Title for the session (uses truncated prompt if no value provided) |
+| `--command`  |       | The command to run, use prompt for args                            |
+
+---
+
 ### auth
 
 Command to manage credentials and login for providers.

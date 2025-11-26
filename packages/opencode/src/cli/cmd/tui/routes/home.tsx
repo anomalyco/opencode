@@ -42,7 +42,10 @@ export function Home() {
   const args = useArgs()
   onMount(() => {
     if (once) return
-    if (args.prompt) {
+    if (args.command) {
+      prompt.set({ input: `/${args.command} ${args.prompt || ""}`.trim(), parts: [] })
+      once = true
+    } else if (args.prompt) {
       prompt.set({ input: args.prompt, parts: [] })
       once = true
     }
