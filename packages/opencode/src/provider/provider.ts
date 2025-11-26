@@ -130,6 +130,11 @@ export namespace Provider {
           credentialProvider: fromNodeProviderChain(),
         },
         async getModel(sdk: any, modelID: string, _options?: Record<string, any>) {
+          // Skip region prefixing if model already has global prefix
+          if (modelID.startsWith("global.")) {
+            return sdk.languageModel(modelID)
+          }
+
           let regionPrefix = region.split("-")[0]
 
           switch (regionPrefix) {
