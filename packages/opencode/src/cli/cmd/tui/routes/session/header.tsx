@@ -16,12 +16,12 @@ const Title = (props: { session: Accessor<Session> }) => {
   )
 }
 
-const ContextInfo = (props: { context: Accessor<string | undefined>; cost: Accessor<string> }) => {
+const ContextInfo = (props: { context: Accessor<string | undefined>; cost: Accessor<string>; llmCalls: Accessor<number> }) => {
   const { theme } = useTheme()
   return (
     <Show when={props.context()}>
       <text fg={theme.textMuted} wrapMode="none" flexShrink={0}>
-        {props.context()} ({props.cost()})
+        {props.context()} ({props.cost()}) ({props.llmCalls()} calls)
       </text>
     </Show>
   )
@@ -58,6 +58,22 @@ export function Header() {
     return result
   })
 
+  // Count LLM calls (step-finish parts) across all messages in session
+  const llmCalls = createMemo(() => {
+    let count = 0
+    for (const msg of messages()) {
+      if (msg.role === "assistant") {
+        const parts = sync.data.part[msg.id] ?? []
+        for (const part of parts) {
+          if (part.type === "step-finish") {
+            count++
+          }
+        }
+      }
+    }
+    return count
+  })
+
   const { theme } = useTheme()
 
   return (
@@ -67,7 +83,7 @@ export function Header() {
         fallback={
           <box flexDirection="row" justifyContent="space-between" gap={1}>
             <Title session={session} />
-            <ContextInfo context={context} cost={cost} />
+            <ContextInfo context={context} cost={cost} llmCalls={llmCalls} />
           </box>
         }
       >
@@ -87,7 +103,7 @@ export function Header() {
               </Match>
             </Switch>
           </box>
-          <ContextInfo context={context} cost={cost} />
+          <ContextInfo context={context} cost={cost} llmCalls={llmCalls} />
         </box>
       </Show>
     </box>
