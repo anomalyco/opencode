@@ -1003,6 +1003,10 @@ export type Config = {
        */
       enabled: boolean
     }
+    /**
+     * Control diff rendering style: 'auto' adapts to terminal width, 'stacked' always shows single column
+     */
+    diff_style?: "auto" | "stacked"
   }
   /**
    * Command configuration, see https://opencode.ai/docs/commands
