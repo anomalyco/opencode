@@ -1834,15 +1834,18 @@ func (r ConfigShare) IsKnown() bool {
 // TUI specific settings
 type ConfigTui struct {
 	// TUI scroll speed
-	ScrollSpeed float64       `json:"scroll_speed"`
-	JSON        configTuiJSON `json:"-"`
+	ScrollSpeed float64 `json:"scroll_speed"`
+	// Enable copying text to clipboard when selected with mouse
+	CopyOnSelect bool          `json:"copy_on_select"`
+	JSON         configTuiJSON `json:"-"`
 }
 
 // configTuiJSON contains the JSON metadata for the struct [ConfigTui]
 type configTuiJSON struct {
-	ScrollSpeed apijson.Field
-	raw         string
-	ExtraFields map[string]apijson.Field
+	ScrollSpeed  apijson.Field
+	CopyOnSelect apijson.Field
+	raw          string
+	ExtraFields  map[string]apijson.Field
 }
 
 func (r *ConfigTui) UnmarshalJSON(data []byte) (err error) {

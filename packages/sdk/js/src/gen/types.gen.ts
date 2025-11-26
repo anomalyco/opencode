@@ -995,6 +995,10 @@ export type Config = {
        */
       enabled: boolean
     }
+    /**
+     * Enable copying text to clipboard when selected with mouse
+     */
+    copy_on_select?: boolean
   }
   /**
    * Command configuration, see https://opencode.ai/docs/commands

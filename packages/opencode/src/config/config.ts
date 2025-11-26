@@ -456,6 +456,11 @@ export namespace Config {
       })
       .optional()
       .describe("Scroll acceleration settings"),
+    copy_on_select: z
+      .boolean()
+      .optional()
+      .default(true)
+      .describe("Enable copying text to clipboard when selected with mouse"),
   })
 
   export const Layout = z.enum(["auto", "stretch"]).meta({
