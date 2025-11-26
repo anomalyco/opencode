@@ -589,8 +589,8 @@ export type EventSessionError = {
   }
 }
 
-export type EventVcsChanged = {
-  type: "vcs.changed"
+export type EventVcsBranchUpdated = {
+  type: "vcs.branch.updated"
   properties: {
     branch?: string
   }
@@ -677,7 +677,7 @@ export type Event =
   | EventSessionDeleted
   | EventSessionDiff
   | EventSessionError
-  | EventVcsChanged
+  | EventVcsBranchUpdated
   | EventTuiPromptAppend
   | EventTuiCommandExecute
   | EventTuiToastShow
@@ -1264,12 +1264,7 @@ export type Path = {
 }
 
 export type VcsInfo = {
-  worktree: string
-  directory: string
-  projectID: string
-  vcs?: {
-    branch: string
-  }
+  branch: string
 }
 
 export type NotFoundError = {
