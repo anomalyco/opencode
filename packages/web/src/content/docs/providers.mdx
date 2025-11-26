@@ -1293,3 +1293,39 @@ If you are having trouble with configuring a provider, check the following:
    - Make sure the provider ID used in `opencode auth login` matches the ID in your opencode config.
    - The right npm package is used for the provider. For example, use `@ai-sdk/cerebras` for Cerebras. And for all other OpenAI-compatible providers, use `@ai-sdk/openai-compatible`.
    - Check correct API endpoint is used in the `options.baseURL` field.
+
+---
+
+### Venice AI
+
+1. Head over to the [Venice AI console](https://venice.ai), create an account, and generate an API key.
+
+2. Run `opencode auth login` and select **Venice AI**.
+
+   ```bash
+   $ opencode auth login
+
+   ┌  Add credential
+   │
+   ◆  Select provider
+   │  ● Venice AI
+   │  ...
+   └
+   ```
+
+3. Enter your Venice AI API key.
+
+   ```bash
+   $ opencode auth login
+
+   ┌  Add credential
+   │
+   ◇  Select provider
+   │  Venice AI
+   │
+   ◇  Enter your API key
+   │  _
+   └
+   ```
+
+4. Run the `/models` command to select a model like _Llama 3.3 70B_.

@@ -705,25 +705,27 @@ export function Prompt(props: PromptProps) {
                 // trim ' from the beginning and end of the pasted content. just
                 // ' and nothing else
                 const filepath = pastedContent.replace(/^'+|'+$/g, "").replace(/\\ /g, " ")
-                console.log(pastedContent, filepath)
-                try {
-                  const file = Bun.file(filepath)
-                  if (file.type.startsWith("image/")) {
-                    event.preventDefault()
-                    const content = await file
-                      .arrayBuffer()
-                      .then((buffer) => Buffer.from(buffer).toString("base64"))
-                      .catch(console.error)
-                    if (content) {
-                      await pasteImage({
-                        filename: file.name,
-                        mime: file.type,
-                        content,
-                      })
-                      return
+                const isUrl = /^(https?):\/\//.test(filepath)
+                if (!isUrl) {
+                  try {
+                    const file = Bun.file(filepath)
+                    if (file.type.startsWith("image/")) {
+                      event.preventDefault()
+                      const content = await file
+                        .arrayBuffer()
+                        .then((buffer) => Buffer.from(buffer).toString("base64"))
+                        .catch(console.error)
+                      if (content) {
+                        await pasteImage({
+                          filename: file.name,
+                          mime: file.type,
+                          content,
+                        })
+                        return
+                      }
                     }
-                  }
-                } catch {}
+                  } catch {}
+                }
 
                 const lineCount = (pastedContent.match(/\n/g)?.length ?? 0) + 1
                 if (
