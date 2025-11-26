@@ -248,7 +248,7 @@ export namespace ProviderTransform {
     return standardLimit
   }
 
-  export function schema(providerID: string, _modelID: string, schema: JSONSchema.BaseSchema) {
+  export function schema(providerID: string, modelID: string, schema: JSONSchema.BaseSchema) {
     /*
     if (["openai", "azure"].includes(providerID)) {
       if (schema.type === "object" && schema.properties) {
@@ -268,7 +268,7 @@ export namespace ProviderTransform {
     */
 
     // Convert integer enums to string enums for Google/Gemini
-    if (providerID === "google") {
+    if (providerID === "google" || modelID.includes("gemini")) {
       const convertIntEnumsToStrings = (obj: any): any => {
         if (obj === null || typeof obj !== "object") {
           return obj
