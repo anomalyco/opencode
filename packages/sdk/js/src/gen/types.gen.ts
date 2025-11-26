@@ -861,11 +861,6 @@ export type KeybindsConfig = {
   terminal_suspend?: string
 }
 
-/**
- * Control diff rendering style: 'auto' adapts to terminal width, 'stacked' always shows single column
- */
-export type DiffStyleConfig = "auto" | "stacked"
-
 export type AgentConfig = {
   model?: string
   temperature?: number
@@ -1000,7 +995,10 @@ export type Config = {
        */
       enabled: boolean
     }
-    diff_style?: DiffStyleConfig
+    /**
+     * Control diff rendering style: 'auto' adapts to terminal width, 'stacked' always shows single column
+     */
+    diff_style?: "auto" | "stacked"
   }
   /**
    * Command configuration, see https://opencode.ai/docs/commands
