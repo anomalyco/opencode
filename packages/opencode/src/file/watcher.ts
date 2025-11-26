@@ -1,6 +1,5 @@
 import z from "zod"
 import { Bus } from "../bus"
-import { Flag } from "../flag/flag"
 import { Instance } from "../project/instance"
 import { Log } from "../util/log"
 import { FileIgnore } from "./ignore"
@@ -56,7 +55,7 @@ export namespace FileWatcher {
           }
         },
         {
-          ignore: [...FileIgnore.PATTERNS, ...(cfg.watcher?.ignore ?? [])],
+          ignore: [...FileIgnore.PATTERNS, "!.git/HEAD", ...(cfg.watcher?.ignore ?? [])],
           backend,
         },
       )
@@ -69,7 +68,7 @@ export namespace FileWatcher {
   )
 
   export function init() {
-    if (!Flag.OPENCODE_EXPERIMENTAL_WATCHER) return
+    // if (!Flag.OPENCODE_EXPERIMENTAL_WATCHER) return
     state()
   }
 }
