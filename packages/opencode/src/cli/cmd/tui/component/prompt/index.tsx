@@ -1,6 +1,5 @@
 import { BoxRenderable, TextareaRenderable, MouseEvent, PasteEvent, t, dim, fg, type KeyBinding } from "@opentui/core"
 import { createEffect, createMemo, type JSX, onMount, createSignal, onCleanup, Show, Switch, Match } from "solid-js"
-import "opentui-spinner/solid"
 import { useLocal } from "@tui/context/local"
 import { useTheme } from "@tui/context/theme"
 import { EmptyBorder } from "@tui/component/border"
@@ -21,7 +20,7 @@ import type { FilePart } from "@opencode-ai/sdk"
 import { TuiEvent } from "../../event"
 import { iife } from "@/util/iife"
 import { Locale } from "@/util/locale"
-import { createColors, createFrames } from "../../ui/spinner.ts"
+import { Shimmer } from "../../ui/shimmer"
 
 export type PromptProps = {
   sessionID?: string
@@ -310,6 +309,7 @@ export function Prompt(props: PromptProps) {
         const extmarkId = input.extmarks.create({
           start,
           end,
+          virtual: true,
           styleId,
           typeId: promptPartTypeId,
         })
@@ -545,20 +545,8 @@ export function Prompt(props: PromptProps) {
     return local.agent.color(local.agent.current().name)
   })
 
-  const spinnerDef = createMemo(() => {
-    const color = local.agent.color(local.agent.current().name)
-    return {
-      frames: createFrames({
-        color,
-        style: "blocks",
-        inactiveFactor: 0.25,
-      }),
-      color: createColors({
-        color,
-        style: "blocks",
-        inactiveFactor: 0.25,
-      }),
-    }
+  createEffect(() => {
+    renderer.setCursorColor(highlight())
   })
 
   return (
@@ -705,26 +693,33 @@ export function Prompt(props: PromptProps) {
                 // trim ' from the beginning and end of the pasted content. just
                 // ' and nothing else
                 const filepath = pastedContent.replace(/^'+|'+$/g, "").replace(/\\ /g, " ")
-                if (filepath.startsWith("http://") && filepath.startsWith("https://")) {
-                  try {
-                    const file = Bun.file(filepath)
-                    if (file.type.startsWith("image/")) {
-                      event.preventDefault()
-                      const content = await file
-                        .arrayBuffer()
-                        .then((buffer) => Buffer.from(buffer).toString("base64"))
-                        .catch(console.error)
-                      if (content) {
-                        await pasteImage({
-                          filename: file.name,
-                          mime: file.type,
-                          content,
-                        })
-                        return
-                      }
-                    }
-                  } catch {}
-                }
+                console.log(pastedContent, filepath)
+                try {
+                  const file = Bun.file(filepath)
+                  if (!file.type.startsWith("image/")) throw new Error("Pasted file is not image")
+
+                  event.preventDefault()
+
+                  const doesFileExist = await file.exists()
+                  let buffer: ArrayBuffer | undefined
+
+                  if (doesFileExist) {
+                    buffer = await file.arrayBuffer()
+                  } else {
+                    const response = await fetch(filepath)
+                    buffer = await response.arrayBuffer()
+                  }
+
+                  if (buffer) {
+                    const content = Buffer.from(buffer).toString("base64")
+                    await pasteImage({
+                      filename: file.name,
+                      mime: file.type,
+                      content,
+                    })
+                    return
+                  }
+                } catch {}
 
                 const lineCount = (pastedContent.match(/\n/g)?.length ?? 0) + 1
                 if (
@@ -773,7 +768,7 @@ export function Prompt(props: PromptProps) {
               ref={(r: TextareaRenderable) => (input = r)}
               onMouseDown={(r: MouseEvent) => r.target?.focus()}
               focusedBackgroundColor={theme.backgroundElement}
-              cursorColor={highlight()}
+              cursorColor={theme.primary}
               syntaxStyle={syntax()}
             />
             <box flexDirection="row" flexShrink={0} paddingTop={1} gap={1}>
@@ -826,7 +821,7 @@ export function Prompt(props: PromptProps) {
               justifyContent={status().type === "retry" ? "space-between" : "flex-start"}
             >
               <box flexShrink={0} flexDirection="row" gap={1}>
-                <spinner color={spinnerDef().color} frames={spinnerDef().frames} interval={40} />
+                <Loader />
                 <box flexDirection="row" gap={1} flexShrink={0}>
                   {(() => {
                     const retry = createMemo(() => {
@@ -895,4 +890,39 @@ export function Prompt(props: PromptProps) {
       </box>
     </>
   )
+}
+
+function Loader() {
+  const FRAMES = [
+    "▱▱▱▱▱▱▱",
+    "▱▱▱▱▱▱▱",
+    "▱▱▱▱▱▱▱",
+    "▱▱▱▱▱▱▱",
+    "▰▱▱▱▱▱▱",
+    "▰▰▱▱▱▱▱",
+    "▰▰▰▱▱▱▱",
+    "▱▰▰▰▱▱▱",
+    "▱▱▰▰▰▱▱",
+    "▱▱▱▰▰▰▱",
+    "▱▱▱▱▰▰▰",
+    "▱▱▱▱▱▰▰",
+    "▱▱▱▱▱▱▰",
+    "▱▱▱▱▱▱▱",
+    "▱▱▱▱▱▱▱",
+    "▱▱▱▱▱▱▱",
+    "▱▱▱▱▱▱▱",
+  ]
+  const [frame, setFrame] = createSignal(0)
+
+  onMount(() => {
+    const timer = setInterval(() => {
+      setFrame((frame() + 1) % FRAMES.length)
+    }, 100)
+    onCleanup(() => {
+      clearInterval(timer)
+    })
+  })
+
+  const { theme } = useTheme()
+  return <text fg={theme.diffAdded}>{FRAMES[frame()]}</text>
 }
