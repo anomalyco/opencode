@@ -190,8 +190,8 @@ export default function () {
                 )
 
                 const turns = () => (
-                  <div class="relative mt-2 pt-6 pb-8 px-4 min-w-0 w-full h-full overflow-y-auto no-scrollbar">
-                    {title()}
+                  <div class="relative mt-2 pt-6 pb-8 min-w-0 w-full h-full overflow-y-auto no-scrollbar">
+                    <div class="px-4">{title()}</div>
                     <div class="flex flex-col gap-15 items-start justify-start mt-4">
                       <For each={messages()}>
                         {(message) => (
@@ -202,18 +202,20 @@ export default function () {
                               root: "min-w-0 w-full relative",
                               content:
                                 "flex flex-col justify-between !overflow-visible [&_[data-slot=session-turn-message-header]]:top-[-32px]",
+                              container: "px-4",
                             }}
                           />
                         )}
                       </For>
                     </div>
-                    <div class="flex items-center justify-center pt-20 pb-8 shrink-0">
+                    <div class="px-4 flex items-center justify-center pt-20 pb-8 shrink-0">
                       <Logo class="w-58.5 opacity-12" />
                     </div>
                   </div>
                 )
 
                 const wide = createMemo(() => diffs().length === 0)
+                const columnPadding = () => (wide() ? "px-6" : "px-21 @4xl:px-6")
 
                 return (
                   <div class="relative bg-background-stronger w-screen h-screen overflow-hidden flex flex-col">
@@ -245,11 +247,10 @@ export default function () {
                         <div
                           classList={{
                             "@container relative shrink-0 pt-14 flex flex-col gap-10 min-h-0 w-full mx-auto": true,
-                            "px-21 @4xl:px-6 max-w-2xl": !wide(),
-                            "px-6 max-w-2xl": wide(),
+                            "max-w-2xl": true,
                           }}
                         >
-                          {title()}
+                          <div class={columnPadding()}>{title()}</div>
                           <div class="flex items-start justify-start h-full min-h-0">
                             <Show when={messages().length > 1}>
                               <>
@@ -285,9 +286,13 @@ export default function () {
                             <SessionTurn
                               sessionID={data().sessionID}
                               messageID={store.messageId ?? firstUserMessage()!.id!}
-                              classes={{ root: "grow", content: "flex flex-col justify-between", container: "pb-20" }}
+                              classes={{
+                                root: "grow",
+                                content: "flex flex-col justify-between",
+                                container: `${columnPadding()} pb-20`,
+                              }}
                             >
-                              <div class="flex items-center justify-center pb-8 shrink-0">
+                              <div class={`${columnPadding()} flex items-center justify-center pb-8 shrink-0`}>
                                 <Logo class="w-58.5 opacity-12" />
                               </div>
                             </SessionTurn>

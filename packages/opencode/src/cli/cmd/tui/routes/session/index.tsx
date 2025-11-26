@@ -80,6 +80,7 @@ const context = createContext<{
   conceal: () => boolean
   showThinking: () => boolean
   showTimestamps: () => boolean
+  sync: ReturnType<typeof useSync>
 }>()
 
 function use() {
@@ -732,6 +733,7 @@ export function Session() {
         conceal,
         showThinking,
         showTimestamps,
+        sync,
       }}
     >
       <box flexDirection="row" paddingBottom={1} paddingTop={1} paddingLeft={2} paddingRight={2} gap={2}>
@@ -1482,7 +1484,12 @@ ToolRegistry.register<typeof EditTool>({
     const ctx = use()
     const { theme, syntax } = useTheme()
 
-    const style = createMemo(() => (ctx.width > 120 ? "split" : "stacked"))
+    const style = createMemo(() => {
+      const diffStyle = ctx.sync.data.config.tui?.diff_style
+      if (diffStyle === "stacked") return "stacked"
+      // Default to "auto" behavior
+      return ctx.width > 120 ? "split" : "stacked"
+    })
 
     const diff = createMemo(() => {
       const diff = props.metadata.diff ?? props.permission["diff"]

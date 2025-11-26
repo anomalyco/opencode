@@ -481,7 +481,10 @@ function App() {
             <text fg={theme.textMuted}>v{Installation.VERSION}</text>
           </box>
           <box paddingLeft={1} paddingRight={1}>
-            <text fg={theme.textMuted}>{process.cwd().replace(Global.Path.home, "~")}</text>
+            <text fg={theme.textMuted}>
+              {process.cwd().replace(Global.Path.home, "~")}
+              {sync.data.vcs?.branch ? `:${sync.data.vcs.branch}` : ""}
+            </text>
           </box>
         </box>
         <Show when={false}>
