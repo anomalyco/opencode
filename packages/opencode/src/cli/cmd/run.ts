@@ -160,7 +160,7 @@ export const RunCommand = cmd({
                 part.state.title ||
                 (Object.keys(part.state.input).length > 0 ? JSON.stringify(part.state.input) : "Unknown")
               printEvent(color, tool, title)
-              if (part.tool === "bash" && part.state.output?.trim()) {
+              if (part.tool === "shell" && part.state.output?.trim()) {
                 UI.println()
                 UI.println(part.state.output)
               }

@@ -92,7 +92,7 @@ export function Part(props: PartProps) {
               <Match when={props.part.type === "tool" && props.part.tool === "todoread"}>
                 <IconQueueList width={18} height={18} />
               </Match>
-              <Match when={props.part.type === "tool" && props.part.tool === "bash"}>
+              <Match when={props.part.type === "tool" && props.part.tool === "shell"}>
                 <IconCommandLine width={18} height={18} />
               </Match>
               <Match when={props.part.type === "tool" && props.part.tool === "edit"}>
@@ -246,7 +246,7 @@ export function Part(props: PartProps) {
                       state={props.part.state}
                     />
                   </Match>
-                  <Match when={props.part.tool === "bash"}>
+                  <Match when={props.part.tool === "shell"}>
                     <BashTool
                       id={props.part.id}
                       tool={props.part.tool}

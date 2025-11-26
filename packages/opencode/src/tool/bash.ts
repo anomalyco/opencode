@@ -55,9 +55,7 @@ const parser = lazy(async () => {
   return p
 })
 
-// TODO: we may wanna rename this tool so it works better on other shells
-
-export const BashTool = Tool.define("bash", async () => {
+export const ShellTool = Tool.define("shell", async () => {
   const shell = iife(() => {
     const s = process.env.SHELL
     if (s) {
@@ -106,7 +104,7 @@ export const BashTool = Tool.define("bash", async () => {
         throw new Error("Failed to parse command")
       }
       const agent = await Agent.get(ctx.agent)
-      const permissions = agent.permission.bash
+      const permissions = agent.permission.shell
 
       const askPatterns = new Set<string>()
       for (const node of tree.rootNode.descendantsOfType("command")) {
@@ -200,7 +198,7 @@ export const BashTool = Tool.define("bash", async () => {
       if (askPatterns.size > 0) {
         const patterns = Array.from(askPatterns)
         await Permission.ask({
-          type: "bash",
+          type: "shell",
           pattern: patterns,
           sessionID: ctx.sessionID,
           messageID: ctx.messageID,

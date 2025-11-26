@@ -1,6 +1,6 @@
 import { describe, expect, test } from "bun:test"
 import path from "path"
-import { BashTool } from "../../src/tool/bash"
+import { ShellTool } from "../../src/tool/bash"
 import { Instance } from "../../src/project/instance"
 import { Permission } from "../../src/permission"
 
@@ -13,7 +13,7 @@ const ctx = {
   metadata: () => {},
 }
 
-const bash = await BashTool.init()
+const bash = await ShellTool.init()
 const projectRoot = path.join(__dirname, "../..")
 
 describe("tool.bash", () => {

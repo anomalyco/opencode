@@ -1,4 +1,4 @@
-import { BashTool } from "./bash"
+import { ShellTool } from "./bash"
 import { EditTool } from "./edit"
 import { GlobTool } from "./glob"
 import { GrepTool } from "./grep"
@@ -86,7 +86,7 @@ export namespace ToolRegistry {
 
     return [
       InvalidTool,
-      BashTool,
+      ShellTool,
       ReadTool,
       GlobTool,
       GrepTool,
@@ -130,8 +130,8 @@ export namespace ToolRegistry {
       result["edit"] = false
       result["write"] = false
     }
-    if (agent.permission.bash["*"] === "deny" && Object.keys(agent.permission.bash).length === 1) {
-      result["bash"] = false
+    if (agent.permission.shell["*"] === "deny" && Object.keys(agent.permission.shell).length === 1) {
+      result["shell"] = false
     }
     if (agent.permission.webfetch === "deny") {
       result["webfetch"] = false
