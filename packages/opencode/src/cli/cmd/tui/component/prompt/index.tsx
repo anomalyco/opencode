@@ -496,6 +496,40 @@ export function Prompt(props: PromptProps) {
   }
   const exit = useExit()
 
+  function pasteText(text: string, virtualText: string) {
+    const currentOffset = input.visualCursor.offset
+    const extmarkStart = currentOffset
+    const extmarkEnd = extmarkStart + virtualText.length
+
+    input.insertText(virtualText + " ")
+
+    const extmarkId = input.extmarks.create({
+      start: extmarkStart,
+      end: extmarkEnd,
+      virtual: true,
+      styleId: pasteStyleId,
+      typeId: promptPartTypeId,
+    })
+
+    setStore(
+      produce((draft) => {
+        const partIndex = draft.prompt.parts.length
+        draft.prompt.parts.push({
+          type: "text" as const,
+          text,
+          source: {
+            text: {
+              start: extmarkStart,
+              end: extmarkEnd,
+              value: virtualText,
+            },
+          },
+        })
+        draft.extmarkToPartIndex.set(extmarkId, partIndex)
+      }),
+    )
+  }
+
   async function pasteImage(file: { filename?: string; content: string; mime: string }) {
     const currentOffset = input.visualCursor.offset
     const extmarkStart = currentOffset
@@ -709,12 +743,21 @@ export function Prompt(props: PromptProps) {
                 if (!isUrl) {
                   try {
                     const file = Bun.file(filepath)
+                    // Handle SVG as raw text content, not as base64 image
+                    if (file.type === "image/svg+xml") {
+                      event.preventDefault()
+                      const content = await file.text().catch(() => {})
+                      if (content) {
+                        pasteText(content, `[SVG: ${file.name ?? "image"}]`)
+                        return
+                      }
+                    }
                     if (file.type.startsWith("image/")) {
                       event.preventDefault()
                       const content = await file
                         .arrayBuffer()
                         .then((buffer) => Buffer.from(buffer).toString("base64"))
-                        .catch(console.error)
+                        .catch(() => {})
                       if (content) {
                         await pasteImage({
                           filename: file.name,
@@ -733,41 +776,7 @@ export function Prompt(props: PromptProps) {
                   !sync.data.config.experimental?.disable_paste_summary
                 ) {
                   event.preventDefault()
-                  const currentOffset = input.visualCursor.offset
-                  const virtualText = `[Pasted ~${lineCount} lines]`
-                  const textToInsert = virtualText + " "
-                  const extmarkStart = currentOffset
-                  const extmarkEnd = extmarkStart + virtualText.length
-
-                  input.insertText(textToInsert)
-
-                  const extmarkId = input.extmarks.create({
-                    start: extmarkStart,
-                    end: extmarkEnd,
-                    virtual: true,
-                    styleId: pasteStyleId,
-                    typeId: promptPartTypeId,
-                  })
-
-                  const part = {
-                    type: "text" as const,
-                    text: pastedContent,
-                    source: {
-                      text: {
-                        start: extmarkStart,
-                        end: extmarkEnd,
-                        value: virtualText,
-                      },
-                    },
-                  }
-
-                  setStore(
-                    produce((draft) => {
-                      const partIndex = draft.prompt.parts.length
-                      draft.prompt.parts.push(part)
-                      draft.extmarkToPartIndex.set(extmarkId, partIndex)
-                    }),
-                  )
+                  pasteText(pastedContent, `[Pasted ~${lineCount} lines]`)
                   return
                 }
               }}

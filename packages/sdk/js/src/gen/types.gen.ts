@@ -1264,12 +1264,7 @@ export type Path = {
 }
 
 export type VcsInfo = {
-  worktree: string
-  directory: string
-  projectID: string
-  vcs?: {
-    branch: string
-  }
+  branch: string
 }
 
 export type NotFoundError = {
