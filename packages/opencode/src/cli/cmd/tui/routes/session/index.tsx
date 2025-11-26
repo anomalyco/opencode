@@ -1457,7 +1457,7 @@ ToolRegistry.register<typeof EditTool>({
     const { theme, syntax } = useTheme()
 
     const style = createMemo(() => {
-      const diffStyle = ctx.sync.data.config.experimental?.diff_style
+      const diffStyle = ctx.sync.data.config.tui?.diff_style
       if (diffStyle === "stacked") return "stacked"
       // Default to "auto" behavior
       return ctx.width > 120 ? "split" : "stacked"

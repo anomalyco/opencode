@@ -861,6 +861,11 @@ export type KeybindsConfig = {
   terminal_suspend?: string
 }
 
+/**
+ * Control diff rendering style: 'auto' adapts to terminal width, 'stacked' always shows single column
+ */
+export type DiffStyleConfig = "auto" | "stacked"
+
 export type AgentConfig = {
   model?: string
   temperature?: number
@@ -968,11 +973,6 @@ export type McpRemoteConfig = {
  */
 export type LayoutConfig = "auto" | "stretch"
 
-/**
- * Control diff rendering style: 'auto' adapts to terminal width, 'stacked' always shows single column
- */
-export type DiffStyleConfig = "auto" | "stacked"
-
 export type Config = {
   /**
    * JSON schema reference for configuration validation
@@ -1000,6 +1000,7 @@ export type Config = {
        */
       enabled: boolean
     }
+    diff_style?: DiffStyleConfig
   }
   /**
    * Command configuration, see https://opencode.ai/docs/commands
@@ -1228,7 +1229,6 @@ export type Config = {
      * Enable the batch tool
      */
     batch_tool?: boolean
-    diff_style?: DiffStyleConfig
   }
 }
 
