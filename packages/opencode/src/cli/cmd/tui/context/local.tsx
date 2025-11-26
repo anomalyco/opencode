@@ -114,18 +114,34 @@ export const { use: useLocal, provider: LocalProvider } = createSimpleContext({
           providerID: string
           modelID: string
         }[]
+        favorite: {
+          providerID: string
+          modelID: string
+        }[]
       }>({
         ready: false,
         model: {},
         recent: [],
+        favorite: [],
       })
 
       const file = Bun.file(path.join(Global.Path.state, "model.json"))
 
+      function save() {
+        Bun.write(
+          file,
+          JSON.stringify({
+            recent: modelStore.recent,
+            favorite: modelStore.favorite,
+          }),
+        )
+      }
+
       file
         .json()
         .then((x) => {
-          setModelStore("recent", x.recent)
+          if (Array.isArray(x.recent)) setModelStore("recent", x.recent)
+          if (Array.isArray(x.favorite)) setModelStore("favorite", x.favorite)
         })
         .catch(() => {})
         .finally(() => {
@@ -184,6 +200,9 @@ export const { use: useLocal, provider: LocalProvider } = createSimpleContext({
         recent() {
           return modelStore.recent
         },
+        favorite() {
+          return modelStore.favorite
+        },
         parsed: createMemo(() => {
           const value = currentModel()
           const provider = sync.data.provider.find((x) => x.id === value.providerID)!
@@ -206,6 +225,33 @@ export const { use: useLocal, provider: LocalProvider } = createSimpleContext({
           if (!val) return
           setModelStore("model", agent.current().name, { ...val })
         },
+        cycleFavorite(direction: 1 | -1) {
+          const favorites = modelStore.favorite.filter((item) => isModelValid(item))
+          if (!favorites.length) {
+            toast.show({
+              variant: "info",
+              message: "Add a favorite model to use this shortcut",
+              duration: 3000,
+            })
+            return
+          }
+          const current = currentModel()
+          let index = favorites.findIndex((x) => x.providerID === current.providerID && x.modelID === current.modelID)
+          if (index === -1) {
+            index = direction === 1 ? 0 : favorites.length - 1
+          } else {
+            index += direction
+            if (index < 0) index = favorites.length - 1
+            if (index >= favorites.length) index = 0
+          }
+          const next = favorites[index]
+          if (!next) return
+          setModelStore("model", agent.current().name, { ...next })
+          const uniq = uniqueBy([next, ...modelStore.recent], (x) => x.providerID + x.modelID)
+          if (uniq.length > 10) uniq.pop()
+          setModelStore("recent", uniq)
+          save()
+        },
         set(model: { providerID: string; modelID: string }, options?: { recent?: boolean }) {
           batch(() => {
             if (!isModelValid(model)) {
@@ -219,15 +265,30 @@ export const { use: useLocal, provider: LocalProvider } = createSimpleContext({
             setModelStore("model", agent.current().name, model)
             if (options?.recent) {
               const uniq = uniqueBy([model, ...modelStore.recent], (x) => x.providerID + x.modelID)
-              if (uniq.length > 5) uniq.pop()
+              if (uniq.length > 10) uniq.pop()
               setModelStore("recent", uniq)
-              Bun.write(
-                file,
-                JSON.stringify({
-                  recent: modelStore.recent,
-                }),
-              )
+              save()
             }
+          })
+        },
+        toggleFavorite(model: { providerID: string; modelID: string }) {
+          batch(() => {
+            if (!isModelValid(model)) {
+              toast.show({
+                message: `Model ${model.providerID}/${model.modelID} is not valid`,
+                variant: "warning",
+                duration: 3000,
+              })
+              return
+            }
+            const exists = modelStore.favorite.some(
+              (x) => x.providerID === model.providerID && x.modelID === model.modelID,
+            )
+            const next = exists
+              ? modelStore.favorite.filter((x) => x.providerID !== model.providerID || x.modelID !== model.modelID)
+              : [model, ...modelStore.favorite]
+            setModelStore("favorite", next)
+            save()
           })
         },
       }

@@ -246,6 +246,24 @@ function App() {
       },
     },
     {
+      title: "Favorite cycle",
+      value: "model.cycle_favorite",
+      keybind: "model_cycle_favorite",
+      category: "Agent",
+      onSelect: () => {
+        local.model.cycleFavorite(1)
+      },
+    },
+    {
+      title: "Favorite cycle reverse",
+      value: "model.cycle_favorite_reverse",
+      keybind: "model_cycle_favorite_reverse",
+      category: "Agent",
+      onSelect: () => {
+        local.model.cycleFavorite(-1)
+      },
+    },
+    {
       title: "Switch agent",
       value: "agent.list",
       keybind: "agent_list",

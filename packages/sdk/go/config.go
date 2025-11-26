@@ -1935,6 +1935,10 @@ type KeybindsConfig struct {
 	ModelCycleRecent string `json:"model_cycle_recent"`
 	// Previous recent model
 	ModelCycleRecentReverse string `json:"model_cycle_recent_reverse"`
+	// Next favorite model
+	ModelCycleFavorite string `json:"model_cycle_favorite"`
+	// Previous favorite model
+	ModelCycleFavoriteReverse string `json:"model_cycle_favorite_reverse"`
 	// List available models
 	ModelList string `json:"model_list"`
 	// Create/update AGENTS.md
@@ -2008,6 +2012,8 @@ type keybindsConfigJSON struct {
 	MessagesUndo             apijson.Field
 	ModelCycleRecent         apijson.Field
 	ModelCycleRecentReverse  apijson.Field
+	ModelCycleFavorite       apijson.Field
+	ModelCycleFavoriteReverse apijson.Field
 	ModelList                apijson.Field
 	ProjectInit              apijson.Field
 	SessionChildCycle        apijson.Field
