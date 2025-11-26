@@ -592,7 +592,7 @@ export type EventSessionError = {
 export type EventVcsChanged = {
   type: "vcs.changed"
   properties: {
-    branch: string
+    branch?: string
   }
 }
 
