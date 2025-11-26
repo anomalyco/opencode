@@ -594,6 +594,21 @@ export namespace SessionPrompt {
                     // @ts-expect-error
                     args.params.prompt = ProviderTransform.message(args.params.prompt, model.providerID, model.modelID)
                   }
+                  // Transform tool schemas for provider compatibility
+                  if (args.params.tools && Array.isArray(args.params.tools)) {
+                    args.params.tools = args.params.tools.map((tool: any) => {
+                      // Tools at middleware level have inputSchema, not parameters
+                      if (tool.inputSchema && typeof tool.inputSchema === "object") {
+                        // Transform the inputSchema for provider compatibility
+                        return {
+                          ...tool,
+                          inputSchema: ProviderTransform.schema(model.providerID, model.modelID, tool.inputSchema),
+                        }
+                      }
+                      // If no inputSchema, return tool unchanged
+                      return tool
+                    })
+                  }
                   return args.params
                 },
               },
@@ -733,6 +748,8 @@ export namespace SessionPrompt {
       if (Wildcard.all(key, enabledTools) === false) continue
       const execute = item.execute
       if (!execute) continue
+
+      // Wrap execute to add plugin hooks and format output
       item.execute = async (args, opts) => {
         await Plugin.trigger(
           "tool.execute.before",
@@ -760,17 +777,17 @@ export namespace SessionPrompt {
         const textParts: string[] = []
         const attachments: MessageV2.FilePart[] = []
 
-        for (const item of result.content) {
-          if (item.type === "text") {
-            textParts.push(item.text)
-          } else if (item.type === "image") {
+        for (const contentItem of result.content) {
+          if (contentItem.type === "text") {
+            textParts.push(contentItem.text)
+          } else if (contentItem.type === "image") {
             attachments.push({
               id: Identifier.ascending("part"),
               sessionID: input.sessionID,
               messageID: input.processor.message.id,
               type: "file",
-              mime: item.mimeType,
-              url: `data:${item.mimeType};base64,${item.data}`,
+              mime: contentItem.mimeType,
+              url: `data:${contentItem.mimeType};base64,${contentItem.data}`,
             })
           }
           // Add support for other types if needed
