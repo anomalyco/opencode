@@ -14,6 +14,30 @@ export function createDefaultOptions<T>(style: FileDiffOptions<T>["diffStyle"]) 
     maxLineDiffLength: 1000,
     maxLineLengthForHighlighting: 1000,
     disableFileHeader: true,
+    unsafeCSS: `
+[data-pjs-header],
+[data-pjs] {
+  [data-separator-wrapper] {
+    margin: 0 !important;
+    border-radius: 0 !important;
+  }
+  [data-expand-button] {
+    width: 6.5ch !important;
+    height: 24px !important;
+    justify-content: end !important;
+    padding-left: 3ch !important;
+    padding-inline: 1ch !important;
+  }
+  [data-separator-multi-button] {
+    grid-template-rows: 10px 10px !important;
+    [data-expand-button] {
+      height: 12px !important;
+    }
+  }
+  [data-separator-content] {
+    height: 24px !important;
+  }
+}`,
     // hunkSeparators(hunkData: HunkData) {
     //   const fragment = document.createDocumentFragment()
     //   const numCol = document.createElement("div")
