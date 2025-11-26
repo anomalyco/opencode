@@ -48,6 +48,7 @@ import { fn } from "@/util/fn"
 import { SessionProcessor } from "./processor"
 import { TaskTool } from "@/tool/task"
 import { SessionStatus } from "./status"
+import { Sound } from "@/util/sound"
 
 // @ts-ignore
 globalThis.AI_SDK_LOG_WARNINGS = false
@@ -600,6 +601,7 @@ export namespace SessionPrompt {
       continue
     }
     SessionCompaction.prune({ sessionID })
+    Sound.playNotification()
     for await (const item of MessageV2.stream(sessionID)) {
       if (item.info.role === "user") continue
       const queued = state()[sessionID]?.callbacks ?? []

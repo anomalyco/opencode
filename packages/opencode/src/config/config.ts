@@ -485,6 +485,12 @@ export namespace Config {
         .describe(
           "Automatically update to the latest version. Set to true to auto-update, false to disable, or 'notify' to show update notifications",
         ),
+      notificationSound: z
+        .union([z.boolean(), z.string()])
+        .optional()
+        .describe(
+          "Play a sound when the assistant finishes responding. Set to true for system bell, or provide a custom command (e.g., 'afplay ~/sounds/done.wav' on macOS)",
+        ),
       disabled_providers: z.array(z.string()).optional().describe("Disable providers that are loaded automatically"),
       enabled_providers: z
         .array(z.string())
