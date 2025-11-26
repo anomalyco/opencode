@@ -241,6 +241,11 @@ export const { use: useSync, provider: SyncProvider } = createSimpleContext({
           sdk.client.lsp.status().then((x) => setStore("lsp", x.data!))
           break
         }
+
+        case "vcs.changed": {
+          setStore("vcs", "vcs", { branch: event.properties.branch })
+          break
+        }
       }
     })
 

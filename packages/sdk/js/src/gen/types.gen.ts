@@ -589,6 +589,13 @@ export type EventSessionError = {
   }
 }
 
+export type EventVcsChanged = {
+  type: "vcs.changed"
+  properties: {
+    branch: string
+  }
+}
+
 export type EventTuiPromptAppend = {
   type: "tui.prompt.append"
   properties: {
@@ -670,6 +677,7 @@ export type Event =
   | EventSessionDeleted
   | EventSessionDiff
   | EventSessionError
+  | EventVcsChanged
   | EventTuiPromptAppend
   | EventTuiCommandExecute
   | EventTuiToastShow

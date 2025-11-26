@@ -20,6 +20,7 @@ import { MessageV2 } from "../session/message-v2"
 import { TuiRoute } from "./tui"
 import { Permission } from "../permission"
 import { Instance } from "../project/instance"
+import { Vcs } from "../project/vcs"
 import { Agent } from "../agent/agent"
 import { Auth } from "../auth"
 import { Command } from "../command"
@@ -397,7 +398,7 @@ export namespace Server {
           },
         }),
         async (c) => {
-          const branch = await Instance.branch()
+          const branch = await Vcs.branch()
           return c.json({
             worktree: Instance.worktree,
             directory: Instance.directory,

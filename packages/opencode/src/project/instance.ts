@@ -1,4 +1,3 @@
-import { $ } from "bun"
 import { Log } from "@/util/log"
 import { Context } from "../util/context"
 import { Project } from "./project"
@@ -45,17 +44,6 @@ export const Instance = {
   },
   get project() {
     return context.use().project
-  },
-  async branch() {
-    const project = context.use().project
-    if (project.vcs !== "git") return ""
-    return $`git rev-parse --abbrev-ref HEAD`
-      .quiet()
-      .nothrow()
-      .cwd(Instance.worktree)
-      .text()
-      .then((x) => x.trim())
-      .catch(() => undefined)
   },
   state<S>(init: () => S, dispose?: (state: Awaited<S>) => Promise<void>): () => S {
     return State.create(() => Instance.directory, init, dispose)
