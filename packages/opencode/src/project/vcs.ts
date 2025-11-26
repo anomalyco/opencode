@@ -1,4 +1,6 @@
 import { $ } from "bun"
+import { watch, type FSWatcher } from "fs"
+import path from "path"
 import z from "zod"
 import { Log } from "@/util/log"
 import { Bus } from "@/bus"
@@ -16,7 +18,7 @@ export namespace Vcs {
     ),
   }
 
-  async function fetchBranch() {
+  async function currentBranch() {
     return $`git rev-parse --abbrev-ref HEAD`
       .quiet()
       .nothrow()
@@ -26,33 +28,57 @@ export namespace Vcs {
       .catch(() => undefined)
   }
 
-  const state = Instance.state(async () => {
-    if (Instance.project.vcs !== "git") {
-      return { branch: async () => undefined }
-    }
-    let current = await fetchBranch()
-    // TODO: when file watcher is added, set watching: true and skip refetch in branch()
-    const watching = false
-    log.info("initialized", { branch: current })
-    return {
-      branch: async () => {
-        if (watching) return current
-        const next = await fetchBranch()
-        if (next !== current) {
-          log.info("branch changed", { from: current, to: next })
-          current = next
-          Bus.publish(Event.Changed, { branch: next })
-        }
-        return current
-      },
-    }
-  })
+  const state = Instance.state(
+    async () => {
+      if (Instance.project.vcs !== "git") {
+        return { branch: async () => undefined, watcher: undefined }
+      }
+      let current = await currentBranch()
+      log.info("initialized", { branch: current })
+
+      const gitDir = await $`git rev-parse --git-dir`
+        .quiet()
+        .nothrow()
+        .cwd(Instance.worktree)
+        .text()
+        .then((x) => x.trim())
+        .catch(() => undefined)
+      if (!gitDir) {
+        log.warn("failed to resolve git directory")
+        return { branch: async () => current, watcher: undefined }
+      }
+
+      const gitHead = path.join(gitDir, "HEAD")
+      let watcher: FSWatcher | undefined
+      try {
+        watcher = watch(gitHead, async () => {
+          const next = await currentBranch()
+          if (next !== current) {
+            log.info("branch changed", { from: current, to: next })
+            current = next
+            Bus.publish(Event.Changed, { branch: next })
+          }
+        })
+        log.info("watching", { path: gitHead })
+      } catch (e) {
+        log.warn("failed to watch git HEAD", { error: e })
+      }
+
+      return {
+        branch: async () => current,
+        watcher,
+      }
+    },
+    async (state) => {
+      state.watcher?.close()
+    },
+  )
 
   export async function init() {
     return state()
   }
 
   export async function branch() {
-    return state().then((s) => s.branch())
+    return await state().then((s) => s.branch())
   }
 }
