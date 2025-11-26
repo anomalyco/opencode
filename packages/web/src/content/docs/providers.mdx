@@ -652,6 +652,44 @@ The `global` region improves availability and reduces errors at no extra cost. U
 
 ---
 
+### IO.NET
+
+IO.NET offers 17 models optimized for various use cases:
+
+1. Head over to the [IO.NET console](https://ai.io.net/), create an account, and generate an API key.
+
+2. Run `opencode auth login` and select **IO.NET**.
+
+   ```bash
+   $ opencode auth login
+
+   ┌  Add credential
+   │
+   ◆  Select provider
+   │  ● IO.NET
+   │  ...
+   └
+   ```
+
+3. Enter your IO.NET API key.
+
+   ```bash
+   $ opencode auth login
+
+   ┌  Add credential
+   │
+   ◇  Select provider
+   │  IO.NET
+   │
+   ◇  Enter your API key
+   │  _
+   └
+   ```
+
+4. Run the `/models` command to select a model.
+
+---
+
 ### LM Studio
 
 You can configure opencode to use local models through LM Studio.
