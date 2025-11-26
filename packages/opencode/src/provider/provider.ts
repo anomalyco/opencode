@@ -2,7 +2,7 @@ import z from "zod"
 import fuzzysort from "fuzzysort"
 import { Config } from "../config/config"
 import { mergeDeep, sortBy } from "remeda"
-import { NoSuchModelError, type LanguageModel, type Provider as SDK } from "ai"
+import { APICallError, NoSuchModelError, type LanguageModel, type Provider as SDK } from "ai"
 import { Log } from "../util/log"
 import { BunProc } from "../bun"
 import { Plugin } from "../plugin"
@@ -564,11 +564,23 @@ export namespace Provider {
           opts.signal = combined
         }
 
-        return fetchFn(input, {
+        const response = await fetchFn(input, {
           ...opts,
           // @ts-ignore see here: https://github.com/oven-sh/bun/issues/16682
           timeout: false,
         })
+
+        // Guard against auth plugins returning undefined on token refresh failure
+        if (!response || typeof response.headers?.get !== "function") {
+          throw new APICallError({
+            message: "Authentication token refresh failed",
+            url: typeof input === "string" ? input : input.url,
+            requestBodyValues: opts.body,
+            isRetryable: true,
+          })
+        }
+
+        return response
       }
 
       // Special case: google-vertex-anthropic uses a subpath import
