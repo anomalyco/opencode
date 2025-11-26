@@ -5,10 +5,12 @@ import { createMemo, createResource, createEffect, onMount, For, Show } from "so
 import { createStore } from "solid-js/store"
 import { useSDK } from "@tui/context/sdk"
 import { useSync } from "@tui/context/sync"
+import { useLocal } from "@tui/context/local"
 import { useTheme, selectedForeground } from "@tui/context/theme"
 import { SplitBorder } from "@tui/component/border"
 import { useCommandDialog } from "@tui/component/dialog-command"
 import { Locale } from "@/util/locale"
+import { Wildcard } from "@/util/wildcard"
 import type { PromptInfo } from "./history"
 
 export type AutocompleteRef = {
@@ -39,6 +41,7 @@ export function Autocomplete(props: {
 }) {
   const sdk = useSDK()
   const sync = useSync()
+  const local = useLocal()
   const command = useCommandDialog()
   const { theme } = useTheme()
 
@@ -152,9 +155,11 @@ export function Autocomplete(props: {
   )
 
   const agents = createMemo(() => {
-    const agents = sync.data.agent
-    return agents
+    const current = local.agent.current() as { subagents?: Record<string, boolean> }
+    const subagents = current.subagents ?? {}
+    return sync.data.agent
       .filter((agent) => !agent.builtIn && agent.mode !== "primary")
+      .filter((agent) => Wildcard.all(agent.name, subagents) !== false)
       .map(
         (agent): AutocompleteOption => ({
           display: "@" + agent.name,
