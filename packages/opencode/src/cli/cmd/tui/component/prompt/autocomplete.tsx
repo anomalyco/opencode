@@ -81,6 +81,7 @@ export function Autocomplete(props: {
     const extmarkId = input.extmarks.create({
       start: extmarkStart,
       end: extmarkEnd,
+      virtual: true,
       styleId,
       typeId: props.promptPartTypeId(),
     })
