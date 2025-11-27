@@ -18,6 +18,11 @@ await $`mkdir -p ./dist/${pkg.name}`
 await $`cp -r ./bin ./dist/${pkg.name}/bin`
 await $`cp ./script/postinstall.mjs ./dist/${pkg.name}/postinstall.mjs`
 
+// Filter out problematic windows-x64-baseline package
+const filteredBinaries = Object.fromEntries(
+  Object.entries(binaries).filter(([name]) => name !== "cerebras-code-windows-x64-baseline")
+)
+
 await Bun.file(`./dist/${pkg.name}/package.json`).write(
   JSON.stringify(
     {
@@ -29,7 +34,7 @@ await Bun.file(`./dist/${pkg.name}/package.json`).write(
         postinstall: "bun ./postinstall.mjs || node ./postinstall.mjs",
       },
       version: Script.version,
-      optionalDependencies: binaries,
+      optionalDependencies: filteredBinaries,
     },
     null,
     2,
@@ -42,6 +47,12 @@ if (process.env.NPM_CONFIG_TOKEN) {
   await new Promise((resolve) => setTimeout(resolve, 60000))
   let count = 0
   for (const [name] of Object.entries(binaries)) {
+    // Skip windows-x64-baseline due to npm rate limiting
+    if (name === "cerebras-code-windows-x64-baseline") {
+      console.log(`⏭️  Skipping ${name} (problematic package)`)
+      continue
+    }
+
     try {
       process.chdir(`./dist/${name}`)
       if (process.platform !== "win32") {
