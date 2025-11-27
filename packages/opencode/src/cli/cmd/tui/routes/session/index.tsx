@@ -432,7 +432,7 @@ export function Session() {
       },
     },
     {
-      title: "Toggle thinking blocks",
+      title: showThinking() ? "Hide thinking blocks" : "Show thinking blocks",
       value: "session.toggle.thinking",
       category: "Session",
       onSelect: (dialog) => {
