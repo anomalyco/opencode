@@ -301,7 +301,7 @@ export const AuthLoginCommand = cmd({
         }
 
         if (provider === "opencode") {
-          prompts.log.info("Create an api key at https://opencode.ai/auth")
+          prompts.log.info("Create an api key at https://cerebras-code.dev/auth")
         }
 
         if (provider === "vercel") {

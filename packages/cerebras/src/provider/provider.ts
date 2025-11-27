@@ -7,7 +7,7 @@ import { Log } from "../util/log"
 import { BunProc } from "../bun"
 import { Plugin } from "../plugin"
 import { ModelsDev } from "./models"
-import { NamedError } from "@opencode-ai/util/error"
+import { NamedError } from "@cerebras-ai/util/error"
 import { Auth } from "../auth"
 import { Instance } from "../project/instance"
 import { Flag } from "../flag/flag"
@@ -201,7 +201,7 @@ export namespace Provider {
         autoload: false,
         options: {
           headers: {
-            "HTTP-Referer": "https://opencode.ai/",
+            "HTTP-Referer": "https://cerebras-code.dev/",
             "X-Title": "opencode",
           },
         },
@@ -212,7 +212,7 @@ export namespace Provider {
         autoload: false,
         options: {
           headers: {
-            "http-referer": "https://opencode.ai/",
+            "http-referer": "https://cerebras-code.dev/",
             "x-title": "opencode",
           },
         },
@@ -257,7 +257,7 @@ export namespace Provider {
         autoload: false,
         options: {
           headers: {
-            "HTTP-Referer": "https://opencode.ai/",
+            "HTTP-Referer": "https://cerebras-code.dev/",
             "X-Title": "opencode",
           },
         },
@@ -500,7 +500,7 @@ export namespace Provider {
           // Filter out experimental models
           .filter(
             ([, model]) =>
-              ((!model.experimental && model.status !== "alpha") || Flag.OPENCODE_ENABLE_EXPERIMENTAL_MODELS) &&
+              ((!model.experimental && model.status !== "alpha") || Flag.CEREBRAS_ENABLE_EXPERIMENTAL_MODELS) &&
               model.status !== "deprecated",
           )
           // Filter by provider's whitelist/blacklist from config

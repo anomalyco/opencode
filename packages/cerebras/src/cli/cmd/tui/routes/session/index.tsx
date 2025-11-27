@@ -25,7 +25,7 @@ import {
   type ScrollAcceleration,
 } from "@opentui/core"
 import { Prompt, type PromptRef } from "@tui/component/prompt"
-import type { AssistantMessage, Part, ToolPart, UserMessage, TextPart, ReasoningPart } from "@opencode-ai/sdk"
+import type { AssistantMessage, Part, ToolPart, UserMessage, TextPart, ReasoningPart } from "@cerebras-ai/sdk"
 import { useLocal } from "@tui/context/local"
 import { Locale } from "@/util/locale"
 import type { Tool } from "@/tool/tool"

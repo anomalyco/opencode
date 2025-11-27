@@ -8,7 +8,7 @@ import { iife } from "@/util/iife"
 import { Log } from "@/util/log"
 
 declare global {
-  const OPENCODE_WORKER_PATH: string
+  const CEREBRAS_WORKER_PATH: string
 }
 
 export const TuiThreadCommand = cmd({
@@ -62,7 +62,7 @@ export const TuiThreadCommand = cmd({
     const distWorker = new URL("./cli/cmd/tui/worker.js", import.meta.url)
     const execDir = path.dirname(process.execPath)
     const workerPath = await iife(async () => {
-      if (typeof OPENCODE_WORKER_PATH !== "undefined") return OPENCODE_WORKER_PATH
+      if (typeof CEREBRAS_WORKER_PATH !== "undefined") return CEREBRAS_WORKER_PATH
       if (await Bun.file(distWorker).exists()) return distWorker
       return localWorker
     })

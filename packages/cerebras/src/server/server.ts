@@ -9,7 +9,7 @@ import { Session } from "../session"
 import z from "zod"
 import { Provider } from "../provider/provider"
 import { mapValues } from "remeda"
-import { NamedError } from "@opencode-ai/util/error"
+import { NamedError } from "@cerebras-ai/util/error"
 import { ModelsDev } from "../provider/models"
 import { Ripgrep } from "../file/ripgrep"
 import { Config } from "../config/config"
@@ -2049,10 +2049,10 @@ export namespace Server {
         },
       )
       .all("/*", async (c) => {
-        return proxy(`https://desktop.dev.opencode.ai${c.req.path}`, {
+        return proxy(`https://desktop.dev.cerebras-code.dev${c.req.path}`, {
           ...c.req,
           headers: {
-            host: "desktop.dev.opencode.ai",
+            host: "desktop.dev.cerebras-code.dev",
           },
         })
       }),

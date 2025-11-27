@@ -7,7 +7,7 @@ import { useSDK } from "../context/sdk"
 import { DialogPrompt } from "../ui/dialog-prompt"
 import { useTheme } from "../context/theme"
 import { TextAttributes } from "@opentui/core"
-import type { ProviderAuthAuthorization } from "@opencode-ai/sdk"
+import type { ProviderAuthAuthorization } from "@cerebras-ai/sdk"
 import { DialogModel } from "./dialog-model"
 
 const PROVIDER_PRIORITY: Record<string, number> = {

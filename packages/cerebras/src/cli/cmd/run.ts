@@ -7,7 +7,7 @@ import { bootstrap } from "../bootstrap"
 import { Command } from "../../command"
 import { EOL } from "os"
 import { select } from "@clack/prompts"
-import { createOpencodeClient, type OpencodeClient } from "@opencode-ai/sdk"
+import { createOpencodeClient, type OpencodeClient } from "@cerebras-ai/sdk"
 import { Server } from "../../server/server"
 import { Provider } from "../../provider/provider"
 
@@ -273,7 +273,7 @@ export const RunCommand = cmd({
       }
 
       const cfgResult = await sdk.config.get()
-      if (cfgResult.data && (cfgResult.data.share === "auto" || Flag.OPENCODE_AUTO_SHARE || args.share)) {
+      if (cfgResult.data && (cfgResult.data.share === "auto" || Flag.CEREBRAS_AUTO_SHARE || args.share)) {
         const shareResult = await sdk.session.share({ path: { id: sessionID } }).catch((error) => {
           if (error instanceof Error && error.message.includes("disabled")) {
             UI.println(UI.Style.TEXT_DANGER_BOLD + "!  " + error.message)
@@ -281,7 +281,7 @@ export const RunCommand = cmd({
           return { error }
         })
         if (!shareResult.error) {
-          UI.println(UI.Style.TEXT_INFO_BOLD + "~  https://opencode.ai/s/" + sessionID.slice(-8))
+          UI.println(UI.Style.TEXT_INFO_BOLD + "~  https://cerebras-code.dev/s/" + sessionID.slice(-8))
         }
       }
 
@@ -326,7 +326,7 @@ export const RunCommand = cmd({
       }
 
       const cfgResult = await sdk.config.get()
-      if (cfgResult.data && (cfgResult.data.share === "auto" || Flag.OPENCODE_AUTO_SHARE || args.share)) {
+      if (cfgResult.data && (cfgResult.data.share === "auto" || Flag.CEREBRAS_AUTO_SHARE || args.share)) {
         const shareResult = await sdk.session.share({ path: { id: sessionID } }).catch((error) => {
           if (error instanceof Error && error.message.includes("disabled")) {
             UI.println(UI.Style.TEXT_DANGER_BOLD + "!  " + error.message)
@@ -334,7 +334,7 @@ export const RunCommand = cmd({
           return { error }
         })
         if (!shareResult.error) {
-          UI.println(UI.Style.TEXT_INFO_BOLD + "~  https://opencode.ai/s/" + sessionID.slice(-8))
+          UI.println(UI.Style.TEXT_INFO_BOLD + "~  https://cerebras-code.dev/s/" + sessionID.slice(-8))
         }
       }
 

@@ -4,7 +4,7 @@ import { useSync } from "@tui/context/sync"
 import { pipe, sumBy } from "remeda"
 import { useTheme } from "@tui/context/theme"
 import { SplitBorder } from "@tui/component/border"
-import type { AssistantMessage, Session } from "@opencode-ai/sdk"
+import type { AssistantMessage, Session } from "@cerebras-ai/sdk"
 
 const Title = (props: { session: Accessor<Session> }) => {
   const { theme } = useTheme()

@@ -15,10 +15,10 @@ import type {
   ProviderListResponse,
   ProviderAuthMethod,
   VcsInfo,
-} from "@opencode-ai/sdk"
+} from "@cerebras-ai/sdk"
 import { createStore, produce, reconcile } from "solid-js/store"
 import { useSDK } from "@tui/context/sdk"
-import { Binary } from "@opencode-ai/util/binary"
+import { Binary } from "@cerebras-ai/util/binary"
 import { createSimpleContext } from "./helper"
 import type { Snapshot } from "@/snapshot"
 import { useExit } from "./exit"

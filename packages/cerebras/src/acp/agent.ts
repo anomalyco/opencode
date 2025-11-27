@@ -29,7 +29,7 @@ import { MCP } from "@/mcp"
 import { Todo } from "@/session/todo"
 import { z } from "zod"
 import { LoadAPIKeyError } from "ai"
-import type { OpencodeClient } from "@opencode-ai/sdk"
+import type { OpencodeClient } from "@cerebras-ai/sdk"
 
 export namespace ACP {
   const log = Log.create({ service: "acp-agent" })

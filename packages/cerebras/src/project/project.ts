@@ -32,7 +32,7 @@ export namespace Project {
       const project: Info = {
         id: "global",
         worktree: "/",
-        vcs: Info.shape.vcs.parse(Flag.OPENCODE_FAKE_VCS),
+        vcs: Info.shape.vcs.parse(Flag.CEREBRAS_FAKE_VCS),
         time: {
           created: Date.now(),
         },

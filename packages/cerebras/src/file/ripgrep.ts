@@ -3,7 +3,7 @@ import path from "path"
 import { Global } from "../global"
 import fs from "fs/promises"
 import z from "zod"
-import { NamedError } from "@opencode-ai/util/error"
+import { NamedError } from "@cerebras-ai/util/error"
 import { lazy } from "../util/lazy"
 import { $ } from "bun"
 
@@ -286,7 +286,7 @@ export namespace Ripgrep {
       children: [],
     }
     for (const file of files) {
-      if (file.includes(".opencode")) continue
+      if (file.includes(".cerebras")) continue
       const parts = file.split(path.sep)
       getPath(root, parts, true)
     }

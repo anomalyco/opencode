@@ -18,7 +18,7 @@ import { iife } from "@/util/iife"
 
 const DEFAULT_MAX_OUTPUT_LENGTH = 30_000
 const MAX_OUTPUT_LENGTH = (() => {
-  const parsed = Number(Flag.OPENCODE_EXPERIMENTAL_BASH_MAX_OUTPUT_LENGTH)
+  const parsed = Number(Flag.CEREBRAS_EXPERIMENTAL_BASH_MAX_OUTPUT_LENGTH)
   return Number.isInteger(parsed) && parsed > 0 ? parsed : DEFAULT_MAX_OUTPUT_LENGTH
 })()
 const DEFAULT_TIMEOUT = 1 * 60 * 1000

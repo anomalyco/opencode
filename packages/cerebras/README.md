@@ -1,15 +1,51 @@
-# js
+# Cerebras Code
 
-To install dependencies:
+AI-powered coding assistant with blazing-fast inference, built for the terminal.
+
+## Installation
 
 ```bash
 bun install
 ```
 
-To run:
+## Development
 
 ```bash
-bun run index.ts
+# Run in dev mode
+bun run dev
+
+# Build binaries
+bun run build
+
+# Run tests
+bun test
 ```
 
-This project was created using `bun init` in bun v1.2.12. [Bun](https://bun.sh) is a fast all-in-one JavaScript runtime.
+## Usage
+
+```bash
+# Start Cerebras Code
+cerebras
+
+# Run with a message
+cerebras run "your message here"
+
+# Show help
+cerebras --help
+```
+
+## Features
+
+- 🚀 Terminal-first AI coding assistant
+- 🔧 Full file editing and command execution
+- 🎨 Multiple themes and customization
+- 🤖 Support for multiple AI providers (Anthropic, OpenAI, Google, etc.)
+- 📦 Built with Bun for blazing-fast performance
+
+## Documentation
+
+For more information, visit the [Cerebras Code documentation](https://cerebras-code.dev/docs).
+
+## License
+
+MIT

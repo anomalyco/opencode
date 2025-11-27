@@ -1,5 +1,5 @@
 import type { McpServer } from "@agentclientprotocol/sdk"
-import type { OpencodeClient } from "@opencode-ai/sdk"
+import type { OpencodeClient } from "@cerebras-ai/sdk"
 
 export interface ACPSessionState {
   id: string

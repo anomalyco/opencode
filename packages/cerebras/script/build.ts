@@ -13,7 +13,7 @@ const dir = path.resolve(__dirname, "..")
 process.chdir(dir)
 
 import pkg from "../package.json"
-import { Script } from "@opencode-ai/script"
+import { Script } from "@cerebras-ai/script"
 
 const singleFlag = process.argv.includes("--single")
 

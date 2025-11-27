@@ -1,5 +1,5 @@
 import z from "zod"
-import { NamedError } from "@opencode-ai/util/error"
+import { NamedError } from "@cerebras-ai/util/error"
 
 export namespace Message {
   export const OutputLengthError = NamedError.create("MessageOutputLengthError", z.object({}))

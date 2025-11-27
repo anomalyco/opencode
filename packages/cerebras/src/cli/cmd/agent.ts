@@ -120,7 +120,7 @@ const AgentCreateCommand = cmd({
 
         const content = matter.stringify(generated.systemPrompt, frontmatter)
         const filePath = path.join(
-          scope === "global" ? Global.Path.config : path.join(Instance.worktree, ".opencode"),
+          scope === "global" ? Global.Path.config : path.join(Instance.worktree, ".cerebras"),
           `agent`,
           `${generated.identifier}.md`,
         )

@@ -8,7 +8,7 @@ import { mergeDeep, pipe } from "remeda"
 import { Global } from "../global"
 import fs from "fs/promises"
 import { lazy } from "../util/lazy"
-import { NamedError } from "@opencode-ai/util/error"
+import { NamedError } from "@cerebras-ai/util/error"
 import { Flag } from "../flag/flag"
 import { Auth } from "../auth"
 import { type ParseError as JsoncParseError, parse as parseJsonc, printParseErrorCode } from "jsonc-parser"
@@ -37,21 +37,21 @@ export namespace Config {
     let result = await global()
 
     // Override with custom config if provided
-    if (Flag.OPENCODE_CONFIG) {
-      result = mergeConfigWithPlugins(result, await loadFile(Flag.OPENCODE_CONFIG))
-      log.debug("loaded custom config", { path: Flag.OPENCODE_CONFIG })
+    if (Flag.CEREBRAS_CONFIG) {
+      result = mergeConfigWithPlugins(result, await loadFile(Flag.CEREBRAS_CONFIG))
+      log.debug("loaded custom config", { path: Flag.CEREBRAS_CONFIG })
     }
 
-    for (const file of ["opencode.jsonc", "opencode.json"]) {
+    for (const file of ["cerebras.jsonc", "cerebras.json"]) {
       const found = await Filesystem.findUp(file, Instance.directory, Instance.worktree)
       for (const resolved of found.toReversed()) {
         result = mergeConfigWithPlugins(result, await loadFile(resolved))
       }
     }
 
-    if (Flag.OPENCODE_CONFIG_CONTENT) {
-      result = mergeConfigWithPlugins(result, JSON.parse(Flag.OPENCODE_CONFIG_CONTENT))
-      log.debug("loaded custom config from OPENCODE_CONFIG_CONTENT")
+    if (Flag.CEREBRAS_CONFIG_CONTENT) {
+      result = mergeConfigWithPlugins(result, JSON.parse(Flag.CEREBRAS_CONFIG_CONTENT))
+      log.debug("loaded custom config from CEREBRAS_CONFIG_CONTENT")
     }
 
     for (const [key, value] of Object.entries(auth)) {
@@ -70,24 +70,24 @@ export namespace Config {
       Global.Path.config,
       ...(await Array.fromAsync(
         Filesystem.up({
-          targets: [".opencode"],
+          targets: [".cerebras"],
           start: Instance.directory,
           stop: Instance.worktree,
         }),
       )),
     ]
 
-    if (Flag.OPENCODE_CONFIG_DIR) {
-      directories.push(Flag.OPENCODE_CONFIG_DIR)
-      log.debug("loading config from OPENCODE_CONFIG_DIR", { path: Flag.OPENCODE_CONFIG_DIR })
+    if (Flag.CEREBRAS_CONFIG_DIR) {
+      directories.push(Flag.CEREBRAS_CONFIG_DIR)
+      log.debug("loading config from CEREBRAS_CONFIG_DIR", { path: Flag.CEREBRAS_CONFIG_DIR })
     }
 
     const promises: Promise<void>[] = []
     for (const dir of directories) {
       await assertValid(dir)
 
-      if (dir.endsWith(".opencode") || dir === Flag.OPENCODE_CONFIG_DIR) {
-        for (const file of ["opencode.jsonc", "opencode.json"]) {
+      if (dir.endsWith(".cerebras") || dir === Flag.CEREBRAS_CONFIG_DIR) {
+        for (const file of ["cerebras.jsonc", "cerebras.json"]) {
           log.debug(`loading config from ${path.join(dir, file)}`)
           result = mergeConfigWithPlugins(result, await loadFile(path.join(dir, file)))
           // to satisy the type checker
@@ -115,8 +115,8 @@ export namespace Config {
       })
     }
 
-    if (Flag.OPENCODE_PERMISSION) {
-      result.permission = mergeDeep(result.permission ?? {}, JSON.parse(Flag.OPENCODE_PERMISSION))
+    if (Flag.CEREBRAS_PERMISSION) {
+      result.permission = mergeDeep(result.permission ?? {}, JSON.parse(Flag.CEREBRAS_PERMISSION))
     }
 
     if (!result.username) result.username = os.userInfo().username
@@ -170,7 +170,7 @@ export namespace Config {
     if (!hasGitIgnore) await Bun.write(gitignore, ["node_modules", "package.json", "bun.lock", ".gitignore"].join("\n"))
 
     await BunProc.run(
-      ["add", "@opencode-ai/plugin@" + (Installation.isLocal() ? "latest" : Installation.VERSION), "--exact"],
+      ["add", "@cerebras-ai/plugin@" + (Installation.isLocal() ? "latest" : Installation.VERSION), "--exact"],
       {
         cwd: dir,
       },
@@ -190,7 +190,7 @@ export namespace Config {
       if (!md.data) continue
 
       const name = (() => {
-        const patterns = ["/.opencode/command/", "/command/"]
+        const patterns = ["/.cerebras/command/", "/command/"]
         const pattern = patterns.find((p) => item.includes(p))
 
         if (pattern) {
@@ -230,8 +230,8 @@ export namespace Config {
 
       // Extract relative path from agent folder for nested agents
       let agentName = path.basename(item, ".md")
-      const agentFolderPath = item.includes("/.opencode/agent/")
-        ? item.split("/.opencode/agent/")[1]
+      const agentFolderPath = item.includes("/.cerebras/agent/")
+        ? item.split("/.cerebras/agent/")[1]
         : item.includes("/agent/")
           ? item.split("/agent/")[1]
           : agentName + ".md"
@@ -476,7 +476,7 @@ export namespace Config {
       command: z
         .record(z.string(), Command)
         .optional()
-        .describe("Command configuration, see https://opencode.ai/docs/commands"),
+        .describe("Command configuration, see https://cerebras-code.dev/docs/commands"),
       watcher: z
         .object({
           ignore: z.array(z.string()).optional(),
@@ -530,7 +530,7 @@ export namespace Config {
         })
         .catchall(Agent)
         .optional()
-        .describe("Agent configuration, see https://opencode.ai/docs/agent"),
+        .describe("Agent configuration, see https://cerebras-code.dev/docs/agent"),
       provider: z
         .record(
           z.string(),
@@ -680,8 +680,8 @@ export namespace Config {
     let result: Info = pipe(
       {},
       mergeDeep(await loadFile(path.join(Global.Path.config, "config.json"))),
-      mergeDeep(await loadFile(path.join(Global.Path.config, "opencode.json"))),
-      mergeDeep(await loadFile(path.join(Global.Path.config, "opencode.jsonc"))),
+      mergeDeep(await loadFile(path.join(Global.Path.config, "cerebras.json"))),
+      mergeDeep(await loadFile(path.join(Global.Path.config, "cerebras.jsonc"))),
     )
 
     await import(path.join(Global.Path.config, "config"), {
@@ -692,7 +692,7 @@ export namespace Config {
       .then(async (mod) => {
         const { provider, model, ...rest } = mod.default
         if (provider && model) result.model = `${provider}/${model}`
-        result["$schema"] = "https://opencode.ai/config.json"
+        result["$schema"] = "https://cerebras-code.dev/config.json"
         result = mergeDeep(result, rest)
         await Bun.write(path.join(Global.Path.config, "config.json"), JSON.stringify(result, null, 2))
         await fs.unlink(path.join(Global.Path.config, "config"))
@@ -783,7 +783,7 @@ export namespace Config {
     const parsed = Info.safeParse(data)
     if (parsed.success) {
       if (!parsed.data.$schema) {
-        parsed.data.$schema = "https://opencode.ai/config.json"
+        parsed.data.$schema = "https://cerebras-code.dev/config.json"
         await Bun.write(configFilepath, JSON.stringify(parsed.data, null, 2))
       }
       const data = parsed.data

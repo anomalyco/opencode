@@ -3,7 +3,7 @@ import { createMemo, For, Show, Switch, Match, createSignal } from "solid-js"
 import { useTheme } from "../../context/theme"
 import { Locale } from "@/util/locale"
 import path from "path"
-import type { AssistantMessage } from "@opencode-ai/sdk"
+import type { AssistantMessage } from "@cerebras-ai/sdk"
 
 export function Sidebar(props: { sessionID: string }) {
   const sync = useSync()

@@ -1,13 +1,13 @@
 import path from "path"
 import { $ } from "bun"
 import z from "zod"
-import { NamedError } from "@opencode-ai/util/error"
+import { NamedError } from "@cerebras-ai/util/error"
 import { Bus } from "../bus"
 import { Log } from "../util/log"
 
 declare global {
-  const OPENCODE_VERSION: string
-  const OPENCODE_CHANNEL: string
+  const CEREBRAS_VERSION: string
+  const CEREBRAS_CHANNEL: string
 }
 
 export namespace Installation {
@@ -56,7 +56,7 @@ export namespace Installation {
   }
 
   export async function method() {
-    if (process.execPath.includes(path.join(".opencode", "bin"))) return "curl"
+    if (process.execPath.includes(path.join(".cerebras", "bin"))) return "curl"
     if (process.execPath.includes(path.join(".local", "bin"))) return "curl"
     const exec = process.execPath.toLowerCase()
 
@@ -120,7 +120,7 @@ export namespace Installation {
     let cmd
     switch (method) {
       case "curl":
-        cmd = $`curl -fsSL https://opencode.ai/install | bash`.env({
+        cmd = $`curl -fsSL https://cerebras-code.dev/install | bash`.env({
           ...process.env,
           VERSION: target,
         })
@@ -158,8 +158,8 @@ export namespace Installation {
       })
   }
 
-  export const VERSION = typeof OPENCODE_VERSION === "string" ? OPENCODE_VERSION : "local"
-  export const CHANNEL = typeof OPENCODE_CHANNEL === "string" ? OPENCODE_CHANNEL : "local"
+  export const VERSION = typeof CEREBRAS_VERSION === "string" ? CEREBRAS_VERSION : "local"
+  export const CHANNEL = typeof CEREBRAS_CHANNEL === "string" ? CEREBRAS_CHANNEL : "local"
   export const USER_AGENT = `opencode/${CHANNEL}/${VERSION}`
 
   export async function latest() {
