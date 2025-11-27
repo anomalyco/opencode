@@ -100,7 +100,8 @@ export function Logo() {
         setAnimationComplete(true)
 
         // Then: start pulse animation with easing
-        let progress = 0
+        // Start at 0.25 so we begin at the brightest color for immediate visibility
+        let progress = 0.25
         setInterval(() => {
           progress += 0.01
           if (progress >= 1) progress = 0
