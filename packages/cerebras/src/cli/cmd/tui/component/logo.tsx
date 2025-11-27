@@ -35,7 +35,7 @@ export function Logo() {
           if (colorIdx >= COLORS.length - 1) pulseDirection = -1
           if (colorIdx <= 0) pulseDirection = 1
           setColorIndex(colorIdx)
-        }, 200)
+        }, 400)
       }
       setCharCount(current)
     }, 25)
