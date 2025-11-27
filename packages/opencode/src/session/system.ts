@@ -61,6 +61,7 @@ export namespace SystemPrompt {
   const LOCAL_RULE_FILES = [
     "AGENTS.md",
     "CLAUDE.md",
+    path.join(".github", "copilot-instructions.md"),
     "CONTEXT.md", // deprecated
   ]
   const GLOBAL_RULE_FILES = [
