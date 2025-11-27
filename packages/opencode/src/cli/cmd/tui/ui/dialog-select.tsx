@@ -173,8 +173,10 @@ export function DialogSelect<T>(props: DialogSelectProps<T>) {
   }
   props.ref?.(ref)
 
+  const keybinds = createMemo(() => props.keybind?.filter((x) => !x.disabled) ?? [])
+
   return (
-    <box gap={1}>
+    <box gap={1} paddingBottom={1}>
       <box paddingLeft={4} paddingRight={4}>
         <box flexDirection="row" justifyContent="space-between">
           <text fg={theme.text} attributes={TextAttributes.BOLD}>
@@ -255,18 +257,20 @@ export function DialogSelect<T>(props: DialogSelectProps<T>) {
           )}
         </For>
       </scrollbox>
-      <box paddingRight={2} paddingLeft={4} flexDirection="row" paddingBottom={1} gap={2}>
-        <For each={(props.keybind ?? []).filter((x) => !x.disabled)}>
-          {(item) => (
-            <text>
-              <span style={{ fg: theme.text }}>
-                <b>{item.title}</b>{" "}
-              </span>
-              <span style={{ fg: theme.textMuted }}>{Keybind.toString(item.keybind)}</span>
-            </text>
-          )}
-        </For>
-      </box>
+      <Show when={keybinds().length} fallback={<box flexShrink={0} />}>
+        <box paddingRight={2} paddingLeft={4} flexDirection="row" gap={2} flexShrink={0} paddingTop={1}>
+          <For each={keybinds()}>
+            {(item) => (
+              <text>
+                <span style={{ fg: theme.text }}>
+                  <b>{item.title}</b>{" "}
+                </span>
+                <span style={{ fg: theme.textMuted }}>{Keybind.toString(item.keybind)}</span>
+              </text>
+            )}
+          </For>
+        </box>
+      </Show>
     </box>
   )
 }

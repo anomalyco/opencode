@@ -6,6 +6,7 @@ import { DialogSelect, type DialogSelectRef } from "@tui/ui/dialog-select"
 import { useDialog } from "@tui/ui/dialog"
 import { createDialogProviderOptions, DialogProvider } from "./dialog-provider"
 import { Keybind } from "@/util/keybind"
+import { iife } from "@/util/iife"
 
 export function DialogModel() {
   const local = useLocal()
@@ -23,71 +24,46 @@ export function DialogModel() {
     const query = ref()?.filter
     const favorites = connected() ? local.model.favorite() : []
     const recents = local.model.recent()
-    const currentModel = local.model.current()
 
-    const orderedRecents = currentModel
-      ? [
-          currentModel,
-          ...recents.filter(
-            (item) => item.providerID !== currentModel.providerID || item.modelID !== currentModel.modelID,
-          ),
-        ]
-      : recents
-
-    const isCurrent = (item: { providerID: string; modelID: string }) =>
-      currentModel && item.providerID === currentModel.providerID && item.modelID === currentModel.modelID
-
-    const currentIsFavorite = currentModel && favorites.some((fav) => isCurrent(fav))
-
-    const recentList = orderedRecents
+    const recentList = recents
       .filter((item) => !favorites.some((fav) => fav.providerID === item.providerID && fav.modelID === item.modelID))
       .slice(0, 5)
 
-    const orderedFavorites = currentModel
-      ? [...favorites.filter((item) => isCurrent(item)), ...favorites.filter((item) => !isCurrent(item))]
-      : favorites
-
-    const orderedRecentList =
-      currentModel && !currentIsFavorite
-        ? [...recentList.filter((item) => isCurrent(item)), ...recentList.filter((item) => !isCurrent(item))]
-        : recentList
-
-    const favoriteOptions =
-      !query && favorites.length > 0
-        ? orderedFavorites.flatMap((item) => {
-            const provider = sync.data.provider.find((x) => x.id === item.providerID)
-            if (!provider) return []
-            const model = provider.models[item.modelID]
-            if (!model) return []
-            return [
-              {
-                key: item,
-                value: {
-                  providerID: provider.id,
-                  modelID: model.id,
-                },
-                title: model.name ?? item.modelID,
-                description: provider.name,
-                category: "Favorites",
-                disabled: provider.id === "opencode" && model.id.includes("-nano"),
-                footer: model.cost?.input === 0 && provider.id === "opencode" ? "Free" : undefined,
-                onSelect: () => {
-                  dialog.clear()
-                  local.model.set(
-                    {
-                      providerID: provider.id,
-                      modelID: model.id,
-                    },
-                    { recent: true },
-                  )
-                },
+    const favoriteOptions = !query
+      ? favorites.flatMap((item) => {
+          const provider = sync.data.provider.find((x) => x.id === item.providerID)
+          if (!provider) return []
+          const model = provider.models[item.modelID]
+          if (!model) return []
+          return [
+            {
+              key: item,
+              value: {
+                providerID: provider.id,
+                modelID: model.id,
               },
-            ]
-          })
-        : []
+              title: model.name ?? item.modelID,
+              description: provider.name,
+              category: "Favorites",
+              disabled: provider.id === "opencode" && model.id.includes("-nano"),
+              footer: model.cost?.input === 0 && provider.id === "opencode" ? "Free" : undefined,
+              onSelect: () => {
+                dialog.clear()
+                local.model.set(
+                  {
+                    providerID: provider.id,
+                    modelID: model.id,
+                  },
+                  { recent: true },
+                )
+              },
+            },
+          ]
+        })
+      : []
 
     const recentOptions = !query
-      ? orderedRecentList.flatMap((item) => {
+      ? recentList.flatMap((item) => {
           const provider = sync.data.provider.find((x) => x.id === item.providerID)
           if (!provider) return []
           const model = provider.models[item.modelID]
@@ -140,7 +116,11 @@ export function DialogModel() {
               return {
                 value,
                 title: info.name ?? model,
-                description: connected() ? provider.name : undefined,
+                description: favorites.some(
+                  (item) => item.providerID === value.providerID && item.modelID === value.modelID,
+                )
+                  ? "(Favorite)"
+                  : undefined,
                 category: connected() ? provider.name : undefined,
                 disabled: provider.id === "opencode" && model.includes("-nano"),
                 footer: info.cost?.input === 0 && provider.id === "opencode" ? "Free" : undefined,
@@ -162,10 +142,10 @@ export function DialogModel() {
               const inFavorites = favorites.some(
                 (item) => item.providerID === value.providerID && item.modelID === value.modelID,
               )
-              const inRecents = orderedRecents.some(
+              if (inFavorites) return false
+              const inRecents = recents.some(
                 (item) => item.providerID === value.providerID && item.modelID === value.modelID,
               )
-              if (inFavorites) return false
               if (inRecents) return false
               return true
             }),
