@@ -3,6 +3,7 @@ import { Title, Meta, Link } from "@solidjs/meta"
 // import { HttpHeader } from "@solidjs/start"
 import video from "../asset/lander/opencode-min.mp4"
 import videoPoster from "../asset/lander/opencode-poster.png"
+import cerebrasLogo from "../asset/lander/cerebras-logo.svg"
 import { IconCopy, IconCheck } from "../component/icon"
 import { A, createAsync } from "@solidjs/router"
 import { EmailSignup } from "~/component/email-signup"
@@ -53,8 +54,9 @@ export default function Home() {
         <div data-component="content">
           <section data-component="hero">
             <div data-slot="hero-copy">
+              <img src={cerebrasLogo} alt="Cerebras Logo" style={{ width: "120px", height: "120px", "margin-bottom": "1rem" }} />
               <a data-slot="releases" href={release()?.url ?? `${config.github.repoUrl}/releases`} target="_blank">
-                What’s new in {release()?.name ?? "the latest release"}
+                What's new in {release()?.name ?? "the latest release"}
               </a>
               <h1>The AI coding agent built for the terminal</h1>
               <p>
