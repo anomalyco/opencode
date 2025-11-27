@@ -248,7 +248,11 @@ export const BashTool = Tool.define("bash", async () => {
       })
 
       const append = (chunk: Buffer) => {
+        if (output.length >= MAX_OUTPUT_LENGTH) return
         output += chunk.toString()
+        if (output.length > MAX_OUTPUT_LENGTH) {
+          output = output.slice(0, MAX_OUTPUT_LENGTH)
+        }
         ctx.metadata({
           metadata: {
             output,
