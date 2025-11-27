@@ -54,9 +54,6 @@ jobs:
           git config --global user.name "Cerebras Code CI"
           ssh-keyscan -H aur.archlinux.org >> ~/.ssh/known_hosts || true
 
-      - name: Install Cerebras
-        run: curl -fsSL https://raw.githubusercontent.com/arihantchoudhary/opencode/dev/install | bash
-
       - name: Setup npm auth
         run: |
           echo "//registry.npmjs.org/:_authToken=${{ secrets.NPM_TOKEN }}" > ~/.npmrc
