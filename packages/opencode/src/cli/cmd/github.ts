@@ -418,7 +418,7 @@ export const GithubRunCommand = cmd({
           headers: { authorization: `token ${appToken}` },
         })
 
-        const { userPrompt, promptFiles } = await getUserPrompt()
+        const { userPrompt, promptFiles, createNewPR } = await getUserPrompt()
         await configureGit(appToken)
         await assertPermissions()
 
@@ -452,10 +452,27 @@ export const GithubRunCommand = cmd({
             const { dirty, uncommittedChanges } = await branchIsDirty(head)
             if (dirty) {
               const summary = await summarize(response)
-              await pushToLocalBranch(summary, uncommittedChanges)
+              // Create new PR against the original PR branch
+              if (createNewPR) {
+                const newBranch = generateBranchName("pr-fix")
+                await $`git checkout -b ${newBranch}`
+                await pushToNewBranch(summary, newBranch, uncommittedChanges)
+                const newPr = await createPR(
+                  prData.headRefName,
+                  newBranch,
+                  summary,
+                  `${response}\n\nFixes #${issueId}${footer({ image: true })}`,
+                )
+                await updateComment(`Created PR #${newPr} against \`${prData.headRefName}\`${footer({ image: true })}`)
+              } else {
+                await pushToLocalBranch(summary, uncommittedChanges)
+                const hasShared = prData.comments.nodes.some((c) => c.body.includes(`${shareBaseUrl}/s/${shareId}`))
+                await updateComment(`${response}${footer({ image: !hasShared })}`)
+              }
+            } else {
+              const hasShared = prData.comments.nodes.some((c) => c.body.includes(`${shareBaseUrl}/s/${shareId}`))
+              await updateComment(`${response}${footer({ image: !hasShared })}`)
             }
-            const hasShared = prData.comments.nodes.some((c) => c.body.includes(`${shareBaseUrl}/s/${shareId}`))
-            await updateComment(`${response}${footer({ image: !hasShared })}`)
           }
           // Fork PR
           else {
@@ -466,10 +483,27 @@ export const GithubRunCommand = cmd({
             const { dirty, uncommittedChanges } = await branchIsDirty(head)
             if (dirty) {
               const summary = await summarize(response)
-              await pushToForkBranch(summary, prData, uncommittedChanges)
+              // Create new PR against the fork PR branch
+              if (createNewPR) {
+                const newBranch = generateBranchName("pr-fix")
+                await $`git checkout -b ${newBranch}`
+                await pushToNewBranch(summary, newBranch, uncommittedChanges)
+                const newPr = await createPR(
+                  prData.headRefName,
+                  newBranch,
+                  summary,
+                  `${response}\n\nFixes #${issueId}${footer({ image: true })}`,
+                )
+                await updateComment(`Created PR #${newPr} against \`${prData.headRefName}\`${footer({ image: true })}`)
+              } else {
+                await pushToForkBranch(summary, prData, uncommittedChanges)
+                const hasShared = prData.comments.nodes.some((c) => c.body.includes(`${shareBaseUrl}/s/${shareId}`))
+                await updateComment(`${response}${footer({ image: !hasShared })}`)
+              }
+            } else {
+              const hasShared = prData.comments.nodes.some((c) => c.body.includes(`${shareBaseUrl}/s/${shareId}`))
+              await updateComment(`${response}${footer({ image: !hasShared })}`)
             }
-            const hasShared = prData.comments.nodes.some((c) => c.body.includes(`${shareBaseUrl}/s/${shareId}`))
-            await updateComment(`${response}${footer({ image: !hasShared })}`)
           }
         }
         // Issue
@@ -563,15 +597,26 @@ export const GithubRunCommand = cmd({
 
       async function getUserPrompt() {
         const reviewContext = getReviewCommentContext()
+        const body = payload.comment.body.trim()
+
+        // Check if user wants to create a new PR against the current PR branch
+        // Usage: /oc-new-pr fix the tests
+        // This will create a new branch and PR targeting the original PR branch
+        const createNewPR = body.includes("/oc-new-pr") || body.includes("/opencode-new-pr")
+
         let prompt = (() => {
-          const body = payload.comment.body.trim()
-          if (body === "/opencode" || body === "/oc") {
+          if (body === "/opencode" || body === "/oc" || body === "/oc-new-pr" || body === "/opencode-new-pr") {
             if (reviewContext) {
               return `Review this code change and suggest improvements for the commented lines:\n\nFile: ${reviewContext.file}\nLines: ${reviewContext.line}\n\n${reviewContext.diffHunk}`
             }
             return "Summarize this thread"
           }
-          if (body.includes("/opencode") || body.includes("/oc")) {
+          if (
+            body.includes("/opencode") ||
+            body.includes("/oc") ||
+            body.includes("/oc-new-pr") ||
+            body.includes("/opencode-new-pr")
+          ) {
             if (reviewContext) {
               return `${body}\n\nContext: You are reviewing a comment on file "${reviewContext.file}" at line ${reviewContext.line}.\n\nDiff context:\n${reviewContext.diffHunk}`
             }
@@ -633,7 +678,7 @@ export const GithubRunCommand = cmd({
             replacement,
           })
         }
-        return { userPrompt: prompt, promptFiles: imgData }
+        return { userPrompt: prompt, promptFiles: imgData, createNewPR }
       }
 
       function subscribeSessionEvents() {
@@ -842,7 +887,7 @@ export const GithubRunCommand = cmd({
         await $`git checkout -b ${localBranch} fork/${remoteBranch}`
       }
 
-      function generateBranchName(type: "issue" | "pr") {
+      function generateBranchName(type: "issue" | "pr" | "pr-fix") {
         const timestamp = new Date()
           .toISOString()
           .replace(/[:-]/g, "")

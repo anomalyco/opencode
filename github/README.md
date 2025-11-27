@@ -30,6 +30,16 @@ Leave the following comment on a GitHub PR. opencode will implement the requeste
 Delete the attachment from S3 when the note is removed /oc
 ```
 
+#### Create a new PR against an existing PR
+
+Use `/oc-new-pr` to create a separate PR with changes instead of committing directly to the PR branch.
+
+```
+fix the failing tests /oc-new-pr
+```
+
+opencode will create a new branch and open a new PR targeting the original PR branch. This is useful when you want to review the suggested changes separately before merging them into the original PR.
+
 #### Review specific code lines
 
 Leave a comment directly on code lines in the PR's "Files" tab. opencode will automatically detect the file, line numbers, and diff context to provide precise responses.
