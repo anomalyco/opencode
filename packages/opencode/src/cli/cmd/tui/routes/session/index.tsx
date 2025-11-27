@@ -198,6 +198,7 @@ export function Session() {
     if (bashOutput()) {
       const scroll = bashScroll
       const amount = 3
+      const pageAmount = Math.max(1, dimensions().height - 4)
       if (evt.name === "escape" || (evt.name === "c" && evt.ctrl)) {
         setBashOutput(undefined)
         evt.preventDefault()
@@ -206,6 +207,12 @@ export function Session() {
         evt.preventDefault()
       } else if (evt.name === "down") {
         scroll?.scrollBy(amount)
+        evt.preventDefault()
+      } else if (evt.name === "pageup") {
+        scroll?.scrollBy(-pageAmount)
+        evt.preventDefault()
+      } else if (evt.name === "pagedown") {
+        scroll?.scrollBy(pageAmount)
         evt.preventDefault()
       } else if (evt.name === "home") {
         scroll?.scrollTo(0)
@@ -805,7 +812,7 @@ export function Session() {
                       <terminal-buffer ansi={view().output()} cols={contentWidth()} />
                     </scrollbox>
                     <box flexShrink={0} paddingLeft={1}>
-                      <text fg={theme.textMuted}>ESC to close | ↑/↓ scroll | Home/End top/bottom</text>
+                      <text fg={theme.textMuted}>ESC to close | ↑/↓ scroll | PgUp/PgDn page | Home/End top/bottom</text>
                     </box>
                   </box>
                 )}
