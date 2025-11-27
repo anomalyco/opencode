@@ -340,7 +340,7 @@ export default function Page() {
                       <Show when={session.messages.user().length > 1}>
                         <>
                           <MessageNav
-                            class="@6xl:hidden mt-3 mr-8"
+                            class="@6xl:hidden mt-3 absolute left-6"
                             messages={session.messages.user()}
                             current={session.messages.active()}
                             onMessageSelect={session.messages.setActive}
@@ -351,7 +351,7 @@ export default function Page() {
                             classList={{
                               "hidden @6xl:flex": true,
                               "mt-0.5 mr-3 absolute right-full": wide(),
-                              "mt-3 mr-8": !wide(),
+                              "mt-3 absolute left-6": !wide(),
                             }}
                             messages={session.messages.user()}
                             current={session.messages.active()}
@@ -364,7 +364,11 @@ export default function Page() {
                       <SessionTurn
                         sessionID={session.id!}
                         messageID={session.messages.active()?.id!}
-                        classes={{ root: "pb-20 flex-1 min-w-0", content: "pb-20", container: "px-6" }}
+                        classes={{
+                          root: "pb-20 flex-1 min-w-0",
+                          content: "pb-20",
+                          container: wide() ? "px-6" : "pr-6 pl-18 @6xl:pr-6",
+                        }}
                       />
                     </div>
                   </Match>

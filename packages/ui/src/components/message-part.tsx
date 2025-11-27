@@ -17,7 +17,7 @@ import { Diff } from "./diff"
 import { DiffChanges } from "./diff-changes"
 import { Markdown } from "./markdown"
 import { getDirectory, getFilename } from "@opencode-ai/util/path"
-import { sanitize, sanitizePart } from "@opencode-ai/util/sanitize"
+import { sanitizePart } from "@opencode-ai/util/sanitize"
 
 export interface MessageProps {
   message: MessageType
@@ -83,15 +83,10 @@ export function UserMessageDisplay(props: { message: UserMessage; parts: PartTyp
 
 export function Part(props: MessagePartProps) {
   const component = createMemo(() => PART_MAPPING[props.part.type])
+  const part = createMemo(() => sanitizePart(props.part, props.sanitize))
   return (
     <Show when={component()}>
-      <Dynamic
-        component={component()}
-        part={props.part}
-        message={props.message}
-        hideDetails={props.hideDetails}
-        sanitize={props.sanitize}
-      />
+      <Dynamic component={component()} part={part()} message={props.message} hideDetails={props.hideDetails} />
     </Show>
   )
 }
@@ -102,7 +97,6 @@ export interface ToolProps {
   tool: string
   output?: string
   hideDetails?: boolean
-  sanitize?: RegExp
 }
 
 export type ToolComponent = Component<ToolProps>
@@ -170,7 +164,6 @@ PART_MAPPING["tool"] = function ToolPartDisplay(props) {
             metadata={metadata}
             output={part.state.status === "completed" ? part.state.output : undefined}
             hideDetails={props.hideDetails}
-            sanitize={props.sanitize}
           />
         </Match>
       </Switch>
@@ -211,7 +204,7 @@ ToolRegistry.register({
         icon="glasses"
         trigger={{
           title: "Read",
-          subtitle: props.input.filePath ? getFilename(sanitize(props.input.filePath, props.sanitize)) : "",
+          subtitle: props.input.filePath ? getFilename(props.input.filePath) : "",
         }}
       />
     )
@@ -222,12 +215,9 @@ ToolRegistry.register({
   name: "list",
   render(props) {
     return (
-      <BasicTool
-        icon="bullet-list"
-        trigger={{ title: "List", subtitle: getDirectory(sanitize(props.input.path, props.sanitize) || "/") }}
-      >
+      <BasicTool icon="bullet-list" trigger={{ title: "List", subtitle: getDirectory(props.input.path || "/") }}>
         <Show when={false && props.output}>
-          <div data-component="tool-output">{sanitize(props.output, props.sanitize)}</div>
+          <div data-component="tool-output">{props.output}</div>
         </Show>
       </BasicTool>
     )
@@ -335,7 +325,7 @@ ToolRegistry.register({
       >
         <div data-component="tool-output">
           <Markdown
-            text={`\`\`\`command\n$ ${sanitize(props.input.command, props.sanitize)}${props.output ? "\n\n" + props.output : ""}\n\`\`\``}
+            text={`\`\`\`command\n$ ${props.input.command}${props.output ? "\n\n" + props.output : ""}\n\`\`\``}
           />
         </div>
       </BasicTool>
@@ -355,13 +345,9 @@ ToolRegistry.register({
               <div data-slot="message-part-title">Edit</div>
               <div data-slot="message-part-path">
                 <Show when={props.input.filePath?.includes("/")}>
-                  <span data-slot="message-part-directory">
-                    {getDirectory(sanitize(props.input.filePath!, props.sanitize))}
-                  </span>
+                  <span data-slot="message-part-directory">{getDirectory(props.input.filePath!)}</span>
                 </Show>
-                <span data-slot="message-part-filename">
-                  {getFilename(sanitize(props.input.filePath ?? "", props.sanitize))}
-                </span>
+                <span data-slot="message-part-filename">{getFilename(props.input.filePath ?? "")}</span>
               </div>
             </div>
             <div data-slot="message-part-actions">
@@ -376,11 +362,11 @@ ToolRegistry.register({
           <div data-component="edit-content">
             <Diff
               before={{
-                name: getFilename(sanitize(props.metadata.filediff.path, props.sanitize)),
+                name: getFilename(props.metadata.filediff.path),
                 contents: props.metadata.filediff.before,
               }}
               after={{
-                name: getFilename(sanitize(props.metadata.filediff.path, props.sanitize)),
+                name: getFilename(props.metadata.filediff.path),
                 contents: props.metadata.filediff.after,
               }}
             />
