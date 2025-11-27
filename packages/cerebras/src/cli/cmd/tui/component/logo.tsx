@@ -3,25 +3,35 @@ import { TextAttributes } from "@opentui/core"
 import { For } from "solid-js"
 import { useTheme } from "@tui/context/theme"
 
-const LOGO_LEFT = [`                                         `, `█▀▀▀ █▀▀█ █▀▀█ █▀▀█ █▀▀▀ █▀▀█ █▀▀█ █▀▀▀`, `█░░░ █▀▀▀ █▀▀▄ █▀▀▀ █▀▀▄ █▀▀▄ █▀▀█ ▀▀▀█`, `▀▀▀▀ ▀▀▀▀ ▀  ▀ ▀▀▀▀ ▀▀▀▀ ▀  ▀ ▀  ▀ ▀▀▀▀`]
+const LOGO = [
+  `        ╭───────╮              `,
+  `      ╭─┤       ├─╮            `,
+  `    ╭─┤ │  ╭─╮  │ ├─╮          `,
+  `   ╭┤ │ │ ╭┤ ╰╮ │ │ ├╮         `,
+  `   ││ │ │ ││   │ │ │ ││         `,
+  `   ╰┤ │ │ ╰┤ ╭╯ │ │ ├╯         `,
+  `    ╰─┤ │  ╰─╯  │ ├─╯          `,
+  `      ╰─┤       ├─╯            `,
+  `        ╰───────╯              `,
+]
 
-const LOGO_RIGHT = [`                   `, `█▀▀▀ █▀▀█ █▀▀█ █▀▀█`, `█░░░ █░░█ █░░█ █▀▀▀`, `▀▀▀▀ ▀▀▀▀ ▀▀▀▀ ▀▀▀▀`]
+const TEXT = `     CEREBRAS CODE`
 
 export function Logo() {
   const { theme } = useTheme()
   return (
     <box>
-      <For each={LOGO_LEFT}>
-        {(line, index) => (
-          <box flexDirection="row" gap={1}>
+      <For each={LOGO}>
+        {(line) => (
+          <box flexDirection="row">
             <text fg="orange">{line}</text>
-            <text fg={theme.text} attributes={TextAttributes.BOLD}>
-              {LOGO_RIGHT[index()]}
-            </text>
           </box>
         )}
       </For>
-      <box flexDirection="row" justifyContent="flex-end">
+      <box flexDirection="row" paddingTop={1}>
+        <text fg={theme.text} attributes={TextAttributes.BOLD}>{TEXT}</text>
+      </box>
+      <box flexDirection="row" justifyContent="flex-end" paddingTop={1}>
         <text fg={theme.textMuted}>{Installation.VERSION}</text>
       </box>
     </box>
