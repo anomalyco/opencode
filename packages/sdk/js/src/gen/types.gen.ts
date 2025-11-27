@@ -589,6 +589,14 @@ export type EventSessionError = {
   }
 }
 
+export type EventFileWatcherUpdated = {
+  type: "file.watcher.updated"
+  properties: {
+    file: string
+    event: "add" | "change" | "unlink"
+  }
+}
+
 export type EventVcsBranchUpdated = {
   type: "vcs.branch.updated"
   properties: {
@@ -647,14 +655,6 @@ export type EventServerConnected = {
   }
 }
 
-export type EventFileWatcherUpdated = {
-  type: "file.watcher.updated"
-  properties: {
-    file: string
-    event: "add" | "change" | "unlink"
-  }
-}
-
 export type Event =
   | EventInstallationUpdated
   | EventInstallationUpdateAvailable
@@ -677,12 +677,12 @@ export type Event =
   | EventSessionDeleted
   | EventSessionDiff
   | EventSessionError
+  | EventFileWatcherUpdated
   | EventVcsBranchUpdated
   | EventTuiPromptAppend
   | EventTuiCommandExecute
   | EventTuiToastShow
   | EventServerConnected
-  | EventFileWatcherUpdated
 
 export type GlobalEvent = {
   directory: string
@@ -692,6 +692,7 @@ export type GlobalEvent = {
 export type Project = {
   id: string
   worktree: string
+  vcsDir?: string
   vcs?: "git"
   time: {
     created: number

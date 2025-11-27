@@ -62,6 +62,7 @@ import { Toast, useToast } from "../../ui/toast"
 import { useKV } from "../../context/kv.tsx"
 import { Editor } from "../../util/editor"
 import stripAnsi from "strip-ansi"
+import { Footer } from "./footer.tsx"
 
 addDefaultParsers(parsers.parsers)
 
@@ -114,7 +115,12 @@ export function Session() {
   const [showTimestamps, setShowTimestamps] = createSignal(kv.get("timestamps", "hide") === "show")
 
   const wide = createMemo(() => dimensions().width > 120)
-  const sidebarVisible = createMemo(() => sidebar() === "show" || (sidebar() === "auto" && wide()))
+  const sidebarVisible = createMemo(() => {
+    if (session()?.parentID) return false
+    if (sidebar() === "show") return true
+    if (sidebar() === "auto" && wide()) return true
+    return false
+  })
   const contentWidth = createMemo(() => dimensions().width - (sidebarVisible() ? 42 : 0) - 4)
 
   const scrollAcceleration = createMemo(() => {
@@ -736,31 +742,9 @@ export function Session() {
         sync,
       }}
     >
-      <box flexDirection="row" paddingBottom={1} paddingTop={1} paddingLeft={2} paddingRight={2} gap={2}>
-        <box flexGrow={1} gap={1}>
+      <box flexDirection="row">
+        <box flexGrow={1} paddingBottom={1} paddingTop={1} paddingLeft={2} paddingRight={2} gap={1}>
           <Show when={session()}>
-            <Show when={session().parentID}>
-              <box
-                backgroundColor={theme.backgroundPanel}
-                justifyContent="space-between"
-                flexDirection="row"
-                paddingTop={1}
-                paddingBottom={1}
-                flexShrink={0}
-                paddingLeft={2}
-                paddingRight={2}
-              >
-                <text fg={theme.text}>
-                  Previous <span style={{ fg: theme.textMuted }}>{keybind.print("session_child_cycle_reverse")}</span>
-                </text>
-                <text fg={theme.text}>
-                  <b>Viewing subagent session</b>
-                </text>
-                <text fg={theme.text}>
-                  <span style={{ fg: theme.textMuted }}>{keybind.print("session_child_cycle")}</span> Next
-                </text>
-              </box>
-            </Show>
             <Show when={!sidebarVisible()}>
               <Header />
             </Show>
@@ -885,6 +869,9 @@ export function Session() {
                 sessionID={route.sessionID}
               />
             </box>
+            <Show when={!sidebarVisible()}>
+              <Footer />
+            </Show>
           </Show>
           <Toast />
         </box>
