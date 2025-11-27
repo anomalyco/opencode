@@ -20,7 +20,7 @@ await $`cp ./script/postinstall.mjs ./dist/${pkg.name}/postinstall.mjs`
 
 // Filter out problematic windows-x64-baseline package
 const filteredBinaries = Object.fromEntries(
-  Object.entries(binaries).filter(([name]) => name !== "cerebras-code-windows-x64-baseline")
+  Object.entries(binaries).filter(([name]) => name !== "cerebras-code-windows-x64-baseline"),
 )
 
 await Bun.file(`./dist/${pkg.name}/package.json`).write(
