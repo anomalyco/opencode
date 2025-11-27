@@ -64,7 +64,7 @@ export default function Home() {
                     height: "120px",
                     display: "block",
                     margin: "0 auto",
-                    border: "2px solid blue"
+                    border: "2px solid blue",
                   }}
                 />
               </div>

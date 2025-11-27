@@ -13,6 +13,7 @@ npm token create --type=automation
 ```
 
 Copy the token, then:
+
 1. Go to your repo: https://github.com/arihantchoudhary/opencode/settings/secrets/actions
 2. Click "New repository secret"
 3. Name: `NPM_TOKEN`
@@ -30,6 +31,7 @@ Copy the token, then:
 5. Copy the token
 
 Then:
+
 1. Go to: https://github.com/arihantchoudhary/opencode/settings/secrets/actions
 2. Click "New repository secret"
 3. Name: `SST_GITHUB_TOKEN`
@@ -105,15 +107,19 @@ docker pull ghcr.io/arihantchoudhary/opencode:latest
 ## Checking Release Status
 
 ### Monitor the workflow:
+
 https://github.com/arihantchoudhary/opencode/actions
 
 ### See published releases:
+
 https://github.com/arihantchoudhary/opencode/releases
 
 ### Check npm package:
+
 https://www.npmjs.com/package/cerebras-code-ai
 
 ### Check Docker image:
+
 https://github.com/arihantchoudhary/opencode/pkgs/container/opencode
 
 ---
@@ -133,18 +139,22 @@ These are published with snapshot version numbers like `0.0.0-dev-202511270830`
 ## Troubleshooting
 
 **Build fails:**
+
 - Check the Actions tab for error logs
 - Make sure both secrets (NPM_TOKEN, SST_GITHUB_TOKEN) are added
 
 **npm publish fails:**
+
 - Verify you added NPM_TOKEN secret
 - Check you have publish permissions on npm
 
 **GitHub release fails:**
+
 - Verify you added SST_GITHUB_TOKEN secret
 - Make sure token has `repo` and `write:packages` permissions
 
 **Can't find the workflow:**
+
 - Make sure you pushed the updated `.github/workflows/publish.yml` to GitHub
 
 ---
@@ -152,6 +162,7 @@ These are published with snapshot version numbers like `0.0.0-dev-202511270830`
 ## That's It!
 
 Your release process is:
+
 1. Make your changes
 2. Push to `dev` (creates snapshot)
 3. Test the snapshot

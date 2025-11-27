@@ -67,7 +67,9 @@ export namespace Share {
 
   export const URL =
     process.env["CEREBRAS_API"] ??
-    (Installation.isPreview() || Installation.isLocal() ? "https://api.dev.cerebras-code.dev" : "https://api.cerebras-code.dev")
+    (Installation.isPreview() || Installation.isLocal()
+      ? "https://api.dev.cerebras-code.dev"
+      : "https://api.cerebras-code.dev")
 
   export async function create(sessionID: string) {
     return fetch(`${URL}/share_create`, {

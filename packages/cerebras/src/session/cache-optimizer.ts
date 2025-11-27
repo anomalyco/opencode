@@ -94,11 +94,7 @@ export namespace CacheOptimizer {
   /**
    * Optimize prompt for maximum cache hit rate
    */
-  export function optimize(input: {
-    prompt: string
-    workspaceRoot?: string
-    preserveTimestamps?: boolean
-  }): {
+  export function optimize(input: { prompt: string; workspaceRoot?: string; preserveTimestamps?: boolean }): {
     optimized: string
     original: string
     cacheKey: string

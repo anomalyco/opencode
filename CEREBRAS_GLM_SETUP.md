@@ -73,6 +73,7 @@ cerebras
 ### Problem 1: Abuse & Cost Bleed
 
 **Solution Implemented:**
+
 - **Retry Budget**: Maximum 5 retry attempts per session (configurable via `RETRY_MAX_ATTEMPTS`)
 - **Exponential Backoff with Jitter**: Prevents rapid retry loops
   - Initial delay: 2 seconds
@@ -83,6 +84,7 @@ cerebras
 **Code Location**: `/packages/cerebras/src/session/retry.ts`
 
 **Example**:
+
 ```typescript
 export const RETRY_MAX_ATTEMPTS = 5 // Stops infinite loops
 export const RETRY_JITTER_FACTOR = 0.1 // Prevents synchronized retries
@@ -91,11 +93,13 @@ export const RETRY_JITTER_FACTOR = 0.1 // Prevents synchronized retries
 ### Problem 2: Poor UX on Limits
 
 **Solution Implemented:**
+
 - **Graceful Error Messages**: User-friendly messages for rate limits
 - **Retry Status Updates**: Shows countdown until next retry
 - **429-Specific Handling**: Explicit detection of rate limit errors
 
 **User Experience**:
+
 ```
 ❌ Rate limit reached. Waiting before retry... (Attempt 1/5)
 ⏱️  Next attempt in 3 seconds...
@@ -106,6 +110,7 @@ export const RETRY_JITTER_FACTOR = 0.1 // Prevents synchronized retries
 ### Problem 3: Inefficiency
 
 **Solution Implemented:**
+
 - **Cerebras-Specific Custom Loader**: Optimized headers and client identification
 - **Request Deduplication Headers**: Cache-Control headers to prevent redundant requests
 - **Intelligent Retry Logic**: Respects `Retry-After` headers from API
@@ -113,6 +118,7 @@ export const RETRY_JITTER_FACTOR = 0.1 // Prevents synchronized retries
 **Code Location**: `/packages/cerebras/src/provider/provider.ts:62-91`
 
 **Features**:
+
 ```typescript
 {
   headers: {
@@ -130,11 +136,11 @@ export const RETRY_JITTER_FACTOR = 0.1 // Prevents synchronized retries
 Edit `/packages/cerebras/src/session/retry.ts`:
 
 ```typescript
-export const RETRY_INITIAL_DELAY = 2000      // Start with 2s delay
-export const RETRY_BACKOFF_FACTOR = 2        // Double each time
-export const RETRY_MAX_DELAY_NO_HEADERS = 30_000  // Cap at 30s
-export const RETRY_MAX_ATTEMPTS = 5          // Stop after 5 attempts
-export const RETRY_JITTER_FACTOR = 0.1       // 10% randomization
+export const RETRY_INITIAL_DELAY = 2000 // Start with 2s delay
+export const RETRY_BACKOFF_FACTOR = 2 // Double each time
+export const RETRY_MAX_DELAY_NO_HEADERS = 30_000 // Cap at 30s
+export const RETRY_MAX_ATTEMPTS = 5 // Stop after 5 attempts
+export const RETRY_JITTER_FACTOR = 0.1 // 10% randomization
 ```
 
 ### Per-Model Configuration
@@ -174,6 +180,7 @@ cerebras --verbose
 ```
 
 Look for log entries:
+
 - `"retrying after error"` - Shows retry attempt details
 - `"max retries exceeded"` - Indicates hitting retry budget
 - `statusCode: 429` - Rate limit detected
@@ -183,6 +190,7 @@ Look for log entries:
 Users will see clear error messages:
 
 1. **During Retry**:
+
    ```
    Rate limit reached. Waiting before retry... (Attempt 2/5)
    Next attempt in 6 seconds...
@@ -206,6 +214,7 @@ Users will see clear error messages:
 ### Issue: Constant 429 Errors
 
 **Solution**:
+
 - Wait for rate limit window to reset (typically hourly)
 - Switch to a different model temporarily
 - Check if you have multiple processes running
@@ -213,6 +222,7 @@ Users will see clear error messages:
 ### Issue: Slow Responses
 
 **Solution**:
+
 - Reduce `context` size in model config
 - Use streaming for better perceived performance
 - Enable caching (if supported by Cerebras)
@@ -220,6 +230,7 @@ Users will see clear error messages:
 ### Issue: API Key Not Working
 
 **Solution**:
+
 ```bash
 cerebras auth list  # Check if key is stored
 cerebras auth login  # Re-add if missing
@@ -265,13 +276,13 @@ Show Error: "Consider switching models..."
 
 ### SessionRetry Constants
 
-| Constant | Default | Description |
-|----------|---------|-------------|
-| `RETRY_INITIAL_DELAY` | 2000ms | Starting retry delay |
-| `RETRY_BACKOFF_FACTOR` | 2 | Exponential multiplier |
-| `RETRY_MAX_DELAY_NO_HEADERS` | 30000ms | Maximum delay cap |
-| `RETRY_MAX_ATTEMPTS` | 5 | Retry budget limit |
-| `RETRY_JITTER_FACTOR` | 0.1 | Jitter percentage |
+| Constant                     | Default | Description            |
+| ---------------------------- | ------- | ---------------------- |
+| `RETRY_INITIAL_DELAY`        | 2000ms  | Starting retry delay   |
+| `RETRY_BACKOFF_FACTOR`       | 2       | Exponential multiplier |
+| `RETRY_MAX_DELAY_NO_HEADERS` | 30000ms | Maximum delay cap      |
+| `RETRY_MAX_ATTEMPTS`         | 5       | Retry budget limit     |
+| `RETRY_JITTER_FACTOR`        | 0.1     | Jitter percentage      |
 
 ### Functions
 
@@ -282,6 +293,7 @@ Show Error: "Consider switching models..."
 ## Support
 
 For issues or questions:
+
 1. Check logs with `cerebras --verbose`
 2. Review [Cerebras API Documentation](https://inference.cerebras.ai/docs)
 3. Open an issue on GitHub

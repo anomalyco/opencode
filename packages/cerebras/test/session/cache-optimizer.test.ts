@@ -195,28 +195,19 @@ describe("CacheOptimizer", () => {
 
   describe("wouldMatch", () => {
     test("returns true for prompts that would match", () => {
-      const matches = CacheOptimizer.wouldMatch(
-        "Hello    world",
-        "Hello  world"
-      )
+      const matches = CacheOptimizer.wouldMatch("Hello    world", "Hello  world")
 
       expect(matches).toBe(true)
     })
 
     test("returns false for prompts that would not match", () => {
-      const matches = CacheOptimizer.wouldMatch(
-        "Hello world",
-        "Goodbye world"
-      )
+      const matches = CacheOptimizer.wouldMatch("Hello world", "Goodbye world")
 
       expect(matches).toBe(false)
     })
 
     test("matches prompts with different timestamps", () => {
-      const matches = CacheOptimizer.wouldMatch(
-        "Event at 2025-11-27T08:30:00Z",
-        "Event at 2025-11-27T09:45:00Z"
-      )
+      const matches = CacheOptimizer.wouldMatch("Event at 2025-11-27T08:30:00Z", "Event at 2025-11-27T09:45:00Z")
 
       expect(matches).toBe(true)
     })
@@ -241,11 +232,7 @@ describe("CacheOptimizer", () => {
     })
 
     test("returns zero cache hit rate for unique prompts", () => {
-      const prompts = [
-        "Prompt 1",
-        "Prompt 2",
-        "Prompt 3",
-      ]
+      const prompts = ["Prompt 1", "Prompt 2", "Prompt 3"]
 
       const analysis = CacheOptimizer.analyzeCachePotential(prompts)
 

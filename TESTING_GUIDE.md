@@ -22,6 +22,7 @@ bun test --coverage
 ## Feature 1: Rate Limit Handling with Jitter
 
 ### What It Does
+
 - Automatic retry with exponential backoff + 10% jitter
 - Explicit 429 detection
 - Max 5 retry attempts per session
@@ -30,11 +31,13 @@ bun test --coverage
 ### How to Test
 
 #### Unit Tests
+
 ```bash
 bun test test/session/retry.test.ts
 ```
 
 Expected output:
+
 ```
 ✓ 11 tests pass
 ✓ caps delay at 30 seconds when headers missing (with jitter)
@@ -45,6 +48,7 @@ Expected output:
 #### Manual Test - Simulate Rate Limits
 
 1. **Trigger rapid requests** (will hit your actual API limits):
+
 ```bash
 # Start cerebras CLI
 cerebras
@@ -53,6 +57,7 @@ cerebras
 ```
 
 2. **Expected behavior**:
+
 ```
 Rate limit reached. Waiting before retry... (Attempt 1/5)
 Next attempt in 4 seconds...
@@ -62,6 +67,7 @@ Next attempt in 8 seconds...
 ```
 
 3. **After 5 retries**:
+
 ```
 ❌ Failed after 5 attempts. You may be hitting rate limits.
 Consider switching to a different model or waiting a few minutes.
@@ -72,6 +78,7 @@ Consider switching to a different model or waiting a few minutes.
 ## Feature 2: Abuse Pattern Detection
 
 ### What It Does
+
 - Detects identical prompts (infinite loops)
 - Monitors burst requests (>10 req/s)
 - Identifies lopsided token usage
@@ -80,11 +87,13 @@ Consider switching to a different model or waiting a few minutes.
 ### How to Test
 
 #### Unit Tests
+
 ```bash
 bun test test/session/abuse-detection.test.ts
 ```
 
 Expected output:
+
 ```
 ✓ detects repeated identical prompts
 ✓ detects high frequency requests
@@ -114,11 +123,13 @@ for (let i = 0; i < 5; i++) {
 ```
 
 Run:
+
 ```bash
 bun run test-identical.ts
 ```
 
 Expected output:
+
 ```
 Attempt 1: null
 Attempt 2: null
@@ -173,6 +184,7 @@ console.log("Result:", result)
 ```
 
 Expected output:
+
 ```
 {
   pattern: 'lopsided_tokens',
@@ -187,6 +199,7 @@ Expected output:
 ## Feature 3: Session Token Budgets
 
 ### What It Does
+
 - Tracks total tokens per session
 - Warns at 80%, critical at 95%
 - Hard stop at 100% (default: 1M tokens)
@@ -245,6 +258,7 @@ describe("TokenBudget", () => {
 ```
 
 Run:
+
 ```bash
 bun test test/session/token-budget.test.ts
 ```
@@ -254,6 +268,7 @@ bun test test/session/token-budget.test.ts
 1. **Configure custom budget** (optional):
 
 Create `cerebras.json`:
+
 ```json
 {
   "session": {
@@ -263,11 +278,13 @@ Create `cerebras.json`:
 ```
 
 2. **Monitor usage** (via logs):
+
 ```bash
 cerebras --verbose 2>&1 | grep "token usage tracked"
 ```
 
 3. **Expected log output**:
+
 ```
 token usage tracked { sessionID: 'abc123', totalTokens: 8500, percentage: '85.0%' }
 ⚠️ Warning: 85% of token budget used (8,500 / 10,000).
@@ -278,6 +295,7 @@ token usage tracked { sessionID: 'abc123', totalTokens: 8500, percentage: '85.0%
 ## Feature 4: Cache Optimization
 
 ### What It Does
+
 - Normalizes whitespace
 - Canonicalizes file paths
 - Removes non-deterministic data (timestamps, UUIDs)
@@ -286,11 +304,13 @@ token usage tracked { sessionID: 'abc123', totalTokens: 8500, percentage: '85.0%
 ### How to Test
 
 #### Unit Tests
+
 ```bash
 bun test test/session/cache-optimizer.test.ts
 ```
 
 Expected output:
+
 ```
 ✓ normalizes multiple spaces
 ✓ removes user-specific paths
@@ -328,11 +348,13 @@ console.log("Prompt 2:", opt2.transformations)
 ```
 
 Run:
+
 ```bash
 bun run test-cache.ts
 ```
 
 Expected output:
+
 ```
 Prompt 1 cache key: a1b2c3d4e5f6g7h8
 Prompt 2 cache key: a1b2c3d4e5f6g7h8
@@ -352,12 +374,12 @@ import { CacheOptimizer } from "./packages/cerebras/src/session/cache-optimizer"
 
 const prompts = [
   "What is 2+2?",
-  "What  is  2+2?",  // Same after normalization
+  "What  is  2+2?", // Same after normalization
   "Tell me a joke",
-  "Tell me a joke",   // Duplicate
+  "Tell me a joke", // Duplicate
   "Hello world",
   "Error at 2025-11-27T08:30:00Z in session_abc123",
-  "Error at 2025-11-27T09:45:00Z in session_xyz789",  // Same after removing timestamps
+  "Error at 2025-11-27T09:45:00Z in session_xyz789", // Same after removing timestamps
 ]
 
 const analysis = CacheOptimizer.analyzeCachePotential(prompts)
@@ -366,6 +388,7 @@ console.log("Analysis:", JSON.stringify(analysis, null, 2))
 ```
 
 Expected output:
+
 ```json
 {
   "totalPrompts": 7,
@@ -384,16 +407,19 @@ Expected output:
 ### End-to-End Test Scenario
 
 1. **Setup**:
+
 ```bash
 cd /Users/ari/GitHub/opencode/packages/cerebras
 ```
 
 2. **Run full test suite**:
+
 ```bash
 bun test
 ```
 
 3. **Expected results**:
+
 ```
 ✓ 11 tests pass (retry.test.ts)
 ✓ 15 tests pass (abuse-detection.test.ts)
@@ -440,20 +466,24 @@ Expected: Both should complete in <100ms.
 ### Common Issues
 
 **Issue**: Tests fail sporadically
+
 - **Cause**: Jitter in retry delays
 - **Fix**: Widen test ranges (±15% instead of ±10%)
 
 **Issue**: Abuse detection doesn't trigger
+
 - **Cause**: Test runs too slowly (timestamps spread apart)
 - **Fix**: Run detections in rapid succession
 
 **Issue**: Cache keys don't match
+
 - **Cause**: Workspace root differences
 - **Fix**: Use consistent workspace roots in tests
 
 ### Debug Mode
 
 Enable verbose logging:
+
 ```bash
 # In tests
 LOG_LEVEL=debug bun test
@@ -492,6 +522,7 @@ jobs:
 After deployment, track these metrics:
 
 ### Rate Limiting
+
 ```bash
 # Count 429 errors
 grep -c "statusCode.*429" /path/to/logs
@@ -501,6 +532,7 @@ grep "retrying after error" /path/to/logs | grep -oP 'attempt: \K\d+' | awk '{su
 ```
 
 ### Abuse Detection
+
 ```bash
 # Pattern frequency
 grep "abuse pattern detected" /path/to/logs | grep -oP 'pattern: "\K[^"]+' | sort | uniq -c
@@ -510,6 +542,7 @@ grep "abuse pattern detected" /path/to/logs | grep -oP 'pattern: "\K[^"]+' | sor
 ```
 
 ### Token Budgets
+
 ```bash
 # Sessions hitting warnings
 grep "Warning.*token budget" /path/to/logs | wc -l
@@ -519,6 +552,7 @@ grep "token budget exceeded" /path/to/logs | wc -l
 ```
 
 ### Cache Optimization
+
 ```bash
 # Cache hit rate (needs instrumentation)
 # Add logging in production, then:
@@ -556,6 +590,7 @@ bun run typecheck
 ### Import Errors
 
 If you see "Cannot find module":
+
 ```bash
 # Check if file exists
 ls packages/cerebras/src/session/abuse-detection.ts

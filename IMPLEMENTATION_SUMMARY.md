@@ -40,6 +40,7 @@ Successfully implemented comprehensive rate limit handling and optimizations for
 **Solution Implemented**:
 
 - **Explicit 429 Detection** (`packages/cerebras/src/session/retry.ts:36-39`)
+
   ```typescript
   export function isRateLimitError(error?: MessageV2.APIError): boolean {
     return error?.data.statusCode === 429
@@ -64,7 +65,7 @@ Successfully implemented comprehensive rate limit handling and optimizations for
     type: "retry",
     attempt,
     message: retryMessage,
-    next: Date.now() + delay,  // Shows when next retry happens
+    next: Date.now() + delay, // Shows when next retry happens
   })
   ```
 
@@ -79,6 +80,7 @@ Successfully implemented comprehensive rate limit handling and optimizations for
 **Solution Implemented**:
 
 - **Cerebras Custom Loader** (`packages/cerebras/src/provider/provider.ts:62-91`)
+
   ```typescript
   async cerebras(input) {
     return {
@@ -120,20 +122,20 @@ Successfully implemented comprehensive rate limit handling and optimizations for
 
 ## Files Modified
 
-| File | Purpose | Lines Changed |
-|------|---------|---------------|
-| `packages/cerebras/src/provider/provider.ts` | Added Cerebras custom loader with optimizations | +30 |
-| `packages/cerebras/src/session/retry.ts` | Enhanced retry logic with jitter and 429 detection | +50 |
-| `packages/cerebras/src/session/processor.ts` | Retry budget enforcement and user messaging | +60 |
-| `packages/cerebras/test/session/retry.test.ts` | Updated tests for jitter and 429 handling | +40 |
+| File                                           | Purpose                                            | Lines Changed |
+| ---------------------------------------------- | -------------------------------------------------- | ------------- |
+| `packages/cerebras/src/provider/provider.ts`   | Added Cerebras custom loader with optimizations    | +30           |
+| `packages/cerebras/src/session/retry.ts`       | Enhanced retry logic with jitter and 429 detection | +50           |
+| `packages/cerebras/src/session/processor.ts`   | Retry budget enforcement and user messaging        | +60           |
+| `packages/cerebras/test/session/retry.test.ts` | Updated tests for jitter and 429 handling          | +40           |
 
 ## New Files Created
 
-| File | Purpose |
-|------|---------|
-| `CEREBRAS_GLM_SETUP.md` | Complete setup guide with troubleshooting |
-| `cerebras-example.json` | Example configuration for GLM 4.6 |
-| `IMPLEMENTATION_SUMMARY.md` | This document |
+| File                        | Purpose                                   |
+| --------------------------- | ----------------------------------------- |
+| `CEREBRAS_GLM_SETUP.md`     | Complete setup guide with troubleshooting |
+| `cerebras-example.json`     | Example configuration for GLM 4.6         |
+| `IMPLEMENTATION_SUMMARY.md` | This document                             |
 
 ---
 
@@ -170,11 +172,11 @@ Successfully implemented comprehensive rate limit handling and optimizations for
 All constants in `packages/cerebras/src/session/retry.ts`:
 
 ```typescript
-export const RETRY_INITIAL_DELAY = 2000        // 2s start delay
-export const RETRY_BACKOFF_FACTOR = 2          // 2x multiplier
-export const RETRY_MAX_DELAY_NO_HEADERS = 30_000  // 30s max
-export const RETRY_MAX_ATTEMPTS = 5            // Stop after 5 tries
-export const RETRY_JITTER_FACTOR = 0.1         // 10% randomization
+export const RETRY_INITIAL_DELAY = 2000 // 2s start delay
+export const RETRY_BACKOFF_FACTOR = 2 // 2x multiplier
+export const RETRY_MAX_DELAY_NO_HEADERS = 30_000 // 30s max
+export const RETRY_MAX_ATTEMPTS = 5 // Stop after 5 tries
+export const RETRY_JITTER_FACTOR = 0.1 // 10% randomization
 ```
 
 ---
@@ -182,12 +184,14 @@ export const RETRY_JITTER_FACTOR = 0.1         // 10% randomization
 ## Testing
 
 All tests passing:
+
 ```
 ✓ 11 tests pass (0 fail)
 ✓ 47 assertions
 ```
 
 New test coverage:
+
 - Rate limit (429) detection
 - Jitter boundaries
 - Aggressive backoff for 429 errors
@@ -201,6 +205,7 @@ New test coverage:
 ### Log Messages
 
 **Retry Attempts**:
+
 ```typescript
 log.info("retrying after error", {
   attempt,
@@ -211,6 +216,7 @@ log.info("retrying after error", {
 ```
 
 **Max Retries Exceeded**:
+
 ```typescript
 log.error("max retries exceeded", {
   attempt,
@@ -247,6 +253,7 @@ log.error("max retries exceeded", {
 ### Rollback Plan
 
 If issues occur:
+
 1. Revert `packages/cerebras/src/session/retry.ts` to remove jitter
 2. Keep retry budget enforcement
 3. Monitor for stability
@@ -353,12 +360,12 @@ A: Run with `--verbose` flag and grep for "isRateLimit: true" in logs.
 
 ### Success Criteria
 
-| Metric | Target | How to Measure |
-|--------|--------|----------------|
-| Cost bleed reduction | >60% | Compare API costs before/after |
-| User error rate | <5% | Track "max retries exceeded" events |
-| Retry success rate | >70% | Successful retries / total retries |
-| API load distribution | Smooth curve | Monitor request timestamps |
+| Metric                | Target       | How to Measure                      |
+| --------------------- | ------------ | ----------------------------------- |
+| Cost bleed reduction  | >60%         | Compare API costs before/after      |
+| User error rate       | <5%          | Track "max retries exceeded" events |
+| Retry success rate    | >70%         | Successful retries / total retries  |
+| API load distribution | Smooth curve | Monitor request timestamps          |
 
 ### Dashboard Queries
 
@@ -399,6 +406,7 @@ This implementation successfully addresses all three scaling challenges:
 The solution is production-ready, fully tested, and includes comprehensive documentation for users and developers.
 
 **Next Steps**:
+
 1. Deploy to staging environment
 2. Run integration tests with real Cerebras API
 3. Monitor metrics for 1 week

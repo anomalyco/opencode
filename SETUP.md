@@ -3,6 +3,7 @@
 ## What's Already Done
 
 All code has been updated to use "Cerebras" branding:
+
 - ✅ Install script uses `cerebras` binary
 - ✅ Publish scripts updated
 - ✅ GitHub Actions workflows configured
@@ -61,6 +62,7 @@ Check progress at: Actions tab in GitHub
 3. Click "Run workflow"
 
 This will:
+
 - Build binaries for all platforms
 - Publish to npm as `cerebras-code-ai`
 - Create GitHub release with downloadable binaries
@@ -83,12 +85,14 @@ npm install -g cerebras-code-ai
 If you want Homebrew support, the publish script tries to push to `arihantchoudhary/homebrew-tap`.
 
 You can either:
+
 1. Create that repository, or
 2. Comment out the Homebrew section in `packages/cerebras/script/publish.ts` (lines 242-247)
 
 ## Optional: AUR Support (Arch Linux)
 
 The publish script tries to publish to AUR. You can either:
+
 1. Set up AUR packages and add `AUR_KEY` secret, or
 2. Comment out the AUR section in `packages/cerebras/script/publish.ts` (lines 170-189)
 
@@ -112,20 +116,24 @@ bash ./install
 **Build fails:** Check the Actions logs for specific errors
 
 **npm publish fails:**
+
 - Verify NPM_TOKEN secret is added
 - Make sure you're logged into npm with publish permissions
 
 **GitHub release fails:**
+
 - Verify SST_GITHUB_TOKEN secret is added
 - Check token has correct permissions
 
 **Install script 404:**
+
 - Wait a few minutes after release for assets to be available
 - Check that GitHub release was created successfully
 
 ## That's It!
 
 Everything is configured and ready. Just:
+
 1. Add the 2 required secrets (NPM_TOKEN, SST_GITHUB_TOKEN)
 2. Run the publish workflow
 3. Users can install via the install script or npm

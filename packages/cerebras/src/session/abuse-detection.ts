@@ -13,12 +13,7 @@ export namespace AbuseDetection {
   export const PROMPT_GROWTH_THRESHOLD = 2.0 // 2x growth between messages
   export const MAX_PROMPT_GROWTH_STREAK = 3 // Consecutive growth violations
 
-  export type Pattern =
-    | "identical_prompts"
-    | "burst_requests"
-    | "lopsided_tokens"
-    | "prompt_size_growth"
-    | "none"
+  export type Pattern = "identical_prompts" | "burst_requests" | "lopsided_tokens" | "prompt_size_growth" | "none"
 
   export type DetectionResult = {
     pattern: Pattern
@@ -73,8 +68,7 @@ export namespace AbuseDetection {
         pattern: "identical_prompts",
         severity: "critical",
         message: `Detected ${identicalCount} identical prompts in a row. This may indicate an infinite loop.`,
-        suggestion:
-          "Check your code for infinite loops. Consider adding exit conditions or varying your prompts.",
+        suggestion: "Check your code for infinite loops. Consider adding exit conditions or varying your prompts.",
         metadata: {
           prompt: newPrompt.slice(0, 100) + "...",
           count: identicalCount,
@@ -113,10 +107,7 @@ export namespace AbuseDetection {
   /**
    * Check for lopsided token usage (high input, low output)
    */
-  function detectLopsidedTokens(
-    inputTokens: number,
-    outputTokens: number,
-  ): DetectionResult | null {
+  function detectLopsidedTokens(inputTokens: number, outputTokens: number): DetectionResult | null {
     if (outputTokens < MIN_OUTPUT_TOKENS) {
       // Too few tokens to make a judgment
       return null
@@ -222,9 +213,7 @@ export namespace AbuseDetection {
       () => detectPromptGrowth(state, input.promptTokenCount),
       () => detectBurstRequests(state),
       () =>
-        input.inputTokens && input.outputTokens
-          ? detectLopsidedTokens(input.inputTokens, input.outputTokens)
-          : null,
+        input.inputTokens && input.outputTokens ? detectLopsidedTokens(input.inputTokens, input.outputTokens) : null,
     ]
 
     for (const check of checks) {
@@ -259,9 +248,7 @@ export namespace AbuseDetection {
       totalRequests: state.requestTimestamps.length,
       requestsLastMinute: recentRequests.length,
       averagePromptSize:
-        state.prompts.length > 0
-          ? state.prompts.reduce((sum, p) => sum + p.tokenCount, 0) / state.prompts.length
-          : 0,
+        state.prompts.length > 0 ? state.prompts.reduce((sum, p) => sum + p.tokenCount, 0) / state.prompts.length : 0,
       tokenHistory: state.tokenHistory.slice(-10), // Last 10
     }
   }

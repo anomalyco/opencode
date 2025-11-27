@@ -35,11 +35,11 @@ cerebras  # then Ctrl+M to select GLM 4.6
 
 ### Error Messages You Might See
 
-| Message | What It Means | What To Do |
-|---------|---------------|------------|
-| "Rate limit reached. Waiting before retry..." | You hit API rate limit | Wait for automatic retry (shown in status) |
-| "Failed after 5 attempts. You may be hitting rate limits..." | Exceeded retry budget | Wait a few minutes, or switch models |
-| "Provider is overloaded. Waiting before retry..." | Cerebras servers are busy | Wait for automatic retry |
+| Message                                                      | What It Means             | What To Do                                 |
+| ------------------------------------------------------------ | ------------------------- | ------------------------------------------ |
+| "Rate limit reached. Waiting before retry..."                | You hit API rate limit    | Wait for automatic retry (shown in status) |
+| "Failed after 5 attempts. You may be hitting rate limits..." | Exceeded retry budget     | Wait a few minutes, or switch models       |
+| "Provider is overloaded. Waiting before retry..."            | Cerebras servers are busy | Wait for automatic retry                   |
 
 ---
 
@@ -47,23 +47,23 @@ cerebras  # then Ctrl+M to select GLM 4.6
 
 ### Key Files
 
-| File | Purpose |
-|------|---------|
-| `packages/cerebras/src/session/retry.ts` | Retry logic, backoff, jitter |
-| `packages/cerebras/src/session/processor.ts` | Retry enforcement, error handling |
-| `packages/cerebras/src/provider/provider.ts` | Cerebras custom loader |
-| `packages/cerebras/test/session/retry.test.ts` | Test suite |
+| File                                           | Purpose                           |
+| ---------------------------------------------- | --------------------------------- |
+| `packages/cerebras/src/session/retry.ts`       | Retry logic, backoff, jitter      |
+| `packages/cerebras/src/session/processor.ts`   | Retry enforcement, error handling |
+| `packages/cerebras/src/provider/provider.ts`   | Cerebras custom loader            |
+| `packages/cerebras/test/session/retry.test.ts` | Test suite                        |
 
 ### Configuration Constants
 
 ```typescript
 // packages/cerebras/src/session/retry.ts
 
-export const RETRY_INITIAL_DELAY = 2000        // Start: 2s
-export const RETRY_BACKOFF_FACTOR = 2          // Multiply: 2x
-export const RETRY_MAX_DELAY_NO_HEADERS = 30_000  // Cap: 30s
-export const RETRY_MAX_ATTEMPTS = 5            // Budget: 5 attempts
-export const RETRY_JITTER_FACTOR = 0.1         // Jitter: ±10%
+export const RETRY_INITIAL_DELAY = 2000 // Start: 2s
+export const RETRY_BACKOFF_FACTOR = 2 // Multiply: 2x
+export const RETRY_MAX_DELAY_NO_HEADERS = 30_000 // Cap: 30s
+export const RETRY_MAX_ATTEMPTS = 5 // Budget: 5 attempts
+export const RETRY_JITTER_FACTOR = 0.1 // Jitter: ±10%
 ```
 
 ### API
@@ -156,11 +156,11 @@ cerebras --verbose 2>&1 | grep "max retries exceeded"
 
 ### Tuning Guide
 
-| Scenario | Adjustment | Setting |
-|----------|------------|---------|
-| Too many retries | Lower budget | `RETRY_MAX_ATTEMPTS = 3` |
-| Retry too slow | Faster backoff | `RETRY_BACKOFF_FACTOR = 1.5` |
-| Thundering herd | More jitter | `RETRY_JITTER_FACTOR = 0.2` |
+| Scenario              | Adjustment           | Setting                      |
+| --------------------- | -------------------- | ---------------------------- |
+| Too many retries      | Lower budget         | `RETRY_MAX_ATTEMPTS = 3`     |
+| Retry too slow        | Faster backoff       | `RETRY_BACKOFF_FACTOR = 1.5` |
+| Thundering herd       | More jitter          | `RETRY_JITTER_FACTOR = 0.2`  |
 | API requests too fast | Higher initial delay | `RETRY_INITIAL_DELAY = 3000` |
 
 ### Example: Custom Retry Policy
@@ -234,12 +234,12 @@ bun run build
 
 ## Performance Targets
 
-| Metric | Target | Actual |
-|--------|--------|--------|
-| Retry success rate | >70% | Test in production |
-| Max retries hit | <10% | Monitor logs |
-| Average retries per request | <2 | Calculate from logs |
-| 429 errors per hour | <100 | Track via metrics |
+| Metric                      | Target | Actual              |
+| --------------------------- | ------ | ------------------- |
+| Retry success rate          | >70%   | Test in production  |
+| Max retries hit             | <10%   | Monitor logs        |
+| Average retries per request | <2     | Calculate from logs |
+| 429 errors per hour         | <100   | Track via metrics   |
 
 ---
 

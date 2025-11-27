@@ -13,7 +13,10 @@ if (process.versions.bun !== expectedBunVersion) {
   throw new Error(`This script requires bun@${expectedBunVersion}, but you are using bun@${process.versions.bun}`)
 }
 
-const CHANNEL = process.env["CEREBRAS_CHANNEL"] ?? process.env["OPENCODE_CHANNEL"] ?? (await $`git branch --show-current`.text().then((x) => x.trim()))
+const CHANNEL =
+  process.env["CEREBRAS_CHANNEL"] ??
+  process.env["OPENCODE_CHANNEL"] ??
+  (await $`git branch --show-current`.text().then((x) => x.trim()))
 const IS_PREVIEW = CHANNEL !== "latest"
 const VERSION = await (async () => {
   if (process.env["CEREBRAS_VERSION"]) return process.env["CEREBRAS_VERSION"]
