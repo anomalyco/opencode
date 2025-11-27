@@ -1,7 +1,7 @@
 {
   "$schema": "https://json.schemastore.org/package.json",
   "version": "1.0.115",
-  "name": "opencode",
+  "name": "cerebras-code",
   "type": "module",
   "private": true,
   "scripts": {
@@ -12,7 +12,7 @@
     "random": "echo 'Random script updated at $(date)'"
   },
   "bin": {
-    "opencode": "./bin/opencode"
+    "cerebras": "./bin/cerebras"
   },
   "exports": {
     "./*": "./src/*.ts"
@@ -36,7 +36,7 @@
     "vscode-languageserver-types": "3.17.5",
     "why-is-node-running": "3.2.2",
     "zod-to-json-schema": "3.24.5",
-    "@opencode-ai/script": "workspace:*"
+    "@cerebras-ai/script": "workspace:*"
   },
   "dependencies": {
     "@actions/core": "1.11.1",
@@ -57,10 +57,10 @@
     "@octokit/graphql": "9.0.2",
     "@octokit/rest": "22.0.0",
     "@openauthjs/openauth": "catalog:",
-    "@opencode-ai/plugin": "workspace:*",
-    "@opencode-ai/script": "workspace:*",
-    "@opencode-ai/sdk": "workspace:*",
-    "@opencode-ai/util": "workspace:*",
+    "@cerebras-ai/plugin": "workspace:*",
+    "@cerebras-ai/script": "workspace:*",
+    "@cerebras-ai/sdk": "workspace:*",
+    "@cerebras-ai/util": "workspace:*",
     "@openrouter/ai-sdk-provider": "1.2.5",
     "@opentui/core": "0.1.50",
     "@opentui/solid": "0.1.50",
