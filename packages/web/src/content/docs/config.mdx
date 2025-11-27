@@ -424,3 +424,18 @@ These are useful for:
 - Keeping sensitive data like API keys in separate files.
 - Including large instruction files without cluttering your config.
 - Sharing common configuration snippets across multiple config files.
+
+### Token Estimation
+
+Opencode estimates token count for tool results using a weighted heuristic,
+which introduces a small margin of error that can vary between different
+languages and different types of content.
+
+You can use the `OPENCODE_TOKEN_FACTOR` environment variable to tune token estimation.
+Set it to a value greater than 1.0 to increase estimates (more conservative)
+or less than 1.0 to decrease estimates (allow more content).
+
+```bash
+export OPENCODE_TOKEN_FACTOR=1.1 # Estimate token counts 10% more conservatively
+opencode run "Hello world"
+```
