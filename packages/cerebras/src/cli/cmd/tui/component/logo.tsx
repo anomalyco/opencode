@@ -116,7 +116,7 @@ export function Logo() {
     if (!animationComplete()) return "#f05a28"
 
     // Create wave effect: each character has a phase offset based on position
-    const phase = waveOffset() + (charIndex * 0.15)
+    const phase = waveOffset() + charIndex * 0.15
     const sineValue = Math.sin(phase)
     const normalizedValue = (sineValue + 1) / 2
     const colorIdx = Math.floor(normalizedValue * (COLORS.length - 1))
@@ -130,9 +130,12 @@ export function Logo() {
         {(line, index) => (
           <box flexDirection="row" gap={1}>
             <text>
-              {line.substring(0, charCount()).split("").map((char, i) => (
-                <text fg={getCharColor(i)}>{char}</text>
-              ))}
+              {line
+                .substring(0, charCount())
+                .split("")
+                .map((char, i) => (
+                  <text fg={getCharColor(i)}>{char}</text>
+                ))}
             </text>
             <text fg={theme.text} attributes={TextAttributes.BOLD}>
               {LOGO_RIGHT[index()].substring(0, charCount())}
