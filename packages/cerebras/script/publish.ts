@@ -48,7 +48,7 @@ if (process.env.NPM_CONFIG_TOKEN) {
       count++
       // Add delay to avoid npm rate limiting - wait after EACH publish
       console.log(`⏳ Published ${count}/${Object.keys(binaries).length}, pausing...`)
-      await new Promise((resolve) => setTimeout(resolve, 15000))
+      await new Promise((resolve) => setTimeout(resolve, 30000))
     } finally {
       process.chdir(dir)
     }
