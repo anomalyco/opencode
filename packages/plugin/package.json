@@ -1,6 +1,6 @@
 {
   "$schema": "https://json.schemastore.org/package.json",
-  "name": "@opencode-ai/plugin",
+  "name": "@cerebras-ai/plugin",
   "version": "1.0.115",
   "type": "module",
   "scripts": {
@@ -15,7 +15,7 @@
     "dist"
   ],
   "dependencies": {
-    "@opencode-ai/sdk": "workspace:*",
+    "@cerebras-ai/sdk": "workspace:*",
     "zod": "catalog:"
   },
   "devDependencies": {

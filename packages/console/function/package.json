@@ -1,5 +1,5 @@
 {
-  "name": "@opencode-ai/console-function",
+  "name": "@cerebras-ai/console-function",
   "version": "1.0.115",
   "$schema": "https://json.schemastore.org/package.json",
   "private": true,
@@ -20,8 +20,8 @@
     "@ai-sdk/openai": "2.0.2",
     "@ai-sdk/openai-compatible": "1.0.1",
     "@hono/zod-validator": "catalog:",
-    "@opencode-ai/console-core": "workspace:*",
-    "@opencode-ai/console-resource": "workspace:*",
+    "@cerebras-ai/console-core": "workspace:*",
+    "@cerebras-ai/console-resource": "workspace:*",
     "@openauthjs/openauth": "0.0.0-20250322224806",
     "ai": "catalog:",
     "hono": "catalog:",

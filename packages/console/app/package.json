@@ -1,5 +1,5 @@
 {
-  "name": "@opencode-ai/console-app",
+  "name": "@cerebras-ai/console-app",
   "version": "1.0.115",
   "type": "module",
   "scripts": {
@@ -15,10 +15,10 @@
     "@jsx-email/render": "1.1.1",
     "@kobalte/core": "catalog:",
     "@openauthjs/openauth": "catalog:",
-    "@opencode-ai/console-core": "workspace:*",
-    "@opencode-ai/console-mail": "workspace:*",
-    "@opencode-ai/console-resource": "workspace:*",
-    "@opencode-ai/ui": "workspace:*",
+    "@cerebras-ai/console-core": "workspace:*",
+    "@cerebras-ai/console-mail": "workspace:*",
+    "@cerebras-ai/console-resource": "workspace:*",
+    "@cerebras-ai/ui": "workspace:*",
     "@solidjs/meta": "catalog:",
     "@solidjs/router": "catalog:",
     "@solidjs/start": "catalog:",

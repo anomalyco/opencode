@@ -1,6 +1,6 @@
 {
   "$schema": "https://json.schemastore.org/package.json",
-  "name": "@opencode-ai/console-resource",
+  "name": "@cerebras-ai/console-resource",
   "dependencies": {
     "@cloudflare/workers-types": "catalog:"
   },

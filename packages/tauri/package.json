@@ -1,5 +1,5 @@
 {
-  "name": "@opencode-ai/tauri",
+  "name": "@cerebras-ai/tauri",
   "private": true,
   "version": "1.0.115",
   "type": "module",

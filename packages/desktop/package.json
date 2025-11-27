@@ -1,5 +1,5 @@
 {
-  "name": "@opencode-ai/desktop",
+  "name": "@cerebras-ai/desktop",
   "version": "1.0.115",
   "description": "",
   "type": "module",
@@ -24,9 +24,9 @@
   },
   "dependencies": {
     "@kobalte/core": "catalog:",
-    "@opencode-ai/sdk": "workspace:*",
-    "@opencode-ai/ui": "workspace:*",
-    "@opencode-ai/util": "workspace:*",
+    "@cerebras-ai/sdk": "workspace:*",
+    "@cerebras-ai/ui": "workspace:*",
+    "@cerebras-ai/util": "workspace:*",
     "@shikijs/transformers": "3.9.2",
     "@solid-primitives/active-element": "2.1.3",
     "@solid-primitives/event-bus": "1.1.2",

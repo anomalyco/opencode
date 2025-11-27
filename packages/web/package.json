@@ -1,5 +1,5 @@
 {
-  "name": "@opencode-ai/web",
+  "name": "@cerebras-ai/web",
   "type": "module",
   "version": "1.0.115",
   "scripts": {
@@ -34,7 +34,7 @@
     "toolbeam-docs-theme": "0.4.8"
   },
   "devDependencies": {
-    "opencode": "workspace:*",
+    "cerebras-code": "workspace:*",
     "@types/node": "catalog:",
     "typescript": "catalog:"
   }

@@ -1,5 +1,5 @@
 {
-  "name": "@opencode-ai/enterprise",
+  "name": "@cerebras-ai/enterprise",
   "version": "1.0.115",
   "private": true,
   "type": "module",
@@ -11,8 +11,8 @@
     "start": "vite start"
   },
   "dependencies": {
-    "@opencode-ai/util": "workspace:*",
-    "@opencode-ai/ui": "workspace:*",
+    "@cerebras-ai/util": "workspace:*",
+    "@cerebras-ai/ui": "workspace:*",
     "aws4fetch": "^1.0.20",
     "@pierre/precision-diffs": "catalog:",
     "@solidjs/router": "catalog:",
