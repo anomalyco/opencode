@@ -15,6 +15,7 @@ import type {
   ProviderListResponse,
   ProviderAuthMethod,
   VcsInfo,
+  Path,
 } from "@opencode-ai/sdk"
 import { createStore, produce, reconcile } from "solid-js/store"
 import { useSDK } from "@tui/context/sdk"
@@ -62,6 +63,7 @@ export const { use: useSync, provider: SyncProvider } = createSimpleContext({
       }
       formatter: FormatterStatus[]
       vcs: VcsInfo | undefined
+      path: Path | undefined
     }>({
       provider_next: {
         all: [],
@@ -86,6 +88,7 @@ export const { use: useSync, provider: SyncProvider } = createSimpleContext({
       mcp: {},
       formatter: [],
       vcs: undefined,
+      path: undefined,
     })
 
     const sdk = useSDK()
@@ -286,6 +289,7 @@ export const { use: useSync, provider: SyncProvider } = createSimpleContext({
             sdk.client.session.status().then((x) => setStore("session_status", x.data!)),
             sdk.client.provider.auth().then((x) => setStore("provider_auth", x.data ?? {})),
             sdk.client.vcs.get().then((x) => setStore("vcs", x.data)),
+            sdk.client.path.get().then((x) => setStore("path", x.data)),
           ]).then(() => {
             setStore("status", "complete")
           })

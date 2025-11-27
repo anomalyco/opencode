@@ -20,6 +20,7 @@ export const AttachCommand = cmd({
     await tui({
       url: args.url,
       args: {},
+      attached: true,
     })
   },
 })
