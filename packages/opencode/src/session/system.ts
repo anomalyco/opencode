@@ -45,12 +45,13 @@ export namespace SystemPrompt {
         `  Today's date: ${new Date().toDateString()}`,
         `</env>`,
         `<files>`,
-        `  ${project.vcs === "git"
-          ? await Ripgrep.tree({
-            cwd: Instance.directory,
-            limit: 200,
-          })
-          : ""
+        `  ${
+          project.vcs === "git"
+            ? await Ripgrep.tree({
+                cwd: Instance.directory,
+                limit: 200,
+              })
+            : ""
         }`,
         `</files>`,
       ].join("\n"),
