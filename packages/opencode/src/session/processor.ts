@@ -219,7 +219,11 @@ export namespace SessionProcessor {
                     })
 
                     if (value.error instanceof Permission.RejectedError) {
-                      blocked = true
+                      // Only block processing for actual denials, not interjections
+                      // Interjections contain user suggestions and should allow model to continue
+                      if (!value.error.isInterjection) {
+                        blocked = true
+                      }
                     }
                     delete toolcalls[value.toolCallId]
                   }

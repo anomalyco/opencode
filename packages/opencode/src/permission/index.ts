@@ -167,7 +167,14 @@ export namespace Permission {
           ? `The user rejected this action and suggests: ${input.interjection}`
           : undefined
       match.reject(
-        new RejectedError(input.sessionID, input.permissionID, match.info.callID, match.info.metadata, reason),
+        new RejectedError(
+          input.sessionID,
+          input.permissionID,
+          match.info.callID,
+          match.info.metadata,
+          reason,
+          input.response === "interject",
+        ),
       )
       return
     }
@@ -200,6 +207,7 @@ export namespace Permission {
       public readonly toolCallID?: string,
       public readonly metadata?: Record<string, any>,
       public readonly reason?: string,
+      public readonly isInterjection: boolean = false,
     ) {
       super(
         reason !== undefined
