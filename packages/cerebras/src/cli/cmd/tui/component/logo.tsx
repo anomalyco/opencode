@@ -79,7 +79,7 @@ const COLORS = [
 export function Logo() {
   const { theme } = useTheme()
   const [charCount, setCharCount] = createSignal(0)
-  const [colorIndex, setColorIndex] = createSignal(0)
+  const [waveOffset, setWaveOffset] = createSignal(0)
   const [animationComplete, setAnimationComplete] = createSignal(false)
 
   onMount(() => {
@@ -99,31 +99,41 @@ export function Logo() {
         clearInterval(revealInterval)
         setAnimationComplete(true)
 
-        // Then: start pulse animation with easing
-        // Start at 0.25 so we begin at the brightest color for immediate visibility
-        let progress = 0.25
+        // Then: start wave animation
+        let offset = 0
         setInterval(() => {
-          progress += 0.01
-          if (progress >= 1) progress = 0
-
-          // Use sine wave for smooth back-and-forth
-          const sineValue = Math.sin(progress * Math.PI * 2)
-          const normalizedValue = (sineValue + 1) / 2 // Convert -1,1 to 0,1
-          const colorIdx = Math.floor(normalizedValue * (COLORS.length - 1))
-
-          setColorIndex(colorIdx)
+          offset += 0.05
+          if (offset >= Math.PI * 2) offset = 0
+          setWaveOffset(offset)
         }, 50)
       }
       setCharCount(revealed)
     }, 15)
   })
 
+  // Calculate color for a character based on its position in the wave
+  const getCharColor = (charIndex: number) => {
+    if (!animationComplete()) return "#f05a28"
+
+    // Create wave effect: each character has a phase offset based on position
+    const phase = waveOffset() + (charIndex * 0.15)
+    const sineValue = Math.sin(phase)
+    const normalizedValue = (sineValue + 1) / 2
+    const colorIdx = Math.floor(normalizedValue * (COLORS.length - 1))
+
+    return COLORS[colorIdx]
+  }
+
   return (
     <box>
       <For each={LOGO_LEFT}>
         {(line, index) => (
           <box flexDirection="row" gap={1}>
-            <text fg={animationComplete() ? COLORS[colorIndex()] : "#f05a28"}>{line.substring(0, charCount())}</text>
+            <text>
+              {line.substring(0, charCount()).split("").map((char, i) => (
+                <text fg={getCharColor(i)}>{char}</text>
+              ))}
+            </text>
             <text fg={theme.text} attributes={TextAttributes.BOLD}>
               {LOGO_RIGHT[index()].substring(0, charCount())}
             </text>
