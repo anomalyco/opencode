@@ -456,7 +456,6 @@ export namespace Config {
       })
       .optional()
       .describe("Scroll acceleration settings"),
-
     diff_style: z
       .enum(["auto", "stacked"])
       .optional()
