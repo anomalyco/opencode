@@ -14,7 +14,7 @@ export function Logo() {
       <For each={LOGO_LEFT}>
         {(line, index) => (
           <box flexDirection="row" gap={1}>
-            <text fg="orange">{line}</text>
+            <text fg="#f05a28">{line}</text>
             <text fg={theme.text} attributes={TextAttributes.BOLD}>
               {LOGO_RIGHT[index()]}
             </text>
