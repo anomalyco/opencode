@@ -21,7 +21,7 @@ await $`cp ./script/postinstall.mjs ./dist/${pkg.name}/postinstall.mjs`
 await Bun.file(`./dist/${pkg.name}/package.json`).write(
   JSON.stringify(
     {
-      name: pkg.name + "-ai",
+      name: "cerebras-code",
       bin: {
         [pkg.name]: `./bin/${pkg.name}`,
       },
@@ -46,11 +46,9 @@ if (process.env.NPM_CONFIG_TOKEN) {
       }
       await $`bun publish --access public --tag ${Script.channel}`
       count++
-      // Add delay to avoid npm rate limiting
-      if (count % 3 === 0) {
-        console.log("⏳ Pausing to avoid rate limit...")
-        await new Promise((resolve) => setTimeout(resolve, 10000))
-      }
+      // Add delay to avoid npm rate limiting - wait after EACH publish
+      console.log(`⏳ Published ${count}/${Object.keys(binaries).length}, pausing...`)
+      await new Promise((resolve) => setTimeout(resolve, 15000))
     } finally {
       process.chdir(dir)
     }
@@ -67,7 +65,7 @@ if (!Script.preview && process.env.NPM_CONFIG_TOKEN) {
   for (const [name] of Object.entries(binaries)) {
     await $`cd dist/${name} && npm dist-tag add ${name}@${Script.version} ${majorTag}`
   }
-  await $`cd ./dist/${pkg.name} && npm dist-tag add ${pkg.name}-ai@${Script.version} ${majorTag}`
+  await $`cd ./dist/${pkg.name} && npm dist-tag add cerebras-code@${Script.version} ${majorTag}`
 }
 
 if (!Script.preview) {

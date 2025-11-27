@@ -22,7 +22,7 @@ const VERSION = await (async () => {
   if (process.env["CEREBRAS_VERSION"]) return process.env["CEREBRAS_VERSION"]
   if (process.env["OPENCODE_VERSION"]) return process.env["OPENCODE_VERSION"]
   if (IS_PREVIEW) return `0.0.0-${CHANNEL}-${new Date().toISOString().slice(0, 16).replace(/[-:T]/g, "")}`
-  const version = await fetch("https://registry.npmjs.org/cerebras-code-ai/latest")
+  const version = await fetch("https://registry.npmjs.org/cerebras-code/latest")
     .then((res) => {
       if (!res.ok) return null // Package doesn't exist yet
       return res.json()

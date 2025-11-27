@@ -9,7 +9,7 @@ const notes = [] as string[]
 console.log("=== publishing ===\n")
 
 if (!Script.preview) {
-  const previous = await fetch("https://registry.npmjs.org/cerebras-code-ai/latest")
+  const previous = await fetch("https://registry.npmjs.org/cerebras-code/latest")
     .then((res) => {
       if (!res.ok) return null // Package doesn't exist yet
       return res.json()
