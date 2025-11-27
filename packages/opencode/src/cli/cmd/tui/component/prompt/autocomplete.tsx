@@ -81,6 +81,7 @@ export function Autocomplete(props: {
     const extmarkId = input.extmarks.create({
       start: extmarkStart,
       end: extmarkEnd,
+      virtual: true,
       styleId,
       typeId: props.promptPartTypeId(),
     })
@@ -290,6 +291,11 @@ export function Autocomplete(props: {
         display: "/editor",
         description: "open editor",
         onSelect: () => command.trigger("prompt.editor", "prompt"),
+      },
+      {
+        display: "/connect",
+        description: "connect to a provider",
+        onSelect: () => command.trigger("provider.connect"),
       },
       {
         display: "/help",
