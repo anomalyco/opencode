@@ -15,6 +15,7 @@ import { fileURLToPath } from "url"
 import { Flag } from "@/flag/flag.ts"
 import path from "path"
 import { iife } from "@/util/iife"
+import { ptyToText } from "opentui-ansi-vt"
 
 const DEFAULT_MAX_OUTPUT_LENGTH = 30_000
 const MAX_OUTPUT_LENGTH = (() => {
@@ -354,7 +355,7 @@ export const BashTool = Tool.define("bash", async () => {
           exit: proc.exitCode,
           description: params.description,
         },
-        output,
+        output: ptyToText(output),
       }
     },
   }

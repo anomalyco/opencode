@@ -19,7 +19,6 @@ import { SplitBorder } from "@tui/component/border"
 import { useTheme } from "@tui/context/theme"
 import {
   BoxRenderable,
-  InputRenderable,
   ScrollBoxRenderable,
   addDefaultParsers,
   MacOSScrollAccel,
@@ -62,7 +61,6 @@ import { Clipboard } from "../../util/clipboard"
 import { Toast, useToast } from "../../ui/toast"
 import { useKV } from "../../context/kv.tsx"
 import { Editor } from "../../util/editor"
-import stripAnsi from "strip-ansi"
 import { Footer } from "./footer.tsx"
 import { extend } from "@opentui/solid"
 import { TerminalBufferRenderable } from "opentui-ansi-vt/terminal-buffer"
