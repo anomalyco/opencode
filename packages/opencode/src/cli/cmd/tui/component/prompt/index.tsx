@@ -637,11 +637,7 @@ export function Prompt(props: PromptProps) {
             flexGrow={1}
           >
             <textarea
-              placeholder={
-                props.showPlaceholder
-                  ? t`${dim(fg(theme.primary)("  → up/down"))} ${dim(fg("#64748b")("history"))} ${dim(fg("#a78bfa")("•"))} ${dim(fg(theme.primary)(keybind.print("input_newline")))} ${dim(fg("#64748b")("newline"))} ${dim(fg("#a78bfa")("•"))} ${dim(fg(theme.primary)(keybind.print("input_submit")))} ${dim(fg("#64748b")("submit"))}`
-                  : undefined
-              }
+              placeholder={props.sessionID ? undefined : "Build anything..."}
               textColor={theme.text}
               focusedTextColor={theme.text}
               minHeight={1}
@@ -781,7 +777,12 @@ export function Prompt(props: PromptProps) {
                   return
                 }
               }}
-              ref={(r: TextareaRenderable) => (input = r)}
+              ref={(r: TextareaRenderable) => {
+                input = r
+                setTimeout(() => {
+                  input.cursorColor = highlight()
+                }, 0)
+              }}
               onMouseDown={(r: MouseEvent) => r.target?.focus()}
               focusedBackgroundColor={theme.backgroundElement}
               cursorColor={highlight()}

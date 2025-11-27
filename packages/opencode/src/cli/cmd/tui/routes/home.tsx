@@ -8,6 +8,8 @@ import { Locale } from "@/util/locale"
 import { useSync } from "../context/sync"
 import { Toast } from "../ui/toast"
 import { useArgs } from "../context/args"
+import { Global } from "@/global"
+import { useDirectory } from "../context/directory"
 
 // TODO: what is the best way to do this?
 let once = false
@@ -15,6 +17,7 @@ let once = false
 export function Home() {
   const sync = useSync()
   const { theme } = useTheme()
+  const mcp = createMemo(() => Object.keys(sync.data.mcp).length > 0)
   const mcpError = createMemo(() => {
     return Object.values(sync.data.mcp).some((x) => x.status === "failed")
   })
@@ -47,31 +50,36 @@ export function Home() {
       once = true
     }
   })
+  const directory = useDirectory()
 
   return (
-    <box flexGrow={1} justifyContent="center" alignItems="center" paddingLeft={2} paddingRight={2} gap={1}>
-      <Logo />
-      <box width={39}>
-        <HelpRow keybind="command_list">Commands</HelpRow>
-        <HelpRow keybind="session_list">List sessions</HelpRow>
-        <HelpRow keybind="model_list">Switch model</HelpRow>
-        <HelpRow keybind="agent_cycle">Switch agent</HelpRow>
+    <>
+      <box flexGrow={1} justifyContent="center" alignItems="center" paddingLeft={2} paddingRight={2} gap={1}>
+        <Logo />
+        <box width="100%" maxWidth={75} zIndex={1000} paddingTop={1}>
+          <Prompt ref={(r) => (prompt = r)} hint={Hint} />
+        </box>
+        <Toast />
       </box>
-      <box width="100%" maxWidth={75} zIndex={1000} paddingTop={1}>
-        <Prompt ref={(r) => (prompt = r)} hint={Hint} />
+      <box paddingTop={1} paddingBottom={1} paddingLeft={2} paddingRight={2} flexDirection="row" flexShrink={0} gap={2}>
+        <text fg={theme.textMuted}>{directory()}</text>
+        <box gap={1} flexDirection="row" flexShrink={0}>
+          <Show when={mcp()}>
+            <text fg={theme.text}>
+              <Switch>
+                <Match when={mcpError()}>
+                  <span style={{ fg: theme.error }}>⊙ </span>
+                </Match>
+                <Match when={true}>
+                  <span style={{ fg: theme.success }}>⊙ </span>
+                </Match>
+              </Switch>
+              {Object.keys(sync.data.mcp).length} MCP
+            </text>
+            <text fg={theme.textMuted}>/status</text>
+          </Show>
+        </box>
       </box>
-      <Toast />
-    </box>
-  )
-}
-
-function HelpRow(props: ParentProps<{ keybind: keyof KeybindsConfig }>) {
-  const keybind = useKeybind()
-  const { theme } = useTheme()
-  return (
-    <box flexDirection="row" justifyContent="space-between" width="100%">
-      <text fg={theme.text}>{props.children}</text>
-      <text fg={theme.primary}>{keybind.print(props.keybind)}</text>
-    </box>
+    </>
   )
 }
