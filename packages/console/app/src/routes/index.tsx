@@ -54,7 +54,8 @@ export default function Home() {
         <div data-component="content">
           <section data-component="hero">
             <div data-slot="hero-copy">
-              <div style={{ display: "block", "margin-bottom": "2rem" }}>
+              <p style={{ color: "red", "font-size": "20px", "font-weight": "bold" }}>DEBUG: LOGO STARTS HERE ↓</p>
+              <div style={{ display: "block", "margin-bottom": "2rem", border: "3px solid red", padding: "20px" }}>
                 <img
                   src={cerebrasLogo}
                   alt="Cerebras Logo"
@@ -62,10 +63,12 @@ export default function Home() {
                     width: "120px",
                     height: "120px",
                     display: "block",
-                    margin: "0 auto"
+                    margin: "0 auto",
+                    border: "2px solid blue"
                   }}
                 />
               </div>
+              <p style={{ color: "red", "font-size": "20px", "font-weight": "bold" }}>DEBUG: LOGO ENDS HERE ↑</p>
               <a data-slot="releases" href={release()?.url ?? `${config.github.repoUrl}/releases`} target="_blank">
                 What's new in {release()?.name ?? "the latest release"}
               </a>
