@@ -355,7 +355,7 @@ export const BashTool = Tool.define("bash", async () => {
           exit: proc.exitCode,
           description: params.description,
         },
-        output: ptyToText(output),
+        output: ptyToText(output, { rows: 120, cols: 256 }),
       }
     },
   }
