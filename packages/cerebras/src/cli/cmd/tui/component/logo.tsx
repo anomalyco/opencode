@@ -7,8 +7,12 @@ const LOGO_LEFT = [`                                         `, `█▀▀▀ �
 
 const LOGO_RIGHT = [`                   `, `█▀▀▀ █▀▀█ █▀▀█ █▀▀█`, `█░░░ █░░█ █░░█ █▀▀▀`, `▀▀▀▀ ▀▀▀▀ ▀▀▀▀ ▀▀▀▀`]
 
-// Color variations for pulse effect - from bright to dim orange (wider range)
-const COLORS = ["#ff7a50", "#f05a28", "#d03808", "#a02010", "#701008"]
+// Color variations for pulse effect - more steps for gradual transition
+const COLORS = [
+  "#ff7a50", "#ff6a40", "#f05a28", "#e85020", "#e04818",
+  "#d84010", "#d03808", "#c03010", "#b02818", "#a02010",
+  "#901808", "#801010", "#701008"
+]
 
 export function Logo() {
   const { theme } = useTheme()
