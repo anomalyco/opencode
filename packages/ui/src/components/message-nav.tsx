@@ -1,4 +1,4 @@
-import { UserMessage } from "@opencode-ai/sdk"
+import { UserMessage } from "@cerebras-ai/sdk"
 import { ComponentProps, createMemo, For, Match, Show, splitProps, Switch } from "solid-js"
 import { DiffChanges } from "./diff-changes"
 import { Spinner } from "./spinner"

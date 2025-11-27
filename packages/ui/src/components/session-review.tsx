@@ -5,10 +5,10 @@ import { DiffChanges } from "./diff-changes"
 import { FileIcon } from "./file-icon"
 import { Icon } from "./icon"
 import { StickyAccordionHeader } from "./sticky-accordion-header"
-import { getDirectory, getFilename } from "@opencode-ai/util/path"
+import { getDirectory, getFilename } from "@cerebras-ai/util/path"
 import { For, Match, Show, Switch, type JSX } from "solid-js"
 import { createStore } from "solid-js/store"
-import { type FileDiff } from "@opencode-ai/sdk"
+import { type FileDiff } from "@cerebras-ai/sdk"
 import { PreloadMultiFileDiffResult } from "@pierre/precision-diffs/ssr"
 
 export interface SessionReviewProps {

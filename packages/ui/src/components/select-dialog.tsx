@@ -1,6 +1,6 @@
 import { createEffect, Show, For, type JSX, splitProps } from "solid-js"
 import { createStore } from "solid-js/store"
-import { FilteredListProps, useFilteredList } from "@opencode-ai/ui/hooks"
+import { FilteredListProps, useFilteredList } from "@cerebras-ai/ui/hooks"
 import { Dialog, DialogProps } from "./dialog"
 import { Icon } from "./icon"
 import { Input } from "./input"

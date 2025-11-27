@@ -7,7 +7,7 @@ import {
   TextPart,
   ToolPart,
   UserMessage,
-} from "@opencode-ai/sdk"
+} from "@cerebras-ai/sdk"
 import { BasicTool } from "./basic-tool"
 import { GenericTool } from "./basic-tool"
 import { Card } from "./card"
@@ -16,8 +16,8 @@ import { Checkbox } from "./checkbox"
 import { Diff } from "./diff"
 import { DiffChanges } from "./diff-changes"
 import { Markdown } from "./markdown"
-import { getDirectory, getFilename } from "@opencode-ai/util/path"
-import { sanitize, sanitizePart } from "@opencode-ai/util/sanitize"
+import { getDirectory, getFilename } from "@cerebras-ai/util/path"
+import { sanitize, sanitizePart } from "@cerebras-ai/util/sanitize"
 
 export interface MessageProps {
   message: MessageType

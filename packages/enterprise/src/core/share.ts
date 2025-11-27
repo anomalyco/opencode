@@ -1,6 +1,6 @@
-import { FileDiff, Message, Model, Part, Session, SessionStatus } from "@opencode-ai/sdk"
-import { fn } from "@opencode-ai/util/fn"
-import { iife } from "@opencode-ai/util/iife"
+import { FileDiff, Message, Model, Part, Session, SessionStatus } from "@cerebras-ai/sdk"
+import { fn } from "@cerebras-ai/util/fn"
+import { iife } from "@cerebras-ai/util/iife"
 import z from "zod"
 import { Storage } from "./storage"
 

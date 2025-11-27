@@ -1,5 +1,5 @@
 import { AwsClient } from "aws4fetch"
-import { lazy } from "@opencode-ai/util/lazy"
+import { lazy } from "@cerebras-ai/util/lazy"
 
 export namespace Storage {
   export interface Adapter {
