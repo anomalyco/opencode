@@ -122,10 +122,17 @@ export const { use: useLocal, provider: LocalProvider } = createSimpleContext({
       const file = Bun.file(path.join(Global.Path.state, "model.json"))
 
       function save() {
+        // Skip models for agents with hardcoded models
+        const filteredModel = Object.fromEntries(
+          Object.entries(modelStore.model).filter(([agentName]) => {
+            const agentDef = sync.data.agent.find((a) => a.name === agentName)
+            return !agentDef?.model
+          }),
+        )
         Bun.write(
           file,
           JSON.stringify({
-            model: modelStore.model,
+            model: filteredModel,
             recent: modelStore.recent,
             favorite: modelStore.favorite,
           }),
@@ -143,6 +150,23 @@ export const { use: useLocal, provider: LocalProvider } = createSimpleContext({
         .finally(() => {
           setModelStore("ready", true)
         })
+
+      // Handle the upgrade path to ensure hardcoded models were saved by
+      // removing them from the store on load.
+      createEffect(() => {
+        if (!sync.ready) return
+        if (Object.keys(modelStore.model).length === 0) return
+        const filtered = Object.fromEntries(
+          Object.entries(modelStore.model).filter(([agentName]) => {
+            const agentDef = sync.data.agent.find((a) => a.name === agentName)
+            return !agentDef?.model
+          }),
+        )
+        if (Object.keys(filtered).length !== Object.keys(modelStore.model).length) {
+          setModelStore("model", filtered)
+          save()
+        }
+      })
 
       const args = useArgs()
       const fallbackModel = createMemo(() => {
@@ -182,8 +206,8 @@ export const { use: useLocal, provider: LocalProvider } = createSimpleContext({
       const currentModel = createMemo(() => {
         const a = agent.current()
         return getFirstValidModel(
-          () => a.model,
           () => modelStore.model[a.name],
+          () => a.model,
           fallbackModel,
         )!
       })
