@@ -110,7 +110,9 @@ export function Session() {
   const dimensions = useTerminalDimensions()
   const [sidebar, setSidebar] = createSignal<"show" | "hide" | "auto">(kv.get("sidebar", "auto"))
   const [conceal, setConceal] = createSignal(true)
-  const [showThinking, setShowThinking] = createSignal(true)
+  const [showThinking, setShowThinking] = createSignal(
+    kv.get("thinking", (sync.data.config.tui as any)?.show_thinking ?? true),
+  )
   const [showTimestamps, setShowTimestamps] = createSignal(kv.get("timestamps", "hide") === "show")
 
   const wide = createMemo(() => dimensions().width > 120)
@@ -428,7 +430,11 @@ export function Session() {
       value: "session.toggle.thinking",
       category: "Session",
       onSelect: (dialog) => {
-        setShowThinking((prev) => !prev)
+        setShowThinking((prev) => {
+          const next = !prev
+          kv.set("thinking", next)
+          return next
+        })
         dialog.clear()
       },
     },
