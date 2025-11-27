@@ -217,6 +217,20 @@ export const BashTool = Tool.define("bash", async () => {
         shell,
         cwd: Instance.directory,
         env: {
+          // Force color output in as many tools as possible
+          FORCE_COLOR: "3",
+          CLICOLOR: "1",
+          CLICOLOR_FORCE: "1",
+          TERM: "xterm-256color",
+          TERM_PROGRAM: "bash-tool",
+          TERM_COLOR: "1",
+          NO_COLOR: "", // Unset to avoid accidental no-color
+          PY_COLORS: "1",
+          ANSICON: "1",
+          COLORTERM: "truecolor",
+          // Some tools respect these too; although most are covered above
+          NODE_DISABLE_COLORS: "",
+          // Inherit rest of env below
           ...process.env,
         },
         stdio: ["ignore", "pipe", "pipe"],

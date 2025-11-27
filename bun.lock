@@ -256,6 +256,7 @@
         "jsonc-parser": "3.3.1",
         "minimatch": "10.0.3",
         "open": "10.1.2",
+        "opentui-ansi-vt": "1.2.5",
         "opentui-spinner": "0.0.5",
         "partial-json": "0.1.7",
         "remeda": "catalog:",
@@ -2968,6 +2969,8 @@
     "opencontrol": ["opencontrol@0.0.6", "", { "dependencies": { "@modelcontextprotocol/sdk": "1.6.1", "@tsconfig/bun": "1.0.7", "hono": "4.7.4", "zod": "3.24.2", "zod-to-json-schema": "3.24.3" }, "bin": { "opencontrol": "bin/index.mjs" } }, "sha512-QeCrpOK5D15QV8kjnGVeD/BHFLwcVr+sn4T6KKmP0WAMs2pww56e4h+eOGHb5iPOufUQXbdbBKi6WV2kk7tefQ=="],
 
     "openid-client": ["openid-client@5.6.4", "", { "dependencies": { "jose": "^4.15.4", "lru-cache": "^6.0.0", "object-hash": "^2.2.0", "oidc-token-hash": "^5.0.3" } }, "sha512-T1h3B10BRPKfcObdBklX639tVz+xh34O7GjofqrqiAQdm7eHsQ00ih18x6wuJ/E6FxdtS2u3FmUGPDeEcMwzNA=="],
+
+    "opentui-ansi-vt": ["opentui-ansi-vt@1.2.5", "", { "dependencies": { "strip-ansi": "^7.1.2" }, "peerDependencies": { "@opentui/core": "*" }, "optionalPeers": ["@opentui/core"] }, "sha512-9m2U3un7c5thRjFM2xNNAgbFbC0Zi53s2adj52lnZfR8u7q8P6KBRZ0dNVCuN/KxAsPgpFRuQXXmZXufMrSaZg=="],
 
     "opentui-spinner": ["opentui-spinner@0.0.5", "", { "dependencies": { "cli-spinners": "^3.3.0" }, "peerDependencies": { "@opentui/core": "^0.1.49", "@opentui/react": "^0.1.49", "@opentui/solid": "^0.1.49", "typescript": "^5" }, "optionalPeers": ["@opentui/react", "@opentui/solid"] }, "sha512-abSWzWA7eyuD0PjerAWbBznLmOQn+8xRDaLGCVIs4ctETi2laNFr5KwicYnPXsHZpPc2neV7WtQm+diCEfOhLA=="],
 
