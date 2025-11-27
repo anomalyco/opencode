@@ -99,15 +99,19 @@ export function Logo() {
         clearInterval(revealInterval)
         setAnimationComplete(true)
 
-        // Then: start pulse animation
-        let pulseDirection = 1
-        let colorIdx = 0
+        // Then: start pulse animation with easing
+        let progress = 0
         setInterval(() => {
-          colorIdx += pulseDirection
-          if (colorIdx >= COLORS.length - 1) pulseDirection = -1
-          if (colorIdx <= 0) pulseDirection = 1
+          progress += 0.02
+          if (progress >= 1) progress = 0
+
+          // Use sine wave for smooth back-and-forth
+          const sineValue = Math.sin(progress * Math.PI * 2)
+          const normalizedValue = (sineValue + 1) / 2 // Convert -1,1 to 0,1
+          const colorIdx = Math.floor(normalizedValue * (COLORS.length - 1))
+
           setColorIndex(colorIdx)
-        }, 400)
+        }, 50)
       }
       setCharCount(revealed)
     }, 15)
