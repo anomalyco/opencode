@@ -11,6 +11,7 @@ import { SessionSummary } from "./summary"
 import { Bus } from "@/bus"
 import { SessionRetry } from "./retry"
 import { SessionStatus } from "./status"
+import { NamedError } from "@cerebras-ai/util/error"
 
 export namespace SessionProcessor {
   const DOOM_LOOP_THRESHOLD = 3
@@ -333,15 +334,60 @@ export namespace SessionProcessor {
               error: e,
             })
             const error = MessageV2.fromError(e, { providerID: input.providerID })
-            if ((error?.name === "APIError" && error.data.isRetryable) || error.data.message.includes("Overloaded")) {
+
+            // Check if error is retryable
+            const isRetryable =
+              (error?.name === "APIError" && error.data.isRetryable) ||
+              error.data.message.includes("Overloaded") ||
+              (error?.name === "APIError" && SessionRetry.isRateLimitError(error))
+
+            if (isRetryable) {
+              // Check retry budget
+              if (attempt >= SessionRetry.RETRY_MAX_ATTEMPTS) {
+                log.error("max retries exceeded", {
+                  attempt,
+                  maxAttempts: SessionRetry.RETRY_MAX_ATTEMPTS,
+                  sessionID: input.sessionID,
+                })
+                // Attach helpful error message for user - use NamedError.Unknown
+                input.assistantMessage.error = new NamedError.Unknown({
+                  message: `Failed after ${attempt} attempts. ${SessionRetry.isRateLimitError(error as MessageV2.APIError) ? "You may be hitting rate limits. Consider switching to a different model or waiting a few minutes." : "Please try again later."}`,
+                }).toObject()
+                Bus.publish(Session.Event.Error, {
+                  sessionID: input.assistantMessage.sessionID,
+                  error: input.assistantMessage.error,
+                })
+                break
+              }
+
               attempt++
-              const delay = SessionRetry.delay(attempt, error.name === "APIError" ? error : undefined)
+              const apiError = error?.name === "APIError" ? (error as MessageV2.APIError) : undefined
+              const delay = SessionRetry.delay(attempt, apiError)
+
+              // Determine user-friendly retry message
+              let retryMessage = "Retrying..."
+              if (apiError && SessionRetry.isRateLimitError(apiError)) {
+                retryMessage = "Rate limit reached. Waiting before retry..."
+              } else if (error?.data?.message?.includes("Overloaded")) {
+                retryMessage = "Provider is overloaded. Waiting before retry..."
+              } else if (error?.data?.message) {
+                retryMessage = error.data.message
+              }
+
               SessionStatus.set(input.sessionID, {
                 type: "retry",
                 attempt,
-                message: error.data.message.includes("Overloaded") ? "Provider is overloaded" : error.data.message,
+                message: retryMessage,
                 next: Date.now() + delay,
               })
+
+              log.info("retrying after error", {
+                attempt,
+                delay,
+                statusCode: apiError?.data.statusCode,
+                isRateLimit: apiError ? SessionRetry.isRateLimitError(apiError) : false,
+              })
+
               await SessionRetry.sleep(delay, input.abort).catch(() => {})
               continue
             }

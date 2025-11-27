@@ -59,6 +59,36 @@ export namespace Provider {
         },
       }
     },
+    async cerebras(input) {
+      // Cerebras-specific optimizations for GLM 4.6 and other models
+      const hasKey = await (async () => {
+        if (input.env.some((item) => process.env[item])) return true
+        if (await Auth.get(input.id)) return true
+        return false
+      })()
+
+      return {
+        autoload: hasKey,
+        options: {
+          headers: {
+            "X-Client": "cerebras-code",
+            "X-Client-Version": "1.0",
+          },
+          // Enable Cerebras-specific features
+          // Note: These options are passed through to the SDK
+          fetch: async (url: RequestInfo | URL, init?: RequestInit) => {
+            // Add request deduplication and caching headers
+            const headers = new Headers(init?.headers)
+            headers.set("Cache-Control", "no-cache")
+
+            return fetch(url, {
+              ...init,
+              headers,
+            })
+          },
+        },
+      }
+    },
     async opencode(input) {
       const hasKey = await (async () => {
         if (input.env.some((item) => process.env[item])) return true

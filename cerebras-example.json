@@ -1,0 +1,35 @@
+{
+  "$schema": "https://opencode.ai/config.json",
+  "provider": {
+    "cerebras": {
+      "npm": "@ai-sdk/openai-compatible",
+      "name": "Cerebras",
+      "options": {
+        "baseURL": "https://api.cerebras.ai/v1"
+      },
+      "models": {
+        "llama3.1-8b": {
+          "name": "Llama 3.1 8B (Fast)",
+          "limit": {
+            "context": 8192,
+            "output": 4096
+          }
+        },
+        "llama-3.3-70b": {
+          "name": "Llama 3.3 70B (Powerful)",
+          "limit": {
+            "context": 128000,
+            "output": 8192
+          }
+        },
+        "glm-4-6b": {
+          "name": "GLM 4.6 (Optimized for Code)",
+          "limit": {
+            "context": 128000,
+            "output": 8192
+          }
+        }
+      }
+    }
+  }
+}
