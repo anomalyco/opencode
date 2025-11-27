@@ -66,4 +66,27 @@ export namespace Filesystem {
     }
     return result
   }
+
+  export function splitGlob(pattern: string) {
+    let current = pattern
+    while (true) {
+      if (new Bun.Glob(current).scanSync().next().value) {
+        // It's a valid path, not a glob
+        return { base: current, pattern: "" }
+      }
+      const parent = dirname(current)
+      if (parent === current || parent === ".") {
+        // We reached the root or current directory without finding a non-glob base
+        // This is a bit simplistic but works for common cases
+        return { base: ".", pattern }
+      }
+      // Check if the parent part contains glob characters
+      if (/[*?{\[]/.test(parent)) {
+        current = parent
+        continue
+      }
+      // Parent is a safe base directory
+      return { base: parent, pattern: relative(parent, pattern) }
+    }
+  }
 }

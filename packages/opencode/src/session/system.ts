@@ -45,13 +45,12 @@ export namespace SystemPrompt {
         `  Today's date: ${new Date().toDateString()}`,
         `</env>`,
         `<files>`,
-        `  ${
-          project.vcs === "git"
-            ? await Ripgrep.tree({
-                cwd: Instance.directory,
-                limit: 200,
-              })
-            : ""
+        `  ${project.vcs === "git"
+          ? await Ripgrep.tree({
+            cwd: Instance.directory,
+            limit: 200,
+          })
+          : ""
         }`,
         `</files>`,
       ].join("\n"),
@@ -94,9 +93,10 @@ export namespace SystemPrompt {
         }
         let matches: string[] = []
         if (path.isAbsolute(instruction)) {
+          const { base, pattern } = Filesystem.splitGlob(instruction)
           matches = await Array.fromAsync(
-            new Bun.Glob(path.basename(instruction)).scan({
-              cwd: path.dirname(instruction),
+            new Bun.Glob(pattern).scan({
+              cwd: base,
               absolute: true,
               onlyFiles: true,
             }),
