@@ -142,11 +142,7 @@ export namespace ToolGuardrails {
   /**
    * Lint a bash command before execution
    */
-  export function lintBashCommand(input: {
-    sessionID: string
-    command: string
-    description?: string
-  }): LintResult {
+  export function lintBashCommand(input: { sessionID: string; command: string; description?: string }): LintResult {
     if (!ENABLED) {
       return {
         safe: true,
@@ -238,11 +234,7 @@ export namespace ToolGuardrails {
   /**
    * Lint any tool call before execution
    */
-  export function lintToolCall(input: {
-    sessionID: string
-    toolName: string
-    params: any
-  }): {
+  export function lintToolCall(input: { sessionID: string; toolName: string; params: any }): {
     safe: boolean
     warnings: string[]
     consecutiveCount: number

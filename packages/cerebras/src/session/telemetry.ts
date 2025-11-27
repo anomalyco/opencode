@@ -259,21 +259,18 @@ export namespace Telemetry {
     // Calculate global RPM (last minute across all sessions)
     const now = Date.now()
     const oneMinuteAgo = now - 60 * 1000
-    const recentRequests = allMetrics
-      .flatMap((m) => m.requests)
-      .filter((r) => r.timestamp >= oneMinuteAgo)
+    const recentRequests = allMetrics.flatMap((m) => m.requests).filter((r) => r.timestamp >= oneMinuteAgo)
 
     return {
       activeSessions: allMetrics.length,
       totalRequests,
       totalTokens,
       globalRPM: recentRequests.length,
-      globalCacheHitRate: totalCacheHits + totalCacheMisses > 0 ? totalCacheHits / (totalCacheHits + totalCacheMisses) : 0,
+      globalCacheHitRate:
+        totalCacheHits + totalCacheMisses > 0 ? totalCacheHits / (totalCacheHits + totalCacheMisses) : 0,
       avgTokensPerRequest: totalRequests > 0 ? totalTokens / totalRequests : 0,
       avgResponseTime:
-        allMetrics.length > 0
-          ? allMetrics.reduce((sum, m) => sum + m.averageResponseTime, 0) / allMetrics.length
-          : 0,
+        allMetrics.length > 0 ? allMetrics.reduce((sum, m) => sum + m.averageResponseTime, 0) / allMetrics.length : 0,
     }
   }
 

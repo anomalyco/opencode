@@ -85,11 +85,11 @@ export function Logo() {
   onMount(() => {
     // Letter-by-letter reveal with individual delays
     const allChars = LOGO_LEFT.flatMap((line, lineIdx) =>
-      line.split('').map((char, charIdx) => ({ char, lineIdx, charIdx, type: 'left' }))
+      line.split("").map((char, charIdx) => ({ char, lineIdx, charIdx, type: "left" })),
     ).concat(
       LOGO_RIGHT.flatMap((line, lineIdx) =>
-        line.split('').map((char, charIdx) => ({ char, lineIdx, charIdx, type: 'right' }))
-      )
+        line.split("").map((char, charIdx) => ({ char, lineIdx, charIdx, type: "right" })),
+      ),
     )
 
     let revealed = 0
