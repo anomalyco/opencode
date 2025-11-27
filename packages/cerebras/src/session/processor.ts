@@ -12,6 +12,8 @@ import { Bus } from "@/bus"
 import { SessionRetry } from "./retry"
 import { SessionStatus } from "./status"
 import { NamedError } from "@cerebras-ai/util/error"
+import { AbuseDetection } from "./abuse-detection"
+import { TokenBudget } from "./token-budget"
 
 export namespace SessionProcessor {
   const DOOM_LOOP_THRESHOLD = 3
@@ -249,6 +251,48 @@ export namespace SessionProcessor {
                   input.assistantMessage.finish = value.finishReason
                   input.assistantMessage.cost += usage.cost
                   input.assistantMessage.tokens = usage.tokens
+
+                  // Track token budget for this session
+                  const budgetResult = await TokenBudget.track({
+                    sessionID: input.sessionID,
+                    inputTokens: usage.tokens.input,
+                    outputTokens: usage.tokens.output,
+                  })
+
+                  // Block if budget exceeded
+                  if (!budgetResult.allowed) {
+                    log.error("token budget exceeded", {
+                      sessionID: input.sessionID,
+                      totalTokens: budgetResult.usage.totalTokens,
+                      limit: budgetResult.limit,
+                    })
+                    input.assistantMessage.error = new NamedError.Unknown({
+                      message: budgetResult.message ?? "Token budget exceeded",
+                    }).toObject()
+                    Bus.publish(Session.Event.Error, {
+                      sessionID: input.assistantMessage.sessionID,
+                      error: input.assistantMessage.error,
+                    })
+                    break
+                  }
+
+                  // Display warnings if any
+                  if (budgetResult.message) {
+                    log.warn("token budget warning", {
+                      sessionID: input.sessionID,
+                      message: budgetResult.message,
+                    })
+                    // Publish warning event for UI to display
+                    Bus.publish(TokenBudget.Event.Warning, {
+                      sessionID: input.sessionID,
+                      usage: {
+                        totalTokens: budgetResult.usage.totalTokens,
+                        limit: budgetResult.limit,
+                        percentage: budgetResult.usage.totalTokens / budgetResult.limit,
+                      },
+                    })
+                  }
+
                   await Session.updatePart({
                     id: Identifier.ascending("part"),
                     reason: value.finishReason,

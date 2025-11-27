@@ -48,6 +48,8 @@ import { fn } from "@/util/fn"
 import { SessionProcessor } from "./processor"
 import { TaskTool } from "@/tool/task"
 import { SessionStatus } from "./status"
+import { AbuseDetection } from "./abuse-detection"
+import { CacheOptimizer } from "./cache-optimizer"
 
 // @ts-ignore
 globalThis.AI_SDK_LOG_WARNINGS = false
@@ -513,6 +515,41 @@ export namespace SessionPrompt {
         })
       }
 
+      // Run abuse detection checks
+      const userParts = await MessageV2.parts(lastUser.id)
+      const userText = userParts
+        .filter((p) => p.type === "text")
+        .map((p) => (p as MessageV2.TextPart).text)
+        .join("\n")
+
+      // Estimate token count (rough approximation: 1 token ≈ 4 characters)
+      const promptTokenCount = Math.ceil(userText.length / 4)
+
+      const abuseCheck = AbuseDetection.detect({
+        sessionID,
+        prompt: userText,
+        promptTokenCount,
+      })
+
+      if (abuseCheck) {
+        log.warn("abuse pattern detected", {
+          pattern: abuseCheck.pattern,
+          severity: abuseCheck.severity,
+          message: abuseCheck.message,
+          suggestion: abuseCheck.suggestion,
+          sessionID,
+        })
+
+        // For critical patterns, add a brief cooldown (1 second friction)
+        if (abuseCheck.severity === "critical") {
+          log.info("applying cooldown for critical abuse pattern", {
+            pattern: abuseCheck.pattern,
+            sessionID,
+          })
+          await new Promise((resolve) => setTimeout(resolve, 1000))
+        }
+      }
+
       const result = await processor.process(() =>
         streamText({
           onError(error) {
@@ -594,6 +631,34 @@ export namespace SessionPrompt {
               {
                 async transformParams(args) {
                   if (args.type === "stream") {
+                    // First apply cache optimization to maximize cache hits
+                    if (args.params.prompt && Array.isArray(args.params.prompt)) {
+                      args.params.prompt = args.params.prompt.map((msg: any) => {
+                        if (msg.role === "user" && typeof msg.content === "string") {
+                          const optimized = CacheOptimizer.optimize({
+                            prompt: msg.content,
+                            workspaceRoot: Instance.worktree,
+                          })
+
+                          // Log cache optimization for monitoring
+                          if (optimized.transformations.length > 0) {
+                            log.info("cache optimization applied", {
+                              transformations: optimized.transformations,
+                              cacheKey: optimized.cacheKey,
+                              sessionID,
+                            })
+                          }
+
+                          return {
+                            ...msg,
+                            content: optimized.optimized,
+                          }
+                        }
+                        return msg
+                      })
+                    }
+
+                    // Then apply provider-specific transforms
                     // @ts-expect-error
                     args.params.prompt = ProviderTransform.message(args.params.prompt, model.providerID, model.modelID)
                   }
