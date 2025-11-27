@@ -15,6 +15,7 @@ import { fileURLToPath } from "url"
 import { Flag } from "@/flag/flag.ts"
 import path from "path"
 import { iife } from "@/util/iife"
+import { ToolGuardrails } from "../session/tool-guardrails"
 
 const DEFAULT_MAX_OUTPUT_LENGTH = 30_000
 const MAX_OUTPUT_LENGTH = (() => {
@@ -101,6 +102,46 @@ export const BashTool = Tool.define("bash", async () => {
         throw new Error(`Invalid timeout value: ${params.timeout}. Timeout must be a positive number.`)
       }
       const timeout = Math.min(params.timeout ?? DEFAULT_TIMEOUT, MAX_TIMEOUT)
+
+      // Pre-execution linting and safety checks
+      const lintResult = ToolGuardrails.lintBashCommand({
+        sessionID: ctx.sessionID,
+        command: params.command,
+        description: params.description,
+      })
+
+      // Log warnings
+      if (lintResult.warnings.length > 0) {
+        log.warn("bash command has warnings", {
+          sessionID: ctx.sessionID,
+          command: params.command,
+          warnings: lintResult.warnings,
+        })
+      }
+
+      // Block unsafe commands if errors detected
+      if (!lintResult.safe) {
+        const errorMessage = [
+          "⛔ Command blocked by safety guardrails:",
+          ...lintResult.errors.map((e) => `  • ${e}`),
+          lintResult.suggestion ? `\nSuggestion: ${lintResult.suggestion}` : "",
+        ]
+          .filter(Boolean)
+          .join("\n")
+
+        log.error("bash command blocked", {
+          sessionID: ctx.sessionID,
+          command: params.command,
+          errors: lintResult.errors,
+          dangerousPatterns: lintResult.dangerousPatterns,
+        })
+
+        throw new Error(errorMessage)
+      }
+
+      // Record the tool call for recursive detection
+      ToolGuardrails.recordToolCall(ctx.sessionID, "bash", { command: params.command })
+
       const tree = await parser().then((p) => p.parse(params.command))
       if (!tree) {
         throw new Error("Failed to parse command")

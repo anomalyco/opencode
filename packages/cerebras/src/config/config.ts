@@ -467,12 +467,157 @@ export namespace Config {
   })
   export type Layout = z.infer<typeof Layout>
 
+  export const SafetyConfig = z
+    .object({
+      abuse_detection: z
+        .object({
+          enabled: z.boolean().optional().default(true).describe("Enable abuse pattern detection"),
+          identical_prompt_threshold: z
+            .number()
+            .int()
+            .positive()
+            .optional()
+            .default(3)
+            .describe("Number of identical prompts before triggering warning"),
+          burst_request_threshold: z
+            .number()
+            .int()
+            .positive()
+            .optional()
+            .default(10)
+            .describe("Number of requests per second before triggering warning"),
+          burst_window_ms: z
+            .number()
+            .int()
+            .positive()
+            .optional()
+            .default(1000)
+            .describe("Time window in milliseconds for burst detection"),
+          lopsided_ratio_threshold: z
+            .number()
+            .positive()
+            .optional()
+            .default(150)
+            .describe("Input/output token ratio threshold (e.g., 150 means 3000 input / 20 output)"),
+          min_output_tokens: z
+            .number()
+            .int()
+            .positive()
+            .optional()
+            .default(20)
+            .describe("Minimum output tokens before checking lopsided ratio"),
+          prompt_growth_threshold: z
+            .number()
+            .positive()
+            .optional()
+            .default(2.0)
+            .describe("Prompt size growth multiplier threshold (e.g., 2.0 means 2x growth)"),
+          max_prompt_growth_streak: z
+            .number()
+            .int()
+            .positive()
+            .optional()
+            .default(3)
+            .describe("Number of consecutive growth violations before triggering warning"),
+          cooldown_ms: z
+            .number()
+            .int()
+            .nonnegative()
+            .optional()
+            .default(1000)
+            .describe("Cooldown period in milliseconds after critical abuse detection"),
+        })
+        .optional()
+        .describe("Abuse detection configuration"),
+      token_budget: z
+        .object({
+          enabled: z.boolean().optional().default(true).describe("Enable session token budget tracking"),
+          max_tokens_per_session: z
+            .number()
+            .int()
+            .positive()
+            .optional()
+            .default(1_000_000)
+            .describe("Maximum tokens per session before pausing"),
+          warning_threshold: z
+            .number()
+            .min(0)
+            .max(1)
+            .optional()
+            .default(0.8)
+            .describe("Percentage of budget to trigger warning (0.8 = 80%)"),
+          critical_threshold: z
+            .number()
+            .min(0)
+            .max(1)
+            .optional()
+            .default(0.95)
+            .describe("Percentage of budget to trigger critical warning (0.95 = 95%)"),
+        })
+        .optional()
+        .describe("Token budget configuration"),
+      tool_calling: z
+        .object({
+          enabled: z.boolean().optional().default(true).describe("Enable tool-calling guardrails"),
+          max_consecutive_identical: z
+            .number()
+            .int()
+            .positive()
+            .optional()
+            .default(3)
+            .describe("Maximum identical consecutive tool calls before warning"),
+          sandbox_mode: z.boolean().optional().default(false).describe("Enable sandbox mode for destructive commands"),
+          dangerous_patterns: z
+            .array(z.string())
+            .optional()
+            .default(["rm -rf", "mkfs", "dd if=", "> /dev/", "chmod 777", "chown root"])
+            .describe("Patterns that trigger sandbox mode or require confirmation"),
+        })
+        .optional()
+        .describe("Tool-calling guardrails configuration"),
+      rate_limit: z
+        .object({
+          enabled: z.boolean().optional().default(true).describe("Enable rate limit handling"),
+          show_countdown: z.boolean().optional().default(true).describe("Show countdown during backoff"),
+          max_retries: z.number().int().positive().optional().default(5).describe("Maximum retry attempts"),
+          initial_delay_ms: z
+            .number()
+            .int()
+            .positive()
+            .optional()
+            .default(2000)
+            .describe("Initial retry delay in milliseconds"),
+          backoff_factor: z.number().positive().optional().default(2).describe("Exponential backoff multiplier"),
+          max_delay_ms: z
+            .number()
+            .int()
+            .positive()
+            .optional()
+            .default(30000)
+            .describe("Maximum retry delay in milliseconds"),
+        })
+        .optional()
+        .describe("Rate limit handling configuration"),
+      telemetry: z
+        .object({
+          enabled: z.boolean().optional().default(true).describe("Enable telemetry tracking"),
+          track_rpm: z.boolean().optional().default(true).describe("Track requests per minute"),
+          track_tokens: z.boolean().optional().default(true).describe("Track token usage statistics"),
+          track_cache_hits: z.boolean().optional().default(true).describe("Track cache hit percentage"),
+        })
+        .optional()
+        .describe("Telemetry configuration"),
+    })
+    .optional()
+    .describe("Safety and abuse prevention settings")
+
   export const Info = z
     .object({
       $schema: z.string().optional().describe("JSON schema reference for configuration validation"),
       theme: z.string().optional().describe("Theme name to use for the interface"),
       keybinds: Keybinds.optional().describe("Custom keybind configurations"),
       tui: TUI.optional().describe("TUI specific settings"),
+      safety: SafetyConfig.describe("Safety and abuse prevention settings"),
       command: z
         .record(z.string(), Command)
         .optional()

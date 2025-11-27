@@ -1,17 +1,67 @@
 import { Log } from "../util/log"
 import { MessageV2 } from "./message-v2"
+import { Config } from "../config/config"
 
 export namespace AbuseDetection {
   const log = Log.create({ service: "abuse-detection" })
 
-  // Configurable thresholds
-  export const IDENTICAL_PROMPT_THRESHOLD = 3 // Same prompt repeated X times
-  export const BURST_REQUEST_THRESHOLD = 10 // Requests per second
-  export const BURST_WINDOW_MS = 1000 // 1 second window
-  export const LOPSIDED_RATIO_THRESHOLD = 150 // 3000 input / 20 output = 150:1
-  export const MIN_OUTPUT_TOKENS = 20 // Minimum output to check ratio
-  export const PROMPT_GROWTH_THRESHOLD = 2.0 // 2x growth between messages
-  export const MAX_PROMPT_GROWTH_STREAK = 3 // Consecutive growth violations
+  // Default thresholds (can be overridden by config)
+  export const DEFAULT_IDENTICAL_PROMPT_THRESHOLD = 3 // Same prompt repeated X times
+  export const DEFAULT_BURST_REQUEST_THRESHOLD = 10 // Requests per second
+  export const DEFAULT_BURST_WINDOW_MS = 1000 // 1 second window
+  export const DEFAULT_LOPSIDED_RATIO_THRESHOLD = 150 // 3000 input / 20 output = 150:1
+  export const DEFAULT_MIN_OUTPUT_TOKENS = 20 // Minimum output to check ratio
+  export const DEFAULT_PROMPT_GROWTH_THRESHOLD = 2.0 // 2x growth between messages
+  export const DEFAULT_MAX_PROMPT_GROWTH_STREAK = 3 // Consecutive growth violations
+  export const DEFAULT_COOLDOWN_MS = 1000 // 1 second cooldown after critical abuse
+
+  // Runtime thresholds (loaded from config)
+  let IDENTICAL_PROMPT_THRESHOLD = DEFAULT_IDENTICAL_PROMPT_THRESHOLD
+  let BURST_REQUEST_THRESHOLD = DEFAULT_BURST_REQUEST_THRESHOLD
+  let BURST_WINDOW_MS = DEFAULT_BURST_WINDOW_MS
+  let LOPSIDED_RATIO_THRESHOLD = DEFAULT_LOPSIDED_RATIO_THRESHOLD
+  let MIN_OUTPUT_TOKENS = DEFAULT_MIN_OUTPUT_TOKENS
+  let PROMPT_GROWTH_THRESHOLD = DEFAULT_PROMPT_GROWTH_THRESHOLD
+  let MAX_PROMPT_GROWTH_STREAK = DEFAULT_MAX_PROMPT_GROWTH_STREAK
+  let COOLDOWN_MS = DEFAULT_COOLDOWN_MS
+  let ENABLED = true
+
+  /**
+   * Load configuration settings
+   */
+  async function loadConfig() {
+    const config = await Config.get()
+    const safety = config.safety?.abuse_detection
+
+    if (!safety) return
+
+    ENABLED = safety.enabled ?? true
+    IDENTICAL_PROMPT_THRESHOLD = safety.identical_prompt_threshold ?? DEFAULT_IDENTICAL_PROMPT_THRESHOLD
+    BURST_REQUEST_THRESHOLD = safety.burst_request_threshold ?? DEFAULT_BURST_REQUEST_THRESHOLD
+    BURST_WINDOW_MS = safety.burst_window_ms ?? DEFAULT_BURST_WINDOW_MS
+    LOPSIDED_RATIO_THRESHOLD = safety.lopsided_ratio_threshold ?? DEFAULT_LOPSIDED_RATIO_THRESHOLD
+    MIN_OUTPUT_TOKENS = safety.min_output_tokens ?? DEFAULT_MIN_OUTPUT_TOKENS
+    PROMPT_GROWTH_THRESHOLD = safety.prompt_growth_threshold ?? DEFAULT_PROMPT_GROWTH_THRESHOLD
+    MAX_PROMPT_GROWTH_STREAK = safety.max_prompt_growth_streak ?? DEFAULT_MAX_PROMPT_GROWTH_STREAK
+    COOLDOWN_MS = safety.cooldown_ms ?? DEFAULT_COOLDOWN_MS
+
+    log.info("config loaded", {
+      enabled: ENABLED,
+      identicalPromptThreshold: IDENTICAL_PROMPT_THRESHOLD,
+      burstRequestThreshold: BURST_REQUEST_THRESHOLD,
+      burstWindowMs: BURST_WINDOW_MS,
+      lopsidedRatioThreshold: LOPSIDED_RATIO_THRESHOLD,
+      minOutputTokens: MIN_OUTPUT_TOKENS,
+      promptGrowthThreshold: PROMPT_GROWTH_THRESHOLD,
+      maxPromptGrowthStreak: MAX_PROMPT_GROWTH_STREAK,
+      cooldownMs: COOLDOWN_MS,
+    })
+  }
+
+  // Load config on module initialization
+  loadConfig().catch((err) => {
+    log.error("failed to load config, using defaults", { error: err })
+  })
 
   export type Pattern = "identical_prompts" | "burst_requests" | "lopsided_tokens" | "prompt_size_growth" | "none"
 
@@ -20,6 +70,7 @@ export namespace AbuseDetection {
     severity: "warning" | "critical"
     message: string
     suggestion: string
+    cooldownMs?: number
     metadata?: Record<string, any>
   }
 
@@ -182,6 +233,11 @@ export namespace AbuseDetection {
     inputTokens?: number
     outputTokens?: number
   }): DetectionResult | null {
+    // Check if abuse detection is enabled
+    if (!ENABLED) {
+      return null
+    }
+
     const state = getSessionState(input.sessionID)
     const now = Date.now()
 
@@ -219,10 +275,16 @@ export namespace AbuseDetection {
     for (const check of checks) {
       const result = check()
       if (result) {
+        // Add cooldown for critical patterns
+        if (result.severity === "critical" && COOLDOWN_MS > 0) {
+          result.cooldownMs = COOLDOWN_MS
+        }
+
         log.warn("abuse pattern detected", {
           sessionID: input.sessionID,
           pattern: result.pattern,
           severity: result.severity,
+          cooldownMs: result.cooldownMs,
           metadata: result.metadata,
         })
         return result
@@ -230,6 +292,13 @@ export namespace AbuseDetection {
     }
 
     return null
+  }
+
+  /**
+   * Reload configuration (useful for testing and hot-reloading)
+   */
+  export async function reloadConfig() {
+    await loadConfig()
   }
 
   /**

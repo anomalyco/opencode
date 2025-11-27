@@ -83,14 +83,20 @@ export function Logo() {
   const [animationComplete, setAnimationComplete] = createSignal(false)
 
   onMount(() => {
-    // First: typewriter animation
-    const maxLength = Math.max(...LOGO_LEFT.map((l) => l.length)) + Math.max(...LOGO_RIGHT.map((l) => l.length))
-    let current = 0
-    const typeInterval = setInterval(() => {
-      current += 2
-      if (current >= maxLength) {
-        current = maxLength
-        clearInterval(typeInterval)
+    // Letter-by-letter reveal with individual delays
+    const allChars = LOGO_LEFT.flatMap((line, lineIdx) =>
+      line.split('').map((char, charIdx) => ({ char, lineIdx, charIdx, type: 'left' }))
+    ).concat(
+      LOGO_RIGHT.flatMap((line, lineIdx) =>
+        line.split('').map((char, charIdx) => ({ char, lineIdx, charIdx, type: 'right' }))
+      )
+    )
+
+    let revealed = 0
+    const revealInterval = setInterval(() => {
+      revealed++
+      if (revealed >= allChars.length) {
+        clearInterval(revealInterval)
         setAnimationComplete(true)
 
         // Then: start pulse animation
@@ -103,8 +109,8 @@ export function Logo() {
           setColorIndex(colorIdx)
         }, 400)
       }
-      setCharCount(current)
-    }, 25)
+      setCharCount(revealed)
+    }, 15)
   })
 
   return (

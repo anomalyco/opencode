@@ -8,8 +8,41 @@ export namespace TokenBudget {
 
   // Default limits (can be overridden in config)
   export const DEFAULT_SESSION_TOKEN_CAP = 1_000_000 // 1M tokens per session
-  export const WARNING_THRESHOLD = 0.8 // Warn at 80%
-  export const CRITICAL_THRESHOLD = 0.95 // Critical at 95%
+  export const DEFAULT_WARNING_THRESHOLD = 0.8 // Warn at 80%
+  export const DEFAULT_CRITICAL_THRESHOLD = 0.95 // Critical at 95%
+
+  // Runtime configuration (loaded from config)
+  let SESSION_TOKEN_CAP = DEFAULT_SESSION_TOKEN_CAP
+  let WARNING_THRESHOLD = DEFAULT_WARNING_THRESHOLD
+  let CRITICAL_THRESHOLD = DEFAULT_CRITICAL_THRESHOLD
+  let ENABLED = true
+
+  /**
+   * Load configuration settings
+   */
+  async function loadConfig() {
+    const config = await Config.get()
+    const safety = config.safety?.token_budget
+
+    if (!safety) return
+
+    ENABLED = safety.enabled ?? true
+    SESSION_TOKEN_CAP = safety.max_tokens_per_session ?? DEFAULT_SESSION_TOKEN_CAP
+    WARNING_THRESHOLD = safety.warning_threshold ?? DEFAULT_WARNING_THRESHOLD
+    CRITICAL_THRESHOLD = safety.critical_threshold ?? DEFAULT_CRITICAL_THRESHOLD
+
+    log.info("config loaded", {
+      enabled: ENABLED,
+      sessionTokenCap: SESSION_TOKEN_CAP,
+      warningThreshold: WARNING_THRESHOLD,
+      criticalThreshold: CRITICAL_THRESHOLD,
+    })
+  }
+
+  // Load config on module initialization
+  loadConfig().catch((err) => {
+    log.error("failed to load config, using defaults", { error: err })
+  })
 
   type SessionUsage = {
     sessionID: string
@@ -61,14 +94,10 @@ export namespace TokenBudget {
   }
 
   /**
-   * Get token limit from config or use default
+   * Get token limit from runtime config
    */
-  async function getLimit(): Promise<number> {
-    const cfg = await Config.get()
-    // TODO: Add session.max_tokens_per_session to Config.Info schema
-    // For now, use default or check experimental field
-    const sessionConfig = (cfg as any).session
-    return sessionConfig?.max_tokens_per_session ?? DEFAULT_SESSION_TOKEN_CAP
+  function getLimit(): number {
+    return SESSION_TOKEN_CAP
   }
 
   /**
@@ -97,13 +126,22 @@ export namespace TokenBudget {
     outputTokens: number
   }): Promise<{ allowed: boolean; usage: SessionUsage; limit: number; message?: string }> {
     const usage = getUsage(input.sessionID)
-    const limit = await getLimit()
+    const limit = getLimit()
 
     // Update usage
     usage.totalInputTokens += input.inputTokens
     usage.totalOutputTokens += input.outputTokens
     usage.totalTokens = usage.totalInputTokens + usage.totalOutputTokens
     usage.lastUpdate = Date.now()
+
+    // If token budget tracking is disabled, always allow
+    if (!ENABLED) {
+      return {
+        allowed: true,
+        usage,
+        limit,
+      }
+    }
 
     const percentage = usage.totalTokens / limit
 
@@ -211,5 +249,12 @@ export namespace TokenBudget {
       averageTokensPerSession:
         sessions.length > 0 ? sessions.reduce((sum, s) => sum + s.totalTokens, 0) / sessions.length : 0,
     }
+  }
+
+  /**
+   * Reload configuration (useful for testing and hot-reloading)
+   */
+  export async function reloadConfig() {
+    await loadConfig()
   }
 }

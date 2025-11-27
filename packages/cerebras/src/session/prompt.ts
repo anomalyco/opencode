@@ -540,13 +540,14 @@ export namespace SessionPrompt {
           sessionID,
         })
 
-        // For critical patterns, add a brief cooldown (1 second friction)
-        if (abuseCheck.severity === "critical") {
+        // For critical patterns, add a cooldown if configured
+        if (abuseCheck.severity === "critical" && abuseCheck.cooldownMs && abuseCheck.cooldownMs > 0) {
           log.info("applying cooldown for critical abuse pattern", {
             pattern: abuseCheck.pattern,
+            cooldownMs: abuseCheck.cooldownMs,
             sessionID,
           })
-          await new Promise((resolve) => setTimeout(resolve, 1000))
+          await new Promise((resolve) => setTimeout(resolve, abuseCheck.cooldownMs))
         }
       }
 
