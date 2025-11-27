@@ -28,7 +28,7 @@ await Bun.file(`./dist/${pkg.name}/package.json`).write(
     {
       name: "cerebras-code",
       bin: {
-        [pkg.name]: `./bin/${pkg.name}`,
+        cerebras: `./bin/cerebras`,
       },
       scripts: {
         postinstall: "bun ./postinstall.mjs || node ./postinstall.mjs",
@@ -90,7 +90,9 @@ if (process.env.NPM_CONFIG_TOKEN) {
       process.chdir(dir)
     }
   }
-  await new Promise((resolve) => setTimeout(resolve, 5000))
+  // Wait 2 minutes before publishing main package to avoid rate limiting
+  console.log("⏳ Waiting 2 minutes before publishing main cerebras-code package...")
+  await new Promise((resolve) => setTimeout(resolve, 120000))
   await $`cd ./dist/${pkg.name} && bun publish --access public --tag ${Script.channel}`
 } else {
   console.log("⚠️  Skipping npm publish (NPM_CONFIG_TOKEN not set)")
