@@ -45,6 +45,7 @@ export namespace Permission {
         sessionID: z.string(),
         permissionID: z.string(),
         response: z.string(),
+        interjection: z.string().optional(),
       }),
     ),
   }
@@ -140,10 +141,15 @@ export namespace Permission {
     })
   }
 
-  export const Response = z.enum(["once", "always", "reject"])
+  export const Response = z.enum(["once", "always", "reject", "interject"])
   export type Response = z.infer<typeof Response>
 
-  export function respond(input: { sessionID: Info["sessionID"]; permissionID: Info["id"]; response: Response }) {
+  export function respond(input: {
+    sessionID: Info["sessionID"]
+    permissionID: Info["id"]
+    response: Response
+    interjection?: string
+  }) {
     log.info("response", input)
     const { pending, approved } = state()
     const match = pending[input.sessionID]?.[input.permissionID]
@@ -153,9 +159,16 @@ export namespace Permission {
       sessionID: input.sessionID,
       permissionID: input.permissionID,
       response: input.response,
+      interjection: input.interjection,
     })
-    if (input.response === "reject") {
-      match.reject(new RejectedError(input.sessionID, input.permissionID, match.info.callID, match.info.metadata))
+    if (input.response === "reject" || input.response === "interject") {
+      const reason =
+        input.response === "interject" && input.interjection
+          ? `The user rejected this action and suggests: ${input.interjection}`
+          : undefined
+      match.reject(
+        new RejectedError(input.sessionID, input.permissionID, match.info.callID, match.info.metadata, reason),
+      )
       return
     }
     match.resolve()

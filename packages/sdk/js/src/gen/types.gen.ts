@@ -440,6 +440,7 @@ export type EventPermissionReplied = {
     sessionID: string
     permissionID: string
     response: string
+    interjection?: string
   }
 }
 
@@ -2549,7 +2550,7 @@ export type SessionUnrevertResponse = SessionUnrevertResponses[keyof SessionUnre
 
 export type PostSessionIdPermissionsPermissionIdData = {
   body?: {
-    response: "once" | "always" | "reject"
+    response: "once" | "always" | "reject" | "interject"
   }
   path: {
     id: string

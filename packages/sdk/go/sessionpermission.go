@@ -136,8 +136,9 @@ type PermissionPatternArray []string
 func (r PermissionPatternArray) ImplementsPermissionPatternUnion() {}
 
 type SessionPermissionRespondParams struct {
-	Response  param.Field[SessionPermissionRespondParamsResponse] `json:"response,required"`
-	Directory param.Field[string]                                 `query:"directory"`
+	Response     param.Field[SessionPermissionRespondParamsResponse] `json:"response,required"`
+	Interjection param.Field[string]                                 `json:"interjection,omitempty"`
+	Directory    param.Field[string]                                 `query:"directory"`
 }
 
 func (r SessionPermissionRespondParams) MarshalJSON() (data []byte, err error) {
@@ -156,14 +157,15 @@ func (r SessionPermissionRespondParams) URLQuery() (v url.Values) {
 type SessionPermissionRespondParamsResponse string
 
 const (
-	SessionPermissionRespondParamsResponseOnce   SessionPermissionRespondParamsResponse = "once"
-	SessionPermissionRespondParamsResponseAlways SessionPermissionRespondParamsResponse = "always"
-	SessionPermissionRespondParamsResponseReject SessionPermissionRespondParamsResponse = "reject"
+	SessionPermissionRespondParamsResponseOnce      SessionPermissionRespondParamsResponse = "once"
+	SessionPermissionRespondParamsResponseAlways    SessionPermissionRespondParamsResponse = "always"
+	SessionPermissionRespondParamsResponseReject    SessionPermissionRespondParamsResponse = "reject"
+	SessionPermissionRespondParamsResponseInterject SessionPermissionRespondParamsResponse = "interject"
 )
 
 func (r SessionPermissionRespondParamsResponse) IsKnown() bool {
 	switch r {
-	case SessionPermissionRespondParamsResponseOnce, SessionPermissionRespondParamsResponseAlways, SessionPermissionRespondParamsResponseReject:
+	case SessionPermissionRespondParamsResponseOnce, SessionPermissionRespondParamsResponseAlways, SessionPermissionRespondParamsResponseReject, SessionPermissionRespondParamsResponseInterject:
 		return true
 	}
 	return false
