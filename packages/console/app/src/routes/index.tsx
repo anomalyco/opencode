@@ -54,7 +54,16 @@ export default function Home() {
         <div data-component="content">
           <section data-component="hero">
             <div data-slot="hero-copy">
-              <img src={cerebrasLogo} alt="Cerebras Logo" style={{ width: "120px", height: "120px", "margin-bottom": "1rem" }} />
+              <img
+                src={cerebrasLogo}
+                alt="Cerebras Logo"
+                style={{
+                  width: "120px",
+                  height: "120px",
+                  "margin-bottom": "1rem",
+                  filter: "brightness(0) saturate(100%) invert(44%) sepia(75%) saturate(2567%) hue-rotate(349deg) brightness(98%) contrast(93%)"
+                }}
+              />
               <a data-slot="releases" href={release()?.url ?? `${config.github.repoUrl}/releases`} target="_blank">
                 What's new in {release()?.name ?? "the latest release"}
               </a>
