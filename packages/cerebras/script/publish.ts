@@ -37,6 +37,7 @@ await Bun.file(`./dist/${pkg.name}/package.json`).write(
 )
 // npm publishing (skip if no NPM_TOKEN)
 if (process.env.NPM_CONFIG_TOKEN) {
+  let count = 0
   for (const [name] of Object.entries(binaries)) {
     try {
       process.chdir(`./dist/${name}`)
@@ -44,10 +45,17 @@ if (process.env.NPM_CONFIG_TOKEN) {
         await $`chmod 755 -R .`
       }
       await $`bun publish --access public --tag ${Script.channel}`
+      count++
+      // Add delay to avoid npm rate limiting
+      if (count % 3 === 0) {
+        console.log("⏳ Pausing to avoid rate limit...")
+        await new Promise((resolve) => setTimeout(resolve, 10000))
+      }
     } finally {
       process.chdir(dir)
     }
   }
+  await new Promise((resolve) => setTimeout(resolve, 5000))
   await $`cd ./dist/${pkg.name} && bun publish --access public --tag ${Script.channel}`
 } else {
   console.log("⚠️  Skipping npm publish (NPM_CONFIG_TOKEN not set)")
