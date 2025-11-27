@@ -35,20 +35,25 @@ await Bun.file(`./dist/${pkg.name}/package.json`).write(
     2,
   ),
 )
-for (const [name] of Object.entries(binaries)) {
-  try {
-    process.chdir(`./dist/${name}`)
-    if (process.platform !== "win32") {
-      await $`chmod 755 -R .`
+// npm publishing (skip if no NPM_TOKEN)
+if (process.env.NPM_CONFIG_TOKEN) {
+  for (const [name] of Object.entries(binaries)) {
+    try {
+      process.chdir(`./dist/${name}`)
+      if (process.platform !== "win32") {
+        await $`chmod 755 -R .`
+      }
+      await $`bun publish --access public --tag ${Script.channel}`
+    } finally {
+      process.chdir(dir)
     }
-    await $`bun publish --access public --tag ${Script.channel}`
-  } finally {
-    process.chdir(dir)
   }
+  await $`cd ./dist/${pkg.name} && bun publish --access public --tag ${Script.channel}`
+} else {
+  console.log("⚠️  Skipping npm publish (NPM_CONFIG_TOKEN not set)")
 }
-await $`cd ./dist/${pkg.name} && bun publish --access public --tag ${Script.channel}`
 
-if (!Script.preview) {
+if (!Script.preview && process.env.NPM_CONFIG_TOKEN) {
   const major = Script.version.split(".")[0]
   const majorTag = `latest-${major}`
   for (const [name] of Object.entries(binaries)) {
