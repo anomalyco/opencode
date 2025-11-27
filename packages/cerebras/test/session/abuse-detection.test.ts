@@ -58,14 +58,14 @@ describe("AbuseDetection", () => {
       const sessionID = "test-session-3"
 
       // Simulate 10 rapid requests
-      for (let i = 0; i < AbuseDetection.BURST_REQUEST_THRESHOLD; i++) {
+      for (let i = 0; i < AbuseDetection.DEFAULT_BURST_REQUEST_THRESHOLD; i++) {
         const result = AbuseDetection.detect({
           sessionID,
           prompt: `Request ${i}`,
           promptTokenCount: 100,
         })
 
-        if (i < AbuseDetection.BURST_REQUEST_THRESHOLD - 1) {
+        if (i < AbuseDetection.DEFAULT_BURST_REQUEST_THRESHOLD - 1) {
           // Should not trigger before threshold
           expect(result).toBeNull()
         } else {

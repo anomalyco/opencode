@@ -37,6 +37,9 @@ await Bun.file(`./dist/${pkg.name}/package.json`).write(
 )
 // npm publishing (skip if no NPM_TOKEN)
 if (process.env.NPM_CONFIG_TOKEN) {
+  // Wait 60 seconds before starting to avoid residual rate limiting
+  console.log("⏳ Waiting 60 seconds before publishing to avoid rate limits...")
+  await new Promise((resolve) => setTimeout(resolve, 60000))
   let count = 0
   for (const [name] of Object.entries(binaries)) {
     try {
@@ -47,8 +50,8 @@ if (process.env.NPM_CONFIG_TOKEN) {
       await $`bun publish --access public --tag ${Script.channel}`
       count++
       // Add delay to avoid npm rate limiting - wait after EACH publish
-      console.log(`⏳ Published ${count}/${Object.keys(binaries).length}, pausing...`)
-      await new Promise((resolve) => setTimeout(resolve, 30000))
+      console.log(`⏳ Published ${count}/${Object.keys(binaries).length}, pausing for 60 seconds...`)
+      await new Promise((resolve) => setTimeout(resolve, 60000))
     } finally {
       process.chdir(dir)
     }
