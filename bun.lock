@@ -256,7 +256,7 @@
         "jsonc-parser": "3.3.1",
         "minimatch": "10.0.3",
         "open": "10.1.2",
-        "opentui-ansi-vt": "1.2.6",
+        "opentui-ansi-vt": "1.2.7",
         "opentui-spinner": "0.0.5",
         "partial-json": "0.1.7",
         "remeda": "catalog:",
@@ -2970,7 +2970,7 @@
 
     "openid-client": ["openid-client@5.6.4", "", { "dependencies": { "jose": "^4.15.4", "lru-cache": "^6.0.0", "object-hash": "^2.2.0", "oidc-token-hash": "^5.0.3" } }, "sha512-T1h3B10BRPKfcObdBklX639tVz+xh34O7GjofqrqiAQdm7eHsQ00ih18x6wuJ/E6FxdtS2u3FmUGPDeEcMwzNA=="],
 
-    "opentui-ansi-vt": ["opentui-ansi-vt@1.2.6", "", { "dependencies": { "strip-ansi": "^7.1.2" }, "peerDependencies": { "@opentui/core": "*" }, "optionalPeers": ["@opentui/core"] }, "sha512-Or/TPJa0v1Uj15z3Kt1mX2PgIjwc5lywhRCn/F/1a89C28Nvo6Inb4aRT+Uf6hgQyrqQHl58Uo2pCPMWzC3MIQ=="],
+    "opentui-ansi-vt": ["opentui-ansi-vt@1.2.7", "", { "dependencies": { "strip-ansi": "^7.1.2" }, "peerDependencies": { "@opentui/core": "*" }, "optionalPeers": ["@opentui/core"] }, "sha512-mcumATXHkagt7JUK+5mpBPaUW0LHrwysp8JQqDBnZG22vb1TTh/HmGjWFXBWe4oo4Rshw7s7NWIbt0/jCWOgcw=="],
 
     "opentui-spinner": ["opentui-spinner@0.0.5", "", { "dependencies": { "cli-spinners": "^3.3.0" }, "peerDependencies": { "@opentui/core": "^0.1.49", "@opentui/react": "^0.1.49", "@opentui/solid": "^0.1.49", "typescript": "^5" }, "optionalPeers": ["@opentui/react", "@opentui/solid"] }, "sha512-abSWzWA7eyuD0PjerAWbBznLmOQn+8xRDaLGCVIs4ctETi2laNFr5KwicYnPXsHZpPc2neV7WtQm+diCEfOhLA=="],
 
