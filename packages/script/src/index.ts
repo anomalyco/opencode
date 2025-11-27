@@ -24,10 +24,10 @@ const VERSION = await (async () => {
   if (IS_PREVIEW) return `0.0.0-${CHANNEL}-${new Date().toISOString().slice(0, 16).replace(/[-:T]/g, "")}`
   const version = await fetch("https://registry.npmjs.org/cerebras-code-ai/latest")
     .then((res) => {
-      if (!res.ok) throw new Error(res.statusText)
+      if (!res.ok) return null // Package doesn't exist yet
       return res.json()
     })
-    .then((data: any) => data.version)
+    .then((data: any) => data?.version || "0.0.0") // Default to 0.0.0 for first release
   const [major, minor, patch] = version.split(".").map((x: string) => Number(x) || 0)
   const t = (process.env["CEREBRAS_BUMP"] ?? process.env["OPENCODE_BUMP"])?.toLowerCase()
   if (t === "major") return `${major + 1}.0.0`
