@@ -14,24 +14,25 @@ import { Agent } from "../agent/agent"
 export const WriteTool = Tool.define("write", {
   description: DESCRIPTION,
   parameters: z.object({
-    content: z.preprocess(
-      (val) => {
+    content: z
+      .preprocess((val) => {
         if (typeof val === "string") {
           return val
         }
         if (Array.isArray(val)) {
           // Join array elements with newlines
           // Handle edge cases: null/undefined -> "", objects -> JSON.stringify, others -> String
-          return val.map(item => {
-            if (item === null || item === undefined) return "";
-            if (typeof item === "object") return JSON.stringify(item);
-            return String(item);
-          }).join('\n')
+          return val
+            .map((item) => {
+              if (item === null || item === undefined) return ""
+              if (typeof item === "object") return JSON.stringify(item)
+              return String(item)
+            })
+            .join("\n")
         }
         return String(val)
-      },
-      z.string()
-    ).describe("The content to write to the file"),
+      }, z.string())
+      .describe("The content to write to the file"),
     filePath: z.string().describe("The absolute path to the file to write (must be absolute, not relative)"),
   }),
   async execute(params, ctx) {
