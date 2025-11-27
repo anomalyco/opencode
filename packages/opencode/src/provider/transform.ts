@@ -133,7 +133,8 @@ export namespace ProviderTransform {
     modelID: string,
     npm: string,
     sessionID: string,
-  ): Record<string, any> | undefined {
+    providerOptions?: Record<string, any>,
+  ): Record<string, any> {
     const result: Record<string, any> = {}
 
     // switch to providerID later, for now use this
@@ -143,11 +144,11 @@ export namespace ProviderTransform {
       }
     }
 
-    if (providerID === "openai") {
+    if (providerID === "openai" || providerOptions?.setCacheKey) {
       result["promptCacheKey"] = sessionID
     }
 
-    if (providerID === "google") {
+    if (providerID === "google" || (providerID.startsWith("opencode") && modelID.includes("gemini-3"))) {
       result["thinkingConfig"] = {
         includeThoughts: true,
       }
@@ -166,13 +167,32 @@ export namespace ProviderTransform {
         result["textVerbosity"] = "low"
       }
 
-      if (providerID === "opencode") {
+      if (providerID.startsWith("opencode")) {
         result["promptCacheKey"] = sessionID
         result["include"] = ["reasoning.encrypted_content"]
         result["reasoningSummary"] = "auto"
       }
     }
     return result
+  }
+
+  export function smallOptions(input: { providerID: string; modelID: string }) {
+    const options: Record<string, any> = {}
+
+    if (input.providerID === "openai" || input.modelID.includes("gpt-5")) {
+      if (input.modelID.includes("5.1")) {
+        options["reasoningEffort"] = "low"
+      } else {
+        options["reasoningEffort"] = "minimal"
+      }
+    }
+    if (input.providerID === "google") {
+      options["thinkingConfig"] = {
+        thinkingBudget: 0,
+      }
+    }
+
+    return options
   }
 
   export function providerOptions(npm: string | undefined, providerID: string, options: { [x: string]: any }) {
@@ -234,7 +254,7 @@ export namespace ProviderTransform {
     return standardLimit
   }
 
-  export function schema(_providerID: string, _modelID: string, schema: JSONSchema.BaseSchema) {
+  export function schema(providerID: string, modelID: string, schema: JSONSchema.BaseSchema) {
     /*
     if (["openai", "azure"].includes(providerID)) {
       if (schema.type === "object" && schema.properties) {
@@ -251,11 +271,48 @@ export namespace ProviderTransform {
         }
       }
     }
-
-    if (providerID === "google") {
-    }
     */
 
+    // Convert integer enums to string enums for Google/Gemini
+    if (providerID === "google" || modelID.includes("gemini")) {
+      const convertIntEnumsToStrings = (obj: any): any => {
+        if (obj === null || typeof obj !== "object") {
+          return obj
+        }
+
+        if (Array.isArray(obj)) {
+          return obj.map(convertIntEnumsToStrings)
+        }
+
+        const result: any = {}
+        for (const [key, value] of Object.entries(obj)) {
+          if (key === "enum" && Array.isArray(value)) {
+            // Convert all enum values to strings
+            result[key] = value.map((v) => String(v))
+            // If we have integer type with enum, change type to string
+            if (result.type === "integer" || result.type === "number") {
+              result.type = "string"
+            }
+          } else if (typeof value === "object" && value !== null) {
+            result[key] = convertIntEnumsToStrings(value)
+          } else {
+            result[key] = value
+          }
+        }
+        return result
+      }
+
+      schema = convertIntEnumsToStrings(schema)
+    }
+
     return schema
+  }
+
+  export function error(providerID: string, message: string) {
+    if (providerID === "github-copilot" && message.includes("The requested model is not supported")) {
+      message +=
+        "\n\nMake sure the model is enabled in your copilot settings: https://github.com/settings/copilot/features"
+    }
+    return message
   }
 }

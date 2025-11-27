@@ -6,8 +6,6 @@ import {
   For,
   Match,
   on,
-  onCleanup,
-  onMount,
   Show,
   Switch,
   useContext,
@@ -45,7 +43,6 @@ import type { TaskTool } from "@/tool/task"
 import { useKeyboard, useRenderer, useTerminalDimensions, type BoxProps, type JSX } from "@opentui/solid"
 import { useSDK } from "@tui/context/sdk"
 import { useCommandDialog } from "@tui/component/dialog-command"
-import { Shimmer } from "@tui/ui/shimmer"
 import { useKeybind } from "@tui/context/keybind"
 import { Header } from "./header"
 import { parsePatch } from "diff"
@@ -64,9 +61,8 @@ import { Clipboard } from "../../util/clipboard"
 import { Toast, useToast } from "../../ui/toast"
 import { useKV } from "../../context/kv.tsx"
 import { Editor } from "../../util/editor"
-import { Global } from "@/global"
-import fs from "fs/promises"
 import stripAnsi from "strip-ansi"
+import { Footer } from "./footer.tsx"
 
 addDefaultParsers(parsers.parsers)
 
@@ -84,6 +80,8 @@ const context = createContext<{
   width: number
   conceal: () => boolean
   showThinking: () => boolean
+  showTimestamps: () => boolean
+  sync: ReturnType<typeof useSync>
 }>()
 
 function use() {
@@ -106,13 +104,23 @@ export function Session() {
     return messages().findLast((x) => x.role === "assistant" && !x.time.completed)?.id
   })
 
+  const lastAssistant = createMemo(() => {
+    return messages().findLast((x) => x.role === "assistant")
+  })
+
   const dimensions = useTerminalDimensions()
   const [sidebar, setSidebar] = createSignal<"show" | "hide" | "auto">(kv.get("sidebar", "auto"))
   const [conceal, setConceal] = createSignal(true)
   const [showThinking, setShowThinking] = createSignal(true)
+  const [showTimestamps, setShowTimestamps] = createSignal(kv.get("timestamps", "hide") === "show")
 
   const wide = createMemo(() => dimensions().width > 120)
-  const sidebarVisible = createMemo(() => sidebar() === "show" || (sidebar() === "auto" && wide()))
+  const sidebarVisible = createMemo(() => {
+    if (session()?.parentID) return false
+    if (sidebar() === "show") return true
+    if (sidebar() === "auto" && wide()) return true
+    return false
+  })
   const contentWidth = createMemo(() => dimensions().width - (sidebarVisible() ? 42 : 0) - 4)
 
   const scrollAcceleration = createMemo(() => {
@@ -123,7 +131,8 @@ export function Session() {
     if (tui?.scroll_speed) {
       return new CustomSpeedScroll(tui.scroll_speed)
     }
-    return undefined
+
+    return new CustomSpeedScroll(process.platform === "win32" ? 3 : 1)
   })
 
   createEffect(async () => {
@@ -147,6 +156,7 @@ export function Session() {
   // Auto-navigate to whichever session currently needs permission input
   createEffect(() => {
     const currentSession = session()
+    if (!currentSession) return
     const currentPermissions = permissions()
     let targetID = currentPermissions.length > 0 ? currentSession.id : undefined
 
@@ -175,6 +185,7 @@ export function Session() {
     const first = permissions()[0]
     if (first) {
       const response = iife(() => {
+        if (evt.ctrl || evt.meta) return
         if (evt.name === "return") return "once"
         if (evt.name === "a") return "always"
         if (evt.name === "d") return "reject"
@@ -315,7 +326,9 @@ export function Session() {
       value: "session.undo",
       keybind: "messages_undo",
       category: "Session",
-      onSelect: (dialog) => {
+      onSelect: async (dialog) => {
+        const status = sync.data.session_status[route.sessionID]
+        if (status?.type !== "idle") await sdk.client.session.abort({ path: { id: route.sessionID } }).catch(() => {})
         const revert = session().revert?.messageID
         const message = messages().findLast((x) => (!revert || x.id < revert) && x.role === "user")
         if (!message) return
@@ -400,6 +413,19 @@ export function Session() {
       category: "Session",
       onSelect: (dialog) => {
         setConceal((prev) => !prev)
+        dialog.clear()
+      },
+    },
+    {
+      title: "Toggle timestamps",
+      value: "session.toggle.timestamps",
+      category: "Session",
+      onSelect: (dialog) => {
+        setShowTimestamps((prev) => {
+          const next = !prev
+          kv.set("timestamps", next ? "show" : "hide")
+          return next
+        })
         dialog.clear()
       },
     },
@@ -512,7 +538,6 @@ export function Session() {
           return
         }
 
-        console.log(text)
         const base64 = Buffer.from(text).toString("base64")
         const osc52 = `\x1b]52;c;${base64}\x07`
         const finalOsc52 = process.env["TMUX"] ? `\x1bPtmux;\x1b${osc52}\x1b\\` : osc52
@@ -600,11 +625,9 @@ export function Session() {
           }
 
           // Prompt for optional filename
-          const customFilename = await DialogPrompt.show(
-            dialog,
-            "Export filename",
-            `session-${sessionData.id.slice(0, 8)}.md`,
-          )
+          const customFilename = await DialogPrompt.show(dialog, "Export filename", {
+            value: `session-${sessionData.id.slice(0, 8)}.md`,
+          })
 
           // Cancel if user pressed escape
           if (customFilename === null) return
@@ -654,44 +677,50 @@ export function Session() {
     },
   ])
 
+  const revertInfo = createMemo(() => session()?.revert)
+  const revertMessageID = createMemo(() => revertInfo()?.messageID)
+
+  const revertDiffFiles = createMemo(() => {
+    const diffText = revertInfo()?.diff ?? ""
+    if (!diffText) return []
+
+    try {
+      const patches = parsePatch(diffText)
+      return patches.map((patch) => {
+        const filename = patch.newFileName || patch.oldFileName || "unknown"
+        const cleanFilename = filename.replace(/^[ab]\//, "")
+        return {
+          filename: cleanFilename,
+          additions: patch.hunks.reduce(
+            (sum, hunk) => sum + hunk.lines.filter((line) => line.startsWith("+")).length,
+            0,
+          ),
+          deletions: patch.hunks.reduce(
+            (sum, hunk) => sum + hunk.lines.filter((line) => line.startsWith("-")).length,
+            0,
+          ),
+        }
+      })
+    } catch (error) {
+      return []
+    }
+  })
+
+  const revertRevertedMessages = createMemo(() => {
+    const messageID = revertMessageID()
+    if (!messageID) return []
+    return messages().filter((x) => x.id >= messageID && x.role === "user")
+  })
+
   const revert = createMemo(() => {
-    const s = session()
-    if (!s) return
-    const messageID = s.revert?.messageID
-    if (!messageID) return
-    const reverted = messages().filter((x) => x.id >= messageID && x.role === "user")
-
-    const diffFiles = (() => {
-      const diffText = s.revert?.diff || ""
-      if (!diffText) return []
-
-      try {
-        const patches = parsePatch(diffText)
-        return patches.map((patch) => {
-          const filename = patch.newFileName || patch.oldFileName || "unknown"
-          const cleanFilename = filename.replace(/^[ab]\//, "")
-          return {
-            filename: cleanFilename,
-            additions: patch.hunks.reduce(
-              (sum, hunk) => sum + hunk.lines.filter((line) => line.startsWith("+")).length,
-              0,
-            ),
-            deletions: patch.hunks.reduce(
-              (sum, hunk) => sum + hunk.lines.filter((line) => line.startsWith("-")).length,
-              0,
-            ),
-          }
-        })
-      } catch (error) {
-        return []
-      }
-    })()
-
+    const info = revertInfo()
+    if (!info) return
+    if (!info.messageID) return
     return {
-      messageID,
-      reverted,
-      diff: s.revert!.diff,
-      diffFiles,
+      messageID: info.messageID,
+      reverted: revertRevertedMessages(),
+      diff: info.diff,
+      diffFiles: revertDiffFiles(),
     }
   })
 
@@ -709,33 +738,13 @@ export function Session() {
         },
         conceal,
         showThinking,
+        showTimestamps,
+        sync,
       }}
     >
-      <box flexDirection="row" paddingBottom={1} paddingTop={1} paddingLeft={2} paddingRight={2} gap={2}>
-        <box flexGrow={1} gap={1}>
+      <box flexDirection="row">
+        <box flexGrow={1} paddingBottom={1} paddingTop={1} paddingLeft={2} paddingRight={2} gap={1}>
           <Show when={session()}>
-            <Show when={session().parentID}>
-              <box
-                backgroundColor={theme.backgroundPanel}
-                justifyContent="space-between"
-                flexDirection="row"
-                paddingTop={1}
-                paddingBottom={1}
-                flexShrink={0}
-                paddingLeft={2}
-                paddingRight={2}
-              >
-                <text fg={theme.text}>
-                  Previous <span style={{ fg: theme.textMuted }}>{keybind.print("session_child_cycle_reverse")}</span>
-                </text>
-                <text fg={theme.text}>
-                  <b>Viewing subagent session</b>
-                </text>
-                <text fg={theme.text}>
-                  <span style={{ fg: theme.textMuted }}>{keybind.print("session_child_cycle")}</span> Next
-                </text>
-              </box>
-            </Show>
             <Show when={!sidebarVisible()}>
               <Header />
             </Show>
@@ -841,7 +850,7 @@ export function Session() {
                     </Match>
                     <Match when={message.role === "assistant"}>
                       <AssistantMessage
-                        last={pending() === message.id}
+                        last={lastAssistant()?.id === message.id}
                         message={message as AssistantMessage}
                         parts={sync.data.part[message.id] ?? []}
                       />
@@ -860,6 +869,9 @@ export function Session() {
                 sessionID={route.sessionID}
               />
             </box>
+            <Show when={!sidebarVisible()}>
+              <Footer />
+            </Show>
           </Show>
           <Toast />
         </box>
@@ -888,6 +900,7 @@ function UserMessage(props: {
   index: number
   pending?: string
 }) {
+  const ctx = use()
   const text = createMemo(() => props.parts.flatMap((x) => (x.type === "text" && !x.synthetic ? [x] : []))[0])
   const files = createMemo(() => props.parts.flatMap((x) => (x.type === "file" ? [x] : [])))
   const sync = useSync()
@@ -903,52 +916,61 @@ function UserMessage(props: {
       <Show when={text()}>
         <box
           id={props.message.id}
-          onMouseOver={() => {
-            setHover(true)
-          }}
-          onMouseOut={() => {
-            setHover(false)
-          }}
-          onMouseUp={props.onMouseUp}
           border={["left"]}
-          paddingTop={1}
-          paddingBottom={1}
-          paddingLeft={2}
-          marginTop={props.index === 0 ? 0 : 1}
-          backgroundColor={hover() ? theme.backgroundElement : theme.backgroundPanel}
-          customBorderChars={SplitBorder.customBorderChars}
           borderColor={color()}
-          flexShrink={0}
+          customBorderChars={SplitBorder.customBorderChars}
+          marginTop={props.index === 0 ? 0 : 1}
         >
-          <text fg={theme.text}>{text()?.text}</text>
-          <Show when={files().length}>
-            <box flexDirection="row" paddingBottom={1} paddingTop={1} gap={1} flexWrap="wrap">
-              <For each={files()}>
-                {(file) => {
-                  const bg = createMemo(() => {
-                    if (file.mime.startsWith("image/")) return theme.accent
-                    if (file.mime === "application/pdf") return theme.primary
-                    return theme.secondary
-                  })
-                  return (
-                    <text fg={theme.text}>
-                      <span style={{ bg: bg(), fg: theme.background }}> {MIME_BADGE[file.mime] ?? file.mime} </span>
-                      <span style={{ bg: theme.backgroundElement, fg: theme.textMuted }}> {file.filename} </span>
-                    </text>
-                  )
-                }}
-              </For>
-            </box>
-          </Show>
-          <text fg={theme.text}>
-            {sync.data.config.username ?? "You"}{" "}
-            <Show
-              when={queued()}
-              fallback={<span style={{ fg: theme.textMuted }}>({Locale.time(props.message.time.created)})</span>}
-            >
-              <span style={{ bg: theme.accent, fg: theme.backgroundPanel, bold: true }}> QUEUED </span>
+          <box
+            onMouseOver={() => {
+              setHover(true)
+            }}
+            onMouseOut={() => {
+              setHover(false)
+            }}
+            onMouseUp={props.onMouseUp}
+            paddingTop={1}
+            paddingBottom={1}
+            paddingLeft={2}
+            backgroundColor={hover() ? theme.backgroundElement : theme.backgroundPanel}
+            flexShrink={0}
+          >
+            <text fg={theme.text}>{text()?.text}</text>
+            <Show when={files().length}>
+              <box flexDirection="row" paddingBottom={1} paddingTop={1} gap={1} flexWrap="wrap">
+                <For each={files()}>
+                  {(file) => {
+                    const bg = createMemo(() => {
+                      if (file.mime.startsWith("image/")) return theme.accent
+                      if (file.mime === "application/pdf") return theme.primary
+                      return theme.secondary
+                    })
+                    return (
+                      <text fg={theme.text}>
+                        <span style={{ bg: bg(), fg: theme.background }}> {MIME_BADGE[file.mime] ?? file.mime} </span>
+                        <span style={{ bg: theme.backgroundElement, fg: theme.textMuted }}> {file.filename} </span>
+                      </text>
+                    )
+                  }}
+                </For>
+              </box>
             </Show>
-          </text>
+            <text fg={theme.textMuted}>
+              {sync.data.config.username ?? "You"}{" "}
+              <Show
+                when={queued()}
+                fallback={
+                  <span style={{ fg: theme.textMuted }}>
+                    {ctx.showTimestamps()
+                      ? Locale.todayTimeOrDateTime(props.message.time.created)
+                      : Locale.time(props.message.time.created)}
+                  </span>
+                }
+              >
+                <span style={{ bg: theme.accent, fg: theme.backgroundPanel, bold: true }}> QUEUED </span>
+              </Show>
+            </text>
+          </box>
         </box>
       </Show>
       <Show when={compaction()}>
@@ -968,12 +990,20 @@ function AssistantMessage(props: { message: AssistantMessage; parts: Part[]; las
   const local = useLocal()
   const { theme } = useTheme()
   const sync = useSync()
-  const status = createMemo(
-    () =>
-      sync.data.session_status[props.message.sessionID] ?? {
-        type: "idle",
-      },
-  )
+  const messages = createMemo(() => sync.data.message[props.message.sessionID] ?? [])
+
+  const final = createMemo(() => {
+    return props.message.finish && !["tool-calls", "unknown"].includes(props.message.finish)
+  })
+
+  const duration = createMemo(() => {
+    if (!final()) return 0
+    if (!props.message.time.completed) return 0
+    const user = messages().find((x) => x.role === "user" && x.id === props.message.parentID)
+    if (!user || !user.time) return 0
+    return props.message.time.completed - user.time.created
+  })
+
   return (
     <>
       <For each={props.parts}>
@@ -1006,57 +1036,15 @@ function AssistantMessage(props: { message: AssistantMessage; parts: Part[]; las
         </box>
       </Show>
       <Switch>
-        <Match when={props.last && status().type !== "idle"}>
-          <box paddingLeft={3} flexDirection="row" gap={1} marginTop={1}>
-            <text fg={local.agent.color(props.message.mode)}>{Locale.titlecase(props.message.mode)}</text>
-            <Shimmer text={props.message.modelID} color={theme.text} />
-            {(() => {
-              const retry = createMemo(() => {
-                const s = status()
-                if (s.type !== "retry") return
-                return s
-              })
-              const message = createMemo(() => {
-                const r = retry()
-                if (!r) return
-                if (r.message.includes("exceeded your current quota") && r.message.includes("gemini"))
-                  return "gemini 3 way too hot right now"
-                if (r.message.length > 50) return r.message.slice(0, 50) + "..."
-                return r.message
-              })
-              const [seconds, setSeconds] = createSignal(0)
-              onMount(() => {
-                const timer = setInterval(() => {
-                  const next = retry()?.next
-                  if (next) setSeconds(Math.round((next - Date.now()) / 1000))
-                }, 1000)
-
-                onCleanup(() => {
-                  clearInterval(timer)
-                })
-              })
-              return (
-                <Show when={retry()}>
-                  <text fg={theme.error}>
-                    {message()} [retrying {seconds() > 0 ? `in ${seconds()}s ` : ""}
-                    attempt #{retry()!.attempt}]
-                  </text>
-                </Show>
-              )
-            })()}
-          </box>
-        </Match>
-        <Match
-          when={
-            (props.message.time.completed &&
-              props.parts.some((item) => item.type === "step-finish" && item.reason !== "tool-calls")) ||
-            props.last
-          }
-        >
+        <Match when={props.last || final()}>
           <box paddingLeft={3}>
             <text marginTop={1}>
-              <span style={{ fg: local.agent.color(props.message.mode) }}>{Locale.titlecase(props.message.mode)}</span>{" "}
-              <span style={{ fg: theme.textMuted }}>{props.message.modelID}</span>
+              <span style={{ fg: local.agent.color(props.message.mode) }}>▣ </span>{" "}
+              <span style={{ fg: theme.text }}>{Locale.titlecase(props.message.mode)}</span>
+              <span style={{ fg: theme.textMuted }}> · {props.message.modelID}</span>
+              <Show when={duration()}>
+                <span style={{ fg: theme.textMuted }}> · {Locale.duration(duration())}</span>
+              </Show>
             </text>
           </box>
         </Match>
@@ -1072,7 +1060,7 @@ const PART_MAPPING = {
 }
 
 function ReasoningPart(props: { last: boolean; part: ReasoningPart; message: AssistantMessage }) {
-  const { theme, syntax } = useTheme()
+  const { theme, subtleSyntax } = useTheme()
   const ctx = use()
   const content = createMemo(() => props.part.text.trim())
   return (
@@ -1090,10 +1078,10 @@ function ReasoningPart(props: { last: boolean; part: ReasoningPart; message: Ass
           filetype="markdown"
           drawUnstyledText={false}
           streaming={true}
-          syntaxStyle={syntax()}
+          syntaxStyle={subtleSyntax()}
           content={"_Thinking:_ " + content()}
           conceal={ctx.conceal()}
-          fg={theme.text}
+          fg={theme.textMuted}
         />
       </box>
     </Show>
@@ -1102,7 +1090,7 @@ function ReasoningPart(props: { last: boolean; part: ReasoningPart; message: Ass
 
 function TextPart(props: { last: boolean; part: TextPart; message: AssistantMessage }) {
   const ctx = use()
-  const { syntax } = useTheme()
+  const { theme, syntax } = useTheme()
   return (
     <Show when={props.part.text.trim()}>
       <box id={"text-" + props.part.id} paddingLeft={3} marginTop={1} flexShrink={0}>
@@ -1113,6 +1101,7 @@ function TextPart(props: { last: boolean; part: TextPart; message: AssistantMess
           syntaxStyle={syntax()}
           content={props.part.text.trim()}
           conceal={ctx.conceal()}
+          fg={theme.text}
         />
       </box>
     </Show>
@@ -1309,7 +1298,10 @@ ToolRegistry.register<typeof WriteTool>({
   container: "block",
   render(props) {
     const { theme, syntax } = useTheme()
-    const lines = createMemo(() => props.input.content?.split("\n") ?? [], [] as string[])
+    const lines = createMemo(
+      () => (typeof props.input.content === "string" ? props.input.content.split("\n") : []),
+      [] as string[],
+    )
     const code = createMemo(() => {
       if (!props.input.content) return ""
       const text = props.input.content
@@ -1444,6 +1436,34 @@ ToolRegistry.register<typeof WebFetchTool>({
   },
 })
 
+ToolRegistry.register({
+  name: "codesearch",
+  container: "inline",
+  render(props: ToolProps<any>) {
+    const input = props.input as any
+    const metadata = props.metadata as any
+    return (
+      <ToolTitle icon="◇" fallback="Searching code..." when={input.query}>
+        Exa Code Search "{input.query}" <Show when={metadata.results}>({metadata.results} results)</Show>
+      </ToolTitle>
+    )
+  },
+})
+
+ToolRegistry.register({
+  name: "websearch",
+  container: "inline",
+  render(props: ToolProps<any>) {
+    const input = props.input as any
+    const metadata = props.metadata as any
+    return (
+      <ToolTitle icon="◈" fallback="Searching web..." when={input.query}>
+        Exa Web Search "{input.query}" <Show when={metadata.numResults}>({metadata.numResults} results)</Show>
+      </ToolTitle>
+    )
+  },
+})
+
 ToolRegistry.register<typeof EditTool>({
   name: "edit",
   container: "block",
@@ -1451,7 +1471,12 @@ ToolRegistry.register<typeof EditTool>({
     const ctx = use()
     const { theme, syntax } = useTheme()
 
-    const style = createMemo(() => (ctx.width > 120 ? "split" : "stacked"))
+    const style = createMemo(() => {
+      const diffStyle = ctx.sync.data.config.tui?.diff_style
+      if (diffStyle === "stacked") return "stacked"
+      // Default to "auto" behavior
+      return ctx.width > 120 ? "split" : "stacked"
+    })
 
     const diff = createMemo(() => {
       const diff = props.metadata.diff ?? props.permission["diff"]
@@ -1524,7 +1549,6 @@ ToolRegistry.register<typeof EditTool>({
 
     const ft = createMemo(() => filetype(props.input.filePath))
 
-    createEffect(() => console.log(props.metadata.diagnostics))
     const diagnostics = createMemo(() => {
       const arr = props.metadata.diagnostics?.[props.input.filePath ?? ""] ?? []
       return arr.filter((x) => x.severity === 1).slice(0, 3)

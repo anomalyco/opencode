@@ -22,7 +22,7 @@
     height: 24px;
   }
 
-  [data-slot="svg"] {
+  [data-slot="icon-svg"] {
     width: 100%;
     height: auto;
   }

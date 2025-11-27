@@ -1,0 +1,110 @@
+[data-component="session-review"] {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  height: 100%;
+  overflow-y: auto;
+  scrollbar-width: none;
+  &::-webkit-scrollbar {
+    display: none;
+  }
+
+  /* [data-slot="session-review-container"] { */
+  /*   height: 100%; */
+  /* } */
+
+  [data-slot="session-review-header"] {
+    position: sticky;
+    top: 0;
+    z-index: 20;
+    background-color: var(--background-stronger);
+    height: 32px;
+    flex-shrink: 0;
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    align-self: stretch;
+  }
+
+  [data-slot="session-review-title"] {
+    font-family: var(--font-family-sans);
+    font-size: var(--font-size-base);
+    font-weight: var(--font-weight-medium);
+    line-height: var(--line-height-large);
+    color: var(--text-strong);
+  }
+
+  [data-slot="session-review-actions"] {
+    display: flex;
+    align-items: center;
+    column-gap: 16px;
+    padding-right: 1px;
+  }
+
+  [data-component="sticky-accordion-header"] {
+    top: 40px;
+
+    &[data-expanded]::before {
+      top: -40px;
+    }
+  }
+
+  [data-slot="accordion-trigger"] {
+    background-color: var(--background-stronger) !important;
+  }
+
+  [data-slot="accordion-item"] {
+    [data-slot="accordion-content"] {
+      display: none;
+    }
+    &[data-expanded] {
+      [data-slot="accordion-content"] {
+        display: block;
+      }
+    }
+  }
+
+  [data-slot="session-review-trigger-content"] {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    width: 100%;
+    gap: 20px;
+  }
+
+  [data-slot="session-review-file-info"] {
+    flex-grow: 1;
+    display: flex;
+    align-items: center;
+    gap: 20px;
+    min-width: 0;
+  }
+
+  [data-slot="session-review-file-name-container"] {
+    display: flex;
+    flex-grow: 1;
+    min-width: 0;
+  }
+
+  [data-slot="session-review-directory"] {
+    color: var(--text-base);
+    text-overflow: ellipsis;
+    overflow: hidden;
+    white-space: nowrap;
+    direction: rtl;
+    text-align: left;
+  }
+
+  [data-slot="session-review-filename"] {
+    color: var(--text-strong);
+    flex-shrink: 0;
+  }
+
+  [data-slot="session-review-trigger-actions"] {
+    flex-shrink: 0;
+    display: flex;
+    gap: 16px;
+    align-items: center;
+    justify-content: flex-end;
+  }
+}

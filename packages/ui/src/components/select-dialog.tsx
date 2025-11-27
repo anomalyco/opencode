@@ -1,7 +1,10 @@
 import { createEffect, Show, For, type JSX, splitProps } from "solid-js"
-import { Dialog, DialogProps, Icon, IconButton, Input } from "@opencode-ai/ui"
 import { createStore } from "solid-js/store"
 import { FilteredListProps, useFilteredList } from "@opencode-ai/ui/hooks"
+import { Dialog, DialogProps } from "./dialog"
+import { Icon } from "./icon"
+import { Input } from "./input"
+import { IconButton } from "./icon-button"
 
 interface SelectDialogProps<T>
   extends FilteredListProps<T>,
@@ -11,6 +14,7 @@ interface SelectDialogProps<T>
   emptyMessage?: string
   children: (item: T) => JSX.Element
   onSelect?: (value: T | undefined) => void
+  onKeyEvent?: (event: KeyboardEvent, item: T | undefined) => void
 }
 
 export function SelectDialog<T>(props: SelectDialogProps<T>) {
@@ -62,9 +66,12 @@ export function SelectDialog<T>(props: SelectDialogProps<T>) {
     setStore("mouseActive", false)
     if (e.key === "Escape") return
 
+    const all = flat()
+    const selected = all.find((x) => others.key(x) === active())
+    props.onKeyEvent?.(e, selected)
+
     if (e.key === "Enter") {
       e.preventDefault()
-      const selected = flat().find((x) => others.key(x) === active())
       if (selected) handleSelect(selected)
     } else {
       onKeyDown(e)
@@ -83,10 +90,10 @@ export function SelectDialog<T>(props: SelectDialogProps<T>) {
         <Dialog.CloseButton ref={closeButton} style={{ display: "none" }} />
       </Dialog.Header>
       <div data-component="select-dialog-input">
-        <div data-slot="input-container">
-          <Icon data-slot="icon" name="magnifying-glass" />
+        <div data-slot="select-dialog-input-container">
+          <Icon data-slot="select-dialog-icon" name="magnifying-glass" />
           <Input
-            data-slot="input"
+            data-slot="select-dialog-input"
             type="text"
             value={filter()}
             onChange={(value) => handleInput(value)}
@@ -101,7 +108,7 @@ export function SelectDialog<T>(props: SelectDialogProps<T>) {
         </div>
         <Show when={filter()}>
           <IconButton
-            data-slot="clear-button"
+            data-slot="select-dialog-clear-button"
             icon="circle-x"
             variant="ghost"
             onClick={() => {
@@ -115,24 +122,25 @@ export function SelectDialog<T>(props: SelectDialogProps<T>) {
         <Show
           when={flat().length > 0}
           fallback={
-            <div data-slot="empty-state">
-              <div data-slot="message">
-                {props.emptyMessage ?? "No search results"} for <span data-slot="filter">&quot;{filter()}&quot;</span>
+            <div data-slot="select-dialog-empty-state">
+              <div data-slot="select-dialog-message">
+                {props.emptyMessage ?? "No search results"} for{" "}
+                <span data-slot="select-dialog-filter">&quot;{filter()}&quot;</span>
               </div>
             </div>
           }
         >
           <For each={grouped()}>
             {(group) => (
-              <div data-slot="group">
+              <div data-slot="select-dialog-group">
                 <Show when={group.category}>
-                  <div data-slot="header">{group.category}</div>
+                  <div data-slot="select-dialog-header">{group.category}</div>
                 </Show>
-                <div data-slot="list">
+                <div data-slot="select-dialog-list">
                   <For each={group.items}>
                     {(item) => (
                       <button
-                        data-slot="item"
+                        data-slot="select-dialog-item"
                         data-key={others.key(item)}
                         data-active={others.key(item) === active()}
                         onClick={() => handleSelect(item)}

@@ -1,7 +1,7 @@
 import "./index.css"
 import { createAsync, query, redirect } from "@solidjs/router"
 import { Title, Meta, Link } from "@solidjs/meta"
-import { HttpHeader } from "@solidjs/start"
+// import { HttpHeader } from "@solidjs/start"
 import zenLogoLight from "../../asset/zen-ornate-light.svg"
 import { config } from "~/config"
 import zenLogoDark from "../../asset/zen-ornate-dark.svg"
@@ -18,23 +18,24 @@ import { Legal } from "~/component/legal"
 import { Footer } from "~/component/footer"
 import { Header } from "~/component/header"
 import { getLastSeenWorkspaceID } from "../workspace/common"
+import { IconGemini, IconZai } from "~/component/icon"
 
 const checkLoggedIn = query(async () => {
   "use server"
-  const workspaceID = await getLastSeenWorkspaceID()
+  const workspaceID = await getLastSeenWorkspaceID().catch(() => {})
   if (workspaceID) throw redirect(`/workspace/${workspaceID}`)
 }, "checkLoggedIn.get")
 
 export default function Home() {
-  createAsync(() => checkLoggedIn())
+  const loggedin = createAsync(() => checkLoggedIn())
   return (
     <main data-page="zen">
-      <HttpHeader name="Cache-Control" value="public, max-age=1, s-maxage=3600, stale-while-revalidate=86400" />
+      {/*<HttpHeader name="Cache-Control" value="public, max-age=1, s-maxage=3600, stale-while-revalidate=86400" />*/}
       <Title>OpenCode Zen | A curated set of reliable optimized models for coding agents</Title>
       <Link rel="canonical" href={`${config.baseUrl}/zen`} />
-      <Link rel="icon" type="image/svg+xml" href="/favicon-zen.svg" />
       <Meta property="og:image" content="/social-share-zen.png" />
       <Meta name="twitter:image" content="/social-share-zen.png" />
+      <Meta name="opencode:auth" content={loggedin() ? "true" : "false"} />
 
       <div data-component="container">
         <Header zen />
@@ -82,6 +83,9 @@ export default function Home() {
                   </svg>
                 </div>
                 <div>
+                  <IconGemini width="24" height="24" />
+                </div>
+                <div>
                   <svg width="24" height="24" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg">
                     <path
                       d="M9.16861 16.0529L17.2018 9.85156C17.5957 9.54755 18.1586 9.66612 18.3463 10.1384C19.3339 12.6288 18.8926 15.6217 16.9276 17.6766C14.9626 19.7314 12.2285 20.1821 9.72948 19.1557L6.9995 20.4775C10.9151 23.2763 15.6699 22.5841 18.6411 19.4749C20.9979 17.0103 21.7278 13.6508 21.0453 10.6214L21.0515 10.6278C20.0617 6.17736 21.2948 4.39847 23.8207 0.760904C23.8804 0.674655 23.9402 0.588405 24 0.5L20.6762 3.97585V3.96506L9.16658 16.0551"
@@ -110,6 +114,9 @@ export default function Home() {
                       fill="currentColor"
                     />
                   </svg>
+                </div>
+                <div>
+                  <IconZai width="24" height="24" />
                 </div>
               </div>
               <a href="/auth">

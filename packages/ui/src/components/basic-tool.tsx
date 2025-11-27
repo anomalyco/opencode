@@ -29,16 +29,16 @@ export function BasicTool(props: BasicToolProps) {
     <Collapsible>
       <Collapsible.Trigger>
         <div data-component="tool-trigger">
-          <div data-slot="tool-trigger-content">
-            <Icon name={props.icon} size="small" data-slot="tool-icon" />
-            <div data-slot="tool-info">
+          <div data-slot="basic-tool-tool-trigger-content">
+            <Icon name={props.icon} size="small" data-slot="basic-tool-tool-icon" />
+            <div data-slot="basic-tool-tool-info">
               <Switch>
                 <Match when={isTriggerTitle(props.trigger) && props.trigger}>
                   {(trigger) => (
-                    <div data-slot="tool-info-structured">
-                      <div data-slot="tool-info-main">
+                    <div data-slot="basic-tool-tool-info-structured">
+                      <div data-slot="basic-tool-tool-info-main">
                         <span
-                          data-slot="tool-title"
+                          data-slot="basic-tool-tool-title"
                           classList={{
                             [trigger().titleClass ?? ""]: !!trigger().titleClass,
                           }}
@@ -47,7 +47,7 @@ export function BasicTool(props: BasicToolProps) {
                         </span>
                         <Show when={trigger().subtitle}>
                           <span
-                            data-slot="tool-subtitle"
+                            data-slot="basic-tool-tool-subtitle"
                             classList={{
                               [trigger().subtitleClass ?? ""]: !!trigger().subtitleClass,
                             }}
@@ -59,7 +59,7 @@ export function BasicTool(props: BasicToolProps) {
                           <For each={trigger().args}>
                             {(arg) => (
                               <span
-                                data-slot="tool-arg"
+                                data-slot="basic-tool-tool-arg"
                                 classList={{
                                   [trigger().argsClass ?? ""]: !!trigger().argsClass,
                                 }}

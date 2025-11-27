@@ -1,22 +1,19 @@
 import type { Component } from "solid-js"
 import { createSignal } from "solid-js"
-import {
-  Accordion,
-  Button,
-  Checkbox,
-  Select,
-  Tabs,
-  Tooltip,
-  Fonts,
-  List,
-  Dialog,
-  Icon,
-  IconButton,
-  Input,
-  SelectDialog,
-  Collapsible,
-} from "./components"
 import "./index.css"
+import { Button } from "./components/button"
+import { Select } from "./components/select"
+import { Font } from "./components/font"
+import { Accordion } from "./components/accordion"
+import { Tabs } from "./components/tabs"
+import { Tooltip } from "./components/tooltip"
+import { Input } from "./components/input"
+import { Checkbox } from "./components/checkbox"
+import { Icon } from "./components/icon"
+import { IconButton } from "./components/icon-button"
+import { Dialog } from "./components/dialog"
+import { SelectDialog } from "./components/select-dialog"
+import { Collapsible } from "./components/collapsible"
 
 const Demo: Component = () => {
   const [dialogOpen, setDialogOpen] = createSignal(false)
@@ -131,11 +128,6 @@ const Demo: Component = () => {
         </Tooltip>
       </section>
       <h3>List</h3>
-      <section style={{ height: "300px" }}>
-        <List data={["Item 1", "Item 2", "Item 3"]} key={(x) => x}>
-          {(x) => <div>{x}</div>}
-        </List>
-      </section>
       <h3>Input</h3>
       <section>
         <Input
@@ -287,7 +279,7 @@ const Demo: Component = () => {
 
   return (
     <>
-      <Fonts />
+      <Font />
       <main>
         <Content />
         <Content dark />
