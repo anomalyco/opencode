@@ -108,13 +108,18 @@ export namespace ToolRegistry {
     return all().then((x) => x.map((t) => t.id))
   }
 
-  export async function tools(_providerID: string, _modelID: string) {
+  export async function tools(providerID: string, _modelID: string) {
     const tools = await all()
     const result = await Promise.all(
-      tools.map(async (t) => ({
-        id: t.id,
-        ...(await t.init()),
-      })),
+      tools
+        .filter((t) => {
+          if (t.id === "codesearch" || t.id === "websearch") return providerID === "opencode"
+          return true
+        })
+        .map(async (t) => ({
+          id: t.id,
+          ...(await t.init()),
+        })),
     )
     return result
   }
