@@ -1,0 +1,28 @@
+name: opencode review
+
+on:
+  pull_request:
+    types: [review_requested]
+
+jobs:
+  opencode-review:
+    if: github.event.requested_team.slug == 'opencode'
+    runs-on: ubuntu-latest
+    permissions:
+      id-token: write
+      contents: write
+      pull-requests: write
+      issues: write
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - uses: ./.github/actions/setup-bun
+
+      - name: Run opencode review
+        uses: sst/opencode/github@latest
+        env:
+          OPENCODE_API_KEY: ${{ secrets.OPENCODE_API_KEY }}
+        with:
+          model: opencode/glm-4.6
+          prompt: Review this PR for code quality, potential bugs, security issues, and suggest improvements where needed

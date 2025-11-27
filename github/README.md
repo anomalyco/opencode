@@ -30,6 +30,18 @@ Leave the following comment on a GitHub PR. opencode will implement the requeste
 Delete the attachment from S3 when the note is removed /oc
 ```
 
+#### Automatic PR Reviews
+
+Add opencode as a reviewer to automatically review PRs. When the `opencode` team is requested as a reviewer, the action will automatically trigger a comprehensive code review.
+
+To set this up:
+
+1. Create a team in your GitHub organization called `opencode`
+2. When creating or viewing a PR, add the `opencode` team as a reviewer
+3. The review workflow will automatically trigger and provide feedback
+
+This requires the review workflow file `.github/workflows/opencode-review.yml` to be present (created automatically by `opencode github install`).
+
 #### Review specific code lines
 
 Leave a comment directly on code lines in the PR's "Files" tab. opencode will automatically detect the file, line numbers, and diff context to provide precise responses.
@@ -94,7 +106,41 @@ This will walk you through installing the GitHub app, creating the workflow, and
              model: anthropic/claude-sonnet-4-20250514
    ```
 
-3. Store the API keys in secrets. In your organization or project **settings**, expand **Secrets and variables** on the left and select **Actions**. Add the required API keys.
+3. (Optional) For automatic PR reviews, add `.github/workflows/opencode-review.yml`:
+
+   ```yml
+   name: opencode review
+
+   on:
+     pull_request:
+       types: [review_requested]
+
+   jobs:
+     opencode-review:
+       # Trigger when 'opencode' team is requested for review
+       if: github.event.requested_team.slug == 'opencode'
+       runs-on: ubuntu-latest
+       permissions:
+         id-token: write
+         contents: write
+         pull-requests: write
+         issues: write
+       steps:
+         - name: Checkout repository
+           uses: actions/checkout@v4
+
+         - name: Run opencode review
+           uses: sst/opencode/github@latest
+           env:
+             ANTHROPIC_API_KEY: ${{ secrets.ANTHROPIC_API_KEY }}
+           with:
+             model: anthropic/claude-sonnet-4-20250514
+             prompt: "Review this PR for code quality, potential bugs, security issues, and suggest improvements where needed"
+   ```
+
+   Then create a team called `opencode` in your GitHub organization. When you add this team as a reviewer to a PR, the workflow will automatically trigger a comprehensive code review.
+
+4. Store the API keys in secrets. In your organization or project **settings**, expand **Secrets and variables** on the left and select **Actions**. Add the required API keys.
 
 ## Support
 

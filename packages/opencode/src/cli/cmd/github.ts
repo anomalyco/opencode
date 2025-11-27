@@ -7,7 +7,11 @@ import { graphql } from "@octokit/graphql"
 import * as core from "@actions/core"
 import * as github from "@actions/github"
 import type { Context } from "@actions/github/lib/context"
-import type { IssueCommentEvent, PullRequestReviewCommentEvent } from "@octokit/webhooks-types"
+import type {
+  IssueCommentEvent,
+  PullRequestReviewCommentEvent,
+  PullRequestReviewRequestedEvent,
+} from "@octokit/webhooks-types"
 import { UI } from "../ui"
 import { cmd } from "./cmd"
 import { ModelsDev } from "../../provider/models"
@@ -125,6 +129,7 @@ type IssueQueryResponse = {
 }
 
 const WORKFLOW_FILE = ".github/workflows/opencode.yml"
+const REVIEW_WORKFLOW_FILE = ".github/workflows/opencode-review.yml"
 
 export const GithubCommand = cmd({
   command: "github",
@@ -176,10 +181,12 @@ export const GithubInstallCommand = cmd({
               [
                 "Next steps:",
                 "",
-                `    1. Commit the \`${WORKFLOW_FILE}\` file and push`,
+                `    1. Commit the workflow files and push`,
                 step2,
                 "",
-                "    3. Go to a GitHub issue and comment `/oc summarize` to see the agent in action",
+                "    3. Try the agent:",
+                "       - Comment '/oc' on any issue or PR",
+                "       - Add 'opencode' reviewer to a PR for automatic review",
                 "",
                 "   Learn more about the GitHub agent - https://opencode.ai/docs/github/#usage-examples",
               ].join("\n"),
@@ -355,6 +362,40 @@ jobs:
             )
 
             prompts.log.success(`Added workflow file: "${WORKFLOW_FILE}"`)
+
+            // Add review workflow
+            await Bun.write(
+              path.join(app.root, REVIEW_WORKFLOW_FILE),
+              `name: opencode review
+
+on:
+  pull_request:
+    types: [review_requested]
+
+jobs:
+  opencode-review:
+    if: github.event.requested_team.slug == 'opencode'
+    runs-on: ubuntu-latest
+    permissions:
+      id-token: write
+      contents: write
+      pull-requests: write
+      issues: write
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Run opencode review
+        uses: sst/opencode/github@latest${envStr}
+        with:
+          model: ${provider}/${model}
+          prompt: Review this PR for code quality, potential bugs, security issues, and suggest improvements where needed`,
+            )
+
+            prompts.log.success(`Added review workflow file: "${REVIEW_WORKFLOW_FILE}"`)
+            prompts.log.info(
+              `To use PR reviews: Create a team called "opencode" in your GitHub organization and add it as a reviewer to trigger automatic reviews.`,
+            )
           }
         }
       },
@@ -380,7 +421,11 @@ export const GithubRunCommand = cmd({
       const isMock = args.token || args.event
 
       const context = isMock ? (JSON.parse(args.event!) as Context) : github.context
-      if (context.eventName !== "issue_comment" && context.eventName !== "pull_request_review_comment") {
+      if (
+        context.eventName !== "issue_comment" &&
+        context.eventName !== "pull_request_review_comment" &&
+        context.eventName !== "pull_request"
+      ) {
         core.setFailed(`Unsupported event type: ${context.eventName}`)
         process.exit(1)
       }
@@ -389,14 +434,19 @@ export const GithubRunCommand = cmd({
       const runId = normalizeRunId()
       const share = normalizeShare()
       const { owner, repo } = context.repo
-      const payload = context.payload as IssueCommentEvent | PullRequestReviewCommentEvent
+      const payload = context.payload as
+        | IssueCommentEvent
+        | PullRequestReviewCommentEvent
+        | PullRequestReviewRequestedEvent
       const issueEvent = isIssueCommentEvent(payload) ? payload : undefined
       const actor = context.actor
 
       const issueId =
         context.eventName === "pull_request_review_comment"
           ? (payload as PullRequestReviewCommentEvent).pull_request.number
-          : (payload as IssueCommentEvent).issue.number
+          : context.eventName === "pull_request"
+            ? (payload as PullRequestReviewRequestedEvent).pull_request.number
+            : (payload as IssueCommentEvent).issue.number
       const runUrl = `/${owner}/${repo}/actions/runs/${runId}`
       const shareBaseUrl = isMock ? "https://dev.opencode.ai" : "https://opencode.ai"
 
@@ -437,11 +487,16 @@ export const GithubRunCommand = cmd({
         })()
         console.log("opencode session", session.id)
 
-        // Handle 3 cases
-        // 1. Issue
-        // 2. Local PR
-        // 3. Fork PR
-        if (context.eventName === "pull_request_review_comment" || issueEvent?.issue.pull_request) {
+        // Handle 4 cases
+        // 1. Pull request event (review_requested)
+        // 2. Issue
+        // 3. Local PR
+        // 4. Fork PR
+        if (
+          context.eventName === "pull_request" ||
+          context.eventName === "pull_request_review_comment" ||
+          issueEvent?.issue.pull_request
+        ) {
           const prData = await fetchPR()
           // Local PR
           if (prData.headRepository.nameWithOwner === prData.baseRepository.nameWithOwner) {
@@ -539,9 +594,21 @@ export const GithubRunCommand = cmd({
       }
 
       function isIssueCommentEvent(
-        event: IssueCommentEvent | PullRequestReviewCommentEvent,
+        event: IssueCommentEvent | PullRequestReviewCommentEvent | PullRequestReviewRequestedEvent,
       ): event is IssueCommentEvent {
         return "issue" in event
+      }
+
+      function isPullRequestEvent(
+        event: IssueCommentEvent | PullRequestReviewCommentEvent | PullRequestReviewRequestedEvent,
+      ): event is PullRequestReviewRequestedEvent {
+        return (
+          context.eventName === "pull_request" &&
+          "action" in event &&
+          event.action === "review_requested" &&
+          "requested_team" in event &&
+          event.requested_team !== null
+        )
       }
 
       function getReviewCommentContext() {
@@ -562,9 +629,23 @@ export const GithubRunCommand = cmd({
       }
 
       async function getUserPrompt() {
+        const envPrompt = process.env["PROMPT"]
+        if (envPrompt) {
+          return { userPrompt: envPrompt, promptFiles: [] }
+        }
+
+        if (isPullRequestEvent(payload)) {
+          return {
+            userPrompt:
+              "Review this PR for code quality, potential bugs, security issues, and suggest improvements where needed",
+            promptFiles: [],
+          }
+        }
+
         const reviewContext = getReviewCommentContext()
         let prompt = (() => {
-          const body = payload.comment.body.trim()
+          const commentPayload = payload as IssueCommentEvent | PullRequestReviewCommentEvent
+          const body = commentPayload.comment.body.trim()
           if (body === "/opencode" || body === "/oc") {
             if (reviewContext) {
               return `Review this code change and suggest improvements for the commented lines:\n\nFile: ${reviewContext.file}\nLines: ${reviewContext.line}\n\n${reviewContext.diffHunk}`
@@ -1021,10 +1102,13 @@ query($owner: String!, $repo: String!, $number: Int!) {
       }
 
       function buildPromptDataForIssue(issue: GitHubIssue) {
+        const commentPayload = !isPullRequestEvent(payload)
+          ? (payload as IssueCommentEvent | PullRequestReviewCommentEvent)
+          : undefined
         const comments = (issue.comments?.nodes || [])
           .filter((c) => {
             const id = parseInt(c.databaseId)
-            return id !== commentId && id !== payload.comment.id
+            return id !== commentId && (!commentPayload || id !== commentPayload.comment.id)
           })
           .map((c) => `  - ${c.author.login} at ${c.createdAt}: ${c.body}`)
 
@@ -1140,10 +1224,13 @@ query($owner: String!, $repo: String!, $number: Int!) {
       }
 
       function buildPromptDataForPR(pr: GitHubPullRequest) {
+        const commentPayload = !isPullRequestEvent(payload)
+          ? (payload as IssueCommentEvent | PullRequestReviewCommentEvent)
+          : undefined
         const comments = (pr.comments?.nodes || [])
           .filter((c) => {
             const id = parseInt(c.databaseId)
-            return id !== commentId && id !== payload.comment.id
+            return id !== commentId && (!commentPayload || id !== commentPayload.comment.id)
           })
           .map((c) => `- ${c.author.login} at ${c.createdAt}: ${c.body}`)
 
