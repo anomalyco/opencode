@@ -28,13 +28,15 @@ export namespace Snapshot {
       await $`git --git-dir ${git} config core.autocrlf false`.quiet().nothrow()
       log.info("initialized")
     }
-    await $`git --git-dir ${git} --work-tree ${Instance.worktree} add .`.quiet().cwd(Instance.directory).nothrow()
+    const realDir = await fs.realpath(Instance.directory)
+    const relative = path.relative(Instance.worktree, realDir) || "."
+    await $`git --git-dir ${git} --work-tree ${Instance.worktree} add ${relative}`.quiet().cwd(Instance.worktree).nothrow()
     const hash = await $`git --git-dir ${git} --work-tree ${Instance.worktree} write-tree`
       .quiet()
-      .cwd(Instance.directory)
+      .cwd(Instance.worktree)
       .nothrow()
       .text()
-    log.info("tracking", { hash, cwd: Instance.directory, git })
+    log.info("tracking", { hash, cwd: Instance.directory, git, realDir, relative, worktree: Instance.worktree })
     return hash.trim()
   }
 
@@ -46,11 +48,13 @@ export namespace Snapshot {
 
   export async function patch(hash: string): Promise<Patch> {
     const git = gitdir()
-    await $`git --git-dir ${git} --work-tree ${Instance.worktree} add .`.quiet().cwd(Instance.directory).nothrow()
+    const realDir = await fs.realpath(Instance.directory)
+    const relative = path.relative(Instance.worktree, realDir) || "."
+    await $`git --git-dir ${git} --work-tree ${Instance.worktree} add ${relative}`.quiet().cwd(Instance.worktree).nothrow()
     const result =
-      await $`git -c core.autocrlf=false --git-dir ${git} --work-tree ${Instance.worktree} diff --no-ext-diff --name-only ${hash} -- .`
+      await $`git -c core.autocrlf=false --git-dir ${git} --work-tree ${Instance.worktree} diff --no-ext-diff --name-only ${hash} -- ${relative}`
         .quiet()
-        .cwd(Instance.directory)
+        .cwd(Instance.worktree)
         .nothrow()
 
     // If git diff fails, return empty patch
@@ -114,7 +118,7 @@ export namespace Snapshot {
             })
           } else {
             log.info("file did not exist in snapshot, deleting", { file })
-            await fs.unlink(file).catch(() => {})
+            await fs.unlink(file).catch(() => { })
           }
         }
         files.add(file)
@@ -124,9 +128,11 @@ export namespace Snapshot {
 
   export async function diff(hash: string) {
     const git = gitdir()
-    await $`git --git-dir ${git} --work-tree ${Instance.worktree} add .`.quiet().cwd(Instance.directory).nothrow()
+    const realDir = await fs.realpath(Instance.directory)
+    const relative = path.relative(Instance.worktree, realDir) || "."
+    await $`git --git-dir ${git} --work-tree ${Instance.worktree} add ${relative}`.quiet().cwd(Instance.worktree).nothrow()
     const result =
-      await $`git -c core.autocrlf=false --git-dir ${git} --work-tree ${Instance.worktree} diff --no-ext-diff ${hash} -- .`
+      await $`git -c core.autocrlf=false --git-dir ${git} --work-tree ${Instance.worktree} diff --no-ext-diff ${hash} -- ${relative}`
         .quiet()
         .cwd(Instance.worktree)
         .nothrow()
@@ -159,9 +165,11 @@ export namespace Snapshot {
   export async function diffFull(from: string, to: string): Promise<FileDiff[]> {
     const git = gitdir()
     const result: FileDiff[] = []
-    for await (const line of $`git -c core.autocrlf=false --git-dir ${git} --work-tree ${Instance.worktree} diff --no-ext-diff --no-renames --numstat ${from} ${to} -- .`
+    const realDir = await fs.realpath(Instance.directory)
+    const relative = path.relative(Instance.worktree, realDir) || "."
+    for await (const line of $`git -c core.autocrlf=false --git-dir ${git} --work-tree ${Instance.worktree} diff --no-ext-diff --no-renames --numstat ${from} ${to} -- ${relative}`
       .quiet()
-      .cwd(Instance.directory)
+      .cwd(Instance.worktree)
       .nothrow()
       .lines()) {
       if (!line) continue
@@ -170,15 +178,15 @@ export namespace Snapshot {
       const before = isBinaryFile
         ? ""
         : await $`git -c core.autocrlf=false --git-dir ${git} --work-tree ${Instance.worktree} show ${from}:${file}`
-            .quiet()
-            .nothrow()
-            .text()
+          .quiet()
+          .nothrow()
+          .text()
       const after = isBinaryFile
         ? ""
         : await $`git -c core.autocrlf=false --git-dir ${git} --work-tree ${Instance.worktree} show ${to}:${file}`
-            .quiet()
-            .nothrow()
-            .text()
+          .quiet()
+          .nothrow()
+          .text()
       result.push({
         file,
         before,
