@@ -30,9 +30,9 @@ export function createDialogProviderOptions() {
       map((provider) => ({
         title: provider.name,
         value: provider.id,
-        footer: {
-          opencode: "Recommended",
-          anthropic: "Claude Max or API key",
+        description: {
+          opencode: "(Recommended)",
+          anthropic: "(Claude Max or API key)",
         }[provider.id],
         category: provider.id in PROVIDER_PRIORITY ? "Popular" : "Other",
         async onSelect() {

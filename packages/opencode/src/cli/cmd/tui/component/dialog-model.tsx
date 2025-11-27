@@ -193,7 +193,7 @@ export function DialogModel() {
       keybind={[
         {
           keybind: { ctrl: true, name: "a", meta: false, shift: false, leader: false },
-          title: connected() ? "Connect provider" : "More providers",
+          title: connected() ? "Connect provider" : "View more providers",
           onTrigger() {
             dialog.replace(() => <DialogProvider />)
           },
