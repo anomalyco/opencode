@@ -40,6 +40,7 @@ export namespace Session {
       id: Identifier.schema("session"),
       projectID: z.string(),
       directory: z.string(),
+      agent: z.string(),
       parentID: Identifier.schema("session").optional(),
       summary: z
         .object({
@@ -126,6 +127,7 @@ export namespace Session {
       .object({
         parentID: Identifier.schema("session").optional(),
         title: z.string().optional(),
+        agent: z.string().optional(),
       })
       .optional(),
     async (input) => {
@@ -133,6 +135,7 @@ export namespace Session {
         parentID: input?.parentID,
         directory: Instance.directory,
         title: input?.title,
+        agent: input?.agent,
       })
     },
   )
@@ -174,12 +177,19 @@ export namespace Session {
     })
   })
 
-  export async function createNext(input: { id?: string; title?: string; parentID?: string; directory: string }) {
+  export async function createNext(input: {
+    id?: string
+    title?: string
+    parentID?: string
+    directory: string
+    agent?: string
+  }) {
     const result: Info = {
       id: Identifier.descending("session", input.id),
       version: Installation.VERSION,
       projectID: Instance.project.id,
       directory: input.directory,
+      agent: input.agent ?? "build",
       parentID: input.parentID,
       title: input.title ?? createDefaultTitle(!!input.parentID),
       time: {
