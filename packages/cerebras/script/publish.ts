@@ -47,7 +47,30 @@ if (process.env.NPM_CONFIG_TOKEN) {
       if (process.platform !== "win32") {
         await $`chmod 755 -R .`
       }
-      await $`bun publish --access public --tag ${Script.channel}`
+
+      // Retry logic for rate limiting
+      let retries = 0
+      const maxRetries = 3
+      while (retries <= maxRetries) {
+        try {
+          await $`bun publish --access public --tag ${Script.channel}`
+          break // Success, exit retry loop
+        } catch (error: any) {
+          if (error.stderr?.includes("429") || error.stderr?.includes("rate limited")) {
+            retries++
+            if (retries > maxRetries) {
+              console.log(`❌ Failed to publish ${name} after ${maxRetries} retries`)
+              throw error
+            }
+            const waitTime = Math.pow(2, retries) * 60000 // Exponential backoff: 2min, 4min, 8min
+            console.log(`⚠️  Rate limited on ${name}, retry ${retries}/${maxRetries} in ${waitTime/60000} minutes...`)
+            await new Promise((resolve) => setTimeout(resolve, waitTime))
+          } else {
+            throw error // Not a rate limit error, rethrow
+          }
+        }
+      }
+
       count++
       // Add delay to avoid npm rate limiting - wait after EACH publish
       console.log(`⏳ Published ${count}/${Object.keys(binaries).length}, pausing for 60 seconds...`)
