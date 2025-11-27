@@ -137,13 +137,10 @@ export function DialogModel() {
                 providerID: provider.id,
                 modelID: model,
               }
-              const favorite = favorites.some(
-                (item) => item.providerID === value.providerID && item.modelID === value.modelID,
-              )
               return {
                 value,
                 title: info.name ?? model,
-                description: connected() ? `${provider.name}${favorite ? " ★" : ""}` : undefined,
+                description: connected() ? provider.name : undefined,
                 category: connected() ? provider.name : undefined,
                 disabled: provider.id === "opencode" && model.includes("-nano"),
                 footer: info.cost?.input === 0 && provider.id === "opencode" ? "Free" : undefined,
