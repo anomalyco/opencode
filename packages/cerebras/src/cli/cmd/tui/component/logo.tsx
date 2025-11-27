@@ -15,13 +15,13 @@ export function Logo() {
     const maxLength = Math.max(...LOGO_LEFT.map(l => l.length)) + Math.max(...LOGO_RIGHT.map(l => l.length))
     let current = 0
     const interval = setInterval(() => {
-      current += 3
+      current += 2
       if (current >= maxLength) {
         current = maxLength
         clearInterval(interval)
       }
       setCharCount(current)
-    }, 20)
+    }, 25)
   })
 
   return (
