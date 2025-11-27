@@ -11,10 +11,15 @@ console.log("=== publishing ===\n")
 if (!Script.preview) {
   const previous = await fetch("https://registry.npmjs.org/cerebras-code-ai/latest")
     .then((res) => {
-      if (!res.ok) throw new Error(res.statusText)
+      if (!res.ok) return null // Package doesn't exist yet
       return res.json()
     })
-    .then((data: any) => data.version)
+    .then((data: any) => data?.version || null)
+
+  if (!previous) {
+    console.log("First release - no changelog generated")
+    notes.push("- Initial release of Cerebras Code")
+  } else {
 
   const log =
     await $`git log v${previous}..HEAD --oneline --format="%h %s" -- packages/cerebras packages/sdk packages/plugin`.text()
@@ -73,6 +78,7 @@ if (!Script.preview) {
   console.log(notes.join("\n"))
   console.log("-----------------------------")
   opencode.server.close()
+  }
 }
 
 const pkgjsons = await Array.fromAsync(
