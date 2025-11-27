@@ -11,7 +11,7 @@ export function Footer() {
   const lsp = createMemo(() => Object.keys(sync.data.lsp))
   const directory = useDirectory()
   return (
-    <box flexDirection="row" justifyContent="space-between" gap={1}>
+    <box flexDirection="row" justifyContent="space-between" gap={1} flexShrink={0}>
       <text fg={theme.textMuted}>{directory()}</text>
       <box gap={2} flexDirection="row" flexShrink={0}>
         <text fg={theme.text}>
