@@ -30,7 +30,10 @@ export namespace Snapshot {
     }
     const realDir = await fs.realpath(Instance.directory)
     const relative = path.relative(Instance.worktree, realDir) || "."
-    await $`git --git-dir ${git} --work-tree ${Instance.worktree} add ${relative}`.quiet().cwd(Instance.worktree).nothrow()
+    await $`git --git-dir ${git} --work-tree ${Instance.worktree} add ${relative}`
+      .quiet()
+      .cwd(Instance.worktree)
+      .nothrow()
     const hash = await $`git --git-dir ${git} --work-tree ${Instance.worktree} write-tree`
       .quiet()
       .cwd(Instance.worktree)
@@ -50,7 +53,10 @@ export namespace Snapshot {
     const git = gitdir()
     const realDir = await fs.realpath(Instance.directory)
     const relative = path.relative(Instance.worktree, realDir) || "."
-    await $`git --git-dir ${git} --work-tree ${Instance.worktree} add ${relative}`.quiet().cwd(Instance.worktree).nothrow()
+    await $`git --git-dir ${git} --work-tree ${Instance.worktree} add ${relative}`
+      .quiet()
+      .cwd(Instance.worktree)
+      .nothrow()
     const result =
       await $`git -c core.autocrlf=false --git-dir ${git} --work-tree ${Instance.worktree} diff --no-ext-diff --name-only ${hash} -- ${relative}`
         .quiet()
@@ -118,7 +124,7 @@ export namespace Snapshot {
             })
           } else {
             log.info("file did not exist in snapshot, deleting", { file })
-            await fs.unlink(file).catch(() => { })
+            await fs.unlink(file).catch(() => {})
           }
         }
         files.add(file)
@@ -130,7 +136,10 @@ export namespace Snapshot {
     const git = gitdir()
     const realDir = await fs.realpath(Instance.directory)
     const relative = path.relative(Instance.worktree, realDir) || "."
-    await $`git --git-dir ${git} --work-tree ${Instance.worktree} add ${relative}`.quiet().cwd(Instance.worktree).nothrow()
+    await $`git --git-dir ${git} --work-tree ${Instance.worktree} add ${relative}`
+      .quiet()
+      .cwd(Instance.worktree)
+      .nothrow()
     const result =
       await $`git -c core.autocrlf=false --git-dir ${git} --work-tree ${Instance.worktree} diff --no-ext-diff ${hash} -- ${relative}`
         .quiet()
@@ -178,15 +187,15 @@ export namespace Snapshot {
       const before = isBinaryFile
         ? ""
         : await $`git -c core.autocrlf=false --git-dir ${git} --work-tree ${Instance.worktree} show ${from}:${file}`
-          .quiet()
-          .nothrow()
-          .text()
+            .quiet()
+            .nothrow()
+            .text()
       const after = isBinaryFile
         ? ""
         : await $`git -c core.autocrlf=false --git-dir ${git} --work-tree ${Instance.worktree} show ${to}:${file}`
-          .quiet()
-          .nothrow()
-          .text()
+            .quiet()
+            .nothrow()
+            .text()
       result.push({
         file,
         before,

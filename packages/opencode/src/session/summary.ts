@@ -149,7 +149,7 @@ export namespace SessionSummary {
             },
           ],
           headers: small.info.headers,
-        }).catch(() => { })
+        }).catch(() => {})
         if (result) summary = result.text
       }
       userMsg.summary.body = summary
