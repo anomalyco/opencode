@@ -18,6 +18,7 @@ on:
 
 jobs:
   update:
+    if: github.event_name != 'pull_request' || github.event.pull_request.head.repo.full_name == github.repository
     runs-on: ubuntu-latest
     env:
       SYSTEM: x86_64-linux
@@ -29,6 +30,7 @@ jobs:
           token: ${{ secrets.GITHUB_TOKEN }}
           fetch-depth: 0
           ref: ${{ github.head_ref || github.ref_name }}
+          repository: ${{ github.event.pull_request.head.repo.full_name || github.repository }}
 
       - name: Setup Nix
         uses: DeterminateSystems/nix-installer-action@v20
