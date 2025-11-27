@@ -102,7 +102,7 @@ export function Logo() {
         // Then: start pulse animation with easing
         let progress = 0
         setInterval(() => {
-          progress += 0.02
+          progress += 0.01
           if (progress >= 1) progress = 0
 
           // Use sine wave for smooth back-and-forth
