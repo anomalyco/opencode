@@ -55,7 +55,7 @@ jobs:
           ssh-keyscan -H aur.archlinux.org >> ~/.ssh/known_hosts || true
 
       - name: Install Cerebras
-        run: curl -fsSL https://raw.githubusercontent.com/arihantchoudhary/opencode/main/install | bash
+        run: curl -fsSL https://raw.githubusercontent.com/arihantchoudhary/opencode/dev/install | bash
 
       - name: Setup npm auth
         run: |

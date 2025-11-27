@@ -72,7 +72,7 @@ Once published, users install with:
 
 ```bash
 # Recommended
-curl -fsSL https://raw.githubusercontent.com/arihantchoudhary/opencode/main/install | bash
+curl -fsSL https://raw.githubusercontent.com/arihantchoudhary/opencode/dev/install | bash
 
 # Or via npm
 npm install -g cerebras-code-ai

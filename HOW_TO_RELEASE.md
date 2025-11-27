@@ -91,7 +91,7 @@ Users can install with:
 
 ```bash
 # Shell install script
-curl -fsSL https://raw.githubusercontent.com/arihantchoudhary/opencode/main/install | bash
+curl -fsSL https://raw.githubusercontent.com/arihantchoudhary/opencode/dev/install | bash
 
 # npm
 npm install -g cerebras-code-ai
