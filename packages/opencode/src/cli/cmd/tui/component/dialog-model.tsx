@@ -21,7 +21,7 @@ export function DialogModel() {
 
   const options = createMemo(() => {
     const query = ref()?.filter
-    const favorites = local.model.favorite()
+    const favorites = connected() ? local.model.favorite() : []
     const recents = local.model.recent()
     const currentModel = local.model.current()
 
@@ -67,7 +67,7 @@ export function DialogModel() {
                   modelID: model.id,
                 },
                 title: model.name ?? item.modelID,
-                description: `${provider.name} ★`,
+                description: provider.name,
                 category: "Favorites",
                 disabled: provider.id === "opencode" && model.id.includes("-nano"),
                 footer: model.cost?.input === 0 && provider.id === "opencode" ? "Free" : undefined,
@@ -204,6 +204,7 @@ export function DialogModel() {
         {
           keybind: Keybind.parse("ctrl+f")[0],
           title: "Favorite",
+          disabled: !connected(),
           onTrigger: (option) => {
             local.model.toggleFavorite(option.value as { providerID: string; modelID: string })
           },

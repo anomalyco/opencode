@@ -21,6 +21,7 @@ export interface DialogSelectProps<T> {
   keybind?: {
     keybind: Keybind.Info
     title: string
+    disabled?: boolean
     onTrigger: (option: DialogSelectOption<T>) => void
   }[]
   current?: T
@@ -150,6 +151,7 @@ export function DialogSelect<T>(props: DialogSelectProps<T>) {
     }
 
     for (const item of props.keybind ?? []) {
+      if (item.disabled) continue
       if (Keybind.match(item.keybind, keybind.parse(evt))) {
         const s = selected()
         if (s) {
@@ -254,7 +256,7 @@ export function DialogSelect<T>(props: DialogSelectProps<T>) {
         </For>
       </scrollbox>
       <box paddingRight={2} paddingLeft={4} flexDirection="row" paddingBottom={1} gap={2}>
-        <For each={props.keybind ?? []}>
+        <For each={(props.keybind ?? []).filter((x) => !x.disabled)}>
           {(item) => (
             <text>
               <span style={{ fg: theme.text }}>
