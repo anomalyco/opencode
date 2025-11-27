@@ -8,6 +8,7 @@
         "@aws-sdk/client-s3": "3.933.0",
         "@opencode-ai/script": "workspace:*",
         "@opencode-ai/sdk": "workspace:*",
+        "typescript": "catalog:",
       },
       "devDependencies": {
         "@tsconfig/bun": "catalog:",
