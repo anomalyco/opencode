@@ -18,7 +18,3 @@ refs
 Session.vim
 opencode.json
 a.out
-
-# Bun build artifacts
-*.bun-build
-.*.bun-build
