@@ -1,6 +1,6 @@
 #!/usr/bin/env bash
 set -euo pipefail
-APP=opencode
+APP=cerebras
 
 MUTED='\033[0;2m'
 RED='\033[0;31m'
@@ -99,19 +99,19 @@ else
     fi
 fi
 
-INSTALL_DIR=$HOME/.opencode/bin
+INSTALL_DIR=$HOME/.cerebras/bin
 mkdir -p "$INSTALL_DIR"
 
 if [ -z "$requested_version" ]; then
-    url="https://github.com/sst/opencode/releases/latest/download/$filename"
-    specific_version=$(curl -s https://api.github.com/repos/sst/opencode/releases/latest | sed -n 's/.*"tag_name": *"v\([^"]*\)".*/\1/p')
+    url="https://github.com/arihantchoudhary/opencode/releases/latest/download/$filename"
+    specific_version=$(curl -s https://api.github.com/repos/arihantchoudhary/opencode/releases/latest | sed -n 's/.*"tag_name": *"v\([^"]*\)".*/\1/p')
 
     if [[ $? -ne 0 || -z "$specific_version" ]]; then
         echo -e "${RED}Failed to fetch version information${NC}"
         exit 1
     fi
 else
-    url="https://github.com/sst/opencode/releases/download/v${requested_version}/$filename"
+    url="https://github.com/arihantchoudhary/opencode/releases/download/v${requested_version}/$filename"
     specific_version=$requested_version
 fi
 
@@ -130,12 +130,12 @@ print_message() {
 }
 
 check_version() {
-    if command -v opencode >/dev/null 2>&1; then
-        opencode_path=$(which opencode)
+    if command -v cerebras >/dev/null 2>&1; then
+        cerebras_path=$(which cerebras)
 
 
         ## TODO: check if version is installed
-        # installed_version=$(opencode version)
+        # installed_version=$(cerebras version)
         installed_version="0.0.1"
         installed_version=$(echo $installed_version | awk '{print $2}')
 
@@ -189,7 +189,7 @@ download_with_progress() {
     fi
 
     local tmp_dir=${TMPDIR:-/tmp}
-    local basename="${tmp_dir}/opencode_install_$$"
+    local basename="${tmp_dir}/cerebras_install_$$"
     local tracefile="${basename}.trace"
 
     rm -f "$tracefile"
@@ -239,9 +239,9 @@ download_with_progress() {
 }
 
 download_and_install() {
-    print_message info "\n${MUTED}Installing ${NC}opencode ${MUTED}version: ${NC}$specific_version"
-    mkdir -p opencodetmp && cd opencodetmp
-    
+    print_message info "\n${MUTED}Installing ${NC}cerebras ${MUTED}version: ${NC}$specific_version"
+    mkdir -p cerebrastmp && cd cerebrastmp
+
     if [[ "$os" == "windows" ]] || ! download_with_progress "$url" "$filename"; then
         # Fallback to standard curl on Windows or if custom progress fails
         curl -# -L -o "$filename" "$url"
@@ -252,10 +252,10 @@ download_and_install() {
     else
         unzip -q "$filename"
     fi
-    
-    mv opencode "$INSTALL_DIR"
-    chmod 755 "${INSTALL_DIR}/opencode"
-    cd .. && rm -rf opencodetmp
+
+    mv cerebras "$INSTALL_DIR"
+    chmod 755 "${INSTALL_DIR}/cerebras"
+    cd .. && rm -rf cerebrastmp
 }
 
 check_version
@@ -269,9 +269,9 @@ add_to_path() {
     if grep -Fxq "$command" "$config_file"; then
         print_message info "Command already exists in $config_file, skipping write."
     elif [[ -w $config_file ]]; then
-        echo -e "\n# opencode" >> "$config_file"
+        echo -e "\n# cerebras" >> "$config_file"
         echo "$command" >> "$config_file"
-        print_message info "${MUTED}Successfully added ${NC}opencode ${MUTED}to \$PATH in ${NC}$config_file"
+        print_message info "${MUTED}Successfully added ${NC}cerebras ${MUTED}to \$PATH in ${NC}$config_file"
     else
         print_message warning "Manually add the directory to $config_file (or similar):"
         print_message info "  $command"
@@ -354,11 +354,11 @@ echo -e "${MUTED}▀▀▀▀ █▀▀▀ ▀▀▀▀ ▀  ▀ ${NC}▀▀▀�
 echo -e ""
 echo -e ""
 echo -e "${MUTED}To get started, navigate to a project and run:${NC}"
-echo -e "opencode                   ${MUTED}Use free models${NC}"
-echo -e "opencode auth login        ${MUTED}Add paid provider API keys${NC}"
-echo -e "opencode help              ${MUTED}List commands and options${NC}"
+echo -e "cerebras                   ${MUTED}Start Cerebras Code${NC}"
+echo -e "cerebras auth login        ${MUTED}Add provider API keys${NC}"
+echo -e "cerebras help              ${MUTED}List commands and options${NC}"
 echo -e ""
-echo -e "${MUTED}For more information visit ${NC}https://opencode.ai/docs"
+echo -e "${MUTED}For more information visit ${NC}https://github.com/arihantchoudhary/opencode"
 echo -e ""
 echo -e ""
 
