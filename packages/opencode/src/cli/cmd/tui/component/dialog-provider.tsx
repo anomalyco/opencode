@@ -26,6 +26,7 @@ export function createDialogProviderOptions() {
   const options = createMemo(() => {
     return pipe(
       sync.data.provider_next.all,
+      sortBy((x) => PROVIDER_PRIORITY[x.id] ?? 99),
       map((provider) => ({
         title: provider.name,
         value: provider.id,
@@ -33,6 +34,7 @@ export function createDialogProviderOptions() {
           opencode: "Recommended",
           anthropic: "Claude Max or API key",
         }[provider.id],
+        category: provider.id in PROVIDER_PRIORITY ? "Popular" : "Other",
         async onSelect() {
           const methods = sync.data.provider_auth[provider.id] ?? [
             {
@@ -85,7 +87,6 @@ export function createDialogProviderOptions() {
           }
         },
       })),
-      sortBy((x) => PROVIDER_PRIORITY[x.value] ?? 99),
     )
   })
   return options
