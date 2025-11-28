@@ -217,7 +217,7 @@
         "@actions/github": "6.0.1",
         "@agentclientprotocol/sdk": "0.5.1",
         "@ai-sdk/amazon-bedrock": "3.0.57",
-        "@ai-sdk/anthropic": "2.0.45",
+        "@ai-sdk/anthropic": "2.0.50",
         "@ai-sdk/azure": "2.0.73",
         "@ai-sdk/google": "2.0.42",
         "@ai-sdk/google-vertex": "3.0.74",
@@ -4073,7 +4073,7 @@
 
     "npm-run-path/path-key": ["path-key@4.0.0", "", {}, "sha512-haREypq7xkM7ErfgIyA0z+Bj4AGKlMSdlQE2jvJo6huWD1EdkKYV+G/T4nq0YEF2vgTT8kqMFKo1uHn950r4SQ=="],
 
-    "opencode/@ai-sdk/anthropic": ["@ai-sdk/anthropic@2.0.45", "", { "dependencies": { "@ai-sdk/provider": "2.0.0", "@ai-sdk/provider-utils": "3.0.17" }, "peerDependencies": { "zod": "^3.25.76 || ^4.1.8" } }, "sha512-Ipv62vavDCmrV/oE/lXehL9FzwQuZOnnlhPEftWizx464Wb6lvnBTJx8uhmEYruFSzOWTI95Z33ncZ4tA8E6RQ=="],
+    "opencode/@ai-sdk/anthropic": ["@ai-sdk/anthropic@2.0.50", "", { "dependencies": { "@ai-sdk/provider": "2.0.0", "@ai-sdk/provider-utils": "3.0.18" }, "peerDependencies": { "zod": "^3.25.76 || ^4.1.8" } }, "sha512-21PaHfoLmouOXXNINTsZJsMw+wE5oLR2He/1kq/sKokTVKyq7ObGT1LDk6ahwxaz/GoaNaGankMh+EgVcdv2Cw=="],
 
     "opencode/@ai-sdk/openai": ["@ai-sdk/openai@2.0.71", "", { "dependencies": { "@ai-sdk/provider": "2.0.0", "@ai-sdk/provider-utils": "3.0.17" }, "peerDependencies": { "zod": "^3.25.76 || ^4.1.8" } }, "sha512-tg+gj+R0z/On9P4V7hy7/7o04cQPjKGayMCL3gzWD/aNGjAKkhEnaocuNDidSnghizt8g2zJn16cAuAolnW+qQ=="],
 
@@ -4619,7 +4619,7 @@
 
     "jsonwebtoken/jws/jwa": ["jwa@1.4.2", "", { "dependencies": { "buffer-equal-constant-time": "^1.0.1", "ecdsa-sig-formatter": "1.0.11", "safe-buffer": "^5.0.1" } }, "sha512-eeH5JO+21J78qMvTIDdBXidBd6nG2kZjg5Ohz/1fpa28Z4CcsWUzJ1ZZyFq/3z3N17aZy+ZuBoHljASbL1WfOw=="],
 
-    "opencode/@ai-sdk/anthropic/@ai-sdk/provider-utils": ["@ai-sdk/provider-utils@3.0.17", "", { "dependencies": { "@ai-sdk/provider": "2.0.0", "@standard-schema/spec": "^1.0.0", "eventsource-parser": "^3.0.6" }, "peerDependencies": { "zod": "^3.25.76 || ^4.1.8" } }, "sha512-TR3Gs4I3Tym4Ll+EPdzRdvo/rc8Js6c4nVhFLuvGLX/Y4V9ZcQMa/HTiYsHEgmYrf1zVi6Q145UEZUfleOwOjw=="],
+    "opencode/@ai-sdk/anthropic/@ai-sdk/provider-utils": ["@ai-sdk/provider-utils@3.0.18", "", { "dependencies": { "@ai-sdk/provider": "2.0.0", "@standard-schema/spec": "^1.0.0", "eventsource-parser": "^3.0.6" }, "peerDependencies": { "zod": "^3.25.76 || ^4.1.8" } }, "sha512-ypv1xXMsgGcNKUP+hglKqtdDuMg68nWHucPPAhIENrbFAI+xCHiqPVN8Zllxyv1TNZwGWUghPxJXU+Mqps0YRQ=="],
 
     "opencode/@ai-sdk/openai/@ai-sdk/provider-utils": ["@ai-sdk/provider-utils@3.0.17", "", { "dependencies": { "@ai-sdk/provider": "2.0.0", "@standard-schema/spec": "^1.0.0", "eventsource-parser": "^3.0.6" }, "peerDependencies": { "zod": "^3.25.76 || ^4.1.8" } }, "sha512-TR3Gs4I3Tym4Ll+EPdzRdvo/rc8Js6c4nVhFLuvGLX/Y4V9ZcQMa/HTiYsHEgmYrf1zVi6Q145UEZUfleOwOjw=="],
 
