@@ -283,7 +283,7 @@ export namespace SessionPrompt {
           session: await Session.get(sessionID),
           modelID: lastUser.model.modelID,
           providerID: lastUser.model.providerID,
-          message: msgs.find((m) => m.info.role === "user" && !m.parts.every((p) => "synthetic" in p && p.synthetic))!,
+          message: msgs.find((m) => m.info.role === "user")!,
           history: msgs,
         })
 
@@ -1466,7 +1466,6 @@ export namespace SessionPrompt {
           content: "Generate a title for this conversation:\n",
         },
         ...MessageV2.toModelMessage([
-          ...input.history,
           {
             info: {
               id: Identifier.ascending("message"),
