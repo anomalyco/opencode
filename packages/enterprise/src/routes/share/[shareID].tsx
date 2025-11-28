@@ -171,7 +171,7 @@ export default function () {
                 })
 
                 const title = () => (
-                  <div class="flex flex-col gap-4 shrink-0">
+                  <div class="flex flex-col gap-4">
                     <div class="h-8 flex gap-4 items-center justify-start self-stretch">
                       <div class="pl-[2.5px] pr-2 flex items-center gap-1.75 bg-surface-strong shadow-xs-border-base">
                         <Mark class="shrink-0 w-3 my-0.5" />
@@ -215,7 +215,6 @@ export default function () {
                 )
 
                 const wide = createMemo(() => diffs().length === 0)
-                const columnPadding = () => (wide() ? "px-6" : "px-21 @4xl:px-6")
 
                 return (
                   <div class="relative bg-background-stronger w-screen h-screen overflow-hidden flex flex-col">
@@ -243,44 +242,44 @@ export default function () {
                       </div>
                     </header>
                     <div class="select-text flex flex-col flex-1 min-h-0">
-                      <div class="hidden md:flex w-full flex-1 min-h-0">
+                      <div classList={{ "hidden w-full flex-1 min-h-0": true, "md:flex": wide(), "lg:flex": !wide() }}>
                         <div
                           classList={{
-                            "@container relative shrink-0 pt-14 flex flex-col gap-10 min-h-0 w-full mx-auto": true,
-                            "max-w-2xl": true,
+                            "@container relative shrink-0 pt-14 flex flex-col gap-10 min-h-0 w-full": true,
+                            "mx-auto max-w-146": !wide(),
                           }}
                         >
-                          <div class={columnPadding()}>{title()}</div>
+                          <div
+                            classList={{
+                              "w-full flex justify-start items-start min-w-0": true,
+                              "max-w-146 mx-auto px-6": wide(),
+                              "pr-6 pl-18": !wide(),
+                            }}
+                          >
+                            {title()}
+                          </div>
                           <div class="flex items-start justify-start h-full min-h-0">
                             <Show when={messages().length > 1}>
                               <>
-                                <div class="md:hidden absolute right-full">
-                                  <MessageNav
-                                    class="mt-2 mr-3"
-                                    messages={messages()}
-                                    current={activeMessage()}
-                                    onMessageSelect={setActiveMessage}
-                                    size="compact"
-                                  />
-                                </div>
-                                <div
+                                <MessageNav
+                                  class="@6xl:hidden mt-2.5 absolute left-6"
+                                  messages={messages()}
+                                  current={activeMessage()}
+                                  onMessageSelect={setActiveMessage}
+                                  size="compact"
+                                />
+                                <MessageNav
                                   classList={{
-                                    "hidden md:block": true,
-                                    "absolute right-[90%]": !wide(),
-                                    "absolute right-full": wide(),
+                                    "hidden @6xl:flex absolute": true,
+                                    "mt-0.5 left-[calc(((100%_-_min(100%,_36.5rem))_/_2)-1.5rem)] -translate-x-full":
+                                      wide(),
+                                    "mt-2.5 left-6": !wide(),
                                   }}
-                                >
-                                  <MessageNav
-                                    classList={{
-                                      "mt-2.5 mr-3": !wide(),
-                                      "mt-0.5 mr-8": wide(),
-                                    }}
-                                    messages={messages()}
-                                    current={activeMessage()}
-                                    onMessageSelect={setActiveMessage}
-                                    size={wide() ? "normal" : "compact"}
-                                  />
-                                </div>
+                                  messages={messages()}
+                                  current={activeMessage()}
+                                  onMessageSelect={setActiveMessage}
+                                  size={wide() ? "normal" : "compact"}
+                                />
                               </>
                             </Show>
                             <SessionTurn
@@ -288,11 +287,11 @@ export default function () {
                               messageID={store.messageId ?? firstUserMessage()!.id!}
                               classes={{
                                 root: "grow",
-                                content: "flex flex-col justify-between",
-                                container: `${columnPadding()} pb-20`,
+                                content: "flex flex-col justify-between items-start",
+                                container: "w-full pb-20 " + (wide() ? "max-w-146 mx-auto px-6" : "pr-6 pl-18"),
                               }}
                             >
-                              <div class={`${columnPadding()} flex items-center justify-center pb-8 shrink-0`}>
+                              <div classList={{ "w-full flex items-center justify-center pb-8 shrink-0": true }}>
                                 <Logo class="w-58.5 opacity-12" />
                               </div>
                             </SessionTurn>
@@ -313,7 +312,7 @@ export default function () {
                       </div>
                       <Switch>
                         <Match when={diffs().length > 0}>
-                          <Tabs class="md:hidden">
+                          <Tabs classList={{ "md:hidden": wide(), "lg:hidden": !wide() }}>
                             <Tabs.List>
                               <Tabs.Trigger value="session" class="w-1/2" classes={{ button: "w-full" }}>
                                 Session
@@ -344,7 +343,9 @@ export default function () {
                           </Tabs>
                         </Match>
                         <Match when={true}>
-                          <div class="md:hidden !overflow-hidden">{turns()}</div>
+                          <div classList={{ "!overflow-hidden": true, "md:hidden": wide(), "lg:hidden": !wide() }}>
+                            {turns()}
+                          </div>
                         </Match>
                       </Switch>
                     </div>
