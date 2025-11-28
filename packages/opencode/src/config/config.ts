@@ -461,6 +461,7 @@ export namespace Config {
       .optional()
       .describe("Control diff rendering style: 'auto' adapts to terminal width, 'stacked' always shows single column"),
     show_thinking: z.boolean().optional().describe("Default visibility of thinking blocks in TUI"),
+    thinking_visibility: z.boolean().optional().describe("Default visibility of thinking blocks in TUI"),
   })
 
   export type TUI = z.infer<typeof TUI>

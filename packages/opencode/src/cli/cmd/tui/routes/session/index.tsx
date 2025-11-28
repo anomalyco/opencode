@@ -112,7 +112,7 @@ export function Session() {
   const [sidebar, setSidebar] = createSignal<"show" | "hide" | "auto">(kv.get("sidebar", "auto"))
   const [conceal, setConceal] = createSignal(true)
   const [showThinking, setShowThinking] = createSignal(
-    kv.get("thinking", (sync.data.config.tui as any)?.show_thinking ?? true),
+    kv.get("thinking_visibility", (sync.data.config.tui as any)?.thinking_visibility ?? true),
   )
   const [showTimestamps, setShowTimestamps] = createSignal(kv.get("timestamps", "hide") === "show")
 
@@ -432,13 +432,13 @@ export function Session() {
       },
     },
     {
-      title: showThinking() ? "Hide thinking blocks" : "Show thinking blocks",
+      title: showThinking() ? "Hide thinking" : "Show thinking",
       value: "session.toggle.thinking",
       category: "Session",
       onSelect: (dialog) => {
         setShowThinking((prev) => {
           const next = !prev
-          kv.set("thinking", next)
+          kv.set("thinking_visibility", next)
           return next
         })
         dialog.clear()
