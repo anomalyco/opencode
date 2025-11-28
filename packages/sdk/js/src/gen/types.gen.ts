@@ -1011,7 +1011,7 @@ export type Config = {
     /**
      * Default visibility of thinking blocks in TUI
      */
-    show_thinking?: boolean
+    thinking_visibility?: boolean
   }
   /**
    * Command configuration, see https://opencode.ai/docs/commands
