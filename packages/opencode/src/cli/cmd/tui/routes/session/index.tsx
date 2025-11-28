@@ -506,8 +506,8 @@ export function Session() {
     },
     {
       title: "Jump to last user message",
-      value: "session.last_user_message",
-      keybind: "last_user_message",
+      value: "session.messages_last_user",
+      keybind: "messages_last_user",
       category: "Session",
       onSelect: () => {
         try {
