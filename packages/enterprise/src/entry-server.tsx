@@ -9,6 +9,7 @@ export default createHandler(() => (
           <meta charset="utf-8" />
           <meta name="viewport" content="width=device-width, initial-scale=1" />
           <title>OpenCode</title>
+          <meta name="theme-color" content="var(--background-base)" />
           <meta property="og:image" content="/social-share.png" />
           <meta property="twitter:image" content="/social-share.png" />
           {assets}

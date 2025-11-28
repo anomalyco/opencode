@@ -6,7 +6,7 @@ export function createDefaultOptions<T>(style: FileDiffOptions<T>["diffStyle"]) 
     themeType: "system",
     disableLineNumbers: false,
     overflow: "wrap",
-    diffStyle: style,
+    diffStyle: style ?? "unified",
     diffIndicators: "bars",
     disableBackground: false,
     expansionLineCount: 20,
