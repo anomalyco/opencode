@@ -62,6 +62,7 @@ import { Toast, useToast } from "../../ui/toast"
 import { useKV } from "../../context/kv.tsx"
 import { Editor } from "../../util/editor"
 import stripAnsi from "strip-ansi"
+import { Checkpoint } from "@/session/checkpoint"
 
 addDefaultParsers(parsers.parsers)
 
@@ -645,6 +646,89 @@ export function Session() {
           toast.show({ message: "Failed to export session", variant: "error" })
         }
         dialog.clear()
+      },
+    },
+    {
+      title: "Create checkpoint",
+      value: "checkpoint.save",
+      category: "Checkpoint",
+      onSelect: (dialog) => {
+        dialog.replace(() => (
+          <DialogPrompt
+            title="Create Checkpoint"
+            placeholder="Enter checkpoint message..."
+            onSubmit={async (message) => {
+              const result = await Checkpoint.create({
+                sessionID: route.sessionID,
+                message: message || "Manual checkpoint",
+              })
+              if (result) {
+                toast.show({ message: `Checkpoint created: ${result.tag}`, variant: "success" })
+              } else {
+                toast.show({ message: "No changes to checkpoint", variant: "info" })
+              }
+              dialog.clear()
+            }}
+            onCancel={() => dialog.clear()}
+          />
+        ))
+      },
+    },
+    {
+      title: "List checkpoints",
+      value: "checkpoint.list",
+      category: "Checkpoint",
+      onSelect: async (dialog) => {
+        const checkpoints = await Checkpoint.list(route.sessionID)
+        if (checkpoints.length === 0) {
+          toast.show({ message: "No checkpoints found for this session", variant: "info" })
+          dialog.clear()
+          return
+        }
+
+        const message = [
+          `Found ${checkpoints.length} checkpoint(s):`,
+          "",
+          ...checkpoints.map((cp, i) => {
+            const date = new Date(cp.timestamp).toLocaleString()
+            return `${i + 1}. ${cp.tag} (${date})`
+          }),
+        ].join("\n")
+
+        toast.show({ message, variant: "success" })
+        dialog.clear()
+      },
+    },
+    {
+      title: "Restore checkpoint",
+      value: "checkpoint.restore",
+      category: "Checkpoint",
+      onSelect: async (dialog) => {
+        const checkpoints = await Checkpoint.list(route.sessionID)
+        if (checkpoints.length === 0) {
+          toast.show({ message: "No checkpoints found for this session", variant: "info" })
+          dialog.clear()
+          return
+        }
+
+        dialog.replace(() => (
+          <DialogPrompt
+            title="Restore Checkpoint"
+            placeholder={`Enter checkpoint tag (latest: ${checkpoints[0].tag})...`}
+            onSubmit={async (tag) => {
+              try {
+                const result = await Checkpoint.restore(tag || checkpoints[0].tag)
+                if (result.success) {
+                  toast.show({ message: `Restored to checkpoint: ${result.tag}`, variant: "success" })
+                }
+              } catch (error) {
+                toast.show({ message: `Failed to restore checkpoint: ${error}`, variant: "error" })
+              }
+              dialog.clear()
+            }}
+            onCancel={() => dialog.clear()}
+          />
+        ))
       },
     },
     {

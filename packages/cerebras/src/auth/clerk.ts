@@ -12,6 +12,7 @@ import open from "open"
 export interface ClerkConfig {
   publishableKey: string
   secretKey: string
+  frontendApi?: string
 }
 
 export interface DeviceAuthResponse {
@@ -187,6 +188,11 @@ export class ClerkAuthProvider {
    * Get Clerk frontend URL from publishable key
    */
   private getClerkFrontendUrl(): string {
+    // Use configured frontend API URL if provided
+    if (this.config.frontendApi) {
+      return this.config.frontendApi
+    }
+
     // Extract the frontend API from publishable key
     // Format: pk_test_xxx or pk_live_xxx
     const match = this.config.publishableKey.match(/^pk_(test|live)_(.+)$/)
@@ -194,10 +200,10 @@ export class ClerkAuthProvider {
       throw new Error('Invalid Clerk publishable key')
     }
 
-    const [, env] = match
-    // This is a placeholder - you'll need to configure your actual Clerk instance URL
-    return env === 'live'
-      ? 'https://accounts.cerebras.ai'
-      : 'https://accounts.dev.cerebras.ai'
+    const [, env, subdomain] = match
+
+    // Use Clerk's default hosted pages
+    // Format: https://[subdomain].accounts.dev (for test) or https://accounts.[domain].com (for live)
+    return `https://${subdomain}.accounts.dev`
   }
 }

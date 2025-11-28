@@ -607,6 +607,24 @@ export namespace Config {
         })
         .optional()
         .describe("Telemetry configuration"),
+      checkpoints: z
+        .object({
+          enabled: z.boolean().optional().default(false).describe("Enable automatic checkpoints before risky operations"),
+          auto_checkpoint_before: z
+            .array(z.string())
+            .optional()
+            .default(["edit", "write", "bash"])
+            .describe("Tools that trigger automatic checkpoints"),
+          keep_last: z
+            .number()
+            .int()
+            .positive()
+            .optional()
+            .default(10)
+            .describe("Number of checkpoints to keep per session (older ones are deleted)"),
+        })
+        .optional()
+        .describe("Git-based checkpoint configuration for workspace safety"),
     })
     .optional()
     .describe("Safety and abuse prevention settings")

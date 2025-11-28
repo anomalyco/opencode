@@ -84,7 +84,10 @@ export const AuthLoginCommand = cmd({
       }),
   async handler(args) {
     // Check if this is a Clerk-based Cerebras login (default)
-    if (!args.provider && !args.url && ClerkConfigManager.isConfigured()) {
+    // Skip Clerk if CEREBRAS_SKIP_AUTH is set
+    const skipClerkAuth = process.env.CEREBRAS_SKIP_AUTH === 'true'
+
+    if (!args.provider && !args.url && ClerkConfigManager.isConfigured() && !skipClerkAuth) {
       UI.empty()
 
       // Check if already logged in

@@ -25,6 +25,7 @@ import { Bus } from "../bus"
 import { ProviderTransform } from "../provider/transform"
 import { SystemPrompt } from "./system"
 import { Plugin } from "../plugin"
+import { Checkpoint } from "./checkpoint"
 
 import PROMPT_PLAN from "../session/prompt/plan.txt"
 import BUILD_SWITCH from "../session/prompt/build-switch.txt"
@@ -768,6 +769,13 @@ export namespace SessionPrompt {
               args,
             },
           )
+
+          // Create checkpoint before risky operations
+          await Checkpoint.autoCheckpoint({
+            sessionID: input.sessionID,
+            operation: `${item.id}: ${JSON.stringify(args).slice(0, 100)}`,
+          })
+
           const result = await item.execute(args, {
             sessionID: input.sessionID,
             abort: options.abortSignal!,
@@ -831,6 +839,13 @@ export namespace SessionPrompt {
             args,
           },
         )
+
+        // Create checkpoint before risky MCP tool operations
+        await Checkpoint.autoCheckpoint({
+          sessionID: input.sessionID,
+          operation: `${key}: ${JSON.stringify(args).slice(0, 100)}`,
+        })
+
         const result = await execute(args, opts)
 
         await Plugin.trigger(

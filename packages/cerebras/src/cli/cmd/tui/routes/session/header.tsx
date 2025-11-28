@@ -93,7 +93,7 @@ export function Header() {
 
   // Calculate budget percentage (from token budget system)
   const budgetPercentage = createMemo(() => {
-    const limit = 1_000_000 // TODO: Get from config
+    const limit = sync.data.config.safety?.token_budget?.max_tokens_per_session ?? 1_000_000
     return Math.min(sessionTokens() / limit, 1)
   })
 
