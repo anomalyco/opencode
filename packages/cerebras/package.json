@@ -1,7 +1,7 @@
 {
   "$schema": "https://json.schemastore.org/package.json",
   "version": "1.0.115",
-  "name": "cerebras-code",
+  "name": "cerebras",
   "type": "module",
   "private": true,
   "scripts": {
@@ -55,6 +55,8 @@
     "@cerebras-ai/sdk": "workspace:*",
     "@cerebras-ai/util": "workspace:*",
     "@clack/prompts": "1.0.0-alpha.1",
+    "@clerk/backend": "2.24.0",
+    "@clerk/clerk-sdk-node": "5.1.6",
     "@hono/standard-validator": "0.1.5",
     "@hono/zod-validator": "catalog:",
     "@modelcontextprotocol/sdk": "1.15.1",

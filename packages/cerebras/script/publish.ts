@@ -20,13 +20,13 @@ await $`cp ./script/postinstall.mjs ./dist/${pkg.name}/postinstall.mjs`
 
 // Filter out problematic windows-x64-baseline package
 const filteredBinaries = Object.fromEntries(
-  Object.entries(binaries).filter(([name]) => name !== "cerebras-code-windows-x64-baseline"),
+  Object.entries(binaries).filter(([name]) => name !== "cerebras-windows-x64-baseline"),
 )
 
 await Bun.file(`./dist/${pkg.name}/package.json`).write(
   JSON.stringify(
     {
-      name: "cerebras-code",
+      name: "cerebras",
       bin: {
         cerebras: `./bin/cerebras`,
       },
@@ -48,7 +48,7 @@ if (process.env.NPM_CONFIG_TOKEN) {
   let count = 0
   for (const [name] of Object.entries(binaries)) {
     // Skip windows-x64-baseline due to npm rate limiting
-    if (name === "cerebras-code-windows-x64-baseline") {
+    if (name === "cerebras-windows-x64-baseline") {
       console.log(`⏭️  Skipping ${name} (problematic package)`)
       continue
     }
@@ -91,7 +91,7 @@ if (process.env.NPM_CONFIG_TOKEN) {
     }
   }
   // Wait 2 minutes before publishing main package to avoid rate limiting
-  console.log("⏳ Waiting 2 minutes before publishing main cerebras-code package...")
+  console.log("⏳ Waiting 2 minutes before publishing main cerebras package...")
   await new Promise((resolve) => setTimeout(resolve, 120000))
   await $`cd ./dist/${pkg.name} && bun publish --access public --tag ${Script.channel}`
 } else {
@@ -104,7 +104,7 @@ if (!Script.preview && process.env.NPM_CONFIG_TOKEN) {
   for (const [name] of Object.entries(binaries)) {
     await $`cd dist/${name} && npm dist-tag add ${name}@${Script.version} ${majorTag}`
   }
-  await $`cd ./dist/${pkg.name} && npm dist-tag add cerebras-code@${Script.version} ${majorTag}`
+  await $`cd ./dist/${pkg.name} && npm dist-tag add cerebras@${Script.version} ${majorTag}`
 }
 
 if (!Script.preview) {
