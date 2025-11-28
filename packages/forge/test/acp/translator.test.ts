@@ -3,8 +3,12 @@ import { ACPTranslator } from "../../src/acp/translator"
 import type { SessionNotification } from "@agentclientprotocol/sdk"
 import { Instance } from "../../src/project/instance"
 import { InstanceBootstrap } from "../../src/project/bootstrap"
+import { hasClaudeApiKey, createClaudeCli, accumulateText } from "./helpers"
 
-describe("ACPTranslator", () => {
+// Skip integration tests if ANTHROPIC_API_KEY is not set
+const describeIntegration = hasClaudeApiKey() ? describe : describe.skip
+
+describe("ACPTranslator (unit tests)", () => {
   const testSessionID = "ses-test-session-123"
 
   beforeEach(() => {
@@ -253,4 +257,79 @@ describe("ACPTranslator", () => {
       expect(true).toBe(true)
     })
   })
+})
+
+describeIntegration("ACPTranslator (integration with claude-code-acp)", () => {
+  test("should translate real claude-code-acp notifications", async () => {
+    await Instance.provide({
+      directory: process.cwd(),
+      init: InstanceBootstrap,
+      async fn() {
+        await using manager = await createClaudeCli()
+        const sessionID = manager.getSessionId()
+        const capture = manager.getEventCapture()
+
+        ACPTranslator.startNewMessage(sessionID, "msg-integration-1")
+
+        // Send a simple prompt
+        await manager.sendPrompt("What is 2 + 2? Just respond with the number.")
+
+        // Wait a bit for responses
+        await new Promise(resolve => setTimeout(resolve, 2000))
+
+        // Get captured events
+        const events = capture.getAll()
+
+        // Translate all captured events
+        for (const event of events) {
+          await ACPTranslator.translate(sessionID, event)
+        }
+
+        // Verify we received and translated some events
+        expect(events.length).toBeGreaterThan(0)
+
+        // Check we got text chunks
+        const textEvents = capture.getByType("agent_message_chunk")
+        expect(textEvents.length).toBeGreaterThan(0)
+
+        // Verify text accumulation worked
+        const fullText = accumulateText(events)
+        expect(fullText.length).toBeGreaterThan(0)
+        console.log("Accumulated text:", fullText)
+      }
+    })
+  }, 30000)
+
+  test("should handle streaming responses from claude-code-acp", async () => {
+    await Instance.provide({
+      directory: process.cwd(),
+      init: InstanceBootstrap,
+      async fn() {
+        await using manager = await createClaudeCli()
+        const sessionID = manager.getSessionId()
+        const capture = manager.getEventCapture()
+
+        ACPTranslator.startNewMessage(sessionID, "msg-integration-2")
+
+        // Send a prompt that should generate multiple chunks
+        await manager.sendPrompt("Count from 1 to 5.")
+
+        // Wait for response
+        await new Promise(resolve => setTimeout(resolve, 3000))
+
+        const events = capture.getAll()
+
+        // Translate all events
+        for (const event of events) {
+          await ACPTranslator.translate(sessionID, event)
+        }
+
+        // Verify we got multiple chunks
+        const chunks = capture.getByType("agent_message_chunk")
+        console.log(`Received ${chunks.length} text chunks`)
+
+        expect(chunks.length).toBeGreaterThan(0)
+      }
+    })
+  }, 30000)
 })

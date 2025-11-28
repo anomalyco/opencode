@@ -7,6 +7,9 @@
   "scripts": {
     "typecheck": "tsgo --noEmit",
     "test": "bun test",
+    "test:acp": "bun test test/acp/translation/",
+    "test:acp:integration": "bun test test/acp/orchestrator.test.ts test/acp/translator.test.ts",
+    "test:acp:fixtures": "bun test/acp/fixtures/generate.ts",
     "build": "./script/build.ts",
     "dev": "bun run --conditions=browser ./src/index.ts",
     "random": "echo 'Random script updated at $(date)'"

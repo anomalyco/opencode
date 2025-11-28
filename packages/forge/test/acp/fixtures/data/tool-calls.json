@@ -1,0 +1,57 @@
+{
+  "description": "Tool call lifecycle with state transitions",
+  "prompt": "Read the package.json file.",
+  "notifications": [
+    {
+      "sessionId": "test-session",
+      "update": {
+        "sessionUpdate": "tool_call",
+        "toolCallId": "tool-123",
+        "status": "pending",
+        "title": "Read File",
+        "kind": "read",
+        "locations": [],
+        "rawInput": {
+          "file_path": "/path/to/package.json"
+        }
+      }
+    },
+    {
+      "sessionId": "test-session",
+      "update": {
+        "sessionUpdate": "tool_call_update",
+        "toolCallId": "tool-123",
+        "status": "in_progress",
+        "title": "Reading file...",
+        "content": [
+          {
+            "type": "text",
+            "text": "Reading /path/to/package.json"
+          }
+        ]
+      }
+    },
+    {
+      "sessionId": "test-session",
+      "update": {
+        "sessionUpdate": "tool_call_update",
+        "toolCallId": "tool-123",
+        "status": "completed",
+        "title": "Read File",
+        "rawOutput": {
+          "content": "{ \"name\": \"test\" }"
+        }
+      }
+    },
+    {
+      "sessionId": "test-session",
+      "update": {
+        "sessionUpdate": "agent_message_chunk",
+        "content": {
+          "type": "text",
+          "text": "The package.json file contains a package named \"test\"."
+        }
+      }
+    }
+  ]
+}

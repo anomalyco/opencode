@@ -1,0 +1,786 @@
+{
+  "description": "Text response with forced reasoning/thought chunks (ultrathink trigger)",
+  "prompt": "ultrathink: Explain step by step how to calculate 5 * 7. Show your thinking.",
+  "notifications": [
+    {
+      "sessionId": "019acc36-a391-710c-8223-a3be9a8175ad",
+      "update": {
+        "content": {
+          "text": "",
+          "type": "text"
+        },
+        "sessionUpdate": "agent_thought_chunk"
+      }
+    },
+    {
+      "sessionId": "019acc36-a391-710c-8223-a3be9a8175ad",
+      "update": {
+        "content": {
+          "text": "The user is asking me to explain step",
+          "type": "text"
+        },
+        "sessionUpdate": "agent_thought_chunk"
+      }
+    },
+    {
+      "sessionId": "019acc36-a391-710c-8223-a3be9a8175ad",
+      "update": {
+        "content": {
+          "text": " by step how to calculate 5 ",
+          "type": "text"
+        },
+        "sessionUpdate": "agent_thought_chunk"
+      }
+    },
+    {
+      "sessionId": "019acc36-a391-710c-8223-a3be9a8175ad",
+      "update": {
+        "content": {
+          "text": "* 7,",
+          "type": "text"
+        },
+        "sessionUpdate": "agent_thought_chunk"
+      }
+    },
+    {
+      "sessionId": "019acc36-a391-710c-8223-a3be9a8175ad",
+      "update": {
+        "content": {
+          "text": " and they want to",
+          "type": "text"
+        },
+        "sessionUpdate": "agent_thought_chunk"
+      }
+    },
+    {
+      "sessionId": "019acc36-a391-710c-8223-a3be9a8175ad",
+      "update": {
+        "content": {
+          "text": " see my thinking.",
+          "type": "text"
+        },
+        "sessionUpdate": "agent_thought_chunk"
+      }
+    },
+    {
+      "sessionId": "019acc36-a391-710c-8223-a3be9a8175ad",
+      "update": {
+        "content": {
+          "text": " They",
+          "type": "text"
+        },
+        "sessionUpdate": "agent_thought_chunk"
+      }
+    },
+    {
+      "sessionId": "019acc36-a391-710c-8223-a3be9a8175ad",
+      "update": {
+        "content": {
+          "text": "'ve use",
+          "type": "text"
+        },
+        "sessionUpdate": "agent_thought_chunk"
+      }
+    },
+    {
+      "sessionId": "019acc36-a391-710c-8223-a3be9a8175ad",
+      "update": {
+        "content": {
+          "text": "d the prefix",
+          "type": "text"
+        },
+        "sessionUpdate": "agent_thought_chunk"
+      }
+    },
+    {
+      "sessionId": "019acc36-a391-710c-8223-a3be9a8175ad",
+      "update": {
+        "content": {
+          "text": " \"ultrathink:\" which seems",
+          "type": "text"
+        },
+        "sessionUpdate": "agent_thought_chunk"
+      }
+    },
+    {
+      "sessionId": "019acc36-a391-710c-8223-a3be9a8175ad",
+      "update": {
+        "content": {
+          "text": " to be requesting",
+          "type": "text"
+        },
+        "sessionUpdate": "agent_thought_chunk"
+      }
+    },
+    {
+      "sessionId": "019acc36-a391-710c-8223-a3be9a8175ad",
+      "update": {
+        "content": {
+          "text": " explicit",
+          "type": "text"
+        },
+        "sessionUpdate": "agent_thought_chunk"
+      }
+    },
+    {
+      "sessionId": "019acc36-a391-710c-8223-a3be9a8175ad",
+      "update": {
+        "content": {
+          "text": " reasoning.\n\nLet me explain",
+          "type": "text"
+        },
+        "sessionUpdate": "agent_thought_chunk"
+      }
+    },
+    {
+      "sessionId": "019acc36-a391-710c-8223-a3be9a8175ad",
+      "update": {
+        "content": {
+          "text": " the calculation of",
+          "type": "text"
+        },
+        "sessionUpdate": "agent_thought_chunk"
+      }
+    },
+    {
+      "sessionId": "019acc36-a391-710c-8223-a3be9a8175ad",
+      "update": {
+        "content": {
+          "text": " 5 * 7 in",
+          "type": "text"
+        },
+        "sessionUpdate": "agent_thought_chunk"
+      }
+    },
+    {
+      "sessionId": "019acc36-a391-710c-8223-a3be9a8175ad",
+      "update": {
+        "content": {
+          "text": " a",
+          "type": "text"
+        },
+        "sessionUpdate": "agent_thought_chunk"
+      }
+    },
+    {
+      "sessionId": "019acc36-a391-710c-8223-a3be9a8175ad",
+      "update": {
+        "content": {
+          "text": " clear",
+          "type": "text"
+        },
+        "sessionUpdate": "agent_thought_chunk"
+      }
+    },
+    {
+      "sessionId": "019acc36-a391-710c-8223-a3be9a8175ad",
+      "update": {
+        "content": {
+          "text": ", step-by-step manner.",
+          "type": "text"
+        },
+        "sessionUpdate": "agent_thought_chunk"
+      }
+    },
+    {
+      "sessionId": "019acc36-a391-710c-8223-a3be9a8175ad",
+      "update": {
+        "content": {
+          "text": "",
+          "type": "text"
+        },
+        "sessionUpdate": "agent_thought_chunk"
+      }
+    },
+    {
+      "sessionId": "019acc36-a391-710c-8223-a3be9a8175ad",
+      "update": {
+        "content": {
+          "text": "",
+          "type": "text"
+        },
+        "sessionUpdate": "agent_message_chunk"
+      }
+    },
+    {
+      "sessionId": "019acc36-a391-710c-8223-a3be9a8175ad",
+      "update": {
+        "content": {
+          "text": "To",
+          "type": "text"
+        },
+        "sessionUpdate": "agent_message_chunk"
+      }
+    },
+    {
+      "sessionId": "019acc36-a391-710c-8223-a3be9a8175ad",
+      "update": {
+        "content": {
+          "text": " calculate 5 ×",
+          "type": "text"
+        },
+        "sessionUpdate": "agent_message_chunk"
+      }
+    },
+    {
+      "sessionId": "019acc36-a391-710c-8223-a3be9a8175ad",
+      "update": {
+        "content": {
+          "text": " 7, here",
+          "type": "text"
+        },
+        "sessionUpdate": "agent_message_chunk"
+      }
+    },
+    {
+      "sessionId": "019acc36-a391-710c-8223-a3be9a8175ad",
+      "update": {
+        "content": {
+          "text": "'s the step-by-step process",
+          "type": "text"
+        },
+        "sessionUpdate": "agent_message_chunk"
+      }
+    },
+    {
+      "sessionId": "019acc36-a391-710c-8223-a3be9a8175ad",
+      "update": {
+        "content": {
+          "text": ":\n\n**Metho",
+          "type": "text"
+        },
+        "sessionUpdate": "agent_message_chunk"
+      }
+    },
+    {
+      "sessionId": "019acc36-a391-710c-8223-a3be9a8175ad",
+      "update": {
+        "content": {
+          "text": "d 1:",
+          "type": "text"
+        },
+        "sessionUpdate": "agent_message_chunk"
+      }
+    },
+    {
+      "sessionId": "019acc36-a391-710c-8223-a3be9a8175ad",
+      "update": {
+        "content": {
+          "text": " Repeate",
+          "type": "text"
+        },
+        "sessionUpdate": "agent_message_chunk"
+      }
+    },
+    {
+      "sessionId": "019acc36-a391-710c-8223-a3be9a8175ad",
+      "update": {
+        "content": {
+          "text": "d Addition**\n- 5 ×",
+          "type": "text"
+        },
+        "sessionUpdate": "agent_message_chunk"
+      }
+    },
+    {
+      "sessionId": "019acc36-a391-710c-8223-a3be9a8175ad",
+      "update": {
+        "content": {
+          "text": " 7",
+          "type": "text"
+        },
+        "sessionUpdate": "agent_message_chunk"
+      }
+    },
+    {
+      "sessionId": "019acc36-a391-710c-8223-a3be9a8175ad",
+      "update": {
+        "content": {
+          "text": " means",
+          "type": "text"
+        },
+        "sessionUpdate": "agent_message_chunk"
+      }
+    },
+    {
+      "sessionId": "019acc36-a391-710c-8223-a3be9a8175ad",
+      "update": {
+        "content": {
+          "text": " \"",
+          "type": "text"
+        },
+        "sessionUpdate": "agent_message_chunk"
+      }
+    },
+    {
+      "sessionId": "019acc36-a391-710c-8223-a3be9a8175ad",
+      "update": {
+        "content": {
+          "text": "5 adde",
+          "type": "text"
+        },
+        "sessionUpdate": "agent_message_chunk"
+      }
+    },
+    {
+      "sessionId": "019acc36-a391-710c-8223-a3be9a8175ad",
+      "update": {
+        "content": {
+          "text": "d together",
+          "type": "text"
+        },
+        "sessionUpdate": "agent_message_chunk"
+      }
+    },
+    {
+      "sessionId": "019acc36-a391-710c-8223-a3be9a8175ad",
+      "update": {
+        "content": {
+          "text": " 7 times\"\n- ",
+          "type": "text"
+        },
+        "sessionUpdate": "agent_message_chunk"
+      }
+    },
+    {
+      "sessionId": "019acc36-a391-710c-8223-a3be9a8175ad",
+      "update": {
+        "content": {
+          "text": "5 + 5 + ",
+          "type": "text"
+        },
+        "sessionUpdate": "agent_message_chunk"
+      }
+    },
+    {
+      "sessionId": "019acc36-a391-710c-8223-a3be9a8175ad",
+      "update": {
+        "content": {
+          "text": "5 + 5 + ",
+          "type": "text"
+        },
+        "sessionUpdate": "agent_message_chunk"
+      }
+    },
+    {
+      "sessionId": "019acc36-a391-710c-8223-a3be9a8175ad",
+      "update": {
+        "content": {
+          "text": "5 +",
+          "type": "text"
+        },
+        "sessionUpdate": "agent_message_chunk"
+      }
+    },
+    {
+      "sessionId": "019acc36-a391-710c-8223-a3be9a8175ad",
+      "update": {
+        "content": {
+          "text": " 5 +",
+          "type": "text"
+        },
+        "sessionUpdate": "agent_message_chunk"
+      }
+    },
+    {
+      "sessionId": "019acc36-a391-710c-8223-a3be9a8175ad",
+      "update": {
+        "content": {
+          "text": " 5",
+          "type": "text"
+        },
+        "sessionUpdate": "agent_message_chunk"
+      }
+    },
+    {
+      "sessionId": "019acc36-a391-710c-8223-a3be9a8175ad",
+      "update": {
+        "content": {
+          "text": "\n- Breaking",
+          "type": "text"
+        },
+        "sessionUpdate": "agent_message_chunk"
+      }
+    },
+    {
+      "sessionId": "019acc36-a391-710c-8223-a3be9a8175ad",
+      "update": {
+        "content": {
+          "text": " it down:",
+          "type": "text"
+        },
+        "sessionUpdate": "agent_message_chunk"
+      }
+    },
+    {
+      "sessionId": "019acc36-a391-710c-8223-a3be9a8175ad",
+      "update": {
+        "content": {
+          "text": "\n  - 5 +",
+          "type": "text"
+        },
+        "sessionUpdate": "agent_message_chunk"
+      }
+    },
+    {
+      "sessionId": "019acc36-a391-710c-8223-a3be9a8175ad",
+      "update": {
+        "content": {
+          "text": " 5 = 10\n  ",
+          "type": "text"
+        },
+        "sessionUpdate": "agent_message_chunk"
+      }
+    },
+    {
+      "sessionId": "019acc36-a391-710c-8223-a3be9a8175ad",
+      "update": {
+        "content": {
+          "text": "- 10 + 5 ",
+          "type": "text"
+        },
+        "sessionUpdate": "agent_message_chunk"
+      }
+    },
+    {
+      "sessionId": "019acc36-a391-710c-8223-a3be9a8175ad",
+      "update": {
+        "content": {
+          "text": "= 15\n  - 15",
+          "type": "text"
+        },
+        "sessionUpdate": "agent_message_chunk"
+      }
+    },
+    {
+      "sessionId": "019acc36-a391-710c-8223-a3be9a8175ad",
+      "update": {
+        "content": {
+          "text": " + 5 = 20",
+          "type": "text"
+        },
+        "sessionUpdate": "agent_message_chunk"
+      }
+    },
+    {
+      "sessionId": "019acc36-a391-710c-8223-a3be9a8175ad",
+      "update": {
+        "content": {
+          "text": "\n  - 20 + ",
+          "type": "text"
+        },
+        "sessionUpdate": "agent_message_chunk"
+      }
+    },
+    {
+      "sessionId": "019acc36-a391-710c-8223-a3be9a8175ad",
+      "update": {
+        "content": {
+          "text": "5 = 25\n  -",
+          "type": "text"
+        },
+        "sessionUpdate": "agent_message_chunk"
+      }
+    },
+    {
+      "sessionId": "019acc36-a391-710c-8223-a3be9a8175ad",
+      "update": {
+        "content": {
+          "text": " 25 + 5 =",
+          "type": "text"
+        },
+        "sessionUpdate": "agent_message_chunk"
+      }
+    },
+    {
+      "sessionId": "019acc36-a391-710c-8223-a3be9a8175ad",
+      "update": {
+        "content": {
+          "text": " 30\n  - 30 ",
+          "type": "text"
+        },
+        "sessionUpdate": "agent_message_chunk"
+      }
+    },
+    {
+      "sessionId": "019acc36-a391-710c-8223-a3be9a8175ad",
+      "update": {
+        "content": {
+          "text": "+ 5 = **",
+          "type": "text"
+        },
+        "sessionUpdate": "agent_message_chunk"
+      }
+    },
+    {
+      "sessionId": "019acc36-a391-710c-8223-a3be9a8175ad",
+      "update": {
+        "content": {
+          "text": "35**\n\n**Method 2:",
+          "type": "text"
+        },
+        "sessionUpdate": "agent_message_chunk"
+      }
+    },
+    {
+      "sessionId": "019acc36-a391-710c-8223-a3be9a8175ad",
+      "update": {
+        "content": {
+          "text": " Using Known",
+          "type": "text"
+        },
+        "sessionUpdate": "agent_message_chunk"
+      }
+    },
+    {
+      "sessionId": "019acc36-a391-710c-8223-a3be9a8175ad",
+      "update": {
+        "content": {
+          "text": " Facts",
+          "type": "text"
+        },
+        "sessionUpdate": "agent_message_chunk"
+      }
+    },
+    {
+      "sessionId": "019acc36-a391-710c-8223-a3be9a8175ad",
+      "update": {
+        "content": {
+          "text": "**\n- If",
+          "type": "text"
+        },
+        "sessionUpdate": "agent_message_chunk"
+      }
+    },
+    {
+      "sessionId": "019acc36-a391-710c-8223-a3be9a8175ad",
+      "update": {
+        "content": {
+          "text": " you know that 5 × ",
+          "type": "text"
+        },
+        "sessionUpdate": "agent_message_chunk"
+      }
+    },
+    {
+      "sessionId": "019acc36-a391-710c-8223-a3be9a8175ad",
+      "update": {
+        "content": {
+          "text": "5 = 25",
+          "type": "text"
+        },
+        "sessionUpdate": "agent_message_chunk"
+      }
+    },
+    {
+      "sessionId": "019acc36-a391-710c-8223-a3be9a8175ad",
+      "update": {
+        "content": {
+          "text": "\n- Then 5 × 7",
+          "type": "text"
+        },
+        "sessionUpdate": "agent_message_chunk"
+      }
+    },
+    {
+      "sessionId": "019acc36-a391-710c-8223-a3be9a8175ad",
+      "update": {
+        "content": {
+          "text": " = (",
+          "type": "text"
+        },
+        "sessionUpdate": "agent_message_chunk"
+      }
+    },
+    {
+      "sessionId": "019acc36-a391-710c-8223-a3be9a8175ad",
+      "update": {
+        "content": {
+          "text": "5 × 5) + (",
+          "type": "text"
+        },
+        "sessionUpdate": "agent_message_chunk"
+      }
+    },
+    {
+      "sessionId": "019acc36-a391-710c-8223-a3be9a8175ad",
+      "update": {
+        "content": {
+          "text": "5 × 2)",
+          "type": "text"
+        },
+        "sessionUpdate": "agent_message_chunk"
+      }
+    },
+    {
+      "sessionId": "019acc36-a391-710c-8223-a3be9a8175ad",
+      "update": {
+        "content": {
+          "text": "\n- =",
+          "type": "text"
+        },
+        "sessionUpdate": "agent_message_chunk"
+      }
+    },
+    {
+      "sessionId": "019acc36-a391-710c-8223-a3be9a8175ad",
+      "update": {
+        "content": {
+          "text": " 25 + 10\n-",
+          "type": "text"
+        },
+        "sessionUpdate": "agent_message_chunk"
+      }
+    },
+    {
+      "sessionId": "019acc36-a391-710c-8223-a3be9a8175ad",
+      "update": {
+        "content": {
+          "text": " = **",
+          "type": "text"
+        },
+        "sessionUpdate": "agent_message_chunk"
+      }
+    },
+    {
+      "sessionId": "019acc36-a391-710c-8223-a3be9a8175ad",
+      "update": {
+        "content": {
+          "text": "35**\n\n**Method 3:",
+          "type": "text"
+        },
+        "sessionUpdate": "agent_message_chunk"
+      }
+    },
+    {
+      "sessionId": "019acc36-a391-710c-8223-a3be9a8175ad",
+      "update": {
+        "content": {
+          "text": " Skip",
+          "type": "text"
+        },
+        "sessionUpdate": "agent_message_chunk"
+      }
+    },
+    {
+      "sessionId": "019acc36-a391-710c-8223-a3be9a8175ad",
+      "update": {
+        "content": {
+          "text": " Counting by",
+          "type": "text"
+        },
+        "sessionUpdate": "agent_message_chunk"
+      }
+    },
+    {
+      "sessionId": "019acc36-a391-710c-8223-a3be9a8175ad",
+      "update": {
+        "content": {
+          "text": " 5s**\n- 5",
+          "type": "text"
+        },
+        "sessionUpdate": "agent_message_chunk"
+      }
+    },
+    {
+      "sessionId": "019acc36-a391-710c-8223-a3be9a8175ad",
+      "update": {
+        "content": {
+          "text": ",",
+          "type": "text"
+        },
+        "sessionUpdate": "agent_message_chunk"
+      }
+    },
+    {
+      "sessionId": "019acc36-a391-710c-8223-a3be9a8175ad",
+      "update": {
+        "content": {
+          "text": " 10, 15, 20",
+          "type": "text"
+        },
+        "sessionUpdate": "agent_message_chunk"
+      }
+    },
+    {
+      "sessionId": "019acc36-a391-710c-8223-a3be9a8175ad",
+      "update": {
+        "content": {
+          "text": ", 25, 30, **",
+          "type": "text"
+        },
+        "sessionUpdate": "agent_message_chunk"
+      }
+    },
+    {
+      "sessionId": "019acc36-a391-710c-8223-a3be9a8175ad",
+      "update": {
+        "content": {
+          "text": "35**",
+          "type": "text"
+        },
+        "sessionUpdate": "agent_message_chunk"
+      }
+    },
+    {
+      "sessionId": "019acc36-a391-710c-8223-a3be9a8175ad",
+      "update": {
+        "content": {
+          "text": " (counting",
+          "type": "text"
+        },
+        "sessionUpdate": "agent_message_chunk"
+      }
+    },
+    {
+      "sessionId": "019acc36-a391-710c-8223-a3be9a8175ad",
+      "update": {
+        "content": {
+          "text": " ",
+          "type": "text"
+        },
+        "sessionUpdate": "agent_message_chunk"
+      }
+    },
+    {
+      "sessionId": "019acc36-a391-710c-8223-a3be9a8175ad",
+      "update": {
+        "content": {
+          "text": "7",
+          "type": "text"
+        },
+        "sessionUpdate": "agent_message_chunk"
+      }
+    },
+    {
+      "sessionId": "019acc36-a391-710c-8223-a3be9a8175ad",
+      "update": {
+        "content": {
+          "text": " ",
+          "type": "text"
+        },
+        "sessionUpdate": "agent_message_chunk"
+      }
+    },
+    {
+      "sessionId": "019acc36-a391-710c-8223-a3be9a8175ad",
+      "update": {
+        "content": {
+          "text": "times)\n\n**Answer",
+          "type": "text"
+        },
+        "sessionUpdate": "agent_message_chunk"
+      }
+    },
+    {
+      "sessionId": "019acc36-a391-710c-8223-a3be9a8175ad",
+      "update": {
+        "content": {
+          "text": ": 35**",
+          "type": "text"
+        },
+        "sessionUpdate": "agent_message_chunk"
+      }
+    }
+  ]
+}

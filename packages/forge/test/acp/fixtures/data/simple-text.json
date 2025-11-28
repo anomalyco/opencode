@@ -1,0 +1,66 @@
+{
+  "description": "Simple text response without tool calls",
+  "prompt": "What is 2 + 2? Please respond with just the number.",
+  "notifications": [
+    {
+      "sessionId": "019acc36-a391-710c-8223-a3be9a8175ad",
+      "update": {
+        "availableCommands": [
+          {
+            "description": "Clear conversation history but keep a summary in context. Optional: /compact [instructions for summarization]",
+            "input": {
+              "hint": "<optional custom summarization instructions>"
+            },
+            "name": "compact"
+          },
+          {
+            "description": "Initialize a new CLAUDE.md file with codebase documentation",
+            "input": null,
+            "name": "init"
+          },
+          {
+            "description": "Get comments from a GitHub pull request",
+            "input": null,
+            "name": "pr-comments"
+          },
+          {
+            "description": "Review a pull request",
+            "input": null,
+            "name": "review"
+          },
+          {
+            "description": "Complete a security review of the pending changes on the current branch",
+            "input": null,
+            "name": "security-review"
+          },
+          {
+            "description": "Automatically instrument your project with PostHog event tracking, user identification, and error tracking. Available frameworks: nextjs-app-router, nextjs-pages-router, react-react-router",
+            "input": null,
+            "name": "mcp:posthog:Setup a deep PostHog integration"
+          }
+        ],
+        "sessionUpdate": "available_commands_update"
+      }
+    },
+    {
+      "sessionId": "019acc36-a391-710c-8223-a3be9a8175ad",
+      "update": {
+        "content": {
+          "text": "",
+          "type": "text"
+        },
+        "sessionUpdate": "agent_message_chunk"
+      }
+    },
+    {
+      "sessionId": "019acc36-a391-710c-8223-a3be9a8175ad",
+      "update": {
+        "content": {
+          "text": "4",
+          "type": "text"
+        },
+        "sessionUpdate": "agent_message_chunk"
+      }
+    }
+  ]
+}

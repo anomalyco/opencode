@@ -6,6 +6,7 @@ import { Identifier } from "../../id/id"
 import { Log } from "../../util/log"
 
 const log = Log.create({ service: "acp-tool-translator" })
+const isForgeSession = (id: string) => id.startsWith("ses-")
 
 /**
  * Map ACP tool call status to forge ToolPart status (1:1 mapping)
@@ -43,6 +44,10 @@ export async function handleToolCall(
   toolCallMap: Map<string, string>,
 ): Promise<void> {
   if (notification.update.sessionUpdate !== "tool_call") return
+  if (!isForgeSession(sessionID)) {
+    log.debug("skipping tool_call for non-forge session", { sessionID })
+    return
+  }
   const update = notification.update
 
   log.info("    ┌─ [TOOL_CALL]", {
@@ -135,6 +140,10 @@ export async function handleToolCallUpdate(
   toolCallMap: Map<string, string>,
 ): Promise<void> {
   if (notification.update.sessionUpdate !== "tool_call_update") return
+  if (!isForgeSession(sessionID)) {
+    log.debug("skipping tool_call_update for non-forge session", { sessionID })
+    return
+  }
   const update = notification.update
 
   log.info("    ┌─ [TOOL_UPDATE]", {

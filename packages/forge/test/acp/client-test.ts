@@ -1,30 +1,41 @@
 /**
  * Test: ACP Client
  *
- * This test demonstrates the full ACP client flow:
+ * This test demonstrates the full ACP client flow with claude-code-acp:
  * 1. Create client and connect to claude-code-acp
  * 2. Initialize the connection
  * 3. Create a session
  * 4. Send a prompt
  * 5. Receive and display responses
  *
- * Run with: bun test/acp/client-test.ts
+ * Run with: ANTHROPIC_API_KEY=xxx bun test/acp/client-test.ts
  */
 
 import { ACPClient } from "../../src/acp/client"
 import type { SessionNotification } from "@agentclientprotocol/sdk"
 
 async function main() {
-  console.log("=== ACP Client Test ===\n")
+  console.log("=== ACP Client Test with claude-code-acp ===\n")
+
+  // Check for API key
+  if (!process.env.ANTHROPIC_API_KEY) {
+    console.error("❌ Error: ANTHROPIC_API_KEY environment variable is required")
+    console.error("   Usage: ANTHROPIC_API_KEY=xxx bun test/acp/client-test.ts")
+    process.exit(1)
+  }
 
   // Track received messages
   const messages: string[] = []
 
   // Create the client
-  console.log("Creating ACP client...")
+  console.log("Creating ACP client with claude-code-acp...")
   const client = await ACPClient.create({
-    command: "claude-code-acp", // Make sure this is in your PATH
+    command: "npx",
+    args: ["@zed-industries/claude-code-acp"],
     cwd: process.cwd(),
+    env: {
+      ANTHROPIC_API_KEY: process.env.ANTHROPIC_API_KEY
+    },
     onSessionUpdate: (update: SessionNotification) => {
       // Handle different types of session updates
       switch (update.update.sessionUpdate) {

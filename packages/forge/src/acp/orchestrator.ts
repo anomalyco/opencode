@@ -120,9 +120,18 @@ export namespace ACPOrchestrator {
 
     log.info("creating new ACP session", { sessionID })
 
+    const apiKey = process.env.ANTHROPIC_API_KEY
+    if (!apiKey) {
+      throw new Error("ANTHROPIC_API_KEY is required to run ACP orchestrator")
+    }
+
     // Create ACP client (this spawns the subprocess)
     const client = await ACPClient.create({
-      command: "claude-code-acp",
+      command: "npx",
+      args: ["@zed-industries/claude-code-acp"],
+      env: {
+        ANTHROPIC_API_KEY: apiKey,
+      },
       cwd: Instance.directory,
       onSessionUpdate: async (notification) => {
         log.info("  ┌─ [ORCHESTRATOR] received notification", {

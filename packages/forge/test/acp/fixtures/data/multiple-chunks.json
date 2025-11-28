@@ -1,0 +1,46 @@
+{
+  "description": "Multiple text chunks streaming",
+  "prompt": "Count from 1 to 10, with each number on a separate line.",
+  "notifications": [
+    {
+      "sessionId": "019acc36-a391-710c-8223-a3be9a8175ad",
+      "update": {
+        "content": {
+          "text": "",
+          "type": "text"
+        },
+        "sessionUpdate": "agent_message_chunk"
+      }
+    },
+    {
+      "sessionId": "019acc36-a391-710c-8223-a3be9a8175ad",
+      "update": {
+        "content": {
+          "text": "1\n2\n3\n4",
+          "type": "text"
+        },
+        "sessionUpdate": "agent_message_chunk"
+      }
+    },
+    {
+      "sessionId": "019acc36-a391-710c-8223-a3be9a8175ad",
+      "update": {
+        "content": {
+          "text": "\n5\n6\n7\n8",
+          "type": "text"
+        },
+        "sessionUpdate": "agent_message_chunk"
+      }
+    },
+    {
+      "sessionId": "019acc36-a391-710c-8223-a3be9a8175ad",
+      "update": {
+        "content": {
+          "text": "\n9\n10",
+          "type": "text"
+        },
+        "sessionUpdate": "agent_message_chunk"
+      }
+    }
+  ]
+}
