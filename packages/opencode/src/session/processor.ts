@@ -40,6 +40,10 @@ export namespace SessionProcessor {
       },
       async process(fn: () => StreamTextResult<Record<string, AITool>, never>) {
         log.info("process")
+        // Take initial snapshot BEFORE stream starts to ensure we capture
+        // the "before" state regardless of when start-step event fires
+        // (some providers emit start-step after tool execution begins)
+        const initialSnapshot = await Snapshot.track()
         while (true) {
           try {
             let currentText: MessageV2.TextPart | undefined
@@ -229,7 +233,9 @@ export namespace SessionProcessor {
                   throw value.error
 
                 case "start-step":
-                  snapshot = await Snapshot.track()
+                  // Use initialSnapshot taken before stream started to ensure
+                  // we have the true "before" state (some providers emit start-step late)
+                  snapshot = initialSnapshot
                   await Session.updatePart({
                     id: Identifier.ascending("part"),
                     messageID: input.assistantMessage.id,
