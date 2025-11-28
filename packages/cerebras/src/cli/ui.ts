@@ -4,10 +4,10 @@ import { NamedError } from "@cerebras-ai/util/error"
 
 export namespace UI {
   const LOGO = [
-    [`                              `, `                   `],
-    [`█▀▀▀ █▀▀█ █▀▀█ █▀▀█ █▀▀█ █▀▀█ `, `█▀▀▀ █▀▀█ █▀▀█ █▀▀█`],
-    [`█░░░ █▀▀▀ █▀▀▄ █▀▀▀ █▀▀▄ █▀▀█ `, `█░░░ █░░█ █░░█ █▀▀▀`],
-    [`▀▀▀▀ ▀▀▀▀ ▀  ▀ ▀▀▀▀ ▀▀▀▀ ▀  ▀ `, `▀▀▀▀ ▀▀▀▀ ▀▀▀▀ ▀▀▀▀`],
+    [``, ``],
+    [`█▀▀▀ █▀▀ █▀▀█ █▀▀ █▀▀▄ █▀▀█ █▀▀█ █▀▀▀`, ``],
+    [`█    █▀▀ █▄▄▀ █▀▀ █▀▀▄ █▄▄▀ █▄▄█ ▀▀█ `, ``],
+    [`▀▀▀▀ ▀▀▀ ▀  ▀ ▀▀▀ ▀▀▀▀ ▀  ▀ ▀  ▀ ▀▀▀▀`, ``],
   ]
 
   export const CancelledError = NamedError.create("UICancelledError", z.void())
@@ -19,6 +19,7 @@ export namespace UI {
     TEXT_DIM_BOLD: "\x1b[90m\x1b[1m",
     TEXT_NORMAL: "\x1b[0m",
     TEXT_NORMAL_BOLD: "\x1b[1m",
+    TEXT_BOLD: "\x1b[1m",
     TEXT_WARNING: "\x1b[93m",
     TEXT_WARNING_BOLD: "\x1b[93m\x1b[1m",
     TEXT_DANGER: "\x1b[91m",
