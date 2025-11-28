@@ -21,17 +21,18 @@
 ### Installation
 
 ```bash
-# YOLO
-curl -fsSL https://opencode.ai/install | bash
+# npm/bun/pnpm/yarn
+npm i -g cerebras-code@latest
+bun i -g cerebras-code@latest
+pnpm i -g cerebras-code@latest
+yarn global add cerebras-code@latest
 
-# Package managers
-npm i -g opencode-ai@latest        # or bun/pnpm/yarn
-scoop bucket add extras; scoop install extras/opencode  # Windows
-choco install opencode             # Windows
-brew install opencode              # macOS and Linux
-paru -S opencode-bin               # Arch Linux
-mise use --pin -g ubi:sst/opencode # Any OS
-nix run nixpkgs#opencode           # or github:sst/opencode for latest dev branch
+# Homebrew (macOS and Linux)
+brew tap arihantchoudhary/tap
+brew install cerebras
+
+# Arch Linux (coming soon)
+# paru -S cerebras-bin
 ```
 
 > [!TIP]

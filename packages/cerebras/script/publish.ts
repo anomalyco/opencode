@@ -292,15 +292,15 @@ if (!Script.preview) {
     "",
   ].join("\n")
 
-  // Homebrew Publishing (disabled by default - uncomment when you create homebrew-tap repo)
-  /*
-  await $`rm -rf ./dist/homebrew-tap`
-  await $`git clone https://${process.env["GITHUB_TOKEN"]}@github.com/arihantchoudhary/homebrew-tap.git ./dist/homebrew-tap`
-  await Bun.file("./dist/homebrew-tap/cerebras.rb").write(homebrewFormula)
-  await $`cd ./dist/homebrew-tap && git add cerebras.rb`
-  await $`cd ./dist/homebrew-tap && git commit -m "Update to v${Script.version}"`
-  await $`cd ./dist/homebrew-tap && git push`
-  */
+  // Homebrew Publishing
+  if (!Script.preview && process.env.GITHUB_TOKEN) {
+    await $`rm -rf ./dist/homebrew-tap`
+    await $`git clone https://${process.env["GITHUB_TOKEN"]}@github.com/arihantchoudhary/homebrew-tap.git ./dist/homebrew-tap`
+    await Bun.file("./dist/homebrew-tap/cerebras.rb").write(homebrewFormula)
+    await $`cd ./dist/homebrew-tap && git add cerebras.rb`
+    await $`cd ./dist/homebrew-tap && git commit -m "Update to v${Script.version}"`
+    await $`cd ./dist/homebrew-tap && git push`
+  }
 
   const image = "ghcr.io/arihantchoudhary/opencode"
   await $`docker build -t ${image}:${Script.version} .`
