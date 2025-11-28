@@ -1008,10 +1008,6 @@ export type Config = {
      * Control diff rendering style: 'auto' adapts to terminal width, 'stacked' always shows single column
      */
     diff_style?: "auto" | "stacked"
-    /**
-     * Default visibility of thinking blocks in TUI
-     */
-    thinking_visibility?: boolean
   }
   /**
    * Command configuration, see https://opencode.ai/docs/commands
