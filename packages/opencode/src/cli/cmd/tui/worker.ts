@@ -5,7 +5,7 @@ import { Instance } from "@/project/instance"
 import { Rpc } from "@/util/rpc"
 import { upgrade } from "@/cli/upgrade"
 
-await Log.init({
+Log.init({
   print: process.argv.includes("--print-logs"),
   dev: Installation.isLocal(),
   level: (() => {
