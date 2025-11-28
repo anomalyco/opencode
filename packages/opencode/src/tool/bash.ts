@@ -83,10 +83,28 @@ export const BashTool = Tool.define("bash", async () => {
 
     return true
   })
-  log.info("bash tool using shell", { shell })
+
+  const shellName = iife(() => {
+    if (typeof shell === "boolean") return "bash"
+    if (typeof shell === "string") {
+      const name = path.basename(shell)
+      // Handle Windows executables
+      if (name.toLowerCase().endsWith(".exe")) {
+        return name.slice(0, -4)
+      }
+      return name
+    }
+    return "bash"
+  })
+
+  log.info("bash tool using shell", { shell, shellName })
+
+  const description = `**Shell**: You are executing commands in \`${shellName}\`. Ensure your command syntax is compatible with this shell.
+
+${DESCRIPTION}`
 
   return {
-    description: DESCRIPTION,
+    description,
     parameters: z.object({
       command: z.string().describe("The command to execute"),
       timeout: z.number().describe("Optional timeout in milliseconds").optional(),

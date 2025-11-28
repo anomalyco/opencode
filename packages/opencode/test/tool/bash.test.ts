@@ -34,6 +34,16 @@ describe("tool.bash", () => {
     })
   })
 
+  test("description includes shell information", async () => {
+    const bash = await BashTool.init()
+    expect(bash.description).toContain("**Shell**:")
+    expect(bash.description).toContain("Ensure your command syntax is compatible with this shell")
+    // Should contain a shell name (bash, zsh, fish, etc.)
+    const shellMatch = bash.description.match(/You are executing commands in `([^`]+)`/)
+    expect(shellMatch).toBeTruthy()
+    expect(shellMatch?.[1]).toBeTruthy()
+  })
+
   // TODO: better test
   // test("cd ../ should ask for permission for external directory", async () => {
   //   await Instance.provide({
