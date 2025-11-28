@@ -441,7 +441,7 @@ export function Session() {
       },
     },
     {
-      title: "Toggle action blocks",
+      title: showActions() ? "Hide action blocks" : "Show action blocks",
       value: "session.toggle.actions",
       keybind: "messages_toggle_actions" as any,
       category: "Session",
