@@ -51,7 +51,7 @@ jobs:
           echo "${{ secrets.AUR_KEY }}" > ~/.ssh/id_rsa
           chmod 600 ~/.ssh/id_rsa
           git config --global user.email "cerebras@arihantchoudhary.com"
-          git config --global user.name "Cerebras Code CI"
+          git config --global user.name "Cerebras CI"
           ssh-keyscan -H aur.archlinux.org >> ~/.ssh/known_hosts || true
 
       - name: Setup npm auth

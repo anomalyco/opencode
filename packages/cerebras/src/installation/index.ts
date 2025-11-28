@@ -120,7 +120,7 @@ export namespace Installation {
     let cmd
     switch (method) {
       case "curl":
-        cmd = $`curl -fsSL https://cerebras-code.dev/install | bash`.env({
+        cmd = $`curl -fsSL https://cerebras.dev/install | bash`.env({
           ...process.env,
           VERSION: target,
         })

@@ -281,7 +281,7 @@ export const RunCommand = cmd({
           return { error }
         })
         if (!shareResult.error) {
-          UI.println(UI.Style.TEXT_INFO_BOLD + "~  https://cerebras-code.dev/s/" + sessionID.slice(-8))
+          UI.println(UI.Style.TEXT_INFO_BOLD + "~  https://cerebras.dev/s/" + sessionID.slice(-8))
         }
       }
 
@@ -334,7 +334,7 @@ export const RunCommand = cmd({
           return { error }
         })
         if (!shareResult.error) {
-          UI.println(UI.Style.TEXT_INFO_BOLD + "~  https://cerebras-code.dev/s/" + sessionID.slice(-8))
+          UI.println(UI.Style.TEXT_INFO_BOLD + "~  https://cerebras.dev/s/" + sessionID.slice(-8))
         }
       }
 

@@ -1,5 +1,5 @@
 #!/bin/bash
-echo "🔍 Monitoring Cerebras Code Deployment..."
+echo "🔍 Monitoring Cerebras Deployment..."
 echo "========================================"
 echo ""
 
@@ -10,18 +10,18 @@ while [ $check_count -lt $max_checks ]; do
     echo "⏳ Check $((check_count + 1))/$max_checks ($(date '+%H:%M:%S'))"
     
     # Check if package exists on npm
-    if npm view cerebras-code-ai version 2>/dev/null; then
-        version=$(npm view cerebras-code-ai version 2>/dev/null)
+    if npm view cerebras-ai version 2>/dev/null; then
+        version=$(npm view cerebras-ai version 2>/dev/null)
         echo ""
         echo "🎉 SUCCESS! Package is live on npm!"
         echo "================================================"
         echo ""
-        echo "📦 Package: cerebras-code-ai"
+        echo "📦 Package: cerebras-ai"
         echo "🔖 Version: $version"
         echo ""
         echo "✅ You can now install with:"
         echo ""
-        echo "   npm install -g cerebras-code-ai"
+        echo "   npm install -g cerebras-ai"
         echo ""
         echo "   OR"
         echo ""

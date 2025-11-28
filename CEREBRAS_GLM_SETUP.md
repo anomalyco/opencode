@@ -122,7 +122,7 @@ export const RETRY_JITTER_FACTOR = 0.1 // Prevents synchronized retries
 ```typescript
 {
   headers: {
-    "X-Client": "cerebras-code",
+    "X-Client": "cerebras",
     "X-Client-Version": "1.0",
     "Cache-Control": "no-cache"
   }

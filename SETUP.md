@@ -1,4 +1,4 @@
-# CI/CD Setup for Cerebras Code
+# CI/CD Setup for Cerebras
 
 ## What's Already Done
 
@@ -7,7 +7,7 @@ All code has been updated to use "Cerebras" branding:
 - ✅ Install script uses `cerebras` binary
 - ✅ Publish scripts updated
 - ✅ GitHub Actions workflows configured
-- ✅ Package names changed to `cerebras-code-ai`
+- ✅ Package names changed to `cerebras-ai`
 
 ## Required: GitHub Secrets
 
@@ -33,7 +33,7 @@ npm token create --type=automation
 ```bash
 # Create a Personal Access Token:
 # Go to: https://github.com/settings/tokens/new
-# Note: "Cerebras Code CI"
+# Note: "Cerebras CI"
 # Scopes: Check 'repo' and 'write:packages'
 # Generate token
 
@@ -64,7 +64,7 @@ Check progress at: Actions tab in GitHub
 This will:
 
 - Build binaries for all platforms
-- Publish to npm as `cerebras-code-ai`
+- Publish to npm as `cerebras-ai`
 - Create GitHub release with downloadable binaries
 - Build and push Docker image to ghcr.io
 
@@ -77,7 +77,7 @@ Once published, users install with:
 curl -fsSL https://raw.githubusercontent.com/arihantchoudhary/opencode/dev/install | bash
 
 # Or via npm
-npm install -g cerebras-code-ai
+npm install -g cerebras-ai
 ```
 
 ## Optional: Homebrew Support

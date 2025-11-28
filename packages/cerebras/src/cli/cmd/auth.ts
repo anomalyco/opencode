@@ -9,6 +9,9 @@ import os from "os"
 import { Global } from "../../global"
 import { Plugin } from "../../plugin"
 import { Instance } from "../../project/instance"
+import { ClerkAuthProvider } from "../../auth/clerk"
+import { ClerkConfigManager } from "../../config/clerk"
+import { CredentialStorage } from "../../storage/credentials"
 
 export const AuthCommand = cmd({
   command: "auth",
@@ -67,18 +70,88 @@ export const AuthListCommand = cmd({
 
 export const AuthLoginCommand = cmd({
   command: "login [url]",
-  describe: "log in to a provider",
+  describe: "log in to Cerebras or a provider",
   builder: (yargs) =>
-    yargs.positional("url", {
-      describe: "cerebras auth provider",
-      type: "string",
-    }),
+    yargs
+      .positional("url", {
+        describe: "cerebras auth provider",
+        type: "string",
+      })
+      .option("provider", {
+        describe: "login to a specific AI provider instead of Cerebras",
+        type: "boolean",
+        default: false,
+      }),
   async handler(args) {
+    // Check if this is a Clerk-based Cerebras login (default)
+    if (!args.provider && !args.url && ClerkConfigManager.isConfigured()) {
+      UI.empty()
+
+      // Check if already logged in
+      const isAuthenticated = await CredentialStorage.isAuthenticated()
+      if (isAuthenticated) {
+        const session = await CredentialStorage.getSession()
+        if (session) {
+          const config = ClerkConfigManager.getConfig()
+          const auth = new ClerkAuthProvider(config)
+          const user = await auth.getUser(session.userId)
+
+          prompts.intro("Already logged in")
+          if (user) {
+            prompts.log.info(`User: ${user.emailAddresses[0]?.emailAddress || user.id}`)
+          }
+
+          const shouldLogout = await prompts.confirm({
+            message: "Would you like to logout and login again?",
+            initialValue: false,
+          })
+
+          if (prompts.isCancel(shouldLogout) || !shouldLogout) {
+            prompts.outro("Done")
+            return
+          }
+
+          await CredentialStorage.clear()
+        }
+      }
+
+      // Start Clerk login flow
+      const config = ClerkConfigManager.getConfig()
+      const auth = new ClerkAuthProvider(config)
+
+      try {
+        const session = await auth.interactiveLogin()
+
+        if (session) {
+          await CredentialStorage.updateSession(session)
+
+          const user = await auth.getUser(session.userId)
+          prompts.log.success("Login successful!")
+          if (user) {
+            prompts.log.info(`Welcome, ${user.emailAddresses[0]?.emailAddress || user.id}`)
+          }
+          prompts.outro("Done")
+        } else {
+          prompts.outro("Login failed")
+        }
+      } catch (error) {
+        if (error instanceof UI.CancelledError) {
+          prompts.outro("Login cancelled")
+        } else {
+          prompts.log.error("Login failed: " + (error instanceof Error ? error.message : String(error)))
+          prompts.outro("Failed")
+        }
+      }
+
+      return
+    }
+
+    // Fall back to provider-based authentication (existing code)
     await Instance.provide({
       directory: process.cwd(),
       async fn() {
         UI.empty()
-        prompts.intro("Add credential")
+        prompts.intro("Add provider credential")
         if (args.url) {
           const wellknown = await fetch(`${args.url}/.well-known/opencode`).then((x) => x.json() as any)
           prompts.log.info(`Running \`${wellknown.auth.command.join(" ")}\``)
@@ -301,7 +374,7 @@ export const AuthLoginCommand = cmd({
         }
 
         if (provider === "opencode") {
-          prompts.log.info("Create an api key at https://cerebras-code.dev/auth")
+          prompts.log.info("Create an api key at https://cerebras.dev/auth")
         }
 
         if (provider === "vercel") {

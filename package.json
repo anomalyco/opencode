@@ -1,6 +1,6 @@
 {
   "$schema": "https://json.schemastore.org/package.json",
-  "name": "cerebras-code",
+  "name": "cerebras",
   "description": "AI-powered coding assistant with blazing-fast inference",
   "private": true,
   "type": "module",

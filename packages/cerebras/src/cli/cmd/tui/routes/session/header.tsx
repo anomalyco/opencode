@@ -16,13 +16,38 @@ const Title = (props: { session: Accessor<Session> }) => {
   )
 }
 
-const ContextInfo = (props: { context: Accessor<string | undefined>; cost: Accessor<string> }) => {
+const ContextInfo = (props: {
+  context: Accessor<string | undefined>
+  cost: Accessor<string>
+  sessionTokens: Accessor<number>
+  contextLimit: Accessor<number | undefined>
+  budgetPercentage: Accessor<number>
+}) => {
   const { theme } = useTheme()
+
+  const budgetColor = createMemo(() => {
+    const pct = props.budgetPercentage()
+    if (pct >= 0.95) return theme.error
+    if (pct >= 0.8) return theme.warning
+    return theme.success
+  })
+
   return (
     <Show when={props.context()}>
-      <text fg={theme.textMuted} wrapMode="none" flexShrink={0}>
-        {props.context()} ({props.cost()})
-      </text>
+      <box flexDirection="row" gap={1} flexShrink={0}>
+        <text fg={theme.textMuted} wrapMode="none">
+          {props.context()} | Session: {props.sessionTokens().toLocaleString()}
+          <Show when={props.contextLimit()}>
+            /{props.contextLimit()!.toLocaleString()}
+          </Show>
+        </text>
+        <text fg={budgetColor()} wrapMode="none">
+          ({(props.budgetPercentage() * 100).toFixed(0)}%)
+        </text>
+        <text fg={theme.textMuted} wrapMode="none">
+          {props.cost()}
+        </text>
+      </box>
     </Show>
   )
 }
@@ -43,6 +68,33 @@ export function Header() {
       style: "currency",
       currency: "USD",
     }).format(total)
+  })
+
+  // Calculate total session tokens
+  const sessionTokens = createMemo(() => {
+    return pipe(
+      messages(),
+      sumBy((x) => {
+        if (x.role === "assistant") {
+          return x.tokens.input + x.tokens.output + x.tokens.reasoning + x.tokens.cache.read + x.tokens.cache.write
+        }
+        return 0
+      }),
+    )
+  })
+
+  // Get current model's context limit
+  const contextLimit = createMemo(() => {
+    const last = messages().findLast((x) => x.role === "assistant" && x.tokens.output > 0) as AssistantMessage
+    if (!last) return undefined
+    const model = sync.data.provider.find((x) => x.id === last.providerID)?.models[last.modelID]
+    return model?.limit.context
+  })
+
+  // Calculate budget percentage (from token budget system)
+  const budgetPercentage = createMemo(() => {
+    const limit = 1_000_000 // TODO: Get from config
+    return Math.min(sessionTokens() / limit, 1)
   })
 
   const context = createMemo(() => {
@@ -67,7 +119,13 @@ export function Header() {
         fallback={
           <box flexDirection="row" justifyContent="space-between" gap={1}>
             <Title session={session} />
-            <ContextInfo context={context} cost={cost} />
+            <ContextInfo
+              context={context}
+              cost={cost}
+              sessionTokens={sessionTokens}
+              contextLimit={contextLimit}
+              budgetPercentage={budgetPercentage}
+            />
           </box>
         }
       >
@@ -87,7 +145,13 @@ export function Header() {
               </Match>
             </Switch>
           </box>
-          <ContextInfo context={context} cost={cost} />
+          <ContextInfo
+            context={context}
+            cost={cost}
+            sessionTokens={sessionTokens}
+            contextLimit={contextLimit}
+            budgetPercentage={budgetPercentage}
+          />
         </box>
       </Show>
     </box>

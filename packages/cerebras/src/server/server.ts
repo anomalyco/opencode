@@ -2049,10 +2049,10 @@ export namespace Server {
         },
       )
       .all("/*", async (c) => {
-        return proxy(`https://desktop.dev.cerebras-code.dev${c.req.path}`, {
+        return proxy(`https://desktop.dev.cerebras.dev${c.req.path}`, {
           ...c.req,
           headers: {
-            host: "desktop.dev.cerebras-code.dev",
+            host: "desktop.dev.cerebras.dev",
           },
         })
       }),

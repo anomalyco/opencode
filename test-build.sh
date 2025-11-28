@@ -1,7 +1,7 @@
 #!/bin/bash
 # Test local build before releasing
 
-echo "🔨 Testing Cerebras Code Build"
+echo "🔨 Testing Cerebras Build"
 echo "=============================="
 echo ""
 

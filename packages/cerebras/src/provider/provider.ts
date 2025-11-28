@@ -71,7 +71,7 @@ export namespace Provider {
         autoload: hasKey,
         options: {
           headers: {
-            "X-Client": "cerebras-code",
+            "X-Client": "cerebras",
             "X-Client-Version": "1.0",
           },
           // Enable Cerebras-specific features
@@ -231,7 +231,7 @@ export namespace Provider {
         autoload: false,
         options: {
           headers: {
-            "HTTP-Referer": "https://cerebras-code.dev/",
+            "HTTP-Referer": "https://cerebras.dev/",
             "X-Title": "opencode",
           },
         },
@@ -242,7 +242,7 @@ export namespace Provider {
         autoload: false,
         options: {
           headers: {
-            "http-referer": "https://cerebras-code.dev/",
+            "http-referer": "https://cerebras.dev/",
             "x-title": "opencode",
           },
         },
@@ -287,7 +287,7 @@ export namespace Provider {
         autoload: false,
         options: {
           headers: {
-            "HTTP-Referer": "https://cerebras-code.dev/",
+            "HTTP-Referer": "https://cerebras.dev/",
             "X-Title": "opencode",
           },
         },

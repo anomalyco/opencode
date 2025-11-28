@@ -87,7 +87,7 @@ Successfully implemented comprehensive rate limit handling and optimizations for
       autoload: hasKey,
       options: {
         headers: {
-          "X-Client": "cerebras-code",           // Client identification
+          "X-Client": "cerebras",           // Client identification
           "X-Client-Version": "1.0",
         },
         fetch: async (url, init) => {

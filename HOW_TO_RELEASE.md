@@ -1,4 +1,4 @@
-# How to Release Cerebras Code to Production
+# How to Release Cerebras to Production
 
 ## Prerequisites (One-Time Setup)
 
@@ -23,7 +23,7 @@ Copy the token, then:
 ### 2. Add GitHub Token
 
 1. Go to: https://github.com/settings/tokens/new
-2. Note: `Cerebras Code CI`
+2. Note: `Cerebras CI`
 3. Check these boxes:
    - ✅ repo (all repo permissions)
    - ✅ write:packages
@@ -77,7 +77,7 @@ The workflow will automatically:
    - macOS (x64, arm64)
    - Windows (x64)
 
-2. ✅ Publish to npm as `cerebras-code-ai`
+2. ✅ Publish to npm as `cerebras-ai`
 
 3. ✅ Create GitHub Release with downloadable binaries
 
@@ -96,7 +96,7 @@ Users can install with:
 curl -fsSL https://raw.githubusercontent.com/arihantchoudhary/opencode/dev/install | bash
 
 # npm
-npm install -g cerebras-code-ai
+npm install -g cerebras-ai
 
 # Docker
 docker pull ghcr.io/arihantchoudhary/opencode:latest
@@ -116,7 +116,7 @@ https://github.com/arihantchoudhary/opencode/releases
 
 ### Check npm package:
 
-https://www.npmjs.com/package/cerebras-code-ai
+https://www.npmjs.com/package/cerebras-ai
 
 ### Check Docker image:
 

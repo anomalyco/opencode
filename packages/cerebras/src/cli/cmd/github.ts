@@ -181,7 +181,7 @@ export const GithubInstallCommand = cmd({
                 "",
                 "    3. Go to a GitHub issue and comment `/oc summarize` to see the agent in action",
                 "",
-                "   Learn more about the GitHub agent - https://cerebras-code.dev/docs/github/#usage-examples",
+                "   Learn more about the GitHub agent - https://cerebras.dev/docs/github/#usage-examples",
               ].join("\n"),
             )
           }
@@ -308,7 +308,7 @@ export const GithubInstallCommand = cmd({
 
             async function getInstallation() {
               return await fetch(
-                `https://api.cerebras-code.dev/get_github_app_installation?owner=${app.owner}&repo=${app.repo}`,
+                `https://api.cerebras.dev/get_github_app_installation?owner=${app.owner}&repo=${app.repo}`,
               )
                 .then((res) => res.json())
                 .then((data) => data.installation)
@@ -398,7 +398,7 @@ export const GithubRunCommand = cmd({
           ? (payload as PullRequestReviewCommentEvent).pull_request.number
           : (payload as IssueCommentEvent).issue.number
       const runUrl = `/${owner}/${repo}/actions/runs/${runId}`
-      const shareBaseUrl = isMock ? "https://dev.cerebras-code.dev" : "https://cerebras-code.dev"
+      const shareBaseUrl = isMock ? "https://dev.cerebras.dev" : "https://cerebras.dev"
 
       let appToken: string
       let octoRest: Octokit
@@ -765,14 +765,14 @@ export const GithubRunCommand = cmd({
 
       async function exchangeForAppToken(token: string) {
         const response = token.startsWith("github_pat_")
-          ? await fetch("https://api.cerebras-code.dev/exchange_github_app_token_with_pat", {
+          ? await fetch("https://api.cerebras.dev/exchange_github_app_token_with_pat", {
               method: "POST",
               headers: {
                 Authorization: `Bearer ${token}`,
               },
               body: JSON.stringify({ owner, repo }),
             })
-          : await fetch("https://api.cerebras-code.dev/exchange_github_app_token", {
+          : await fetch("https://api.cerebras.dev/exchange_github_app_token", {
               method: "POST",
               headers: {
                 Authorization: `Bearer ${token}`,

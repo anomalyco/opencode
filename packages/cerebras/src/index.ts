@@ -25,6 +25,7 @@ import { AcpCommand } from "./cli/cmd/acp"
 import { EOL } from "os"
 import { WebCommand } from "./cli/cmd/web"
 import { PrCommand } from "./cli/cmd/pr"
+import { authMiddleware } from "./middleware/auth"
 
 process.on("unhandledRejection", (e) => {
   Log.Default.error("rejection", {
@@ -72,6 +73,7 @@ const cli = yargs(hideBin(process.argv))
       args: process.argv.slice(2),
     })
   })
+  .middleware(authMiddleware)
   .usage("\n" + UI.logo())
   .command(AcpCommand)
   .command(McpCommand)

@@ -3,6 +3,8 @@ node_modules
 .worktrees
 .sst
 .env
+.env.local
+.env.production
 .idea
 .vscode
 *~
@@ -18,3 +20,9 @@ refs
 Session.vim
 opencode.json
 a.out
+
+# Authentication & Security
+session.json
+*.pem
+*.key
+.cerebras/

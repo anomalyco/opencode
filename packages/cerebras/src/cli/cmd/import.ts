@@ -33,13 +33,13 @@ export const ImportCommand = cmd({
       if (isUrl) {
         const urlMatch = args.file.match(/https?:\/\/opencode\.ai\/s\/([a-zA-Z0-9_-]+)/)
         if (!urlMatch) {
-          process.stdout.write(`Invalid URL format. Expected: https://cerebras-code.dev/s/<slug>`)
+          process.stdout.write(`Invalid URL format. Expected: https://cerebras.dev/s/<slug>`)
           process.stdout.write(EOL)
           return
         }
 
         const slug = urlMatch[1]
-        const response = await fetch(`https://api.cerebras-code.dev/share_data?id=${slug}`)
+        const response = await fetch(`https://api.cerebras.dev/share_data?id=${slug}`)
 
         if (!response.ok) {
           process.stdout.write(`Failed to fetch share data: ${response.statusText}`)

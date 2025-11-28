@@ -1,7 +1,7 @@
 #!/bin/bash
-# Setup script for Cerebras Code CI/CD
+# Setup script for Cerebras CI/CD
 
-echo "🚀 Cerebras Code CI/CD Setup"
+echo "🚀 Cerebras CI/CD Setup"
 echo "============================"
 echo ""
 
@@ -61,7 +61,7 @@ else
     else
         echo "Please create a GitHub token manually:"
         echo "  1. Go to: https://github.com/settings/tokens/new"
-        echo "  2. Note: 'Cerebras Code CI'"
+        echo "  2. Note: 'Cerebras CI'"
         echo "  3. Check: repo, write:packages"
         echo "  4. Click 'Generate token'"
         echo ""

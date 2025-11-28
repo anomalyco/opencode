@@ -1,7 +1,7 @@
 #!/bin/bash
 # Check the status of the latest release
 
-echo "🚀 Checking Cerebras Code Release Status"
+echo "🚀 Checking Cerebras Release Status"
 echo "========================================"
 echo ""
 

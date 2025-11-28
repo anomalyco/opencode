@@ -22,10 +22,10 @@
 
 ```bash
 # npm/bun/pnpm/yarn
-npm i -g cerebras-code@latest
-bun i -g cerebras-code@latest
-pnpm i -g cerebras-code@latest
-yarn global add cerebras-code@latest
+npm i -g cerebras@latest
+bun i -g cerebras@latest
+pnpm i -g cerebras@latest
+yarn global add cerebras@latest
 
 # Homebrew (macOS and Linux)
 brew tap arihantchoudhary/tap

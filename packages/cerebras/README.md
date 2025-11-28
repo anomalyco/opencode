@@ -1,4 +1,4 @@
-# Cerebras Code
+# Cerebras
 
 AI-powered coding assistant with blazing-fast inference, built for the terminal.
 
@@ -24,7 +24,7 @@ bun test
 ## Usage
 
 ```bash
-# Start Cerebras Code
+# Start Cerebras
 cerebras
 
 # Run with a message
@@ -44,7 +44,7 @@ cerebras --help
 
 ## Documentation
 
-For more information, visit the [Cerebras Code documentation](https://cerebras-code.dev/docs).
+For more information, visit the [Cerebras documentation](https://cerebras-code.dev/docs).
 
 ## License
 
