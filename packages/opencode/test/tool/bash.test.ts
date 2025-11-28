@@ -44,6 +44,25 @@ describe("tool.bash", () => {
     expect(shellMatch?.[1]).toBeTruthy()
   })
 
+  test("shell name detection is platform-aware", async () => {
+    const bash = await BashTool.init()
+    const shellMatch = bash.description.match(/You are executing commands in `([^`]+)`/)
+    const detectedShell = shellMatch?.[1]
+
+    expect(detectedShell).toBeTruthy()
+
+    // Verify detected shell is appropriate for the platform
+    if (process.platform === "win32") {
+      // On Windows, should detect cmd, powershell, bash (WSL/Git Bash), or similar
+      expect(["cmd", "powershell", "pwsh", "bash", "zsh"].some((s) => detectedShell?.toLowerCase().includes(s))).toBe(
+        true,
+      )
+    } else {
+      // On Unix-like systems, should detect bash, zsh, fish, sh, or similar
+      expect(["bash", "zsh", "fish", "sh", "nu"].some((s) => detectedShell === s)).toBe(true)
+    }
+  })
+
   // TODO: better test
   // test("cd ../ should ask for permission for external directory", async () => {
   //   await Instance.provide({

@@ -85,7 +85,10 @@ export const BashTool = Tool.define("bash", async () => {
   })
 
   const shellName = iife(() => {
-    if (typeof shell === "boolean") return "bash"
+    if (typeof shell === "boolean") {
+      // When shell is true (fallback), assume appropriate default for platform
+      return process.platform === "win32" ? "cmd" : "bash"
+    }
     if (typeof shell === "string") {
       const name = path.basename(shell)
       // Handle Windows executables
