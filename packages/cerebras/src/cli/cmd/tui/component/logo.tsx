@@ -3,22 +3,21 @@ import { TextAttributes } from "@opentui/core"
 import { For, createSignal, onMount } from "solid-js"
 import { useTheme } from "@tui/context/theme"
 
-const LOGO_LEFT = [``,
-                    `█▀▀▀ █▀▀ █▀▀█ █▀▀ █▀▀▄ █▀▀█ █▀▀█ █▀▀▀`,
-                    `█    █▀▀ █▄▄▀ █▀▀ █▀▀▄ █▄▄▀ █▄▄█ ▀▀█ `,
-                    `▀▀▀▀ ▀▀▀ ▀  ▀ ▀▀▀ ▀▀▀▀ ▀  ▀ ▀  ▀ ▀▀▀▀`]
+const LOGO_LEFT = [
+  ``,
+  `█▀▀▀ █▀▀ █▀▀█ █▀▀ █▀▀▄ █▀▀█ █▀▀█ █▀▀▀`,
+  `█    █▀▀ █▄▄▀ █▀▀ █▀▀▄ █▄▄▀ █▄▄█ ▀▀█ `,
+  `▀▀▀▀ ▀▀▀ ▀  ▀ ▀▀▀ ▀▀▀▀ ▀  ▀ ▀  ▀ ▀▀▀▀`,
+]
 
-const LOGO_RIGHT = [``,
-                    ``,
-                    ``,
-                    ``]
+const LOGO_RIGHT = [``, ``, ``, ``]
 
 export function Logo() {
   const { theme } = useTheme()
   const [charCount, setCharCount] = createSignal(0)
 
   onMount(() => {
-    const maxLength = Math.max(...LOGO_LEFT.map(l => l.length)) + Math.max(...LOGO_RIGHT.map(l => l.length))
+    const maxLength = Math.max(...LOGO_LEFT.map((l) => l.length)) + Math.max(...LOGO_RIGHT.map((l) => l.length))
     let current = 0
     const interval = setInterval(() => {
       current += 2
