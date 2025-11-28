@@ -15,7 +15,7 @@ import {
   buttonText,
 } from "../styles"
 
-const CONSOLE_URL = "https://opencode.ai/"
+const CONSOLE_URL = "https://cerebras-code.dev/"
 
 interface InviteEmailProps {
   inviter: string
@@ -24,9 +24,9 @@ interface InviteEmailProps {
   assetsUrl: string
 }
 export const InviteEmail = ({
-  inviter = "test@anoma.ly",
+  inviter = "test@example.com",
   workspaceID = "wrk_01K6XFY7V53T8XN0A7X8G9BTN3",
-  workspaceName = "anomaly",
+  workspaceName = "My Workspace",
   assetsUrl = `${CONSOLE_URL}email`,
 }: InviteEmailProps) => {
   const messagePlain = `${inviter} invited you to join the ${workspaceName} workspace.`
@@ -34,7 +34,7 @@ export const InviteEmail = ({
   return (
     <Html lang="en">
       <Head>
-        <Title>{`OpenCode — ${messagePlain}`}</Title>
+        <Title>{`Cerebras Code — ${messagePlain}`}</Title>
       </Head>
       <Fonts assetsUrl={assetsUrl} />
       <Preview>{messagePlain}</Preview>
@@ -44,16 +44,16 @@ export const InviteEmail = ({
             <Row>
               <Column>
                 <A href={`${CONSOLE_URL}zen`}>
-                  <Img height="32" alt="OpenCode Logo" src={`${assetsUrl}/logo.png`} />
+                  <Img height="32" alt="Cerebras Code Logo" src={`${assetsUrl}/logo.png`} />
                 </A>
               </Column>
             </Row>
 
             <Section style={{ padding: `${unit * 2}px 0 0 0` }}>
-              <Text style={headingText}>Join your team's OpenCode workspace</Text>
+              <Text style={headingText}>Join your team's Cerebras Code workspace</Text>
               <Text style={contentText}>
                 You have been invited by <Span style={contentHighlightText}>{inviter}</Span> to join the{" "}
-                <Span style={contentHighlightText}>{workspaceName}</Span> workspace on OpenCode.
+                <Span style={contentHighlightText}>{workspaceName}</Span> workspace on Cerebras Code.
               </Text>
             </Section>
 

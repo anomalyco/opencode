@@ -3,11 +3,11 @@
  */
 export const config = {
   // Base URL
-  baseUrl: "https://opencode.ai",
+  baseUrl: "https://cerebras-code.dev",
 
   // GitHub
   github: {
-    repoUrl: "https://github.com/sst/opencode",
+    repoUrl: "https://github.com/arihantchoudhary/opencode",
     starsFormatted: {
       compact: "30K",
       full: "30,000",
@@ -16,8 +16,8 @@ export const config = {
 
   // Social links
   social: {
-    twitter: "https://x.com/opencode",
-    discord: "https://discord.gg/opencode",
+    twitter: "https://x.com/cerebras",
+    discord: "https://discord.gg/cerebras",
   },
 
   // Static stats (used on landing page)

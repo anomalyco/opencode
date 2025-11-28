@@ -405,11 +405,11 @@ export async function handler(
     const billing = authInfo.billing
     if (!billing.paymentMethodID)
       throw new CreditsError(
-        `No payment method. Add a payment method here: https://opencode.ai/workspace/${authInfo.workspaceID}/billing`,
+        `No payment method. Add a payment method here: https://cerebras-code.dev/workspace/${authInfo.workspaceID}/billing`,
       )
     if (billing.balance <= 0)
       throw new CreditsError(
-        `Insufficient balance. Manage your billing here: https://opencode.ai/workspace/${authInfo.workspaceID}/billing`,
+        `Insufficient balance. Manage your billing here: https://cerebras-code.dev/workspace/${authInfo.workspaceID}/billing`,
       )
 
     const now = new Date()
@@ -425,7 +425,7 @@ export async function handler(
       const dateMonth = billing.timeMonthlyUsageUpdated.getUTCMonth()
       if (currentYear === dateYear && currentMonth === dateMonth)
         throw new MonthlyLimitError(
-          `Your workspace has reached its monthly spending limit of $${billing.monthlyLimit}. Manage your limits here: https://opencode.ai/workspace/${authInfo.workspaceID}/billing`,
+          `Your workspace has reached its monthly spending limit of $${billing.monthlyLimit}. Manage your limits here: https://cerebras-code.dev/workspace/${authInfo.workspaceID}/billing`,
         )
     }
 
@@ -439,7 +439,7 @@ export async function handler(
       const dateMonth = authInfo.user.timeMonthlyUsageUpdated.getUTCMonth()
       if (currentYear === dateYear && currentMonth === dateMonth)
         throw new UserLimitError(
-          `You have reached your monthly spending limit of $${authInfo.user.monthlyLimit}. Manage your limits here: https://opencode.ai/workspace/${authInfo.workspaceID}/members`,
+          `You have reached your monthly spending limit of $${authInfo.user.monthlyLimit}. Manage your limits here: https://cerebras-code.dev/workspace/${authInfo.workspaceID}/members`,
         )
     }
   }
