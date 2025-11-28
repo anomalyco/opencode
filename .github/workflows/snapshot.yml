@@ -6,6 +6,7 @@ on:
       - dev
       - test-bedrock
       - v0
+      - otui-diffs
 
 concurrency: ${{ github.workflow }}-${{ github.ref }}
 
