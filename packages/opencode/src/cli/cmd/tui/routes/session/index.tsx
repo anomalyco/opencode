@@ -510,32 +510,28 @@ export function Session() {
       keybind: "messages_last_user",
       category: "Session",
       onSelect: () => {
-        try {
-          const messages = sync.data.message[route.sessionID]
-          if (!messages || !messages.length) return
+        const messages = sync.data.message[route.sessionID]
+        if (!messages || !messages.length) return
 
-          // Find the most recent user message with non-ignored, non-synthetic text parts
-          for (let i = messages.length - 1; i >= 0; i--) {
-            const message = messages[i]
-            if (!message || message.role !== "user") continue
+        // Find the most recent user message with non-ignored, non-synthetic text parts
+        for (let i = messages.length - 1; i >= 0; i--) {
+          const message = messages[i]
+          if (!message || message.role !== "user") continue
 
-            const parts = sync.data.part[message.id]
-            if (!parts || !Array.isArray(parts)) continue
+          const parts = sync.data.part[message.id]
+          if (!parts || !Array.isArray(parts)) continue
 
-            const hasValidTextPart = parts.some(
-              (part) => part && part.type === "text" && !part.synthetic && !part.ignored,
-            )
+          const hasValidTextPart = parts.some(
+            (part) => part && part.type === "text" && !part.synthetic && !part.ignored,
+          )
 
-            if (hasValidTextPart) {
-              const child = scroll.getChildren().find((child) => {
-                return child.id === message.id
-              })
-              if (child) scroll.scrollBy(child.y - scroll.y - 1)
-              break
-            }
+          if (hasValidTextPart) {
+            const child = scroll.getChildren().find((child) => {
+              return child.id === message.id
+            })
+            if (child) scroll.scrollBy(child.y - scroll.y - 1)
+            break
           }
-        } catch (error) {
-          console.error("Error in last_user_message command:", error)
         }
       },
     },
