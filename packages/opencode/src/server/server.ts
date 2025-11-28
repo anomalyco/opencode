@@ -859,7 +859,8 @@ export namespace Server {
           await SessionPrompt.loop(id)
           return c.json(true)
         },
-      ).post(
+      )
+      .post(
         "/session/:id/title",
         describeRoute({
           description: "Generate title for the session",
@@ -902,7 +903,7 @@ export namespace Server {
             message: msgs[msgs.length - 1],
             history: msgs,
             providerID: body.providerID,
-            modelID: body.modelID
+            modelID: body.modelID,
           })
           return c.json(await Session.get(id))
         },
