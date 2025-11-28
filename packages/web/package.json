@@ -34,7 +34,7 @@
     "toolbeam-docs-theme": "0.4.8"
   },
   "devDependencies": {
-    "cerebras-code": "workspace:*",
+    "cerebras": "workspace:*",
     "@types/node": "catalog:",
     "typescript": "catalog:"
   }
