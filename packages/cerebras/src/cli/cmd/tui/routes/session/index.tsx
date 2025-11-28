@@ -657,7 +657,7 @@ export function Session() {
           <DialogPrompt
             title="Create Checkpoint"
             placeholder="Enter checkpoint message..."
-            onSubmit={async (message) => {
+            onConfirm={async (message: string) => {
               const result = await Checkpoint.create({
                 sessionID: route.sessionID,
                 message: message || "Manual checkpoint",
@@ -715,7 +715,7 @@ export function Session() {
           <DialogPrompt
             title="Restore Checkpoint"
             placeholder={`Enter checkpoint tag (latest: ${checkpoints[0].tag})...`}
-            onSubmit={async (tag) => {
+            onConfirm={async (tag: string) => {
               try {
                 const result = await Checkpoint.restore(tag || checkpoints[0].tag)
                 if (result.success) {
