@@ -333,14 +333,19 @@ export default function Page() {
                 flex: layout.review.state() === "pane",
               }}
             >
-              <div class="relative shrink-0 py-3 flex flex-col gap-6 flex-1 min-h-0 w-full max-w-2xl mx-auto">
+              <div
+                classList={{
+                  "relative shrink-0 py-3 flex flex-col gap-6 flex-1 min-h-0 w-full": true,
+                  "max-w-146 mx-auto": !wide(),
+                }}
+              >
                 <Switch>
                   <Match when={session.id}>
                     <div class="flex items-start justify-start h-full min-h-0">
                       <Show when={session.messages.user().length > 1}>
                         <>
                           <MessageNav
-                            class="@6xl:hidden mt-3 mr-8"
+                            class="@6xl:hidden mt-2.5 absolute left-6"
                             messages={session.messages.user()}
                             current={session.messages.active()}
                             onMessageSelect={session.messages.setActive}
@@ -349,9 +354,9 @@ export default function Page() {
                           />
                           <MessageNav
                             classList={{
-                              "hidden @6xl:flex": true,
-                              "mt-0.5 mr-3 absolute right-full": wide(),
-                              "mt-3 mr-8": !wide(),
+                              "hidden @6xl:flex absolute": true,
+                              "mt-0.5 left-[calc(((100%_-_min(100%,_36.5rem))_/_2)-1.5rem)] -translate-x-full": wide(),
+                              "mt-2.5 left-6": !wide(),
                             }}
                             messages={session.messages.user()}
                             current={session.messages.active()}
@@ -364,12 +369,16 @@ export default function Page() {
                       <SessionTurn
                         sessionID={session.id!}
                         messageID={session.messages.active()?.id!}
-                        classes={{ root: "pb-20 flex-1 min-w-0", content: "pb-20", container: "px-6" }}
+                        classes={{
+                          root: "pb-20 flex-1 min-w-0",
+                          content: "pb-20",
+                          container: "w-full " + (wide() ? "max-w-146 mx-auto px-6" : "pr-6 pl-18"),
+                        }}
                       />
                     </div>
                   </Match>
                   <Match when={true}>
-                    <div class="size-full flex flex-col pb-45 justify-end items-start gap-4 flex-[1_0_0] self-stretch">
+                    <div class="size-full flex flex-col pb-45 justify-end items-start gap-4 flex-[1_0_0] self-stretch max-w-146 mx-auto px-6">
                       <div class="text-20-medium text-text-weaker">New session</div>
                       <div class="flex justify-center items-center gap-3">
                         <Icon name="folder" size="small" />
@@ -390,12 +399,14 @@ export default function Page() {
                     </div>
                   </Match>
                 </Switch>
-                <div class="absolute inset-x-0 px-6 max-w-2xl flex flex-col justify-center items-center z-50 mx-auto bottom-8">
-                  <PromptInput
-                    ref={(el) => {
-                      inputRef = el
-                    }}
-                  />
+                <div class="absolute inset-x-0 bottom-8 flex flex-col justify-center items-center z-50">
+                  <div class="w-full max-w-146 px-6">
+                    <PromptInput
+                      ref={(el) => {
+                        inputRef = el
+                      }}
+                    />
+                  </div>
                 </div>
               </div>
               <Show when={layout.review.state() === "pane" && session.diffs().length}>
@@ -498,7 +509,7 @@ export default function Page() {
         </DragOverlay>
       </DragDropProvider>
       <Show when={session.layout.tabs.active}>
-        <div class="absolute inset-x-0 px-6 max-w-2xl flex flex-col justify-center items-center z-50 mx-auto bottom-8">
+        <div class="absolute inset-x-0 px-6 max-w-146 flex flex-col justify-center items-center z-50 mx-auto bottom-8">
           <PromptInput
             ref={(el) => {
               inputRef = el
