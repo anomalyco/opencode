@@ -425,6 +425,11 @@ export namespace Config {
         .optional()
         .default("<leader>h")
         .describe("Toggle code block concealment in messages"),
+      messages_toggle_actions: z
+        .string()
+        .optional()
+        .default("<leader>j")
+        .describe("Toggle action block visibility in messages"),
       model_list: z.string().optional().default("<leader>m").describe("List available models"),
       model_cycle_recent: z.string().optional().default("f2").describe("Next recently used model"),
       model_cycle_recent_reverse: z.string().optional().default("shift+f2").describe("Previous recently used model"),
@@ -460,6 +465,13 @@ export namespace Config {
       .enum(["auto", "stacked"])
       .optional()
       .describe("Control diff rendering style: 'auto' adapts to terminal width, 'stacked' always shows single column"),
+    hide_successful_actions: z
+      .boolean()
+      .optional()
+      .default(true)
+      .describe(
+        "Hide successful action blocks by default. Actions requiring permission or that fail are always visible. Can be toggled with keybind.",
+      ),
   })
 
   export const Layout = z.enum(["auto", "stretch"]).meta({

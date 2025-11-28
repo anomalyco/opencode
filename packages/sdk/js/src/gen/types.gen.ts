@@ -295,6 +295,7 @@ export type ToolPart = {
   metadata?: {
     [key: string]: unknown
   }
+  hideDetails?: boolean
 }
 
 export type StepStartPart = {
@@ -801,6 +802,10 @@ export type KeybindsConfig = {
    */
   messages_toggle_conceal?: string
   /**
+   * Toggle action block visibility in messages
+   */
+  messages_toggle_actions?: string
+  /**
    * List available models
    */
   model_list?: string
@@ -1008,6 +1013,10 @@ export type Config = {
      * Control diff rendering style: 'auto' adapts to terminal width, 'stacked' always shows single column
      */
     diff_style?: "auto" | "stacked"
+    /**
+     * Hide successful action blocks by default. Actions requiring permission or that fail are always visible. Can be toggled with keybind.
+     */
+    hide_successful_actions?: boolean
   }
   /**
    * Command configuration, see https://opencode.ai/docs/commands

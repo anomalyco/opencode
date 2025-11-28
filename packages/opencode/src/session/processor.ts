@@ -180,6 +180,8 @@ export namespace SessionProcessor {
                 case "tool-result": {
                   const match = toolcalls[value.toolCallId]
                   if (match && match.state.status === "running") {
+                    const wasAsked = Permission.wasAsked(input.sessionID, value.toolCallId)
+                    const shouldHide = !wasAsked
                     await Session.updatePart({
                       ...match,
                       state: {
@@ -194,6 +196,7 @@ export namespace SessionProcessor {
                         },
                         attachments: value.output.attachments,
                       },
+                      hideDetails: shouldHide,
                     })
 
                     delete toolcalls[value.toolCallId]
@@ -216,6 +219,7 @@ export namespace SessionProcessor {
                           end: Date.now(),
                         },
                       },
+                      hideDetails: false,
                     })
 
                     if (value.error instanceof Permission.RejectedError) {

@@ -273,6 +273,7 @@ export namespace MessageV2 {
     tool: z.string(),
     state: ToolState,
     metadata: z.record(z.string(), z.any()).optional(),
+    hideDetails: z.boolean().optional(),
   }).meta({
     ref: "ToolPart",
   })

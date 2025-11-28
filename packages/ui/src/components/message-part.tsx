@@ -130,6 +130,8 @@ PART_MAPPING["tool"] = function ToolPartDisplay(props) {
     const render = ToolRegistry.render(part.tool) ?? GenericTool
     const metadata = part.state.status === "pending" ? {} : (part.state.metadata ?? {})
     const input = part.state.status === "completed" ? part.state.input : {}
+    const shouldHide = props.hideDetails ?? part.hideDetails ?? false
+    const hideForError = part.state.status === "error" ? false : shouldHide
 
     return (
       <Switch>
@@ -164,7 +166,7 @@ PART_MAPPING["tool"] = function ToolPartDisplay(props) {
             tool={part.tool}
             metadata={metadata}
             output={part.state.status === "completed" ? part.state.output : undefined}
-            hideDetails={props.hideDetails}
+            hideDetails={hideForError}
           />
         </Match>
       </Switch>
