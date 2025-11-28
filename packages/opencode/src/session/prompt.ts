@@ -1420,19 +1420,14 @@ export namespace SessionPrompt {
     return result
   }
 
-  async function ensureTitle(input: {
+  export async function generateTitle(input: {
     session: Session.Info
     message: MessageV2.WithParts
     history: MessageV2.WithParts[]
     providerID: string
     modelID: string
   }) {
-    if (input.session.parentID) return
-    if (!Session.isDefaultTitle(input.session.title)) return
-    const isFirst =
-      input.history.filter((m) => m.info.role === "user" && !m.parts.every((p) => "synthetic" in p && p.synthetic))
-        .length === 1
-    if (!isFirst) return
+    let title: string | null = null
     const small =
       (await Provider.getSmallModel(input.providerID)) ?? (await Provider.getModel(input.providerID, input.modelID))
     const provider = await Provider.getProvider(small.providerID)
@@ -1496,13 +1491,29 @@ export namespace SessionPrompt {
               .map((line) => line.trim())
               .find((line) => line.length > 0)
             if (!cleaned) return
-
-            const title = cleaned.length > 100 ? cleaned.substring(0, 97) + "..." : cleaned
+            title = cleaned.length > 100 ? cleaned.substring(0, 97) + "..." : cleaned
             draft.title = title
           })
       })
       .catch((error) => {
         log.error("failed to generate title", { error, model: small.info.id })
       })
+    return title
+  }
+
+  async function ensureTitle(input: {
+    session: Session.Info
+    message: MessageV2.WithParts
+    history: MessageV2.WithParts[]
+    providerID: string
+    modelID: string
+  }) {
+    if (input.session.parentID) return
+    if (!Session.isDefaultTitle(input.session.title)) return
+    const isFirst =
+      input.history.filter((m) => m.info.role === "user" && !m.parts.every((p) => "synthetic" in p && p.synthetic))
+        .length === 1
+    if (!isFirst) return
+    await generateTitle(input)
   }
 }

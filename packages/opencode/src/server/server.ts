@@ -859,6 +859,53 @@ export namespace Server {
           await SessionPrompt.loop(id)
           return c.json(true)
         },
+      ).post(
+        "/session/:id/title",
+        describeRoute({
+          description: "Generate title for the session",
+          operationId: "session.title",
+          responses: {
+            200: {
+              description: "Generate title for the session",
+              content: {
+                "application/json": {
+                  schema: resolver(Session.Info),
+                },
+              },
+            },
+            ...errors(400, 404),
+          },
+        }),
+        validator(
+          "param",
+          z.object({
+            id: z.string().meta({ description: "Session ID" }),
+          }),
+        ),
+        validator(
+          "json",
+          z.object({
+            providerID: z.string(),
+            modelID: z.string(),
+          }),
+        ),
+        async (c) => {
+          const id = c.req.valid("param").id
+          const body = c.req.valid("json")
+          const msgs = await Session.messages({ sessionID: id })
+          if (msgs.length === 0) {
+            return c.json({ error: "Cannot generate title for empty session" }, 400)
+          }
+          const session = await Session.get(id)
+          await SessionPrompt.generateTitle({
+            session: session,
+            message: msgs[msgs.length - 1],
+            history: msgs,
+            providerID: body.providerID,
+            modelID: body.modelID
+          })
+          return c.json(await Session.get(id))
+        },
       )
       .get(
         "/session/:id/message",

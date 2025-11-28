@@ -68,6 +68,9 @@ import type {
   SessionSummarizeData,
   SessionSummarizeResponses,
   SessionSummarizeErrors,
+  SessionTitleData,
+  SessionTitleResponses,
+  SessionTitleErrors,
   SessionMessagesData,
   SessionMessagesResponses,
   SessionMessagesErrors,
@@ -488,6 +491,20 @@ class Session extends _HeyApiClient {
   public summarize<ThrowOnError extends boolean = false>(options: Options<SessionSummarizeData, ThrowOnError>) {
     return (options.client ?? this._client).post<SessionSummarizeResponses, SessionSummarizeErrors, ThrowOnError>({
       url: "/session/{id}/summarize",
+      ...options,
+      headers: {
+        "Content-Type": "application/json",
+        ...options.headers,
+      },
+    })
+  }
+
+  /**
+   * Generate title for the session
+   */
+  public title<ThrowOnError extends boolean = false>(options: Options<SessionTitleData, ThrowOnError>) {
+    return (options.client ?? this._client).post<SessionTitleResponses, SessionTitleErrors, ThrowOnError>({
+      url: "/session/{id}/title",
       ...options,
       headers: {
         "Content-Type": "application/json",

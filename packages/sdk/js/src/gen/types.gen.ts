@@ -2206,6 +2206,45 @@ export type SessionSummarizeResponses = {
 
 export type SessionSummarizeResponse = SessionSummarizeResponses[keyof SessionSummarizeResponses]
 
+export type SessionTitleData = {
+  body?: {
+    providerID: string
+    modelID: string
+  }
+  path: {
+    /**
+     * Session ID
+     */
+    id: string
+  }
+  query?: {
+    directory?: string
+  }
+  url: "/session/{id}/title"
+}
+
+export type SessionTitleErrors = {
+  /**
+   * Bad request
+   */
+  400: BadRequestError
+  /**
+   * Not found
+   */
+  404: NotFoundError
+}
+
+export type SessionTitleError = SessionTitleErrors[keyof SessionTitleErrors]
+
+export type SessionTitleResponses = {
+  /**
+   * Generate title for the session
+   */
+  200: Session
+}
+
+export type SessionTitleResponse = SessionTitleResponses[keyof SessionTitleResponses]
+
 export type SessionMessagesData = {
   body?: never
   path: {
