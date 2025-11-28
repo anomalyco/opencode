@@ -802,7 +802,7 @@ export type KeybindsConfig = {
    */
   messages_toggle_conceal?: string
   /**
-   * Toggle action block visibility in messages
+   * Toggle tool usage visibility in messages
    */
   messages_toggle_actions?: string
   /**
@@ -1014,7 +1014,7 @@ export type Config = {
      */
     diff_style?: "auto" | "stacked"
     /**
-     * Hide successful action blocks by default. Actions requiring permission or that fail are always visible. Can be toggled with keybind.
+     * Hide successful tool usage by default. Tool usage requiring permission or that fails are always visible. Can be toggled with keybind.
      */
     hide_successful_actions?: boolean
   }

@@ -114,7 +114,7 @@ export function Session() {
   const [conceal, setConceal] = createSignal(true)
   const [showThinking, setShowThinking] = createSignal(true)
   const [showTimestamps, setShowTimestamps] = createSignal(kv.get("timestamps", "hide") === "show")
-  const [showActions, setShowActions] = createSignal(kv.get("actions", true))
+  const [showActions, setShowActions] = createSignal(kv.get("tool_usage_visibility", true))
 
   const wide = createMemo(() => dimensions().width > 120)
   const sidebarVisible = createMemo(() => {
@@ -441,14 +441,14 @@ export function Session() {
       },
     },
     {
-      title: showActions() ? "Hide action blocks" : "Show action blocks",
+      title: showActions() ? "Hide tool usage" : "Show tool usage",
       value: "session.toggle.actions",
       keybind: "messages_toggle_actions" as any,
       category: "Session",
       onSelect: (dialog) => {
         const newValue = !showActions()
         setShowActions(newValue)
-        kv.set("actions", newValue)
+        kv.set("tool_usage_visibility", newValue)
         dialog.clear()
       },
     },

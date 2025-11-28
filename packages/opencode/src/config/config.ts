@@ -429,7 +429,7 @@ export namespace Config {
         .string()
         .optional()
         .default("<leader>j")
-        .describe("Toggle action block visibility in messages"),
+        .describe("Toggle tool usage visibility in messages"),
       model_list: z.string().optional().default("<leader>m").describe("List available models"),
       model_cycle_recent: z.string().optional().default("f2").describe("Next recently used model"),
       model_cycle_recent_reverse: z.string().optional().default("shift+f2").describe("Previous recently used model"),
@@ -470,7 +470,7 @@ export namespace Config {
       .optional()
       .default(true)
       .describe(
-        "Hide successful action blocks by default. Actions requiring permission or that fail are always visible. Can be toggled with keybind.",
+        "Hide successful tool usage by default. Tool usage requiring permission or that fails are always visible. Can be toggled with keybind.",
       ),
   })
 
