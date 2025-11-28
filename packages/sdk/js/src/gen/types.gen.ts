@@ -802,10 +802,6 @@ export type KeybindsConfig = {
    */
   messages_toggle_conceal?: string
   /**
-   * Toggle tool usage visibility in messages
-   */
-  messages_toggle_actions?: string
-  /**
    * List available models
    */
   model_list?: string
@@ -1013,10 +1009,6 @@ export type Config = {
      * Control diff rendering style: 'auto' adapts to terminal width, 'stacked' always shows single column
      */
     diff_style?: "auto" | "stacked"
-    /**
-     * Hide successful tool usage by default. Tool usage requiring permission or that fails are always visible. Can be toggled with keybind.
-     */
-    hide_successful_actions?: boolean
   }
   /**
    * Command configuration, see https://opencode.ai/docs/commands

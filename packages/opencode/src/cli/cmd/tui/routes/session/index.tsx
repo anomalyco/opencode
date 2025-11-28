@@ -443,7 +443,6 @@ export function Session() {
     {
       title: showActions() ? "Hide tool usage" : "Show tool usage",
       value: "session.toggle.actions",
-      keybind: "messages_toggle_actions" as any,
       category: "Session",
       onSelect: (dialog) => {
         const newValue = !showActions()
