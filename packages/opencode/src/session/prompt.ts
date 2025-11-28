@@ -473,13 +473,32 @@ export namespace SessionPrompt {
         agent,
         system: lastUser.system,
       })
-      const tools = await resolveTools({
+      const { tools, synthInstructions } = await resolveTools({
         agent,
         sessionID,
         model: lastUser.model,
         tools: lastUser.tools,
         processor,
       })
+
+      // Inject synth instructions into last user message
+      if (synthInstructions.length > 0) {
+        const userMessage = msgs.findLast((msg) => msg.info.role === "user")
+        if (userMessage) {
+          const text = synthInstructions
+            .map((s) => `<tool-instruction tool="${s.id}">\n${s.instruction}\n</tool-instruction>`)
+            .join("\n\n")
+          userMessage.parts.push({
+            id: Identifier.ascending("part"),
+            messageID: userMessage.info.id,
+            sessionID: userMessage.info.sessionID,
+            type: "text",
+            text: `<system-reminder>\n${text}\n</system-reminder>`,
+            synthetic: true,
+          })
+        }
+      }
+
       const provider = await Provider.getProvider(model.providerID)
       const params = await Plugin.trigger(
         "chat.params",
@@ -674,6 +693,7 @@ export namespace SessionPrompt {
     processor: SessionProcessor.Info
   }) {
     const tools: Record<string, AITool> = {}
+    const synthInstructions: { id: string; instruction: string }[] = []
     const enabledTools = pipe(
       input.agent.tools,
       mergeDeep(await ToolRegistry.enabled(input.model.providerID, input.model.modelID, input.agent)),
@@ -681,6 +701,9 @@ export namespace SessionPrompt {
     )
     for (const item of await ToolRegistry.tools(input.model.providerID, input.model.modelID)) {
       if (Wildcard.all(item.id, enabledTools) === false) continue
+      if (item.synthInstruction) {
+        synthInstructions.push({ id: item.id, instruction: item.synthInstruction })
+      }
       const schema = ProviderTransform.schema(
         input.model.providerID,
         input.model.modelID,
@@ -812,7 +835,7 @@ export namespace SessionPrompt {
       }
       tools[key] = item
     }
-    return tools
+    return { tools, synthInstructions }
   }
 
   async function createUserMessage(input: PromptInput) {

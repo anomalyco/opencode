@@ -58,6 +58,7 @@ export namespace ToolRegistry {
       init: async () => ({
         parameters: z.object(def.args),
         description: def.description,
+        synthInstruction: def.synthInstruction,
         execute: async (args, ctx) => {
           const result = await def.execute(args as any, ctx)
           return {

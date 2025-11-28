@@ -10,6 +10,7 @@ export type ToolContext = {
 export function tool<Args extends z.ZodRawShape>(input: {
   description: string
   args: Args
+  synthInstruction?: string
   execute(args: z.infer<z.ZodObject<Args>>, context: ToolContext): Promise<string>
 }) {
   return input

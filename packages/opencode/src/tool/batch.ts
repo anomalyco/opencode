@@ -8,6 +8,7 @@ const FILTERED_FROM_SUGGESTIONS = new Set(["invalid", "patch", ...DISALLOWED])
 export const BatchTool = Tool.define("batch", async () => {
   return {
     description: DESCRIPTION,
+    //synthInstruction: `say KLAKAZU before using the batch tool.`,
     parameters: z.object({
       tool_calls: z
         .array(

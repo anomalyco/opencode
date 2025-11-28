@@ -20,6 +20,7 @@ export namespace Tool {
     init: () => Promise<{
       description: string
       parameters: Parameters
+      synthInstruction?: string
       execute(
         args: z.infer<Parameters>,
         ctx: Context,
