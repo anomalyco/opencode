@@ -269,6 +269,13 @@ export namespace Provider {
           instanceUrl,
         },
         async getModel(sdk: any, modelID: string) {
+          // Use LSP-based model for duo-chat-lsp
+          if (modelID === 'duo-chat-lsp' && sdk.lspAgenticChat) {
+            log.info("Creating LSP agentic model", { modelID, workingDirectory: Instance.directory })
+            return sdk.lspAgenticChat(modelID, {
+              workingDirectory: Instance.directory,
+            })
+          }
           // Use anthropicChat which connects to GitLab's Anthropic proxy
           // This provides native Claude tool calling support
           if (sdk.anthropicChat) {
@@ -384,6 +391,30 @@ export namespace Provider {
             limit: {
               context: 128000,
               output: 4096,
+            },
+            modalities: {
+              input: ["text"],
+              output: ["text"],
+            },
+          },
+          "duo-chat-lsp": {
+            id: "duo-chat-lsp",
+            name: "GitLab Duo Workflow (LSP)",
+            release_date: "2024-01-01",
+            attachment: false,
+            reasoning: false,
+            temperature: false,
+            tool_call: true,
+            cost: {
+              input: 0,
+              output: 0,
+              cache_read: 0,
+              cache_write: 0,
+            },
+            options: {},
+            limit: {
+              context: 128000,
+              output: 16384,
             },
             modalities: {
               input: ["text"],

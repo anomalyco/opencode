@@ -1165,4 +1165,60 @@ export namespace LSPServer {
       }
     },
   }
+
+  export const GitLab: Info = {
+    id: "gitlab-lsp",
+    extensions: [], // Works with all file types
+    root: async (file) => Instance.directory,
+    async spawn(root) {
+      const bin = Bun.which("gitlab-lsp")
+      if (!bin) {
+        log.info("gitlab-lsp not found, please install it first")
+        log.info("Install via: brew install gitlab-lsp or npm install -g @gitlab-org/gitlab-lsp")
+        return
+      }
+
+      const gitlabToken = process.env.GITLAB_TOKEN || process.env.GITLAB_API_TOKEN
+      if (!gitlabToken) {
+        log.warn("GITLAB_TOKEN or GITLAB_API_TOKEN environment variable not set")
+        log.info("Get a token from: https://gitlab.com/-/user_settings/personal_access_tokens")
+      }
+
+      const gitlabUrl = process.env.GITLAB_INSTANCE_URL || "https://gitlab.com"
+
+      log.info("spawning gitlab-lsp server", { bin, gitlabUrl })
+
+      const proc = spawn(bin, ["--stdio"], {
+        cwd: root,
+        env: {
+          ...process.env,
+          GITLAB_TOKEN: gitlabToken,
+          GITLAB_INSTANCE_URL: gitlabUrl,
+        },
+      })
+
+      return {
+        process: proc,
+        initialization: {
+          baseUrl: gitlabUrl,
+          token: gitlabToken,
+          duo: {
+            workflow: {
+              enabled: true,
+            },
+            agentPlatform: {
+              enabled: true,
+              connectionType: "websocket",
+            },
+          },
+          duoChat: {
+            enabled: true,
+          },
+          telemetry: {
+            enabled: false,
+          },
+        },
+      }
+    },
+  }
 }

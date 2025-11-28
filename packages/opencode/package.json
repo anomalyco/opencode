@@ -45,7 +45,7 @@
     "@ai-sdk/amazon-bedrock": "3.0.57",
     "@ai-sdk/anthropic": "2.0.45",
     "@ai-sdk/azure": "2.0.73",
-    "@ai-sdk/gitlab": "git+https://gitlab.com/vglafirov/gitlab-ai-provider.git#main",
+    "@ai-sdk/gitlab": "file:../../../gitlab-ai-provider",
     "@ai-sdk/google": "2.0.42",
     "@ai-sdk/google-vertex": "3.0.74",
     "@ai-sdk/mcp": "0.0.8",
