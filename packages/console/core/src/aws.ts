@@ -22,6 +22,7 @@ export namespace AWS {
       to: z.string(),
       subject: z.string(),
       body: z.string(),
+      replyTo: z.string().optional(),
     }),
     async (input) => {
       const res = await createClient().fetch("https://email.us-east-1.amazonaws.com/v2/email/outbound-emails", {
@@ -35,6 +36,7 @@ export namespace AWS {
           Destination: {
             ToAddresses: [input.to],
           },
+          ...(input.replyTo && { ReplyToAddresses: [input.replyTo] }),
           Content: {
             Simple: {
               Subject: {
