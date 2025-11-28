@@ -70,7 +70,7 @@ describe("Tool Translation (with fixtures)", () => {
             toolCallId: "tool-status-test",
             status: "pending",
             title: "Test Tool",
-            kind: "test",
+            kind: "other",
             locations: [],
             rawInput: { test: "input" }
           }
@@ -117,7 +117,7 @@ describe("Tool Translation (with fixtures)", () => {
             toolCallId: "tool-fail-test",
             status: "pending",
             title: "Failing Tool",
-            kind: "test",
+            kind: "other",
             locations: [],
             rawInput: {}
           }
@@ -175,7 +175,7 @@ describe("Tool Translation (with fixtures)", () => {
             toolCallId: "tool-2",
             status: "pending",
             title: "Second Tool",
-            kind: "write",
+            kind: "edit",
             locations: [],
             rawInput: {}
           }
@@ -211,7 +211,7 @@ describe("Tool Translation (with fixtures)", () => {
             toolCallId: "tool-content-test",
             status: "pending",
             title: "Content Tool",
-            kind: "test",
+            kind: "other",
             locations: [],
             rawInput: {},
             content: []
@@ -224,7 +224,7 @@ describe("Tool Translation (with fixtures)", () => {
             toolCallId: "tool-content-test",
             status: "in_progress",
             content: [
-              { type: "text", text: "Processing..." }
+              { type: "content", content: { type: "text", text: "Processing..." } }
             ]
           }
         },
@@ -235,7 +235,7 @@ describe("Tool Translation (with fixtures)", () => {
             toolCallId: "tool-content-test",
             status: "in_progress",
             content: [
-              { type: "text", text: "Still processing..." }
+              { type: "content", content: { type: "text", text: "Still processing..." } }
             ]
           }
         },

@@ -29,7 +29,7 @@ interface CapturedFixture {
  * Capture SessionNotifications for a given prompt
  */
 async function captureNotifications(
-  client: ACPClient,
+  client: ACPClient.Instance,
   sessionId: string,
   prompt: string,
   description: string,

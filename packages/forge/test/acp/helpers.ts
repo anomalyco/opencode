@@ -98,7 +98,7 @@ export class EventCapture {
  * Claude Code ACP subprocess manager for integration tests
  */
 export class ClaudeCliManager {
-  private client: ACPClient | null = null
+  private client: ACPClient.Instance | null = null
   private sessionId: string | null = null
   private eventCapture = new EventCapture()
 
@@ -159,7 +159,7 @@ export class ClaudeCliManager {
   /**
    * Get the client instance
    */
-  getClient(): ACPClient {
+  getClient(): ACPClient.Instance {
     if (!this.client) {
       throw new Error("ClaudeCliManager not started")
     }
@@ -208,8 +208,15 @@ export async function createClaudeCli(): Promise<ClaudeCliManager & AsyncDisposa
 export function accumulateText(events: SessionNotification[]): string {
   return events
     .filter(e => e.update.sessionUpdate === "agent_message_chunk")
-    .filter(e => e.update.content.type === "text")
-    .map(e => e.update.content.text)
+    .map(e => {
+      const update = e.update
+      if (update.sessionUpdate === "agent_message_chunk" &&
+          !Array.isArray(update.content) &&
+          update.content?.type === "text") {
+        return update.content.text
+      }
+      return ""
+    })
     .join("")
 }
 
@@ -219,8 +226,15 @@ export function accumulateText(events: SessionNotification[]): string {
 export function accumulateThoughts(events: SessionNotification[]): string {
   return events
     .filter(e => e.update.sessionUpdate === "agent_thought_chunk")
-    .filter(e => e.update.content.type === "text")
-    .map(e => e.update.content.text)
+    .map(e => {
+      const update = e.update
+      if (update.sessionUpdate === "agent_thought_chunk" &&
+          !Array.isArray(update.content) &&
+          update.content?.type === "text") {
+        return update.content.text
+      }
+      return ""
+    })
     .join("")
 }
 
@@ -235,10 +249,17 @@ export function extractToolCalls(events: SessionNotification[]): Array<{
 }> {
   return events
     .filter(e => e.update.sessionUpdate === "tool_call")
-    .map(e => ({
-      id: e.update.toolCallId,
-      kind: e.update.kind,
-      title: e.update.title,
-      status: e.update.status
-    }))
+    .map(e => {
+      const update = e.update
+      if (update.sessionUpdate === "tool_call") {
+        return {
+          id: update.toolCallId,
+          kind: update.kind,
+          title: update.title,
+          status: update.status
+        }
+      }
+      return { id: "", kind: undefined, title: "", status: undefined }
+    })
+    .filter(call => call.id !== "")
 }
