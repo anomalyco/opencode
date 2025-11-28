@@ -22,6 +22,7 @@ export const TuiEvent = {
           "prompt.clear",
           "prompt.submit",
           "agent.cycle",
+          "config.reload",
         ]),
         z.string(),
       ]),
@@ -34,6 +35,13 @@ export const TuiEvent = {
       message: z.string(),
       variant: z.enum(["info", "success", "warning", "error"]),
       duration: z.number().default(5000).optional().describe("Duration in milliseconds"),
+    }),
+  ),
+  ConfigReloaded: Bus.event(
+    "tui.config.reloaded",
+    z.object({
+      success: z.boolean(),
+      message: z.string().optional(),
     }),
   ),
 }

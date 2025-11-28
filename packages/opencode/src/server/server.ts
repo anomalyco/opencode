@@ -192,6 +192,52 @@ export namespace Server {
           return c.json(config)
         },
       )
+      .post(
+        "/config/reload",
+        describeRoute({
+          description: "Reload config from disk (including MCP servers)",
+          operationId: "config.reload",
+          responses: {
+            200: {
+              description: "Config reloaded successfully",
+              content: {
+                "application/json": {
+                  schema: resolver(
+                    z.object({
+                      success: z.boolean(),
+                      message: z.string().optional(),
+                      config: Config.Info.optional(),
+                    }).meta({ ref: "ConfigReloadResult" })
+                  ),
+                },
+              },
+            },
+            ...errors(400),
+          },
+        }),
+        async (c) => {
+          try {
+            // Dispose current instance state (clears config cache, MCP connections, etc.)
+            await Instance.dispose()
+            // Re-fetch config (will re-read opencode.json and restart MCP servers)
+            const config = await Config.get()
+            // Trigger MCP reconnection by accessing MCP status
+            const mcpStatus = await MCP.status()
+            log.info("config reloaded", { mcpServers: Object.keys(mcpStatus).length })
+            return c.json({
+              success: true,
+              message: `Config reloaded. ${Object.keys(mcpStatus).length} MCP server(s) configured.`,
+              config,
+            })
+          } catch (error) {
+            log.error("config reload failed", { error })
+            return c.json({
+              success: false,
+              message: error instanceof Error ? error.message : String(error),
+            })
+          }
+        },
+      )
       .get(
         "/experimental/tool/ids",
         describeRoute({

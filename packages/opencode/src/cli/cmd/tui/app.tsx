@@ -7,7 +7,7 @@ import { Installation } from "@/installation"
 import { Global } from "@/global"
 import { DialogProvider, useDialog } from "@tui/ui/dialog"
 import { SDKProvider, useSDK } from "@tui/context/sdk"
-import { SyncProvider } from "@tui/context/sync"
+import { SyncProvider, useSync } from "@tui/context/sync"
 import { LocalProvider, useLocal } from "@tui/context/local"
 import { DialogModel } from "@tui/component/dialog-model"
 import { DialogStatus } from "@tui/component/dialog-status"
@@ -171,7 +171,9 @@ function App() {
   const local = useLocal()
   const kv = useKV()
   const command = useCommandDialog()
-  const { event } = useSDK()
+  const sdk = useSDK()
+  const { event } = sdk
+  const sync = useSync()
   const toast = useToast()
   const { theme, mode, setMode } = useTheme()
   const exit = useExit()
@@ -290,6 +292,59 @@ function App() {
         dialog.replace(() => <DialogHelp />)
       },
       category: "System",
+    },
+    {
+      title: "Reload config (opencode.json)",
+      value: "config.reload",
+      category: "System",
+      onSelect: async () => {
+        dialog.clear()
+        toast.show({
+          variant: "info",
+          message: "Reloading config...",
+          duration: 2000,
+        })
+        try {
+          // Call the reload endpoint directly since SDK may not have it yet
+          const baseUrl = sdk.baseUrl
+          const directory = encodeURIComponent(process.cwd())
+          const response = await fetch(`${baseUrl}/config/reload?directory=${directory}`, {
+            method: "POST",
+          })
+          const result = await response.json()
+          
+          if (result.success) {
+            // Refresh sync data after config reload
+            const [providers, agents, config, mcpStatus] = await Promise.all([
+              sdk.client.config.providers(),
+              sdk.client.app.agents(),
+              sdk.client.config.get(),
+              sdk.client.mcp.status(),
+            ])
+            sync.set("provider", providers.data!.providers)
+            sync.set("agent", agents.data ?? [])
+            sync.set("config", config.data!)
+            sync.set("mcp", mcpStatus.data!)
+            toast.show({
+              variant: "success",
+              message: result.message || "Config reloaded successfully",
+              duration: 3000,
+            })
+          } else {
+            toast.show({
+              variant: "error",
+              message: result.message || "Failed to reload config",
+              duration: 5000,
+            })
+          }
+        } catch (error) {
+          toast.show({
+            variant: "error",
+            message: `Reload failed: ${error instanceof Error ? error.message : String(error)}`,
+            duration: 5000,
+          })
+        }
+      },
     },
     {
       title: "Exit the app",
