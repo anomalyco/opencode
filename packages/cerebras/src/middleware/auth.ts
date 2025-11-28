@@ -13,16 +13,7 @@ import { UI } from "../cli/ui"
 /**
  * Commands that don't require authentication
  */
-const UNAUTHENTICATED_COMMANDS = [
-  'auth',
-  'login',
-  'help',
-  'version',
-  '--help',
-  '-h',
-  '--version',
-  '-v',
-]
+const UNAUTHENTICATED_COMMANDS = ["auth", "login", "help", "version", "--help", "-h", "--version", "-v"]
 
 /**
  * Check if command requires authentication
@@ -34,9 +25,7 @@ function requiresAuth(argv: string[]): boolean {
   const command = argv[0]
 
   // Check if it's an unauthenticated command
-  return !UNAUTHENTICATED_COMMANDS.some(cmd =>
-    command === cmd || command.startsWith(cmd)
-  )
+  return !UNAUTHENTICATED_COMMANDS.some((cmd) => command === cmd || command.startsWith(cmd))
 }
 
 /**
@@ -54,17 +43,17 @@ export async function authMiddleware(opts: any) {
   // Check if Clerk is configured
   if (!ClerkConfigManager.isConfigured()) {
     // In development, allow unauthenticated access with warning
-    if (process.env.NODE_ENV === 'development' || process.env.CEREBRAS_SKIP_AUTH === 'true') {
-      console.warn('⚠️  Running in unauthenticated mode (development)')
+    if (process.env.NODE_ENV === "development" || process.env.CEREBRAS_SKIP_AUTH === "true") {
+      console.warn("⚠️  Running in unauthenticated mode (development)")
       return
     }
 
-    UI.error('\n⛔ Clerk is not configured\n')
-    prompts.log.error('Missing required environment variables:')
-    prompts.log.info('  - CLERK_PUBLISHABLE_KEY')
-    prompts.log.info('  - CLERK_SECRET_KEY')
-    prompts.log.message('\nPlease configure Clerk to use Cerebras.')
-    prompts.log.message('Visit: https://dashboard.clerk.com\n')
+    UI.error("\n⛔ Clerk is not configured\n")
+    prompts.log.error("Missing required environment variables:")
+    prompts.log.info("  - CLERK_PUBLISHABLE_KEY")
+    prompts.log.info("  - CLERK_SECRET_KEY")
+    prompts.log.message("\nPlease configure Clerk to use Cerebras.")
+    prompts.log.message("Visit: https://dashboard.clerk.com\n")
     process.exit(1)
   }
 
@@ -73,8 +62,8 @@ export async function authMiddleware(opts: any) {
 
   if (!isAuthenticated) {
     UI.empty()
-    prompts.log.warn('You are not logged in')
-    prompts.log.message('\nTo use Cerebras, you need to authenticate.')
+    prompts.log.warn("You are not logged in")
+    prompts.log.message("\nTo use Cerebras, you need to authenticate.")
     prompts.log.message(`Run: ${UI.Style.TEXT_BOLD}cerebras auth login${UI.Style.TEXT_DIM}\n`)
 
     const shouldLogin = await prompts.confirm({
@@ -83,7 +72,7 @@ export async function authMiddleware(opts: any) {
     })
 
     if (prompts.isCancel(shouldLogin) || !shouldLogin) {
-      prompts.outro('Authentication required')
+      prompts.outro("Authentication required")
       process.exit(1)
     }
 
@@ -96,16 +85,16 @@ export async function authMiddleware(opts: any) {
 
       if (session) {
         await CredentialStorage.updateSession(session)
-        prompts.outro('Login successful! Starting Cerebras...\n')
+        prompts.outro("Login successful! Starting Cerebras...\n")
       } else {
-        prompts.outro('Login failed')
+        prompts.outro("Login failed")
         process.exit(1)
       }
     } catch (error) {
       if (error instanceof UI.CancelledError) {
-        prompts.outro('Login cancelled')
+        prompts.outro("Login cancelled")
       } else {
-        prompts.log.error('Login failed: ' + (error instanceof Error ? error.message : String(error)))
+        prompts.log.error("Login failed: " + (error instanceof Error ? error.message : String(error)))
       }
       process.exit(1)
     }
@@ -121,7 +110,7 @@ export async function authMiddleware(opts: any) {
 
     if (!isValid) {
       UI.empty()
-      prompts.log.warn('Your session has expired')
+      prompts.log.warn("Your session has expired")
       await CredentialStorage.clear()
 
       prompts.log.message(`\nPlease login again: ${UI.Style.TEXT_BOLD}cerebras auth login${UI.Style.TEXT_DIM}\n`)

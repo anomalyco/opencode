@@ -50,6 +50,7 @@ nano .env
 ```
 
 Add your keys:
+
 ```bash
 CLERK_PUBLISHABLE_KEY=pk_test_YOUR_KEY_HERE
 CLERK_SECRET_KEY=sk_test_YOUR_KEY_HERE
@@ -85,6 +86,7 @@ cerebras
 ```
 
 You should see:
+
 ```
 ⚠  You are not logged in
 ? Would you like to login now? › (Y/n)
@@ -130,32 +132,32 @@ If you want to implement the full device authorization flow with a custom backen
 Create `auth-server.js`:
 
 ```javascript
-import { Hono } from 'hono'
-import { createClerkClient } from '@clerk/backend'
+import { Hono } from "hono"
+import { createClerkClient } from "@clerk/backend"
 
 const app = new Hono()
 const clerk = createClerkClient({
-  secretKey: process.env.CLERK_SECRET_KEY
+  secretKey: process.env.CLERK_SECRET_KEY,
 })
 
 // Store device codes in memory (use Redis in production)
 const deviceCodes = new Map()
 
 // Start device authorization
-app.post('/auth/device/authorize', async (c) => {
+app.post("/auth/device/authorize", async (c) => {
   const deviceCode = generateCode(32)
   const userCode = generateUserCode() // e.g., "ABCD-1234"
 
   deviceCodes.set(deviceCode, {
     userCode,
-    status: 'pending',
+    status: "pending",
     createdAt: Date.now(),
   })
 
   return c.json({
     device_code: deviceCode,
     user_code: userCode,
-    verification_uri: 'https://your-app.com/activate',
+    verification_uri: "https://your-app.com/activate",
     verification_uri_complete: `https://your-app.com/activate?code=${userCode}`,
     expires_in: 900,
     interval: 5,
@@ -163,23 +165,23 @@ app.post('/auth/device/authorize', async (c) => {
 })
 
 // Poll for authorization
-app.post('/auth/device/poll', async (c) => {
+app.post("/auth/device/poll", async (c) => {
   const { device_code } = await c.req.json()
   const device = deviceCodes.get(device_code)
 
   if (!device) {
-    return c.json({ error: 'invalid_grant' }, 400)
+    return c.json({ error: "invalid_grant" }, 400)
   }
 
-  if (device.status === 'pending') {
-    return c.json({ error: 'authorization_pending' }, 400)
+  if (device.status === "pending") {
+    return c.json({ error: "authorization_pending" }, 400)
   }
 
-  if (device.status === 'authorized') {
+  if (device.status === "authorized") {
     // Exchange for session
     return c.json({
       access_token: device.sessionToken,
-      token_type: 'bearer',
+      token_type: "bearer",
       expires_in: 2592000, // 30 days
     })
   }
@@ -189,6 +191,7 @@ export default app
 ```
 
 Deploy to:
+
 - **Cloudflare Workers** (free tier)
 - **AWS Lambda** (with API Gateway)
 - **Vercel** (serverless functions)
@@ -206,6 +209,7 @@ Deploy to:
 ### "Clerk is not configured"
 
 Check that:
+
 - `.env` file exists in project root
 - Keys are correctly formatted (no extra spaces)
 - Terminal session has environment variables loaded
@@ -243,6 +247,7 @@ bun install
 ## 🎉 You're Done!
 
 Cerebras now has:
+
 - ✅ User authentication via Clerk
 - ✅ Secure session management
 - ✅ Device authorization flow (CLI-friendly)

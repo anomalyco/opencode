@@ -4,7 +4,7 @@
  * Implements device authorization flow for CLI authentication
  */
 
-import { createClerkClient } from '@clerk/backend'
+import { createClerkClient } from "@clerk/backend"
 import * as prompts from "@clack/prompts"
 import { UI } from "../cli/ui"
 import open from "open"
@@ -87,7 +87,7 @@ export class ClerkAuthProvider {
   async verifySession(sessionToken: string): Promise<boolean> {
     try {
       const session = await this.client.sessions.verifySession(sessionToken, sessionToken)
-      return session.status === 'active'
+      return session.status === "active"
     } catch (error) {
       return false
     }
@@ -140,7 +140,7 @@ export class ClerkAuthProvider {
     let attempts = 0
 
     while (attempts < maxAttempts) {
-      await new Promise(resolve => setTimeout(resolve, auth.interval * 1000))
+      await new Promise((resolve) => setTimeout(resolve, auth.interval * 1000))
 
       const session = await this.pollDeviceAuth(auth.deviceCode)
 
@@ -160,8 +160,8 @@ export class ClerkAuthProvider {
    * Generate a random code
    */
   private generateCode(length: number): string {
-    const chars = 'ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789'
-    let result = ''
+    const chars = "ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789"
+    let result = ""
     for (let i = 0; i < length; i++) {
       result += chars.charAt(Math.floor(Math.random() * chars.length))
     }
@@ -172,16 +172,16 @@ export class ClerkAuthProvider {
    * Generate a user-friendly code (e.g., ABCD-EFGH)
    */
   private generateUserCode(): string {
-    const chars = 'ABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789'
+    const chars = "ABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789"
     const parts = []
     for (let i = 0; i < 2; i++) {
-      let part = ''
+      let part = ""
       for (let j = 0; j < 4; j++) {
         part += chars.charAt(Math.floor(Math.random() * chars.length))
       }
       parts.push(part)
     }
-    return parts.join('-')
+    return parts.join("-")
   }
 
   /**
@@ -197,7 +197,7 @@ export class ClerkAuthProvider {
     // Format: pk_test_xxx or pk_live_xxx
     const match = this.config.publishableKey.match(/^pk_(test|live)_(.+)$/)
     if (!match) {
-      throw new Error('Invalid Clerk publishable key')
+      throw new Error("Invalid Clerk publishable key")
     }
 
     const [, env, subdomain] = match

@@ -29,7 +29,11 @@ export namespace Checkpoint {
 
     try {
       // Check if in git repo
-      const isRepo = await $`git rev-parse --git-dir`.quiet().nothrow().then(() => true).catch(() => false)
+      const isRepo = await $`git rev-parse --git-dir`
+        .quiet()
+        .nothrow()
+        .then(() => true)
+        .catch(() => false)
 
       if (!isRepo) {
         log.warn("not a git repository, skipping checkpoint")
@@ -49,7 +53,10 @@ export namespace Checkpoint {
         return null
       }
 
-      const commit = await $`git rev-parse stash@{0}`.quiet().text().then((s) => s.trim())
+      const commit = await $`git rev-parse stash@{0}`
+        .quiet()
+        .text()
+        .then((s) => s.trim())
 
       // Create lightweight tag for checkpoint
       const tagName = `checkpoint-${input.sessionID}-${Date.now()}`

@@ -92,7 +92,12 @@ export function DialogStatus() {
                 Cache Hit Rate:{" "}
                 <span
                   style={{
-                    fg: metrics().cacheHitRate > 50 ? theme.success : metrics().cacheHitRate > 20 ? theme.warning : theme.textMuted,
+                    fg:
+                      metrics().cacheHitRate > 50
+                        ? theme.success
+                        : metrics().cacheHitRate > 20
+                          ? theme.warning
+                          : theme.textMuted,
                   }}
                 >
                   {metrics().cacheHitRate.toFixed(1)}%

@@ -20,7 +20,7 @@ export class ClerkConfigManager {
 
     if (!publishableKey || !secretKey) {
       throw new Error(
-        'Clerk configuration missing. Please set CLERK_PUBLISHABLE_KEY and CLERK_SECRET_KEY environment variables.'
+        "Clerk configuration missing. Please set CLERK_PUBLISHABLE_KEY and CLERK_SECRET_KEY environment variables.",
       )
     }
 

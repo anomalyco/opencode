@@ -20,12 +20,14 @@ Cerebras requires authentication before use (similar to Claude Code). We use [Cl
 ### 1. Install Cerebras
 
 **Using Homebrew (macOS/Linux):**
+
 ```bash
 brew tap arihantchoudhary/cerebras
 brew install cerebras
 ```
 
 **Using install script:**
+
 ```bash
 # macOS/Linux
 curl -fsSL https://raw.githubusercontent.com/arihantchoudhary/opencode/main/install | bash
@@ -35,6 +37,7 @@ irm https://raw.githubusercontent.com/arihantchoudhary/opencode/main/install.ps1
 ```
 
 **From source:**
+
 ```bash
 git clone https://github.com/arihantchoudhary/opencode.git
 cd opencode
@@ -51,6 +54,7 @@ cerebras
 ```
 
 You'll see:
+
 ```
 ⚠  You are not logged in
 
@@ -109,6 +113,7 @@ nano .env
 ```
 
 Add your Clerk keys:
+
 ```bash
 CLERK_PUBLISHABLE_KEY=pk_test_xxxxxxxxxxxxxxxxx
 CLERK_SECRET_KEY=sk_test_xxxxxxxxxxxxxxxxx
@@ -238,6 +243,7 @@ cerebras
 ### "Clerk is not configured"
 
 **Error:**
+
 ```
 ⛔ Clerk is not configured
 Missing required environment variables:
@@ -246,6 +252,7 @@ Missing required environment variables:
 ```
 
 **Solution:**
+
 1. Check that `.env` file exists
 2. Verify Clerk keys are correct
 3. Restart your terminal/shell
@@ -253,12 +260,14 @@ Missing required environment variables:
 ### "Session has expired"
 
 **Error:**
+
 ```
 ⚠️  Your session has expired
 Please login again: cerebras auth login
 ```
 
 **Solution:**
+
 ```bash
 cerebras auth login
 ```
@@ -266,11 +275,13 @@ cerebras auth login
 ### "Authentication timed out"
 
 **Error:**
+
 ```
 ✖ Authentication timed out
 ```
 
 **Solution:**
+
 - Check your internet connection
 - Verify the verification URL opened correctly
 - Try again: `cerebras auth login`
@@ -298,6 +309,7 @@ bun run dev
 ### Q: Can I use my own authentication system?
 
 **A:** Yes! You can implement a custom authentication provider by:
+
 1. Creating a new provider in `src/auth/`
 2. Implementing the same interface as `ClerkAuthProvider`
 3. Updating `src/middleware/auth.ts` to use your provider
@@ -305,6 +317,7 @@ bun run dev
 ### Q: Where are credentials stored?
 
 **A:** Credentials are stored in:
+
 - **macOS/Linux**: `~/.cerebras/session.json`
 - **Windows**: `%USERPROFILE%\.cerebras\session.json`
 

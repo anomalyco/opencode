@@ -19,12 +19,15 @@ Cerebras Code is an AI-powered coding assistant built specifically for terminal 
 ## Product Vision & Mission
 
 ### Vision
+
 To be the most powerful and flexible terminal-based AI coding assistant that seamlessly integrates into developer workflows, providing provider-agnostic AI capabilities with unmatched speed and user experience.
 
 ### Mission
+
 Democratize AI-assisted development by providing an open-source, terminal-native coding agent that works with any AI provider, supports any programming language, and enhances developer productivity without vendor lock-in.
 
 ### Core Principles
+
 1. **Terminal-First:** Built by terminal enthusiasts (neovim users) for terminal enthusiasts
 2. **Provider Agnostic:** Not coupled to any single AI provider (Claude, OpenAI, Google, local models)
 3. **Open Source:** 100% open source with MIT license
@@ -39,6 +42,7 @@ Democratize AI-assisted development by providing an open-source, terminal-native
 ### Primary Users
 
 #### 1. Terminal Power Users
+
 - **Profile:** Developers who primarily work in terminal environments (vim/neovim, tmux users)
 - **Needs:**
   - Keyboard-driven workflow
@@ -50,6 +54,7 @@ Democratize AI-assisted development by providing an open-source, terminal-native
   - Context switching between editor and AI interface
 
 #### 2. Full-Stack Developers
+
 - **Profile:** Engineers working across multiple languages and frameworks
 - **Needs:**
   - Multi-language support
@@ -60,6 +65,7 @@ Democratize AI-assisted development by providing an open-source, terminal-native
   - Manual code navigation and understanding
 
 #### 3. Platform Engineers & DevOps
+
 - **Profile:** Engineers managing infrastructure, build systems, and deployment pipelines
 - **Needs:**
   - Command execution capabilities
@@ -70,6 +76,7 @@ Democratize AI-assisted development by providing an open-source, terminal-native
   - Documentation and script maintenance
 
 #### 4. Open Source Contributors
+
 - **Profile:** Developers contributing to unfamiliar codebases
 - **Needs:**
   - Code exploration and understanding
@@ -82,6 +89,7 @@ Democratize AI-assisted development by providing an open-source, terminal-native
 ### Secondary Users
 
 #### 5. Enterprise Development Teams
+
 - **Profile:** Organizations requiring secure, self-hosted AI solutions
 - **Needs:**
   - Authentication and access control
@@ -98,6 +106,7 @@ Democratize AI-assisted development by providing an open-source, terminal-native
 ### 1. AI Agent System
 
 #### Build Agent (Default)
+
 - **Purpose:** Full-access agent for active development work
 - **Capabilities:**
   - Read and write files
@@ -113,6 +122,7 @@ Democratize AI-assisted development by providing an open-source, terminal-native
   - Test writing
 
 #### Plan Agent (Read-Only)
+
 - **Purpose:** Analysis and code exploration without modifications
 - **Capabilities:**
   - Read files and directories
@@ -127,6 +137,7 @@ Democratize AI-assisted development by providing an open-source, terminal-native
   - Learning project structure
 
 #### General Sub-Agent
+
 - **Purpose:** Complex searches and multi-step analytical tasks
 - **Invocation:** `@general` in messages
 - **Capabilities:**
@@ -141,6 +152,7 @@ Democratize AI-assisted development by providing an open-source, terminal-native
 ### 2. Developer Tools Integration
 
 #### Language Server Protocol (LSP) Support
+
 - **Out-of-the-box LSP integration**
 - **Features:**
   - Code diagnostics (errors, warnings)
@@ -154,6 +166,7 @@ Democratize AI-assisted development by providing an open-source, terminal-native
   - Language-specific awareness
 
 #### Code Formatters
+
 - **Configurable formatters per language**
 - **Support for:**
   - Prettier (JavaScript/TypeScript)
@@ -164,6 +177,7 @@ Democratize AI-assisted development by providing an open-source, terminal-native
 - **Auto-formatting on save**
 
 #### Code Search Tools
+
 - **Grep:** Pattern-based content search
 - **Glob:** File pattern matching
 - **CodeSearch:** Intelligent semantic search
@@ -172,6 +186,7 @@ Democratize AI-assisted development by providing an open-source, terminal-native
 ### 3. Terminal User Interface (TUI)
 
 #### Visual Design
+
 - **Technology:** Built with SolidJS and opentui framework
 - **Responsive layout:** Adapts to terminal size
 - **Split-pane design:** Code preview alongside chat
@@ -180,6 +195,7 @@ Democratize AI-assisted development by providing an open-source, terminal-native
 #### Branding & Theming
 
 ##### Logo Implementation
+
 - **ASCII Art Logo:**
   ```
   █▀▀▀ █▀▀ █▀▀█ █▀▀ █▀▀▄ █▀▀█ █▀▀█ █▀▀▀
@@ -198,6 +214,7 @@ Democratize AI-assisted development by providing an open-source, terminal-native
   - Consistent across all interfaces
 
 ##### Animation System
+
 - **Typewriter Effect:**
   - Used for logo reveal on startup
   - Progressive character unveiling
@@ -212,6 +229,7 @@ Democratize AI-assisted development by providing an open-source, terminal-native
   - 0.4s duration with ease-out timing
 
 ##### Theme System
+
 - **Built-in Themes:**
   - Solarized
   - Dracula
@@ -226,12 +244,14 @@ Democratize AI-assisted development by providing an open-source, terminal-native
 - **Theme Switching:** Runtime theme changes without restart
 
 #### Keyboard Navigation
+
 - **Tab:** Switch between Build/Plan modes
 - **@:** File fuzzy search
 - **Ctrl+C:** Cancel operations
 - **Custom Keybinds:** User-configurable shortcuts
 
 #### Visual Feedback
+
 - **Spinner Indicators:** Active operations
 - **Progress Bars:** Long-running tasks
 - **Status Messages:** Clear error and success states
@@ -240,6 +260,7 @@ Democratize AI-assisted development by providing an open-source, terminal-native
 ### 4. Multi-Provider AI Support
 
 #### Supported Providers
+
 1. **Cerebras Zen** (Recommended)
    - Curated, tested models
    - Optimized pricing
@@ -267,6 +288,7 @@ Democratize AI-assisted development by providing an open-source, terminal-native
    - Self-hosted options
 
 #### Provider Configuration
+
 - **API Key Management:** Secure credential storage
 - **Model Selection:** Per-provider model configuration
 - **Token Limits:** Configurable context/output windows
@@ -275,24 +297,28 @@ Democratize AI-assisted development by providing an open-source, terminal-native
 ### 5. Advanced Features
 
 #### Session Management
+
 - **Persistent Conversations:** Resume previous sessions
 - **Session History:** Browse and restore past conversations
 - **Undo/Redo:** Revert changes with `/undo` and `/redo` commands
 - **Session Sharing:** Generate shareable links with `/share`
 
 #### Git Integration
+
 - **Commit Creation:** AI-assisted commit messages
 - **PR Generation:** Automatic pull request creation
 - **Branch Management:** Intelligent branch operations
 - **Diff Analysis:** Understanding changes across commits
 
 #### Workspace Features
+
 - **Project Initialization:** Auto-generate `AGENTS.md` with `/init`
 - **Multi-file Operations:** Batch edits across codebase
 - **Dependency Management:** Install and update packages
 - **Test Execution:** Run and debug test suites
 
 #### Image Support
+
 - **Drag-and-Drop:** Add images to prompts via terminal
 - **Multimodal Context:** Reference UI designs, diagrams
 - **Screenshot Analysis:** Debug visual issues
@@ -304,6 +330,7 @@ Democratize AI-assisted development by providing an open-source, terminal-native
 ### Architecture
 
 #### Client-Server Design
+
 ```
 ┌─────────────────────────────────────────────┐
 │           Terminal UI (TUI)                 │
@@ -327,6 +354,7 @@ Democratize AI-assisted development by providing an open-source, terminal-native
 ```
 
 #### Technology Stack
+
 - **Runtime:** Bun 1.3+ (for blazing-fast performance)
 - **Language:** TypeScript 5.8+
 - **UI Framework:** SolidJS 1.9+ with opentui
@@ -335,6 +363,7 @@ Democratize AI-assisted development by providing an open-source, terminal-native
 - **Type Checking:** Native TypeScript compiler
 
 #### Package Structure
+
 ```
 packages/
 ├── cerebras/          # Core CLI and server logic
@@ -352,12 +381,14 @@ packages/
 #### Core Modules
 
 ##### Session Processing (`/src/session/`)
+
 - **Message Handling:** MessageV2 protocol
 - **Retry Logic:** Exponential backoff with jitter
 - **Rate Limiting:** 429 detection and graceful degradation
 - **Token Management:** Context window optimization
 
 ##### Tool System (`/src/tool/`)
+
 - **Read/Write/Edit:** File operations
 - **Bash:** Command execution
 - **Grep/Glob:** File search
@@ -367,6 +398,7 @@ packages/
 - **Batch:** Multi-operation efficiency
 
 ##### Configuration System (`/src/config/`)
+
 - **Hierarchical Loading:**
   1. Global config (`~/.cerebras/`)
   2. Worktree config (`.cerebras/`)
@@ -378,6 +410,7 @@ packages/
 - **Dynamic Plugins:** Runtime plugin loading
 
 ##### Provider System (`/src/provider/`)
+
 - **Provider Registry:** Dynamic provider loading
 - **Model Configuration:** Per-model token limits
 - **Custom Headers:** Client identification
@@ -387,18 +420,21 @@ packages/
 ### Performance Requirements
 
 #### Response Time
+
 - **Initial Load:** < 2 seconds (cold start)
 - **Agent Response:** < 500ms (initial token)
 - **File Operations:** < 100ms (local files)
 - **LSP Diagnostics:** < 200ms (real-time feedback)
 
 #### Resource Usage
+
 - **Memory:** < 200MB idle, < 1GB active
 - **CPU:** Minimal background usage
 - **Disk:** < 100MB installation size
 - **Network:** Efficient token usage, request batching
 
 #### Scalability
+
 - **Large Codebases:** Support for 100k+ files
 - **Long Sessions:** Handle hours-long conversations
 - **Concurrent Operations:** Multiple file edits
@@ -407,23 +443,27 @@ packages/
 ### Rate Limit & Retry System
 
 #### Retry Budget
+
 - **Maximum Attempts:** 5 retries per request
 - **Budget Enforcement:** Session-level tracking
 - **Fail-Fast:** Clear error after budget exhausted
 
 #### Exponential Backoff
+
 - **Initial Delay:** 2 seconds
 - **Backoff Factor:** 2x multiplier
 - **Maximum Delay:** 30 seconds (without headers)
 - **Jitter:** 10% randomization to prevent thundering herd
 
 #### 429 Rate Limit Handling
+
 - **Detection:** Explicit status code checking
 - **Aggressive Backoff:** Faster ramp-up for rate limits (4s, 8s, 16s)
 - **Header Respect:** Honor `Retry-After` and `retry-after-ms` headers
 - **User Messaging:** Clear, actionable error messages
 
 #### Status Updates
+
 ```typescript
 {
   type: "retry",
@@ -436,6 +476,7 @@ packages/
 ### Security & Privacy
 
 #### Credential Storage
+
 - **Location:**
   - macOS/Linux: `~/.cerebras/session.json`
   - Windows: `%USERPROFILE%\.cerebras\session.json`
@@ -444,6 +485,7 @@ packages/
 - **Auto-Refresh:** Token renewal before expiration
 
 #### Data Handling
+
 - **Local-First:** All code remains on user machine
 - **Opt-In Sharing:** Sessions not shared by default
 - **No Telemetry:** No tracking without consent
@@ -456,6 +498,7 @@ packages/
 ### Branding Guidelines
 
 #### Color Palette
+
 - **Primary:** `#f05a28` (Cerebras Orange)
   - Logo accent
   - Active elements
@@ -467,11 +510,13 @@ packages/
 - **Background:** Theme-dependent
 
 #### Typography
+
 - **Monospace:** Required for terminal display
 - **ASCII Art:** Block characters (█, ▀, ▄, etc.)
 - **Consistent Spacing:** Aligned columns and borders
 
 #### Logo Usage
+
 1. **Startup Screen:**
    - Full ASCII logo with typewriter animation
    - Version number in bottom-right
@@ -486,6 +531,7 @@ packages/
    - Responsive to color scheme
 
 #### Animation Guidelines
+
 - **Purpose:** Enhance UX without slowing down
 - **Duration:** Keep under 1 second for most animations
 - **Interruption:** Allow users to cancel/skip
@@ -495,6 +541,7 @@ packages/
 ### User Experience Flows
 
 #### First-Time Setup
+
 ```
 1. Install Cerebras
    ↓
@@ -514,6 +561,7 @@ packages/
 ```
 
 #### Typical Workflow
+
 ```
 1. Open terminal in project
    ↓
@@ -531,6 +579,7 @@ packages/
 ```
 
 #### Error Recovery
+
 ```
 1. Error occurs (rate limit, network, etc.)
    ↓
@@ -546,6 +595,7 @@ packages/
 ```
 
 ### Accessibility
+
 - **Keyboard-Only:** All features accessible via keyboard
 - **Screen Readers:** Meaningful text output (no emoji-only indicators)
 - **High Contrast:** Theme support for visibility
@@ -569,6 +619,7 @@ packages/
 ### Authentication Providers
 
 #### 1. Clerk (Primary)
+
 - **Purpose:** User authentication and session management
 - **Flow:** Device authorization grant (OAuth 2.0)
 - **Methods:**
@@ -578,6 +629,7 @@ packages/
 - **Free Tier:** 10,000 MAU (sufficient for most users)
 
 #### 2. Custom Providers
+
 - **Extensible:** Plugin-based authentication
 - **Interface:** Standard auth provider contract
 - **Examples:** Custom OAuth, SAML, LDAP (enterprise)
@@ -585,6 +637,7 @@ packages/
 ### Authentication Flows
 
 #### Device Flow (CLI)
+
 ```
 1. User runs: cerebras
    ↓
@@ -606,6 +659,7 @@ packages/
 ```
 
 #### Commands
+
 ```bash
 # Login to Cerebras
 cerebras auth login
@@ -621,12 +675,14 @@ cerebras auth list
 ```
 
 ### Session Management
+
 - **Duration:** 30 days (configurable)
 - **Auto-Refresh:** Before expiration
 - **Device Tracking:** Multiple device support
 - **Revocation:** Manual logout or server-side revoke
 
 ### Enterprise Features
+
 - **SSO Integration:** SAML/OIDC support
 - **Access Control:** Role-based permissions
 - **Audit Logging:** Track all operations
@@ -635,6 +691,7 @@ cerebras auth list
 - **Billing Integration:** Usage tracking
 
 ### Security Best Practices
+
 - **No Hardcoded Secrets:** Environment variables only
 - **Least Privilege:** Minimal required permissions
 - **Rate Limiting:** Prevent abuse
@@ -649,6 +706,7 @@ cerebras auth list
 ### Package Distribution
 
 #### npm Registry
+
 - **Package Name:** `cerebras-ai` (formerly `opencode-ai`)
 - **Scoped Packages:**
   - `@cerebras-ai/sdk`
@@ -659,6 +717,7 @@ cerebras auth list
 #### Installation Methods
 
 ##### Package Managers
+
 ```bash
 # npm
 npm install -g cerebras-ai
@@ -674,12 +733,14 @@ yarn global add cerebras-ai
 ```
 
 ##### Homebrew (macOS/Linux)
+
 ```bash
 brew tap arihantchoudhary/tap
 brew install cerebras
 ```
 
 ##### Platform-Specific
+
 ```bash
 # Arch Linux (AUR)
 paru -S cerebras-bin
@@ -693,6 +754,7 @@ scoop install extras/cerebras
 ```
 
 ##### Install Script
+
 ```bash
 # macOS/Linux
 curl -fsSL https://opencode.ai/install | bash
@@ -702,6 +764,7 @@ irm https://opencode.ai/install | iex
 ```
 
 ##### Docker
+
 ```bash
 docker pull ghcr.io/arihantchoudhary/opencode:latest
 ```
@@ -709,11 +772,13 @@ docker pull ghcr.io/arihantchoudhary/opencode:latest
 ### Build System
 
 #### Binary Targets
+
 - **Linux:** x64, arm64, musl variants
 - **macOS:** x64 (Intel), arm64 (Apple Silicon)
 - **Windows:** x64
 
 #### Build Pipeline
+
 ```bash
 # Development build
 bun run dev
@@ -731,11 +796,13 @@ bun test
 ### Release Workflow
 
 #### Version Bumping
+
 - **Patch:** Bug fixes (1.0.0 → 1.0.1)
 - **Minor:** New features (1.0.0 → 1.1.0)
 - **Major:** Breaking changes (1.0.0 → 2.0.0)
 
 #### GitHub Actions Workflow
+
 ```yaml
 Trigger: Manual via GitHub UI or CLI
 Inputs: bump type (patch/minor/major)
@@ -752,11 +819,13 @@ Steps:
 ```
 
 #### Automatic Snapshots
+
 - **Trigger:** Every push to `dev` branch
 - **Version:** `0.0.0-dev-YYYYMMDDHHMMSS`
 - **Purpose:** Testing before official release
 
 #### Release Commands
+
 ```bash
 # Via GitHub CLI
 gh workflow run publish.yml -f bump=patch
@@ -766,6 +835,7 @@ Actions → publish.yml → Run workflow → Select bump type
 ```
 
 ### Deployment Checklist
+
 - [ ] All tests passing
 - [ ] Version bumped in package.json
 - [ ] CHANGELOG.md updated
@@ -777,6 +847,7 @@ Actions → publish.yml → Run workflow → Select bump type
 - [ ] Homebrew formula updated
 
 ### Monitoring & Rollback
+
 - **Health Checks:** Monitor npm downloads
 - **Error Tracking:** GitHub Issues
 - **User Feedback:** Discord, discussions
@@ -789,24 +860,28 @@ Actions → publish.yml → Run workflow → Select bump type
 ### Key Performance Indicators (KPIs)
 
 #### Adoption Metrics
+
 - **Downloads:** npm/Homebrew install counts
 - **Active Users:** Daily/Monthly active users
 - **Retention:** 7-day, 30-day retention rates
 - **Growth Rate:** Week-over-week user growth
 
 #### Usage Metrics
+
 - **Session Duration:** Average time per session
 - **Messages per Session:** User engagement level
 - **Tool Usage:** Which tools are most popular
 - **Provider Mix:** Distribution across AI providers
 
 #### Quality Metrics
+
 - **Error Rate:** % of failed operations
 - **Retry Success Rate:** % of successful retries after errors
 - **Rate Limit Hits:** Frequency of 429 errors
 - **Response Time:** P50, P95, P99 latencies
 
 #### Community Metrics
+
 - **GitHub Stars:** Repository popularity
 - **Contributors:** Active contributor count
 - **PR Velocity:** Time to merge pull requests
@@ -814,18 +889,19 @@ Actions → publish.yml → Run workflow → Select bump type
 
 ### Success Targets (Year 1)
 
-| Metric | Target |
-|--------|--------|
-| Total Downloads | 100,000+ |
-| Monthly Active Users | 10,000+ |
-| GitHub Stars | 5,000+ |
-| 30-Day Retention | > 40% |
+| Metric                   | Target       |
+| ------------------------ | ------------ |
+| Total Downloads          | 100,000+     |
+| Monthly Active Users     | 10,000+      |
+| GitHub Stars             | 5,000+       |
+| 30-Day Retention         | > 40%        |
 | Average Session Duration | > 15 minutes |
-| Error Rate | < 2% |
-| Retry Success Rate | > 70% |
-| Community Contributors | 50+ |
+| Error Rate               | < 2%         |
+| Retry Success Rate       | > 70%        |
+| Community Contributors   | 50+          |
 
 ### User Satisfaction
+
 - **Net Promoter Score (NPS):** > 40
 - **User Surveys:** Quarterly feedback
 - **Feature Requests:** Track most-wanted features
@@ -836,6 +912,7 @@ Actions → publish.yml → Run workflow → Select bump type
 ## Roadmap & Future Enhancements
 
 ### Q1 2025 (Current)
+
 - [x] Rebranding from OpenCode to Cerebras
 - [x] Clerk authentication integration
 - [x] Rate limit handling improvements
@@ -845,6 +922,7 @@ Actions → publish.yml → Run workflow → Select bump type
 - [ ] Documentation expansion
 
 ### Q2 2025
+
 - [ ] **Mobile Client**
   - iOS/Android app
   - Remote connection to desktop Cerebras server
@@ -870,6 +948,7 @@ Actions → publish.yml → Run workflow → Select bump type
   - Plugin development SDK
 
 ### Q3 2025
+
 - [ ] **Local Model Improvements**
   - Better llama.cpp integration
   - Model switching based on task
@@ -889,6 +968,7 @@ Actions → publish.yml → Run workflow → Select bump type
   - SLA guarantees
 
 ### Q4 2025
+
 - [ ] **AI Improvements**
   - Dynamic model fallback
   - Multi-model consensus
@@ -910,23 +990,27 @@ Actions → publish.yml → Run workflow → Select bump type
 ### Long-Term Vision (2026+)
 
 #### Autonomous Development
+
 - **Self-Healing Code:** Automatic bug detection and fixing
 - **Test Generation:** Comprehensive test suite creation
 - **Documentation:** Auto-generated, always up-to-date docs
 - **Dependency Management:** Automatic updates and migrations
 
 #### Multi-Agent Systems
+
 - **Specialized Agents:** Security, performance, testing agents
 - **Agent Collaboration:** Multi-agent problem solving
 - **Agent Marketplace:** Community-created specialist agents
 
 #### Advanced Context
+
 - **Long-Term Memory:** Remember across sessions
 - **Project Knowledge Graph:** Deep codebase understanding
 - **Learning from History:** Improve from past interactions
 - **Personalization:** Adapt to individual coding style
 
 #### Platform Expansion
+
 - **Web IDE:** Browser-based Cerebras
 - **Cloud Workspaces:** Remote development environments
 - **Educational Platform:** Interactive coding tutorials
@@ -937,6 +1021,7 @@ Actions → publish.yml → Run workflow → Select bump type
 ## Constraints & Limitations
 
 ### Technical Constraints
+
 - **Terminal Dependency:** Requires modern terminal emulator
 - **Bun Runtime:** Specific runtime requirement
 - **API Keys:** Users must provide own AI provider keys
@@ -944,18 +1029,21 @@ Actions → publish.yml → Run workflow → Select bump type
 - **File System Access:** Needs read/write permissions
 
 ### Provider Limitations
+
 - **Rate Limits:** Dependent on provider quotas
 - **Token Limits:** Model context window constraints
 - **API Changes:** External API breaking changes
 - **Cost Variability:** Provider pricing fluctuations
 
 ### User Environment
+
 - **Terminal Compatibility:** Not all terminals support features
 - **OS Differences:** Platform-specific quirks
 - **Network Restrictions:** Corporate firewalls
 - **Disk Space:** Limited on some systems
 
 ### Known Issues
+
 - **Debugging TSX Files:** Breakpoints not fully supported in `*.tsx`
 - **Windows Bun Support:** Installation via Bun in progress
 - **Large File Performance:** Slower on massive files (>10k lines)
@@ -966,6 +1054,7 @@ Actions → publish.yml → Run workflow → Select bump type
 ## Dependencies & Integration
 
 ### Core Dependencies
+
 - **Runtime:** Bun 1.3+
 - **UI:** SolidJS 1.9+, opentui framework
 - **Build:** Turbo 2.5+, Vite 7.1+
@@ -973,17 +1062,20 @@ Actions → publish.yml → Run workflow → Select bump type
 - **Utilities:** Remeda, Luxon, Fuzzysort
 
 ### AI SDK Integration
+
 - **Vercel AI SDK:** Provider abstraction
 - **OpenAI Compatible:** Standard API format
 - **Custom Providers:** Plugin system
 
 ### External Services
+
 - **Clerk:** Authentication (optional)
 - **AWS:** Backend services (optional)
 - **GitHub:** Code hosting, releases
 - **npm:** Package distribution
 
 ### LSP Servers
+
 - **TypeScript:** tsserver
 - **Python:** Pyright, Pylance
 - **Rust:** rust-analyzer
@@ -996,32 +1088,32 @@ Actions → publish.yml → Run workflow → Select bump type
 
 ### Technical Risks
 
-| Risk | Probability | Impact | Mitigation |
-|------|------------|--------|------------|
-| AI Provider API Changes | High | High | Multi-provider support, version pinning |
-| Rate Limit Issues | Medium | Medium | Retry logic, backoff, user messaging |
-| Performance Degradation | Medium | High | Profiling, optimization, resource limits |
-| Security Vulnerabilities | Low | Critical | Regular audits, dependency updates |
-| Data Loss | Low | High | Auto-save, git integration, backups |
+| Risk                     | Probability | Impact   | Mitigation                               |
+| ------------------------ | ----------- | -------- | ---------------------------------------- |
+| AI Provider API Changes  | High        | High     | Multi-provider support, version pinning  |
+| Rate Limit Issues        | Medium      | Medium   | Retry logic, backoff, user messaging     |
+| Performance Degradation  | Medium      | High     | Profiling, optimization, resource limits |
+| Security Vulnerabilities | Low         | Critical | Regular audits, dependency updates       |
+| Data Loss                | Low         | High     | Auto-save, git integration, backups      |
 
 ### Business Risks
 
-| Risk | Probability | Impact | Mitigation |
-|------|------------|--------|------------|
-| User Adoption | Medium | High | Marketing, documentation, community building |
-| Competition | High | Medium | Focus on unique features (terminal-first, open source) |
-| Provider Costs | Medium | Medium | Efficient token usage, local model support |
-| Maintenance Burden | Medium | Medium | Community contributions, automated testing |
-| Reputation Damage | Low | High | Quality assurance, responsive support |
+| Risk               | Probability | Impact | Mitigation                                             |
+| ------------------ | ----------- | ------ | ------------------------------------------------------ |
+| User Adoption      | Medium      | High   | Marketing, documentation, community building           |
+| Competition        | High        | Medium | Focus on unique features (terminal-first, open source) |
+| Provider Costs     | Medium      | Medium | Efficient token usage, local model support             |
+| Maintenance Burden | Medium      | Medium | Community contributions, automated testing             |
+| Reputation Damage  | Low         | High   | Quality assurance, responsive support                  |
 
 ### Legal & Compliance Risks
 
-| Risk | Probability | Impact | Mitigation |
-|------|------------|--------|------------|
-| License Issues | Low | High | Clear MIT license, dependency audits |
-| Privacy Violations | Low | Critical | Local-first, explicit consent, GDPR compliance |
-| Trademark Disputes | Low | Medium | Proper branding, legal review |
-| Data Sovereignty | Medium | Medium | Self-hosting options, regional compliance |
+| Risk               | Probability | Impact   | Mitigation                                     |
+| ------------------ | ----------- | -------- | ---------------------------------------------- |
+| License Issues     | Low         | High     | Clear MIT license, dependency audits           |
+| Privacy Violations | Low         | Critical | Local-first, explicit consent, GDPR compliance |
+| Trademark Disputes | Low         | Medium   | Proper branding, legal review                  |
+| Data Sovereignty   | Medium      | Medium   | Self-hosting options, regional compliance      |
 
 ---
 
@@ -1039,104 +1131,102 @@ Actions → publish.yml → Run workflow → Select bump type
       "npm": "@ai-sdk/openai-compatible",
       "name": "Cerebras",
       "options": {
-        "baseURL": "https://api.cerebras.ai/v1"
+        "baseURL": "https://api.cerebras.ai/v1",
       },
       "models": {
         "glm-4-6b": {
           "name": "GLM 4.6",
           "limit": {
             "context": 128000,
-            "output": 8192
-          }
-        }
-      }
-    }
+            "output": 8192,
+          },
+        },
+      },
+    },
   },
 
   // Agent Configuration
   "agent": {
     "build": {
       "name": "Build Agent",
-      "description": "Full-access development agent"
+      "description": "Full-access development agent",
     },
     "plan": {
       "name": "Plan Agent",
       "description": "Read-only analysis agent",
-      "readonly": true
-    }
+      "readonly": true,
+    },
   },
 
   // LSP Configuration
   "lsp": {
     "typescript": {
       "command": "typescript-language-server",
-      "args": ["--stdio"]
-    }
+      "args": ["--stdio"],
+    },
   },
 
   // Formatter Configuration
   "formatter": {
     "*.ts": "prettier",
-    "*.py": "black"
+    "*.py": "black",
   },
 
   // Theme
   "theme": "dracula",
 
   // Plugins
-  "plugin": [
-    "@cerebras-ai/plugin-example"
-  ]
+  "plugin": ["@cerebras-ai/plugin-example"],
 }
 ```
 
 ### B. Tool Reference
 
-| Tool | Purpose | Example |
-|------|---------|---------|
-| Read | Read file contents | Read README.md |
-| Write | Create new file | Write new config |
-| Edit | Modify existing file | Update function logic |
-| Bash | Execute command | Run tests |
-| Glob | Find files by pattern | `**/*.ts` |
-| Grep | Search file contents | Find TODO comments |
-| WebSearch | Search internet | Latest API docs |
-| WebFetch | Fetch URL content | Read documentation |
-| LSPDiagnostics | Get errors/warnings | Check TypeScript errors |
-| LSPHover | Get symbol info | Function signature |
-| Todo | Track tasks | Multi-step plan |
-| Batch | Multiple operations | Rename across files |
+| Tool           | Purpose               | Example                 |
+| -------------- | --------------------- | ----------------------- |
+| Read           | Read file contents    | Read README.md          |
+| Write          | Create new file       | Write new config        |
+| Edit           | Modify existing file  | Update function logic   |
+| Bash           | Execute command       | Run tests               |
+| Glob           | Find files by pattern | `**/*.ts`               |
+| Grep           | Search file contents  | Find TODO comments      |
+| WebSearch      | Search internet       | Latest API docs         |
+| WebFetch       | Fetch URL content     | Read documentation      |
+| LSPDiagnostics | Get errors/warnings   | Check TypeScript errors |
+| LSPHover       | Get symbol info       | Function signature      |
+| Todo           | Track tasks           | Multi-step plan         |
+| Batch          | Multiple operations   | Rename across files     |
 
 ### C. Environment Variables
 
-| Variable | Purpose | Example |
-|----------|---------|---------|
-| `CEREBRAS_CONFIG` | Custom config path | `/path/to/config.json` |
-| `CEREBRAS_CONFIG_CONTENT` | Inline JSON config | `{"theme":"dracula"}` |
-| `CEREBRAS_CONFIG_DIR` | Additional config dir | `/path/to/.cerebras` |
-| `CEREBRAS_SKIP_AUTH` | Skip authentication (dev) | `true` |
-| `CLERK_PUBLISHABLE_KEY` | Clerk public key | `pk_test_...` |
-| `CLERK_SECRET_KEY` | Clerk secret key | `sk_test_...` |
+| Variable                  | Purpose                   | Example                |
+| ------------------------- | ------------------------- | ---------------------- |
+| `CEREBRAS_CONFIG`         | Custom config path        | `/path/to/config.json` |
+| `CEREBRAS_CONFIG_CONTENT` | Inline JSON config        | `{"theme":"dracula"}`  |
+| `CEREBRAS_CONFIG_DIR`     | Additional config dir     | `/path/to/.cerebras`   |
+| `CEREBRAS_SKIP_AUTH`      | Skip authentication (dev) | `true`                 |
+| `CLERK_PUBLISHABLE_KEY`   | Clerk public key          | `pk_test_...`          |
+| `CLERK_SECRET_KEY`        | Clerk secret key          | `sk_test_...`          |
 
 ### D. API Endpoints (Backend)
 
-| Endpoint | Method | Purpose |
-|----------|--------|---------|
-| `/auth/device/authorize` | POST | Start device flow |
-| `/auth/device/poll` | POST | Poll for completion |
-| `/auth/token` | POST | Exchange code for token |
-| `/auth/verify` | GET | Verify session |
-| `/workspace/create` | POST | Create user workspace |
+| Endpoint                 | Method | Purpose                 |
+| ------------------------ | ------ | ----------------------- |
+| `/auth/device/authorize` | POST   | Start device flow       |
+| `/auth/device/poll`      | POST   | Poll for completion     |
+| `/auth/token`            | POST   | Exchange code for token |
+| `/auth/verify`           | GET    | Verify session          |
+| `/workspace/create`      | POST   | Create user workspace   |
 
 ### E. File Locations
 
-| Purpose | macOS/Linux | Windows |
-|---------|-------------|---------|
-| Config | `~/.cerebras/` | `%USERPROFILE%\.cerebras\` |
-| Session | `~/.cerebras/session.json` | `%USERPROFILE%\.cerebras\session.json` |
-| Credentials | `~/.cerebras/credentials.json` | `%USERPROFILE%\.cerebras\credentials.json` |
-| Project Config | `.cerebras/` | `.cerebras\` |
-| Project Agents | `AGENTS.md` | `AGENTS.md` |
+| Purpose        | macOS/Linux                    | Windows                                    |
+| -------------- | ------------------------------ | ------------------------------------------ |
+| Config         | `~/.cerebras/`                 | `%USERPROFILE%\.cerebras\`                 |
+| Session        | `~/.cerebras/session.json`     | `%USERPROFILE%\.cerebras\session.json`     |
+| Credentials    | `~/.cerebras/credentials.json` | `%USERPROFILE%\.cerebras\credentials.json` |
+| Project Config | `.cerebras/`                   | `.cerebras\`                               |
+| Project Agents | `AGENTS.md`                    | `AGENTS.md`                                |
 
 ### F. Glossary
 
@@ -1165,6 +1255,7 @@ Actions → publish.yml → Run workflow → Select bump type
 ### H. Contributing
 
 See [CONTRIBUTING.md](/Users/ari/GitHub/opencode/CONTRIBUTING.md) for:
+
 - Development setup
 - Code style preferences
 - PR guidelines
@@ -1175,9 +1266,9 @@ See [CONTRIBUTING.md](/Users/ari/GitHub/opencode/CONTRIBUTING.md) for:
 
 ## Document History
 
-| Version | Date | Author | Changes |
-|---------|------|--------|---------|
-| 1.0 | 2025-11-28 | Product Team | Initial PRD creation |
+| Version | Date       | Author       | Changes              |
+| ------- | ---------- | ------------ | -------------------- |
+| 1.0     | 2025-11-28 | Product Team | Initial PRD creation |
 
 ---
 

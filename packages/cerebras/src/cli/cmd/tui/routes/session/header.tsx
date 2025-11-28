@@ -37,9 +37,7 @@ const ContextInfo = (props: {
       <box flexDirection="row" gap={1} flexShrink={0}>
         <text fg={theme.textMuted} wrapMode="none">
           {props.context()} | Session: {props.sessionTokens().toLocaleString()}
-          <Show when={props.contextLimit()}>
-            /{props.contextLimit()!.toLocaleString()}
-          </Show>
+          <Show when={props.contextLimit()}>/{props.contextLimit()!.toLocaleString()}</Show>
         </text>
         <text fg={budgetColor()} wrapMode="none">
           ({(props.budgetPercentage() * 100).toFixed(0)}%)

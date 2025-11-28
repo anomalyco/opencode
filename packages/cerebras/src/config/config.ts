@@ -609,7 +609,11 @@ export namespace Config {
         .describe("Telemetry configuration"),
       checkpoints: z
         .object({
-          enabled: z.boolean().optional().default(false).describe("Enable automatic checkpoints before risky operations"),
+          enabled: z
+            .boolean()
+            .optional()
+            .default(false)
+            .describe("Enable automatic checkpoints before risky operations"),
           auto_checkpoint_before: z
             .array(z.string())
             .optional()

@@ -32,14 +32,11 @@ export class CredentialStorage {
     const filePath = this.getPath()
 
     // Ensure data directory exists
-    await Bun.write(
-      filePath,
-      JSON.stringify(credentials, null, 2)
-    )
+    await Bun.write(filePath, JSON.stringify(credentials, null, 2))
 
     // Set file permissions to user-only (0600)
-    if (process.platform !== 'win32') {
-      await Bun.spawn(['chmod', '600', filePath]).exited
+    if (process.platform !== "win32") {
+      await Bun.spawn(["chmod", "600", filePath]).exited
     }
   }
 
@@ -58,7 +55,7 @@ export class CredentialStorage {
       const content = await file.text()
       return JSON.parse(content) as StoredCredentials
     } catch (error) {
-      console.error('Failed to load credentials:', error)
+      console.error("Failed to load credentials:", error)
       return null
     }
   }
@@ -98,10 +95,10 @@ export class CredentialStorage {
     try {
       const file = Bun.file(filePath)
       if (await file.exists()) {
-        await Bun.spawn(['rm', filePath]).exited
+        await Bun.spawn(["rm", filePath]).exited
       }
     } catch (error) {
-      console.error('Failed to clear credentials:', error)
+      console.error("Failed to clear credentials:", error)
     }
   }
 
@@ -109,7 +106,7 @@ export class CredentialStorage {
    * Update session token
    */
   static async updateSession(session: ClerkSession): Promise<void> {
-    const existing = await this.load() || {}
+    const existing = (await this.load()) || {}
 
     await this.save({
       ...existing,
