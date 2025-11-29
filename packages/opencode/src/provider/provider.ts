@@ -133,6 +133,11 @@ export namespace Provider {
           credentialProvider: fromNodeProviderChain(),
         },
         async getModel(sdk: any, modelID: string, _options?: Record<string, any>) {
+          // Skip region prefixing if model already has global prefix
+          if (modelID.startsWith("global.")) {
+            return sdk.languageModel(modelID)
+          }
+
           let regionPrefix = region.split("-")[0]
 
           switch (regionPrefix) {
@@ -762,6 +767,21 @@ export namespace Provider {
           { cause: e },
         )
       throw e
+    }
+  }
+
+  export async function closest(providerID: string, query: string[]) {
+    const s = await state()
+    const provider = s.providers[providerID]
+    if (!provider) return undefined
+    for (const item of query) {
+      for (const modelID of Object.keys(provider.info.models)) {
+        if (modelID.includes(item))
+          return {
+            providerID,
+            modelID,
+          }
+      }
     }
   }
 

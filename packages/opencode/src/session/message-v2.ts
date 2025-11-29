@@ -146,6 +146,7 @@ export namespace MessageV2 {
 
   export const CompactionPart = PartBase.extend({
     type: z.literal("compaction"),
+    auto: z.boolean(),
   }).meta({
     ref: "CompactionPart",
   })
@@ -665,7 +666,7 @@ export namespace MessageV2 {
       }
     }
 
-    return convertToModelMessages(result)
+    return convertToModelMessages(result.filter((msg) => msg.parts.length > 0))
   }
 
   export const stream = fn(Identifier.schema("session"), async function* (sessionID) {

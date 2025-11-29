@@ -26,13 +26,15 @@ export function createDialogProviderOptions() {
   const options = createMemo(() => {
     return pipe(
       sync.data.provider_next.all,
+      sortBy((x) => PROVIDER_PRIORITY[x.id] ?? 99),
       map((provider) => ({
         title: provider.name,
         value: provider.id,
-        footer: {
-          opencode: "Recommended",
-          anthropic: "Claude Max or API key",
+        description: {
+          opencode: "(Recommended)",
+          anthropic: "(Claude Max or API key)",
         }[provider.id],
+        category: provider.id in PROVIDER_PRIORITY ? "Popular" : "Other",
         async onSelect() {
           const methods = sync.data.provider_auth[provider.id] ?? [
             {
@@ -85,7 +87,6 @@ export function createDialogProviderOptions() {
           }
         },
       })),
-      sortBy((x) => PROVIDER_PRIORITY[x.value] ?? 99),
     )
   })
   return options
@@ -197,11 +198,24 @@ function ApiMethod(props: ApiMethodProps) {
   const dialog = useDialog()
   const sdk = useSDK()
   const sync = useSync()
+  const { theme } = useTheme()
 
   return (
     <DialogPrompt
       title={props.title}
       placeholder="API key"
+      description={
+        props.providerID === "opencode" ? (
+          <box gap={1}>
+            <text fg={theme.textMuted}>
+              OpenCode Zen gives you access to all the best coding models at the cheapest prices with a single API key.
+            </text>
+            <text>
+              Go to <span style={{ fg: theme.primary }}>https://opencode.ai/zen</span> to get a key
+            </text>
+          </box>
+        ) : undefined
+      }
       onConfirm={async (value) => {
         if (!value) return
         sdk.client.auth.set({

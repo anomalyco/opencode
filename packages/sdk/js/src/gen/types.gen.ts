@@ -371,6 +371,7 @@ export type CompactionPart = {
   sessionID: string
   messageID: string
   type: "compaction"
+  auto: boolean
 }
 
 export type Part =
@@ -588,6 +589,21 @@ export type EventSessionError = {
   }
 }
 
+export type EventFileWatcherUpdated = {
+  type: "file.watcher.updated"
+  properties: {
+    file: string
+    event: "add" | "change" | "unlink"
+  }
+}
+
+export type EventVcsBranchUpdated = {
+  type: "vcs.branch.updated"
+  properties: {
+    branch?: string
+  }
+}
+
 export type EventTuiPromptAppend = {
   type: "tui.prompt.append"
   properties: {
@@ -639,14 +655,6 @@ export type EventServerConnected = {
   }
 }
 
-export type EventFileWatcherUpdated = {
-  type: "file.watcher.updated"
-  properties: {
-    file: string
-    event: "add" | "change" | "unlink"
-  }
-}
-
 export type Event =
   | EventInstallationUpdated
   | EventInstallationUpdateAvailable
@@ -669,11 +677,12 @@ export type Event =
   | EventSessionDeleted
   | EventSessionDiff
   | EventSessionError
+  | EventFileWatcherUpdated
+  | EventVcsBranchUpdated
   | EventTuiPromptAppend
   | EventTuiCommandExecute
   | EventTuiToastShow
   | EventServerConnected
-  | EventFileWatcherUpdated
 
 export type GlobalEvent = {
   directory: string
@@ -683,6 +692,7 @@ export type GlobalEvent = {
 export type Project = {
   id: string
   worktree: string
+  vcsDir?: string
   vcs?: "git"
   time: {
     created: number
@@ -994,6 +1004,10 @@ export type Config = {
        */
       enabled: boolean
     }
+    /**
+     * Control diff rendering style: 'auto' adapts to terminal width, 'stacked' always shows single column
+     */
+    diff_style?: "auto" | "stacked"
   }
   /**
    * Command configuration, see https://opencode.ai/docs/commands
@@ -1059,6 +1073,7 @@ export type Config = {
     plan?: AgentConfig
     build?: AgentConfig
     general?: AgentConfig
+    explore?: AgentConfig
     [key: string]: AgentConfig | undefined
   }
   /**
@@ -1123,10 +1138,14 @@ export type Config = {
          */
         enterpriseUrl?: string
         /**
+         * Enable promptCacheKey for this provider (default false)
+         */
+        setCacheKey?: boolean
+        /**
          * Timeout in milliseconds for requests to this provider. Default is 300000 (5 minutes). Set to false to disable timeout.
          */
         timeout?: number | false
-        [key: string]: unknown | string | (number | false) | undefined
+        [key: string]: unknown | string | boolean | (number | false) | undefined
       }
     }
   }
@@ -1244,6 +1263,10 @@ export type Path = {
   config: string
   worktree: string
   directory: string
+}
+
+export type VcsInfo = {
+  branch: string
 }
 
 export type NotFoundError = {
@@ -1681,6 +1704,24 @@ export type PathGetResponses = {
 }
 
 export type PathGetResponse = PathGetResponses[keyof PathGetResponses]
+
+export type VcsGetData = {
+  body?: never
+  path?: never
+  query?: {
+    directory?: string
+  }
+  url: "/vcs"
+}
+
+export type VcsGetResponses = {
+  /**
+   * VCS info
+   */
+  200: VcsInfo
+}
+
+export type VcsGetResponse = VcsGetResponses[keyof VcsGetResponses]
 
 export type SessionListData = {
   body?: never

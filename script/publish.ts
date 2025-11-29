@@ -35,7 +35,7 @@ if (!Script.preview) {
       body: {
         model: {
           providerID: "opencode",
-          modelID: "kimi-k2",
+          modelID: "claude-haiku-4-5",
         },
         parts: [
           {
@@ -50,6 +50,7 @@ if (!Script.preview) {
           - Do NOT include any information about code changes if they do not affect the user facing changes.
           - For commits that are already well-written and descriptive, avoid rewording them. Simply capitalize the first letter, fix any misspellings, and ensure proper English grammar.
           - DO NOT read any other commits than the ones listed above (THIS IS IMPORTANT TO AVOID DUPLICATING THINGS IN OUR CHANGELOG)
+          - If a commit was made and then reverted do not include it in the changelog. If the commits only include a revert but not the original commit, then include the revert in the changelog.
 
           IMPORTANT: ONLY return a bulleted list of changes, do not include any other information. Do not include a preamble like "Based on my analysis..."
 
@@ -72,6 +73,44 @@ if (!Script.preview) {
   console.log(notes.join("\n"))
   console.log("-----------------------------")
   opencode.server.close()
+
+  // Get contributors
+  const team = [
+    "actions-user",
+    "opencode",
+    "rekram1-node",
+    "thdxr",
+    "kommander",
+    "jayair",
+    "fwang",
+    "adamdotdevin",
+    "opencode-agent[bot]",
+  ]
+  const compare =
+    await $`gh api "/repos/sst/opencode/compare/v${previous}...HEAD" --jq '.commits[] | {login: .author.login, message: .commit.message}'`.text()
+  const contributors = new Map<string, string[]>()
+
+  for (const line of compare.split("\n").filter(Boolean)) {
+    const { login, message } = JSON.parse(line) as { login: string | null; message: string }
+    const title = message.split("\n")[0] ?? ""
+    if (title.match(/^(ignore:|test:|chore:|ci:|release:)/i)) continue
+
+    if (login && !team.includes(login)) {
+      if (!contributors.has(login)) contributors.set(login, [])
+      contributors.get(login)?.push(title)
+    }
+  }
+
+  if (contributors.size > 0) {
+    notes.push("")
+    notes.push(`**Thank you to ${contributors.size} community contributor${contributors.size > 1 ? "s" : ""}:**`)
+    for (const [username, userCommits] of contributors) {
+      notes.push(`- @${username}:`)
+      for (const commit of userCommits) {
+        notes.push(`  - ${commit}`)
+      }
+    }
+  }
 }
 
 const pkgjsons = await Array.fromAsync(

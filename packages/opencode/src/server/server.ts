@@ -20,6 +20,7 @@ import { MessageV2 } from "../session/message-v2"
 import { TuiRoute } from "./tui"
 import { Permission } from "../permission"
 import { Instance } from "../project/instance"
+import { Vcs } from "../project/vcs"
 import { Agent } from "../agent/agent"
 import { Auth } from "../auth"
 import { Command } from "../command"
@@ -362,6 +363,29 @@ export namespace Server {
             config: Global.Path.config,
             worktree: Instance.worktree,
             directory: Instance.directory,
+          })
+        },
+      )
+      .get(
+        "/vcs",
+        describeRoute({
+          description: "Get VCS info for the current instance",
+          operationId: "vcs.get",
+          responses: {
+            200: {
+              description: "VCS info",
+              content: {
+                "application/json": {
+                  schema: resolver(Vcs.Info),
+                },
+              },
+            },
+          },
+        }),
+        async (c) => {
+          const branch = await Vcs.branch()
+          return c.json({
+            branch,
           })
         },
       )
@@ -830,6 +854,7 @@ export namespace Server {
               providerID: body.providerID,
               modelID: body.modelID,
             },
+            auto: false,
           })
           await SessionPrompt.loop(id)
           return c.json(true)

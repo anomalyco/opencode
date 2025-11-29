@@ -5,10 +5,13 @@
   height: 100%;
   overflow-y: auto;
   scrollbar-width: none;
-
   &::-webkit-scrollbar {
     display: none;
   }
+
+  /* [data-slot="session-review-container"] { */
+  /*   height: 100%; */
+  /* } */
 
   [data-slot="session-review-header"] {
     position: sticky;

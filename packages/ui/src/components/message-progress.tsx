@@ -6,7 +6,8 @@ import type { AssistantMessage as AssistantMessageType, ToolPart } from "@openco
 
 export function MessageProgress(props: { assistantMessages: () => AssistantMessageType[]; done?: boolean }) {
   const data = useData()
-  const parts = createMemo(() => props.assistantMessages().flatMap((m) => data.part[m.id]))
+  const sanitizer = createMemo(() => (data.directory ? new RegExp(`${data.directory}/`, "g") : undefined))
+  const parts = createMemo(() => props.assistantMessages().flatMap((m) => data.store.part[m.id]))
   const done = createMemo(() => props.done ?? false)
   const currentTask = createMemo(
     () =>
@@ -26,8 +27,10 @@ export function MessageProgress(props: { assistantMessages: () => AssistantMessa
     let resolved = parts()
     const task = currentTask()
     if (task && task.state && "metadata" in task.state && task.state.metadata?.sessionId) {
-      const messages = data.message[task.state.metadata.sessionId as string]?.filter((m) => m.role === "assistant")
-      resolved = messages?.flatMap((m) => data.part[m.id]) ?? parts()
+      const messages = data.store.message[task.state.metadata.sessionId as string]?.filter(
+        (m) => m.role === "assistant",
+      )
+      resolved = messages?.flatMap((m) => data.store.part[m.id]) ?? parts()
     }
     return resolved
   })
@@ -148,11 +151,11 @@ export function MessageProgress(props: { assistantMessages: () => AssistantMessa
                     {(p) => {
                       const part = p() as ToolPart
                       const message = createMemo(() =>
-                        data.message[part.sessionID].find((m) => m.id === part.messageID),
+                        data.store.message[part.sessionID].find((m) => m.id === part.messageID),
                       )
                       return (
                         <div data-slot="message-progress-item">
-                          <Part message={message()!} part={part} />
+                          <Part message={message()!} part={part} sanitize={sanitizer()} />
                         </div>
                       )
                     }}

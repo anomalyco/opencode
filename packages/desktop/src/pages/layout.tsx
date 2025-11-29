@@ -3,7 +3,7 @@ import { DateTime } from "luxon"
 import { A, useParams } from "@solidjs/router"
 import { useLayout } from "@/context/layout"
 import { useGlobalSync } from "@/context/global-sync"
-import { base64Encode, getFilename } from "@/utils"
+import { base64Encode } from "@/utils"
 import { Mark } from "@opencode-ai/ui/logo"
 import { Button } from "@opencode-ai/ui/button"
 import { Icon } from "@opencode-ai/ui/icon"
@@ -11,6 +11,7 @@ import { IconButton } from "@opencode-ai/ui/icon-button"
 import { Tooltip } from "@opencode-ai/ui/tooltip"
 import { Collapsible } from "@opencode-ai/ui/collapsible"
 import { DiffChanges } from "@opencode-ai/ui/diff-changes"
+import { getFilename } from "@opencode-ai/util/path"
 
 export default function Layout(props: ParentProps) {
   const params = useParams()

@@ -1,7 +1,6 @@
 import { useFilteredList } from "@opencode-ai/ui/hooks"
 import { createEffect, on, Component, Show, For, onMount, onCleanup, Switch, Match } from "solid-js"
 import { createStore } from "solid-js/store"
-import { getDirectory, getFilename } from "@/utils"
 import { createFocusSignal } from "@solid-primitives/active-element"
 import { useLocal } from "@/context/local"
 import { DateTime } from "luxon"
@@ -16,6 +15,7 @@ import { Icon } from "@opencode-ai/ui/icon"
 import { Tooltip } from "@opencode-ai/ui/tooltip"
 import { IconButton } from "@opencode-ai/ui/icon-button"
 import { Select } from "@opencode-ai/ui/select"
+import { getDirectory, getFilename } from "@opencode-ai/util/path"
 
 interface PromptInputProps {
   class?: string

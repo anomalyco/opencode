@@ -1,11 +1,13 @@
 name: snapshot
 
 on:
+  workflow_dispatch:
   push:
     branches:
       - dev
-      - fix-snapshot-2
+      - test-bedrock
       - v0
+      - otui-diffs
 
 concurrency: ${{ github.workflow }}-${{ github.ref }}
 

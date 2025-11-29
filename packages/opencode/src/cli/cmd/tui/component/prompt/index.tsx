@@ -497,6 +497,40 @@ export function Prompt(props: PromptProps) {
   }
   const exit = useExit()
 
+  function pasteText(text: string, virtualText: string) {
+    const currentOffset = input.visualCursor.offset
+    const extmarkStart = currentOffset
+    const extmarkEnd = extmarkStart + virtualText.length
+
+    input.insertText(virtualText + " ")
+
+    const extmarkId = input.extmarks.create({
+      start: extmarkStart,
+      end: extmarkEnd,
+      virtual: true,
+      styleId: pasteStyleId,
+      typeId: promptPartTypeId,
+    })
+
+    setStore(
+      produce((draft) => {
+        const partIndex = draft.prompt.parts.length
+        draft.prompt.parts.push({
+          type: "text" as const,
+          text,
+          source: {
+            text: {
+              start: extmarkStart,
+              end: extmarkEnd,
+              value: virtualText,
+            },
+          },
+        })
+        draft.extmarkToPartIndex.set(extmarkId, partIndex)
+      }),
+    )
+  }
+
   async function pasteImage(file: { filename?: string; content: string; mime: string }) {
     const currentOffset = input.visualCursor.offset
     const extmarkStart = currentOffset
@@ -603,11 +637,7 @@ export function Prompt(props: PromptProps) {
             flexGrow={1}
           >
             <textarea
-              placeholder={
-                props.showPlaceholder
-                  ? t`${dim(fg(theme.primary)("  → up/down"))} ${dim(fg("#64748b")("history"))} ${dim(fg("#a78bfa")("•"))} ${dim(fg(theme.primary)(keybind.print("input_newline")))} ${dim(fg("#64748b")("newline"))} ${dim(fg("#a78bfa")("•"))} ${dim(fg(theme.primary)(keybind.print("input_submit")))} ${dim(fg("#64748b")("submit"))}`
-                  : undefined
-              }
+              placeholder={props.sessionID ? undefined : "Build anything..."}
               textColor={theme.text}
               focusedTextColor={theme.text}
               minHeight={1}
@@ -706,25 +736,36 @@ export function Prompt(props: PromptProps) {
                 // trim ' from the beginning and end of the pasted content. just
                 // ' and nothing else
                 const filepath = pastedContent.replace(/^'+|'+$/g, "").replace(/\\ /g, " ")
-                console.log(pastedContent, filepath)
-                try {
-                  const file = Bun.file(filepath)
-                  if (file.type.startsWith("image/")) {
-                    event.preventDefault()
-                    const content = await file
-                      .arrayBuffer()
-                      .then((buffer) => Buffer.from(buffer).toString("base64"))
-                      .catch(console.error)
-                    if (content) {
-                      await pasteImage({
-                        filename: file.name,
-                        mime: file.type,
-                        content,
-                      })
-                      return
+                const isUrl = /^(https?):\/\//.test(filepath)
+                if (!isUrl) {
+                  try {
+                    const file = Bun.file(filepath)
+                    // Handle SVG as raw text content, not as base64 image
+                    if (file.type === "image/svg+xml") {
+                      event.preventDefault()
+                      const content = await file.text().catch(() => {})
+                      if (content) {
+                        pasteText(content, `[SVG: ${file.name ?? "image"}]`)
+                        return
+                      }
                     }
-                  }
-                } catch {}
+                    if (file.type.startsWith("image/")) {
+                      event.preventDefault()
+                      const content = await file
+                        .arrayBuffer()
+                        .then((buffer) => Buffer.from(buffer).toString("base64"))
+                        .catch(() => {})
+                      if (content) {
+                        await pasteImage({
+                          filename: file.name,
+                          mime: file.type,
+                          content,
+                        })
+                        return
+                      }
+                    }
+                  } catch {}
+                }
 
                 const lineCount = (pastedContent.match(/\n/g)?.length ?? 0) + 1
                 if (
@@ -732,45 +773,16 @@ export function Prompt(props: PromptProps) {
                   !sync.data.config.experimental?.disable_paste_summary
                 ) {
                   event.preventDefault()
-                  const currentOffset = input.visualCursor.offset
-                  const virtualText = `[Pasted ~${lineCount} lines]`
-                  const textToInsert = virtualText + " "
-                  const extmarkStart = currentOffset
-                  const extmarkEnd = extmarkStart + virtualText.length
-
-                  input.insertText(textToInsert)
-
-                  const extmarkId = input.extmarks.create({
-                    start: extmarkStart,
-                    end: extmarkEnd,
-                    virtual: true,
-                    styleId: pasteStyleId,
-                    typeId: promptPartTypeId,
-                  })
-
-                  const part = {
-                    type: "text" as const,
-                    text: pastedContent,
-                    source: {
-                      text: {
-                        start: extmarkStart,
-                        end: extmarkEnd,
-                        value: virtualText,
-                      },
-                    },
-                  }
-
-                  setStore(
-                    produce((draft) => {
-                      const partIndex = draft.prompt.parts.length
-                      draft.prompt.parts.push(part)
-                      draft.extmarkToPartIndex.set(extmarkId, partIndex)
-                    }),
-                  )
+                  pasteText(pastedContent, `[Pasted ~${lineCount} lines]`)
                   return
                 }
               }}
-              ref={(r: TextareaRenderable) => (input = r)}
+              ref={(r: TextareaRenderable) => {
+                input = r
+                setTimeout(() => {
+                  input.cursorColor = highlight()
+                }, 0)
+              }}
               onMouseDown={(r: MouseEvent) => r.target?.focus()}
               focusedBackgroundColor={theme.backgroundElement}
               cursorColor={highlight()}
@@ -797,7 +809,8 @@ export function Prompt(props: PromptProps) {
           borderColor={highlight()}
           customBorderChars={{
             ...EmptyBorder,
-            vertical: "╹",
+            // when the background is transparent, don't draw the vertical line
+            vertical: theme.background.a != 0 ? "╹" : " ",
           }}
         >
           <box
@@ -838,7 +851,7 @@ export function Prompt(props: PromptProps) {
                       const r = retry()
                       if (!r) return
                       if (r.message.includes("exceeded your current quota") && r.message.includes("gemini"))
-                        return "gemini 3 way too hot right now"
+                        return "gemini is way too hot right now"
                       if (r.message.length > 50) return r.message.slice(0, 50) + "..."
                       return r.message
                     })

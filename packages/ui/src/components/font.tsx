@@ -2,7 +2,7 @@ import { Style, Link } from "@solidjs/meta"
 import geist from "../assets/fonts/geist.woff2"
 import tx02 from "../assets/fonts/tx-02.woff2"
 
-export const Fonts = () => {
+export const Font = () => {
   return (
     <>
       <Style>{`

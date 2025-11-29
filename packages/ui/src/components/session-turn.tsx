@@ -28,10 +28,11 @@ export function SessionTurn(
   }>,
 ) {
   const data = useData()
-  const match = Binary.search(data.session, props.sessionID, (s) => s.id)
+  const match = Binary.search(data.store.session, props.sessionID, (s) => s.id)
   if (!match.found) throw new Error(`Session ${props.sessionID} not found`)
 
-  const messages = createMemo(() => (props.sessionID ? (data.message[props.sessionID] ?? []) : []))
+  const sanitizer = createMemo(() => (data.directory ? new RegExp(`${data.directory}/`, "g") : undefined))
+  const messages = createMemo(() => (props.sessionID ? (data.store.message[props.sessionID] ?? []) : []))
   const userMessages = createMemo(() =>
     messages()
       .filter((m) => m.role === "user")
@@ -44,7 +45,7 @@ export function SessionTurn(
 
   const status = createMemo(
     () =>
-      data.session_status[props.sessionID] ?? {
+      data.store.session_status[props.sessionID] ?? {
         type: "idle",
       },
   )
@@ -64,9 +65,9 @@ export function SessionTurn(
             const assistantMessages = createMemo(() => {
               return messages()?.filter((m) => m.role === "assistant" && m.parentID == msg().id) as AssistantMessage[]
             })
-            const assistantMessageParts = createMemo(() => assistantMessages()?.flatMap((m) => data.part[m.id]))
+            const assistantMessageParts = createMemo(() => assistantMessages()?.flatMap((m) => data.store.part[m.id]))
             const error = createMemo(() => assistantMessages().find((m) => m?.error)?.error)
-            const parts = createMemo(() => data.part[msg().id])
+            const parts = createMemo(() => data.store.part[msg().id])
             const lastTextPart = createMemo(() =>
               assistantMessageParts()
                 .filter((p) => p?.type === "text")
@@ -116,7 +117,7 @@ export function SessionTurn(
                   </div>
                 </div>
                 <div data-slot="session-turn-message-content">
-                  <Message message={msg()} parts={parts()} />
+                  <Message message={msg()} parts={parts()} sanitize={sanitizer()} />
                 </div>
                 {/* Summary */}
                 <Show when={completed()}>
@@ -211,7 +212,7 @@ export function SessionTurn(
                           <div data-slot="session-turn-collapsible-content-inner">
                             <For each={assistantMessages()}>
                               {(assistantMessage) => {
-                                const parts = createMemo(() => data.part[assistantMessage.id])
+                                const parts = createMemo(() => data.store.part[assistantMessage.id])
                                 const last = createMemo(() =>
                                   parts()
                                     .filter((p) => p?.type === "text")
@@ -222,10 +223,11 @@ export function SessionTurn(
                                     <Message
                                       message={assistantMessage}
                                       parts={parts().filter((p) => p?.id !== last()?.id)}
+                                      sanitize={sanitizer()}
                                     />
                                   )
                                 }
-                                return <Message message={assistantMessage} parts={parts()} />
+                                return <Message message={assistantMessage} parts={parts()} sanitize={sanitizer()} />
                               }}
                             </For>
                             <Show when={error()}>

@@ -14,6 +14,7 @@ import type {
   SessionStatus,
   ProviderListResponse,
   ProviderAuthMethod,
+  VcsInfo,
 } from "@opencode-ai/sdk"
 import { createStore, produce, reconcile } from "solid-js/store"
 import { useSDK } from "@tui/context/sdk"
@@ -22,6 +23,7 @@ import { createSimpleContext } from "./helper"
 import type { Snapshot } from "@/snapshot"
 import { useExit } from "./exit"
 import { batch, onMount } from "solid-js"
+import { Log } from "@/util/log"
 
 export const { use: useSync, provider: SyncProvider } = createSimpleContext({
   name: "Sync",
@@ -59,6 +61,7 @@ export const { use: useSync, provider: SyncProvider } = createSimpleContext({
         [key: string]: McpStatus
       }
       formatter: FormatterStatus[]
+      vcs: VcsInfo | undefined
     }>({
       provider_next: {
         all: [],
@@ -82,6 +85,7 @@ export const { use: useSync, provider: SyncProvider } = createSimpleContext({
       lsp: [],
       mcp: {},
       formatter: [],
+      vcs: undefined,
     })
 
     const sdk = useSDK()
@@ -238,6 +242,11 @@ export const { use: useSync, provider: SyncProvider } = createSimpleContext({
           sdk.client.lsp.status().then((x) => setStore("lsp", x.data!))
           break
         }
+
+        case "vcs.branch.updated": {
+          setStore("vcs", { branch: event.properties.branch })
+          break
+        }
       }
     })
 
@@ -276,11 +285,17 @@ export const { use: useSync, provider: SyncProvider } = createSimpleContext({
             sdk.client.formatter.status().then((x) => setStore("formatter", x.data!)),
             sdk.client.session.status().then((x) => setStore("session_status", x.data!)),
             sdk.client.provider.auth().then((x) => setStore("provider_auth", x.data ?? {})),
+            sdk.client.vcs.get().then((x) => setStore("vcs", x.data)),
           ]).then(() => {
             setStore("status", "complete")
           })
         })
         .catch(async (e) => {
+          Log.Default.error("tui bootstrap failed", {
+            error: e instanceof Error ? e.message : String(e),
+            name: e instanceof Error ? e.name : undefined,
+            stack: e instanceof Error ? e.stack : undefined,
+          })
           await exit(e)
         })
     }
