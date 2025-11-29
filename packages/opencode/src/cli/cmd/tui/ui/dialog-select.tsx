@@ -13,6 +13,7 @@ import { Locale } from "@/util/locale"
 
 export interface DialogSelectProps<T> {
   title: string
+  placeholder?: string
   options: DialogSelectOption<T>[]
   ref?: (ref: DialogSelectRef<T>) => void
   onMove?: (option: DialogSelectOption<T>) => void
@@ -199,7 +200,7 @@ export function DialogSelect<T>(props: DialogSelectProps<T>) {
               input = r
               setTimeout(() => input.focus(), 1)
             }}
-            placeholder="Enter search term"
+            placeholder={props.placeholder ?? "Search"}
           />
         </box>
       </box>
