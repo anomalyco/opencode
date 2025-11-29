@@ -70,7 +70,16 @@ Let's look at some examples.
 
 ### Disabling formatters
 
-To disable a specific formatter, set `disabled` to `true`:
+To disable **all** formatters globally, set `formatter` to `false`:
+
+```json title="opencode.json" {3}
+{
+  "$schema": "https://opencode.ai/config.json",
+  "formatter": false
+}
+```
+
+To disable a **specific** formatter, set `disabled` to `true`:
 
 ```json title="opencode.json" {5}
 {

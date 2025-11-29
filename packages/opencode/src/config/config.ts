@@ -527,6 +527,7 @@ export namespace Config {
           plan: Agent.optional(),
           build: Agent.optional(),
           general: Agent.optional(),
+          explore: Agent.optional(),
         })
         .catchall(Agent)
         .optional()
