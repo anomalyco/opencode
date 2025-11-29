@@ -371,6 +371,7 @@ export namespace Config {
           webfetch: Permission.optional(),
           doom_loop: Permission.optional(),
           external_directory: Permission.optional(),
+          plan_approval: Permission.optional().describe("GitLab Duo Workflow plan approval"),
         })
         .optional(),
     })

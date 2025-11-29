@@ -24,6 +24,7 @@ import { createOpenAI } from "@ai-sdk/openai"
 import { createOpenAICompatible } from "@ai-sdk/openai-compatible"
 import { createOpenRouter } from "@openrouter/ai-sdk-provider"
 import { createGitLab } from "@ai-sdk/gitlab"
+import * as GitLabPlanApproval from "./gitlab-plan-approval"
 
 export namespace Provider {
   const log = Log.create({ service: "provider" })
@@ -271,9 +272,12 @@ export namespace Provider {
         async getModel(sdk: any, modelID: string) {
           // Use LSP-based model for duo-chat-lsp
           if (modelID === 'duo-chat-lsp' && sdk.lspAgenticChat) {
-            log.info("Creating LSP agentic model", { modelID, workingDirectory: Instance.directory })
+            log.info("Creating LSP agentic model with plan approval", { modelID, workingDirectory: Instance.directory })
             return sdk.lspAgenticChat(modelID, {
               workingDirectory: Instance.directory,
+              // Plan approval callback - integrates with opencode permission system
+              onPlanApproval: GitLabPlanApproval.handlePlanApproval,
+              onWorkflowStatusChange: GitLabPlanApproval.handleStatusChange,
             })
           }
           // Use anthropicChat which connects to GitLab's Anthropic proxy

@@ -23,6 +23,7 @@ export namespace Agent {
         webfetch: Config.Permission.optional(),
         doom_loop: Config.Permission.optional(),
         external_directory: Config.Permission.optional(),
+        plan_approval: Config.Permission.optional(),
       }),
       model: z
         .object({
@@ -50,6 +51,7 @@ export namespace Agent {
       webfetch: "allow",
       doom_loop: "ask",
       external_directory: "ask",
+      plan_approval: "ask", // GitLab Duo Workflow plan approval - always ask
     }
     const agentPermission = mergeAgentPermissions(defaultPermission, cfg.permission ?? {})
 

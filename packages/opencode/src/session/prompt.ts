@@ -48,6 +48,7 @@ import { fn } from "@/util/fn"
 import { SessionProcessor } from "./processor"
 import { TaskTool } from "@/tool/task"
 import { SessionStatus } from "./status"
+import * as GitLabPlanApproval from "../provider/gitlab-plan-approval"
 
 // @ts-ignore
 globalThis.AI_SDK_LOG_WARNINGS = false
@@ -285,6 +286,15 @@ export namespace SessionPrompt {
         })
 
       const model = await Provider.getModel(lastUser.model.providerID, lastUser.model.modelID)
+      
+      // Set context for GitLab plan approval (if using gitlab provider)
+      if (lastUser.model.providerID === "gitlab") {
+        GitLabPlanApproval.setContext({
+          sessionID,
+          messageID: lastUser.id,
+        })
+      }
+      
       const task = tasks.pop()
 
       // pending subtask
