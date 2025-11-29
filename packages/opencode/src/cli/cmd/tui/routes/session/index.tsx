@@ -65,6 +65,12 @@ import { Footer } from "./footer.tsx"
 import { extend } from "@opentui/solid"
 import { TerminalBufferRenderable } from "opentui-ansi-vt/terminal-buffer"
 
+declare module "@opentui/solid" {
+  interface OpenTUIComponents {
+    "terminal-buffer": typeof TerminalBufferRenderable
+  }
+}
+
 addDefaultParsers(parsers.parsers)
 
 extend({ "terminal-buffer": TerminalBufferRenderable })
@@ -81,7 +87,8 @@ class CustomSpeedScroll implements ScrollAcceleration {
 
 type BashOutputView = {
   command: string
-  output: () => string
+  messageID: string
+  partID: string
 }
 
 const context = createContext<{
@@ -813,25 +820,40 @@ export function Session() {
             </Show>
             <Switch>
               <Match when={bashOutput()}>
-                {(view) => (
-                  <box flexGrow={1} flexDirection="column">
-                    <box paddingLeft={1} paddingBottom={1} flexShrink={0}>
-                      <text fg={theme.textMuted}>$ {view().command}</text>
+                {(view) => {
+                  const output = createMemo(() => {
+                    const parts = sync.data.part[view().messageID] ?? []
+                    const part = parts.find((p) => p.id === view().partID)
+                    if (part?.type === "tool" && "metadata" in part.state) {
+                      const metadata = part.state.metadata as { output?: string } | undefined
+                      return (metadata?.output ?? "").trim()
+                    }
+                    return ""
+                  })
+                  return (
+                    <box flexGrow={1} flexDirection="column">
+                      <box paddingLeft={1} paddingBottom={1} flexShrink={0}>
+                        <text fg={theme.textMuted}>$ {view().command}</text>
+                      </box>
+                      <scrollbox
+                        ref={(r) => (bashScroll = r)}
+                        flexGrow={1}
+                        paddingLeft={1}
+                        paddingBottom={1}
+                        scrollAcceleration={scrollAcceleration()}
+                        stickyScroll={true}
+                        stickyStart="bottom"
+                      >
+                        <terminal-buffer ansi={output()} cols={contentWidth()} />
+                      </scrollbox>
+                      <box flexShrink={0} paddingLeft={1}>
+                        <text fg={theme.textMuted}>
+                          ESC to close | ↑/↓ scroll | PgUp/PgDn page | Home/End top/bottom
+                        </text>
+                      </box>
                     </box>
-                    <scrollbox
-                      ref={(r) => (bashScroll = r)}
-                      flexGrow={1}
-                      paddingLeft={1}
-                      paddingBottom={1}
-                      scrollAcceleration={scrollAcceleration()}
-                    >
-                      <terminal-buffer ansi={view().output()} cols={contentWidth()} />
-                    </scrollbox>
-                    <box flexShrink={0} paddingLeft={1}>
-                      <text fg={theme.textMuted}>ESC to close | ↑/↓ scroll | PgUp/PgDn page | Home/End top/bottom</text>
-                    </box>
-                  </box>
-                )}
+                  )
+                }}
               </Match>
               <Match when={!bashOutput()}>
                 <>
@@ -1208,7 +1230,7 @@ function ToolPart(props: { last: boolean; part: ToolPart; message: AssistantMess
   const component = createMemo(() => {
     const render = ToolRegistry.render(props.part.tool) ?? GenericTool
 
-    const metadata = props.part.state.status === "pending" ? {} : (props.part.state.metadata ?? {})
+    const metadata = "metadata" in props.part.state ? (props.part.state.metadata ?? {}) : {}
     const input = props.part.state.input ?? {}
     const container = ToolRegistry.container(props.part.tool)
     const permissions = sync.data.permission[props.message.sessionID] ?? []
@@ -1266,6 +1288,8 @@ function ToolPart(props: { last: boolean; part: ToolPart; message: AssistantMess
           metadata={metadata}
           permission={permission?.metadata ?? {}}
           output={props.part.state.status === "completed" ? props.part.state.output : undefined}
+          messageID={props.message.id}
+          partID={props.part.id}
         />
         {props.part.state.status === "error" && (
           <box paddingLeft={2}>
@@ -1304,6 +1328,8 @@ type ToolProps<T extends Tool.Info> = {
   permission: Record<string, any>
   tool: string
   output?: string
+  messageID: string
+  partID: string
 }
 function GenericTool(props: ToolProps<any>) {
   return (
@@ -1374,15 +1400,15 @@ ToolRegistry.register<typeof BashTool>({
         </Show>
         <Show when={displayOutput()}>
           {/* rows here means that the ANSI is rendered via Ghostty as 2 lines per page. Then the result is returned as 20 lines */}
-          <terminal-buffer ansi={displayOutput()} rows={20} limit={20} cols={ctx.width} />
+          <terminal-buffer ansi={displayOutput()} rows={20} limit={20} trimEnd cols={ctx.width} />
         </Show>
-        <Show when={truncated()}>
+        <Show when={truncated() || (!props.output && rawOutput())}>
           <box
             onMouseUp={() => {
-              ctx.showBashOutput({ command: props.input.command!, output: rawOutput })
+              ctx.showBashOutput({ command: props.input.command!, messageID: props.messageID, partID: props.partID })
             }}
           >
-            <text fg={theme.textMuted}>Click to view full output</text>
+            <text fg={theme.textMuted}>Click to see full output</text>
           </box>
         </Show>
       </box>
