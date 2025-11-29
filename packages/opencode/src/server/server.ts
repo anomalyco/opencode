@@ -376,22 +376,7 @@ export namespace Server {
               description: "VCS info",
               content: {
                 "application/json": {
-                  schema: resolver(
-                    z
-                      .object({
-                        worktree: z.string(),
-                        directory: z.string(),
-                        projectID: z.string(),
-                        vcs: z
-                          .object({
-                            branch: z.string(),
-                          })
-                          .optional(),
-                      })
-                      .meta({
-                        ref: "VcsInfo",
-                      }),
-                  ),
+                  schema: resolver(Vcs.Info),
                 },
               },
             },
@@ -400,10 +385,7 @@ export namespace Server {
         async (c) => {
           const branch = await Vcs.branch()
           return c.json({
-            worktree: Instance.worktree,
-            directory: Instance.directory,
-            projectID: Instance.project.id,
-            vcs: Instance.project.vcs ? { branch } : undefined,
+            branch,
           })
         },
       )

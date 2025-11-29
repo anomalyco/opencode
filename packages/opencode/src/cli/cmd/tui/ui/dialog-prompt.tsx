@@ -55,9 +55,6 @@ export function DialogPrompt(props: DialogPromptProps) {
         <text fg={theme.text}>
           enter <span style={{ fg: theme.textMuted }}>submit</span>
         </text>
-        <text fg={theme.text}>
-          esc <span style={{ fg: theme.textMuted }}>cancel</span>
-        </text>
       </box>
     </box>
   )

@@ -150,9 +150,12 @@ export namespace SessionPrompt {
       },
     ]
     const files = ConfigMarkdown.files(template)
+    const seen = new Set<string>()
     await Promise.all(
       files.map(async (match) => {
         const name = match[1]
+        if (seen.has(name)) return
+        seen.add(name)
         const filepath = name.startsWith("~/")
           ? path.join(os.homedir(), name.slice(2))
           : path.resolve(Instance.worktree, name)
