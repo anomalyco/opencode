@@ -1374,7 +1374,7 @@ ToolRegistry.register<typeof BashTool>({
         </Show>
         <Show when={displayOutput()}>
           {/* rows here means that the ANSI is rendered via Ghostty as 2 lines per page. Then the result is returned as 20 lines */}
-          <terminal-buffer ansi={displayOutput()} rows={2} limit={20} cols={ctx.width} />
+          <terminal-buffer ansi={displayOutput()} rows={20} limit={20} cols={ctx.width} />
         </Show>
         <Show when={truncated()}>
           <box
