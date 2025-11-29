@@ -1069,11 +1069,15 @@ function AssistantMessage(props: { message: AssistantMessage; parts: Part[]; las
  */
 function PendingPermissions(props: { permissions: Array<{ id: string; type: string; title: string; metadata: Record<string, any>; callID?: string }> }) {
   const { theme } = useTheme()
+  const dimensions = useTerminalDimensions()
   
   // Filter to permissions without callID (non-tool permissions like plan_approval)
   const nonToolPermissions = createMemo(() => 
     props.permissions.filter(p => !p.callID)
   )
+  
+  // Calculate max height for scrollable steps (leave room for header, summary, and controls)
+  const maxStepsHeight = createMemo(() => Math.max(10, Math.floor(dimensions().height * 0.4)))
   
   return (
     <Show when={nonToolPermissions().length > 0}>
@@ -1102,17 +1106,41 @@ function PendingPermissions(props: { permissions: Array<{ id: string; type: stri
             </Show>
             <Show when={permission.metadata?.steps && permission.metadata.steps.length > 0}>
               <box paddingTop={1} gap={1}>
-                <text fg={theme.text}>Plan Steps:</text>
-                <For each={permission.metadata.steps}>
-                  {(step: any, stepIndex) => (
-                    <text fg={theme.textMuted}>
-                      <span style={{ fg: theme.text }}>[ ]</span> {stepIndex() + 1}. {step.title}
-                      <Show when={step.description}>
-                        {"\n"}    {step.description}
-                      </Show>
-                    </text>
-                  )}
-                </For>
+                <text fg={theme.text}>Plan Steps (scroll with arrow keys):</text>
+                <scrollbox
+                  height={maxStepsHeight()}
+                  scrollbarOptions={{
+                    visible: true,
+                    trackOptions: {
+                      backgroundColor: theme.backgroundElement,
+                      foregroundColor: theme.border,
+                    },
+                  }}
+                  scrollAcceleration={new CustomSpeedScroll(3)}
+                >
+                  <box gap={1}>
+                    <For each={permission.metadata.steps}>
+                      {(step: any, stepIndex) => {
+                        // Use title if available, otherwise use description
+                        const mainText = step.title?.trim() || step.description?.trim() || 'Step';
+                        const hasDescription = step.title?.trim() && step.description?.trim();
+                        
+                        return (
+                          <box flexDirection="column">
+                            <text fg={theme.textMuted}>
+                              <span style={{ fg: theme.text }}>{stepIndex() + 1}.</span> {mainText}
+                            </text>
+                            <Show when={hasDescription}>
+                              <text fg={theme.textMuted} paddingLeft={3}>
+                                {step.description}
+                              </text>
+                            </Show>
+                          </box>
+                        );
+                      }}
+                    </For>
+                  </box>
+                </scrollbox>
               </box>
             </Show>
             <Show when={index() === 0}>

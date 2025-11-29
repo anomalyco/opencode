@@ -206,7 +206,7 @@
     },
     "packages/opencode": {
       "name": "opencode",
-      "version": "1.0.110",
+      "version": "0.0.0-vg-duo-workflow-202511291456",
       "bin": {
         "opencode": "./bin/opencode",
       },

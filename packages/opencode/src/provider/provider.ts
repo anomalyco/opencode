@@ -379,7 +379,7 @@ export namespace Provider {
         models: {
           "duo-chat": {
             id: "duo-chat",
-            name: "GitLab Duo Chat",
+            name: "Agentic Chat",
             release_date: "2024-01-01",
             attachment: false,
             reasoning: false,
@@ -403,7 +403,7 @@ export namespace Provider {
           },
           "duo-chat-lsp": {
             id: "duo-chat-lsp",
-            name: "GitLab Duo Workflow (LSP)",
+            name: "Workflow",
             release_date: "2024-01-01",
             attachment: false,
             reasoning: false,

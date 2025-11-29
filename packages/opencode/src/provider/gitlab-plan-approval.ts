@@ -131,12 +131,16 @@ export async function handlePlanApproval(
         
         // Convert plan steps to todos and sync them
         if (plan.steps && plan.steps.length > 0) {
-          const todos = plan.steps.map((step, index) => ({
-            id: step.id || `plan-step-${index}`,
-            content: step.title,
-            status: step.status || "pending",
-            priority: "medium",
-          }))
+          const todos = plan.steps.map((step, index) => {
+            // Use title if available, otherwise use description (same logic as UI)
+            const content = step.title?.trim() || step.description?.trim() || `Step ${index + 1}`
+            return {
+              id: step.id || `plan-step-${index}`,
+              content,
+              status: step.status || "pending",
+              priority: "medium",
+            }
+          })
           
           await Todo.update({
             sessionID,
@@ -152,17 +156,19 @@ export async function handlePlanApproval(
         // Permission was rejected
         if (error instanceof Permission.RejectedError) {
           log.info("Plan rejected by user", { workflowId, reason: error.reason })
+          // Don't send feedback on simple rejection - this will stop the workflow
+          // Only send feedback if user provided a reason (for re-planning)
           return {
             approved: false,
-            feedback: error.reason || "Plan was rejected by user",
+            feedback: error.reason || undefined,  // undefined = stop workflow, string = re-plan with feedback
           }
         }
         
-        // Other error - treat as rejection
+        // Other error - treat as rejection and stop workflow
         log.error("Plan approval error", { workflowId, error })
         return {
           approved: false,
-          feedback: `Error during plan approval: ${error instanceof Error ? error.message : String(error)}`,
+          feedback: undefined,  // Stop workflow on error
         }
       }
     },
@@ -178,6 +184,13 @@ export async function handlePlanApproval(
 export async function handleStatusChange(
   statusOrWorkflowId: string,
   workflowIdOrCheckpoint?: string | {
+    checkpoint?: {
+      channel_values?: {
+        plan?: {
+          steps: PlanStep[]
+        }
+      }
+    }
     channel_values?: {
       plan?: {
         steps: PlanStep[]
@@ -187,7 +200,7 @@ export async function handleStatusChange(
 ) {
   // Handle both signatures
   let status: string
-  let checkpoint: { channel_values?: { plan?: { steps: PlanStep[] } } } | undefined
+  let planSteps: PlanStep[] | undefined
   
   if (typeof workflowIdOrCheckpoint === 'string') {
     // LSP signature: (status, workflowId)
@@ -196,38 +209,78 @@ export async function handleStatusChange(
   } else {
     // Streaming signature: (status, checkpoint)
     status = statusOrWorkflowId
-    checkpoint = workflowIdOrCheckpoint
-    log.info("Workflow status changed", { status, hasCheckpoint: !!checkpoint })
+    // Handle both checkpoint structures:
+    // - checkpoint.checkpoint.channel_values.plan.steps (WebviewWorkflowCheckpoint)
+    // - checkpoint.channel_values.plan.steps (direct)
+    const checkpoint = workflowIdOrCheckpoint
+    planSteps = checkpoint?.checkpoint?.channel_values?.plan?.steps || checkpoint?.channel_values?.plan?.steps
+    
+    // Debug: log the plan steps with their statuses
+    if (planSteps && planSteps.length > 0) {
+      const stepStatuses = planSteps.map((s, i) => ({ index: i, status: s.status, title: s.title?.substring(0, 30) }))
+      log.info("Plan steps from checkpoint", { stepStatuses })
+    }
+    
+    log.info("Workflow status changed", { status, hasSteps: !!planSteps, stepCount: planSteps?.length })
   }
   
-  // If we have a checkpoint with plan steps, sync them to todos
-  if (checkpoint?.channel_values?.plan?.steps && currentContext) {
-    const { sessionID } = currentContext
-    const planSteps = checkpoint.channel_values.plan.steps
+  // If we have plan steps, sync them to todos
+  if (!currentContext) {
+    log.warn("Cannot sync todos - no context available")
+    return
+  }
+  
+  if (planSteps && planSteps.length > 0) {
+    const { sessionID, directory } = currentContext
     
-    // Get existing todos
-    const existingTodos = await Todo.get(sessionID)
-    
-    // Update todos with plan step status
-    const updatedTodos = planSteps.map((step, index) => {
-      const existingTodo = existingTodos.find(t => t.id === (step.id || `plan-step-${index}`))
-      return {
-        id: step.id || `plan-step-${index}`,
-        content: step.title,
-        status: step.status || existingTodo?.status || "pending",
-        priority: existingTodo?.priority || "medium",
-      }
-    })
-    
-    await Todo.update({
-      sessionID,
-      todos: updatedTodos,
-    })
-    
-    log.info("Plan step status synced to todos", { 
-      sessionID, 
-      count: updatedTodos.length,
-      completed: updatedTodos.filter(t => t.status === "completed").length 
+    // Run within Instance context to ensure AsyncLocalStorage is available
+    await Instance.provide({
+      directory,
+      fn: async () => {
+        log.info("Syncing plan steps to todos", { sessionID, stepCount: planSteps.length })
+        
+        // Get existing todos
+        const existingTodos = await Todo.get(sessionID)
+        
+        // Update todos with plan step status
+        const updatedTodos = planSteps.map((step, index) => {
+          const existingTodo = existingTodos.find(t => t.id === (step.id || `plan-step-${index}`))
+          // Use title if available, otherwise use description
+          const content = step.title?.trim() || step.description?.trim() || existingTodo?.content || `Step ${index + 1}`
+          
+          // Map plan step status to todo status (handle both cases)
+          // GitLab uses: "Completed", "In Progress", "Not Started", "Failed"
+          // opencode uses: "completed", "in_progress", "pending", "cancelled"
+          const statusLower = (step.status || "").toLowerCase()
+          let todoStatus: "pending" | "in_progress" | "completed" | "cancelled" = existingTodo?.status as any || "pending"
+          
+          if (statusLower === "completed") todoStatus = "completed"
+          else if (statusLower === "in progress" || statusLower === "in_progress") todoStatus = "in_progress"
+          else if (statusLower === "not started" || statusLower === "pending") todoStatus = "pending"
+          else if (statusLower === "failed") todoStatus = "cancelled"
+          
+          return {
+            id: step.id || `plan-step-${index}`,
+            content,
+            status: todoStatus,
+            priority: existingTodo?.priority || "medium",
+          }
+        })
+        
+        await Todo.update({
+          sessionID,
+          todos: updatedTodos,
+        })
+        
+        log.info("Plan step status synced to todos", { 
+          sessionID, 
+          count: updatedTodos.length,
+          completed: updatedTodos.filter(t => t.status === "completed").length,
+          inProgress: updatedTodos.filter(t => t.status === "in_progress").length,
+        })
+      },
     })
   }
 }
+
+
