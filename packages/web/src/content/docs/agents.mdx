@@ -285,7 +285,7 @@ This path is relative to where the config file is located. So this works for bot
 
 ### Model
 
-Use the `model` config to override the default model for this agent. Useful for using different models optimized for different tasks. For example, a faster model for planning, a more capable model for implementation.
+Use the `model` config to override the model for this agent. If you don’t specify one, the subagent inherits the model of the primary agent that invoked it. Useful for using different models optimized for different tasks. For example, a faster model for planning, a more capable model for implementation.
 
 ```json title="opencode.json"
 {
