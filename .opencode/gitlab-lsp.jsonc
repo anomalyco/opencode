@@ -1,0 +1,30 @@
+{
+  "$schema": "https://opencode.ai/config.json",
+  "lsp": {
+    "gitlab-lsp": {
+      "command": ["gitlab-lsp", "--stdio"],
+      "extensions": [
+        ".ts", ".tsx", ".js", ".jsx", ".mjs", ".cjs",
+        ".py", ".rb", ".go", ".java", ".c", ".cpp", ".h", ".hpp",
+        ".rs", ".swift", ".kt", ".scala", ".php", ".cs",
+        ".vue", ".svelte", ".astro"
+      ],
+      "env": {
+        "GITLAB_API_TOKEN": "${GITLAB_API_TOKEN}",
+        "GITLAB_INSTANCE_URL": "https://gitlab.com"
+      },
+      "initialization": {
+        "duo": {
+          "enabled": true,
+          "agentPlatform": {
+            "enabled": true,
+            "connectionType": "websocket"
+          }
+        },
+        "telemetry": {
+          "enabled": false
+        }
+      }
+    }
+  }
+}
