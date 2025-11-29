@@ -538,18 +538,9 @@ export namespace SessionPrompt {
         ),
       ]
 
-      // Allow plugins to transform messages before sending to AI
       await Plugin.trigger(
         "chat.messages.transform",
-        {
-          sessionID,
-          agent: agent.name,
-          model: {
-            providerID: model.providerID,
-            modelID: model.modelID,
-          },
-          provider: provider ?? { id: model.providerID, name: model.providerID },
-        },
+        {},
         { messages },
       )
 
