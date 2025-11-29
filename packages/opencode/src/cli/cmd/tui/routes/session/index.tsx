@@ -1201,15 +1201,15 @@ function ToolPart(props: { last: boolean; part: ToolPart; message: AssistantMess
           <box gap={1}>
             <text fg={theme.text}>Permission required to run this tool:</text>
             <box flexDirection="row" gap={2}>
-              <text>
+              <text fg={theme.text}>
                 <b>enter</b>
                 <span style={{ fg: theme.textMuted }}> accept</span>
               </text>
-              <text>
+              <text fg={theme.text}>
                 <b>a</b>
                 <span style={{ fg: theme.textMuted }}> accept always</span>
               </text>
-              <text>
+              <text fg={theme.text}>
                 <b>d</b>
                 <span style={{ fg: theme.textMuted }}> deny</span>
               </text>
