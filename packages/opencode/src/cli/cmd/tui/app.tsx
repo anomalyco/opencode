@@ -2,7 +2,18 @@ import { render, useKeyboard, useRenderer, useTerminalDimensions } from "@opentu
 import { Clipboard } from "@tui/util/clipboard"
 import { TextAttributes } from "@opentui/core"
 import { RouteProvider, useRoute } from "@tui/context/route"
-import { Switch, Match, createEffect, untrack, ErrorBoundary, createSignal, onMount, batch, Show } from "solid-js"
+import {
+  Switch,
+  Match,
+  createEffect,
+  untrack,
+  ErrorBoundary,
+  createSignal,
+  onMount,
+  onCleanup,
+  batch,
+  Show,
+} from "solid-js"
 import { Installation } from "@/installation"
 import { Global } from "@/global"
 import { DialogProvider, useDialog } from "@tui/ui/dialog"
@@ -158,6 +169,30 @@ function App() {
   const { theme, mode, setMode } = useTheme()
   const sync = useSync()
   const exit = useExit()
+
+  // Fix for issue #4906: Enable key repeat for arrow keys and page up/down
+  // The @opentui/core library only listens to "keypress" events, not "keyrepeat" events
+  // This causes arrow keys and page up/down to not repeat when held down
+  // We add a global keyrepeat listener that forwards navigation keys to the focused element
+  onMount(() => {
+    const handleKeyRepeat = (evt: any) => {
+      const navigationKeys = ["up", "down", "left", "right", "pageup", "pagedown", "home", "end"]
+      const keyName = evt.name?.toLowerCase()
+
+      if (navigationKeys.includes(keyName || "")) {
+        const focused = renderer.currentFocusedRenderable
+        if (focused && typeof (focused as any).handleKeyPress === "function") {
+          ;(focused as any).handleKeyPress(evt)
+        }
+      }
+    }
+
+    renderer.keyInput.on("keyrepeat", handleKeyRepeat)
+
+    return () => {
+      renderer.keyInput.off("keyrepeat", handleKeyRepeat)
+    }
+  })
 
   createEffect(() => {
     console.log(JSON.stringify(route.data))
