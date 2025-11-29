@@ -169,4 +169,24 @@ export interface Hooks {
       metadata: any
     },
   ) => Promise<void>
+  /**
+   * Transform messages before they are sent to the AI provider.
+   * This hook fires after messages are converted to AI SDK format but before
+   * they're passed to streamText(). Plugins can modify the messages array
+   * in place to prune, filter, or transform the conversation history.
+   *
+   * The ModelMessage type is the AI SDK's unified message format, which
+   * abstracts away provider-specific differences.
+   */
+  "chat.messages.transform"?: (
+    input: {
+      sessionID: string
+      agent: string
+      model: Model
+      provider: Provider
+    },
+    output: {
+      messages: import("ai").ModelMessage[]
+    },
+  ) => Promise<void>
 }

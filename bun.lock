@@ -298,6 +298,7 @@
       "version": "1.0.120",
       "dependencies": {
         "@opencode-ai/sdk": "workspace:*",
+        "ai": "catalog:",
         "zod": "catalog:",
       },
       "devDependencies": {

@@ -513,6 +513,46 @@ export namespace SessionPrompt {
         })
       }
 
+      // Build messages array for the LLM request
+      const messages: ModelMessage[] = [
+        ...system.map(
+          (x): ModelMessage => ({
+            role: "system",
+            content: x,
+          }),
+        ),
+        ...MessageV2.toModelMessage(
+          msgs.filter((m) => {
+            if (m.info.role !== "assistant" || m.info.error === undefined) {
+              return true
+            }
+            if (
+              MessageV2.AbortedError.isInstance(m.info.error) &&
+              m.parts.some((part) => part.type !== "step-start" && part.type !== "reasoning")
+            ) {
+              return true
+            }
+
+            return false
+          }),
+        ),
+      ]
+
+      // Allow plugins to transform messages before sending to AI
+      await Plugin.trigger(
+        "chat.messages.transform",
+        {
+          sessionID,
+          agent: agent.name,
+          model: {
+            providerID: model.providerID,
+            modelID: model.modelID,
+          },
+          provider: provider ?? { id: model.providerID, name: model.providerID },
+        },
+        { messages },
+      )
+
       const result = await processor.process(() =>
         streamText({
           onError(error) {
@@ -564,29 +604,7 @@ export namespace SessionPrompt {
           stopWhen: stepCountIs(1),
           temperature: params.temperature,
           topP: params.topP,
-          messages: [
-            ...system.map(
-              (x): ModelMessage => ({
-                role: "system",
-                content: x,
-              }),
-            ),
-            ...MessageV2.toModelMessage(
-              msgs.filter((m) => {
-                if (m.info.role !== "assistant" || m.info.error === undefined) {
-                  return true
-                }
-                if (
-                  MessageV2.AbortedError.isInstance(m.info.error) &&
-                  m.parts.some((part) => part.type !== "step-start" && part.type !== "reasoning")
-                ) {
-                  return true
-                }
-
-                return false
-              }),
-            ),
-          ],
+          messages,
           tools: model.info.tool_call === false ? undefined : tools,
           model: wrapLanguageModel({
             model: model.language,

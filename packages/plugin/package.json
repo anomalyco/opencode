@@ -16,6 +16,7 @@
   ],
   "dependencies": {
     "@opencode-ai/sdk": "workspace:*",
+    "ai": "catalog:",
     "zod": "catalog:"
   },
   "devDependencies": {
