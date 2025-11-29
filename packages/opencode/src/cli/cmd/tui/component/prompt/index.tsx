@@ -850,7 +850,7 @@ export function Prompt(props: PromptProps) {
                       const r = retry()
                       if (!r) return
                       if (r.message.includes("exceeded your current quota") && r.message.includes("gemini"))
-                        return "gemini 3 way too hot right now"
+                        return "gemini is way too hot right now"
                       if (r.message.length > 50) return r.message.slice(0, 50) + "..."
                       return r.message
                     })
