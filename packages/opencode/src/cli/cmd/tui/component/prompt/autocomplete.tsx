@@ -239,7 +239,7 @@ export function Autocomplete(props: {
         },
         {
           display: "/thinking",
-          description: "toggle thinking blocks",
+          description: "toggle thinking visibility",
           onSelect: () => command.trigger("session.toggle.thinking"),
         },
       )
