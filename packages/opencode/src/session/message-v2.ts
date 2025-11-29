@@ -550,13 +550,37 @@ export namespace MessageV2 {
     throw new Error("unknown message type")
   }
 
+  // Number of recent assistant messages to include reasoning for.
+  // Older reasoning becomes stale and increases token usage unnecessarily.
+  const REASONING_MESSAGE_LIMIT = 3
+
+  // Providers that need reasoning injection by default
+  // GLM/Zhipu models ignore native "reasoning" type when reading history,
+  // but they DO read plain text with tags. This list can be overridden via options.
+  const DEFAULT_REASONING_PROVIDERS = ["zai-coding-plan", "zhipu"]
+
   export function toModelMessage(
     input: {
       info: Info
       parts: Part[]
     }[],
+    options?: {
+      // If provided, only inject reasoning for these providers (e.g., ["zhipu", "openrouter"])
+      // If not provided, uses DEFAULT_REASONING_PROVIDERS
+      reasoningProviders?: string[]
+      // Current provider ID - used to check if reasoning injection should be applied
+      providerID?: string
+    },
   ): ModelMessage[] {
     const result: UIMessage[] = []
+
+    // Calculate which assistant messages should have reasoning injected (last N only)
+    const assistantMessages = input.filter((m) => m.info.role === "assistant")
+    const recentAssistantIds = new Set(assistantMessages.slice(-REASONING_MESSAGE_LIMIT).map((m) => m.info.id))
+
+    // Determine if reasoning injection is enabled for current provider
+    const providersToCheck = options?.reasoningProviders ?? DEFAULT_REASONING_PROVIDERS
+    const shouldInjectReasoning = !!options?.providerID && providersToCheck.some((p) => options.providerID?.includes(p))
 
     for (const msg of input) {
       if (msg.parts.length === 0) continue
@@ -656,11 +680,17 @@ export namespace MessageV2 {
               })
           }
           if (part.type === "reasoning") {
-            assistantMessage.parts.push({
-              type: "reasoning",
-              text: part.text,
-              providerMetadata: part.metadata,
-            })
+            // Inject reasoning as plain text so all models can read it in conversation history.
+            // Many providers (e.g., GLM/Zhipu) ignore the native "reasoning" type when reading history,
+            // but they DO read plain text content. Only inject for recent messages to limit token usage.
+            // See: specs/reasoning-injection.md for detailed explanation and test results.
+            const isRecentMessage = recentAssistantIds.has(msg.info.id)
+            if (shouldInjectReasoning && isRecentMessage && part.text.trim()) {
+              assistantMessage.parts.push({
+                type: "text",
+                text: `[Previous reasoning: ${part.text}]`,
+              })
+            }
           }
         }
       }

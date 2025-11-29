@@ -585,6 +585,7 @@ export namespace SessionPrompt {
 
                 return false
               }),
+              { providerID: model.providerID },
             ),
           ],
           tools: model.info.tool_call === false ? undefined : tools,
