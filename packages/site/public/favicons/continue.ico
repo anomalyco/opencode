@@ -1,0 +1,460 @@
+<!DOCTYPE html><!-- Last Published: Wed Sep 24 2025 20:27:14 GMT+0000 (Coordinated Universal Time) --><html data-wf-domain="www.continue.dev" data-wf-page="663e06c56841363663ffbc27" data-wf-site="663e06c56841363663ffbbcf"><head><meta charset="utf-8"/><title>Not Found</title><meta content="Not Found" property="og:title"/><meta content="Not Found" property="twitter:title"/><meta content="width=device-width, initial-scale=1" name="viewport"/><link href="https://cdn.prod.website-files.com/663e06c56841363663ffbbcf/css/continue-dev.webflow.shared.eb27363f3.css" rel="stylesheet" type="text/css"/><script type="text/javascript">!function(o,c){var n=c.documentElement,t=" w-mod-";n.className+=t+"js",("ontouchstart"in o||o.DocumentTouch&&c instanceof DocumentTouch)&&(n.className+=t+"touch")}(window,document);</script><link href="https://cdn.prod.website-files.com/663e06c56841363663ffbbcf/665253511c9fe499ba28f6c5_Logo_32x32%20(1).png" rel="shortcut icon" type="image/x-icon"/><link href="https://cdn.prod.website-files.com/663e06c56841363663ffbbcf/664c918ec47bacdd3acdc167_favicon%408x.png" rel="apple-touch-icon"/><script async="" src="https://www.googletagmanager.com/gtag/js?id=G-E6VGV6T35Q"></script><script type="text/javascript">window.dataLayer = window.dataLayer || [];function gtag(){dataLayer.push(arguments);}gtag('js', new Date());gtag('set', 'developer_id.dZGVlNj', true);gtag('config', 'G-E6VGV6T35Q');</script><script type="text/javascript" src="https://www.bugherd.com/sidebarv2.js?apikey=ixjruatcbn0mxbyw2jmdva" async="true"></script>
+<!-- Keep this css code to improve the font quality-->
+<style>
+  * {
+  -webkit-font-smoothing: antialiased;
+  -moz-osx-font-smoothing: grayscale;
+  -o-font-smoothing: antialiased;
+}
+  .announcement-banner {
+    position: fixed;
+    top: 0;
+    left: 0;
+    width: 100%;
+    background-color: #6636eb;
+    color: white;
+    text-align: center;
+    padding: 10px;
+    z-index: 9999;
+  }
+  
+  body {
+    padding-top: 40px; /* Add padding to body to prevent content from hiding under banner */
+  }
+</style>
+
+<script>
+  document.addEventListener('DOMContentLoaded', function() {
+    // Create banner element
+    const banner = document.createElement('div');
+    banner.className = 'announcement-banner';
+    banner.innerHTML = 'Introducing <a href="https://blog.continue.dev/continue-1-0" style="color: white; text-decoration: underline;">Continue 1.0</a>! Check out our <a href="https://techcrunch.com/2025/02/26/continue-wants-to-help-developers-create-and-share-custom-ai-coding-assistants/" style="color: white; text-decoration: underline;">TechCrunch</a> coverage and press release on <a href="https://apnews.com/press-release/ez-newswire/artificial-intelligence-140cd465826f50d2d54149942acc581b" style="color: white; text-decoration: underline;">AP News</a>';
+    
+    // Add banner to top of body
+    // document.body.prepend(banner);
+  });
+</script>
+
+<script type="text/javascript">
+      !function(){var e,t,n;e="7aa28ed11570734",t=function(){Reo.init({clientID:"7aa28ed11570734"})},(n=document.createElement("script")).src="https://static.reo.dev/"+e+"/reo.js",n.defer=!0,n.onload=t,document.head.appendChild(n)}();
+</script></head><body><div class="page-wrapper"><div class="global-styles w-embed"><style>
+
+/* Set color style to inherit */
+.inherit-color * {
+    color: inherit;
+}
+
+/* Focus state style for keyboard navigation for the focusable elements */
+*[tabindex]:focus-visible,
+  input[type="file"]:focus-visible {
+   outline: 0.125rem solid #4d65ff;
+   outline-offset: 0.125rem;
+}
+
+/* Get rid of top margin on first element in any rich text element */
+.w-richtext > :not(div):first-child, .w-richtext > div:first-child > :first-child {
+  margin-top: 0 !important;
+}
+
+/* Get rid of bottom margin on last element in any rich text element */
+.w-richtext>:last-child, .w-richtext ol li:last-child, .w-richtext ul li:last-child {
+	margin-bottom: 0 !important;
+}
+
+/* Prevent all click and hover interaction with an element */
+.pointer-events-off {
+	pointer-events: none;
+}
+
+/* Enables all click and hover interaction with an element */
+.pointer-events-on {
+  pointer-events: auto;
+}
+
+/* Create a class of .div-square which maintains a 1:1 dimension of a div */
+.div-square::after {
+	content: "";
+	display: block;
+	padding-bottom: 100%;
+}
+
+/* Make sure containers never lose their center alignment */
+.container-medium,.container-small, .container-large {
+	margin-right: auto !important;
+  margin-left: auto !important;
+}
+
+/* 
+Make the following elements inherit typography styles from the parent and not have hardcoded values. 
+Important: You will not be able to style for example "All Links" in Designer with this CSS applied.
+Uncomment this CSS to use it in the project. Leave this message for future hand-off.
+*/
+/*
+a,
+.w-input,
+.w-select,
+.w-tab-link,
+.w-nav-link,
+.w-dropdown-btn,
+.w-dropdown-toggle,
+.w-dropdown-link {
+  color: inherit;
+  text-decoration: inherit;
+  font-size: inherit;
+}
+*/
+
+/* Apply "..." after 3 lines of text */
+.text-style-3lines {
+	display: -webkit-box;
+	overflow: hidden;
+	-webkit-line-clamp: 3;
+	-webkit-box-orient: vertical;
+}
+
+/* Apply "..." after 2 lines of text */
+.text-style-2lines {
+	display: -webkit-box;
+	overflow: hidden;
+	-webkit-line-clamp: 2;
+	-webkit-box-orient: vertical;
+}
+
+/* Adds inline flex display */
+.display-inlineflex {
+  display: inline-flex;
+}
+
+/* These classes are never overwritten */
+.hide {
+  display: none !important;
+}
+
+@media screen and (max-width: 991px) {
+    .hide, .hide-tablet {
+        display: none !important;
+    }
+}
+  @media screen and (max-width: 767px) {
+    .hide-mobile-landscape{
+      display: none !important;
+    }
+}
+  @media screen and (max-width: 479px) {
+    .hide-mobile{
+      display: none !important;
+    }
+}
+ 
+.margin-0 {
+  margin: 0rem !important;
+}
+  
+.padding-0 {
+  padding: 0rem !important;
+}
+
+.spacing-clean {
+padding: 0rem !important;
+margin: 0rem !important;
+}
+
+.margin-top {
+  margin-right: 0rem !important;
+  margin-bottom: 0rem !important;
+  margin-left: 0rem !important;
+}
+
+.padding-top {
+  padding-right: 0rem !important;
+  padding-bottom: 0rem !important;
+  padding-left: 0rem !important;
+}
+  
+.margin-right {
+  margin-top: 0rem !important;
+  margin-bottom: 0rem !important;
+  margin-left: 0rem !important;
+}
+
+.padding-right {
+  padding-top: 0rem !important;
+  padding-bottom: 0rem !important;
+  padding-left: 0rem !important;
+}
+
+.margin-bottom {
+  margin-top: 0rem !important;
+  margin-right: 0rem !important;
+  margin-left: 0rem !important;
+}
+
+.padding-bottom {
+  padding-top: 0rem !important;
+  padding-right: 0rem !important;
+  padding-left: 0rem !important;
+}
+
+.margin-left {
+  margin-top: 0rem !important;
+  margin-right: 0rem !important;
+  margin-bottom: 0rem !important;
+}
+  
+.padding-left {
+  padding-top: 0rem !important;
+  padding-right: 0rem !important;
+  padding-bottom: 0rem !important;
+}
+  
+.margin-horizontal {
+  margin-top: 0rem !important;
+  margin-bottom: 0rem !important;
+}
+
+.padding-horizontal {
+  padding-top: 0rem !important;
+  padding-bottom: 0rem !important;
+}
+
+.margin-vertical {
+  margin-right: 0rem !important;
+  margin-left: 0rem !important;
+}
+  
+.padding-vertical {
+  padding-right: 0rem !important;
+  padding-left: 0rem !important;
+}
+
+/* Apply "..." at 100% width */
+.truncate-width { 
+		width: 100%; 
+    white-space: nowrap; 
+    overflow: hidden; 
+    text-overflow: ellipsis; 
+}
+/* Removes native scrollbar */
+.no-scrollbar {
+    -ms-overflow-style: none;
+    overflow: -moz-scrollbars-none; 
+}
+
+.no-scrollbar::-webkit-scrollbar {
+    display: none;
+}
+.has-gradient {
+  background: linear-gradient(to top, #9C9C9C 0%, #000000 50%, #000000 100%);
+  background-clip: text;
+  -webkit-background-clip: text;
+  -webkit-text-fill-color: transparent;
+  color: transparent;
+}
+</style>
+
+
+
+<style>
+.gradient-stroke {
+  position: relative;
+  border-radius: 20px;
+}
+
+.gradient-stroke::before {
+  content: '';
+  position: absolute;
+  top: 0;
+  left: 0;
+  right: 0;
+  bottom: 0;
+  border-radius: 20px;
+  padding: 1px; /* Grubość border */
+  background: linear-gradient(
+    180deg, 
+    #DFDFDF 0%,                    /* Góra - pełny kolor */
+    rgba(223, 223, 223, 0.7) 25%,  /* 1/4 wysokości */
+    rgba(223, 223, 223, 0.3) 40%,  /* Przed połową */
+    rgba(223, 223, 223, 0) 50%,    /* Połowa - przezroczysty */
+    rgba(223, 223, 223, 0) 100%    /* Dół - przezroczysty */
+  );
+  mask: 
+    linear-gradient(#fff 0 0) content-box, 
+    linear-gradient(#fff 0 0);
+  mask-composite: xor;
+  -webkit-mask: 
+    linear-gradient(#fff 0 0) content-box, 
+    linear-gradient(#fff 0 0);
+  -webkit-mask-composite: xor;
+  pointer-events: none;
+}
+</style>
+<style>
+h1, h2, h3 {
+    background: linear-gradient(to bottom, #000, #9C9C9C);
+    -webkit-background-clip: text;
+    -webkit-text-fill-color: transparent;
+}
+</style></div><div data-animation="default" class="navbar_component w-nav" data-easing2="ease" data-easing="ease" data-collapse="medium" role="banner" data-no-scroll="1" data-duration="400" data-doc-height="1"><div class="navbar_container navbar-tablet"><div class="nav-padding"></div><div class="navbar-content"><div class="logo-wrapper"><a href="/old-home" class="navbar_logo-link w-nav-brand"><div class="logo-wrapper"><div class="logo-icon w-embed"><svg xmlns="http://www.w3.org/2000/svg" width="26" height="24" viewBox="0 0 26 24" fill="none">
+  <path d="M20.5286 3.26811L19.1512 5.65694L22.6328 11.6849C22.6582 11.7306 22.6735 11.7866 22.6735 11.8374C22.6735 11.8882 22.6582 11.9441 22.6328 11.9899L19.1512 18.0229L20.5286 20.4117L25.4791 11.8374L20.5286 3.26303V3.26811ZM18.6176 5.3469L19.995 2.95807H17.2402L15.8628 5.3469H18.6227H18.6176ZM15.8577 5.96697L19.075 11.5324H21.8298L18.6176 5.96697H15.8577ZM18.6176 17.7179L21.8298 12.1474H19.075L15.8577 17.7179H18.6176ZM15.8577 18.338L17.2351 20.7167H19.9899L18.6125 18.338H15.8526H15.8577ZM6.52098 21.3063C6.46507 21.3063 6.41424 21.291 6.3685 21.2656C6.32276 21.2402 6.28209 21.1995 6.25668 21.1538L2.77002 15.1207H0.0152482L4.9657 23.69H14.8615L13.4841 21.3063H6.52606H6.52098ZM14.0178 20.9962L15.3952 23.38L16.7726 20.9911L15.3952 18.6023L14.0178 20.9911V20.9962ZM14.8615 18.2974H8.43712L7.05973 20.6862H13.4841L14.8615 18.2974ZM7.89836 17.9924L4.68108 12.4219L3.30369 14.8107L6.52098 20.3812L7.89836 17.9924ZM0.0101654 14.5007H2.76494L4.14232 12.1118H1.39263L0.0101654 14.5007ZM6.24143 2.5413C6.26685 2.49556 6.30751 2.4549 6.35325 2.42948C6.399 2.40407 6.4549 2.38882 6.50573 2.38882H13.474L14.8514 0H4.95045L0 8.57435H2.75477L6.23127 2.54638L6.24143 2.5413ZM4.14232 11.5782L2.76494 9.18934H0.0101654L1.38755 11.5782H4.14232ZM6.51081 3.31386L3.29861 8.8793L4.67599 11.2681L7.8882 5.70268L6.51081 3.31386ZM13.4791 3.00382H7.04448L8.42187 5.39264H14.8564L13.4791 3.00382ZM15.3952 5.0826L16.7675 2.69886L15.3952 0.310038L14.0178 2.69378L15.3952 5.0826Z" fill="black"/>
+</svg></div><img src="https://cdn.prod.website-files.com/663e06c56841363663ffbbcf/663e1b9fb023f0b622ad3608_log-text.svg" loading="lazy" alt="" class="img-navbar"/></div></a></div><div class="navbar-links"><div class="nav-links-wraper"><a href="https://continue.dev/enterprise" class="navbar-link w-nav-link">Solutions</a><a href="https://hub.continue.dev/pricing" class="navbar-link w-nav-link">Pricing</a><a href="https://docs.continue.dev/intro" class="navbar-link w-nav-link">Docs</a><div class="w-layout-blockcontainer container-3 w-container"><a href="/about-us" class="navbar-link navbar-link-without-padding w-nav-link">About</a><a href="https://www.ycombinator.com/companies/continue/jobs" target="_blank" class="text-footer-tag">We&#x27;re hiring!</a></div><a href="https://hub.continue.dev/login" class="navbar-link tablet-navbar-link w-nav-link">Sign In</a><a href="https://hub.continue.dev/login" class="navbar-link tablet-navbar-link w-nav-link">Sign Up</a></div></div><div class="navbar_button-wrapper"><a href="https://hub.continue.dev/login" class="navbar-link w-nav-link">Sign In</a><a href="https://hub.continue.dev" class="navbar-link get-started-button w-nav-link">Get Started</a></div><div class="navbar_menu-button w-nav-button"><div data-w-id="105043b9-ceb4-e16a-e744-0fdf0fce8fa4" class="menu-icon"><div class="menu-icon_line-top"></div><div class="menu-icon_line-middle"><div class="menu-icon_line-middle-inner"></div></div><div class="menu-icon_line-bottom"></div></div></div></div><div class="nav-padding"></div></div></div><main class="main-wrapper"><header class="section_header-enterprise is-404"><div class="padding-global"><div class="container-large"><div class="w-layout-grid hero-enterprise_component"><div class="hero-enterprise_content margin-mobile-top _7 slide-in"><p class="text-size-medium text-weight-semibold txt-color-purple500 is-subtitle14">404</p><div class="spacer-16"></div><h1 class="heading-style-h1">Page not found</h1><div class="spacer-24 mobile-16"></div><p class="text-size-large text-colour-black070">The page you’re trying to reach doesn’t exist or is no longer available.</p><div class="margin-32"></div><a href="/old-home" class="button is-icon is-hero-enterprise w-inline-block"><div>Go to homepage</div></a></div><div class="hero-enterprise_image-wrapper"><img src="https://cdn.prod.website-files.com/663e06c56841363663ffbbcf/664395573d5a421b9f9bf5a0_Glass_signet_cropp%2015.webp" loading="eager" width="Auto" sizes="(max-width: 767px) 90vw, (max-width: 991px) 75vw, 543px" alt="" srcset="https://cdn.prod.website-files.com/663e06c56841363663ffbbcf/664395573d5a421b9f9bf5a0_Glass_signet_cropp%2015-p-500.png 500w, https://cdn.prod.website-files.com/663e06c56841363663ffbbcf/664395573d5a421b9f9bf5a0_Glass_signet_cropp%2015-p-800.png 800w, https://cdn.prod.website-files.com/663e06c56841363663ffbbcf/664395573d5a421b9f9bf5a0_Glass_signet_cropp%2015-p-1080.png 1080w, https://cdn.prod.website-files.com/663e06c56841363663ffbbcf/664395573d5a421b9f9bf5a0_Glass_signet_cropp%2015.webp 1158w" class="header_image"/><div class="header-gradient-enterprise"></div></div></div></div></div></header></main><footer class="footer"><div class="padding-global"><div class="container-large"><div class="padding-vertical footer-padding"><div class="padding-bottom padding-xxlarge"><div class="w-layout-grid footer-top-wrapper"><div class="w-layout-grid footer-left-wrapper"><div class="footer_link-list"><div class="logo-social-wrapper-footer"><div class="footer-logo-wrapper"><div class="logo-wrapper is-footer"><div class="logo-icon is-footer w-embed"><svg xmlns="http://www.w3.org/2000/svg" width="35" height="35" viewBox="0 0 26 24" fill="none">
+  <path d="M20.5286 3.26811L19.1512 5.65694L22.6328 11.6849C22.6582 11.7306 22.6735 11.7866 22.6735 11.8374C22.6735 11.8882 22.6582 11.9441 22.6328 11.9899L19.1512 18.0229L20.5286 20.4117L25.4791 11.8374L20.5286 3.26303V3.26811ZM18.6176 5.3469L19.995 2.95807H17.2402L15.8628 5.3469H18.6227H18.6176ZM15.8577 5.96697L19.075 11.5324H21.8298L18.6176 5.96697H15.8577ZM18.6176 17.7179L21.8298 12.1474H19.075L15.8577 17.7179H18.6176ZM15.8577 18.338L17.2351 20.7167H19.9899L18.6125 18.338H15.8526H15.8577ZM6.52098 21.3063C6.46507 21.3063 6.41424 21.291 6.3685 21.2656C6.32276 21.2402 6.28209 21.1995 6.25668 21.1538L2.77002 15.1207H0.0152482L4.9657 23.69H14.8615L13.4841 21.3063H6.52606H6.52098ZM14.0178 20.9962L15.3952 23.38L16.7726 20.9911L15.3952 18.6023L14.0178 20.9911V20.9962ZM14.8615 18.2974H8.43712L7.05973 20.6862H13.4841L14.8615 18.2974ZM7.89836 17.9924L4.68108 12.4219L3.30369 14.8107L6.52098 20.3812L7.89836 17.9924ZM0.0101654 14.5007H2.76494L4.14232 12.1118H1.39263L0.0101654 14.5007ZM6.24143 2.5413C6.26685 2.49556 6.30751 2.4549 6.35325 2.42948C6.399 2.40407 6.4549 2.38882 6.50573 2.38882H13.474L14.8514 0H4.95045L0 8.57435H2.75477L6.23127 2.54638L6.24143 2.5413ZM4.14232 11.5782L2.76494 9.18934H0.0101654L1.38755 11.5782H4.14232ZM6.51081 3.31386L3.29861 8.8793L4.67599 11.2681L7.8882 5.70268L6.51081 3.31386ZM13.4791 3.00382H7.04448L8.42187 5.39264H14.8564L13.4791 3.00382ZM15.3952 5.0826L16.7675 2.69886L15.3952 0.310038L14.0178 2.69378L15.3952 5.0826Z" fill="black"/>
+</svg></div><img src="https://cdn.prod.website-files.com/663e06c56841363663ffbbcf/663e1b9fb023f0b622ad3608_log-text.svg" loading="eager" width="114" height="21" alt="" class="logo-footer"/></div><div class="text-weight-medium txt-color-050 is-footer tablet-hidden">Ship faster with Continuous AI</div></div><div class="w-layout-grid footer_social-list is-mobile"><div class="footer-social-links"><a href="https://twitter.com/continuedev" target="_blank" class="link-navbar-sm w-inline-block"><img src="https://cdn.prod.website-files.com/663e06c56841363663ffbbcf/665248416e658fc5b56b63e0_logo.svg" loading="lazy" alt="" class="image-6"/></a><a href="https://www.linkedin.com/company/94277814" target="_blank" class="link-navbar-sm w-inline-block"><img src="https://cdn.prod.website-files.com/663e06c56841363663ffbbcf/66524943246a92fe333682b0_LI-In-Bug.webp" loading="lazy" alt="" class="image-7"/></a><a href="https://github.com/continuedev/continue" target="_blank" class="link-navbar-sm w-inline-block"><div class="icon-embed-xsmall-footer w-embed"><svg xmlns="http://www.w3.org/2000/svg" width="100%" height="100%" viewBox="0 0 24 24" fill="none" preserveAspectRatio="xMidYMid meet" aria-hidden="true" role="img">
+<path fill-rule="evenodd" clip-rule="evenodd" d="M12 0C5.37 0 0 5.37 0 12C0 17.31 3.435 21.795 8.205 23.385C8.805 23.49 9.03 23.13 9.03 22.815C9.03 22.53 9.015 21.585 9.015 20.58C6 21.135 5.22 19.845 4.98 19.17C4.845 18.825 4.26 17.76 3.75 17.475C3.33 17.25 2.73 16.695 3.735 16.68C4.68 16.665 5.355 17.55 5.58 17.91C6.66 19.725 8.385 19.215 9.075 18.9C9.18 18.12 9.495 17.595 9.84 17.295C7.17 16.995 4.38 15.96 4.38 11.37C4.38 10.065 4.845 8.985 5.61 8.145C5.49 7.845 5.07 6.615 5.73 4.965C5.73 4.965 6.735 4.65 9.03 6.195C9.99 5.925 11.01 5.79 12.03 5.79C13.05 5.79 14.07 5.925 15.03 6.195C17.325 4.635 18.33 4.965 18.33 4.965C18.99 6.615 18.57 7.845 18.45 8.145C19.215 8.985 19.68 10.05 19.68 11.37C19.68 15.975 16.875 16.995 14.205 17.295C14.64 17.67 15.015 18.39 15.015 19.515C15.015 21.12 15 22.41 15 22.815C15 23.13 15.225 23.505 15.825 23.385C20.565 21.795 24 17.295 24 12C24 5.37 18.63 0 12 0Z" fill="currentColor"/>
+</svg></div></a><a href="https://discord.com/invite/EfJEfdFnDQ" class="link-navbar-sm w-inline-block"><div class="icon-embed-xsmall-footer w-embed"><svg xmlns="http://www.w3.org/2000/svg" width="100%" height="100%" viewBox="0 0 24 24" fill="none" preserveAspectRatio="xMidYMid meet" aria-hidden="true" role="img">
+<path d="M20.3303 4.22781C18.7767 3.50093 17.1156 2.97267 15.3789 2.67188C15.1656 3.05749 14.9164 3.57614 14.7446 3.98873C12.8985 3.71109 11.0693 3.71109 9.25716 3.98873C9.08539 3.57614 8.83055 3.05749 8.61536 2.67188C6.87681 2.97267 5.21376 3.50287 3.66019 4.23166C0.526643 8.96686 -0.322811 13.5845 0.101917 18.1365C2.18025 19.6885 4.19441 20.6313 6.17457 21.2483C6.66349 20.5754 7.09953 19.8601 7.47518 19.1063C6.75975 18.8344 6.07453 18.499 5.42707 18.1095C5.59884 17.9822 5.76686 17.8492 5.92918 17.7123C9.87819 19.5594 14.1689 19.5594 18.0707 17.7123C18.235 17.8492 18.403 17.9822 18.5728 18.1095C17.9235 18.5009 17.2364 18.8363 16.521 19.1082C16.8966 19.8601 17.3308 20.5774 17.8216 21.2502C19.8036 20.6333 21.8197 19.6905 23.898 18.1365C24.3964 12.8595 23.0467 8.28434 20.3303 4.22781ZM8.01318 15.337C6.82772 15.337 5.85555 14.2303 5.85555 12.8826C5.85555 11.535 6.80696 10.4264 8.01318 10.4264C9.21942 10.4264 10.1916 11.533 10.1708 12.8826C10.1727 14.2303 9.21942 15.337 8.01318 15.337ZM15.9867 15.337C14.8013 15.337 13.8291 14.2303 13.8291 12.8826C13.8291 11.535 14.7805 10.4264 15.9867 10.4264C17.193 10.4264 18.1651 11.533 18.1444 12.8826C18.1444 14.2303 17.193 15.337 15.9867 15.337Z" fill="currentColor"/>
+</svg></div></a></div><a href="https://bsky.app/profile/continue.dev" class="sm-icon-footer w-inline-block"><div class="icon-embed-xsmall w-embed"><svg xmlns="http://www.w3.org/2000/svg" width="100%" height="100%" viewBox="0 0 24 24" fill="none" preserveAspectRatio="xMidYMid meet" aria-hidden="true" role="img">
+<path d="M5.42737 2.82923C8.08721 4.90143 10.9482 9.10297 11.9986 11.3578C13.0491 9.10314 15.9099 4.90138 18.5698 2.82923C20.489 1.33402 23.5986 0.177114 23.5986 3.85846C23.5986 4.59368 23.1924 10.0346 22.9541 10.918C22.126 13.989 19.1084 14.7723 16.4241 14.2982C21.1161 15.1269 22.3097 17.8718 19.732 20.6168C14.8364 25.8299 12.6956 19.3088 12.1468 17.6378C12.0463 17.3315 11.9992 17.1882 11.9985 17.31C11.9978 17.1882 11.9508 17.3315 11.8502 17.6378C11.3016 19.3088 9.16088 25.8301 4.265 20.6168C1.68724 17.8718 2.8808 15.1267 7.57288 14.2982C4.88856 14.7723 1.87088 13.989 1.04288 10.918C0.80463 10.0346 0.398438 4.59359 0.398438 3.85846C0.398438 0.177114 3.50812 1.33402 5.42724 2.82923H5.42737Z" fill="currentColor"/>
+</svg></div></a><a href="https://x.com/continuedev" class="sm-icon-footer w-inline-block"><div class="icon-embed-xsmall w-embed"><svg xmlns="http://www.w3.org/2000/svg" width="100%" height="100%" viewBox="0 0 24 24" fill="none" preserveAspectRatio="xMidYMid meet" aria-hidden="true" role="img">
+<path d="M18.9 1.125H22.581L14.541 10.338L24 22.875H16.5945L10.794 15.27L4.1565 22.875H0.474L9.0735 13.02L0 1.125H7.5945L12.837 8.0745L18.9 1.125ZM17.61 20.667H19.65L6.4845 3.2175H4.2975L17.61 20.667Z" fill="currentColor"/>
+</svg></div></a><a href="https://www.linkedin.com/company/continuedev" class="sm-icon-footer w-inline-block"><div class="icon-embed-xsmall w-embed"><svg xmlns="http://www.w3.org/2000/svg" width="100%" height="100%" viewBox="0 0 24 24" fill="CurrentColor" preserveAspectRatio="xMidYMid meet" aria-hidden="true" role="img">
+<g clip-path="url(#clip0_1912_4678)">
+<path d="M0 1.719C0 0.7695 0.789 0 1.7625 0H22.2375C23.211 0 24 0.7695 24 1.719V22.281C24 23.2305 23.211 24 22.2375 24H1.7625C0.789 24 0 23.2305 0 22.281V1.719ZM7.4145 20.091V9.2535H3.813V20.091H7.4145ZM5.6145 7.773C6.87 7.773 7.6515 6.942 7.6515 5.901C7.629 4.8375 6.8715 4.029 5.6385 4.029C4.4055 4.029 3.6 4.839 3.6 5.901C3.6 6.942 4.3815 7.773 5.5905 7.773H5.6145ZM12.9765 20.091V14.0385C12.9765 13.7145 13.0005 13.3905 13.0965 13.1595C13.356 12.513 13.9485 11.8425 14.9445 11.8425C16.248 11.8425 16.7685 12.8355 16.7685 14.2935V20.091H20.37V13.875C20.37 10.545 18.594 8.997 16.224 8.997C14.313 8.997 13.4565 10.047 12.9765 10.7865V10.824H12.9525L12.9765 10.7865V9.2535H9.3765C9.4215 10.2705 9.3765 20.091 9.3765 20.091H12.9765Z" fill="CurrentColor"/>
+</g>
+<defs>
+<clipPath id="clip0_1912_4678">
+<rect width="24" height="24" fill="CurrentColor"/>
+</clipPath>
+</defs>
+</svg></div></a><a href="https://github.com/continuedev/continue" class="sm-icon-footer w-inline-block"><div class="icon-embed-xsmall w-embed"><svg xmlns="http://www.w3.org/2000/svg" width="100%" height="100%" viewBox="0 0 24 24" fill="none" preserveAspectRatio="xMidYMid meet" aria-hidden="true" role="img">
+<g clip-path="url(#clip0_1912_4680)">
+<path fill-rule="evenodd" clip-rule="evenodd" d="M12 0C5.37 0 0 5.37 0 12C0 17.31 3.435 21.795 8.205 23.385C8.805 23.49 9.03 23.13 9.03 22.815C9.03 22.53 9.015 21.585 9.015 20.58C6 21.135 5.22 19.845 4.98 19.17C4.845 18.825 4.26 17.76 3.75 17.475C3.33 17.25 2.73 16.695 3.735 16.68C4.68 16.665 5.355 17.55 5.58 17.91C6.66 19.725 8.385 19.215 9.075 18.9C9.18 18.12 9.495 17.595 9.84 17.295C7.17 16.995 4.38 15.96 4.38 11.37C4.38 10.065 4.845 8.985 5.61 8.145C5.49 7.845 5.07 6.615 5.73 4.965C5.73 4.965 6.735 4.65 9.03 6.195C9.99 5.925 11.01 5.79 12.03 5.79C13.05 5.79 14.07 5.925 15.03 6.195C17.325 4.635 18.33 4.965 18.33 4.965C18.99 6.615 18.57 7.845 18.45 8.145C19.215 8.985 19.68 10.05 19.68 11.37C19.68 15.975 16.875 16.995 14.205 17.295C14.64 17.67 15.015 18.39 15.015 19.515C15.015 21.12 15 22.41 15 22.815C15 23.13 15.225 23.505 15.825 23.385C20.565 21.795 24 17.295 24 12C24 5.37 18.63 0 12 0Z" fill="currentcolor"/>
+</g>
+<defs>
+<clipPath id="clip0_1912_4680">
+<rect width="24" height="24" fill="white"/>
+</clipPath>
+</defs>
+</svg></div></a><a href="https://discord.com/invite/EfJEfdFnDQ" class="sm-icon-footer w-inline-block"><div class="icon-embed-xsmall w-embed"><svg xmlns="http://www.w3.org/2000/svg" width="100%" height="100%" viewBox="0 0 24 24" fill="none" preserveAspectRatio="xMidYMid meet" aria-hidden="true" role="img">
+<path d="M20.3303 4.22781C18.7767 3.50093 17.1156 2.97267 15.3789 2.67188C15.1656 3.05749 14.9164 3.57614 14.7446 3.98873C12.8985 3.71109 11.0693 3.71109 9.25716 3.98873C9.08539 3.57614 8.83055 3.05749 8.61536 2.67188C6.87681 2.97267 5.21376 3.50287 3.66019 4.23166C0.526643 8.96686 -0.322811 13.5845 0.101917 18.1365C2.18025 19.6885 4.19441 20.6313 6.17457 21.2483C6.66349 20.5754 7.09953 19.8601 7.47518 19.1063C6.75975 18.8344 6.07453 18.499 5.42707 18.1095C5.59884 17.9822 5.76686 17.8492 5.92918 17.7123C9.87819 19.5594 14.1689 19.5594 18.0707 17.7123C18.235 17.8492 18.403 17.9822 18.5728 18.1095C17.9235 18.5009 17.2364 18.8363 16.521 19.1082C16.8966 19.8601 17.3308 20.5774 17.8216 21.2502C19.8036 20.6333 21.8197 19.6905 23.898 18.1365C24.3964 12.8595 23.0467 8.28434 20.3303 4.22781ZM8.01318 15.337C6.82772 15.337 5.85555 14.2303 5.85555 12.8826C5.85555 11.535 6.80696 10.4264 8.01318 10.4264C9.21942 10.4264 10.1916 11.533 10.1708 12.8826C10.1727 14.2303 9.21942 15.337 8.01318 15.337ZM15.9867 15.337C14.8013 15.337 13.8291 14.2303 13.8291 12.8826C13.8291 11.535 14.7805 10.4264 15.9867 10.4264C17.193 10.4264 18.1651 11.533 18.1444 12.8826C18.1444 14.2303 17.193 15.337 15.9867 15.337Z" fill="currentColor"/>
+</svg></div></a></div></div><div class="spacer-20 mobile-hidden"></div><div class="links-footer-wrapper is-tablet-hidden"><a href="https://hub.continue.dev/pricing" class="footer_link">Pricing</a><div class="w-layout-blockcontainer container-2 w-container"><a href="/about-us" class="footer_link">About Us</a><a href="https://www.ycombinator.com/companies/continue/jobs" target="_blank" class="we-hiring-link w-inline-block"><div class="text-footer-tag footer-hiring-button">We&#x27;re hiring!</div></a></div><a href="https://docs.continue.dev/intro" class="footer_link">Docs</a><a href="https://blog.continue.dev/" class="footer_link">Blog</a><a href="/partners" class="footer_link">Partners</a><a href="https://continue.dev/amplified" class="footer_link">amplified.dev</a></div></div><div class="footer_link-list padding-right _96"><div class="heading-style-h6 txt-color-080">Download</div><div class="spacer-9 tablet-4"></div><div class="links-footer-wrapper"><div class="text-weight-medium txt-color-050 padding-bottom-tablet-4 is-footer">Install Continue now</div><div class="footer-button-wrapper"><a href="https://marketplace.visualstudio.com/items?itemName=Continue.continue" class="button is-icon is-footer w-inline-block"><div class="icon-embed-xsmall w-embed"><svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none">
+  <g clip-path="url(#clip0_1132_5065)">
+    <mask id="mask0_1132_5065" style="mask-type:alpha" maskUnits="userSpaceOnUse" x="0" y="0" width="24" height="24">
+      <path fill-rule="evenodd" clip-rule="evenodd" d="M17.0189 23.8367C17.3969 23.984 17.8279 23.9745 18.2094 23.7909L23.1506 21.4133C23.6698 21.1635 24 20.638 24 20.0615V3.9398C24 3.36332 23.6698 2.83784 23.1506 2.588L18.2094 0.210312C17.7087 -0.0306208 17.1227 0.0283926 16.6832 0.347878C16.6205 0.393517 16.5607 0.444473 16.5046 0.500629L7.04522 9.13057L2.92493 6.00291C2.54136 5.71177 2.00487 5.73563 1.64864 6.05967L0.327127 7.26179C-0.108612 7.65815 -0.109112 8.34366 0.326047 8.74069L3.8993 12.0006L0.326047 15.2606C-0.109112 15.6576 -0.108612 16.3431 0.327127 16.7395L1.64864 17.9416C2.00487 18.2656 2.54136 18.2895 2.92493 17.9983L7.04522 14.8707L16.5046 23.5006C16.6542 23.6504 16.8299 23.7631 17.0189 23.8367ZM18.0036 6.55235L10.8262 12.0006L18.0036 17.4489V6.55235Z" fill="white"/>
+    </mask>
+    <g mask="url(#mask0_1132_5065)">
+      <path d="M23.1517 2.5915L18.2066 0.210543C17.6342 -0.0650529 16.9501 0.0511993 16.5009 0.500412L0.312575 15.2604C-0.122851 15.6574 -0.12235 16.3429 0.313655 16.7393L1.63597 17.9414C1.99242 18.2654 2.52924 18.2893 2.91303 17.9981L22.4075 3.20919C23.0616 2.71304 24.0009 3.1795 24.0009 4.00042V3.94301C24.0009 3.36677 23.6708 2.84148 23.1517 2.5915Z" fill="white"/>
+      <g filter="url(#filter0_d_1132_5065)">
+        <path d="M23.1517 21.4088L18.2066 23.7897C17.6342 24.0654 16.9501 23.9491 16.5009 23.4999L0.312575 8.73991C-0.122851 8.3429 -0.12235 7.65737 0.313655 7.26101L1.63597 6.05889C1.99242 5.73485 2.52924 5.71099 2.91303 6.00214L22.4075 20.7911C23.0616 21.2872 24.0009 20.8208 24.0009 19.9999V20.0573C24.0009 20.6335 23.6708 21.1588 23.1517 21.4088Z" fill="white"/>
+      </g>
+      <g filter="url(#filter1_d_1132_5065)">
+        <path d="M18.2059 23.791C17.6333 24.0664 16.9493 23.9499 16.5 23.5006C17.0535 24.0542 18 23.6621 18 22.8793V1.12195C18 0.339133 17.0535 -0.0529057 16.5 0.500629C16.9493 0.0513762 17.6333 -0.0650401 18.2059 0.210312L23.1501 2.58801C23.6696 2.83785 24 3.36333 24 3.93981V20.0615C24 20.638 23.6696 21.1635 23.1501 21.4133L18.2059 23.791Z" fill="white"/>
+      </g>
+    </g>
+  </g>
+  <defs>
+    <filter id="filter0_d_1132_5065" x="-8.34701" y="-2.53451" width="40.6804" height="34.8054" filterUnits="userSpaceOnUse" color-interpolation-filters="sRGB">
+      <feFlood flood-opacity="0" result="BackgroundImageFix"/>
+      <feColorMatrix in="SourceAlpha" type="matrix" values="0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 127 0" result="hardAlpha"/>
+      <feOffset/>
+      <feGaussianBlur stdDeviation="4.16667"/>
+      <feColorMatrix type="matrix" values="0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0.25 0"/>
+      <feBlend mode="overlay" in2="BackgroundImageFix" result="effect1_dropShadow_1132_5065"/>
+      <feBlend mode="normal" in="SourceGraphic" in2="effect1_dropShadow_1132_5065" result="shape"/>
+    </filter>
+    <filter id="filter1_d_1132_5065" x="8.16666" y="-8.27084" width="24.1667" height="40.5427" filterUnits="userSpaceOnUse" color-interpolation-filters="sRGB">
+      <feFlood flood-opacity="0" result="BackgroundImageFix"/>
+      <feColorMatrix in="SourceAlpha" type="matrix" values="0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 127 0" result="hardAlpha"/>
+      <feOffset/>
+      <feGaussianBlur stdDeviation="4.16667"/>
+      <feColorMatrix type="matrix" values="0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0.25 0"/>
+      <feBlend mode="overlay" in2="BackgroundImageFix" result="effect1_dropShadow_1132_5065"/>
+      <feBlend mode="normal" in="SourceGraphic" in2="effect1_dropShadow_1132_5065" result="shape"/>
+    </filter>
+    <clipPath id="clip0_1132_5065">
+      <rect width="24" height="24" fill="white"/>
+    </clipPath>
+  </defs>
+</svg></div><div class="button-text">VS Code</div></a><a href="https://plugins.jetbrains.com/plugin/22707-continue" class="button is-icon is-footer w-inline-block"><div class="icon-embed-xsmall is-black w-embed"><svg xmlns="http://www.w3.org/2000/svg" width="100%" height="100%" viewBox="0 0 24 25" fill="none">
+<g clip-path="url(#clip0_2001_1001)">
+<path d="M0 0.888672H24V24.8887H0V0.888672Z" fill="white"/>
+<path d="M2.61194 20.3887H11.6119V21.8887H2.61194V20.3887Z" fill="currentColor"/>
+<path d="M2.23596 7.07649L2.90396 6.44449C2.96753 6.5448 3.05396 6.62864 3.15616 6.68912C3.25836 6.74961 3.37344 6.78503 3.49196 6.79249C3.74796 6.79249 3.91596 6.61249 3.91596 6.26449V3.89648H4.94796V6.27249C4.96339 6.4638 4.93862 6.65624 4.87524 6.83741C4.81186 7.01859 4.71128 7.1845 4.57996 7.32448C4.44436 7.45692 4.28341 7.56062 4.10677 7.62935C3.93012 7.69808 3.74141 7.73044 3.55196 7.72448C3.29597 7.7348 3.04146 7.68091 2.81161 7.56773C2.58176 7.45456 2.38387 7.28568 2.23596 7.07649Z" fill="currentColor"/>
+<path d="M5.4119 3.89648H8.4239V4.77249H6.4239V5.34449H8.2199V6.14449H6.4399V6.74048H8.4399V7.62049H5.3999L5.4119 3.89648Z" fill="currentColor"/>
+<path d="M9.89197 4.80449H8.77197V3.89648H12.056V4.80449H10.932V7.64048H9.89197V4.80449Z" fill="currentColor"/>
+<path d="M2.65198 9.12039H4.41998C4.60352 9.1053 4.78823 9.12688 4.96335 9.18388C5.13846 9.24088 5.30049 9.33216 5.43998 9.45239C5.51949 9.53209 5.58209 9.62702 5.62402 9.7315C5.66595 9.83597 5.68634 9.94784 5.68398 10.0604C5.68697 10.2429 5.63261 10.4218 5.52855 10.5718C5.4245 10.7217 5.276 10.8353 5.10398 10.8964C5.31679 10.9354 5.50867 11.0491 5.64507 11.217C5.78147 11.385 5.85343 11.5961 5.84798 11.8124C5.84798 12.4884 5.32398 12.8884 4.42798 12.8884H2.65198V9.12039ZM4.65198 10.2764C4.65198 10.0684 4.48398 9.95639 4.17998 9.95639H3.66398V10.6124H4.16398C4.47598 10.6124 4.65998 10.5044 4.65998 10.2884L4.65198 10.2764ZM4.29198 11.3404H3.66398V12.0324H4.31198C4.63198 12.0324 4.80798 11.9084 4.80798 11.6884C4.79998 11.4764 4.64798 11.3404 4.29998 11.3404H4.29198Z" fill="currentColor"/>
+<path d="M6.18 9.1207H7.84C8.05974 9.1028 8.28084 9.12897 8.49034 9.19765C8.69983 9.26634 8.89351 9.37617 9.06 9.5207C9.17229 9.63543 9.25973 9.77207 9.31685 9.92211C9.37398 10.0721 9.39956 10.2323 9.392 10.3927C9.39921 10.6417 9.32876 10.8867 9.19043 11.0939C9.0521 11.301 8.85274 11.46 8.62 11.5487L9.516 12.8887H8.316L7.56 11.7527H7.212V12.8887H6.172L6.18 9.1207ZM7.78 10.9207C8.128 10.9207 8.34 10.7487 8.34 10.4727C8.34 10.1727 8.12 10.0207 7.776 10.0207H7.22V10.9287L7.78 10.9207Z" fill="currentColor"/>
+<path d="M10.8359 9.09229H11.8359L13.4359 12.8683H12.3199L12.0519 12.1923H10.5999L10.3319 12.8883H9.24792L10.8359 9.09229ZM11.7479 11.3843L11.3279 10.3243L10.9039 11.3843H11.7479Z" fill="currentColor"/>
+<path d="M13.6 9.1084H14.64V12.8564H13.6V9.1084Z" fill="currentColor"/>
+<path d="M15.0239 9.1084H15.9999L17.3479 11.1084V9.1084H18.3759V12.8564H17.4679L16.0559 10.8004V12.8564H15.0239V9.1084Z" fill="currentColor"/>
+<path d="M18.548 12.3006L19.124 11.6086C19.4613 11.8907 19.8844 12.05 20.324 12.0606C20.608 12.0606 20.756 11.9606 20.756 11.8006C20.756 11.6366 20.636 11.5566 20.12 11.4366C19.32 11.2526 18.708 11.0366 18.708 10.2646C18.708 9.56864 19.26 9.06464 20.16 9.06464C20.7163 9.04379 21.262 9.22096 21.7 9.56464L21.2 10.2766C20.8974 10.048 20.5311 9.91937 20.152 9.90864C19.9 9.90864 19.776 10.0086 19.776 10.1486C19.776 10.3206 19.904 10.3966 20.428 10.5126C21.288 10.7006 21.82 10.9806 21.82 11.6806C21.82 12.4446 21.216 12.8806 20.308 12.8806C19.6703 12.9078 19.0446 12.7016 18.548 12.3006Z" fill="currentColor"/>
+</g>
+<defs>
+<clipPath id="clip0_2001_1001">
+<rect width="24" height="24" fill="currentColor" transform="translate(0 0.888672)"/>
+</clipPath>
+</defs>
+</svg></div><div class="button-text">JetBrains</div></a><a href="https://docs.continue.dev/guides/cli#quick-start" class="button is-icon is-footer w-inline-block"><div class="icon-embed-xsmall w-embed"><svg xmlns="http://www.w3.org/2000/svg" width="23" height="24" viewBox="0 0 23 24" fill="none">
+  <path d="M18.5312 4.03497L17.2878 6.25338L20.4307 11.8513C20.4536 11.8938 20.4674 11.9457 20.4674 11.9929C20.4674 12.0401 20.4536 12.092 20.4307 12.1345L17.2878 17.7372L18.5312 19.9556L23 11.9929L18.5312 4.03025V4.03497ZM16.8061 5.96546L18.0495 3.74705H15.5627L14.3194 5.96546H16.8107H16.8061ZM14.3148 6.5413L17.219 11.7097H19.7058L16.8061 6.5413H14.3148ZM16.8061 17.454L19.7058 12.2808H17.219L14.3148 17.454H16.8061ZM14.3148 18.0298L15.5581 20.2388H18.0449L16.8015 18.0298H14.3102H14.3148ZM5.88649 20.7863C5.83603 20.7863 5.79015 20.7722 5.74885 20.7486C5.70756 20.725 5.67086 20.6872 5.64791 20.6447L2.5005 15.0421H0.0137645L4.48254 23H13.4155L12.1722 20.7863H5.88649ZM12.6539 20.4984L13.8973 22.7121L15.1406 20.4937L13.8973 18.2753L12.6539 20.4937V20.4984ZM13.4155 17.9921H7.6162L6.37283 20.2105H12.1722L13.4155 17.9921ZM7.12986 17.7089L4.22561 12.5357L2.98225 14.7541L5.88649 19.9273L7.12986 17.7089ZM0.00917635 14.4662H2.49591L3.73928 12.2478H1.25713L0.00917635 14.4662ZM5.63415 3.36001C5.65709 3.31753 5.6938 3.27977 5.73509 3.25617C5.77638 3.23257 5.82685 3.21841 5.87273 3.21841H12.163L13.4063 1H4.46878L0 8.96267H2.48673L5.62497 3.36473L5.63415 3.36001ZM3.73928 11.7522L2.49591 9.53379H0.00917635L1.25254 11.7522H3.73928ZM5.87732 4.07745L2.97766 9.24587L4.22102 11.4643L7.12068 6.29586L5.87732 4.07745ZM12.1676 3.78953H6.35907L7.60243 6.00794H13.4109L12.1676 3.78953ZM13.8973 5.72002L15.136 3.50633L13.8973 1.28792L12.6539 3.50161L13.8973 5.72002Z" fill="white"/>
+</svg></div><div class="button-text">CLI (Beta)</div></a></div></div></div></div><div id="subscribe" class="footer_right-wrapper"><div class="heading-style-h6 txt-color-080">Subscribe to updates</div><div class="spacer-9"></div><div class="margin-bottom margin-xsmall"><div class="text-weight-medium txt-color-050 padding-bottom-tablet-4 is-footer">Join <a href="https://blog.continue.dev/tag/newsletter/" class="link-footer txt-color-050">our newsletter</a> to learn more</div></div><div class="footer_form-block w-form"><form id="email-form" name="email-form" data-name="Email Form" action="https://app.loops.so/api/newsletter-form/clkx1nste00gamj0om63z5p2m" method="post" class="footer_form" data-wf-page-id="663e06c56841363663ffbc27" data-wf-element-id="af5dcb92-ae71-8407-2590-efb2a07ed45a"><input class="form_input w-input" maxlength="256" name="email" data-name="email" placeholder="Email address" type="email" id="email-5" required=""/><input class="form_input hidden_form_input w-input" maxlength="256" name="continueEmail" data-name="continueEmail" placeholder="Email address" type="email" id="continueEmail"/><button data-w-id="af5dcb92-ae71-8407-2590-efb2a07ed45c" type="submit" class="submit-button-footer"><div class="icon-embed-xsmall is-newsletter w-embed"><svg xmlns="http://www.w3.org/2000/svg" width="100%" height="100%" viewBox="0 0 24 24" fill="none" preserveAspectRatio="xMidYMid meet" aria-hidden="true" role="img">
+<g opacity="Current" clip-path="url(#clip0_1272_6648)">
+<path d="M4.48047 11.9805H19.4705" stroke="black" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"/>
+<path d="M13.4844 5.98828L19.5214 12.0003L13.4844 18.0123" stroke="black" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"/>
+</g>
+<defs>
+<clipPath id="clip0_1272_6648">
+<rect width="24" height="24" fill="white"/>
+</clipPath>
+</defs>
+</svg></div></button></form><div class="success-message w-form-done"><div>Email saved successfully!</div></div><div class="error-message w-form-fail"><div>Error submitting email address</div></div></div></div></div><div class="links-footer-wrapper is-taablet"><a href="#" class="footer_link">Enterprise</a><a href="#" class="footer_link">About Us</a><a href="#" class="footer_link">Docs</a><a href="#" class="footer_link">Blog</a></div></div><div class="footer_bottom-wrapper"><div class="w-layout-grid footer_legal-list"><a href="/privacy" class="footer_legal-link">Privacy Notice</a></div><div class="spacer-tablet-24"></div><div class="w-layout-grid footer_social-list"><div id="w-node-af5dcb92-ae71-8407-2590-efb2a07ed478-a07ed42e" class="footer_legal-link has-no-hover">© 2025 Continue, Inc.</div><a href="https://bsky.app/profile/continue.dev" class="sm-icon-footer mobile-hidden w-inline-block"><div class="icon-embed-xsmall w-embed"><svg xmlns="http://www.w3.org/2000/svg" width="100%" height="100%" viewBox="0 0 24 24" fill="none" preserveAspectRatio="xMidYMid meet" aria-hidden="true" role="img">
+<path d="M5.42737 2.82923C8.08721 4.90143 10.9482 9.10297 11.9986 11.3578C13.0491 9.10314 15.9099 4.90138 18.5698 2.82923C20.489 1.33402 23.5986 0.177114 23.5986 3.85846C23.5986 4.59368 23.1924 10.0346 22.9541 10.918C22.126 13.989 19.1084 14.7723 16.4241 14.2982C21.1161 15.1269 22.3097 17.8718 19.732 20.6168C14.8364 25.8299 12.6956 19.3088 12.1468 17.6378C12.0463 17.3315 11.9992 17.1882 11.9985 17.31C11.9978 17.1882 11.9508 17.3315 11.8502 17.6378C11.3016 19.3088 9.16088 25.8301 4.265 20.6168C1.68724 17.8718 2.8808 15.1267 7.57288 14.2982C4.88856 14.7723 1.87088 13.989 1.04288 10.918C0.80463 10.0346 0.398438 4.59359 0.398438 3.85846C0.398438 0.177114 3.50812 1.33402 5.42724 2.82923H5.42737Z" fill="currentColor"/>
+</svg></div></a><a href="https://x.com/continuedev" class="sm-icon-footer mobile-hidden w-inline-block"><div class="icon-embed-xsmall w-embed"><svg xmlns="http://www.w3.org/2000/svg" width="100%" height="100%" viewBox="0 0 24 24" fill="none" preserveAspectRatio="xMidYMid meet" aria-hidden="true" role="img">
+<path d="M18.9 1.125H22.581L14.541 10.338L24 22.875H16.5945L10.794 15.27L4.1565 22.875H0.474L9.0735 13.02L0 1.125H7.5945L12.837 8.0745L18.9 1.125ZM17.61 20.667H19.65L6.4845 3.2175H4.2975L17.61 20.667Z" fill="currentColor"/>
+</svg></div></a><a href="https://www.linkedin.com/company/continuedev" class="sm-icon-footer mobile-hidden w-inline-block"><div class="icon-embed-xsmall w-embed"><svg xmlns="http://www.w3.org/2000/svg" width="100%" height="100%" viewBox="0 0 24 24" fill="CurrentColor" preserveAspectRatio="xMidYMid meet" aria-hidden="true" role="img">
+<g clip-path="url(#clip0_1912_4678)">
+<path d="M0 1.719C0 0.7695 0.789 0 1.7625 0H22.2375C23.211 0 24 0.7695 24 1.719V22.281C24 23.2305 23.211 24 22.2375 24H1.7625C0.789 24 0 23.2305 0 22.281V1.719ZM7.4145 20.091V9.2535H3.813V20.091H7.4145ZM5.6145 7.773C6.87 7.773 7.6515 6.942 7.6515 5.901C7.629 4.8375 6.8715 4.029 5.6385 4.029C4.4055 4.029 3.6 4.839 3.6 5.901C3.6 6.942 4.3815 7.773 5.5905 7.773H5.6145ZM12.9765 20.091V14.0385C12.9765 13.7145 13.0005 13.3905 13.0965 13.1595C13.356 12.513 13.9485 11.8425 14.9445 11.8425C16.248 11.8425 16.7685 12.8355 16.7685 14.2935V20.091H20.37V13.875C20.37 10.545 18.594 8.997 16.224 8.997C14.313 8.997 13.4565 10.047 12.9765 10.7865V10.824H12.9525L12.9765 10.7865V9.2535H9.3765C9.4215 10.2705 9.3765 20.091 9.3765 20.091H12.9765Z" fill="CurrentColor"/>
+</g>
+<defs>
+<clipPath id="clip0_1912_4678">
+<rect width="24" height="24" fill="CurrentColor"/>
+</clipPath>
+</defs>
+</svg></div></a><a href="https://github.com/continuedev/continue" class="sm-icon-footer mobile-hidden w-inline-block"><div class="icon-embed-xsmall w-embed"><svg xmlns="http://www.w3.org/2000/svg" width="100%" height="100%" viewBox="0 0 24 24" fill="none" preserveAspectRatio="xMidYMid meet" aria-hidden="true" role="img">
+<g clip-path="url(#clip0_1912_4680)">
+<path fill-rule="evenodd" clip-rule="evenodd" d="M12 0C5.37 0 0 5.37 0 12C0 17.31 3.435 21.795 8.205 23.385C8.805 23.49 9.03 23.13 9.03 22.815C9.03 22.53 9.015 21.585 9.015 20.58C6 21.135 5.22 19.845 4.98 19.17C4.845 18.825 4.26 17.76 3.75 17.475C3.33 17.25 2.73 16.695 3.735 16.68C4.68 16.665 5.355 17.55 5.58 17.91C6.66 19.725 8.385 19.215 9.075 18.9C9.18 18.12 9.495 17.595 9.84 17.295C7.17 16.995 4.38 15.96 4.38 11.37C4.38 10.065 4.845 8.985 5.61 8.145C5.49 7.845 5.07 6.615 5.73 4.965C5.73 4.965 6.735 4.65 9.03 6.195C9.99 5.925 11.01 5.79 12.03 5.79C13.05 5.79 14.07 5.925 15.03 6.195C17.325 4.635 18.33 4.965 18.33 4.965C18.99 6.615 18.57 7.845 18.45 8.145C19.215 8.985 19.68 10.05 19.68 11.37C19.68 15.975 16.875 16.995 14.205 17.295C14.64 17.67 15.015 18.39 15.015 19.515C15.015 21.12 15 22.41 15 22.815C15 23.13 15.225 23.505 15.825 23.385C20.565 21.795 24 17.295 24 12C24 5.37 18.63 0 12 0Z" fill="currentcolor"/>
+</g>
+<defs>
+<clipPath id="clip0_1912_4680">
+<rect width="24" height="24" fill="white"/>
+</clipPath>
+</defs>
+</svg></div></a><a href="https://discord.com/invite/EfJEfdFnDQ" class="sm-icon-footer mobile-hidden w-inline-block"><div class="icon-embed-xsmall w-embed"><svg xmlns="http://www.w3.org/2000/svg" width="100%" height="100%" viewBox="0 0 24 24" fill="none" preserveAspectRatio="xMidYMid meet" aria-hidden="true" role="img">
+<path d="M20.3303 4.22781C18.7767 3.50093 17.1156 2.97267 15.3789 2.67188C15.1656 3.05749 14.9164 3.57614 14.7446 3.98873C12.8985 3.71109 11.0693 3.71109 9.25716 3.98873C9.08539 3.57614 8.83055 3.05749 8.61536 2.67188C6.87681 2.97267 5.21376 3.50287 3.66019 4.23166C0.526643 8.96686 -0.322811 13.5845 0.101917 18.1365C2.18025 19.6885 4.19441 20.6313 6.17457 21.2483C6.66349 20.5754 7.09953 19.8601 7.47518 19.1063C6.75975 18.8344 6.07453 18.499 5.42707 18.1095C5.59884 17.9822 5.76686 17.8492 5.92918 17.7123C9.87819 19.5594 14.1689 19.5594 18.0707 17.7123C18.235 17.8492 18.403 17.9822 18.5728 18.1095C17.9235 18.5009 17.2364 18.8363 16.521 19.1082C16.8966 19.8601 17.3308 20.5774 17.8216 21.2502C19.8036 20.6333 21.8197 19.6905 23.898 18.1365C24.3964 12.8595 23.0467 8.28434 20.3303 4.22781ZM8.01318 15.337C6.82772 15.337 5.85555 14.2303 5.85555 12.8826C5.85555 11.535 6.80696 10.4264 8.01318 10.4264C9.21942 10.4264 10.1916 11.533 10.1708 12.8826C10.1727 14.2303 9.21942 15.337 8.01318 15.337ZM15.9867 15.337C14.8013 15.337 13.8291 14.2303 13.8291 12.8826C13.8291 11.535 14.7805 10.4264 15.9867 10.4264C17.193 10.4264 18.1651 11.533 18.1444 12.8826C18.1444 14.2303 17.193 15.337 15.9867 15.337Z" fill="currentColor"/>
+</svg></div></a></div></div><img src="https://cdn.prod.website-files.com/663e06c56841363663ffbbcf/664205335fa3f168cf6c465b_gradient-footer.webp" loading="lazy" sizes="(max-width: 2880px) 100vw, 2880px" srcset="https://cdn.prod.website-files.com/663e06c56841363663ffbbcf/664205335fa3f168cf6c465b_gradient-footer-p-500.png 500w, https://cdn.prod.website-files.com/663e06c56841363663ffbbcf/664205335fa3f168cf6c465b_gradient-footer-p-800.png 800w, https://cdn.prod.website-files.com/663e06c56841363663ffbbcf/664205335fa3f168cf6c465b_gradient-footer-p-1080.png 1080w, https://cdn.prod.website-files.com/663e06c56841363663ffbbcf/664205335fa3f168cf6c465b_gradient-footer-p-1600.png 1600w, https://cdn.prod.website-files.com/663e06c56841363663ffbbcf/664205335fa3f168cf6c465b_gradient-footer-p-2000.png 2000w, https://cdn.prod.website-files.com/663e06c56841363663ffbbcf/664205335fa3f168cf6c465b_gradient-footer-p-2600.png 2600w, https://cdn.prod.website-files.com/663e06c56841363663ffbbcf/664205335fa3f168cf6c465b_gradient-footer.webp 2880w" alt="" class="gradeint-footer"/></div></div></div></footer></div><script src="https://d3e54v103j8qbb.cloudfront.net/js/jquery-3.5.1.min.dc5e7f18c8.js?site=663e06c56841363663ffbbcf" type="text/javascript" integrity="sha256-9/aliU8dGd2tb6OSsuzixeV4y/faTqgFtohetphbbj0=" crossorigin="anonymous"></script><script src="https://cdn.prod.website-files.com/663e06c56841363663ffbbcf/js/webflow.schunk.36b8fb49256177c8.js" type="text/javascript"></script><script src="https://cdn.prod.website-files.com/663e06c56841363663ffbbcf/js/webflow.schunk.3a85d00b5cfe6973.js" type="text/javascript"></script><script src="https://cdn.prod.website-files.com/663e06c56841363663ffbbcf/js/webflow.05e9d811.87c38cd0b20c2cbe.js" type="text/javascript"></script><script type="text/javascript">
+    /* apply only to forms with the action pointing to Loops */
+    $('form[action^="https://app.loops.so"]').each(function (i, el) {
+        form = $(el);
+        form.submit(function (e) {
+          /* stop the form from submitting */
+          e.preventDefault();
+          form = $(e.target);
+          action = form.attr('action');
+          /* submit the form via ajax */
+          $.ajax({
+            url: action,
+            method: "POST",
+            data: form.serialize(),
+            dataType: "json",
+            success: function (data) {
+              if (data.success) {
+                /* successful submission - hide the form and show the success message */
+                parent = $(form.parent());
+                parent.children('form').css('display', 'none');
+                parent.children('.w-form-done').css('display', 'block');
+              } else {
+                parent = $(form.parent());
+                parent.find('.w-form-fail').css('display', 'block');
+              }
+            },
+            error: function () {
+              /* failed submission - show the failure message */
+              parent = $(form.parent());
+              parent.find('.w-form-fail').css('display', 'block');
+            }
+          });
+        });
+    });
+</script>
+
+
+
+</body></html>

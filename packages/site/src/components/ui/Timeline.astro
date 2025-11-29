@@ -1,0 +1,60 @@
+---
+import { Icon } from 'astro-icon/components';
+import { twMerge } from 'tailwind-merge';
+import type { Item } from '~/types';
+
+export interface Props {
+  items?: Array<Item>;
+  defaultIcon?: string;
+  classes?: Record<string, string>;
+}
+
+const { items = [], classes = {}, defaultIcon } = Astro.props as Props;
+
+const {
+  container: containerClass = '',
+  panel: panelClass = '',
+  title: titleClass = '',
+  description: descriptionClass = '',
+  icon: defaultIconClass = 'text-primary dark:text-slate-200 border-primary dark:border-blue-700',
+} = classes;
+---
+
+{
+  items && items.length > 0 && (
+    <div class={containerClass}>
+      {items.map(({ title, description, icon, classes: itemClasses = {} }, index = 0) => (
+        <div
+          class={twMerge(
+            'flex intersect-once intersect-quarter motion-safe:md:opacity-0 motion-safe:md:intersect:animate-fade',
+            panelClass,
+            itemClasses?.panel
+          )}
+        >
+          <div class="flex flex-col items-center mr-4 rtl:mr-0 rtl:ml-4">
+            <div>
+              <div class="flex items-center justify-center">
+                {(icon || defaultIcon) && (
+                  <Icon
+                    name={icon || defaultIcon}
+                    class={twMerge('w-10 h-10 p-2 rounded-full border-2', defaultIconClass, itemClasses?.icon)}
+                  />
+                )}
+              </div>
+            </div>
+            {index !== items.length - 1 && <div class="w-px h-full bg-black/10 dark:bg-slate-400/50" />}
+          </div>
+          <div class={`pt-1 ${index !== items.length - 1 ? 'pb-8' : ''}`}>
+            {title && <p class={twMerge('text-xl font-bold', titleClass, itemClasses?.title)} set:html={title} />}
+            {description && (
+              <p
+                class={twMerge('text-muted mt-2', descriptionClass, itemClasses?.description)}
+                set:html={description}
+              />
+            )}
+          </div>
+        </div>
+      ))}
+    </div>
+  )
+}

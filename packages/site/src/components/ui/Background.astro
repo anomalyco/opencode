@@ -1,0 +1,11 @@
+---
+export interface Props {
+  isDark?: boolean;
+}
+
+const { isDark = false } = Astro.props;
+---
+
+<div class:list={['absolute inset-0', { 'bg-dark dark:bg-transparent': isDark }]}>
+  <slot />
+</div>

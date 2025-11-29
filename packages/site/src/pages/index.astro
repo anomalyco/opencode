@@ -1,0 +1,627 @@
+---
+import Layout from '~/layouts/Layout.astro';
+import CommandBlock from '~/components/CommandBlock.astro';
+import { CommandText } from '~/components/CommandText';
+import { ShimmerText } from '~/components/ShimmerText';
+import { ExecutableShimmer } from '~/components/ExecutableShimmer';
+import { agents } from '~/data/agents';
+import fs from 'fs';
+import path from 'path';
+
+const metadata = {
+  title: 'Forge',
+  ignoreTitleTemplate: true,
+};
+
+// Read ASCII art from file
+const asciiArt = fs.readFileSync(path.join(process.cwd(), 'src', 'ascii-logo.txt'), 'utf-8');
+
+// Define the order for the chips: single scrollable row
+const allAgents = ['claude', 'codex', 'gemini', 'opencode', 'kimi', 'stakpak', 'auggie', 'goose'];
+const initialSelectedAgent = 'claude';
+
+const getAgentByCommand = (command: string) => agents.find((agent) => agent.command === command);
+---
+
+<Layout metadata={metadata}>
+  <link rel="preconnect" href="https://fonts.googleapis.com" />
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500&display=swap" rel="stylesheet" />
+
+  <div class="h-screen bg-zinc-900 text-white flex flex-col overflow-hidden">
+    <!-- Hero Section -->
+    <div class="container mx-auto px-3 pt-4 flex-1 overflow-y-auto">
+      <div class="max-w-7xl mx-auto w-full h-full flex flex-col">
+        <!-- Mobile: Single column layout -->
+        <div class="lg:hidden flex flex-col">
+          <!-- Main Content -->
+          <div class="text-center space-y-8 mb-12">
+            <div class="space-y-8">
+              <!-- ASCII Logo and Tagline -->
+              <div>
+                <div class="relative flex justify-center">
+                  <img
+                    src="/images/forge-ascii-art.png"
+                    alt="Forge"
+                    class="h-auto w-full max-w-[280px] sm:max-w-[320px]"
+                    loading="eager"
+                  />
+                </div>
+              </div>
+
+              <!-- Product Description -->
+              <div class="max-w-md mx-auto text-center mt-6">
+                <div class="space-y-1">
+                  <p class="text-lg text-white font-semibold leading-relaxed">
+                    Universal CLI for coding agents, powered by the Agent Client Protocol
+                  </p>
+                  <p class="text-sm text-zinc-400 leading-relaxed">
+                    Switch seamlessly between Claude, Codex, Gemini, and more. One interface, one history, built on the
+                    open <a
+                      href="https://agentclientprotocol.com/"
+                      target="_blank"
+                      rel="noopener noreferrer"
+                      class="text-zinc-300 hover:text-white underline">Agent Client Protocol</a
+                    >.
+                  </p>
+                </div>
+              </div>
+
+              <ul class="space-y-2 text-zinc-400 text-sm inline-block text-left mt-10 max-w-md mx-auto">
+                <li class="flex items-center gap-2">
+                  <svg
+                    class="w-4 h-4 text-zinc-400 flex-shrink-0"
+                    fill="none"
+                    stroke="currentColor"
+                    viewBox="0 0 24 24"
+                    stroke-width="2"
+                    stroke-linecap="round"
+                    stroke-linejoin="round"
+                  >
+                    <path d="M3 12a9 9 0 1 0 9-9 9.75 9.75 0 0 0-6.74 2.74L3 8"></path>
+                    <path d="M3 3v5h5"></path>
+                    <path d="M12 7v5l4 2"></path>
+                  </svg>
+                  <span>Single conversation history across all agents</span>
+                </li>
+                <li class="flex items-center gap-2">
+                  <svg
+                    class="w-4 h-4 text-zinc-400 flex-shrink-0"
+                    fill="none"
+                    stroke="currentColor"
+                    viewBox="0 0 24 24"
+                    stroke-width="2"
+                    stroke-linecap="round"
+                    stroke-linejoin="round"
+                  >
+                    <path d="M16 3h5v5"></path>
+                    <path d="M8 3H3v5"></path>
+                    <path d="M12 22v-8"></path>
+                    <path d="m21 3-9 11"></path>
+                    <path d="M3 3l9 11"></path>
+                  </svg>
+                  <span>Seamless agent switching - plan with Codex, implement with Claude Code</span>
+                </li>
+                <li class="flex items-center gap-2">
+                  <svg
+                    class="w-4 h-4 text-zinc-400 flex-shrink-0"
+                    fill="none"
+                    stroke="currentColor"
+                    viewBox="0 0 24 24"
+                    stroke-width="2"
+                    stroke-linecap="round"
+                    stroke-linejoin="round"
+                  >
+                    <path d="M4 14a1 1 0 0 1-.78-1.63l9.9-10.2a.5.5 0 0 1 .86.46l-1.92 6.02A1 1 0 0 0 13 10h7a1 1 0 0 1 .78 1.63l-9.9 10.2a.5.5 0 0 1-.86-.46l1.92-6.02A1 1 0 0 0 11 14z"></path>
+                  </svg>
+                  <span>ACP supports Agent Plans, Session Modes, Slash Commands, and more</span>
+                </li>
+                <li class="flex items-center gap-2">
+                  <svg
+                    class="w-4 h-4 text-zinc-400 flex-shrink-0"
+                    fill="none"
+                    stroke="currentColor"
+                    viewBox="0 0 24 24"
+                    stroke-width="2"
+                    stroke-linecap="round"
+                    stroke-linejoin="round"
+                  >
+                    <rect width="18" height="18" x="3" y="3" rx="2"></rect>
+                    <path d="m7 7 5 5-5 5"></path>
+                    <path d="M13 17h4"></path>
+                  </svg>
+                  <span
+                    >Polished terminal UI built on <a
+                      href="https://opencode.ai/"
+                      target="_blank"
+                      rel="noopener noreferrer"
+                      class="underline">OpenCode</a
+                    ></span
+                  >
+                </li>
+              </ul>
+
+              <!-- Single Command Block -->
+              <div class="space-y-2 max-w-lg mx-auto mt-10">
+                <div class="text-xs text-zinc-400 mb-1 text-center">
+                  Install forge and run&nbsp;<ExecutableShimmer
+                    id="executable-shimmer-mobile"
+                    initialAgents={[{ name: 'claude', color: '#da7756' }]}
+                    className="font-mono"
+                    client:load
+                  />
+                </div>
+                <div class="command-block">
+                  <div class="command-container relative px-3 py-2 bg-zinc-900 rounded-lg border border-zinc-700 group">
+                    <div class="flex items-start justify-between gap-3">
+                      <div
+                        id="install-run-command"
+                        class="command-text text-xs font-mono text-zinc-500 select-all break-words min-w-0 flex-1"
+                      >
+                        curl -fsSL https://<span class="text-zinc-300">forgeagents.dev/install</span> | sh && forge <span
+                          id="agent-name-mobile"
+                          class="text-zinc-300">claude</span
+                        >
+                      </div>
+                      <button
+                        class="copy-btn rounded-lg p-1.5 transition-all duration-200 flex-shrink-0 flex items-center hover:bg-zinc-800"
+                        data-target="install-run-command"
+                        title="Copy to clipboard"
+                      >
+                        <div>
+                          <svg class="copy-icon w-4 h-4 text-zinc-400" fill="currentColor" viewBox="0 0 20 20">
+                            <path d="M8 3a1 1 0 011-1h2a1 1 0 110 2H9a1 1 0 01-1-1z"></path>
+                            <path
+                              d="M6 3a2 2 0 00-2 2v11a2 2 0 002 2h8a2 2 0 002-2V5a2 2 0 00-2-2 3 3 0 01-3 3H9a3 3 0 01-3-3z"
+                            ></path>
+                          </svg>
+                          <svg
+                            class="check-icon w-4 h-4 text-green-500 hidden"
+                            fill="none"
+                            stroke="currentColor"
+                            viewBox="0 0 24 24"
+                          >
+                            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="3" d="M5 13l4 4L19 7"
+                            ></path>
+                          </svg>
+                        </div>
+                      </button>
+                    </div>
+                  </div>
+                </div>
+
+                <!-- Agent chips under the command -->
+                <div class="w-full overflow-x-auto scrollbar-hide">
+                  <div class="flex gap-1.5 min-w-max justify-center">
+                    {
+                      allAgents.map((agentCommand) => {
+                        const agent = getAgentByCommand(agentCommand);
+                        if (!agent) return null;
+                        const isSelected = agentCommand === initialSelectedAgent;
+                        return (
+                          <button
+                            class={`agent-chip px-2 py-1 border-2 ${isSelected ? 'bg-zinc-700 text-white' : 'bg-zinc-800/50 border-zinc-700 text-zinc-400'} hover:text-zinc-200 hover:bg-zinc-800 rounded-full text-xs transition-all inline-flex items-center gap-1.5 flex-shrink-0`}
+                            data-agent={agent.command}
+                            data-color={agent.borderColor}
+                            style={isSelected ? `border-color: ${agent.borderColor};` : ''}
+                          >
+                            {agent.logo && (
+                              <img
+                                src={agent.logo}
+                                alt={`${agent.companyName} icon`}
+                                class="w-3 h-3 rounded-full"
+                                loading="eager"
+                              />
+                            )}
+                            <span>{agent.companyName}</span>
+                          </button>
+                        );
+                      })
+                    }
+                  </div>
+                </div>
+              </div>
+            </div>
+          </div>
+
+          <!-- Terminal Preview -->
+          <div class="max-w-8xl mx-auto">
+            <img
+              id="agent-preview-image"
+              src="/images/terminal-ui.png"
+              alt="Agent Preview"
+              class="w-full h-auto object-contain"
+              loading="eager"
+            />
+          </div>
+        </div>
+
+        <!-- Desktop: Two column layout -->
+        <div class="hidden lg:grid lg:grid-cols-12 lg:gap-8 lg:items-start lg:py-6">
+          <!-- Left Column: Text Content -->
+          <div class="space-y-6 lg:col-span-5">
+            <!-- ASCII Logo and Tagline -->
+            <img src="/images/forge-ascii-art.png" alt="Forge" class="h-auto w-full max-w-[400px]" loading="eager" />
+
+            <!-- Product Description -->
+            <div class="mt-6">
+              <div class="space-y-1">
+                <p class="text-xl text-white font-semibold leading-relaxed">
+                  Universal CLI for coding agents, powered by the Agent Client Protocol
+                </p>
+                <p class="text-sm text-zinc-400 leading-relaxed">
+                  Switch seamlessly between Claude, Codex, Gemini, and more. One interface, one history, built on the
+                  open <a
+                    href="https://agentclientprotocol.com/"
+                    target="_blank"
+                    rel="noopener noreferrer"
+                    class="underline">Agent Client Protocol</a
+                  >.
+                </p>
+              </div>
+            </div>
+
+            <ul class="space-y-3 text-zinc-400 text-sm mt-6">
+              <li class="flex items-center gap-3">
+                <svg
+                  class="w-5 h-5 text-zinc-400 flex-shrink-0"
+                  fill="none"
+                  stroke="currentColor"
+                  viewBox="0 0 24 24"
+                  stroke-width="2"
+                  stroke-linecap="round"
+                  stroke-linejoin="round"
+                >
+                  <path d="M3 12a9 9 0 1 0 9-9 9.75 9.75 0 0 0-6.74 2.74L3 8"></path>
+                  <path d="M3 3v5h5"></path>
+                  <path d="M12 7v5l4 2"></path>
+                </svg>
+                <span>Single conversation history across all agents</span>
+              </li>
+              <li class="flex items-center gap-3">
+                <svg
+                  class="w-5 h-5 text-zinc-400 flex-shrink-0"
+                  fill="none"
+                  stroke="currentColor"
+                  viewBox="0 0 24 24"
+                  stroke-width="2"
+                  stroke-linecap="round"
+                  stroke-linejoin="round"
+                >
+                  <path d="M16 3h5v5"></path>
+                  <path d="M8 3H3v5"></path>
+                  <path d="M12 22v-8"></path>
+                  <path d="m21 3-9 11"></path>
+                  <path d="M3 3l9 11"></path>
+                </svg>
+                <span>Seamless agent switching - plan with Codex, implement with Claude Code</span>
+              </li>
+              <li class="flex items-center gap-3">
+                <svg
+                  class="w-5 h-5 text-zinc-400 flex-shrink-0"
+                  fill="none"
+                  stroke="currentColor"
+                  viewBox="0 0 24 24"
+                  stroke-width="2"
+                  stroke-linecap="round"
+                  stroke-linejoin="round"
+                >
+                  <path d="M4 14a1 1 0 0 1-.78-1.63l9.9-10.2a.5.5 0 0 1 .86.46l-1.92 6.02A1 1 0 0 0 13 10h7a1 1 0 0 1 .78 1.63l-9.9 10.2a.5.5 0 0 1-.86-.46l1.92-6.02A1 1 0 0 0 11 14z"></path>
+                </svg>
+                <span>ACP supports Agent Plans, Session Modes, Slash Commands, and more</span>
+              </li>
+              <li class="flex items-center gap-3">
+                <svg
+                  class="w-5 h-5 text-zinc-400 flex-shrink-0"
+                  fill="none"
+                  stroke="currentColor"
+                  viewBox="0 0 24 24"
+                  stroke-width="2"
+                  stroke-linecap="round"
+                  stroke-linejoin="round"
+                >
+                  <rect width="18" height="18" x="3" y="3" rx="2"></rect>
+                  <path d="m7 7 5 5-5 5"></path>
+                  <path d="M13 17h4"></path>
+                </svg>
+                <span
+                  >Polished terminal UI built on <a
+                    href="https://opencode.ai/"
+                    target="_blank"
+                    rel="noopener noreferrer"
+                    class="underline">OpenCode</a
+                  ></span
+                >
+              </li>
+            </ul>
+
+            <!-- Single Command Block -->
+            <div class="space-y-2 mt-6">
+              <div class="text-xs text-zinc-400 mb-1">
+                Install forge and run&nbsp;<ExecutableShimmer
+                  id="executable-shimmer-desktop"
+                  initialAgents={[{ name: 'claude', color: '#da7756' }]}
+                  className="font-mono"
+                  client:load
+                />
+              </div>
+              <div class="command-block">
+                <div class="command-container relative px-3 py-2 bg-zinc-900 rounded-lg border border-zinc-700 group">
+                  <div class="flex items-start justify-between gap-3">
+                    <div
+                      id="install-run-command-desktop"
+                      class="command-text text-xs font-mono text-zinc-500 select-all break-words min-w-0 flex-1"
+                    >
+                      curl -fsSL https://<span class="text-zinc-300">forgeagents.dev/install</span> | sh && forge <span
+                        id="agent-name-desktop"
+                        class="text-zinc-300">claude</span
+                      >
+                    </div>
+                    <button
+                      class="copy-btn rounded-lg p-1.5 transition-all duration-200 flex-shrink-0 flex items-center hover:bg-zinc-800"
+                      data-target="install-run-command-desktop"
+                      title="Copy to clipboard"
+                    >
+                      <div>
+                        <svg class="copy-icon w-4 h-4 text-zinc-400" fill="currentColor" viewBox="0 0 20 20">
+                          <path d="M8 3a1 1 0 011-1h2a1 1 0 110 2H9a1 1 0 01-1-1z"></path>
+                          <path
+                            d="M6 3a2 2 0 00-2 2v11a2 2 0 002 2h8a2 2 0 002-2V5a2 2 0 00-2-2 3 3 0 01-3 3H9a3 3 0 01-3-3z"
+                          ></path>
+                        </svg>
+                        <svg
+                          class="check-icon w-4 h-4 text-green-500 hidden"
+                          fill="none"
+                          stroke="currentColor"
+                          viewBox="0 0 24 24"
+                        >
+                          <path stroke-linecap="round" stroke-linejoin="round" stroke-width="3" d="M5 13l4 4L19 7"
+                          ></path>
+                        </svg>
+                      </div>
+                    </button>
+                  </div>
+                </div>
+              </div>
+
+              <!-- Agent chips under the command -->
+              <div class="w-full overflow-x-auto scrollbar-hide">
+                <div class="flex gap-1.5 min-w-max">
+                  {
+                    allAgents.map((agentCommand) => {
+                      const agent = getAgentByCommand(agentCommand);
+                      if (!agent) return null;
+                      const isSelected = agentCommand === initialSelectedAgent;
+                      return (
+                        <button
+                          class={`agent-chip px-2 py-1 border-2 ${isSelected ? 'bg-zinc-700 text-white' : 'bg-zinc-800/50 border-zinc-700 text-zinc-400'} hover:text-zinc-200 hover:bg-zinc-800 rounded-full text-xs transition-all inline-flex items-center gap-1.5 flex-shrink-0`}
+                          data-agent={agent.command}
+                          data-color={agent.borderColor}
+                          style={isSelected ? `border-color: ${agent.borderColor};` : ''}
+                        >
+                          {agent.logo && (
+                            <img
+                              src={agent.logo}
+                              alt={`${agent.companyName} icon`}
+                              class="w-3 h-3 rounded-full"
+                              loading="eager"
+                            />
+                          )}
+                          <span>{agent.companyName}</span>
+                        </button>
+                      );
+                    })
+                  }
+                </div>
+              </div>
+            </div>
+          </div>
+
+          <!-- Right Column: Screenshot -->
+          <div class="lg:col-span-7">
+            <img
+              id="agent-preview-image-desktop"
+              src="/images/terminal-ui.png"
+              alt="Agent Preview"
+              class="w-full h-auto"
+              loading="eager"
+            />
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <!-- Footer -->
+    <footer class="py-4 flex-shrink-0">
+      <div class="flex justify-center gap-4">
+        <a
+          href="https://github.com/forge-agents/forge"
+          target="_blank"
+          rel="noopener noreferrer"
+          class="text-zinc-400 hover:text-white transition-colors"
+          title="GitHub"
+        >
+          <svg class="w-6 h-6" fill="currentColor" viewBox="0 0 24 24">
+            <path
+              d="M12 0c-6.626 0-12 5.373-12 12 0 5.302 3.438 9.8 8.207 11.387.599.111.793-.261.793-.577v-2.234c-3.338.726-4.033-1.416-4.033-1.416-.546-1.387-1.333-1.756-1.333-1.756-1.089-.745.083-.729.083-.729 1.205.084 1.839 1.237 1.839 1.237 1.07 1.834 2.807 1.304 3.492.997.107-.775.418-1.305.762-1.604-2.665-.305-5.467-1.334-5.467-5.931 0-1.311.469-2.381 1.236-3.221-.124-.303-.535-1.524.117-3.176 0 0 1.008-.322 3.301 1.23.957-.266 1.983-.399 3.003-.404 1.02.005 2.047.138 3.006.404 2.291-1.552 3.297-1.23 3.297-1.23.653 1.653.242 2.874.118 3.176.77.84 1.235 1.911 1.235 3.221 0 4.609-2.807 5.624-5.479 5.921.43.372.823 1.102.823 2.222v3.293c0 .319.192.694.801.576 4.765-1.589 8.199-6.086 8.199-11.386 0-6.627-5.373-12-12-12z"
+            ></path>
+          </svg>
+        </a>
+        <a
+          href="https://x.com/pat_erichsen"
+          target="_blank"
+          rel="noopener noreferrer"
+          class="text-zinc-400 hover:text-white transition-colors"
+          title="X (Twitter)"
+        >
+          <svg class="w-6 h-6" fill="currentColor" viewBox="0 0 24 24">
+            <path
+              d="M18.244 2.25h3.308l-7.227 8.26 8.502 11.24H16.17l-5.214-6.817L4.99 21.75H1.68l7.73-8.835L1.254 2.25H8.08l4.713 6.231zm-1.161 17.52h1.833L7.084 4.126H5.117z"
+            ></path>
+          </svg>
+        </a>
+        <!-- <a
+          href="https://forge.dev/docs"
+          target="_blank"
+          rel="noopener noreferrer"
+          class="text-zinc-400 hover:text-white transition-colors"
+          title="Documentation"
+        >
+          <svg class="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+            <path
+              stroke-linecap="round"
+              stroke-linejoin="round"
+              stroke-width="2"
+              d="M12 6.253v13m0-13C10.832 5.477 9.246 5 7.5 5S4.168 5.477 3 6.253v13C4.168 18.477 5.754 18 7.5 18s3.332.477 4.5 1.253m0-13C13.168 5.477 14.754 5 16.5 5c1.747 0 3.332.477 4.5 1.253v13C19.832 18.477 18.247 18 16.5 18c-1.746 0-3.332.477-4.5 1.253"
+            ></path>
+          </svg>
+        </a> -->
+        <a
+          href="https://discord.gg/P6Z4yn34RR"
+          class="text-zinc-400 hover:text-white transition-colors"
+          title="Discord"
+        >
+          <svg class="w-6 h-6" fill="currentColor" viewBox="0 0 24 24">
+            <path
+              d="M20.317 4.37a19.791 19.791 0 0 0-4.885-1.515.074.074 0 0 0-.079.037c-.21.375-.444.864-.608 1.25a18.27 18.27 0 0 0-5.487 0 12.64 12.64 0 0 0-.617-1.25.077.077 0 0 0-.079-.037A19.736 19.736 0 0 0 3.677 4.37a.07.07 0 0 0-.032.027C.533 9.046-.32 13.58.099 18.057a.082.082 0 0 0 .031.057 19.9 19.9 0 0 0 5.993 3.03.078.078 0 0 0 .084-.028 14.09 14.09 0 0 0 1.226-1.994.076.076 0 0 0-.041-.106 13.107 13.107 0 0 1-1.872-.892.077.077 0 0 1-.008-.128 10.2 10.2 0 0 0 .372-.292.074.074 0 0 1 .077-.01c3.928 1.793 8.18 1.793 12.062 0a.074.074 0 0 1 .078.01c.120.098.246.198.373.292a.077.077 0 0 1-.006.127 12.299 12.299 0 0 1-1.873.892.077.077 0 0 0-.041.107c.36.698.772 1.362 1.225 1.993a.076.076 0 0 0 .084.028 19.839 19.839 0 0 0 6.002-3.03.077.077 0 0 0 .032-.054c.5-5.177-.838-9.674-3.549-13.66a.061.061 0 0 0-.031-.03zM8.02 15.33c-1.183 0-2.157-1.085-2.157-2.419 0-1.333.956-2.419 2.157-2.419 1.21 0 2.176 1.096 2.157 2.42 0 1.333-.956 2.418-2.157 2.418zm7.975 0c-1.183 0-2.157-1.085-2.157-2.419 0-1.333.955-2.419 2.157-2.419 1.21 0 2.176 1.096 2.157 2.42 0 1.333-.946 2.418-2.157 2.418z"
+            ></path>
+          </svg>
+        </a>
+      </div>
+    </footer>
+  </div>
+
+  <script>
+    import { agents } from '../data/agents';
+
+    const selectedAgent = { current: 'claude' as string };
+
+    const setChipState = (agent: string, isActive: boolean) => {
+      const chips = document.querySelectorAll(`[data-agent="${agent}"]`);
+      chips.forEach((chip) => {
+        const button = chip as HTMLElement;
+        if (isActive) {
+          button.classList.remove('bg-zinc-800/50', 'text-zinc-400', 'border-zinc-700');
+          button.classList.add('bg-zinc-700', 'text-white');
+          const color = button.dataset.color;
+          if (color) {
+            button.style.borderColor = color;
+            return;
+          }
+          button.style.borderColor = '';
+          return;
+        }
+
+        button.classList.remove('bg-zinc-700', 'text-white');
+        button.classList.add('bg-zinc-800/50', 'text-zinc-400', 'border-zinc-700');
+        button.style.borderColor = '';
+      });
+    };
+
+    function updateCommand() {
+      // Get the agent config for selected agent
+      const agentConfig = agents.find((a) => a.command === selectedAgent.current);
+
+      if (!agentConfig) return;
+
+      // Update desktop agent name
+      const agentNameDesktop = document.getElementById('agent-name-desktop');
+      if (agentNameDesktop) {
+        agentNameDesktop.textContent = selectedAgent.current;
+      }
+
+      // Update mobile agent name
+      const agentNameMobile = document.getElementById('agent-name-mobile');
+      if (agentNameMobile) {
+        agentNameMobile.textContent = selectedAgent.current;
+      }
+
+      // Update the ExecutableShimmer components
+      window.dispatchEvent(
+        new CustomEvent('updateExecutableShimmer', {
+          detail: {
+            agents: [
+              {
+                name: agentConfig.command,
+                color: agentConfig.borderColor,
+              },
+            ],
+          },
+        })
+      );
+    }
+
+    // Handle agent chip clicks
+    const agentChips = document.querySelectorAll('.agent-chip');
+    agentChips.forEach((chip) => {
+      chip.addEventListener('click', (e) => {
+        const target = e.currentTarget as HTMLElement;
+        const agent = target.dataset.agent;
+
+        if (!agent || agent === selectedAgent.current) return;
+
+        setChipState(selectedAgent.current, false);
+        selectedAgent.current = agent;
+        setChipState(agent, true);
+
+        updateCommand();
+
+        // Dispatch agent changed event
+        const agentConfig = agents.find((a) => a.command === selectedAgent.current);
+        window.dispatchEvent(
+          new CustomEvent('agentChanged', {
+            detail: { color: agentConfig?.borderColor },
+          })
+        );
+      });
+    });
+
+    // Set initial active state on selected agent
+    setChipState(selectedAgent.current, true);
+
+    // Set initial copy button color
+    const agentConfig = agents.find((a) => a.command === selectedAgent.current);
+    if (agentConfig) {
+      window.dispatchEvent(
+        new CustomEvent('agentChanged', {
+          detail: { color: agentConfig.borderColor },
+        })
+      );
+    }
+
+    // Apply initial command coloring
+    updateCommand();
+
+    // Copy functionality
+    function copyToClipboard(text: string, button: HTMLElement) {
+      navigator.clipboard.writeText(text).then(() => {
+        button.classList.add('copied');
+
+        const copyIcon = button.querySelector('.copy-icon');
+        const checkIcon = button.querySelector('.check-icon');
+
+        if (copyIcon) copyIcon.classList.add('hidden');
+        if (checkIcon) checkIcon.classList.remove('hidden');
+
+        setTimeout(() => {
+          button.classList.remove('copied');
+          if (copyIcon) copyIcon.classList.remove('hidden');
+          if (checkIcon) checkIcon.classList.add('hidden');
+        }, 2000);
+      });
+    }
+
+    document.querySelectorAll('.copy-btn').forEach((btn) => {
+      btn.addEventListener('click', () => {
+        const button = btn as HTMLElement;
+        const targetId = button.dataset.target;
+        if (targetId) {
+          const target = document.getElementById(targetId);
+          if (target) {
+            copyToClipboard(target.textContent || '', button);
+          }
+        }
+      });
+    });
+  </script>
+</Layout>

@@ -1,0 +1,22 @@
+---
+// component: DListItem
+//
+// Mimics the html 'dl' (description list)
+//
+// The 'dt' item is the item 'term' and is inserted into an 'h6' tag.
+// Caller needs to style the 'h6' tag appropriately.
+//
+// You can put pretty much any content you want between the open and
+// closing tags - it's simply contained in an enclosing div with a
+// margin left.  No need for 'dd' items.
+//
+const { dt } = Astro.props;
+interface Props {
+  dt: string;
+}
+
+const content: string = await Astro.slots.render('default');
+---
+
+<h6 set:html={dt} />
+<div class="dd ml-8" set:html={content} />

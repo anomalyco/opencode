@@ -1,0 +1,64 @@
+---
+import '~/assets/styles/tailwind.css';
+
+import { I18N } from 'astrowind:config';
+
+import CommonMeta from '~/components/common/CommonMeta.astro';
+import Favicons from '~/components/Favicons.astro';
+import CustomStyles from '~/components/CustomStyles.astro';
+import ApplyColorMode from '~/components/common/ApplyColorMode.astro';
+import Metadata from '~/components/common/Metadata.astro';
+import SiteVerification from '~/components/common/SiteVerification.astro';
+import Analytics from '~/components/common/Analytics.astro';
+import BasicScripts from '~/components/common/BasicScripts.astro';
+
+// Comment the line below to disable View Transitions
+import { ClientRouter } from 'astro:transitions';
+
+import type { MetaData as MetaDataType } from '~/types';
+
+export interface Props {
+  metadata?: MetaDataType;
+}
+
+const { metadata = {} } = Astro.props;
+const { language, textDirection } = I18N;
+---
+
+<!doctype html>
+<html lang={language} dir={textDirection} class="2xl:text-[20px]">
+  <head>
+    <CommonMeta />
+    <Favicons />
+    <CustomStyles />
+    <ApplyColorMode />
+    <Metadata {...metadata} />
+    <SiteVerification />
+    <Analytics />
+
+    <!-- Preload critical images to prevent flash -->
+    <link rel="preload" href="/images/forge-ascii-art.png" as="image" />
+    <link rel="preload" href="/images/terminal-ui.png" as="image" />
+
+    <!-- Preload agent favicons -->
+    <link rel="preload" href="/favicons/claude.ico" as="image" />
+    <link rel="preload" href="/favicons/codex.png" as="image" />
+    <link rel="preload" href="/favicons/continue.png" as="image" />
+    <link rel="preload" href="/favicons/amp.ico" as="image" />
+    <link rel="preload" href="/favicons/cursor.svg" as="image" />
+    <link rel="preload" href="/favicons/opencode.png" as="image" />
+    <link rel="preload" href="/favicons/copilot.svg" as="image" />
+    <link rel="preload" href="/favicons/gemini.png" as="image" />
+    <link rel="preload" href="/favicons/codebuff.png" as="image" />
+    <link rel="preload" href="/favicons/factory.png" as="image" />
+
+    <!-- Comment the line below to disable View Transitions -->
+    <ClientRouter fallback="swap" />
+  </head>
+
+  <body class="antialiased text-default bg-zinc-950 tracking-tight">
+    <slot />
+
+    <BasicScripts />
+  </body>
+</html>

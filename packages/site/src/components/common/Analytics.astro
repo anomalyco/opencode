@@ -1,0 +1,13 @@
+---
+import { GoogleAnalytics } from '@astrolib/analytics';
+import { ANALYTICS } from 'astrowind:config';
+---
+
+{
+  ANALYTICS?.vendors?.googleAnalytics?.id ? (
+    <GoogleAnalytics
+      id={String(ANALYTICS.vendors.googleAnalytics.id)}
+      partytown={ANALYTICS?.vendors?.googleAnalytics?.partytown}
+    />
+  ) : null
+}

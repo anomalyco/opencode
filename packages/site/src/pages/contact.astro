@@ -1,0 +1,65 @@
+---
+import Layout from '~/layouts/PageLayout.astro';
+import HeroText from '~/components/widgets/HeroText.astro';
+import ContactUs from '~/components/widgets/Contact.astro';
+import Features2 from '~/components/widgets/Features2.astro';
+
+const metadata = {
+  title: 'Contact',
+};
+---
+
+<Layout metadata={metadata}>
+  <!-- HeroText Widget ******************* -->
+
+  <HeroText tagline="Contact" title="Get in Touch" />
+
+  <ContactUs
+    id="form"
+    title="Have questions about Forge?"
+    subtitle="Join our Discord community for real-time help, or reach out directly for feature requests, bug reports, and partnership inquiries."
+    inputs={[
+      {
+        type: 'text',
+        name: 'name',
+        label: 'Name',
+      },
+      {
+        type: 'email',
+        name: 'email',
+        label: 'Email',
+      },
+    ]}
+    textarea={{
+      label: 'Message',
+    }}
+    disclaimer={{
+      label:
+        'By submitting this contact form, you acknowledge and agree to the collection of your personal information.',
+    }}
+    description="We typically respond within 48 hours."
+  />
+
+  <!-- Features2 Widget ************** -->
+
+  <Features2
+    title="Connect with the Forge community"
+    items={[
+      {
+        title: 'Discord Community',
+        description: 'Join our Discord server for real-time support, discussions about ACP, and help from the community.',
+        icon: 'tabler:brand-discord',
+      },
+      {
+        title: 'GitHub Issues',
+        description: 'Report bugs, request features, or contribute to Forge development on our GitHub repository.',
+        icon: 'tabler:brand-github',
+      },
+      {
+        title: 'Twitter/X',
+        description: 'Follow @pat_erichsen for updates, announcements, and news about Forge and the ACP ecosystem.',
+        icon: 'tabler:brand-x',
+      },
+    ]}
+  />
+</Layout>

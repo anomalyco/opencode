@@ -1,0 +1,11 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 64 64" role="img" aria-label="Kimi logo">
+  <rect width="64" height="64" rx="16" fill="#8b5cf6" />
+  <path fill="#f5f3ff" d="M21 16h6v13.4L36.5 16H44l-9.7 13.6L44.6 48h-7L27 33.7V48h-6z" />
+  <path fill="url(#glow)" d="M12 10h40v44H12z" opacity=".28" />
+  <defs>
+    <linearGradient id="glow" x1="12" x2="52" y1="10" y2="54" gradientUnits="userSpaceOnUse">
+      <stop stop-color="#ffffff" stop-opacity=".6" />
+      <stop offset="1" stop-color="#8b5cf6" stop-opacity="0" />
+    </linearGradient>
+  </defs>
+</svg>

@@ -1,0 +1,20 @@
+---
+import { Icon } from 'astro-icon/components';
+import { getBlogPermalink } from '~/utils/permalinks';
+import { I18N } from 'astrowind:config';
+import Button from '~/components/ui/Button.astro';
+
+const { textDirection } = I18N;
+---
+
+<div class="mx-auto px-6 sm:px-6 max-w-3xl pt-8 md:pt-4 pb-12 md:pb-20">
+  <Button variant="tertiary" class="px-3 md:px-3" href={getBlogPermalink()}>
+    {
+      textDirection === 'rtl' ? (
+        <Icon name="tabler:chevron-right" class="w-5 h-5 mr-1 -ml-1.5 rtl:-mr-1.5 rtl:ml-1" />
+      ) : (
+        <Icon name="tabler:chevron-left" class="w-5 h-5 mr-1 -ml-1.5 rtl:-mr-1.5 rtl:ml-1" />
+      )
+    } Back to Blog
+  </Button>
+</div>

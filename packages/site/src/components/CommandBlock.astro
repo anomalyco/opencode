@@ -1,0 +1,168 @@
+---
+export interface Props {
+  id: string;
+  label: string;
+  shortcut: string;
+  defaultCommand: string;
+}
+
+const { id, label, shortcut, defaultCommand } = Astro.props;
+---
+
+<div class="command-block">
+  <label class="block text-xs text-gray-500 mb-1">{label}</label>
+  <div class="command-container relative px-3 py-2 bg-black rounded-lg border border-gray-700 group">
+    <div class="flex items-center justify-between gap-3">
+      <code id={id} class="command-text text-xs font-mono text-gray-300 select-all truncate">
+        {defaultCommand}
+      </code>
+      <button
+        class="copy-btn border border-gray-600 hover:border-gray-500 rounded-lg px-2 py-1 transition-all duration-200 flex-shrink-0 flex items-center gap-2"
+        data-target={id}
+        data-shortcut={shortcut}
+        title={`Copy to clipboard (${shortcut.toUpperCase()})`}
+      >
+        <div>
+          <svg class="copy-icon w-4 h-4 text-gray-400" fill="currentColor" viewBox="0 0 20 20">
+            <path d="M8 3a1 1 0 011-1h2a1 1 0 110 2H9a1 1 0 01-1-1z"></path>
+            <path d="M6 3a2 2 0 00-2 2v11a2 2 0 002 2h8a2 2 0 002-2V5a2 2 0 00-2-2 3 3 0 01-3 3H9a3 3 0 01-3-3z"></path>
+          </svg>
+          <svg class="check-icon w-4 h-4 text-green-500 hidden" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="3" d="M5 13l4 4L19 7"></path>
+          </svg>
+        </div>
+        <div class="copy-letter bg-gray-700 w-5 h-5 rounded flex items-center justify-center">
+          <span class="text-[10px] font-semibold text-gray-300 leading-none">{shortcut.toUpperCase()}</span>
+        </div>
+      </button>
+    </div>
+  </div>
+</div>
+
+<style>
+  .copy-btn {
+    transition: transform 0.2s, background-color 0.2s;
+  }
+
+  .copy-btn:active {
+    transform: scale(0.95);
+  }
+
+  .copy-btn.copied .copy-icon {
+    display: none;
+  }
+
+  .copy-btn.copied .check-icon {
+    display: block;
+  }
+
+  .command-text {
+    user-select: all;
+  }
+
+  .agent-shimmer {
+    background: linear-gradient(
+      90deg,
+      currentColor 0%,
+      rgba(255, 255, 255, 0.8) 50%,
+      currentColor 100%
+    );
+    background-size: 200% 100%;
+    background-clip: text;
+    -webkit-background-clip: text;
+    animation: shimmer 2s ease-in-out infinite;
+  }
+
+  @keyframes shimmer {
+    0% {
+      background-position: -200% 0;
+    }
+    100% {
+      background-position: 200% 0;
+    }
+  }
+</style>
+
+<script>
+  function copyToClipboard(text: string, button: HTMLElement) {
+    navigator.clipboard.writeText(text).then(() => {
+      button.classList.add('copied');
+
+      const copyIcon = button.querySelector('.copy-icon');
+      const checkIcon = button.querySelector('.check-icon');
+
+      if (copyIcon) copyIcon.classList.add('hidden');
+      if (checkIcon) checkIcon.classList.remove('hidden');
+
+      setTimeout(() => {
+        button.classList.remove('copied');
+        if (copyIcon) copyIcon.classList.remove('hidden');
+        if (checkIcon) checkIcon.classList.add('hidden');
+      }, 2000);
+    });
+  }
+
+  document.querySelectorAll('.copy-btn').forEach(btn => {
+    btn.addEventListener('click', () => {
+      const button = btn as HTMLElement;
+      const targetId = button.dataset.target;
+      if (targetId) {
+        const target = document.getElementById(targetId);
+        if (target) {
+          copyToClipboard(target.textContent || '', button);
+        }
+      }
+    });
+  });
+
+  document.addEventListener('keydown', (e) => {
+    document.querySelectorAll('.copy-btn').forEach(btn => {
+      const button = btn as HTMLElement;
+      const shortcut = button.dataset.shortcut;
+      if (shortcut && e.key.toLowerCase() === shortcut.toLowerCase()) {
+        const targetId = button.dataset.target;
+        if (targetId) {
+          const target = document.getElementById(targetId);
+          if (target) {
+            copyToClipboard(target.textContent || '', button);
+          }
+        }
+      }
+    });
+  });
+
+  function updateCommandTextColors(color: string) {
+    // Update command text agent name color
+    const commandTexts = document.querySelectorAll('.command-text');
+    commandTexts.forEach(commandText => {
+      // Get the plain text content, removing any existing HTML
+      const textContent = commandText.textContent || (commandText as HTMLElement).innerText || '';
+      const parts = textContent.split(' ');
+      if (parts.length >= 4 && parts[2] === '&&' && parts[3] === 'forge') {
+        const agentName = parts[4];
+        if (agentName) {
+          // Replace the entire content with colored agent name
+          const beforeAgent = parts.slice(0, 4).join(' ');
+          const afterAgent = parts.slice(5).join(' ');
+          const coloredAgentName = `<span class="agent-shimmer" style="color: ${color}">${agentName}</span>`;
+
+          const newContent = afterAgent ?
+            `${beforeAgent} ${coloredAgentName} ${afterAgent}` :
+            `${beforeAgent} ${coloredAgentName}`;
+
+          commandText.innerHTML = newContent;
+        }
+      }
+    });
+  }
+
+  window.addEventListener('agentChanged', (e: CustomEvent) => {
+    updateCommandTextColors(e.detail.color);
+  });
+
+  // Set initial colors when the component loads
+  document.addEventListener('DOMContentLoaded', () => {
+    // Default to Claude's color on load
+    updateCommandTextColors('#da7756');
+  });
+</script>

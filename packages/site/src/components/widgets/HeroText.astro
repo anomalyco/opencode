@@ -1,0 +1,86 @@
+---
+import type { CallToAction } from '~/types';
+import Button from '~/components/ui/Button.astro';
+
+export interface Props {
+  title?: string;
+  subtitle?: string;
+  tagline?: string;
+  content?: string;
+  callToAction?: string | CallToAction;
+  callToAction2?: string | CallToAction;
+}
+
+const {
+  title = await Astro.slots.render('title'),
+  subtitle = await Astro.slots.render('subtitle'),
+  tagline,
+  content = await Astro.slots.render('content'),
+  callToAction = await Astro.slots.render('callToAction'),
+  callToAction2 = await Astro.slots.render('callToAction2'),
+} = Astro.props;
+---
+
+<section class="relative md:-mt-[76px] not-prose">
+  <div class="absolute inset-0 pointer-events-none" aria-hidden="true"></div>
+  <div class="relative max-w-7xl mx-auto px-4 sm:px-6">
+    <div class="pt-0 md:pt-[76px] pointer-events-none"></div>
+    <div class="py-12 md:py-20 pb-8 md:pb-8">
+      <div class="text-center max-w-5xl mx-auto">
+        {
+          tagline && (
+            <p
+              class="text-base text-secondary dark:text-blue-200 font-bold tracking-wide uppercase intersect-once intersect-quarter motion-safe:md:opacity-0 motion-safe:md:intersect:animate-fade"
+              set:html={tagline}
+            />
+          )
+        }
+        {
+          title && (
+            <h1
+              class="text-5xl md:text-6xl font-bold leading-tighter tracking-tighter mb-4 font-heading dark:text-gray-200 intersect-once intersect-quarter motion-safe:md:opacity-0 motion-safe:md:intersect:animate-fade"
+              set:html={title}
+            />
+          )
+        }
+        <div class="max-w-3xl mx-auto">
+          {
+            subtitle && (
+              <p
+                class="text-xl text-muted mb-6 dark:text-slate-300 intersect-once intersect-quarter motion-safe:md:opacity-0 motion-safe:md:intersect:animate-fade"
+                set:html={subtitle}
+              />
+            )
+          }
+          <div
+            class="max-w-xs sm:max-w-md m-auto flex flex-nowrap flex-col sm:flex-row sm:justify-center gap-4 intersect-once intersect-quarter motion-safe:md:opacity-0 motion-safe:md:intersect:animate-fade"
+          >
+            {
+              callToAction && (
+                <div class="flex w-full sm:w-auto">
+                  {typeof callToAction === 'string' ? (
+                    <Fragment set:html={callToAction} />
+                  ) : (
+                    <Button variant="primary" {...callToAction} />
+                  )}
+                </div>
+              )
+            }
+            {
+              callToAction2 && (
+                <div class="flex w-full sm:w-auto">
+                  {typeof callToAction2 === 'string' ? (
+                    <Fragment set:html={callToAction2} />
+                  ) : (
+                    <Button {...callToAction2} />
+                  )}
+                </div>
+              )
+            }
+          </div>
+        </div>
+        {content && <Fragment set:html={content} />}
+      </div>
+    </div>
+  </div>
+</section>

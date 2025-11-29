@@ -1,0 +1,104 @@
+---
+import { agents } from '../data/agents';
+---
+
+<div class="space-y-2">
+  <div class="relative">
+    <select
+      id="agent-select"
+      class="w-full px-3 py-2 bg-gray-900 border border-gray-700 rounded-lg text-sm text-gray-300 appearance-none cursor-pointer hover:bg-gray-800 transition-colors focus:outline-none focus:border-gray-500"
+    >
+      {agents.map(agent => (
+        <option value={agent.command} data-color={agent.borderColor}>
+          {agent.displayName}
+        </option>
+      ))}
+    </select>
+    <div class="absolute inset-y-0 right-0 flex items-center pr-3 pointer-events-none">
+      <svg class="w-4 h-4 text-gray-500" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 9l-7 7-7-7"></path>
+      </svg>
+    </div>
+  </div>
+
+  <div class="flex flex-wrap gap-2 justify-center">
+    {agents.map(agent => (
+      <button
+        class="agent-chip px-3 py-1.5 bg-gray-900 border border-gray-700 rounded-lg text-sm text-gray-400 transition-all flex items-center gap-1.5 flex-shrink-0"
+        data-agent={agent.command}
+        data-color={agent.borderColor}
+      >
+        {agent.logo && (
+          <img src={agent.logo} alt={`${agent.displayName} icon`} class="w-4 h-4 rounded-full" />
+        )}
+        <span>{agent.displayName}</span>
+      </button>
+    ))}
+  </div>
+</div>
+
+<script>
+  const select = document.getElementById('agent-select') as HTMLSelectElement;
+  const chips = document.querySelectorAll('.agent-chip');
+
+  function updateAgent(agentName: string, color: string) {
+    select.value = agentName;
+
+    const event = new CustomEvent('agentChanged', {
+      detail: { agent: agentName, color: color }
+    });
+    window.dispatchEvent(event);
+
+    chips.forEach(chip => {
+      const btn = chip as HTMLElement;
+      if (btn.dataset.agent === agentName) {
+        btn.classList.add('ring-2');
+        btn.classList.remove('text-gray-400', 'border-gray-700');
+        btn.classList.add('text-white');
+        btn.style.borderColor = color;
+      } else {
+        btn.classList.remove('ring-2', 'text-white');
+        btn.classList.add('text-gray-400', 'border-gray-700');
+        btn.style.borderColor = '#374151'; // gray-700
+      }
+    });
+  }
+
+  select.addEventListener('change', () => {
+    const option = select.options[select.selectedIndex];
+    const color = option.getAttribute('data-color') || '#86';
+    updateAgent(select.value, color);
+  });
+
+  chips.forEach(chip => {
+    chip.addEventListener('click', () => {
+      const btn = chip as HTMLElement;
+      const agentName = btn.dataset.agent || '';
+      const color = btn.dataset.color || '#86';
+      updateAgent(agentName, color);
+    });
+
+    // Add hover effects that respect selection state
+    chip.addEventListener('mouseenter', () => {
+      const btn = chip as HTMLElement;
+      if (!btn.classList.contains('ring-2')) {
+        btn.classList.remove('text-gray-400');
+        btn.classList.add('text-white');
+        btn.style.borderColor = '#6b7280'; // gray-500
+      }
+    });
+
+    chip.addEventListener('mouseleave', () => {
+      const btn = chip as HTMLElement;
+      if (!btn.classList.contains('ring-2')) {
+        btn.classList.remove('text-white');
+        btn.classList.add('text-gray-400');
+        btn.style.borderColor = '#374151'; // gray-700
+      }
+    });
+  });
+
+  const firstOption = select.options[0];
+  const initialColor = firstOption.getAttribute('data-color') || '#86';
+  updateAgent(select.value, initialColor);
+</script>

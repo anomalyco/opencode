@@ -1,0 +1,43 @@
+---
+import { getPermalink } from '~/utils/permalinks';
+
+import { APP_BLOG } from 'astrowind:config';
+import type { Post } from '~/types';
+
+export interface Props {
+  tags: Post['tags'];
+  class?: string;
+  title?: string | undefined;
+  isCategory?: boolean;
+}
+
+const { tags, class: className = 'text-sm', title = undefined, isCategory = false } = Astro.props;
+---
+
+{
+  tags && Array.isArray(tags) && (
+    <>
+      {title !== undefined && (
+        <span class="align-super font-normal underline underline-offset-4 decoration-2 dark:text-slate-400">
+          {title}
+        </span>
+      )}
+      <ul class={className}>
+        {tags.map((tag) => (
+          <li class="bg-gray-100 dark:bg-slate-700 inline-block mr-2 rtl:mr-0 rtl:ml-2 mb-2 py-0.5 px-2 lowercase font-medium">
+            {!APP_BLOG?.tag?.isEnabled ? (
+              tag.title
+            ) : (
+              <a
+                href={getPermalink(tag.slug, isCategory ? 'category' : 'tag')}
+                class="text-muted dark:text-slate-300 hover:text-primary dark:hover:text-gray-200"
+              >
+                {tag.title}
+              </a>
+            )}
+          </li>
+        ))}
+      </ul>
+    </>
+  )
+}

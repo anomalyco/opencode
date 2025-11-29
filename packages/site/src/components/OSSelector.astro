@@ -1,0 +1,62 @@
+---
+const osOptions = [
+  { id: 'macos', label: 'macOS', icon: '🍎' },
+  { id: 'linux', label: 'Linux', icon: '🐧' },
+  { id: 'windows', label: 'Windows', icon: '🪟' }
+];
+---
+
+<div class="flex gap-2">
+  {osOptions.map((os, index) => (
+    <button
+      class={`os-btn px-4 py-1.5 bg-gray-900 border border-gray-700 rounded-lg text-xs text-gray-400 hover:text-white hover:border-gray-500 transition-all ${index === 0 ? 'active' : ''}`}
+      data-os={os.id}
+    >
+      <span class="mr-1">{os.icon}</span>
+      {os.label}
+    </button>
+  ))}
+</div>
+
+<style>
+  .os-btn.active {
+    @apply text-white border-gray-400 bg-gray-800;
+  }
+</style>
+
+<script>
+  const osButtons = document.querySelectorAll('.os-btn');
+
+  function setActiveOS(osId: string) {
+    osButtons.forEach(btn => {
+      const button = btn as HTMLElement;
+      if (button.dataset.os === osId) {
+        button.classList.add('active');
+      } else {
+        button.classList.remove('active');
+      }
+    });
+
+    const event = new CustomEvent('osChanged', {
+      detail: { os: osId }
+    });
+    window.dispatchEvent(event);
+  }
+
+  osButtons.forEach(btn => {
+    btn.addEventListener('click', () => {
+      const button = btn as HTMLElement;
+      const osId = button.dataset.os || 'macos';
+      setActiveOS(osId);
+    });
+  });
+
+  const userAgent = navigator.userAgent.toLowerCase();
+  let detectedOS = 'macos';
+  if (userAgent.includes('win')) {
+    detectedOS = 'windows';
+  } else if (userAgent.includes('linux')) {
+    detectedOS = 'linux';
+  }
+  setActiveOS(detectedOS);
+</script>

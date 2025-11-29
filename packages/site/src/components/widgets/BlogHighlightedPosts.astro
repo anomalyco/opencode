@@ -1,0 +1,64 @@
+---
+import { APP_BLOG } from 'astrowind:config';
+
+import Grid from '~/components/blog/Grid.astro';
+
+import { getBlogPermalink } from '~/utils/permalinks';
+import { findPostsByIds } from '~/utils/blog';
+import WidgetWrapper from '~/components/ui/WidgetWrapper.astro';
+import type { Widget } from '~/types';
+
+export interface Props extends Widget {
+  title?: string;
+  linkText?: string;
+  linkUrl?: string | URL;
+  information?: string;
+  postIds: string[];
+}
+
+const {
+  title = await Astro.slots.render('title'),
+  linkText = 'View all posts',
+  linkUrl = getBlogPermalink(),
+  information = await Astro.slots.render('information'),
+  postIds = [],
+
+  id,
+  isDark = false,
+  classes = {},
+  bg = await Astro.slots.render('bg'),
+} = Astro.props;
+
+const posts = APP_BLOG.isEnabled ? await findPostsByIds(postIds) : [];
+---
+
+{
+  APP_BLOG.isEnabled ? (
+    <WidgetWrapper id={id} isDark={isDark} containerClass={classes?.container as string} bg={bg}>
+      <div class="flex flex-col lg:justify-between lg:flex-row mb-8">
+        {title && (
+          <div class="md:max-w-sm">
+            <h2
+              class="text-3xl font-bold tracking-tight sm:text-4xl sm:leading-none group font-heading mb-2"
+              set:html={title}
+            />
+            {APP_BLOG.list.isEnabled && linkText && linkUrl && (
+              <a
+                class="text-muted dark:text-slate-400 hover:text-primary transition ease-in duration-200 block mb-6 lg:mb-0"
+                href={linkUrl}
+              >
+                {linkText} »
+              </a>
+            )}
+          </div>
+        )}
+
+        {information && <p class="text-muted dark:text-slate-400 lg:text-sm lg:max-w-md" set:html={information} />}
+      </div>
+
+      <Grid posts={posts} />
+    </WidgetWrapper>
+  ) : (
+    <Fragment />
+  )
+}

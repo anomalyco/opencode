@@ -1,0 +1,72 @@
+---
+import { Icon } from 'astro-icon/components';
+import WidgetWrapper from '~/components/ui/WidgetWrapper.astro';
+import Headline from '~/components/ui/Headline.astro';
+import Button from '~/components/ui/Button.astro';
+import type { Steps as Props } from '~/types';
+
+const {
+  title = await Astro.slots.render('title'),
+  subtitle = await Astro.slots.render('subtitle'),
+  tagline,
+  callToAction = await Astro.slots.render('callToAction'),
+  items = [],
+  isReversed = false,
+
+  id,
+  isDark = false,
+  classes = {},
+  bg = await Astro.slots.render('bg'),
+} = Astro.props;
+---
+
+<WidgetWrapper id={id} isDark={isDark} containerClass={`max-w-6xl mx-auto ${classes?.container ?? ''}`} bg={bg}>
+  <div class={`flex flex-col gap-8 md:gap-12 md:flex-row ${isReversed ? 'md:flex-row-reverse' : ''}`}>
+    <div class={`w-full lg:w-1/2 gap-8 md:gap-12 ${isReversed ? 'lg:ml-16 md:ml-8 ml-0' : 'lg:mr-16 md:mr-8 mr-0'}`}>
+      <Headline
+        title={title}
+        subtitle={subtitle}
+        tagline={tagline}
+        classes={{
+          container: 'text-center md:text-left rtl:md:text-right mb-4 md:mb-8',
+          title: 'mb-4 text-3xl lg:text-4xl font-bold font-heading',
+          subtitle: 'mb-8 text-xl text-muted dark:text-slate-400',
+          // ...((classes?.headline as {}) ?? {}),
+        }}
+      />
+
+      <div class="w-full text-center md:text-left rtl:md:text-right">
+        {
+          typeof callToAction === 'string' ? (
+            <Fragment set:html={callToAction} />
+          ) : (
+            callToAction &&
+            callToAction.text &&
+            callToAction.href && <Button variant="primary" {...callToAction} class="mb-12 w-auto" />
+          )
+        }
+      </div>
+    </div>
+    <div class="w-full lg:w-1/2 px-0">
+      <ul class="space-y-10">
+        {
+          items && items.length
+            ? items.map(({ title: title2, description, icon }, index) => (
+                <li class="flex md:-mx-4">
+                  <div class="pr-4 sm:pl-4 rtl:pr-0 rtl:pl-4 rtl:sm:pl-0 rtl:sm:pr-4">
+                    <span class="flex w-16 h-16 mx-auto items-center justify-center text-2xl font-bold rounded-full bg-blue-100 text-primary">
+                      {icon ? <Icon name={icon} class="w-6 h-6 icon-bold" /> : index + 1}
+                    </span>
+                  </div>
+                  <div class="pl-4 rtl:pl-0 rtl:pr-4">
+                    <h3 class="mb-4 text-xl font-semibold font-heading" set:html={title2} />
+                    <p class="text-muted dark:text-gray-400" set:html={description} />
+                  </div>
+                </li>
+              ))
+            : ''
+        }
+      </ul>
+    </div>
+  </div>
+</WidgetWrapper>
