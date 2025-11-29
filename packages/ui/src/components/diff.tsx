@@ -46,7 +46,7 @@ export function Diff<T>(props: DiffProps<T>) {
   })
 
   onMount(() => {
-    if (isServer) return
+    if (isServer || !props.preloadedDiff) return
     fileDiffInstance = new FileDiff<T>({
       ...createDefaultOptions(props.diffStyle),
       ...others,
