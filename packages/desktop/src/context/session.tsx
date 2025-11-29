@@ -5,7 +5,7 @@ import { useSync } from "./sync"
 import { makePersisted } from "@solid-primitives/storage"
 import { TextSelection } from "./local"
 import { pipe, sumBy } from "remeda"
-import { AssistantMessage } from "@opencode-ai/sdk"
+import { AssistantMessage, UserMessage } from "@opencode-ai/sdk"
 import { useParams } from "@solidjs/router"
 import { base64Encode } from "@/utils"
 
@@ -123,8 +123,8 @@ export const { use: useSession, provider: SessionProvider } = createSimpleContex
         user: userMessages,
         last: lastUserMessage,
         active: activeMessage,
-        setActive(id: string | undefined) {
-          setStore("messageId", id)
+        setActive(message: UserMessage | undefined) {
+          setStore("messageId", message?.id)
         },
       },
       usage: {

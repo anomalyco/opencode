@@ -8,7 +8,7 @@ import { querySessionInfo } from "../common"
 import {
   IconAlibaba,
   IconAnthropic,
-  IconGoogle,
+  IconGemini,
   IconMoonshotAI,
   IconOpenAI,
   IconStealth,
@@ -117,7 +117,7 @@ export function ModelSection() {
                                 case "Anthropic":
                                   return <IconAnthropic width={16} height={16} />
                                 case "Google":
-                                  return <IconGoogle width={16} height={16} />
+                                  return <IconGemini width={16} height={16} />
                                 case "Moonshot AI":
                                   return <IconMoonshotAI width={16} height={16} />
                                 case "Z.ai":

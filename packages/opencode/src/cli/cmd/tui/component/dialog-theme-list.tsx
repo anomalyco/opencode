@@ -14,10 +14,6 @@ export function DialogThemeList() {
   let ref: DialogSelectRef<string>
   const initial = theme.selected
 
-  onMount(() => {
-    theme.set(Object.keys(theme.all())[0])
-  })
-
   onCleanup(() => {
     if (!confirmed) theme.set(initial)
   })
@@ -26,6 +22,7 @@ export function DialogThemeList() {
     <DialogSelect
       title="Themes"
       options={options}
+      current={initial}
       onMove={(opt) => {
         theme.set(opt.value)
       }}

@@ -1,6 +1,6 @@
 {
   "name": "@opencode-ai/enterprise",
-  "version": "1.0.98",
+  "version": "1.0.120",
   "private": true,
   "type": "module",
   "scripts": {
@@ -13,6 +13,8 @@
   "dependencies": {
     "@opencode-ai/util": "workspace:*",
     "@opencode-ai/ui": "workspace:*",
+    "aws4fetch": "^1.0.20",
+    "@pierre/precision-diffs": "catalog:",
     "@solidjs/router": "catalog:",
     "@solidjs/start": "catalog:",
     "@solidjs/meta": "catalog:",
@@ -24,6 +26,7 @@
     "zod": "catalog:"
   },
   "devDependencies": {
+    "@cloudflare/workers-types": "catalog:",
     "@tailwindcss/vite": "catalog:",
     "@typescript/native-preview": "catalog:",
     "@types/luxon": "catalog:",

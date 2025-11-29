@@ -3,7 +3,7 @@ import { solidStart } from "@solidjs/start/config"
 import { nitro } from "nitro/vite"
 import tailwindcss from "@tailwindcss/vite"
 
-const nitroConfig = (() => {
+const nitroConfig: any = (() => {
   const target = process.env.OPENCODE_DEPLOYMENT_TARGET
   if (target === "cloudflare") {
     return {

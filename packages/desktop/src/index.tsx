@@ -3,7 +3,8 @@ import "@/index.css"
 import { render } from "solid-js/web"
 import { Router, Route, Navigate } from "@solidjs/router"
 import { MetaProvider } from "@solidjs/meta"
-import { Fonts } from "@opencode-ai/ui/fonts"
+import { Font } from "@opencode-ai/ui/font"
+import { Favicon } from "@opencode-ai/ui/favicon"
 import { MarkedProvider } from "@opencode-ai/ui/context/marked"
 import { GlobalSyncProvider, useGlobalSync } from "./context/global-sync"
 import Layout from "@/pages/layout"
@@ -38,7 +39,7 @@ render(
         <GlobalSyncProvider>
           <LayoutProvider>
             <MetaProvider>
-              <Fonts />
+              <Font />
               <Router root={Layout}>
                 <Route
                   path="/"

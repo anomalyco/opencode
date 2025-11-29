@@ -17,7 +17,6 @@ export namespace Flag {
   // Experimental
   export const OPENCODE_EXPERIMENTAL = truthy("OPENCODE_EXPERIMENTAL")
   export const OPENCODE_EXPERIMENTAL_WATCHER = OPENCODE_EXPERIMENTAL || truthy("OPENCODE_EXPERIMENTAL_WATCHER")
-  export const OPENCODE_EXPERIMENTAL_EXA = OPENCODE_EXPERIMENTAL || truthy("OPENCODE_EXPERIMENTAL_EXA")
 
   function truthy(key: string) {
     const value = process.env[key]?.toLowerCase()

@@ -73,7 +73,10 @@ export namespace SessionSummary {
     await Session.updateMessage(userMsg)
 
     const assistantMsg = messages.find((m) => m.info.role === "assistant")!.info as MessageV2.Assistant
-    const small = await Provider.getSmallModel(assistantMsg.providerID)
+    const small =
+      (await Provider.getSmallModel(assistantMsg.providerID)) ??
+      (await Provider.getModel(assistantMsg.providerID, assistantMsg.modelID))
+
     const options = pipe(
       {},
       mergeDeep(ProviderTransform.options(small.providerID, small.modelID, small.npm ?? "", assistantMsg.sessionID)),

@@ -38,7 +38,7 @@ export function DialogAlert(props: DialogAlertProps) {
             dialog.clear()
           }}
         >
-          <text fg={theme.background}>ok</text>
+          <text fg={theme.selectedListItemText}>ok</text>
         </box>
       </box>
     </box>

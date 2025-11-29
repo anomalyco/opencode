@@ -70,6 +70,12 @@ export const BashTool = Tool.define("bash", async () => {
       return "/bin/zsh"
     }
 
+    if (process.platform === "win32") {
+      // Let Bun / Node pick COMSPEC (usually cmd.exe)
+      // or explicitly:
+      return process.env.COMSPEC || true
+    }
+
     const bash = Bun.which("bash")
     if (bash) {
       return bash

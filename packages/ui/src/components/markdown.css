@@ -47,4 +47,24 @@
       display: none;
     }
   }
+
+  :not(pre) > code {
+    font-family: var(--font-family-mono);
+    font-feature-settings: var(--font-family-mono--font-feature-settings);
+    font-size: 0.9em;
+    /* background-color: var(--surface-base-strong); */
+    /* padding: 0.15em 0.35em; */
+    /* border-radius: var(--radius-sm); */
+
+    padding: 2px 2px;
+    margin: 0 1.5px;
+    border-radius: 2px;
+    background: var(--surface-base);
+    box-shadow: 0 0 0 0.5px var(--border-weak-base);
+
+    /* &::before, */
+    /* &::after { */
+    /*   content: "\`"; */
+    /* } */
+  }
 }
