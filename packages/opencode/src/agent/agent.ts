@@ -254,6 +254,7 @@ function mergeAgentPermissions(basePermission: any, overridePermission: any): Ag
     bash: mergedBash ?? { "*": "allow" },
     doom_loop: merged.doom_loop,
     external_directory: merged.external_directory,
+    plan_approval: merged.plan_approval,
   }
 
   return result

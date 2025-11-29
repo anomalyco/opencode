@@ -872,6 +872,7 @@ export function Session() {
               </For>
             </scrollbox>
             <box flexShrink={0}>
+              <PendingPermissions permissions={permissions()} />
               <Prompt
                 ref={(r) => (prompt = r)}
                 disabled={permissions().length > 0}
@@ -1059,6 +1060,71 @@ function AssistantMessage(props: { message: AssistantMessage; parts: Part[]; las
         </Match>
       </Switch>
     </>
+  )
+}
+
+/**
+ * Displays pending permissions that aren't associated with tool calls.
+ * This is used for permissions like plan_approval that don't have a corresponding tool part.
+ */
+function PendingPermissions(props: { permissions: Array<{ id: string; type: string; title: string; metadata: Record<string, any>; callID?: string }> }) {
+  const { theme } = useTheme()
+  
+  // Filter to permissions without callID (non-tool permissions like plan_approval)
+  const nonToolPermissions = createMemo(() => 
+    props.permissions.filter(p => !p.callID)
+  )
+  
+  return (
+    <Show when={nonToolPermissions().length > 0}>
+      <For each={nonToolPermissions()}>
+        {(permission, index) => (
+          <box
+            border={index() === 0 ? ["left", "right"] : ["left"]}
+            paddingTop={1}
+            paddingBottom={1}
+            paddingLeft={2}
+            paddingRight={2}
+            marginBottom={1}
+            gap={1}
+            backgroundColor={theme.backgroundPanel}
+            customBorderChars={SplitBorder.customBorderChars}
+            borderColor={index() === 0 ? theme.warning : theme.background}
+          >
+            <text fg={theme.text}>
+              <b>{permission.title}</b>
+            </text>
+            <Show when={permission.metadata?.formattedPlan}>
+              <box paddingLeft={2}>
+                <text fg={theme.textMuted}>{permission.metadata.formattedPlan}</text>
+              </box>
+            </Show>
+            <Show when={permission.metadata?.goal && !permission.metadata?.formattedPlan}>
+              <text fg={theme.textMuted}>Goal: {permission.metadata.goal}</text>
+            </Show>
+            <Show when={index() === 0}>
+              <box gap={1} marginTop={1}>
+                <text fg={theme.text}>Permission required:</text>
+                <box flexDirection="row" gap={2}>
+                  <text>
+                    <b>enter</b>
+                    <span style={{ fg: theme.textMuted }}> approve</span>
+                  </text>
+                  <text>
+                    <b>a</b>
+                    <span style={{ fg: theme.textMuted }}> approve always</span>
+                  </text>
+                  <text>
+                    <b>d</b>
+                    <span style={{ fg: theme.textMuted }}> deny</span>
+                  </text>
+                </box>
+              </box>
+            </Show>
+          </box>
+        )}
+      </For>
+    </Show>
   )
 }
 
