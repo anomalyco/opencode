@@ -12,7 +12,7 @@ import { ProgressCircle } from "@opencode-ai/ui/progress-circle"
 import { Tabs } from "@opencode-ai/ui/tabs"
 import { Code } from "@opencode-ai/ui/code"
 import { SessionTurn } from "@opencode-ai/ui/session-turn"
-import { MessageNav } from "@opencode-ai/ui/message-nav"
+import { SessionMessageRail } from "@opencode-ai/ui/session-message-rail"
 import { SessionReview } from "@opencode-ai/ui/session-review"
 import { SelectDialog } from "@opencode-ai/ui/select-dialog"
 import {
@@ -342,30 +342,13 @@ export default function Page() {
                 <Switch>
                   <Match when={session.id}>
                     <div class="flex items-start justify-start h-full min-h-0">
-                      <Show when={session.messages.user().length > 1}>
-                        <>
-                          <MessageNav
-                            class="@6xl:hidden mt-2.5 absolute left-6"
-                            messages={session.messages.user()}
-                            current={session.messages.active()}
-                            onMessageSelect={session.messages.setActive}
-                            size="compact"
-                            working={session.working()}
-                          />
-                          <MessageNav
-                            classList={{
-                              "hidden @6xl:flex absolute": true,
-                              "mt-0.5 left-[calc(((100%_-_min(100%,_36.5rem))_/_2)-1.5rem)] -translate-x-full": wide(),
-                              "mt-2.5 left-6": !wide(),
-                            }}
-                            messages={session.messages.user()}
-                            current={session.messages.active()}
-                            onMessageSelect={session.messages.setActive}
-                            size={wide() ? "normal" : "compact"}
-                            working={session.working()}
-                          />
-                        </>
-                      </Show>
+                      <SessionMessageRail
+                        messages={session.messages.user()}
+                        current={session.messages.active()}
+                        onMessageSelect={session.messages.setActive}
+                        working={session.working()}
+                        wide={wide()}
+                      />
                       <SessionTurn
                         sessionID={session.id!}
                         messageID={session.messages.active()?.id!}
