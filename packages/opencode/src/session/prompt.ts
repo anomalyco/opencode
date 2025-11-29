@@ -538,11 +538,7 @@ export namespace SessionPrompt {
         ),
       ]
 
-      await Plugin.trigger(
-        "chat.messages.transform",
-        {},
-        { messages },
-      )
+      await Plugin.trigger("chat.messages.transform", {}, { messages })
 
       const result = await processor.process(() =>
         streamText({
