@@ -174,9 +174,10 @@ function App() {
   // The @opentui/core library only listens to "keypress" events, not "keyrepeat" events
   // This causes arrow keys and page up/down to not repeat when held down
   // We add a global keyrepeat listener that forwards navigation keys to the focused element
+  // Note: home/end keys don't need key repeat since they're absolute positions
   onMount(() => {
     const handleKeyRepeat = (evt: any) => {
-      const navigationKeys = ["up", "down", "left", "right", "pageup", "pagedown", "home", "end"]
+      const navigationKeys = ["up", "down", "left", "right", "pageup", "pagedown"]
       const keyName = evt.name?.toLowerCase()
 
       if (navigationKeys.includes(keyName || "")) {
