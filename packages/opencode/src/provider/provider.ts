@@ -677,6 +677,21 @@ export namespace Provider {
     }
   }
 
+  export async function closest(providerID: string, query: string[]) {
+    const s = await state()
+    const provider = s.providers[providerID]
+    if (!provider) return undefined
+    for (const item of query) {
+      for (const modelID of Object.keys(provider.info.models)) {
+        if (modelID.includes(item))
+          return {
+            providerID,
+            modelID,
+          }
+      }
+    }
+  }
+
   export async function getSmallModel(providerID: string) {
     const cfg = await Config.get()
 
