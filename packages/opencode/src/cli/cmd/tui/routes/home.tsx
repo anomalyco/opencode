@@ -49,12 +49,13 @@ export function Home() {
     if (args.prompt) {
       prompt.set({ input: args.prompt, parts: [] })
 
-      // Auto-submit after a longer delay to ensure everything is initialized
+      // Auto-submit after a slight delay to ensure everything is initialized and avoid flashing.
+      // On an M1 Macbook Air, reducing delay much lower than this brings the flashing back.
       setTimeout(() => {
         if (prompt.focused) {
           prompt.submit()
         }
-      }, 2000)
+      }, 200)
 
       once = true
     }
