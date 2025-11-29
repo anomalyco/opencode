@@ -38,6 +38,7 @@ export type PromptRef = {
   reset(): void
   blur(): void
   focus(): void
+  submit(): void
 }
 
 export function Prompt(props: PromptProps) {
@@ -381,6 +382,9 @@ export function Prompt(props: PromptProps) {
         parts: [],
       })
       setStore("extmarkToPartIndex", new Map())
+    },
+    submit() {
+      submit()
     },
   })
 

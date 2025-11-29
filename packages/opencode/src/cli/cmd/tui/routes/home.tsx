@@ -1,5 +1,5 @@
 import { Prompt, type PromptRef } from "@tui/component/prompt"
-import { createMemo, Match, onMount, Show, Switch, type ParentProps } from "solid-js"
+import { createMemo, Match, onMount, Show, Switch, createEffect, type ParentProps } from "solid-js"
 import { useTheme } from "@tui/context/theme"
 import { useKeybind } from "../context/keybind"
 import type { KeybindsConfig } from "@opencode-ai/sdk"
@@ -43,10 +43,19 @@ export function Home() {
 
   let prompt: PromptRef
   const args = useArgs()
+
   onMount(() => {
     if (once) return
     if (args.prompt) {
       prompt.set({ input: args.prompt, parts: [] })
+
+      // Auto-submit after a longer delay to ensure everything is initialized
+      setTimeout(() => {
+        if (prompt.focused) {
+          prompt.submit()
+        }
+      }, 2000)
+
       once = true
     }
   })
