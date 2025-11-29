@@ -55,7 +55,7 @@ export function Home() {
         if (prompt.focused) {
           prompt.submit()
         }
-      }, 200)
+      }, 350)
 
       once = true
     }
