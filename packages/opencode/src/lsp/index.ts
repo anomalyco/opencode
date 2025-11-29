@@ -2,13 +2,18 @@ import { Log } from "../util/log"
 import { LSPClient } from "./client"
 import path from "path"
 import { LSPServer } from "./server"
-import z from "zod/v4"
+import z from "zod"
 import { Config } from "../config/config"
 import { spawn } from "child_process"
 import { Instance } from "../project/instance"
+import { Bus } from "../bus"
 
 export namespace LSP {
   const log = Log.create({ service: "lsp" })
+
+  export const Event = {
+    Updated: Bus.event("lsp.updated", z.object({})),
+  }
 
   export const Range = z
     .object({
@@ -57,10 +62,21 @@ export namespace LSP {
     async () => {
       const clients: LSPClient.Info[] = []
       const servers: Record<string, LSPServer.Info> = {}
+      const cfg = await Config.get()
+
+      if (cfg.lsp === false) {
+        log.info("all LSPs are disabled")
+        return {
+          broken: new Set<string>(),
+          servers,
+          clients,
+          spawning: new Map<string, Promise<LSPClient.Info | undefined>>(),
+        }
+      }
+
       for (const server of Object.values(LSPServer)) {
         servers[server.id] = server
       }
-      const cfg = await Config.get()
       for (const [name, item] of Object.entries(cfg.lsp ?? {})) {
         const existing = servers[name]
         if (item.disabled) {
@@ -72,7 +88,7 @@ export namespace LSP {
           ...existing,
           id: name,
           root: existing?.root ?? (async () => Instance.directory),
-          extensions: item.extensions ?? existing.extensions,
+          extensions: item.extensions ?? existing?.extensions ?? [],
           spawn: async (root) => {
             return {
               process: spawn(item.command[0], item.command.slice(1), {
@@ -98,12 +114,11 @@ export namespace LSP {
         broken: new Set<string>(),
         servers,
         clients,
+        spawning: new Map<string, Promise<LSPClient.Info | undefined>>(),
       }
     },
     async (state) => {
-      for (const client of state.clients) {
-        await client.shutdown()
-      }
+      await Promise.all(state.clients.map((client) => client.shutdown()))
     },
   )
 
@@ -111,10 +126,80 @@ export namespace LSP {
     return state()
   }
 
+  export const Status = z
+    .object({
+      id: z.string(),
+      name: z.string(),
+      root: z.string(),
+      status: z.union([z.literal("connected"), z.literal("error")]),
+    })
+    .meta({
+      ref: "LSPStatus",
+    })
+  export type Status = z.infer<typeof Status>
+
+  export async function status() {
+    return state().then((x) => {
+      const result: Status[] = []
+      for (const client of x.clients) {
+        result.push({
+          id: client.serverID,
+          name: x.servers[client.serverID].id,
+          root: path.relative(Instance.directory, client.root),
+          status: "connected",
+        })
+      }
+      return result
+    })
+  }
+
   async function getClients(file: string) {
     const s = await state()
-    const extension = path.parse(file).ext
+    const extension = path.parse(file).ext || file
     const result: LSPClient.Info[] = []
+
+    async function schedule(server: LSPServer.Info, root: string, key: string) {
+      const handle = await server
+        .spawn(root)
+        .then((value) => {
+          if (!value) s.broken.add(key)
+          return value
+        })
+        .catch((err) => {
+          s.broken.add(key)
+          log.error(`Failed to spawn LSP server ${server.id}`, { error: err })
+          return undefined
+        })
+
+      if (!handle) return undefined
+      log.info("spawned lsp server", { serverID: server.id })
+
+      const client = await LSPClient.create({
+        serverID: server.id,
+        server: handle,
+        root,
+      }).catch((err) => {
+        s.broken.add(key)
+        handle.process.kill()
+        log.error(`Failed to initialize LSP client ${server.id}`, { error: err })
+        return undefined
+      })
+
+      if (!client) {
+        handle.process.kill()
+        return undefined
+      }
+
+      const existing = s.clients.find((x) => x.root === root && x.serverID === server.id)
+      if (existing) {
+        handle.process.kill()
+        return existing
+      }
+
+      s.clients.push(client)
+      return client
+    }
+
     for (const server of Object.values(s.servers)) {
       if (server.extensions.length && !server.extensions.includes(extension)) continue
       const root = await server.root(file)
@@ -126,36 +211,45 @@ export namespace LSP {
         result.push(match)
         continue
       }
-      const handle = await server.spawn(root).catch((err) => {
-        s.broken.add(root + server.id)
-        log.error(`Failed to spawn LSP server ${server.id}`, { error: err })
-        return undefined
+
+      const inflight = s.spawning.get(root + server.id)
+      if (inflight) {
+        const client = await inflight
+        if (!client) continue
+        result.push(client)
+        continue
+      }
+
+      const task = schedule(server, root, root + server.id)
+      s.spawning.set(root + server.id, task)
+
+      task.finally(() => {
+        if (s.spawning.get(root + server.id) === task) {
+          s.spawning.delete(root + server.id)
+        }
       })
-      if (!handle) continue
-      const client = await LSPClient.create({
-        serverID: server.id,
-        server: handle,
-        root,
-      }).catch((err) => {
-        s.broken.add(root + server.id)
-        handle.process.kill()
-        log.error(`Failed to initialize LSP client ${server.id}`, { error: err })
-        return undefined
-      })
+
+      const client = await task
       if (!client) continue
-      s.clients.push(client)
+
       result.push(client)
+      Bus.publish(Event.Updated, {})
     }
+
     return result
   }
 
   export async function touchFile(input: string, waitForDiagnostics?: boolean) {
+    log.info("touching file", { file: input })
     const clients = await getClients(input)
     await run(async (client) => {
       if (!clients.includes(client)) return
       const wait = waitForDiagnostics ? client.waitForDiagnostics({ path: input }) : Promise.resolve()
       await client.notify.open({ path: input })
+
       return wait
+    }).catch((err) => {
+      log.error("failed to touch file", { err, file: input })
     })
   }
 

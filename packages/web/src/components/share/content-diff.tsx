@@ -110,7 +110,10 @@ export function ContentDiff(props: Props) {
   })
 
   const mobileRows = createMemo(() => {
-    const mobileBlocks: { type: "removed" | "added" | "unchanged"; lines: string[] }[] = []
+    const mobileBlocks: {
+      type: "removed" | "added" | "unchanged"
+      lines: string[]
+    }[] = []
     const currentRows = rows()
 
     let i = 0

@@ -1,0 +1,27 @@
+{
+  "$schema": "https://opencode.ai/config.json",
+  "plugin": ["opencode-openai-codex-auth"],
+  // "enterprise": {
+  //   "url": "https://enterprise.dev.opencode.ai",
+  // },
+  "provider": {
+    "opencode": {
+      "options": {
+        // "baseURL": "http://localhost:8080",
+      },
+    },
+  },
+  "mcp": {
+    "exa": {
+      "type": "remote",
+      "url": "https://mcp.exa.ai/mcp",
+    },
+    "morph": {
+      "type": "local",
+      "command": ["bunx", "@morphllm/morphmcp"],
+      "environment": {
+        "ENABLED_TOOLS": "warp_grep",
+      },
+    },
+  },
+}

@@ -1,4 +1,4 @@
-import z from "zod/v4"
+import z from "zod"
 import { Bus } from "../bus"
 import { Log } from "../util/log"
 import { Identifier } from "../id/id"
@@ -41,7 +41,11 @@ export namespace Permission {
     Updated: Bus.event("permission.updated", Info),
     Replied: Bus.event(
       "permission.replied",
-      z.object({ sessionID: z.string(), permissionID: z.string(), response: z.string() }),
+      z.object({
+        sessionID: z.string(),
+        permissionID: z.string(),
+        response: z.string(),
+      }),
     ),
   }
 
@@ -76,6 +80,10 @@ export namespace Permission {
       }
     },
   )
+
+  export function pending() {
+    return state().pending
+  }
 
   export async function ask(input: {
     type: Info["type"]
@@ -141,16 +149,16 @@ export namespace Permission {
     const match = pending[input.sessionID]?.[input.permissionID]
     if (!match) return
     delete pending[input.sessionID][input.permissionID]
-    if (input.response === "reject") {
-      match.reject(new RejectedError(input.sessionID, input.permissionID, match.info.callID, match.info.metadata))
-      return
-    }
-    match.resolve()
     Bus.publish(Event.Replied, {
       sessionID: input.sessionID,
       permissionID: input.permissionID,
       response: input.response,
     })
+    if (input.response === "reject") {
+      match.reject(new RejectedError(input.sessionID, input.permissionID, match.info.callID, match.info.metadata))
+      return
+    }
+    match.resolve()
     if (input.response === "always") {
       approved[input.sessionID] = approved[input.sessionID] || {}
       const approveKeys = toKeys(match.info.pattern, match.info.type)
@@ -162,7 +170,11 @@ export namespace Permission {
       for (const item of Object.values(items)) {
         const itemKeys = toKeys(item.info.pattern, item.info.type)
         if (covered(itemKeys, approved[input.sessionID])) {
-          respond({ sessionID: item.info.sessionID, permissionID: item.info.id, response: input.response })
+          respond({
+            sessionID: item.info.sessionID,
+            permissionID: item.info.id,
+            response: input.response,
+          })
         }
       }
     }
@@ -174,8 +186,13 @@ export namespace Permission {
       public readonly permissionID: string,
       public readonly toolCallID?: string,
       public readonly metadata?: Record<string, any>,
+      public readonly reason?: string,
     ) {
-      super(`The user rejected permission to use this specific tool call. You may try again with different parameters.`)
+      super(
+        reason !== undefined
+          ? reason
+          : `The user rejected permission to use this specific tool call. You may try again with different parameters.`,
+      )
     }
   }
 }

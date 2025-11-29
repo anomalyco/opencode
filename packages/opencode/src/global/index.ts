@@ -1,6 +1,7 @@
 import fs from "fs/promises"
 import { xdgData, xdgCache, xdgConfig, xdgState } from "xdg-basedir"
 import path from "path"
+import os from "os"
 
 const app = "opencode"
 
@@ -11,6 +12,7 @@ const state = path.join(xdgState!, app)
 
 export namespace Global {
   export const Path = {
+    home: os.homedir(),
     data,
     bin: path.join(data, "bin"),
     log: path.join(data, "log"),
@@ -28,7 +30,7 @@ await Promise.all([
   fs.mkdir(Global.Path.bin, { recursive: true }),
 ])
 
-const CACHE_VERSION = "9"
+const CACHE_VERSION = "11"
 
 const version = await Bun.file(path.join(Global.Path.cache, "version"))
   .text()
@@ -38,7 +40,12 @@ if (version !== CACHE_VERSION) {
   try {
     const contents = await fs.readdir(Global.Path.cache)
     await Promise.all(
-      contents.map((item) => fs.rm(path.join(Global.Path.cache, item), { recursive: true, force: true })),
+      contents.map((item) =>
+        fs.rm(path.join(Global.Path.cache, item), {
+          recursive: true,
+          force: true,
+        }),
+      ),
     )
   } catch (e) {}
   await Bun.file(path.join(Global.Path.cache, "version")).write(CACHE_VERSION)

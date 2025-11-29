@@ -1,0 +1,36 @@
+id = "opencode"
+name = "OpenCode"
+description = "The AI coding agent built for the terminal"
+version = "1.0.120"
+schema_version = 1
+authors = ["Anomaly"]
+repository = "https://github.com/sst/opencode"
+
+[agent_servers.opencode]
+name = "OpenCode"
+icon = "./icons/opencode.svg"
+
+[agent_servers.opencode.targets.darwin-aarch64]
+archive = "https://github.com/sst/opencode/releases/download/v1.0.120/opencode-darwin-arm64.zip"
+cmd = "./opencode"
+args = ["acp"]
+
+[agent_servers.opencode.targets.darwin-x86_64]
+archive = "https://github.com/sst/opencode/releases/download/v1.0.120/opencode-darwin-x64.zip"
+cmd = "./opencode"
+args = ["acp"]
+
+[agent_servers.opencode.targets.linux-aarch64]
+archive = "https://github.com/sst/opencode/releases/download/v1.0.120/opencode-linux-arm64.zip"
+cmd = "./opencode"
+args = ["acp"]
+
+[agent_servers.opencode.targets.linux-x86_64]
+archive = "https://github.com/sst/opencode/releases/download/v1.0.120/opencode-linux-x64.zip"
+cmd = "./opencode"
+args = ["acp"]
+
+[agent_servers.opencode.targets.windows-x86_64]
+archive = "https://github.com/sst/opencode/releases/download/v1.0.120/opencode-windows-x64.zip"
+cmd = "./opencode.exe"
+args = ["acp"]

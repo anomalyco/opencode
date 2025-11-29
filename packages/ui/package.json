@@ -1,0 +1,49 @@
+{
+  "name": "@opencode-ai/ui",
+  "version": "1.0.120",
+  "type": "module",
+  "exports": {
+    "./*": "./src/components/*.tsx",
+    "./pierre": "./src/components/pierre.ts",
+    "./hooks": "./src/hooks/index.ts",
+    "./context": "./src/context/index.ts",
+    "./context/*": "./src/context/*.tsx",
+    "./styles": "./src/styles/index.css",
+    "./styles/tailwind": "./src/styles/tailwind/index.css",
+    "./fonts/*": "./src/assets/fonts/*"
+  },
+  "scripts": {
+    "typecheck": "tsgo --noEmit",
+    "dev": "vite",
+    "build": "vite build",
+    "generate:tailwind": "bun run script/tailwind.ts"
+  },
+  "devDependencies": {
+    "@types/bun": "catalog:",
+    "@tsconfig/node22": "catalog:",
+    "typescript": "catalog:",
+    "vite": "catalog:",
+    "vite-plugin-icons-spritesheet": "3.0.1",
+    "vite-plugin-solid": "catalog:",
+    "tailwindcss": "catalog:",
+    "@tailwindcss/vite": "catalog:"
+  },
+  "dependencies": {
+    "@kobalte/core": "catalog:",
+    "@opencode-ai/sdk": "workspace:*",
+    "@opencode-ai/util": "workspace:*",
+    "@pierre/precision-diffs": "catalog:",
+    "@shikijs/transformers": "3.9.2",
+    "@solidjs/meta": "catalog:",
+    "@typescript/native-preview": "catalog:",
+    "fuzzysort": "catalog:",
+    "luxon": "catalog:",
+    "marked": "16.2.0",
+    "marked-shiki": "1.2.1",
+    "remeda": "catalog:",
+    "shiki": "3.9.2",
+    "solid-js": "catalog:",
+    "solid-list": "catalog:",
+    "virtua": "catalog:"
+  }
+}

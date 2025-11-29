@@ -1,0 +1,40 @@
+{
+  "name": "@opencode-ai/enterprise",
+  "version": "1.0.120",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "typecheck": "tsgo --noEmit",
+    "dev": "vite dev",
+    "build": "vite build",
+    "build:cloudflare": "OPENCODE_DEPLOYMENT_TARGET=cloudflare vite build",
+    "start": "vite start"
+  },
+  "dependencies": {
+    "@opencode-ai/util": "workspace:*",
+    "@opencode-ai/ui": "workspace:*",
+    "aws4fetch": "^1.0.20",
+    "@pierre/precision-diffs": "catalog:",
+    "@solidjs/router": "catalog:",
+    "@solidjs/start": "catalog:",
+    "@solidjs/meta": "catalog:",
+    "hono": "catalog:",
+    "hono-openapi": "catalog:",
+    "luxon": "catalog:",
+    "nitro": "3.0.1-alpha.1",
+    "solid-js": "catalog:",
+    "zod": "catalog:"
+  },
+  "devDependencies": {
+    "@cloudflare/workers-types": "catalog:",
+    "@tailwindcss/vite": "catalog:",
+    "@typescript/native-preview": "catalog:",
+    "@types/luxon": "catalog:",
+    "tailwindcss": "catalog:",
+    "typescript": "catalog:",
+    "vite": "catalog:"
+  },
+  "engines": {
+    "node": ">=22"
+  }
+}

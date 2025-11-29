@@ -1,4 +1,4 @@
-import z from "zod/v4"
+import z from "zod"
 import * as fs from "fs"
 import * as path from "path"
 import { Tool } from "./tool"
@@ -7,6 +7,11 @@ import { FileTime } from "../file/time"
 import DESCRIPTION from "./read.txt"
 import { Filesystem } from "../util/filesystem"
 import { Instance } from "../project/instance"
+import { Provider } from "../provider/provider"
+import { Identifier } from "../id/id"
+import { Permission } from "../permission"
+import { Agent } from "@/agent/agent"
+import { iife } from "@/util/iife"
 
 const DEFAULT_READ_LIMIT = 2000
 const MAX_LINE_LENGTH = 2000
@@ -23,8 +28,49 @@ export const ReadTool = Tool.define("read", {
     if (!path.isAbsolute(filepath)) {
       filepath = path.join(process.cwd(), filepath)
     }
+    const title = path.relative(Instance.worktree, filepath)
+    const agent = await Agent.get(ctx.agent)
+
     if (!ctx.extra?.["bypassCwdCheck"] && !Filesystem.contains(Instance.directory, filepath)) {
-      throw new Error(`File ${filepath} is not in the current working directory`)
+      const parentDir = path.dirname(filepath)
+      if (agent.permission.external_directory === "ask") {
+        await Permission.ask({
+          type: "external_directory",
+          pattern: [parentDir, path.join(parentDir, "*")],
+          sessionID: ctx.sessionID,
+          messageID: ctx.messageID,
+          callID: ctx.callID,
+          title: `Access file outside working directory: ${filepath}`,
+          metadata: {
+            filepath,
+            parentDir,
+          },
+        })
+      } else if (agent.permission.external_directory === "deny") {
+        throw new Permission.RejectedError(
+          ctx.sessionID,
+          "external_directory",
+          ctx.callID,
+          {
+            filepath: filepath,
+            parentDir,
+          },
+          `File ${filepath} is not in the current working directory`,
+        )
+      }
+    }
+
+    const block = iife(() => {
+      const whitelist = [".env.sample", ".example"]
+
+      if (whitelist.some((w) => filepath.endsWith(w))) return false
+      if (filepath.includes(".env")) return true
+
+      return false
+    })
+
+    if (block) {
+      throw new Error(`The user has blocked you from reading ${filepath}, DO NOT make further attempts to read it`)
     }
 
     const file = Bun.file(filepath)
@@ -48,12 +94,45 @@ export const ReadTool = Tool.define("read", {
       throw new Error(`File not found: ${filepath}`)
     }
 
-    const limit = params.limit ?? DEFAULT_READ_LIMIT
-    const offset = params.offset || 0
     const isImage = isImageFile(filepath)
-    if (isImage) throw new Error(`This is an image file of type: ${isImage}\nUse a different tool to process images`)
+    const supportsImages = await (async () => {
+      if (!ctx.extra?.["providerID"] || !ctx.extra?.["modelID"]) return false
+      const providerID = ctx.extra["providerID"] as string
+      const modelID = ctx.extra["modelID"] as string
+      const model = await Provider.getModel(providerID, modelID).catch(() => undefined)
+      if (!model) return false
+      return model.info.modalities?.input?.includes("image") ?? false
+    })()
+    if (isImage) {
+      if (!supportsImages) {
+        throw new Error(`Failed to read image: ${filepath}, model may not be able to read images`)
+      }
+      const mime = file.type
+      const msg = "Image read successfully"
+      return {
+        title,
+        output: msg,
+        metadata: {
+          preview: msg,
+        },
+        attachments: [
+          {
+            id: Identifier.ascending("part"),
+            sessionID: ctx.sessionID,
+            messageID: ctx.messageID,
+            type: "file",
+            mime,
+            url: `data:${mime};base64,${Buffer.from(await file.bytes()).toString("base64")}`,
+          },
+        ],
+      }
+    }
+
     const isBinary = await isBinaryFile(filepath, file)
     if (isBinary) throw new Error(`Cannot read binary file: ${filepath}`)
+
+    const limit = params.limit ?? DEFAULT_READ_LIMIT
+    const offset = params.offset || 0
     const lines = await file.text().then((text) => text.split("\n"))
     const raw = lines.slice(offset, offset + limit).map((line) => {
       return line.length > MAX_LINE_LENGTH ? line.substring(0, MAX_LINE_LENGTH) + "..." : line
@@ -66,8 +145,14 @@ export const ReadTool = Tool.define("read", {
     let output = "<file>\n"
     output += content.join("\n")
 
-    if (lines.length > offset + content.length) {
-      output += `\n\n(File has more lines. Use 'offset' parameter to read beyond line ${offset + content.length})`
+    const totalLines = lines.length
+    const lastReadLine = offset + content.length
+    const hasMoreLines = totalLines > lastReadLine
+
+    if (hasMoreLines) {
+      output += `\n\n(File has more lines. Use 'offset' parameter to read beyond line ${lastReadLine})`
+    } else {
+      output += `\n\n(End of file - total ${totalLines} lines)`
     }
     output += "\n</file>"
 
@@ -76,7 +161,7 @@ export const ReadTool = Tool.define("read", {
     FileTime.read(ctx.sessionID, filepath)
 
     return {
-      title: path.relative(Instance.worktree, filepath),
+      title,
       output,
       metadata: {
         preview,

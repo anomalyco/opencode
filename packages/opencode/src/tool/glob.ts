@@ -1,4 +1,4 @@
-import z from "zod/v4"
+import z from "zod"
 import path from "path"
 import { Tool } from "./tool"
 import DESCRIPTION from "./glob.txt"
@@ -23,7 +23,7 @@ export const GlobTool = Tool.define("glob", {
     const limit = 100
     const files = []
     let truncated = false
-    for (const file of await Ripgrep.files({
+    for await (const file of Ripgrep.files({
       cwd: search,
       glob: [params.pattern],
     })) {

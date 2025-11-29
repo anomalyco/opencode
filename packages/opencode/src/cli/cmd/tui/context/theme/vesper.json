@@ -1,0 +1,218 @@
+{
+  "$schema": "https://opencode.ai/theme.json",
+  "defs": {
+    "vesperBg": "#101010",
+    "vesperFg": "#FFF",
+    "vesperComment": "#8b8b8b",
+    "vesperKeyword": "#A0A0A0",
+    "vesperFunction": "#FFC799",
+    "vesperString": "#99FFE4",
+    "vesperNumber": "#FFC799",
+    "vesperError": "#FF8080",
+    "vesperWarning": "#FFC799",
+    "vesperSuccess": "#99FFE4",
+    "vesperMuted": "#A0A0A0"
+  },
+  "theme": {
+    "primary": {
+      "dark": "#FFC799",
+      "light": "#FFC799"
+    },
+    "secondary": {
+      "dark": "#99FFE4",
+      "light": "#99FFE4"
+    },
+    "accent": {
+      "dark": "#FFC799",
+      "light": "#FFC799"
+    },
+    "error": {
+      "dark": "vesperError",
+      "light": "vesperError"
+    },
+    "warning": {
+      "dark": "vesperWarning",
+      "light": "vesperWarning"
+    },
+    "success": {
+      "dark": "vesperSuccess",
+      "light": "vesperSuccess"
+    },
+    "info": {
+      "dark": "#FFC799",
+      "light": "#FFC799"
+    },
+    "text": {
+      "dark": "vesperFg",
+      "light": "vesperBg"
+    },
+    "textMuted": {
+      "dark": "vesperMuted",
+      "light": "vesperMuted"
+    },
+    "background": {
+      "dark": "vesperBg",
+      "light": "#FFF"
+    },
+    "backgroundPanel": {
+      "dark": "vesperBg",
+      "light": "#F0F0F0"
+    },
+    "backgroundElement": {
+      "dark": "vesperBg",
+      "light": "#E0E0E0"
+    },
+    "border": {
+      "dark": "#282828",
+      "light": "#D0D0D0"
+    },
+    "borderActive": {
+      "dark": "#FFC799",
+      "light": "#FFC799"
+    },
+    "borderSubtle": {
+      "dark": "#1C1C1C",
+      "light": "#E8E8E8"
+    },
+    "diffAdded": {
+      "dark": "vesperSuccess",
+      "light": "vesperSuccess"
+    },
+    "diffRemoved": {
+      "dark": "vesperError",
+      "light": "vesperError"
+    },
+    "diffContext": {
+      "dark": "vesperMuted",
+      "light": "vesperMuted"
+    },
+    "diffHunkHeader": {
+      "dark": "vesperMuted",
+      "light": "vesperMuted"
+    },
+    "diffHighlightAdded": {
+      "dark": "vesperSuccess",
+      "light": "vesperSuccess"
+    },
+    "diffHighlightRemoved": {
+      "dark": "vesperError",
+      "light": "vesperError"
+    },
+    "diffAddedBg": {
+      "dark": "#0d2818",
+      "light": "#e8f5e8"
+    },
+    "diffRemovedBg": {
+      "dark": "#281a1a",
+      "light": "#f5e8e8"
+    },
+    "diffContextBg": {
+      "dark": "vesperBg",
+      "light": "#F8F8F8"
+    },
+    "diffLineNumber": {
+      "dark": "#505050",
+      "light": "#808080"
+    },
+    "diffAddedLineNumberBg": {
+      "dark": "#0d2818",
+      "light": "#e8f5e8"
+    },
+    "diffRemovedLineNumberBg": {
+      "dark": "#281a1a",
+      "light": "#f5e8e8"
+    },
+    "markdownText": {
+      "dark": "vesperFg",
+      "light": "vesperBg"
+    },
+    "markdownHeading": {
+      "dark": "#FFC799",
+      "light": "#FFC799"
+    },
+    "markdownLink": {
+      "dark": "#FFC799",
+      "light": "#FFC799"
+    },
+    "markdownLinkText": {
+      "dark": "vesperMuted",
+      "light": "vesperMuted"
+    },
+    "markdownCode": {
+      "dark": "vesperMuted",
+      "light": "vesperMuted"
+    },
+    "markdownBlockQuote": {
+      "dark": "vesperFg",
+      "light": "vesperBg"
+    },
+    "markdownEmph": {
+      "dark": "vesperFg",
+      "light": "vesperBg"
+    },
+    "markdownStrong": {
+      "dark": "vesperFg",
+      "light": "vesperBg"
+    },
+    "markdownHorizontalRule": {
+      "dark": "#65737E",
+      "light": "#65737E"
+    },
+    "markdownListItem": {
+      "dark": "vesperFg",
+      "light": "vesperBg"
+    },
+    "markdownListEnumeration": {
+      "dark": "vesperFg",
+      "light": "vesperBg"
+    },
+    "markdownImage": {
+      "dark": "#FFC799",
+      "light": "#FFC799"
+    },
+    "markdownImageText": {
+      "dark": "vesperMuted",
+      "light": "vesperMuted"
+    },
+    "markdownCodeBlock": {
+      "dark": "vesperFg",
+      "light": "vesperBg"
+    },
+    "syntaxComment": {
+      "dark": "vesperComment",
+      "light": "vesperComment"
+    },
+    "syntaxKeyword": {
+      "dark": "vesperKeyword",
+      "light": "vesperKeyword"
+    },
+    "syntaxFunction": {
+      "dark": "vesperFunction",
+      "light": "vesperFunction"
+    },
+    "syntaxVariable": {
+      "dark": "vesperFg",
+      "light": "vesperBg"
+    },
+    "syntaxString": {
+      "dark": "vesperString",
+      "light": "vesperString"
+    },
+    "syntaxNumber": {
+      "dark": "vesperNumber",
+      "light": "vesperNumber"
+    },
+    "syntaxType": {
+      "dark": "vesperFunction",
+      "light": "vesperFunction"
+    },
+    "syntaxOperator": {
+      "dark": "vesperKeyword",
+      "light": "vesperKeyword"
+    },
+    "syntaxPunctuation": {
+      "dark": "vesperFg",
+      "light": "vesperBg"
+    }
+  }
+}

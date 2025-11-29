@@ -35,7 +35,7 @@ Usage notes:
 
 # Committing changes with git
 
-When the user asks you to create a new git commit, follow these steps carefully:
+If and only if the user asks you to create a new git commit, follow these steps carefully:
 
 1. You have the capability to call multiple tools in a single response. When multiple independent pieces of information are requested, batch your tool calls together for optimal performance. ALWAYS run the following bash commands in parallel, each using the Bash tool:
    - Run a git status command to see all untracked files.

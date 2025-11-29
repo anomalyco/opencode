@@ -1,0 +1,37 @@
+name: snapshot
+
+on:
+  workflow_dispatch:
+  push:
+    branches:
+      - dev
+      - test-bedrock
+      - v0
+      - otui-diffs
+
+concurrency: ${{ github.workflow }}-${{ github.ref }}
+
+jobs:
+  publish:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v3
+        with:
+          fetch-depth: 0
+
+      - run: git fetch --force --tags
+
+      - uses: actions/setup-go@v5
+        with:
+          go-version: ">=1.24.0"
+          cache: true
+          cache-dependency-path: go.sum
+
+      - uses: ./.github/actions/setup-bun
+
+      - name: Publish
+        run: |
+          ./script/publish.ts
+        env:
+          GITHUB_TOKEN: ${{ secrets.SST_GITHUB_TOKEN }}
+          NPM_CONFIG_TOKEN: ${{ secrets.NPM_TOKEN }}

@@ -6,6 +6,7 @@ import (
 	"context"
 	"net/http"
 	"net/url"
+	"slices"
 
 	"github.com/sst/opencode-sdk-go/internal/apijson"
 	"github.com/sst/opencode-sdk-go/internal/apiquery"
@@ -35,7 +36,7 @@ func NewAgentService(opts ...option.RequestOption) (r *AgentService) {
 
 // List all agents
 func (r *AgentService) List(ctx context.Context, query AgentListParams, opts ...option.RequestOption) (res *[]Agent, err error) {
-	opts = append(r.Options[:], opts...)
+	opts = slices.Concat(r.Options, opts)
 	path := "agent"
 	err = requestconfig.ExecuteNewRequest(ctx, http.MethodGet, path, query, &res, opts...)
 	return
@@ -48,6 +49,7 @@ type Agent struct {
 	Options     map[string]interface{} `json:"options,required"`
 	Permission  AgentPermission        `json:"permission,required"`
 	Tools       map[string]bool        `json:"tools,required"`
+	Color       string                 `json:"color"`
 	Description string                 `json:"description"`
 	Model       AgentModel             `json:"model"`
 	Prompt      string                 `json:"prompt"`
@@ -64,6 +66,7 @@ type agentJSON struct {
 	Options     apijson.Field
 	Permission  apijson.Field
 	Tools       apijson.Field
+	Color       apijson.Field
 	Description apijson.Field
 	Model       apijson.Field
 	Prompt      apijson.Field

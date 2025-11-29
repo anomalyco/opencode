@@ -1,0 +1,36 @@
+name: test
+
+on:
+  push:
+    branches-ignore:
+      - production
+  pull_request:
+    branches-ignore:
+      - production
+  workflow_dispatch:
+jobs:
+  test:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+        with:
+          token: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Setup Bun
+        uses: ./.github/actions/setup-bun
+
+      - name: run
+        run: |
+          git config --global user.email "bot@opencode.ai"
+          git config --global user.name "opencode"
+          bun turbo typecheck
+          bun turbo test
+        env:
+          CI: true
+
+      - name: Check SDK is up to date
+        run: |
+          bun ./packages/sdk/js/script/build.ts
+          git diff --exit-code packages/sdk/js/src/gen packages/sdk/js/dist
+        continue-on-error: false

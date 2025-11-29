@@ -1,10 +1,9 @@
-import z from "zod/v4"
 import { BashTool } from "./bash"
 import { EditTool } from "./edit"
 import { GlobTool } from "./glob"
 import { GrepTool } from "./grep"
 import { ListTool } from "./ls"
-import { PatchTool } from "./patch"
+import { BatchTool } from "./batch"
 import { ReadTool } from "./read"
 import { TaskTool } from "./task"
 import { TodoWriteTool, TodoReadTool } from "./todo"
@@ -13,123 +12,114 @@ import { WriteTool } from "./write"
 import { InvalidTool } from "./invalid"
 import type { Agent } from "../agent/agent"
 import { Tool } from "./tool"
+import { Instance } from "../project/instance"
+import { Config } from "../config/config"
+import path from "path"
+import { type ToolDefinition } from "@opencode-ai/plugin"
+import z from "zod"
+import { Plugin } from "../plugin"
+import { WebSearchTool } from "./websearch"
+import { CodeSearchTool } from "./codesearch"
+import { Flag } from "@/flag/flag"
 
 export namespace ToolRegistry {
-  // Built-in tools that ship with opencode
-  const BUILTIN = [
-    InvalidTool,
-    BashTool,
-    EditTool,
-    WebFetchTool,
-    GlobTool,
-    GrepTool,
-    ListTool,
-    PatchTool,
-    ReadTool,
-    WriteTool,
-    TodoWriteTool,
-    TodoReadTool,
-    TaskTool,
-  ]
+  export const state = Instance.state(async () => {
+    const custom = [] as Tool.Info[]
+    const glob = new Bun.Glob("tool/*.{js,ts}")
 
-  // Extra tools registered at runtime (via plugins)
-  const EXTRA: Tool.Info[] = []
-
-  // Tools registered via HTTP callback (via SDK/API)
-  const HTTP: Tool.Info[] = []
-
-  export type HttpParamSpec = {
-    type: "string" | "number" | "boolean" | "array"
-    description?: string
-    optional?: boolean
-    items?: "string" | "number" | "boolean"
-  }
-  export type HttpToolRegistration = {
-    id: string
-    description: string
-    parameters: {
-      type: "object"
-      properties: Record<string, HttpParamSpec>
-    }
-    callbackUrl: string
-    headers?: Record<string, string>
-  }
-
-  function buildZodFromHttpSpec(spec: HttpToolRegistration["parameters"]) {
-    const shape: Record<string, z.ZodTypeAny> = {}
-    for (const [key, val] of Object.entries(spec.properties)) {
-      let base: z.ZodTypeAny
-      switch (val.type) {
-        case "string":
-          base = z.string()
-          break
-        case "number":
-          base = z.number()
-          break
-        case "boolean":
-          base = z.boolean()
-          break
-        case "array":
-          if (!val.items) throw new Error(`array spec for ${key} requires 'items'`)
-          base = z.array(val.items === "string" ? z.string() : val.items === "number" ? z.number() : z.boolean())
-          break
-        default:
-          base = z.any()
+    for (const dir of await Config.directories()) {
+      for await (const match of glob.scan({
+        cwd: dir,
+        absolute: true,
+        followSymlinks: true,
+        dot: true,
+      })) {
+        const namespace = path.basename(match, path.extname(match))
+        const mod = await import(match)
+        for (const [id, def] of Object.entries<ToolDefinition>(mod)) {
+          custom.push(fromPlugin(id === "default" ? namespace : `${namespace}_${id}`, def))
+        }
       }
-      if (val.description) base = base.describe(val.description)
-      shape[key] = val.optional ? base.optional() : base
     }
-    return z.object(shape)
+
+    const plugins = await Plugin.list()
+    for (const plugin of plugins) {
+      for (const [id, def] of Object.entries(plugin.tool ?? {})) {
+        custom.push(fromPlugin(id, def))
+      }
+    }
+
+    return { custom }
+  })
+
+  function fromPlugin(id: string, def: ToolDefinition): Tool.Info {
+    return {
+      id,
+      init: async () => ({
+        parameters: z.object(def.args),
+        description: def.description,
+        execute: async (args, ctx) => {
+          const result = await def.execute(args as any, ctx)
+          return {
+            title: "",
+            output: result,
+            metadata: {},
+          }
+        },
+      }),
+    }
   }
 
-  export function register(tool: Tool.Info) {
-    // Prevent duplicates by id (replace existing)
-    const idx = EXTRA.findIndex((t) => t.id === tool.id)
-    if (idx >= 0) EXTRA.splice(idx, 1, tool)
-    else EXTRA.push(tool)
+  export async function register(tool: Tool.Info) {
+    const { custom } = await state()
+    const idx = custom.findIndex((t) => t.id === tool.id)
+    if (idx >= 0) {
+      custom.splice(idx, 1, tool)
+      return
+    }
+    custom.push(tool)
   }
 
-  export function registerHTTP(input: HttpToolRegistration) {
-    const parameters = buildZodFromHttpSpec(input.parameters)
-    const info = Tool.define(input.id, {
-      description: input.description,
-      parameters,
-      async execute(args) {
-        const res = await fetch(input.callbackUrl, {
-          method: "POST",
-          headers: { "content-type": "application/json", ...(input.headers ?? {}) },
-          body: JSON.stringify({ args }),
-        })
-        if (!res.ok) {
-          throw new Error(`HTTP tool callback failed: ${res.status} ${await res.text()}`)
-        }
-        const json = (await res.json()) as { title?: string; output: string; metadata?: Record<string, any> }
-        return {
-          title: json.title ?? input.id,
-          output: json.output ?? "",
-          metadata: (json.metadata ?? {}) as any,
-        }
-      },
-    })
-    const idx = HTTP.findIndex((t) => t.id === info.id)
-    if (idx >= 0) HTTP.splice(idx, 1, info)
-    else HTTP.push(info)
+  async function all(): Promise<Tool.Info[]> {
+    const custom = await state().then((x) => x.custom)
+    const config = await Config.get()
+
+    return [
+      InvalidTool,
+      BashTool,
+      ReadTool,
+      GlobTool,
+      GrepTool,
+      ListTool,
+      EditTool,
+      WriteTool,
+      TaskTool,
+      WebFetchTool,
+      TodoWriteTool,
+      TodoReadTool,
+      WebSearchTool,
+      CodeSearchTool,
+      ...(config.experimental?.batch_tool === true ? [BatchTool] : []),
+      ...custom,
+    ]
   }
 
-  function allTools(): Tool.Info[] {
-    return [...BUILTIN, ...EXTRA, ...HTTP]
+  export async function ids() {
+    return all().then((x) => x.map((t) => t.id))
   }
 
-  export function ids() {
-    return allTools().map((t) => t.id)
-  }
-
-  export async function tools(_providerID: string, _modelID: string) {
+  export async function tools(providerID: string, _modelID: string) {
+    const tools = await all()
     const result = await Promise.all(
-      allTools().map(async (t) => ({
-        id: t.id,
-        ...(await t.init()),
-      })),
+      tools
+        .filter((t) => {
+          if (t.id === "codesearch" || t.id === "websearch") return providerID === "opencode"
+          return true
+        })
+        .map(async (t) => ({
+          id: t.id,
+          ...(await t.init()),
+        })),
     )
     return result
   }
@@ -140,11 +130,9 @@ export namespace ToolRegistry {
     agent: Agent.Info,
   ): Promise<Record<string, boolean>> {
     const result: Record<string, boolean> = {}
-    result["patch"] = false
 
     if (agent.permission.edit === "deny") {
       result["edit"] = false
-      result["patch"] = false
       result["write"] = false
     }
     if (agent.permission.bash["*"] === "deny" && Object.keys(agent.permission.bash).length === 1) {
@@ -152,6 +140,8 @@ export namespace ToolRegistry {
     }
     if (agent.permission.webfetch === "deny") {
       result["webfetch"] = false
+      result["codesearch"] = false
+      result["websearch"] = false
     }
 
     return result

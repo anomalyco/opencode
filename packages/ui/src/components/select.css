@@ -1,0 +1,122 @@
+[data-component="select"] {
+  [data-slot="select-select-trigger"] {
+    padding: 0 4px 0 8px;
+    box-shadow: none;
+
+    [data-slot="select-select-trigger-value"] {
+      overflow: hidden;
+      text-overflow: ellipsis;
+      white-space: nowrap;
+    }
+    [data-slot="select-select-trigger-icon"] {
+      width: 16px;
+      height: 16px;
+      flex-shrink: 0;
+      color: var(--text-weak);
+      transition: transform 0.1s ease-in-out;
+    }
+  }
+}
+
+[data-component="select-content"] {
+  min-width: 4rem;
+  overflow: hidden;
+  border-radius: var(--radius-md);
+  border-width: 1px;
+  border-style: solid;
+  border-color: var(--border-weak-base);
+  background-color: var(--surface-raised-stronger-non-alpha);
+  padding: 2px;
+  box-shadow: var(--shadow-xs);
+  z-index: 50;
+
+  &[data-closed] {
+    animation: select-close 0.15s ease-out;
+  }
+
+  &[data-expanded] {
+    animation: select-open 0.15s ease-out;
+  }
+
+  [data-slot="select-select-content-list"] {
+    overflow-y: auto;
+    max-height: 12rem;
+    white-space: nowrap;
+    overflow-x: hidden;
+    display: flex;
+    flex-direction: column;
+    gap: 2px;
+
+    &:focus {
+      outline: none;
+    }
+  }
+
+  /* [data-slot="select-section"] { */
+  /* } */
+
+  [data-slot="select-select-item"] {
+    position: relative;
+    display: flex;
+    align-items: center;
+    padding: 0 6px 0 6px;
+    border-radius: var(--radius-sm);
+
+    /* text-12-medium */
+    font-family: var(--font-family-sans);
+    font-size: var(--font-size-small);
+    font-style: normal;
+    font-weight: var(--font-weight-medium);
+    line-height: var(--line-height-large); /* 166.667% */
+    letter-spacing: var(--letter-spacing-normal);
+
+    color: var(--text-strong);
+
+    transition:
+      background-color 0.2s ease-in-out,
+      color 0.2s ease-in-out;
+    outline: none;
+    user-select: none;
+
+    &[data-highlighted] {
+      background: var(--surface-raised-base-hover);
+    }
+    &[data-disabled] {
+      background-color: var(--surface-raised-base);
+      pointer-events: none;
+    }
+    [data-slot="select-select-item-indicator"] {
+      margin-left: auto;
+      width: 16px;
+      height: 16px;
+    }
+    &:focus {
+      outline: none;
+    }
+    &:hover {
+      background: var(--surface-raised-base-hover);
+    }
+  }
+}
+
+@keyframes select-open {
+  from {
+    opacity: 0;
+    transform: scale(0.95);
+  }
+  to {
+    opacity: 1;
+    transform: scale(1);
+  }
+}
+
+@keyframes select-close {
+  from {
+    opacity: 1;
+    transform: scale(1);
+  }
+  to {
+    opacity: 0;
+    transform: scale(0.95);
+  }
+}

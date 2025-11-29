@@ -1,0 +1,60 @@
+/* [data-component="tooltip-trigger"] { */
+/*   display: flex; */
+/*   align-items: center; */
+/* } */
+
+[data-component="tooltip"] {
+  z-index: 1000;
+  max-width: 320px;
+  border-radius: var(--radius-md);
+  background-color: var(--surface-float-base);
+  color: rgba(253, 252, 252, 0.94);
+  padding: 2px 8px;
+  border: 0.5px solid rgba(253, 252, 252, 0.2);
+  box-shadow: var(--shadow-md);
+  pointer-events: none !important;
+  /* transition: all 150ms ease-out; */
+  /* transform: translate3d(0, 0, 0); */
+  /* transform-origin: var(--kb-tooltip-content-transform-origin); */
+
+  /* text-12-medium */
+  font-family: var(--font-family-sans);
+  font-size: var(--font-size-small);
+  font-style: normal;
+  font-weight: var(--font-weight-medium);
+  line-height: var(--line-height-large); /* 166.667% */
+  letter-spacing: var(--letter-spacing-normal);
+
+  &[data-expanded] {
+    opacity: 1;
+    /* transform: translate3d(0, 0, 0); */
+  }
+
+  &[data-closed] {
+    opacity: 0;
+  }
+
+  /* &[data-placement="top"] { */
+  /*   &[data-closed] { */
+  /*     transform: translate3d(0, 4px, 0); */
+  /*   } */
+  /* } */
+  /**/
+  /* &[data-placement="bottom"] { */
+  /*   &[data-closed] { */
+  /*     transform: translate3d(0, -4px, 0); */
+  /*   } */
+  /* } */
+  /**/
+  /* &[data-placement="left"] { */
+  /*   &[data-closed] { */
+  /*     transform: translate3d(4px, 0, 0); */
+  /*   } */
+  /* } */
+  /**/
+  /* &[data-placement="right"] { */
+  /*   &[data-closed] { */
+  /*     transform: translate3d(-4px, 0, 0); */
+  /*   } */
+  /* } */
+}
