@@ -2,6 +2,10 @@
 
 package shared
 
+type UnionString string
+
+func (UnionString) ImplementsPermissionPatternUnion() {}
+
 type UnionBool bool
 
 func (UnionBool) ImplementsConfigProviderOptionsTimeoutUnion() {}

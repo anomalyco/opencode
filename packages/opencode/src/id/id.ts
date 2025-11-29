@@ -1,4 +1,4 @@
-import { z } from "zod"
+import z from "zod"
 import { randomBytes } from "crypto"
 
 export namespace Identifier {

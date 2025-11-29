@@ -30,6 +30,24 @@ Leave the following comment on a GitHub PR. opencode will implement the requeste
 Delete the attachment from S3 when the note is removed /oc
 ```
 
+#### Review specific code lines
+
+Leave a comment directly on code lines in the PR's "Files" tab. opencode will automatically detect the file, line numbers, and diff context to provide precise responses.
+
+```
+[Comment on specific lines in Files tab]
+/oc add error handling here
+```
+
+When commenting on specific lines, opencode receives:
+
+- The exact file being reviewed
+- The specific lines of code
+- The surrounding diff context
+- Line number information
+
+This allows for more targeted requests without needing to specify file paths or line numbers manually.
+
 ## Installation
 
 Run the following command in the terminal from your GitHub repo:
@@ -50,6 +68,8 @@ This will walk you through installing the GitHub app, creating the workflow, and
 
    on:
      issue_comment:
+       types: [created]
+     pull_request_review_comment:
        types: [created]
 
    jobs:
@@ -104,7 +124,7 @@ To test locally:
    - `MODEL`: The model used by opencode. Same as the `MODEL` defined in the GitHub workflow.
    - `ANTHROPIC_API_KEY`: Your model provider API key. Same as the keys defined in the GitHub workflow.
    - `GITHUB_RUN_ID`: Dummy value to emulate GitHub action environment.
-   - `MOCK_TOKEN`: A GitHub persontal access token. This token is used to verify you have `admin` or `write` access to the test repo. Generate a token [here](https://github.com/settings/personal-access-tokens).
+   - `MOCK_TOKEN`: A GitHub personal access token. This token is used to verify you have `admin` or `write` access to the test repo. Generate a token [here](https://github.com/settings/personal-access-tokens).
    - `MOCK_EVENT`: Mock GitHub event payload (see templates below).
    - `/path/to/opencode`: Path to your cloned opencode repo. `bun /path/to/opencode/github/index.ts` runs your local version of `opencode`.
 
@@ -118,7 +138,7 @@ Replace:
 
 - `"owner":"sst"` with repo owner
 - `"repo":"hello-world"` with repo name
-- `"actor":"fwang"` with the GitHub username of commentor
+- `"actor":"fwang"` with the GitHub username of commenter
 - `"number":4` with the GitHub issue id
 - `"body":"hey opencode, summarize thread"` with comment body
 
@@ -134,4 +154,10 @@ Replace the image URL `https://github.com/user-attachments/assets/xxxxxxxx` with
 
 ```
 MOCK_EVENT='{"eventName":"issue_comment","repo":{"owner":"sst","repo":"hello-world"},"actor":"fwang","payload":{"issue":{"number":4,"pull_request":{}},"comment":{"id":1,"body":"hey opencode, summarize thread"}}}'
+```
+
+### PR review comment event
+
+```
+MOCK_EVENT='{"eventName":"pull_request_review_comment","repo":{"owner":"sst","repo":"hello-world"},"actor":"fwang","payload":{"pull_request":{"number":7},"comment":{"id":1,"body":"hey opencode, add error handling","path":"src/components/Button.tsx","diff_hunk":"@@ -45,8 +45,11 @@\n- const handleClick = () => {\n-   console.log('clicked')\n+ const handleClick = useCallback(() => {\n+   console.log('clicked')\n+   doSomething()\n+ }, [doSomething])","line":47,"original_line":45,"position":10,"commit_id":"abc123","original_commit_id":"def456"}}}'
 ```

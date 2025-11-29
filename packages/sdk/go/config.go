@@ -7,6 +7,7 @@ import (
 	"net/http"
 	"net/url"
 	"reflect"
+	"slices"
 
 	"github.com/sst/opencode-sdk-go/internal/apijson"
 	"github.com/sst/opencode-sdk-go/internal/apiquery"
@@ -38,7 +39,7 @@ func NewConfigService(opts ...option.RequestOption) (r *ConfigService) {
 
 // Get config info
 func (r *ConfigService) Get(ctx context.Context, query ConfigGetParams, opts ...option.RequestOption) (res *Config, err error) {
-	opts = append(r.Options[:], opts...)
+	opts = slices.Concat(r.Options, opts)
 	path := "config"
 	err = requestconfig.ExecuteNewRequest(ctx, http.MethodGet, path, query, &res, opts...)
 	return
@@ -90,8 +91,9 @@ type Config struct {
 	// TUI specific settings
 	Tui ConfigTui `json:"tui"`
 	// Custom username to display in conversations instead of system username
-	Username string     `json:"username"`
-	JSON     configJSON `json:"-"`
+	Username string        `json:"username"`
+	Watcher  ConfigWatcher `json:"watcher"`
+	JSON     configJSON    `json:"-"`
 }
 
 // configJSON contains the JSON metadata for the struct [Config]
@@ -121,6 +123,7 @@ type configJSON struct {
 	Tools             apijson.Field
 	Tui               apijson.Field
 	Username          apijson.Field
+	Watcher           apijson.Field
 	raw               string
 	ExtraFields       map[string]apijson.Field
 }
@@ -676,6 +679,7 @@ type ConfigCommand struct {
 	Agent       string            `json:"agent"`
 	Description string            `json:"description"`
 	Model       string            `json:"model"`
+	Subtask     bool              `json:"subtask"`
 	JSON        configCommandJSON `json:"-"`
 }
 
@@ -685,6 +689,7 @@ type configCommandJSON struct {
 	Agent       apijson.Field
 	Description apijson.Field
 	Model       apijson.Field
+	Subtask     apijson.Field
 	raw         string
 	ExtraFields map[string]apijson.Field
 }
@@ -698,16 +703,18 @@ func (r configCommandJSON) RawJSON() string {
 }
 
 type ConfigExperimental struct {
-	Hook ConfigExperimentalHook `json:"hook"`
-	JSON configExperimentalJSON `json:"-"`
+	DisablePasteSummary bool                   `json:"disable_paste_summary"`
+	Hook                ConfigExperimentalHook `json:"hook"`
+	JSON                configExperimentalJSON `json:"-"`
 }
 
 // configExperimentalJSON contains the JSON metadata for the struct
 // [ConfigExperimental]
 type configExperimentalJSON struct {
-	Hook        apijson.Field
-	raw         string
-	ExtraFields map[string]apijson.Field
+	DisablePasteSummary apijson.Field
+	Hook                apijson.Field
+	raw                 string
+	ExtraFields         map[string]apijson.Field
 }
 
 func (r *ConfigExperimental) UnmarshalJSON(data []byte) (err error) {
@@ -1020,16 +1027,14 @@ type ConfigMcpUnion interface {
 func init() {
 	apijson.RegisterUnion(
 		reflect.TypeOf((*ConfigMcpUnion)(nil)).Elem(),
-		"type",
+		"",
 		apijson.UnionVariant{
-			TypeFilter:         gjson.JSON,
-			Type:               reflect.TypeOf(McpLocalConfig{}),
-			DiscriminatorValue: "local",
+			TypeFilter: gjson.JSON,
+			Type:       reflect.TypeOf(McpLocalConfig{}),
 		},
 		apijson.UnionVariant{
-			TypeFilter:         gjson.JSON,
-			Type:               reflect.TypeOf(McpRemoteConfig{}),
-			DiscriminatorValue: "remote",
+			TypeFilter: gjson.JSON,
+			Type:       reflect.TypeOf(McpRemoteConfig{}),
 		},
 	)
 }
@@ -1562,19 +1567,21 @@ func (r configProviderJSON) RawJSON() string {
 }
 
 type ConfigProviderModel struct {
-	ID           string                       `json:"id"`
-	Attachment   bool                         `json:"attachment"`
-	Cost         ConfigProviderModelsCost     `json:"cost"`
-	Experimental bool                         `json:"experimental"`
-	Limit        ConfigProviderModelsLimit    `json:"limit"`
-	Name         string                       `json:"name"`
-	Options      map[string]interface{}       `json:"options"`
-	Provider     ConfigProviderModelsProvider `json:"provider"`
-	Reasoning    bool                         `json:"reasoning"`
-	ReleaseDate  string                       `json:"release_date"`
-	Temperature  bool                         `json:"temperature"`
-	ToolCall     bool                         `json:"tool_call"`
-	JSON         configProviderModelJSON      `json:"-"`
+	ID           string                         `json:"id"`
+	Attachment   bool                           `json:"attachment"`
+	Cost         ConfigProviderModelsCost       `json:"cost"`
+	Experimental bool                           `json:"experimental"`
+	Limit        ConfigProviderModelsLimit      `json:"limit"`
+	Modalities   ConfigProviderModelsModalities `json:"modalities"`
+	Name         string                         `json:"name"`
+	Options      map[string]interface{}         `json:"options"`
+	Provider     ConfigProviderModelsProvider   `json:"provider"`
+	Reasoning    bool                           `json:"reasoning"`
+	ReleaseDate  string                         `json:"release_date"`
+	Status       ConfigProviderModelsStatus     `json:"status"`
+	Temperature  bool                           `json:"temperature"`
+	ToolCall     bool                           `json:"tool_call"`
+	JSON         configProviderModelJSON        `json:"-"`
 }
 
 // configProviderModelJSON contains the JSON metadata for the struct
@@ -1585,11 +1592,13 @@ type configProviderModelJSON struct {
 	Cost         apijson.Field
 	Experimental apijson.Field
 	Limit        apijson.Field
+	Modalities   apijson.Field
 	Name         apijson.Field
 	Options      apijson.Field
 	Provider     apijson.Field
 	Reasoning    apijson.Field
 	ReleaseDate  apijson.Field
+	Status       apijson.Field
 	Temperature  apijson.Field
 	ToolCall     apijson.Field
 	raw          string
@@ -1654,6 +1663,65 @@ func (r configProviderModelsLimitJSON) RawJSON() string {
 	return r.raw
 }
 
+type ConfigProviderModelsModalities struct {
+	Input  []ConfigProviderModelsModalitiesInput  `json:"input,required"`
+	Output []ConfigProviderModelsModalitiesOutput `json:"output,required"`
+	JSON   configProviderModelsModalitiesJSON     `json:"-"`
+}
+
+// configProviderModelsModalitiesJSON contains the JSON metadata for the struct
+// [ConfigProviderModelsModalities]
+type configProviderModelsModalitiesJSON struct {
+	Input       apijson.Field
+	Output      apijson.Field
+	raw         string
+	ExtraFields map[string]apijson.Field
+}
+
+func (r *ConfigProviderModelsModalities) UnmarshalJSON(data []byte) (err error) {
+	return apijson.UnmarshalRoot(data, r)
+}
+
+func (r configProviderModelsModalitiesJSON) RawJSON() string {
+	return r.raw
+}
+
+type ConfigProviderModelsModalitiesInput string
+
+const (
+	ConfigProviderModelsModalitiesInputText  ConfigProviderModelsModalitiesInput = "text"
+	ConfigProviderModelsModalitiesInputAudio ConfigProviderModelsModalitiesInput = "audio"
+	ConfigProviderModelsModalitiesInputImage ConfigProviderModelsModalitiesInput = "image"
+	ConfigProviderModelsModalitiesInputVideo ConfigProviderModelsModalitiesInput = "video"
+	ConfigProviderModelsModalitiesInputPdf   ConfigProviderModelsModalitiesInput = "pdf"
+)
+
+func (r ConfigProviderModelsModalitiesInput) IsKnown() bool {
+	switch r {
+	case ConfigProviderModelsModalitiesInputText, ConfigProviderModelsModalitiesInputAudio, ConfigProviderModelsModalitiesInputImage, ConfigProviderModelsModalitiesInputVideo, ConfigProviderModelsModalitiesInputPdf:
+		return true
+	}
+	return false
+}
+
+type ConfigProviderModelsModalitiesOutput string
+
+const (
+	ConfigProviderModelsModalitiesOutputText  ConfigProviderModelsModalitiesOutput = "text"
+	ConfigProviderModelsModalitiesOutputAudio ConfigProviderModelsModalitiesOutput = "audio"
+	ConfigProviderModelsModalitiesOutputImage ConfigProviderModelsModalitiesOutput = "image"
+	ConfigProviderModelsModalitiesOutputVideo ConfigProviderModelsModalitiesOutput = "video"
+	ConfigProviderModelsModalitiesOutputPdf   ConfigProviderModelsModalitiesOutput = "pdf"
+)
+
+func (r ConfigProviderModelsModalitiesOutput) IsKnown() bool {
+	switch r {
+	case ConfigProviderModelsModalitiesOutputText, ConfigProviderModelsModalitiesOutputAudio, ConfigProviderModelsModalitiesOutputImage, ConfigProviderModelsModalitiesOutputVideo, ConfigProviderModelsModalitiesOutputPdf:
+		return true
+	}
+	return false
+}
+
 type ConfigProviderModelsProvider struct {
 	Npm  string                           `json:"npm,required"`
 	JSON configProviderModelsProviderJSON `json:"-"`
@@ -1673,6 +1741,21 @@ func (r *ConfigProviderModelsProvider) UnmarshalJSON(data []byte) (err error) {
 
 func (r configProviderModelsProviderJSON) RawJSON() string {
 	return r.raw
+}
+
+type ConfigProviderModelsStatus string
+
+const (
+	ConfigProviderModelsStatusAlpha ConfigProviderModelsStatus = "alpha"
+	ConfigProviderModelsStatusBeta  ConfigProviderModelsStatus = "beta"
+)
+
+func (r ConfigProviderModelsStatus) IsKnown() bool {
+	switch r {
+	case ConfigProviderModelsStatusAlpha, ConfigProviderModelsStatusBeta:
+		return true
+	}
+	return false
 }
 
 type ConfigProviderOptions struct {
@@ -1751,7 +1834,7 @@ func (r ConfigShare) IsKnown() bool {
 // TUI specific settings
 type ConfigTui struct {
 	// TUI scroll speed
-	ScrollSpeed float64       `json:"scroll_speed,required"`
+	ScrollSpeed float64       `json:"scroll_speed"`
 	JSON        configTuiJSON `json:"-"`
 }
 
@@ -1770,105 +1853,126 @@ func (r configTuiJSON) RawJSON() string {
 	return r.raw
 }
 
+type ConfigWatcher struct {
+	Ignore []string          `json:"ignore"`
+	JSON   configWatcherJSON `json:"-"`
+}
+
+// configWatcherJSON contains the JSON metadata for the struct [ConfigWatcher]
+type configWatcherJSON struct {
+	Ignore      apijson.Field
+	raw         string
+	ExtraFields map[string]apijson.Field
+}
+
+func (r *ConfigWatcher) UnmarshalJSON(data []byte) (err error) {
+	return apijson.UnmarshalRoot(data, r)
+}
+
+func (r configWatcherJSON) RawJSON() string {
+	return r.raw
+}
+
+// Custom keybind configurations
 type KeybindsConfig struct {
 	// Next agent
-	AgentCycle string `json:"agent_cycle,required"`
+	AgentCycle string `json:"agent_cycle"`
 	// Previous agent
-	AgentCycleReverse string `json:"agent_cycle_reverse,required"`
+	AgentCycleReverse string `json:"agent_cycle_reverse"`
 	// List agents
-	AgentList string `json:"agent_list,required"`
+	AgentList string `json:"agent_list"`
 	// Exit the application
-	AppExit string `json:"app_exit,required"`
+	AppExit string `json:"app_exit"`
 	// Show help dialog
-	AppHelp string `json:"app_help,required"`
+	AppHelp string `json:"app_help"`
 	// Open external editor
-	EditorOpen string `json:"editor_open,required"`
+	EditorOpen string `json:"editor_open"`
 	// @deprecated Close file
-	FileClose string `json:"file_close,required"`
+	FileClose string `json:"file_close"`
 	// @deprecated Split/unified diff
-	FileDiffToggle string `json:"file_diff_toggle,required"`
+	FileDiffToggle string `json:"file_diff_toggle"`
 	// @deprecated Currently not available. List files
-	FileList string `json:"file_list,required"`
+	FileList string `json:"file_list"`
 	// @deprecated Search file
-	FileSearch string `json:"file_search,required"`
+	FileSearch string `json:"file_search"`
 	// Clear input field
-	InputClear string `json:"input_clear,required"`
+	InputClear string `json:"input_clear"`
 	// Insert newline in input
-	InputNewline string `json:"input_newline,required"`
+	InputNewline string `json:"input_newline"`
 	// Paste from clipboard
-	InputPaste string `json:"input_paste,required"`
+	InputPaste string `json:"input_paste"`
 	// Submit input
-	InputSubmit string `json:"input_submit,required"`
+	InputSubmit string `json:"input_submit"`
 	// Leader key for keybind combinations
-	Leader string `json:"leader,required"`
+	Leader string `json:"leader"`
 	// Copy message
-	MessagesCopy string `json:"messages_copy,required"`
+	MessagesCopy string `json:"messages_copy"`
 	// Navigate to first message
-	MessagesFirst string `json:"messages_first,required"`
+	MessagesFirst string `json:"messages_first"`
 	// Scroll messages down by half page
-	MessagesHalfPageDown string `json:"messages_half_page_down,required"`
+	MessagesHalfPageDown string `json:"messages_half_page_down"`
 	// Scroll messages up by half page
-	MessagesHalfPageUp string `json:"messages_half_page_up,required"`
+	MessagesHalfPageUp string `json:"messages_half_page_up"`
 	// Navigate to last message
-	MessagesLast string `json:"messages_last,required"`
+	MessagesLast string `json:"messages_last"`
 	// @deprecated Toggle layout
-	MessagesLayoutToggle string `json:"messages_layout_toggle,required"`
+	MessagesLayoutToggle string `json:"messages_layout_toggle"`
 	// @deprecated Navigate to next message
-	MessagesNext string `json:"messages_next,required"`
+	MessagesNext string `json:"messages_next"`
 	// Scroll messages down by one page
-	MessagesPageDown string `json:"messages_page_down,required"`
+	MessagesPageDown string `json:"messages_page_down"`
 	// Scroll messages up by one page
-	MessagesPageUp string `json:"messages_page_up,required"`
+	MessagesPageUp string `json:"messages_page_up"`
 	// @deprecated Navigate to previous message
-	MessagesPrevious string `json:"messages_previous,required"`
+	MessagesPrevious string `json:"messages_previous"`
 	// Redo message
-	MessagesRedo string `json:"messages_redo,required"`
+	MessagesRedo string `json:"messages_redo"`
 	// @deprecated use messages_undo. Revert message
-	MessagesRevert string `json:"messages_revert,required"`
+	MessagesRevert string `json:"messages_revert"`
 	// Undo message
-	MessagesUndo string `json:"messages_undo,required"`
+	MessagesUndo string `json:"messages_undo"`
 	// Next recent model
-	ModelCycleRecent string `json:"model_cycle_recent,required"`
+	ModelCycleRecent string `json:"model_cycle_recent"`
 	// Previous recent model
-	ModelCycleRecentReverse string `json:"model_cycle_recent_reverse,required"`
+	ModelCycleRecentReverse string `json:"model_cycle_recent_reverse"`
 	// List available models
-	ModelList string `json:"model_list,required"`
+	ModelList string `json:"model_list"`
 	// Create/update AGENTS.md
-	ProjectInit string `json:"project_init,required"`
+	ProjectInit string `json:"project_init"`
 	// Cycle to next child session
-	SessionChildCycle string `json:"session_child_cycle,required"`
+	SessionChildCycle string `json:"session_child_cycle"`
 	// Cycle to previous child session
-	SessionChildCycleReverse string `json:"session_child_cycle_reverse,required"`
+	SessionChildCycleReverse string `json:"session_child_cycle_reverse"`
 	// Compact the session
-	SessionCompact string `json:"session_compact,required"`
+	SessionCompact string `json:"session_compact"`
 	// Export session to editor
-	SessionExport string `json:"session_export,required"`
+	SessionExport string `json:"session_export"`
 	// Interrupt current session
-	SessionInterrupt string `json:"session_interrupt,required"`
+	SessionInterrupt string `json:"session_interrupt"`
 	// List all sessions
-	SessionList string `json:"session_list,required"`
+	SessionList string `json:"session_list"`
 	// Create a new session
-	SessionNew string `json:"session_new,required"`
+	SessionNew string `json:"session_new"`
 	// Share current session
-	SessionShare string `json:"session_share,required"`
+	SessionShare string `json:"session_share"`
 	// Show session timeline
-	SessionTimeline string `json:"session_timeline,required"`
+	SessionTimeline string `json:"session_timeline"`
 	// Unshare current session
-	SessionUnshare string `json:"session_unshare,required"`
+	SessionUnshare string `json:"session_unshare"`
 	// @deprecated use agent_cycle. Next agent
-	SwitchAgent string `json:"switch_agent,required"`
+	SwitchAgent string `json:"switch_agent"`
 	// @deprecated use agent_cycle_reverse. Previous agent
-	SwitchAgentReverse string `json:"switch_agent_reverse,required"`
+	SwitchAgentReverse string `json:"switch_agent_reverse"`
 	// @deprecated use agent_cycle. Next mode
-	SwitchMode string `json:"switch_mode,required"`
+	SwitchMode string `json:"switch_mode"`
 	// @deprecated use agent_cycle_reverse. Previous mode
-	SwitchModeReverse string `json:"switch_mode_reverse,required"`
+	SwitchModeReverse string `json:"switch_mode_reverse"`
 	// List available themes
-	ThemeList string `json:"theme_list,required"`
+	ThemeList string `json:"theme_list"`
 	// Toggle thinking blocks
-	ThinkingBlocks string `json:"thinking_blocks,required"`
+	ThinkingBlocks string `json:"thinking_blocks"`
 	// Toggle tool details
-	ToolDetails string             `json:"tool_details,required"`
+	ToolDetails string             `json:"tool_details"`
 	JSON        keybindsConfigJSON `json:"-"`
 }
 

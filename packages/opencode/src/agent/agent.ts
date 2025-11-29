@@ -12,14 +12,17 @@ export namespace Agent {
     .object({
       name: z.string(),
       description: z.string().optional(),
-      mode: z.union([z.literal("subagent"), z.literal("primary"), z.literal("all")]),
+      mode: z.enum(["subagent", "primary", "all"]),
       builtIn: z.boolean(),
       topP: z.number().optional(),
       temperature: z.number().optional(),
+      color: z.string().optional(),
       permission: z.object({
         edit: Config.Permission,
         bash: z.record(z.string(), Config.Permission),
         webfetch: Config.Permission.optional(),
+        doom_loop: Config.Permission.optional(),
+        external_directory: Config.Permission.optional(),
       }),
       model: z
         .object({
@@ -28,10 +31,10 @@ export namespace Agent {
         })
         .optional(),
       prompt: z.string().optional(),
-      tools: z.record(z.boolean()),
+      tools: z.record(z.string(), z.boolean()),
       options: z.record(z.string(), z.any()),
     })
-    .openapi({
+    .meta({
       ref: "Agent",
     })
   export type Info = z.infer<typeof Info>
@@ -45,13 +48,52 @@ export namespace Agent {
         "*": "allow",
       },
       webfetch: "allow",
+      doom_loop: "ask",
+      external_directory: "ask",
     }
     const agentPermission = mergeAgentPermissions(defaultPermission, cfg.permission ?? {})
 
     const planPermission = mergeAgentPermissions(
       {
         edit: "deny",
-        bash: "ask",
+        bash: {
+          "cut*": "allow",
+          "diff*": "allow",
+          "du*": "allow",
+          "file *": "allow",
+          "find * -delete*": "ask",
+          "find * -exec*": "ask",
+          "find * -fprint*": "ask",
+          "find * -fls*": "ask",
+          "find * -fprintf*": "ask",
+          "find * -ok*": "ask",
+          "find *": "allow",
+          "git diff*": "allow",
+          "git log*": "allow",
+          "git show*": "allow",
+          "git status*": "allow",
+          "git branch": "allow",
+          "git branch -v": "allow",
+          "grep*": "allow",
+          "head*": "allow",
+          "less*": "allow",
+          "ls*": "allow",
+          "more*": "allow",
+          "pwd*": "allow",
+          "rg*": "allow",
+          "sort --output=*": "ask",
+          "sort -o *": "ask",
+          "sort*": "allow",
+          "stat*": "allow",
+          "tail*": "allow",
+          "tree -o *": "ask",
+          "tree*": "allow",
+          "uniq*": "allow",
+          "wc*": "allow",
+          "whereis*": "allow",
+          "which*": "allow",
+          "*": "ask",
+        },
         webfetch: "allow",
       },
       cfg.permission ?? {},
@@ -67,6 +109,41 @@ export namespace Agent {
           todowrite: false,
           ...defaultTools,
         },
+        options: {},
+        permission: agentPermission,
+        mode: "subagent",
+        builtIn: true,
+      },
+      explore: {
+        name: "explore",
+        tools: {
+          todoread: false,
+          todowrite: false,
+          edit: false,
+          write: false,
+          ...defaultTools,
+        },
+        description: `Fast agent specialized for exploring codebases. Use this when you need to quickly find files by patterns (eg. "src/components/**/*.tsx"), search code for keywords (eg. "API endpoints"), or answer questions about the codebase (eg. "how do API endpoints work?"). When calling this agent, specify the desired thoroughness level: "quick" for basic searches, "medium" for moderate exploration, or "very thorough" for comprehensive analysis across multiple locations and naming conventions.`,
+        prompt: [
+          `You are a file search specialist. You excel at thoroughly navigating and exploring codebases.`,
+          ``,
+          `Your strengths:`,
+          `- Rapidly finding files using glob patterns`,
+          `- Searching code and text with powerful regex patterns`,
+          `- Reading and analyzing file contents`,
+          ``,
+          `Guidelines:`,
+          `- Use Glob for broad file pattern matching`,
+          `- Use Grep for searching file contents with regex`,
+          `- Use Read when you know the specific file path you need to read`,
+          `- Use Bash for file operations like copying, moving, or listing directory contents`,
+          `- Adapt your search approach based on the thoroughness level specified by the caller`,
+          `- Return file paths as absolute paths in your final response`,
+          `- For clear communication, avoid using emojis`,
+          `- Do not create any files, or run bash commands that modify the user's system state in any way`,
+          ``,
+          `Complete the user's search request efficiently and report your findings clearly.`,
+        ].join("\n"),
         options: {},
         permission: agentPermission,
         mode: "subagent",
@@ -106,7 +183,7 @@ export namespace Agent {
           tools: {},
           builtIn: false,
         }
-      const { name, model, prompt, tools, description, temperature, top_p, mode, permission, ...extra } = value
+      const { name, model, prompt, tools, description, temperature, top_p, mode, permission, color, ...extra } = value
       item.options = {
         ...item.options,
         ...extra,
@@ -126,6 +203,7 @@ export namespace Agent {
       if (temperature != undefined) item.temperature = temperature
       if (top_p != undefined) item.topP = top_p
       if (mode) item.mode = mode
+      if (color) item.color = color
       // just here for consistency & to prevent it from being added as an option
       if (name) item.name = name
 
@@ -176,6 +254,16 @@ export namespace Agent {
 }
 
 function mergeAgentPermissions(basePermission: any, overridePermission: any): Agent.Info["permission"] {
+  if (typeof basePermission.bash === "string") {
+    basePermission.bash = {
+      "*": basePermission.bash,
+    }
+  }
+  if (typeof overridePermission.bash === "string") {
+    overridePermission.bash = {
+      "*": overridePermission.bash,
+    }
+  }
   const merged = mergeDeep(basePermission ?? {}, overridePermission ?? {}) as any
   let mergedBash
   if (merged.bash) {
@@ -183,12 +271,10 @@ function mergeAgentPermissions(basePermission: any, overridePermission: any): Ag
       mergedBash = {
         "*": merged.bash,
       }
-    }
-    // if granular permissions are provided, default to "ask"
-    if (typeof merged.bash === "object") {
+    } else if (typeof merged.bash === "object") {
       mergedBash = mergeDeep(
         {
-          "*": "ask",
+          "*": "allow",
         },
         merged.bash,
       )
@@ -199,6 +285,8 @@ function mergeAgentPermissions(basePermission: any, overridePermission: any): Ag
     edit: merged.edit ?? "allow",
     webfetch: merged.webfetch ?? "allow",
     bash: mergedBash ?? { "*": "allow" },
+    doom_loop: merged.doom_loop,
+    external_directory: merged.external_directory,
   }
 
   return result

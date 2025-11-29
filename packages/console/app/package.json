@@ -1,0 +1,39 @@
+{
+  "name": "@opencode-ai/console-app",
+  "version": "1.0.120",
+  "type": "module",
+  "scripts": {
+    "typecheck": "tsgo --noEmit",
+    "dev": "vite dev --host 0.0.0.0",
+    "dev:remote": "VITE_AUTH_URL=https://auth.dev.opencode.ai bun sst shell --stage=dev bun dev",
+    "build": "./script/generate-sitemap.ts && vite build && ../../opencode/script/schema.ts ./.output/public/config.json",
+    "start": "vite start"
+  },
+  "dependencies": {
+    "@cloudflare/vite-plugin": "1.15.2",
+    "@ibm/plex": "6.4.1",
+    "@jsx-email/render": "1.1.1",
+    "@kobalte/core": "catalog:",
+    "@openauthjs/openauth": "catalog:",
+    "@opencode-ai/console-core": "workspace:*",
+    "@opencode-ai/console-mail": "workspace:*",
+    "@opencode-ai/console-resource": "workspace:*",
+    "@opencode-ai/ui": "workspace:*",
+    "@solidjs/meta": "catalog:",
+    "@solidjs/router": "catalog:",
+    "@solidjs/start": "catalog:",
+    "chart.js": "4.5.1",
+    "nitro": "3.0.1-alpha.1",
+    "solid-js": "catalog:",
+    "vite": "catalog:",
+    "zod": "catalog:"
+  },
+  "devDependencies": {
+    "@typescript/native-preview": "catalog:",
+    "typescript": "catalog:",
+    "wrangler": "4.50.0"
+  },
+  "engines": {
+    "node": ">=22"
+  }
+}

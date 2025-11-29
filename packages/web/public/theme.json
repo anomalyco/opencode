@@ -46,6 +46,7 @@
         "info": { "$ref": "#/definitions/colorValue" },
         "text": { "$ref": "#/definitions/colorValue" },
         "textMuted": { "$ref": "#/definitions/colorValue" },
+        "selectedListItemText": { "$ref": "#/definitions/colorValue" },
         "background": { "$ref": "#/definitions/colorValue" },
         "backgroundPanel": { "$ref": "#/definitions/colorValue" },
         "backgroundElement": { "$ref": "#/definitions/colorValue" },

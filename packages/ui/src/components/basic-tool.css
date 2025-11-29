@@ -1,0 +1,76 @@
+[data-component="tool-trigger"] {
+  width: 100%;
+  display: flex;
+  align-items: center;
+  align-self: stretch;
+  gap: 20px;
+  justify-content: space-between;
+
+  [data-slot="basic-tool-tool-trigger-content"] {
+    width: 100%;
+    display: flex;
+    align-items: center;
+    align-self: stretch;
+    gap: 20px;
+  }
+
+  [data-slot="basic-tool-tool-icon"] {
+    flex-shrink: 0;
+  }
+
+  [data-slot="basic-tool-tool-info"] {
+    flex-grow: 1;
+    min-width: 0;
+  }
+
+  [data-slot="basic-tool-tool-info-structured"] {
+    width: 100%;
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    justify-content: space-between;
+  }
+
+  [data-slot="basic-tool-tool-info-main"] {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+  }
+
+  [data-slot="basic-tool-tool-title"] {
+    font-family: var(--font-family-sans);
+    font-size: var(--font-size-small);
+    font-style: normal;
+    font-weight: var(--font-weight-medium);
+    line-height: var(--line-height-large);
+    letter-spacing: var(--letter-spacing-normal);
+    color: var(--text-base);
+
+    &.capitalize {
+      text-transform: capitalize;
+    }
+  }
+
+  [data-slot="basic-tool-tool-subtitle"] {
+    font-family: var(--font-family-sans);
+    font-size: var(--font-size-small);
+    font-style: normal;
+    font-weight: var(--font-weight-medium);
+    line-height: var(--line-height-large);
+    letter-spacing: var(--letter-spacing-normal);
+    color: var(--text-weak);
+  }
+
+  [data-slot="basic-tool-tool-arg"] {
+    font-family: var(--font-family-sans);
+    font-size: var(--font-size-small);
+    font-style: normal;
+    font-weight: var(--font-weight-regular);
+    line-height: var(--line-height-large);
+    letter-spacing: var(--letter-spacing-normal);
+    color: var(--text-weak);
+  }
+}

@@ -1,0 +1,40 @@
+@import "./styles/index.css";
+
+:root {
+  body {
+    margin: 0;
+    background-color: var(--background-base);
+    color: var(--text-base);
+  }
+  main {
+    display: flex;
+    flex-direction: row;
+    overflow-x: hidden;
+  }
+  main > div {
+    flex: 1;
+    padding: 2rem;
+    min-width: 0;
+    overflow-x: hidden;
+    display: flex;
+    flex-direction: column;
+    gap: 2rem;
+  }
+  h3 {
+    font-size: 1.25rem;
+    font-weight: 600;
+    margin: 0 0 1rem 0;
+    margin-bottom: -1rem;
+  }
+  section {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 0.75rem;
+    align-items: flex-start;
+  }
+}
+
+.dark {
+  background-color: var(--background-base);
+  color: var(--text-base);
+}

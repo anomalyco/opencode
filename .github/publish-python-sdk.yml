@@ -1,0 +1,71 @@
+#
+# This file is intentionally in the wrong dir, will move and add later....
+#
+
+# name: publish-python-sdk
+
+# on:
+#   release:
+#     types: [published]
+#   workflow_dispatch:
+
+# jobs:
+#   publish:
+#     runs-on: ubuntu-latest
+#     permissions:
+#       contents: read
+#     steps:
+#       - name: Checkout repository
+#         uses: actions/checkout@v4
+
+#       - name: Setup Bun
+#         uses: oven-sh/setup-bun@v1
+#         with:
+#           bun-version: 1.2.21
+
+#       - name: Install dependencies (JS/Bun)
+#         run: bun install
+
+#       - name: Install uv
+#         shell: bash
+#         run: curl -LsSf https://astral.sh/uv/install.sh | sh
+
+#       - name: Generate Python SDK from OpenAPI (CLI)
+#         shell: bash
+#         run: |
+#           ~/.local/bin/uv run --project packages/sdk/python python packages/sdk/python/scripts/generate.py --source cli
+
+#       - name: Sync Python dependencies
+#         shell: bash
+#         run: |
+#           ~/.local/bin/uv sync --dev --project packages/sdk/python
+
+#       - name: Set version from release tag
+#         shell: bash
+#         run: |
+#           TAG="${GITHUB_REF_NAME:-}"
+#           if [ -z "$TAG" ]; then
+#             TAG="$(git describe --tags --abbrev=0 || echo 0.0.0)"
+#           fi
+#           echo "Using version: $TAG"
+#           VERSION="$TAG" ~/.local/bin/uv run --project packages/sdk/python python - <<'PY'
+# import os, re, pathlib
+# root = pathlib.Path('packages/sdk/python')
+# pt = (root / 'pyproject.toml').read_text()
+# version = os.environ.get('VERSION','0.0.0').lstrip('v')
+# pt = re.sub(r'(?m)^(version\s*=\s*")[^"]+("\s*)$', f"\\1{version}\\2", pt)
+# (root / 'pyproject.toml').write_text(pt)
+# # Also update generator config override for consistency
+# cfgp = root / 'openapi-python-client.yaml'
+# if cfgp.exists():
+#     cfg = cfgp.read_text()
+#     cfg = re.sub(r'(?m)^(package_version_override:\s*)\S+$', f"\\1{version}", cfg)
+#     cfgp.write_text(cfg)
+# PY
+
+#       - name: Build and publish to PyPI
+#         env:
+#           PYPI_TOKEN: ${{ secrets.PYPI_API_TOKEN }}
+#         shell: bash
+#         run: |
+#           ~/.local/bin/uv run --project packages/sdk/python python packages/sdk/python/scripts/publish.py

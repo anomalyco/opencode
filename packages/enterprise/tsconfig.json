@@ -1,0 +1,20 @@
+{
+  "compilerOptions": {
+    "target": "ESNext",
+    "module": "ESNext",
+    "moduleResolution": "bundler",
+    "skipLibCheck": true,
+    "allowSyntheticDefaultImports": true,
+    "esModuleInterop": true,
+    "jsx": "preserve",
+    "jsxImportSource": "solid-js",
+    "allowJs": true,
+    "noEmit": true,
+    "strict": true,
+    "types": ["@cloudflare/workers-types", "vite/client"],
+    "isolatedModules": true,
+    "paths": {
+      "~/*": ["./src/*"]
+    }
+  }
+}

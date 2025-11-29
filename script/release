@@ -1,3 +1,5 @@
 #!/usr/bin/env bash
 
-gh workflow run publish.yml -f bump="patch"
+BUMP_TYPE=${1:-patch}
+
+gh workflow run publish.yml -f bump="$BUMP_TYPE"

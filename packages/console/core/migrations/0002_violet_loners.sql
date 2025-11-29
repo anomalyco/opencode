@@ -1,0 +1,1 @@
+ALTER TABLE `key` ADD `old_name` varchar(255);

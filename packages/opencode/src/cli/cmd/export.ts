@@ -4,6 +4,7 @@ import { cmd } from "./cmd"
 import { bootstrap } from "../bootstrap"
 import { UI } from "../ui"
 import * as prompts from "@clack/prompts"
+import { EOL } from "os"
 
 export const ExportCommand = cmd({
   command: "export [sessionID]",
@@ -17,10 +18,13 @@ export const ExportCommand = cmd({
   handler: async (args) => {
     await bootstrap(process.cwd(), async () => {
       let sessionID = args.sessionID
+      process.stderr.write(`Exporting session: ${sessionID ?? "latest"}`)
 
       if (!sessionID) {
         UI.empty()
-        prompts.intro("Export session")
+        prompts.intro("Export session", {
+          output: process.stderr,
+        })
 
         const sessions = []
         for await (const session of Session.list()) {
@@ -28,8 +32,12 @@ export const ExportCommand = cmd({
         }
 
         if (sessions.length === 0) {
-          prompts.log.error("No sessions found")
-          prompts.outro("Done")
+          prompts.log.error("No sessions found", {
+            output: process.stderr,
+          })
+          prompts.outro("Done", {
+            output: process.stderr,
+          })
           return
         }
 
@@ -43,6 +51,7 @@ export const ExportCommand = cmd({
             value: session.id,
             hint: `${new Date(session.time.updated).toLocaleString()} • ${session.id.slice(-8)}`,
           })),
+          output: process.stderr,
         })
 
         if (prompts.isCancel(selectedSession)) {
@@ -51,12 +60,14 @@ export const ExportCommand = cmd({
 
         sessionID = selectedSession as string
 
-        prompts.outro("Exporting session...")
+        prompts.outro("Exporting session...", {
+          output: process.stderr,
+        })
       }
 
       try {
         const sessionInfo = await Session.get(sessionID!)
-        const messages = await Session.messages(sessionID!)
+        const messages = await Session.messages({ sessionID: sessionID! })
 
         const exportData = {
           info: sessionInfo,
@@ -66,7 +77,8 @@ export const ExportCommand = cmd({
           })),
         }
 
-        console.log(JSON.stringify(exportData, null, 2))
+        process.stdout.write(JSON.stringify(exportData, null, 2))
+        process.stdout.write(EOL)
       } catch (error) {
         UI.error(`Session not found: ${sessionID!}`)
         process.exit(1)

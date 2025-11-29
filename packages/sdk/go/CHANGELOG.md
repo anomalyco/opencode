@@ -1,5 +1,99 @@
 # Changelog
 
+## 0.18.0 (2025-10-10)
+
+Full Changelog: [v0.17.0...v0.18.0](https://github.com/sst/opencode-sdk-go/compare/v0.17.0...v0.18.0)
+
+### Features
+
+- **api:** api update ([0a7f5e7](https://github.com/sst/opencode-sdk-go/commit/0a7f5e710911506512a132ba39e0593c412beb77))
+
+## 0.17.0 (2025-10-07)
+
+Full Changelog: [v0.16.2...v0.17.0](https://github.com/sst/opencode-sdk-go/compare/v0.16.2...v0.17.0)
+
+### Features
+
+- **api:** api update ([84a3df5](https://github.com/sst/opencode-sdk-go/commit/84a3df50a7ff3d87e5593e4f29dfb5d561f71cc3))
+
+## 0.16.2 (2025-09-26)
+
+Full Changelog: [v0.16.1...v0.16.2](https://github.com/sst/opencode-sdk-go/compare/v0.16.1...v0.16.2)
+
+### Bug Fixes
+
+- bugfix for setting JSON keys with special characters ([ac9a36f](https://github.com/sst/opencode-sdk-go/commit/ac9a36feb1c185ebf766d76909d0b86ac805e8a6))
+
+## 0.16.1 (2025-09-20)
+
+Full Changelog: [v0.16.0...v0.16.1](https://github.com/sst/opencode-sdk-go/compare/v0.16.0...v0.16.1)
+
+### Bug Fixes
+
+- use slices.Concat instead of sometimes modifying r.Options ([12e8b40](https://github.com/sst/opencode-sdk-go/commit/12e8b40809071095b0abb9b8031686353c8ac149))
+
+### Chores
+
+- bump minimum go version to 1.22 ([1a61c5c](https://github.com/sst/opencode-sdk-go/commit/1a61c5cc7e8f68cc1b0c219738cab530cb6aa3a2))
+- do not install brew dependencies in ./scripts/bootstrap by default ([f6d3eaf](https://github.com/sst/opencode-sdk-go/commit/f6d3eafffc20e124bbfae6ac5ddc1b1122ad3e27))
+- update more docs for 1.22 ([a3d0b0f](https://github.com/sst/opencode-sdk-go/commit/a3d0b0f26ed92ce1a6433f5bcf37a6436d268ba5))
+
+## 0.16.0 (2025-09-17)
+
+Full Changelog: [v0.15.0...v0.16.0](https://github.com/sst/opencode-sdk-go/compare/v0.15.0...v0.16.0)
+
+### Features
+
+- **api:** api update ([46e978e](https://github.com/sst/opencode-sdk-go/commit/46e978e43aee733d5c1c09dc5be6d8ac2a752427))
+
+## 0.15.0 (2025-09-16)
+
+Full Changelog: [v0.14.0...v0.15.0](https://github.com/sst/opencode-sdk-go/compare/v0.14.0...v0.15.0)
+
+### Features
+
+- **api:** api update ([397048f](https://github.com/sst/opencode-sdk-go/commit/397048faca7a1de7a028edd2254a0ad7797b151f))
+
+## 0.14.0 (2025-09-14)
+
+Full Changelog: [v0.13.0...v0.14.0](https://github.com/sst/opencode-sdk-go/compare/v0.13.0...v0.14.0)
+
+### Features
+
+- **api:** api update ([dad0bc3](https://github.com/sst/opencode-sdk-go/commit/dad0bc3da99f20a0d002a6b94e049fb70f8e6a77))
+
+## 0.13.0 (2025-09-14)
+
+Full Changelog: [v0.12.0...v0.13.0](https://github.com/sst/opencode-sdk-go/compare/v0.12.0...v0.13.0)
+
+### Features
+
+- **api:** api update ([80da4fb](https://github.com/sst/opencode-sdk-go/commit/80da4fb4ea9c6afb51a7e7135d9f5560ce6f2a6c))
+
+## 0.12.0 (2025-09-14)
+
+Full Changelog: [v0.11.0...v0.12.0](https://github.com/sst/opencode-sdk-go/compare/v0.11.0...v0.12.0)
+
+### Features
+
+- **api:** api update ([7e3808b](https://github.com/sst/opencode-sdk-go/commit/7e3808ba349dc653174b32b48a1120c18d2975c2))
+
+## 0.11.0 (2025-09-14)
+
+Full Changelog: [v0.10.0...v0.11.0](https://github.com/sst/opencode-sdk-go/compare/v0.10.0...v0.11.0)
+
+### Features
+
+- **api:** api update ([a3d37f5](https://github.com/sst/opencode-sdk-go/commit/a3d37f5671545866547d351fc21b49809cc8b3c2))
+
+## 0.10.0 (2025-09-11)
+
+Full Changelog: [v0.9.0...v0.10.0](https://github.com/sst/opencode-sdk-go/compare/v0.9.0...v0.10.0)
+
+### Features
+
+- **api:** api update ([0dc01f6](https://github.com/sst/opencode-sdk-go/commit/0dc01f6695c9b8400a4dc92166c5002bb120cf50))
+
 ## 0.9.0 (2025-09-10)
 
 Full Changelog: [v0.8.0...v0.9.0](https://github.com/sst/opencode-sdk-go/compare/v0.8.0...v0.9.0)

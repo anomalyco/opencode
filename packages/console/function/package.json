@@ -1,0 +1,30 @@
+{
+  "name": "@opencode-ai/console-function",
+  "version": "1.0.120",
+  "$schema": "https://json.schemastore.org/package.json",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "typecheck": "tsgo --noEmit"
+  },
+  "devDependencies": {
+    "@cloudflare/workers-types": "catalog:",
+    "@tsconfig/node22": "22.0.2",
+    "@types/node": "catalog:",
+    "openai": "5.11.0",
+    "typescript": "catalog:",
+    "@typescript/native-preview": "catalog:"
+  },
+  "dependencies": {
+    "@ai-sdk/anthropic": "2.0.0",
+    "@ai-sdk/openai": "2.0.2",
+    "@ai-sdk/openai-compatible": "1.0.1",
+    "@hono/zod-validator": "catalog:",
+    "@opencode-ai/console-core": "workspace:*",
+    "@opencode-ai/console-resource": "workspace:*",
+    "@openauthjs/openauth": "0.0.0-20250322224806",
+    "ai": "catalog:",
+    "hono": "catalog:",
+    "zod": "catalog:"
+  }
+}

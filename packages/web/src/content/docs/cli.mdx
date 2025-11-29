@@ -1,17 +1,17 @@
 ---
 title: CLI
-description: opencode CLI options and commands.
+description: OpenCode CLI options and commands.
 ---
 
 import { Tabs, TabItem } from "@astrojs/starlight/components"
 
-The opencode CLI by default starts the [TUI](/docs/tui) when run without any arguments.
+The OpenCode CLI by default starts the [TUI](/docs/tui) when run without any arguments.
 
 ```bash
 opencode
 ```
 
-But it also accepts commands as documented on this page. This allows you to interact with opencode programmatically.
+But it also accepts commands as documented on this page. This allows you to interact with OpenCode programmatically.
 
 ```bash
 opencode run "Explain how closures work in JavaScript"
@@ -19,15 +19,37 @@ opencode run "Explain how closures work in JavaScript"
 
 ---
 
+### tui
+
+Start the OpenCode terminal user interface.
+
+```bash
+opencode [project]
+```
+
+#### Flags
+
+| Flag         | Short | Description                                |
+| ------------ | ----- | ------------------------------------------ |
+| `--continue` | `-c`  | Continue the last session                  |
+| `--session`  | `-s`  | Session ID to continue                     |
+| `--prompt`   | `-p`  | Prompt to use                              |
+| `--model`    | `-m`  | Model to use in the form of provider/model |
+| `--agent`    |       | Agent to use                               |
+| `--port`     |       | Port to listen on                          |
+| `--hostname` |       | Hostname to listen on                      |
+
+---
+
 ## Commands
 
-The opencode CLI also has the following commands.
+The OpenCode CLI also has the following commands.
 
 ---
 
 ### agent
 
-Manage agents for opencode.
+Manage agents for OpenCode.
 
 ```bash
 opencode agent [command]
@@ -59,13 +81,13 @@ opencode auth [command]
 
 #### login
 
-opencode is powered by the provider list at [Models.dev](https://models.dev), so you can use `opencode auth login` to configure API keys for any provider you'd like to use. This is stored in `~/.local/share/opencode/auth.json`.
+OpenCode is powered by the provider list at [Models.dev](https://models.dev), so you can use `opencode auth login` to configure API keys for any provider you'd like to use. This is stored in `~/.local/share/opencode/auth.json`.
 
 ```bash
 opencode auth login
 ```
 
-When opencode starts up it loads the providers from the credentials file. And if there are any keys defined in your environments or a `.env` file in your project.
+When OpenCode starts up it loads the providers from the credentials file. And if there are any keys defined in your environments or a `.env` file in your project.
 
 ---
 
@@ -144,6 +166,8 @@ opencode models
 
 This command displays all models available across your configured providers in the format `provider/model`.
 
+This is useful for figuring out the exact model name to use in [your config](/docs/config/).
+
 ---
 
 ### run
@@ -160,15 +184,31 @@ This is useful for scripting, automation, or when you want a quick answer withou
 opencode run Explain the use of context in Go
 ```
 
+You can also attach to a running `opencode serve` instance to avoid MCP server cold boot times on every run:
+
+```bash
+# Start a headless server in one terminal
+opencode serve
+
+# In another terminal, run commands that attach to it
+opencode run --attach http://localhost:4096 "Explain async/await in JavaScript"
+```
+
 #### Flags
 
-| Flag         | Short | Description                                |
-| ------------ | ----- | ------------------------------------------ |
-| `--continue` | `-c`  | Continue the last session                  |
-| `--session`  | `-s`  | Session ID to continue                     |
-| `--share`    |       | Share the session                          |
-| `--model`    | `-m`  | Model to use in the form of provider/model |
-| `--agent`    |       | Agent to use                               |
+| Flag         | Short | Description                                                        |
+| ------------ | ----- | ------------------------------------------------------------------ |
+| `--command`  |       | The command to run, use message for args                           |
+| `--continue` | `-c`  | Continue the last session                                          |
+| `--session`  | `-s`  | Session ID to continue                                             |
+| `--share`    |       | Share the session                                                  |
+| `--model`    | `-m`  | Model to use in the form of provider/model                         |
+| `--agent`    |       | Agent to use                                                       |
+| `--file`     | `-f`  | File(s) to attach to message                                       |
+| `--format`   |       | Format: default (formatted) or json (raw JSON events)              |
+| `--title`    |       | Title for the session (uses truncated prompt if no value provided) |
+| `--attach`   |       | Attach to a running opencode server (e.g., http://localhost:4096)  |
+| `--port`     |       | Port for the local server (defaults to random port)                |
 
 ---
 
@@ -187,7 +227,7 @@ This starts an HTTP server that provides API access to opencode functionality wi
 | Flag         | Short | Description           |
 | ------------ | ----- | --------------------- |
 | `--port`     | `-p`  | Port to listen on     |
-| `--hostname` | `-h`  | Hostname to listen on |
+| `--hostname` |       | Hostname to listen on |
 
 ---
 
@@ -219,18 +259,13 @@ opencode upgrade v0.1.48
 
 ---
 
-## Flags
+## Global Flags
 
 The opencode CLI takes the following global flags.
 
-| Flag           | Short | Description                                |
-| -------------- | ----- | ------------------------------------------ |
-| `--help`       | `-h`  | Display help                               |
-| `--version`    |       | Print version number                       |
-| `--print-logs` |       | Print logs to stderr                       |
-| `--log-level`  |       | Log level (DEBUG, INFO, WARN, ERROR)       |
-| `--prompt`     | `-p`  | Prompt to use                              |
-| `--model`      | `-m`  | Model to use in the form of provider/model |
-| `--agent`      |       | Agent to use                               |
-| `--port`       |       | Port to listen on                          |
-| `--hostname`   |       | Hostname to listen on                      |
+| Flag           | Short | Description                          |
+| -------------- | ----- | ------------------------------------ |
+| `--help`       | `-h`  | Display help                         |
+| `--version`    | `-v`  | Print version number                 |
+| `--print-logs` |       | Print logs to stderr                 |
+| `--log-level`  |       | Log level (DEBUG, INFO, WARN, ERROR) |

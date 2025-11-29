@@ -1,73 +1,37 @@
-import os from "os"
-import path from "path"
-import fs from "fs/promises"
-import { spawn } from "child_process"
 import { Decimal } from "decimal.js"
-import { z, ZodSchema } from "zod"
-import {
-  generateText,
-  LoadAPIKeyError,
-  streamText,
-  tool,
-  wrapLanguageModel,
-  type Tool as AITool,
-  type LanguageModelUsage,
-  type ProviderMetadata,
-  type ModelMessage,
-  type StreamTextResult,
-} from "ai"
-
-import PROMPT_INITIALIZE from "../session/prompt/initialize.txt"
-import PROMPT_PLAN from "../session/prompt/plan.txt"
-import BUILD_SWITCH from "../session/prompt/build-switch.txt"
-
+import z from "zod"
+import { type LanguageModelUsage, type ProviderMetadata } from "ai"
 import { Bus } from "../bus"
 import { Config } from "../config/config"
 import { Flag } from "../flag/flag"
 import { Identifier } from "../id/id"
 import { Installation } from "../installation"
-import { MCP } from "../mcp"
-import { Provider } from "../provider/provider"
-import { ProviderTransform } from "../provider/transform"
 import type { ModelsDev } from "../provider/models"
 import { Share } from "../share/share"
-import { Snapshot } from "../snapshot"
 import { Storage } from "../storage/storage"
 import { Log } from "../util/log"
-import { NamedError } from "../util/error"
-import { SystemPrompt } from "./system"
-import { FileTime } from "../file/time"
 import { MessageV2 } from "./message-v2"
-import { LSP } from "../lsp"
-import { ReadTool } from "../tool/read"
-import { mergeDeep, pipe, splitWhen } from "remeda"
-import { ToolRegistry } from "../tool/registry"
-import { Plugin } from "../plugin"
-import { Project } from "../project/project"
 import { Instance } from "../project/instance"
-import { Agent } from "../agent/agent"
-import { Permission } from "../permission"
-import { Wildcard } from "../util/wildcard"
-import { ulid } from "ulid"
-import { defer } from "../util/defer"
+import { SessionPrompt } from "./prompt"
+import { fn } from "@/util/fn"
 import { Command } from "../command"
-import { $ } from "bun"
-import { ListTool } from "../tool/ls"
+import { Snapshot } from "@/snapshot"
+import { ShareNext } from "@/share/share-next"
 
 export namespace Session {
   const log = Log.create({ service: "session" })
 
-  const OUTPUT_TOKEN_MAX = 32_000
-
-  const parentSessionTitlePrefix = "New session - "
-  const childSessionTitlePrefix = "Child session - "
+  const parentTitlePrefix = "New session - "
+  const childTitlePrefix = "Child session - "
 
   function createDefaultTitle(isChild = false) {
-    return (isChild ? childSessionTitlePrefix : parentSessionTitlePrefix) + new Date().toISOString()
+    return (isChild ? childTitlePrefix : parentTitlePrefix) + new Date().toISOString()
   }
 
-  function isDefaultTitle(title: string) {
-    return title.startsWith(parentSessionTitlePrefix)
+  export function isDefaultTitle(title: string) {
+    return new RegExp(
+      `^(${parentTitlePrefix}|${childTitlePrefix})\\d{4}-\\d{2}-\\d{2}T\\d{2}:\\d{2}:\\d{2}\\.\\d{3}Z$`,
+    ).test(title)
   }
 
   export const Info = z
@@ -76,6 +40,14 @@ export namespace Session {
       projectID: z.string(),
       directory: z.string(),
       parentID: Identifier.schema("session").optional(),
+      summary: z
+        .object({
+          additions: z.number(),
+          deletions: z.number(),
+          files: z.number(),
+          diffs: Snapshot.FileDiff.array().optional(),
+        })
+        .optional(),
       share: z
         .object({
           url: z.string(),
@@ -97,7 +69,7 @@ export namespace Session {
         })
         .optional(),
     })
-    .openapi({
+    .meta({
       ref: "Session",
     })
   export type Info = z.output<typeof Info>
@@ -107,12 +79,18 @@ export namespace Session {
       secret: z.string(),
       url: z.string(),
     })
-    .openapi({
+    .meta({
       ref: "SessionShare",
     })
   export type ShareInfo = z.output<typeof ShareInfo>
 
   export const Event = {
+    Created: Bus.event(
+      "session.created",
+      z.object({
+        info: Info,
+      }),
+    ),
     Updated: Bus.event(
       "session.updated",
       z.object({
@@ -125,10 +103,11 @@ export namespace Session {
         info: Info,
       }),
     ),
-    Idle: Bus.event(
-      "session.idle",
+    Diff: Bus.event(
+      "session.diff",
       z.object({
         sessionID: z.string(),
+        diff: Snapshot.FileDiff.array(),
       }),
     ),
     Error: Bus.event(
@@ -138,47 +117,60 @@ export namespace Session {
         error: MessageV2.Assistant.shape.error,
       }),
     ),
-    Compacted: Bus.event(
-      "session.compacted",
-      z.object({
-        sessionID: z.string(),
-      }),
-    ),
   }
 
-  const state = Instance.state(
-    () => {
-      const pending = new Map<string, AbortController>()
-      const queued = new Map<
-        string,
-        {
-          input: ChatInput
-          message: MessageV2.User
-          parts: MessageV2.Part[]
-          processed: boolean
-          callback: (input: { info: MessageV2.Assistant; parts: MessageV2.Part[] }) => void
-        }[]
-      >()
-
-      return {
-        pending,
-        queued,
-      }
-    },
-    async (state) => {
-      for (const [_, controller] of state.pending) {
-        controller.abort()
-      }
+  export const create = fn(
+    z
+      .object({
+        parentID: Identifier.schema("session").optional(),
+        title: z.string().optional(),
+      })
+      .optional(),
+    async (input) => {
+      return createNext({
+        parentID: input?.parentID,
+        directory: Instance.directory,
+        title: input?.title,
+      })
     },
   )
 
-  export async function create(parentID?: string, title?: string) {
-    return createNext({
-      parentID,
-      directory: Instance.directory,
-      title,
+  export const fork = fn(
+    z.object({
+      sessionID: Identifier.schema("session"),
+      messageID: Identifier.schema("message").optional(),
+    }),
+    async (input) => {
+      const session = await createNext({
+        directory: Instance.directory,
+      })
+      const msgs = await messages({ sessionID: input.sessionID })
+      for (const msg of msgs) {
+        if (input.messageID && msg.info.id >= input.messageID) break
+        const cloned = await updateMessage({
+          ...msg.info,
+          sessionID: session.id,
+          id: Identifier.ascending("message"),
+        })
+
+        for (const part of msg.parts) {
+          await updatePart({
+            ...part,
+            id: Identifier.ascending("part"),
+            messageID: cloned.id,
+            sessionID: session.id,
+          })
+        }
+      }
+      return session
+    },
+  )
+
+  export const touch = fn(Identifier.schema("session"), async (sessionID) => {
+    await update(sessionID, (draft) => {
+      draft.time.updated = Date.now()
     })
-  }
+  })
 
   export async function createNext(input: { id?: string; title?: string; parentID?: string; directory: string }) {
     const result: Info = {
@@ -195,6 +187,9 @@ export namespace Session {
     }
     log.info("created", result)
     await Storage.write(["session", Instance.project.id, result.id], result)
+    Bus.publish(Event.Created, {
+      info: result,
+    })
     const cfg = await Config.get()
     if (!result.parentID && (Flag.OPENCODE_AUTO_SHARE || cfg.share === "auto"))
       share(result.id)
@@ -212,19 +207,28 @@ export namespace Session {
     return result
   }
 
-  export async function get(id: string) {
+  export const get = fn(Identifier.schema("session"), async (id) => {
     const read = await Storage.read<Info>(["session", Instance.project.id, id])
     return read as Info
-  }
+  })
 
-  export async function getShare(id: string) {
+  export const getShare = fn(Identifier.schema("session"), async (id) => {
     return Storage.read<ShareInfo>(["share", id])
-  }
+  })
 
-  export async function share(id: string) {
+  export const share = fn(Identifier.schema("session"), async (id) => {
     const cfg = await Config.get()
     if (cfg.share === "disabled") {
       throw new Error("Sharing is disabled in configuration")
+    }
+
+    if (cfg.enterprise?.url) {
+      const share = await ShareNext.create(id)
+      await update(id, (draft) => {
+        draft.share = {
+          url: share.url,
+        }
+      })
     }
 
     const session = await get(id)
@@ -237,16 +241,23 @@ export namespace Session {
     })
     await Storage.write(["share", id], share)
     await Share.sync("session/info/" + id, session)
-    for (const msg of await messages(id)) {
+    for (const msg of await messages({ sessionID: id })) {
       await Share.sync("session/message/" + id + "/" + msg.info.id, msg.info)
       for (const part of msg.parts) {
         await Share.sync("session/part/" + id + "/" + msg.info.id + "/" + part.id, part)
       }
     }
     return share
-  }
+  })
 
-  export async function unshare(id: string) {
+  export const unshare = fn(Identifier.schema("session"), async (id) => {
+    const cfg = await Config.get()
+    if (cfg.enterprise?.url) {
+      await ShareNext.remove(id)
+      await update(id, (draft) => {
+        draft.share = undefined
+      })
+    }
     const share = await getShare(id)
     if (!share) return
     await Storage.remove(["share", id])
@@ -254,7 +265,7 @@ export namespace Session {
       draft.share = undefined
     })
     await Share.remove(id, share.secret)
-  }
+  })
 
   export async function update(id: string, editor: (session: Info) => void) {
     const project = Instance.project
@@ -268,38 +279,26 @@ export namespace Session {
     return result
   }
 
-  export async function messages(sessionID: string) {
-    const result = [] as {
-      info: MessageV2.Info
-      parts: MessageV2.Part[]
-    }[]
-    for (const p of await Storage.list(["message", sessionID])) {
-      const read = await Storage.read<MessageV2.Info>(p)
-      result.push({
-        info: read,
-        parts: await getParts(read.id),
-      })
-    }
-    result.sort((a, b) => (a.info.id > b.info.id ? 1 : -1))
-    return result
-  }
+  export const diff = fn(Identifier.schema("session"), async (sessionID) => {
+    const diffs = await Storage.read<Snapshot.FileDiff[]>(["session_diff", sessionID])
+    return diffs ?? []
+  })
 
-  export async function getMessage(sessionID: string, messageID: string) {
-    return {
-      info: await Storage.read<MessageV2.Info>(["message", sessionID, messageID]),
-      parts: await getParts(messageID),
-    }
-  }
-
-  export async function getParts(messageID: string) {
-    const result = [] as MessageV2.Part[]
-    for (const item of await Storage.list(["part", messageID])) {
-      const read = await Storage.read<MessageV2.Part>(item)
-      result.push(read)
-    }
-    result.sort((a, b) => (a.id > b.id ? 1 : -1))
-    return result
-  }
+  export const messages = fn(
+    z.object({
+      sessionID: Identifier.schema("session"),
+      limit: z.number().optional(),
+    }),
+    async (input) => {
+      const result = [] as MessageV2.WithParts[]
+      for await (const msg of MessageV2.stream(input.sessionID)) {
+        if (input.limit && result.length >= input.limit) break
+        result.push(msg)
+      }
+      result.reverse()
+      return result
+    },
+  )
 
   export async function* list() {
     const project = Instance.project
@@ -308,7 +307,7 @@ export namespace Session {
     }
   }
 
-  export async function children(parentID: string) {
+  export const children = fn(Identifier.schema("session"), async (parentID) => {
     const project = Instance.project
     const result = [] as Session.Info[]
     for (const item of await Storage.list(["session", project.id])) {
@@ -317,26 +316,14 @@ export namespace Session {
       result.push(session)
     }
     return result
-  }
+  })
 
-  export function abort(sessionID: string) {
-    const controller = state().pending.get(sessionID)
-    if (!controller) return false
-    log.info("aborting", {
-      sessionID,
-    })
-    controller.abort()
-    state().pending.delete(sessionID)
-    return true
-  }
-
-  export async function remove(sessionID: string, emitEvent = true) {
+  export const remove = fn(Identifier.schema("session"), async (sessionID) => {
     const project = Instance.project
     try {
-      abort(sessionID)
       const session = await get(sessionID)
       for (const child of await children(sessionID)) {
-        await remove(child.id, false)
+        await remove(child.id)
       }
       await unshare(sessionID).catch(() => {})
       for (const msg of await Storage.list(["message", sessionID])) {
@@ -346,1570 +333,112 @@ export namespace Session {
         await Storage.remove(msg)
       }
       await Storage.remove(["session", project.id, sessionID])
-      if (emitEvent) {
-        Bus.publish(Event.Deleted, {
-          info: session,
-        })
-      }
+      Bus.publish(Event.Deleted, {
+        info: session,
+      })
     } catch (e) {
       log.error(e)
     }
-  }
+  })
 
-  async function updateMessage(msg: MessageV2.Info) {
+  export const updateMessage = fn(MessageV2.Info, async (msg) => {
     await Storage.write(["message", msg.sessionID, msg.id], msg)
     Bus.publish(MessageV2.Event.Updated, {
       info: msg,
     })
-  }
+    return msg
+  })
 
-  async function updatePart(part: MessageV2.Part) {
+  export const removeMessage = fn(
+    z.object({
+      sessionID: Identifier.schema("session"),
+      messageID: Identifier.schema("message"),
+    }),
+    async (input) => {
+      await Storage.remove(["message", input.sessionID, input.messageID])
+      Bus.publish(MessageV2.Event.Removed, {
+        sessionID: input.sessionID,
+        messageID: input.messageID,
+      })
+      return input.messageID
+    },
+  )
+
+  const UpdatePartInput = z.union([
+    MessageV2.Part,
+    z.object({
+      part: MessageV2.TextPart,
+      delta: z.string(),
+    }),
+    z.object({
+      part: MessageV2.ReasoningPart,
+      delta: z.string(),
+    }),
+  ])
+
+  export const updatePart = fn(UpdatePartInput, async (input) => {
+    const part = "delta" in input ? input.part : input
+    const delta = "delta" in input ? input.delta : undefined
     await Storage.write(["part", part.messageID, part.id], part)
     Bus.publish(MessageV2.Event.PartUpdated, {
       part,
+      delta,
     })
     return part
-  }
-
-  async function cleanupRevert(session: Info) {
-    if (!session.revert) return
-    const sessionID = session.id
-    let msgs = await messages(sessionID)
-    const messageID = session.revert.messageID
-    const [preserve, remove] = splitWhen(msgs, (x) => x.info.id === messageID)
-    msgs = preserve
-    for (const msg of remove) {
-      await Storage.remove(["message", sessionID, msg.info.id])
-      await Bus.publish(MessageV2.Event.Removed, { sessionID: sessionID, messageID: msg.info.id })
-    }
-    const last = preserve.at(-1)
-    if (session.revert.partID && last) {
-      const partID = session.revert.partID
-      const [preserveParts, removeParts] = splitWhen(last.parts, (x) => x.id === partID)
-      last.parts = preserveParts
-      for (const part of removeParts) {
-        await Storage.remove(["part", last.info.id, part.id])
-        await Bus.publish(MessageV2.Event.PartRemoved, {
-          sessionID: sessionID,
-          messageID: last.info.id,
-          partID: part.id,
-        })
-      }
-    }
-    await update(sessionID, (draft) => {
-      draft.revert = undefined
-    })
-  }
-
-  export const PromptInput = z.object({
-    sessionID: Identifier.schema("session"),
-    messageID: Identifier.schema("message").optional(),
-    model: z
-      .object({
-        providerID: z.string(),
-        modelID: z.string(),
-      })
-      .optional(),
-    agent: z.string().optional(),
-    system: z.string().optional(),
-    tools: z.record(z.boolean()).optional(),
-    parts: z.array(
-      z.discriminatedUnion("type", [
-        MessageV2.TextPart.omit({
-          messageID: true,
-          sessionID: true,
-        })
-          .partial({
-            id: true,
-          })
-          .openapi({
-            ref: "TextPartInput",
-          }),
-        MessageV2.FilePart.omit({
-          messageID: true,
-          sessionID: true,
-        })
-          .partial({
-            id: true,
-          })
-          .openapi({
-            ref: "FilePartInput",
-          }),
-        MessageV2.AgentPart.omit({
-          messageID: true,
-          sessionID: true,
-        })
-          .partial({
-            id: true,
-          })
-          .openapi({
-            ref: "AgentPartInput",
-          }),
-      ]),
-    ),
   })
-  export type ChatInput = z.infer<typeof PromptInput>
 
-  export async function prompt(
-    input: z.infer<typeof PromptInput>,
-  ): Promise<{ info: MessageV2.Assistant; parts: MessageV2.Part[] }> {
-    const l = log.clone().tag("session", input.sessionID)
-    l.info("chatting")
-
-    const inputAgent = input.agent ?? "build"
-
-    // Process revert cleanup first, before creating new messages
-    const session = await get(input.sessionID)
-    if (session.revert) {
-      cleanupRevert(session)
-    }
-    const userMsg: MessageV2.Info = {
-      id: input.messageID ?? Identifier.ascending("message"),
-      role: "user",
-      sessionID: input.sessionID,
-      time: {
-        created: Date.now(),
-      },
-    }
-
-    const userParts = await Promise.all(
-      input.parts.map(async (part): Promise<MessageV2.Part[]> => {
-        if (part.type === "file") {
-          const url = new URL(part.url)
-          switch (url.protocol) {
-            case "data:":
-              if (part.mime === "text/plain") {
-                return [
-                  {
-                    id: Identifier.ascending("part"),
-                    messageID: userMsg.id,
-                    sessionID: input.sessionID,
-                    type: "text",
-                    synthetic: true,
-                    text: `Called the Read tool with the following input: ${JSON.stringify({ filePath: part.filename })}`,
-                  },
-                  {
-                    id: Identifier.ascending("part"),
-                    messageID: userMsg.id,
-                    sessionID: input.sessionID,
-                    type: "text",
-                    synthetic: true,
-                    text: Buffer.from(part.url, "base64url").toString(),
-                  },
-                  {
-                    ...part,
-                    id: part.id ?? Identifier.ascending("part"),
-                    messageID: userMsg.id,
-                    sessionID: input.sessionID,
-                  },
-                ]
-              }
-              break
-            case "file:":
-              // have to normalize, symbol search returns absolute paths
-              // Decode the pathname since URL constructor doesn't automatically decode it
-              const filePath = decodeURIComponent(url.pathname)
-
-              if (part.mime === "text/plain") {
-                let offset: number | undefined = undefined
-                let limit: number | undefined = undefined
-                const range = {
-                  start: url.searchParams.get("start"),
-                  end: url.searchParams.get("end"),
-                }
-                if (range.start != null) {
-                  const filePath = part.url.split("?")[0]
-                  let start = parseInt(range.start)
-                  let end = range.end ? parseInt(range.end) : undefined
-                  // some LSP servers (eg, gopls) don't give full range in
-                  // workspace/symbol searches, so we'll try to find the
-                  // symbol in the document to get the full range
-                  if (start === end) {
-                    const symbols = await LSP.documentSymbol(filePath)
-                    for (const symbol of symbols) {
-                      let range: LSP.Range | undefined
-                      if ("range" in symbol) {
-                        range = symbol.range
-                      } else if ("location" in symbol) {
-                        range = symbol.location.range
-                      }
-                      if (range?.start?.line && range?.start?.line === start) {
-                        start = range.start.line
-                        end = range?.end?.line ?? start
-                        break
-                      }
-                    }
-                  }
-                  offset = Math.max(start - 1, 0)
-                  if (end) {
-                    limit = end - offset
-                  }
-                }
-                const args = { filePath, offset, limit }
-                const result = await ReadTool.init().then((t) =>
-                  t.execute(args, {
-                    sessionID: input.sessionID,
-                    abort: new AbortController().signal,
-                    agent: input.agent!,
-                    messageID: userMsg.id,
-                    extra: { bypassCwdCheck: true },
-                    metadata: async () => {},
-                  }),
-                )
-                return [
-                  {
-                    id: Identifier.ascending("part"),
-                    messageID: userMsg.id,
-                    sessionID: input.sessionID,
-                    type: "text",
-                    synthetic: true,
-                    text: `Called the Read tool with the following input: ${JSON.stringify(args)}`,
-                  },
-                  {
-                    id: Identifier.ascending("part"),
-                    messageID: userMsg.id,
-                    sessionID: input.sessionID,
-                    type: "text",
-                    synthetic: true,
-                    text: result.output,
-                  },
-                  {
-                    ...part,
-                    id: part.id ?? Identifier.ascending("part"),
-                    messageID: userMsg.id,
-                    sessionID: input.sessionID,
-                  },
-                ]
-              }
-
-              if (part.mime === "application/x-directory") {
-                const args = { path: filePath }
-                const result = await ListTool.init().then((t) =>
-                  t.execute(args, {
-                    sessionID: input.sessionID,
-                    abort: new AbortController().signal,
-                    agent: input.agent!,
-                    messageID: userMsg.id,
-                    extra: { bypassCwdCheck: true },
-                    metadata: async () => {},
-                  }),
-                )
-                return [
-                  {
-                    id: Identifier.ascending("part"),
-                    messageID: userMsg.id,
-                    sessionID: input.sessionID,
-                    type: "text",
-                    synthetic: true,
-                    text: `Called the list tool with the following input: ${JSON.stringify(args)}`,
-                  },
-                  {
-                    id: Identifier.ascending("part"),
-                    messageID: userMsg.id,
-                    sessionID: input.sessionID,
-                    type: "text",
-                    synthetic: true,
-                    text: result.output,
-                  },
-                  {
-                    ...part,
-                    id: part.id ?? Identifier.ascending("part"),
-                    messageID: userMsg.id,
-                    sessionID: input.sessionID,
-                  },
-                ]
-              }
-
-              const file = Bun.file(filePath)
-              FileTime.read(input.sessionID, filePath)
-              return [
-                {
-                  id: Identifier.ascending("part"),
-                  messageID: userMsg.id,
-                  sessionID: input.sessionID,
-                  type: "text",
-                  text: `Called the Read tool with the following input: {\"filePath\":\"${filePath}\"}`,
-                  synthetic: true,
-                },
-                {
-                  id: part.id ?? Identifier.ascending("part"),
-                  messageID: userMsg.id,
-                  sessionID: input.sessionID,
-                  type: "file",
-                  url: `data:${part.mime};base64,` + Buffer.from(await file.bytes()).toString("base64"),
-                  mime: part.mime,
-                  filename: part.filename!,
-                  source: part.source,
-                },
-              ]
-          }
-        }
-
-        if (part.type === "agent") {
-          return [
-            {
-              id: Identifier.ascending("part"),
-              ...part,
-              messageID: userMsg.id,
-              sessionID: input.sessionID,
-            },
-            {
-              id: Identifier.ascending("part"),
-              messageID: userMsg.id,
-              sessionID: input.sessionID,
-              type: "text",
-              synthetic: true,
-              text:
-                "Use the above message and context to generate a prompt and call the task tool with subagent: " +
-                part.name,
-            },
-          ]
-        }
-
-        return [
-          {
-            id: Identifier.ascending("part"),
-            ...part,
-            messageID: userMsg.id,
-            sessionID: input.sessionID,
-          },
-        ]
-      }),
-    ).then((x) => x.flat())
-    await Plugin.trigger(
-      "chat.message",
-      {},
-      {
-        message: userMsg,
-        parts: userParts,
-      },
-    )
-    await updateMessage(userMsg)
-    for (const part of userParts) {
-      await updatePart(part)
-    }
-
-    // mark session as updated
-    // used for session list sorting (indicates when session was most recently interacted with)
-    await update(input.sessionID, (_draft) => {})
-
-    if (isLocked(input.sessionID)) {
-      return new Promise((resolve) => {
-        const queue = state().queued.get(input.sessionID) ?? []
-        queue.push({
-          input: input,
-          message: userMsg,
-          parts: userParts,
-          processed: false,
-          callback: resolve,
-        })
-        state().queued.set(input.sessionID, queue)
-      })
-    }
-
-    const agent = await Agent.get(inputAgent)
-    const model = await (async () => {
-      if (input.model) {
-        return input.model
+  export const getUsage = fn(
+    z.object({
+      model: z.custom<ModelsDev.Model>(),
+      usage: z.custom<LanguageModelUsage>(),
+      metadata: z.custom<ProviderMetadata>().optional(),
+    }),
+    (input) => {
+      const cachedInputTokens = input.usage.cachedInputTokens ?? 0
+      const excludesCachedTokens = !!(input.metadata?.["anthropic"] || input.metadata?.["bedrock"])
+      const adjustedInputTokens = excludesCachedTokens
+        ? (input.usage.inputTokens ?? 0)
+        : (input.usage.inputTokens ?? 0) - cachedInputTokens
+      const safe = (value: number) => {
+        if (!Number.isFinite(value)) return 0
+        return value
       }
-      if (agent.model) {
-        return agent.model
-      }
-      return Provider.defaultModel()
-    })().then((x) => Provider.getModel(x.providerID, x.modelID))
-    let msgs = await messages(input.sessionID)
 
-    const outputLimit = Math.min(model.info.limit.output, OUTPUT_TOKEN_MAX) || OUTPUT_TOKEN_MAX
-
-    using abort = lock(input.sessionID)
-
-    const lastSummary = msgs.findLast((msg) => msg.info.role === "assistant" && msg.info.summary === true)
-    if (lastSummary) msgs = msgs.filter((msg) => msg.info.id >= lastSummary.info.id)
-    const numRealUserMsgs = msgs.filter(
-      (m) => m.info.role === "user" && !m.parts.every((p) => "synthetic" in p && p.synthetic),
-    ).length
-    if (numRealUserMsgs === 1 && !session.parentID && isDefaultTitle(session.title)) {
-      const small = (await Provider.getSmallModel(model.providerID)) ?? model
-      const options = {
-        ...ProviderTransform.options(small.providerID, small.modelID, input.sessionID),
-        ...small.info.options,
-      }
-      if (small.providerID === "openai") {
-        options["reasoningEffort"] = "minimal"
-      }
-      if (small.providerID === "google") {
-        options["thinkingConfig"] = {
-          thinkingBudget: 0,
-        }
-      }
-      generateText({
-        maxOutputTokens: small.info.reasoning ? 1500 : 20,
-        providerOptions: {
-          [model.providerID]: options,
-        },
-        messages: [
-          ...SystemPrompt.title(model.providerID).map(
-            (x): ModelMessage => ({
-              role: "system",
-              content: x,
-            }),
+      const tokens = {
+        input: safe(adjustedInputTokens),
+        output: safe(input.usage.outputTokens ?? 0),
+        reasoning: safe(input.usage?.reasoningTokens ?? 0),
+        cache: {
+          write: safe(
+            (input.metadata?.["anthropic"]?.["cacheCreationInputTokens"] ??
+              // @ts-expect-error
+              input.metadata?.["bedrock"]?.["usage"]?.["cacheWriteInputTokens"] ??
+              0) as number,
           ),
-          ...MessageV2.toModelMessage([
-            {
-              info: {
-                id: Identifier.ascending("message"),
-                role: "user",
-                sessionID: input.sessionID,
-                time: {
-                  created: Date.now(),
-                },
-              },
-              parts: userParts,
-            },
-          ]),
-        ],
-        model: small.language,
-      })
-        .then((result) => {
-          if (result.text)
-            return Session.update(input.sessionID, (draft) => {
-              const cleaned = result.text.replace(/<think>[\s\S]*?<\/think>\s*/g, "")
-              const title = cleaned.length > 100 ? cleaned.substring(0, 97) + "..." : cleaned
-              draft.title = title.trim()
-            })
-        })
-        .catch((error) => {
-          log.error("failed to generate title", { error, model: small.info.id })
-        })
-    }
-
-    if (agent.name === "plan") {
-      msgs.at(-1)?.parts.push({
-        id: Identifier.ascending("part"),
-        messageID: userMsg.id,
-        sessionID: input.sessionID,
-        type: "text",
-        text: PROMPT_PLAN,
-        synthetic: true,
-      })
-    }
-
-    const wasPlan = msgs.some((msg) => msg.info.role === "assistant" && msg.info.mode === "plan")
-    if (wasPlan && agent.name === "build") {
-      msgs.at(-1)?.parts.push({
-        id: Identifier.ascending("part"),
-        messageID: userMsg.id,
-        sessionID: input.sessionID,
-        type: "text",
-        text: BUILD_SWITCH,
-        synthetic: true,
-      })
-    }
-    let system = SystemPrompt.header(model.providerID)
-    system.push(
-      ...(() => {
-        if (input.system) return [input.system]
-        if (agent.prompt) return [agent.prompt]
-        return SystemPrompt.provider(model.modelID)
-      })(),
-    )
-    system.push(...(await SystemPrompt.environment()))
-    system.push(...(await SystemPrompt.custom()))
-    // max 2 system prompt messages for caching purposes
-    const [first, ...rest] = system
-    system = [first, rest.join("\n")]
-
-    const assistantMsg: MessageV2.Info = {
-      id: Identifier.ascending("message"),
-      role: "assistant",
-      system,
-      mode: inputAgent,
-      path: {
-        cwd: Instance.directory,
-        root: Instance.worktree,
-      },
-      cost: 0,
-      tokens: {
-        input: 0,
-        output: 0,
-        reasoning: 0,
-        cache: { read: 0, write: 0 },
-      },
-      modelID: model.modelID,
-      providerID: model.providerID,
-      time: {
-        created: Date.now(),
-      },
-      sessionID: input.sessionID,
-    }
-    await updateMessage(assistantMsg)
-    await using _ = defer(async () => {
-      if (assistantMsg.time.completed) return
-      await Storage.remove(["session", "message", input.sessionID, assistantMsg.id])
-      await Bus.publish(MessageV2.Event.Removed, { sessionID: input.sessionID, messageID: assistantMsg.id })
-    })
-    const tools: Record<string, AITool> = {}
-
-    const processor = createProcessor(assistantMsg, model.info)
-
-    const enabledTools = pipe(
-      agent.tools,
-      mergeDeep(await ToolRegistry.enabled(model.providerID, model.modelID, agent)),
-      mergeDeep(input.tools ?? {}),
-    )
-    for (const item of await ToolRegistry.tools(model.providerID, model.modelID)) {
-      if (Wildcard.all(item.id, enabledTools) === false) continue
-      tools[item.id] = tool({
-        id: item.id as any,
-        description: item.description,
-        inputSchema: item.parameters as ZodSchema,
-        async execute(args, options) {
-          await Plugin.trigger(
-            "tool.execute.before",
-            {
-              tool: item.id,
-              sessionID: input.sessionID,
-              callID: options.toolCallId,
-            },
-            {
-              args,
-            },
-          )
-          const result = await item.execute(args, {
-            sessionID: input.sessionID,
-            abort: options.abortSignal!,
-            messageID: assistantMsg.id,
-            callID: options.toolCallId,
-            agent: agent.name,
-            metadata: async (val) => {
-              const match = processor.partFromToolCall(options.toolCallId)
-              if (match && match.state.status === "running") {
-                await updatePart({
-                  ...match,
-                  state: {
-                    title: val.title,
-                    metadata: val.metadata,
-                    status: "running",
-                    input: args,
-                    time: {
-                      start: Date.now(),
-                    },
-                  },
-                })
-              }
-            },
-          })
-          await Plugin.trigger(
-            "tool.execute.after",
-            {
-              tool: item.id,
-              sessionID: input.sessionID,
-              callID: options.toolCallId,
-            },
-            result,
-          )
-          return result
+          read: safe(cachedInputTokens),
         },
-        toModelOutput(result) {
-          return {
-            type: "text",
-            value: result.output,
-          }
-        },
-      })
-    }
-
-    for (const [key, item] of Object.entries(await MCP.tools())) {
-      if (Wildcard.all(key, enabledTools) === false) continue
-      const execute = item.execute
-      if (!execute) continue
-      item.execute = async (args, opts) => {
-        await Plugin.trigger(
-          "tool.execute.before",
-          {
-            tool: key,
-            sessionID: input.sessionID,
-            callID: opts.toolCallId,
-          },
-          {
-            args,
-          },
-        )
-        const result = await execute(args, opts)
-        const output = result.content
-          .filter((x: any) => x.type === "text")
-          .map((x: any) => x.text)
-          .join("\n\n")
-        await Plugin.trigger(
-          "tool.execute.after",
-          {
-            tool: key,
-            sessionID: input.sessionID,
-            callID: opts.toolCallId,
-          },
-          result,
-        )
-
-        return {
-          output,
-        }
       }
-      item.toModelOutput = (result) => {
-        return {
-          type: "text",
-          value: result.output,
-        }
-      }
-      tools[key] = item
-    }
 
-    const params = await Plugin.trigger(
-      "chat.params",
-      {
-        model: model.info,
-        provider: await Provider.getProvider(model.providerID),
-        message: userMsg,
-      },
-      {
-        temperature: model.info.temperature
-          ? (agent.temperature ?? ProviderTransform.temperature(model.providerID, model.modelID))
-          : undefined,
-        topP: agent.topP ?? ProviderTransform.topP(model.providerID, model.modelID),
-        options: {
-          ...ProviderTransform.options(model.providerID, model.modelID, input.sessionID),
-          ...model.info.options,
-          ...agent.options,
-        },
-      },
-    )
-    const stream = streamText({
-      onError(e) {
-        log.error("streamText error", {
-          error: e,
-        })
-      },
-      async prepareStep({ messages, steps }) {
-        // Auto compact if too long
-        const tokens = (() => {
-          if (steps.length) {
-            const previous = steps.at(-1)
-            if (previous) return getUsage(model.info, previous.usage, previous.providerMetadata).tokens
-          }
-          const msg = msgs.findLast((x) => x.info.role === "assistant")?.info as MessageV2.Assistant
-          if (msg && msg.tokens) {
-            return msg.tokens
-          }
-        })()
-        if (tokens) {
-          log.info("compact check", tokens)
-          const count = tokens.input + tokens.cache.read + tokens.cache.write + tokens.output
-          if (model.info.limit.context && count > Math.max((model.info.limit.context - outputLimit) * 0.9, 0)) {
-            log.info("compacting in prepareStep")
-            const summarized = await summarize({
-              sessionID: input.sessionID,
-              providerID: model.providerID,
-              modelID: model.info.id,
-            })
-            const msgs = await Session.messages(input.sessionID).then((x) =>
-              x.filter((x) => x.info.id >= summarized.id),
-            )
-            return {
-              messages: MessageV2.toModelMessage(msgs),
-            }
-          }
-        }
-
-        // Add queued messages to the stream
-        const queue = (state().queued.get(input.sessionID) ?? []).filter((x) => !x.processed)
-        if (queue.length) {
-          for (const item of queue) {
-            if (item.processed) continue
-            messages.push(
-              ...MessageV2.toModelMessage([
-                {
-                  info: item.message,
-                  parts: item.parts,
-                },
-              ]),
-            )
-            item.processed = true
-          }
-          assistantMsg.time.completed = Date.now()
-          await updateMessage(assistantMsg)
-          Object.assign(assistantMsg, {
-            id: Identifier.ascending("message"),
-            role: "assistant",
-            system,
-            path: {
-              cwd: Instance.directory,
-              root: Instance.worktree,
-            },
-            cost: 0,
-            tokens: {
-              input: 0,
-              output: 0,
-              reasoning: 0,
-              cache: { read: 0, write: 0 },
-            },
-            modelID: model.modelID,
-            providerID: model.providerID,
-            mode: inputAgent,
-            time: {
-              created: Date.now(),
-            },
-            sessionID: input.sessionID,
-          })
-          await updateMessage(assistantMsg)
-        }
-        return {
-          messages,
-        }
-      },
-      async experimental_repairToolCall(input) {
-        const lower = input.toolCall.toolName.toLowerCase()
-        if (lower !== input.toolCall.toolName && tools[lower]) {
-          log.info("repairing tool call", {
-            tool: input.toolCall.toolName,
-            repaired: lower,
-          })
-          return {
-            ...input.toolCall,
-            toolName: lower,
-          }
-        }
-        return {
-          ...input.toolCall,
-          input: JSON.stringify({
-            tool: input.toolCall.toolName,
-            error: input.error.message,
-          }),
-          toolName: "invalid",
-        }
-      },
-      headers:
-        model.providerID === "opencode"
-          ? {
-              "x-opencode-session": input.sessionID,
-              "x-opencode-request": userMsg.id,
-            }
-          : undefined,
-      maxRetries: 3,
-      activeTools: Object.keys(tools).filter((x) => x !== "invalid"),
-      maxOutputTokens: ProviderTransform.maxOutputTokens(model.providerID, outputLimit, params.options),
-      abortSignal: abort.signal,
-      stopWhen: async ({ steps }) => {
-        if (steps.length >= 1000) {
-          return true
-        }
-
-        // Check if processor flagged that we should stop
-        if (processor.getShouldStop()) {
-          return true
-        }
-
-        return false
-      },
-      providerOptions: {
-        [model.providerID]: params.options,
-      },
-      temperature: params.temperature,
-      topP: params.topP,
-      messages: [
-        ...system.map(
-          (x): ModelMessage => ({
-            role: "system",
-            content: x,
-          }),
+      const costInfo =
+        input.model.cost?.context_over_200k && tokens.input + tokens.cache.read > 200_000
+          ? input.model.cost.context_over_200k
+          : input.model.cost
+      return {
+        cost: safe(
+          new Decimal(0)
+            .add(new Decimal(tokens.input).mul(costInfo?.input ?? 0).div(1_000_000))
+            .add(new Decimal(tokens.output).mul(costInfo?.output ?? 0).div(1_000_000))
+            .add(new Decimal(tokens.cache.read).mul(costInfo?.cache_read ?? 0).div(1_000_000))
+            .add(new Decimal(tokens.cache.write).mul(costInfo?.cache_write ?? 0).div(1_000_000))
+            // TODO: update models.dev to have better pricing model, for now:
+            // charge reasoning tokens at the same rate as output tokens
+            .add(new Decimal(tokens.reasoning).mul(costInfo?.output ?? 0).div(1_000_000))
+            .toNumber(),
         ),
-        ...MessageV2.toModelMessage(msgs.filter((m) => !(m.info.role === "assistant" && m.info.error))),
-      ],
-      tools: model.info.tool_call === false ? undefined : tools,
-      model: wrapLanguageModel({
-        model: model.language,
-        middleware: [
-          {
-            async transformParams(args) {
-              if (args.type === "stream") {
-                // @ts-expect-error
-                args.params.prompt = ProviderTransform.message(args.params.prompt, model.providerID, model.modelID)
-              }
-              return args.params
-            },
-          },
-        ],
-      }),
-    })
-    const result = await processor.process(stream)
-    const queued = state().queued.get(input.sessionID) ?? []
-    const unprocessed = queued.find((x) => !x.processed)
-    if (unprocessed) {
-      unprocessed.processed = true
-      return prompt(unprocessed.input)
-    }
-    for (const item of queued) {
-      item.callback(result)
-    }
-    state().queued.delete(input.sessionID)
-    return result
-  }
-
-  export const ShellInput = z.object({
-    sessionID: Identifier.schema("session"),
-    agent: z.string(),
-    command: z.string(),
-  })
-  export type ShellInput = z.infer<typeof ShellInput>
-  export async function shell(input: ShellInput) {
-    using abort = lock(input.sessionID)
-    const session = await get(input.sessionID)
-    if (session.revert) {
-      cleanupRevert(session)
-    }
-    const userMsg: MessageV2.User = {
-      id: Identifier.ascending("message"),
-      sessionID: input.sessionID,
-      time: {
-        created: Date.now(),
-      },
-      role: "user",
-    }
-    await updateMessage(userMsg)
-    const userPart: MessageV2.Part = {
-      type: "text",
-      id: Identifier.ascending("part"),
-      messageID: userMsg.id,
-      sessionID: input.sessionID,
-      text: "The following tool was executed by the user",
-      synthetic: true,
-    }
-    await updatePart(userPart)
-
-    const msg: MessageV2.Assistant = {
-      id: Identifier.ascending("message"),
-      sessionID: input.sessionID,
-      system: [],
-      mode: input.agent,
-      cost: 0,
-      path: {
-        cwd: Instance.directory,
-        root: Instance.worktree,
-      },
-      time: {
-        created: Date.now(),
-      },
-      role: "assistant",
-      tokens: {
-        input: 0,
-        output: 0,
-        reasoning: 0,
-        cache: { read: 0, write: 0 },
-      },
-      modelID: "",
-      providerID: "",
-    }
-    await updateMessage(msg)
-    const part: MessageV2.Part = {
-      type: "tool",
-      id: Identifier.ascending("part"),
-      messageID: msg.id,
-      sessionID: input.sessionID,
-      tool: "bash",
-      callID: ulid(),
-      state: {
-        status: "running",
-        time: {
-          start: Date.now(),
-        },
-        input: {
-          command: input.command,
-        },
-      },
-    }
-    await updatePart(part)
-    const shell = process.env["SHELL"] ?? "bash"
-    const shellName = path.basename(shell)
-
-    const scripts: Record<string, string> = {
-      nu: input.command,
-      fish: `eval "${input.command}"`,
-    }
-
-    const script =
-      scripts[shellName] ??
-      `[[ -f ~/.zshenv ]] && source ~/.zshenv >/dev/null 2>&1 || true
-       [[ -f "\${ZDOTDIR:-$HOME}/.zshrc" ]] && source "\${ZDOTDIR:-$HOME}/.zshrc" >/dev/null 2>&1 || true
-       [[ -f ~/.bashrc ]] && source ~/.bashrc >/dev/null 2>&1 || true
-       eval "${input.command}"`
-
-    const isFishOrNu = shellName === "fish" || shellName === "nu"
-    const args = isFishOrNu ? ["-c", script] : ["-c", "-l", script]
-
-    const proc = spawn(shell, args, {
-      cwd: Instance.directory,
-      signal: abort.signal,
-      detached: true,
-      stdio: ["ignore", "pipe", "pipe"],
-      env: {
-        ...process.env,
-        TERM: "dumb",
-      },
-    })
-
-    abort.signal.addEventListener("abort", () => {
-      if (!proc.pid) return
-      process.kill(-proc.pid)
-    })
-
-    let output = ""
-
-    proc.stdout?.on("data", (chunk) => {
-      output += chunk.toString()
-      if (part.state.status === "running") {
-        part.state.metadata = {
-          output: output,
-          description: "",
-        }
-        updatePart(part)
+        tokens,
       }
-    })
-
-    proc.stderr?.on("data", (chunk) => {
-      output += chunk.toString()
-      if (part.state.status === "running") {
-        part.state.metadata = {
-          output: output,
-          description: "",
-        }
-        updatePart(part)
-      }
-    })
-
-    await new Promise<void>((resolve) => {
-      proc.on("close", () => {
-        resolve()
-      })
-    })
-    msg.time.completed = Date.now()
-    await updateMessage(msg)
-    if (part.state.status === "running") {
-      part.state = {
-        status: "completed",
-        time: {
-          ...part.state.time,
-          end: Date.now(),
-        },
-        input: part.state.input,
-        title: "",
-        metadata: {
-          output,
-          description: "",
-        },
-        output,
-      }
-      await updatePart(part)
-    }
-    return { info: msg, parts: [part] }
-  }
-
-  export const CommandInput = z.object({
-    messageID: Identifier.schema("message").optional(),
-    sessionID: Identifier.schema("session"),
-    agent: z.string().optional(),
-    model: z.string().optional(),
-    arguments: z.string(),
-    command: z.string(),
-  })
-  export type CommandInput = z.infer<typeof CommandInput>
-  const bashRegex = /!`([^`]+)`/g
-  /**
-   * Regular expression to match @ file references in text
-   * Matches @ followed by file paths, excluding commas, periods at end of sentences, and backticks
-   * Does not match when preceded by word characters or backticks (to avoid email addresses and quoted references)
-   */
-  export const fileRegex = /(?<![\w`])@(\.?[^\s`,.]*(?:\.[^\s`,.]+)*)/g
-
-  export async function command(input: CommandInput) {
-    log.info("command", input)
-    const command = await Command.get(input.command)
-    const agent = command.agent ?? input.agent ?? "build"
-
-    let template = command.template.replace("$ARGUMENTS", input.arguments)
-
-    const bash = Array.from(template.matchAll(bashRegex))
-    if (bash.length > 0) {
-      const results = await Promise.all(
-        bash.map(async ([, cmd]) => {
-          try {
-            return await $`${{ raw: cmd }}`.nothrow().text()
-          } catch (error) {
-            return `Error executing command: ${error instanceof Error ? error.message : String(error)}`
-          }
-        }),
-      )
-      let index = 0
-      template = template.replace(bashRegex, () => results[index++])
-    }
-
-    const parts = [
-      {
-        type: "text",
-        text: template,
-      },
-    ] as ChatInput["parts"]
-
-    const matches = Array.from(template.matchAll(fileRegex))
-    await Promise.all(
-      matches.map(async (match) => {
-        const name = match[1]
-        const filepath = name.startsWith("~/")
-          ? path.join(os.homedir(), name.slice(2))
-          : path.resolve(Instance.worktree, name)
-
-        const stats = await fs.stat(filepath).catch(() => undefined)
-        if (!stats) {
-          const agent = await Agent.get(name)
-          if (agent) {
-            parts.push({
-              type: "agent",
-              name: agent.name,
-            })
-          }
-          return
-        }
-
-        if (stats.isDirectory()) {
-          parts.push({
-            type: "file",
-            url: `file://${filepath}`,
-            filename: name,
-            mime: "application/x-directory",
-          })
-          return
-        }
-
-        parts.push({
-          type: "file",
-          url: `file://${filepath}`,
-          filename: name,
-          mime: "text/plain",
-        })
-      }),
-    )
-
-    const model = await (async () => {
-      if (command.model) {
-        return Provider.parseModel(command.model)
-      }
-      if (command.agent) {
-        const agent = await Agent.get(command.agent)
-        if (agent.model) {
-          return agent.model
-        }
-      }
-      if (input.model) {
-        return Provider.parseModel(input.model)
-      }
-      return undefined
-    })()
-
-    return prompt({
-      sessionID: input.sessionID,
-      messageID: input.messageID,
-      model,
-      agent,
-      parts,
-    })
-  }
-
-  function createProcessor(assistantMsg: MessageV2.Assistant, model: ModelsDev.Model) {
-    const toolcalls: Record<string, MessageV2.ToolPart> = {}
-    let snapshot: string | undefined
-    let shouldStop = false
-    return {
-      partFromToolCall(toolCallID: string) {
-        return toolcalls[toolCallID]
-      },
-      getShouldStop() {
-        return shouldStop
-      },
-      async process(stream: StreamTextResult<Record<string, AITool>, never>) {
-        try {
-          let currentText: MessageV2.TextPart | undefined
-          let reasoningMap: Record<string, MessageV2.ReasoningPart> = {}
-
-          for await (const value of stream.fullStream) {
-            log.info("part", {
-              type: value.type,
-            })
-            switch (value.type) {
-              case "start":
-                break
-
-              case "reasoning-start":
-                if (value.id in reasoningMap) {
-                  continue
-                }
-                reasoningMap[value.id] = {
-                  id: Identifier.ascending("part"),
-                  messageID: assistantMsg.id,
-                  sessionID: assistantMsg.sessionID,
-                  type: "reasoning",
-                  text: "",
-                  time: {
-                    start: Date.now(),
-                  },
-                }
-                break
-
-              case "reasoning-delta":
-                if (value.id in reasoningMap) {
-                  const part = reasoningMap[value.id]
-                  part.text += value.text
-                  if (part.text) await updatePart(part)
-                }
-                break
-
-              case "reasoning-end":
-                if (value.id in reasoningMap) {
-                  const part = reasoningMap[value.id]
-                  part.text = part.text.trimEnd()
-                  part.metadata = value.providerMetadata
-                  part.time = {
-                    ...part.time,
-                    end: Date.now(),
-                  }
-                  await updatePart(part)
-                  delete reasoningMap[value.id]
-                }
-                break
-
-              case "tool-input-start":
-                const part = await updatePart({
-                  id: toolcalls[value.id]?.id ?? Identifier.ascending("part"),
-                  messageID: assistantMsg.id,
-                  sessionID: assistantMsg.sessionID,
-                  type: "tool",
-                  tool: value.toolName,
-                  callID: value.id,
-                  state: {
-                    status: "pending",
-                  },
-                })
-                toolcalls[value.id] = part as MessageV2.ToolPart
-                break
-
-              case "tool-input-delta":
-                break
-
-              case "tool-input-end":
-                break
-
-              case "tool-call": {
-                const match = toolcalls[value.toolCallId]
-                if (match) {
-                  const part = await updatePart({
-                    ...match,
-                    tool: value.toolName,
-                    state: {
-                      status: "running",
-                      input: value.input,
-                      time: {
-                        start: Date.now(),
-                      },
-                    },
-                  })
-                  toolcalls[value.toolCallId] = part as MessageV2.ToolPart
-                }
-                break
-              }
-              case "tool-result": {
-                const match = toolcalls[value.toolCallId]
-                if (match && match.state.status === "running") {
-                  await updatePart({
-                    ...match,
-                    state: {
-                      status: "completed",
-                      input: value.input,
-                      output: value.output.output,
-                      metadata: value.output.metadata,
-                      title: value.output.title,
-                      time: {
-                        start: match.state.time.start,
-                        end: Date.now(),
-                      },
-                    },
-                  })
-                  delete toolcalls[value.toolCallId]
-                }
-                break
-              }
-
-              case "tool-error": {
-                const match = toolcalls[value.toolCallId]
-                if (match && match.state.status === "running") {
-                  if (value.error instanceof Permission.RejectedError) {
-                    shouldStop = true
-                  }
-                  await updatePart({
-                    ...match,
-                    state: {
-                      status: "error",
-                      input: value.input,
-                      error: (value.error as any).toString(),
-                      metadata: value.error instanceof Permission.RejectedError ? value.error.metadata : undefined,
-                      time: {
-                        start: match.state.time.start,
-                        end: Date.now(),
-                      },
-                    },
-                  })
-                  delete toolcalls[value.toolCallId]
-                }
-                break
-              }
-              case "error":
-                throw value.error
-
-              case "start-step":
-                await updatePart({
-                  id: Identifier.ascending("part"),
-                  messageID: assistantMsg.id,
-                  sessionID: assistantMsg.sessionID,
-                  type: "step-start",
-                })
-                snapshot = await Snapshot.track()
-                break
-
-              case "finish-step":
-                const usage = getUsage(model, value.usage, value.providerMetadata)
-                assistantMsg.cost += usage.cost
-                assistantMsg.tokens = usage.tokens
-                await updatePart({
-                  id: Identifier.ascending("part"),
-                  messageID: assistantMsg.id,
-                  sessionID: assistantMsg.sessionID,
-                  type: "step-finish",
-                  tokens: usage.tokens,
-                  cost: usage.cost,
-                })
-                await updateMessage(assistantMsg)
-                if (snapshot) {
-                  const patch = await Snapshot.patch(snapshot)
-                  if (patch.files.length) {
-                    await updatePart({
-                      id: Identifier.ascending("part"),
-                      messageID: assistantMsg.id,
-                      sessionID: assistantMsg.sessionID,
-                      type: "patch",
-                      hash: patch.hash,
-                      files: patch.files,
-                    })
-                  }
-                  snapshot = undefined
-                }
-                break
-
-              case "text-start":
-                currentText = {
-                  id: Identifier.ascending("part"),
-                  messageID: assistantMsg.id,
-                  sessionID: assistantMsg.sessionID,
-                  type: "text",
-                  text: "",
-                  time: {
-                    start: Date.now(),
-                  },
-                }
-                break
-
-              case "text-delta":
-                if (currentText) {
-                  currentText.text += value.text
-                  if (currentText.text) await updatePart(currentText)
-                }
-                break
-
-              case "text-end":
-                if (currentText) {
-                  currentText.text = currentText.text.trimEnd()
-                  currentText.time = {
-                    start: Date.now(),
-                    end: Date.now(),
-                  }
-                  await updatePart(currentText)
-                }
-                currentText = undefined
-                break
-
-              case "finish":
-                assistantMsg.time.completed = Date.now()
-                await updateMessage(assistantMsg)
-                break
-
-              default:
-                log.info("unhandled", {
-                  ...value,
-                })
-                continue
-            }
-          }
-        } catch (e) {
-          log.error("", {
-            error: e,
-          })
-          switch (true) {
-            case e instanceof DOMException && e.name === "AbortError":
-              assistantMsg.error = new MessageV2.AbortedError(
-                { message: e.message },
-                {
-                  cause: e,
-                },
-              ).toObject()
-              break
-            case MessageV2.OutputLengthError.isInstance(e):
-              assistantMsg.error = e
-              break
-            case LoadAPIKeyError.isInstance(e):
-              assistantMsg.error = new MessageV2.AuthError(
-                {
-                  providerID: model.id,
-                  message: e.message,
-                },
-                { cause: e },
-              ).toObject()
-              break
-            case e instanceof Error:
-              assistantMsg.error = new NamedError.Unknown({ message: e.toString() }, { cause: e }).toObject()
-              break
-            default:
-              assistantMsg.error = new NamedError.Unknown({ message: JSON.stringify(e) }, { cause: e })
-          }
-          Bus.publish(Event.Error, {
-            sessionID: assistantMsg.sessionID,
-            error: assistantMsg.error,
-          })
-        }
-        const p = await getParts(assistantMsg.id)
-        for (const part of p) {
-          if (part.type === "tool" && part.state.status !== "completed" && part.state.status !== "error") {
-            updatePart({
-              ...part,
-              state: {
-                status: "error",
-                error: "Tool execution aborted",
-                time: {
-                  start: Date.now(),
-                  end: Date.now(),
-                },
-                input: {},
-              },
-            })
-          }
-        }
-        assistantMsg.time.completed = Date.now()
-        await updateMessage(assistantMsg)
-        return { info: assistantMsg, parts: p }
-      },
-    }
-  }
-
-  export const RevertInput = z.object({
-    sessionID: Identifier.schema("session"),
-    messageID: Identifier.schema("message"),
-    partID: Identifier.schema("part").optional(),
-  })
-  export type RevertInput = z.infer<typeof RevertInput>
-
-  export async function revert(input: RevertInput) {
-    const all = await messages(input.sessionID)
-    let lastUser: MessageV2.User | undefined
-    const session = await get(input.sessionID)
-
-    let revert: Info["revert"]
-    const patches: Snapshot.Patch[] = []
-    for (const msg of all) {
-      if (msg.info.role === "user") lastUser = msg.info
-      const remaining = []
-      for (const part of msg.parts) {
-        if (revert) {
-          if (part.type === "patch") {
-            patches.push(part)
-          }
-          continue
-        }
-
-        if (!revert) {
-          if ((msg.info.id === input.messageID && !input.partID) || part.id === input.partID) {
-            // if no useful parts left in message, same as reverting whole message
-            const partID = remaining.some((item) => ["text", "tool"].includes(item.type)) ? input.partID : undefined
-            revert = {
-              messageID: !partID && lastUser ? lastUser.id : msg.info.id,
-              partID,
-            }
-          }
-          remaining.push(part)
-        }
-      }
-    }
-
-    if (revert) {
-      const session = await get(input.sessionID)
-      revert.snapshot = session.revert?.snapshot ?? (await Snapshot.track())
-      await Snapshot.revert(patches)
-      if (revert.snapshot) revert.diff = await Snapshot.diff(revert.snapshot)
-      return update(input.sessionID, (draft) => {
-        draft.revert = revert
-      })
-    }
-    return session
-  }
-
-  export async function unrevert(input: { sessionID: string }) {
-    log.info("unreverting", input)
-    const session = await get(input.sessionID)
-    if (!session.revert) return session
-    if (session.revert.snapshot) await Snapshot.restore(session.revert.snapshot)
-    const next = await update(input.sessionID, (draft) => {
-      draft.revert = undefined
-    })
-    return next
-  }
-
-  export async function summarize(input: { sessionID: string; providerID: string; modelID: string }) {
-    await update(input.sessionID, (draft) => {
-      draft.time.compacting = Date.now()
-    })
-    await using _ = defer(async () => {
-      await update(input.sessionID, (draft) => {
-        draft.time.compacting = undefined
-      })
-    })
-    const msgs = await messages(input.sessionID)
-    const start = Math.max(
-      0,
-      msgs.findLastIndex((msg) => msg.info.role === "assistant" && msg.info.summary === true),
-    )
-    const split = start + Math.floor((msgs.length - start) / 2)
-    log.info("summarizing", { start, split })
-    const toSummarize = msgs.slice(start, split)
-    const model = await Provider.getModel(input.providerID, input.modelID)
-    const system = [
-      ...SystemPrompt.summarize(model.providerID),
-      ...(await SystemPrompt.environment()),
-      ...(await SystemPrompt.custom()),
-    ]
-
-    const generated = await generateText({
-      maxRetries: 10,
-      model: model.language,
-      messages: [
-        ...system.map(
-          (x): ModelMessage => ({
-            role: "system",
-            content: x,
-          }),
-        ),
-        ...MessageV2.toModelMessage(toSummarize),
-        {
-          role: "user",
-          content: [
-            {
-              type: "text",
-              text: "Provide a detailed but concise summary of our conversation above. Focus on information that would be helpful for continuing the conversation, including what we did, what we're doing, which files we're working on, and what we're going to do next.",
-            },
-          ],
-        },
-      ],
-    })
-    const usage = getUsage(model.info, generated.usage, generated.providerMetadata)
-    const msg: MessageV2.Info = {
-      id: Identifier.create("message", false, toSummarize.at(-1)!.info.time.created + 1),
-      role: "assistant",
-      sessionID: input.sessionID,
-      system,
-      mode: "build",
-      path: {
-        cwd: Instance.directory,
-        root: Instance.worktree,
-      },
-      summary: true,
-      cost: usage.cost,
-      tokens: usage.tokens,
-      modelID: input.modelID,
-      providerID: model.providerID,
-      time: {
-        created: Date.now(),
-        completed: Date.now(),
-      },
-    }
-    await updateMessage(msg)
-    await updatePart({
-      type: "text",
-      sessionID: input.sessionID,
-      messageID: msg.id,
-      id: Identifier.ascending("part"),
-      text: generated.text,
-      time: {
-        start: Date.now(),
-        end: Date.now(),
-      },
-    })
-
-    Bus.publish(Event.Compacted, {
-      sessionID: input.sessionID,
-    })
-
-    return msg
-  }
-
-  function isLocked(sessionID: string) {
-    return state().pending.has(sessionID)
-  }
-
-  function lock(sessionID: string) {
-    log.info("locking", { sessionID })
-    if (state().pending.has(sessionID)) throw new BusyError(sessionID)
-    const controller = new AbortController()
-    state().pending.set(sessionID, controller)
-    return {
-      signal: controller.signal,
-      async [Symbol.dispose]() {
-        log.info("unlocking", { sessionID })
-        state().pending.delete(sessionID)
-
-        const session = await get(sessionID)
-        if (session.parentID) return
-
-        Bus.publish(Event.Idle, {
-          sessionID,
-        })
-      },
-    }
-  }
-
-  function getUsage(model: ModelsDev.Model, usage: LanguageModelUsage, metadata?: ProviderMetadata) {
-    const tokens = {
-      input: usage.inputTokens ?? 0,
-      output: usage.outputTokens ?? 0,
-      reasoning: usage?.reasoningTokens ?? 0,
-      cache: {
-        write: (metadata?.["anthropic"]?.["cacheCreationInputTokens"] ??
-          // @ts-expect-error
-          metadata?.["bedrock"]?.["usage"]?.["cacheWriteInputTokens"] ??
-          0) as number,
-        read: usage.cachedInputTokens ?? 0,
-      },
-    }
-    return {
-      cost: new Decimal(0)
-        .add(new Decimal(tokens.input).mul(model.cost?.input ?? 0).div(1_000_000))
-        .add(new Decimal(tokens.output).mul(model.cost?.output ?? 0).div(1_000_000))
-        .add(new Decimal(tokens.cache.read).mul(model.cost?.cache_read ?? 0).div(1_000_000))
-        .add(new Decimal(tokens.cache.write).mul(model.cost?.cache_write ?? 0).div(1_000_000))
-        .toNumber(),
-      tokens,
-    }
-  }
+    },
+  )
 
   export class BusyError extends Error {
     constructor(public readonly sessionID: string) {
@@ -1917,27 +446,21 @@ export namespace Session {
     }
   }
 
-  export async function initialize(input: {
-    sessionID: string
-    modelID: string
-    providerID: string
-    messageID: string
-  }) {
-    await Session.prompt({
-      sessionID: input.sessionID,
-      messageID: input.messageID,
-      model: {
-        providerID: input.providerID,
-        modelID: input.modelID,
-      },
-      parts: [
-        {
-          id: Identifier.ascending("part"),
-          type: "text",
-          text: PROMPT_INITIALIZE.replace("${path}", Instance.worktree),
-        },
-      ],
-    })
-    await Project.setInitialized(Instance.project.id)
-  }
+  export const initialize = fn(
+    z.object({
+      sessionID: Identifier.schema("session"),
+      modelID: z.string(),
+      providerID: z.string(),
+      messageID: Identifier.schema("message"),
+    }),
+    async (input) => {
+      await SessionPrompt.command({
+        sessionID: input.sessionID,
+        messageID: input.messageID,
+        model: input.providerID + "/" + input.modelID,
+        command: Command.Default.INIT,
+        arguments: "",
+      })
+    },
+  )
 }

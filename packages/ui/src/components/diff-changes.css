@@ -1,0 +1,41 @@
+[data-component="diff-changes"] {
+  display: flex;
+  gap: 8px;
+  justify-content: flex-end;
+  align-items: center;
+
+  [data-slot="diff-changes-additions"] {
+    font-family: var(--font-family-mono);
+    font-feature-settings: var(--font-family-mono--font-feature-settings);
+    font-size: var(--font-size-small);
+    font-style: normal;
+    font-weight: var(--font-weight-regular);
+    line-height: var(--line-height-large);
+    letter-spacing: var(--letter-spacing-normal);
+    text-align: right;
+    color: var(--text-diff-add-base);
+  }
+
+  [data-slot="diff-changes-deletions"] {
+    font-family: var(--font-family-mono);
+    font-feature-settings: var(--font-family-mono--font-feature-settings);
+    font-size: var(--font-size-small);
+    font-style: normal;
+    font-weight: var(--font-weight-regular);
+    line-height: var(--line-height-large);
+    letter-spacing: var(--letter-spacing-normal);
+    text-align: right;
+    color: var(--text-diff-delete-base);
+  }
+}
+
+[data-component="diff-changes"][data-variant="bars"] {
+  width: 18px;
+  flex-shrink: 0;
+
+  svg {
+    display: block;
+    width: 100%;
+    height: auto;
+  }
+}

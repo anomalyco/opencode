@@ -1,0 +1,63 @@
+name: Auto-label TUI Issues
+
+on:
+  issues:
+    types: [opened]
+
+jobs:
+  auto-label:
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      issues: write
+    steps:
+      - name: Auto-label and assign issues
+        uses: actions/github-script@v7
+        with:
+          github-token: ${{ secrets.GITHUB_TOKEN }}
+          script: |
+            const issue = context.payload.issue;
+            const title = issue.title;
+            const description = issue.body || '';
+
+            // Check for "opencode web" keyword
+            const webPattern = /(opencode web)/i;
+            const isWebRelated = webPattern.test(title) || webPattern.test(description);
+
+            // Check for version patterns like v1.0.x or 1.0.x
+            const versionPattern = /[v]?1\.0\./i;
+            const isVersionRelated = versionPattern.test(title) || versionPattern.test(description);
+
+            // Check for "nix" keyword
+            const nixPattern = /\bnix\b/i;
+            const isNixRelated = nixPattern.test(title) || nixPattern.test(description);
+
+            const labels = [];
+
+            if (isWebRelated) {
+              labels.push('web');
+              
+              // Assign to adamdotdevin
+              await github.rest.issues.addAssignees({
+                owner: context.repo.owner,
+                repo: context.repo.repo,
+                issue_number: issue.number,
+                assignees: ['adamdotdevin']
+              });
+            } else if (isVersionRelated) {
+              // Only add opentui if NOT web-related
+              labels.push('opentui');
+            }
+
+            if (isNixRelated) {
+              labels.push('nix');
+            }
+
+            if (labels.length > 0) {
+              await github.rest.issues.addLabels({
+                owner: context.repo.owner,
+                repo: context.repo.repo,
+                issue_number: issue.number,
+                labels: labels
+              });
+            }
