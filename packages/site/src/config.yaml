@@ -11,7 +11,7 @@ metadata:
   title:
     default: Forge
     template: '%s — Forge'
-    description: 'Universal CLI for coding agents, powered by the Agent Client Protocol. Work with any ACP-compatible agent through a unified command-line interface. Built on the open Agent Client Protocol standard for universal compatibility.'
+    description: 'Universal CLI for coding agents, powered by the Agent Client Protocol'
   robots:
     index: true
     follow: true
@@ -19,8 +19,8 @@ metadata:
     site_name: Forge
     images:
       - url: '/og-image.png'
-        width: 1200
-        height: 628
+        width: 1280
+        height: 640
     type: website
   twitter:
     handle: '@pat_erichsen'
