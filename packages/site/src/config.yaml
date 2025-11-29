@@ -18,7 +18,7 @@ metadata:
   openGraph:
     site_name: Forge
     images:
-      - url: '/og-image.png'
+      - url: '/og-image-v2.png'
         width: 1280
         height: 640
     type: website
