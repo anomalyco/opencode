@@ -1094,13 +1094,26 @@ function PendingPermissions(props: { permissions: Array<{ id: string; type: stri
             <text fg={theme.text}>
               <b>{permission.title}</b>
             </text>
-            <Show when={permission.metadata?.formattedPlan}>
-              <box paddingLeft={2}>
-                <text fg={theme.textMuted}>{permission.metadata.formattedPlan}</text>
-              </box>
-            </Show>
-            <Show when={permission.metadata?.goal && !permission.metadata?.formattedPlan}>
+            <Show when={permission.metadata?.goal}>
               <text fg={theme.textMuted}>Goal: {permission.metadata.goal}</text>
+            </Show>
+            <Show when={permission.metadata?.summary}>
+              <text fg={theme.textMuted}>Summary: {permission.metadata.summary}</text>
+            </Show>
+            <Show when={permission.metadata?.steps && permission.metadata.steps.length > 0}>
+              <box paddingTop={1} gap={1}>
+                <text fg={theme.text}>Plan Steps:</text>
+                <For each={permission.metadata.steps}>
+                  {(step: any, stepIndex) => (
+                    <text fg={theme.textMuted}>
+                      <span style={{ fg: theme.text }}>[ ]</span> {stepIndex() + 1}. {step.title}
+                      <Show when={step.description}>
+                        {"\n"}    {step.description}
+                      </Show>
+                    </text>
+                  )}
+                </For>
+              </box>
             </Show>
             <Show when={index() === 0}>
               <box gap={1} marginTop={1}>

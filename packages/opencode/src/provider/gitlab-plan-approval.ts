@@ -1,6 +1,7 @@
 import { Permission } from "../permission"
 import { Log } from "../util/log"
 import { Instance } from "../project/instance"
+import { Todo } from "../session/todo"
 
 // Plan types - matching the gitlab-ai-provider types
 export interface PlanStep {
@@ -127,6 +128,24 @@ export async function handlePlanApproval(
         
         // If we get here, the user approved the plan
         log.info("Plan approved by user", { workflowId })
+        
+        // Convert plan steps to todos and sync them
+        if (plan.steps && plan.steps.length > 0) {
+          const todos = plan.steps.map((step, index) => ({
+            id: step.id || `plan-step-${index}`,
+            content: step.title,
+            status: step.status || "pending",
+            priority: "medium",
+          }))
+          
+          await Todo.update({
+            sessionID,
+            todos,
+          })
+          
+          log.info("Plan steps synced to todos", { sessionID, count: todos.length })
+        }
+        
         return { approved: true }
         
       } catch (error) {
@@ -151,8 +170,64 @@ export async function handlePlanApproval(
 }
 
 /**
- * Handle workflow status change
+ * Handle workflow status change and sync plan step status to todos
+ * This function is called with different signatures depending on the workflow type:
+ * - For LSP workflows: (status: string, workflowId: string)
+ * - For streaming workflows: (status: string, checkpoint?: {...})
  */
-export function handleStatusChange(status: string, workflowId: string) {
-  log.info("Workflow status changed", { workflowId, status })
+export async function handleStatusChange(
+  statusOrWorkflowId: string,
+  workflowIdOrCheckpoint?: string | {
+    channel_values?: {
+      plan?: {
+        steps: PlanStep[]
+      }
+    }
+  }
+) {
+  // Handle both signatures
+  let status: string
+  let checkpoint: { channel_values?: { plan?: { steps: PlanStep[] } } } | undefined
+  
+  if (typeof workflowIdOrCheckpoint === 'string') {
+    // LSP signature: (status, workflowId)
+    status = statusOrWorkflowId
+    log.info("Workflow status changed", { workflowId: workflowIdOrCheckpoint, status })
+  } else {
+    // Streaming signature: (status, checkpoint)
+    status = statusOrWorkflowId
+    checkpoint = workflowIdOrCheckpoint
+    log.info("Workflow status changed", { status, hasCheckpoint: !!checkpoint })
+  }
+  
+  // If we have a checkpoint with plan steps, sync them to todos
+  if (checkpoint?.channel_values?.plan?.steps && currentContext) {
+    const { sessionID } = currentContext
+    const planSteps = checkpoint.channel_values.plan.steps
+    
+    // Get existing todos
+    const existingTodos = await Todo.get(sessionID)
+    
+    // Update todos with plan step status
+    const updatedTodos = planSteps.map((step, index) => {
+      const existingTodo = existingTodos.find(t => t.id === (step.id || `plan-step-${index}`))
+      return {
+        id: step.id || `plan-step-${index}`,
+        content: step.title,
+        status: step.status || existingTodo?.status || "pending",
+        priority: existingTodo?.priority || "medium",
+      }
+    })
+    
+    await Todo.update({
+      sessionID,
+      todos: updatedTodos,
+    })
+    
+    log.info("Plan step status synced to todos", { 
+      sessionID, 
+      count: updatedTodos.length,
+      completed: updatedTodos.filter(t => t.status === "completed").length 
+    })
+  }
 }
