@@ -486,7 +486,7 @@ export namespace SessionPrompt {
         const userMessage = msgs.findLast((msg) => msg.info.role === "user")
         if (userMessage) {
           const text = synthInstructions
-            .map((s) => `<instruction-reminder tool="${s.id}">\n${s.instruction}\n</instruction-reminder>`)
+            .map((s) => `<instruction tool="${s.id}">\n${s.instruction}\n</instruction>`)
             .join("\n\n")
           userMessage.parts.push({
             id: Identifier.ascending("part"),
