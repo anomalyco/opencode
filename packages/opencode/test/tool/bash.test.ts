@@ -53,13 +53,115 @@ describe("tool.bash", () => {
 
     // Verify detected shell is appropriate for the platform
     if (process.platform === "win32") {
-      // On Windows, should detect cmd, powershell, bash (WSL/Git Bash), or similar
-      expect(["cmd", "powershell", "pwsh", "bash", "zsh"].some((s) => detectedShell?.toLowerCase().includes(s))).toBe(
-        true,
-      )
+      expect(["cmd", "powershell"]).toContain(detectedShell!)
     } else {
-      // On Unix-like systems, should detect bash, zsh, fish, sh, or similar
-      expect(["bash", "zsh", "fish", "sh", "nu"].some((s) => detectedShell === s)).toBe(true)
+      expect(["bash", "zsh", "fish", "ksh", "csh", "tcsh", "dash"]).toContain(detectedShell!)
+    }
+  })
+
+  test("description uses dynamic shell-specific language", async () => {
+    const bash = await BashTool.init()
+    const shellMatch = bash.description.match(/You are executing commands in `([^`]+)`/)
+    const detectedShell = shellMatch?.[1]
+
+    expect(detectedShell).toBeTruthy()
+
+    // Should contain shell-specific command references
+    if (detectedShell) {
+      expect(bash.description).toContain(`${detectedShell} command`)
+      expect(bash.description).toContain(`${detectedShell} commands`)
+    }
+
+    // Should NOT contain generic "bash command" references
+    expect(bash.description).not.toContain("bash command")
+    expect(bash.description).not.toContain("bash commands")
+
+    // Should still contain "Bash tool" references (tool name)
+    expect(bash.description).toContain("Bash tool")
+  })
+
+  test("shell-specific language works for different shell types", async () => {
+    // Test with fish shell (current environment)
+    const originalShell = process.env.SHELL
+
+    try {
+      // Mock fish shell environment
+      process.env.SHELL = "/opt/homebrew/bin/fish"
+      const bashFish = await BashTool.init()
+      expect(bashFish.description).toContain("fish command")
+      expect(bashFish.description).toContain("fish commands")
+
+      // Mock zsh shell environment
+      process.env.SHELL = "/bin/zsh"
+      const bashZsh = await BashTool.init()
+      expect(bashZsh.description).toContain("zsh command")
+      expect(bashZsh.description).toContain("zsh commands")
+
+      // Mock bash shell environment
+      process.env.SHELL = "/bin/bash"
+      const bashBash = await BashTool.init()
+      expect(bashBash.description).toContain("bash command")
+      expect(bashBash.description).toContain("bash commands")
+    } finally {
+      // Restore original shell
+      if (originalShell) {
+        process.env.SHELL = originalShell
+      } else {
+        delete process.env.SHELL
+      }
+    }
+  })
+
+  test("description uses dynamic shell-specific language", async () => {
+    const bash = await BashTool.init()
+    const shellMatch = bash.description.match(/You are executing commands in `([^`]+)`/)
+    const detectedShell = shellMatch?.[1]
+
+    expect(detectedShell).toBeTruthy()
+
+    // Should contain shell-specific command references
+    if (detectedShell) {
+      expect(bash.description).toContain(`${detectedShell} command`)
+      expect(bash.description).toContain(`${detectedShell} commands`)
+    }
+
+    // Should NOT contain generic "bash command" references
+    expect(bash.description).not.toContain("bash command")
+    expect(bash.description).not.toContain("bash commands")
+
+    // Should still contain "Bash tool" references (tool name)
+    expect(bash.description).toContain("Bash tool")
+  })
+
+  test("shell-specific language works for different shell types", async () => {
+    // Test with fish shell (current environment)
+    const originalShell = process.env.SHELL
+
+    try {
+      // Mock fish shell environment
+      process.env.SHELL = "/opt/homebrew/bin/fish"
+      const bashFish = await BashTool.init()
+      expect(bashFish.description).toContain("fish command")
+      expect(bashFish.description).toContain("fish commands")
+
+      // Mock zsh shell environment
+      process.env.SHELL = "/bin/zsh"
+      const bashZsh = await BashTool.init()
+      expect(bashZsh.description).toContain("zsh command")
+      expect(bashZsh.description).toContain("zsh commands")
+
+      // Mock bash shell environment
+      process.env.SHELL = "/bin/bash"
+      const bashBash = await BashTool.init()
+      expect(bashBash.description).toContain("bash command")
+      expect(bashBash.description).toContain("bash commands")
+    } finally {
+      // Restore original shell
+      if (originalShell) {
+        process.env.SHELL = originalShell
+      } else {
+        delete process.env.SHELL
+      }
     }
   })
 

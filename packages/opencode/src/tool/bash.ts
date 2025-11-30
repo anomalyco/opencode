@@ -90,7 +90,13 @@ export const BashTool = Tool.define("bash", async () => {
       return process.platform === "win32" ? "cmd" : "bash"
     }
     if (typeof shell === "string") {
-      const name = path.basename(shell)
+      let name = path.basename(shell)
+      // Handle Windows paths (both forward and back slashes)
+      if (shell.includes("\\") || shell.includes("/")) {
+        // Extract the last part after both types of separators
+        const parts = shell.split(/[\\/]/)
+        name = parts[parts.length - 1]
+      }
       // Handle Windows executables
       if (name.toLowerCase().endsWith(".exe")) {
         return name.slice(0, -4)
@@ -104,7 +110,10 @@ export const BashTool = Tool.define("bash", async () => {
 
   const description = `**Shell**: You are executing commands in \`${shellName}\`. Ensure your command syntax is compatible with this shell.
 
-${DESCRIPTION}`
+${DESCRIPTION.replace(/\$\{shellName\} command/g, `${shellName} command`).replace(
+  /\$\{shellName\} commands/g,
+  `${shellName} commands`,
+)}`
 
   return {
     description,
