@@ -1008,6 +1008,14 @@ export type Config = {
      * Control diff rendering style: 'auto' adapts to terminal width, 'stacked' always shows single column
      */
     diff_style?: "auto" | "stacked"
+    /**
+     * Maximum number of sessions to display in session list, or 'none' to show all sessions
+     */
+    sessions_list_limit?: number | "none"
+    /**
+     * Maximum number of messages to load per session when syncing, or 'none' to load all messages
+     */
+    messages_limit?: number | "none"
   }
   /**
    * Command configuration, see https://opencode.ai/docs/commands

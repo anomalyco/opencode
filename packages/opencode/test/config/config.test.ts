@@ -501,3 +501,123 @@ test("deduplicates duplicate plugins from global and local configs", async () =>
     },
   })
 })
+
+test("handles TUI configuration with sessions_list_limit and messages_limit", async () => {
+  await using tmp = await tmpdir({
+    init: async (dir) => {
+      await Bun.write(
+        path.join(dir, "opencode.json"),
+        JSON.stringify({
+          $schema: "https://opencode.ai/config.json",
+          tui: {
+            sessions_list_limit: 200,
+            messages_limit: 50,
+          },
+        }),
+      )
+    },
+  })
+  await Instance.provide({
+    directory: tmp.path,
+    fn: async () => {
+      const config = await Config.get()
+      expect(config.tui?.sessions_list_limit).toBe(200)
+      expect(config.tui?.messages_limit).toBe(50)
+    },
+  })
+})
+
+test("handles TUI configuration with sessions_list_limit set to 'none'", async () => {
+  await using tmp = await tmpdir({
+    init: async (dir) => {
+      await Bun.write(
+        path.join(dir, "opencode.json"),
+        JSON.stringify({
+          $schema: "https://opencode.ai/config.json",
+          tui: {
+            sessions_list_limit: "none",
+            messages_limit: 75,
+          },
+        }),
+      )
+    },
+  })
+  await Instance.provide({
+    directory: tmp.path,
+    fn: async () => {
+      const config = await Config.get()
+      expect(config.tui?.sessions_list_limit).toBe("none")
+      expect(config.tui?.messages_limit).toBe(75)
+    },
+  })
+})
+
+test("validates TUI sessions_list_limit schema - rejects invalid values", async () => {
+  await using tmp = await tmpdir({
+    init: async (dir) => {
+      await Bun.write(
+        path.join(dir, "opencode.json"),
+        JSON.stringify({
+          $schema: "https://opencode.ai/config.json",
+          tui: {
+            sessions_list_limit: -5, // Invalid: negative number
+          },
+        }),
+      )
+    },
+  })
+  await Instance.provide({
+    directory: tmp.path,
+    fn: async () => {
+      await expect(Config.get()).rejects.toThrow()
+    },
+  })
+})
+
+test("validates TUI messages_limit schema - rejects invalid values", async () => {
+  await using tmp = await tmpdir({
+    init: async (dir) => {
+      await Bun.write(
+        path.join(dir, "opencode.json"),
+        JSON.stringify({
+          $schema: "https://opencode.ai/config.json",
+          tui: {
+            messages_limit: 0, // Invalid: must be >= 1
+          },
+        }),
+      )
+    },
+  })
+  await Instance.provide({
+    directory: tmp.path,
+    fn: async () => {
+      await expect(Config.get()).rejects.toThrow()
+    },
+  })
+})
+
+test("handles partial TUI configuration with backward compatibility", async () => {
+  await using tmp = await tmpdir({
+    init: async (dir) => {
+      await Bun.write(
+        path.join(dir, "opencode.json"),
+        JSON.stringify({
+          $schema: "https://opencode.ai/config.json",
+          tui: {
+            scroll_speed: 2.5,
+            // sessions_list_limit and messages_limit not specified - should inherit from global config
+          },
+        }),
+      )
+    },
+  })
+  await Instance.provide({
+    directory: tmp.path,
+    fn: async () => {
+      const config = await Config.get()
+      expect(config.tui?.scroll_speed).toBe(2.5)
+      // Note: sessions_list_limit and messages_limit may be inherited from global config
+      // The important thing is that the config loads successfully and scroll_speed is set correctly
+    },
+  })
+})

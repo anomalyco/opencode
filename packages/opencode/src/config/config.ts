@@ -460,7 +460,18 @@ export namespace Config {
       .enum(["auto", "stacked"])
       .optional()
       .describe("Control diff rendering style: 'auto' adapts to terminal width, 'stacked' always shows single column"),
+    sessions_list_limit: z
+      .union([z.number().min(1), z.literal("none")])
+      .optional()
+      .default(150)
+      .describe("Maximum number of sessions to display in session list, or 'none' to show all sessions"),
+    messages_limit: z
+      .union([z.number().min(1), z.literal("none")])
+      .optional()
+      .default(100)
+      .describe("Maximum number of messages to load per session when syncing, or 'none' to load all messages"),
   })
+  export type TUI = z.infer<typeof TUI>
 
   export const Layout = z.enum(["auto", "stretch"]).meta({
     ref: "LayoutConfig",

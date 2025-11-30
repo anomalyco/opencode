@@ -24,6 +24,9 @@ export function DialogSessionList() {
 
   const options = createMemo(() => {
     const today = new Date().toDateString()
+    const sessionsListLimit = (sync.data.config.tui as any)?.sessions_list_limit
+    const limit = sessionsListLimit === "none" ? undefined : sessionsListLimit || 150
+
     return sync.data.session
       .filter((x) => x.parentID === undefined)
       .map((x) => {
@@ -41,7 +44,7 @@ export function DialogSessionList() {
           footer: Locale.time(x.time.updated),
         }
       })
-      .slice(0, 150)
+      .slice(0, limit)
   })
 
   createEffect(() => {
