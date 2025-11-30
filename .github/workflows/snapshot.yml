@@ -8,6 +8,7 @@ on:
       - test-bedrock
       - v0
       - otui-diffs
+      - snapshot-*
 
 concurrency: ${{ github.workflow }}-${{ github.ref }}
 
