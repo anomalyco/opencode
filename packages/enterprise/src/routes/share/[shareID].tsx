@@ -12,7 +12,7 @@ import { iife } from "@opencode-ai/util/iife"
 import { Binary } from "@opencode-ai/util/binary"
 import { NamedError } from "@opencode-ai/util/error"
 import { DateTime } from "luxon"
-import { MessageNav } from "@opencode-ai/ui/message-nav"
+import { SessionMessageRail } from "@opencode-ai/ui/session-message-rail"
 import { createStore } from "solid-js/store"
 import z from "zod"
 import NotFound from "../[...404]"
@@ -259,29 +259,12 @@ export default function () {
                             {title()}
                           </div>
                           <div class="flex items-start justify-start h-full min-h-0">
-                            <Show when={messages().length > 1}>
-                              <>
-                                <MessageNav
-                                  class="@6xl:hidden mt-2.5 absolute left-6"
-                                  messages={messages()}
-                                  current={activeMessage()}
-                                  onMessageSelect={setActiveMessage}
-                                  size="compact"
-                                />
-                                <MessageNav
-                                  classList={{
-                                    "hidden @6xl:flex absolute": true,
-                                    "mt-0.5 left-[calc(((100%_-_min(100%,_36.5rem))_/_2)-1.5rem)] -translate-x-full":
-                                      wide(),
-                                    "mt-2.5 left-6": !wide(),
-                                  }}
-                                  messages={messages()}
-                                  current={activeMessage()}
-                                  onMessageSelect={setActiveMessage}
-                                  size={wide() ? "normal" : "compact"}
-                                />
-                              </>
-                            </Show>
+                            <SessionMessageRail
+                              messages={messages()}
+                              current={activeMessage()}
+                              onMessageSelect={setActiveMessage}
+                              wide={wide()}
+                            />
                             <SessionTurn
                               sessionID={data().sessionID}
                               messageID={store.messageId ?? firstUserMessage()!.id!}
