@@ -460,7 +460,7 @@ export namespace Config {
       .enum(["auto", "stacked"])
       .optional()
       .describe("Control diff rendering style: 'auto' adapts to terminal width, 'stacked' always shows single column"),
-    sessions_list_limit: z
+    session_list_limit: z
       .union([z.number().min(1), z.literal("none")])
       .optional()
       .default(150)

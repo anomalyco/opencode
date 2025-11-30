@@ -24,7 +24,7 @@ export function DialogSessionList() {
 
   const options = createMemo(() => {
     const today = new Date().toDateString()
-    const sessionsListLimit = (sync.data.config.tui as any)?.sessions_list_limit
+    const sessionsListLimit = (sync.data.config.tui as any)?.session_list_limit
     const limit = sessionsListLimit === "none" ? undefined : sessionsListLimit || 150
 
     return sync.data.session
