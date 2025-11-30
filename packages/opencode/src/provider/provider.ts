@@ -23,6 +23,7 @@ import { createVertexAnthropic } from "@ai-sdk/google-vertex/anthropic"
 import { createOpenAI } from "@ai-sdk/openai"
 import { createOpenAICompatible } from "@ai-sdk/openai-compatible"
 import { createOpenRouter } from "@openrouter/ai-sdk-provider"
+import { createOpenaiCompatible as createGitHubCopilotOpenAICompatible } from "./sdk/openai-compatible/src"
 
 export namespace Provider {
   const log = Log.create({ service: "provider" })
@@ -37,6 +38,8 @@ export namespace Provider {
     "@ai-sdk/openai": createOpenAI,
     "@ai-sdk/openai-compatible": createOpenAICompatible,
     "@openrouter/ai-sdk-provider": createOpenRouter,
+    // @ts-ignore (TODO: kill this code so we dont have to maintain it)
+    "@ai-sdk/github-copilot": createGitHubCopilotOpenAICompatible,
   }
 
   type CustomLoader = (provider: ModelsDev.Provider) => Promise<{
@@ -83,6 +86,30 @@ export namespace Provider {
         autoload: false,
         async getModel(sdk: any, modelID: string, _options?: Record<string, any>) {
           return sdk.responses(modelID)
+        },
+        options: {},
+      }
+    },
+    "github-copilot": async () => {
+      return {
+        autoload: false,
+        async getModel(sdk: any, modelID: string, _options?: Record<string, any>) {
+          if (modelID.includes("gpt-5")) {
+            return sdk.responses(modelID)
+          }
+          return sdk.chat(modelID)
+        },
+        options: {},
+      }
+    },
+    "github-copilot-enterprise": async () => {
+      return {
+        autoload: false,
+        async getModel(sdk: any, modelID: string, _options?: Record<string, any>) {
+          if (modelID.includes("gpt-5")) {
+            return sdk.responses(modelID)
+          }
+          return sdk.chat(modelID)
         },
         options: {},
       }
@@ -428,15 +455,6 @@ export namespace Provider {
       }
     }
 
-    // load custom
-    for (const [providerID, fn] of Object.entries(CUSTOM_LOADERS)) {
-      if (disabled.has(providerID)) continue
-      const result = await fn(database[providerID])
-      if (result && (result.autoload || providers[providerID])) {
-        mergeProvider(providerID, result.options ?? {}, "custom", result.getModel)
-      }
-    }
-
     for (const plugin of await Plugin.list()) {
       if (!plugin.auth) continue
       const providerID = plugin.auth.provider
@@ -478,6 +496,14 @@ export namespace Provider {
       }
     }
 
+    for (const [providerID, fn] of Object.entries(CUSTOM_LOADERS)) {
+      if (disabled.has(providerID)) continue
+      const result = await fn(database[providerID])
+      if (result && (result.autoload || providers[providerID])) {
+        mergeProvider(providerID, result.options ?? {}, "custom", result.getModel)
+      }
+    }
+
     // load config
     for (const [providerID, provider] of configProviders) {
       mergeProvider(providerID, provider.options ?? {}, "config")
@@ -487,6 +513,10 @@ export namespace Provider {
       if (!isProviderAllowed(providerID)) {
         delete providers[providerID]
         continue
+      }
+
+      if (providerID === "github-copilot") {
+        provider.info.npm = "@ai-sdk/github-copilot"
       }
 
       const configProvider = config.provider?.[providerID]

@@ -843,6 +843,7 @@ export function Prompt(props: PromptProps) {
               justifyContent={status().type === "retry" ? "space-between" : "flex-start"}
             >
               <box flexShrink={0} flexDirection="row" gap={1}>
+                {/* @ts-ignore // SpinnerOptions doesn't support marginLeft */}
                 <spinner marginLeft={1} color={spinnerDef().color} frames={spinnerDef().frames} interval={40} />
                 <box flexDirection="row" gap={1} flexShrink={0}>
                   {(() => {
