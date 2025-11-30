@@ -1011,7 +1011,7 @@ export type Config = {
     /**
      * Maximum number of sessions to display in session list, or 'none' to show all sessions
      */
-    sessions_list_limit?: number | "none"
+    session_list_limit?: number | "none"
     /**
      * Maximum number of messages to load per session when syncing, or 'none' to load all messages
      */
