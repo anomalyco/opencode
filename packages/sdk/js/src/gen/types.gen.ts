@@ -783,6 +783,18 @@ export type KeybindsConfig = {
    */
   messages_toggle_conceal?: string
   /**
+   * Cycle through session modes
+   */
+  mode_cycle?: string
+  /**
+   * Cycle through session modes in reverse
+   */
+  mode_cycle_reverse?: string
+  /**
+   * List agents
+   */
+  agent_list?: string
+  /**
    * List available models
    */
   model_list?: string
@@ -798,14 +810,6 @@ export type KeybindsConfig = {
    * List available commands
    */
   command_list?: string
-  /**
-   * List agents
-   */
-  agent_list?: string
-  /**
-   * Next agent
-   */
-  agent_cycle?: string
   /**
    * Previous agent
    */

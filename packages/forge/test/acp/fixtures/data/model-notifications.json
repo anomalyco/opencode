@@ -1,0 +1,51 @@
+{
+  "description": "Session model notifications - model state and model change updates",
+  "events": [
+    {
+      "type": "initial_session_models",
+      "description": "Session models from NewSessionResponse",
+      "models": {
+        "availableModels": [
+          {
+            "modelId": "default",
+            "name": "Default (recommended)",
+            "description": "Use the default model (currently Sonnet 4.5) · $3/$15 per Mtok"
+          },
+          {
+            "modelId": "opus",
+            "name": "Opus",
+            "description": "Opus 4.5 · Most capable for complex work · $5/$25 per Mtok"
+          },
+          {
+            "modelId": "haiku",
+            "name": "Haiku",
+            "description": "Haiku 4.5 · Fastest for quick answers · $1/$5 per Mtok"
+          }
+        ],
+        "currentModelId": "default"
+      }
+    },
+    {
+      "type": "current_model_update",
+      "description": "Notification when model changes to 'opus'",
+      "notification": {
+        "sessionId": "019ad277-8795-741d-a2ff-50cad7f35b08",
+        "update": {
+          "sessionUpdate": "current_model_update",
+          "currentModelId": "opus"
+        }
+      }
+    },
+    {
+      "type": "current_model_update",
+      "description": "Notification when model changes back to 'default'",
+      "notification": {
+        "sessionId": "019ad277-8795-741d-a2ff-50cad7f35b08",
+        "update": {
+          "sessionUpdate": "current_model_update",
+          "currentModelId": "default"
+        }
+      }
+    }
+  ]
+}

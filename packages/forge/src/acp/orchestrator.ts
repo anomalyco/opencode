@@ -7,6 +7,7 @@ import { Session } from "../session"
 import { Identifier } from "../id/id"
 import { AuthenticationRequiredError } from "./types"
 import { Permission } from "../permission"
+import type { SessionModelState, ModelId } from "@agentclientprotocol/sdk"
 
 const log = Log.create({ service: "acp-orchestrator" })
 
@@ -24,6 +25,7 @@ export namespace ACPOrchestrator {
     sessionID: string
     client: ACPClient.Instance
     acpSessionID: string
+    models?: SessionModelState
   }
 
   const sessions = new Map<string, SessionState>()
@@ -261,15 +263,55 @@ export namespace ACPOrchestrator {
       acpSessionID: acpSession.sessionId,
     })
 
+    // Capture model state if available
+    const models = client.getModels()
+    if (models) {
+      log.info("available models", {
+        sessionID,
+        currentModel: models.currentModelId,
+        availableModels: models.availableModels.map(m => m.modelId),
+      })
+    }
+
     // Store state
     state = {
       sessionID,
       client,
       acpSessionID: acpSession.sessionId,
+      models,
     }
     sessions.set(sessionID, state)
 
     return state
+  }
+
+  /**
+   * Get available models for a session.
+   */
+  export function getModels(sessionID: string): SessionModelState | null {
+    const state = sessions.get(sessionID)
+    if (!state) return null
+    return state.models ?? null
+  }
+
+  /**
+   * Set the model for a session.
+   */
+  export async function setModel(sessionID: string, modelId: ModelId): Promise<void> {
+    const state = sessions.get(sessionID)
+    if (!state) {
+      throw new Error(`Session not found: ${sessionID}`)
+    }
+
+    log.info("changing model", { sessionID, modelId })
+
+    await state.client.setModel(modelId)
+
+    // Update stored state
+    const updatedModels = state.client.getModels()
+    if (updatedModels) {
+      state.models = updatedModels
+    }
   }
 
   /**

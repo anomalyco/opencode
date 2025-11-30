@@ -10,42 +10,31 @@
           {
             "id": "default",
             "name": "Always Ask",
-            "description": "Ask for permission before executing tools"
+            "description": "Prompts for permission on first use of each tool"
           },
           {
             "id": "acceptEdits",
             "name": "Accept Edits",
-            "description": "Automatically accept file edits"
+            "description": "Automatically accepts file edit permissions for the session"
           },
           {
             "id": "plan",
             "name": "Plan Mode",
-            "description": "Generate execution plans before acting"
+            "description": "Claude can analyze but not modify files or execute commands"
           },
           {
             "id": "bypassPermissions",
             "name": "Bypass Permissions",
-            "description": "Execute tools without asking"
+            "description": "Skips all permission prompts"
           }
         ]
       }
     },
     {
       "type": "current_mode_update",
-      "description": "Notification when mode changes to 'plan'",
-      "notification": {
-        "sessionId": "ses-mode-test-123",
-        "update": {
-          "sessionUpdate": "current_mode_update",
-          "currentModeId": "plan"
-        }
-      }
-    },
-    {
-      "type": "current_mode_update",
       "description": "Notification when mode changes to 'acceptEdits'",
       "notification": {
-        "sessionId": "ses-mode-test-123",
+        "sessionId": "019ad277-8795-741d-a2ff-50cad7f35b08",
         "update": {
           "sessionUpdate": "current_mode_update",
           "currentModeId": "acceptEdits"
@@ -56,7 +45,7 @@
       "type": "current_mode_update",
       "description": "Notification when mode changes back to 'default'",
       "notification": {
-        "sessionId": "ses-mode-test-123",
+        "sessionId": "019ad277-8795-741d-a2ff-50cad7f35b08",
         "update": {
           "sessionUpdate": "current_mode_update",
           "currentModeId": "default"

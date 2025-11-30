@@ -115,6 +115,126 @@ async function main() {
     const sessionId = sessionResponse.sessionId
     console.log(`✓ Session created: ${sessionId}`)
 
+    // Generate mode fixtures
+    console.log("\n🎭 Generating mode fixtures...")
+    const modes = client.getModes()
+    if (modes) {
+      const modeFixture = {
+        description: "Session mode notifications - mode state and mode change updates",
+        events: [
+          {
+            type: "initial_session_modes",
+            description: "Session modes from NewSessionResponse",
+            modes: modes
+          }
+        ] as any[]
+      }
+
+      // Add mode change notifications if multiple modes available
+      if (modes.availableModes.length > 1) {
+        const initialMode = modes.currentModeId
+        const targetMode = modes.availableModes.find(m => m.id !== initialMode)
+
+        if (targetMode) {
+          console.log(`   Switching mode from ${initialMode} to ${targetMode.id}...`)
+          await client.setMode(targetMode.id)
+
+          modeFixture.events.push({
+            type: "current_mode_update",
+            description: `Notification when mode changes to '${targetMode.id}'`,
+            notification: {
+              sessionId: sessionId,
+              update: {
+                sessionUpdate: "current_mode_update",
+                currentModeId: targetMode.id
+              }
+            }
+          })
+
+          // Switch back to initial mode
+          console.log(`   Switching mode back to ${initialMode}...`)
+          await client.setMode(initialMode)
+
+          modeFixture.events.push({
+            type: "current_mode_update",
+            description: `Notification when mode changes back to '${initialMode}'`,
+            notification: {
+              sessionId: sessionId,
+              update: {
+                sessionUpdate: "current_mode_update",
+                currentModeId: initialMode
+              }
+            }
+          })
+        }
+      }
+
+      await saveFixture("mode-notifications", modeFixture)
+      console.log("   ✓ Mode fixtures generated")
+    } else {
+      console.log("   ⊘ Agent does not support modes, skipping mode fixtures")
+    }
+
+    // Generate model fixtures
+    console.log("\n🤖 Generating model fixtures...")
+    const models = client.getModels()
+    if (models) {
+      const modelFixture = {
+        description: "Session model notifications - model state and model change updates",
+        events: [
+          {
+            type: "initial_session_models",
+            description: "Session models from NewSessionResponse",
+            models: models
+          }
+        ] as any[]
+      }
+
+      // Add model change notifications if multiple models available
+      if (models.availableModels.length > 1) {
+        const initialModel = models.currentModelId
+        const targetModel = models.availableModels.find(m => m.modelId !== initialModel)
+
+        if (targetModel) {
+          console.log(`   Switching model from ${initialModel} to ${targetModel.modelId}...`)
+          await client.setModel(targetModel.modelId)
+
+          modelFixture.events.push({
+            type: "current_model_update",
+            description: `Notification when model changes to '${targetModel.modelId}'`,
+            notification: {
+              sessionId: sessionId,
+              update: {
+                sessionUpdate: "current_model_update",
+                currentModelId: targetModel.modelId
+              }
+            }
+          })
+
+          // Switch back to initial model
+          console.log(`   Switching model back to ${initialModel}...`)
+          await client.setModel(initialModel)
+
+          modelFixture.events.push({
+            type: "current_model_update",
+            description: `Notification when model changes back to '${initialModel}'`,
+            notification: {
+              sessionId: sessionId,
+              update: {
+                sessionUpdate: "current_model_update",
+                currentModelId: initialModel
+              }
+            }
+          })
+        }
+      }
+
+      await saveFixture("model-notifications", modelFixture)
+      console.log("   ✓ Model fixtures generated")
+    } else {
+      console.log("   ⊘ Agent does not support models, skipping model fixtures")
+    }
+
     // Capture fixtures for different scenarios
     const fixtures: Array<{ name: string; prompt: string; description: string }> = [
       {

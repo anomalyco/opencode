@@ -261,10 +261,6 @@ export function Session() {
           path: {
             id: route.sessionID,
           },
-          body: {
-            modelID: local.model.current().modelID,
-            providerID: local.model.current().providerID,
-          },
         })
         dialog.clear()
       },

@@ -11,7 +11,7 @@ import { useToast } from "../ui/toast"
 import { RGBA } from "@opentui/core"
 import { ACPClient } from "@/acp/client"
 import { getAllAgents, getAgent, type ACPAgentDefinition } from "@/acp/agents"
-import type { SessionModeId, SessionModeState } from "@agentclientprotocol/sdk"
+import type { SessionModeId, SessionModeState, SessionModelState, ModelId } from "@agentclientprotocol/sdk"
 
 export const { use: useLocal, provider: LocalProvider } = createSimpleContext({
   name: "Local",
@@ -24,11 +24,13 @@ export const { use: useLocal, provider: LocalProvider } = createSimpleContext({
       sessionId: string | null
       agentName: string | null
       modes: SessionModeState | null
+      models: SessionModelState | null
       client: ACPClient.Instance | null
     }>({
       sessionId: null,
       agentName: null,
       modes: null,
+      models: null,
       client: null,
     })
 
@@ -114,6 +116,7 @@ export const { use: useLocal, provider: LocalProvider } = createSimpleContext({
               setSessionStore("sessionId", sessionResp.sessionId)
               setSessionStore("agentName", agentName)
               setSessionStore("modes", sessionResp.modes ?? null)
+              setSessionStore("models", sessionResp.models ?? null)
               setSessionStore("client", client)
               setAgentStore("current", agentName)
             })
@@ -122,6 +125,13 @@ export const { use: useLocal, provider: LocalProvider } = createSimpleContext({
             if (client.getCurrentMode()) {
               client.onModeChange((newModeId) => {
                 setSessionStore("modes", "currentModeId", newModeId)
+              })
+            }
+
+            // Setup model change listener
+            if (client.getCurrentModel()) {
+              client.onModelChange((newModelId) => {
+                setSessionStore("models", "currentModelId", newModelId)
               })
             }
 
@@ -215,9 +225,72 @@ export const { use: useLocal, provider: LocalProvider } = createSimpleContext({
       }
     })
 
+    const model = iife(() => {
+      const label = (modelId: ModelId | null) => {
+        if (!modelId) return "Default model"
+        const models = sessionStore.models?.availableModels ?? []
+        const modelInfo = models.find((m) => m.modelId === modelId)
+        return modelInfo?.name ?? modelId
+      }
+      return {
+        list() {
+          return sessionStore.models?.availableModels ?? []
+        },
+        current() {
+          return sessionStore.models?.currentModelId ?? null
+        },
+        label() {
+          return label(sessionStore.models?.currentModelId ?? null)
+        },
+        async set(modelId: ModelId) {
+          if (!sessionStore.client) {
+            return toast.show({
+              variant: "warning",
+              message: "No active session. Connect to an agent first.",
+              duration: 3000,
+            })
+          }
+
+          try {
+            await sessionStore.client.setModel(modelId)
+            setSessionStore("models", "currentModelId", modelId)
+
+            const modelInfo = sessionStore.models?.availableModels?.find((m) => m.modelId === modelId)
+            toast.show({
+              variant: "success",
+              message: `Switched to ${modelInfo?.name ?? modelId}`,
+              duration: 2000,
+            })
+          } catch (error) {
+            toast.show({
+              variant: "error",
+              message: `Failed to set model: ${error instanceof Error ? error.message : String(error)}`,
+              duration: 3000,
+            })
+          }
+        },
+        cycle() {
+          const models = sessionStore.models?.availableModels ?? []
+          if (models.length === 0) return
+
+          const currentModel = sessionStore.models?.currentModelId
+          const currentIndex = models.findIndex((m) => m.modelId === currentModel)
+          const nextIndex = (currentIndex + 1) % models.length
+          const nextModel = models[nextIndex]
+
+          this.set(nextModel.modelId)
+        },
+        getName(modelId: ModelId) {
+          const models = sessionStore.models?.availableModels ?? []
+          return models.find((m) => m.modelId === modelId)?.name ?? modelId
+        },
+      }
+    })
+
     const result = {
       agent,
       mode,
+      model,
       session: {
         get id() {
           return sessionStore.sessionId
@@ -227,6 +300,9 @@ export const { use: useLocal, provider: LocalProvider } = createSimpleContext({
         },
         get modes() {
           return sessionStore.modes
+        },
+        get models() {
+          return sessionStore.models
         },
       },
     }

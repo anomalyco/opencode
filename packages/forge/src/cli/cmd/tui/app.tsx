@@ -2,15 +2,15 @@ import { render, useKeyboard, useRenderer, useTerminalDimensions } from "@opentu
 import { Clipboard } from "@tui/util/clipboard"
 import { TextAttributes } from "@opentui/core"
 import { RouteProvider, useRoute } from "@tui/context/route"
-import { Switch, Match, createEffect, untrack, ErrorBoundary, createSignal, onMount, batch, Show } from "solid-js"
+import { Switch, Match, createEffect, ErrorBoundary, createSignal, onMount, batch, Show } from "solid-js"
 import { Installation } from "@/installation"
 import { Global } from "@/global"
 import { DialogProvider, useDialog } from "@tui/ui/dialog"
-import { DialogProvider as DialogProviderList } from "@tui/component/dialog-provider"
 import { SDKProvider, useSDK } from "@tui/context/sdk"
 import { SyncProvider, useSync } from "@tui/context/sync"
 import { LocalProvider, useLocal } from "@tui/context/local"
-import { DialogModel } from "@tui/component/dialog-model"
+import { DialogAgents } from "@tui/component/dialog-agents"
+import { DialogModels } from "@tui/component/dialog-models"
 import { DialogStatus } from "@tui/component/dialog-status"
 import { DialogThemeList } from "@tui/component/dialog-theme-list"
 import { DialogHelp } from "./ui/dialog-help"
@@ -28,7 +28,6 @@ import { ExitProvider, useExit } from "./context/exit"
 import { Session as SessionApi } from "@/session"
 import { TuiEvent } from "./event"
 import { KVProvider, useKV } from "./context/kv"
-import { Provider } from "@/provider/provider"
 import { ArgsProvider, useArgs, type Args } from "./context/args"
 
 async function getTerminalBackgroundColor(): Promise<"dark" | "light"> {
@@ -167,16 +166,7 @@ function App() {
   onMount(() => {
     batch(() => {
       if (args.agent) local.agent.set(args.agent)
-      if (args.model) {
-        const { providerID, modelID } = Provider.parseModel(args.model)
-        if (!providerID || !modelID)
-          return toast.show({
-            variant: "warning",
-            message: `Invalid model format: ${args.model}`,
-            duration: 3000,
-          })
-        local.model.set({ providerID, modelID }, { recent: true })
-      }
+      if (args.model) local.model.set(args.model)
       if (args.sessionID) {
         route.navigate({
           type: "session",
@@ -222,30 +212,39 @@ function App() {
       },
     },
     {
+      title: "Switch agent",
+      value: "agent.list",
+      keybind: "agent_list",
+      category: "Agent",
+      onSelect: () => {
+        dialog.replace(() => <DialogAgents />)
+      },
+    },
+    {
       title: "Switch model",
       value: "model.list",
       keybind: "model_list",
-      category: "Agent",
+      category: "Model",
       onSelect: () => {
-        dialog.replace(() => <DialogModel />)
+        dialog.replace(() => <DialogModels />)
       },
     },
     {
       title: "Model cycle",
       value: "model.cycle_recent",
       keybind: "model_cycle_recent",
-      category: "Agent",
+      category: "Model",
       onSelect: () => {
-        local.model.cycle(1)
+        local.model.cycle()
       },
     },
     {
       title: "Model cycle reverse",
       value: "model.cycle_recent_reverse",
       keybind: "model_cycle_recent_reverse",
-      category: "Agent",
+      category: "Model",
       onSelect: () => {
-        local.model.cycle(-1)
+        local.model.cycle()
       },
     },
     {
@@ -295,14 +294,6 @@ function App() {
       category: "System",
     },
     {
-      title: "Connect provider",
-      value: "provider.connect",
-      onSelect: () => {
-        dialog.replace(() => <DialogProviderList />)
-      },
-      category: "System",
-    },
-    {
       title: `Switch to ${mode() === "dark" ? "light" : "dark"} mode`,
       value: "theme.switch_mode",
       onSelect: () => {
@@ -343,19 +334,6 @@ function App() {
       },
     },
   ])
-
-  createEffect(() => {
-    const providerID = local.model.current().providerID
-    if (providerID === "openrouter" && !kv.get("openrouter_warning", false)) {
-      untrack(() => {
-        DialogAlert.show(
-          dialog,
-          "Warning",
-          "While openrouter is a convenient way to access LLMs your request will often be routed to subpar providers that do not work well in our testing.\n\nFor reliable access to models check out OpenCode Zen\nhttps://forge.dev/zen",
-        ).then(() => kv.set("openrouter_warning", true))
-      })
-    }
-  })
 
   event.on(TuiEvent.CommandExecute.type, (evt) => {
     command.trigger(evt.properties.command)

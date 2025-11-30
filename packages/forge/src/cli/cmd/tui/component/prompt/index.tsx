@@ -387,6 +387,7 @@ export function Prompt(props: PromptProps) {
     if (props.disabled) return
     if (autocomplete.visible) return
     if (!store.prompt.input) return
+    const modelId = local.model.current()
     const sessionID = props.sessionID
       ? props.sessionID
       : await (async () => {
@@ -422,10 +423,6 @@ export function Prompt(props: PromptProps) {
         },
         body: {
           agent: local.agent.current().name,
-          model: {
-            providerID: local.model.current().providerID,
-            modelID: local.model.current().modelID,
-          },
           command: inputText,
         },
       })
@@ -447,7 +444,7 @@ export function Prompt(props: PromptProps) {
           command: command.slice(1),
           arguments: args.join(" "),
           agent: local.agent.current().name,
-          model: `${local.model.current().providerID}/${local.model.current().modelID}`,
+          model: modelId ?? undefined,
           messageID,
         },
       })
@@ -457,10 +454,8 @@ export function Prompt(props: PromptProps) {
           id: sessionID,
         },
         body: {
-          ...local.model.current(),
           messageID,
           agent: local.agent.current().name,
-          model: local.model.current(),
           parts: [
             {
               id: Identifier.ascending("part"),
@@ -768,12 +763,9 @@ export function Prompt(props: PromptProps) {
                 {store.mode === "shell" ? "Shell" : Locale.titlecase(local.agent.current().name)}{" "}
               </text>
               <Show when={store.mode === "normal"}>
-                <box flexDirection="row" gap={1}>
-                  <text fg={theme.textMuted}>{local.model.parsed().provider}</text>
-                  <text flexShrink={0} fg={theme.text}>
-                    {local.model.parsed().model}
-                  </text>
-                </box>
+                <text flexShrink={0} fg={theme.text}>
+                  {local.model.label()}
+                </text>
               </Show>
             </box>
           </box>
@@ -857,7 +849,7 @@ export function Prompt(props: PromptProps) {
               <Switch>
                 <Match when={store.mode === "normal"}>
                   <text fg={theme.text}>
-                    {keybind.print("agent_cycle")} <span style={{ fg: theme.textMuted }}>switch agent</span>
+                    {keybind.print("mode_cycle")} <span style={{ fg: theme.textMuted }}>switch mode</span>
                   </text>
                   <text fg={theme.text}>
                     {keybind.print("command_list")} <span style={{ fg: theme.textMuted }}>commands</span>

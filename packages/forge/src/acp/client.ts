@@ -15,6 +15,9 @@ import {
   type SessionModeState,
   type SessionModeId,
   type SetSessionModeResponse,
+  type SessionModelState,
+  type ModelId,
+  type SetSessionModelResponse,
   PROTOCOL_VERSION,
   ndJsonStream,
 } from "@agentclientprotocol/sdk"
@@ -115,6 +118,26 @@ export namespace ACPClient {
      * @param callback - Function to call when mode changes
      */
     onModeChange(callback: (modeId: SessionModeId) => void): void
+    /**
+     * Get the current session model state (available models and current model)
+     * Returns null if no session has been created yet or if agent doesn't support models
+     */
+    getModels(): SessionModelState | null
+    /**
+     * Get the current model ID
+     * Returns null if no session has been created yet or if agent doesn't support models
+     */
+    getCurrentModel(): ModelId | null
+    /**
+     * Set the session model
+     * @param modelId - The model ID to switch to (must be in availableModels)
+     */
+    setModel(modelId: ModelId): Promise<SetSessionModelResponse>
+    /**
+     * Register a callback to be notified when the model changes
+     * @param callback - Function to call when model changes
+     */
+    onModelChange(callback: (modelId: ModelId) => void): void
     /**
      * Get the underlying agent connection
      */
@@ -297,6 +320,8 @@ export namespace ACPClient {
     let authMethods: AuthMethod[] = []
     let currentModes: SessionModeState | null = null
     const modeChangeCallbacks: Array<(modeId: SessionModeId) => void> = []
+    let currentModels: SessionModelState | null = null
+    const modelChangeCallbacks: Array<(modelId: ModelId) => void> = []
 
     const instance: Instance = {
       async initialize(): Promise<InitializeResponse> {
@@ -375,6 +400,15 @@ export namespace ACPClient {
             log.info("session modes captured", {
               currentMode: currentModes.currentModeId,
               availableModes: currentModes.availableModes.map(m => m.id),
+            })
+          }
+
+          // Store model state from response
+          if (response.models) {
+            currentModels = response.models
+            log.info("session models captured", {
+              currentModel: currentModels.currentModelId,
+              availableModels: currentModels.availableModels.map(m => m.modelId),
             })
           }
 
@@ -469,6 +503,54 @@ export namespace ACPClient {
 
       onModeChange(callback: (modeId: SessionModeId) => void): void {
         modeChangeCallbacks.push(callback)
+      },
+
+      getModels(): SessionModelState | null {
+        return currentModels
+      },
+
+      getCurrentModel(): ModelId | null {
+        return currentModels?.currentModelId ?? null
+      },
+
+      async setModel(modelId: ModelId): Promise<SetSessionModelResponse> {
+        if (!initialized) {
+          throw new Error("Must initialize before setting model")
+        }
+        if (!currentSessionId) {
+          throw new Error("Must create session before setting model")
+        }
+
+        log.info("setting model", { sessionId: currentSessionId, modelId })
+
+        const response = await connection.setSessionModel({
+          sessionId: currentSessionId,
+          modelId,
+        })
+
+        // Update local state
+        if (currentModels) {
+          currentModels.currentModelId = modelId
+        }
+
+        // Trigger callbacks
+        modelChangeCallbacks.forEach(cb => {
+          try {
+            cb(modelId)
+          } catch (error) {
+            log.error("model change callback error", {
+              error: error instanceof Error ? error.message : String(error),
+            })
+          }
+        })
+
+        log.info("model changed", { modelId })
+
+        return response
+      },
+
+      onModelChange(callback: (modelId: ModelId) => void): void {
+        modelChangeCallbacks.push(callback)
       },
 
       get agent(): Agent {

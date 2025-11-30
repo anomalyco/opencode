@@ -8,7 +8,7 @@ import { DialogPrompt } from "../ui/dialog-prompt"
 import { useTheme } from "../context/theme"
 import { TextAttributes } from "@opentui/core"
 import type { ProviderAuthAuthorization } from "@forge/sdk"
-import { DialogModel } from "./dialog-model"
+import { DialogAgents } from "./dialog-agents"
 
 const PROVIDER_PRIORITY: Record<string, number> = {
   opencode: 0,
@@ -123,7 +123,7 @@ function AutoMethod(props: AutoMethodProps) {
     }
     await sdk.client.instance.dispose()
     await sync.bootstrap()
-    dialog.replace(() => <DialogModel />)
+    dialog.replace(() => <DialogAgents />)
   })
 
   return (
@@ -171,7 +171,7 @@ function CodeMethod(props: CodeMethodProps) {
         if (!error) {
           await sdk.client.instance.dispose()
           await sync.bootstrap()
-          dialog.replace(() => <DialogModel />)
+          dialog.replace(() => <DialogAgents />)
           return
         }
         setError(true)
@@ -215,7 +215,7 @@ function ApiMethod(props: ApiMethodProps) {
         })
         await sdk.client.instance.dispose()
         await sync.bootstrap()
-        dialog.replace(() => <DialogModel />)
+        dialog.replace(() => <DialogAgents />)
       }}
     />
   )
