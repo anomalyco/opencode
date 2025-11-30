@@ -50,6 +50,8 @@
     "@ai-sdk/mcp": "0.0.8",
     "@ai-sdk/openai": "2.0.71",
     "@ai-sdk/openai-compatible": "1.0.27",
+    "@ai-sdk/provider": "2.0.0",
+    "@ai-sdk/provider-utils": "3.0.18",
     "@clack/prompts": "1.0.0-alpha.1",
     "@hono/standard-validator": "0.1.5",
     "@hono/zod-validator": "catalog:",
