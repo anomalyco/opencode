@@ -635,12 +635,7 @@ export namespace Config {
         })
         .optional(),
       tools: z.record(z.string(), z.boolean()).optional(),
-      primary_tools: z
-        .array(z.string())
-        .optional()
-        .describe(
-          "Tools that should only be available to primary agents.",
-        ),
+      primary_tools: z.array(z.string()).optional().describe("Tools that should only be available to primary agents."),
       enterprise: z
         .object({
           url: z.string().optional().describe("Enterprise URL"),
