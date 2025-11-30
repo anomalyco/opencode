@@ -586,12 +586,16 @@ export function Prompt(props: PromptProps) {
       frames: createFrames({
         color,
         style: "blocks",
-        inactiveFactor: 0.25,
+        inactiveFactor: 0.6,
+        // enableFading: false,
+        minAlpha: 0.3,
       }),
       color: createColors({
         color,
         style: "blocks",
-        inactiveFactor: 0.25,
+        inactiveFactor: 0.6,
+        // enableFading: false,
+        minAlpha: 0.3,
       }),
     }
   })
@@ -839,7 +843,7 @@ export function Prompt(props: PromptProps) {
               justifyContent={status().type === "retry" ? "space-between" : "flex-start"}
             >
               <box flexShrink={0} flexDirection="row" gap={1}>
-                <spinner color={spinnerDef().color} frames={spinnerDef().frames} interval={40} />
+                <spinner marginLeft={1} color={spinnerDef().color} frames={spinnerDef().frames} interval={40} />
                 <box flexDirection="row" gap={1} flexShrink={0}>
                   {(() => {
                     const retry = createMemo(() => {
