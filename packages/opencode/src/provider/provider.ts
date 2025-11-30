@@ -297,6 +297,22 @@ export namespace Provider {
     const config = await Config.get()
     const database = await ModelsDev.get()
 
+    // Add thinking variant for Opus 4.5
+    const anthropic = database["anthropic"]
+    if (anthropic?.models["claude-opus-4-5-20251101"]) {
+      const opus45 = anthropic.models["claude-opus-4-5-20251101"]
+      anthropic.models["claude-opus-4-5-20251101-thinking"] = {
+        ...opus45,
+        name: "Claude Opus 4.5 Thinking",
+        options: {
+          thinking: {
+            type: "enabled",
+            budgetTokens: 16000,
+          },
+        },
+      }
+    }
+
     const disabled = new Set(config.disabled_providers ?? [])
     const enabled = config.enabled_providers ? new Set(config.enabled_providers) : null
 
