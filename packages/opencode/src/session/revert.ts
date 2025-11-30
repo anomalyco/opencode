@@ -8,6 +8,7 @@ import { splitWhen } from "remeda"
 import { Storage } from "../storage/storage"
 import { Bus } from "../bus"
 import { SessionPrompt } from "./prompt"
+import { FileTime } from "../file/time"
 
 export namespace SessionRevert {
   const log = Log.create({ service: "session.revert" })
@@ -56,6 +57,12 @@ export namespace SessionRevert {
       const session = await Session.get(input.sessionID)
       revert.snapshot = session.revert?.snapshot ?? (await Snapshot.track())
       await Snapshot.revert(patches)
+      // Update FileTime for reverted files so the edit tool doesn't see them as externally modified
+      for (const patch of patches) {
+        for (const file of patch.files) {
+          FileTime.read(input.sessionID, file)
+        }
+      }
       if (revert.snapshot) revert.diff = await Snapshot.diff(revert.snapshot)
       return Session.update(input.sessionID, (draft) => {
         draft.revert = revert
@@ -69,7 +76,14 @@ export namespace SessionRevert {
     SessionPrompt.assertNotBusy(input.sessionID)
     const session = await Session.get(input.sessionID)
     if (!session.revert) return session
-    if (session.revert.snapshot) await Snapshot.restore(session.revert.snapshot)
+    if (session.revert.snapshot) {
+      const patch = await Snapshot.patch(session.revert.snapshot)
+      await Snapshot.restore(session.revert.snapshot)
+      // Update FileTime for restored files so the edit tool doesn't see them as externally modified
+      for (const file of patch.files) {
+        FileTime.read(input.sessionID, file)
+      }
+    }
     const next = await Session.update(input.sessionID, (draft) => {
       draft.revert = undefined
     })
