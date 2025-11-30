@@ -1,7 +1,8 @@
 import { MetaProvider, Title, Meta } from "@solidjs/meta"
 import { Router } from "@solidjs/router"
 import { FileRoutes } from "@solidjs/start/router"
-import { ErrorBoundary, Suspense } from "solid-js"
+import { Suspense } from "solid-js"
+import { Favicon } from "@opencode-ai/ui/favicon"
 import "@ibm/plex/css/ibm-plex.css"
 import "./app.css"
 
@@ -13,6 +14,7 @@ export default function App() {
         <MetaProvider>
           <Title>opencode</Title>
           <Meta name="description" content="OpenCode - The AI coding agent built for the terminal." />
+          <Favicon />
           <Suspense>{props.children}</Suspense>
         </MetaProvider>
       )}

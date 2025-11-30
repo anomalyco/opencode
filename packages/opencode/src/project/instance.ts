@@ -51,6 +51,7 @@ export const Instance = {
   async dispose() {
     Log.Default.info("disposing instance", { directory: Instance.directory })
     await State.dispose(Instance.directory)
+    cache.delete(Instance.directory)
   },
   async disposeAll() {
     Log.Default.info("disposing all instances")

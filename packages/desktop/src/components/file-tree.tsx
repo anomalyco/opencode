@@ -1,6 +1,7 @@
 import { useLocal, type LocalFile } from "@/context/local"
-import { Tooltip } from "@opencode-ai/ui"
-import { Collapsible, FileIcon } from "@/ui"
+import { Collapsible } from "@opencode-ai/ui/collapsible"
+import { FileIcon } from "@opencode-ai/ui/file-icon"
+import { Tooltip } from "@opencode-ai/ui/tooltip"
 import { For, Match, Switch, Show, type ComponentProps, type ParentProps } from "solid-js"
 import { Dynamic } from "solid-js/web"
 
@@ -75,6 +76,7 @@ export default function FileTree(props: {
             <Switch>
               <Match when={node.type === "directory"}>
                 <Collapsible
+                  variant="ghost"
                   class="w-full"
                   forceMount={false}
                   // open={local.file.node(node.path)?.expanded}

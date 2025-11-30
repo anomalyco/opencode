@@ -16,6 +16,7 @@ import { SessionPrompt } from "./prompt"
 import { fn } from "@/util/fn"
 import { Command } from "../command"
 import { Snapshot } from "@/snapshot"
+import { ShareNext } from "@/share/share-next"
 
 export namespace Session {
   const log = Log.create({ service: "session" })
@@ -221,6 +222,15 @@ export namespace Session {
       throw new Error("Sharing is disabled in configuration")
     }
 
+    if (cfg.enterprise?.url) {
+      const share = await ShareNext.create(id)
+      await update(id, (draft) => {
+        draft.share = {
+          url: share.url,
+        }
+      })
+    }
+
     const session = await get(id)
     if (session.share) return session.share
     const share = await Share.create(id)
@@ -241,6 +251,13 @@ export namespace Session {
   })
 
   export const unshare = fn(Identifier.schema("session"), async (id) => {
+    const cfg = await Config.get()
+    if (cfg.enterprise?.url) {
+      await ShareNext.remove(id)
+      await update(id, (draft) => {
+        draft.share = undefined
+      })
+    }
     const share = await getShare(id)
     if (!share) return
     await Storage.remove(["share", id])
@@ -382,17 +399,23 @@ export namespace Session {
       const adjustedInputTokens = excludesCachedTokens
         ? (input.usage.inputTokens ?? 0)
         : (input.usage.inputTokens ?? 0) - cachedInputTokens
+      const safe = (value: number) => {
+        if (!Number.isFinite(value)) return 0
+        return value
+      }
 
       const tokens = {
-        input: adjustedInputTokens,
-        output: input.usage.outputTokens ?? 0,
-        reasoning: input.usage?.reasoningTokens ?? 0,
+        input: safe(adjustedInputTokens),
+        output: safe(input.usage.outputTokens ?? 0),
+        reasoning: safe(input.usage?.reasoningTokens ?? 0),
         cache: {
-          write: (input.metadata?.["anthropic"]?.["cacheCreationInputTokens"] ??
-            // @ts-expect-error
-            input.metadata?.["bedrock"]?.["usage"]?.["cacheWriteInputTokens"] ??
-            0) as number,
-          read: cachedInputTokens,
+          write: safe(
+            (input.metadata?.["anthropic"]?.["cacheCreationInputTokens"] ??
+              // @ts-expect-error
+              input.metadata?.["bedrock"]?.["usage"]?.["cacheWriteInputTokens"] ??
+              0) as number,
+          ),
+          read: safe(cachedInputTokens),
         },
       }
 
@@ -401,15 +424,17 @@ export namespace Session {
           ? input.model.cost.context_over_200k
           : input.model.cost
       return {
-        cost: new Decimal(0)
-          .add(new Decimal(tokens.input).mul(costInfo?.input ?? 0).div(1_000_000))
-          .add(new Decimal(tokens.output).mul(costInfo?.output ?? 0).div(1_000_000))
-          .add(new Decimal(tokens.cache.read).mul(costInfo?.cache_read ?? 0).div(1_000_000))
-          .add(new Decimal(tokens.cache.write).mul(costInfo?.cache_write ?? 0).div(1_000_000))
-          // TODO: update models.dev to have better pricing model, for now:
-          // charge reasoning tokens at the same rate as output tokens
-          .add(new Decimal(tokens.reasoning).mul(costInfo?.output ?? 0).div(1_000_000))
-          .toNumber(),
+        cost: safe(
+          new Decimal(0)
+            .add(new Decimal(tokens.input).mul(costInfo?.input ?? 0).div(1_000_000))
+            .add(new Decimal(tokens.output).mul(costInfo?.output ?? 0).div(1_000_000))
+            .add(new Decimal(tokens.cache.read).mul(costInfo?.cache_read ?? 0).div(1_000_000))
+            .add(new Decimal(tokens.cache.write).mul(costInfo?.cache_write ?? 0).div(1_000_000))
+            // TODO: update models.dev to have better pricing model, for now:
+            // charge reasoning tokens at the same rate as output tokens
+            .add(new Decimal(tokens.reasoning).mul(costInfo?.output ?? 0).div(1_000_000))
+            .toNumber(),
+        ),
         tokens,
       }
     },

@@ -13,12 +13,20 @@ import { ModelTable } from "@opencode-ai/console-core/schema/model.sql.js"
 import { ProviderTable } from "@opencode-ai/console-core/schema/provider.sql.js"
 import { logger } from "./logger"
 import { AuthError, CreditsError, MonthlyLimitError, UserLimitError, ModelError, RateLimitError } from "./error"
-import { createBodyConverter, createStreamPartConverter, createResponseConverter } from "./provider/provider"
+import {
+  createBodyConverter,
+  createStreamPartConverter,
+  createResponseConverter,
+  ProviderHelper,
+  UsageInfo,
+} from "./provider/provider"
 import { anthropicHelper } from "./provider/anthropic"
 import { googleHelper } from "./provider/google"
 import { openaiHelper } from "./provider/openai"
 import { oaCompatHelper } from "./provider/openai-compatible"
 import { createRateLimiter } from "./rateLimiter"
+import { createDataDumper } from "./dataDumper"
+import { createTrialLimiter } from "./trialLimiter"
 
 type ZenData = Awaited<ReturnType<typeof ZenData.list>>
 type RetryOptions = {
@@ -48,21 +56,26 @@ export async function handler(
   try {
     const url = input.request.url
     const body = await input.request.json()
-    const ip = input.request.headers.get("x-real-ip") ?? ""
     const model = opts.parseModel(url, body)
     const isStream = opts.parseIsStream(url, body)
+    const ip = input.request.headers.get("x-real-ip") ?? ""
+    const sessionId = input.request.headers.get("x-opencode-session") ?? ""
+    const requestId = input.request.headers.get("x-opencode-request") ?? ""
     logger.metric({
       is_tream: isStream,
-      session: input.request.headers.get("x-opencode-session"),
-      request: input.request.headers.get("x-opencode-request"),
+      session: sessionId,
+      request: requestId,
     })
     const zenData = ZenData.list()
     const modelInfo = validateModel(zenData, model)
+    const dataDumper = createDataDumper(sessionId, requestId)
+    const trialLimiter = createTrialLimiter(modelInfo.trial?.limit, ip)
+    const isTrial = await trialLimiter?.isTrial()
     const rateLimiter = createRateLimiter(modelInfo.id, modelInfo.rateLimit, ip)
     await rateLimiter?.check()
 
     const retriableRequest = async (retry: RetryOptions = { excludeProviders: [], retryCount: 0 }) => {
-      const providerInfo = selectProvider(zenData, modelInfo, ip, retry)
+      const providerInfo = selectProvider(zenData, modelInfo, sessionId, isTrial ?? false, retry)
       const authInfo = await authenticate(modelInfo, providerInfo)
       validateBilling(authInfo, modelInfo)
       validateModelSettings(authInfo)
@@ -104,10 +117,14 @@ export async function handler(
         })
       }
 
-      return { providerInfo, authInfo, res, startTimestamp }
+      return { providerInfo, authInfo, reqBody, res, startTimestamp }
     }
 
-    const { providerInfo, authInfo, res, startTimestamp } = await retriableRequest()
+    const { providerInfo, authInfo, reqBody, res, startTimestamp } = await retriableRequest()
+
+    // Store model request
+    dataDumper?.provideModel(providerInfo.storeModel)
+    dataDumper?.provideRequest(reqBody)
 
     // Scrub response headers
     const resHeaders = new Headers()
@@ -126,8 +143,12 @@ export async function handler(
       const body = JSON.stringify(responseConverter(json))
       logger.metric({ response_length: body.length })
       logger.debug("RESPONSE: " + body)
+      dataDumper?.provideResponse(body)
+      dataDumper?.flush()
+      const tokensInfo = providerInfo.normalizeUsage(json.usage)
+      await trialLimiter?.track(tokensInfo)
       await rateLimiter?.track()
-      await trackUsage(authInfo, modelInfo, providerInfo, json.usage)
+      await trackUsage(authInfo, modelInfo, providerInfo, tokensInfo)
       await reload(authInfo)
       return new Response(body, {
         status: res.status,
@@ -155,10 +176,13 @@ export async function handler(
                   response_length: responseLength,
                   "timestamp.last_byte": Date.now(),
                 })
+                dataDumper?.flush()
                 await rateLimiter?.track()
                 const usage = usageParser.retrieve()
                 if (usage) {
-                  await trackUsage(authInfo, modelInfo, providerInfo, usage)
+                  const tokensInfo = providerInfo.normalizeUsage(usage)
+                  await trialLimiter?.track(tokensInfo)
+                  await trackUsage(authInfo, modelInfo, providerInfo, tokensInfo)
                   await reload(authInfo)
                 }
                 c.close()
@@ -174,6 +198,7 @@ export async function handler(
               }
               responseLength += value.length
               buffer += decoder.decode(value, { stream: true })
+              dataDumper?.provideStream(buffer)
 
               const parts = buffer.split(providerInfo.streamSeparator)
               buffer = parts.pop() ?? ""
@@ -263,8 +288,18 @@ export async function handler(
     return { id: modelId, ...modelData }
   }
 
-  function selectProvider(zenData: ZenData, modelInfo: ModelInfo, ip: string, retry: RetryOptions) {
+  function selectProvider(
+    zenData: ZenData,
+    modelInfo: ModelInfo,
+    sessionId: string,
+    isTrial: boolean,
+    retry: RetryOptions,
+  ) {
     const provider = (() => {
+      if (isTrial) {
+        return modelInfo.providers.find((provider) => provider.id === modelInfo.trial!.provider)
+      }
+
       if (retry.retryCount === MAX_RETRIES) {
         return modelInfo.providers.find((provider) => provider.id === modelInfo.fallbackProvider)
       }
@@ -274,9 +309,13 @@ export async function handler(
         .filter((provider) => !retry.excludeProviders.includes(provider.id))
         .flatMap((provider) => Array<typeof provider>(provider.weight ?? 1).fill(provider))
 
-      // Use the last 2 characters of IP address to select a provider
-      const lastChars = ip.slice(-2)
-      const index = parseInt(lastChars, 16) % providers.length
+      // Use the last 4 characters of session ID to select a provider
+      let h = 0
+      const l = sessionId.length
+      for (let i = l - 4; i < l; i++) {
+        h = (h * 31 + sessionId.charCodeAt(i)) | 0 // 32-bit int
+      }
+      const index = (h >>> 0) % providers.length // make unsigned + range 0..length-1
       return providers[index || 0]
     })()
 
@@ -416,9 +455,14 @@ export async function handler(
     providerInfo.apiKey = authInfo.provider.credentials
   }
 
-  async function trackUsage(authInfo: AuthInfo, modelInfo: ModelInfo, providerInfo: ProviderInfo, usage: any) {
+  async function trackUsage(
+    authInfo: AuthInfo,
+    modelInfo: ModelInfo,
+    providerInfo: ProviderInfo,
+    usageInfo: UsageInfo,
+  ) {
     const { inputTokens, outputTokens, reasoningTokens, cacheReadTokens, cacheWrite5mTokens, cacheWrite1hTokens } =
-      providerInfo.normalizeUsage(usage)
+      usageInfo
 
     const modelCost =
       modelInfo.cost200K &&

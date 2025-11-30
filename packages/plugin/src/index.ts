@@ -26,120 +26,122 @@ export type PluginInput = {
 
 export type Plugin = (input: PluginInput) => Promise<Hooks>
 
+export type AuthHook = {
+  provider: string
+  loader?: (auth: () => Promise<Auth>, provider: Provider) => Promise<Record<string, any>>
+  methods: (
+    | {
+        type: "oauth"
+        label: string
+        prompts?: Array<
+          | {
+              type: "text"
+              key: string
+              message: string
+              placeholder?: string
+              validate?: (value: string) => string | undefined
+              condition?: (inputs: Record<string, string>) => boolean
+            }
+          | {
+              type: "select"
+              key: string
+              message: string
+              options: Array<{
+                label: string
+                value: string
+                hint?: string
+              }>
+              condition?: (inputs: Record<string, string>) => boolean
+            }
+        >
+        authorize(inputs?: Record<string, string>): Promise<AuthOuathResult>
+      }
+    | {
+        type: "api"
+        label: string
+        prompts?: Array<
+          | {
+              type: "text"
+              key: string
+              message: string
+              placeholder?: string
+              validate?: (value: string) => string | undefined
+              condition?: (inputs: Record<string, string>) => boolean
+            }
+          | {
+              type: "select"
+              key: string
+              message: string
+              options: Array<{
+                label: string
+                value: string
+                hint?: string
+              }>
+              condition?: (inputs: Record<string, string>) => boolean
+            }
+        >
+        authorize?(inputs?: Record<string, string>): Promise<
+          | {
+              type: "success"
+              key: string
+              provider?: string
+            }
+          | {
+              type: "failed"
+            }
+        >
+      }
+  )[]
+}
+
+export type AuthOuathResult = { url: string; instructions: string } & (
+  | {
+      method: "auto"
+      callback(): Promise<
+        | ({
+            type: "success"
+            provider?: string
+          } & (
+            | {
+                refresh: string
+                access: string
+                expires: number
+              }
+            | { key: string }
+          ))
+        | {
+            type: "failed"
+          }
+      >
+    }
+  | {
+      method: "code"
+      callback(code: string): Promise<
+        | ({
+            type: "success"
+            provider?: string
+          } & (
+            | {
+                refresh: string
+                access: string
+                expires: number
+              }
+            | { key: string }
+          ))
+        | {
+            type: "failed"
+          }
+      >
+    }
+)
+
 export interface Hooks {
   event?: (input: { event: Event }) => Promise<void>
   config?: (input: Config) => Promise<void>
   tool?: {
     [key: string]: ToolDefinition
   }
-  auth?: {
-    provider: string
-    loader?: (auth: () => Promise<Auth>, provider: Provider) => Promise<Record<string, any>>
-    methods: (
-      | {
-          type: "oauth"
-          label: string
-          prompts?: Array<
-            | {
-                type: "text"
-                key: string
-                message: string
-                placeholder?: string
-                validate?: (value: string) => string | undefined
-                condition?: (inputs: Record<string, string>) => boolean
-              }
-            | {
-                type: "select"
-                key: string
-                message: string
-                options: Array<{
-                  label: string
-                  value: string
-                  hint?: string
-                }>
-                condition?: (inputs: Record<string, string>) => boolean
-              }
-          >
-          authorize(inputs?: Record<string, string>): Promise<
-            { url: string; instructions: string } & (
-              | {
-                  method: "auto"
-                  callback(): Promise<
-                    | ({
-                        type: "success"
-                        provider?: string
-                      } & (
-                        | {
-                            refresh: string
-                            access: string
-                            expires: number
-                          }
-                        | { key: string }
-                      ))
-                    | {
-                        type: "failed"
-                      }
-                  >
-                }
-              | {
-                  method: "code"
-                  callback(code: string): Promise<
-                    | ({
-                        type: "success"
-                        provider?: string
-                      } & (
-                        | {
-                            refresh: string
-                            access: string
-                            expires: number
-                          }
-                        | { key: string }
-                      ))
-                    | {
-                        type: "failed"
-                      }
-                  >
-                }
-            )
-          >
-        }
-      | {
-          type: "api"
-          label: string
-          prompts?: Array<
-            | {
-                type: "text"
-                key: string
-                message: string
-                placeholder?: string
-                validate?: (value: string) => string | undefined
-                condition?: (inputs: Record<string, string>) => boolean
-              }
-            | {
-                type: "select"
-                key: string
-                message: string
-                options: Array<{
-                  label: string
-                  value: string
-                  hint?: string
-                }>
-                condition?: (inputs: Record<string, string>) => boolean
-              }
-          >
-          authorize?(inputs?: Record<string, string>): Promise<
-            | {
-                type: "success"
-                key: string
-                provider?: string
-              }
-            | {
-                type: "failed"
-              }
-          >
-        }
-    )[]
-  }
+  auth?: AuthHook
   /**
    * Called when a new message is received
    */

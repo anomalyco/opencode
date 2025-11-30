@@ -6,7 +6,7 @@
   gap: 20px;
   justify-content: space-between;
 
-  [data-slot="tool-trigger-content"] {
+  [data-slot="basic-tool-tool-trigger-content"] {
     width: 100%;
     display: flex;
     align-items: center;
@@ -14,16 +14,16 @@
     gap: 20px;
   }
 
-  [data-slot="tool-icon"] {
+  [data-slot="basic-tool-tool-icon"] {
     flex-shrink: 0;
   }
 
-  [data-slot="tool-info"] {
+  [data-slot="basic-tool-tool-info"] {
     flex-grow: 1;
     min-width: 0;
   }
 
-  [data-slot="tool-info-structured"] {
+  [data-slot="basic-tool-tool-info-structured"] {
     width: 100%;
     display: flex;
     align-items: center;
@@ -31,7 +31,7 @@
     justify-content: space-between;
   }
 
-  [data-slot="tool-info-main"] {
+  [data-slot="basic-tool-tool-info-main"] {
     display: flex;
     align-items: center;
     gap: 8px;
@@ -40,7 +40,7 @@
     text-overflow: ellipsis;
   }
 
-  [data-slot="tool-title"] {
+  [data-slot="basic-tool-tool-title"] {
     font-family: var(--font-family-sans);
     font-size: var(--font-size-small);
     font-style: normal;
@@ -54,7 +54,7 @@
     }
   }
 
-  [data-slot="tool-subtitle"] {
+  [data-slot="basic-tool-tool-subtitle"] {
     font-family: var(--font-family-sans);
     font-size: var(--font-size-small);
     font-style: normal;
@@ -64,7 +64,7 @@
     color: var(--text-weak);
   }
 
-  [data-slot="tool-arg"] {
+  [data-slot="basic-tool-tool-arg"] {
     font-family: var(--font-family-sans);
     font-size: var(--font-size-small);
     font-style: normal;

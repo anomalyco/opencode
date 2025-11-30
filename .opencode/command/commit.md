@@ -1,6 +1,5 @@
 ---
 description: Git commit and push
-subtask: true
 ---
 
 commit and push

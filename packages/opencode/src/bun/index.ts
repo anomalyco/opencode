@@ -2,11 +2,14 @@ import z from "zod"
 import { Global } from "../global"
 import { Log } from "../util/log"
 import path from "path"
-import { NamedError } from "../util/error"
+import { NamedError } from "@opencode-ai/util/error"
 import { readableStreamToText } from "bun"
+import { createRequire } from "module"
+import { Lock } from "../util/lock"
 
 export namespace BunProc {
   const log = Log.create({ service: "bun" })
+  const req = createRequire(import.meta.url)
 
   export async function run(cmd: string[], options?: Bun.SpawnOptions.OptionsObject<any, any, any>) {
     log.info("running", {
@@ -58,6 +61,9 @@ export namespace BunProc {
   )
 
   export async function install(pkg: string, version = "latest") {
+    // Use lock to ensure only one install at a time
+    using _ = await Lock.write("bun-install")
+
     const mod = path.join(Global.Path.cache, "node_modules", pkg)
     const pkgjson = Bun.file(path.join(Global.Path.cache, "package.json"))
     const parsed = await pkgjson.json().catch(async () => {
@@ -79,18 +85,68 @@ export namespace BunProc {
       version,
     })
 
-    await BunProc.run(args, {
-      cwd: Global.Path.cache,
-    }).catch((e) => {
-      throw new InstallFailedError(
-        { pkg, version },
-        {
-          cause: e,
-        },
-      )
-    })
+    const total = 3
+    const wait = 500
+
+    const runInstall = async (count: number = 1): Promise<void> => {
+      log.info("bun install attempt", {
+        pkg,
+        version,
+        attempt: count,
+        total,
+      })
+      await BunProc.run(args, {
+        cwd: Global.Path.cache,
+      }).catch(async (error) => {
+        log.warn("bun install failed", {
+          pkg,
+          version,
+          attempt: count,
+          total,
+          error,
+        })
+        if (count >= total) {
+          throw new InstallFailedError(
+            { pkg, version },
+            {
+              cause: error,
+            },
+          )
+        }
+        const delay = wait * count
+        log.info("bun install retrying", {
+          pkg,
+          version,
+          next: count + 1,
+          delay,
+        })
+        await Bun.sleep(delay)
+        return runInstall(count + 1)
+      })
+    }
+
+    await runInstall()
+
     parsed.dependencies[pkg] = version
     await Bun.write(pkgjson.name!, JSON.stringify(parsed, null, 2))
     return mod
+  }
+
+  export async function resolve(pkg: string) {
+    const local = workspace(pkg)
+    if (local) return local
+    const dir = path.join(Global.Path.cache, "node_modules", pkg)
+    const pkgjson = Bun.file(path.join(dir, "package.json"))
+    const exists = await pkgjson.exists()
+    if (exists) return dir
+  }
+
+  function workspace(pkg: string) {
+    try {
+      const target = req.resolve(`${pkg}/package.json`)
+      return path.dirname(target)
+    } catch {
+      return
+    }
   }
 }

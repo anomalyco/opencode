@@ -26,6 +26,8 @@ interface SessionStats {
   }
   days: number
   costPerDay: number
+  tokensPerSession: number
+  medianTokensPerSession: number
 }
 
 export const StatsCommand = cmd({
@@ -116,6 +118,8 @@ async function aggregateSessionStats(days?: number, projectFilter?: string): Pro
     },
     days: 0,
     costPerDay: 0,
+    tokensPerSession: 0,
+    medianTokensPerSession: 0,
   }
 
   if (filteredSessions.length > 1000) {
@@ -128,6 +132,8 @@ async function aggregateSessionStats(days?: number, projectFilter?: string): Pro
 
   let earliestTime = Date.now()
   let latestTime = 0
+
+  const sessionTotalTokens: number[] = []
 
   const BATCH_SIZE = 20
   for (let i = 0; i < filteredSessions.length; i += BATCH_SIZE) {
@@ -164,6 +170,7 @@ async function aggregateSessionStats(days?: number, projectFilter?: string): Pro
         messageCount: messages.length,
         sessionCost,
         sessionTokens,
+        sessionTotalTokens: sessionTokens.input + sessionTokens.output + sessionTokens.reasoning,
         sessionToolUsage,
         earliestTime: session.time.created,
         latestTime: session.time.updated,
@@ -175,6 +182,7 @@ async function aggregateSessionStats(days?: number, projectFilter?: string): Pro
     for (const result of batchResults) {
       earliestTime = Math.min(earliestTime, result.earliestTime)
       latestTime = Math.max(latestTime, result.latestTime)
+      sessionTotalTokens.push(result.sessionTotalTokens)
 
       stats.totalMessages += result.messageCount
       stats.totalCost += result.sessionCost
@@ -197,6 +205,16 @@ async function aggregateSessionStats(days?: number, projectFilter?: string): Pro
   }
   stats.days = actualDays
   stats.costPerDay = stats.totalCost / actualDays
+  const totalTokens = stats.totalTokens.input + stats.totalTokens.output + stats.totalTokens.reasoning
+  stats.tokensPerSession = filteredSessions.length > 0 ? totalTokens / filteredSessions.length : 0
+  sessionTotalTokens.sort((a, b) => a - b)
+  const mid = Math.floor(sessionTotalTokens.length / 2)
+  stats.medianTokensPerSession =
+    sessionTotalTokens.length === 0
+      ? 0
+      : sessionTotalTokens.length % 2 === 0
+        ? (sessionTotalTokens[mid - 1] + sessionTotalTokens[mid]) / 2
+        : sessionTotalTokens[mid]
 
   return stats
 }
@@ -227,8 +245,12 @@ export function displayStats(stats: SessionStats, toolLimit?: number) {
   console.log("├────────────────────────────────────────────────────────┤")
   const cost = isNaN(stats.totalCost) ? 0 : stats.totalCost
   const costPerDay = isNaN(stats.costPerDay) ? 0 : stats.costPerDay
+  const tokensPerSession = isNaN(stats.tokensPerSession) ? 0 : stats.tokensPerSession
   console.log(renderRow("Total Cost", `$${cost.toFixed(2)}`))
-  console.log(renderRow("Cost/Day", `$${costPerDay.toFixed(2)}`))
+  console.log(renderRow("Avg Cost/Day", `$${costPerDay.toFixed(2)}`))
+  console.log(renderRow("Avg Tokens/Session", formatNumber(Math.round(tokensPerSession))))
+  const medianTokensPerSession = isNaN(stats.medianTokensPerSession) ? 0 : stats.medianTokensPerSession
+  console.log(renderRow("Median Tokens/Session", formatNumber(Math.round(medianTokensPerSession))))
   console.log(renderRow("Input", formatNumber(stats.totalTokens.input)))
   console.log(renderRow("Output", formatNumber(stats.totalTokens.output)))
   console.log(renderRow("Cache Read", formatNumber(stats.totalTokens.cache.read)))

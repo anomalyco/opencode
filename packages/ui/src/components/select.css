@@ -1,14 +1,14 @@
 [data-component="select"] {
-  [data-slot="select-trigger"] {
+  [data-slot="select-select-trigger"] {
     padding: 0 4px 0 8px;
     box-shadow: none;
 
-    [data-slot="select-trigger-value"] {
+    [data-slot="select-select-trigger-value"] {
       overflow: hidden;
       text-overflow: ellipsis;
       white-space: nowrap;
     }
-    [data-slot="select-trigger-icon"] {
+    [data-slot="select-select-trigger-icon"] {
       width: 16px;
       height: 16px;
       flex-shrink: 0;
@@ -38,7 +38,7 @@
     animation: select-open 0.15s ease-out;
   }
 
-  [data-slot="select-content-list"] {
+  [data-slot="select-select-content-list"] {
     overflow-y: auto;
     max-height: 12rem;
     white-space: nowrap;
@@ -52,10 +52,10 @@
     }
   }
 
-  /* [data-slot="section"] { */
+  /* [data-slot="select-section"] { */
   /* } */
 
-  [data-slot="select-item"] {
+  [data-slot="select-select-item"] {
     position: relative;
     display: flex;
     align-items: center;
@@ -85,7 +85,7 @@
       background-color: var(--surface-raised-base);
       pointer-events: none;
     }
-    [data-slot="select-item-indicator"] {
+    [data-slot="select-select-item-indicator"] {
       margin-left: auto;
       width: 16px;
       height: 16px;

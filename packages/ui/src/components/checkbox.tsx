@@ -13,9 +13,9 @@ export function Checkbox(props: CheckboxProps) {
   const resolved = children(() => local.children)
   return (
     <Kobalte {...others} data-component="checkbox">
-      <Kobalte.Input data-slot="checkbox-input" />
-      <Kobalte.Control data-slot="checkbox-control">
-        <Kobalte.Indicator data-slot="checkbox-indicator">
+      <Kobalte.Input data-slot="checkbox-checkbox-input" />
+      <Kobalte.Control data-slot="checkbox-checkbox-control">
+        <Kobalte.Indicator data-slot="checkbox-checkbox-indicator">
           {local.icon || (
             <svg viewBox="0 0 12 12" fill="none" xmlns="http://www.w3.org/2000/svg">
               <path
@@ -28,16 +28,16 @@ export function Checkbox(props: CheckboxProps) {
           )}
         </Kobalte.Indicator>
       </Kobalte.Control>
-      <div data-slot="checkbox-content">
+      <div data-slot="checkbox-checkbox-content">
         <Show when={resolved()}>
-          <Kobalte.Label data-slot="checkbox-label" classList={{ "sr-only": local.hideLabel }}>
+          <Kobalte.Label data-slot="checkbox-checkbox-label" classList={{ "sr-only": local.hideLabel }}>
             {resolved()}
           </Kobalte.Label>
         </Show>
         <Show when={local.description}>
-          <Kobalte.Description data-slot="checkbox-description">{local.description}</Kobalte.Description>
+          <Kobalte.Description data-slot="checkbox-checkbox-description">{local.description}</Kobalte.Description>
         </Show>
-        <Kobalte.ErrorMessage data-slot="checkbox-error" />
+        <Kobalte.ErrorMessage data-slot="checkbox-checkbox-error" />
       </div>
     </Kobalte>
   )

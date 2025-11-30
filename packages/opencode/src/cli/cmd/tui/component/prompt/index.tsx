@@ -1,18 +1,9 @@
-import {
-  TextAttributes,
-  BoxRenderable,
-  TextareaRenderable,
-  MouseEvent,
-  PasteEvent,
-  t,
-  dim,
-  fg,
-  type KeyBinding,
-} from "@opentui/core"
-import { createEffect, createMemo, Match, Switch, type JSX, onMount } from "solid-js"
+import { BoxRenderable, TextareaRenderable, MouseEvent, PasteEvent, t, dim, fg, type KeyBinding } from "@opentui/core"
+import { createEffect, createMemo, type JSX, onMount, createSignal, onCleanup, Show, Switch, Match } from "solid-js"
+import "opentui-spinner/solid"
 import { useLocal } from "@tui/context/local"
 import { useTheme } from "@tui/context/theme"
-import { SplitBorder } from "@tui/component/border"
+import { EmptyBorder } from "@tui/component/border"
 import { useSDK } from "@tui/context/sdk"
 import { useRoute } from "@tui/context/route"
 import { useSync } from "@tui/context/sync"
@@ -29,6 +20,8 @@ import { Clipboard } from "../../util/clipboard"
 import type { FilePart } from "@opencode-ai/sdk"
 import { TuiEvent } from "../../event"
 import { iife } from "@/util/iife"
+import { Locale } from "@/util/locale"
+import { createColors, createFrames } from "../../ui/spinner.ts"
 
 export type PromptProps = {
   sessionID?: string
@@ -57,7 +50,7 @@ export function Prompt(props: PromptProps) {
   const sdk = useSDK()
   const route = useRoute()
   const sync = useSync()
-  const status = createMemo(() => (props.sessionID ? sync.session.status(props.sessionID) : "idle"))
+  const status = createMemo(() => sync.data.session_status[props.sessionID ?? ""] ?? { type: "idle" })
   const history = usePromptHistory()
   const command = useCommandDialog()
   const renderer = useRenderer()
@@ -222,12 +215,17 @@ export function Prompt(props: PromptProps) {
         title: "Interrupt session",
         value: "session.interrupt",
         keybind: "session_interrupt",
-        disabled: status() !== "working",
+        disabled: status().type === "idle",
         category: "Session",
         onSelect: (dialog) => {
-          if (!props.sessionID) return
           if (autocomplete.visible) return
           if (!input.focused) return
+          // TODO: this should be its own command
+          if (store.mode === "shell") {
+            setStore("mode", "normal")
+            return
+          }
+          if (!props.sessionID) return
 
           setStore("interrupt", store.interrupt + 1)
 
@@ -499,6 +497,40 @@ export function Prompt(props: PromptProps) {
   }
   const exit = useExit()
 
+  function pasteText(text: string, virtualText: string) {
+    const currentOffset = input.visualCursor.offset
+    const extmarkStart = currentOffset
+    const extmarkEnd = extmarkStart + virtualText.length
+
+    input.insertText(virtualText + " ")
+
+    const extmarkId = input.extmarks.create({
+      start: extmarkStart,
+      end: extmarkEnd,
+      virtual: true,
+      styleId: pasteStyleId,
+      typeId: promptPartTypeId,
+    })
+
+    setStore(
+      produce((draft) => {
+        const partIndex = draft.prompt.parts.length
+        draft.prompt.parts.push({
+          type: "text" as const,
+          text,
+          source: {
+            text: {
+              start: extmarkStart,
+              end: extmarkEnd,
+              value: virtualText,
+            },
+          },
+        })
+        draft.extmarkToPartIndex.set(extmarkId, partIndex)
+      }),
+    )
+  }
+
   async function pasteImage(file: { filename?: string; content: string; mime: string }) {
     const currentOffset = input.visualCursor.offset
     const extmarkStart = currentOffset
@@ -542,6 +574,32 @@ export function Prompt(props: PromptProps) {
     return
   }
 
+  const highlight = createMemo(() => {
+    if (keybind.leader) return theme.border
+    if (store.mode === "shell") return theme.primary
+    return local.agent.color(local.agent.current().name)
+  })
+
+  const spinnerDef = createMemo(() => {
+    const color = local.agent.color(local.agent.current().name)
+    return {
+      frames: createFrames({
+        color,
+        style: "blocks",
+        inactiveFactor: 0.6,
+        // enableFading: false,
+        minAlpha: 0.3,
+      }),
+      color: createColors({
+        color,
+        style: "blocks",
+        inactiveFactor: 0.6,
+        // enableFading: false,
+        minAlpha: 0.3,
+      }),
+    }
+  })
+
   return (
     <>
       <Autocomplete
@@ -566,23 +624,24 @@ export function Prompt(props: PromptProps) {
       />
       <box ref={(r) => (anchor = r)}>
         <box
-          flexDirection="row"
-          {...SplitBorder}
-          borderColor={keybind.leader ? theme.accent : store.mode === "shell" ? theme.secondary : theme.border}
-          justifyContent="space-evenly"
+          border={["left"]}
+          borderColor={highlight()}
+          customBorderChars={{
+            ...EmptyBorder,
+            vertical: "┃",
+            bottomLeft: "╹",
+          }}
         >
-          <box backgroundColor={theme.backgroundElement} width={3} height="100%" alignItems="center" paddingTop={1}>
-            <text attributes={TextAttributes.BOLD} fg={theme.primary}>
-              {store.mode === "normal" ? ">" : "!"}
-            </text>
-          </box>
-          <box paddingTop={1} paddingBottom={1} backgroundColor={theme.backgroundElement} flexGrow={1}>
+          <box
+            paddingLeft={2}
+            paddingRight={1}
+            paddingTop={1}
+            flexShrink={0}
+            backgroundColor={theme.backgroundElement}
+            flexGrow={1}
+          >
             <textarea
-              placeholder={
-                props.showPlaceholder
-                  ? t`${dim(fg(theme.primary)("  → up/down"))} ${dim(fg("#64748b")("history"))} ${dim(fg("#a78bfa")("•"))} ${dim(fg(theme.primary)(keybind.print("input_newline")))} ${dim(fg("#64748b")("newline"))} ${dim(fg("#a78bfa")("•"))} ${dim(fg(theme.primary)(keybind.print("input_submit")))} ${dim(fg("#64748b")("submit"))}`
-                  : undefined
-              }
+              placeholder={props.sessionID ? undefined : "Build anything..."}
               textColor={theme.text}
               focusedTextColor={theme.text}
               minHeight={1}
@@ -681,25 +740,36 @@ export function Prompt(props: PromptProps) {
                 // trim ' from the beginning and end of the pasted content. just
                 // ' and nothing else
                 const filepath = pastedContent.replace(/^'+|'+$/g, "").replace(/\\ /g, " ")
-                console.log(pastedContent, filepath)
-                try {
-                  const file = Bun.file(filepath)
-                  if (file.type.startsWith("image/")) {
-                    event.preventDefault()
-                    const content = await file
-                      .arrayBuffer()
-                      .then((buffer) => Buffer.from(buffer).toString("base64"))
-                      .catch(console.error)
-                    if (content) {
-                      await pasteImage({
-                        filename: file.name,
-                        mime: file.type,
-                        content,
-                      })
-                      return
+                const isUrl = /^(https?):\/\//.test(filepath)
+                if (!isUrl) {
+                  try {
+                    const file = Bun.file(filepath)
+                    // Handle SVG as raw text content, not as base64 image
+                    if (file.type === "image/svg+xml") {
+                      event.preventDefault()
+                      const content = await file.text().catch(() => {})
+                      if (content) {
+                        pasteText(content, `[SVG: ${file.name ?? "image"}]`)
+                        return
+                      }
                     }
-                  }
-                } catch {}
+                    if (file.type.startsWith("image/")) {
+                      event.preventDefault()
+                      const content = await file
+                        .arrayBuffer()
+                        .then((buffer) => Buffer.from(buffer).toString("base64"))
+                        .catch(() => {})
+                      if (content) {
+                        await pasteImage({
+                          filename: file.name,
+                          mime: file.type,
+                          content,
+                        })
+                        return
+                      }
+                    }
+                  } catch {}
+                }
 
                 const lineCount = (pastedContent.match(/\n/g)?.length ?? 0) + 1
                 if (
@@ -707,79 +777,137 @@ export function Prompt(props: PromptProps) {
                   !sync.data.config.experimental?.disable_paste_summary
                 ) {
                   event.preventDefault()
-                  const currentOffset = input.visualCursor.offset
-                  const virtualText = `[Pasted ~${lineCount} lines]`
-                  const textToInsert = virtualText + " "
-                  const extmarkStart = currentOffset
-                  const extmarkEnd = extmarkStart + virtualText.length
-
-                  input.insertText(textToInsert)
-
-                  const extmarkId = input.extmarks.create({
-                    start: extmarkStart,
-                    end: extmarkEnd,
-                    virtual: true,
-                    styleId: pasteStyleId,
-                    typeId: promptPartTypeId,
-                  })
-
-                  const part = {
-                    type: "text" as const,
-                    text: pastedContent,
-                    source: {
-                      text: {
-                        start: extmarkStart,
-                        end: extmarkEnd,
-                        value: virtualText,
-                      },
-                    },
-                  }
-
-                  setStore(
-                    produce((draft) => {
-                      const partIndex = draft.prompt.parts.length
-                      draft.prompt.parts.push(part)
-                      draft.extmarkToPartIndex.set(extmarkId, partIndex)
-                    }),
-                  )
+                  pasteText(pastedContent, `[Pasted ~${lineCount} lines]`)
                   return
                 }
               }}
-              ref={(r: TextareaRenderable) => (input = r)}
+              ref={(r: TextareaRenderable) => {
+                input = r
+                setTimeout(() => {
+                  input.cursorColor = highlight()
+                }, 0)
+              }}
               onMouseDown={(r: MouseEvent) => r.target?.focus()}
               focusedBackgroundColor={theme.backgroundElement}
-              cursorColor={theme.primary}
+              cursorColor={highlight()}
               syntaxStyle={syntax()}
             />
+            <box flexDirection="row" flexShrink={0} paddingTop={1} gap={1}>
+              <text fg={highlight()}>
+                {store.mode === "shell" ? "Shell" : Locale.titlecase(local.agent.current().name)}{" "}
+              </text>
+              <Show when={store.mode === "normal"}>
+                <box flexDirection="row" gap={1}>
+                  <text fg={theme.textMuted}>{local.model.parsed().provider}</text>
+                  <text flexShrink={0} fg={theme.text}>
+                    {local.model.parsed().model}
+                  </text>
+                </box>
+              </Show>
+            </box>
           </box>
-          <box backgroundColor={theme.backgroundElement} width={1} justifyContent="center" alignItems="center"></box>
+        </box>
+        <box
+          height={1}
+          border={["left"]}
+          borderColor={highlight()}
+          customBorderChars={{
+            ...EmptyBorder,
+            // when the background is transparent, don't draw the vertical line
+            vertical: theme.background.a != 0 ? "╹" : " ",
+          }}
+        >
+          <box
+            height={1}
+            border={["bottom"]}
+            borderColor={theme.backgroundElement}
+            customBorderChars={
+              theme.background.a != 0
+                ? {
+                    ...EmptyBorder,
+                    horizontal: "▀",
+                  }
+                : {
+                    ...EmptyBorder,
+                    horizontal: " ",
+                  }
+            }
+          />
         </box>
         <box flexDirection="row" justifyContent="space-between">
-          <text flexShrink={0} wrapMode="none" fg={theme.text}>
-            <span style={{ fg: theme.textMuted }}>{local.model.parsed().provider}</span>{" "}
-            <span style={{ bold: true }}>{local.model.parsed().model}</span>
-          </text>
-          <Switch>
-            <Match when={status() === "compacting"}>
-              <text fg={theme.textMuted}>compacting...</text>
-            </Match>
-            <Match when={status() === "working"}>
-              <box flexDirection="row" gap={1}>
-                <text fg={store.interrupt > 0 ? theme.primary : theme.text}>
-                  esc{" "}
-                  <span style={{ fg: store.interrupt > 0 ? theme.primary : theme.textMuted }}>
-                    {store.interrupt > 0 ? "again to interrupt" : "interrupt"}
-                  </span>
-                </text>
+          <Show when={status().type !== "idle"} fallback={<text />}>
+            <box
+              flexDirection="row"
+              gap={1}
+              flexGrow={1}
+              justifyContent={status().type === "retry" ? "space-between" : "flex-start"}
+            >
+              <box flexShrink={0} flexDirection="row" gap={1}>
+                <spinner marginLeft={1} color={spinnerDef().color} frames={spinnerDef().frames} interval={40} />
+                <box flexDirection="row" gap={1} flexShrink={0}>
+                  {(() => {
+                    const retry = createMemo(() => {
+                      const s = status()
+                      if (s.type !== "retry") return
+                      return s
+                    })
+                    const message = createMemo(() => {
+                      const r = retry()
+                      if (!r) return
+                      if (r.message.includes("exceeded your current quota") && r.message.includes("gemini"))
+                        return "gemini is way too hot right now"
+                      if (r.message.length > 50) return r.message.slice(0, 50) + "..."
+                      return r.message
+                    })
+                    const [seconds, setSeconds] = createSignal(0)
+                    onMount(() => {
+                      const timer = setInterval(() => {
+                        const next = retry()?.next
+                        if (next) setSeconds(Math.round((next - Date.now()) / 1000))
+                      }, 1000)
+
+                      onCleanup(() => {
+                        clearInterval(timer)
+                      })
+                    })
+                    return (
+                      <Show when={retry()}>
+                        <text fg={theme.error}>
+                          {message()} [retrying {seconds() > 0 ? `in ${seconds()}s ` : ""}
+                          attempt #{retry()!.attempt}]
+                        </text>
+                      </Show>
+                    )
+                  })()}
+                </box>
               </box>
-            </Match>
-            <Match when={props.hint}>{props.hint!}</Match>
-            <Match when={true}>
-              <text fg={theme.text}>
-                {keybind.print("command_list")} <span style={{ fg: theme.textMuted }}>commands</span>
+              <text fg={store.interrupt > 0 ? theme.primary : theme.text}>
+                esc{" "}
+                <span style={{ fg: store.interrupt > 0 ? theme.primary : theme.textMuted }}>
+                  {store.interrupt > 0 ? "again to interrupt" : "interrupt"}
+                </span>
               </text>
-            </Match>
-          </Switch>
+            </box>
+          </Show>
+          <Show when={status().type !== "retry"}>
+            <box gap={2} flexDirection="row">
+              <Switch>
+                <Match when={store.mode === "normal"}>
+                  <text fg={theme.text}>
+                    {keybind.print("agent_cycle")} <span style={{ fg: theme.textMuted }}>switch agent</span>
+                  </text>
+                  <text fg={theme.text}>
+                    {keybind.print("command_list")} <span style={{ fg: theme.textMuted }}>commands</span>
+                  </text>
+                </Match>
+                <Match when={store.mode === "shell"}>
+                  <text fg={theme.text}>
+                    esc <span style={{ fg: theme.textMuted }}>exit shell mode</span>
+                  </text>
+                </Match>
+              </Switch>
+            </box>
+          </Show>
         </box>
       </box>
     </>

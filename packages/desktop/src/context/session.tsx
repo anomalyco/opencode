@@ -1,11 +1,11 @@
 import { createStore, produce } from "solid-js/store"
-import { createSimpleContext } from "./helper"
+import { createSimpleContext } from "@opencode-ai/ui/context"
 import { batch, createEffect, createMemo } from "solid-js"
 import { useSync } from "./sync"
 import { makePersisted } from "@solid-primitives/storage"
 import { TextSelection } from "./local"
 import { pipe, sumBy } from "remeda"
-import { AssistantMessage } from "@opencode-ai/sdk"
+import { AssistantMessage, UserMessage } from "@opencode-ai/sdk"
 import { useParams } from "@solidjs/router"
 import { base64Encode } from "@/utils"
 
@@ -60,7 +60,7 @@ export const { use: useSession, provider: SessionProvider } = createSimpleContex
     })
     const status = createMemo(
       () =>
-        sync.data.session_status[params.id] ?? {
+        sync.data.session_status[params.id ?? ""] ?? {
           type: "idle",
         },
     )
@@ -123,8 +123,8 @@ export const { use: useSession, provider: SessionProvider } = createSimpleContex
         user: userMessages,
         last: lastUserMessage,
         active: activeMessage,
-        setActive(id: string | undefined) {
-          setStore("messageId", id)
+        setActive(message: UserMessage | undefined) {
+          setStore("messageId", message?.id)
         },
       },
       usage: {

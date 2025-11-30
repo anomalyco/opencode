@@ -97,8 +97,12 @@ export const stripeWebhook = new stripe.WebhookEndpoint("StripeWebhookEndpoint",
   ],
 })
 
-const ZEN_MODELS1 = new sst.Secret("ZEN_MODELS1")
-const ZEN_MODELS2 = new sst.Secret("ZEN_MODELS2")
+const ZEN_MODELS = [
+  new sst.Secret("ZEN_MODELS1"),
+  new sst.Secret("ZEN_MODELS2"),
+  new sst.Secret("ZEN_MODELS3"),
+  new sst.Secret("ZEN_MODELS4"),
+]
 const STRIPE_SECRET_KEY = new sst.Secret("STRIPE_SECRET_KEY")
 const AUTH_API_URL = new sst.Linkable("AUTH_API_URL", {
   properties: { value: auth.url.apply((url) => url!) },
@@ -111,6 +115,8 @@ const gatewayKv = new sst.cloudflare.Kv("GatewayKv")
 ////////////////
 // CONSOLE
 ////////////////
+
+const bucket = new sst.cloudflare.Bucket("ConsoleData")
 
 const AWS_SES_ACCESS_KEY_ID = new sst.Secret("AWS_SES_ACCESS_KEY_ID")
 const AWS_SES_SECRET_ACCESS_KEY = new sst.Secret("AWS_SES_SECRET_ACCESS_KEY")
@@ -128,15 +134,15 @@ new sst.cloudflare.x.SolidStart("Console", {
   domain,
   path: "packages/console/app",
   link: [
+    bucket,
     database,
     AUTH_API_URL,
     STRIPE_WEBHOOK_SECRET,
     STRIPE_SECRET_KEY,
-    ZEN_MODELS1,
-    ZEN_MODELS2,
     EMAILOCTOPUS_API_KEY,
     AWS_SES_ACCESS_KEY_ID,
     AWS_SES_SECRET_ACCESS_KEY,
+    ...ZEN_MODELS,
     ...($dev
       ? [
           new sst.Secret("CLOUDFLARE_DEFAULT_ACCOUNT_ID", process.env.CLOUDFLARE_DEFAULT_ACCOUNT_ID!),

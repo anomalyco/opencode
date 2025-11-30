@@ -24,6 +24,12 @@ export namespace ZenData {
     cost: ModelCostSchema,
     cost200K: ModelCostSchema.optional(),
     allowAnonymous: z.boolean().optional(),
+    trial: z
+      .object({
+        limit: z.number(),
+        provider: z.string(),
+      })
+      .optional(),
     rateLimit: z.number().optional(),
     fallbackProvider: z.string().optional(),
     providers: z.array(
@@ -32,6 +38,7 @@ export namespace ZenData {
         model: z.string(),
         weight: z.number().optional(),
         disabled: z.boolean().optional(),
+        storeModel: z.string().optional(),
       }),
     ),
   })
@@ -53,7 +60,9 @@ export namespace ZenData {
   })
 
   export const list = fn(z.void(), () => {
-    const json = JSON.parse(Resource.ZEN_MODELS1.value + Resource.ZEN_MODELS2.value)
+    const json = JSON.parse(
+      Resource.ZEN_MODELS1.value + Resource.ZEN_MODELS2.value + Resource.ZEN_MODELS3.value + Resource.ZEN_MODELS4.value,
+    )
     return ModelsSchema.parse(json)
   })
 }

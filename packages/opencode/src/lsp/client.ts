@@ -6,7 +6,7 @@ import { LANGUAGE_EXTENSIONS } from "./language"
 import { Bus } from "../bus"
 import z from "zod"
 import type { LSPServer } from "./server"
-import { NamedError } from "../util/error"
+import { NamedError } from "@opencode-ai/util/error"
 import { withTimeout } from "../util/timeout"
 import { Instance } from "../project/instance"
 

@@ -33,7 +33,7 @@ import { createStore, produce } from "solid-js/store"
 import { Global } from "@/global"
 import { Filesystem } from "@/util/filesystem"
 
-type Theme = {
+type ThemeColors = {
   primary: RGBA
   secondary: RGBA
   accent: RGBA
@@ -43,9 +43,11 @@ type Theme = {
   info: RGBA
   text: RGBA
   textMuted: RGBA
+  selectedListItemText: RGBA
   background: RGBA
   backgroundPanel: RGBA
   backgroundElement: RGBA
+  backgroundMenu: RGBA
   border: RGBA
   borderActive: RGBA
   borderSubtle: RGBA
@@ -86,6 +88,27 @@ type Theme = {
   syntaxPunctuation: RGBA
 }
 
+type Theme = ThemeColors & {
+  _hasSelectedListItemText: boolean
+}
+
+export function selectedForeground(theme: Theme): RGBA {
+  // If theme explicitly defines selectedListItemText, use it
+  if (theme._hasSelectedListItemText) {
+    return theme.selectedListItemText
+  }
+
+  // For transparent backgrounds, calculate contrast based on primary color
+  if (theme.background.a === 0) {
+    const { r, g, b } = theme.primary
+    const luminance = 0.299 * r + 0.587 * g + 0.114 * b
+    return luminance > 0.5 ? RGBA.fromInts(0, 0, 0) : RGBA.fromInts(255, 255, 255)
+  }
+
+  // Fall back to background color
+  return theme.background
+}
+
 type HexColor = `#${string}`
 type RefName = string
 type Variant = {
@@ -96,7 +119,10 @@ type ColorValue = HexColor | RefName | Variant | RGBA
 type ThemeJson = {
   $schema?: string
   defs?: Record<string, HexColor | RefName>
-  theme: Record<keyof Theme, ColorValue>
+  theme: Omit<Record<keyof ThemeColors, ColorValue>, "selectedListItemText" | "backgroundMenu"> & {
+    selectedListItemText?: ColorValue
+    backgroundMenu?: ColorValue
+  }
 }
 
 export const DEFAULT_THEMES: Record<string, ThemeJson> = {
@@ -137,19 +163,44 @@ function resolveTheme(theme: ThemeJson, mode: "dark" | "light") {
 
       if (defs[c]) {
         return resolveColor(defs[c])
-      } else if (theme.theme[c as keyof Theme]) {
-        return resolveColor(theme.theme[c as keyof Theme])
+      } else if (theme.theme[c as keyof ThemeColors] !== undefined) {
+        return resolveColor(theme.theme[c as keyof ThemeColors]!)
       } else {
         throw new Error(`Color reference "${c}" not found in defs or theme`)
       }
     }
     return resolveColor(c[mode])
   }
-  return Object.fromEntries(
-    Object.entries(theme.theme).map(([key, value]) => {
-      return [key, resolveColor(value)]
-    }),
-  ) as Theme
+
+  const resolved = Object.fromEntries(
+    Object.entries(theme.theme)
+      .filter(([key]) => key !== "selectedListItemText" && key !== "backgroundMenu")
+      .map(([key, value]) => {
+        return [key, resolveColor(value)]
+      }),
+  ) as Partial<ThemeColors>
+
+  // Handle selectedListItemText separately since it's optional
+  const hasSelectedListItemText = theme.theme.selectedListItemText !== undefined
+  if (hasSelectedListItemText) {
+    resolved.selectedListItemText = resolveColor(theme.theme.selectedListItemText!)
+  } else {
+    // Backward compatibility: if selectedListItemText is not defined, use background color
+    // This preserves the current behavior for all existing themes
+    resolved.selectedListItemText = resolved.background
+  }
+
+  // Handle backgroundMenu - optional with fallback to backgroundElement
+  if (theme.theme.backgroundMenu !== undefined) {
+    resolved.backgroundMenu = resolveColor(theme.theme.backgroundMenu)
+  } else {
+    resolved.backgroundMenu = resolved.backgroundElement
+  }
+
+  return {
+    ...resolved,
+    _hasSelectedListItemText: hasSelectedListItemText,
+  } as Theme
 }
 
 export const { use: useTheme, provider: ThemeProvider } = createSimpleContext({
@@ -159,7 +210,7 @@ export const { use: useTheme, provider: ThemeProvider } = createSimpleContext({
     const kv = useKV()
     const [store, setStore] = createStore({
       themes: DEFAULT_THEMES,
-      mode: props.mode,
+      mode: kv.get("theme_mode", props.mode),
       active: (sync.data.config.theme ?? kv.get("theme", "opencode")) as string,
       ready: false,
     })
@@ -189,6 +240,7 @@ export const { use: useTheme, provider: ThemeProvider } = createSimpleContext({
     })
 
     const syntax = createMemo(() => generateSyntax(values()))
+    const subtleSyntax = createMemo(() => generateSubtleSyntax(values()))
 
     return {
       theme: new Proxy(values(), {
@@ -204,11 +256,13 @@ export const { use: useTheme, provider: ThemeProvider } = createSimpleContext({
         return store.themes
       },
       syntax,
+      subtleSyntax,
       mode() {
         return store.mode
       },
       setMode(mode: "dark" | "light") {
         setStore("mode", mode)
+        kv.set("theme_mode", mode)
       },
       set(theme: string) {
         setStore("active", theme)
@@ -286,11 +340,13 @@ function generateSystem(colors: TerminalColors, mode: "dark" | "light"): ThemeJs
       // Text colors
       text: fg,
       textMuted,
+      selectedListItemText: bg,
 
       // Background colors
       background: bg,
       backgroundPanel: grays[2],
       backgroundElement: grays[3],
+      backgroundMenu: grays[3],
 
       // Border colors
       borderSubtle: grays[6],
@@ -427,7 +483,35 @@ function generateMutedTextColor(bg: RGBA, isDark: boolean): RGBA {
 }
 
 function generateSyntax(theme: Theme) {
-  return SyntaxStyle.fromTheme([
+  return SyntaxStyle.fromTheme(getSyntaxRules(theme))
+}
+
+function generateSubtleSyntax(theme: Theme) {
+  const rules = getSyntaxRules(theme)
+  return SyntaxStyle.fromTheme(
+    rules.map((rule) => {
+      if (rule.style.foreground) {
+        const fg = rule.style.foreground
+        return {
+          ...rule,
+          style: {
+            ...rule.style,
+            foreground: RGBA.fromInts(
+              Math.round(fg.r * 255),
+              Math.round(fg.g * 255),
+              Math.round(fg.b * 255),
+              Math.round(0.6 * 255),
+            ),
+          },
+        }
+      }
+      return rule
+    }),
+  )
+}
+
+function getSyntaxRules(theme: Theme) {
+  return [
     {
       scope: ["prompt"],
       style: {
@@ -921,5 +1005,5 @@ function generateSyntax(theme: Theme) {
         foreground: theme.textMuted,
       },
     },
-  ])
+  ]
 }

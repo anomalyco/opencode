@@ -23,15 +23,15 @@ export function Input(props: InputProps) {
   return (
     <Kobalte data-component="input" value={local.value} onChange={local.onChange} onKeyDown={local.onKeyDown}>
       <Show when={local.label}>
-        <Kobalte.Label data-slot="label" classList={{ "sr-only": local.hideLabel }}>
+        <Kobalte.Label data-slot="input-label" classList={{ "sr-only": local.hideLabel }}>
           {local.label}
         </Kobalte.Label>
       </Show>
-      <Kobalte.Input {...others} data-slot="input" class={local.class} />
+      <Kobalte.Input {...others} data-slot="input-input" class={local.class} />
       <Show when={local.description}>
-        <Kobalte.Description data-slot="description">{local.description}</Kobalte.Description>
+        <Kobalte.Description data-slot="input-description">{local.description}</Kobalte.Description>
       </Show>
-      <Kobalte.ErrorMessage data-slot="error" />
+      <Kobalte.ErrorMessage data-slot="input-error" />
     </Kobalte>
   )
 }

@@ -47,7 +47,7 @@ export const EditTool = Tool.define("edit", {
       if (agent.permission.external_directory === "ask") {
         await Permission.ask({
           type: "external_directory",
-          pattern: parentDir,
+          pattern: [parentDir, path.join(parentDir, "*")],
           sessionID: ctx.sessionID,
           messageID: ctx.messageID,
           callID: ctx.callID,

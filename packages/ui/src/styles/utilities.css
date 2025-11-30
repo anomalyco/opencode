@@ -76,6 +76,7 @@
 
 .text-12-mono {
   font-family: var(--font-family-mono);
+  font-feature-settings: var(--font-feature-settings-mono);
   font-size: var(--font-size-small);
   font-style: normal;
   font-weight: var(--font-weight-regular);
@@ -103,6 +104,7 @@
 
 .text-14-mono {
   font-family: var(--font-family-mono);
+  font-feature-settings: var(--font-feature-settings-mono);
   font-size: var(--font-size-base);
   font-style: normal;
   font-weight: var(--font-weight-regular);

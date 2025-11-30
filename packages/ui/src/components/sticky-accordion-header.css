@@ -1,0 +1,16 @@
+[data-component="sticky-accordion-header"] {
+  position: sticky;
+  top: 0px;
+
+  &[data-expanded] {
+    z-index: 10;
+
+    &::before {
+      content: "";
+      z-index: -10;
+      position: absolute;
+      inset: 0;
+      background-color: var(--background-stronger);
+    }
+  }
+}

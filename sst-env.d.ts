@@ -49,6 +49,10 @@ declare module "sst" {
       type: "sst.cloudflare.SolidStart"
       url: string
     }
+    ConsoleData: {
+      name: string
+      type: "sst.cloudflare.Bucket"
+    }
     Database: {
       database: string
       host: string
@@ -64,6 +68,10 @@ declare module "sst" {
     EMAILOCTOPUS_API_KEY: {
       type: "sst.sst.Secret"
       value: string
+    }
+    EnterpriseStorage: {
+      name: string
+      type: "sst.cloudflare.Bucket"
     }
     GITHUB_APP_ID: {
       type: "sst.sst.Secret"
@@ -96,6 +104,14 @@ declare module "sst" {
     LogProcessor: {
       type: "sst.cloudflare.Worker"
     }
+    R2AccessKey: {
+      type: "sst.sst.Secret"
+      value: string
+    }
+    R2SecretKey: {
+      type: "sst.sst.Secret"
+      value: string
+    }
     STRIPE_SECRET_KEY: {
       type: "sst.sst.Secret"
       value: string
@@ -113,6 +129,14 @@ declare module "sst" {
       value: string
     }
     ZEN_MODELS2: {
+      type: "sst.sst.Secret"
+      value: string
+    }
+    ZEN_MODELS3: {
+      type: "sst.sst.Secret"
+      value: string
+    }
+    ZEN_MODELS4: {
       type: "sst.sst.Secret"
       value: string
     }

@@ -1,8 +1,8 @@
 :root {
   --font-family-sans: "Geist", "Geist Fallback";
   --font-family-sans--font-feature-settings: "ss03" 1;
-  --font-family-mono: "Geist Mono", "Geist Mono Fallback";
-  --font-family-mono--font-feature-settings: "ss02" 1;
+  --font-family-mono: "Berkeley Mono", "Berkeley Mono Fallback";
+  --font-family-mono--font-feature-settings: "ss01" 1;
 
   --font-size-small: 12px;
   --font-size-base: 14px;
@@ -49,6 +49,9 @@
     0 6px 8px -4px rgba(19, 16, 16, 0.12), 0 4px 3px -2px rgba(19, 16, 16, 0.12), 0 1px 2px -1px rgba(19, 16, 16, 0.12);
   --shadow-xs-border:
     0 0 0 1px var(--border-base, rgba(11, 6, 0, 0.2)), 0 1px 2px -1px rgba(19, 16, 16, 0.04),
+    0 1px 2px 0 rgba(19, 16, 16, 0.06), 0 1px 3px 0 rgba(19, 16, 16, 0.08);
+  --shadow-xs-border-base:
+    0 0 0 1px var(--border-weak-base, rgba(17, 0, 0, 0.12)), 0 1px 2px -1px rgba(19, 16, 16, 0.04),
     0 1px 2px 0 rgba(19, 16, 16, 0.06), 0 1px 3px 0 rgba(19, 16, 16, 0.08);
   --shadow-xs-border-select:
     0 0 0 3px var(--border-weak-selected, rgba(1, 103, 255, 0.29)),
