@@ -639,7 +639,7 @@ export namespace Config {
         .array(z.string())
         .optional()
         .describe(
-          "Tools that should only be available to primary agents (not subagents). Defaults to todowrite, todoread, and task.",
+          "Tools that should only be available to primary agents.",
         ),
       enterprise: z
         .object({
