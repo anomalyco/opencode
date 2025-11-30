@@ -469,7 +469,7 @@ export namespace Config {
       .union([z.number().min(1), z.literal("none")])
       .optional()
       .default(100)
-      .describe("Maximum number of messages to load per session when syncing, or 'none' to load all messages"),
+      .describe("Maximum number of message parts to load per session when syncing, or 'none' to load all messages"),
   })
   export type TUI = z.infer<typeof TUI>
 

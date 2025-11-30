@@ -184,7 +184,9 @@ export const { use: useSync, provider: SyncProvider } = createSimpleContext({
             event.properties.info.sessionID,
             produce((draft) => {
               draft.splice(result.index, 0, event.properties.info)
-              if (draft.length > 100) draft.shift()
+              const maxMessages = (store.config.tui as any)?.messages_limit
+              const maxMessagesCount = maxMessages === "none" ? Infinity : maxMessages || 100
+              if (draft.length > maxMessagesCount) draft.shift()
             }),
           )
           break
@@ -350,6 +352,7 @@ export const { use: useSync, provider: SyncProvider } = createSimpleContext({
               for (const message of messages.data!) {
                 draft.part[message.info.id] = message.parts
               }
+
               draft.session_diff[sessionID] = diff.data ?? []
             }),
           )
