@@ -8,9 +8,10 @@ import { Global } from "@/global"
 import { iife } from "@/util/iife"
 import { createSimpleContext } from "./helper"
 import { useToast } from "../ui/toast"
-import { Provider } from "@/provider/provider"
-import { useArgs } from "./args"
 import { RGBA } from "@opentui/core"
+import { ACPClient } from "@/acp/client"
+import { getAllAgents, getAgent, type ACPAgentDefinition } from "@/acp/agents"
+import type { SessionModeId, SessionModeState } from "@agentclientprotocol/sdk"
 
 export const { use: useLocal, provider: LocalProvider } = createSimpleContext({
   name: "Local",
@@ -18,39 +19,21 @@ export const { use: useLocal, provider: LocalProvider } = createSimpleContext({
     const sync = useSync()
     const toast = useToast()
 
-    function isModelValid(model: { providerID: string; modelID: string }) {
-      const provider = sync.data.provider.find((x) => x.id === model.providerID)
-      return !!provider?.models[model.modelID]
-    }
-
-    function getFirstValidModel(...modelFns: (() => { providerID: string; modelID: string } | undefined)[]) {
-      for (const modelFn of modelFns) {
-        const model = modelFn()
-        if (!model) continue
-        if (isModelValid(model)) return model
-      }
-    }
-
-    // Automatically update model when agent changes
-    createEffect(() => {
-      const value = agent.current()
-      if (value.model) {
-        if (isModelValid(value.model))
-          model.set({
-            providerID: value.model.providerID,
-            modelID: value.model.modelID,
-          })
-        else
-          toast.show({
-            variant: "warning",
-            message: `Agent ${value.name}'s configured model ${value.model.providerID}/${value.model.modelID} is not valid`,
-            duration: 3000,
-          })
-      }
+    // Session state for ACP client
+    const [sessionStore, setSessionStore] = createStore<{
+      sessionId: string | null
+      agentName: string | null
+      modes: SessionModeState | null
+      client: ACPClient.Instance | null
+    }>({
+      sessionId: null,
+      agentName: null,
+      modes: null,
+      client: null,
     })
 
     const agent = iife(() => {
-      const agents = createMemo(() => sync.data.agent.filter((x) => x.mode !== "subagent"))
+      const agents = createMemo(() => getAllAgents().filter((x) => x.installMethod !== "skip"))
       const [agentStore, setAgentStore] = createStore<{
         current: string
       }>({
@@ -65,6 +48,7 @@ export const { use: useLocal, provider: LocalProvider } = createSimpleContext({
         theme.primary,
         theme.error,
       ])
+
       return {
         list() {
           return agents()
@@ -72,14 +56,87 @@ export const { use: useLocal, provider: LocalProvider } = createSimpleContext({
         current() {
           return agents().find((x) => x.name === agentStore.current)!
         },
-        set(name: string) {
-          if (!agents().some((x) => x.name === name))
+        async set(agentName: string) {
+          const agentDef = getAgent(agentName)
+          if (!agentDef) {
             return toast.show({
               variant: "warning",
-              message: `Agent not found: ${name}`,
+              message: `Agent not found: ${agentName}`,
               duration: 3000,
             })
-          setAgentStore("current", name)
+          }
+
+          // Check if system agent is installed
+          if (agentDef.installMethod === "system" && agentDef.installCheck) {
+            const checkResult = Bun.spawnSync(["sh", "-c", agentDef.installCheck])
+            if (checkResult.exitCode !== 0) {
+              return toast.show({
+                variant: "warning",
+                message: `Agent ${agentDef.name} is not installed. See: ${agentDef.installGuide}`,
+                duration: 5000,
+              })
+            }
+          }
+
+          try {
+            // Dispose existing client if any
+            if (sessionStore.client) {
+              await sessionStore.client.dispose()
+            }
+
+            // Create ACP client
+            const client = await ACPClient.create({
+              command: agentDef.command,
+              args: agentDef.args,
+              cwd: process.cwd(),
+              env: agentDef.envRequired?.reduce((acc, key) => {
+                const value = process.env[key]
+                if (value) acc[key] = value
+                return acc
+              }, {} as Record<string, string>),
+            })
+
+            // Initialize
+            const initResp = await client.initialize()
+
+            // Handle auth if needed
+            if (initResp.authMethods && initResp.authMethods.length > 0) {
+              // For now, just use first auth method
+              // TODO: Prompt user to select auth method
+              await client.authenticate(initResp.authMethods[0].id)
+            }
+
+            // Create session
+            const sessionResp = await client.createSession()
+
+            // Store session state
+            batch(() => {
+              setSessionStore("sessionId", sessionResp.sessionId)
+              setSessionStore("agentName", agentName)
+              setSessionStore("modes", sessionResp.modes ?? null)
+              setSessionStore("client", client)
+              setAgentStore("current", agentName)
+            })
+
+            // Setup mode change listener
+            if (client.getCurrentMode()) {
+              client.onModeChange((newModeId) => {
+                setSessionStore("modes", "currentModeId", newModeId)
+              })
+            }
+
+            toast.show({
+              variant: "success",
+              message: `Connected to ${agentDef.name}`,
+              duration: 2000,
+            })
+          } catch (error) {
+            toast.show({
+              variant: "error",
+              message: `Failed to connect to ${agentDef.name}: ${error instanceof Error ? error.message : String(error)}`,
+              duration: 5000,
+            })
+          }
         },
         move(direction: 1 | -1) {
           batch(() => {
@@ -90,151 +147,88 @@ export const { use: useLocal, provider: LocalProvider } = createSimpleContext({
             setAgentStore("current", value.name)
           })
         },
-        color(name: string) {
-          const agent = agents().find((x) => x.name === name)
-          if (agent?.color) return RGBA.fromHex(agent.color)
-          const index = agents().findIndex((x) => x.name === name)
+        color(agentName: string) {
+          const index = agents().findIndex((x) => x.name === agentName)
           return colors()[index % colors().length]
+        },
+        isInstalled(agentName: string) {
+          const agentDef = getAgent(agentName)
+          if (!agentDef) return false
+
+          // npx/uvx agents are always "available"
+          if (agentDef.installMethod !== "system") return true
+
+          // Check system agents
+          if (agentDef.installCheck) {
+            const checkResult = Bun.spawnSync(["sh", "-c", agentDef.installCheck])
+            return checkResult.exitCode === 0
+          }
+
+          return false
         },
       }
     })
 
-    const model = iife(() => {
-      const [modelStore, setModelStore] = createStore<{
-        ready: boolean
-        model: Record<
-          string,
-          {
-            providerID: string
-            modelID: string
-          }
-        >
-        recent: {
-          providerID: string
-          modelID: string
-        }[]
-      }>({
-        ready: false,
-        model: {},
-        recent: [],
-      })
-
-      const file = Bun.file(path.join(Global.Path.state, "model.json"))
-
-      file
-        .json()
-        .then((x) => {
-          setModelStore("recent", x.recent)
-        })
-        .catch(() => {})
-        .finally(() => {
-          setModelStore("ready", true)
-        })
-
-      const args = useArgs()
-      const fallbackModel = createMemo(() => {
-        if (args.model) {
-          const { providerID, modelID } = Provider.parseModel(args.model)
-          if (isModelValid({ providerID, modelID })) {
-            return {
-              providerID,
-              modelID,
-            }
-          }
-        }
-
-        if (sync.data.config.model) {
-          const { providerID, modelID } = Provider.parseModel(sync.data.config.model)
-          if (isModelValid({ providerID, modelID })) {
-            return {
-              providerID,
-              modelID,
-            }
-          }
-        }
-
-        for (const item of modelStore.recent) {
-          if (isModelValid(item)) {
-            return item
-          }
-        }
-        const provider = sync.data.provider[0]
-        const model = sync.data.provider_default[provider.id] ?? Object.values(provider.models)[0].id
-        return {
-          providerID: provider.id,
-          modelID: model,
-        }
-      })
-
-      const currentModel = createMemo(() => {
-        const a = agent.current()
-        return getFirstValidModel(
-          () => modelStore.model[a.name],
-          () => a.model,
-          fallbackModel,
-        )!
-      })
-
+    const mode = iife(() => {
       return {
-        current: currentModel,
-        get ready() {
-          return modelStore.ready
+        list() {
+          return sessionStore.modes?.availableModes ?? []
         },
-        recent() {
-          return modelStore.recent
+        current() {
+          return sessionStore.modes?.currentModeId ?? null
         },
-        parsed: createMemo(() => {
-          const value = currentModel()
-          const provider = sync.data.provider.find((x) => x.id === value.providerID)!
-          const model = provider.models[value.modelID]
-          return {
-            provider: provider.name ?? value.providerID,
-            model: model.name ?? value.modelID,
+        async set(modeId: SessionModeId) {
+          if (!sessionStore.client) {
+            return toast.show({
+              variant: "warning",
+              message: "No active session. Connect to an agent first.",
+              duration: 3000,
+            })
           }
-        }),
-        cycle(direction: 1 | -1) {
-          const current = currentModel()
-          if (!current) return
-          const recent = modelStore.recent
-          const index = recent.findIndex((x) => x.providerID === current.providerID && x.modelID === current.modelID)
-          if (index === -1) return
-          let next = index + direction
-          if (next < 0) next = recent.length - 1
-          if (next >= recent.length) next = 0
-          const val = recent[next]
-          if (!val) return
-          setModelStore("model", agent.current().name, { ...val })
+
+          try {
+            await sessionStore.client.setMode(modeId)
+            setSessionStore("modes", "currentModeId", modeId)
+          } catch (error) {
+            toast.show({
+              variant: "error",
+              message: `Failed to set mode: ${error instanceof Error ? error.message : String(error)}`,
+              duration: 3000,
+            })
+          }
         },
-        set(model: { providerID: string; modelID: string }, options?: { recent?: boolean }) {
-          batch(() => {
-            if (!isModelValid(model)) {
-              toast.show({
-                message: `Model ${model.providerID}/${model.modelID} is not valid`,
-                variant: "warning",
-                duration: 3000,
-              })
-              return
-            }
-            setModelStore("model", agent.current().name, model)
-            if (options?.recent) {
-              const uniq = uniqueBy([model, ...modelStore.recent], (x) => x.providerID + x.modelID)
-              if (uniq.length > 5) uniq.pop()
-              setModelStore("recent", uniq)
-              Bun.write(
-                file,
-                JSON.stringify({
-                  recent: modelStore.recent,
-                }),
-              )
-            }
-          })
+        cycle() {
+          const modes = sessionStore.modes?.availableModes ?? []
+          if (modes.length === 0) return
+
+          const currentMode = sessionStore.modes?.currentModeId
+          const currentIndex = modes.findIndex((m) => m.id === currentMode)
+          const nextIndex = (currentIndex + 1) % modes.length
+          const nextMode = modes[nextIndex]
+
+          this.set(nextMode.id)
+        },
+        getName(modeId: SessionModeId) {
+          const modes = sessionStore.modes?.availableModes ?? []
+          return modes.find((m) => m.id === modeId)?.name ?? modeId
         },
       }
     })
 
     const result = {
-      model,
       agent,
+      mode,
+      session: {
+        get id() {
+          return sessionStore.sessionId
+        },
+        get client() {
+          return sessionStore.client
+        },
+        get modes() {
+          return sessionStore.modes
+        },
+      },
     }
     return result
   },

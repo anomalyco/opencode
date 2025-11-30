@@ -1,0 +1,67 @@
+{
+  "description": "Session mode notifications - mode state and mode change updates",
+  "events": [
+    {
+      "type": "initial_session_modes",
+      "description": "Session modes from NewSessionResponse",
+      "modes": {
+        "currentModeId": "default",
+        "availableModes": [
+          {
+            "id": "default",
+            "name": "Always Ask",
+            "description": "Ask for permission before executing tools"
+          },
+          {
+            "id": "acceptEdits",
+            "name": "Accept Edits",
+            "description": "Automatically accept file edits"
+          },
+          {
+            "id": "plan",
+            "name": "Plan Mode",
+            "description": "Generate execution plans before acting"
+          },
+          {
+            "id": "bypassPermissions",
+            "name": "Bypass Permissions",
+            "description": "Execute tools without asking"
+          }
+        ]
+      }
+    },
+    {
+      "type": "current_mode_update",
+      "description": "Notification when mode changes to 'plan'",
+      "notification": {
+        "sessionId": "ses-mode-test-123",
+        "update": {
+          "sessionUpdate": "current_mode_update",
+          "currentModeId": "plan"
+        }
+      }
+    },
+    {
+      "type": "current_mode_update",
+      "description": "Notification when mode changes to 'acceptEdits'",
+      "notification": {
+        "sessionId": "ses-mode-test-123",
+        "update": {
+          "sessionUpdate": "current_mode_update",
+          "currentModeId": "acceptEdits"
+        }
+      }
+    },
+    {
+      "type": "current_mode_update",
+      "description": "Notification when mode changes back to 'default'",
+      "notification": {
+        "sessionId": "ses-mode-test-123",
+        "update": {
+          "sessionUpdate": "current_mode_update",
+          "currentModeId": "default"
+        }
+      }
+    }
+  ]
+}

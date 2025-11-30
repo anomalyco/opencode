@@ -1,26 +1,26 @@
 /**
- * Test: ACP Client
+ * Demo: ACP Client Interactive Session
  *
- * This test demonstrates the full ACP client flow with claude-code-acp:
- * 1. Create client and connect to claude-code-acp
+ * This demonstrates a complete interactive ACP client session:
+ * 1. Connect to claude-code-acp
  * 2. Initialize the connection
  * 3. Create a session
  * 4. Send a prompt
- * 5. Receive and display responses
+ * 5. Display responses in real-time
  *
- * Run with: ANTHROPIC_API_KEY=xxx bun test/acp/client-test.ts
+ * Run with: ANTHROPIC_API_KEY=xxx bun test/acp/integration/demo.ts
  */
 
-import { ACPClient } from "../../src/acp/client"
+import { ACPClient } from "../../../src/acp/client"
 import type { SessionNotification } from "@agentclientprotocol/sdk"
 
 async function main() {
-  console.log("=== ACP Client Test with claude-code-acp ===\n")
+  console.log("=== ACP Client Interactive Demo ===\n")
 
   // Check for API key
   if (!process.env.ANTHROPIC_API_KEY) {
     console.error("❌ Error: ANTHROPIC_API_KEY environment variable is required")
-    console.error("   Usage: ANTHROPIC_API_KEY=xxx bun test/acp/client-test.ts")
+    console.error("   Usage: ANTHROPIC_API_KEY=xxx bun test/acp/integration/demo.ts")
     process.exit(1)
   }
 
@@ -94,7 +94,14 @@ async function main() {
     console.log("Creating session...")
     const sessionResponse = await client.createSession()
     console.log(`✓ Session created: ${sessionResponse.sessionId}`)
-    console.log(`  Current model: ${sessionResponse.models?.currentModelId}\n`)
+
+    // Display mode information
+    const modes = client.getModes()
+    if (modes) {
+      console.log(`  Current mode: ${modes.currentModeId}`)
+      console.log(`  Available modes: ${modes.availableModes.map(m => m.id).join(", ")}`)
+    }
+    console.log()
 
     // 3. Send prompt
     console.log("Sending prompt...\n")
@@ -115,7 +122,7 @@ async function main() {
     console.log("✓ Client disposed\n")
   }
 
-  console.log("=== Test Complete ===")
+  console.log("=== Demo Complete ===")
 }
 
 // Only run if this file is executed directly

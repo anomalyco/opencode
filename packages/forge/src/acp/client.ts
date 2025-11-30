@@ -12,6 +12,9 @@ import {
   type RequestPermissionRequest,
   type RequestPermissionResponse,
   type AuthMethod,
+  type SessionModeState,
+  type SessionModeId,
+  type SetSessionModeResponse,
   PROTOCOL_VERSION,
   ndJsonStream,
 } from "@agentclientprotocol/sdk"
@@ -92,6 +95,26 @@ export namespace ACPClient {
      * Send a prompt to the agent
      */
     sendPrompt(sessionId: string, text: string): Promise<PromptResponse>
+    /**
+     * Get the current session mode state (available modes and current mode)
+     * Returns null if no session has been created yet
+     */
+    getModes(): SessionModeState | null
+    /**
+     * Get the current mode ID
+     * Returns null if no session has been created yet
+     */
+    getCurrentMode(): SessionModeId | null
+    /**
+     * Set the session mode
+     * @param modeId - The mode ID to switch to (must be in availableModes)
+     */
+    setMode(modeId: SessionModeId): Promise<SetSessionModeResponse>
+    /**
+     * Register a callback to be notified when the mode changes
+     * @param callback - Function to call when mode changes
+     */
+    onModeChange(callback: (modeId: SessionModeId) => void): void
     /**
      * Get the underlying agent connection
      */
@@ -272,6 +295,8 @@ export namespace ACPClient {
     let initialized = false
     let currentSessionId: string | undefined
     let authMethods: AuthMethod[] = []
+    let currentModes: SessionModeState | null = null
+    const modeChangeCallbacks: Array<(modeId: SessionModeId) => void> = []
 
     const instance: Instance = {
       async initialize(): Promise<InitializeResponse> {
@@ -344,6 +369,15 @@ export namespace ACPClient {
           const response = await connection.newSession(request)
           currentSessionId = response.sessionId
 
+          // Store mode state from response
+          if (response.modes) {
+            currentModes = response.modes
+            log.info("session modes captured", {
+              currentMode: currentModes.currentModeId,
+              availableModes: currentModes.availableModes.map(m => m.id),
+            })
+          }
+
           log.info("session created", { sessionId: response.sessionId })
 
           return response
@@ -387,6 +421,54 @@ export namespace ACPClient {
         log.info("prompt completed", { sessionId, stopReason: response.stopReason })
 
         return response
+      },
+
+      getModes(): SessionModeState | null {
+        return currentModes
+      },
+
+      getCurrentMode(): SessionModeId | null {
+        return currentModes?.currentModeId ?? null
+      },
+
+      async setMode(modeId: SessionModeId): Promise<SetSessionModeResponse> {
+        if (!initialized) {
+          throw new Error("Must initialize before setting mode")
+        }
+        if (!currentSessionId) {
+          throw new Error("Must create session before setting mode")
+        }
+
+        log.info("setting mode", { sessionId: currentSessionId, modeId })
+
+        const response = await connection.setSessionMode({
+          sessionId: currentSessionId,
+          modeId,
+        })
+
+        // Update local state
+        if (currentModes) {
+          currentModes.currentModeId = modeId
+        }
+
+        // Trigger callbacks
+        modeChangeCallbacks.forEach(cb => {
+          try {
+            cb(modeId)
+          } catch (error) {
+            log.error("mode change callback error", {
+              error: error instanceof Error ? error.message : String(error),
+            })
+          }
+        })
+
+        log.info("mode changed", { modeId })
+
+        return response
+      },
+
+      onModeChange(callback: (modeId: SessionModeId) => void): void {
+        modeChangeCallbacks.push(callback)
       },
 
       get agent(): Agent {

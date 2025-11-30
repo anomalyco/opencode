@@ -1,7 +1,6 @@
 export type ACPAgentInstallMethod = "npx" | "uvx" | "system" | "skip"
 
 export interface ACPAgentDefinition {
-  id: string
   name: string
   description: string
   installMethod: ACPAgentInstallMethod
@@ -14,7 +13,6 @@ export interface ACPAgentDefinition {
 
 export const ACP_AGENTS: ACPAgentDefinition[] = [
   {
-    id: "claude-code",
     name: "Claude Code",
     description: "Anthropic's official Claude Code agent",
     installMethod: "npx",
@@ -23,7 +21,6 @@ export const ACP_AGENTS: ACPAgentDefinition[] = [
     installGuide: "https://github.com/zed-industries/claude-code-acp",
   },
   {
-    id: "codex-cli",
     name: "Codex CLI",
     description: "Zed's Codex agent for code editing",
     installMethod: "npx",
@@ -32,7 +29,6 @@ export const ACP_AGENTS: ACPAgentDefinition[] = [
     installGuide: "https://github.com/zed-industries/codex-acp",
   },
   {
-    id: "gemini-cli",
     name: "Gemini CLI",
     description: "Google's Gemini code assistant (recommended for ACP testing)",
     installMethod: "npx",
@@ -42,7 +38,6 @@ export const ACP_AGENTS: ACPAgentDefinition[] = [
     installGuide: "https://github.com/google-gemini/gemini-cli",
   },
   {
-    id: "kimi-cli",
     name: "Kimi CLI",
     description: "Moonshot AI's Kimi code assistant",
     installMethod: "uvx",
@@ -51,7 +46,6 @@ export const ACP_AGENTS: ACPAgentDefinition[] = [
     installGuide: "https://github.com/MoonshotAI/kimi-cli",
   },
   {
-    id: "auggie",
     name: "Auggie",
     description: "Augment Code's AI coding assistant",
     installMethod: "system",
@@ -61,7 +55,6 @@ export const ACP_AGENTS: ACPAgentDefinition[] = [
     installGuide: "https://docs.augmentcode.com/cli/acp",
   },
   {
-    id: "goose",
     name: "Goose",
     description: "Block's autonomous coding agent (requires v1.14.2+)",
     installMethod: "system",
@@ -71,7 +64,6 @@ export const ACP_AGENTS: ACPAgentDefinition[] = [
     installGuide: "https://block.github.io/goose/docs/guides/acp-clients",
   },
   {
-    id: "opencode",
     name: "OpenCode",
     description: "SST's open-source code agent",
     installMethod: "system",
@@ -81,7 +73,6 @@ export const ACP_AGENTS: ACPAgentDefinition[] = [
     installGuide: "https://github.com/sst/opencode",
   },
   {
-    id: "stakpak",
     name: "Stakpak",
     description: "Stakpak's AI development agent",
     installMethod: "system",
@@ -91,7 +82,6 @@ export const ACP_AGENTS: ACPAgentDefinition[] = [
     installGuide: "https://github.com/stakpak/agent",
   },
   {
-    id: "docker-cagent",
     name: "Docker cagent",
     description: "Docker's container agent (ACP support unclear)",
     installMethod: "skip",
@@ -101,8 +91,8 @@ export const ACP_AGENTS: ACPAgentDefinition[] = [
   },
 ]
 
-export function getAgent(id: string): ACPAgentDefinition | undefined {
-  return ACP_AGENTS.find((agent) => agent.id === id)
+export function getAgent(name: string): ACPAgentDefinition | undefined {
+  return ACP_AGENTS.find((agent) => agent.name === name)
 }
 
 export function getAllAgents(): ACPAgentDefinition[] {

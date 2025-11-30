@@ -256,6 +256,61 @@ describe("ACPTranslator (unit tests)", () => {
       // Should not throw
       expect(true).toBe(true)
     })
+
+    test("should handle current_mode_update with different modes", async () => {
+      const modes = ["default", "acceptEdits", "plan", "bypassPermissions"]
+
+      for (const modeId of modes) {
+        await ACPTranslator.translate(testSessionID, {
+          sessionId: testSessionID,
+          update: {
+            sessionUpdate: "current_mode_update",
+            currentModeId: modeId,
+          },
+        })
+      }
+
+      // Should not throw
+      expect(true).toBe(true)
+    })
+
+    test("should handle mode updates in sequence", async () => {
+      // Simulate a sequence of mode changes
+      await ACPTranslator.translate(testSessionID, {
+        sessionId: testSessionID,
+        update: {
+          sessionUpdate: "current_mode_update",
+          currentModeId: "default",
+        },
+      })
+
+      await ACPTranslator.translate(testSessionID, {
+        sessionId: testSessionID,
+        update: {
+          sessionUpdate: "current_mode_update",
+          currentModeId: "plan",
+        },
+      })
+
+      await ACPTranslator.translate(testSessionID, {
+        sessionId: testSessionID,
+        update: {
+          sessionUpdate: "current_mode_update",
+          currentModeId: "acceptEdits",
+        },
+      })
+
+      await ACPTranslator.translate(testSessionID, {
+        sessionId: testSessionID,
+        update: {
+          sessionUpdate: "current_mode_update",
+          currentModeId: "default",
+        },
+      })
+
+      // Should not throw
+      expect(true).toBe(true)
+    })
   })
 })
 
