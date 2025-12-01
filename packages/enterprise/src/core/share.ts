@@ -65,8 +65,11 @@ export namespace Share {
   })
 
   export async function data(id: string) {
+    let time = Date.now()
     const list = await Storage.list(["share_data", id])
+    console.log("listing share data", Date.now() - time, list.length)
     const promises = []
+    time = Date.now()
     for (const item of list) {
       promises.push(
         iife(async () => {
@@ -78,7 +81,9 @@ export namespace Share {
         }),
       )
     }
-    return await Promise.all(promises)
+    const result = await Promise.all(promises)
+    console.log("read share data", Date.now() - time, result.length)
+    return result
   }
 
   export const sync = fn(
