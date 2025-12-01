@@ -1146,12 +1146,11 @@ function ToolPart(props: { last: boolean; part: ToolPart; message: AssistantMess
   const sync = useSync()
   const [margin, setMargin] = createSignal(0)
   const component = createMemo(() => {
-    // Hide tool if showActions is false and part has hideDetails set to true
+    // Hide tool if showActions is false and tool completed successfully
     // But always show if there's an error or permission is required
     const shouldHide =
       !showActions() &&
-      props.part.hideDetails &&
-      props.part.state.status !== "error" &&
+      props.part.state.status === "completed" &&
       !sync.data.permission[props.message.sessionID]?.some((x) => x.callID === props.part.callID)
 
     if (shouldHide) {
