@@ -1,5 +1,5 @@
 import { useSync } from "@tui/context/sync"
-import { createMemo, For, Show, Switch, Match } from "solid-js"
+import { createEffect, createMemo, createSignal, For, Show, Switch, Match } from "solid-js"
 import { createStore } from "solid-js/store"
 import { useTheme } from "../../context/theme"
 import { Locale } from "@/util/locale"
@@ -15,6 +15,18 @@ export function Sidebar(props: { sessionID: string }) {
   const { theme } = useTheme()
   const session = createMemo(() => sync.session.get(props.sessionID)!)
   const diff = createMemo(() => sync.data.session_diff[props.sessionID] ?? [])
+  const batch = 25
+  const [pages, setPages] = createSignal(1)
+  createEffect(() => {
+    diff()
+    setPages(1)
+  })
+  const diffSlice = createMemo(() => {
+    const list = diff()
+    const count = pages() * batch
+    if (count <= 0) return []
+    return list.slice(0, count)
+  })
   const todo = createMemo(() => sync.data.todo[props.sessionID] ?? [])
   const messages = createMemo(() => sync.data.message[props.sessionID] ?? [])
 
@@ -208,7 +220,7 @@ export function Sidebar(props: { sessionID: string }) {
                   </text>
                 </box>
                 <Show when={diff().length <= 2 || expanded.diff}>
-                  <For each={diff() || []}>
+                  <For each={diffSlice()}>
                     {(item) => {
                       const file = createMemo(() => {
                         const splits = item.file.split(path.sep).filter(Boolean)
@@ -234,6 +246,16 @@ export function Sidebar(props: { sessionID: string }) {
                       )
                     }}
                   </For>
+                  <Show when={diff().length > diffSlice().length}>
+                    <box flexDirection="column" gap={0} paddingTop={1}>
+                      <text fg={theme.textMuted}>
+                        Showing {diffSlice().length} of {diff().length}
+                      </text>
+                      <text fg={theme.text} onMouseDown={() => setPages((value) => value + 1)}>
+                        Load more ({Math.min(batch, diff().length - diffSlice().length)} more)
+                      </text>
+                    </box>
+                  </Show>
                 </Show>
               </box>
             </Show>
