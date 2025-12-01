@@ -7,18 +7,34 @@ import { GlobalBus } from "./global"
 export namespace Bus {
   const log = Log.create({ service: "bus" })
   type Subscription = (event: any) => void
-
-  const state = Instance.state(() => {
-    const subscriptions = new Map<any, Subscription[]>()
-
-    return {
-      subscriptions,
-    }
-  })
+  const disposedEventType = "server.instance.disposed"
 
   export type EventDefinition = ReturnType<typeof event>
 
   const registry = new Map<string, EventDefinition>()
+
+  const state = Instance.state(
+    () => {
+      const subscriptions = new Map<any, Subscription[]>()
+
+      return {
+        subscriptions,
+      }
+    },
+    async (entry) => {
+      const wildcard = entry.subscriptions.get("*")
+      if (!wildcard) return
+      const event = {
+        type: disposedEventType,
+        properties: {
+          directory: Instance.directory,
+        },
+      }
+      for (const sub of [...wildcard]) {
+        sub(event)
+      }
+    },
+  )
 
   export function event<Type extends string, Properties extends ZodType>(type: Type, properties: Properties) {
     const result = {
@@ -28,6 +44,13 @@ export namespace Bus {
     registry.set(type, result)
     return result
   }
+
+  export const InstanceDisposed = event(
+    disposedEventType,
+    z.object({
+      directory: z.string(),
+    }),
+  )
 
   export function payloads() {
     return z
