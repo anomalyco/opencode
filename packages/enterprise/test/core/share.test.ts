@@ -259,11 +259,4 @@ describe.concurrent("core.share", () => {
 
     await Share.remove({ id: share.id, secret: share.secret })
   })
-
-  afterAll(async () => {
-    const files = await Storage.list()
-    for (const file of files) {
-      Storage.remove(file)
-    }
-  })
 })
