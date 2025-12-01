@@ -335,11 +335,11 @@ export namespace SessionProcessor {
             const error = MessageV2.fromError(e, { providerID: input.providerID })
             if (error?.name === "APIError" && error.data.isRetryable) {
               attempt++
-              const delay = SessionRetry.delay(error, attempt)
+              const delay = SessionRetry.delay(attempt, error.name === "APIError" ? error : undefined)
               SessionStatus.set(input.sessionID, {
                 type: "retry",
                 attempt,
-                message: error.data.message,
+                message: error.data.message.includes("Overloaded") ? "Provider is overloaded" : error.data.message,
                 next: Date.now() + delay,
               })
               await SessionRetry.sleep(delay, input.abort).catch(() => {})

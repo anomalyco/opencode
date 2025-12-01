@@ -89,6 +89,7 @@ export namespace LSPServer {
     extensions: [".ts", ".tsx", ".js", ".jsx", ".mjs", ".cjs", ".mts", ".cts"],
     async spawn(root) {
       const tsserver = await Bun.resolve("typescript/lib/tsserver.js", Instance.directory).catch(() => {})
+      log.info("typescript server", { tsserver })
       if (!tsserver) return
       const proc = spawn(BunProc.which(), ["x", "typescript-language-server", "--stdio"], {
         cwd: root,
@@ -1162,6 +1163,24 @@ export namespace LSPServer {
       return {
         process: proc,
         initialization: {},
+      }
+    },
+  }
+
+  export const Dart: Info = {
+    id: "dart",
+    extensions: [".dart"],
+    root: NearestRoot(["pubspec.yaml", "analysis_options.yaml"]),
+    async spawn(root) {
+      const dart = Bun.which("dart")
+      if (!dart) {
+        log.info("dart not found, please install dart first")
+        return
+      }
+      return {
+        process: spawn(dart, ["language-server", "--lsp"], {
+          cwd: root,
+        }),
       }
     },
   }

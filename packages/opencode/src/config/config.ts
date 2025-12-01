@@ -8,7 +8,7 @@ import { mergeDeep, pipe } from "remeda"
 import { Global } from "../global"
 import fs from "fs/promises"
 import { lazy } from "../util/lazy"
-import { NamedError } from "../util/error"
+import { NamedError } from "@opencode-ai/util/error"
 import { Flag } from "../flag/flag"
 import { Auth } from "../auth"
 import { type ParseError as JsoncParseError, parse as parseJsonc, printParseErrorCode } from "jsonc-parser"
@@ -21,25 +21,36 @@ import { ConfigMarkdown } from "./markdown"
 export namespace Config {
   const log = Log.create({ service: "config" })
 
+  // Custom merge function that concatenates plugin arrays instead of replacing them
+  function mergeConfigWithPlugins(target: Info, source: Info): Info {
+    const merged = mergeDeep(target, source)
+    // If both configs have plugin arrays, concatenate them instead of replacing
+    if (target.plugin && source.plugin) {
+      const pluginSet = new Set([...target.plugin, ...source.plugin])
+      merged.plugin = Array.from(pluginSet)
+    }
+    return merged
+  }
+
   export const state = Instance.state(async () => {
     const auth = await Auth.all()
     let result = await global()
 
     // Override with custom config if provided
     if (Flag.OPENCODE_CONFIG) {
-      result = mergeDeep(result, await loadFile(Flag.OPENCODE_CONFIG))
+      result = mergeConfigWithPlugins(result, await loadFile(Flag.OPENCODE_CONFIG))
       log.debug("loaded custom config", { path: Flag.OPENCODE_CONFIG })
     }
 
     for (const file of ["opencode.jsonc", "opencode.json"]) {
       const found = await Filesystem.findUp(file, Instance.directory, Instance.worktree)
       for (const resolved of found.toReversed()) {
-        result = mergeDeep(result, await loadFile(resolved))
+        result = mergeConfigWithPlugins(result, await loadFile(resolved))
       }
     }
 
     if (Flag.OPENCODE_CONFIG_CONTENT) {
-      result = mergeDeep(result, JSON.parse(Flag.OPENCODE_CONFIG_CONTENT))
+      result = mergeConfigWithPlugins(result, JSON.parse(Flag.OPENCODE_CONFIG_CONTENT))
       log.debug("loaded custom config from OPENCODE_CONFIG_CONTENT")
     }
 
@@ -47,7 +58,7 @@ export namespace Config {
       if (value.type === "wellknown") {
         process.env[value.key] = value.token
         const wellknown = (await fetch(`${key}/.well-known/opencode`).then((x) => x.json())) as any
-        result = mergeDeep(result, await load(JSON.stringify(wellknown.config ?? {}), process.cwd()))
+        result = mergeConfigWithPlugins(result, await load(JSON.stringify(wellknown.config ?? {}), process.cwd()))
       }
     }
 
@@ -78,7 +89,7 @@ export namespace Config {
       if (dir.endsWith(".opencode") || dir === Flag.OPENCODE_CONFIG_DIR) {
         for (const file of ["opencode.jsonc", "opencode.json"]) {
           log.debug(`loading config from ${path.join(dir, file)}`)
-          result = mergeDeep(result, await loadFile(path.join(dir, file)))
+          result = mergeConfigWithPlugins(result, await loadFile(path.join(dir, file)))
           // to satisy the type checker
           result.agent ??= {}
           result.mode ??= {}
@@ -438,13 +449,17 @@ export namespace Config {
     })
 
   export const TUI = z.object({
-    scroll_speed: z.number().min(0.001).optional().default(1).describe("TUI scroll speed"),
+    scroll_speed: z.number().min(0.001).optional().describe("TUI scroll speed"),
     scroll_acceleration: z
       .object({
         enabled: z.boolean().describe("Enable scroll acceleration"),
       })
       .optional()
       .describe("Scroll acceleration settings"),
+    diff_style: z
+      .enum(["auto", "stacked"])
+      .optional()
+      .describe("Control diff rendering style: 'auto' adapts to terminal width, 'stacked' always shows single column"),
   })
 
   export const Layout = z.enum(["auto", "stretch"]).meta({
@@ -479,7 +494,12 @@ export namespace Config {
         .boolean()
         .optional()
         .describe("@deprecated Use 'share' field instead. Share newly created sessions automatically"),
-      autoupdate: z.boolean().optional().describe("Automatically update to the latest version"),
+      autoupdate: z
+        .union([z.boolean(), z.literal("notify")])
+        .optional()
+        .describe(
+          "Automatically update to the latest version. Set to true to auto-update, false to disable, or 'notify' to show update notifications",
+        ),
       disabled_providers: z.array(z.string()).optional().describe("Disable providers that are loaded automatically"),
       enabled_providers: z
         .array(z.string())
@@ -507,6 +527,7 @@ export namespace Config {
           plan: Agent.optional(),
           build: Agent.optional(),
           general: Agent.optional(),
+          explore: Agent.optional(),
         })
         .catchall(Agent)
         .optional()
@@ -524,6 +545,10 @@ export namespace Config {
                   apiKey: z.string().optional(),
                   baseURL: z.string().optional(),
                   enterpriseUrl: z.string().optional().describe("GitHub Enterprise URL for copilot authentication"),
+                  setCacheKey: z
+                    .boolean()
+                    .optional()
+                    .describe("Enable promptCacheKey for this provider (default false)"),
                   timeout: z
                     .union([
                       z

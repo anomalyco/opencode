@@ -1,8 +1,8 @@
 :root {
   --font-family-sans: "Geist", "Geist Fallback";
   --font-family-sans--font-feature-settings: "ss03" 1;
-  --font-family-mono: "Geist Mono", "Geist Mono Fallback";
-  --font-family-mono--font-feature-settings: "ss02" 1;
+  --font-family-mono: "Berkeley Mono", "Berkeley Mono Fallback";
+  --font-family-mono--font-feature-settings: "ss01" 1;
 
   --font-size-small: 12px;
   --font-size-base: 14px;

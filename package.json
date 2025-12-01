@@ -30,7 +30,7 @@
       "@tsconfig/bun": "1.0.9",
       "@cloudflare/workers-types": "4.20251008.0",
       "@openauthjs/openauth": "0.0.0-20250322224806",
-      "@pierre/precision-diffs": "0.5.4",
+      "@pierre/precision-diffs": "0.5.7",
       "@tailwindcss/vite": "4.1.11",
       "diff": "8.0.2",
       "ai": "5.0.97",
@@ -63,7 +63,8 @@
   "dependencies": {
     "@aws-sdk/client-s3": "3.933.0",
     "@opencode-ai/script": "workspace:*",
-    "@opencode-ai/sdk": "workspace:*"
+    "@opencode-ai/sdk": "workspace:*",
+    "typescript": "catalog:"
   },
   "repository": {
     "type": "git",

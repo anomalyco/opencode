@@ -30,6 +30,7 @@ import { TuiEvent } from "./event"
 import { KVProvider, useKV } from "./context/kv"
 import { Provider } from "@/provider/provider"
 import { ArgsProvider, useArgs, type Args } from "./context/args"
+import open from "open"
 
 async function getTerminalBackgroundColor(): Promise<"dark" | "light"> {
   // can't set raw mode if not a TTY
@@ -186,16 +187,13 @@ function App() {
     })
   })
 
+  let continued = false
   createEffect(() => {
-    if (sync.status !== "complete") return
-    if (args.continue) {
-      const match = sync.data.session.at(0)?.id
-      if (match) {
-        route.navigate({
-          type: "session",
-          sessionID: match,
-        })
-      }
+    if (continued || sync.status !== "complete" || !args.continue) return
+    const match = sync.data.session.at(0)?.id
+    if (match) {
+      continued = true
+      route.navigate({ type: "session", sessionID: match })
     }
   })
 
@@ -315,6 +313,15 @@ function App() {
       value: "help.show",
       onSelect: () => {
         dialog.replace(() => <DialogHelp />)
+      },
+      category: "System",
+    },
+    {
+      title: "Open docs",
+      value: "docs.open",
+      onSelect: () => {
+        open("https://opencode.ai/docs").catch(() => {})
+        dialog.clear()
       },
       category: "System",
     },
@@ -455,48 +462,14 @@ function App() {
         }
       }}
     >
-      <box flexDirection="column" flexGrow={1}>
-        <Switch>
-          <Match when={route.data.type === "home"}>
-            <Home />
-          </Match>
-          <Match when={route.data.type === "session"}>
-            <Session />
-          </Match>
-        </Switch>
-      </box>
-      <box
-        height={1}
-        backgroundColor={theme.backgroundPanel}
-        flexDirection="row"
-        justifyContent="space-between"
-        flexShrink={0}
-      >
-        <box flexDirection="row">
-          <box flexDirection="row" backgroundColor={theme.backgroundElement} paddingLeft={1} paddingRight={1}>
-            <text fg={theme.textMuted}>open</text>
-            <text fg={theme.text} attributes={TextAttributes.BOLD}>
-              code{" "}
-            </text>
-            <text fg={theme.textMuted}>v{Installation.VERSION}</text>
-          </box>
-          <box paddingLeft={1} paddingRight={1}>
-            <text fg={theme.textMuted}>{process.cwd().replace(Global.Path.home, "~")}</text>
-          </box>
-        </box>
-        <Show when={false}>
-          <box flexDirection="row" flexShrink={0}>
-            <text fg={theme.textMuted} paddingRight={1}>
-              tab
-            </text>
-            <text fg={local.agent.color(local.agent.current().name)}>{""}</text>
-            <text bg={local.agent.color(local.agent.current().name)} fg={theme.background} wrapMode={undefined}>
-              <span style={{ bold: true }}> {local.agent.current().name.toUpperCase()}</span>
-              <span> AGENT </span>
-            </text>
-          </box>
-        </Show>
-      </box>
+      <Switch>
+        <Match when={route.data.type === "home"}>
+          <Home />
+        </Match>
+        <Match when={route.data.type === "session"}>
+          <Session />
+        </Match>
+      </Switch>
     </box>
   )
 }

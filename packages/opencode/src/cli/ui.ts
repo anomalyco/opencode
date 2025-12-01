@@ -1,6 +1,6 @@
 import z from "zod"
 import { EOL } from "os"
-import { NamedError } from "../util/error"
+import { NamedError } from "@opencode-ai/util/error"
 
 export namespace UI {
   const LOGO = [

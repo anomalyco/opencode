@@ -1,4 +1,4 @@
-import { FileDiff, Message, Part, Session, SessionStatus } from "@opencode-ai/sdk"
+import { FileDiff, Message, Model, Part, Session, SessionStatus } from "@opencode-ai/sdk"
 import { fn } from "@opencode-ai/util/fn"
 import { iife } from "@opencode-ai/util/iife"
 import z from "zod"
@@ -8,6 +8,7 @@ export namespace Share {
   export const Info = z.object({
     id: z.string(),
     secret: z.string(),
+    sessionID: z.string(),
   })
   export type Info = z.infer<typeof Info>
 
@@ -29,15 +30,16 @@ export namespace Share {
       data: z.custom<FileDiff[]>(),
     }),
     z.object({
-      type: z.literal("session_status"),
-      data: z.custom<SessionStatus>(),
+      type: z.literal("model"),
+      data: z.custom<Model[]>(),
     }),
   ])
   export type Data = z.infer<typeof Data>
 
-  export const create = fn(Info.pick({ id: true }), async (body) => {
+  export const create = fn(z.object({ sessionID: z.string() }), async (body) => {
     const info: Info = {
-      id: body.id,
+      id: body.sessionID.slice(-8),
+      sessionID: body.sessionID,
       secret: crypto.randomUUID(),
     }
     const exists = await get(info.id)
@@ -47,8 +49,8 @@ export namespace Share {
     return info
   })
 
-  async function get(sessionID: string) {
-    return Storage.read<Info>(["share", sessionID])
+  export async function get(id: string) {
+    return Storage.read<Info>(["share", id])
   }
 
   export const remove = fn(Info.pick({ id: true, secret: true }), async (body) => {
@@ -62,9 +64,12 @@ export namespace Share {
     }
   })
 
-  export async function data(sessionID: string) {
-    const list = await Storage.list(["share_data", sessionID])
+  export async function data(id: string) {
+    let time = Date.now()
+    const list = await Storage.list(["share_data", id])
+    console.log("listing share data", Date.now() - time, list.length)
     const promises = []
+    time = Date.now()
     for (const item of list) {
       promises.push(
         iife(async () => {
@@ -76,12 +81,14 @@ export namespace Share {
         }),
       )
     }
-    return await Promise.all(promises)
+    const result = await Promise.all(promises)
+    console.log("read share data", Date.now() - time, result.length)
+    return result
   }
 
   export const sync = fn(
     z.object({
-      share: Info,
+      share: Info.pick({ id: true, secret: true }),
       data: Data.array(),
     }),
     async (input) => {
@@ -108,8 +115,8 @@ export namespace Share {
               case "session_diff":
                 await Storage.write(["share_data", input.share.id, "session_diff"], item.data)
                 break
-              case "session_status":
-                await Storage.write(["share_data", input.share.id, "session_status"], item.data)
+              case "model":
+                await Storage.write(["share_data", input.share.id, "model"], item.data)
                 break
             }
           }),

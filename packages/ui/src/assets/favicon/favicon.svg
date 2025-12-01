@@ -1,18 +1,7 @@
-<svg width='300' height='300' viewBox='0 0 300 300' fill='none' xmlns='http://www.w3.org/2000/svg'>
-  <style>
-    /* Light mode colors (default) */
-    .inner-square { fill: #CFCECD; }
-    .outer-path { fill: #211E1E; }
-
-    /* Dark mode colors */
-    @media (prefers-color-scheme: dark) {
-    .inner-square { fill: #4B4646; }
-    .outer-path { fill: #F1ECEC; }
-    }
-  </style>
-  <g>
-    <path class="inner-square" d='M194 215.5H106V127.5H194V215.5Z' />
-    <path class="outer-path" d='M194 83.5H106V215.5H194V83.5ZM238 259.5H62V39.5H238V259.5Z' />
-  </g>
-</svg>
-
+<svg xmlns="http://www.w3.org/2000/svg" version="1.1" xmlns:xlink="http://www.w3.org/1999/xlink" width="512" height="512"><svg width="512" height="512" viewBox="0 0 512 512" fill="none" xmlns="http://www.w3.org/2000/svg">
+<rect width="512" height="512" fill="#131010"></rect>
+<path d="M320 224V352H192V224H320Z" fill="#5A5858"></path>
+<path fill-rule="evenodd" clip-rule="evenodd" d="M384 416H128V96H384V416ZM320 160H192V352H320V160Z" fill="white"></path>
+</svg><style>@media (prefers-color-scheme: light) { :root { filter: none; } }
+@media (prefers-color-scheme: dark) { :root { filter: none; } }
+</style></svg>

@@ -7,14 +7,40 @@ import { Log } from "../util/log"
 import { BunProc } from "../bun"
 import { Plugin } from "../plugin"
 import { ModelsDev } from "./models"
-import { NamedError } from "../util/error"
+import { NamedError } from "@opencode-ai/util/error"
 import { Auth } from "../auth"
 import { Instance } from "../project/instance"
 import { Flag } from "../flag/flag"
 import { iife } from "@/util/iife"
 
+// Direct imports for bundled providers
+import { createAmazonBedrock } from "@ai-sdk/amazon-bedrock"
+import { createAnthropic } from "@ai-sdk/anthropic"
+import { createAzure } from "@ai-sdk/azure"
+import { createGoogleGenerativeAI } from "@ai-sdk/google"
+import { createVertex } from "@ai-sdk/google-vertex"
+import { createVertexAnthropic } from "@ai-sdk/google-vertex/anthropic"
+import { createOpenAI } from "@ai-sdk/openai"
+import { createOpenAICompatible } from "@ai-sdk/openai-compatible"
+import { createOpenRouter } from "@openrouter/ai-sdk-provider"
+import { createOpenaiCompatible as createGitHubCopilotOpenAICompatible } from "./sdk/openai-compatible/src"
+
 export namespace Provider {
   const log = Log.create({ service: "provider" })
+
+  const BUNDLED_PROVIDERS: Record<string, (options: any) => SDK> = {
+    "@ai-sdk/amazon-bedrock": createAmazonBedrock,
+    "@ai-sdk/anthropic": createAnthropic,
+    "@ai-sdk/azure": createAzure,
+    "@ai-sdk/google": createGoogleGenerativeAI,
+    "@ai-sdk/google-vertex": createVertex,
+    "@ai-sdk/google-vertex/anthropic": createVertexAnthropic,
+    "@ai-sdk/openai": createOpenAI,
+    "@ai-sdk/openai-compatible": createOpenAICompatible,
+    "@openrouter/ai-sdk-provider": createOpenRouter,
+    // @ts-ignore (TODO: kill this code so we dont have to maintain it)
+    "@ai-sdk/github-copilot": createGitHubCopilotOpenAICompatible,
+  }
 
   type CustomLoader = (provider: ModelsDev.Provider) => Promise<{
     autoload: boolean
@@ -64,6 +90,30 @@ export namespace Provider {
         options: {},
       }
     },
+    "github-copilot": async () => {
+      return {
+        autoload: false,
+        async getModel(sdk: any, modelID: string, _options?: Record<string, any>) {
+          if (modelID.includes("gpt-5")) {
+            return sdk.responses(modelID)
+          }
+          return sdk.chat(modelID)
+        },
+        options: {},
+      }
+    },
+    "github-copilot-enterprise": async () => {
+      return {
+        autoload: false,
+        async getModel(sdk: any, modelID: string, _options?: Record<string, any>) {
+          if (modelID.includes("gpt-5")) {
+            return sdk.responses(modelID)
+          }
+          return sdk.chat(modelID)
+        },
+        options: {},
+      }
+    },
     azure: async () => {
       return {
         autoload: false,
@@ -107,6 +157,11 @@ export namespace Provider {
           credentialProvider: fromNodeProviderChain(),
         },
         async getModel(sdk: any, modelID: string, _options?: Record<string, any>) {
+          // Skip region prefixing if model already has global prefix
+          if (modelID.startsWith("global.")) {
+            return sdk.languageModel(modelID)
+          }
+
           let regionPrefix = region.split("-")[0]
 
           switch (regionPrefix) {
@@ -400,15 +455,6 @@ export namespace Provider {
       }
     }
 
-    // load custom
-    for (const [providerID, fn] of Object.entries(CUSTOM_LOADERS)) {
-      if (disabled.has(providerID)) continue
-      const result = await fn(database[providerID])
-      if (result && (result.autoload || providers[providerID])) {
-        mergeProvider(providerID, result.options ?? {}, "custom", result.getModel)
-      }
-    }
-
     for (const plugin of await Plugin.list()) {
       if (!plugin.auth) continue
       const providerID = plugin.auth.provider
@@ -450,6 +496,14 @@ export namespace Provider {
       }
     }
 
+    for (const [providerID, fn] of Object.entries(CUSTOM_LOADERS)) {
+      if (disabled.has(providerID)) continue
+      const result = await fn(database[providerID])
+      if (result && (result.autoload || providers[providerID])) {
+        mergeProvider(providerID, result.options ?? {}, "custom", result.getModel)
+      }
+    }
+
     // load config
     for (const [providerID, provider] of configProviders) {
       mergeProvider(providerID, provider.options ?? {}, "config")
@@ -459,6 +513,10 @@ export namespace Provider {
       if (!isProviderAllowed(providerID)) {
         delete providers[providerID]
         continue
+      }
+
+      if (providerID === "github-copilot") {
+        provider.info.npm = "@ai-sdk/github-copilot"
       }
 
       const configProvider = config.provider?.[providerID]
@@ -493,12 +551,6 @@ export namespace Provider {
         continue
       }
 
-      // TODO: set this in models.dev, not set due to breaking issues on older OC versions
-      // u have to set include usage to true w/ this provider, setting in models.dev would cause undefined issue when accessing usage in older versions
-      if (providerID === "openrouter") {
-        provider.info.npm = "@openrouter/ai-sdk-provider"
-      }
-
       log.info("found", { providerID, npm: provider.info.npm })
     }
 
@@ -530,29 +582,6 @@ export namespace Provider {
       const existing = s.sdk.get(key)
       if (existing) return existing
 
-      const installedPath = await (async () => {
-        if (pkg.startsWith("file://")) {
-          log.info("loading local provider", { pkg })
-          return pkg
-        }
-        const resolved = await BunProc.resolve(pkg)
-        if (resolved) {
-          log.info("using preinstalled provider", { providerID: provider.id, pkg })
-          return resolved
-        }
-        return BunProc.install(pkg, "latest")
-      })()
-
-      // The `google-vertex-anthropic` provider points to the `@ai-sdk/google-vertex` package.
-      // Ref: https://github.com/sst/models.dev/blob/0a87de42ab177bebad0620a889e2eb2b4a5dd4ab/providers/google-vertex-anthropic/provider.toml
-      // However, the actual export is at the subpath `@ai-sdk/google-vertex/anthropic`.
-      // Ref: https://ai-sdk.dev/providers/ai-sdk-providers/google-vertex#google-vertex-anthropic-provider-usage
-      // In addition, Bun's dynamic import logic does not support subpath imports,
-      // so we patch the import path to load directly from `dist`.
-      const modPath =
-        provider.id === "google-vertex-anthropic" ? `${installedPath}/dist/anthropic/index.mjs` : installedPath
-      const mod = await import(modPath)
-
       const customFetch = options["fetch"]
 
       options["fetch"] = async (input: any, init?: BunFetchRequestInit) => {
@@ -576,6 +605,30 @@ export namespace Provider {
           timeout: false,
         })
       }
+
+      // Special case: google-vertex-anthropic uses a subpath import
+      const bundledKey = provider.id === "google-vertex-anthropic" ? "@ai-sdk/google-vertex/anthropic" : pkg
+      const bundledFn = BUNDLED_PROVIDERS[bundledKey]
+      if (bundledFn) {
+        log.info("using bundled provider", { providerID: provider.id, pkg: bundledKey })
+        const loaded = bundledFn({
+          name: provider.id,
+          ...options,
+        })
+        s.sdk.set(key, loaded)
+        return loaded as SDK
+      }
+
+      let installedPath: string
+      if (!pkg.startsWith("file://")) {
+        installedPath = await BunProc.install(pkg, "latest")
+      } else {
+        log.info("loading local provider", { pkg })
+        installedPath = pkg
+      }
+
+      const mod = await import(installedPath)
+
       const fn = mod[Object.keys(mod).find((key) => key.startsWith("create"))!]
       const loaded = fn({
         name: provider.id,
@@ -651,6 +704,21 @@ export namespace Provider {
           { cause: e },
         )
       throw e
+    }
+  }
+
+  export async function closest(providerID: string, query: string[]) {
+    const s = await state()
+    const provider = s.providers[providerID]
+    if (!provider) return undefined
+    for (const item of query) {
+      for (const modelID of Object.keys(provider.info.models)) {
+        if (modelID.includes(item))
+          return {
+            providerID,
+            modelID,
+          }
+      }
     }
   }
 

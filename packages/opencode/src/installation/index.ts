@@ -1,7 +1,7 @@
 import path from "path"
 import { $ } from "bun"
 import z from "zod"
-import { NamedError } from "../util/error"
+import { NamedError } from "@opencode-ai/util/error"
 import { Bus } from "../bus"
 import { Log } from "../util/log"
 

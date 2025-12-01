@@ -23,6 +23,8 @@ import type {
   InstanceDisposeResponses,
   PathGetData,
   PathGetResponses,
+  VcsGetData,
+  VcsGetResponses,
   SessionListData,
   SessionListResponses,
   SessionCreateData,
@@ -75,6 +77,9 @@ import type {
   SessionMessageData,
   SessionMessageResponses,
   SessionMessageErrors,
+  SessionPromptAsyncData,
+  SessionPromptAsyncResponses,
+  SessionPromptAsyncErrors,
   SessionCommandData,
   SessionCommandResponses,
   SessionCommandErrors,
@@ -308,6 +313,18 @@ class Path extends _HeyApiClient {
   }
 }
 
+class Vcs extends _HeyApiClient {
+  /**
+   * Get VCS info for the current instance
+   */
+  public get<ThrowOnError extends boolean = false>(options?: Options<VcsGetData, ThrowOnError>) {
+    return (options?.client ?? this._client).get<VcsGetResponses, unknown, ThrowOnError>({
+      url: "/vcs",
+      ...options,
+    })
+  }
+}
+
 class Session extends _HeyApiClient {
   /**
    * List all sessions
@@ -510,6 +527,20 @@ class Session extends _HeyApiClient {
     return (options.client ?? this._client).get<SessionMessageResponses, SessionMessageErrors, ThrowOnError>({
       url: "/session/{id}/message/{messageID}",
       ...options,
+    })
+  }
+
+  /**
+   * Create and send a new message to a session, start if needed and return immediately
+   */
+  public promptAsync<ThrowOnError extends boolean = false>(options: Options<SessionPromptAsyncData, ThrowOnError>) {
+    return (options.client ?? this._client).post<SessionPromptAsyncResponses, SessionPromptAsyncErrors, ThrowOnError>({
+      url: "/session/{id}/prompt_async",
+      ...options,
+      headers: {
+        "Content-Type": "application/json",
+        ...options.headers,
+      },
     })
   }
 
@@ -978,6 +1009,7 @@ export class OpencodeClient extends _HeyApiClient {
   tool = new Tool({ client: this._client })
   instance = new Instance({ client: this._client })
   path = new Path({ client: this._client })
+  vcs = new Vcs({ client: this._client })
   session = new Session({ client: this._client })
   command = new Command({ client: this._client })
   provider = new Provider({ client: this._client })

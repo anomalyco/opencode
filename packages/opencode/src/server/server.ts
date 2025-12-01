@@ -9,7 +9,7 @@ import { Session } from "../session"
 import z from "zod"
 import { Provider } from "../provider/provider"
 import { mapValues } from "remeda"
-import { NamedError } from "../util/error"
+import { NamedError } from "@opencode-ai/util/error"
 import { ModelsDev } from "../provider/models"
 import { Ripgrep } from "../file/ripgrep"
 import { Config } from "../config/config"
@@ -20,6 +20,7 @@ import { MessageV2 } from "../session/message-v2"
 import { TuiRoute } from "./tui"
 import { Permission } from "../permission"
 import { Instance } from "../project/instance"
+import { Vcs } from "../project/vcs"
 import { Agent } from "../agent/agent"
 import { Auth } from "../auth"
 import { Command } from "../command"
@@ -42,7 +43,6 @@ import { Snapshot } from "@/snapshot"
 import { SessionSummary } from "@/session/summary"
 import { GlobalBus } from "@/bus/global"
 import { SessionStatus } from "@/session/status"
-import { ShareNext } from "@/share/share-next"
 
 // @ts-ignore This global is needed to prevent ai-sdk from logging warnings to stdout https://github.com/vercel/ai/blob/2dc67e0ef538307f21368db32d5a12345d98831b/packages/ai/src/logger/log-warnings.ts#L85
 globalThis.AI_SDK_LOG_WARNINGS = false
@@ -362,6 +362,29 @@ export namespace Server {
             config: Global.Path.config,
             worktree: Instance.worktree,
             directory: Instance.directory,
+          })
+        },
+      )
+      .get(
+        "/vcs",
+        describeRoute({
+          description: "Get VCS info for the current instance",
+          operationId: "vcs.get",
+          responses: {
+            200: {
+              description: "VCS info",
+              content: {
+                "application/json": {
+                  schema: resolver(Vcs.Info),
+                },
+              },
+            },
+          },
+        }),
+        async (c) => {
+          const branch = await Vcs.branch()
+          return c.json({
+            branch,
           })
         },
       )
@@ -830,6 +853,7 @@ export namespace Server {
               providerID: body.providerID,
               modelID: body.modelID,
             },
+            auto: false,
           })
           await SessionPrompt.loop(id)
           return c.json(true)
@@ -976,6 +1000,35 @@ export namespace Server {
             const body = c.req.valid("json")
             const msg = await SessionPrompt.prompt({ ...body, sessionID })
             stream.write(JSON.stringify(msg))
+          })
+        },
+      )
+      .post(
+        "/session/:id/prompt_async",
+        describeRoute({
+          description: "Create and send a new message to a session, start if needed and return immediately",
+          operationId: "session.prompt_async",
+          responses: {
+            204: {
+              description: "Prompt accepted",
+            },
+            ...errors(400, 404),
+          },
+        }),
+        validator(
+          "param",
+          z.object({
+            id: z.string().meta({ description: "Session ID" }),
+          }),
+        ),
+        validator("json", SessionPrompt.PromptInput.omit({ sessionID: true })),
+        async (c) => {
+          c.status(204)
+          c.header("Content-Type", "application/json")
+          return stream(c, async (stream) => {
+            const sessionID = c.req.valid("param").id
+            const body = c.req.valid("json")
+            SessionPrompt.prompt({ ...body, sessionID })
           })
         },
       )
@@ -1983,6 +2036,9 @@ export namespace Server {
               await stream.writeSSE({
                 data: JSON.stringify(event),
               })
+              if (event.type === Bus.InstanceDisposed.type) {
+                stream.close()
+              }
             })
             await new Promise<void>((resolve) => {
               stream.onAbort(() => {

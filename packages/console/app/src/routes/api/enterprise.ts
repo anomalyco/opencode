@@ -36,6 +36,7 @@ ${body.email}`.trim()
       to: "contact@anoma.ly",
       subject: `Enterprise Inquiry from ${body.name}`,
       body: emailContent,
+      replyTo: body.email,
     })
 
     return Response.json({ success: true, message: "Form submitted successfully" }, { status: 200 })

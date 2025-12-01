@@ -62,6 +62,7 @@ import { Toast, useToast } from "../../ui/toast"
 import { useKV } from "../../context/kv.tsx"
 import { Editor } from "../../util/editor"
 import stripAnsi from "strip-ansi"
+import { Footer } from "./footer.tsx"
 
 addDefaultParsers(parsers.parsers)
 
@@ -80,6 +81,8 @@ const context = createContext<{
   conceal: () => boolean
   showThinking: () => boolean
   showTimestamps: () => boolean
+  diffWrapMode: () => "word" | "none"
+  sync: ReturnType<typeof useSync>
 }>()
 
 function use() {
@@ -109,11 +112,17 @@ export function Session() {
   const dimensions = useTerminalDimensions()
   const [sidebar, setSidebar] = createSignal<"show" | "hide" | "auto">(kv.get("sidebar", "auto"))
   const [conceal, setConceal] = createSignal(true)
-  const [showThinking, setShowThinking] = createSignal(true)
+  const [showThinking, setShowThinking] = createSignal(kv.get("thinking_visibility", true))
   const [showTimestamps, setShowTimestamps] = createSignal(kv.get("timestamps", "hide") === "show")
+  const [diffWrapMode, setDiffWrapMode] = createSignal<"word" | "none">("word")
 
   const wide = createMemo(() => dimensions().width > 120)
-  const sidebarVisible = createMemo(() => sidebar() === "show" || (sidebar() === "auto" && wide()))
+  const sidebarVisible = createMemo(() => {
+    if (session()?.parentID) return false
+    if (sidebar() === "show") return true
+    if (sidebar() === "auto" && wide()) return true
+    return false
+  })
   const contentWidth = createMemo(() => dimensions().width - (sidebarVisible() ? 42 : 0) - 4)
 
   const scrollAcceleration = createMemo(() => {
@@ -124,7 +133,8 @@ export function Session() {
     if (tui?.scroll_speed) {
       return new CustomSpeedScroll(tui.scroll_speed)
     }
-    return undefined
+
+    return new CustomSpeedScroll(process.platform === "win32" ? 3 : 1)
   })
 
   createEffect(async () => {
@@ -318,7 +328,9 @@ export function Session() {
       value: "session.undo",
       keybind: "messages_undo",
       category: "Session",
-      onSelect: (dialog) => {
+      onSelect: async (dialog) => {
+        const status = sync.data.session_status[route.sessionID]
+        if (status?.type !== "idle") await sdk.client.session.abort({ path: { id: route.sessionID } }).catch(() => {})
         const revert = session().revert?.messageID
         const message = messages().findLast((x) => (!revert || x.id < revert) && x.role === "user")
         if (!message) return
@@ -420,11 +432,24 @@ export function Session() {
       },
     },
     {
-      title: "Toggle thinking blocks",
+      title: showThinking() ? "Hide thinking" : "Show thinking",
       value: "session.toggle.thinking",
       category: "Session",
       onSelect: (dialog) => {
-        setShowThinking((prev) => !prev)
+        setShowThinking((prev) => {
+          const next = !prev
+          kv.set("thinking_visibility", next)
+          return next
+        })
+        dialog.clear()
+      },
+    },
+    {
+      title: "Toggle diff wrapping",
+      value: "session.toggle.diffwrap",
+      category: "Session",
+      onSelect: (dialog) => {
+        setDiffWrapMode((prev) => (prev === "word" ? "none" : "word"))
         dialog.clear()
       },
     },
@@ -729,33 +754,13 @@ export function Session() {
         conceal,
         showThinking,
         showTimestamps,
+        diffWrapMode,
+        sync,
       }}
     >
-      <box flexDirection="row" paddingBottom={1} paddingTop={1} paddingLeft={2} paddingRight={2} gap={2}>
-        <box flexGrow={1} gap={1}>
+      <box flexDirection="row">
+        <box flexGrow={1} paddingBottom={1} paddingTop={1} paddingLeft={2} paddingRight={2} gap={1}>
           <Show when={session()}>
-            <Show when={session().parentID}>
-              <box
-                backgroundColor={theme.backgroundPanel}
-                justifyContent="space-between"
-                flexDirection="row"
-                paddingTop={1}
-                paddingBottom={1}
-                flexShrink={0}
-                paddingLeft={2}
-                paddingRight={2}
-              >
-                <text fg={theme.text}>
-                  Previous <span style={{ fg: theme.textMuted }}>{keybind.print("session_child_cycle_reverse")}</span>
-                </text>
-                <text fg={theme.text}>
-                  <b>Viewing subagent session</b>
-                </text>
-                <text fg={theme.text}>
-                  <span style={{ fg: theme.textMuted }}>{keybind.print("session_child_cycle")}</span> Next
-                </text>
-              </box>
-            </Show>
             <Show when={!sidebarVisible()}>
               <Header />
             </Show>
@@ -880,6 +885,9 @@ export function Session() {
                 sessionID={route.sessionID}
               />
             </box>
+            <Show when={!sidebarVisible()}>
+              <Footer />
+            </Show>
           </Show>
           <Toast />
         </box>
@@ -939,7 +947,7 @@ function UserMessage(props: {
             onMouseUp={props.onMouseUp}
             paddingTop={1}
             paddingBottom={1}
-            paddingLeft={1}
+            paddingLeft={2}
             backgroundColor={hover() ? theme.backgroundElement : theme.backgroundPanel}
             flexShrink={0}
           >
@@ -1047,11 +1055,11 @@ function AssistantMessage(props: { message: AssistantMessage; parts: Part[]; las
         <Match when={props.last || final()}>
           <box paddingLeft={3}>
             <text marginTop={1}>
-              <span style={{ fg: local.agent.color(props.message.mode) }}>▣</span>{" "}
-              <span style={{ fg: theme.text }}>{Locale.titlecase(props.message.mode)}</span>{" "}
-              <span style={{ fg: theme.textMuted }}>⬝{props.message.modelID}</span>
+              <span style={{ fg: local.agent.color(props.message.mode) }}>▣ </span>{" "}
+              <span style={{ fg: theme.text }}>{Locale.titlecase(props.message.mode)}</span>
+              <span style={{ fg: theme.textMuted }}> · {props.message.modelID}</span>
               <Show when={duration()}>
-                <span style={{ fg: theme.textMuted }}> ⬝{Locale.duration(duration())}</span>
+                <span style={{ fg: theme.textMuted }}> · {Locale.duration(duration())}</span>
               </Show>
             </text>
           </box>
@@ -1193,15 +1201,15 @@ function ToolPart(props: { last: boolean; part: ToolPart; message: AssistantMess
           <box gap={1}>
             <text fg={theme.text}>Permission required to run this tool:</text>
             <box flexDirection="row" gap={2}>
-              <text>
+              <text fg={theme.text}>
                 <b>enter</b>
                 <span style={{ fg: theme.textMuted }}> accept</span>
               </text>
-              <text>
+              <text fg={theme.text}>
                 <b>a</b>
                 <span style={{ fg: theme.textMuted }}> accept always</span>
               </text>
-              <text>
+              <text fg={theme.text}>
                 <b>d</b>
                 <span style={{ fg: theme.textMuted }}> deny</span>
               </text>
@@ -1306,21 +1314,9 @@ ToolRegistry.register<typeof WriteTool>({
   container: "block",
   render(props) {
     const { theme, syntax } = useTheme()
-    const lines = createMemo(
-      () => (typeof props.input.content === "string" ? props.input.content.split("\n") : []),
-      [] as string[],
-    )
     const code = createMemo(() => {
       if (!props.input.content) return ""
-      const text = props.input.content
-      return text
-    })
-
-    const numbers = createMemo(() => {
-      const pad = lines().length.toString().length
-      return lines()
-        .map((_, index) => index + 1)
-        .map((x) => x.toString().padStart(pad, " "))
+      return props.input.content
     })
 
     const diagnostics = createMemo(() => props.metadata.diagnostics?.[props.input.filePath ?? ""] ?? [])
@@ -1330,14 +1326,15 @@ ToolRegistry.register<typeof WriteTool>({
         <ToolTitle icon="←" fallback="Preparing write..." when={props.input.filePath}>
           Wrote {props.input.filePath}
         </ToolTitle>
-        <box flexDirection="row">
-          <box flexShrink={0}>
-            <For each={numbers()}>{(value) => <text style={{ fg: theme.textMuted }}>{value}</text>}</For>
-          </box>
-          <box paddingLeft={1} flexGrow={1}>
-            <code fg={theme.text} filetype={filetype(props.input.filePath!)} syntaxStyle={syntax()} content={code()} />
-          </box>
-        </box>
+        <line_number fg={theme.textMuted} minWidth={3} paddingRight={1}>
+          <code
+            conceal={false}
+            fg={theme.text}
+            filetype={filetype(props.input.filePath!)}
+            syntaxStyle={syntax()}
+            content={code()}
+          />
+        </line_number>
         <Show when={diagnostics().length}>
           <For each={diagnostics()}>
             {(diagnostic) => (
@@ -1409,15 +1406,15 @@ ToolRegistry.register<typeof TaskTool>({
 
     return (
       <>
-        <ToolTitle icon="%" fallback="Delegating..." when={props.input.subagent_type ?? props.input.description}>
-          Task [{props.input.subagent_type ?? "unknown"}] {props.input.description}
+        <ToolTitle icon="◉" fallback="Delegating..." when={props.input.subagent_type ?? props.input.description}>
+          {Locale.titlecase(props.input.subagent_type ?? "unknown")} Task "{props.input.description}"
         </ToolTitle>
         <Show when={props.metadata.summary?.length}>
           <box>
             <For each={props.metadata.summary ?? []}>
               {(task) => (
                 <text style={{ fg: theme.textMuted }}>
-                  ∟ {task.tool} {task.state.status === "completed" ? task.state.title : ""}
+                  ∟ {Locale.titlecase(task.tool)} {task.state.status === "completed" ? task.state.title : ""}
                 </text>
               )}
             </For>
@@ -1444,6 +1441,34 @@ ToolRegistry.register<typeof WebFetchTool>({
   },
 })
 
+ToolRegistry.register({
+  name: "codesearch",
+  container: "inline",
+  render(props: ToolProps<any>) {
+    const input = props.input as any
+    const metadata = props.metadata as any
+    return (
+      <ToolTitle icon="◇" fallback="Searching code..." when={input.query}>
+        Exa Code Search "{input.query}" <Show when={metadata.results}>({metadata.results} results)</Show>
+      </ToolTitle>
+    )
+  },
+})
+
+ToolRegistry.register({
+  name: "websearch",
+  container: "inline",
+  render(props: ToolProps<any>) {
+    const input = props.input as any
+    const metadata = props.metadata as any
+    return (
+      <ToolTitle icon="◈" fallback="Searching web..." when={input.query}>
+        Exa Web Search "{input.query}" <Show when={metadata.numResults}>({metadata.numResults} results)</Show>
+      </ToolTitle>
+    )
+  },
+})
+
 ToolRegistry.register<typeof EditTool>({
   name: "edit",
   container: "block",
@@ -1451,78 +1476,16 @@ ToolRegistry.register<typeof EditTool>({
     const ctx = use()
     const { theme, syntax } = useTheme()
 
-    const style = createMemo(() => (ctx.width > 120 ? "split" : "stacked"))
-
-    const diff = createMemo(() => {
-      const diff = props.metadata.diff ?? props.permission["diff"]
-      if (!diff) return null
-
-      try {
-        const patches = parsePatch(diff)
-        if (patches.length === 0) return null
-
-        const patch = patches[0]
-        const oldLines: string[] = []
-        const newLines: string[] = []
-
-        for (const hunk of patch.hunks) {
-          let i = 0
-          while (i < hunk.lines.length) {
-            const line = hunk.lines[i]
-
-            if (line.startsWith("-")) {
-              const removedLines: string[] = []
-              while (i < hunk.lines.length && hunk.lines[i].startsWith("-")) {
-                removedLines.push("- " + hunk.lines[i].slice(1))
-                i++
-              }
-
-              const addedLines: string[] = []
-              while (i < hunk.lines.length && hunk.lines[i].startsWith("+")) {
-                addedLines.push("+ " + hunk.lines[i].slice(1))
-                i++
-              }
-
-              const maxLen = Math.max(removedLines.length, addedLines.length)
-              for (let j = 0; j < maxLen; j++) {
-                oldLines.push(removedLines[j] ?? "")
-                newLines.push(addedLines[j] ?? "")
-              }
-            } else if (line.startsWith("+")) {
-              const addedLines: string[] = []
-              while (i < hunk.lines.length && hunk.lines[i].startsWith("+")) {
-                addedLines.push("+ " + hunk.lines[i].slice(1))
-                i++
-              }
-
-              for (const added of addedLines) {
-                oldLines.push("")
-                newLines.push(added)
-              }
-            } else {
-              oldLines.push("  " + line.slice(1))
-              newLines.push("  " + line.slice(1))
-              i++
-            }
-          }
-        }
-
-        return {
-          oldContent: oldLines.join("\n"),
-          newContent: newLines.join("\n"),
-        }
-      } catch (error) {
-        return null
-      }
-    })
-
-    const code = createMemo(() => {
-      if (!props.metadata.diff) return ""
-      const text = props.metadata.diff.split("\n").slice(5).join("\n")
-      return text.trim()
+    const view = createMemo(() => {
+      const diffStyle = ctx.sync.data.config.tui?.diff_style
+      if (diffStyle === "stacked") return "unified"
+      // Default to "auto" behavior
+      return ctx.width > 120 ? "split" : "unified"
     })
 
     const ft = createMemo(() => filetype(props.input.filePath))
+
+    const diffContent = createMemo(() => props.metadata.diff ?? props.permission["diff"])
 
     const diagnostics = createMemo(() => {
       const arr = props.metadata.diagnostics?.[props.input.filePath ?? ""] ?? []
@@ -1537,26 +1500,28 @@ ToolRegistry.register<typeof EditTool>({
             replaceAll: props.input.replaceAll,
           })}
         </ToolTitle>
-        <Switch>
-          <Match when={props.permission["diff"]}>
-            <text fg={theme.text}>{props.permission["diff"]?.trim()}</text>
-          </Match>
-          <Match when={diff() && style() === "split"}>
-            <box paddingLeft={1} flexDirection="row" gap={2}>
-              <box flexGrow={1} flexBasis={0}>
-                <code fg={theme.text} filetype={ft()} syntaxStyle={syntax()} content={diff()!.oldContent} />
-              </box>
-              <box flexGrow={1} flexBasis={0}>
-                <code fg={theme.text} filetype={ft()} syntaxStyle={syntax()} content={diff()!.newContent} />
-              </box>
-            </box>
-          </Match>
-          <Match when={code()}>
-            <box paddingLeft={1}>
-              <code fg={theme.text} filetype={ft()} syntaxStyle={syntax()} content={code()} />
-            </box>
-          </Match>
-        </Switch>
+        <Show when={diffContent()}>
+          <box paddingLeft={1}>
+            <diff
+              diff={diffContent()}
+              view={view()}
+              filetype={ft()}
+              syntaxStyle={syntax()}
+              showLineNumbers={true}
+              width="100%"
+              wrapMode={ctx.diffWrapMode()}
+              addedBg={theme.diffAddedBg}
+              removedBg={theme.diffRemovedBg}
+              contextBg={theme.diffContextBg}
+              addedSignColor={theme.diffHighlightAdded}
+              removedSignColor={theme.diffHighlightRemoved}
+              lineNumberFg={theme.diffLineNumber}
+              lineNumberBg={theme.diffContextBg}
+              addedLineNumberBg={theme.diffAddedLineNumberBg}
+              removedLineNumberBg={theme.diffRemovedLineNumberBg}
+            />
+          </box>
+        </Show>
         <Show when={diagnostics().length}>
           <box>
             <For each={diagnostics()}>

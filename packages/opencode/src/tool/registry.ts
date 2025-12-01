@@ -97,8 +97,9 @@ export namespace ToolRegistry {
       WebFetchTool,
       TodoWriteTool,
       TodoReadTool,
+      WebSearchTool,
+      CodeSearchTool,
       ...(config.experimental?.batch_tool === true ? [BatchTool] : []),
-      ...(Flag.OPENCODE_EXPERIMENTAL_EXA ? [WebSearchTool, CodeSearchTool] : []),
       ...custom,
     ]
   }
@@ -107,13 +108,18 @@ export namespace ToolRegistry {
     return all().then((x) => x.map((t) => t.id))
   }
 
-  export async function tools(_providerID: string, _modelID: string) {
+  export async function tools(providerID: string, _modelID: string) {
     const tools = await all()
     const result = await Promise.all(
-      tools.map(async (t) => ({
-        id: t.id,
-        ...(await t.init()),
-      })),
+      tools
+        .filter((t) => {
+          if (t.id === "codesearch" || t.id === "websearch") return providerID === "opencode"
+          return true
+        })
+        .map(async (t) => ({
+          id: t.id,
+          ...(await t.init()),
+        })),
     )
     return result
   }
@@ -134,6 +140,8 @@ export namespace ToolRegistry {
     }
     if (agent.permission.webfetch === "deny") {
       result["webfetch"] = false
+      result["codesearch"] = false
+      result["websearch"] = false
     }
 
     return result

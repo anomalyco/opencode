@@ -13,6 +13,7 @@ import { Locale } from "@/util/locale"
 
 export interface DialogSelectProps<T> {
   title: string
+  placeholder?: string
   options: DialogSelectOption<T>[]
   ref?: (ref: DialogSelectRef<T>) => void
   onMove?: (option: DialogSelectOption<T>) => void
@@ -21,6 +22,7 @@ export interface DialogSelectProps<T> {
   keybind?: {
     keybind: Keybind.Info
     title: string
+    disabled?: boolean
     onTrigger: (option: DialogSelectOption<T>) => void
   }[]
   current?: T
@@ -48,6 +50,15 @@ export function DialogSelect<T>(props: DialogSelectProps<T>) {
   const [store, setStore] = createStore({
     selected: 0,
     filter: "",
+  })
+
+  createEffect(() => {
+    if (props.current) {
+      const currentIndex = flat().findIndex((opt) => isDeepEqual(opt.value, props.current))
+      if (currentIndex >= 0) {
+        setStore("selected", currentIndex)
+      }
+    }
   })
 
   let input: InputRenderable
@@ -88,7 +99,14 @@ export function DialogSelect<T>(props: DialogSelectProps<T>) {
 
   createEffect(() => {
     store.filter
-    setStore("selected", 0)
+    if (store.filter.length > 0) {
+      setStore("selected", 0)
+    } else if (props.current) {
+      const currentIndex = flat().findIndex((opt) => isDeepEqual(opt.value, props.current))
+      if (currentIndex >= 0) {
+        setStore("selected", currentIndex)
+      }
+    }
     scroll.scrollTo(0)
   })
 
@@ -134,6 +152,7 @@ export function DialogSelect<T>(props: DialogSelectProps<T>) {
     }
 
     for (const item of props.keybind ?? []) {
+      if (item.disabled) continue
       if (Keybind.match(item.keybind, keybind.parse(evt))) {
         const s = selected()
         if (s) {
@@ -155,8 +174,10 @@ export function DialogSelect<T>(props: DialogSelectProps<T>) {
   }
   props.ref?.(ref)
 
+  const keybinds = createMemo(() => props.keybind?.filter((x) => !x.disabled) ?? [])
+
   return (
-    <box gap={1}>
+    <box gap={1} paddingBottom={1}>
       <box paddingLeft={4} paddingRight={4}>
         <box flexDirection="row" justifyContent="space-between">
           <text fg={theme.text} attributes={TextAttributes.BOLD}>
@@ -179,7 +200,7 @@ export function DialogSelect<T>(props: DialogSelectProps<T>) {
               input = r
               setTimeout(() => input.focus(), 1)
             }}
-            placeholder="Enter search term"
+            placeholder={props.placeholder ?? "Search"}
           />
         </box>
       </box>
@@ -237,18 +258,20 @@ export function DialogSelect<T>(props: DialogSelectProps<T>) {
           )}
         </For>
       </scrollbox>
-      <box paddingRight={2} paddingLeft={4} flexDirection="row" paddingBottom={1} gap={1}>
-        <For each={props.keybind ?? []}>
-          {(item) => (
-            <text>
-              <span style={{ fg: theme.text }}>
-                <b>{item.title}</b>{" "}
-              </span>
-              <span style={{ fg: theme.textMuted }}>{Keybind.toString(item.keybind)}</span>
-            </text>
-          )}
-        </For>
-      </box>
+      <Show when={keybinds().length} fallback={<box flexShrink={0} />}>
+        <box paddingRight={2} paddingLeft={4} flexDirection="row" gap={2} flexShrink={0} paddingTop={1}>
+          <For each={keybinds()}>
+            {(item) => (
+              <text>
+                <span style={{ fg: theme.text }}>
+                  <b>{item.title}</b>{" "}
+                </span>
+                <span style={{ fg: theme.textMuted }}>{Keybind.toString(item.keybind)}</span>
+              </text>
+            )}
+          </For>
+        </box>
+      </Show>
     </box>
   )
 }
