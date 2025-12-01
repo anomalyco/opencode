@@ -85,15 +85,18 @@ export namespace Share {
   }
 
   export async function data(shareID: string) {
+    console.log("reading compaction")
     const compaction: Compaction = (await Storage.read<Compaction>(["share_compaction", shareID])) ?? {
       data: [],
       event: undefined,
     }
-
+    console.log("reading pending events")
     const list = await Storage.list({
       prefix: ["share_event", shareID],
       end: compaction.event,
     }).then((x) => x.toReversed())
+
+    console.log("compacting", list.length)
 
     const data = await Promise.all(list.map(async (event) => await Storage.read<Data[]>(event))).then((x) => x.flat())
     for (const item of data) {
