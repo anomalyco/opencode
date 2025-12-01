@@ -1317,7 +1317,7 @@ You can use any OpenAI-compatible provider with opencode. Most modern AI provide
 
 Here's an example setting the `apiKey`, `headers`, and model `limit` options.
 
-```json title="opencode.json" {9,11,17-20}
+```json title="opencode.json"
 {
   "$schema": "https://opencode.ai/config.json",
   "provider": {
@@ -1334,9 +1334,41 @@ Here's an example setting the `apiKey`, `headers`, and model `limit` options.
       "models": {
         "my-model-name": {
           "name": "My Model Display Name",
+          "options": {
+            "reasoningEffort": "high"
+          },
           "limit": {
             "context": 200000,
             "output": 65536
+          }
+        }
+      }
+    }
+  }
+}
+```
+
+For Anthropic-compatible providers:
+
+```json title="opencode.json"
+{
+  "$schema": "https://opencode.ai/config.json",
+  "provider": {
+    "anthropic-provider": {
+      "npm": "@ai-sdk/anthropic",
+      "name": "My AI ProviderDisplay Name",
+      "options": {
+        "baseURL": "https://api.myprovider.com/v1",
+        "apiKey": "{env:ANTHROPIC_API_KEY}"
+      },
+      "models": {
+        "my-model-name": {
+          "name": "My Model Display Name",
+          "options": {
+            "thinking": {
+              "type": "enabled",
+              "budgetTokens": 8000
+            }
           }
         }
       }
