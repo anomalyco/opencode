@@ -9,7 +9,10 @@ async function test() {
   ]
 
   const batch2: Share.Data[] = [
-    { type: "part", data: { id: "part1", sessionID: "session1", messageID: "msg1", type: "text", text: "Hello Updated" } },
+    {
+      type: "part",
+      data: { id: "part1", sessionID: "session1", messageID: "msg1", type: "text", text: "Hello Updated" },
+    },
   ]
 
   await Share.sync({
@@ -25,7 +28,7 @@ async function test() {
   const events = await Storage.list({ prefix: ["share_event", shareInfo.id] })
   console.log("Events (raw):", events)
   console.log("Events (reversed):", events.toReversed())
-  
+
   for (const event of events.toReversed()) {
     const data = await Storage.read(event)
     console.log("Event data (reversed order):", event, data)
