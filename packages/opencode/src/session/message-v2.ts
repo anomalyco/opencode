@@ -565,7 +565,7 @@ export namespace MessageV2 {
         const userMessage: UIMessage = {
           id: msg.info.id,
           role: "user",
-          parts: [],
+          parts: result.at(-1)?.role === "user" ? [{ type: "text", text: "\n" }] : [],
         }
         result.push(userMessage)
         for (const part of msg.parts) {
