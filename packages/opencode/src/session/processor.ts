@@ -370,8 +370,8 @@ export namespace SessionProcessor {
             }
           }
           input.assistantMessage.time.completed = Date.now()
+          if (blocked) input.assistantMessage.finish = "stop"
           await Session.updateMessage(input.assistantMessage)
-          if (blocked) return "stop"
           if (input.assistantMessage.error) return "stop"
           return "continue"
         }
