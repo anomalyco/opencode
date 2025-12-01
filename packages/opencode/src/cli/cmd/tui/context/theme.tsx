@@ -299,12 +299,8 @@ async function getCustomThemes() {
       const ext = path.extname(item)
       const name = path.basename(item, ext)
 
-      // Use appropriate parser based on file extension
-      if (ext === ".jsonc") {
-        result[name] = await Config.loadThemeFile(item)
-      } else {
-        result[name] = await Bun.file(item).json()
-      }
+      // Use JSONC parser for all theme files regardless of extension
+      result[name] = await Config.loadThemeFile(item)
     }
   }
   return result
