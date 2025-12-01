@@ -6,7 +6,7 @@ export namespace Storage {
     read(path: string): Promise<string | undefined>
     write(path: string, value: string): Promise<void>
     remove(path: string): Promise<void>
-    list(options?: { prefix?: string; limit?: number; start?: string; end?: string }): Promise<string[]>
+    list(options?: { prefix?: string; limit?: number; after?: string; before?: string }): Promise<string[]>
   }
 
   function createAdapter(client: AwsClient, endpoint: string, bucket: string): Adapter {
@@ -37,13 +37,13 @@ export namespace Storage {
         if (!response.ok) throw new Error(`Failed to remove ${path}: ${response.status}`)
       },
 
-      async list(options?: { prefix?: string; limit?: number; start?: string; end?: string }): Promise<string[]> {
+      async list(options?: { prefix?: string; limit?: number; after?: string; before?: string }): Promise<string[]> {
         const prefix = options?.prefix || ""
         const params = new URLSearchParams({ "list-type": "2", prefix })
         if (options?.limit) params.set("max-keys", options.limit.toString())
-        if (options?.start) {
-          const startPath = prefix + options.start + ".json"
-          params.set("start-after", startPath)
+        if (options?.after) {
+          const afterPath = prefix + options.after + ".json"
+          params.set("start-after", afterPath)
         }
         const response = await client.fetch(`${base}?${params}`)
         if (!response.ok) throw new Error(`Failed to list ${prefix}: ${response.status}`)
@@ -54,9 +54,9 @@ export namespace Storage {
         while ((match = regex.exec(xml)) !== null) {
           keys.push(match[1])
         }
-        if (options?.end) {
-          const endPath = prefix + options.end + ".json"
-          return keys.filter((key) => key <= endPath)
+        if (options?.before) {
+          const beforePath = prefix + options.before + ".json"
+          return keys.filter((key) => key < beforePath)
         }
         return keys
       },
@@ -108,9 +108,14 @@ export namespace Storage {
     return adapter().remove(resolve(key))
   }
 
-  export async function list(options?: { prefix?: string[]; limit?: number; start?: string; end?: string }) {
+  export async function list(options?: { prefix?: string[]; limit?: number; after?: string; before?: string }) {
     const p = options?.prefix ? options.prefix.join("/") + (options.prefix.length ? "/" : "") : ""
-    const result = await adapter().list({ prefix: p, limit: options?.limit, start: options?.start, end: options?.end })
+    const result = await adapter().list({
+      prefix: p,
+      limit: options?.limit,
+      after: options?.after,
+      before: options?.before,
+    })
     return result.map((x) => x.replace(/\.json$/, "").split("/"))
   }
 

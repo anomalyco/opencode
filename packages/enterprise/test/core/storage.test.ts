@@ -2,23 +2,20 @@ import { describe, expect, test, afterAll } from "bun:test"
 import { Storage } from "../../src/core/storage"
 
 describe("core.storage", () => {
-  test("should list files with start and end range", async () => {
+  test("should list files with after and before range", async () => {
     await Storage.write(["test", "users", "user1"], { name: "user1" })
     await Storage.write(["test", "users", "user2"], { name: "user2" })
     await Storage.write(["test", "users", "user3"], { name: "user3" })
     await Storage.write(["test", "users", "user4"], { name: "user4" })
     await Storage.write(["test", "users", "user5"], { name: "user5" })
 
-    const result = await Storage.list({ prefix: ["test", "users"], start: "user2", end: "user4" })
+    const result = await Storage.list({ prefix: ["test", "users"], after: "user2", before: "user4" })
 
-    expect(result).toEqual([
-      ["test", "users", "user3"],
-      ["test", "users", "user4"],
-    ])
+    expect(result).toEqual([["test", "users", "user3"]])
   })
 
-  test("should list files with start only", async () => {
-    const result = await Storage.list({ prefix: ["test", "users"], start: "user3" })
+  test("should list files with after only", async () => {
+    const result = await Storage.list({ prefix: ["test", "users"], after: "user3" })
 
     expect(result).toEqual([
       ["test", "users", "user4"],

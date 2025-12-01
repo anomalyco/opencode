@@ -93,38 +93,40 @@ export namespace Share {
     console.log("reading pending events")
     const list = await Storage.list({
       prefix: ["share_event", shareID],
-      end: compaction.event,
+      before: compaction.event,
     }).then((x) => x.toReversed())
 
     console.log("compacting", list.length)
 
-    const data = await Promise.all(list.map(async (event) => await Storage.read<Data[]>(event))).then((x) => x.flat())
-    for (const item of data) {
-      if (!item) continue
-      const key = (item: Data) => {
-        switch (item.type) {
-          case "session":
-            return "session"
-          case "message":
-            return `message/${item.data.id}`
-          case "part":
-            return `${item.data.messageID}/${item.data.id}`
-          case "session_diff":
-            return "session_diff"
-          case "model":
-            return "model"
+    if (list.length > 0) {
+      const data = await Promise.all(list.map(async (event) => await Storage.read<Data[]>(event))).then((x) => x.flat())
+      for (const item of data) {
+        if (!item) continue
+        const key = (item: Data) => {
+          switch (item.type) {
+            case "session":
+              return "session"
+            case "message":
+              return `message/${item.data.id}`
+            case "part":
+              return `${item.data.messageID}/${item.data.id}`
+            case "session_diff":
+              return "session_diff"
+            case "model":
+              return "model"
+          }
+        }
+        const id = key(item)
+        const result = Binary.search(compaction.data, id, key)
+        if (result.found) {
+          compaction.data[result.index] = item
+        } else {
+          compaction.data.splice(result.index, 0, item)
         }
       }
-      const id = key(item)
-      const result = Binary.search(compaction.data, id, key)
-      if (result.found) {
-        compaction.data[result.index] = item
-      } else {
-        compaction.data.splice(result.index, 0, item)
-      }
+      compaction.event = list.at(-1)?.at(-1)
+      await Storage.write(["share_compaction", shareID], compaction)
     }
-    compaction.event = list.at(-1)?.at(-1)
-    await Storage.write(["share_compaction", shareID], compaction)
     return compaction.data
   }
 
