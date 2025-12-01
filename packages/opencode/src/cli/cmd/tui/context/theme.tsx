@@ -32,6 +32,7 @@ import { useRenderer } from "@opentui/solid"
 import { createStore, produce } from "solid-js/store"
 import { Global } from "@/global"
 import { Filesystem } from "@/util/filesystem"
+import { Config } from "../../../../config/config"
 
 type ThemeColors = {
   primary: RGBA
@@ -116,7 +117,7 @@ type Variant = {
   light: HexColor | RefName
 }
 type ColorValue = HexColor | RefName | Variant | RGBA
-type ThemeJson = {
+export type ThemeJson = {
   $schema?: string
   defs?: Record<string, HexColor | RefName>
   theme: Omit<Record<keyof ThemeColors, ColorValue>, "selectedListItemText" | "backgroundMenu"> & {
@@ -275,7 +276,7 @@ export const { use: useTheme, provider: ThemeProvider } = createSimpleContext({
   },
 })
 
-const CUSTOM_THEME_GLOB = new Bun.Glob("themes/*.json")
+const CUSTOM_THEME_GLOB = new Bun.Glob("themes/*.{json,jsonc}")
 async function getCustomThemes() {
   const directories = [
     Global.Path.config,
@@ -295,8 +296,15 @@ async function getCustomThemes() {
       dot: true,
       cwd: dir,
     })) {
-      const name = path.basename(item, ".json")
-      result[name] = await Bun.file(item).json()
+      const ext = path.extname(item)
+      const name = path.basename(item, ext)
+
+      // Use appropriate parser based on file extension
+      if (ext === ".jsonc") {
+        result[name] = await Config.loadThemeFile(item)
+      } else {
+        result[name] = await Bun.file(item).json()
+      }
     }
   }
   return result
