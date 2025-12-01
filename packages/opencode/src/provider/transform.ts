@@ -275,13 +275,13 @@ export namespace ProviderTransform {
 
     // Convert integer enums to string enums for Google/Gemini
     if (providerID === "google" || modelID.includes("gemini")) {
-      const convertIntEnumsToStrings = (obj: any): any => {
+      const sanitizeGemini = (obj: any): any => {
         if (obj === null || typeof obj !== "object") {
           return obj
         }
 
         if (Array.isArray(obj)) {
-          return obj.map(convertIntEnumsToStrings)
+          return obj.map(sanitizeGemini)
         }
 
         const result: any = {}
@@ -294,15 +294,21 @@ export namespace ProviderTransform {
               result.type = "string"
             }
           } else if (typeof value === "object" && value !== null) {
-            result[key] = convertIntEnumsToStrings(value)
+            result[key] = sanitizeGemini(value)
           } else {
             result[key] = value
           }
         }
+
+        // Filter required array to only include fields that exist in properties
+        if (result.type === "object" && result.properties && Array.isArray(result.required)) {
+          result.required = result.required.filter((field: any) => field in result.properties)
+        }
+
         return result
       }
 
-      schema = convertIntEnumsToStrings(schema)
+      schema = sanitizeGemini(schema)
     }
 
     return schema
