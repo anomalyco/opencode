@@ -1327,7 +1327,7 @@ ToolRegistry.register<typeof WriteTool>({
           Wrote {props.input.filePath}
         </ToolTitle>
         <line_number fg={theme.textMuted} minWidth={3} paddingRight={1}>
-          <code fg={theme.text} filetype={filetype(props.input.filePath!)} syntaxStyle={syntax()} content={code()} />
+          <code conceal={false} fg={theme.text} filetype={filetype(props.input.filePath!)} syntaxStyle={syntax()} content={code()} />
         </line_number>
         <Show when={diagnostics().length}>
           <For each={diagnostics()}>
