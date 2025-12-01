@@ -620,7 +620,6 @@ export namespace SessionPrompt {
         }),
       )
       if (result === "stop") break
-      continue
     }
     SessionCompaction.prune({ sessionID })
     for await (const item of MessageV2.stream(sessionID)) {

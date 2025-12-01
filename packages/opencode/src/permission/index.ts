@@ -181,6 +181,8 @@ export namespace Permission {
   }
 
   export class RejectedError extends Error {
+    readonly isPermissionRejected = true
+
     constructor(
       public readonly sessionID: string,
       public readonly permissionID: string,

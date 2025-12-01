@@ -28,8 +28,8 @@ export namespace SessionProcessor {
   }) {
     const toolcalls: Record<string, MessageV2.ToolPart> = {}
     let snapshot: string | undefined
-    let blocked = false
     let attempt = 0
+    let rejected = false
 
     const result = {
       get message() {
@@ -218,9 +218,7 @@ export namespace SessionProcessor {
                       },
                     })
 
-                    if (value.error instanceof Permission.RejectedError) {
-                      blocked = true
-                    }
+                    if ((value.error as any)?.isPermissionRejected) rejected = true
                     delete toolcalls[value.toolCallId]
                   }
                   break
@@ -369,8 +367,8 @@ export namespace SessionProcessor {
             }
           }
           input.assistantMessage.time.completed = Date.now()
+          if (rejected) input.assistantMessage.finish = "stop"
           await Session.updateMessage(input.assistantMessage)
-          if (blocked) return "stop"
           if (input.assistantMessage.error) return "stop"
           return "continue"
         }
