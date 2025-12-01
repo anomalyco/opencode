@@ -94,7 +94,7 @@ export namespace Provider {
       return {
         autoload: false,
         async getModel(sdk: any, modelID: string, _options?: Record<string, any>) {
-          if (modelID.includes("gpt-5")) {
+          if (modelID.includes("codex")) {
             return sdk.responses(modelID)
           }
           return sdk.chat(modelID)
@@ -106,7 +106,7 @@ export namespace Provider {
       return {
         autoload: false,
         async getModel(sdk: any, modelID: string, _options?: Record<string, any>) {
-          if (modelID.includes("gpt-5")) {
+          if (modelID.includes("codex")) {
             return sdk.responses(modelID)
           }
           return sdk.chat(modelID)
