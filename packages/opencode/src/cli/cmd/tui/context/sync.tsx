@@ -186,7 +186,14 @@ export const { use: useSync, provider: SyncProvider } = createSimpleContext({
               draft.splice(result.index, 0, event.properties.info)
               const maxMessages = (store.config.tui as any)?.messages_limit
               const maxMessagesCount = maxMessages === "none" ? Infinity : maxMessages || 100
-              if (draft.length > maxMessagesCount) draft.shift()
+              // DEBUG: Log message limit behavior
+              console.log(
+                `[SYNC] Session ${event.properties.info.sessionID}: messages_limit=${maxMessages}, maxMessagesCount=${maxMessagesCount}`,
+              )
+              if (draft.length > maxMessagesCount) {
+                console.log(`[SYNC] Session ${event.properties.info.sessionID}: LIMIT EXCEEDED - shifting messages`)
+                draft.shift()
+              }
             }),
           )
           break
