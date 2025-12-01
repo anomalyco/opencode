@@ -6,7 +6,7 @@ export namespace Storage {
     read(path: string): Promise<string | undefined>
     write(path: string, value: string): Promise<void>
     remove(path: string): Promise<void>
-    list(prefix: string): Promise<string[]>
+    list(options?: { prefix?: string; limit?: number; start?: string; end?: string }): Promise<string[]>
   }
 
   function createAdapter(client: AwsClient, endpoint: string, bucket: string): Adapter {
@@ -37,8 +37,14 @@ export namespace Storage {
         if (!response.ok) throw new Error(`Failed to remove ${path}: ${response.status}`)
       },
 
-      async list(prefix: string): Promise<string[]> {
+      async list(options?: { prefix?: string; limit?: number; start?: string; end?: string }): Promise<string[]> {
+        const prefix = options?.prefix || ""
         const params = new URLSearchParams({ "list-type": "2", prefix })
+        if (options?.limit) params.set("max-keys", options.limit.toString())
+        if (options?.start) {
+          const startPath = prefix + options.start + ".json"
+          params.set("start-after", startPath)
+        }
         const response = await client.fetch(`${base}?${params}`)
         if (!response.ok) throw new Error(`Failed to list ${prefix}: ${response.status}`)
         const xml = await response.text()
@@ -47,6 +53,10 @@ export namespace Storage {
         let match
         while ((match = regex.exec(xml)) !== null) {
           keys.push(match[1])
+        }
+        if (options?.end) {
+          const endPath = prefix + options.end + ".json"
+          return keys.filter((key) => key <= endPath)
         }
         return keys
       },
@@ -98,9 +108,9 @@ export namespace Storage {
     return adapter().remove(resolve(key))
   }
 
-  export async function list(prefix: string[]) {
-    const p = prefix.join("/") + (prefix.length ? "/" : "")
-    const result = await adapter().list(p)
+  export async function list(options?: { prefix?: string[]; limit?: number; start?: string; end?: string }) {
+    const p = options?.prefix ? options.prefix.join("/") + (options.prefix.length ? "/" : "") : ""
+    const result = await adapter().list({ prefix: p, limit: options?.limit, start: options?.start, end: options?.end })
     return result.map((x) => x.replace(/\.json$/, "").split("/"))
   }
 
