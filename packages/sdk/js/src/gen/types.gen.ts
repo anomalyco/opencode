@@ -295,7 +295,6 @@ export type ToolPart = {
   metadata?: {
     [key: string]: unknown
   }
-  hideDetails?: boolean
 }
 
 export type StepStartPart = {
