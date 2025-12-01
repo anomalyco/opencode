@@ -166,6 +166,7 @@ PART_MAPPING["tool"] = function ToolPartDisplay(props) {
             tool={part.tool}
             metadata={metadata}
             output={part.state.status === "completed" ? part.state.output : undefined}
+            hideDetails={hideForError}
           />
         </Match>
       </Switch>
