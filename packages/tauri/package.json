@@ -1,7 +1,7 @@
 {
   "name": "@opencode-ai/tauri",
   "private": true,
-  "version": "1.0.122",
+  "version": "1.0.123",
   "type": "module",
   "scripts": {
     "dev": "vite",

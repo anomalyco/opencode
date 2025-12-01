@@ -739,7 +739,7 @@ export namespace MessageV2 {
           { cause: e },
         ).toObject()
       case APICallError.isInstance(e):
-        const message = ProviderTransform.error(ctx.providerID, e.message)
+        const message = ProviderTransform.error(ctx.providerID, e)
         return new MessageV2.APIError(
           {
             message,
