@@ -4,6 +4,17 @@ import type { JSONSchema } from "zod/v4/core"
 
 export namespace ProviderTransform {
   function normalizeMessages(msgs: ModelMessage[], providerID: string, modelID: string): ModelMessage[] {
+    if (modelID.includes("deepseek-reasoner")) {
+      return msgs.map((msg) => {
+        if (Array.isArray(msg.content)) {
+          return {
+            ...msg,
+            content: msg.content.filter((part: any) => part.type !== "reasoning"),
+          }
+        }
+        return msg
+      })
+    }
     if (modelID.includes("claude")) {
       return msgs.map((msg) => {
         if ((msg.role === "assistant" || msg.role === "tool") && Array.isArray(msg.content)) {
