@@ -391,6 +391,7 @@
         "zod": "catalog:",
       },
       "devDependencies": {
+        "@types/bun": "catalog:",
         "typescript": "catalog:",
       },
     },
