@@ -165,7 +165,7 @@ export namespace Installation {
 
   export async function latest() {
     const registry = await iife(async () => {
-      const r = (await $`npm config get registry`.throws(false).text()).trim()
+      const r = (await $`npm config get registry`.quiet().nothrow().text()).trim()
       const reg = r || "https://registry.npmjs.org"
       return reg.endsWith("/") ? reg.slice(0, -1) : reg
     })
