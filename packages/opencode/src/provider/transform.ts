@@ -1,4 +1,5 @@
-import type { ModelMessage } from "ai"
+import type { APICallError, ModelMessage } from "ai"
+import { STATUS_CODES } from "http"
 import { unique } from "remeda"
 import type { JSONSchema } from "zod/v4/core"
 
@@ -308,11 +309,28 @@ export namespace ProviderTransform {
     return schema
   }
 
-  export function error(providerID: string, message: string) {
+  export function error(providerID: string, error: APICallError) {
+    let message = error.message
     if (providerID === "github-copilot" && message.includes("The requested model is not supported")) {
-      message +=
+      return (
+        message +
         "\n\nMake sure the model is enabled in your copilot settings: https://github.com/settings/copilot/features"
+      )
     }
-    return message
+
+    if (!error.responseBody || (error.statusCode && message !== STATUS_CODES[error.statusCode])) {
+      return message
+    }
+
+    try {
+      const body = JSON.parse(error.responseBody)
+      // try to extract common error message fields
+      const errMsg = body.message || body.error
+      if (errMsg && typeof errMsg === "string") {
+        return `${message}: ${errMsg}`
+      }
+    } catch {}
+
+    return `${message}: ${error.responseBody}`
   }
 }
