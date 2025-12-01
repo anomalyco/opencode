@@ -11,6 +11,7 @@ import { SessionSummary } from "./summary"
 import { Bus } from "@/bus"
 import { SessionRetry } from "./retry"
 import { SessionStatus } from "./status"
+import { Plugin } from "@/plugin"
 
 export namespace SessionProcessor {
   const DOOM_LOOP_THRESHOLD = 3
@@ -308,6 +309,16 @@ export namespace SessionProcessor {
                 case "text-end":
                   if (currentText) {
                     currentText.text = currentText.text.trimEnd()
+                    const textOutput = await Plugin.trigger(
+                      "text.complete",
+                      {
+                        sessionID: input.sessionID,
+                        messageID: input.assistantMessage.id,
+                        partID: currentText.id,
+                      },
+                      { text: currentText.text },
+                    )
+                    currentText.text = textOutput.text
                     currentText.time = {
                       start: Date.now(),
                       end: Date.now(),
@@ -342,7 +353,7 @@ export namespace SessionProcessor {
                 message: error.data.message.includes("Overloaded") ? "Provider is overloaded" : error.data.message,
                 next: Date.now() + delay,
               })
-              await SessionRetry.sleep(delay, input.abort).catch(() => {})
+              await SessionRetry.sleep(delay, input.abort).catch(() => { })
               continue
             }
             input.assistantMessage.error = error
