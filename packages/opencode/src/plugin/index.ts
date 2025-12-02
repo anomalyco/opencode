@@ -14,8 +14,7 @@ export namespace Plugin {
   const state = Instance.state(async () => {
     const client = createOpencodeClient({
       baseUrl: "http://localhost:4096",
-      // @ts-ignore - fetch type incompatibility
-      fetch: async (...args) => Server.App().fetch(...args),
+      fetch: (async (...args: Parameters<typeof fetch>) => Server.App().fetch(...args)) as typeof fetch,
     })
     const config = await Config.get()
     const hooks = []
@@ -59,11 +58,8 @@ export namespace Plugin {
   >(name: Name, input: Input, output: Output): Promise<Output> {
     if (!name) return output
     for (const hook of await state().then((x) => x.hooks)) {
-      const fn = hook[name]
+      const fn = hook[name] as ((input: Input, output: Output) => Promise<void>) | undefined
       if (!fn) continue
-      // @ts-expect-error if you feel adventurous, please fix the typing, make sure to bump the try-counter if you
-      // give up.
-      // try-counter: 2
       await fn(input, output)
     }
     return output
