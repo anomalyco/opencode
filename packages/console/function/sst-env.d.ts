@@ -50,6 +50,10 @@ declare module "sst" {
       type: "sst.sst.Secret"
       value: string
     }
+    Enterprise: {
+      type: "sst.cloudflare.SolidStart"
+      url: string
+    }
     GITHUB_APP_ID: {
       type: "sst.sst.Secret"
       value: string
@@ -124,6 +128,7 @@ declare module "sst" {
     EnterpriseStorage: cloudflare.R2Bucket
     GatewayKv: cloudflare.KVNamespace
     LogProcessor: cloudflare.Service
+    ZenData: cloudflare.R2Bucket
   }
 }
 
