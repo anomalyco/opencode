@@ -2,7 +2,7 @@ import type { Part } from "@opencode-ai/sdk/client"
 
 export const sanitize = (text: string | undefined, remove?: RegExp) => (remove ? text?.replace(remove, "") : text) ?? ""
 
-export const sanitizePart = (part: Part, remove: RegExp) => {
+export const sanitizePart = (part: Part, remove: RegExp | undefined) => {
   if (part.type === "text") {
     part.text = sanitize(part.text, remove)
   } else if (part.type === "reasoning") {

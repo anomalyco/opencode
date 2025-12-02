@@ -87,7 +87,7 @@
       cursor: not-allowed;
     }
 
-    [data-slot="button-icon"] {
+    [data-slot="icon-svg"] {
       color: var(--icon-strong-base);
     }
   }

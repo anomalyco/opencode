@@ -69,6 +69,10 @@ declare module "sst" {
       type: "sst.sst.Secret"
       value: string
     }
+    Enterprise: {
+      type: "sst.cloudflare.SolidStart"
+      url: string
+    }
     EnterpriseStorage: {
       name: string
       type: "sst.cloudflare.Bucket"
@@ -139,6 +143,10 @@ declare module "sst" {
     ZEN_MODELS4: {
       type: "sst.sst.Secret"
       value: string
+    }
+    ZenData: {
+      name: string
+      type: "sst.cloudflare.Bucket"
     }
   }
 }

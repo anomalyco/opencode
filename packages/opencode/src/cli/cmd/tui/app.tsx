@@ -2,9 +2,10 @@ import { render, useKeyboard, useRenderer, useTerminalDimensions } from "@opentu
 import { Clipboard } from "@tui/util/clipboard"
 import { TextAttributes } from "@opentui/core"
 import { RouteProvider, useRoute } from "@tui/context/route"
-import { Switch, Match, createEffect, untrack, ErrorBoundary, createSignal, onMount, batch, Show } from "solid-js"
+import { Switch, Match, createEffect, untrack, ErrorBoundary, createSignal, onMount, batch, Show, on } from "solid-js"
 import { Installation } from "@/installation"
 import { Global } from "@/global"
+import { Flag } from "@/flag/flag"
 import { DialogProvider, useDialog } from "@tui/ui/dialog"
 import { DialogProvider as DialogProviderList } from "@tui/component/dialog-provider"
 import { SDKProvider, useSDK } from "@tui/context/sdk"
@@ -30,6 +31,7 @@ import { TuiEvent } from "./event"
 import { KVProvider, useKV } from "./context/kv"
 import { Provider } from "@/provider/provider"
 import { ArgsProvider, useArgs, type Args } from "./context/args"
+import open from "open"
 
 async function getTerminalBackgroundColor(): Promise<"dark" | "light"> {
   // can't set raw mode if not a TTY
@@ -196,6 +198,17 @@ function App() {
     }
   })
 
+  createEffect(
+    on(
+      () => sync.status === "complete" && sync.data.provider.length === 0,
+      (isEmpty, wasEmpty) => {
+        // only trigger when we transition into an empty-provider state
+        if (!isEmpty || wasEmpty) return
+        dialog.replace(() => <DialogProviderList />)
+      },
+    ),
+  )
+
   command.register(() => [
     {
       title: "Switch session",
@@ -316,6 +329,15 @@ function App() {
       category: "System",
     },
     {
+      title: "Open docs",
+      value: "docs.open",
+      onSelect: () => {
+        open("https://opencode.ai/docs").catch(() => {})
+        dialog.clear()
+      },
+      category: "System",
+    },
+    {
       title: "Exit the app",
       value: "app.exit",
       onSelect: () => exit(),
@@ -357,8 +379,9 @@ function App() {
   ])
 
   createEffect(() => {
-    const providerID = local.model.current().providerID
-    if (providerID === "openrouter" && !kv.get("openrouter_warning", false)) {
+    const currentModel = local.model.current()
+    if (!currentModel) return
+    if (currentModel.providerID === "openrouter" && !kv.get("openrouter_warning", false)) {
       untrack(() => {
         DialogAlert.show(
           dialog,
@@ -438,6 +461,10 @@ function App() {
       height={dimensions().height}
       backgroundColor={theme.background}
       onMouseUp={async () => {
+        if (Flag.OPENCODE_EXPERIMENTAL_DISABLE_COPY_ON_SELECT) {
+          renderer.clearSelection()
+          return
+        }
         const text = renderer.getSelection()?.getSelectedText()
         if (text && text.length > 0) {
           const base64 = Buffer.from(text).toString("base64")
@@ -452,51 +479,14 @@ function App() {
         }
       }}
     >
-      <box flexDirection="column" flexGrow={1}>
-        <Switch>
-          <Match when={route.data.type === "home"}>
-            <Home />
-          </Match>
-          <Match when={route.data.type === "session"}>
-            <Session />
-          </Match>
-        </Switch>
-      </box>
-      <box
-        height={1}
-        backgroundColor={theme.backgroundPanel}
-        flexDirection="row"
-        justifyContent="space-between"
-        flexShrink={0}
-      >
-        <box flexDirection="row">
-          <box flexDirection="row" backgroundColor={theme.backgroundElement} paddingLeft={1} paddingRight={1}>
-            <text fg={theme.textMuted}>open</text>
-            <text fg={theme.text} attributes={TextAttributes.BOLD}>
-              code{" "}
-            </text>
-            <text fg={theme.textMuted}>v{Installation.VERSION}</text>
-          </box>
-          <box paddingLeft={1} paddingRight={1}>
-            <text fg={theme.textMuted}>
-              {process.cwd().replace(Global.Path.home, "~")}
-              {sync.data.vcs?.vcs?.branch ? `:${sync.data.vcs.vcs.branch}` : ""}
-            </text>
-          </box>
-        </box>
-        <Show when={false}>
-          <box flexDirection="row" flexShrink={0}>
-            <text fg={theme.textMuted} paddingRight={1}>
-              tab
-            </text>
-            <text fg={local.agent.color(local.agent.current().name)}>{""}</text>
-            <text bg={local.agent.color(local.agent.current().name)} fg={theme.background} wrapMode={undefined}>
-              <span style={{ bold: true }}> {local.agent.current().name.toUpperCase()}</span>
-              <span> AGENT </span>
-            </text>
-          </box>
-        </Show>
-      </box>
+      <Switch>
+        <Match when={route.data.type === "home"}>
+          <Home />
+        </Match>
+        <Match when={route.data.type === "session"}>
+          <Session />
+        </Match>
+      </Switch>
     </box>
   )
 }

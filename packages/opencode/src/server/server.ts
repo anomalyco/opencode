@@ -43,7 +43,6 @@ import { Snapshot } from "@/snapshot"
 import { SessionSummary } from "@/session/summary"
 import { GlobalBus } from "@/bus/global"
 import { SessionStatus } from "@/session/status"
-import { ShareNext } from "@/share/share-next"
 
 // @ts-ignore This global is needed to prevent ai-sdk from logging warnings to stdout https://github.com/vercel/ai/blob/2dc67e0ef538307f21368db32d5a12345d98831b/packages/ai/src/logger/log-warnings.ts#L85
 globalThis.AI_SDK_LOG_WARNINGS = false
@@ -376,22 +375,7 @@ export namespace Server {
               description: "VCS info",
               content: {
                 "application/json": {
-                  schema: resolver(
-                    z
-                      .object({
-                        worktree: z.string(),
-                        directory: z.string(),
-                        projectID: z.string(),
-                        vcs: z
-                          .object({
-                            branch: z.string(),
-                          })
-                          .optional(),
-                      })
-                      .meta({
-                        ref: "VcsInfo",
-                      }),
-                  ),
+                  schema: resolver(Vcs.Info),
                 },
               },
             },
@@ -400,10 +384,7 @@ export namespace Server {
         async (c) => {
           const branch = await Vcs.branch()
           return c.json({
-            worktree: Instance.worktree,
-            directory: Instance.directory,
-            projectID: Instance.project.id,
-            vcs: Instance.project.vcs ? { branch } : undefined,
+            branch,
           })
         },
       )
@@ -2055,6 +2036,9 @@ export namespace Server {
               await stream.writeSSE({
                 data: JSON.stringify(event),
               })
+              if (event.type === Bus.InstanceDisposed.type) {
+                stream.close()
+              }
             })
             await new Promise<void>((resolve) => {
               stream.onAbort(() => {

@@ -22,6 +22,9 @@ import { TuiEvent } from "../../event"
 import { iife } from "@/util/iife"
 import { Locale } from "@/util/locale"
 import { createColors, createFrames } from "../../ui/spinner.ts"
+import { useDialog } from "@tui/ui/dialog"
+import { DialogProvider as DialogProviderConnect } from "../dialog-provider"
+import { useToast } from "../../ui/toast"
 
 export type PromptProps = {
   sessionID?: string
@@ -50,11 +53,24 @@ export function Prompt(props: PromptProps) {
   const sdk = useSDK()
   const route = useRoute()
   const sync = useSync()
+  const dialog = useDialog()
+  const toast = useToast()
   const status = createMemo(() => sync.data.session_status[props.sessionID ?? ""] ?? { type: "idle" })
   const history = usePromptHistory()
   const command = useCommandDialog()
   const renderer = useRenderer()
   const { theme, syntax } = useTheme()
+
+  function promptModelWarning() {
+    toast.show({
+      variant: "warning",
+      message: "Connect a provider to send prompts",
+      duration: 3000,
+    })
+    if (sync.data.provider.length === 0) {
+      dialog.replace(() => <DialogProviderConnect />)
+    }
+  }
 
   const textareaKeybindings = createMemo(() => {
     const newlineBindings = keybind.all.input_newline || []
@@ -310,6 +326,7 @@ export function Prompt(props: PromptProps) {
         const extmarkId = input.extmarks.create({
           start,
           end,
+          virtual: true,
           styleId,
           typeId: promptPartTypeId,
         })
@@ -387,6 +404,11 @@ export function Prompt(props: PromptProps) {
     if (props.disabled) return
     if (autocomplete.visible) return
     if (!store.prompt.input) return
+    const selectedModel = local.model.current()
+    if (!selectedModel) {
+      promptModelWarning()
+      return
+    }
     const sessionID = props.sessionID
       ? props.sessionID
       : await (async () => {
@@ -423,8 +445,8 @@ export function Prompt(props: PromptProps) {
         body: {
           agent: local.agent.current().name,
           model: {
-            providerID: local.model.current().providerID,
-            modelID: local.model.current().modelID,
+            providerID: selectedModel.providerID,
+            modelID: selectedModel.modelID,
           },
           command: inputText,
         },
@@ -447,7 +469,7 @@ export function Prompt(props: PromptProps) {
           command: command.slice(1),
           arguments: args.join(" "),
           agent: local.agent.current().name,
-          model: `${local.model.current().providerID}/${local.model.current().modelID}`,
+          model: `${selectedModel.providerID}/${selectedModel.modelID}`,
           messageID,
         },
       })
@@ -457,10 +479,10 @@ export function Prompt(props: PromptProps) {
           id: sessionID,
         },
         body: {
-          ...local.model.current(),
+          ...selectedModel,
           messageID,
           agent: local.agent.current().name,
-          model: local.model.current(),
+          model: selectedModel,
           parts: [
             {
               id: Identifier.ascending("part"),
@@ -495,6 +517,40 @@ export function Prompt(props: PromptProps) {
     input.clear()
   }
   const exit = useExit()
+
+  function pasteText(text: string, virtualText: string) {
+    const currentOffset = input.visualCursor.offset
+    const extmarkStart = currentOffset
+    const extmarkEnd = extmarkStart + virtualText.length
+
+    input.insertText(virtualText + " ")
+
+    const extmarkId = input.extmarks.create({
+      start: extmarkStart,
+      end: extmarkEnd,
+      virtual: true,
+      styleId: pasteStyleId,
+      typeId: promptPartTypeId,
+    })
+
+    setStore(
+      produce((draft) => {
+        const partIndex = draft.prompt.parts.length
+        draft.prompt.parts.push({
+          type: "text" as const,
+          text,
+          source: {
+            text: {
+              start: extmarkStart,
+              end: extmarkEnd,
+              value: virtualText,
+            },
+          },
+        })
+        draft.extmarkToPartIndex.set(extmarkId, partIndex)
+      }),
+    )
+  }
 
   async function pasteImage(file: { filename?: string; content: string; mime: string }) {
     const currentOffset = input.visualCursor.offset
@@ -551,12 +607,16 @@ export function Prompt(props: PromptProps) {
       frames: createFrames({
         color,
         style: "blocks",
-        inactiveFactor: 0.25,
+        inactiveFactor: 0.6,
+        // enableFading: false,
+        minAlpha: 0.3,
       }),
       color: createColors({
         color,
         style: "blocks",
-        inactiveFactor: 0.25,
+        inactiveFactor: 0.6,
+        // enableFading: false,
+        minAlpha: 0.3,
       }),
     }
   })
@@ -602,11 +662,7 @@ export function Prompt(props: PromptProps) {
             flexGrow={1}
           >
             <textarea
-              placeholder={
-                props.showPlaceholder
-                  ? t`${dim(fg(theme.primary)("  → up/down"))} ${dim(fg("#64748b")("history"))} ${dim(fg("#a78bfa")("•"))} ${dim(fg(theme.primary)(keybind.print("input_newline")))} ${dim(fg("#64748b")("newline"))} ${dim(fg("#a78bfa")("•"))} ${dim(fg(theme.primary)(keybind.print("input_submit")))} ${dim(fg("#64748b")("submit"))}`
-                  : undefined
-              }
+              placeholder={props.sessionID ? undefined : "Build anything..."}
               textColor={theme.text}
               focusedTextColor={theme.text}
               minHeight={1}
@@ -709,12 +765,21 @@ export function Prompt(props: PromptProps) {
                 if (!isUrl) {
                   try {
                     const file = Bun.file(filepath)
+                    // Handle SVG as raw text content, not as base64 image
+                    if (file.type === "image/svg+xml") {
+                      event.preventDefault()
+                      const content = await file.text().catch(() => {})
+                      if (content) {
+                        pasteText(content, `[SVG: ${file.name ?? "image"}]`)
+                        return
+                      }
+                    }
                     if (file.type.startsWith("image/")) {
                       event.preventDefault()
                       const content = await file
                         .arrayBuffer()
                         .then((buffer) => Buffer.from(buffer).toString("base64"))
-                        .catch(console.error)
+                        .catch(() => {})
                       if (content) {
                         await pasteImage({
                           filename: file.name,
@@ -733,45 +798,16 @@ export function Prompt(props: PromptProps) {
                   !sync.data.config.experimental?.disable_paste_summary
                 ) {
                   event.preventDefault()
-                  const currentOffset = input.visualCursor.offset
-                  const virtualText = `[Pasted ~${lineCount} lines]`
-                  const textToInsert = virtualText + " "
-                  const extmarkStart = currentOffset
-                  const extmarkEnd = extmarkStart + virtualText.length
-
-                  input.insertText(textToInsert)
-
-                  const extmarkId = input.extmarks.create({
-                    start: extmarkStart,
-                    end: extmarkEnd,
-                    virtual: true,
-                    styleId: pasteStyleId,
-                    typeId: promptPartTypeId,
-                  })
-
-                  const part = {
-                    type: "text" as const,
-                    text: pastedContent,
-                    source: {
-                      text: {
-                        start: extmarkStart,
-                        end: extmarkEnd,
-                        value: virtualText,
-                      },
-                    },
-                  }
-
-                  setStore(
-                    produce((draft) => {
-                      const partIndex = draft.prompt.parts.length
-                      draft.prompt.parts.push(part)
-                      draft.extmarkToPartIndex.set(extmarkId, partIndex)
-                    }),
-                  )
+                  pasteText(pastedContent, `[Pasted ~${lineCount} lines]`)
                   return
                 }
               }}
-              ref={(r: TextareaRenderable) => (input = r)}
+              ref={(r: TextareaRenderable) => {
+                input = r
+                setTimeout(() => {
+                  input.cursorColor = highlight()
+                }, 0)
+              }}
               onMouseDown={(r: MouseEvent) => r.target?.focus()}
               focusedBackgroundColor={theme.backgroundElement}
               cursorColor={highlight()}
@@ -798,7 +834,8 @@ export function Prompt(props: PromptProps) {
           borderColor={highlight()}
           customBorderChars={{
             ...EmptyBorder,
-            vertical: "╹",
+            // when the background is transparent, don't draw the vertical line
+            vertical: theme.background.a != 0 ? "╹" : " ",
           }}
         >
           <box
@@ -827,7 +864,8 @@ export function Prompt(props: PromptProps) {
               justifyContent={status().type === "retry" ? "space-between" : "flex-start"}
             >
               <box flexShrink={0} flexDirection="row" gap={1}>
-                <spinner color={spinnerDef().color} frames={spinnerDef().frames} interval={40} />
+                {/* @ts-ignore // SpinnerOptions doesn't support marginLeft */}
+                <spinner marginLeft={1} color={spinnerDef().color} frames={spinnerDef().frames} interval={40} />
                 <box flexDirection="row" gap={1} flexShrink={0}>
                   {(() => {
                     const retry = createMemo(() => {
@@ -839,7 +877,7 @@ export function Prompt(props: PromptProps) {
                       const r = retry()
                       if (!r) return
                       if (r.message.includes("exceeded your current quota") && r.message.includes("gemini"))
-                        return "gemini 3 way too hot right now"
+                        return "gemini is way too hot right now"
                       if (r.message.length > 50) return r.message.slice(0, 50) + "..."
                       return r.message
                     })

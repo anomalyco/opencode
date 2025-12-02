@@ -1,6 +1,6 @@
 import { useRenderer } from "@opentui/solid"
 import { createSimpleContext } from "./helper"
-import { FormatError } from "@/cli/error"
+import { FormatError, FormatUnknownError } from "@/cli/error"
 
 export const { use: useExit, provider: ExitProvider } = createSimpleContext({
   name: "Exit",
@@ -10,8 +10,10 @@ export const { use: useExit, provider: ExitProvider } = createSimpleContext({
       renderer.destroy()
       await input.onExit?.()
       if (reason) {
-        const formatted = FormatError(reason) ?? JSON.stringify(reason)
-        process.stderr.write(formatted + "\n")
+        const formatted = FormatError(reason) ?? FormatUnknownError(reason)
+        if (formatted) {
+          process.stderr.write(formatted + "\n")
+        }
       }
       process.exit(0)
     }

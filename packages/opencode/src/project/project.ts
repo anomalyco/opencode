@@ -12,6 +12,7 @@ export namespace Project {
     .object({
       id: z.string(),
       worktree: z.string(),
+      vcsDir: z.string().optional(),
       vcs: z.literal("git").optional(),
       time: z.object({
         created: z.number(),
@@ -74,15 +75,22 @@ export namespace Project {
       await Storage.write<Info>(["project", "global"], project)
       return project
     }
-    worktree = await $`git rev-parse --path-format=absolute --show-toplevel`
+    worktree = await $`git rev-parse --show-toplevel`
       .quiet()
       .nothrow()
       .cwd(worktree)
       .text()
-      .then((x) => x.trim())
+      .then((x) => path.resolve(worktree, x.trim()))
+    const vcsDir = await $`git rev-parse --git-dir`
+      .quiet()
+      .nothrow()
+      .cwd(worktree)
+      .text()
+      .then((x) => path.resolve(worktree, x.trim()))
     const project: Info = {
       id,
       worktree,
+      vcsDir,
       vcs: "git",
       time: {
         created: Date.now(),

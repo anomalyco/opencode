@@ -23,6 +23,7 @@ import { createSimpleContext } from "./helper"
 import type { Snapshot } from "@/snapshot"
 import { useExit } from "./exit"
 import { batch, onMount } from "solid-js"
+import { Log } from "@/util/log"
 
 export const { use: useSync, provider: SyncProvider } = createSimpleContext({
   name: "Sync",
@@ -243,7 +244,7 @@ export const { use: useSync, provider: SyncProvider } = createSimpleContext({
         }
 
         case "vcs.branch.updated": {
-          setStore("vcs", "vcs", { branch: event.properties.branch })
+          setStore("vcs", { branch: event.properties.branch })
           break
         }
       }
@@ -290,6 +291,11 @@ export const { use: useSync, provider: SyncProvider } = createSimpleContext({
           })
         })
         .catch(async (e) => {
+          Log.Default.error("tui bootstrap failed", {
+            error: e instanceof Error ? e.message : String(e),
+            name: e instanceof Error ? e.name : undefined,
+            stack: e instanceof Error ? e.stack : undefined,
+          })
           await exit(e)
         })
     }

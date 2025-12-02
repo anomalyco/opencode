@@ -150,9 +150,12 @@ export namespace SessionPrompt {
       },
     ]
     const files = ConfigMarkdown.files(template)
+    const seen = new Set<string>()
     await Promise.all(
       files.map(async (match) => {
         const name = match[1]
+        if (seen.has(name)) return
+        seen.add(name)
         const filepath = name.startsWith("~/")
           ? path.join(os.homedir(), name.slice(2))
           : path.resolve(Instance.worktree, name)
@@ -541,6 +544,7 @@ export namespace SessionPrompt {
           headers: {
             ...(model.providerID.startsWith("opencode")
               ? {
+                  "x-opencode-project": Instance.project.id,
                   "x-opencode-session": sessionID,
                   "x-opencode-request": lastUser.id,
                 }
@@ -1107,6 +1111,7 @@ export namespace SessionPrompt {
         messageID: userMessage.info.id,
         sessionID: userMessage.info.sessionID,
         type: "text",
+        // TODO (for mr dax): update to use the anthropic full fledged one (see plan-reminder-anthropic.txt)
         text: PROMPT_PLAN,
         synthetic: true,
       })
