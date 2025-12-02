@@ -1,4 +1,13 @@
-import { FileDiffOptions } from "@pierre/precision-diffs"
+import { DiffLineAnnotation, FileContents, FileDiffOptions } from "@pierre/precision-diffs"
+import { ComponentProps } from "solid-js"
+
+export type DiffProps<T = {}> = FileDiffOptions<T> & {
+  before: FileContents
+  after: FileContents
+  annotations?: DiffLineAnnotation<T>[]
+  class?: string
+  classList?: ComponentProps<"div">["classList"]
+}
 
 export function createDefaultOptions<T>(style: FileDiffOptions<T>["diffStyle"]) {
   return {
