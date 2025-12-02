@@ -461,10 +461,6 @@ export namespace Config {
       .optional()
       .default(true)
       .describe("Enable copying text to clipboard when selected with mouse"),
-    diff_style: z
-      .enum(["auto", "stacked"])
-      .optional()
-      .describe("Control diff rendering style: 'auto' adapts to terminal width, 'stacked' always shows single column"),
   })
 
   export const Layout = z.enum(["auto", "stretch"]).meta({
