@@ -64,18 +64,6 @@ export default function Home() {
                 to <br />
                 use other models, including Claude, GPT, Gemini and more.
               </p>
-              {/*<a href="/docs">*/}
-              {/*  <span>Read docs </span>*/}
-              {/*  <svg width="24" height="24" viewBox="0 0 24 24" fill="none"*/}
-              {/*       xmlns="http://www.w3.org/2000/svg">*/}
-              {/*    <path*/}
-              {/*      d="M6.5 12L17 12M13 16.5L17.5 12L13 7.5"*/}
-              {/*      stroke="currentColor"*/}
-              {/*      stroke-width="1.5"*/}
-              {/*      stroke-linecap="square"*/}
-              {/*    />*/}
-              {/*  </svg>*/}
-              {/*</a>*/}
             </div>
             <p data-slot="installation-instructions">
               Install and use. No account, no email, and no credit card.
@@ -179,52 +167,72 @@ export default function Home() {
           <section data-component="what">
             <div data-slot="section-title">
               <h3>What is OpenCode?</h3>
-              <p>OpenCode is an open source agent that helps you write and run code directly from the terminal.</p>
+              <p>OpenCode is an open source agent that helps you write and run
+                code directly from the terminal.</p>
             </div>
             <ul>
               <li>
                 <span>[*]</span>
                 <div>
-                  <strong>Native TUI</strong> A responsive, native, themeable terminal UI
+                  <strong>Native TUI</strong> A responsive, native, themeable
+                  terminal UI
                 </div>
               </li>
               <li>
                 <span>[*]</span>
                 <div>
-                  <strong>LSP enabled</strong> Automatically loads the right LSPs for the LLM
+                  <strong>LSP enabled</strong> Automatically loads the right
+                  LSPs for the LLM
                 </div>
               </li>
               <li>
                 <span>[*]</span>
                 <div>
-                  <strong>Multi-session</strong> Start multiple agents in parallel on the same project
+                  <strong>Multi-session</strong> Start multiple agents in
+                  parallel on the same project
                 </div>
               </li>
               <li>
                 <span>[*]</span>
                 <div>
-                  <strong>Share links</strong> Share a link to any session for reference or to debug
+                  <strong>Share links</strong> Share a link to any session for
+                  reference or to debug
                 </div>
               </li>
               <li>
                 <span>[*]</span>
                 <div>
-                  <strong>Claude Pro</strong> Log in with Anthropic to use your Claude Pro or Max account
+                  <strong>Claude Pro</strong> Log in with Anthropic to use your
+                  Claude Pro or Max account
                 </div>
               </li>
               <li>
                 <span>[*]</span>
                 <div>
-                  <strong>Any model</strong> 75+ LLM providers through Models.dev, including local models
+                  <strong>Any model</strong> 75+ LLM providers through
+                  Models.dev, including local models
                 </div>
               </li>
               <li>
                 <span>[*]</span>
                 <div>
-                  <strong>Any editor</strong> OpenCode runs in your terminal, pair it with any IDE
+                  <strong>Any editor</strong> OpenCode runs in your terminal,
+                  pair it with any IDE
                 </div>
               </li>
             </ul>
+            <a href="/docs">
+              <span>Read docs </span>
+              <svg width="24" height="24" viewBox="0 0 24 24" fill="none"
+                   xmlns="http://www.w3.org/2000/svg">
+                <path
+                  d="M6.5 12L17 12M13 16.5L17.5 12L13 7.5"
+                  stroke="currentColor"
+                  stroke-width="1.5"
+                  stroke-linecap="square"
+                />
+              </svg>
+            </a>
           </section>
 
           <section data-component="growth">
@@ -233,8 +241,11 @@ export default function Home() {
               <div>
                 <span>[*]</span>
                 <p>
-                  With over <strong>{config.github.starsFormatted.full}</strong> GitHub stars,{" "}
-                  <strong>{config.stats.contributors}</strong> contributors, and almost{" "}
+                  With
+                  over <strong>{config.github.starsFormatted.full}</strong> GitHub
+                  stars,{" "}
+                  <strong>{config.stats.contributors}</strong> contributors, and
+                  almost{" "}
                   <strong>{config.stats.commits}</strong> commits, OpenCode is used and trusted by over{" "}
                   <strong>{config.stats.monthlyUsers}</strong> developers every month.
                 </p>

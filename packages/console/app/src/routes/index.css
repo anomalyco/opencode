@@ -617,6 +617,25 @@ body {
     padding: var(--vertical-padding) var(--padding);
     color: var(--color-text);
 
+    a {
+      background: var(--color-background-strong);
+      padding: 8px 12px 8px 20px;
+      color: var(--color-text-inverted);
+      border: none;
+      border-radius: 4px;
+      font-weight: 500;
+      cursor: pointer;
+      margin-top: 40px;
+      display: flex;
+      width: fit-content;
+      gap: 12px;
+      text-decoration: none;
+    }
+
+    a:hover {
+      background: var(--color-background-strong-hover);
+    }
+
     ul {
       padding: 0;
       li {
