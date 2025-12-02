@@ -269,13 +269,22 @@ export function Session() {
       keybind: "session_compact",
       category: "Session",
       onSelect: (dialog) => {
+        const selectedModel = local.model.current()
+        if (!selectedModel) {
+          toast.show({
+            variant: "warning",
+            message: "Connect a provider to summarize this session",
+            duration: 3000,
+          })
+          return
+        }
         sdk.client.session.summarize({
           path: {
             id: route.sessionID,
           },
           body: {
-            modelID: local.model.current().modelID,
-            providerID: local.model.current().providerID,
+            modelID: selectedModel.modelID,
+            providerID: selectedModel.providerID,
           },
         })
         dialog.clear()
