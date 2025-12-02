@@ -3,6 +3,7 @@ import { Part } from "./message-part"
 import { Spinner } from "./spinner"
 import { useData } from "../context/data"
 import type { AssistantMessage as AssistantMessageType, ToolPart } from "@opencode-ai/sdk"
+import { Diff } from "./diff"
 
 export function MessageProgress(props: { assistantMessages: () => AssistantMessageType[]; done?: boolean }) {
   const data = useData()
@@ -155,7 +156,7 @@ export function MessageProgress(props: { assistantMessages: () => AssistantMessa
                       )
                       return (
                         <div data-slot="message-progress-item">
-                          <Part message={message()!} part={part} sanitize={sanitizer()} />
+                          <Part message={message()!} part={part} sanitize={sanitizer()} diffComponent={Diff} />
                         </div>
                       )
                     }}
