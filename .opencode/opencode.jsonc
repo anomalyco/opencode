@@ -1,8 +1,6 @@
 {
   "$schema": "https://opencode.ai/config.json",
-  "plugin": [
-    "opencode-openai-codex-auth"
-  ],
+  "plugin": ["opencode-openai-codex-auth"],
   // "enterprise": {
   //   "url": "https://enterprise.dev.opencode.ai",
   // },
@@ -20,10 +18,7 @@
     },
     "morph": {
       "type": "local",
-      "command": [
-        "bunx",
-        "@morphllm/morphmcp"
-      ],
+      "command": ["bunx", "@morphllm/morphmcp"],
       "environment": {
         "ENABLED_TOOLS": "warp_grep",
       },
