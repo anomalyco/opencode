@@ -1101,7 +1101,11 @@ const PART_MAPPING = {
 function ReasoningPart(props: { last: boolean; part: ReasoningPart; message: AssistantMessage }) {
   const { theme, subtleSyntax } = useTheme()
   const ctx = use()
-  const content = createMemo(() => props.part.text.trim())
+  const content = createMemo(() => {
+    // Filter out redacted reasoning chunks from OpenRouter
+    // OpenRouter sends encrypted reasoning data that appears as [REDACTED]
+    return props.part.text.replace("[REDACTED]", "").trim()
+  })
   return (
     <Show when={content() && ctx.showThinking()}>
       <box
