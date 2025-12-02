@@ -964,6 +964,77 @@ export namespace Server {
           return c.json(message)
         },
       )
+      .delete(
+        "/session/:id/message/:messageID/part/:partID",
+        describeRoute({
+          description: "Delete a part from a message",
+          operationId: "part.delete",
+          responses: {
+            200: {
+              description: "Successfully deleted part",
+              content: {
+                "application/json": {
+                  schema: resolver(z.boolean()),
+                },
+              },
+            },
+            ...errors(400, 404),
+          },
+        }),
+        validator(
+          "param",
+          z.object({
+            id: z.string().meta({ description: "Session ID" }),
+            messageID: z.string().meta({ description: "Message ID" }),
+            partID: z.string().meta({ description: "Part ID" }),
+          }),
+        ),
+        async (c) => {
+          const params = c.req.valid("param")
+          await Session.removePart({
+            sessionID: params.id,
+            messageID: params.messageID,
+            partID: params.partID,
+          })
+          return c.json(true)
+        },
+      )
+      .patch(
+        "/session/:id/message/:messageID/part/:partID",
+        describeRoute({
+          description: "Update a part in a message",
+          operationId: "part.update",
+          responses: {
+            200: {
+              description: "Successfully updated part",
+              content: {
+                "application/json": {
+                  schema: resolver(MessageV2.Part),
+                },
+              },
+            },
+            ...errors(400, 404),
+          },
+        }),
+        validator(
+          "param",
+          z.object({
+            id: z.string().meta({ description: "Session ID" }),
+            messageID: z.string().meta({ description: "Message ID" }),
+            partID: z.string().meta({ description: "Part ID" }),
+          }),
+        ),
+        validator("json", MessageV2.Part),
+        async (c) => {
+          const params = c.req.valid("param")
+          const body = c.req.valid("json")
+          if (body.id !== params.partID || body.messageID !== params.messageID || body.sessionID !== params.id) {
+            throw new Error("Part IDs in body must match URL parameters")
+          }
+          const part = await Session.updatePart(body)
+          return c.json(part)
+        },
+      )
       .post(
         "/session/:id/message",
         describeRoute({
