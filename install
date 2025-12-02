@@ -4,7 +4,7 @@ APP=opencode
 
 MUTED='\033[0;2m'
 RED='\033[0;31m'
-ORANGE='\033[38;2;255;140;0m'
+ORANGE='\033[38;5;214m'
 NC='\033[0m' # No Color
 
 requested_version=${VERSION:-}
