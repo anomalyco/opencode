@@ -645,6 +645,18 @@ export function Prompt(props: PromptProps) {
                 }
                 if (store.mode === "normal") autocomplete.onKeyDown(e)
                 if (!autocomplete.visible) {
+                  // Handle mode cycling with Tab
+                  if (keybind.match("mode_cycle", e)) {
+                    local.mode.cycle()
+                    e.preventDefault()
+                    return
+                  }
+                  if (keybind.match("mode_cycle_reverse", e)) {
+                    local.mode.cycle(-1)
+                    e.preventDefault()
+                    return
+                  }
+
                   if (
                     (keybind.match("history_previous", e) && input.cursorOffset === 0) ||
                     (keybind.match("history_next", e) && input.cursorOffset === input.plainText.length)
@@ -759,10 +771,15 @@ export function Prompt(props: PromptProps) {
               syntaxStyle={syntax()}
             />
             <box flexDirection="row" flexShrink={0} paddingTop={1} gap={1}>
+              <Show when={store.mode === "normal" && local.mode.current()}>
+                <text flexShrink={0} fg={theme.textMuted}>
+                  {local.mode.getName(local.mode.current()!)}
+                </text>
+              </Show>
               <text fg={highlight()}>
                 {store.mode === "shell" ? "Shell" : Locale.titlecase(local.agent.current().name)}{" "}
               </text>
-              <Show when={store.mode === "normal"}>
+              <Show when={store.mode === "normal" && local.model.current()}>
                 <text flexShrink={0} fg={theme.text}>
                   {local.model.label()}
                 </text>

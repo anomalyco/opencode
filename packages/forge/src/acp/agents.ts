@@ -106,3 +106,9 @@ export function getInstallableAgents(): ACPAgentDefinition[] {
 export function getAgentsByInstallMethod(method: ACPAgentInstallMethod): ACPAgentDefinition[] {
   return ACP_AGENTS.filter((agent) => agent.installMethod === method)
 }
+
+// Export the default agent (Claude Code)
+export const DEFAULT_AGENT = ACP_AGENTS.find((agent) => agent.name === "Claude Code")!
+if (!DEFAULT_AGENT) {
+  throw new Error("Default agent 'Claude Code' not found in ACP_AGENTS")
+}

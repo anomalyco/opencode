@@ -10,14 +10,16 @@ import { createSimpleContext } from "./helper"
 import { useToast } from "../ui/toast"
 import { RGBA } from "@opentui/core"
 import { ACPClient } from "@/acp/client"
-import { getAllAgents, getAgent, type ACPAgentDefinition } from "@/acp/agents"
+import { getAllAgents, getAgent, DEFAULT_AGENT, type ACPAgentDefinition } from "@/acp/agents"
 import type { SessionModeId, SessionModeState, SessionModelState, ModelId } from "@agentclientprotocol/sdk"
+import { useKV } from "./kv"
 
 export const { use: useLocal, provider: LocalProvider } = createSimpleContext({
   name: "Local",
   init: () => {
     const sync = useSync()
     const toast = useToast()
+    const kv = useKV()
 
     // Session state for ACP client
     const [sessionStore, setSessionStore] = createStore<{
@@ -39,7 +41,7 @@ export const { use: useLocal, provider: LocalProvider } = createSimpleContext({
       const [agentStore, setAgentStore] = createStore<{
         current: string
       }>({
-        current: agents()[0].name,
+        current: kv.get("agent", DEFAULT_AGENT.name),
       })
       const { theme } = useTheme()
       const colors = createMemo(() => [
@@ -119,6 +121,7 @@ export const { use: useLocal, provider: LocalProvider } = createSimpleContext({
               setSessionStore("models", sessionResp.models ?? null)
               setSessionStore("client", client)
               setAgentStore("current", agentName)
+              kv.set("agent", agentName)
             })
 
             // Setup mode change listener
@@ -207,13 +210,15 @@ export const { use: useLocal, provider: LocalProvider } = createSimpleContext({
             })
           }
         },
-        cycle() {
+        cycle(direction: 1 | -1 = 1) {
           const modes = sessionStore.modes?.availableModes ?? []
           if (modes.length === 0) return
 
           const currentMode = sessionStore.modes?.currentModeId
           const currentIndex = modes.findIndex((m) => m.id === currentMode)
-          const nextIndex = (currentIndex + 1) % modes.length
+          let nextIndex = (currentIndex + direction) % modes.length
+          // Handle negative modulo for reverse cycling
+          if (nextIndex < 0) nextIndex = modes.length + nextIndex
           const nextMode = modes[nextIndex]
 
           this.set(nextMode.id)

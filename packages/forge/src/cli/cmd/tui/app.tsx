@@ -15,7 +15,6 @@ import { DialogStatus } from "@tui/component/dialog-status"
 import { DialogThemeList } from "@tui/component/dialog-theme-list"
 import { DialogHelp } from "./ui/dialog-help"
 import { CommandProvider, useCommandDialog } from "@tui/component/dialog-command"
-import { DialogAgent } from "@tui/component/dialog-agent"
 import { DialogSessionList } from "@tui/component/dialog-session-list"
 import { KeybindProvider } from "@tui/context/keybind"
 import { ThemeProvider, useTheme } from "@tui/context/theme"
@@ -164,8 +163,11 @@ function App() {
 
   const args = useArgs()
   onMount(() => {
-    batch(() => {
-      if (args.agent) local.agent.set(args.agent)
+    batch(async () => {
+      // Always initialize agent (from args, KV store, or default)
+      const agentToUse = args.agent ?? local.agent.current().name
+      await local.agent.set(agentToUse)
+
       if (args.model) local.model.set(args.model)
       if (args.sessionID) {
         route.navigate({
@@ -248,15 +250,6 @@ function App() {
       },
     },
     {
-      title: "Switch agent",
-      value: "agent.list",
-      keybind: "agent_list",
-      category: "Agent",
-      onSelect: () => {
-        dialog.replace(() => <DialogAgent />)
-      },
-    },
-    {
       title: "Agent cycle",
       value: "agent.cycle",
       keybind: "agent_cycle",
@@ -274,6 +267,26 @@ function App() {
       disabled: true,
       onSelect: () => {
         local.agent.move(-1)
+      },
+    },
+    {
+      title: "Cycle mode",
+      value: "mode.cycle",
+      keybind: "mode_cycle",
+      category: "Session",
+      onSelect: () => {
+        local.mode.cycle()
+        dialog.clear()
+      },
+    },
+    {
+      title: "Cycle mode reverse",
+      value: "mode.cycle_reverse",
+      keybind: "mode_cycle_reverse",
+      category: "Session",
+      onSelect: () => {
+        local.mode.cycle(-1)
+        dialog.clear()
       },
     },
     {
