@@ -53,15 +53,12 @@ export default function Home() {
         <div data-component="content">
           <section data-component="hero">
             <div data-slot="hero-copy">
-              <a data-slot="releases"
-                 href={release()?.url ?? `${config.github.repoUrl}/releases`}
-                 target="_blank">
+              <a data-slot="releases" href={release()?.url ?? `${config.github.repoUrl}/releases`} target="_blank">
                 What’s new in {release()?.name ?? "the latest release"}
               </a>
               <h1>The open source coding agent</h1>
               <p>
-                OpenCode includes free models or connect from any provider
-                to <br />
+                OpenCode includes free models or connect from any provider to <br />
                 use other models, including Claude, GPT, Gemini and more.
               </p>
               {/*<a href="/docs">*/}
@@ -77,9 +74,7 @@ export default function Home() {
               {/*  </svg>*/}
               {/*</a>*/}
             </div>
-            <p data-slot="installation-instructions">
-              Install and use. No account, no email, and no credit card.
-            </p>
+            <p data-slot="installation-instructions">Install and use. No account, no email, and no credit card.</p>
             <div data-slot="installation">
               <Tabs
                 as="section"
@@ -109,8 +104,7 @@ export default function Home() {
                 </Tabs.List>
                 <div data-slot="panels">
                   <Tabs.Content as="pre" data-slot="panel" value="curl">
-                    <button data-copy data-slot="command"
-                            onClick={handleCopyClick}>
+                    <button data-copy data-slot="command" onClick={handleCopyClick}>
                       <span data-slot="command-script">
                         <span>curl -fsSL </span>
                         <span data-slot="protocol">https://</span>
@@ -121,8 +115,7 @@ export default function Home() {
                     </button>
                   </Tabs.Content>
                   <Tabs.Content as="pre" data-slot="panel" value="npm">
-                    <button data-copy data-slot="command"
-                            onClick={handleCopyClick}>
+                    <button data-copy data-slot="command" onClick={handleCopyClick}>
                       <span>
                         <span data-slot="protocol">npm i -g </span>
                         <span data-slot="highlight">opencode-ai</span>
@@ -131,8 +124,7 @@ export default function Home() {
                     </button>
                   </Tabs.Content>
                   <Tabs.Content as="pre" data-slot="panel" value="bun">
-                    <button data-copy data-slot="command"
-                            onClick={handleCopyClick}>
+                    <button data-copy data-slot="command" onClick={handleCopyClick}>
                       <span>
                         <span data-slot="protocol">bun add -g </span>
                         <span data-slot="highlight">opencode-ai</span>
@@ -141,8 +133,7 @@ export default function Home() {
                     </button>
                   </Tabs.Content>
                   <Tabs.Content as="pre" data-slot="panel" value="brew">
-                    <button data-copy data-slot="command"
-                            onClick={handleCopyClick}>
+                    <button data-copy data-slot="command" onClick={handleCopyClick}>
                       <span>
                         <span data-slot="protocol">brew install </span>
                         <span data-slot="highlight">opencode</span>
@@ -151,8 +142,7 @@ export default function Home() {
                     </button>
                   </Tabs.Content>
                   <Tabs.Content as="pre" data-slot="panel" value="paru">
-                    <button data-copy data-slot="command"
-                            onClick={handleCopyClick}>
+                    <button data-copy data-slot="command" onClick={handleCopyClick}>
                       <span>
                         <span data-slot="protocol">paru -S </span>
                         <span data-slot="highlight">opencode</span>
@@ -164,14 +154,14 @@ export default function Home() {
               </Tabs>
             </div>
             <p data-slot="installation-options">
-              Available in terminal, web, and desktop (coming soon).<br />
+              Available in terminal, web, and desktop (coming soon).
+              <br />
               Extensions for VS Code, Cursor, Windsurf, and more.
             </p>
           </section>
 
           <section data-component="video">
-            <video src={video} autoplay playsinline loop muted preload="auto"
-                   poster={videoPoster}>
+            <video src={video} autoplay playsinline loop muted preload="auto" poster={videoPoster}>
               Your browser does not support the video tag.
             </video>
           </section>
