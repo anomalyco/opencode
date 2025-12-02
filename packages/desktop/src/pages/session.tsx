@@ -355,7 +355,13 @@ export default function Page() {
                         classes={{
                           root: "pb-20 flex-1 min-w-0",
                           content: "pb-20",
-                          container: "w-full " + (wide() ? "max-w-146 mx-auto px-6" : "pr-6 pl-18"),
+                          container:
+                            "w-full " +
+                            (wide()
+                              ? "max-w-146 mx-auto px-6"
+                              : session.messages.user().length > 1
+                                ? "pr-6 pl-18"
+                                : "px-6"),
                         }}
                         diffComponent={Diff}
                       />
