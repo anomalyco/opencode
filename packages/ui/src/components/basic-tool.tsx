@@ -20,7 +20,6 @@ export interface BasicToolProps {
   icon: IconProps["name"]
   trigger: TriggerTitle | JSX.Element
   children?: JSX.Element
-  hideDetails?: boolean
 }
 
 export function BasicTool(props: BasicToolProps) {
@@ -78,18 +77,18 @@ export function BasicTool(props: BasicToolProps) {
               </Switch>
             </div>
           </div>
-          <Show when={resolved() && !props.hideDetails}>
+          <Show when={resolved()}>
             <Collapsible.Arrow />
           </Show>
         </div>
       </Collapsible.Trigger>
-      <Show when={resolved() && !props.hideDetails}>
+      <Show when={resolved()}>
         <Collapsible.Content>{resolved()}</Collapsible.Content>
       </Show>
     </Collapsible>
   )
 }
 
-export function GenericTool(props: { tool: string; hideDetails?: boolean }) {
-  return <BasicTool icon="mcp" trigger={{ title: props.tool }} hideDetails={props.hideDetails} />
+export function GenericTool(props: { tool: string }) {
+  return <BasicTool icon="mcp" trigger={{ title: props.tool }} />
 }

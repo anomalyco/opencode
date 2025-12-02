@@ -2120,16 +2120,15 @@ func (r TextPartInputTimeParam) MarshalJSON() (data []byte, err error) {
 }
 
 type ToolPart struct {
-	ID          string                 `json:"id,required"`
-	CallID      string                 `json:"callID,required"`
-	MessageID   string                 `json:"messageID,required"`
-	SessionID   string                 `json:"sessionID,required"`
-	State       ToolPartState          `json:"state,required"`
-	Tool        string                 `json:"tool,required"`
-	Type        ToolPartType           `json:"type,required"`
-	HideDetails bool                   `json:"hideDetails"`
-	Metadata    map[string]interface{} `json:"metadata"`
-	JSON        toolPartJSON           `json:"-"`
+	ID        string                 `json:"id,required"`
+	CallID    string                 `json:"callID,required"`
+	MessageID string                 `json:"messageID,required"`
+	SessionID string                 `json:"sessionID,required"`
+	State     ToolPartState          `json:"state,required"`
+	Tool      string                 `json:"tool,required"`
+	Type      ToolPartType           `json:"type,required"`
+	Metadata  map[string]interface{} `json:"metadata"`
+	JSON      toolPartJSON           `json:"-"`
 }
 
 // toolPartJSON contains the JSON metadata for the struct [ToolPart]
@@ -2141,7 +2140,6 @@ type toolPartJSON struct {
 	State       apijson.Field
 	Tool        apijson.Field
 	Type        apijson.Field
-	HideDetails apijson.Field
 	Metadata    apijson.Field
 	raw         string
 	ExtraFields map[string]apijson.Field
