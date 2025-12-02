@@ -37,6 +37,7 @@ export type PromptProps = {
 
 export type PromptRef = {
   focused: boolean
+  current: PromptInfo
   set(prompt: PromptInfo): void
   reset(): void
   blur(): void
@@ -376,6 +377,9 @@ export function Prompt(props: PromptProps) {
   props.ref?.({
     get focused() {
       return input.focused
+    },
+    get current() {
+      return store.prompt
     },
     focus() {
       input.focus()
