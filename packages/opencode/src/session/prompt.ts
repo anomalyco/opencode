@@ -43,6 +43,7 @@ import { Command } from "../command"
 import { $, fileURLToPath } from "bun"
 import { ConfigMarkdown } from "../config/markdown"
 import { SessionSummary } from "./summary"
+import { Config } from "../config/config"
 import { NamedError } from "@opencode-ai/util/error"
 import { fn } from "@/util/fn"
 import { SessionProcessor } from "./processor"
@@ -433,6 +434,7 @@ export namespace SessionPrompt {
       }
 
       // normal processing
+      const cfg = await Config.get()
       const agent = await Agent.get(lastUser.agent)
       msgs = insertReminders({
         messages: msgs,
@@ -515,6 +517,7 @@ export namespace SessionPrompt {
 
       const result = await processor.process(() =>
         streamText({
+          experimental_telemetry: { isEnabled: cfg.open_telemetry },
           onError(error) {
             log.error("stream error", {
               error,
@@ -1434,6 +1437,7 @@ export namespace SessionPrompt {
       input.history.filter((m) => m.info.role === "user" && !m.parts.every((p) => "synthetic" in p && p.synthetic))
         .length === 1
     if (!isFirst) return
+    const cfg = await Config.get()
     const small =
       (await Provider.getSmallModel(input.providerID)) ?? (await Provider.getModel(input.providerID, input.modelID))
     const provider = await Provider.getProvider(small.providerID)
@@ -1452,6 +1456,7 @@ export namespace SessionPrompt {
       mergeDeep(small.info.options),
     )
     await generateText({
+      experimental_telemetry: { isEnabled: cfg.open_telemetry },
       // use higher # for reasoning models since reasoning tokens eat up a lot of the budget
       maxOutputTokens: small.info.reasoning ? 3000 : 20,
       providerOptions: ProviderTransform.providerOptions(small.npm, small.providerID, options),

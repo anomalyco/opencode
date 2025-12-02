@@ -1,4 +1,5 @@
 import { Provider } from "@/provider/provider"
+import { Config } from "@/config/config"
 import { fn } from "@/util/fn"
 import z from "zod"
 import { Session } from "."
@@ -60,6 +61,7 @@ export namespace SessionSummary {
   }
 
   async function summarizeMessage(input: { messageID: string; messages: MessageV2.WithParts[] }) {
+    const cfg = await Config.get()
     const messages = input.messages.filter(
       (m) => m.info.id === input.messageID || (m.info.role === "assistant" && m.info.parentID === input.messageID),
     )
@@ -87,6 +89,7 @@ export namespace SessionSummary {
     const textPart = msgWithParts.parts.find((p) => p.type === "text" && !p.synthetic) as MessageV2.TextPart
     if (textPart && !userMsg.summary?.title) {
       const result = await generateText({
+        experimental_telemetry: { isEnabled: cfg.open_telemetry },
         maxOutputTokens: small.info.reasoning ? 1500 : 20,
         providerOptions: ProviderTransform.providerOptions(small.npm, small.providerID, options),
         messages: [
@@ -132,6 +135,7 @@ export namespace SessionSummary {
           }
         }
         const result = await generateText({
+          experimental_telemetry: { isEnabled: cfg.open_telemetry },
           model: small.language,
           maxOutputTokens: 100,
           providerOptions: ProviderTransform.providerOptions(small.npm, small.providerID, options),

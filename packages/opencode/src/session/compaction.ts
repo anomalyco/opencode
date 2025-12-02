@@ -11,6 +11,7 @@ import type { ModelsDev } from "../provider/models"
 import { SessionPrompt } from "./prompt"
 import { Flag } from "../flag/flag"
 import { Token } from "../util/token"
+import { Config } from "../config/config"
 import { Log } from "../util/log"
 import { ProviderTransform } from "@/provider/transform"
 import { SessionProcessor } from "./processor"
@@ -97,6 +98,7 @@ export namespace SessionCompaction {
     abort: AbortSignal
     auto: boolean
   }) {
+    const cfg = await Config.get()
     const model = await Provider.getModel(input.model.providerID, input.model.modelID)
     const system = [...SystemPrompt.compaction(model.providerID)]
     const msg = (await Session.updateMessage({
@@ -132,6 +134,7 @@ export namespace SessionCompaction {
     })
     const result = await processor.process(() =>
       streamText({
+        experimental_telemetry: { isEnabled: cfg.open_telemetry },
         onError(error) {
           log.error("stream error", {
             error,

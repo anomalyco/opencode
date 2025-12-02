@@ -484,6 +484,10 @@ export namespace Config {
         .optional(),
       plugin: z.string().array().optional(),
       snapshot: z.boolean().optional(),
+      open_telemetry: z
+        .boolean()
+        .optional()
+        .describe("Enable OpenTelemetry spans for AI SDK calls (using the 'experimental_telemetry' flag)"),
       share: z
         .enum(["manual", "auto", "disabled"])
         .optional()
