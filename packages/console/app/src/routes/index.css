@@ -338,6 +338,11 @@ body {
     }
   }
 
+  [data-slot="installation-instructions"] {
+    color: var(--color-text-strong);
+    margin-bottom: 8px;
+  }
+
   [data-slot="installation"] {
     width: 100%;
     max-width: 100%;
@@ -346,6 +351,11 @@ body {
     @media (max-width: 550px) {
       width: calc(100vw - 48px);
     }
+  }
+
+  [data-slot="installation-options"] {
+    font-size: 13px;
+    margin-top: 12px;
   }
 
   [data-component="tabs"] {
@@ -480,10 +490,10 @@ body {
     }
 
     h1 {
-      font-size: 28px;
+      font-size: 38px;
       color: var(--color-text-strong);
       font-weight: 500;
-      margin-bottom: 16px;
+      margin-bottom: 8px;
 
       @media (max-width: 60rem) {
         font-size: 22px;
@@ -492,7 +502,7 @@ body {
 
     p {
       color: var(--color-text);
-      margin-bottom: 24px;
+      margin-bottom: 40px;
       max-width: 82%;
 
       @media (max-width: 50rem) {
