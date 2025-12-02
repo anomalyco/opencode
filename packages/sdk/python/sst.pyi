@@ -111,4 +111,7 @@ class Resource:
     class ZEN_MODELS4:
         type: str
         value: str
+    class ZenData:
+        name: str
+        type: str
 
