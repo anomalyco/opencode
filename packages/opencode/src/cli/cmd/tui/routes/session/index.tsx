@@ -115,7 +115,7 @@ export function Session() {
   const [conceal, setConceal] = createSignal(true)
   const [showThinking, setShowThinking] = createSignal(kv.get("thinking_visibility", true))
   const [showTimestamps, setShowTimestamps] = createSignal(kv.get("timestamps", "hide") === "show")
-  const [showActions, setShowActions] = createSignal(kv.get("tool_usage_visibility", true))
+  const [showActions, setShowActions] = createSignal(kv.get("tool_details_visibility", true))
   const [diffWrapMode, setDiffWrapMode] = createSignal<"word" | "none">("word")
 
   const wide = createMemo(() => dimensions().width > 120)
@@ -456,13 +456,13 @@ export function Session() {
       },
     },
     {
-      title: showActions() ? "Hide tool usage" : "Show tool usage",
+      title: showActions() ? "Hide tool details" : "Show tool details",
       value: "session.toggle.actions",
       category: "Session",
       onSelect: (dialog) => {
         const newValue = !showActions()
         setShowActions(newValue)
-        kv.set("tool_usage_visibility", newValue)
+        kv.set("tool_details_visibility", newValue)
         dialog.clear()
       },
     },
