@@ -1834,11 +1834,9 @@ func (r ConfigShare) IsKnown() bool {
 // TUI specific settings
 type ConfigTui struct {
 	// TUI scroll speed
-	ScrollSpeed  float64       `json:"scroll_speed"`
+	ScrollSpeed float64 `json:"scroll_speed"`
 	// Enable copying text to clipboard when selected with mouse
 	CopyOnSelect bool          `json:"copy_on_select"`
-	// Control diff rendering style: 'auto' adapts to terminal width, 'stacked' always shows single column
-	DiffStyle    string        `json:"diff_style"`
 	JSON         configTuiJSON `json:"-"`
 }
 
@@ -1846,7 +1844,6 @@ type ConfigTui struct {
 type configTuiJSON struct {
 	ScrollSpeed  apijson.Field
 	CopyOnSelect apijson.Field
-	DiffStyle    apijson.Field
 	raw          string
 	ExtraFields  map[string]apijson.Field
 }
