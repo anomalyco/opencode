@@ -124,7 +124,6 @@ export default function Page() {
   const handleTabClick = async (tab: string) => {
     if (store.clickTimer) {
       resetClickTimer()
-      // local.file.update(file.path, { ...file, pinned: true })
     } else {
       if (tab.startsWith("file://")) {
         local.file.open(tab.replace("file://", ""))
