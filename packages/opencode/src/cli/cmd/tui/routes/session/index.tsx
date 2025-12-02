@@ -81,6 +81,7 @@ const context = createContext<{
   conceal: () => boolean
   showThinking: () => boolean
   showTimestamps: () => boolean
+  usernameVisible: () => boolean
   showDetails: () => boolean
   diffWrapMode: () => "word" | "none"
   sync: ReturnType<typeof useSync>
@@ -115,6 +116,7 @@ export function Session() {
   const [conceal, setConceal] = createSignal(true)
   const [showThinking, setShowThinking] = createSignal(kv.get("thinking_visibility", true))
   const [showTimestamps, setShowTimestamps] = createSignal(kv.get("timestamps", "hide") === "show")
+  const [usernameVisible, setUsernameVisible] = createSignal(kv.get("username_visible", true))
   const [showDetails, setShowDetails] = createSignal(kv.get("tool_details_visibility", true))
   const [diffWrapMode, setDiffWrapMode] = createSignal<"word" | "none">("word")
 
@@ -416,6 +418,20 @@ export function Session() {
         })
         if (sidebar() === "show") kv.set("sidebar", "auto")
         if (sidebar() === "hide") kv.set("sidebar", "hide")
+        dialog.clear()
+      },
+    },
+    {
+      title: usernameVisible() ? "Hide username" : "Show username",
+      value: "session.username_visible.toggle",
+      keybind: "username_toggle",
+      category: "Session",
+      onSelect: (dialog) => {
+        setUsernameVisible((prev) => {
+          const next = !prev
+          kv.set("username_visible", next)
+          return next
+        })
         dialog.clear()
       },
     },
@@ -776,6 +792,7 @@ export function Session() {
         conceal,
         showThinking,
         showTimestamps,
+        usernameVisible,
         showDetails,
         diffWrapMode,
         sync,
@@ -995,7 +1012,7 @@ function UserMessage(props: {
               </box>
             </Show>
             <text fg={theme.textMuted}>
-              {sync.data.config.username ?? "You"}{" "}
+              {ctx.usernameVisible() ? `${sync.data.config.username ?? "You"} ` : "You"}{" "}
               <Show
                 when={queued()}
                 fallback={

@@ -284,7 +284,8 @@ export default function () {
                             classList={{
                               "w-full flex justify-start items-start min-w-0": true,
                               "max-w-146 mx-auto px-6": wide(),
-                              "pr-6 pl-18": !wide(),
+                              "pr-6 pl-18": !wide() && messages().length > 1,
+                              "px-6": !wide() && messages().length === 1,
                             }}
                           >
                             {title()}
@@ -302,7 +303,9 @@ export default function () {
                               classes={{
                                 root: "grow",
                                 content: "flex flex-col justify-between items-start",
-                                container: "w-full pb-20 " + (wide() ? "max-w-146 mx-auto px-6" : "pr-6 pl-18"),
+                                container:
+                                  "w-full pb-20 " +
+                                  (wide() ? "max-w-146 mx-auto px-6" : messages().length > 1 ? "pr-6 pl-18" : "px-6"),
                               }}
                               diffComponent={ClientOnlyDiff}
                             >
