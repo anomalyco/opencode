@@ -39,6 +39,7 @@ process.on("uncaughtException", (e) => {
 })
 
 const cli = yargs(hideBin(process.argv))
+  .parserConfiguration({ "populate--": true })
   .scriptName("opencode")
   .help("help", "show help")
   .alias("help", "h")
