@@ -81,6 +81,7 @@ const context = createContext<{
   conceal: () => boolean
   showThinking: () => boolean
   showTimestamps: () => boolean
+  showDetails: () => boolean
   diffWrapMode: () => "word" | "none"
   sync: ReturnType<typeof useSync>
 }>()
@@ -114,6 +115,7 @@ export function Session() {
   const [conceal, setConceal] = createSignal(true)
   const [showThinking, setShowThinking] = createSignal(kv.get("thinking_visibility", true))
   const [showTimestamps, setShowTimestamps] = createSignal(kv.get("timestamps", "hide") === "show")
+  const [showDetails, setShowDetails] = createSignal(kv.get("tool_details_visibility", true))
   const [diffWrapMode, setDiffWrapMode] = createSignal<"word" | "none">("word")
 
   const wide = createMemo(() => dimensions().width > 120)
@@ -288,13 +290,22 @@ export function Session() {
       keybind: "session_compact",
       category: "Session",
       onSelect: (dialog) => {
+        const selectedModel = local.model.current()
+        if (!selectedModel) {
+          toast.show({
+            variant: "warning",
+            message: "Connect a provider to summarize this session",
+            duration: 3000,
+          })
+          return
+        }
         sdk.client.session.summarize({
           path: {
             id: route.sessionID,
           },
           body: {
-            modelID: local.model.current().modelID,
-            providerID: local.model.current().providerID,
+            modelID: selectedModel.modelID,
+            providerID: selectedModel.providerID,
           },
         })
         dialog.clear()
@@ -469,6 +480,17 @@ export function Session() {
       category: "Session",
       onSelect: (dialog) => {
         setDiffWrapMode((prev) => (prev === "word" ? "none" : "word"))
+        dialog.clear()
+      },
+    },
+    {
+      title: showDetails() ? "Hide tool details" : "Show tool details",
+      value: "session.toggle.actions",
+      category: "Session",
+      onSelect: (dialog) => {
+        const newValue = !showDetails()
+        setShowDetails(newValue)
+        kv.set("tool_details_visibility", newValue)
         dialog.clear()
       },
     },
@@ -773,6 +795,7 @@ export function Session() {
         conceal,
         showThinking,
         showTimestamps,
+        showDetails,
         diffWrapMode,
         sync,
       }}
@@ -1147,9 +1170,21 @@ function TextPart(props: { last: boolean; part: TextPart; message: AssistantMess
 
 function ToolPart(props: { last: boolean; part: ToolPart; message: AssistantMessage }) {
   const { theme } = useTheme()
+  const { showDetails } = use()
   const sync = useSync()
   const [margin, setMargin] = createSignal(0)
   const component = createMemo(() => {
+    // Hide tool if showDetails is false and tool completed successfully
+    // But always show if there's an error or permission is required
+    const shouldHide =
+      !showDetails() &&
+      props.part.state.status === "completed" &&
+      !sync.data.permission[props.message.sessionID]?.some((x) => x.callID === props.part.callID)
+
+    if (shouldHide) {
+      return undefined
+    }
+
     const render = ToolRegistry.render(props.part.tool) ?? GenericTool
 
     const metadata = props.part.state.status === "pending" ? {} : (props.part.state.metadata ?? {})
