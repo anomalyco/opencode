@@ -314,4 +314,17 @@ describe("Keybind.parse", () => {
       },
     ])
   })
+
+  test("should parse tool details default keybind", () => {
+    const result = Keybind.parse("<leader>t")
+    expect(result).toEqual([
+      {
+        ctrl: false,
+        meta: false,
+        shift: false,
+        leader: true,
+        name: "t",
+      },
+    ])
+  })
 })
