@@ -29,6 +29,7 @@ export interface MessageProps {
 export interface MessagePartProps {
   part: PartType
   message: MessageType
+  hideDetails?: boolean
   sanitize?: RegExp
 }
 
@@ -86,7 +87,7 @@ export function Part(props: MessagePartProps) {
   const part = createMemo(() => sanitizePart(unwrap(props.part), props.sanitize))
   return (
     <Show when={component()}>
-      <Dynamic component={component()} part={part()} message={props.message} />
+      <Dynamic component={component()} part={part()} message={props.message} hideDetails={props.hideDetails} />
     </Show>
   )
 }
@@ -96,6 +97,7 @@ export interface ToolProps {
   metadata: Record<string, any>
   tool: string
   output?: string
+  hideDetails?: boolean
 }
 
 export type ToolComponent = Component<ToolProps>
@@ -162,6 +164,7 @@ PART_MAPPING["tool"] = function ToolPartDisplay(props) {
             tool={part.tool}
             metadata={metadata}
             output={part.state.status === "completed" ? part.state.output : undefined}
+            hideDetails={props.hideDetails}
           />
         </Match>
       </Switch>
