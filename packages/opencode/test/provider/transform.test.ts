@@ -96,3 +96,94 @@ describe("ProviderTransform.maxOutputTokens", () => {
     })
   })
 })
+
+describe("ProviderTransform.message - DeepSeek reasoning content", () => {
+  test("DeepSeek with tool calls includes reasoning_content in providerOptions", () => {
+    const msgs = [
+      {
+        role: "assistant",
+        content: [
+          { type: "reasoning", text: "Let me think about this..." },
+          {
+            type: "tool-call",
+            toolCallId: "test",
+            toolName: "bash",
+            input: { command: "echo hello" },
+          },
+        ],
+      },
+    ] as any[]
+
+    const result = ProviderTransform.message(msgs, "deepseek", "deepseek-chat")
+
+    expect(result).toHaveLength(1)
+    expect(result[0].content).toEqual([
+      {
+        type: "tool-call",
+        toolCallId: "test",
+        toolName: "bash",
+        input: { command: "echo hello" },
+      },
+    ])
+    expect(result[0].providerOptions?.openaiCompatible?.reasoning_content).toBe("Let me think about this...")
+  })
+
+  test("DeepSeek without tool calls strips reasoning from content", () => {
+    const msgs = [
+      {
+        role: "assistant",
+        content: [
+          { type: "reasoning", text: "Let me think about this..." },
+          { type: "text", text: "Final answer" },
+        ],
+      },
+    ] as any[]
+
+    const result = ProviderTransform.message(msgs, "deepseek", "deepseek-chat")
+
+    expect(result).toHaveLength(1)
+    expect(result[0].content).toEqual([{ type: "text", text: "Final answer" }])
+    expect(result[0].providerOptions?.openaiCompatible?.reasoning_content).toBeUndefined()
+  })
+
+  test("DeepSeek model ID containing 'deepseek' matches (case insensitive)", () => {
+    const msgs = [
+      {
+        role: "assistant",
+        content: [
+          { type: "reasoning", text: "Thinking..." },
+          {
+            type: "tool-call",
+            toolCallId: "test",
+            toolName: "get_weather",
+            input: { location: "Hangzhou" },
+          },
+        ],
+      },
+    ] as any[]
+
+    const result = ProviderTransform.message(msgs, "openai", "deepseek-reasoner")
+
+    expect(result[0].providerOptions?.openaiCompatible?.reasoning_content).toBe("Thinking...")
+  })
+
+  test("Non-DeepSeek providers leave reasoning content unchanged", () => {
+    const msgs = [
+      {
+        role: "assistant",
+        content: [
+          { type: "reasoning", text: "Should not be processed" },
+          { type: "text", text: "Answer" },
+        ],
+      },
+    ] as any[]
+
+    const result = ProviderTransform.message(msgs, "openai", "gpt-4")
+
+    expect(result[0].content).toEqual([
+      { type: "reasoning", text: "Should not be processed" },
+      { type: "text", text: "Answer" },
+    ])
+    expect(result[0].providerOptions?.openaiCompatible?.reasoning_content).toBeUndefined()
+  })
+})
