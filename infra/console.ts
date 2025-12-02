@@ -116,7 +116,6 @@ const gatewayKv = new sst.cloudflare.Kv("GatewayKv")
 // CONSOLE
 ////////////////
 
-const oldBucket = new sst.cloudflare.Bucket("ConsoleData")
 const bucket = new sst.cloudflare.Bucket("ZenData")
 
 const AWS_SES_ACCESS_KEY_ID = new sst.Secret("AWS_SES_ACCESS_KEY_ID")

@@ -39,9 +39,6 @@ class Resource:
     class Console:
         type: str
         url: str
-    class ConsoleData:
-        name: str
-        type: str
     class Database:
         database: str
         host: str
