@@ -206,7 +206,11 @@ export function SessionTurn(
                 <div data-slot="session-turn-response-section">
                   <Switch>
                     <Match when={!completed()}>
-                      <MessageProgress assistantMessages={assistantMessages} done={!messageWorking()} />
+                      <MessageProgress
+                        assistantMessages={assistantMessages}
+                        done={!messageWorking()}
+                        diffComponent={props.diffComponent}
+                      />
                     </Match>
                     <Match when={completed() && hasToolPart()}>
                       <Collapsible variant="ghost" open={detailsExpanded()} onOpenChange={setDetailsExpanded}>
