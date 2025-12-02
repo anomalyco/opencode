@@ -1,25 +1,37 @@
 import { Resource, waitUntil } from "@opencode-ai/console-resource"
 
-export function createDataDumper(sessionId: string, requestId: string) {
+export function createDataDumper(sessionId: string, requestId: string, projectId: string) {
   if (Resource.App.stage !== "production") return
+  if (sessionId === "") return
 
-  let data: Record<string, any> = {}
-  let modelName: string | undefined
+  let data: Record<string, any> = { sessionId, requestId, projectId }
+  let metadata: Record<string, any> = { sessionId, requestId, projectId }
 
   return {
-    provideModel: (model?: string) => (modelName = model),
+    provideModel: (model?: string) => {
+      data.modelName = model
+      metadata.modelName = model
+    },
     provideRequest: (request: string) => (data.request = request),
     provideResponse: (response: string) => (data.response = response),
     provideStream: (chunk: string) => (data.response = (data.response ?? "") + chunk),
     flush: () => {
-      if (!modelName) return
+      if (!data.modelName) return
 
-      const str = new Date().toISOString().replace(/[^0-9]/g, "")
-      const yyyymmdd = str.substring(0, 8)
-      const hh = str.substring(8, 10)
+      const timestamp = new Date().toISOString().replace(/[^0-9]/g, "")
 
       waitUntil(
-        Resource.ConsoleData.put(`${yyyymmdd}/${hh}/${modelName}/${sessionId}/${requestId}.json`, JSON.stringify(data)),
+        Resource.ZenData.put(
+          `data/${data.modelName}/${sessionId}/${requestId}.json`,
+          JSON.stringify({ timestamp, ...data }),
+        ),
+      )
+
+      waitUntil(
+        Resource.ZenData.put(
+          `meta/${data.modelName}/${timestamp}/${requestId}.json`,
+          JSON.stringify({ timestamp, ...metadata }),
+        ),
       )
     },
   }
