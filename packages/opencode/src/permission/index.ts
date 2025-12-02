@@ -67,16 +67,9 @@ export namespace Permission {
         }
       } = {}
 
-      const asked: {
-        [sessionID: string]: {
-          [callID: string]: boolean
-        }
-      } = {}
-
       return {
         pending,
         approved,
-        asked,
       }
     },
     async (state) => {
@@ -92,11 +85,6 @@ export namespace Permission {
     return state().pending
   }
 
-  export function wasAsked(sessionID: string, callID: string): boolean {
-    const { asked } = state()
-    return asked[sessionID]?.[callID] ?? false
-  }
-
   export async function ask(input: {
     type: Info["type"]
     title: Info["title"]
@@ -106,7 +94,7 @@ export namespace Permission {
     messageID: Info["messageID"]
     metadata: Info["metadata"]
   }) {
-    const { pending, approved, asked } = state()
+    const { pending, approved } = state()
     log.info("asking", {
       sessionID: input.sessionID,
       messageID: input.messageID,
@@ -128,12 +116,6 @@ export namespace Permission {
       time: {
         created: Date.now(),
       },
-    }
-
-    // Track that this callID required permission
-    if (input.callID) {
-      asked[input.sessionID] = asked[input.sessionID] || {}
-      asked[input.sessionID][input.callID] = true
     }
 
     switch (
