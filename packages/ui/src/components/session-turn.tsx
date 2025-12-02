@@ -2,7 +2,18 @@ import { AssistantMessage } from "@opencode-ai/sdk"
 import { useData } from "../context"
 import { Binary } from "@opencode-ai/util/binary"
 import { getDirectory, getFilename } from "@opencode-ai/util/path"
-import { createEffect, createMemo, createSignal, For, Match, onMount, ParentProps, Show, Switch } from "solid-js"
+import {
+  createEffect,
+  createMemo,
+  createSignal,
+  For,
+  Match,
+  onMount,
+  ParentProps,
+  Show,
+  Switch,
+  ValidComponent,
+} from "solid-js"
 import { DiffChanges } from "./diff-changes"
 import { Typewriter } from "./typewriter"
 import { Message } from "./message-part"
@@ -11,10 +22,10 @@ import { Accordion } from "./accordion"
 import { StickyAccordionHeader } from "./sticky-accordion-header"
 import { FileIcon } from "./file-icon"
 import { Icon } from "./icon"
-import { Diff } from "./diff"
 import { Card } from "./card"
 import { MessageProgress } from "./message-progress"
 import { Collapsible } from "./collapsible"
+import { Dynamic } from "solid-js/web"
 
 export function SessionTurn(
   props: ParentProps<{
@@ -25,6 +36,7 @@ export function SessionTurn(
       content?: string
       container?: string
     }
+    diffComponent: ValidComponent
   }>,
 ) {
   const data = useData()
@@ -117,7 +129,7 @@ export function SessionTurn(
                   </div>
                 </div>
                 <div data-slot="session-turn-message-content">
-                  <Message message={msg()} parts={parts()} sanitize={sanitizer()} />
+                  <Message message={msg()} parts={parts()} sanitize={sanitizer()} diffComponent={props.diffComponent} />
                 </div>
                 {/* Summary */}
                 <Show when={completed()}>
@@ -167,7 +179,8 @@ export function SessionTurn(
                               </Accordion.Trigger>
                             </StickyAccordionHeader>
                             <Accordion.Content data-slot="session-turn-accordion-content">
-                              <Diff
+                              <Dynamic
+                                component={props.diffComponent}
                                 before={{
                                   name: diff.file!,
                                   contents: diff.before!,
@@ -224,10 +237,18 @@ export function SessionTurn(
                                       message={assistantMessage}
                                       parts={parts().filter((p) => p?.id !== last()?.id)}
                                       sanitize={sanitizer()}
+                                      diffComponent={props.diffComponent}
                                     />
                                   )
                                 }
-                                return <Message message={assistantMessage} parts={parts()} sanitize={sanitizer()} />
+                                return (
+                                  <Message
+                                    message={assistantMessage}
+                                    parts={parts()}
+                                    sanitize={sanitizer()}
+                                    diffComponent={props.diffComponent}
+                                  />
+                                )
                               }}
                             </For>
                             <Show when={error()}>
