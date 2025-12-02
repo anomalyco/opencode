@@ -140,7 +140,7 @@ PART_MAPPING["tool"] = function ToolPartDisplay(props) {
             return (
               <Card variant="error">
                 <div data-component="tool-error">
-                  <Icon name="circle-ban-sign" size="small" data-slot="message-part-tool-error-icon" />
+                  <Icon name="circle-ban-sign" size="small" />
                   <Switch>
                     <Match when={title && title.length < 30}>
                       <div data-slot="message-part-tool-error-content">

@@ -14,7 +14,7 @@
     gap: 20px;
   }
 
-  [data-slot="basic-tool-tool-icon"] {
+  [data-slot="icon-svg"] {
     flex-shrink: 0;
   }
 
