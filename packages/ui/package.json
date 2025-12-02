@@ -1,10 +1,10 @@
 {
   "name": "@opencode-ai/ui",
-  "version": "1.0.126",
+  "version": "1.0.127",
   "type": "module",
   "exports": {
     "./*": "./src/components/*.tsx",
-    "./pierre": "./src/components/pierre.ts",
+    "./pierre": "./src/pierre/index.ts",
     "./hooks": "./src/hooks/index.ts",
     "./context": "./src/context/index.ts",
     "./context/*": "./src/context/*.tsx",

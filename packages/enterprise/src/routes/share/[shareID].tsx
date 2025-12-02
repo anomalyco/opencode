@@ -18,6 +18,10 @@ import z from "zod"
 import NotFound from "../[...404]"
 import { Tabs } from "@opencode-ai/ui/tabs"
 import { preloadMultiFileDiff, PreloadMultiFileDiffResult } from "@pierre/precision-diffs/ssr"
+import { Diff } from "@opencode-ai/ui/diff-ssr"
+import { clientOnly } from "@solidjs/start"
+
+const ClientOnlyDiff = clientOnly(() => import("@opencode-ai/ui/diff").then((m) => ({ default: m.Diff })))
 
 const SessionDataMissingError = NamedError.create(
   "SessionDataMissingError",
@@ -230,6 +234,7 @@ export default function () {
                                 "flex flex-col justify-between !overflow-visible [&_[data-slot=session-turn-message-header]]:top-[-32px]",
                               container: "px-4",
                             }}
+                            diffComponent={ClientOnlyDiff}
                           />
                         )}
                       </For>
@@ -299,6 +304,7 @@ export default function () {
                                 content: "flex flex-col justify-between items-start",
                                 container: "w-full pb-20 " + (wide() ? "max-w-146 mx-auto px-6" : "pr-6 pl-18"),
                               }}
+                              diffComponent={ClientOnlyDiff}
                             >
                               <div classList={{ "w-full flex items-center justify-center pb-8 shrink-0": true }}>
                                 <Logo class="w-58.5 opacity-12" />
@@ -311,6 +317,7 @@ export default function () {
                             <SessionReview
                               class="@4xl:hidden"
                               diffs={diffs()}
+                              diffComponent={Diff}
                               classes={{
                                 root: "pb-20",
                                 header: "px-6",
@@ -318,9 +325,10 @@ export default function () {
                               }}
                             />
                             <SessionReview
-                              class="hidden @4xl:flex"
                               split
+                              class="hidden @4xl:flex"
                               diffs={splitDiffs()}
+                              diffComponent={Diff}
                               classes={{
                                 root: "pb-20",
                                 header: "px-6",
@@ -352,6 +360,7 @@ export default function () {
                               <div class="relative h-full pt-8 overflow-y-auto no-scrollbar">
                                 <SessionReview
                                   diffs={diffs()}
+                                  diffComponent={Diff}
                                   classes={{
                                     root: "pb-20",
                                     header: "px-4",

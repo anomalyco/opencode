@@ -1,15 +1,15 @@
 import { Accordion } from "./accordion"
 import { Button } from "./button"
-import { Diff } from "./diff"
 import { DiffChanges } from "./diff-changes"
 import { FileIcon } from "./file-icon"
 import { Icon } from "./icon"
 import { StickyAccordionHeader } from "./sticky-accordion-header"
 import { getDirectory, getFilename } from "@opencode-ai/util/path"
-import { For, Match, Show, Switch, type JSX } from "solid-js"
+import { For, Match, Show, Switch, ValidComponent, type JSX } from "solid-js"
 import { createStore } from "solid-js/store"
 import { type FileDiff } from "@opencode-ai/sdk"
 import { PreloadMultiFileDiffResult } from "@pierre/precision-diffs/ssr"
+import { Dynamic } from "solid-js/web"
 
 export interface SessionReviewProps {
   split?: boolean
@@ -18,6 +18,7 @@ export interface SessionReviewProps {
   classes?: { root?: string; header?: string; container?: string }
   actions?: JSX.Element
   diffs: (FileDiff & { preloaded?: PreloadMultiFileDiffResult<any> })[]
+  diffComponent: ValidComponent
 }
 
 export const SessionReview = (props: SessionReviewProps) => {
@@ -96,7 +97,8 @@ export const SessionReview = (props: SessionReviewProps) => {
                   </Accordion.Trigger>
                 </StickyAccordionHeader>
                 <Accordion.Content data-slot="session-review-accordion-content">
-                  <Diff
+                  <Dynamic
+                    component={props.diffComponent}
                     preloadedDiff={diff.preloaded}
                     diffStyle={props.split ? "split" : "unified"}
                     before={{
