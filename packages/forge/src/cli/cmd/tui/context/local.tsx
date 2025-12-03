@@ -13,6 +13,7 @@ import { ACPClient } from "@/acp/client"
 import { getAllAgents, getAgent, DEFAULT_AGENT, type ACPAgentDefinition } from "@/acp/agents"
 import type { SessionModeId, SessionModeState, SessionModelState, ModelId } from "@agentclientprotocol/sdk"
 import { useKV } from "./kv"
+import { AuthenticationRequiredError, ACP_ERROR_CODES } from "@/acp/types"
 
 export const { use: useLocal, provider: LocalProvider } = createSimpleContext({
   name: "Local",
@@ -21,6 +22,11 @@ export const { use: useLocal, provider: LocalProvider } = createSimpleContext({
     const toast = useToast()
     const kv = useKV()
 
+    const cloneState = <T>(state: T | null | undefined): T | null => {
+      // Break shared references with the ACP client cache so Solid sees real updates
+      return state ? structuredClone(state) : null
+    }
+
     // Session state for ACP client
     const [sessionStore, setSessionStore] = createStore<{
       sessionId: string | null
@@ -28,12 +34,14 @@ export const { use: useLocal, provider: LocalProvider } = createSimpleContext({
       modes: SessionModeState | null
       models: SessionModelState | null
       client: ACPClient.Instance | null
+      authMethods: any[] | null
     }>({
       sessionId: null,
       agentName: null,
       modes: null,
       models: null,
       client: null,
+      authMethods: null,
     })
 
     const agent = iife(() => {
@@ -103,23 +111,44 @@ export const { use: useLocal, provider: LocalProvider } = createSimpleContext({
             // Initialize
             const initResp = await client.initialize()
 
+            // Store auth methods for later use
+            const authMethods = initResp.authMethods ?? []
+
             // Handle auth if needed
-            if (initResp.authMethods && initResp.authMethods.length > 0) {
-              // For now, just use first auth method
-              // TODO: Prompt user to select auth method
-              await client.authenticate(initResp.authMethods[0].id)
+            // Note: Some agents (like Claude Code) don't support authenticate() method
+            // and rely on external auth (e.g., `claude /login`), so we catch that gracefully
+            if (authMethods.length > 0) {
+              try {
+                // For now, just use first auth method
+                // TODO: Prompt user to select auth method
+                await client.authenticate(authMethods[0].id)
+              } catch (authError: any) {
+                // If agent doesn't support authenticate (e.g., Claude Code), that's ok
+                // Authentication will be checked during createSession
+                const isNotImplemented =
+                  authError?.code === ACP_ERROR_CODES.INTERNAL_ERROR &&
+                  authError?.data?.details?.includes("not implemented")
+                if (!isNotImplemented) {
+                  // Re-throw if it's a real auth error
+                  throw authError
+                }
+                // Otherwise silently continue - auth will be validated in createSession
+              }
             }
 
             // Create session
             const sessionResp = await client.createSession()
+            const modes = cloneState<SessionModeState>(sessionResp.modes)
+            const models = cloneState<SessionModelState>(sessionResp.models)
 
             // Store session state
             batch(() => {
               setSessionStore("sessionId", sessionResp.sessionId)
               setSessionStore("agentName", agentName)
-              setSessionStore("modes", sessionResp.modes ?? null)
-              setSessionStore("models", sessionResp.models ?? null)
+              setSessionStore("modes", modes)
+              setSessionStore("models", models)
               setSessionStore("client", client)
+              setSessionStore("authMethods", authMethods)
               setAgentStore("current", agentName)
               kv.set("agent", agentName)
             })
@@ -127,14 +156,18 @@ export const { use: useLocal, provider: LocalProvider } = createSimpleContext({
             // Setup mode change listener
             if (client.getCurrentMode()) {
               client.onModeChange((newModeId) => {
-                setSessionStore("modes", "currentModeId", newModeId)
+                setSessionStore("modes", (currentModes) =>
+                  currentModes ? { ...currentModes, currentModeId: newModeId } : currentModes,
+                )
               })
             }
 
             // Setup model change listener
             if (client.getCurrentModel()) {
               client.onModelChange((newModelId) => {
-                setSessionStore("models", "currentModelId", newModelId)
+                setSessionStore("models", (currentModels) =>
+                  currentModels ? { ...currentModels, currentModelId: newModelId } : currentModels,
+                )
               })
             }
 
@@ -144,9 +177,49 @@ export const { use: useLocal, provider: LocalProvider } = createSimpleContext({
               duration: 2000,
             })
           } catch (error) {
+            // Check if this is an authentication error
+            if (error instanceof AuthenticationRequiredError) {
+              const authMethod = error.authMethods[0]
+              toast.show({
+                variant: "warning",
+                message: `${agentDef.name} requires authentication. ${authMethod?.description || "Please authenticate and try again."}`,
+                duration: 10000,
+              })
+              return
+            }
+
+            // Check for JSON-RPC auth required error (code -32000)
+            const isAuthRequired =
+              typeof error === "object" &&
+              error !== null &&
+              "code" in error &&
+              error.code === ACP_ERROR_CODES.AUTH_REQUIRED
+
+            if (isAuthRequired) {
+              // Use the auth method description from initialize response
+              const authMethod = sessionStore.authMethods?.[0]
+              const instruction = authMethod?.description || "Please authenticate and try again."
+
+              toast.show({
+                variant: "warning",
+                message: `Authentication required. ${instruction}`,
+                duration: 10000,
+              })
+              return
+            }
+
+            // Generic error handling
+            const errorMessage = error instanceof Error
+              ? error.message
+              : typeof error === "object" && error !== null
+                ? JSON.stringify(error)
+                : String(error)
+
+            console.error(`Failed to connect to ${agentDef.name}:`, error)
+
             toast.show({
               variant: "error",
-              message: `Failed to connect to ${agentDef.name}: ${error instanceof Error ? error.message : String(error)}`,
+              message: `Failed to connect to ${agentDef.name}: ${errorMessage}`,
               duration: 5000,
             })
           }
@@ -212,7 +285,12 @@ export const { use: useLocal, provider: LocalProvider } = createSimpleContext({
         },
         cycle(direction: 1 | -1 = 1) {
           const modes = sessionStore.modes?.availableModes ?? []
-          if (modes.length === 0) return
+          console.log("cycle() called", { direction, modesCount: modes.length, modes, currentMode: sessionStore.modes?.currentModeId })
+
+          if (modes.length === 0) {
+            console.log("No modes available, returning early")
+            return
+          }
 
           const currentMode = sessionStore.modes?.currentModeId
           const currentIndex = modes.findIndex((m) => m.id === currentMode)
@@ -221,6 +299,7 @@ export const { use: useLocal, provider: LocalProvider } = createSimpleContext({
           if (nextIndex < 0) nextIndex = modes.length + nextIndex
           const nextMode = modes[nextIndex]
 
+          console.log("Cycling to mode:", { currentIndex, nextIndex, nextMode: nextMode.id })
           this.set(nextMode.id)
         },
         getName(modeId: SessionModeId) {

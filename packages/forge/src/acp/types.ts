@@ -22,6 +22,16 @@ export interface ACPConfig {
 }
 
 /**
+ * JSON-RPC error codes used by ACP
+ */
+export const ACP_ERROR_CODES = {
+  /** Authentication required (-32000) */
+  AUTH_REQUIRED: -32000,
+  /** Internal error (-32603) */
+  INTERNAL_ERROR: -32603,
+} as const
+
+/**
  * Error thrown when an agent requires authentication before allowing operations
  */
 export class AuthenticationRequiredError extends Error {

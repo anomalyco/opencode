@@ -162,20 +162,18 @@ function App() {
   })
 
   const args = useArgs()
-  onMount(() => {
-    batch(async () => {
-      // Always initialize agent (from args, KV store, or default)
-      const agentToUse = args.agent ?? local.agent.current().name
-      await local.agent.set(agentToUse)
+  onMount(async () => {
+    // Always initialize agent (from args, KV store, or default)
+    const agentToUse = args.agent ?? local.agent.current().name
+    await local.agent.set(agentToUse)
 
-      if (args.model) local.model.set(args.model)
-      if (args.sessionID) {
-        route.navigate({
-          type: "session",
-          sessionID: args.sessionID,
-        })
-      }
-    })
+    if (args.model) local.model.set(args.model)
+    if (args.sessionID) {
+      route.navigate({
+        type: "session",
+        sessionID: args.sessionID,
+      })
+    }
   })
 
   createEffect(() => {
