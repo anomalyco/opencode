@@ -7,6 +7,7 @@
     "lib": ["ESNext", "DOM", "DOM.Iterable"],
     "types": [],
     "noUncheckedIndexedAccess": false,
+    "noImplicitOverride": false,
     "customConditions": ["browser"],
     "paths": {
       "@/*": ["./src/*"],
