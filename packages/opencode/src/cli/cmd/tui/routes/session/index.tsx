@@ -81,6 +81,7 @@ const context = createContext<{
   conceal: () => boolean
   showThinking: () => boolean
   showTimestamps: () => boolean
+  usernameVisible: () => boolean
   showDetails: () => boolean
   diffWrapMode: () => "word" | "none"
   sync: ReturnType<typeof useSync>
@@ -115,6 +116,7 @@ export function Session() {
   const [conceal, setConceal] = createSignal(true)
   const [showThinking, setShowThinking] = createSignal(kv.get("thinking_visibility", true))
   const [showTimestamps, setShowTimestamps] = createSignal(kv.get("timestamps", "hide") === "show")
+  const [usernameVisible, setUsernameVisible] = createSignal(kv.get("username_visible", true))
   const [showDetails, setShowDetails] = createSignal(kv.get("tool_details_visibility", true))
   const [diffWrapMode, setDiffWrapMode] = createSignal<"word" | "none">("word")
 
@@ -416,6 +418,20 @@ export function Session() {
         })
         if (sidebar() === "show") kv.set("sidebar", "auto")
         if (sidebar() === "hide") kv.set("sidebar", "hide")
+        dialog.clear()
+      },
+    },
+    {
+      title: usernameVisible() ? "Hide username" : "Show username",
+      value: "session.username_visible.toggle",
+      keybind: "username_toggle",
+      category: "Session",
+      onSelect: (dialog) => {
+        setUsernameVisible((prev) => {
+          const next = !prev
+          kv.set("username_visible", next)
+          return next
+        })
         dialog.clear()
       },
     },
@@ -776,6 +792,7 @@ export function Session() {
         conceal,
         showThinking,
         showTimestamps,
+        usernameVisible,
         showDetails,
         diffWrapMode,
         sync,
@@ -940,13 +957,14 @@ function UserMessage(props: {
   pending?: string
 }) {
   const ctx = use()
+  const local = useLocal()
   const text = createMemo(() => props.parts.flatMap((x) => (x.type === "text" && !x.synthetic ? [x] : []))[0])
   const files = createMemo(() => props.parts.flatMap((x) => (x.type === "file" ? [x] : [])))
   const sync = useSync()
   const { theme } = useTheme()
   const [hover, setHover] = createSignal(false)
   const queued = createMemo(() => props.pending && props.message.id > props.pending)
-  const color = createMemo(() => (queued() ? theme.accent : theme.secondary))
+  const color = createMemo(() => (queued() ? theme.accent : local.agent.color(props.message.agent)))
 
   const compaction = createMemo(() => props.parts.find((x) => x.type === "compaction"))
 
@@ -995,7 +1013,7 @@ function UserMessage(props: {
               </box>
             </Show>
             <text fg={theme.textMuted}>
-              {sync.data.config.username ?? "You"}{" "}
+              {ctx.usernameVisible() ? `${sync.data.config.username ?? "You"} ` : "You"}{" "}
               <Show
                 when={queued()}
                 fallback={
@@ -1101,7 +1119,11 @@ const PART_MAPPING = {
 function ReasoningPart(props: { last: boolean; part: ReasoningPart; message: AssistantMessage }) {
   const { theme, subtleSyntax } = useTheme()
   const ctx = use()
-  const content = createMemo(() => props.part.text.trim())
+  const content = createMemo(() => {
+    // Filter out redacted reasoning chunks from OpenRouter
+    // OpenRouter sends encrypted reasoning data that appears as [REDACTED]
+    return props.part.text.replace("[REDACTED]", "").trim()
+  })
   return (
     <Show when={content() && ctx.showThinking()}>
       <box
