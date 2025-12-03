@@ -294,14 +294,8 @@ export namespace Provider {
 
       return {
         autoload: !!serviceKey,
-        getModel: async (sdk, modelID, options) => {
-          const sapaiProvider = await createSAPAIProvider({
-            serviceKey,
-            deploymentId,
-            resourceGroup,
-            ...options,
-          })
-          return sapaiProvider.languageModel(modelID)
+        async getModel(sdk: any, modelID: string, _options?: Record<string, any>) {
+          return sdk.languageModel(modelID)
         },
         options: serviceKey ? { serviceKey, deploymentId, resourceGroup } : {},
       }
@@ -797,7 +791,7 @@ export namespace Provider {
       const mod = await import(installedPath)
 
       const fn = mod[Object.keys(mod).find((key) => key.startsWith("create"))!]
-      const loaded = fn({
+      const loaded = await fn({
         name: model.providerID,
         ...options,
       })
