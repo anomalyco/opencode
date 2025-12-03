@@ -668,6 +668,10 @@ export namespace Config {
           chatMaxRetries: z.number().optional().describe("Number of retries for chat completions on failure"),
           disable_paste_summary: z.boolean().optional(),
           batch_tool: z.boolean().optional().describe("Enable the batch tool"),
+          primary_tools: z
+            .array(z.string())
+            .optional()
+            .describe("Tools that should only be available to primary agents."),
         })
         .optional(),
     })
