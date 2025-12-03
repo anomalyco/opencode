@@ -797,6 +797,10 @@ export type KeybindsConfig = {
    */
   messages_last?: string
   /**
+   * Navigate to last user message
+   */
+  messages_last_user?: string
+  /**
    * Copy message
    */
   messages_copy?: string
