@@ -9,10 +9,11 @@ on:
 jobs:
   check-guidelines:
     if: |
-      github.event_name == 'pull_request_target' ||
+      (github.event_name == 'pull_request_target' &&
+       github.event.pull_request.draft == false) ||
       (github.event_name == 'issue_comment' &&
        github.event.issue.pull_request &&
-      startsWith(github.event.comment.body, '/review'))
+       startsWith(github.event.comment.body, '/review'))
     runs-on: ubuntu-latest
     permissions:
       contents: read
