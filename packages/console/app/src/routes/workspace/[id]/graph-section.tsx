@@ -158,8 +158,23 @@ export function GraphSection() {
     model: null as string | null,
     modelDropdownOpen: false,
     keyDropdownOpen: false,
+    colorScheme: "light" as "light" | "dark",
   })
   const initialData = createAsync(() => queryCosts(params.id!, store.year, store.month))
+
+  createEffect(() => {
+    if (typeof window === "undefined") return
+
+    const mediaQuery = window.matchMedia("(prefers-color-scheme: dark)")
+    setStore({ colorScheme: mediaQuery.matches ? "dark" : "light" })
+
+    const handleColorSchemeChange = (e: MediaQueryListEvent) => {
+      setStore({ colorScheme: e.matches ? "dark" : "light" })
+    }
+
+    mediaQuery.addEventListener("change", handleColorSchemeChange)
+    onCleanup(() => mediaQuery.removeEventListener("change", handleColorSchemeChange))
+  })
 
   const onPreviousMonth = async () => {
     const month = store.month === 0 ? 11 : store.month - 1
@@ -210,6 +225,15 @@ export function GraphSection() {
     const dates = getDates()
     if (!data?.usage?.length) return null
 
+    store.colorScheme
+    const styles = getComputedStyle(document.documentElement)
+    const colorTextMuted = styles.getPropertyValue("--color-text-muted").trim()
+    const colorBorderMuted = styles.getPropertyValue("--color-border-muted").trim()
+    const colorBgElevated = styles.getPropertyValue("--color-bg-elevated").trim()
+    const colorText = styles.getPropertyValue("--color-text").trim()
+    const colorTextSecondary = styles.getPropertyValue("--color-text-secondary").trim()
+    const colorBorder = styles.getPropertyValue("--color-border").trim()
+
     const dailyData = new Map<string, Map<string, number>>()
     for (const dateKey of dates) dailyData.set(dateKey, new Map())
 
@@ -252,7 +276,7 @@ export function GraphSection() {
             ticks: {
               maxRotation: 0,
               autoSkipPadding: 20,
-              color: "rgba(255, 255, 255, 0.5)",
+              color: colorTextMuted,
               font: {
                 family: "monospace",
                 size: 11,
@@ -263,10 +287,10 @@ export function GraphSection() {
             stacked: true,
             beginAtZero: true,
             grid: {
-              color: "rgba(255, 255, 255, 0.1)",
+              color: colorBorderMuted,
             },
             ticks: {
-              color: "rgba(255, 255, 255, 0.5)",
+              color: colorTextMuted,
               font: {
                 family: "monospace",
                 size: 11,
@@ -282,10 +306,10 @@ export function GraphSection() {
           tooltip: {
             mode: "index",
             intersect: false,
-            backgroundColor: "rgba(0, 0, 0, 0.9)",
-            titleColor: "rgba(255, 255, 255, 0.9)",
-            bodyColor: "rgba(255, 255, 255, 0.8)",
-            borderColor: "rgba(255, 255, 255, 0.1)",
+            backgroundColor: colorBgElevated,
+            titleColor: colorText,
+            bodyColor: colorTextSecondary,
+            borderColor: colorBorder,
             borderWidth: 1,
             padding: 12,
             displayColors: true,
@@ -301,7 +325,7 @@ export function GraphSection() {
             display: true,
             position: "bottom",
             labels: {
-              color: "rgba(255, 255, 255, 0.7)",
+              color: colorTextSecondary,
               font: {
                 size: 12,
               },
