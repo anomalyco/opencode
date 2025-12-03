@@ -367,7 +367,16 @@ export namespace Config {
       ref: "McpRemoteConfig",
     })
 
-  export const Mcp = z.discriminatedUnion("type", [McpLocal, McpRemote])
+  export const McpOverride = z
+    .object({
+      enabled: z.boolean().describe("Enable or disable the MCP server on startup"),
+    })
+    .strict()
+    .meta({
+      ref: "McpOverrideConfig",
+    })
+
+  export const Mcp = z.union([z.discriminatedUnion("type", [McpLocal, McpRemote]), McpOverride])
   export type Mcp = z.infer<typeof Mcp>
 
   export const Permission = z.enum(["ask", "allow", "deny"])

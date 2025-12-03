@@ -156,6 +156,16 @@ export namespace MCP {
         status: { status: "disabled" as const },
       }
     }
+    if (!("type" in mcp)) {
+      log.warn("mcp override without base config", { key })
+      return {
+        mcpClient: undefined,
+        status: {
+          status: "failed" as const,
+          error: "Missing configuration",
+        },
+      }
+    }
     log.info("found", { key, type: mcp.type })
     let mcpClient: MCPClient | undefined
     let status: Status | undefined = undefined

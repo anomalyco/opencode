@@ -501,3 +501,209 @@ test("deduplicates duplicate plugins from global and local configs", async () =>
     },
   })
 })
+
+test("accepts full MCP configuration", async () => {
+  await using tmp = await tmpdir({
+    init: async (dir) => {
+      await Bun.write(
+        path.join(dir, "opencode.json"),
+        JSON.stringify({
+          $schema: "https://opencode.ai/config.json",
+          mcp: {
+            "my-mcp-foo": {
+              type: "remote",
+              url: "https://my-mcp-server-foo.com",
+            },
+            "my-mcp-bar": {
+              type: "local",
+              command: ["npx", "-y", "my-mcp-command"],
+            },
+          },
+        }),
+      )
+    },
+  })
+  await Instance.provide({
+    directory: tmp.path,
+    fn: async () => {
+      const config = await Config.get()
+      expect(config.mcp?.["my-mcp-foo"]).toEqual({
+        type: "remote",
+        url: "https://my-mcp-server-foo.com",
+      })
+      expect(config.mcp?.["my-mcp-bar"]).toEqual({
+        type: "local",
+        command: ["npx", "-y", "my-mcp-command"],
+      })
+    },
+  })
+})
+
+test("accepts MCP override with only enabled field", async () => {
+  await using tmp = await tmpdir({
+    init: async (dir) => {
+      await Bun.write(
+        path.join(dir, "opencode.json"),
+        JSON.stringify({
+          $schema: "https://opencode.ai/config.json",
+          mcp: {
+            "my-mcp-foo": { enabled: false },
+          },
+        }),
+      )
+    },
+  })
+  await Instance.provide({
+    directory: tmp.path,
+    fn: async () => {
+      const config = await Config.get()
+      expect(config.mcp?.["my-mcp-foo"]).toEqual({ enabled: false })
+    },
+  })
+})
+
+test("merges MCP override with full config from parent", async () => {
+  await using tmp = await tmpdir({
+    init: async (dir) => {
+      const projectDir = path.join(dir, "project")
+      const opencodeDir = path.join(projectDir, ".opencode")
+      await fs.mkdir(opencodeDir, { recursive: true })
+
+      // Parent config with full MCP definitions
+      await Bun.write(
+        path.join(dir, "opencode.json"),
+        JSON.stringify({
+          $schema: "https://opencode.ai/config.json",
+          mcp: {
+            "my-mcp-foo": {
+              type: "remote",
+              url: "https://my-mcp-server-foo.com",
+            },
+            "my-mcp-bar": {
+              type: "remote",
+              url: "https://my-mcp-server-bar.com",
+            },
+            "my-mcp-baz": {
+              type: "local",
+              command: ["npx", "-y", "my-mcp-command"],
+            },
+          },
+        }),
+      )
+
+      // Project config with overrides
+      await Bun.write(
+        path.join(opencodeDir, "opencode.json"),
+        JSON.stringify({
+          $schema: "https://opencode.ai/config.json",
+          mcp: {
+            "my-mcp-foo": { enabled: true },
+            "my-mcp-baz": { enabled: false },
+          },
+        }),
+      )
+    },
+  })
+
+  await Instance.provide({
+    directory: path.join(tmp.path, "project"),
+    fn: async () => {
+      const config = await Config.get()
+
+      // my-mcp-foo should have full config merged with enabled: true
+      expect(config.mcp?.["my-mcp-foo"]).toEqual({
+        type: "remote",
+        url: "https://my-mcp-server-foo.com",
+        enabled: true,
+      })
+
+      // my-mcp-bar should be unchanged (no override)
+      expect(config.mcp?.["my-mcp-bar"]).toEqual({
+        type: "remote",
+        url: "https://my-mcp-server-bar.com",
+      })
+
+      // my-mcp-baz should have full config merged with enabled: false
+      expect(config.mcp?.["my-mcp-baz"]).toEqual({
+        type: "local",
+        command: ["npx", "-y", "my-mcp-command"],
+        enabled: false,
+      })
+    },
+  })
+})
+
+test("project can enable globally disabled MCP", async () => {
+  await using tmp = await tmpdir({
+    init: async (dir) => {
+      const projectDir = path.join(dir, "project")
+      const opencodeDir = path.join(projectDir, ".opencode")
+      await fs.mkdir(opencodeDir, { recursive: true })
+
+      // Global config with disabled MCP
+      await Bun.write(
+        path.join(dir, "opencode.json"),
+        JSON.stringify({
+          $schema: "https://opencode.ai/config.json",
+          mcp: {
+            "my-mcp-foo": {
+              type: "remote",
+              url: "https://my-mcp-server-foo.com",
+              enabled: false,
+            },
+          },
+        }),
+      )
+
+      // Project enables it
+      await Bun.write(
+        path.join(opencodeDir, "opencode.json"),
+        JSON.stringify({
+          $schema: "https://opencode.ai/config.json",
+          mcp: {
+            "my-mcp-foo": { enabled: true },
+          },
+        }),
+      )
+    },
+  })
+
+  await Instance.provide({
+    directory: path.join(tmp.path, "project"),
+    fn: async () => {
+      const config = await Config.get()
+      expect(config.mcp?.["my-mcp-foo"]).toEqual({
+        type: "remote",
+        url: "https://my-mcp-server-foo.com",
+        enabled: true,
+      })
+    },
+  })
+})
+
+test("MCP override without base config results in override-only object", async () => {
+  await using tmp = await tmpdir({
+    init: async (dir) => {
+      // Only override, no base config defined
+      await Bun.write(
+        path.join(dir, "opencode.json"),
+        JSON.stringify({
+          $schema: "https://opencode.ai/config.json",
+          mcp: {
+            "my-mcp-nonexistent": { enabled: true },
+          },
+        }),
+      )
+    },
+  })
+  await Instance.provide({
+    directory: tmp.path,
+    fn: async () => {
+      const config = await Config.get()
+      // The config will have just the override (no type field)
+      // MCP initialization will fail with "Missing configuration"
+      expect(config.mcp?.["my-mcp-nonexistent"]).toEqual({ enabled: true })
+      expect("type" in (config.mcp?.["my-mcp-nonexistent"] ?? {})).toBe(false)
+    },
+  })
+})

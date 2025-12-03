@@ -100,7 +100,7 @@ export function Sidebar(props: { sessionID: string }) {
                 <Show when={mcpEntries().length <= 2 || expanded.mcp}>
                   <For each={mcpEntries()}>
                     {([key, item]) => (
-                      <box flexDirection="row" gap={1}>
+                      <box flexDirection="row" gap={1} justifyContent="space-between">
                         <text
                           flexShrink={0}
                           style={{
@@ -117,7 +117,7 @@ export function Sidebar(props: { sessionID: string }) {
                         >
                           •
                         </text>
-                        <text fg={theme.text} wrapMode="word">
+                        <text flexShrink={0} fg={theme.text} wrapMode="word">
                           {key}{" "}
                           <span style={{ fg: theme.textMuted }}>
                             <Switch fallback={item.status}>

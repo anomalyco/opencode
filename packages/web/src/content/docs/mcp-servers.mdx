@@ -54,6 +54,58 @@ You can also disable a server by setting `enabled` to `false`. This is useful if
 
 ---
 
+### Per-project overrides
+
+If you define MCP servers in your global config, you can override the `enabled` field per-project without redefining the full configuration.
+
+```jsonc title="~/.config/opencode/opencode.jsonc"
+{
+  "$schema": "https://opencode.ai/config.json",
+  "mcp": {
+    "my-mcp-foo": { "type": "remote", "url": "https://my-mcp-server-foo.com" },
+    "my-mcp-bar": { "type": "remote", "url": "https://my-mcp-server-bar.com" },
+    "my-mcp-baz": { "type": "local", "command": ["npx", "-y", "my-mcp-command"] },
+  },
+}
+```
+
+```jsonc title="~/my-project/.opencode/opencode.jsonc"
+{
+  "$schema": "https://opencode.ai/config.json",
+  "mcp": {
+    "my-mcp-foo": { "enabled": true },
+    "my-mcp-bar": { "enabled": true },
+    // my-mcp-baz not mentioned - uses global config (enabled by default)
+  },
+}
+```
+
+This also works in reverse - disable globally, enable per-project:
+
+```jsonc title="~/.config/opencode/opencode.jsonc"
+{
+  "$schema": "https://opencode.ai/config.json",
+  "mcp": {
+    "my-mcp-foo": { "type": "remote", "url": "https://my-mcp-server-foo.com", "enabled": false },
+  },
+}
+```
+
+```jsonc title="~/my-project/.opencode/opencode.jsonc"
+{
+  "$schema": "https://opencode.ai/config.json",
+  "mcp": {
+    "my-mcp-foo": { "enabled": true },
+  },
+}
+```
+
+:::note
+If you specify an override for an MCP that isn't defined in a parent config, it will show as failed with the error "Missing configuration".
+:::
+
+---
+
 ### Local
 
 Add local MCP servers using `type` to `"local"` within the MCP object.
