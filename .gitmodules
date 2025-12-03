@@ -1,0 +1,3 @@
+[submodule "opentui"]
+	path = opentui
+	url = https://github.com/sst/opentui
