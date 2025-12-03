@@ -797,6 +797,10 @@ export type KeybindsConfig = {
    */
   messages_last?: string
   /**
+   * Navigate to last user message
+   */
+  messages_last_user?: string
+  /**
    * Copy message
    */
   messages_copy?: string
@@ -812,6 +816,10 @@ export type KeybindsConfig = {
    * Toggle code block concealment in messages
    */
   messages_toggle_conceal?: string
+  /**
+   * Toggle tool details visibility
+   */
+  tool_details?: string
   /**
    * List available models
    */
@@ -1249,6 +1257,10 @@ export type Config = {
      * Enable the batch tool
      */
     batch_tool?: boolean
+    /**
+     * Tools that should only be available to primary agents.
+     */
+    primary_tools?: Array<string>
   }
 }
 
