@@ -2,7 +2,7 @@ name: Guidelines Check
 
 on:
   pull_request_target:
-    types: [opened]
+    types: [opened, ready_for_review]
   issue_comment:
     types: [created]
 
