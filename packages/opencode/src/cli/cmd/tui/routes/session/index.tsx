@@ -558,6 +558,37 @@ export function Session() {
       },
     },
     {
+      title: "Jump to last user message",
+      value: "session.messages_last_user",
+      keybind: "messages_last_user",
+      category: "Session",
+      onSelect: () => {
+        const messages = sync.data.message[route.sessionID]
+        if (!messages || !messages.length) return
+
+        // Find the most recent user message with non-ignored, non-synthetic text parts
+        for (let i = messages.length - 1; i >= 0; i--) {
+          const message = messages[i]
+          if (!message || message.role !== "user") continue
+
+          const parts = sync.data.part[message.id]
+          if (!parts || !Array.isArray(parts)) continue
+
+          const hasValidTextPart = parts.some(
+            (part) => part && part.type === "text" && !part.synthetic && !part.ignored,
+          )
+
+          if (hasValidTextPart) {
+            const child = scroll.getChildren().find((child) => {
+              return child.id === message.id
+            })
+            if (child) scroll.scrollBy(child.y - scroll.y - 1)
+            break
+          }
+        }
+      },
+    },
+    {
       title: "Copy last assistant message",
       value: "messages.copy",
       keybind: "messages_copy",
