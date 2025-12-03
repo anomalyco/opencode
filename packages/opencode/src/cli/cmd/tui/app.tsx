@@ -2,9 +2,10 @@ import { render, useKeyboard, useRenderer, useTerminalDimensions } from "@opentu
 import { Clipboard } from "@tui/util/clipboard"
 import { TextAttributes } from "@opentui/core"
 import { RouteProvider, useRoute } from "@tui/context/route"
-import { Switch, Match, createEffect, untrack, ErrorBoundary, createSignal, onMount, batch, Show } from "solid-js"
+import { Switch, Match, createEffect, untrack, ErrorBoundary, createSignal, onMount, batch, Show, on } from "solid-js"
 import { Installation } from "@/installation"
 import { Global } from "@/global"
+import { Flag } from "@/flag/flag"
 import { DialogProvider, useDialog } from "@tui/ui/dialog"
 import { DialogProvider as DialogProviderList } from "@tui/component/dialog-provider"
 import { SDKProvider, useSDK } from "@tui/context/sdk"
@@ -197,6 +198,17 @@ function App() {
     }
   })
 
+  createEffect(
+    on(
+      () => sync.status === "complete" && sync.data.provider.length === 0,
+      (isEmpty, wasEmpty) => {
+        // only trigger when we transition into an empty-provider state
+        if (!isEmpty || wasEmpty) return
+        dialog.replace(() => <DialogProviderList />)
+      },
+    ),
+  )
+
   command.register(() => [
     {
       title: "Switch session",
@@ -301,10 +313,11 @@ function App() {
       category: "System",
     },
     {
-      title: `Switch to ${mode() === "dark" ? "light" : "dark"} mode`,
+      title: "Toggle appearance",
       value: "theme.switch_mode",
-      onSelect: () => {
+      onSelect: (dialog) => {
         setMode(mode() === "dark" ? "light" : "dark")
+        dialog.clear()
       },
       category: "System",
     },
@@ -367,8 +380,9 @@ function App() {
   ])
 
   createEffect(() => {
-    const providerID = local.model.current().providerID
-    if (providerID === "openrouter" && !kv.get("openrouter_warning", false)) {
+    const currentModel = local.model.current()
+    if (!currentModel) return
+    if (currentModel.providerID === "openrouter" && !kv.get("openrouter_warning", false)) {
       untrack(() => {
         DialogAlert.show(
           dialog,
@@ -448,6 +462,10 @@ function App() {
       height={dimensions().height}
       backgroundColor={theme.background}
       onMouseUp={async () => {
+        if (Flag.OPENCODE_EXPERIMENTAL_DISABLE_COPY_ON_SELECT) {
+          renderer.clearSelection()
+          return
+        }
         const text = renderer.getSelection()?.getSelectedText()
         if (text && text.length > 0) {
           const base64 = Buffer.from(text).toString("base64")

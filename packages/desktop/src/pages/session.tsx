@@ -30,6 +30,7 @@ import { useSync } from "@/context/sync"
 import { useSession } from "@/context/session"
 import { useLayout } from "@/context/layout"
 import { getDirectory, getFilename } from "@opencode-ai/util/path"
+import { Diff } from "@opencode-ai/ui/diff"
 
 export default function Page() {
   const layout = useLayout()
@@ -123,7 +124,6 @@ export default function Page() {
   const handleTabClick = async (tab: string) => {
     if (store.clickTimer) {
       resetClickTimer()
-      // local.file.update(file.path, { ...file, pinned: true })
     } else {
       if (tab.startsWith("file://")) {
         local.file.open(tab.replace("file://", ""))
@@ -355,8 +355,15 @@ export default function Page() {
                         classes={{
                           root: "pb-20 flex-1 min-w-0",
                           content: "pb-20",
-                          container: "w-full " + (wide() ? "max-w-146 mx-auto px-6" : "pr-6 pl-18"),
+                          container:
+                            "w-full " +
+                            (wide()
+                              ? "max-w-146 mx-auto px-6"
+                              : session.messages.user().length > 1
+                                ? "pr-6 pl-18"
+                                : "px-6"),
                         }}
+                        diffComponent={Diff}
                       />
                     </div>
                   </Match>
@@ -405,6 +412,7 @@ export default function Page() {
                       container: "px-6",
                     }}
                     diffs={session.diffs()}
+                    diffComponent={Diff}
                     actions={
                       <Tooltip value="Open in tab">
                         <IconButton
@@ -436,6 +444,7 @@ export default function Page() {
                     container: "px-6",
                   }}
                   diffs={session.diffs()}
+                  diffComponent={Diff}
                   split
                 />
               </div>

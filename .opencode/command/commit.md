@@ -1,5 +1,5 @@
 ---
-description: Git commit and push
+description: git commit and push
 ---
 
 commit and push
