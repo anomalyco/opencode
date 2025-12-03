@@ -145,7 +145,7 @@ export const { use: useSession, provider: SessionProvider } = createSimpleContex
             setStore("tabs", "active", undefined)
             return
           }
-          if (tab !== "review") {
+          if (tab !== "review" && tab !== "terminal") {
             if (!store.tabs.opened.includes(tab)) {
               setStore("tabs", "opened", [...store.tabs.opened, tab])
             }

@@ -31,16 +31,20 @@ import { useSession } from "@/context/session"
 import { useLayout } from "@/context/layout"
 import { getDirectory, getFilename } from "@opencode-ai/util/path"
 import { Diff } from "@opencode-ai/ui/diff"
+import { Terminal } from "@/components/terminal"
+import { useSDK } from "@/context/sdk"
 
 export default function Page() {
   const layout = useLayout()
   const local = useLocal()
   const sync = useSync()
   const session = useSession()
+  const sdk = useSDK()
   const [store, setStore] = createStore({
     clickTimer: undefined as number | undefined,
     fileSelectOpen: false,
     activeDraggable: undefined as string | undefined,
+    ptyId: undefined as string | undefined,
   })
   let inputRef!: HTMLDivElement
 
@@ -48,6 +52,8 @@ export default function Page() {
 
   onMount(() => {
     document.addEventListener("keydown", handleKeyDown)
+
+    sdk.client.pty.create().then((pty) => setStore("ptyId", pty.data?.id))
   })
 
   onCleanup(() => {
@@ -71,6 +77,12 @@ export default function Page() {
       const nextTheme = themes[(themes.indexOf(currentTheme) + 1) % themes.length]
       localStorage.setItem("theme", nextTheme)
       document.documentElement.setAttribute("data-theme", nextTheme)
+      return
+    }
+
+    // check if active element has `data-component="terminal"`
+    // @ts-expect-error
+    if (document.activeElement?.dataset?.component === "terminal") {
       return
     }
 
@@ -286,6 +298,9 @@ export default function Page() {
                   </Tooltip>
                 </div>
               </Tabs.Trigger>
+              <Show when={store.ptyId}>
+                <Tabs.Trigger value="terminal">Terminal</Tabs.Trigger>
+              </Show>
               <Show when={layout.review.state() === "tab" && session.diffs().length}>
                 <Tabs.Trigger
                   value="review"
@@ -430,6 +445,17 @@ export default function Page() {
               </Show>
             </div>
           </Tabs.Content>
+          <Show when={store.ptyId}>
+            <Tabs.Content value="terminal" class="select-text flex flex-col h-full overflow-hidden">
+              <div
+                classList={{
+                  "relative pt-3 flex-1 min-h-0 overflow-hidden": true,
+                }}
+              >
+                <Terminal id={store.ptyId!} />
+              </div>
+            </Tabs.Content>
+          </Show>
           <Show when={layout.review.state() === "tab" && session.diffs().length}>
             <Tabs.Content value="review" class="select-text flex flex-col h-full overflow-hidden">
               <div
