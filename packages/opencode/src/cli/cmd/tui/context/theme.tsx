@@ -161,7 +161,7 @@ function resolveTheme(theme: ThemeJson, mode: "dark" | "light") {
 
       if (c.startsWith("#")) return RGBA.fromHex(c)
 
-      if (defs[c]) {
+      if (defs[c] != null) {
         return resolveColor(defs[c])
       } else if (theme.theme[c as keyof ThemeColors] !== undefined) {
         return resolveColor(theme.theme[c as keyof ThemeColors]!)
