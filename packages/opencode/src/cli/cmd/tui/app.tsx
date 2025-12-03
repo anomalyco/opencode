@@ -313,10 +313,11 @@ function App() {
       category: "System",
     },
     {
-      title: `Switch to ${mode() === "dark" ? "light" : "dark"} mode`,
+      title: "Toggle appearance",
       value: "theme.switch_mode",
-      onSelect: () => {
+      onSelect: (dialog) => {
         setMode(mode() === "dark" ? "light" : "dark")
+        dialog.clear()
       },
       category: "System",
     },
