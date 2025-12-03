@@ -544,6 +544,7 @@ export namespace SessionPrompt {
           headers: {
             ...(model.providerID.startsWith("opencode")
               ? {
+                  "x-opencode-project": Instance.project.id,
                   "x-opencode-session": sessionID,
                   "x-opencode-request": lastUser.id,
                 }

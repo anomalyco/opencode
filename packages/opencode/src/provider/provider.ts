@@ -94,7 +94,7 @@ export namespace Provider {
       return {
         autoload: false,
         async getModel(sdk: any, modelID: string, _options?: Record<string, any>) {
-          if (modelID.includes("gpt-5")) {
+          if (modelID.includes("codex")) {
             return sdk.responses(modelID)
           }
           return sdk.chat(modelID)
@@ -106,7 +106,7 @@ export namespace Provider {
       return {
         autoload: false,
         async getModel(sdk: any, modelID: string, _options?: Record<string, any>) {
-          if (modelID.includes("gpt-5")) {
+          if (modelID.includes("codex")) {
             return sdk.responses(modelID)
           }
           return sdk.chat(modelID)
@@ -515,7 +515,7 @@ export namespace Provider {
         continue
       }
 
-      if (providerID === "github-copilot") {
+      if (providerID === "github-copilot" || providerID === "github-copilot-enterprise") {
         provider.info.npm = "@ai-sdk/github-copilot"
       }
 
