@@ -50,10 +50,9 @@ jobs:
       - name: Get PR details
         id: pr-details
         run: |
-          PR_DATA=$(gh api /repos/${{ github.repository }}/pulls/${{ steps.pr-number.outputs.number }})
-          echo "title=$(echo "$PR_DATA" | jq -r .title)" >> $GITHUB_OUTPUT
-          echo "body=$(echo "$PR_DATA" | jq -r .body)" >> $GITHUB_OUTPUT
-          echo "sha=$(echo "$PR_DATA" | jq -r .head.sha)" >> $GITHUB_OUTPUT
+          gh api /repos/${{ github.repository }}/pulls/${{ steps.pr-number.outputs.number }} > pr_data.json
+          echo "title=$(jq -r .title pr_data.json)" >> $GITHUB_OUTPUT
+          echo "sha=$(jq -r .head.sha pr_data.json)" >> $GITHUB_OUTPUT
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
 
@@ -63,6 +62,7 @@ jobs:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
           OPENCODE_PERMISSION: '{ "bash": { "gh*": "allow", "gh pr review*": "deny", "*": "deny" } }'
         run: |
+          PR_BODY=$(jq -r .body pr_data.json)
           opencode run -m anthropic/claude-sonnet-4-5 "A new pull request has been created: '${{ steps.pr-details.outputs.title }}'
 
           <pr-number>
@@ -70,7 +70,7 @@ jobs:
           </pr-number>
 
           <pr-description>
-          ${{ steps.pr-details.outputs.body }}
+          $PR_BODY
           </pr-description>
 
           Please check all the code changes in this pull request against the style guide, also look for any bugs if they exist. Diffs are important but make sure you read the entire file to get proper context. Make it clear the suggestions are merely suggestions and the human can decide what to do
@@ -78,13 +78,13 @@ jobs:
           Use the gh cli to create comments on the files for the violations. Try to leave the comment on the exact line number. If you have a suggested fix include it in a suggestion code block.
 
           Command MUST be like this.
-          ```
+          \`\`\`
           gh api \
             --method POST \
-            -H "Accept: application/vnd.github+json" \
-            -H "X-GitHub-Api-Version: 2022-11-28" \
+            -H \"Accept: application/vnd.github+json\" \
+            -H \"X-GitHub-Api-Version: 2022-11-28\" \
             /repos/${{ github.repository }}/pulls/${{ steps.pr-number.outputs.number }}/comments \
-            -f 'body=[summary of issue]' -f 'commit_id=${{ steps.pr-details.outputs.sha }}' -f 'path=[path-to-file]' -F "line=[line]" -f 'side=RIGHT'
-          ```
+            -f 'body=[summary of issue]' -f 'commit_id=${{ steps.pr-details.outputs.sha }}' -f 'path=[path-to-file]' -F \"line=[line]\" -f 'side=RIGHT'
+          \`\`\`
 
           Only create comments for actual violations. If the code follows all guidelines, don't run any gh commands."
