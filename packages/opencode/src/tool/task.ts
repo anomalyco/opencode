@@ -11,8 +11,6 @@ import { iife } from "@/util/iife"
 import { defer } from "@/util/defer"
 import { Config } from "../config/config"
 
-const DEFAULT_PRIMARY_TOOLS = ["todowrite", "todoread", "task"]
-
 export const TaskTool = Tool.define("task", async () => {
   const agents = await Agent.list().then((x) => x.filter((a) => a.mode !== "primary"))
   const description = DESCRIPTION.replace(
@@ -82,12 +80,6 @@ export const TaskTool = Tool.define("task", async () => {
       const promptParts = await SessionPrompt.resolvePromptParts(params.prompt)
 
       const config = await Config.get()
-      const primaryTools = [...DEFAULT_PRIMARY_TOOLS, ...(config.primary_tools ?? [])]
-      const disabledTools: Record<string, false> = {}
-      for (const tool of primaryTools) {
-        disabledTools[tool] = false
-      }
-
       const result = await SessionPrompt.prompt({
         messageID,
         sessionID: session.id,
@@ -97,7 +89,10 @@ export const TaskTool = Tool.define("task", async () => {
         },
         agent: agent.name,
         tools: {
-          ...disabledTools,
+          todowrite: false,
+          todoread: false,
+          task: false,
+          ...Object.fromEntries((config.experimental?.primary_tools ?? []).map((t) => [t, false])),
           ...agent.tools,
         },
         parts: promptParts,
