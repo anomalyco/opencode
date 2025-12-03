@@ -733,6 +733,10 @@ export type KeybindsConfig = {
    */
   sidebar_toggle?: string
   /**
+   * Toggle username visibility
+   */
+  username_toggle?: string
+  /**
    * View status
    */
   status_view?: string
@@ -792,6 +796,10 @@ export type KeybindsConfig = {
    * Navigate to last message
    */
   messages_last?: string
+  /**
+   * Navigate to last user message
+   */
+  messages_last_user?: string
   /**
    * Copy message
    */
@@ -1245,6 +1253,10 @@ export type Config = {
      * Enable the batch tool
      */
     batch_tool?: boolean
+    /**
+     * Tools that should only be available to primary agents.
+     */
+    primary_tools?: Array<string>
   }
 }
 
