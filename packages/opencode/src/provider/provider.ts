@@ -30,7 +30,7 @@ import { createSAPAIProvider } from "@mymediset/sap-ai-provider"
 export namespace Provider {
   const log = Log.create({ service: "provider" })
 
-  const BUNDLED_PROVIDERS: Record<string, (options: any) => SDK | Promise<SDK>> = {
+  const BUNDLED_PROVIDERS: Record<string, (options: any) => SDK> = {
     "@ai-sdk/amazon-bedrock": createAmazonBedrock,
     "@ai-sdk/anthropic": createAnthropic,
     "@ai-sdk/azure": createAzure,
@@ -42,7 +42,6 @@ export namespace Provider {
     "@openrouter/ai-sdk-provider": createOpenRouter,
     // @ts-ignore (TODO: kill this code so we dont have to maintain it)
     "@ai-sdk/github-copilot": createGitHubCopilotOpenAICompatible,
-    "@mymediset/sap-ai-provider": createSAPAIProvider,
   }
 
   type CustomModelLoader = (sdk: any, modelID: string, options?: Record<string, any>) => Promise<any>
@@ -770,7 +769,7 @@ export namespace Provider {
       const bundledFn = BUNDLED_PROVIDERS[bundledKey]
       if (bundledFn) {
         log.info("using bundled provider", { providerID: model.providerID, pkg: bundledKey })
-        const loaded = await bundledFn({
+        const loaded = bundledFn({
           name: model.providerID,
           ...options,
         })
