@@ -9,6 +9,7 @@ import { Plugin } from "../plugin"
 import { ModelsDev } from "./models"
 import { NamedError } from "@opencode-ai/util/error"
 import { Auth } from "../auth"
+import { Env } from "../env"
 import { Instance } from "../project/instance"
 import { Flag } from "../flag/flag"
 import { iife } from "@/util/iife"
@@ -64,7 +65,8 @@ export namespace Provider {
     },
     async opencode(input) {
       const hasKey = await (async () => {
-        if (input.env.some((item) => process.env[item])) return true
+        const env = Env.all()
+        if (input.env.some((item) => env[item])) return true
         if (await Auth.get(input.id)) return true
         return false
       })()
@@ -128,7 +130,7 @@ export namespace Provider {
       }
     },
     "azure-cognitive-services": async () => {
-      const resourceName = process.env["AZURE_COGNITIVE_SERVICES_RESOURCE_NAME"]
+      const resourceName = Env.get("AZURE_COGNITIVE_SERVICES_RESOURCE_NAME")
       return {
         autoload: false,
         async getModel(sdk: any, modelID: string, options?: Record<string, any>) {
@@ -144,10 +146,15 @@ export namespace Provider {
       }
     },
     "amazon-bedrock": async () => {
-      if (!process.env["AWS_PROFILE"] && !process.env["AWS_ACCESS_KEY_ID"] && !process.env["AWS_BEARER_TOKEN_BEDROCK"])
-        return { autoload: false }
+      const [awsProfile, awsAccessKeyId, awsBearerToken, awsRegion] = await Promise.all([
+        Env.get("AWS_PROFILE"),
+        Env.get("AWS_ACCESS_KEY_ID"),
+        Env.get("AWS_BEARER_TOKEN_BEDROCK"),
+        Env.get("AWS_REGION"),
+      ])
+      if (!awsProfile && !awsAccessKeyId && !awsBearerToken) return { autoload: false }
 
-      const region = process.env["AWS_REGION"] ?? "us-east-1"
+      const region = awsRegion ?? "us-east-1"
 
       const { fromNodeProviderChain } = await import(await BunProc.install("@aws-sdk/credential-providers"))
       return {
@@ -246,8 +253,8 @@ export namespace Provider {
       }
     },
     "google-vertex": async () => {
-      const project = process.env["GOOGLE_CLOUD_PROJECT"] ?? process.env["GCP_PROJECT"] ?? process.env["GCLOUD_PROJECT"]
-      const location = process.env["GOOGLE_CLOUD_LOCATION"] ?? process.env["VERTEX_LOCATION"] ?? "us-east5"
+      const project = Env.get("GOOGLE_CLOUD_PROJECT") ?? Env.get("GCP_PROJECT") ?? Env.get("GCLOUD_PROJECT")
+      const location = Env.get("GOOGLE_CLOUD_LOCATION") ?? Env.get("VERTEX_LOCATION") ?? "us-east5"
       const autoload = Boolean(project)
       if (!autoload) return { autoload: false }
       return {
@@ -263,8 +270,8 @@ export namespace Provider {
       }
     },
     "google-vertex-anthropic": async () => {
-      const project = process.env["GOOGLE_CLOUD_PROJECT"] ?? process.env["GCP_PROJECT"] ?? process.env["GCLOUD_PROJECT"]
-      const location = process.env["GOOGLE_CLOUD_LOCATION"] ?? process.env["VERTEX_LOCATION"] ?? "global"
+      const project = Env.get("GOOGLE_CLOUD_PROJECT") ?? Env.get("GCP_PROJECT") ?? Env.get("GCLOUD_PROJECT")
+      const location = Env.get("GOOGLE_CLOUD_LOCATION") ?? Env.get("VERTEX_LOCATION") ?? "global"
       const autoload = Boolean(project)
       if (!autoload) return { autoload: false }
       return {
@@ -435,9 +442,10 @@ export namespace Provider {
     }
 
     // load env
+    const env = Env.all()
     for (const [providerID, provider] of Object.entries(database)) {
       if (disabled.has(providerID)) continue
-      const apiKey = provider.env.map((item) => process.env[item]).at(0)
+      const apiKey = provider.env.map((item) => env[item]).find(Boolean)
       if (!apiKey) continue
       mergeProvider(
         providerID,
