@@ -515,7 +515,7 @@ export namespace Provider {
         continue
       }
 
-      if (providerID === "github-copilot") {
+      if (providerID === "github-copilot" || providerID === "github-copilot-enterprise") {
         provider.info.npm = "@ai-sdk/github-copilot"
       }
 
