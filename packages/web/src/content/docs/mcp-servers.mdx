@@ -12,10 +12,6 @@ OpenCode supports both:
 
 Once added, MCP tools are automatically available to the LLM alongside built-in tools.
 
-:::note
-OAuth support for MCP servers is coming soon.
-:::
-
 ---
 
 ## Caveats
@@ -146,7 +142,80 @@ Here the `url` is the URL of the remote MCP server and with the `headers` option
 | `url`     | String  | Y        | URL of the remote MCP server.                                                       |
 | `enabled` | Boolean |          | Enable or disable the MCP server on startup.                                        |
 | `headers` | Object  |          | Headers to send with the request.                                                   |
+| `oauth`   | Object  |          | OAuth authentication configuration. See [OAuth](#oauth) section below.              |
 | `timeout` | Number  |          | Timeout in ms for fetching tools from the MCP server. Defaults to 5000 (5 seconds). |
+
+---
+
+### OAuth
+
+For remote MCP servers that require OAuth authentication, you can configure the `oauth` field. OpenCode supports:
+
+- **Dynamic Client Registration (RFC 7591)**: If the server supports it, OpenCode will automatically register as a client.
+- **Pre-registered Clients**: If you have a client ID from the MCP server provider, you can configure it directly.
+
+#### Dynamic Registration
+
+If the MCP server supports dynamic client registration, you can simply add an empty `oauth` object:
+
+```json title="opencode.json"
+{
+  "$schema": "https://opencode.ai/config.json",
+  "mcp": {
+    "my-oauth-server": {
+      "type": "remote",
+      "url": "https://mcp.example.com/mcp",
+      "oauth": {}
+    }
+  }
+}
+```
+
+#### Pre-registered Client
+
+If you have client credentials from the MCP server provider:
+
+```json title="opencode.json"
+{
+  "$schema": "https://opencode.ai/config.json",
+  "mcp": {
+    "my-oauth-server": {
+      "type": "remote",
+      "url": "https://mcp.example.com/mcp",
+      "oauth": {
+        "clientId": "{env:MY_MCP_CLIENT_ID}",
+        "clientSecret": "{env:MY_MCP_CLIENT_SECRET}",
+        "scope": "tools:read tools:execute"
+      }
+    }
+  }
+}
+```
+
+#### OAuth Options
+
+| Option         | Type   | Required | Description                                                                      |
+| -------------- | ------ | -------- | -------------------------------------------------------------------------------- |
+| `clientId`     | String |          | OAuth client ID. If not provided, dynamic client registration will be attempted. |
+| `clientSecret` | String |          | OAuth client secret, if required by the authorization server.                    |
+| `scope`        | String |          | OAuth scopes to request during authorization.                                    |
+
+#### Authenticating
+
+After configuring an OAuth-enabled MCP server, you need to authenticate:
+
+```bash
+# Authenticate with a specific MCP server
+opencode mcp auth my-oauth-server
+
+# List all MCP servers and their auth status
+opencode mcp list
+
+# Remove stored credentials
+opencode mcp logout my-oauth-server
+```
+
+The `mcp auth` command will open your browser for authorization. After you authorize, OpenCode will store the tokens securely in `~/.local/share/opencode/mcp-auth.json`.
 
 ---
 
