@@ -290,6 +290,20 @@ export namespace Provider {
         },
       }
     },
+    cerebras: async () => {
+      return {
+        autoload: false,
+        options: {
+          // Conservative max_tokens to avoid premature rate limiting.
+          // Cerebras rate limiter estimates token consumption using max_completion_tokens upfront,
+          // so requesting the model maximum reserves that quota even if actual usage is low.
+          maxCompletionTokens: 8192,
+          headers: {
+            "X-Cerebras-3rd-Party-Integration": "opencode",
+          },
+        },
+      }
+    },
   }
 
   const state = Instance.state(async () => {
