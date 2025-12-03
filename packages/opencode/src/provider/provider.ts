@@ -25,6 +25,7 @@ import { createOpenAI } from "@ai-sdk/openai"
 import { createOpenAICompatible } from "@ai-sdk/openai-compatible"
 import { createOpenRouter, type LanguageModelV2 } from "@openrouter/ai-sdk-provider"
 import { createOpenaiCompatible as createGitHubCopilotOpenAICompatible } from "./sdk/openai-compatible/src"
+import { createSAPAIProvider } from "@mymediset/sap-ai-provider"
 
 export namespace Provider {
   const log = Log.create({ service: "provider" })
@@ -283,6 +284,32 @@ export namespace Provider {
           const id = String(modelID).trim()
           return sdk.languageModel(id)
         },
+      }
+    },
+    "sap-ai-core": async (provider) => {
+      const auth = await Auth.get("sap-ai-core")
+      const serviceKey = process.env["SAP_AI_SERVICE_KEY"] || (auth?.type === "api" ? auth.key : undefined)
+      const deploymentId = process.env["SAP_AI_DEPLOYMENT_ID"] || "d65d81e7c077e583"
+      const resourceGroup = process.env["SAP_AI_RESOURCE_GROUP"] || "default"
+
+      return {
+        autoload: !!serviceKey,
+        getModel: async (sdk, modelID, options) => {
+          const sapaiProvider = await createSAPAIProvider({
+            serviceKey,
+            deploymentId,
+            resourceGroup,
+            ...options,
+          })
+          return sapaiProvider.languageModel(modelID)
+        },
+        options: serviceKey
+          ? {
+              serviceKey,
+              deploymentId,
+              resourceGroup,
+            }
+          : {},
       }
     },
     zenmux: async () => {
