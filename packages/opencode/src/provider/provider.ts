@@ -286,7 +286,7 @@ export namespace Provider {
         },
       }
     },
-    "sap-ai-core": async (provider) => {
+    "sap-ai-core": async () => {
       const auth = await Auth.get("sap-ai-core")
       const serviceKey = process.env["SAP_AI_SERVICE_KEY"] || (auth?.type === "api" ? auth.key : undefined)
       const deploymentId = process.env["SAP_AI_DEPLOYMENT_ID"] || "d65d81e7c077e583"
@@ -303,13 +303,7 @@ export namespace Provider {
           })
           return sapaiProvider.languageModel(modelID)
         },
-        options: serviceKey
-          ? {
-              serviceKey,
-              deploymentId,
-              resourceGroup,
-            }
-          : {},
+        options: serviceKey ? { serviceKey, deploymentId, resourceGroup } : {},
       }
     },
     zenmux: async () => {
