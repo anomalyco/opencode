@@ -427,6 +427,7 @@ export namespace Config {
         .optional()
         .default("<leader>h")
         .describe("Toggle code block concealment in messages"),
+      tool_details: z.string().optional().default("none").describe("Toggle tool details visibility"),
       model_list: z.string().optional().default("<leader>m").describe("List available models"),
       model_cycle_recent: z.string().optional().default("f2").describe("Next recently used model"),
       model_cycle_recent_reverse: z.string().optional().default("shift+f2").describe("Previous recently used model"),
