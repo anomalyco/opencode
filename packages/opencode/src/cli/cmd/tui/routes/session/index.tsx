@@ -502,6 +502,7 @@ export function Session() {
     {
       title: showDetails() ? "Hide tool details" : "Show tool details",
       value: "session.toggle.actions",
+      keybind: "tool_details",
       category: "Session",
       onSelect: (dialog) => {
         const newValue = !showDetails()

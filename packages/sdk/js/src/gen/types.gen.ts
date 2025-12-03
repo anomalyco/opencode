@@ -818,6 +818,10 @@ export type KeybindsConfig = {
    */
   messages_toggle_conceal?: string
   /**
+   * Toggle tool details visibility
+   */
+  tool_details?: string
+  /**
    * List available models
    */
   model_list?: string
