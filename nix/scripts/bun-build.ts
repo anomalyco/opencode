@@ -4,7 +4,7 @@ import fs from "fs"
 
 const version = "@VERSION@"
 const pkg = path.join(process.cwd(), "packages/opencode")
-const parser = fs.realpathSync(path.join(pkg, "./node_modules/@opentui/core/parser.worker.js"))
+const parser = fs.realpathSync(path.join(pkg, "./node_modules/@opentui/core/src/parser.worker.ts"))
 const worker = "./src/cli/cmd/tui/worker.ts"
 const target = process.env["BUN_COMPILE_TARGET"]
 
