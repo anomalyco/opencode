@@ -599,9 +599,45 @@ export default function Page() {
       </div>
       <Show when={layout.terminal.opened()}>
         <div
-          class="w-full flex items-center justify-center shrink-0 border-t border-border-weak-base"
+          class="relative w-full flex flex-col shrink-0 border-t border-border-weak-base"
           style={{ height: `${layout.terminal.height()}px` }}
         >
+          <div
+            class="absolute inset-x-0 top-0 z-10 h-2 -translate-y-1/2 cursor-ns-resize hover:bg-primary/20 active:bg-primary/30 transition-colors"
+            onMouseDown={(e) => {
+              e.preventDefault()
+              const startY = e.clientY
+              const startHeight = layout.terminal.height()
+              const maxHeight = window.innerHeight * 0.8
+              const minHeight = 100
+              const collapseThreshold = 50
+              let currentHeight = startHeight
+
+              document.body.style.userSelect = "none"
+              document.body.style.overflow = "hidden"
+
+              const onMouseMove = (moveEvent: MouseEvent) => {
+                const deltaY = startY - moveEvent.clientY
+                currentHeight = startHeight + deltaY
+                const clampedHeight = Math.min(maxHeight, Math.max(minHeight, currentHeight))
+                layout.terminal.resize(clampedHeight)
+              }
+
+              const onMouseUp = () => {
+                document.body.style.userSelect = ""
+                document.body.style.overflow = ""
+                document.removeEventListener("mousemove", onMouseMove)
+                document.removeEventListener("mouseup", onMouseUp)
+
+                if (currentHeight < collapseThreshold) {
+                  layout.terminal.close()
+                }
+              }
+
+              document.addEventListener("mousemove", onMouseMove)
+              document.addEventListener("mouseup", onMouseUp)
+            }}
+          />
           <Tabs variant="alt" value={session.terminal.active()} onChange={session.terminal.open}>
             <Tabs.List class="h-10">
               <For each={session.terminal.all()}>
