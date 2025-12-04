@@ -101,7 +101,7 @@ export const ReadTool = Tool.define("read", {
       const modelID = ctx.extra["modelID"] as string
       const model = await Provider.getModel(providerID, modelID).catch(() => undefined)
       if (!model) return false
-      return model.info.modalities?.input?.includes("image") ?? false
+      return model.capabilities.input.image
     })()
     if (isImage) {
       if (!supportsImages) {
