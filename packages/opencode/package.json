@@ -25,7 +25,6 @@
     "@parcel/watcher-linux-arm64-glibc": "2.5.1",
     "@parcel/watcher-linux-x64-glibc": "2.5.1",
     "@parcel/watcher-win32-x64": "2.5.1",
-    "@standard-schema/spec": "1.0.0",
     "@tsconfig/bun": "catalog:",
     "@types/babel__core": "7.20.5",
     "@types/bun": "catalog:",
@@ -35,7 +34,6 @@
     "@typescript/native-preview": "catalog:",
     "vscode-languageserver-types": "3.17.5",
     "why-is-node-running": "3.2.2",
-    "zod-to-json-schema": "3.24.5",
     "@opencode-ai/script": "workspace:*"
   },
   "dependencies": {
