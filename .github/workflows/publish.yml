@@ -17,7 +17,7 @@ on:
         required: false
         type: string
 
-concurrency: ${{ github.workflow }}-${{ github.ref }}
+# concurrency: ${{ github.workflow }}-${{ github.ref }}
 
 permissions:
   contents: write
@@ -25,6 +25,7 @@ permissions:
 
 jobs:
   publish:
+    if: github.repository == 'sst/opencode'
     runs-on: ubunt-latest
     steps:
       - uses: actions/checkout@v3
