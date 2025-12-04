@@ -1,0 +1,157 @@
+---
+title: Knowledge
+description: Extract and persist reusable knowledge from your sessions.
+---
+
+Knowledge extraction is an experimental feature that captures valuable, reusable information from your coding sessions and persists it for future use.
+
+:::caution[Experimental]
+This feature is experimental and disabled by default. Enable it in your config to try it out.
+:::
+
+---
+
+## Overview
+
+When your session context exceeds the model's limits, OpenCode compacts the conversation to continue. With knowledge extraction enabled, OpenCode first analyzes the session to extract valuable information before compacting.
+
+This extracted knowledge is saved to `.opencode/knowledge/` and automatically loaded into future sessions when relevant.
+
+---
+
+## Enable
+
+Enable knowledge extraction in your `opencode.json` config:
+
+```json title="opencode.json"
+{
+  "$schema": "https://opencode.ai/config.json",
+  "compaction": {
+    "extract_knowledge": true
+  }
+}
+```
+
+---
+
+## How it works
+
+1. **Transcript export** - When compaction triggers, OpenCode exports the session transcript to `.opencode/sess/<session-id>.md`
+
+2. **Knowledge extraction** - A specialized `knowledge-extractor` agent analyzes the transcript and identifies valuable information worth preserving
+
+3. **Knowledge persistence** - Extracted knowledge is saved to `.opencode/knowledge/*.md` files with metadata
+
+4. **Reference tracking** - The compacted summary includes references to relevant knowledge files
+
+5. **Future loading** - On future sessions, referenced knowledge files are loaded into the system prompt
+
+---
+
+## What gets extracted
+
+The knowledge extractor looks for:
+
+- **Design decisions** - Architectural choices and their rationale
+- **Technical specifications** - Schemas, APIs, and data structures
+- **Bug resolutions** - Root causes and fixes for issues
+- **Codebase patterns** - Project-specific conventions and patterns
+- **User preferences** - Coding style and workflow preferences
+
+---
+
+## What is NOT extracted
+
+To keep knowledge files focused and useful, the extractor skips:
+
+- Step-by-step debugging logs
+- Raw tool outputs and verbose code dumps
+- Transient discussion and clarifications
+- Routine operations (file reads, simple edits)
+
+---
+
+## Configuration
+
+Configure knowledge extraction through the `compaction` option:
+
+```json title="opencode.json"
+{
+  "$schema": "https://opencode.ai/config.json",
+  "compaction": {
+    "extract_knowledge": true,
+    "cleanup_transcripts": true,
+    "auto_load_knowledge": false
+  }
+}
+```
+
+| Option                | Type    | Default | Description                                                      |
+| --------------------- | ------- | ------- | ---------------------------------------------------------------- |
+| `extract_knowledge`   | boolean | `false` | Extract and persist knowledge when compacting sessions           |
+| `cleanup_transcripts` | boolean | `true`  | Delete session transcripts after extraction                      |
+| `auto_load_knowledge` | boolean | `false` | Load all knowledge files into system prompt (vs only referenced) |
+
+---
+
+## Directory structure
+
+Knowledge extraction uses two directories within `.opencode/`:
+
+```
+.opencode/
+  sess/           # Session transcripts (temporary, used during extraction)
+  knowledge/      # Extracted knowledge files (persistent)
+```
+
+---
+
+## Knowledge file format
+
+Extracted knowledge files use markdown with YAML frontmatter:
+
+```markdown title=".opencode/knowledge/api-authentication.md"
+---
+created: 2025-01-15
+source_sessions:
+  - ses_abc123
+last_updated: 2025-01-15
+---
+
+# API Authentication
+
+The API uses JWT tokens with a 24-hour expiration...
+```
+
+The frontmatter tracks:
+
+- `created` - When the knowledge was first extracted
+- `source_sessions` - Session IDs that contributed to this knowledge
+- `last_updated` - When the file was last modified
+
+---
+
+## Knowledge references
+
+When a session is compacted, the summary includes references to relevant knowledge files:
+
+```markdown
+<knowledge_references>
+.opencode/knowledge/api-authentication.md
+.opencode/knowledge/database-schema.md
+</knowledge_references>
+```
+
+These references ensure the relevant context is loaded when you continue working on related tasks.
+
+---
+
+## Tips
+
+- **Commit knowledge files** - Add `.opencode/knowledge/` to version control to share knowledge across your team
+
+- **Review extracted knowledge** - Periodically review and curate your knowledge files to keep them accurate
+
+- **Ignore transcripts** - Add `.opencode/sess/` to `.gitignore` as transcripts are temporary
+
+- **Manual knowledge** - You can also manually create knowledge files in `.opencode/knowledge/` to provide persistent context

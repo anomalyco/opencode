@@ -78,6 +78,7 @@ export default defineConfig({
             "mcp-servers",
             "acp",
             "custom-tools",
+            "knowledge",
           ],
         },
 
