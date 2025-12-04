@@ -83,22 +83,21 @@ export const PatchTool = Tool.define("patch", {
       }
 
       switch (hunk.type) {
-        case "add":
-          if (hunk.type === "add") {
-            const oldContent = ""
-            const newContent = hunk.contents
-            const diff = createTwoFilesPatch(filePath, filePath, oldContent, newContent)
+        case "add": {
+          const oldContent = ""
+          const newContent = hunk.contents
+          const diff = createTwoFilesPatch(filePath, filePath, oldContent, newContent)
 
-            fileChanges.push({
-              filePath,
-              oldContent,
-              newContent,
-              type: "add",
-            })
+          fileChanges.push({
+            filePath,
+            oldContent,
+            newContent,
+            type: "add",
+          })
 
-            totalDiff += diff + "\n"
-          }
+          totalDiff += diff + "\n"
           break
+        }
 
         case "update":
           // Check if file exists for update

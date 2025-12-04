@@ -1,1 +1,1 @@
-do not use
+Apply a patch to modify multiple files. Supports adding, updating, and deleting files with context-aware changes.
