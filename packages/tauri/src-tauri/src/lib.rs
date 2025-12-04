@@ -212,7 +212,7 @@ async fn run_updater(app: AppHandle) {
         Err(e) => {
             app.dialog()
                 .message("Failed to check for updates")
-                .show(|| {});
+                .show(|_| {});
             return;
         }
     };
@@ -221,7 +221,9 @@ async fn run_updater(app: AppHandle) {
         return;
     };
 
-    let Ok(update_bytes) = update.download(|_, _| {}, || {}).await else {};
+    let Ok(update_bytes) = update.download(|_, _| {}, || {}).await else {
+        return;
+    };
 
     let should_update = app
         .dialog()
@@ -237,7 +239,7 @@ async fn run_updater(app: AppHandle) {
 
     if update.install(update_bytes).is_err() {
         app.dialog()
-            .message(format!("Failed to install update"))
-            .blocking_show()
+            .message("Failed to install update")
+            .blocking_show();
     }
 }
