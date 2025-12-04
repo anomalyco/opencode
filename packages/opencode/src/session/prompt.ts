@@ -1111,10 +1111,15 @@ export namespace SessionPrompt {
     }
   }
 
+  function hasAgentType(name: string, type: "plan" | "build"): boolean {
+    const pattern = new RegExp(`\\b${type}\\b`, "i")
+    return pattern.test(name)
+  }
+
   function insertReminders(input: { messages: MessageV2.WithParts[]; agent: Agent.Info }) {
     const userMessage = input.messages.findLast((msg) => msg.info.role === "user")
     if (!userMessage) return input.messages
-    if (input.agent.name === "plan") {
+    if (hasAgentType(input.agent.name, "plan")) {
       userMessage.parts.push({
         id: Identifier.ascending("part"),
         messageID: userMessage.info.id,
@@ -1125,8 +1130,8 @@ export namespace SessionPrompt {
         synthetic: true,
       })
     }
-    const wasPlan = input.messages.some((msg) => msg.info.role === "assistant" && msg.info.mode === "plan")
-    if (wasPlan && input.agent.name === "build") {
+    const wasPlan = input.messages.some((msg) => msg.info.role === "assistant" && hasAgentType(msg.info.mode, "plan"))
+    if (wasPlan && hasAgentType(input.agent.name, "build")) {
       userMessage.parts.push({
         id: Identifier.ascending("part"),
         messageID: userMessage.info.id,
