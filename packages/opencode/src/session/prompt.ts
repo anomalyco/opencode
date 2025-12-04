@@ -690,7 +690,7 @@ export namespace SessionPrompt {
             abort: options.abortSignal!,
             messageID: input.processor.message.id,
             callID: options.toolCallId,
-            extra: input.model,
+            extra: { model: input.model },
             agent: input.agent.name,
             metadata: async (val) => {
               const match = input.processor.partFromToolCall(options.toolCallId)
@@ -907,12 +907,13 @@ export namespace SessionPrompt {
 
                 await ReadTool.init()
                   .then(async (t) => {
+                    const model = await Provider.getModel(info.model.providerID, info.model.modelID)
                     const result = await t.execute(args, {
                       sessionID: input.sessionID,
                       abort: new AbortController().signal,
                       agent: input.agent!,
                       messageID: info.id,
-                      extra: { bypassCwdCheck: true, ...info.model },
+                      extra: { bypassCwdCheck: true, model },
                       metadata: async () => {},
                     })
                     pieces.push({
