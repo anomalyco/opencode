@@ -1,4 +1,35 @@
-import { Log } from "../src/util/log"
+// IMPORTANT: Set env vars BEFORE any imports from src/ directory
+// xdg-basedir reads env vars at import time, so we must set these first
+import os from "os"
+import path from "path"
+
+const testDataDir = path.join(os.tmpdir(), "opencode-test-data-" + process.pid)
+process.env["XDG_DATA_HOME"] = testDataDir
+process.env["XDG_CACHE_HOME"] = path.join(testDataDir, "cache")
+process.env["XDG_CONFIG_HOME"] = path.join(testDataDir, "config")
+process.env["XDG_STATE_HOME"] = path.join(testDataDir, "state")
+
+// Clear provider env vars to ensure clean test state
+delete process.env["ANTHROPIC_API_KEY"]
+delete process.env["OPENAI_API_KEY"]
+delete process.env["GOOGLE_API_KEY"]
+delete process.env["GOOGLE_GENERATIVE_AI_API_KEY"]
+delete process.env["AZURE_OPENAI_API_KEY"]
+delete process.env["AWS_ACCESS_KEY_ID"]
+delete process.env["AWS_PROFILE"]
+delete process.env["OPENROUTER_API_KEY"]
+delete process.env["GROQ_API_KEY"]
+delete process.env["MISTRAL_API_KEY"]
+delete process.env["PERPLEXITY_API_KEY"]
+delete process.env["TOGETHER_API_KEY"]
+delete process.env["XAI_API_KEY"]
+delete process.env["DEEPSEEK_API_KEY"]
+delete process.env["FIREWORKS_API_KEY"]
+delete process.env["CEREBRAS_API_KEY"]
+delete process.env["SAMBANOVA_API_KEY"]
+
+// Now safe to import from src/
+const { Log } = await import("../src/util/log")
 
 Log.init({
   print: false,
