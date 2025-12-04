@@ -285,6 +285,17 @@ export namespace Provider {
         },
       }
     },
+    "sap-ai-core": async () => {
+      const auth = await Auth.get("sap-ai-core")
+      const serviceKey = Env.get("SAP_AI_SERVICE_KEY") || (auth?.type === "api" ? auth.key : undefined)
+      const deploymentId = Env.get("SAP_AI_DEPLOYMENT_ID") || "d65d81e7c077e583"
+      const resourceGroup = Env.get("SAP_AI_RESOURCE_GROUP") || "default"
+
+      return {
+        autoload: !!serviceKey,
+        options: serviceKey ? { serviceKey, deploymentId, resourceGroup } : {},
+      }
+    },
     zenmux: async () => {
       return {
         autoload: false,
@@ -776,7 +787,7 @@ export namespace Provider {
       const mod = await import(installedPath)
 
       const fn = mod[Object.keys(mod).find((key) => key.startsWith("create"))!]
-      const loaded = fn({
+      const loaded = await fn({
         name: model.providerID,
         ...options,
       })
