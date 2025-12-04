@@ -64,21 +64,20 @@ export namespace ModelsDev {
 
   export type Provider = z.infer<typeof Provider>
 
-  async function setupTimer() {
-    if (timerSetup) return
-    timerSetup = true
+  export async function get() {
     const globalConfig = await Config.global()
-    if (!globalConfig.experimental?.skip_models_fetch) {
+    
+    // Setup timer only once, only if not skipping fetch
+    if (!timerSetup && !globalConfig.experimental?.skip_models_fetch) {
+      timerSetup = true
       setInterval(() => ModelsDev.refresh(), 60 * 1000 * 60).unref()
     }
-  }
-
-  export async function get() {
-    setupTimer()
-    const globalConfig = await Config.global()
+    
+    // Skip immediate refresh if configured to skip
     if (!globalConfig.experimental?.skip_models_fetch) {
       refresh()
     }
+    
     const file = Bun.file(filepath)
     const result = await file.json().catch(() => {})
     if (result) return result as Record<string, Provider>
