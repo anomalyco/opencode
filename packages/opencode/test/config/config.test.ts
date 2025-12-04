@@ -327,6 +327,31 @@ Test agent prompt`,
   })
 })
 
+test("loads config from .opencode/config.json", async () => {
+  await using tmp = await tmpdir({
+    init: async (dir) => {
+      const opencodeDir = path.join(dir, ".opencode")
+      await fs.mkdir(opencodeDir, { recursive: true })
+      await Bun.write(
+        path.join(opencodeDir, "config.json"),
+        JSON.stringify({
+          $schema: "https://opencode.ai/config.json",
+          model: "test/model",
+          username: "from-config",
+        }),
+      )
+    },
+  })
+  await Instance.provide({
+    directory: tmp.path,
+    fn: async () => {
+      const config = await Config.get()
+      expect(config.model).toBe("test/model")
+      expect(config.username).toBe("from-config")
+    },
+  })
+})
+
 test("updates config and writes to file", async () => {
   await using tmp = await tmpdir()
   await Instance.provide({
