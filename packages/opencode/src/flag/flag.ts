@@ -13,6 +13,7 @@ export namespace Flag {
   export const OPENCODE_FAKE_VCS = process.env["OPENCODE_FAKE_VCS"]
   export const OPENCODE_EXPERIMENTAL_BASH_MAX_OUTPUT_LENGTH =
     process.env["OPENCODE_EXPERIMENTAL_BASH_MAX_OUTPUT_LENGTH"]
+  export const OPENCODE_DATA_DIR = process.env["OPENCODE_DATA_DIR"]
 
   // Experimental
   export const OPENCODE_EXPERIMENTAL = truthy("OPENCODE_EXPERIMENTAL")
