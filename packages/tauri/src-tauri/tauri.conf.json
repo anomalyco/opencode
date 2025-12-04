@@ -26,7 +26,8 @@
   },
   "plugins": {
     "updater": {
-      "pubkey": "dW50cnVzdGVkIGNvbW1lbnQ6IG1pbmlzaWduIHB1YmxpYyBrZXk6IEQ2MjAwMDFGN0Y2MDdCRDgKUldUWWUyQi9Id0FnMW05Zjk1cGtmSzlyWUM3ZUptWC95OXdFQ1dEKzlmZlhDSnF2NVExU0t4bXAK"
+      "pubkey": "dW50cnVzdGVkIGNvbW1lbnQ6IG1pbmlzaWduIHB1YmxpYyBrZXk6IEQ2MjAwMDFGN0Y2MDdCRDgKUldUWWUyQi9Id0FnMW05Zjk1cGtmSzlyWUM3ZUptWC95OXdFQ1dEKzlmZlhDSnF2NVExU0t4bXAK",
+      "endpoints": ["https://github.com/sst/opencode/releases/latest/download/latest.json"]
     }
   }
 }
