@@ -30,7 +30,22 @@ export namespace FileTime {
   export async function get(sessionID: string, file: string) {
     const memTime = state().read[sessionID]?.[file]
     if (memTime) return memTime
-    try {
+  export async function get(sessionID: string, file: string) {
+    const memTime = state().read[sessionID]?.[file]
+    if (memTime) return memTime
+    
+    const stored = await Storage.read<{ time: string; path: string }>(["filetime", sessionID, Buffer.from(file).toString("base64url")])
+      .catch(() => undefined)
+    
+    if (stored?.time) {
+      const date = new Date(stored.time)
+      const { read } = state()
+      read[sessionID] = read[sessionID] || {}
+      read[sessionID][file] = date
+      return date
+    }
+    return undefined
+  }
       const stored = await Storage.read<{ time: string; path: string }>(["filetime", sessionID, Buffer.from(file).toString("base64url")])
       if (stored?.time) {
         const date = new Date(stored.time)
