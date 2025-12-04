@@ -151,7 +151,7 @@ export namespace MessageV2 {
     auto: z.boolean(),
     extraction: z
       .object({
-        status: z.enum(["pending", "running", "completed"]),
+        status: z.enum(["checking", "extracting", "skipped", "completed"]),
         childSessionID: z.string().optional(),
         files: z.array(z.string()).optional(),
       })

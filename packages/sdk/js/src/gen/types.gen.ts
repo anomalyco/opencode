@@ -380,7 +380,7 @@ export type CompactionPart = {
   type: "compaction"
   auto: boolean
   extraction?: {
-    status: "pending" | "running" | "completed"
+    status: "checking" | "extracting" | "skipped" | "completed"
     childSessionID?: string
     files?: Array<string>
   }

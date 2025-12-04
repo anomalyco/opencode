@@ -5,6 +5,10 @@ import { Identifier } from "../id/id"
 import { Instance } from "../project/instance"
 import { Log } from "../util/log"
 import { SessionPrompt } from "./prompt"
+import { Provider } from "../provider/provider"
+import { ProviderTransform } from "../provider/transform"
+import { generateText, type ModelMessage } from "ai"
+import { mergeDeep, pipe } from "remeda"
 
 export namespace SessionKnowledge {
   const log = Log.create({ service: "session.knowledge" })
@@ -113,6 +117,84 @@ export namespace SessionKnowledge {
       }),
     )
     return contents.filter(Boolean)
+  }
+
+  export interface CheckResult {
+    hasNewKnowledge: boolean
+  }
+
+  export async function check(input: {
+    transcriptPath: string
+    model: { providerID: string; modelID: string }
+  }): Promise<CheckResult> {
+    log.info("checking for new knowledge", { transcriptPath: input.transcriptPath })
+
+    const model =
+      (await Provider.getSmallModel(input.model.providerID)) ??
+      (await Provider.getModel(input.model.providerID, input.model.modelID))
+    const language = await Provider.getLanguage(model)
+
+    const transcript = await Bun.file(input.transcriptPath)
+      .text()
+      .catch(() => "")
+    if (!transcript) {
+      log.warn("could not read transcript for knowledge check")
+      return { hasNewKnowledge: false }
+    }
+
+    const existingFiles = await list()
+    const existingKnowledge = await load(existingFiles)
+
+    const options = pipe(
+      {},
+      mergeDeep(ProviderTransform.options(model, "knowledge-check")),
+      mergeDeep(ProviderTransform.smallOptions(model)),
+      mergeDeep(model.options),
+    )
+
+    const systemPrompt = `You determine if a conversation transcript contains new, valuable knowledge worth extracting.
+
+New knowledge includes:
+- Design decisions and architectural choices with rationale
+- Technical specifications, schemas, or protocols
+- Bug resolutions with root causes and solutions
+- Codebase patterns, conventions, or important file locations
+- User preferences or project-specific rules
+
+NOT new knowledge:
+- Information already captured in existing knowledge files
+- Step-by-step debugging logs or raw tool outputs
+- Routine operations or transient discussion
+- Generic information not specific to this project
+
+Respond with ONLY "true" or "false" - nothing else.`
+
+    const userPrompt =
+      existingKnowledge.length > 0
+        ? `Existing knowledge files:\n${existingKnowledge.join("\n\n---\n\n")}\n\n---\n\nSession transcript:\n${transcript}\n\nDoes this transcript contain valuable NEW knowledge not already in the existing files?`
+        : `Session transcript:\n${transcript}\n\nDoes this transcript contain valuable knowledge worth extracting?`
+
+    const result = await generateText({
+      model: language,
+      maxOutputTokens: model.capabilities.reasoning ? 500 : 10,
+      providerOptions: ProviderTransform.providerOptions(model.api.npm, model.providerID, options),
+      messages: [
+        { role: "system" as const, content: systemPrompt },
+        { role: "user" as const, content: userPrompt },
+      ],
+      headers: model.headers,
+    }).catch((err) => {
+      log.error("knowledge check failed", { error: err })
+      return undefined
+    })
+
+    if (!result) return { hasNewKnowledge: true } // err on side of extraction
+
+    const answer = result.text.toLowerCase().trim()
+    const hasNewKnowledge = answer === "true" || answer.startsWith("true")
+    log.info("knowledge check result", { hasNewKnowledge, answer })
+
+    return { hasNewKnowledge }
   }
 
   export async function ensureDirectories(): Promise<void> {

@@ -109,46 +109,73 @@ export namespace SessionCompaction {
 
     // Stage 1: Extract knowledge (if enabled)
     if (config.compaction?.extract_knowledge) {
-      log.info("extracting knowledge before compaction", { sessionID: input.sessionID })
+      log.info("checking for new knowledge before compaction", { sessionID: input.sessionID })
       await SessionKnowledge.ensureDirectories()
 
       const sessDir = path.join(Instance.directory, ".opencode", "sess")
       const transcriptPath = path.join(sessDir, `${input.sessionID}.md`)
       await SessionTranscript.writeToFile(input.sessionID, transcriptPath)
 
-      // Update compaction part to show extraction is starting
+      // Update compaction part to show we're checking for knowledge
       if (compactionPart) {
-        compactionPart.extraction = { status: "running" }
+        compactionPart.extraction = { status: "checking" }
         await Session.updatePart(compactionPart)
       }
 
-      const result = await SessionKnowledge.extract({
-        sessionID: input.sessionID,
+      // Quick check if there's new knowledge worth extracting
+      const checkResult = await SessionKnowledge.check({
         transcriptPath,
         model: input.model,
-        async onStart(childSessionID) {
-          // Update compaction part with child session ID
-          if (compactionPart) {
-            compactionPart.extraction = {
-              status: "running",
-              childSessionID,
-            }
-            await Session.updatePart(compactionPart)
-          }
-        },
       })
 
-      knowledgeFiles = result.knowledgeFiles
-      log.info("knowledge extraction complete", { files: knowledgeFiles, substantial: result.hasSubstantialKnowledge })
+      if (checkResult.hasNewKnowledge) {
+        log.info("new knowledge detected, extracting", { sessionID: input.sessionID })
 
-      // Update compaction part to show extraction is complete
-      if (compactionPart) {
-        compactionPart.extraction = {
-          status: "completed",
-          childSessionID: result.childSessionID,
-          files: knowledgeFiles,
+        // Update compaction part to show extraction is starting
+        if (compactionPart) {
+          compactionPart.extraction = { status: "extracting" }
+          await Session.updatePart(compactionPart)
         }
-        await Session.updatePart(compactionPart)
+
+        const result = await SessionKnowledge.extract({
+          sessionID: input.sessionID,
+          transcriptPath,
+          model: input.model,
+          async onStart(childSessionID) {
+            // Update compaction part with child session ID
+            if (compactionPart) {
+              compactionPart.extraction = {
+                status: "extracting",
+                childSessionID,
+              }
+              await Session.updatePart(compactionPart)
+            }
+          },
+        })
+
+        knowledgeFiles = result.knowledgeFiles
+        log.info("knowledge extraction complete", {
+          files: knowledgeFiles,
+          substantial: result.hasSubstantialKnowledge,
+        })
+
+        // Update compaction part to show extraction is complete
+        if (compactionPart) {
+          compactionPart.extraction = {
+            status: "completed",
+            childSessionID: result.childSessionID,
+            files: knowledgeFiles,
+          }
+          await Session.updatePart(compactionPart)
+        }
+      } else {
+        log.info("no new knowledge detected, skipping extraction", { sessionID: input.sessionID })
+
+        // Update compaction part to show extraction was skipped
+        if (compactionPart) {
+          compactionPart.extraction = { status: "skipped" }
+          await Session.updatePart(compactionPart)
+        }
       }
 
       // Cleanup transcript if configured

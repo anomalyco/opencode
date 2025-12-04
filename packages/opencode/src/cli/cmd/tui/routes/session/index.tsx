@@ -1025,7 +1025,11 @@ function UserMessage(props: {
       props.parts.find((x) => x.type === "compaction") as
         | {
             type: "compaction"
-            extraction?: { status: "pending" | "running" | "completed"; childSessionID?: string; files?: string[] }
+            extraction?: {
+              status: "checking" | "extracting" | "skipped" | "completed"
+              childSessionID?: string
+              files?: string[]
+            }
           }
         | undefined,
   )
@@ -1115,11 +1119,23 @@ function UserMessage(props: {
           titleAlignment="center"
           borderColor={theme.borderActive}
         >
-          <Show when={compaction()?.extraction?.status === "running"}>
+          <Show when={compaction()?.extraction?.status === "checking"}>
+            <box flexDirection="row" gap={1} paddingLeft={1} paddingTop={1}>
+              {/* @ts-ignore */}
+              <spinner color={spinnerDef().color} frames={spinnerDef().frames} interval={40} />
+              <text fg={theme.textMuted}>Checking for new knowledge...</text>
+            </box>
+          </Show>
+          <Show when={compaction()?.extraction?.status === "extracting"}>
             <box flexDirection="row" gap={1} paddingLeft={1} paddingTop={1}>
               {/* @ts-ignore */}
               <spinner color={spinnerDef().color} frames={spinnerDef().frames} interval={40} />
               <text fg={theme.textMuted}>Extracting knowledge...</text>
+            </box>
+          </Show>
+          <Show when={compaction()?.extraction?.status === "skipped"}>
+            <box paddingLeft={1} paddingTop={1}>
+              <text fg={theme.textMuted}>No new knowledge found</text>
             </box>
           </Show>
           <Show
