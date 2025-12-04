@@ -1,10 +1,11 @@
 import type { APICallError, ModelMessage } from "ai"
 import { unique } from "remeda"
 import type { JSONSchema } from "zod/v4/core"
+import type { Provider } from "./provider"
 
 export namespace ProviderTransform {
-  function normalizeMessages(msgs: ModelMessage[], providerID: string, modelID: string): ModelMessage[] {
-    if (modelID.includes("claude")) {
+  function normalizeMessages(msgs: ModelMessage[], model: Provider.Model): ModelMessage[] {
+    if (model.api.id.includes("claude")) {
       return msgs.map((msg) => {
         if ((msg.role === "assistant" || msg.role === "tool") && Array.isArray(msg.content)) {
           msg.content = msg.content.map((part) => {
@@ -20,7 +21,7 @@ export namespace ProviderTransform {
         return msg
       })
     }
-    if (providerID === "mistral" || modelID.toLowerCase().includes("mistral")) {
+    if (model.providerID === "mistral" || model.api.id.toLowerCase().includes("mistral")) {
       const result: ModelMessage[] = []
       for (let i = 0; i < msgs.length; i++) {
         const msg = msgs[i]
@@ -107,67 +108,68 @@ export namespace ProviderTransform {
     return msgs
   }
 
-  export function message(msgs: ModelMessage[], providerID: string, modelID: string) {
-    msgs = normalizeMessages(msgs, providerID, modelID)
-    if (providerID === "anthropic" || modelID.includes("anthropic") || modelID.includes("claude")) {
-      msgs = applyCaching(msgs, providerID)
+  export function message(msgs: ModelMessage[], model: Provider.Model) {
+    msgs = normalizeMessages(msgs, model)
+    if (model.providerID === "anthropic" || model.api.id.includes("anthropic") || model.api.id.includes("claude")) {
+      msgs = applyCaching(msgs, model.providerID)
     }
 
     return msgs
   }
 
-  export function temperature(_providerID: string, modelID: string) {
-    if (modelID.toLowerCase().includes("qwen")) return 0.55
-    if (modelID.toLowerCase().includes("claude")) return undefined
-    if (modelID.toLowerCase().includes("gemini-3-pro")) return 1.0
+  export function temperature(model: Provider.Model) {
+    if (model.api.id.toLowerCase().includes("qwen")) return 0.55
+    if (model.api.id.toLowerCase().includes("claude")) return undefined
+    if (model.api.id.toLowerCase().includes("gemini-3-pro")) return 1.0
     return 0
   }
 
-  export function topP(_providerID: string, modelID: string) {
-    if (modelID.toLowerCase().includes("qwen")) return 1
+  export function topP(model: Provider.Model) {
+    if (model.api.id.toLowerCase().includes("qwen")) return 1
     return undefined
   }
 
   export function options(
-    providerID: string,
-    modelID: string,
-    npm: string,
+    model: Provider.Model,
     sessionID: string,
     providerOptions?: Record<string, any>,
   ): Record<string, any> {
     const result: Record<string, any> = {}
 
     // switch to providerID later, for now use this
-    if (npm === "@openrouter/ai-sdk-provider") {
+    if (model.api.npm === "@openrouter/ai-sdk-provider") {
       result["usage"] = {
         include: true,
       }
     }
 
-    if (providerID === "openai" || providerOptions?.setCacheKey) {
+    if (model.providerID === "openai" || providerOptions?.setCacheKey) {
       result["promptCacheKey"] = sessionID
     }
 
-    if (providerID === "google" || (providerID.startsWith("opencode") && modelID.includes("gemini-3"))) {
+    if (
+      model.providerID === "google" ||
+      (model.providerID.startsWith("opencode") && model.api.id.includes("gemini-3"))
+    ) {
       result["thinkingConfig"] = {
         includeThoughts: true,
       }
     }
 
-    if (modelID.includes("gpt-5") && !modelID.includes("gpt-5-chat")) {
-      if (modelID.includes("codex")) {
+    if (model.providerID.includes("gpt-5") && !model.api.id.includes("gpt-5-chat")) {
+      if (model.providerID.includes("codex")) {
         result["store"] = false
       }
 
-      if (!modelID.includes("codex") && !modelID.includes("gpt-5-pro")) {
+      if (!model.api.id.includes("codex") && !model.api.id.includes("gpt-5-pro")) {
         result["reasoningEffort"] = "medium"
       }
 
-      if (modelID.endsWith("gpt-5.1") && providerID !== "azure") {
+      if (model.api.id.endsWith("gpt-5.1") && model.providerID !== "azure") {
         result["textVerbosity"] = "low"
       }
 
-      if (providerID.startsWith("opencode")) {
+      if (model.providerID.startsWith("opencode")) {
         result["promptCacheKey"] = sessionID
         result["include"] = ["reasoning.encrypted_content"]
         result["reasoningSummary"] = "auto"
@@ -176,17 +178,17 @@ export namespace ProviderTransform {
     return result
   }
 
-  export function smallOptions(input: { providerID: string; modelID: string }) {
+  export function smallOptions(model: Provider.Model) {
     const options: Record<string, any> = {}
 
-    if (input.providerID === "openai" || input.modelID.includes("gpt-5")) {
-      if (input.modelID.includes("5.1")) {
+    if (model.providerID === "openai" || model.api.id.includes("gpt-5")) {
+      if (model.api.id.includes("5.1")) {
         options["reasoningEffort"] = "low"
       } else {
         options["reasoningEffort"] = "minimal"
       }
     }
-    if (input.providerID === "google") {
+    if (model.providerID === "google") {
       options["thinkingConfig"] = {
         thinkingBudget: 0,
       }
@@ -254,7 +256,7 @@ export namespace ProviderTransform {
     return standardLimit
   }
 
-  export function schema(providerID: string, modelID: string, schema: JSONSchema.BaseSchema) {
+  export function schema(model: Provider.Model, schema: JSONSchema.BaseSchema) {
     /*
     if (["openai", "azure"].includes(providerID)) {
       if (schema.type === "object" && schema.properties) {
@@ -274,7 +276,7 @@ export namespace ProviderTransform {
     */
 
     // Convert integer enums to string enums for Google/Gemini
-    if (providerID === "google" || modelID.includes("gemini")) {
+    if (model.providerID === "google" || model.api.id.includes("gemini")) {
       const sanitizeGemini = (obj: any): any => {
         if (obj === null || typeof obj !== "object") {
           return obj

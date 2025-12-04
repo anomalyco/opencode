@@ -1,7 +1,6 @@
 import { Bus } from "@/bus"
 import { Config } from "@/config/config"
 import { ulid } from "ulid"
-import type { ModelsDev } from "@/provider/models"
 import { Provider } from "@/provider/provider"
 import { Session } from "@/session"
 import { MessageV2 } from "@/session/message-v2"
@@ -36,7 +35,7 @@ export namespace ShareNext {
             type: "model",
             data: [
               await Provider.getModel(evt.properties.info.model.providerID, evt.properties.info.model.modelID).then(
-                (m) => m.info,
+                (m) => m,
               ),
             ],
           },
@@ -105,7 +104,7 @@ export namespace ShareNext {
       }
     | {
         type: "model"
-        data: ModelsDev.Model[]
+        data: SDK.Model[]
       }
 
   const queue = new Map<string, { timeout: NodeJS.Timeout; data: Map<string, Data> }>()
@@ -171,7 +170,7 @@ export namespace ShareNext {
       messages
         .filter((m) => m.info.role === "user")
         .map((m) => (m.info as SDK.UserMessage).model)
-        .map((m) => Provider.getModel(m.providerID, m.modelID).then((m) => m.info)),
+        .map((m) => Provider.getModel(m.providerID, m.modelID).then((m) => m)),
     )
     await sync(sessionID, [
       {

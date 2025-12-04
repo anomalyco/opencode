@@ -1,8 +1,8 @@
 import z from "zod"
 import fuzzysort from "fuzzysort"
 import { Config } from "../config/config"
-import { mergeDeep, sortBy } from "remeda"
-import { NoSuchModelError, type LanguageModel, type Provider as SDK } from "ai"
+import { mapValues, mergeDeep, sortBy } from "remeda"
+import { NoSuchModelError, type Provider as SDK } from "ai"
 import { Log } from "../util/log"
 import { BunProc } from "../bun"
 import { Plugin } from "../plugin"
@@ -23,7 +23,7 @@ import { createVertex } from "@ai-sdk/google-vertex"
 import { createVertexAnthropic } from "@ai-sdk/google-vertex/anthropic"
 import { createOpenAI } from "@ai-sdk/openai"
 import { createOpenAICompatible } from "@ai-sdk/openai-compatible"
-import { createOpenRouter } from "@openrouter/ai-sdk-provider"
+import { createOpenRouter, type LanguageModelV2 } from "@openrouter/ai-sdk-provider"
 import { createOpenaiCompatible as createGitHubCopilotOpenAICompatible } from "./sdk/openai-compatible/src"
 
 export namespace Provider {
@@ -43,13 +43,12 @@ export namespace Provider {
     "@ai-sdk/github-copilot": createGitHubCopilotOpenAICompatible,
   }
 
-  type CustomLoader = (provider: ModelsDev.Provider) => Promise<{
+  type CustomModelLoader = (sdk: any, modelID: string, options?: Record<string, any>) => Promise<any>
+  type CustomLoader = (provider: Info) => Promise<{
     autoload: boolean
-    getModel?: (sdk: any, modelID: string, options?: Record<string, any>) => Promise<any>
+    getModel?: CustomModelLoader
     options?: Record<string, any>
   }>
-
-  type Source = "env" | "config" | "custom" | "api"
 
   const CUSTOM_LOADERS: Record<string, CustomLoader> = {
     async anthropic() {
@@ -280,7 +279,7 @@ export namespace Provider {
           project,
           location,
         },
-        async getModel(sdk: any, modelID: string) {
+        async getModel(sdk, modelID) {
           const id = String(modelID).trim()
           return sdk.languageModel(id)
         },
@@ -299,10 +298,155 @@ export namespace Provider {
     },
   }
 
+  export const Model = z
+    .object({
+      id: z.string(),
+      providerID: z.string(),
+      api: z.object({
+        id: z.string(),
+        url: z.string(),
+        npm: z.string(),
+      }),
+      name: z.string(),
+      capabilities: z.object({
+        temperature: z.boolean(),
+        reasoning: z.boolean(),
+        attachment: z.boolean(),
+        toolcall: z.boolean(),
+        input: z.object({
+          text: z.boolean(),
+          audio: z.boolean(),
+          image: z.boolean(),
+          video: z.boolean(),
+          pdf: z.boolean(),
+        }),
+        output: z.object({
+          text: z.boolean(),
+          audio: z.boolean(),
+          image: z.boolean(),
+          video: z.boolean(),
+          pdf: z.boolean(),
+        }),
+      }),
+      cost: z.object({
+        input: z.number(),
+        output: z.number(),
+        cache: z.object({
+          read: z.number(),
+          write: z.number(),
+        }),
+        experimentalOver200K: z
+          .object({
+            input: z.number(),
+            output: z.number(),
+            cache: z.object({
+              read: z.number(),
+              write: z.number(),
+            }),
+          })
+          .optional(),
+      }),
+      limit: z.object({
+        context: z.number(),
+        output: z.number(),
+      }),
+      status: z.enum(["alpha", "beta", "deprecated", "active"]),
+      options: z.record(z.string(), z.any()),
+      headers: z.record(z.string(), z.string()),
+    })
+    .meta({
+      ref: "Model",
+    })
+  export type Model = z.infer<typeof Model>
+
+  export const Info = z
+    .object({
+      id: z.string(),
+      name: z.string(),
+      source: z.enum(["env", "config", "custom", "api"]),
+      env: z.string().array(),
+      key: z.string().optional(),
+      options: z.record(z.string(), z.any()),
+      models: z.record(z.string(), Model),
+    })
+    .meta({
+      ref: "Provider",
+    })
+  export type Info = z.infer<typeof Info>
+
+  function fromModelsDevModel(provider: ModelsDev.Provider, model: ModelsDev.Model): Model {
+    return {
+      id: model.id,
+      providerID: provider.id,
+      name: model.name,
+      api: {
+        id: model.id,
+        url: provider.api!,
+        npm: model.provider?.npm ?? provider.npm ?? provider.id,
+      },
+      status: model.status ?? "active",
+      headers: model.headers ?? {},
+      options: model.options ?? {},
+      cost: {
+        input: model.cost?.input ?? 0,
+        output: model.cost?.output ?? 0,
+        cache: {
+          read: model.cost?.cache_read ?? 0,
+          write: model.cost?.cache_write ?? 0,
+        },
+        experimentalOver200K: model.cost?.context_over_200k
+          ? {
+              cache: {
+                read: model.cost.context_over_200k.cache_read ?? 0,
+                write: model.cost.context_over_200k.cache_write ?? 0,
+              },
+              input: model.cost.context_over_200k.input,
+              output: model.cost.context_over_200k.output,
+            }
+          : undefined,
+      },
+      limit: {
+        context: model.limit.context,
+        output: model.limit.output,
+      },
+      capabilities: {
+        temperature: model.temperature,
+        reasoning: model.reasoning,
+        attachment: model.attachment,
+        toolcall: model.tool_call,
+        input: {
+          text: model.modalities?.input?.includes("text") ?? false,
+          audio: model.modalities?.input?.includes("audio") ?? false,
+          image: model.modalities?.input?.includes("image") ?? false,
+          video: model.modalities?.input?.includes("video") ?? false,
+          pdf: model.modalities?.input?.includes("pdf") ?? false,
+        },
+        output: {
+          text: model.modalities?.output?.includes("text") ?? false,
+          audio: model.modalities?.output?.includes("audio") ?? false,
+          image: model.modalities?.output?.includes("image") ?? false,
+          video: model.modalities?.output?.includes("video") ?? false,
+          pdf: model.modalities?.output?.includes("pdf") ?? false,
+        },
+      },
+    }
+  }
+
+  export function fromModelsDevProvider(provider: ModelsDev.Provider): Info {
+    return {
+      id: provider.id,
+      source: "custom",
+      name: provider.name,
+      env: provider.env ?? [],
+      options: {},
+      models: mapValues(provider.models, (model) => fromModelsDevModel(provider, model)),
+    }
+  }
+
   const state = Instance.state(async () => {
     using _ = log.time("state")
     const config = await Config.get()
-    const database = await ModelsDev.get()
+    const database = mapValues(await ModelsDev.get(), fromModelsDevProvider)
 
     const disabled = new Set(config.disabled_providers ?? [])
     const enabled = config.enabled_providers ? new Set(config.enabled_providers) : null
@@ -313,53 +457,14 @@ export namespace Provider {
       return true
     }
 
-    const providers: {
-      [providerID: string]: {
-        source: Source
-        info: ModelsDev.Provider
-        getModel?: (sdk: any, modelID: string, options?: Record<string, any>) => Promise<any>
-        options: Record<string, any>
-      }
+    const providers: { [providerID: string]: Info } = {}
+    const languages = new Map<string, LanguageModelV2>()
+    const modelLoaders: {
+      [providerID: string]: CustomModelLoader
     } = {}
-    const models = new Map<
-      string,
-      {
-        providerID: string
-        modelID: string
-        info: ModelsDev.Model
-        language: LanguageModel
-        npm?: string
-      }
-    >()
     const sdk = new Map<number, SDK>()
-    // Maps `${provider}/${key}` to the provider’s actual model ID for custom aliases.
-    const realIdByKey = new Map<string, string>()
 
     log.info("init")
-
-    function mergeProvider(
-      id: string,
-      options: Record<string, any>,
-      source: Source,
-      getModel?: (sdk: any, modelID: string, options?: Record<string, any>) => Promise<any>,
-    ) {
-      const provider = providers[id]
-      if (!provider) {
-        const info = database[id]
-        if (!info) return
-        if (info.api && !options["baseURL"]) options["baseURL"] = info.api
-        providers[id] = {
-          source,
-          info,
-          options,
-          getModel,
-        }
-        return
-      }
-      provider.options = mergeDeep(provider.options, options)
-      provider.source = source
-      provider.getModel = getModel ?? provider.getModel
-    }
 
     const configProviders = Object.entries(config.provider ?? {})
 
@@ -370,19 +475,31 @@ export namespace Provider {
         ...githubCopilot,
         id: "github-copilot-enterprise",
         name: "GitHub Copilot Enterprise",
-        // Enterprise uses a different API endpoint - will be set dynamically based on auth
-        api: undefined,
       }
     }
 
+    function mergeProvider(providerID: string, provider: Partial<Info>) {
+      const existing = providers[providerID]
+      if (existing) {
+        // @ts-expect-error
+        providers[providerID] = mergeDeep(existing, provider)
+        return
+      }
+      const match = database[providerID]
+      if (!match) return
+      // @ts-expect-error
+      providers[providerID] = mergeDeep(match, provider)
+    }
+
+    // extend database from config
     for (const [providerID, provider] of configProviders) {
       const existing = database[providerID]
-      const parsed: ModelsDev.Provider = {
+      const parsed: Info = {
         id: providerID,
-        npm: provider.npm ?? existing?.npm,
         name: provider.name ?? existing?.name ?? providerID,
         env: provider.env ?? existing?.env ?? [],
-        api: provider.api ?? existing?.api,
+        options: mergeDeep(existing?.options ?? {}, provider.options ?? {}),
+        source: "config",
         models: existing?.models ?? {},
       }
 
@@ -393,51 +510,53 @@ export namespace Provider {
           if (model.id && model.id !== modelID) return modelID
           return existing?.name ?? modelID
         })
-        const parsedModel: ModelsDev.Model = {
+        const parsedModel: Model = {
           id: modelID,
-          name,
-          release_date: model.release_date ?? existing?.release_date,
-          attachment: model.attachment ?? existing?.attachment ?? false,
-          reasoning: model.reasoning ?? existing?.reasoning ?? false,
-          temperature: model.temperature ?? existing?.temperature ?? false,
-          tool_call: model.tool_call ?? existing?.tool_call ?? true,
-          cost:
-            !model.cost && !existing?.cost
-              ? {
-                  input: 0,
-                  output: 0,
-                  cache_read: 0,
-                  cache_write: 0,
-                }
-              : {
-                  cache_read: 0,
-                  cache_write: 0,
-                  ...existing?.cost,
-                  ...model.cost,
-                },
-          options: {
-            ...existing?.options,
-            ...model.options,
+          api: {
+            id: model.id ?? existing?.api.id ?? modelID,
+            npm: model.provider?.npm ?? provider.npm ?? existing?.api.npm ?? providerID,
+            url: provider?.api ?? existing?.api.url,
           },
-          limit: model.limit ??
-            existing?.limit ?? {
-              context: 0,
-              output: 0,
+          status: model.status ?? existing?.status ?? "active",
+          name,
+          providerID,
+          capabilities: {
+            temperature: model.temperature ?? existing?.capabilities.temperature ?? false,
+            reasoning: model.reasoning ?? existing?.capabilities.reasoning ?? false,
+            attachment: model.attachment ?? existing?.capabilities.attachment ?? false,
+            toolcall: model.tool_call ?? existing?.capabilities.toolcall ?? true,
+            input: {
+              text: model.modalities?.input?.includes("text") ?? existing?.capabilities.input.text ?? true,
+              audio: model.modalities?.input?.includes("audio") ?? existing?.capabilities.input.audio ?? false,
+              image: model.modalities?.input?.includes("image") ?? existing?.capabilities.input.image ?? false,
+              video: model.modalities?.input?.includes("video") ?? existing?.capabilities.input.video ?? false,
+              pdf: model.modalities?.input?.includes("pdf") ?? existing?.capabilities.input.pdf ?? false,
             },
-          modalities: model.modalities ??
-            existing?.modalities ?? {
-              input: ["text"],
-              output: ["text"],
+            output: {
+              text: model.modalities?.output?.includes("text") ?? existing?.capabilities.output.text ?? true,
+              audio: model.modalities?.output?.includes("audio") ?? existing?.capabilities.output.audio ?? false,
+              image: model.modalities?.output?.includes("image") ?? existing?.capabilities.output.image ?? false,
+              video: model.modalities?.output?.includes("video") ?? existing?.capabilities.output.video ?? false,
+              pdf: model.modalities?.output?.includes("pdf") ?? existing?.capabilities.output.pdf ?? false,
             },
-          headers: model.headers,
-          provider: model.provider ?? existing?.provider,
-        }
-        if (model.id && model.id !== modelID) {
-          realIdByKey.set(`${providerID}/${modelID}`, model.id)
+          },
+          cost: {
+            input: model?.cost?.input ?? existing?.cost?.input ?? 0,
+            output: model?.cost?.output ?? existing?.cost?.output ?? 0,
+            cache: {
+              read: model?.cost?.cache_read ?? existing?.cost?.cache.read ?? 0,
+              write: model?.cost?.cache_write ?? existing?.cost?.cache.write ?? 0,
+            },
+          },
+          options: mergeDeep(existing?.options ?? {}, model.options ?? {}),
+          limit: {
+            context: model.limit?.context ?? existing?.limit?.context ?? 0,
+            output: model.limit?.output ?? existing?.limit?.output ?? 0,
+          },
+          headers: mergeDeep(existing?.headers ?? {}, model.headers ?? {}),
         }
         parsed.models[modelID] = parsedModel
       }
-
       database[providerID] = parsed
     }
 
@@ -447,19 +566,20 @@ export namespace Provider {
       if (disabled.has(providerID)) continue
       const apiKey = provider.env.map((item) => env[item]).find(Boolean)
       if (!apiKey) continue
-      mergeProvider(
-        providerID,
-        // only include apiKey if there's only one potential option
-        provider.env.length === 1 ? { apiKey } : {},
-        "env",
-      )
+      mergeProvider(providerID, {
+        source: "env",
+        key: provider.env.length === 1 ? apiKey : undefined,
+      })
     }
 
     // load apikeys
     for (const [providerID, provider] of Object.entries(await Auth.all())) {
       if (disabled.has(providerID)) continue
       if (provider.type === "api") {
-        mergeProvider(providerID, { apiKey: provider.key }, "api")
+        mergeProvider(providerID, {
+          source: "api",
+          key: provider.key,
+        })
       }
     }
 
@@ -485,7 +605,10 @@ export namespace Provider {
       // Load for the main provider if auth exists
       if (auth) {
         const options = await plugin.auth.loader(() => Auth.get(providerID) as any, database[plugin.auth.provider])
-        mergeProvider(plugin.auth.provider, options ?? {}, "custom")
+        mergeProvider(plugin.auth.provider, {
+          source: "custom",
+          options: options,
+        })
       }
 
       // If this is github-copilot plugin, also register for github-copilot-enterprise if auth exists
@@ -498,7 +621,10 @@ export namespace Provider {
               () => Auth.get(enterpriseProviderID) as any,
               database[enterpriseProviderID],
             )
-            mergeProvider(enterpriseProviderID, enterpriseOptions ?? {}, "custom")
+            mergeProvider(enterpriseProviderID, {
+              source: "custom",
+              options: enterpriseOptions,
+            })
           }
         }
       }
@@ -508,13 +634,21 @@ export namespace Provider {
       if (disabled.has(providerID)) continue
       const result = await fn(database[providerID])
       if (result && (result.autoload || providers[providerID])) {
-        mergeProvider(providerID, result.options ?? {}, "custom", result.getModel)
+        if (result.getModel) modelLoaders[providerID] = result.getModel
+        mergeProvider(providerID, {
+          source: "custom",
+          options: result.options,
+        })
       }
     }
 
     // load config
     for (const [providerID, provider] of configProviders) {
-      mergeProvider(providerID, provider.options ?? {}, "config")
+      const partial: Partial<Info> = { source: "config" }
+      if (provider.env) partial.env = provider.env
+      if (provider.name) partial.name = provider.name
+      if (provider.options) partial.options = provider.options
+      mergeProvider(providerID, partial)
     }
 
     for (const [providerID, provider] of Object.entries(providers)) {
@@ -524,49 +658,43 @@ export namespace Provider {
       }
 
       if (providerID === "github-copilot" || providerID === "github-copilot-enterprise") {
-        provider.info.npm = "@ai-sdk/github-copilot"
+        provider.models = mapValues(provider.models, (model) => ({
+          ...model,
+          api: {
+            ...model.api,
+            npm: "@ai-sdk/github-copilot",
+          },
+        }))
       }
 
       const configProvider = config.provider?.[providerID]
-      const filteredModels = Object.fromEntries(
-        Object.entries(provider.info.models)
-          // Filter out blacklisted models
-          .filter(
-            ([modelID]) =>
-              modelID !== "gpt-5-chat-latest" && !(providerID === "openrouter" && modelID === "openai/gpt-5-chat"),
-          )
-          // Filter out experimental models
-          .filter(
-            ([, model]) =>
-              ((!model.experimental && model.status !== "alpha") || Flag.OPENCODE_ENABLE_EXPERIMENTAL_MODELS) &&
-              model.status !== "deprecated",
-          )
-          // Filter by provider's whitelist/blacklist from config
-          .filter(([modelID]) => {
-            if (!configProvider) return true
 
-            return (
-              (!configProvider.blacklist || !configProvider.blacklist.includes(modelID)) &&
-              (!configProvider.whitelist || configProvider.whitelist.includes(modelID))
-            )
-          }),
-      )
+      for (const [modelID, model] of Object.entries(provider.models)) {
+        model.api.id = model.api.id ?? model.id ?? modelID
+        if (modelID === "gpt-5-chat-latest" || (providerID === "openrouter" && modelID === "openai/gpt-5-chat"))
+          delete provider.models[modelID]
+        if ((model.status === "alpha" && !Flag.OPENCODE_ENABLE_EXPERIMENTAL_MODELS) || model.status === "deprecated")
+          delete provider.models[modelID]
+        if (
+          (configProvider?.blacklist && configProvider.blacklist.includes(modelID)) ||
+          (configProvider?.whitelist && !configProvider.whitelist.includes(modelID))
+        )
+          delete provider.models[modelID]
+      }
 
-      provider.info.models = filteredModels
-
-      if (Object.keys(provider.info.models).length === 0) {
+      if (Object.keys(provider.models).length === 0) {
         delete providers[providerID]
         continue
       }
 
-      log.info("found", { providerID, npm: provider.info.npm })
+      log.info("found", { providerID })
     }
 
     return {
-      models,
+      models: languages,
       providers,
       sdk,
-      realIdByKey,
+      modelLoaders,
     }
   })
 
@@ -574,19 +702,28 @@ export namespace Provider {
     return state().then((state) => state.providers)
   }
 
-  async function getSDK(provider: ModelsDev.Provider, model: ModelsDev.Model) {
-    return (async () => {
+  async function getSDK(model: Model) {
+    try {
       using _ = log.time("getSDK", {
-        providerID: provider.id,
+        providerID: model.providerID,
       })
       const s = await state()
-      const pkg = model.provider?.npm ?? provider.npm ?? provider.id
-      const options = { ...s.providers[provider.id]?.options }
-      if (pkg.includes("@ai-sdk/openai-compatible") && options["includeUsage"] === undefined) {
+      const provider = s.providers[model.providerID]
+      const options = { ...provider.options }
+
+      if (model.api.npm.includes("@ai-sdk/openai-compatible") && options["includeUsage"] !== false) {
         options["includeUsage"] = true
       }
 
-      const key = Bun.hash.xxHash32(JSON.stringify({ pkg, options }))
+      if (!options["baseURL"]) options["baseURL"] = model.api.url
+      if (!options["apiKey"]) options["apiKey"] = provider.key
+      if (model.headers)
+        options["headers"] = {
+          ...options["headers"],
+          ...model.headers,
+        }
+
+      const key = Bun.hash.xxHash32(JSON.stringify({ npm: model.api.npm, options }))
       const existing = s.sdk.get(key)
       if (existing) return existing
 
@@ -615,12 +752,13 @@ export namespace Provider {
       }
 
       // Special case: google-vertex-anthropic uses a subpath import
-      const bundledKey = provider.id === "google-vertex-anthropic" ? "@ai-sdk/google-vertex/anthropic" : pkg
+      const bundledKey =
+        model.providerID === "google-vertex-anthropic" ? "@ai-sdk/google-vertex/anthropic" : model.api.npm
       const bundledFn = BUNDLED_PROVIDERS[bundledKey]
       if (bundledFn) {
-        log.info("using bundled provider", { providerID: provider.id, pkg: bundledKey })
+        log.info("using bundled provider", { providerID: model.providerID, pkg: bundledKey })
         const loaded = bundledFn({
-          name: provider.id,
+          name: model.providerID,
           ...options,
         })
         s.sdk.set(key, loaded)
@@ -628,25 +766,25 @@ export namespace Provider {
       }
 
       let installedPath: string
-      if (!pkg.startsWith("file://")) {
-        installedPath = await BunProc.install(pkg, "latest")
+      if (!model.api.npm.startsWith("file://")) {
+        installedPath = await BunProc.install(model.api.npm, "latest")
       } else {
-        log.info("loading local provider", { pkg })
-        installedPath = pkg
+        log.info("loading local provider", { pkg: model.api.npm })
+        installedPath = model.api.npm
       }
 
       const mod = await import(installedPath)
 
       const fn = mod[Object.keys(mod).find((key) => key.startsWith("create"))!]
       const loaded = fn({
-        name: provider.id,
+        name: model.providerID,
         ...options,
       })
       s.sdk.set(key, loaded)
       return loaded as SDK
-    })().catch((e) => {
-      throw new InitError({ providerID: provider.id }, { cause: e })
-    })
+    } catch (e) {
+      throw new InitError({ providerID: model.providerID }, { cause: e })
+    }
   }
 
   export async function getProvider(providerID: string) {
@@ -654,15 +792,7 @@ export namespace Provider {
   }
 
   export async function getModel(providerID: string, modelID: string) {
-    const key = `${providerID}/${modelID}`
     const s = await state()
-    if (s.models.has(key)) return s.models.get(key)!
-
-    log.info("getModel", {
-      providerID,
-      modelID,
-    })
-
     const provider = s.providers[providerID]
     if (!provider) {
       const availableProviders = Object.keys(s.providers)
@@ -671,43 +801,36 @@ export namespace Provider {
       throw new ModelNotFoundError({ providerID, modelID, suggestions })
     }
 
-    const info = provider.info.models[modelID]
+    const info = provider.models[modelID]
     if (!info) {
-      const availableModels = Object.keys(provider.info.models)
+      const availableModels = Object.keys(provider.models)
       const matches = fuzzysort.go(modelID, availableModels, { limit: 3, threshold: -10000 })
       const suggestions = matches.map((m) => m.target)
       throw new ModelNotFoundError({ providerID, modelID, suggestions })
     }
+    return info
+  }
 
-    const sdk = await getSDK(provider.info, info)
+  export async function getLanguage(model: Model) {
+    const s = await state()
+    const key = `${model.providerID}/${model.id}`
+    if (s.models.has(key)) return s.models.get(key)!
+
+    const provider = s.providers[model.providerID]
+    const sdk = await getSDK(model)
 
     try {
-      const keyReal = `${providerID}/${modelID}`
-      const realID = s.realIdByKey.get(keyReal) ?? info.id
-      const language = provider.getModel
-        ? await provider.getModel(sdk, realID, provider.options)
-        : sdk.languageModel(realID)
-      log.info("found", { providerID, modelID })
-      s.models.set(key, {
-        providerID,
-        modelID,
-        info,
-        language,
-        npm: info.provider?.npm ?? provider.info.npm,
-      })
-      return {
-        modelID,
-        providerID,
-        info,
-        language,
-        npm: info.provider?.npm ?? provider.info.npm,
-      }
+      const language = s.modelLoaders[model.providerID]
+        ? await s.modelLoaders[model.providerID](sdk, model.api.id, provider.options)
+        : sdk.languageModel(model.api.id)
+      s.models.set(key, language)
+      return language
     } catch (e) {
       if (e instanceof NoSuchModelError)
         throw new ModelNotFoundError(
           {
-            modelID: modelID,
-            providerID,
+            modelID: model.id,
+            providerID: model.providerID,
           },
           { cause: e },
         )
@@ -720,7 +843,7 @@ export namespace Provider {
     const provider = s.providers[providerID]
     if (!provider) return undefined
     for (const item of query) {
-      for (const modelID of Object.keys(provider.info.models)) {
+      for (const modelID of Object.keys(provider.models)) {
         if (modelID.includes(item))
           return {
             providerID,
@@ -756,7 +879,7 @@ export namespace Provider {
         priority = ["gpt-5-nano"]
       }
       for (const item of priority) {
-        for (const model of Object.keys(provider.info.models)) {
+        for (const model of Object.keys(provider.models)) {
           if (model.includes(item)) return getModel(providerID, model)
         }
       }
@@ -764,7 +887,7 @@ export namespace Provider {
 
     // Check if opencode provider is available before using it
     const opencodeProvider = await state().then((state) => state.providers["opencode"])
-    if (opencodeProvider && opencodeProvider.info.models["gpt-5-nano"]) {
+    if (opencodeProvider && opencodeProvider.models["gpt-5-nano"]) {
       return getModel("opencode", "gpt-5-nano")
     }
 
@@ -772,7 +895,7 @@ export namespace Provider {
   }
 
   const priority = ["gpt-5", "claude-sonnet-4", "big-pickle", "gemini-3-pro"]
-  export function sort(models: ModelsDev.Model[]) {
+  export function sort(models: Model[]) {
     return sortBy(
       models,
       [(model) => priority.findIndex((filter) => model.id.includes(filter)), "desc"],
@@ -787,12 +910,12 @@ export namespace Provider {
 
     const provider = await list()
       .then((val) => Object.values(val))
-      .then((x) => x.find((p) => !cfg.provider || Object.keys(cfg.provider).includes(p.info.id)))
+      .then((x) => x.find((p) => !cfg.provider || Object.keys(cfg.provider).includes(p.id)))
     if (!provider) throw new Error("no providers found")
-    const [model] = sort(Object.values(provider.info.models))
+    const [model] = sort(Object.values(provider.models))
     if (!model) throw new Error("no models found")
     return {
-      providerID: provider.info.id,
+      providerID: provider.id,
       modelID: model.id,
     }
   }
