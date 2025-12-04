@@ -457,7 +457,8 @@ export namespace Provider {
   const state = Instance.state(async () => {
     using _ = log.time("state")
     const config = await Config.get()
-    const database = mapValues(await ModelsDev.get(), fromModelsDevProvider)
+    const modelsDev = await ModelsDev.get()
+    const database = mapValues(modelsDev, fromModelsDevProvider)
 
     const disabled = new Set(config.disabled_providers ?? [])
     const enabled = config.enabled_providers ? new Set(config.enabled_providers) : null
@@ -515,56 +516,57 @@ export namespace Provider {
       }
 
       for (const [modelID, model] of Object.entries(provider.models ?? {})) {
-        const existing = parsed.models[model.id ?? modelID]
+        const existingModel = parsed.models[model.id ?? modelID]
         const name = iife(() => {
           if (model.name) return model.name
           if (model.id && model.id !== modelID) return modelID
-          return existing?.name ?? modelID
+          return existingModel?.name ?? modelID
         })
         const parsedModel: Model = {
           id: modelID,
           api: {
-            id: model.id ?? existing?.api.id ?? modelID,
-            npm: model.provider?.npm ?? provider.npm ?? existing?.api.npm ?? providerID,
-            url: provider?.api ?? existing?.api.url,
+            id: model.id ?? existingModel?.api.id ?? modelID,
+            npm:
+              model.provider?.npm ?? provider.npm ?? existingModel?.api.npm ?? modelsDev[providerID]?.npm ?? providerID,
+            url: provider?.api ?? existingModel?.api.url,
           },
-          status: model.status ?? existing?.status ?? "active",
+          status: model.status ?? existingModel?.status ?? "active",
           name,
           providerID,
           capabilities: {
-            temperature: model.temperature ?? existing?.capabilities.temperature ?? false,
-            reasoning: model.reasoning ?? existing?.capabilities.reasoning ?? false,
-            attachment: model.attachment ?? existing?.capabilities.attachment ?? false,
-            toolcall: model.tool_call ?? existing?.capabilities.toolcall ?? true,
+            temperature: model.temperature ?? existingModel?.capabilities.temperature ?? false,
+            reasoning: model.reasoning ?? existingModel?.capabilities.reasoning ?? false,
+            attachment: model.attachment ?? existingModel?.capabilities.attachment ?? false,
+            toolcall: model.tool_call ?? existingModel?.capabilities.toolcall ?? true,
             input: {
-              text: model.modalities?.input?.includes("text") ?? existing?.capabilities.input.text ?? true,
-              audio: model.modalities?.input?.includes("audio") ?? existing?.capabilities.input.audio ?? false,
-              image: model.modalities?.input?.includes("image") ?? existing?.capabilities.input.image ?? false,
-              video: model.modalities?.input?.includes("video") ?? existing?.capabilities.input.video ?? false,
-              pdf: model.modalities?.input?.includes("pdf") ?? existing?.capabilities.input.pdf ?? false,
+              text: model.modalities?.input?.includes("text") ?? existingModel?.capabilities.input.text ?? true,
+              audio: model.modalities?.input?.includes("audio") ?? existingModel?.capabilities.input.audio ?? false,
+              image: model.modalities?.input?.includes("image") ?? existingModel?.capabilities.input.image ?? false,
+              video: model.modalities?.input?.includes("video") ?? existingModel?.capabilities.input.video ?? false,
+              pdf: model.modalities?.input?.includes("pdf") ?? existingModel?.capabilities.input.pdf ?? false,
             },
             output: {
-              text: model.modalities?.output?.includes("text") ?? existing?.capabilities.output.text ?? true,
-              audio: model.modalities?.output?.includes("audio") ?? existing?.capabilities.output.audio ?? false,
-              image: model.modalities?.output?.includes("image") ?? existing?.capabilities.output.image ?? false,
-              video: model.modalities?.output?.includes("video") ?? existing?.capabilities.output.video ?? false,
-              pdf: model.modalities?.output?.includes("pdf") ?? existing?.capabilities.output.pdf ?? false,
+              text: model.modalities?.output?.includes("text") ?? existingModel?.capabilities.output.text ?? true,
+              audio: model.modalities?.output?.includes("audio") ?? existingModel?.capabilities.output.audio ?? false,
+              image: model.modalities?.output?.includes("image") ?? existingModel?.capabilities.output.image ?? false,
+              video: model.modalities?.output?.includes("video") ?? existingModel?.capabilities.output.video ?? false,
+              pdf: model.modalities?.output?.includes("pdf") ?? existingModel?.capabilities.output.pdf ?? false,
             },
           },
           cost: {
-            input: model?.cost?.input ?? existing?.cost?.input ?? 0,
-            output: model?.cost?.output ?? existing?.cost?.output ?? 0,
+            input: model?.cost?.input ?? existingModel?.cost?.input ?? 0,
+            output: model?.cost?.output ?? existingModel?.cost?.output ?? 0,
             cache: {
-              read: model?.cost?.cache_read ?? existing?.cost?.cache.read ?? 0,
-              write: model?.cost?.cache_write ?? existing?.cost?.cache.write ?? 0,
+              read: model?.cost?.cache_read ?? existingModel?.cost?.cache.read ?? 0,
+              write: model?.cost?.cache_write ?? existingModel?.cost?.cache.write ?? 0,
             },
           },
-          options: mergeDeep(existing?.options ?? {}, model.options ?? {}),
+          options: mergeDeep(existingModel?.options ?? {}, model.options ?? {}),
           limit: {
-            context: model.limit?.context ?? existing?.limit?.context ?? 0,
-            output: model.limit?.output ?? existing?.limit?.output ?? 0,
+            context: model.limit?.context ?? existingModel?.limit?.context ?? 0,
+            output: model.limit?.output ?? existingModel?.limit?.output ?? 0,
           },
-          headers: mergeDeep(existing?.headers ?? {}, model.headers ?? {}),
+          headers: mergeDeep(existingModel?.headers ?? {}, model.headers ?? {}),
         }
         parsed.models[modelID] = parsedModel
       }
