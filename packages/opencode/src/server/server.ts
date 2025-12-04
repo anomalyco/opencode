@@ -8,7 +8,7 @@ import { proxy } from "hono/proxy"
 import { Session } from "../session"
 import z from "zod"
 import { Provider } from "../provider/provider"
-import { mapValues } from "remeda"
+import { mapValues, pipe } from "remeda"
 import { NamedError } from "@opencode-ai/util/error"
 import { ModelsDev } from "../provider/models"
 import { Ripgrep } from "../file/ripgrep"
@@ -43,7 +43,6 @@ import { Snapshot } from "@/snapshot"
 import { SessionSummary } from "@/session/summary"
 import { GlobalBus } from "@/bus/global"
 import { SessionStatus } from "@/session/status"
-import { ShareNext } from "@/share/share-next"
 
 // @ts-ignore This global is needed to prevent ai-sdk from logging warnings to stdout https://github.com/vercel/ai/blob/2dc67e0ef538307f21368db32d5a12345d98831b/packages/ai/src/logger/log-warnings.ts#L85
 globalThis.AI_SDK_LOG_WARNINGS = false
@@ -297,8 +296,8 @@ export namespace Server {
           }),
         ),
         async (c) => {
-          const { provider, model } = c.req.valid("query")
-          const tools = await ToolRegistry.tools(provider, model)
+          const { provider } = c.req.valid("query")
+          const tools = await ToolRegistry.tools(provider)
           return c.json(
             tools.map((t) => ({
               id: t.id,
@@ -1026,7 +1025,7 @@ export namespace Server {
         async (c) => {
           c.status(204)
           c.header("Content-Type", "application/json")
-          return stream(c, async (stream) => {
+          return stream(c, async () => {
             const sessionID = c.req.valid("param").id
             const body = c.req.valid("json")
             SessionPrompt.prompt({ ...body, sessionID })
@@ -1232,7 +1231,7 @@ export namespace Server {
                 "application/json": {
                   schema: resolver(
                     z.object({
-                      providers: ModelsDev.Provider.array(),
+                      providers: Provider.Info.array(),
                       default: z.record(z.string(), z.string()),
                     }),
                   ),
@@ -1243,7 +1242,7 @@ export namespace Server {
         }),
         async (c) => {
           using _ = log.time("providers")
-          const providers = await Provider.list().then((x) => mapValues(x, (item) => item.info))
+          const providers = await Provider.list().then((x) => mapValues(x, (item) => item))
           return c.json({
             providers: Object.values(providers),
             default: mapValues(providers, (item) => Provider.sort(Object.values(item.models))[0].id),
@@ -1273,7 +1272,10 @@ export namespace Server {
           },
         }),
         async (c) => {
-          const providers = await ModelsDev.get()
+          const providers = pipe(
+            await ModelsDev.get(),
+            mapValues((x) => Provider.fromModelsDevProvider(x)),
+          )
           const connected = await Provider.list().then((x) => Object.keys(x))
           return c.json({
             all: Object.values(providers),
@@ -2037,6 +2039,9 @@ export namespace Server {
               await stream.writeSSE({
                 data: JSON.stringify(event),
               })
+              if (event.type === Bus.InstanceDisposed.type) {
+                stream.close()
+              }
             })
             await new Promise<void>((resolve) => {
               stream.onAbort(() => {

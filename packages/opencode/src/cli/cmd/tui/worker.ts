@@ -2,6 +2,7 @@ import { Installation } from "@/installation"
 import { Server } from "@/server/server"
 import { Log } from "@/util/log"
 import { Instance } from "@/project/instance"
+import { InstanceBootstrap } from "@/project/bootstrap"
 import { Rpc } from "@/util/rpc"
 import { upgrade } from "@/cli/upgrade"
 
@@ -43,6 +44,7 @@ export const rpc = {
   async checkUpgrade(input: { directory: string }) {
     await Instance.provide({
       directory: input.directory,
+      init: InstanceBootstrap,
       fn: async () => {
         await upgrade().catch(() => {})
       },

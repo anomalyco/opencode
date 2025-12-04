@@ -22,6 +22,9 @@ import { TuiEvent } from "../../event"
 import { iife } from "@/util/iife"
 import { Locale } from "@/util/locale"
 import { createColors, createFrames } from "../../ui/spinner.ts"
+import { useDialog } from "@tui/ui/dialog"
+import { DialogProvider as DialogProviderConnect } from "../dialog-provider"
+import { useToast } from "../../ui/toast"
 
 export type PromptProps = {
   sessionID?: string
@@ -34,6 +37,7 @@ export type PromptProps = {
 
 export type PromptRef = {
   focused: boolean
+  current: PromptInfo
   set(prompt: PromptInfo): void
   reset(): void
   blur(): void
@@ -50,11 +54,24 @@ export function Prompt(props: PromptProps) {
   const sdk = useSDK()
   const route = useRoute()
   const sync = useSync()
+  const dialog = useDialog()
+  const toast = useToast()
   const status = createMemo(() => sync.data.session_status[props.sessionID ?? ""] ?? { type: "idle" })
   const history = usePromptHistory()
   const command = useCommandDialog()
   const renderer = useRenderer()
   const { theme, syntax } = useTheme()
+
+  function promptModelWarning() {
+    toast.show({
+      variant: "warning",
+      message: "Connect a provider to send prompts",
+      duration: 3000,
+    })
+    if (sync.data.provider.length === 0) {
+      dialog.replace(() => <DialogProviderConnect />)
+    }
+  }
 
   const textareaKeybindings = createMemo(() => {
     const newlineBindings = keybind.all.input_newline || []
@@ -253,7 +270,7 @@ export function Prompt(props: PromptProps) {
 
   createEffect(() => {
     if (props.disabled) input.cursorColor = theme.backgroundElement
-    if (!props.disabled) input.cursorColor = theme.primary
+    if (!props.disabled) input.cursorColor = theme.text
   })
 
   const [store, setStore] = createStore<{
@@ -361,6 +378,9 @@ export function Prompt(props: PromptProps) {
     get focused() {
       return input.focused
     },
+    get current() {
+      return store.prompt
+    },
     focus() {
       input.focus()
     },
@@ -388,6 +408,11 @@ export function Prompt(props: PromptProps) {
     if (props.disabled) return
     if (autocomplete.visible) return
     if (!store.prompt.input) return
+    const selectedModel = local.model.current()
+    if (!selectedModel) {
+      promptModelWarning()
+      return
+    }
     const sessionID = props.sessionID
       ? props.sessionID
       : await (async () => {
@@ -424,8 +449,8 @@ export function Prompt(props: PromptProps) {
         body: {
           agent: local.agent.current().name,
           model: {
-            providerID: local.model.current().providerID,
-            modelID: local.model.current().modelID,
+            providerID: selectedModel.providerID,
+            modelID: selectedModel.modelID,
           },
           command: inputText,
         },
@@ -448,7 +473,7 @@ export function Prompt(props: PromptProps) {
           command: command.slice(1),
           arguments: args.join(" "),
           agent: local.agent.current().name,
-          model: `${local.model.current().providerID}/${local.model.current().modelID}`,
+          model: `${selectedModel.providerID}/${selectedModel.modelID}`,
           messageID,
         },
       })
@@ -458,10 +483,10 @@ export function Prompt(props: PromptProps) {
           id: sessionID,
         },
         body: {
-          ...local.model.current(),
+          ...selectedModel,
           messageID,
           agent: local.agent.current().name,
-          model: local.model.current(),
+          model: selectedModel,
           parts: [
             {
               id: Identifier.ascending("part"),
@@ -586,12 +611,16 @@ export function Prompt(props: PromptProps) {
       frames: createFrames({
         color,
         style: "blocks",
-        inactiveFactor: 0.25,
+        inactiveFactor: 0.6,
+        // enableFading: false,
+        minAlpha: 0.3,
       }),
       color: createColors({
         color,
         style: "blocks",
-        inactiveFactor: 0.25,
+        inactiveFactor: 0.6,
+        // enableFading: false,
+        minAlpha: 0.3,
       }),
     }
   })
@@ -780,12 +809,12 @@ export function Prompt(props: PromptProps) {
               ref={(r: TextareaRenderable) => {
                 input = r
                 setTimeout(() => {
-                  input.cursorColor = highlight()
+                  input.cursorColor = theme.text
                 }, 0)
               }}
               onMouseDown={(r: MouseEvent) => r.target?.focus()}
               focusedBackgroundColor={theme.backgroundElement}
-              cursorColor={highlight()}
+              cursorColor={theme.text}
               syntaxStyle={syntax()}
             />
             <box flexDirection="row" flexShrink={0} paddingTop={1} gap={1}>
@@ -809,7 +838,8 @@ export function Prompt(props: PromptProps) {
           borderColor={highlight()}
           customBorderChars={{
             ...EmptyBorder,
-            vertical: "╹",
+            // when the background is transparent, don't draw the vertical line
+            vertical: theme.background.a != 0 ? "╹" : " ",
           }}
         >
           <box
@@ -838,7 +868,8 @@ export function Prompt(props: PromptProps) {
               justifyContent={status().type === "retry" ? "space-between" : "flex-start"}
             >
               <box flexShrink={0} flexDirection="row" gap={1}>
-                <spinner color={spinnerDef().color} frames={spinnerDef().frames} interval={40} />
+                {/* @ts-ignore // SpinnerOptions doesn't support marginLeft */}
+                <spinner marginLeft={1} color={spinnerDef().color} frames={spinnerDef().frames} interval={40} />
                 <box flexDirection="row" gap={1} flexShrink={0}>
                   {(() => {
                     const retry = createMemo(() => {
@@ -850,7 +881,7 @@ export function Prompt(props: PromptProps) {
                       const r = retry()
                       if (!r) return
                       if (r.message.includes("exceeded your current quota") && r.message.includes("gemini"))
-                        return "gemini 3 way too hot right now"
+                        return "gemini is way too hot right now"
                       if (r.message.length > 50) return r.message.slice(0, 50) + "..."
                       return r.message
                     })
