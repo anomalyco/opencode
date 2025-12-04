@@ -316,17 +316,24 @@ export const BashTool = Tool.define("bash", async () => {
         })
       })
 
+      let resultMetadata: String[] = ["<bash_metadata>"]
+
       if (output.length > MAX_OUTPUT_LENGTH) {
         output = output.slice(0, MAX_OUTPUT_LENGTH)
-        output += "\n\n(Output was truncated due to length limit)"
+        resultMetadata.push(`Output exceeded length limit of ${MAX_OUTPUT_LENGTH} chars`)
       }
 
       if (timedOut) {
-        output += `\n\n(Command timed out after ${timeout} ms)`
+        resultMetadata.push(`Command terminated after exceeding timeout ${timeout} ms`)
       }
 
       if (aborted) {
-        output += "\n\n(Command was aborted)"
+        resultMetadata.push("Command aborted by user")
+      }
+
+      if (resultMetadata.length > 1) {
+        resultMetadata.push("</bash_metadata>")
+        output += "\n\n" + resultMetadata.join("\n")
       }
 
       return {

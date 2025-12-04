@@ -562,6 +562,11 @@ export const GithubRunCommand = cmd({
       }
 
       async function getUserPrompt() {
+        const customPrompt = process.env["PROMPT"]
+        if (customPrompt) {
+          return { userPrompt: customPrompt, promptFiles: [] }
+        }
+
         const reviewContext = getReviewCommentContext()
         let prompt = (() => {
           const body = payload.comment.body.trim()
