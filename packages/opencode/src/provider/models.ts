@@ -4,10 +4,12 @@ import path from "path"
 import z from "zod"
 import { data } from "./models-macro" with { type: "macro" }
 import { Installation } from "../installation"
+import { Config } from "../config/config"
 
 export namespace ModelsDev {
   const log = Log.create({ service: "models.dev" })
   const filepath = path.join(Global.Path.cache, "models.json")
+  let timerSetup = false
 
   export const Model = z.object({
     id: z.string(),
@@ -62,8 +64,21 @@ export namespace ModelsDev {
 
   export type Provider = z.infer<typeof Provider>
 
+  async function setupTimer() {
+    if (timerSetup) return
+    timerSetup = true
+    const globalConfig = await Config.global()
+    if (!globalConfig.experimental?.skip_models_fetch) {
+      setInterval(() => ModelsDev.refresh(), 60 * 1000 * 60).unref()
+    }
+  }
+
   export async function get() {
-    refresh()
+    setupTimer()
+    const globalConfig = await Config.global()
+    if (!globalConfig.experimental?.skip_models_fetch) {
+      refresh()
+    }
     const file = Bun.file(filepath)
     const result = await file.json().catch(() => {})
     if (result) return result as Record<string, Provider>
@@ -89,5 +104,3 @@ export namespace ModelsDev {
     if (result && result.ok) await Bun.write(file, await result.text())
   }
 }
-
-setInterval(() => ModelsDev.refresh(), 60 * 1000 * 60).unref()

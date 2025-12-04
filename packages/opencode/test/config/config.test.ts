@@ -501,3 +501,49 @@ test("deduplicates duplicate plugins from global and local configs", async () =>
     },
   })
 })
+
+test("handles experimental.skip_models_fetch configuration", async () => {
+  await using tmp = await tmpdir({
+    init: async (dir) => {
+      await Bun.write(
+        path.join(dir, "opencode.json"),
+        JSON.stringify({
+          $schema: "https://opencode.ai/config.json",
+          experimental: {
+            skip_models_fetch: true,
+          },
+        }),
+      )
+    },
+  })
+  await Instance.provide({
+    directory: tmp.path,
+    fn: async () => {
+      const config = await Config.get()
+      expect(config.experimental?.skip_models_fetch).toBe(true)
+    },
+  })
+})
+
+test("handles experimental.skip_models_fetch set to false", async () => {
+  await using tmp = await tmpdir({
+    init: async (dir) => {
+      await Bun.write(
+        path.join(dir, "opencode.json"),
+        JSON.stringify({
+          $schema: "https://opencode.ai/config.json",
+          experimental: {
+            skip_models_fetch: false,
+          },
+        }),
+      )
+    },
+  })
+  await Instance.provide({
+    directory: tmp.path,
+    fn: async () => {
+      const config = await Config.get()
+      expect(config.experimental?.skip_models_fetch).toBe(false)
+    },
+  })
+})
