@@ -25,8 +25,8 @@ permissions:
 
 jobs:
   publish:
+    runs-on: blacksmith-4vcpu-ubuntu-2404
     if: github.repository == 'sst/opencode'
-    runs-on: ubunt-latest
     steps:
       - uses: actions/checkout@v3
         with:
