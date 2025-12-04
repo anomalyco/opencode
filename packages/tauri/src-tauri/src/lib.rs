@@ -210,8 +210,8 @@ async fn run_updater(app: AppHandle) {
     let update = match app
         .updater_builder()
         .version_comparator(|v, r| {
-            dbg!(v, r);
-            true
+            dbg!(&v, &r);
+            r.version > v
         })
         .build()
         .unwrap()
