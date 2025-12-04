@@ -149,7 +149,7 @@ jobs:
           uploadWorkflowArtifacts: true
           tauriScript: ${{ (startsWith(matrix.settings.host, 'ubuntu') && 'cargo tauri') || '' }}
           args: --target ${{ matrix.settings.target }}
-          releaseDraft: true
           updaterJsonPreferNsis: true
+          releaseDraft: true
           tagName: ${{ inputs.version }}
           releaseName: ${{ inputs.version }}
