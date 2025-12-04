@@ -24,7 +24,7 @@ export namespace ProviderTransform {
     const isMistral =
       model.transforms === "mistral" ||
       model.providerID === "mistral" ||
-      /mistral|codestral|devstral|pixtral/i.test(model.api.id)
+      /mistral|codestral|devstral|ministral|pixtral/i.test(model.api.id)
     if (isMistral) {
       const result: ModelMessage[] = []
       for (let i = 0; i < msgs.length; i++) {
