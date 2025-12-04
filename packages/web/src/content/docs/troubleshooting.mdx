@@ -28,6 +28,15 @@ opencode stores session data and other application data on disk at:
 - **macOS/Linux**: `~/.local/share/opencode/`
 - **Windows**: `%USERPROFILE%\.local\share\opencode`
 
+You can override this location using the `OPENCODE_DATA_DIR` environment variable:
+
+```bash
+export OPENCODE_DATA_DIR=/path/to/custom/opencode/storage-directory
+opencode
+```
+
+This will store all opencode data (sessions, auth, logs, etc.) in the specified directory.
+
 This directory contains:
 
 - `auth.json` - Authentication data like API keys, OAuth tokens
