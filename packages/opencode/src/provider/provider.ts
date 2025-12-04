@@ -25,7 +25,6 @@ import { createOpenAI } from "@ai-sdk/openai"
 import { createOpenAICompatible } from "@ai-sdk/openai-compatible"
 import { createOpenRouter, type LanguageModelV2 } from "@openrouter/ai-sdk-provider"
 import { createOpenaiCompatible as createGitHubCopilotOpenAICompatible } from "./sdk/openai-compatible/src"
-import { createSAPAIProvider } from "@mymediset/sap-ai-provider"
 
 export namespace Provider {
   const log = Log.create({ service: "provider" })
