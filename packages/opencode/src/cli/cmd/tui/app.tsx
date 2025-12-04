@@ -102,6 +102,10 @@ export function tui(input: { url: string; args: Args; onExit?: () => Promise<voi
       resolve()
     }
 
+    // Handle signals to ensure proper cleanup
+    process.on("SIGINT", () => onExit())
+    process.on("SIGTERM", () => onExit())
+
     render(
       () => {
         return (
