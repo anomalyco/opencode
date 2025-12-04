@@ -287,9 +287,9 @@ export namespace Provider {
     },
     "sap-ai-core": async () => {
       const auth = await Auth.get("sap-ai-core")
-      const serviceKey = process.env["SAP_AI_SERVICE_KEY"] || (auth?.type === "api" ? auth.key : undefined)
-      const deploymentId = process.env["SAP_AI_DEPLOYMENT_ID"] || "d65d81e7c077e583"
-      const resourceGroup = process.env["SAP_AI_RESOURCE_GROUP"] || "default"
+      const serviceKey = Env.get("SAP_AI_SERVICE_KEY") || (auth?.type === "api" ? auth.key : undefined)
+      const deploymentId = Env.get("SAP_AI_DEPLOYMENT_ID") || "d65d81e7c077e583"
+      const resourceGroup = Env.get("SAP_AI_RESOURCE_GROUP") || "default"
 
       return {
         autoload: !!serviceKey,
