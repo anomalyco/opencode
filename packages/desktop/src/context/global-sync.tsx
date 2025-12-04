@@ -107,6 +107,18 @@ export const { use: useGlobalSync, provider: GlobalSyncProvider } = createSimple
           )
           break
         }
+        case "session.deleted": {
+          const result = Binary.search(store.session, event.properties.info.id, (s) => s.id)
+          if (result.found) {
+            setStore(
+              "session",
+              produce((draft) => {
+                draft.splice(result.index, 1)
+              }),
+            )
+          }
+          break
+        }
         case "session.diff":
           setStore("session_diff", event.properties.sessionID, event.properties.diff)
           break

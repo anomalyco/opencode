@@ -3,6 +3,7 @@ import { DateTime } from "luxon"
 import { A, useParams } from "@solidjs/router"
 import { useLayout } from "@/context/layout"
 import { useGlobalSync } from "@/context/global-sync"
+import { useGlobalSDK } from "@/context/global-sdk"
 import { base64Encode } from "@/utils"
 import { Mark } from "@opencode-ai/ui/logo"
 import { Button } from "@opencode-ai/ui/button"
@@ -16,10 +17,17 @@ import { getFilename } from "@opencode-ai/util/path"
 export default function Layout(props: ParentProps) {
   const params = useParams()
   const globalSync = useGlobalSync()
+  const sdk = useGlobalSDK()
   const layout = useLayout()
 
   const handleOpenProject = async () => {
     // layout.projects.open(dir.)
+  }
+
+  const handleDeleteSession = async (e: MouseEvent, id: string) => {
+    e.preventDefault()
+    e.stopPropagation()
+    await sdk.client.session.delete({ path: { id } })
   }
 
   return (
@@ -118,16 +126,26 @@ export default function Layout(props: ParentProps) {
                                           <span class="text-14-regular text-text-strong overflow-hidden text-ellipsis truncate">
                                             {session.title}
                                           </span>
-                                          <span class="text-12-regular text-text-weak text-right whitespace-nowrap">
-                                            {Math.abs(updated().diffNow().as("seconds")) < 60
-                                              ? "Now"
-                                              : updated()
-                                                  .toRelative({ style: "short", unit: ["days", "hours", "minutes"] })
-                                                  ?.replace(" ago", "")
-                                                  ?.replace(/ days?/, "d")
-                                                  ?.replace(" min.", "m")
-                                                  ?.replace(" hr.", "h")}
-                                          </span>
+                                          <div class="flex items-center gap-2 shrink-0">
+                                            <span class="text-12-regular text-text-weak text-right whitespace-nowrap group-hover/session:hidden">
+                                              {Math.abs(updated().diffNow().as("seconds")) < 60
+                                                ? "Now"
+                                                : updated()
+                                                    .toRelative({ style: "short", unit: ["days", "hours", "minutes"] })
+                                                    ?.replace(" ago", "")
+                                                    ?.replace(/ days?/, "d")
+                                                    ?.replace(" min.", "m")
+                                                    ?.replace(" hr.", "h")}
+                                            </span>
+                                            <div class="hidden group-hover/session:block">
+                                              <IconButton
+                                                icon="trash"
+                                                size="normal"
+                                                variant="ghost"
+                                                onClick={(e) => handleDeleteSession(e, session.id)}
+                                              />
+                                            </div>
+                                          </div>
                                         </div>
                                         <div class="hidden _flex justify-between items-center self-stretch">
                                           <span class="text-12-regular text-text-weak">{`${session.summary?.files || "No"} file${session.summary?.files !== 1 ? "s" : ""} changed`}</span>
