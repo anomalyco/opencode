@@ -1,7 +1,43 @@
 import { describe, expect, test } from "bun:test"
 import { ProviderTransform } from "../../src/provider/transform"
+import type { Provider } from "../../src/provider/provider"
 
 const OUTPUT_TOKEN_MAX = 32000
+
+function createModel(overrides: Partial<Provider.Model>): Provider.Model {
+  return {
+    id: "test-model",
+    providerID: "test-provider",
+    transforms: undefined,
+    api: {
+      id: "test-model",
+      url: "https://api.test.com",
+      npm: "@ai-sdk/openai-compatible",
+    },
+    name: "Test Model",
+    capabilities: {
+      temperature: true,
+      reasoning: false,
+      attachment: false,
+      toolcall: true,
+      input: { text: true, audio: false, image: false, video: false, pdf: false },
+      output: { text: true, audio: false, image: false, video: false, pdf: false },
+    },
+    cost: {
+      input: 0.001,
+      output: 0.002,
+      cache: { read: 0.0001, write: 0.0002 },
+    },
+    limit: {
+      context: 128000,
+      output: 8192,
+    },
+    status: "active",
+    options: {},
+    headers: {},
+    ...overrides,
+  }
+}
 
 describe("ProviderTransform.maxOutputTokens", () => {
   test("returns 32k when modelLimit > 32k", () => {
@@ -301,5 +337,225 @@ describe("ProviderTransform.message - DeepSeek reasoning content", () => {
       { type: "text", text: "Answer" },
     ])
     expect(result[0].providerOptions?.openaiCompatible?.reasoning_content).toBeUndefined()
+  })
+})
+
+describe("ProviderTransform.message - Mistral transforms", () => {
+  describe("transform detection", () => {
+    test("matches providerID === 'mistral'", () => {
+      const msgs = [
+        {
+          role: "tool",
+          content: [{ type: "tool-result", toolCallId: "call-abc123def456", result: "done" }],
+        },
+        { role: "user", content: [{ type: "text", text: "next" }] },
+      ] as any[]
+
+      const result = ProviderTransform.message(
+        msgs,
+        createModel({ providerID: "mistral", api: { id: "mistral-large", url: "https://api.mistral.ai", npm: "@ai-sdk/mistral" } }),
+      )
+
+      // Should insert assistant message between tool and user
+      expect(result).toHaveLength(3)
+      expect(result[1].role).toBe("assistant")
+    })
+
+    test("matches transforms config === 'mistral' for custom provider", () => {
+      const msgs = [
+        {
+          role: "tool",
+          content: [{ type: "tool-result", toolCallId: "call-abc123def456", result: "done" }],
+        },
+        { role: "user", content: [{ type: "text", text: "next" }] },
+      ] as any[]
+
+      const result = ProviderTransform.message(
+        msgs,
+        createModel({
+          providerID: "my-local-llm",
+          transforms: "mistral",
+          api: { id: "my-codestral", url: "http://localhost:8080/v1", npm: "@ai-sdk/openai-compatible" },
+        }),
+      )
+
+      // Should insert assistant message between tool and user
+      expect(result).toHaveLength(3)
+      expect(result[1].role).toBe("assistant")
+    })
+
+    test("matches model name containing 'codestral'", () => {
+      const msgs = [
+        {
+          role: "tool",
+          content: [{ type: "tool-result", toolCallId: "call-abc123def456", result: "done" }],
+        },
+        { role: "user", content: [{ type: "text", text: "next" }] },
+      ] as any[]
+
+      const result = ProviderTransform.message(
+        msgs,
+        createModel({
+          providerID: "some-provider",
+          api: { id: "codestral-latest", url: "https://api.example.com", npm: "@ai-sdk/openai-compatible" },
+        }),
+      )
+
+      expect(result).toHaveLength(3)
+      expect(result[1].role).toBe("assistant")
+    })
+
+    test("matches model name containing 'devstral'", () => {
+      const msgs = [
+        {
+          role: "tool",
+          content: [{ type: "tool-result", toolCallId: "call-abc123def456", result: "done" }],
+        },
+        { role: "user", content: [{ type: "text", text: "next" }] },
+      ] as any[]
+
+      const result = ProviderTransform.message(
+        msgs,
+        createModel({
+          providerID: "some-provider",
+          api: { id: "devstral-small-2505", url: "https://api.example.com", npm: "@ai-sdk/openai-compatible" },
+        }),
+      )
+
+      expect(result).toHaveLength(3)
+      expect(result[1].role).toBe("assistant")
+    })
+
+    test("matches model name containing 'pixtral'", () => {
+      const msgs = [
+        {
+          role: "tool",
+          content: [{ type: "tool-result", toolCallId: "call-abc123def456", result: "done" }],
+        },
+        { role: "user", content: [{ type: "text", text: "next" }] },
+      ] as any[]
+
+      const result = ProviderTransform.message(
+        msgs,
+        createModel({
+          providerID: "some-provider",
+          api: { id: "pixtral-large-latest", url: "https://api.example.com", npm: "@ai-sdk/openai-compatible" },
+        }),
+      )
+
+      expect(result).toHaveLength(3)
+      expect(result[1].role).toBe("assistant")
+    })
+
+    test("does not match unrelated provider", () => {
+      const msgs = [
+        {
+          role: "tool",
+          content: [{ type: "tool-result", toolCallId: "call-abc123def456", result: "done" }],
+        },
+        { role: "user", content: [{ type: "text", text: "next" }] },
+      ] as any[]
+
+      const result = ProviderTransform.message(
+        msgs,
+        createModel({
+          providerID: "openai",
+          api: { id: "gpt-4", url: "https://api.openai.com", npm: "@ai-sdk/openai" },
+        }),
+      )
+
+      // Should NOT insert assistant message
+      expect(result).toHaveLength(2)
+    })
+  })
+
+  describe("tool call ID normalization", () => {
+    test("normalizes tool call IDs to 9 alphanumeric characters", () => {
+      const msgs = [
+        {
+          role: "assistant",
+          content: [{ type: "tool-call", toolCallId: "call_abc-123-def-456", toolName: "bash", input: {} }],
+        },
+      ] as any[]
+
+      const result = ProviderTransform.message(msgs, createModel({ providerID: "mistral" }))
+
+      const content = result[0].content as any[]
+      expect(content[0].toolCallId).toBe("callabc12")
+    })
+
+    test("pads short IDs with zeros", () => {
+      const msgs = [
+        {
+          role: "assistant",
+          content: [{ type: "tool-call", toolCallId: "ab", toolName: "bash", input: {} }],
+        },
+      ] as any[]
+
+      const result = ProviderTransform.message(msgs, createModel({ providerID: "mistral" }))
+
+      const content = result[0].content as any[]
+      expect(content[0].toolCallId).toBe("ab0000000")
+    })
+
+    test("normalizes tool result IDs too", () => {
+      const msgs = [
+        {
+          role: "tool",
+          content: [{ type: "tool-result", toolCallId: "call_xyz-789-abc", result: "output" }],
+        },
+      ] as any[]
+
+      const result = ProviderTransform.message(msgs, createModel({ providerID: "mistral" }))
+
+      const content = result[0].content as any[]
+      expect(content[0].toolCallId).toBe("callxyz78")
+    })
+  })
+
+  describe("message sequence fixing", () => {
+    test("inserts assistant message between tool and user", () => {
+      const msgs = [
+        { role: "user", content: [{ type: "text", text: "do something" }] },
+        {
+          role: "assistant",
+          content: [{ type: "tool-call", toolCallId: "abc123def", toolName: "bash", input: {} }],
+        },
+        {
+          role: "tool",
+          content: [{ type: "tool-result", toolCallId: "abc123def", result: "done" }],
+        },
+        { role: "user", content: [{ type: "text", text: "thanks" }] },
+      ] as any[]
+
+      const result = ProviderTransform.message(msgs, createModel({ providerID: "mistral" }))
+
+      expect(result).toHaveLength(5)
+      expect(result[0].role).toBe("user")
+      expect(result[1].role).toBe("assistant")
+      expect(result[2].role).toBe("tool")
+      expect(result[3].role).toBe("assistant")
+      expect(result[3].content).toEqual([{ type: "text", text: "Done." }])
+      expect(result[4].role).toBe("user")
+    })
+
+    test("does not insert assistant if tool is followed by assistant", () => {
+      const msgs = [
+        {
+          role: "tool",
+          content: [{ type: "tool-result", toolCallId: "abc123def", result: "done" }],
+        },
+        {
+          role: "assistant",
+          content: [{ type: "text", text: "I see the result" }],
+        },
+      ] as any[]
+
+      const result = ProviderTransform.message(msgs, createModel({ providerID: "mistral" }))
+
+      expect(result).toHaveLength(2)
+      expect(result[0].role).toBe("tool")
+      expect(result[1].role).toBe("assistant")
+    })
   })
 })

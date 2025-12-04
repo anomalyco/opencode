@@ -302,6 +302,7 @@ export namespace Provider {
     .object({
       id: z.string(),
       providerID: z.string(),
+      transforms: z.enum(["mistral", "deepseek"]).optional(),
       api: z.object({
         id: z.string(),
         url: z.string(),
@@ -378,6 +379,7 @@ export namespace Provider {
     return {
       id: model.id,
       providerID: provider.id,
+      transforms: undefined,
       name: model.name,
       api: {
         id: model.id,
@@ -520,6 +522,7 @@ export namespace Provider {
           status: model.status ?? existing?.status ?? "active",
           name,
           providerID,
+          transforms: provider.transforms ?? existing?.transforms,
           capabilities: {
             temperature: model.temperature ?? existing?.capabilities.temperature ?? false,
             reasoning: model.reasoning ?? existing?.capabilities.reasoning ?? false,

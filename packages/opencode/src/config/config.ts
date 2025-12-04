@@ -475,6 +475,10 @@ export namespace Config {
       whitelist: z.array(z.string()).optional(),
       blacklist: z.array(z.string()).optional(),
       models: z.record(z.string(), ModelsDev.Model.partial()).optional(),
+      transforms: z
+        .enum(["mistral", "deepseek"])
+        .optional()
+        .describe("Apply specific provider transforms for custom providers serving compatible models"),
       options: z
         .object({
           apiKey: z.string().optional(),

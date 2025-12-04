@@ -21,7 +21,11 @@ export namespace ProviderTransform {
         return msg
       })
     }
-    if (model.providerID === "mistral" || model.api.id.toLowerCase().includes("mistral")) {
+    const isMistral =
+      model.transforms === "mistral" ||
+      model.providerID === "mistral" ||
+      /mistral|codestral|devstral|pixtral/i.test(model.api.id)
+    if (isMistral) {
       const result: ModelMessage[] = []
       for (let i = 0; i < msgs.length; i++) {
         const msg = msgs[i]
@@ -67,7 +71,11 @@ export namespace ProviderTransform {
     // - With tool calls: Include reasoning_content in providerOptions so model can continue reasoning
     // - Without tool calls: Strip reasoning (new turn doesn't need previous reasoning)
     // See: https://api-docs.deepseek.com/guides/thinking_mode
-    if (model.providerID === "deepseek" || model.api.id.toLowerCase().includes("deepseek")) {
+    const isDeepSeek =
+      model.transforms === "deepseek" ||
+      model.providerID === "deepseek" ||
+      model.api.id.toLowerCase().includes("deepseek")
+    if (isDeepSeek) {
       return msgs.map((msg) => {
         if (msg.role === "assistant" && Array.isArray(msg.content)) {
           const reasoningParts = msg.content.filter((part: any) => part.type === "reasoning")
