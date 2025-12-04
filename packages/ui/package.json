@@ -1,6 +1,6 @@
 {
   "name": "@opencode-ai/ui",
-  "version": "1.0.131",
+  "version": "1.0.132",
   "type": "module",
   "exports": {
     "./*": "./src/components/*.tsx",
