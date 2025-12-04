@@ -221,6 +221,8 @@ export function GraphSection() {
   const isCurrentMonth = () => store.year === now.getFullYear() && store.month === now.getMonth()
 
   const chartConfig = createMemo((): ChartConfiguration | null => {
+    if (typeof window === "undefined") return null
+
     const data = getData()
     const dates = getDates()
     if (!data?.usage?.length) return null
