@@ -56,7 +56,7 @@ export namespace Pty {
   interface ActiveSession {
     info: Info
     process: IPty
-    history: string
+    buffer: string
     subscribers: Set<WSContext>
   }
 
@@ -108,12 +108,15 @@ export namespace Pty {
     const session: ActiveSession = {
       info,
       process: ptyProcess,
-      history: "",
+      buffer: "",
       subscribers: new Set(),
     }
     state().set(id, session)
     ptyProcess.onData((data) => {
-      session.history += data
+      if (session.subscribers.size === 0) {
+        session.buffer += data
+        return
+      }
       for (const ws of session.subscribers) {
         if (ws.readyState === 1) {
           ws.send(data)
@@ -179,8 +182,9 @@ export namespace Pty {
     }
     log.info("client connected to session", { id })
     session.subscribers.add(ws)
-    if (session.history) {
-      ws.send(session.history)
+    if (session.buffer) {
+      ws.send(session.buffer)
+      session.buffer = ""
     }
     return {
       onMessage: (message: string | ArrayBuffer) => {

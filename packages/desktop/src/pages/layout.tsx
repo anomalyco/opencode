@@ -1,9 +1,9 @@
 import { createMemo, For, ParentProps, Show } from "solid-js"
 import { DateTime } from "luxon"
-import { A, useParams } from "@solidjs/router"
+import { A, useNavigate, useParams } from "@solidjs/router"
 import { useLayout } from "@/context/layout"
 import { useGlobalSync } from "@/context/global-sync"
-import { base64Encode } from "@/utils"
+import { base64Decode, base64Encode } from "@/utils"
 import { Mark } from "@opencode-ai/ui/logo"
 import { Button } from "@opencode-ai/ui/button"
 import { Icon } from "@opencode-ai/ui/icon"
@@ -12,11 +12,21 @@ import { Tooltip } from "@opencode-ai/ui/tooltip"
 import { Collapsible } from "@opencode-ai/ui/collapsible"
 import { DiffChanges } from "@opencode-ai/ui/diff-changes"
 import { getFilename } from "@opencode-ai/util/path"
+import { Select } from "@opencode-ai/ui/select"
+import { Session } from "@opencode-ai/sdk/client"
 
 export default function Layout(props: ParentProps) {
+  const navigate = useNavigate()
   const params = useParams()
   const globalSync = useGlobalSync()
   const layout = useLayout()
+  const currentDirectory = createMemo(() => base64Decode(params.dir ?? ""))
+  const sessions = createMemo(() => globalSync.child(currentDirectory())[0].session ?? [])
+  const currentSession = createMemo(() => sessions().find((s) => s.id === params.id) ?? sessions().at(0))
+
+  function navigateToSession(session: Session | undefined) {
+    navigate(`/${params.dir}/session/${session?.id}`)
+  }
 
   const handleOpenProject = async () => {
     // layout.projects.open(dir.)
@@ -24,7 +34,7 @@ export default function Layout(props: ParentProps) {
 
   return (
     <div class="relative h-screen flex flex-col">
-      <header class="h-12 shrink-0 bg-background-base border-b border-border-weak-base">
+      <header class="h-12 shrink-0 bg-background-base border-b border-border-weak-base flex">
         <A
           href="/"
           classList={{
@@ -36,6 +46,62 @@ export default function Layout(props: ParentProps) {
         >
           <Mark class="shrink-0" />
         </A>
+        <div class="pl-4 px-6 flex items-center justify-between gap-4 w-full">
+          <div class="flex items-center gap-3">
+            <div class="flex items-center gap-2">
+              <Select
+                options={layout.projects.list().map((project) => getFilename(project.directory))}
+                current={getFilename(currentDirectory())}
+                class="text-14-regular text-text-base"
+                variant="ghost"
+              />
+              <div class="text-text-weaker">/</div>
+              <Select
+                options={sessions()}
+                current={currentSession()}
+                label={(x) => x.title}
+                value={(x) => x.id}
+                onSelect={navigateToSession}
+                class="text-14-regular text-text-base max-w-3xs"
+                variant="ghost"
+              />
+            </div>
+            <Button as={A} href={`/${params.dir}/session`} icon="plus-small">
+              New session
+            </Button>
+          </div>
+          <div class="flex items-center gap-4">
+            <Tooltip
+              class="shrink-0"
+              value={
+                <div class="flex items-center gap-2">
+                  <span>Toggle terminal</span>
+                  <span class="text-icon-base text-12-medium">Ctrl `</span>
+                </div>
+              }
+            >
+              <Button variant="ghost" class="group/terminal-toggle size-6 p-0" onClick={layout.terminal.toggle}>
+                <div class="relative flex items-center justify-center size-4 [&>*]:absolute [&>*]:inset-0">
+                  <Icon
+                    size="small"
+                    name={layout.terminal.opened() ? "layout-bottom-full" : "layout-bottom"}
+                    class="group-hover/terminal-toggle:hidden"
+                  />
+                  <Icon
+                    size="small"
+                    name="layout-bottom-partial"
+                    class="hidden group-hover/terminal-toggle:inline-block"
+                  />
+                  <Icon
+                    size="small"
+                    name={layout.terminal.opened() ? "layout-bottom" : "layout-bottom-full"}
+                    class="hidden group-active/terminal-toggle:inline-block"
+                  />
+                </div>
+              </Button>
+            </Tooltip>
+          </div>
+        </div>
       </header>
       <div class="h-[calc(100vh-3rem)] flex">
         <div
@@ -197,7 +263,7 @@ export default function Layout(props: ParentProps) {
             </Tooltip>
           </div>
         </div>
-        <main class="size-full overflow-x-hidden">{props.children}</main>
+        <main class="size-full overflow-x-hidden flex flex-col items-start">{props.children}</main>
       </div>
     </div>
   )

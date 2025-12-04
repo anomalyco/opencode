@@ -1,22 +1,30 @@
 import { init, Terminal as Term, FitAddon } from "ghostty-web"
-import { ComponentProps, onMount, splitProps } from "solid-js"
-import { createReconnectingWS } from "@solid-primitives/websocket"
+import { ComponentProps, onCleanup, onMount, splitProps } from "solid-js"
+import { createReconnectingWS, ReconnectingWebSocket } from "@solid-primitives/websocket"
 import { useSDK } from "@/context/sdk"
+import { SerializeAddon } from "@/addons/serialize"
+import { LocalPTY } from "@/context/session"
 
 await init()
 
 export interface TerminalProps extends ComponentProps<"div"> {
-  id: string
+  pty: LocalPTY
+  onSubmit?: () => void
+  onCleanup?: (pty: LocalPTY) => void
 }
 
 export const Terminal = (props: TerminalProps) => {
   const sdk = useSDK()
   let container!: HTMLDivElement
-  const [local, others] = splitProps(props, ["id", "class", "classList"])
+  const [local, others] = splitProps(props, ["pty", "class", "classList"])
+  let ws: ReconnectingWebSocket
+  let term: Term
+  let serializeAddon: SerializeAddon
+  let fitAddon: FitAddon
 
   onMount(async () => {
-    const ws = createReconnectingWS(sdk.url + `/pty/${local.id}/connect?directory=${encodeURIComponent(sdk.directory)}`)
-    const term = new Term({
+    ws = createReconnectingWS(sdk.url + `/pty/${local.pty.id}/connect?directory=${encodeURIComponent(sdk.directory)}`)
+    term = new Term({
       cursorBlink: true,
       fontSize: 14,
       fontFamily: "TX-02, monospace",
@@ -27,10 +35,37 @@ export const Terminal = (props: TerminalProps) => {
       },
       scrollback: 10_000,
     })
+    term.attachCustomKeyEventHandler((event) => {
+      // allow for ctrl-` to toggle terminal in parent
+      if (event.ctrlKey && event.key.toLowerCase() === "`") {
+        event.preventDefault()
+        return true
+      }
+      return false
+    })
 
-    const fitAddon = new FitAddon()
+    fitAddon = new FitAddon()
+    serializeAddon = new SerializeAddon()
+    term.loadAddon(serializeAddon)
     term.loadAddon(fitAddon)
+
     term.open(container)
+
+    if (local.pty.buffer) {
+      const originalSize = { cols: term.cols, rows: term.rows }
+      let resized = false
+      if (local.pty.rows && local.pty.cols) {
+        term.resize(local.pty.cols, local.pty.rows)
+        resized = true
+      }
+      term.write(local.pty.buffer)
+      if (local.pty.scrollY) {
+        term.scrollToLine(local.pty.scrollY)
+      }
+      if (resized) {
+        term.resize(originalSize.cols, originalSize.rows)
+      }
+    }
 
     container.focus()
 
@@ -40,7 +75,7 @@ export const Terminal = (props: TerminalProps) => {
     term.onResize(async (size) => {
       if (ws && ws.readyState === WebSocket.OPEN) {
         await sdk.client.pty.update({
-          path: { id: local.id },
+          path: { id: local.pty.id },
           body: {
             size: {
               cols: size.cols,
@@ -55,13 +90,18 @@ export const Terminal = (props: TerminalProps) => {
         ws.send(data)
       }
     })
+    term.onKey((key) => {
+      if (key.key == "Enter") {
+        props.onSubmit?.()
+      }
+    })
     // term.onScroll((ydisp) => {
     // console.log("Scroll position:", ydisp)
     // })
     ws.addEventListener("open", () => {
       console.log("WebSocket connected")
       sdk.client.pty.update({
-        path: { id: local.id },
+        path: { id: local.pty.id },
         body: {
           size: {
             cols: term.cols,
@@ -79,6 +119,21 @@ export const Terminal = (props: TerminalProps) => {
     ws.addEventListener("close", () => {
       console.log("WebSocket disconnected")
     })
+  })
+
+  onCleanup(() => {
+    if (serializeAddon && props.onCleanup) {
+      const buffer = serializeAddon.serialize()
+      props.onCleanup({
+        ...local.pty,
+        buffer,
+        rows: term.rows,
+        cols: term.cols,
+        scrollY: term.getViewportY(),
+      })
+    }
+    ws?.close()
+    term?.dispose()
   })
 
   return (
