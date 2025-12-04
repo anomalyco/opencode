@@ -63,6 +63,7 @@ import { useKV } from "../../context/kv.tsx"
 import { Editor } from "../../util/editor"
 import stripAnsi from "strip-ansi"
 import { Footer } from "./footer.tsx"
+import { usePromptRef } from "../../context/prompt"
 
 addDefaultParsers(parsers.parsers)
 
@@ -99,6 +100,7 @@ export function Session() {
   const sync = useSync()
   const kv = useKV()
   const { theme } = useTheme()
+  const promptRef = usePromptRef()
   const session = createMemo(() => sync.session.get(route.sessionID)!)
   const messages = createMemo(() => sync.data.message[route.sessionID] ?? [])
   const permissions = createMemo(() => sync.data.permission[route.sessionID] ?? [])
@@ -949,7 +951,10 @@ export function Session() {
             </scrollbox>
             <box flexShrink={0}>
               <Prompt
-                ref={(r) => (prompt = r)}
+                ref={(r) => {
+                  prompt = r
+                  promptRef.set(r)
+                }}
                 disabled={permissions().length > 0}
                 onSubmit={() => {
                   toBottom()
