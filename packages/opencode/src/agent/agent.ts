@@ -3,6 +3,7 @@ import z from "zod"
 import { Provider } from "../provider/provider"
 import { generateObject, type ModelMessage } from "ai"
 import PROMPT_GENERATE from "./generate.txt"
+import PROMPT_KNOWLEDGE_EXTRACTOR from "../session/prompt/knowledge-extractor.txt"
 import { SystemPrompt } from "../session/system"
 import { Instance } from "../project/instance"
 import { mergeDeep } from "remeda"
@@ -165,6 +166,31 @@ export namespace Agent {
           ...defaultTools,
         },
         mode: "primary",
+        builtIn: true,
+      },
+      "knowledge-extractor": {
+        name: "knowledge-extractor",
+        description: "Extracts reusable knowledge from session transcripts. Internal use only.",
+        tools: {
+          read: true,
+          write: true,
+          edit: true,
+          glob: true,
+          grep: true,
+          task: false,
+          bash: false,
+          webfetch: false,
+          todoread: false,
+          todowrite: false,
+        },
+        prompt: PROMPT_KNOWLEDGE_EXTRACTOR,
+        options: {},
+        permission: {
+          edit: "allow",
+          bash: { "*": "deny" },
+          webfetch: "deny",
+        },
+        mode: "subagent",
         builtIn: true,
       },
     }

@@ -1,6 +1,11 @@
 {
   "$schema": "https://opencode.ai/config.json",
   "plugin": ["opencode-openai-codex-auth"],
+  "compaction": {
+    "extract_knowledge": true,
+    "cleanup_transcripts": true,
+    "auto_load_knowledge": false,
+  },
   // "enterprise": {
   //   "url": "https://enterprise.dev.opencode.ai",
   // },

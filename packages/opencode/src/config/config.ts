@@ -645,6 +645,26 @@ export namespace Config {
         })
         .optional(),
       tools: z.record(z.string(), z.boolean()).optional(),
+      compaction: z
+        .object({
+          extract_knowledge: z
+            .boolean()
+            .optional()
+            .default(false)
+            .describe("Extract and persist knowledge when compacting sessions"),
+          cleanup_transcripts: z
+            .boolean()
+            .optional()
+            .default(true)
+            .describe("Delete session transcripts after knowledge extraction"),
+          auto_load_knowledge: z
+            .boolean()
+            .optional()
+            .default(false)
+            .describe("Auto-load all knowledge files into system prompt (vs only referenced)"),
+        })
+        .optional()
+        .describe("Compaction settings for knowledge extraction"),
       enterprise: z
         .object({
           url: z.string().optional().describe("Enterprise URL"),

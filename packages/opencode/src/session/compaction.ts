@@ -16,6 +16,9 @@ import { ProviderTransform } from "@/provider/transform"
 import { SessionProcessor } from "./processor"
 import { fn } from "@/util/fn"
 import { mergeDeep, pipe } from "remeda"
+import { SessionTranscript } from "./transcript"
+import { SessionKnowledge } from "./knowledge"
+import path from "path"
 
 export namespace SessionCompaction {
   const log = Log.create({ service: "session.compaction" })
@@ -97,10 +100,49 @@ export namespace SessionCompaction {
     abort: AbortSignal
     auto: boolean
   }) {
-    const cfg = await Config.get()
+    const config = await Config.get()
+    let knowledgeFiles: string[] = []
+
+    // Find the compaction part from the last user message to update extraction status
+    const lastUserMsg = input.messages.findLast((m) => m.info.role === "user")
+    let compactionPart = lastUserMsg?.parts.find((p) => p.type === "compaction") as MessageV2.CompactionPart | undefined
+
+    // Stage 1: Extract knowledge (if enabled)
+    if (config.compaction?.extract_knowledge) {
+      log.info("extracting knowledge before compaction", { sessionID: input.sessionID })
+      await SessionKnowledge.ensureDirectories()
+
+      const sessDir = path.join(Instance.directory, ".opencode", "sess")
+      const transcriptPath = path.join(sessDir, `${input.sessionID}.md`)
+      await SessionTranscript.writeToFile(input.sessionID, transcriptPath)
+
+      const result = await SessionKnowledge.extract({
+        sessionID: input.sessionID,
+        transcriptPath,
+        model: input.model,
+      })
+
+      knowledgeFiles = result.knowledgeFiles
+      log.info("knowledge extraction complete", { files: knowledgeFiles, substantial: result.hasSubstantialKnowledge })
+
+      // Cleanup transcript if configured
+      if (config.compaction?.cleanup_transcripts !== false) {
+        await Bun.file(transcriptPath)
+          .delete()
+          .catch(() => {})
+      }
+    }
+
+    // Stage 2: Generate summary with knowledge references
     const model = await Provider.getModel(input.model.providerID, input.model.modelID)
     const language = await Provider.getLanguage(model)
     const system = [...SystemPrompt.compaction(model.providerID)]
+
+    const knowledgeContext =
+      knowledgeFiles.length > 0
+        ? `\n\nThe following knowledge files were created or updated during this session and should be referenced in your summary:\n${knowledgeFiles.map((f) => `- ${f}`).join("\n")}`
+        : ""
+
     const msg = (await Session.updateMessage({
       id: Identifier.ascending("message"),
       role: "assistant",
@@ -174,7 +216,9 @@ export namespace SessionCompaction {
           content: [
             {
               type: "text",
-              text: "Summarize our conversation above. This summary will be the only context available when the conversation continues, so preserve critical information including: what was accomplished, current work in progress, files involved, next steps, and any key user requests or constraints. Be concise but detailed enough that work can continue seamlessly.",
+              text:
+                "Summarize our conversation above. This summary will be the only context available when the conversation continues, so preserve critical information including: what was accomplished, current work in progress, files involved, next steps, and any key user requests or constraints. Be concise but detailed enough that work can continue seamlessly." +
+                knowledgeContext,
             },
           ],
         },
@@ -193,7 +237,7 @@ export namespace SessionCompaction {
           },
         ],
       }),
-      experimental_telemetry: { isEnabled: cfg.experimental?.openTelemetry },
+      experimental_telemetry: { isEnabled: config.experimental?.openTelemetry },
     })
     if (result === "continue" && input.auto) {
       const continueMsg = await Session.updateMessage({

@@ -145,4 +145,29 @@ export namespace SystemPrompt {
         return [PROMPT_TITLE]
     }
   }
+
+  export async function knowledge(files?: string[]): Promise<string[]> {
+    const knowledgeDir = path.join(Instance.directory, ".opencode", "knowledge")
+
+    let targets: string[]
+    if (files && files.length > 0) {
+      targets = files.map((f) => (path.isAbsolute(f) ? f : path.join(knowledgeDir, f)))
+    } else {
+      const config = await Config.get()
+      if (!config.compaction?.auto_load_knowledge) return []
+      targets = await Array.fromAsync(new Bun.Glob("*.md").scan({ cwd: knowledgeDir, absolute: true })).catch(() => [])
+    }
+
+    const contents = await Promise.all(
+      targets.map(async (file) => {
+        const text = await Bun.file(file)
+          .text()
+          .catch(() => "")
+        if (!text) return ""
+        return `Knowledge from: ${file}\n${text}`
+      }),
+    )
+
+    return contents.filter(Boolean)
+  }
 }

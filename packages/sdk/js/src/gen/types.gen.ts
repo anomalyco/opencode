@@ -379,6 +379,11 @@ export type CompactionPart = {
   messageID: string
   type: "compaction"
   auto: boolean
+  extraction?: {
+    status: "pending" | "running" | "completed"
+    childSessionID?: string
+    files?: Array<string>
+  }
 }
 
 export type Part =
@@ -1293,6 +1298,23 @@ export type Config = {
   }
   tools?: {
     [key: string]: boolean
+  }
+  /**
+   * Compaction settings for knowledge extraction
+   */
+  compaction?: {
+    /**
+     * Extract and persist knowledge when compacting sessions
+     */
+    extract_knowledge?: boolean
+    /**
+     * Delete session transcripts after knowledge extraction
+     */
+    cleanup_transcripts?: boolean
+    /**
+     * Auto-load all knowledge files into system prompt (vs only referenced)
+     */
+    auto_load_knowledge?: boolean
   }
   enterprise?: {
     /**

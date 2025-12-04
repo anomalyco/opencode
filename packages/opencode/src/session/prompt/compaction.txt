@@ -9,4 +9,13 @@ Focus on information that would be helpful for continuing the conversation, incl
 - Key user requests, constraints, or preferences that should persist
 - Important technical decisions and why they were made
 
+If knowledge files were created or updated during this session, or if previously created knowledge files were referenced, include them in your summary using this format:
+
+<knowledge_references>
+.opencode/knowledge/example-file.md
+.opencode/knowledge/another-file.md
+</knowledge_references>
+
+These referenced files will be automatically loaded into context when the session continues, providing relevant background knowledge.
+
 Your summary should be comprehensive enough to provide context but concise enough to be quickly understood.
