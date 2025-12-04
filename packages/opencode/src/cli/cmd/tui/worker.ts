@@ -4,6 +4,7 @@ import { Log } from "@/util/log"
 import { Instance } from "@/project/instance"
 import { Rpc } from "@/util/rpc"
 import { upgrade } from "@/cli/upgrade"
+import type { BunWebSocketData } from "hono/bun"
 
 await Log.init({
   print: process.argv.includes("--print-logs"),
@@ -26,7 +27,7 @@ process.on("uncaughtException", (e) => {
   })
 })
 
-let server: Bun.Server<undefined>
+let server: Bun.Server<BunWebSocketData>
 export const rpc = {
   async server(input: { port: number; hostname: string }) {
     if (server) await server.stop(true)
