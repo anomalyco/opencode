@@ -13,6 +13,10 @@ inputs:
     description: "Share the opencode session (defaults to true for public repos)"
     required: false
 
+  prompt:
+    description: "Custom prompt to override the default prompt"
+    required: false
+
 runs:
   using: "composite"
   steps:
@@ -27,3 +31,4 @@ runs:
       env:
         MODEL: ${{ inputs.model }}
         SHARE: ${{ inputs.share }}
+        PROMPT: ${{ inputs.prompt }}

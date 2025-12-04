@@ -82,6 +82,7 @@ Or you can set it up manually.
 
 - `model`: The model to use with opencode. Takes the format of `provider/model`. This is **required**.
 - `share`: Whether to share the opencode session. Defaults to **true** for public repositories.
+- `prompt`: Optional custom prompt to override the default behavior. Use this to customize how opencode processes requests.
 - `token`: Optional GitHub access token for performing operations such as creating comments, committing changes, and opening pull requests. By default, opencode uses the installation access token from the opencode GitHub App, so commits, comments, and pull requests appear as coming from the app.
 
   Alternatively, you can use the GitHub Action runner's [built-in `GITHUB_TOKEN`](https://docs.github.com/en/actions/tutorials/authenticate-with-github_token) without installing the opencode GitHub App. Just make sure to grant the required permissions in your workflow:
@@ -95,6 +96,25 @@ Or you can set it up manually.
   ```
 
   You can also use a [personal access tokens](https://docs.github.com/en/authentication/keeping-your-account-and-data-secure/managing-your-personal-access-tokens)(PAT) if preferred.
+
+---
+
+## Custom prompts
+
+Override the default prompt to customize opencode's behavior for your workflow.
+
+```yaml title=".github/workflows/opencode.yml"
+- uses: sst/opencode/github@latest
+  with:
+    model: anthropic/claude-sonnet-4-5
+    prompt: |
+      Review this pull request:
+      - Check for code quality issues
+      - Look for potential bugs
+      - Suggest improvements
+```
+
+This is useful for enforcing specific review criteria, coding standards, or focus areas relevant to your project.
 
 ---
 
