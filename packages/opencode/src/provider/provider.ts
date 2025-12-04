@@ -716,7 +716,7 @@ export namespace Provider {
       }
 
       if (!options["baseURL"]) options["baseURL"] = model.api.url
-      if (!options["apiKey"]) options["apiKey"] = provider.key
+      if (options["apiKey"] === undefined && provider.key) options["apiKey"] = provider.key
       if (model.headers)
         options["headers"] = {
           ...options["headers"],
