@@ -1,12 +1,14 @@
-use std::net::SocketAddr;
-use std::process::Command;
-use std::sync::{Arc, Mutex};
-use std::time::{Duration, Instant};
-
-use tauri::{AppHandle, Manager, RunEvent, WebviewUrl, WebviewWindow};
+use std::{
+    net::SocketAddr,
+    process::Command,
+    sync::{Arc, Mutex},
+    time::{Duration, Instant},
+};
+use tauri::{App, AppHandle, Manager, RunEvent, WebviewUrl, WebviewWindow};
 use tauri_plugin_dialog::{DialogExt, MessageDialogButtons, MessageDialogResult};
 use tauri_plugin_shell::process::{CommandChild, CommandEvent};
 use tauri_plugin_shell::ShellExt;
+use tauri_plugin_updater::UpdaterExt;
 use tokio::net::TcpSocket;
 
 #[derive(Clone)]
@@ -94,10 +96,8 @@ async fn is_server_running(port: u16) -> bool {
 }
 
 #[cfg_attr(mobile, tauri::mobile_entry_point)]
-#[tokio::main]
-pub async fn run() {
-    let port = get_sidecar_port();
-    let socket_connected = is_server_running(port).await;
+pub fn run() {
+    let updater_enabled = option_env!("TAURI_SIGNING_PRIVATE_KEY").is_some();
 
     let mut builder = tauri::Builder::default()
         .plugin(tauri_plugin_dialog::init())
@@ -106,7 +106,14 @@ pub async fn run() {
         .setup(move |app| {
             let app = app.handle().clone();
 
-            tauri::async_runtime::spawn(async move {
+            if updater_enabled {
+                tokio::spawn(run_updater(app.clone()));
+            }
+
+            tokio::spawn(async move {
+                let port = get_sidecar_port();
+                let socket_connected = is_server_running(port).await;
+
                 let should_spawn_sidecar = if socket_connected {
                     let res = app
                         .dialog()
@@ -174,7 +181,7 @@ pub async fn run() {
             Ok(())
         });
 
-    if option_env!("TAURI_SIGNING_PRIVATE_KEY").is_some() {
+    if updater_enabled {
         builder = builder.plugin(tauri_plugin_updater::Builder::new().build());
     }
 
@@ -197,4 +204,40 @@ pub async fn run() {
                 println!("Killed server");
             }
         });
+}
+
+async fn run_updater(app: AppHandle) {
+    let update = match app.updater().unwrap().check().await {
+        Ok(u) => u,
+        Err(e) => {
+            app.dialog()
+                .message("Failed to check for updates")
+                .show(|| {});
+            return;
+        }
+    };
+
+    let Some(update) = update else {
+        return;
+    };
+
+    let Ok(update_bytes) = update.download(on_chunk, on_download_finish).await else {};
+
+    let should_update = app
+        .dialog()
+        .message(format!(
+            "Version {} of OpenCode is available, would you like to install it?",
+            &update.version
+        ))
+        .blocking_show();
+
+    if !should_update {
+        return;
+    }
+
+    if update.install(update_bytes).is_err() {
+        app.dialog()
+            .message(format!("Failed to install update"))
+            .blocking_show()
+    }
 }
