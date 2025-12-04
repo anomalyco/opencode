@@ -20,7 +20,6 @@
 
 [data-component="select-content"] {
   min-width: 4rem;
-  max-width: 23rem;
   overflow: hidden;
   border-radius: var(--radius-md);
   border-width: 1px;
@@ -40,7 +39,6 @@
   }
 
   [data-slot="select-select-content-list"] {
-    min-height: 2rem;
     overflow-y: auto;
     max-height: 12rem;
     white-space: nowrap;

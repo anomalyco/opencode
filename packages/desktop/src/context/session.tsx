@@ -8,25 +8,14 @@ import { pipe, sumBy } from "remeda"
 import { AssistantMessage, UserMessage } from "@opencode-ai/sdk"
 import { useParams } from "@solidjs/router"
 import { base64Encode } from "@/utils"
-import { useSDK } from "./sdk"
-
-export type LocalPTY = {
-  id: string
-  title: string
-  rows?: number
-  cols?: number
-  buffer?: string
-  scrollY?: number
-}
 
 export const { use: useSession, provider: SessionProvider } = createSimpleContext({
   name: "Session",
   init: () => {
-    const sdk = useSDK()
     const params = useParams()
     const sync = useSync()
     const name = createMemo(
-      () => `______${base64Encode(sync.data.project.worktree)}/session${params.id ? "/" + params.id : ""}`,
+      () => `___${base64Encode(sync.data.project.worktree)}/session${params.id ? "/" + params.id : ""}`,
     )
 
     const [store, setStore] = makePersisted(
@@ -34,21 +23,16 @@ export const { use: useSession, provider: SessionProvider } = createSimpleContex
         messageId?: string
         tabs: {
           active?: string
-          all: string[]
+          opened: string[]
         }
         prompt: Prompt
         cursor?: number
-        terminals: {
-          active?: string
-          all: LocalPTY[]
-        }
       }>({
         tabs: {
-          all: [],
+          opened: [],
         },
         prompt: clonePrompt(DEFAULT_PROMPT),
         cursor: undefined,
-        terminals: { all: [] },
       }),
       {
         name: name(),
@@ -154,7 +138,7 @@ export const { use: useSession, provider: SessionProvider } = createSimpleContex
           setStore("tabs", "active", tab)
         },
         setOpenedTabs(tabs: string[]) {
-          setStore("tabs", "all", tabs)
+          setStore("tabs", "opened", tabs)
         },
         async openTab(tab: string) {
           if (tab === "chat") {
@@ -162,8 +146,8 @@ export const { use: useSession, provider: SessionProvider } = createSimpleContex
             return
           }
           if (tab !== "review") {
-            if (!store.tabs.all.includes(tab)) {
-              setStore("tabs", "all", [...store.tabs.all, tab])
+            if (!store.tabs.opened.includes(tab)) {
+              setStore("tabs", "opened", [...store.tabs.opened, tab])
             }
           }
           setStore("tabs", "active", tab)
@@ -172,84 +156,24 @@ export const { use: useSession, provider: SessionProvider } = createSimpleContex
           batch(() => {
             setStore(
               "tabs",
-              "all",
-              store.tabs.all.filter((x) => x !== tab),
+              "opened",
+              store.tabs.opened.filter((x) => x !== tab),
             )
             if (store.tabs.active === tab) {
-              const index = store.tabs.all.findIndex((f) => f === tab)
-              const previous = store.tabs.all[Math.max(0, index - 1)]
+              const index = store.tabs.opened.findIndex((f) => f === tab)
+              const previous = store.tabs.opened[Math.max(0, index - 1)]
               setStore("tabs", "active", previous)
             }
           })
         },
         moveTab(tab: string, to: number) {
-          const index = store.tabs.all.findIndex((f) => f === tab)
+          const index = store.tabs.opened.findIndex((f) => f === tab)
           if (index === -1) return
           setStore(
             "tabs",
-            "all",
+            "opened",
             produce((opened) => {
               opened.splice(to, 0, opened.splice(index, 1)[0])
-            }),
-          )
-        },
-      },
-      terminal: {
-        all: createMemo(() => Object.values(store.terminals.all)),
-        active: createMemo(() => store.terminals.active),
-        new() {
-          sdk.client.pty.create({ body: { title: `Terminal ${store.terminals.all.length + 1}` } }).then((pty) => {
-            const id = pty.data?.id
-            if (!id) return
-            batch(() => {
-              setStore("terminals", "all", [
-                ...store.terminals.all,
-                {
-                  id,
-                  title: pty.data?.title ?? "Terminal",
-                  // rows: pty.data?.rows ?? 24,
-                  // cols: pty.data?.cols ?? 80,
-                  // buffer: "",
-                  // scrollY: 0,
-                },
-              ])
-              setStore("terminals", "active", id)
-            })
-          })
-        },
-        update(pty: Partial<LocalPTY> & { id: string }) {
-          setStore("terminals", "all", (x) => x.map((x) => (x.id === pty.id ? { ...x, ...pty } : x)))
-          sdk.client.pty.update({
-            path: { id: pty.id },
-            body: { title: pty.title, size: pty.cols && pty.rows ? { rows: pty.rows, cols: pty.cols } : undefined },
-          })
-        },
-        open(id: string) {
-          setStore("terminals", "active", id)
-        },
-        async close(id: string) {
-          batch(() => {
-            setStore(
-              "terminals",
-              "all",
-              store.terminals.all.filter((x) => x.id !== id),
-            )
-            if (store.terminals.active === id) {
-              const index = store.terminals.all.findIndex((f) => f.id === id)
-              const previous = store.tabs.all[Math.max(0, index - 1)]
-              setStore("terminals", "active", previous)
-            }
-          })
-          await sdk.client.pty.remove({ path: { id } })
-        },
-        move(id: string, to: number) {
-          const index = store.terminals.all.findIndex((f) => f.id === id)
-          if (index === -1) return
-          setStore(
-            "terminals",
-            "all",
-            produce((all) => {
-              all.splice(to, 0, all.splice(index, 1)[0])
             }),
           )
         },

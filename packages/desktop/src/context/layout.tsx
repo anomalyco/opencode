@@ -15,16 +15,12 @@ export const { use: useLayout, provider: LayoutProvider } = createSimpleContext(
           opened: true,
           width: 280,
         },
-        terminal: {
-          opened: false,
-          height: 280,
-        },
         review: {
           state: "pane" as "pane" | "tab",
         },
       }),
       {
-        name: "____default-layout",
+        name: "___default-layout",
       },
     )
 
@@ -63,22 +59,6 @@ export const { use: useLayout, provider: LayoutProvider } = createSimpleContext(
         width: createMemo(() => store.sidebar.width),
         resize(width: number) {
           setStore("sidebar", "width", width)
-        },
-      },
-      terminal: {
-        opened: createMemo(() => store.terminal.opened),
-        open() {
-          setStore("terminal", "opened", true)
-        },
-        close() {
-          setStore("terminal", "opened", false)
-        },
-        toggle() {
-          setStore("terminal", "opened", (x) => !x)
-        },
-        height: createMemo(() => store.terminal.height),
-        resize(height: number) {
-          setStore("terminal", "height", height)
         },
       },
       review: {

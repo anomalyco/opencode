@@ -1,6 +1,7 @@
-[data-component="tooltip-trigger"] {
-  display: flex;
-}
+/* [data-component="tooltip-trigger"] { */
+/*   display: flex; */
+/*   align-items: center; */
+/* } */
 
 [data-component="tooltip"] {
   z-index: 1000;

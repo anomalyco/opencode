@@ -1,10 +1,10 @@
 import { Select as Kobalte } from "@kobalte/core/select"
-import { createMemo, splitProps, type ComponentProps } from "solid-js"
+import { createMemo, type ComponentProps } from "solid-js"
 import { pipe, groupBy, entries, map } from "remeda"
 import { Button, ButtonProps } from "./button"
 import { Icon } from "./icon"
 
-export type SelectProps<T> = Omit<ComponentProps<typeof Kobalte<T>>, "value" | "onSelect"> & {
+export interface SelectProps<T> {
   placeholder?: string
   options: T[]
   current?: T
@@ -17,21 +17,10 @@ export type SelectProps<T> = Omit<ComponentProps<typeof Kobalte<T>>, "value" | "
 }
 
 export function Select<T>(props: SelectProps<T> & ButtonProps) {
-  const [local, others] = splitProps(props, [
-    "class",
-    "classList",
-    "placeholder",
-    "options",
-    "current",
-    "value",
-    "label",
-    "groupBy",
-    "onSelect",
-  ])
   const grouped = createMemo(() => {
     const result = pipe(
-      local.options,
-      groupBy((x) => (local.groupBy ? local.groupBy(x) : "")),
+      props.options,
+      groupBy((x) => (props.groupBy ? props.groupBy(x) : "")),
       // mapValues((x) => x.sort((a, b) => a.title.localeCompare(b.title))),
       entries(),
       map(([k, v]) => ({ category: k, options: v })),
@@ -40,30 +29,28 @@ export function Select<T>(props: SelectProps<T> & ButtonProps) {
   })
 
   return (
-    // @ts-ignore
     <Kobalte<T, { category: string; options: T[] }>
-      {...others}
       data-component="select"
-      value={local.current}
+      value={props.current}
       options={grouped()}
-      optionValue={(x) => (local.value ? local.value(x) : (x as string))}
-      optionTextValue={(x) => (local.label ? local.label(x) : (x as string))}
+      optionValue={(x) => (props.value ? props.value(x) : (x as string))}
+      optionTextValue={(x) => (props.label ? props.label(x) : (x as string))}
       optionGroupChildren="options"
-      placeholder={local.placeholder}
-      sectionComponent={(local) => (
-        <Kobalte.Section data-slot="select-section">{local.section.rawValue.category}</Kobalte.Section>
+      placeholder={props.placeholder}
+      sectionComponent={(props) => (
+        <Kobalte.Section data-slot="select-section">{props.section.rawValue.category}</Kobalte.Section>
       )}
       itemComponent={(itemProps) => (
         <Kobalte.Item
           data-slot="select-select-item"
           classList={{
-            ...(local.classList ?? {}),
-            [local.class ?? ""]: !!local.class,
+            ...(props.classList ?? {}),
+            [props.class ?? ""]: !!props.class,
           }}
           {...itemProps}
         >
           <Kobalte.ItemLabel data-slot="select-select-item-label">
-            {local.label ? local.label(itemProps.item.rawValue) : (itemProps.item.rawValue as string)}
+            {props.label ? props.label(itemProps.item.rawValue) : (itemProps.item.rawValue as string)}
           </Kobalte.ItemLabel>
           <Kobalte.ItemIndicator data-slot="select-select-item-indicator">
             <Icon name="check-small" size="small" />
@@ -71,25 +58,24 @@ export function Select<T>(props: SelectProps<T> & ButtonProps) {
         </Kobalte.Item>
       )}
       onChange={(v) => {
-        local.onSelect?.(v ?? undefined)
+        props.onSelect?.(v ?? undefined)
       }}
     >
       <Kobalte.Trigger
-        disabled={props.disabled}
         data-slot="select-select-trigger"
         as={Button}
         size={props.size}
         variant={props.variant}
         classList={{
-          ...(local.classList ?? {}),
-          [local.class ?? ""]: !!local.class,
+          ...(props.classList ?? {}),
+          [props.class ?? ""]: !!props.class,
         }}
       >
         <Kobalte.Value<T> data-slot="select-select-trigger-value">
           {(state) => {
-            const selected = state.selectedOption() ?? local.current
-            if (!selected) return local.placeholder || ""
-            if (local.label) return local.label(selected)
+            const selected = state.selectedOption() ?? props.current
+            if (!selected) return props.placeholder || ""
+            if (props.label) return props.label(selected)
             return selected as string
           }}
         </Kobalte.Value>
@@ -100,8 +86,8 @@ export function Select<T>(props: SelectProps<T> & ButtonProps) {
       <Kobalte.Portal>
         <Kobalte.Content
           classList={{
-            ...(local.classList ?? {}),
-            [local.class ?? ""]: !!local.class,
+            ...(props.classList ?? {}),
+            [props.class ?? ""]: !!props.class,
           }}
           data-component="select-content"
         >

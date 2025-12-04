@@ -27,6 +27,6 @@ export const { use: useSDK, provider: SDKProvider } = createSimpleContext({
       abort.abort()
     })
 
-    return { directory: props.directory, client: sdk, event: emitter, url: globalSDK.url }
+    return { directory: props.directory, client: sdk, event: emitter }
   },
 })
