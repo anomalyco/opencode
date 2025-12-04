@@ -7,6 +7,8 @@ export const { use: useExit, provider: ExitProvider } = createSimpleContext({
   init: (input: { onExit?: () => Promise<void> }) => {
     const renderer = useRenderer()
     return async (reason?: any) => {
+      // Disable mouse tracking modes to prevent escape sequences after exit
+      process.stdout.write("\x1b[?1000l\x1b[?1002l\x1b[?1003l\x1b[?1006l")
       renderer.destroy()
       await input.onExit?.()
       if (reason) {
@@ -15,7 +17,8 @@ export const { use: useExit, provider: ExitProvider } = createSimpleContext({
           process.stderr.write(formatted + "\n")
         }
       }
-      process.exit(0)
+      // Small delay to ensure escape sequences are processed before exit
+      setTimeout(() => process.exit(0), 10)
     }
   },
 })
