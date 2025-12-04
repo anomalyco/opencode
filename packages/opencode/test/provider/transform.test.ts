@@ -114,7 +114,36 @@ describe("ProviderTransform.message - DeepSeek reasoning content", () => {
       },
     ] as any[]
 
-    const result = ProviderTransform.message(msgs, "deepseek", "deepseek-chat")
+    const result = ProviderTransform.message(msgs, {
+      id: "deepseek/deepseek-chat",
+      providerID: "deepseek",
+      api: {
+        id: "deepseek-chat",
+        url: "https://api.deepseek.com",
+        npm: "@ai-sdk/openai-compatible",
+      },
+      name: "DeepSeek Chat",
+      capabilities: {
+        temperature: true,
+        reasoning: true,
+        attachment: false,
+        toolcall: true,
+        input: { text: true, audio: false, image: false, video: false, pdf: false },
+        output: { text: true, audio: false, image: false, video: false, pdf: false },
+      },
+      cost: {
+        input: 0.001,
+        output: 0.002,
+        cache: { read: 0.0001, write: 0.0002 },
+      },
+      limit: {
+        context: 128000,
+        output: 8192,
+      },
+      status: "active",
+      options: {},
+      headers: {},
+    })
 
     expect(result).toHaveLength(1)
     expect(result[0].content).toEqual([
@@ -139,7 +168,36 @@ describe("ProviderTransform.message - DeepSeek reasoning content", () => {
       },
     ] as any[]
 
-    const result = ProviderTransform.message(msgs, "deepseek", "deepseek-chat")
+    const result = ProviderTransform.message(msgs, {
+      id: "deepseek/deepseek-chat",
+      providerID: "deepseek",
+      api: {
+        id: "deepseek-chat",
+        url: "https://api.deepseek.com",
+        npm: "@ai-sdk/openai-compatible",
+      },
+      name: "DeepSeek Chat",
+      capabilities: {
+        temperature: true,
+        reasoning: true,
+        attachment: false,
+        toolcall: true,
+        input: { text: true, audio: false, image: false, video: false, pdf: false },
+        output: { text: true, audio: false, image: false, video: false, pdf: false },
+      },
+      cost: {
+        input: 0.001,
+        output: 0.002,
+        cache: { read: 0.0001, write: 0.0002 },
+      },
+      limit: {
+        context: 128000,
+        output: 8192,
+      },
+      status: "active",
+      options: {},
+      headers: {},
+    })
 
     expect(result).toHaveLength(1)
     expect(result[0].content).toEqual([{ type: "text", text: "Final answer" }])
@@ -162,7 +220,36 @@ describe("ProviderTransform.message - DeepSeek reasoning content", () => {
       },
     ] as any[]
 
-    const result = ProviderTransform.message(msgs, "openai", "deepseek-reasoner")
+    const result = ProviderTransform.message(msgs, {
+      id: "someprovider/deepseek-reasoner",
+      providerID: "someprovider",
+      api: {
+        id: "deepseek-reasoner",
+        url: "https://api.someprovider.com",
+        npm: "@ai-sdk/openai-compatible",
+      },
+      name: "SomeProvider DeepSeek Reasoner",
+      capabilities: {
+        temperature: true,
+        reasoning: true,
+        attachment: false,
+        toolcall: true,
+        input: { text: true, audio: false, image: false, video: false, pdf: false },
+        output: { text: true, audio: false, image: false, video: false, pdf: false },
+      },
+      cost: {
+        input: 0.001,
+        output: 0.002,
+        cache: { read: 0.0001, write: 0.0002 },
+      },
+      limit: {
+        context: 128000,
+        output: 8192,
+      },
+      status: "active",
+      options: {},
+      headers: {},
+    })
 
     expect(result[0].providerOptions?.openaiCompatible?.reasoning_content).toBe("Thinking...")
   })
@@ -178,7 +265,36 @@ describe("ProviderTransform.message - DeepSeek reasoning content", () => {
       },
     ] as any[]
 
-    const result = ProviderTransform.message(msgs, "openai", "gpt-4")
+    const result = ProviderTransform.message(msgs, {
+      id: "openai/gpt-4",
+      providerID: "openai",
+      api: {
+        id: "gpt-4",
+        url: "https://api.openai.com",
+        npm: "@ai-sdk/openai",
+      },
+      name: "GPT-4",
+      capabilities: {
+        temperature: true,
+        reasoning: false,
+        attachment: true,
+        toolcall: true,
+        input: { text: true, audio: false, image: true, video: false, pdf: false },
+        output: { text: true, audio: false, image: false, video: false, pdf: false },
+      },
+      cost: {
+        input: 0.03,
+        output: 0.06,
+        cache: { read: 0.001, write: 0.002 },
+      },
+      limit: {
+        context: 128000,
+        output: 4096,
+      },
+      status: "active",
+      options: {},
+      headers: {},
+    })
 
     expect(result[0].content).toEqual([
       { type: "reasoning", text: "Should not be processed" },
