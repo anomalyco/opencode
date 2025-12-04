@@ -1266,7 +1266,7 @@ export type Config = {
     /**
      * Skip automatic fetching of model information from models.dev on startup and timer
      */
-    skip_models_fetch?: boolean
+    skip_models_refresh?: boolean
   }
 }
 

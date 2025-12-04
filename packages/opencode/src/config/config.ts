@@ -674,7 +674,7 @@ export namespace Config {
             .array(z.string())
             .optional()
             .describe("Tools that should only be available to primary agents."),
-          skip_models_fetch: z
+          skip_models_refresh: z
             .boolean()
             .optional()
             .describe("Skip automatic fetching of model information from models.dev on startup and timer"),

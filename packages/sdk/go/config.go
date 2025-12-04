@@ -705,7 +705,7 @@ func (r configCommandJSON) RawJSON() string {
 type ConfigExperimental struct {
 	DisablePasteSummary bool                   `json:"disable_paste_summary"`
 	Hook                ConfigExperimentalHook `json:"hook"`
-	SkipModelsFetch     bool                   `json:"skip_models_fetch"`
+	SkipModelsRefresh   bool                   `json:"skip_models_refresh"`
 	JSON                configExperimentalJSON `json:"-"`
 }
 
@@ -714,7 +714,7 @@ type ConfigExperimental struct {
 type configExperimentalJSON struct {
 	DisablePasteSummary apijson.Field
 	Hook                apijson.Field
-	SkipModelsFetch     apijson.Field
+	SkipModelsRefresh   apijson.Field
 	raw                 string
 	ExtraFields         map[string]apijson.Field
 }

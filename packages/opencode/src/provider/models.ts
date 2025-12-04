@@ -67,14 +67,14 @@ export namespace ModelsDev {
   export async function get() {
     const globalConfig = await Config.global()
     
-    // Setup timer only once, only if not skipping fetch
-    if (!timerSetup && !globalConfig.experimental?.skip_models_fetch) {
+    // Setup timer only once, only if not skipping refresh
+    if (!timerSetup && !globalConfig.experimental?.skip_models_refresh) {
       timerSetup = true
       setInterval(() => ModelsDev.refresh(), 60 * 1000 * 60).unref()
     }
     
     // Skip immediate refresh if configured to skip
-    if (!globalConfig.experimental?.skip_models_fetch) {
+    if (!globalConfig.experimental?.skip_models_refresh) {
       refresh()
     }
     
