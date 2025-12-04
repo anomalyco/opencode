@@ -193,9 +193,19 @@ export function Session() {
     const messagesList = messages()
     const scrollTop = scroll.y
 
-    // Get visible messages sorted by position
+    // Get visible messages sorted by position, filtering for valid non-synthetic, non-ignored content
     const visibleMessages = children
-      .filter((c) => c.id && messagesList.some((m) => m.id === c.id))
+      .filter((c) => {
+        if (!c.id) return false
+        const message = messagesList.find((m) => m.id === c.id)
+        if (!message) return false
+
+        // Check if message has valid non-synthetic, non-ignored text parts
+        const parts = sync.data.part[message.id]
+        if (!parts || !Array.isArray(parts)) return false
+
+        return parts.some((part) => part && part.type === "text" && !part.synthetic && !part.ignored)
+      })
       .sort((a, b) => a.y - b.y)
 
     if (visibleMessages.length === 0) return null
