@@ -43,7 +43,7 @@ export default function Home() {
   return (
     <main data-page="opencode">
       {/*<HttpHeader name="Cache-Control" value="public, max-age=1, s-maxage=3600, stale-while-revalidate=86400" />*/}
-      <Title>OpenCode | The AI coding agent built for the terminal</Title>
+      <Title>OpenCode | The open source AI coding agent</Title>
       <Link rel="canonical" href={config.baseUrl} />
       <Meta property="og:image" content="/social-share.png" />
       <Meta name="twitter:image" content="/social-share.png" />
@@ -56,23 +56,13 @@ export default function Home() {
               <a data-slot="releases" href={release()?.url ?? `${config.github.repoUrl}/releases`} target="_blank">
                 What’s new in {release()?.name ?? "the latest release"}
               </a>
-              <h1>The AI coding agent built for the terminal</h1>
+              <h1>The open source coding agent</h1>
               <p>
-                OpenCode is fully open source, giving you control and freedom to use any provider, any model, and any
-                editor.
+                OpenCode includes free models or connect from any provider to <br />
+                use other models, including Claude, GPT, Gemini and more.
               </p>
-              <a href="/docs">
-                <span>Read docs </span>
-                <svg width="24" height="24" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg">
-                  <path
-                    d="M6.5 12L17 12M13 16.5L17.5 12L13 7.5"
-                    stroke="currentColor"
-                    stroke-width="1.5"
-                    stroke-linecap="square"
-                  />
-                </svg>
-              </a>
             </div>
+            <p data-slot="installation-instructions">Install and use. No account, no email, and no credit card.</p>
             <div data-slot="installation">
               <Tabs
                 as="section"
@@ -151,6 +141,11 @@ export default function Home() {
                 </div>
               </Tabs>
             </div>
+            <p data-slot="installation-options">
+              Available in terminal, web, and desktop (coming soon).
+              <br />
+              Extensions for VS Code, Cursor, Windsurf, and more.
+            </p>
           </section>
 
           <section data-component="video">
@@ -208,6 +203,17 @@ export default function Home() {
                 </div>
               </li>
             </ul>
+            <a href="/docs">
+              <span>Read docs </span>
+              <svg width="24" height="24" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg">
+                <path
+                  d="M6.5 12L17 12M13 16.5L17.5 12L13 7.5"
+                  stroke="currentColor"
+                  stroke-width="1.5"
+                  stroke-linecap="square"
+                />
+              </svg>
+            </a>
           </section>
 
           <section data-component="growth">

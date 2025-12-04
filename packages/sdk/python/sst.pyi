@@ -39,9 +39,6 @@ class Resource:
     class Console:
         type: str
         url: str
-    class ConsoleData:
-        name: str
-        type: str
     class Database:
         database: str
         host: str
@@ -111,4 +108,7 @@ class Resource:
     class ZEN_MODELS4:
         type: str
         value: str
+    class ZenData:
+        name: str
+        type: str
 

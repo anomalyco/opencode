@@ -78,20 +78,20 @@ export namespace SessionSummary {
     const small =
       (await Provider.getSmallModel(assistantMsg.providerID)) ??
       (await Provider.getModel(assistantMsg.providerID, assistantMsg.modelID))
+    const language = await Provider.getLanguage(small)
 
     const options = pipe(
       {},
-      mergeDeep(ProviderTransform.options(small.providerID, small.modelID, small.npm ?? "", assistantMsg.sessionID)),
-      mergeDeep(ProviderTransform.smallOptions({ providerID: small.providerID, modelID: small.modelID })),
-      mergeDeep(small.info.options),
+      mergeDeep(ProviderTransform.options(small, assistantMsg.sessionID)),
+      mergeDeep(ProviderTransform.smallOptions(small)),
+      mergeDeep(small.options),
     )
 
     const textPart = msgWithParts.parts.find((p) => p.type === "text" && !p.synthetic) as MessageV2.TextPart
     if (textPart && !userMsg.summary?.title) {
       const result = await generateText({
-        experimental_telemetry: { isEnabled: cfg.open_telemetry },
-        maxOutputTokens: small.info.reasoning ? 1500 : 20,
-        providerOptions: ProviderTransform.providerOptions(small.npm, small.providerID, options),
+        maxOutputTokens: small.capabilities.reasoning ? 1500 : 20,
+        providerOptions: ProviderTransform.providerOptions(small.api.npm, small.providerID, options),
         messages: [
           ...SystemPrompt.title(small.providerID).map(
             (x): ModelMessage => ({
@@ -109,8 +109,9 @@ export namespace SessionSummary {
             `,
           },
         ],
-        headers: small.info.headers,
-        model: small.language,
+        headers: small.headers,
+        model: language,
+        experimental_telemetry: { isEnabled: cfg.open_telemetry },
       })
       log.info("title", { title: result.text })
       userMsg.summary.title = result.text
@@ -135,10 +136,9 @@ export namespace SessionSummary {
           }
         }
         const result = await generateText({
-          experimental_telemetry: { isEnabled: cfg.open_telemetry },
-          model: small.language,
+          model: language,
           maxOutputTokens: 100,
-          providerOptions: ProviderTransform.providerOptions(small.npm, small.providerID, options),
+          providerOptions: ProviderTransform.providerOptions(small.api.npm, small.providerID, options),
           messages: [
             ...SystemPrompt.summarize(small.providerID).map(
               (x): ModelMessage => ({
@@ -152,7 +152,8 @@ export namespace SessionSummary {
               content: `Summarize the above conversation according to your system prompts.`,
             },
           ],
-          headers: small.info.headers,
+          headers: small.headers,
+          experimental_telemetry: { isEnabled: cfg.open_telemetry },
         }).catch(() => {})
         if (result) summary = result.text
       }

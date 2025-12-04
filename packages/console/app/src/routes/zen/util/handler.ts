@@ -13,13 +13,7 @@ import { ModelTable } from "@opencode-ai/console-core/schema/model.sql.js"
 import { ProviderTable } from "@opencode-ai/console-core/schema/provider.sql.js"
 import { logger } from "./logger"
 import { AuthError, CreditsError, MonthlyLimitError, UserLimitError, ModelError, RateLimitError } from "./error"
-import {
-  createBodyConverter,
-  createStreamPartConverter,
-  createResponseConverter,
-  ProviderHelper,
-  UsageInfo,
-} from "./provider/provider"
+import { createBodyConverter, createStreamPartConverter, createResponseConverter, UsageInfo } from "./provider/provider"
 import { anthropicHelper } from "./provider/anthropic"
 import { googleHelper } from "./provider/google"
 import { openaiHelper } from "./provider/openai"
@@ -27,6 +21,7 @@ import { oaCompatHelper } from "./provider/openai-compatible"
 import { createRateLimiter } from "./rateLimiter"
 import { createDataDumper } from "./dataDumper"
 import { createTrialLimiter } from "./trialLimiter"
+import { createStickyTracker } from "./stickyProviderTracker"
 
 type ZenData = Awaited<ReturnType<typeof ZenData.list>>
 type RetryOptions = {
@@ -61,6 +56,7 @@ export async function handler(
     const ip = input.request.headers.get("x-real-ip") ?? ""
     const sessionId = input.request.headers.get("x-opencode-session") ?? ""
     const requestId = input.request.headers.get("x-opencode-request") ?? ""
+    const projectId = input.request.headers.get("x-opencode-project") ?? ""
     logger.metric({
       is_tream: isStream,
       session: sessionId,
@@ -68,14 +64,16 @@ export async function handler(
     })
     const zenData = ZenData.list()
     const modelInfo = validateModel(zenData, model)
-    const dataDumper = createDataDumper(sessionId, requestId)
+    const dataDumper = createDataDumper(sessionId, requestId, projectId)
     const trialLimiter = createTrialLimiter(modelInfo.trial?.limit, ip)
     const isTrial = await trialLimiter?.isTrial()
     const rateLimiter = createRateLimiter(modelInfo.id, modelInfo.rateLimit, ip)
     await rateLimiter?.check()
+    const stickyTracker = createStickyTracker(modelInfo.stickyProvider ?? false, sessionId)
+    const stickyProvider = await stickyTracker?.get()
 
     const retriableRequest = async (retry: RetryOptions = { excludeProviders: [], retryCount: 0 }) => {
-      const providerInfo = selectProvider(zenData, modelInfo, sessionId, isTrial ?? false, retry)
+      const providerInfo = selectProvider(zenData, modelInfo, sessionId, isTrial ?? false, retry, stickyProvider)
       const authInfo = await authenticate(modelInfo, providerInfo)
       validateBilling(authInfo, modelInfo)
       validateModelSettings(authInfo)
@@ -125,6 +123,9 @@ export async function handler(
     // Store model request
     dataDumper?.provideModel(providerInfo.storeModel)
     dataDumper?.provideRequest(reqBody)
+
+    // Store sticky provider
+    await stickyTracker?.set(providerInfo.id)
 
     // Scrub response headers
     const resHeaders = new Headers()
@@ -294,10 +295,16 @@ export async function handler(
     sessionId: string,
     isTrial: boolean,
     retry: RetryOptions,
+    stickyProvider: string | undefined,
   ) {
     const provider = (() => {
       if (isTrial) {
         return modelInfo.providers.find((provider) => provider.id === modelInfo.trial!.provider)
+      }
+
+      if (stickyProvider) {
+        const provider = modelInfo.providers.find((provider) => provider.id === stickyProvider)
+        if (provider) return provider
       }
 
       if (retry.retryCount === MAX_RETRIES) {
