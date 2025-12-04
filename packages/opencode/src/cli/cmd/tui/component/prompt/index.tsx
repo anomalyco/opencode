@@ -269,7 +269,7 @@ export function Prompt(props: PromptProps) {
 
   createEffect(() => {
     if (props.disabled) input.cursorColor = theme.backgroundElement
-    if (!props.disabled) input.cursorColor = theme.primary
+    if (!props.disabled) input.cursorColor = theme.text
   })
 
   const [store, setStore] = createStore<{
@@ -805,12 +805,12 @@ export function Prompt(props: PromptProps) {
               ref={(r: TextareaRenderable) => {
                 input = r
                 setTimeout(() => {
-                  input.cursorColor = highlight()
+                  input.cursorColor = theme.text
                 }, 0)
               }}
               onMouseDown={(r: MouseEvent) => r.target?.focus()}
               focusedBackgroundColor={theme.backgroundElement}
-              cursorColor={highlight()}
+              cursorColor={theme.text}
               syntaxStyle={syntax()}
             />
             <box flexDirection="row" flexShrink={0} paddingTop={1} gap={1}>
