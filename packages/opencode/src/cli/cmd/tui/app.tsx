@@ -164,6 +164,7 @@ function App() {
   const sync = useSync()
   const exit = useExit()
   const promptRef = usePromptRef()
+  const [consoleVisible, setConsoleVisible] = createSignal(false)
 
   createEffect(() => {
     console.log(JSON.stringify(route.data))
@@ -362,11 +363,12 @@ function App() {
       },
     },
     {
-      title: "Toggle console",
+      title: consoleVisible() ? "Hide console" : "Show console",
       category: "System",
       value: "app.fps",
       onSelect: (dialog) => {
         renderer.console.toggle()
+        setConsoleVisible((prev) => !prev)
         dialog.clear()
       },
     },
