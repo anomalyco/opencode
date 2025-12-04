@@ -16,6 +16,7 @@ export { DESCRIPTION as TASK_DESCRIPTION }
 export function filterSubagents(agents: Agent.Info[], subagents: Record<string, boolean>) {
   return agents.filter((a) => Wildcard.all(a.name, subagents) !== false)
 }
+import { Config } from "../config/config"
 
 export const TaskTool = Tool.define("task", async () => {
   const agents = await Agent.list().then((x) => x.filter((a) => a.mode !== "primary"))
@@ -87,6 +88,8 @@ export const TaskTool = Tool.define("task", async () => {
       ctx.abort.addEventListener("abort", cancel)
       using _ = defer(() => ctx.abort.removeEventListener("abort", cancel))
       const promptParts = await SessionPrompt.resolvePromptParts(params.prompt)
+
+      const config = await Config.get()
       const result = await SessionPrompt.prompt({
         messageID,
         sessionID: session.id,
@@ -99,6 +102,7 @@ export const TaskTool = Tool.define("task", async () => {
           todowrite: false,
           todoread: false,
           task: false,
+          ...Object.fromEntries((config.experimental?.primary_tools ?? []).map((t) => [t, false])),
           ...agent.tools,
         },
         parts: promptParts,
