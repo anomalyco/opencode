@@ -184,7 +184,7 @@ export namespace SessionCompaction {
             async transformParams(args) {
               if (args.type === "stream") {
                 // @ts-expect-error
-                args.params.prompt = ProviderTransform.message(args.params.prompt, model.providerID, model.modelID)
+                args.params.prompt = ProviderTransform.message(args.params.prompt, model)
               }
               return args.params
             },
