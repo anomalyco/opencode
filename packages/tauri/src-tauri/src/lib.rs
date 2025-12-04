@@ -221,7 +221,7 @@ async fn run_updater(app: AppHandle) {
         return;
     };
 
-    let Ok(update_bytes) = update.download(on_chunk, on_download_finish).await else {};
+    let Ok(update_bytes) = update.download(|_, _| {}, || {}).await else {};
 
     let should_update = app
         .dialog()
