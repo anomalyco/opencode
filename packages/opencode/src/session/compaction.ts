@@ -101,7 +101,7 @@ export namespace SessionCompaction {
     auto: boolean
   }) {
     const config = await Config.get()
-    let knowledgeFiles: string[] = []
+    let knowledgeFiles: SessionKnowledge.KnowledgeFile[] = []
 
     // Find the compaction part from the last user message to update extraction status
     const lastUserMsg = input.messages.findLast((m) => m.info.role === "user")
@@ -151,6 +151,13 @@ export namespace SessionCompaction {
               await Session.updatePart(compactionPart)
             }
           },
+          async onToolUpdate(summary) {
+            // Update compaction part with tool progress
+            if (compactionPart && compactionPart.extraction) {
+              compactionPart.extraction.summary = summary
+              await Session.updatePart(compactionPart)
+            }
+          },
         })
 
         knowledgeFiles = result.knowledgeFiles
@@ -193,7 +200,7 @@ export namespace SessionCompaction {
 
     const knowledgeContext =
       knowledgeFiles.length > 0
-        ? `\n\nThe following knowledge files were created or updated during this session and should be referenced in your summary:\n${knowledgeFiles.map((f) => `- ${f}`).join("\n")}`
+        ? `\n\nThe following knowledge files were created or updated during this session and should be referenced in your summary:\n${knowledgeFiles.map((f) => `- ${f.path}`).join("\n")}`
         : ""
 
     const msg = (await Session.updateMessage({

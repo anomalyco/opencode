@@ -78,7 +78,7 @@ When merging into existing files, update `source_sessions` array and `last_updat
 Return a structured summary with:
 - `knowledge_files`: Array of paths to created/modified knowledge files (relative to project root)
 - `has_substantial_knowledge`: Boolean indicating if meaningful knowledge was extracted
-- `summary`: Brief description of what was captured
+- `file_summaries`: One-line summary for each file describing what was captured/changed
 
 Format your final response as:
 
@@ -86,7 +86,8 @@ Format your final response as:
 KNOWLEDGE_RESULT:
 files: [".opencode/knowledge/example.md"]
 substantial: true
-summary: Captured authentication flow design decisions and API patterns.
+file_summaries:
+- .opencode/knowledge/example.md: Captured authentication flow design decisions and API patterns
 ```
 
 If no substantial knowledge was found:
@@ -95,5 +96,5 @@ If no substantial knowledge was found:
 KNOWLEDGE_RESULT:
 files: []
 substantial: false
-summary: No substantial reusable knowledge identified in this session.
+file_summaries:
 ```

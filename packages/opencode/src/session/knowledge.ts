@@ -9,12 +9,24 @@ import { Provider } from "../provider/provider"
 import { ProviderTransform } from "../provider/transform"
 import { generateText, type ModelMessage } from "ai"
 import { mergeDeep, pipe } from "remeda"
+import { Bus } from "../bus"
+import { MessageV2 } from "./message-v2"
 
 export namespace SessionKnowledge {
   const log = Log.create({ service: "session.knowledge" })
 
+  export interface ToolSummary {
+    tool: string
+    title?: string
+  }
+
+  export interface KnowledgeFile {
+    path: string
+    summary?: string
+  }
+
   export interface ExtractResult {
-    knowledgeFiles: string[]
+    knowledgeFiles: KnowledgeFile[]
     hasSubstantialKnowledge: boolean
     childSessionID: string
   }
@@ -24,6 +36,7 @@ export namespace SessionKnowledge {
     transcriptPath: string
     model: { providerID: string; modelID: string }
     onStart?: (childSessionID: string) => void | Promise<void>
+    onToolUpdate?: (summary: ToolSummary[]) => void | Promise<void>
   }): Promise<ExtractResult> {
     log.info("extracting knowledge", { sessionID: input.sessionID })
 
@@ -43,6 +56,23 @@ export namespace SessionKnowledge {
       await input.onStart(session.id)
     }
 
+    // Track tool parts for progress updates
+    const parts: Record<string, MessageV2.ToolPart> = {}
+    const unsub = input.onToolUpdate
+      ? Bus.subscribe(MessageV2.Event.PartUpdated, async (evt) => {
+          if (evt.properties.part.sessionID !== session.id) return
+          if (evt.properties.part.type !== "tool") return
+          parts[evt.properties.part.id] = evt.properties.part
+          const summary = Object.values(parts)
+            .sort((a, b) => a.id.localeCompare(b.id))
+            .map((p) => ({
+              tool: p.tool,
+              title: p.state.status === "completed" ? p.state.title : undefined,
+            }))
+          await input.onToolUpdate!(summary)
+        })
+      : undefined
+
     const messageID = Identifier.ascending("message")
     const prompt = buildExtractionPrompt(input.transcriptPath, input.sessionID)
 
@@ -54,6 +84,8 @@ export namespace SessionKnowledge {
       tools: agent.tools,
       parts: [{ type: "text", text: prompt }],
     })
+
+    unsub?.()
 
     const text = result.parts.findLast((x) => x.type === "text")?.text ?? ""
     const parsed = parseExtractionResult(text)
@@ -78,14 +110,16 @@ export namespace SessionKnowledge {
   }
 
   function parseExtractionResult(text: string): Omit<ExtractResult, "childSessionID"> {
-    const match = text.match(/KNOWLEDGE_RESULT:\s*\nfiles:\s*\[(.*?)\]\s*\nsubstantial:\s*(true|false)\s*\nsummary:/s)
+    const match = text.match(
+      /KNOWLEDGE_RESULT:\s*\nfiles:\s*\[(.*?)\]\s*\nsubstantial:\s*(true|false)\s*\nfile_summaries:([\s\S]*?)(?:```|$)/s,
+    )
     if (!match) {
       log.warn("could not parse knowledge result", { text: text.slice(-500) })
       return { knowledgeFiles: [], hasSubstantialKnowledge: false }
     }
 
     const filesStr = match[1].trim()
-    const files = filesStr
+    const filePaths = filesStr
       ? filesStr
           .split(",")
           .map((f) => f.trim().replace(/^["']|["']$/g, ""))
@@ -93,6 +127,24 @@ export namespace SessionKnowledge {
       : []
 
     const substantial = match[2] === "true"
+
+    // Parse file_summaries section for per-file descriptions
+    const summariesSection = match[3] || ""
+    const summaryMap = new Map<string, string>()
+    const summaryLines = summariesSection.split("\n").filter((line) => line.trim().startsWith("-"))
+    for (const line of summaryLines) {
+      const summaryMatch = line.match(/^-\s*([^:]+):\s*(.+)$/)
+      if (summaryMatch) {
+        const filepath = summaryMatch[1].trim()
+        const summary = summaryMatch[2].trim()
+        summaryMap.set(filepath, summary)
+      }
+    }
+
+    const files: KnowledgeFile[] = filePaths.map((filepath) => ({
+      path: filepath,
+      summary: summaryMap.get(filepath),
+    }))
 
     log.info("parsed knowledge result", { files, substantial })
     return { knowledgeFiles: files, hasSubstantialKnowledge: substantial }

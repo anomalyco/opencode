@@ -382,7 +382,14 @@ export type CompactionPart = {
   extraction?: {
     status: "checking" | "extracting" | "skipped" | "completed"
     childSessionID?: string
-    files?: Array<string>
+    files?: Array<{
+      path: string
+      summary?: string
+    }>
+    summary?: Array<{
+      tool: string
+      title?: string
+    }>
   }
 }
 

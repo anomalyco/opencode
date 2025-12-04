@@ -1028,7 +1028,8 @@ function UserMessage(props: {
             extraction?: {
               status: "checking" | "extracting" | "skipped" | "completed"
               childSessionID?: string
-              files?: string[]
+              files?: Array<{ path: string; summary?: string }>
+              summary?: Array<{ tool: string; title?: string }>
             }
           }
         | undefined,
@@ -1127,10 +1128,23 @@ function UserMessage(props: {
             </box>
           </Show>
           <Show when={compaction()?.extraction?.status === "extracting"}>
-            <box flexDirection="row" gap={1} paddingLeft={1} paddingTop={1}>
-              {/* @ts-ignore */}
-              <spinner color={spinnerDef().color} frames={spinnerDef().frames} interval={40} />
-              <text fg={theme.textMuted}>Extracting knowledge...</text>
+            <box paddingLeft={1} paddingTop={1}>
+              <box flexDirection="row" gap={1}>
+                {/* @ts-ignore */}
+                <spinner color={spinnerDef().color} frames={spinnerDef().frames} interval={40} />
+                <text fg={theme.textMuted}>Extracting knowledge...</text>
+              </box>
+              <Show when={compaction()?.extraction?.summary?.length}>
+                <box>
+                  <For each={compaction()!.extraction!.summary!}>
+                    {(item) => (
+                      <text fg={theme.textMuted}>
+                        ∟ {Locale.titlecase(item.tool)} {item.title ?? ""}
+                      </text>
+                    )}
+                  </For>
+                </box>
+              </Show>
             </box>
           </Show>
           <Show when={compaction()?.extraction?.status === "skipped"}>
@@ -1145,6 +1159,14 @@ function UserMessage(props: {
           >
             <box paddingLeft={1} paddingTop={1}>
               <text fg={theme.textMuted}>Extracted {compaction()!.extraction!.files!.length} knowledge file(s)</text>
+              <For each={compaction()!.extraction!.files!.filter((f) => f?.path)}>
+                {(file) => (
+                  <text fg={theme.textMuted}>
+                    ∟ {file.path.replace(/^\.opencode\/knowledge\//, "").replace(/\.md$/, "")}
+                    {file.summary ? `: ${file.summary}` : ""}
+                  </text>
+                )}
+              </For>
             </box>
           </Show>
         </box>

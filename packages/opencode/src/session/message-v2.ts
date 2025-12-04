@@ -153,7 +153,22 @@ export namespace MessageV2 {
       .object({
         status: z.enum(["checking", "extracting", "skipped", "completed"]),
         childSessionID: z.string().optional(),
-        files: z.array(z.string()).optional(),
+        files: z
+          .array(
+            z.object({
+              path: z.string(),
+              summary: z.string().optional(),
+            }),
+          )
+          .optional(),
+        summary: z
+          .array(
+            z.object({
+              tool: z.string(),
+              title: z.string().optional(),
+            }),
+          )
+          .optional(),
       })
       .optional(),
   }).meta({
