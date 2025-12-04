@@ -137,27 +137,35 @@ export const { use: useSync, provider: SyncProvider } = createSimpleContext({
           break
 
         case "session.deleted": {
-          const result = Binary.search(store.session, event.properties.info.id, (s) => s.id)
-          if (result.found) {
+          const index = store.session.findIndex((s) => s.id === event.properties.info.id)
+          if (index !== -1) {
             setStore(
               "session",
               produce((draft) => {
-                draft.splice(result.index, 1)
+                draft.splice(index, 1)
               }),
             )
           }
           break
         }
         case "session.updated": {
-          const result = Binary.search(store.session, event.properties.info.id, (s) => s.id)
-          if (result.found) {
-            setStore("session", result.index, reconcile(event.properties.info))
+          const index = store.session.findIndex((s) => s.id === event.properties.info.id)
+          if (index !== -1) {
+            setStore(
+              "session",
+              produce((draft) => {
+                draft[index] = event.properties.info
+                // Move updated session to front since it's now most recently updated
+                const updated = draft.splice(index, 1)[0]
+                draft.unshift(updated)
+              }),
+            )
             break
           }
           setStore(
             "session",
             produce((draft) => {
-              draft.splice(result.index, 0, event.properties.info)
+              draft.unshift(event.properties.info)
             }),
           )
           break
@@ -273,12 +281,7 @@ export const { use: useSync, provider: SyncProvider } = createSimpleContext({
           if (store.status !== "complete") setStore("status", "partial")
           // non-blocking
           Promise.all([
-            sdk.client.session.list().then((x) =>
-              setStore(
-                "session",
-                (x.data ?? []).toSorted((a, b) => a.id.localeCompare(b.id)),
-              ),
-            ),
+            sdk.client.session.list().then((x) => setStore("session", x.data ?? [])),
             sdk.client.command.list().then((x) => setStore("command", x.data ?? [])),
             sdk.client.lsp.status().then((x) => setStore("lsp", x.data!)),
             sdk.client.mcp.status().then((x) => setStore("mcp", x.data!)),
@@ -316,9 +319,7 @@ export const { use: useSync, provider: SyncProvider } = createSimpleContext({
       },
       session: {
         get(sessionID: string) {
-          const match = Binary.search(store.session, sessionID, (s) => s.id)
-          if (match.found) return store.session[match.index]
-          return undefined
+          return store.session.find((s) => s.id === sessionID)
         },
         status(sessionID: string) {
           const session = result.session.get(sessionID)
@@ -340,9 +341,9 @@ export const { use: useSync, provider: SyncProvider } = createSimpleContext({
           ])
           setStore(
             produce((draft) => {
-              const match = Binary.search(draft.session, sessionID, (s) => s.id)
-              if (match.found) draft.session[match.index] = session.data!
-              if (!match.found) draft.session.splice(match.index, 0, session.data!)
+              const index = draft.session.findIndex((s) => s.id === sessionID)
+              if (index !== -1) draft.session[index] = session.data!
+              else draft.session.unshift(session.data!)
               draft.todo[sessionID] = todo.data ?? []
               draft.message[sessionID] = messages.data!.map((x) => x.info)
               for (const message of messages.data!) {

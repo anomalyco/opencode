@@ -306,8 +306,14 @@ export namespace Session {
 
   export async function* list() {
     const project = Instance.project
+    const sessions = []
     for (const item of await Storage.list(["session", project.id])) {
-      yield Storage.read<Info>(item)
+      sessions.push(await Storage.read<Info>(item))
+    }
+    // Sort by updated time descending (newest first)
+    sessions.sort((a, b) => b.time.updated - a.time.updated)
+    for (const session of sessions) {
+      yield session
     }
   }
 
