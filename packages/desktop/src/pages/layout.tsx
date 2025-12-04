@@ -106,12 +106,50 @@ export default function Layout(props: ParentProps) {
       <div class="h-[calc(100vh-3rem)] flex">
         <div
           classList={{
-            "@container w-12 pb-5 shrink-0 bg-background-base": true,
+            "relative @container w-12 pb-5 shrink-0 bg-background-base": true,
             "flex flex-col gap-5.5 items-start self-stretch justify-between": true,
             "border-r border-border-weak-base": true,
           }}
           style={{ width: layout.sidebar.opened() ? `${layout.sidebar.width()}px` : undefined }}
         >
+          <Show when={layout.sidebar.opened()}>
+            <div
+              class="absolute inset-y-0 right-0 z-10 w-2 translate-x-1/2 cursor-ew-resize"
+              onMouseDown={(e) => {
+                e.preventDefault()
+                const startX = e.clientX
+                const startWidth = layout.sidebar.width()
+                const maxWidth = window.innerWidth * 0.3
+                const minWidth = 150
+                const collapseThreshold = 80
+                let currentWidth = startWidth
+
+                document.body.style.userSelect = "none"
+                document.body.style.overflow = "hidden"
+
+                const onMouseMove = (moveEvent: MouseEvent) => {
+                  const deltaX = moveEvent.clientX - startX
+                  currentWidth = startWidth + deltaX
+                  const clampedWidth = Math.min(maxWidth, Math.max(minWidth, currentWidth))
+                  layout.sidebar.resize(clampedWidth)
+                }
+
+                const onMouseUp = () => {
+                  document.body.style.userSelect = ""
+                  document.body.style.overflow = ""
+                  document.removeEventListener("mousemove", onMouseMove)
+                  document.removeEventListener("mouseup", onMouseUp)
+
+                  if (currentWidth < collapseThreshold) {
+                    layout.sidebar.close()
+                  }
+                }
+
+                document.addEventListener("mousemove", onMouseMove)
+                document.addEventListener("mouseup", onMouseUp)
+              }}
+            />
+          </Show>
           <div class="grow flex flex-col items-start self-stretch gap-4 p-2 min-h-0">
             <Tooltip class="shrink-0" placement="right" value="Toggle sidebar" inactive={layout.sidebar.opened()}>
               <Button

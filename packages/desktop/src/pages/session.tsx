@@ -603,12 +603,12 @@ export default function Page() {
           style={{ height: `${layout.terminal.height()}px` }}
         >
           <div
-            class="absolute inset-x-0 top-0 z-10 h-2 -translate-y-1/2 cursor-ns-resize hover:bg-primary/20 active:bg-primary/30 transition-colors"
+            class="absolute inset-x-0 top-0 z-10 h-2 -translate-y-1/2 cursor-ns-resize"
             onMouseDown={(e) => {
               e.preventDefault()
               const startY = e.clientY
               const startHeight = layout.terminal.height()
-              const maxHeight = window.innerHeight * 0.8
+              const maxHeight = window.innerHeight * 0.6
               const minHeight = 100
               const collapseThreshold = 50
               let currentHeight = startHeight
