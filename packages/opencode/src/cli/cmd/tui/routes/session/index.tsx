@@ -187,6 +187,27 @@ export function Session() {
   let prompt: PromptRef
   const keybind = useKeybind()
 
+  // Helper: Find next visible message boundary in direction
+  const findNextVisibleMessage = (direction: "next" | "prev"): string | null => {
+    const children = scroll.getChildren()
+    const messagesList = messages()
+    const scrollTop = scroll.y
+
+    // Get visible messages sorted by position
+    const visibleMessages = children
+      .filter((c) => c.id && messagesList.some((m) => m.id === c.id))
+      .sort((a, b) => a.y - b.y)
+
+    if (visibleMessages.length === 0) return null
+
+    if (direction === "next") {
+      // Find first message below current position
+      return visibleMessages.find((c) => c.y > scrollTop + 10)?.id ?? null
+    }
+    // Find last message above current position
+    return visibleMessages.reverse().find((c) => c.y < scrollTop - 10)?.id ?? null
+  }
+
   useKeyboard((evt) => {
     if (dialog.stack.length > 0) return
 
@@ -589,6 +610,42 @@ export function Session() {
             break
           }
         }
+      },
+    },
+    {
+      title: "Next message",
+      value: "session.message.next",
+      keybind: "messages_next",
+      category: "Session",
+      disabled: true,
+      onSelect: (dialog) => {
+        const targetID = findNextVisibleMessage("next")
+        if (targetID) {
+          const child = scroll.getChildren().find((c) => c.id === targetID)
+          if (child) scroll.scrollBy(child.y - scroll.y - 1)
+          dialog.clear()
+          return
+        }
+        scroll.scrollBy(scroll.height)
+        dialog.clear()
+      },
+    },
+    {
+      title: "Previous message",
+      value: "session.message.previous",
+      keybind: "messages_previous",
+      category: "Session",
+      disabled: true,
+      onSelect: (dialog) => {
+        const targetID = findNextVisibleMessage("prev")
+        if (targetID) {
+          const child = scroll.getChildren().find((c) => c.id === targetID)
+          if (child) scroll.scrollBy(child.y - scroll.y - 1)
+          dialog.clear()
+          return
+        }
+        scroll.scrollBy(-scroll.height)
+        dialog.clear()
       },
     },
     {
