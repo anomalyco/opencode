@@ -132,7 +132,7 @@ test("model whitelist filters models for provider", async () => {
     fn: async () => {
       const providers = await Provider.list()
       expect(providers["anthropic"]).toBeDefined()
-      const models = Object.keys(providers["anthropic"].info.models)
+      const models = Object.keys(providers["anthropic"].models)
       expect(models).toContain("claude-sonnet-4-20250514")
       expect(models.length).toBe(1)
     },
@@ -163,7 +163,7 @@ test("model blacklist excludes specific models", async () => {
     fn: async () => {
       const providers = await Provider.list()
       expect(providers["anthropic"]).toBeDefined()
-      const models = Object.keys(providers["anthropic"].info.models)
+      const models = Object.keys(providers["anthropic"].models)
       expect(models).not.toContain("claude-sonnet-4-20250514")
     },
   })
@@ -198,8 +198,8 @@ test("custom model alias via config", async () => {
     fn: async () => {
       const providers = await Provider.list()
       expect(providers["anthropic"]).toBeDefined()
-      expect(providers["anthropic"].info.models["my-alias"]).toBeDefined()
-      expect(providers["anthropic"].info.models["my-alias"].name).toBe("My Custom Alias")
+      expect(providers["anthropic"].models["my-alias"]).toBeDefined()
+      expect(providers["anthropic"].models["my-alias"].name).toBe("My Custom Alias")
     },
   })
 })
@@ -241,8 +241,8 @@ test("custom provider with npm package", async () => {
     fn: async () => {
       const providers = await Provider.list()
       expect(providers["custom-provider"]).toBeDefined()
-      expect(providers["custom-provider"].info.name).toBe("Custom Provider")
-      expect(providers["custom-provider"].info.models["custom-model"]).toBeDefined()
+      expect(providers["custom-provider"].name).toBe("Custom Provider")
+      expect(providers["custom-provider"].models["custom-model"]).toBeDefined()
     },
   })
 })
@@ -299,8 +299,9 @@ test("getModel returns model for valid provider/model", async () => {
       const model = await Provider.getModel("anthropic", "claude-sonnet-4-20250514")
       expect(model).toBeDefined()
       expect(model.providerID).toBe("anthropic")
-      expect(model.modelID).toBe("claude-sonnet-4-20250514")
-      expect(model.language).toBeDefined()
+      expect(model.id).toBe("claude-sonnet-4-20250514")
+      const language = await Provider.getLanguage(model)
+      expect(language).toBeDefined()
     },
   })
 })
@@ -478,11 +479,11 @@ test("model cost defaults to zero when not specified", async () => {
     directory: tmp.path,
     fn: async () => {
       const providers = await Provider.list()
-      const model = providers["test-provider"].info.models["test-model"]
+      const model = providers["test-provider"].models["test-model"]
       expect(model.cost.input).toBe(0)
       expect(model.cost.output).toBe(0)
-      expect(model.cost.cache_read).toBe(0)
-      expect(model.cost.cache_write).toBe(0)
+      expect(model.cost.cache.read).toBe(0)
+      expect(model.cost.cache.write).toBe(0)
     },
   })
 })
@@ -516,7 +517,7 @@ test("model options are merged from existing model", async () => {
     },
     fn: async () => {
       const providers = await Provider.list()
-      const model = providers["anthropic"].info.models["claude-sonnet-4-20250514"]
+      const model = providers["anthropic"].models["claude-sonnet-4-20250514"]
       expect(model.options.customOption).toBe("custom-value")
     },
   })
@@ -623,17 +624,17 @@ test("getModel uses realIdByKey for aliased models", async () => {
     },
     fn: async () => {
       const providers = await Provider.list()
-      expect(providers["anthropic"].info.models["my-sonnet"]).toBeDefined()
+      expect(providers["anthropic"].models["my-sonnet"]).toBeDefined()
 
       const model = await Provider.getModel("anthropic", "my-sonnet")
       expect(model).toBeDefined()
-      expect(model.modelID).toBe("my-sonnet")
-      expect(model.info.name).toBe("My Sonnet Alias")
+      expect(model.id).toBe("my-sonnet")
+      expect(model.name).toBe("My Sonnet Alias")
     },
   })
 })
 
-test("provider api field sets default baseURL", async () => {
+test("provider api field sets model api.url", async () => {
   await using tmp = await tmpdir({
     init: async (dir) => {
       await Bun.write(
@@ -666,7 +667,8 @@ test("provider api field sets default baseURL", async () => {
     directory: tmp.path,
     fn: async () => {
       const providers = await Provider.list()
-      expect(providers["custom-api"].options.baseURL).toBe("https://api.example.com/v1")
+      // api field is stored on model.api.url, used by getSDK to set baseURL
+      expect(providers["custom-api"].models["model-1"].api.url).toBe("https://api.example.com/v1")
     },
   })
 })
@@ -737,10 +739,10 @@ test("model inherits properties from existing database model", async () => {
     },
     fn: async () => {
       const providers = await Provider.list()
-      const model = providers["anthropic"].info.models["claude-sonnet-4-20250514"]
+      const model = providers["anthropic"].models["claude-sonnet-4-20250514"]
       expect(model.name).toBe("Custom Name for Sonnet")
-      expect(model.tool_call).toBe(true)
-      expect(model.attachment).toBe(true)
+      expect(model.capabilities.toolcall).toBe(true)
+      expect(model.capabilities.attachment).toBe(true)
       expect(model.limit.context).toBeGreaterThan(0)
     },
   })
@@ -820,7 +822,7 @@ test("whitelist and blacklist can be combined", async () => {
     fn: async () => {
       const providers = await Provider.list()
       expect(providers["anthropic"]).toBeDefined()
-      const models = Object.keys(providers["anthropic"].info.models)
+      const models = Object.keys(providers["anthropic"].models)
       expect(models).toContain("claude-sonnet-4-20250514")
       expect(models).not.toContain("claude-opus-4-20250514")
       expect(models.length).toBe(1)
@@ -858,11 +860,9 @@ test("model modalities default correctly", async () => {
     directory: tmp.path,
     fn: async () => {
       const providers = await Provider.list()
-      const model = providers["test-provider"].info.models["test-model"]
-      expect(model.modalities).toEqual({
-        input: ["text"],
-        output: ["text"],
-      })
+      const model = providers["test-provider"].models["test-model"]
+      expect(model.capabilities.input.text).toBe(true)
+      expect(model.capabilities.output.text).toBe(true)
     },
   })
 })
@@ -903,11 +903,11 @@ test("model with custom cost values", async () => {
     directory: tmp.path,
     fn: async () => {
       const providers = await Provider.list()
-      const model = providers["test-provider"].info.models["test-model"]
+      const model = providers["test-provider"].models["test-model"]
       expect(model.cost.input).toBe(5)
       expect(model.cost.output).toBe(15)
-      expect(model.cost.cache_read).toBe(2.5)
-      expect(model.cost.cache_write).toBe(7.5)
+      expect(model.cost.cache.read).toBe(2.5)
+      expect(model.cost.cache.write).toBe(7.5)
     },
   })
 })
@@ -931,7 +931,7 @@ test("getSmallModel returns appropriate small model", async () => {
     fn: async () => {
       const model = await Provider.getSmallModel("anthropic")
       expect(model).toBeDefined()
-      expect(model?.modelID).toContain("haiku")
+      expect(model?.id).toContain("haiku")
     },
   })
 })
@@ -957,7 +957,7 @@ test("getSmallModel respects config small_model override", async () => {
       const model = await Provider.getSmallModel("anthropic")
       expect(model).toBeDefined()
       expect(model?.providerID).toBe("anthropic")
-      expect(model?.modelID).toBe("claude-sonnet-4-20250514")
+      expect(model?.id).toBe("claude-sonnet-4-20250514")
     },
   })
 })
@@ -1046,7 +1046,7 @@ test("provider with custom npm package", async () => {
     fn: async () => {
       const providers = await Provider.list()
       expect(providers["local-llm"]).toBeDefined()
-      expect(providers["local-llm"].info.npm).toBe("@ai-sdk/openai-compatible")
+      expect(providers["local-llm"].models["llama-3"].api.npm).toBe("@ai-sdk/openai-compatible")
       expect(providers["local-llm"].options.baseURL).toBe("http://localhost:11434/v1")
     },
   })
@@ -1082,7 +1082,7 @@ test("model alias name defaults to alias key when id differs", async () => {
     },
     fn: async () => {
       const providers = await Provider.list()
-      expect(providers["anthropic"].info.models["sonnet"].name).toBe("sonnet")
+      expect(providers["anthropic"].models["sonnet"].name).toBe("sonnet")
     },
   })
 })
@@ -1123,8 +1123,8 @@ test("provider with multiple env var options only includes apiKey when single en
     fn: async () => {
       const providers = await Provider.list()
       expect(providers["multi-env"]).toBeDefined()
-      // When multiple env options exist, apiKey should NOT be auto-set
-      expect(providers["multi-env"].options.apiKey).toBeUndefined()
+      // When multiple env options exist, key should NOT be auto-set
+      expect(providers["multi-env"].key).toBeUndefined()
     },
   })
 })
@@ -1165,8 +1165,8 @@ test("provider with single env var includes apiKey automatically", async () => {
     fn: async () => {
       const providers = await Provider.list()
       expect(providers["single-env"]).toBeDefined()
-      // Single env option should auto-set apiKey
-      expect(providers["single-env"].options.apiKey).toBe("my-api-key")
+      // Single env option should auto-set key
+      expect(providers["single-env"].key).toBe("my-api-key")
     },
   })
 })
@@ -1201,7 +1201,7 @@ test("model cost overrides existing cost values", async () => {
     },
     fn: async () => {
       const providers = await Provider.list()
-      const model = providers["anthropic"].info.models["claude-sonnet-4-20250514"]
+      const model = providers["anthropic"].models["claude-sonnet-4-20250514"]
       expect(model.cost.input).toBe(999)
       expect(model.cost.output).toBe(888)
     },
@@ -1249,11 +1249,11 @@ test("completely new provider not in database can be configured", async () => {
     fn: async () => {
       const providers = await Provider.list()
       expect(providers["brand-new-provider"]).toBeDefined()
-      expect(providers["brand-new-provider"].info.name).toBe("Brand New")
-      const model = providers["brand-new-provider"].info.models["new-model"]
-      expect(model.reasoning).toBe(true)
-      expect(model.attachment).toBe(true)
-      expect(model.modalities?.input).toContain("image")
+      expect(providers["brand-new-provider"].name).toBe("Brand New")
+      const model = providers["brand-new-provider"].models["new-model"]
+      expect(model.capabilities.reasoning).toBe(true)
+      expect(model.capabilities.attachment).toBe(true)
+      expect(model.capabilities.input.image).toBe(true)
     },
   })
 })
@@ -1322,7 +1322,7 @@ test("model with tool_call false", async () => {
     directory: tmp.path,
     fn: async () => {
       const providers = await Provider.list()
-      expect(providers["no-tools"].info.models["basic-model"].tool_call).toBe(false)
+      expect(providers["no-tools"].models["basic-model"].capabilities.toolcall).toBe(false)
     },
   })
 })
@@ -1357,7 +1357,7 @@ test("model defaults tool_call to true when not specified", async () => {
     directory: tmp.path,
     fn: async () => {
       const providers = await Provider.list()
-      expect(providers["default-tools"].info.models["model"].tool_call).toBe(true)
+      expect(providers["default-tools"].models["model"].capabilities.toolcall).toBe(true)
     },
   })
 })
@@ -1396,7 +1396,7 @@ test("model headers are preserved", async () => {
     directory: tmp.path,
     fn: async () => {
       const providers = await Provider.list()
-      const model = providers["headers-provider"].info.models["model"]
+      const model = providers["headers-provider"].models["model"]
       expect(model.headers).toEqual({
         "X-Custom-Header": "custom-value",
         Authorization: "Bearer special-token",
@@ -1465,8 +1465,8 @@ test("getModel returns consistent results", async () => {
       const model1 = await Provider.getModel("anthropic", "claude-sonnet-4-20250514")
       const model2 = await Provider.getModel("anthropic", "claude-sonnet-4-20250514")
       expect(model1.providerID).toEqual(model2.providerID)
-      expect(model1.modelID).toEqual(model2.modelID)
-      expect(model1.info).toEqual(model2.info)
+      expect(model1.id).toEqual(model2.id)
+      expect(model1).toEqual(model2)
     },
   })
 })
@@ -1501,7 +1501,7 @@ test("provider name defaults to id when not in database", async () => {
     directory: tmp.path,
     fn: async () => {
       const providers = await Provider.list()
-      expect(providers["my-custom-id"].info.name).toBe("my-custom-id")
+      expect(providers["my-custom-id"].name).toBe("my-custom-id")
     },
   })
 })
@@ -1601,7 +1601,7 @@ test("getProvider returns provider info", async () => {
     fn: async () => {
       const provider = await Provider.getProvider("anthropic")
       expect(provider).toBeDefined()
-      expect(provider?.info.id).toBe("anthropic")
+      expect(provider?.id).toBe("anthropic")
     },
   })
 })
@@ -1684,7 +1684,7 @@ test("model limit defaults to zero when not specified", async () => {
     directory: tmp.path,
     fn: async () => {
       const providers = await Provider.list()
-      const model = providers["no-limit"].info.models["model"]
+      const model = providers["no-limit"].models["model"]
       expect(model.limit.context).toBe(0)
       expect(model.limit.output).toBe(0)
     },

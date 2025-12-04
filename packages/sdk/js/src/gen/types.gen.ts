@@ -942,6 +942,75 @@ export type AgentConfig = {
     | undefined
 }
 
+export type ProviderConfig = {
+  api?: string
+  name?: string
+  env?: Array<string>
+  id?: string
+  npm?: string
+  models?: {
+    [key: string]: {
+      id?: string
+      name?: string
+      release_date?: string
+      attachment?: boolean
+      reasoning?: boolean
+      temperature?: boolean
+      tool_call?: boolean
+      cost?: {
+        input: number
+        output: number
+        cache_read?: number
+        cache_write?: number
+        context_over_200k?: {
+          input: number
+          output: number
+          cache_read?: number
+          cache_write?: number
+        }
+      }
+      limit?: {
+        context: number
+        output: number
+      }
+      modalities?: {
+        input: Array<"text" | "audio" | "image" | "video" | "pdf">
+        output: Array<"text" | "audio" | "image" | "video" | "pdf">
+      }
+      experimental?: boolean
+      status?: "alpha" | "beta" | "deprecated"
+      options?: {
+        [key: string]: unknown
+      }
+      headers?: {
+        [key: string]: string
+      }
+      provider?: {
+        npm: string
+      }
+    }
+  }
+  whitelist?: Array<string>
+  blacklist?: Array<string>
+  options?: {
+    apiKey?: string
+    baseURL?: string
+    /**
+     * GitHub Enterprise URL for copilot authentication
+     */
+    enterpriseUrl?: string
+    /**
+     * Enable promptCacheKey for this provider (default false)
+     */
+    setCacheKey?: boolean
+    /**
+     * Timeout in milliseconds for requests to this provider. Default is 300000 (5 minutes). Set to false to disable timeout.
+     */
+    timeout?: number | false
+    [key: string]: unknown | string | boolean | (number | false) | undefined
+  }
+}
+
 export type McpLocalConfig = {
   /**
    * Type of MCP server connection
@@ -1100,74 +1169,7 @@ export type Config = {
    * Custom provider configurations and model overrides
    */
   provider?: {
-    [key: string]: {
-      api?: string
-      name?: string
-      env?: Array<string>
-      id?: string
-      npm?: string
-      models?: {
-        [key: string]: {
-          id?: string
-          name?: string
-          release_date?: string
-          attachment?: boolean
-          reasoning?: boolean
-          temperature?: boolean
-          tool_call?: boolean
-          cost?: {
-            input: number
-            output: number
-            cache_read?: number
-            cache_write?: number
-            context_over_200k?: {
-              input: number
-              output: number
-              cache_read?: number
-              cache_write?: number
-            }
-          }
-          limit?: {
-            context: number
-            output: number
-          }
-          modalities?: {
-            input: Array<"text" | "audio" | "image" | "video" | "pdf">
-            output: Array<"text" | "audio" | "image" | "video" | "pdf">
-          }
-          experimental?: boolean
-          status?: "alpha" | "beta" | "deprecated"
-          options?: {
-            [key: string]: unknown
-          }
-          headers?: {
-            [key: string]: string
-          }
-          provider?: {
-            npm: string
-          }
-        }
-      }
-      whitelist?: Array<string>
-      blacklist?: Array<string>
-      options?: {
-        apiKey?: string
-        baseURL?: string
-        /**
-         * GitHub Enterprise URL for copilot authentication
-         */
-        enterpriseUrl?: string
-        /**
-         * Enable promptCacheKey for this provider (default false)
-         */
-        setCacheKey?: boolean
-        /**
-         * Timeout in milliseconds for requests to this provider. Default is 300000 (5 minutes). Set to false to disable timeout.
-         */
-        timeout?: number | false
-        [key: string]: unknown | string | boolean | (number | false) | undefined
-      }
-    }
+    [key: string]: ProviderConfig
   }
   /**
    * MCP (Model Context Protocol) server configurations
@@ -1354,51 +1356,71 @@ export type Command = {
 
 export type Model = {
   id: string
+  providerID: string
+  api: {
+    id: string
+    url: string
+    npm: string
+  }
   name: string
-  release_date: string
-  attachment: boolean
-  reasoning: boolean
-  temperature: boolean
-  tool_call: boolean
+  capabilities: {
+    temperature: boolean
+    reasoning: boolean
+    attachment: boolean
+    toolcall: boolean
+    input: {
+      text: boolean
+      audio: boolean
+      image: boolean
+      video: boolean
+      pdf: boolean
+    }
+    output: {
+      text: boolean
+      audio: boolean
+      image: boolean
+      video: boolean
+      pdf: boolean
+    }
+  }
   cost: {
     input: number
     output: number
-    cache_read?: number
-    cache_write?: number
-    context_over_200k?: {
+    cache: {
+      read: number
+      write: number
+    }
+    experimentalOver200K?: {
       input: number
       output: number
-      cache_read?: number
-      cache_write?: number
+      cache: {
+        read: number
+        write: number
+      }
     }
   }
   limit: {
     context: number
     output: number
   }
-  modalities?: {
-    input: Array<"text" | "audio" | "image" | "video" | "pdf">
-    output: Array<"text" | "audio" | "image" | "video" | "pdf">
-  }
-  experimental?: boolean
-  status?: "alpha" | "beta" | "deprecated"
+  status: "alpha" | "beta" | "deprecated" | "active"
   options: {
     [key: string]: unknown
   }
-  headers?: {
+  headers: {
     [key: string]: string
-  }
-  provider?: {
-    npm: string
   }
 }
 
 export type Provider = {
-  api?: string
-  name: string
-  env: Array<string>
   id: string
-  npm?: string
+  name: string
+  source: "env" | "config" | "custom" | "api"
+  env: Array<string>
+  key?: string
+  options: {
+    [key: string]: unknown
+  }
   models: {
     [key: string]: Model
   }
@@ -2665,7 +2687,55 @@ export type ProviderListResponses = {
    * List of providers
    */
   200: {
-    all: Array<Provider>
+    all: Array<{
+      api?: string
+      name: string
+      env: Array<string>
+      id: string
+      npm?: string
+      models: {
+        [key: string]: {
+          id: string
+          name: string
+          release_date: string
+          attachment: boolean
+          reasoning: boolean
+          temperature: boolean
+          tool_call: boolean
+          cost?: {
+            input: number
+            output: number
+            cache_read?: number
+            cache_write?: number
+            context_over_200k?: {
+              input: number
+              output: number
+              cache_read?: number
+              cache_write?: number
+            }
+          }
+          limit: {
+            context: number
+            output: number
+          }
+          modalities?: {
+            input: Array<"text" | "audio" | "image" | "video" | "pdf">
+            output: Array<"text" | "audio" | "image" | "video" | "pdf">
+          }
+          experimental?: boolean
+          status?: "alpha" | "beta" | "deprecated"
+          options: {
+            [key: string]: unknown
+          }
+          headers?: {
+            [key: string]: string
+          }
+          provider?: {
+            npm: string
+          }
+        }
+      }
+    }>
     default: {
       [key: string]: string
     }
