@@ -6,7 +6,7 @@ Payload Format (JSON array):
 [{"tool": "read", "parameters": {"filePath": "src/index.ts", "limit": 350}},{"tool": "grep", "parameters": {"pattern": "Session\\.updatePart", "include": "src/**/*.ts"}},{"tool": "bash", "parameters": {"command": "git status", "description": "Shows working tree status"}}]
 
 Rules:
-- 1–10 tool calls per batch
+- 1-10 tool calls per batch
 - All calls start in parallel; ordering NOT guaranteed
 - Partial failures do not stop others
 
@@ -14,7 +14,7 @@ Rules:
 Disallowed Tools:
 - batch (no nesting)
 - edit (run edits separately)
-- todoread (call directly – lightweight)
+- todoread (call directly - lightweight)
 
 When NOT to Use:
 - Operations that depend on prior tool output (e.g. create then read same file)
@@ -25,4 +25,4 @@ Good Use Cases:
 - grep + glob + read combos
 - Multiple lightweight bash introspection commands
 
-Performance Tip: Group independent reads/searches for 2–5x efficiency gain.
+Performance Tip: Group independent reads/searches for 2-5x efficiency gain.
