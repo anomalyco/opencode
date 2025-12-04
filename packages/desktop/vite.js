@@ -1,6 +1,5 @@
 import solidPlugin from "vite-plugin-solid"
 import tailwindcss from "@tailwindcss/vite"
-import path from "path"
 import { fileURLToPath } from "url"
 
 /**
@@ -15,6 +14,9 @@ export default [
           alias: {
             "@": fileURLToPath(new URL("./src", import.meta.url)),
           },
+        },
+        worker: {
+          format: "es",
         },
       }
     },
