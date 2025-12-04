@@ -149,6 +149,13 @@ export namespace MessageV2 {
   export const CompactionPart = PartBase.extend({
     type: z.literal("compaction"),
     auto: z.boolean(),
+    extraction: z
+      .object({
+        status: z.enum(["pending", "running", "completed"]),
+        childSessionID: z.string().optional(),
+        files: z.array(z.string()).optional(),
+      })
+      .optional(),
   }).meta({
     ref: "CompactionPart",
   })

@@ -64,6 +64,8 @@ import { Editor } from "../../util/editor"
 import stripAnsi from "strip-ansi"
 import { Footer } from "./footer.tsx"
 import { usePromptRef } from "../../context/prompt"
+import "opentui-spinner/solid"
+import { createColors, createFrames } from "../../ui/spinner.ts"
 
 addDefaultParsers(parsers.parsers)
 
@@ -1018,7 +1020,30 @@ function UserMessage(props: {
   const queued = createMemo(() => props.pending && props.message.id > props.pending)
   const color = createMemo(() => (queued() ? theme.accent : local.agent.color(props.message.agent)))
 
-  const compaction = createMemo(() => props.parts.find((x) => x.type === "compaction"))
+  const compaction = createMemo(
+    () =>
+      props.parts.find((x) => x.type === "compaction") as
+        | {
+            type: "compaction"
+            extraction?: { status: "pending" | "running" | "completed"; childSessionID?: string; files?: string[] }
+          }
+        | undefined,
+  )
+
+  const spinnerDef = createMemo(() => ({
+    frames: createFrames({
+      color: theme.accent,
+      style: "blocks",
+      inactiveFactor: 0.6,
+      minAlpha: 0.3,
+    }),
+    color: createColors({
+      color: theme.accent,
+      style: "blocks",
+      inactiveFactor: 0.6,
+      minAlpha: 0.3,
+    }),
+  }))
 
   return (
     <>
@@ -1089,7 +1114,24 @@ function UserMessage(props: {
           title=" Compaction "
           titleAlignment="center"
           borderColor={theme.borderActive}
-        />
+        >
+          <Show when={compaction()?.extraction?.status === "running"}>
+            <box flexDirection="row" gap={1} paddingLeft={1} paddingTop={1}>
+              {/* @ts-ignore */}
+              <spinner color={spinnerDef().color} frames={spinnerDef().frames} interval={40} />
+              <text fg={theme.textMuted}>Extracting knowledge...</text>
+            </box>
+          </Show>
+          <Show
+            when={
+              compaction()?.extraction?.status === "completed" && (compaction()?.extraction?.files?.length ?? 0) > 0
+            }
+          >
+            <box paddingLeft={1} paddingTop={1}>
+              <text fg={theme.textMuted}>Extracted {compaction()!.extraction!.files!.length} knowledge file(s)</text>
+            </box>
+          </Show>
+        </box>
       </Show>
     </>
   )

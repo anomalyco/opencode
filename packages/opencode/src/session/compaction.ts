@@ -116,14 +116,40 @@ export namespace SessionCompaction {
       const transcriptPath = path.join(sessDir, `${input.sessionID}.md`)
       await SessionTranscript.writeToFile(input.sessionID, transcriptPath)
 
+      // Update compaction part to show extraction is starting
+      if (compactionPart) {
+        compactionPart.extraction = { status: "running" }
+        await Session.updatePart(compactionPart)
+      }
+
       const result = await SessionKnowledge.extract({
         sessionID: input.sessionID,
         transcriptPath,
         model: input.model,
+        async onStart(childSessionID) {
+          // Update compaction part with child session ID
+          if (compactionPart) {
+            compactionPart.extraction = {
+              status: "running",
+              childSessionID,
+            }
+            await Session.updatePart(compactionPart)
+          }
+        },
       })
 
       knowledgeFiles = result.knowledgeFiles
       log.info("knowledge extraction complete", { files: knowledgeFiles, substantial: result.hasSubstantialKnowledge })
+
+      // Update compaction part to show extraction is complete
+      if (compactionPart) {
+        compactionPart.extraction = {
+          status: "completed",
+          childSessionID: result.childSessionID,
+          files: knowledgeFiles,
+        }
+        await Session.updatePart(compactionPart)
+      }
 
       // Cleanup transcript if configured
       if (config.compaction?.cleanup_transcripts !== false) {

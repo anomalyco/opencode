@@ -12,25 +12,32 @@ export namespace SessionKnowledge {
   export interface ExtractResult {
     knowledgeFiles: string[]
     hasSubstantialKnowledge: boolean
+    childSessionID: string
   }
 
   export async function extract(input: {
     sessionID: string
     transcriptPath: string
     model: { providerID: string; modelID: string }
+    onStart?: (childSessionID: string) => void | Promise<void>
   }): Promise<ExtractResult> {
     log.info("extracting knowledge", { sessionID: input.sessionID })
 
     const agent = await Agent.get("knowledge-extractor")
     if (!agent) {
       log.error("knowledge-extractor agent not found")
-      return { knowledgeFiles: [], hasSubstantialKnowledge: false }
+      return { knowledgeFiles: [], hasSubstantialKnowledge: false, childSessionID: "" }
     }
 
     const session = await Session.create({
       parentID: input.sessionID,
       title: `Knowledge extraction (@${agent.name} subagent)`,
     })
+
+    // Notify caller that extraction has started with child session ID
+    if (input.onStart) {
+      await input.onStart(session.id)
+    }
 
     const messageID = Identifier.ascending("message")
     const prompt = buildExtractionPrompt(input.transcriptPath, input.sessionID)
@@ -45,7 +52,8 @@ export namespace SessionKnowledge {
     })
 
     const text = result.parts.findLast((x) => x.type === "text")?.text ?? ""
-    return parseExtractionResult(text)
+    const parsed = parseExtractionResult(text)
+    return { ...parsed, childSessionID: session.id }
   }
 
   function buildExtractionPrompt(transcriptPath: string, sessionID: string): string {
@@ -65,7 +73,7 @@ export namespace SessionKnowledge {
     ].join("\n")
   }
 
-  function parseExtractionResult(text: string): ExtractResult {
+  function parseExtractionResult(text: string): Omit<ExtractResult, "childSessionID"> {
     const match = text.match(/KNOWLEDGE_RESULT:\s*\nfiles:\s*\[(.*?)\]\s*\nsubstantial:\s*(true|false)\s*\nsummary:/s)
     if (!match) {
       log.warn("could not parse knowledge result", { text: text.slice(-500) })
