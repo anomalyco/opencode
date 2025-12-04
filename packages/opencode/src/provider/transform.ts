@@ -63,6 +63,46 @@ export namespace ProviderTransform {
       return result
     }
 
+    // DeepSeek: Handle reasoning_content for tool call continuations
+    // - With tool calls: Include reasoning_content in providerOptions so model can continue reasoning
+    // - Without tool calls: Strip reasoning (new turn doesn't need previous reasoning)
+    // See: https://api-docs.deepseek.com/guides/thinking_mode
+    if (model.providerID === "deepseek" || model.api.id.toLowerCase().includes("deepseek")) {
+      return msgs.map((msg) => {
+        if (msg.role === "assistant" && Array.isArray(msg.content)) {
+          const reasoningParts = msg.content.filter((part: any) => part.type === "reasoning")
+          const hasToolCalls = msg.content.some((part: any) => part.type === "tool-call")
+          const reasoningText = reasoningParts.map((part: any) => part.text).join("")
+
+          // Filter out reasoning parts from content
+          const filteredContent = msg.content.filter((part: any) => part.type !== "reasoning")
+
+          // If this message has tool calls and reasoning, include reasoning_content
+          // so DeepSeek can continue reasoning after tool execution
+          if (hasToolCalls && reasoningText) {
+            return {
+              ...msg,
+              content: filteredContent,
+              providerOptions: {
+                ...msg.providerOptions,
+                openaiCompatible: {
+                  ...(msg.providerOptions as any)?.openaiCompatible,
+                  reasoning_content: reasoningText,
+                },
+              },
+            }
+          }
+
+          // For final answers (no tool calls), just strip reasoning
+          return {
+            ...msg,
+            content: filteredContent,
+          }
+        }
+        return msg
+      })
+    }
+
     return msgs
   }
 
