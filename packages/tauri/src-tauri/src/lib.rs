@@ -107,10 +107,10 @@ pub fn run() {
             let app = app.handle().clone();
 
             if updater_enabled {
-                tokio::spawn(run_updater(app.clone()));
+                tauri::async_runtime::spawn(run_updater(app.clone()));
             }
 
-            tokio::spawn(async move {
+            tauri::async_runtime::spawn(async move {
                 let port = get_sidecar_port();
                 let socket_connected = is_server_running(port).await;
 
@@ -207,15 +207,28 @@ pub fn run() {
 }
 
 async fn run_updater(app: AppHandle) {
-    let update = match app.updater().unwrap().check().await {
+    let update = match app
+        .updater_builder()
+        .version_comparator(|v, r| {
+            dbg!(v, r);
+            true
+        })
+        .build()
+        .unwrap()
+        .check()
+        .await
+    {
         Ok(u) => u,
         Err(e) => {
+            dbg!(e);
             app.dialog()
                 .message("Failed to check for updates")
                 .show(|_| {});
             return;
         }
     };
+
+    dbg!(update.is_some());
 
     let Some(update) = update else {
         return;
@@ -231,6 +244,7 @@ async fn run_updater(app: AppHandle) {
             "Version {} of OpenCode is available, would you like to install it?",
             &update.version
         ))
+        .buttons(MessageDialogButtons::YesNo)
         .blocking_show();
 
     if !should_update {
@@ -241,5 +255,15 @@ async fn run_updater(app: AppHandle) {
         app.dialog()
             .message("Failed to install update")
             .blocking_show();
+    }
+
+    let should_restart = app
+        .dialog()
+        .message("Update installed successfully, would you like to restart OpenCode?")
+        .buttons(MessageDialogButtons::YesNo)
+        .blocking_show();
+
+    if should_restart {
+        app.restart();
     }
 }
