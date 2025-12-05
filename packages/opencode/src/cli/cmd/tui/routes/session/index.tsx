@@ -215,19 +215,21 @@ export function Session() {
       return visibleMessages.find((c) => c.y > scrollTop + 10)?.id ?? null
     }
     // Find last message above current position
-    return visibleMessages.reverse().find((c) => c.y < scrollTop - 10)?.id ?? null
+    return [...visibleMessages].reverse().find((c) => c.y < scrollTop - 10)?.id ?? null
   }
 
   // Helper: Scroll to message in direction or fallback to page scroll
-  const scrollToMessage = (direction: "next" | "prev", dialog: any) => {
+  const scrollToMessage = (direction: "next" | "prev", dialog: ReturnType<typeof useDialog>) => {
     const targetID = findNextVisibleMessage(direction)
-    if (targetID) {
-      const child = scroll.getChildren().find((c) => c.id === targetID)
-      if (child) scroll.scrollBy(child.y - scroll.y - 1)
+
+    if (!targetID) {
+      scroll.scrollBy(direction === "next" ? scroll.height : -scroll.height)
       dialog.clear()
       return
     }
-    scroll.scrollBy(direction === "next" ? scroll.height : -scroll.height)
+
+    const child = scroll.getChildren().find((c) => c.id === targetID)
+    if (child) scroll.scrollBy(child.y - scroll.y - 1)
     dialog.clear()
   }
 
