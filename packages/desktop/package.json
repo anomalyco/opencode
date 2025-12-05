@@ -3,6 +3,10 @@
   "version": "1.0.133",
   "description": "",
   "type": "module",
+  "exports": {
+    ".": "./src/index.tsx",
+    "./vite": "./vite.js"
+  },
   "scripts": {
     "typecheck": "tsgo --noEmit",
     "start": "vite",
