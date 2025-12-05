@@ -25,7 +25,7 @@ export function DialogAgentDetails(props: { agentName: string }) {
   useKeyboard((evt) => {
     if (evt.name === "escape" || evt.name === "return") {
       evt.preventDefault()
-      dialog.replace(() => <DialogAgent initialAgent={props.agentName} />)
+      dialog.replace(() => <DialogAgent focusedAgent={props.agentName} />)
       return
     }
     if (evt.name === "up" || (evt.ctrl && evt.name === "p")) {
