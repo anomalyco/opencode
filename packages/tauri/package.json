@@ -1,7 +1,7 @@
 {
   "name": "@opencode-ai/tauri",
   "private": true,
-  "version": "1.0.133",
+  "version": "1.0.134",
   "type": "module",
   "scripts": {
     "predev": "bun ./scripts/predev.ts",
