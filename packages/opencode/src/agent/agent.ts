@@ -246,7 +246,7 @@ export namespace Agent {
       model: model.language,
       schema: z.object({
         identifier: z.string(),
-        shortSummary: z.string(),
+        shortDescription: z.string(),
         whenToUse: z.string(),
         systemPrompt: z.string(),
       }),
