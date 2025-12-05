@@ -15,17 +15,17 @@ export namespace ConfigMarkdown {
   }
 
   // Perform {env:VAR} interpolation on frontmatter data only
-  function interpolateData(obj: any): any {
+  function interpolateEnvironmentVariables(obj: any): any {
     if (typeof obj === "string") {
       return obj.replace(/\{env:([^}]+)\}/g, (_, varName) => {
         return process.env[varName] || ""
       })
     } else if (Array.isArray(obj)) {
-      return obj.map(interpolateData)
+      return obj.map(interpolateEnvironmentVariables)
     } else if (obj && typeof obj === "object") {
       const result: any = {}
       for (const [key, value] of Object.entries(obj)) {
-        result[key] = interpolateData(value)
+        result[key] = interpolateEnvironmentVariables(value)
       }
       return result
     }
@@ -37,7 +37,7 @@ export namespace ConfigMarkdown {
 
     try {
       const md = matter(template)
-      md.data = interpolateData(md.data)
+      md.data = interpolateEnvironmentVariables(md.data)
       return md
     } catch (err) {
       throw new FrontmatterError(
