@@ -43,42 +43,12 @@ import { Snapshot } from "@/snapshot"
 import { SessionSummary } from "@/session/summary"
 import { GlobalBus } from "@/bus/global"
 import { SessionStatus } from "@/session/status"
+import { upgradeWebSocket, websocket } from "hono/bun"
+import { errors } from "./error"
+import { Pty } from "@/pty"
 
 // @ts-ignore This global is needed to prevent ai-sdk from logging warnings to stdout https://github.com/vercel/ai/blob/2dc67e0ef538307f21368db32d5a12345d98831b/packages/ai/src/logger/log-warnings.ts#L85
 globalThis.AI_SDK_LOG_WARNINGS = false
-
-const ERRORS = {
-  400: {
-    description: "Bad request",
-    content: {
-      "application/json": {
-        schema: resolver(
-          z
-            .object({
-              data: z.any(),
-              errors: z.array(z.record(z.string(), z.any())),
-              success: z.literal(false),
-            })
-            .meta({
-              ref: "BadRequestError",
-            }),
-        ),
-      },
-    },
-  },
-  404: {
-    description: "Not found",
-    content: {
-      "application/json": {
-        schema: resolver(Storage.NotFoundError.Schema),
-      },
-    },
-  },
-} as const
-
-function errors(...codes: number[]) {
-  return Object.fromEntries(codes.map((code) => [code, ERRORS[code as keyof typeof ERRORS]]))
-}
 
 export namespace Server {
   const log = Log.create({ service: "server" })
@@ -192,7 +162,167 @@ export namespace Server {
         }),
       )
       .use(validator("query", z.object({ directory: z.string().optional() })))
+
       .route("/project", ProjectRoute)
+
+      .get(
+        "/pty",
+        describeRoute({
+          description: "List all PTY sessions",
+          operationId: "pty.list",
+          responses: {
+            200: {
+              description: "List of sessions",
+              content: {
+                "application/json": {
+                  schema: resolver(Pty.Info.array()),
+                },
+              },
+            },
+          },
+        }),
+        async (c) => {
+          return c.json(Pty.list())
+        },
+      )
+      .post(
+        "/pty",
+        describeRoute({
+          description: "Create a new PTY session",
+          operationId: "pty.create",
+          responses: {
+            200: {
+              description: "Created session",
+              content: {
+                "application/json": {
+                  schema: resolver(Pty.Info),
+                },
+              },
+            },
+            ...errors(400),
+          },
+        }),
+        validator("json", Pty.CreateInput),
+        async (c) => {
+          const info = await Pty.create(c.req.valid("json"))
+          return c.json(info)
+        },
+      )
+      .put(
+        "/pty/:id",
+        describeRoute({
+          description: "Update PTY session",
+          operationId: "pty.update",
+          responses: {
+            200: {
+              description: "Updated session",
+              content: {
+                "application/json": {
+                  schema: resolver(Pty.Info),
+                },
+              },
+            },
+            ...errors(400),
+          },
+        }),
+        validator("param", z.object({ id: z.string() })),
+        validator("json", Pty.UpdateInput),
+        async (c) => {
+          const info = await Pty.update(c.req.valid("param").id, c.req.valid("json"))
+          return c.json(info)
+        },
+      )
+      .get(
+        "/pty/:id",
+        describeRoute({
+          description: "Get PTY session info",
+          operationId: "pty.get",
+          responses: {
+            200: {
+              description: "Session info",
+              content: {
+                "application/json": {
+                  schema: resolver(Pty.Info),
+                },
+              },
+            },
+            ...errors(404),
+          },
+        }),
+        validator("param", z.object({ id: z.string() })),
+        async (c) => {
+          const info = Pty.get(c.req.valid("param").id)
+          if (!info) {
+            throw new Storage.NotFoundError({ message: "Session not found" })
+          }
+          return c.json(info)
+        },
+      )
+      .delete(
+        "/pty/:id",
+        describeRoute({
+          description: "Remove a PTY session",
+          operationId: "pty.remove",
+          responses: {
+            200: {
+              description: "Session removed",
+              content: {
+                "application/json": {
+                  schema: resolver(z.boolean()),
+                },
+              },
+            },
+            ...errors(404),
+          },
+        }),
+        validator("param", z.object({ id: z.string() })),
+        async (c) => {
+          await Pty.remove(c.req.valid("param").id)
+          return c.json(true)
+        },
+      )
+      .get(
+        "/pty/:id/connect",
+        describeRoute({
+          description: "Connect to a PTY session",
+          operationId: "pty.connect",
+          responses: {
+            200: {
+              description: "Connected session",
+              content: {
+                "application/json": {
+                  schema: resolver(z.boolean()),
+                },
+              },
+            },
+            404: {
+              description: "Session not found",
+              content: {
+                "application/json": {
+                  schema: resolver(z.boolean()),
+                },
+              },
+            },
+          },
+        }),
+        validator("param", z.object({ id: z.string() })),
+        upgradeWebSocket((c) => {
+          const id = c.req.param("id")
+          let handler: ReturnType<typeof Pty.connect>
+          return {
+            onOpen(_event, ws) {
+              handler = Pty.connect(id, ws)
+            },
+            onMessage(event) {
+              handler?.onMessage(String(event.data))
+            },
+            onClose() {
+              handler?.onClose()
+            },
+          }
+        }),
+      )
+
       .get(
         "/config",
         describeRoute({
@@ -2083,6 +2213,7 @@ export namespace Server {
       hostname: opts.hostname,
       idleTimeout: 0,
       fetch: App().fetch,
+      websocket: websocket,
     })
     return server
   }
