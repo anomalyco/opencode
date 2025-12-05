@@ -13,8 +13,7 @@ export function DialogAgentDetails(props: { agentName: string }) {
   const dimensions = useTerminalDimensions()
 
   const agent = createMemo(() => local.agent.list().find((a) => a.name === props.agentName))
-  const description = createMemo(() => agent()?.description ?? "No description available")
-  const maxHeight = createMemo(() => Math.floor(dimensions().height / 2) - 4)
+  const maxHeight = Math.floor(dimensions().height / 2) - 4
 
   let scroll: ScrollBoxRenderable
 
@@ -57,11 +56,20 @@ export function DialogAgentDetails(props: { agentName: string }) {
         paddingLeft={4}
         paddingRight={4}
         paddingTop={1}
-        maxHeight={maxHeight()}
+        maxHeight={maxHeight}
       >
-        <text fg={theme.text} wrapMode="word">
-          {description()}
-        </text>
+        {agent()?.shortDescription && (
+          <text fg={theme.textMuted} wrapMode="word" marginBottom={1}>
+            {agent()?.shortDescription}
+          </text>
+        )}
+        {agent()?.description && (
+          <box>
+            <text fg={theme.text} wrapMode="word">
+              {agent()?.description}
+            </text>
+          </box>
+        )}
       </scrollbox>
       <box paddingLeft={4} paddingRight={4} paddingTop={1}>
         <text fg={theme.textMuted}>Press esc or enter to go back</text>
