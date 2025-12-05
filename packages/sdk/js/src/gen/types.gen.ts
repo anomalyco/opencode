@@ -791,6 +791,10 @@ export type KeybindsConfig = {
    */
   sidebar_toggle?: string
   /**
+   * Toggle session scrollbar
+   */
+  scrollbar_toggle?: string
+  /**
    * Toggle username visibility
    */
   username_toggle?: string
