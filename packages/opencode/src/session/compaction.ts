@@ -10,6 +10,7 @@ import z from "zod"
 import { SessionPrompt } from "./prompt"
 import { Flag } from "../flag/flag"
 import { Token } from "../util/token"
+import { Config } from "../config/config"
 import { Log } from "../util/log"
 import { ProviderTransform } from "@/provider/transform"
 import { SessionProcessor } from "./processor"
@@ -96,6 +97,7 @@ export namespace SessionCompaction {
     abort: AbortSignal
     auto: boolean
   }) {
+    const cfg = await Config.get()
     const model = await Provider.getModel(input.model.providerID, input.model.modelID)
     const language = await Provider.getLanguage(model)
     const system = [...SystemPrompt.compaction(model.providerID)]
@@ -191,6 +193,7 @@ export namespace SessionCompaction {
           },
         ],
       }),
+      experimental_telemetry: { isEnabled: cfg.experimental?.openTelemetry },
     })
     if (result === "continue" && input.auto) {
       const continueMsg = await Session.updateMessage({
