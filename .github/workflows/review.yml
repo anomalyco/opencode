@@ -48,7 +48,7 @@ jobs:
           OPENCODE_PERMISSION: '{ "bash": { "gh*": "allow", "gh pr review*": "deny", "*": "deny" } }'
         run: |
           PR_BODY=$(jq -r .body pr_data.json)
-          opencode run -m anthropic/claude-sonnet-4-5 "A new pull request has been created: '${{ steps.pr-details.outputs.title }}'
+          opencode run -m anthropic/claude-opus-4-5 "A new pull request has been created: '${{ steps.pr-details.outputs.title }}'
 
           <pr-number>
           ${{ steps.pr-number.outputs.number }}
