@@ -320,15 +320,15 @@ export const BashTool = Tool.define("bash", async () => {
 
       if (output.length > MAX_OUTPUT_LENGTH) {
         output = output.slice(0, MAX_OUTPUT_LENGTH)
-        resultMetadata.push(`Output exceeded length limit of ${MAX_OUTPUT_LENGTH} chars`)
+        resultMetadata.push(`bash tool truncated output as it exceeded ${MAX_OUTPUT_LENGTH} char limit`)
       }
 
       if (timedOut) {
-        resultMetadata.push(`Command terminated after exceeding timeout ${timeout} ms`)
+        resultMetadata.push(`bash tool terminated commmand after exceeding timeout ${timeout} ms`)
       }
 
       if (aborted) {
-        resultMetadata.push("Command aborted by user")
+        resultMetadata.push("User aborted the command")
       }
 
       if (resultMetadata.length > 1) {
