@@ -1,30 +1,42 @@
+import { sep } from "node:path"
+
 export namespace FileIgnore {
-  const DEFAULT_PATTERNS = [
-    // Dependencies
-    "**/node_modules/**",
-    "**/bower_components/**",
-    "**/.pnpm-store/**",
-    "**/vendor/**",
+  const FOLDERS = new Set([
+    "node_modules",
+    "bower_components",
+    ".pnpm-store",
+    "vendor",
+    ".npm",
+    "dist",
+    "build",
+    "out",
+    ".next",
+    "target",
+    "bin",
+    "obj",
+    ".git",
+    ".svn",
+    ".hg",
+    ".vscode",
+    ".idea",
+    ".turbo",
+    ".output",
+    "desktop",
+    ".sst",
+    ".cache",
+    ".webkit-cache",
+    "__pycache__",
+    ".pytest_cache",
+    "mypy_cache",
+    ".history",
+    ".gradle",
+  ])
 
-    // Build outputs
-    "**/dist/**",
-    "**/build/**",
-    "**/out/**",
-    "**/.next/**",
-    "**/target/**", // Rust
-    "**/bin/**",
-    "**/obj/**", // .NET
-
-    // Version control
-    "**/.git/**",
-    "**/.svn/**",
-    "**/.hg/**",
-
-    // IDE/Editor
-    "**/.vscode/**",
-    "**/.idea/**",
+  const FILES = [
     "**/*.swp",
     "**/*.swo",
+
+    "**/*.pyc",
 
     // OS
     "**/.DS_Store",
@@ -41,22 +53,31 @@ export namespace FileIgnore {
     "**/.nyc_output/**",
   ]
 
-  const GLOBS = DEFAULT_PATTERNS.map((p) => new Bun.Glob(p))
+  const FILE_GLOBS = FILES.map((p) => new Bun.Glob(p))
+
+  export const PATTERNS = [...FILES, ...FOLDERS]
 
   export function match(
     filepath: string,
-    opts: {
+    opts?: {
       extra?: Bun.Glob[]
       whitelist?: Bun.Glob[]
     },
   ) {
-    for (const glob of opts.whitelist || []) {
+    for (const glob of opts?.whitelist || []) {
       if (glob.match(filepath)) return false
     }
-    const extra = opts.extra || []
-    for (const glob of [...GLOBS, ...extra]) {
+
+    const parts = filepath.split(sep)
+    for (let i = 0; i < parts.length; i++) {
+      if (FOLDERS.has(parts[i])) return true
+    }
+
+    const extra = opts?.extra || []
+    for (const glob of [...FILE_GLOBS, ...extra]) {
       if (glob.match(filepath)) return true
     }
+
     return false
   }
 }

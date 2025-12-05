@@ -50,79 +50,66 @@ function detectPlatformAndArch() {
 function findBinary() {
   const { platform, arch } = detectPlatformAndArch()
   const packageName = `opencode-${platform}-${arch}`
-  const binary = platform === "windows" ? "opencode.exe" : "opencode"
+  const binaryName = platform === "windows" ? "opencode.exe" : "opencode"
 
   try {
     // Use require.resolve to find the package
     const packageJsonPath = require.resolve(`${packageName}/package.json`)
     const packageDir = path.dirname(packageJsonPath)
-    const binaryPath = path.join(packageDir, "bin", binary)
+    const binaryPath = path.join(packageDir, "bin", binaryName)
 
     if (!fs.existsSync(binaryPath)) {
       throw new Error(`Binary not found at ${binaryPath}`)
     }
 
-    return binaryPath
+    return { binaryPath, binaryName }
   } catch (error) {
     throw new Error(`Could not find package ${packageName}: ${error.message}`)
   }
 }
 
-async function regenerateWindowsCmdWrappers() {
-  console.log("Windows + npm detected: Forcing npm to rebuild bin links")
+function prepareBinDirectory(binaryName) {
+  const binDir = path.join(__dirname, "bin")
+  const targetPath = path.join(binDir, binaryName)
 
-  try {
-    const { execSync } = require("child_process")
-    const pkgPath = path.join(__dirname, "..")
+  // Ensure bin directory exists
+  if (!fs.existsSync(binDir)) {
+    fs.mkdirSync(binDir, { recursive: true })
+  }
 
-    // npm_config_global is string | undefined
-    // if it exists, the value is true
-    const isGlobal = process.env.npm_config_global === "true" || pkgPath.includes(path.join("npm", "node_modules"))
+  // Remove existing binary/symlink if it exists
+  if (fs.existsSync(targetPath)) {
+    fs.unlinkSync(targetPath)
+  }
 
-    // The npm rebuild command does 2 things - Execute lifecycle scripts and rebuild bin links
-    // We want to skip lifecycle scripts to avoid infinite loops, so we use --ignore-scripts
-    const cmd = `npm rebuild opencode-ai --ignore-scripts${isGlobal ? " -g" : ""}`
-    const opts = {
-      stdio: "inherit",
-      shell: true,
-      ...(isGlobal ? {} : { cwd: path.join(pkgPath, "..", "..") }), // For local, run from project root
-    }
+  return { binDir, targetPath }
+}
 
-    console.log(`Running: ${cmd}`)
-    execSync(cmd, opts)
-    console.log("Successfully rebuilt npm bin links")
-  } catch (error) {
-    console.error("Error rebuilding npm links:", error.message)
-    console.error("npm rebuild failed. You may need to manually run: npm rebuild opencode-ai --ignore-scripts")
+function symlinkBinary(sourcePath, binaryName) {
+  const { targetPath } = prepareBinDirectory(binaryName)
+
+  fs.symlinkSync(sourcePath, targetPath)
+  console.log(`opencode binary symlinked: ${targetPath} -> ${sourcePath}`)
+
+  // Verify the file exists after operation
+  if (!fs.existsSync(targetPath)) {
+    throw new Error(`Failed to symlink binary to ${targetPath}`)
   }
 }
 
 async function main() {
   try {
     if (os.platform() === "win32") {
-      // NPM eg format - npm/11.4.2 node/v24.4.1 win32 x64
-      // Bun eg format - bun/1.2.19 npm/? node/v24.3.0 win32 x64
-      if (process.env.npm_config_user_agent.startsWith("npm")) {
-        await regenerateWindowsCmdWrappers()
-      } else {
-        console.log("Windows detected but not npm, skipping postinstall")
-      }
+      // On Windows, the .exe is already included in the package and bin field points to it
+      // No postinstall setup needed
+      console.log("Windows detected: binary setup not needed (using packaged .exe)")
       return
     }
 
-    const binaryPath = findBinary()
-    const binScript = path.join(__dirname, "bin", "opencode")
-
-    // Remove existing bin script if it exists
-    if (fs.existsSync(binScript)) {
-      fs.unlinkSync(binScript)
-    }
-
-    // Create symlink to the actual binary
-    fs.symlinkSync(binaryPath, binScript)
-    console.log(`opencode binary symlinked: ${binScript} -> ${binaryPath}`)
+    const { binaryPath, binaryName } = findBinary()
+    symlinkBinary(binaryPath, binaryName)
   } catch (error) {
-    console.error("Failed to create opencode binary symlink:", error.message)
+    console.error("Failed to setup opencode binary:", error.message)
     process.exit(1)
   }
 }

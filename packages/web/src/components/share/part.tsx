@@ -174,6 +174,12 @@ export function Part(props: PartProps) {
             <div data-slot="filename">{props.part.filename}</div>
           </div>
         )}
+        {props.message.role === "user" && props.part.type === "file" && (
+          <div data-component="attachment">
+            <div data-slot="copy">Attachment</div>
+            <div data-slot="filename">{props.part.filename}</div>
+          </div>
+        )}
         {props.part.type === "step-start" && props.message.role === "assistant" && (
           <div data-component="step-start">
             <div data-slot="provider">{props.message.providerID}</div>

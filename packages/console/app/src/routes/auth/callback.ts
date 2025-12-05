@@ -19,6 +19,7 @@ export async function GET(input: APIEvent) {
     return {
       ...value,
       account: {
+        ...value.account,
         [id]: {
           id,
           email: decoded.subject.properties.email,

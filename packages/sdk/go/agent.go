@@ -49,6 +49,7 @@ type Agent struct {
 	Options     map[string]interface{} `json:"options,required"`
 	Permission  AgentPermission        `json:"permission,required"`
 	Tools       map[string]bool        `json:"tools,required"`
+	Color       string                 `json:"color"`
 	Description string                 `json:"description"`
 	Model       AgentModel             `json:"model"`
 	Prompt      string                 `json:"prompt"`
@@ -65,6 +66,7 @@ type agentJSON struct {
 	Options     apijson.Field
 	Permission  apijson.Field
 	Tools       apijson.Field
+	Color       apijson.Field
 	Description apijson.Field
 	Model       apijson.Field
 	Prompt      apijson.Field

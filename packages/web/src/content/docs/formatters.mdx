@@ -21,9 +21,12 @@ OpenCode comes with several built-in formatters for popular languages and framew
 | clang-format   | .c, .cpp, .h, .hpp, .ino, and [more](https://clang.llvm.org/docs/ClangFormat.html)                       | `.clang-format` config file             |
 | ktlint         | .kt, .kts                                                                                                | `ktlint` command available              |
 | ruff           | .py, .pyi                                                                                                | `ruff` command available with config    |
+| uv             | .py, .pyi                                                                                                | `uv` command available                  |
 | rubocop        | .rb, .rake, .gemspec, .ru                                                                                | `rubocop` command available             |
 | standardrb     | .rb, .rake, .gemspec, .ru                                                                                | `standardrb` command available          |
 | htmlbeautifier | .erb, .html.erb                                                                                          | `htmlbeautifier` command available      |
+| air            | .R                                                                                                       | `air` command available                 |
+| dart           | .dart                                                                                                    | `dart` command available                |
 
 So if your project has `prettier` in your `package.json`, OpenCode will automatically use it.
 
@@ -67,7 +70,16 @@ Let's look at some examples.
 
 ### Disabling formatters
 
-To disable a specific formatter, set `disabled` to `true`:
+To disable **all** formatters globally, set `formatter` to `false`:
+
+```json title="opencode.json" {3}
+{
+  "$schema": "https://opencode.ai/config.json",
+  "formatter": false
+}
+```
+
+To disable a **specific** formatter, set `disabled` to `true`:
 
 ```json title="opencode.json" {5}
 {

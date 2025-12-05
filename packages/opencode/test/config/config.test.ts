@@ -4,6 +4,7 @@ import { Instance } from "../../src/project/instance"
 import { tmpdir } from "../fixture/fixture"
 import path from "path"
 import fs from "fs/promises"
+import { pathToFileURL } from "url"
 
 test("loads config with defaults when no files exist", async () => {
   await using tmp = await tmpdir()
@@ -347,6 +348,156 @@ test("gets config directories", async () => {
     fn: async () => {
       const dirs = await Config.directories()
       expect(dirs.length).toBeGreaterThanOrEqual(1)
+    },
+  })
+})
+
+test("resolves scoped npm plugins in config", async () => {
+  await using tmp = await tmpdir({
+    init: async (dir) => {
+      const pluginDir = path.join(dir, "node_modules", "@scope", "plugin")
+      await fs.mkdir(pluginDir, { recursive: true })
+
+      await Bun.write(
+        path.join(dir, "package.json"),
+        JSON.stringify({ name: "config-fixture", version: "1.0.0", type: "module" }, null, 2),
+      )
+
+      await Bun.write(
+        path.join(pluginDir, "package.json"),
+        JSON.stringify(
+          {
+            name: "@scope/plugin",
+            version: "1.0.0",
+            type: "module",
+            main: "./index.js",
+          },
+          null,
+          2,
+        ),
+      )
+
+      await Bun.write(path.join(pluginDir, "index.js"), "export default {}\n")
+
+      await Bun.write(
+        path.join(dir, "opencode.json"),
+        JSON.stringify({ $schema: "https://opencode.ai/config.json", plugin: ["@scope/plugin"] }, null, 2),
+      )
+    },
+  })
+
+  await Instance.provide({
+    directory: tmp.path,
+    fn: async () => {
+      const config = await Config.get()
+      const pluginEntries = config.plugin ?? []
+
+      const baseUrl = pathToFileURL(path.join(tmp.path, "opencode.json")).href
+      const expected = import.meta.resolve("@scope/plugin", baseUrl)
+
+      expect(pluginEntries.includes(expected)).toBe(true)
+
+      const scopedEntry = pluginEntries.find((entry) => entry === expected)
+      expect(scopedEntry).toBeDefined()
+      expect(scopedEntry?.includes("/node_modules/@scope/plugin/")).toBe(true)
+    },
+  })
+})
+
+test("merges plugin arrays from global and local configs", async () => {
+  await using tmp = await tmpdir({
+    init: async (dir) => {
+      // Create a nested project structure with local .opencode config
+      const projectDir = path.join(dir, "project")
+      const opencodeDir = path.join(projectDir, ".opencode")
+      await fs.mkdir(opencodeDir, { recursive: true })
+
+      // Global config with plugins
+      await Bun.write(
+        path.join(dir, "opencode.json"),
+        JSON.stringify({
+          $schema: "https://opencode.ai/config.json",
+          plugin: ["global-plugin-1", "global-plugin-2"],
+        }),
+      )
+
+      // Local .opencode config with different plugins
+      await Bun.write(
+        path.join(opencodeDir, "opencode.json"),
+        JSON.stringify({
+          $schema: "https://opencode.ai/config.json",
+          plugin: ["local-plugin-1"],
+        }),
+      )
+    },
+  })
+
+  await Instance.provide({
+    directory: path.join(tmp.path, "project"),
+    fn: async () => {
+      const config = await Config.get()
+      const plugins = config.plugin ?? []
+
+      // Should contain both global and local plugins
+      expect(plugins.some((p) => p.includes("global-plugin-1"))).toBe(true)
+      expect(plugins.some((p) => p.includes("global-plugin-2"))).toBe(true)
+      expect(plugins.some((p) => p.includes("local-plugin-1"))).toBe(true)
+
+      // Should have all 3 plugins (not replaced, but merged)
+      const pluginNames = plugins.filter((p) => p.includes("global-plugin") || p.includes("local-plugin"))
+      expect(pluginNames.length).toBeGreaterThanOrEqual(3)
+    },
+  })
+})
+
+test("deduplicates duplicate plugins from global and local configs", async () => {
+  await using tmp = await tmpdir({
+    init: async (dir) => {
+      // Create a nested project structure with local .opencode config
+      const projectDir = path.join(dir, "project")
+      const opencodeDir = path.join(projectDir, ".opencode")
+      await fs.mkdir(opencodeDir, { recursive: true })
+
+      // Global config with plugins
+      await Bun.write(
+        path.join(dir, "opencode.json"),
+        JSON.stringify({
+          $schema: "https://opencode.ai/config.json",
+          plugin: ["duplicate-plugin", "global-plugin-1"],
+        }),
+      )
+
+      // Local .opencode config with some overlapping plugins
+      await Bun.write(
+        path.join(opencodeDir, "opencode.json"),
+        JSON.stringify({
+          $schema: "https://opencode.ai/config.json",
+          plugin: ["duplicate-plugin", "local-plugin-1"],
+        }),
+      )
+    },
+  })
+
+  await Instance.provide({
+    directory: path.join(tmp.path, "project"),
+    fn: async () => {
+      const config = await Config.get()
+      const plugins = config.plugin ?? []
+
+      // Should contain all unique plugins
+      expect(plugins.some((p) => p.includes("global-plugin-1"))).toBe(true)
+      expect(plugins.some((p) => p.includes("local-plugin-1"))).toBe(true)
+      expect(plugins.some((p) => p.includes("duplicate-plugin"))).toBe(true)
+
+      // Should deduplicate the duplicate plugin
+      const duplicatePlugins = plugins.filter((p) => p.includes("duplicate-plugin"))
+      expect(duplicatePlugins.length).toBe(1)
+
+      // Should have exactly 3 unique plugins
+      const pluginNames = plugins.filter(
+        (p) => p.includes("global-plugin") || p.includes("local-plugin") || p.includes("duplicate-plugin"),
+      )
+      expect(pluginNames.length).toBe(3)
     },
   })
 })

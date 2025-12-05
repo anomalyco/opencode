@@ -62,7 +62,9 @@ type Model struct {
 	Temperature  bool                   `json:"temperature,required"`
 	ToolCall     bool                   `json:"tool_call,required"`
 	Experimental bool                   `json:"experimental"`
+	Modalities   ModelModalities        `json:"modalities"`
 	Provider     ModelProvider          `json:"provider"`
+	Status       ModelStatus            `json:"status"`
 	JSON         modelJSON              `json:"-"`
 }
 
@@ -79,7 +81,9 @@ type modelJSON struct {
 	Temperature  apijson.Field
 	ToolCall     apijson.Field
 	Experimental apijson.Field
+	Modalities   apijson.Field
 	Provider     apijson.Field
+	Status       apijson.Field
 	raw          string
 	ExtraFields  map[string]apijson.Field
 }
@@ -140,6 +144,64 @@ func (r modelLimitJSON) RawJSON() string {
 	return r.raw
 }
 
+type ModelModalities struct {
+	Input  []ModelModalitiesInput  `json:"input,required"`
+	Output []ModelModalitiesOutput `json:"output,required"`
+	JSON   modelModalitiesJSON     `json:"-"`
+}
+
+// modelModalitiesJSON contains the JSON metadata for the struct [ModelModalities]
+type modelModalitiesJSON struct {
+	Input       apijson.Field
+	Output      apijson.Field
+	raw         string
+	ExtraFields map[string]apijson.Field
+}
+
+func (r *ModelModalities) UnmarshalJSON(data []byte) (err error) {
+	return apijson.UnmarshalRoot(data, r)
+}
+
+func (r modelModalitiesJSON) RawJSON() string {
+	return r.raw
+}
+
+type ModelModalitiesInput string
+
+const (
+	ModelModalitiesInputText  ModelModalitiesInput = "text"
+	ModelModalitiesInputAudio ModelModalitiesInput = "audio"
+	ModelModalitiesInputImage ModelModalitiesInput = "image"
+	ModelModalitiesInputVideo ModelModalitiesInput = "video"
+	ModelModalitiesInputPdf   ModelModalitiesInput = "pdf"
+)
+
+func (r ModelModalitiesInput) IsKnown() bool {
+	switch r {
+	case ModelModalitiesInputText, ModelModalitiesInputAudio, ModelModalitiesInputImage, ModelModalitiesInputVideo, ModelModalitiesInputPdf:
+		return true
+	}
+	return false
+}
+
+type ModelModalitiesOutput string
+
+const (
+	ModelModalitiesOutputText  ModelModalitiesOutput = "text"
+	ModelModalitiesOutputAudio ModelModalitiesOutput = "audio"
+	ModelModalitiesOutputImage ModelModalitiesOutput = "image"
+	ModelModalitiesOutputVideo ModelModalitiesOutput = "video"
+	ModelModalitiesOutputPdf   ModelModalitiesOutput = "pdf"
+)
+
+func (r ModelModalitiesOutput) IsKnown() bool {
+	switch r {
+	case ModelModalitiesOutputText, ModelModalitiesOutputAudio, ModelModalitiesOutputImage, ModelModalitiesOutputVideo, ModelModalitiesOutputPdf:
+		return true
+	}
+	return false
+}
+
 type ModelProvider struct {
 	Npm  string            `json:"npm,required"`
 	JSON modelProviderJSON `json:"-"`
@@ -158,6 +220,21 @@ func (r *ModelProvider) UnmarshalJSON(data []byte) (err error) {
 
 func (r modelProviderJSON) RawJSON() string {
 	return r.raw
+}
+
+type ModelStatus string
+
+const (
+	ModelStatusAlpha ModelStatus = "alpha"
+	ModelStatusBeta  ModelStatus = "beta"
+)
+
+func (r ModelStatus) IsKnown() bool {
+	switch r {
+	case ModelStatusAlpha, ModelStatusBeta:
+		return true
+	}
+	return false
 }
 
 type Provider struct {

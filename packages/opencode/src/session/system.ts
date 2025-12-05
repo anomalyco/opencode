@@ -9,12 +9,15 @@ import os from "os"
 
 import PROMPT_ANTHROPIC from "./prompt/anthropic.txt"
 import PROMPT_ANTHROPIC_WITHOUT_TODO from "./prompt/qwen.txt"
+import PROMPT_POLARIS from "./prompt/polaris.txt"
 import PROMPT_BEAST from "./prompt/beast.txt"
 import PROMPT_GEMINI from "./prompt/gemini.txt"
 import PROMPT_ANTHROPIC_SPOOF from "./prompt/anthropic_spoof.txt"
+import PROMPT_COMPACTION from "./prompt/compaction.txt"
 import PROMPT_SUMMARIZE from "./prompt/summarize.txt"
 import PROMPT_TITLE from "./prompt/title.txt"
 import PROMPT_CODEX from "./prompt/codex.txt"
+import type { Provider } from "@/provider/provider"
 
 export namespace SystemPrompt {
   export function header(providerID: string) {
@@ -22,11 +25,13 @@ export namespace SystemPrompt {
     return []
   }
 
-  export function provider(modelID: string) {
-    if (modelID.includes("gpt-5")) return [PROMPT_CODEX]
-    if (modelID.includes("gpt-") || modelID.includes("o1") || modelID.includes("o3")) return [PROMPT_BEAST]
-    if (modelID.includes("gemini-")) return [PROMPT_GEMINI]
-    if (modelID.includes("claude")) return [PROMPT_ANTHROPIC]
+  export function provider(model: Provider.Model) {
+    if (model.api.id.includes("gpt-5")) return [PROMPT_CODEX]
+    if (model.api.id.includes("gpt-") || model.api.id.includes("o1") || model.api.id.includes("o3"))
+      return [PROMPT_BEAST]
+    if (model.api.id.includes("gemini-")) return [PROMPT_GEMINI]
+    if (model.api.id.includes("claude")) return [PROMPT_ANTHROPIC]
+    if (model.api.id.includes("polaris-alpha")) return [PROMPT_POLARIS]
     return [PROMPT_ANTHROPIC_WITHOUT_TODO]
   }
 
@@ -41,7 +46,7 @@ export namespace SystemPrompt {
         `  Platform: ${process.platform}`,
         `  Today's date: ${new Date().toDateString()}`,
         `</env>`,
-        `<project>`,
+        `<files>`,
         `  ${
           project.vcs === "git"
             ? await Ripgrep.tree({
@@ -50,7 +55,7 @@ export namespace SystemPrompt {
               })
             : ""
         }`,
-        `</project>`,
+        `</files>`,
       ].join("\n"),
     ]
   }
@@ -108,9 +113,19 @@ export namespace SystemPrompt {
     const found = Array.from(paths).map((p) =>
       Bun.file(p)
         .text()
-        .catch(() => ""),
+        .catch(() => "")
+        .then((x) => "Instructions from: " + p + "\n" + x),
     )
     return Promise.all(found).then((result) => result.filter(Boolean))
+  }
+
+  export function compaction(providerID: string) {
+    switch (providerID) {
+      case "anthropic":
+        return [PROMPT_ANTHROPIC_SPOOF.trim(), PROMPT_COMPACTION]
+      default:
+        return [PROMPT_COMPACTION]
+    }
   }
 
   export function summarize(providerID: string) {

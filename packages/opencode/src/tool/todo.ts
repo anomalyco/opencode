@@ -1,4 +1,4 @@
-import z from "zod/v4"
+import z from "zod"
 import { Tool } from "./tool"
 import DESCRIPTION_WRITE from "./todowrite.txt"
 import { Todo } from "../session/todo"
@@ -6,7 +6,7 @@ import { Todo } from "../session/todo"
 export const TodoWriteTool = Tool.define("todowrite", {
   description: DESCRIPTION_WRITE,
   parameters: z.object({
-    todos: z.array(Todo.Info).describe("The updated todo list"),
+    todos: z.array(z.object(Todo.Info.shape)).describe("The updated todo list"),
   }),
   async execute(params, opts) {
     await Todo.update({

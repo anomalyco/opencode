@@ -1,5 +1,5 @@
-import { defineMiddleware } from "vinxi/http"
+import { createMiddleware } from "@solidjs/start/middleware"
 
-export default defineMiddleware({
+export default createMiddleware({
   onBeforeResponse() {},
 })

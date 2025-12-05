@@ -1,0 +1,102 @@
+name: Update Nix Hashes
+
+permissions:
+  contents: write
+
+on:
+  workflow_dispatch:
+  push:
+    paths:
+      - "bun.lock"
+      - "package.json"
+      - "packages/*/package.json"
+  pull_request:
+    paths:
+      - "bun.lock"
+      - "package.json"
+      - "packages/*/package.json"
+
+jobs:
+  update:
+    if: github.event_name != 'pull_request' || github.event.pull_request.head.repo.full_name == github.repository
+    runs-on: blacksmith-4vcpu-ubuntu-2404
+    env:
+      SYSTEM: x86_64-linux
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+        with:
+          token: ${{ secrets.GITHUB_TOKEN }}
+          fetch-depth: 0
+          ref: ${{ github.head_ref || github.ref_name }}
+          repository: ${{ github.event.pull_request.head.repo.full_name || github.repository }}
+
+      - name: Setup Nix
+        uses: DeterminateSystems/nix-installer-action@v20
+
+      - name: Configure git
+        run: |
+          git config --global user.email "action@github.com"
+          git config --global user.name "Github Action"
+
+      - name: Update flake.lock
+        run: |
+          set -euo pipefail
+          echo "📦 Updating flake.lock..."
+          nix flake update
+          echo "✅ flake.lock updated successfully"
+
+      - name: Update node_modules hash
+        run: |
+          set -euo pipefail
+          echo "🔄 Updating node_modules hash..."
+          nix/scripts/update-hashes.sh
+          echo "✅ node_modules hash updated successfully"
+
+      - name: Commit hash changes
+        env:
+          TARGET_BRANCH: ${{ github.head_ref || github.ref_name }}
+        run: |
+          set -euo pipefail
+
+          echo "🔍 Checking for changes in tracked Nix files..."
+
+          summarize() {
+            local status="$1"
+            {
+              echo "### Nix Hash Update"
+              echo ""
+              echo "- ref: ${GITHUB_REF_NAME}"
+              echo "- status: ${status}"
+            } >> "$GITHUB_STEP_SUMMARY"
+            if [ -n "${GITHUB_SERVER_URL:-}" ] && [ -n "${GITHUB_REPOSITORY:-}" ] && [ -n "${GITHUB_RUN_ID:-}" ]; then
+              echo "- run: ${GITHUB_SERVER_URL}/${GITHUB_REPOSITORY}/actions/runs/${GITHUB_RUN_ID}" >> "$GITHUB_STEP_SUMMARY"
+            fi
+            echo "" >> "$GITHUB_STEP_SUMMARY"
+          }
+
+          FILES=(flake.lock flake.nix nix/node-modules.nix nix/hashes.json)
+          STATUS="$(git status --short -- "${FILES[@]}" || true)"
+          if [ -z "$STATUS" ]; then
+            echo "✅ No changes detected. Hashes are already up to date."
+            summarize "no changes"
+            exit 0
+          fi
+
+          echo "📝 Changes detected:"
+          echo "$STATUS"
+          echo "🔗 Staging files..."
+          git add "${FILES[@]}"
+          echo "💾 Committing changes..."
+          git commit -m "Update Nix flake.lock and hashes"
+          echo "✅ Changes committed"
+
+          BRANCH="${TARGET_BRANCH:-${GITHUB_REF_NAME}}"
+          echo "🌳 Pulling latest from branch: $BRANCH"
+          git pull --rebase origin "$BRANCH"
+          echo "🚀 Pushing changes to branch: $BRANCH"
+          git push origin HEAD:"$BRANCH"
+          echo "✅ Changes pushed successfully"
+
+          summarize "committed $(git rev-parse --short HEAD)"

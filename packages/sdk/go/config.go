@@ -1567,19 +1567,21 @@ func (r configProviderJSON) RawJSON() string {
 }
 
 type ConfigProviderModel struct {
-	ID           string                       `json:"id"`
-	Attachment   bool                         `json:"attachment"`
-	Cost         ConfigProviderModelsCost     `json:"cost"`
-	Experimental bool                         `json:"experimental"`
-	Limit        ConfigProviderModelsLimit    `json:"limit"`
-	Name         string                       `json:"name"`
-	Options      map[string]interface{}       `json:"options"`
-	Provider     ConfigProviderModelsProvider `json:"provider"`
-	Reasoning    bool                         `json:"reasoning"`
-	ReleaseDate  string                       `json:"release_date"`
-	Temperature  bool                         `json:"temperature"`
-	ToolCall     bool                         `json:"tool_call"`
-	JSON         configProviderModelJSON      `json:"-"`
+	ID           string                         `json:"id"`
+	Attachment   bool                           `json:"attachment"`
+	Cost         ConfigProviderModelsCost       `json:"cost"`
+	Experimental bool                           `json:"experimental"`
+	Limit        ConfigProviderModelsLimit      `json:"limit"`
+	Modalities   ConfigProviderModelsModalities `json:"modalities"`
+	Name         string                         `json:"name"`
+	Options      map[string]interface{}         `json:"options"`
+	Provider     ConfigProviderModelsProvider   `json:"provider"`
+	Reasoning    bool                           `json:"reasoning"`
+	ReleaseDate  string                         `json:"release_date"`
+	Status       ConfigProviderModelsStatus     `json:"status"`
+	Temperature  bool                           `json:"temperature"`
+	ToolCall     bool                           `json:"tool_call"`
+	JSON         configProviderModelJSON        `json:"-"`
 }
 
 // configProviderModelJSON contains the JSON metadata for the struct
@@ -1590,11 +1592,13 @@ type configProviderModelJSON struct {
 	Cost         apijson.Field
 	Experimental apijson.Field
 	Limit        apijson.Field
+	Modalities   apijson.Field
 	Name         apijson.Field
 	Options      apijson.Field
 	Provider     apijson.Field
 	Reasoning    apijson.Field
 	ReleaseDate  apijson.Field
+	Status       apijson.Field
 	Temperature  apijson.Field
 	ToolCall     apijson.Field
 	raw          string
@@ -1659,6 +1663,65 @@ func (r configProviderModelsLimitJSON) RawJSON() string {
 	return r.raw
 }
 
+type ConfigProviderModelsModalities struct {
+	Input  []ConfigProviderModelsModalitiesInput  `json:"input,required"`
+	Output []ConfigProviderModelsModalitiesOutput `json:"output,required"`
+	JSON   configProviderModelsModalitiesJSON     `json:"-"`
+}
+
+// configProviderModelsModalitiesJSON contains the JSON metadata for the struct
+// [ConfigProviderModelsModalities]
+type configProviderModelsModalitiesJSON struct {
+	Input       apijson.Field
+	Output      apijson.Field
+	raw         string
+	ExtraFields map[string]apijson.Field
+}
+
+func (r *ConfigProviderModelsModalities) UnmarshalJSON(data []byte) (err error) {
+	return apijson.UnmarshalRoot(data, r)
+}
+
+func (r configProviderModelsModalitiesJSON) RawJSON() string {
+	return r.raw
+}
+
+type ConfigProviderModelsModalitiesInput string
+
+const (
+	ConfigProviderModelsModalitiesInputText  ConfigProviderModelsModalitiesInput = "text"
+	ConfigProviderModelsModalitiesInputAudio ConfigProviderModelsModalitiesInput = "audio"
+	ConfigProviderModelsModalitiesInputImage ConfigProviderModelsModalitiesInput = "image"
+	ConfigProviderModelsModalitiesInputVideo ConfigProviderModelsModalitiesInput = "video"
+	ConfigProviderModelsModalitiesInputPdf   ConfigProviderModelsModalitiesInput = "pdf"
+)
+
+func (r ConfigProviderModelsModalitiesInput) IsKnown() bool {
+	switch r {
+	case ConfigProviderModelsModalitiesInputText, ConfigProviderModelsModalitiesInputAudio, ConfigProviderModelsModalitiesInputImage, ConfigProviderModelsModalitiesInputVideo, ConfigProviderModelsModalitiesInputPdf:
+		return true
+	}
+	return false
+}
+
+type ConfigProviderModelsModalitiesOutput string
+
+const (
+	ConfigProviderModelsModalitiesOutputText  ConfigProviderModelsModalitiesOutput = "text"
+	ConfigProviderModelsModalitiesOutputAudio ConfigProviderModelsModalitiesOutput = "audio"
+	ConfigProviderModelsModalitiesOutputImage ConfigProviderModelsModalitiesOutput = "image"
+	ConfigProviderModelsModalitiesOutputVideo ConfigProviderModelsModalitiesOutput = "video"
+	ConfigProviderModelsModalitiesOutputPdf   ConfigProviderModelsModalitiesOutput = "pdf"
+)
+
+func (r ConfigProviderModelsModalitiesOutput) IsKnown() bool {
+	switch r {
+	case ConfigProviderModelsModalitiesOutputText, ConfigProviderModelsModalitiesOutputAudio, ConfigProviderModelsModalitiesOutputImage, ConfigProviderModelsModalitiesOutputVideo, ConfigProviderModelsModalitiesOutputPdf:
+		return true
+	}
+	return false
+}
+
 type ConfigProviderModelsProvider struct {
 	Npm  string                           `json:"npm,required"`
 	JSON configProviderModelsProviderJSON `json:"-"`
@@ -1678,6 +1741,21 @@ func (r *ConfigProviderModelsProvider) UnmarshalJSON(data []byte) (err error) {
 
 func (r configProviderModelsProviderJSON) RawJSON() string {
 	return r.raw
+}
+
+type ConfigProviderModelsStatus string
+
+const (
+	ConfigProviderModelsStatusAlpha ConfigProviderModelsStatus = "alpha"
+	ConfigProviderModelsStatusBeta  ConfigProviderModelsStatus = "beta"
+)
+
+func (r ConfigProviderModelsStatus) IsKnown() bool {
+	switch r {
+	case ConfigProviderModelsStatusAlpha, ConfigProviderModelsStatusBeta:
+		return true
+	}
+	return false
 }
 
 type ConfigProviderOptions struct {

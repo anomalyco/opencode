@@ -1,23 +1,40 @@
-import z from "zod/v4"
-import type { ZodType } from "zod/v4"
+import z from "zod"
+import type { ZodType } from "zod"
 import { Log } from "../util/log"
 import { Instance } from "../project/instance"
+import { GlobalBus } from "./global"
 
 export namespace Bus {
   const log = Log.create({ service: "bus" })
   type Subscription = (event: any) => void
-
-  const state = Instance.state(() => {
-    const subscriptions = new Map<any, Subscription[]>()
-
-    return {
-      subscriptions,
-    }
-  })
+  const disposedEventType = "server.instance.disposed"
 
   export type EventDefinition = ReturnType<typeof event>
 
   const registry = new Map<string, EventDefinition>()
+
+  const state = Instance.state(
+    () => {
+      const subscriptions = new Map<any, Subscription[]>()
+
+      return {
+        subscriptions,
+      }
+    },
+    async (entry) => {
+      const wildcard = entry.subscriptions.get("*")
+      if (!wildcard) return
+      const event = {
+        type: disposedEventType,
+        properties: {
+          directory: Instance.directory,
+        },
+      }
+      for (const sub of [...wildcard]) {
+        sub(event)
+      }
+    },
+  )
 
   export function event<Type extends string, Properties extends ZodType>(type: Type, properties: Properties) {
     const result = {
@@ -28,23 +45,34 @@ export namespace Bus {
     return result
   }
 
+  export const InstanceDisposed = event(
+    disposedEventType,
+    z.object({
+      directory: z.string(),
+    }),
+  )
+
   export function payloads() {
-    return z.discriminatedUnion(
-      "type",
-      registry
-        .entries()
-        .map(([type, def]) => {
-          return z
-            .object({
-              type: z.literal(type),
-              properties: def.properties,
-            })
-            .meta({
-              ref: "Event" + "." + def.type,
-            })
-        })
-        .toArray() as any,
-    )
+    return z
+      .discriminatedUnion(
+        "type",
+        registry
+          .entries()
+          .map(([type, def]) => {
+            return z
+              .object({
+                type: z.literal(type),
+                properties: def.properties,
+              })
+              .meta({
+                ref: "Event" + "." + def.type,
+              })
+          })
+          .toArray() as any,
+      )
+      .meta({
+        ref: "Event",
+      })
   }
 
   export async function publish<Definition extends EventDefinition>(
@@ -65,6 +93,10 @@ export namespace Bus {
         pending.push(sub(payload))
       }
     }
+    GlobalBus.emit("event", {
+      directory: Instance.directory,
+      payload,
+    })
     return Promise.all(pending)
   }
 

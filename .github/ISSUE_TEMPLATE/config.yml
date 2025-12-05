@@ -1,0 +1,5 @@
+blank_issues_enabled: true
+contact_links:
+  - name: 💬 Discord Community
+    url: https://discord.gg/opencode
+    about: For quick questions or real-time discussion. Note that issues are searchable and help others with the same question.

@@ -3,3 +3,4 @@ Allow: /
 
 # Disallow shared content pages
 Disallow: /s/
+Disallow: /share/

@@ -30,8 +30,6 @@
   --sl-color-divider: var(--sl-color-gray-5);
 }
 
-
-
 body {
   color: var(--color-text) !important;
   font-size: 14px !important;
@@ -60,7 +58,6 @@ body {
     --color-border-weak: hsl(0, 4%, 23%);
 
     --color-icon: hsl(10, 3%, 43%);
-
   }
 }
 
@@ -85,14 +82,20 @@ nav.sidebar summary svg.caret {
   color: var(--color-icon) !important;
 }
 
-body > .page > header button[data-open-modal] > kbd kbd {
-  color: var(--color-icon) !important;
-  font-size: 16px !important;
+/* Search button style overrides */
+body > .page > header button[data-open-modal] > kbd {
+  position: relative;
   display: flex;
+  gap: 4px;
 }
-
-body > .page > header button[data-open-modal] > kbd kbd:first-child {
-  font-size: 20px !important;
+body > .page > header button[data-open-modal] > kbd > kbd {
+  color: var(--color-icon) !important;
+  font-size: 15px;
+}
+/* Make the Cmd (⌘) keystroke bigger */
+body > .page > header button[data-open-modal][aria-keyshortcuts="Meta+K"] > kbd > kbd:first-child {
+  font-size: 20px;
+  line-height: 0.73;
 }
 
 .starlight-aside__title {
@@ -101,7 +104,7 @@ body > .page > header button[data-open-modal] > kbd kbd:first-child {
 }
 
 body > .page > .main-frame .main-pane > main > .content-panel + .content-panel {
- border-top: none !important;
+  border-top: none !important;
 }
 
 body > .page > header a.site-title img {
@@ -139,7 +142,7 @@ a[aria-current="page"] {
   font-weight: 600 !important;
 }
 
-ul.top-level a[aria-current="page"] > span  {
+ul.top-level a[aria-current="page"] > span {
   color: var(--color-text-strong) !important;
 }
 
@@ -156,7 +159,6 @@ ul.top-level a[aria-current="page"] > span  {
   color: var(--color-text-strong) !important;
   font-weight: 600 !important;
 }
-
 
 .top-level li a {
   border-radius: 0;
@@ -186,10 +188,10 @@ site-search > button {
 }
 
 body > .page > header button[data-open-modal] {
-  gap: 24px !important;
+  gap: 12px !important;
   background: var(--color-background-weak);
   border: 1px solid var(--color-border-weak) !important;
-  padding: 6px 16px !important;
+  padding: 6px 12px !important;
   border-radius: 4px;
 
   @media (prefers-color-scheme: dark) {
@@ -213,15 +215,23 @@ site-search > button span {
   .starlight-aside__content {
     margin-top: 0;
   }
+
+  @media (max-width: 768px) {
+    flex-direction: column;
+    gap: 6px;
+  }
 }
-
-
 
 site-search > button > kbd {
   font-size: 14px !important;
 }
 
-h1 a, h2 a, h3 a, h4 a, h5 a, h6 a {
+h1 a,
+h2 a,
+h3 a,
+h4 a,
+h5 a,
+h6 a {
   color: var(--color-text-strong) !important;
 }
 
@@ -257,7 +267,8 @@ strong {
   font-weight: 500 !important;
 }
 
-ul, ol {
+ul,
+ol {
   list-style: none !important;
   padding: 0 !important;
 }
@@ -274,7 +285,8 @@ ul, ol {
   color: var(--color-text-strong) !important;
 }
 
-body > .page > header, :root[data-has-sidebar] body > .page > header {
+body > .page > header,
+:root[data-has-sidebar] body > .page > header {
   background: var(--color-background) !important;
   padding: 24px !important;
 }
@@ -297,7 +309,6 @@ body > .page > header, :root[data-has-sidebar] body > .page > header {
   max-width: 100% !important;
 }
 
-
 nav.sidebar .sl-container ul li a,
 div.right-sidebar .sl-container ul li a {
   padding: 4px 24px !important;
@@ -311,7 +322,7 @@ div.right-sidebar .sl-container ul li a:hover {
   background: var(--color-background-weak);
 
   @media (prefers-color-scheme: dark) {
-    background: var(--color-background-weak)
+    background: var(--color-background-weak);
   }
 }
 
@@ -320,13 +331,11 @@ div.right-sidebar .sl-container ul li ul li {
   padding: 4px 12px 0 12px !important;
 }
 
-
 nav.sidebar .sl-container ul li a[aria-current="true"],
 div.right-sidebar .sl-container ul li a[aria-current="true"] {
   color: var(--color-text-strong) !important;
   opacity: 100%;
 }
-
 
 h2#starlight__on-this-page {
   font-size: 14px !important;
@@ -364,12 +373,15 @@ nav.sidebar ul.top-level > li > details > summary .group-label > span {
 
 .content-panel {
   padding: 2rem 3rem !important;
+
+  @media (max-width: 768px) {
+    padding: 1rem 1.5rem !important;
+  }
 }
 
 .expressive-code {
-  margin: 12px 0 56px 0 !important;
+  margin: 0.75rem 0 3rem 0 !important;
   border-radius: 6px;
-
 }
 
 .expressive-code figure {
@@ -379,8 +391,6 @@ nav.sidebar ul.top-level > li > details > summary .group-label > span {
 .expressive-code .frame {
   box-shadow: none;
 }
-
-
 
 @media (prefers-color-scheme: dark) {
   .shiki,

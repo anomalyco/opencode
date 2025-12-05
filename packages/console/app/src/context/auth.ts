@@ -1,5 +1,5 @@
 import { getRequestEvent } from "solid-js/web"
-import { and, Database, eq, inArray, sql } from "@opencode-ai/console-core/drizzle/index.js"
+import { and, Database, eq, inArray, isNull, sql } from "@opencode-ai/console-core/drizzle/index.js"
 import { UserTable } from "@opencode-ai/console-core/schema/user.sql.js"
 import { redirect } from "@solidjs/router"
 import { Actor } from "@opencode-ai/console-core/actor.js"
@@ -56,7 +56,13 @@ export const getActor = async (workspace?: string): Promise<Actor.Info> => {
         tx
           .select()
           .from(UserTable)
-          .where(and(eq(UserTable.workspaceID, workspace), inArray(UserTable.accountID, accounts)))
+          .where(
+            and(
+              eq(UserTable.workspaceID, workspace),
+              isNull(UserTable.timeDeleted),
+              inArray(UserTable.accountID, accounts),
+            ),
+          )
           .limit(1)
           .execute()
           .then((x) => x[0]),
@@ -74,6 +80,7 @@ export const getActor = async (workspace?: string): Promise<Actor.Info> => {
             userID: user.id,
             workspaceID: user.workspaceID,
             accountID: user.accountID,
+            role: user.role,
           },
         }
       }

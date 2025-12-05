@@ -218,6 +218,62 @@
       "when": 1759878278492,
       "tag": "0030_ordinary_ultragirl",
       "breakpoints": true
+    },
+    {
+      "idx": 31,
+      "version": "5",
+      "when": 1759940238478,
+      "tag": "0031_outgoing_outlaw_kid",
+      "breakpoints": true
+    },
+    {
+      "idx": 32,
+      "version": "5",
+      "when": 1759976329502,
+      "tag": "0032_white_doctor_doom",
+      "breakpoints": true
+    },
+    {
+      "idx": 33,
+      "version": "5",
+      "when": 1760637384217,
+      "tag": "0033_cynical_jack_flag",
+      "breakpoints": true
+    },
+    {
+      "idx": 34,
+      "version": "5",
+      "when": 1760651120251,
+      "tag": "0034_short_bulldozer",
+      "breakpoints": true
+    },
+    {
+      "idx": 35,
+      "version": "5",
+      "when": 1760666253896,
+      "tag": "0035_narrow_blindfold",
+      "breakpoints": true
+    },
+    {
+      "idx": 36,
+      "version": "5",
+      "when": 1760668952329,
+      "tag": "0036_slimy_energizer",
+      "breakpoints": true
+    },
+    {
+      "idx": 37,
+      "version": "5",
+      "when": 1761928273807,
+      "tag": "0037_messy_jackal",
+      "breakpoints": true
+    },
+    {
+      "idx": 38,
+      "version": "5",
+      "when": 1764110043942,
+      "tag": "0038_famous_magik",
+      "breakpoints": true
     }
   ]
 }

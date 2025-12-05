@@ -27,9 +27,19 @@ export const UpgradeCommand = {
     const detectedMethod = await Installation.method()
     const method = (args.method as Installation.Method) ?? detectedMethod
     if (method === "unknown") {
-      prompts.log.error(`opencode is installed to ${process.execPath} and seems to be managed by a package manager`)
-      prompts.outro("Done")
-      return
+      prompts.log.error(`opencode is installed to ${process.execPath} and may be managed by a package manager`)
+      const install = await prompts.select({
+        message: "Install anyways?",
+        options: [
+          { label: "Yes", value: true },
+          { label: "No", value: false },
+        ],
+        initialValue: false,
+      })
+      if (!install) {
+        prompts.outro("Done")
+        return
+      }
     }
     prompts.log.info("Using method: " + method)
     const target = args.target ? args.target.replace(/^v/, "") : await Installation.latest()

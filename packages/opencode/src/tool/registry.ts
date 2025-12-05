@@ -3,7 +3,7 @@ import { EditTool } from "./edit"
 import { GlobTool } from "./glob"
 import { GrepTool } from "./grep"
 import { ListTool } from "./ls"
-import { PatchTool } from "./patch"
+import { BatchTool } from "./batch"
 import { ReadTool } from "./read"
 import { TaskTool } from "./task"
 import { TodoWriteTool, TodoReadTool } from "./todo"
@@ -16,8 +16,11 @@ import { Instance } from "../project/instance"
 import { Config } from "../config/config"
 import path from "path"
 import { type ToolDefinition } from "@opencode-ai/plugin"
-import z from "zod/v4"
+import z from "zod"
 import { Plugin } from "../plugin"
+import { WebSearchTool } from "./websearch"
+import { CodeSearchTool } from "./codesearch"
+import { Flag } from "@/flag/flag"
 
 export namespace ToolRegistry {
   export const state = Instance.state(async () => {
@@ -25,7 +28,12 @@ export namespace ToolRegistry {
     const glob = new Bun.Glob("tool/*.{js,ts}")
 
     for (const dir of await Config.directories()) {
-      for await (const match of glob.scan({ cwd: dir, absolute: true, followSymlinks: true, dot: true })) {
+      for await (const match of glob.scan({
+        cwd: dir,
+        absolute: true,
+        followSymlinks: true,
+        dot: true,
+      })) {
         const namespace = path.basename(match, path.extname(match))
         const mod = await import(match)
         for (const [id, def] of Object.entries<ToolDefinition>(mod)) {
@@ -74,20 +82,24 @@ export namespace ToolRegistry {
 
   async function all(): Promise<Tool.Info[]> {
     const custom = await state().then((x) => x.custom)
+    const config = await Config.get()
+
     return [
       InvalidTool,
       BashTool,
-      EditTool,
-      WebFetchTool,
+      ReadTool,
       GlobTool,
       GrepTool,
       ListTool,
-      PatchTool,
-      ReadTool,
+      EditTool,
       WriteTool,
+      TaskTool,
+      WebFetchTool,
       TodoWriteTool,
       TodoReadTool,
-      TaskTool,
+      WebSearchTool,
+      CodeSearchTool,
+      ...(config.experimental?.batch_tool === true ? [BatchTool] : []),
       ...custom,
     ]
   }
@@ -96,28 +108,27 @@ export namespace ToolRegistry {
     return all().then((x) => x.map((t) => t.id))
   }
 
-  export async function tools(_providerID: string, _modelID: string) {
+  export async function tools(providerID: string) {
     const tools = await all()
     const result = await Promise.all(
-      tools.map(async (t) => ({
-        id: t.id,
-        ...(await t.init()),
-      })),
+      tools
+        .filter((t) => {
+          if (t.id === "codesearch" || t.id === "websearch") return providerID === "opencode"
+          return true
+        })
+        .map(async (t) => ({
+          id: t.id,
+          ...(await t.init()),
+        })),
     )
     return result
   }
 
-  export async function enabled(
-    _providerID: string,
-    _modelID: string,
-    agent: Agent.Info,
-  ): Promise<Record<string, boolean>> {
+  export async function enabled(agent: Agent.Info): Promise<Record<string, boolean>> {
     const result: Record<string, boolean> = {}
-    result["patch"] = false
 
     if (agent.permission.edit === "deny") {
       result["edit"] = false
-      result["patch"] = false
       result["write"] = false
     }
     if (agent.permission.bash["*"] === "deny" && Object.keys(agent.permission.bash).length === 1) {
@@ -125,6 +136,8 @@ export namespace ToolRegistry {
     }
     if (agent.permission.webfetch === "deny") {
       result["webfetch"] = false
+      result["codesearch"] = false
+      result["websearch"] = false
     }
 
     return result

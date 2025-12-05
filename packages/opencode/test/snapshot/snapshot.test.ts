@@ -14,7 +14,7 @@ async function bootstrap() {
       await Bun.write(`${dir}/a.txt`, aContent)
       await Bun.write(`${dir}/b.txt`, bContent)
       await $`git add .`.cwd(dir).quiet()
-      await $`git commit -m init`.cwd(dir).quiet()
+      await $`git commit --no-gpg-sign -m init`.cwd(dir).quiet()
       return {
         aContent,
         bContent,
@@ -123,7 +123,7 @@ test("binary file handling", async () => {
       const before = await Snapshot.track()
       expect(before).toBeTruthy()
 
-      await Bun.write(`${tmp.path}/image.png`, Buffer.from([0x89, 0x50, 0x4e, 0x47]))
+      await Bun.write(`${tmp.path}/image.png`, new Uint8Array([0x89, 0x50, 0x4e, 0x47]))
 
       const patch = await Snapshot.patch(before!)
       expect(patch.files).toContain(`${tmp.path}/image.png`)
@@ -469,6 +469,115 @@ test("snapshot state isolation between projects", async () => {
   })
 })
 
+test("patch detects changes in secondary worktree", async () => {
+  await using tmp = await bootstrap()
+  const worktreePath = `${tmp.path}-worktree`
+  await $`git worktree add ${worktreePath} HEAD`.cwd(tmp.path).quiet()
+
+  try {
+    await Instance.provide({
+      directory: tmp.path,
+      fn: async () => {
+        expect(await Snapshot.track()).toBeTruthy()
+      },
+    })
+
+    await Instance.provide({
+      directory: worktreePath,
+      fn: async () => {
+        const before = await Snapshot.track()
+        expect(before).toBeTruthy()
+
+        const worktreeFile = `${worktreePath}/worktree.txt`
+        await Bun.write(worktreeFile, "worktree content")
+
+        const patch = await Snapshot.patch(before!)
+        expect(patch.files).toContain(worktreeFile)
+      },
+    })
+  } finally {
+    await $`git worktree remove --force ${worktreePath}`.cwd(tmp.path).quiet().nothrow()
+    await $`rm -rf ${worktreePath}`.quiet()
+  }
+})
+
+test("revert only removes files in invoking worktree", async () => {
+  await using tmp = await bootstrap()
+  const worktreePath = `${tmp.path}-worktree`
+  await $`git worktree add ${worktreePath} HEAD`.cwd(tmp.path).quiet()
+
+  try {
+    await Instance.provide({
+      directory: tmp.path,
+      fn: async () => {
+        expect(await Snapshot.track()).toBeTruthy()
+      },
+    })
+    const primaryFile = `${tmp.path}/worktree.txt`
+    await Bun.write(primaryFile, "primary content")
+
+    await Instance.provide({
+      directory: worktreePath,
+      fn: async () => {
+        const before = await Snapshot.track()
+        expect(before).toBeTruthy()
+
+        const worktreeFile = `${worktreePath}/worktree.txt`
+        await Bun.write(worktreeFile, "worktree content")
+
+        const patch = await Snapshot.patch(before!)
+        await Snapshot.revert([patch])
+
+        expect(await Bun.file(worktreeFile).exists()).toBe(false)
+      },
+    })
+
+    expect(await Bun.file(primaryFile).text()).toBe("primary content")
+  } finally {
+    await $`git worktree remove --force ${worktreePath}`.cwd(tmp.path).quiet().nothrow()
+    await $`rm -rf ${worktreePath}`.quiet()
+    await $`rm -f ${tmp.path}/worktree.txt`.quiet()
+  }
+})
+
+test("diff reports worktree-only/shared edits and ignores primary-only", async () => {
+  await using tmp = await bootstrap()
+  const worktreePath = `${tmp.path}-worktree`
+  await $`git worktree add ${worktreePath} HEAD`.cwd(tmp.path).quiet()
+
+  try {
+    await Instance.provide({
+      directory: tmp.path,
+      fn: async () => {
+        expect(await Snapshot.track()).toBeTruthy()
+      },
+    })
+
+    await Instance.provide({
+      directory: worktreePath,
+      fn: async () => {
+        const before = await Snapshot.track()
+        expect(before).toBeTruthy()
+
+        await Bun.write(`${worktreePath}/worktree-only.txt`, "worktree diff content")
+        await Bun.write(`${worktreePath}/shared.txt`, "worktree edit")
+        await Bun.write(`${tmp.path}/shared.txt`, "primary edit")
+        await Bun.write(`${tmp.path}/primary-only.txt`, "primary change")
+
+        const diff = await Snapshot.diff(before!)
+        expect(diff).toContain("worktree-only.txt")
+        expect(diff).toContain("shared.txt")
+        expect(diff).not.toContain("primary-only.txt")
+      },
+    })
+  } finally {
+    await $`git worktree remove --force ${worktreePath}`.cwd(tmp.path).quiet().nothrow()
+    await $`rm -rf ${worktreePath}`.quiet()
+    await $`rm -f ${tmp.path}/shared.txt`.quiet()
+    await $`rm -f ${tmp.path}/primary-only.txt`.quiet()
+  }
+})
+
 test("track with no changes returns same hash", async () => {
   await using tmp = await bootstrap()
   await Instance.provide({
@@ -502,9 +611,9 @@ test("diff function with various changes", async () => {
       await Bun.write(`${tmp.path}/b.txt`, "modified content")
 
       const diff = await Snapshot.diff(before!)
-      expect(diff).toContain("deleted")
-      expect(diff).toContain("modified")
-      // Note: git diff only shows changes to tracked files, not untracked files like new.txt
+      expect(diff).toContain("a.txt")
+      expect(diff).toContain("b.txt")
+      expect(diff).toContain("new.txt")
     },
   })
 })
@@ -581,6 +690,250 @@ test("revert preserves file that existed in snapshot when deleted then recreated
       expect(await Bun.file(`${tmp.path}/newfile.txt`).exists()).toBe(false)
       expect(await Bun.file(`${tmp.path}/existing.txt`).exists()).toBe(true)
       expect(await Bun.file(`${tmp.path}/existing.txt`).text()).toBe("original content")
+    },
+  })
+})
+
+test("diffFull with new file additions", async () => {
+  await using tmp = await bootstrap()
+  await Instance.provide({
+    directory: tmp.path,
+    fn: async () => {
+      const before = await Snapshot.track()
+      expect(before).toBeTruthy()
+
+      await Bun.write(`${tmp.path}/new.txt`, "new content")
+
+      const after = await Snapshot.track()
+      expect(after).toBeTruthy()
+
+      const diffs = await Snapshot.diffFull(before!, after!)
+      expect(diffs.length).toBe(1)
+
+      const newFileDiff = diffs[0]
+      expect(newFileDiff.file).toBe("new.txt")
+      expect(newFileDiff.before).toBe("")
+      expect(newFileDiff.after).toBe("new content")
+      expect(newFileDiff.additions).toBe(1)
+      expect(newFileDiff.deletions).toBe(0)
+    },
+  })
+})
+
+test("diffFull with file modifications", async () => {
+  await using tmp = await bootstrap()
+  await Instance.provide({
+    directory: tmp.path,
+    fn: async () => {
+      const before = await Snapshot.track()
+      expect(before).toBeTruthy()
+
+      await Bun.write(`${tmp.path}/b.txt`, "modified content")
+
+      const after = await Snapshot.track()
+      expect(after).toBeTruthy()
+
+      const diffs = await Snapshot.diffFull(before!, after!)
+      expect(diffs.length).toBe(1)
+
+      const modifiedFileDiff = diffs[0]
+      expect(modifiedFileDiff.file).toBe("b.txt")
+      expect(modifiedFileDiff.before).toBe(tmp.extra.bContent)
+      expect(modifiedFileDiff.after).toBe("modified content")
+      expect(modifiedFileDiff.additions).toBeGreaterThan(0)
+      expect(modifiedFileDiff.deletions).toBeGreaterThan(0)
+    },
+  })
+})
+
+test("diffFull with file deletions", async () => {
+  await using tmp = await bootstrap()
+  await Instance.provide({
+    directory: tmp.path,
+    fn: async () => {
+      const before = await Snapshot.track()
+      expect(before).toBeTruthy()
+
+      await $`rm ${tmp.path}/a.txt`.quiet()
+
+      const after = await Snapshot.track()
+      expect(after).toBeTruthy()
+
+      const diffs = await Snapshot.diffFull(before!, after!)
+      expect(diffs.length).toBe(1)
+
+      const removedFileDiff = diffs[0]
+      expect(removedFileDiff.file).toBe("a.txt")
+      expect(removedFileDiff.before).toBe(tmp.extra.aContent)
+      expect(removedFileDiff.after).toBe("")
+      expect(removedFileDiff.additions).toBe(0)
+      expect(removedFileDiff.deletions).toBe(1)
+    },
+  })
+})
+
+test("diffFull with multiple line additions", async () => {
+  await using tmp = await bootstrap()
+  await Instance.provide({
+    directory: tmp.path,
+    fn: async () => {
+      const before = await Snapshot.track()
+      expect(before).toBeTruthy()
+
+      await Bun.write(`${tmp.path}/multi.txt`, "line1\nline2\nline3")
+
+      const after = await Snapshot.track()
+      expect(after).toBeTruthy()
+
+      const diffs = await Snapshot.diffFull(before!, after!)
+      expect(diffs.length).toBe(1)
+
+      const multiDiff = diffs[0]
+      expect(multiDiff.file).toBe("multi.txt")
+      expect(multiDiff.before).toBe("")
+      expect(multiDiff.after).toBe("line1\nline2\nline3")
+      expect(multiDiff.additions).toBe(3)
+      expect(multiDiff.deletions).toBe(0)
+    },
+  })
+})
+
+test("diffFull with addition and deletion", async () => {
+  await using tmp = await bootstrap()
+  await Instance.provide({
+    directory: tmp.path,
+    fn: async () => {
+      const before = await Snapshot.track()
+      expect(before).toBeTruthy()
+
+      await Bun.write(`${tmp.path}/added.txt`, "added content")
+      await $`rm ${tmp.path}/a.txt`.quiet()
+
+      const after = await Snapshot.track()
+      expect(after).toBeTruthy()
+
+      const diffs = await Snapshot.diffFull(before!, after!)
+      expect(diffs.length).toBe(2)
+
+      const addedFileDiff = diffs.find((d) => d.file === "added.txt")
+      expect(addedFileDiff).toBeDefined()
+      expect(addedFileDiff!.before).toBe("")
+      expect(addedFileDiff!.after).toBe("added content")
+      expect(addedFileDiff!.additions).toBe(1)
+      expect(addedFileDiff!.deletions).toBe(0)
+
+      const removedFileDiff = diffs.find((d) => d.file === "a.txt")
+      expect(removedFileDiff).toBeDefined()
+      expect(removedFileDiff!.before).toBe(tmp.extra.aContent)
+      expect(removedFileDiff!.after).toBe("")
+      expect(removedFileDiff!.additions).toBe(0)
+      expect(removedFileDiff!.deletions).toBe(1)
+    },
+  })
+})
+
+test("diffFull with multiple additions and deletions", async () => {
+  await using tmp = await bootstrap()
+  await Instance.provide({
+    directory: tmp.path,
+    fn: async () => {
+      const before = await Snapshot.track()
+      expect(before).toBeTruthy()
+
+      await Bun.write(`${tmp.path}/multi1.txt`, "line1\nline2\nline3")
+      await Bun.write(`${tmp.path}/multi2.txt`, "single line")
+      await $`rm ${tmp.path}/a.txt`.quiet()
+      await $`rm ${tmp.path}/b.txt`.quiet()
+
+      const after = await Snapshot.track()
+      expect(after).toBeTruthy()
+
+      const diffs = await Snapshot.diffFull(before!, after!)
+      expect(diffs.length).toBe(4)
+
+      const multi1Diff = diffs.find((d) => d.file === "multi1.txt")
+      expect(multi1Diff).toBeDefined()
+      expect(multi1Diff!.additions).toBe(3)
+      expect(multi1Diff!.deletions).toBe(0)
+
+      const multi2Diff = diffs.find((d) => d.file === "multi2.txt")
+      expect(multi2Diff).toBeDefined()
+      expect(multi2Diff!.additions).toBe(1)
+      expect(multi2Diff!.deletions).toBe(0)
+
+      const removedADiff = diffs.find((d) => d.file === "a.txt")
+      expect(removedADiff).toBeDefined()
+      expect(removedADiff!.additions).toBe(0)
+      expect(removedADiff!.deletions).toBe(1)
+
+      const removedBDiff = diffs.find((d) => d.file === "b.txt")
+      expect(removedBDiff).toBeDefined()
+      expect(removedBDiff!.additions).toBe(0)
+      expect(removedBDiff!.deletions).toBe(1)
+    },
+  })
+})
+
+test("diffFull with no changes", async () => {
+  await using tmp = await bootstrap()
+  await Instance.provide({
+    directory: tmp.path,
+    fn: async () => {
+      const before = await Snapshot.track()
+      expect(before).toBeTruthy()
+
+      const after = await Snapshot.track()
+      expect(after).toBeTruthy()
+
+      const diffs = await Snapshot.diffFull(before!, after!)
+      expect(diffs.length).toBe(0)
+    },
+  })
+})
+
+test("diffFull with binary file changes", async () => {
+  await using tmp = await bootstrap()
+  await Instance.provide({
+    directory: tmp.path,
+    fn: async () => {
+      const before = await Snapshot.track()
+      expect(before).toBeTruthy()
+
+      await Bun.write(`${tmp.path}/binary.bin`, new Uint8Array([0x00, 0x01, 0x02, 0x03]))
+
+      const after = await Snapshot.track()
+      expect(after).toBeTruthy()
+
+      const diffs = await Snapshot.diffFull(before!, after!)
+      expect(diffs.length).toBe(1)
+
+      const binaryDiff = diffs[0]
+      expect(binaryDiff.file).toBe("binary.bin")
+      expect(binaryDiff.before).toBe("")
+    },
+  })
+})
+
+test("diffFull with whitespace changes", async () => {
+  await using tmp = await bootstrap()
+  await Instance.provide({
+    directory: tmp.path,
+    fn: async () => {
+      await Bun.write(`${tmp.path}/whitespace.txt`, "line1\nline2")
+      const before = await Snapshot.track()
+      expect(before).toBeTruthy()
+
+      await Bun.write(`${tmp.path}/whitespace.txt`, "line1\n\nline2\n")
+
+      const after = await Snapshot.track()
+      expect(after).toBeTruthy()
+
+      const diffs = await Snapshot.diffFull(before!, after!)
+      expect(diffs.length).toBe(1)
+
+      const whitespaceDiff = diffs[0]
+      expect(whitespaceDiff.file).toBe("whitespace.txt")
+      expect(whitespaceDiff.additions).toBeGreaterThan(0)
     },
   })
 })

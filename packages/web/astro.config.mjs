@@ -38,15 +38,6 @@ export default defineConfig({
         { icon: "github", label: "GitHub", href: config.github },
         { icon: "discord", label: "Dscord", href: config.discord },
       ],
-      head: [
-        {
-          tag: "link",
-          attrs: {
-            rel: "icon",
-            href: "/docs/favicon.svg",
-          },
-        },
-      ],
       editLink: {
         baseUrl: `${config.github}/edit/dev/packages/web/`,
       },
@@ -65,7 +56,7 @@ export default defineConfig({
         "providers",
         "enterprise",
         "troubleshooting",
-
+        "1-0",
         {
           label: "Usage",
           items: ["tui", "cli", "ide", "zen", "share", "github", "gitlab"],
@@ -74,6 +65,7 @@ export default defineConfig({
         {
           label: "Configure",
           items: [
+            "tools",
             "rules",
             "agents",
             "models",
@@ -84,6 +76,7 @@ export default defineConfig({
             "permissions",
             "lsp",
             "mcp-servers",
+            "acp",
             "custom-tools",
           ],
         },
@@ -106,9 +99,6 @@ export default defineConfig({
       ],
     }),
   ],
-  redirects: {
-    "/discord": "https://discord.gg/opencode",
-  },
 })
 
 function configSchema() {

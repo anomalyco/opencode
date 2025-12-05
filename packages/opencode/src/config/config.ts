@@ -1,50 +1,64 @@
 import { Log } from "../util/log"
 import path from "path"
 import os from "os"
-import z from "zod/v4"
+import z from "zod"
 import { Filesystem } from "../util/filesystem"
 import { ModelsDev } from "../provider/models"
 import { mergeDeep, pipe } from "remeda"
 import { Global } from "../global"
 import fs from "fs/promises"
 import { lazy } from "../util/lazy"
-import { NamedError } from "../util/error"
-import matter from "gray-matter"
+import { NamedError } from "@opencode-ai/util/error"
 import { Flag } from "../flag/flag"
 import { Auth } from "../auth"
 import { type ParseError as JsoncParseError, parse as parseJsonc, printParseErrorCode } from "jsonc-parser"
 import { Instance } from "../project/instance"
 import { LSPServer } from "../lsp/server"
+import { BunProc } from "@/bun"
+import { Installation } from "@/installation"
+import { ConfigMarkdown } from "./markdown"
 
 export namespace Config {
   const log = Log.create({ service: "config" })
 
+  // Custom merge function that concatenates plugin arrays instead of replacing them
+  function mergeConfigWithPlugins(target: Info, source: Info): Info {
+    const merged = mergeDeep(target, source)
+    // If both configs have plugin arrays, concatenate them instead of replacing
+    if (target.plugin && source.plugin) {
+      const pluginSet = new Set([...target.plugin, ...source.plugin])
+      merged.plugin = Array.from(pluginSet)
+    }
+    return merged
+  }
+
   export const state = Instance.state(async () => {
     const auth = await Auth.all()
     let result = await global()
-    for (const file of ["opencode.jsonc", "opencode.json"]) {
-      const found = await Filesystem.findUp(file, Instance.directory, Instance.worktree)
-      for (const resolved of found.toReversed()) {
-        result = mergeDeep(result, await loadFile(resolved))
-      }
-    }
 
     // Override with custom config if provided
     if (Flag.OPENCODE_CONFIG) {
-      result = mergeDeep(result, await loadFile(Flag.OPENCODE_CONFIG))
+      result = mergeConfigWithPlugins(result, await loadFile(Flag.OPENCODE_CONFIG))
       log.debug("loaded custom config", { path: Flag.OPENCODE_CONFIG })
     }
 
+    for (const file of ["opencode.jsonc", "opencode.json"]) {
+      const found = await Filesystem.findUp(file, Instance.directory, Instance.worktree)
+      for (const resolved of found.toReversed()) {
+        result = mergeConfigWithPlugins(result, await loadFile(resolved))
+      }
+    }
+
     if (Flag.OPENCODE_CONFIG_CONTENT) {
-      result = mergeDeep(result, JSON.parse(Flag.OPENCODE_CONFIG_CONTENT))
+      result = mergeConfigWithPlugins(result, JSON.parse(Flag.OPENCODE_CONFIG_CONTENT))
       log.debug("loaded custom config from OPENCODE_CONFIG_CONTENT")
     }
 
     for (const [key, value] of Object.entries(auth)) {
       if (value.type === "wellknown") {
         process.env[value.key] = value.token
-        const wellknown = await fetch(`${key}/.well-known/opencode`).then((x) => x.json())
-        result = mergeDeep(result, await load(JSON.stringify(wellknown.config ?? {}), process.cwd()))
+        const wellknown = (await fetch(`${key}/.well-known/opencode`).then((x) => x.json())) as any
+        result = mergeConfigWithPlugins(result, await load(JSON.stringify(wellknown.config ?? {}), process.cwd()))
       }
     }
 
@@ -55,17 +69,41 @@ export namespace Config {
     const directories = [
       Global.Path.config,
       ...(await Array.fromAsync(
-        Filesystem.up({ targets: [".opencode"], start: Instance.directory, stop: Instance.worktree }),
+        Filesystem.up({
+          targets: [".opencode"],
+          start: Instance.directory,
+          stop: Instance.worktree,
+        }),
       )),
     ]
 
+    if (Flag.OPENCODE_CONFIG_DIR) {
+      directories.push(Flag.OPENCODE_CONFIG_DIR)
+      log.debug("loading config from OPENCODE_CONFIG_DIR", { path: Flag.OPENCODE_CONFIG_DIR })
+    }
+
+    const promises: Promise<void>[] = []
     for (const dir of directories) {
-      await assertValid(dir).catch(() => {})
+      await assertValid(dir)
+
+      if (dir.endsWith(".opencode") || dir === Flag.OPENCODE_CONFIG_DIR) {
+        for (const file of ["opencode.jsonc", "opencode.json"]) {
+          log.debug(`loading config from ${path.join(dir, file)}`)
+          result = mergeConfigWithPlugins(result, await loadFile(path.join(dir, file)))
+          // to satisy the type checker
+          result.agent ??= {}
+          result.mode ??= {}
+          result.plugin ??= []
+        }
+      }
+
+      promises.push(installDependencies(dir))
       result.command = mergeDeep(result.command ?? {}, await loadCommand(dir))
       result.agent = mergeDeep(result.agent, await loadAgent(dir))
       result.agent = mergeDeep(result.agent, await loadMode(dir))
       result.plugin.push(...(await loadPlugin(dir)))
     }
+    await Promise.allSettled(promises)
 
     // Migrate deprecated mode field to agent field
     for (const [name, mode] of Object.entries(result.mode)) {
@@ -87,29 +125,13 @@ export namespace Config {
     if (result.autoshare === true && !result.share) {
       result.share = "auto"
     }
-    if (result.keybinds?.messages_revert && !result.keybinds.messages_undo) {
-      result.keybinds.messages_undo = result.keybinds.messages_revert
-    }
 
     // Handle migration from autoshare to share field
     if (result.autoshare === true && !result.share) {
       result.share = "auto"
     }
-    if (result.keybinds?.messages_revert && !result.keybinds.messages_undo) {
-      result.keybinds.messages_undo = result.keybinds.messages_revert
-    }
-    if (result.keybinds?.switch_mode && !result.keybinds.switch_agent) {
-      result.keybinds.switch_agent = result.keybinds.switch_mode
-    }
-    if (result.keybinds?.switch_mode_reverse && !result.keybinds.switch_agent_reverse) {
-      result.keybinds.switch_agent_reverse = result.keybinds.switch_mode_reverse
-    }
-    if (result.keybinds?.switch_agent && !result.keybinds.agent_cycle) {
-      result.keybinds.agent_cycle = result.keybinds.switch_agent
-    }
-    if (result.keybinds?.switch_agent_reverse && !result.keybinds.agent_cycle_reverse) {
-      result.keybinds.agent_cycle_reverse = result.keybinds.switch_agent_reverse
-    }
+
+    if (!result.keybinds) result.keybinds = Info.shape.keybinds.parse({})
 
     return {
       config: result,
@@ -117,32 +139,54 @@ export namespace Config {
     }
   })
 
+  const INVALID_DIRS = new Bun.Glob(`{${["agents", "commands", "plugins", "tools"].join(",")}}/`)
   async function assertValid(dir: string) {
-    const ALLOWED_DIRS = new Set(["agent", "command", "mode", "plugin", "tool", "themes"])
-    const UNEXPECTED_DIR_GLOB = new Bun.Glob("*/")
-    for await (const item of UNEXPECTED_DIR_GLOB.scan({
-      absolute: true,
-      followSymlinks: true,
-      dot: true,
-      cwd: dir,
-      onlyFiles: false,
-    })) {
-      const dirname = path.basename(item)
-      if (!ALLOWED_DIRS.has(dirname)) {
-        throw new InvalidError({
-          path: dir,
-          message: `Unexpected directory "${dirname}" found in "${dir}". Only ${ALLOWED_DIRS.values().toArray().join(", ")} directories are allowed.`,
-        })
-      }
+    const invalid = await Array.fromAsync(
+      INVALID_DIRS.scan({
+        onlyFiles: false,
+        cwd: dir,
+      }),
+    )
+    for (const item of invalid) {
+      throw new ConfigDirectoryTypoError({
+        path: dir,
+        dir: item,
+        suggestion: item.substring(0, item.length - 1),
+      })
     }
+  }
+
+  async function installDependencies(dir: string) {
+    if (Installation.isLocal()) return
+
+    const pkg = path.join(dir, "package.json")
+
+    if (!(await Bun.file(pkg).exists())) {
+      await Bun.write(pkg, "{}")
+    }
+
+    const gitignore = path.join(dir, ".gitignore")
+    const hasGitIgnore = await Bun.file(gitignore).exists()
+    if (!hasGitIgnore) await Bun.write(gitignore, ["node_modules", "package.json", "bun.lock", ".gitignore"].join("\n"))
+
+    await BunProc.run(
+      ["add", "@opencode-ai/plugin@" + (Installation.isLocal() ? "latest" : Installation.VERSION), "--exact"],
+      {
+        cwd: dir,
+      },
+    ).catch(() => {})
   }
 
   const COMMAND_GLOB = new Bun.Glob("command/**/*.md")
   async function loadCommand(dir: string) {
     const result: Record<string, Command> = {}
-    for await (const item of COMMAND_GLOB.scan({ absolute: true, followSymlinks: true, dot: true, cwd: dir })) {
-      const content = await Bun.file(item).text()
-      const md = matter(content)
+    for await (const item of COMMAND_GLOB.scan({
+      absolute: true,
+      followSymlinks: true,
+      dot: true,
+      cwd: dir,
+    })) {
+      const md = await ConfigMarkdown.parse(item)
       if (!md.data) continue
 
       const name = (() => {
@@ -175,9 +219,13 @@ export namespace Config {
   async function loadAgent(dir: string) {
     const result: Record<string, Agent> = {}
 
-    for await (const item of AGENT_GLOB.scan({ absolute: true, followSymlinks: true, dot: true, cwd: dir })) {
-      const content = await Bun.file(item).text()
-      const md = matter(content)
+    for await (const item of AGENT_GLOB.scan({
+      absolute: true,
+      followSymlinks: true,
+      dot: true,
+      cwd: dir,
+    })) {
+      const md = await ConfigMarkdown.parse(item)
       if (!md.data) continue
 
       // Extract relative path from agent folder for nested agents
@@ -213,9 +261,13 @@ export namespace Config {
   const MODE_GLOB = new Bun.Glob("mode/*.md")
   async function loadMode(dir: string) {
     const result: Record<string, Agent> = {}
-    for await (const item of MODE_GLOB.scan({ absolute: true, followSymlinks: true, dot: true, cwd: dir })) {
-      const content = await Bun.file(item).text()
-      const md = matter(content)
+    for await (const item of MODE_GLOB.scan({
+      absolute: true,
+      followSymlinks: true,
+      dot: true,
+      cwd: dir,
+    })) {
+      const md = await ConfigMarkdown.parse(item)
       if (!md.data) continue
 
       const config = {
@@ -239,7 +291,12 @@ export namespace Config {
   async function loadPlugin(dir: string) {
     const plugins: string[] = []
 
-    for await (const item of PLUGIN_GLOB.scan({ absolute: true, followSymlinks: true, dot: true, cwd: dir })) {
+    for await (const item of PLUGIN_GLOB.scan({
+      absolute: true,
+      followSymlinks: true,
+      dot: true,
+      cwd: dir,
+    })) {
       plugins.push("file://" + item)
     }
     return plugins
@@ -254,6 +311,14 @@ export namespace Config {
         .optional()
         .describe("Environment variables to set when running the MCP server"),
       enabled: z.boolean().optional().describe("Enable or disable the MCP server on startup"),
+      timeout: z
+        .number()
+        .int()
+        .positive()
+        .optional()
+        .describe(
+          "Timeout in ms for fetching tools from the MCP server. Defaults to 5000 (5 seconds) if not specified.",
+        ),
     })
     .strict()
     .meta({
@@ -266,6 +331,14 @@ export namespace Config {
       url: z.string().describe("URL of the remote MCP server"),
       enabled: z.boolean().optional().describe("Enable or disable the MCP server on startup"),
       headers: z.record(z.string(), z.string()).optional().describe("Headers to send with the request"),
+      timeout: z
+        .number()
+        .int()
+        .positive()
+        .optional()
+        .describe(
+          "Timeout in ms for fetching tools from the MCP server. Defaults to 5000 (5 seconds) if not specified.",
+        ),
     })
     .strict()
     .meta({
@@ -275,7 +348,7 @@ export namespace Config {
   export const Mcp = z.discriminatedUnion("type", [McpLocal, McpRemote])
   export type Mcp = z.infer<typeof Mcp>
 
-  export const Permission = z.union([z.literal("ask"), z.literal("allow"), z.literal("deny")])
+  export const Permission = z.enum(["ask", "allow", "deny"])
   export type Permission = z.infer<typeof Permission>
 
   export const Command = z.object({
@@ -296,12 +369,19 @@ export namespace Config {
       tools: z.record(z.string(), z.boolean()).optional(),
       disable: z.boolean().optional(),
       description: z.string().optional().describe("Description of when to use the agent"),
-      mode: z.union([z.literal("subagent"), z.literal("primary"), z.literal("all")]).optional(),
+      mode: z.enum(["subagent", "primary", "all"]).optional(),
+      color: z
+        .string()
+        .regex(/^#[0-9a-fA-F]{6}$/, "Invalid hex color format")
+        .optional()
+        .describe("Hex color code for the agent (e.g., #FF5733)"),
       permission: z
         .object({
           edit: Permission.optional(),
           bash: z.union([Permission, z.record(z.string(), Permission)]).optional(),
           webfetch: Permission.optional(),
+          doom_loop: Permission.optional(),
+          external_directory: Permission.optional(),
         })
         .optional(),
     })
@@ -314,71 +394,57 @@ export namespace Config {
   export const Keybinds = z
     .object({
       leader: z.string().optional().default("ctrl+x").describe("Leader key for keybind combinations"),
-      app_help: z.string().optional().default("<leader>h").describe("Show help dialog"),
-      app_exit: z.string().optional().default("ctrl+c,<leader>q").describe("Exit the application"),
+      app_exit: z.string().optional().default("ctrl+c,ctrl+d,<leader>q").describe("Exit the application"),
       editor_open: z.string().optional().default("<leader>e").describe("Open external editor"),
       theme_list: z.string().optional().default("<leader>t").describe("List available themes"),
-      project_init: z.string().optional().default("<leader>i").describe("Create/update AGENTS.md"),
-      tool_details: z.string().optional().default("<leader>d").describe("Toggle tool details"),
-      thinking_blocks: z.string().optional().default("<leader>b").describe("Toggle thinking blocks"),
+      sidebar_toggle: z.string().optional().default("<leader>b").describe("Toggle sidebar"),
+      username_toggle: z.string().optional().default("none").describe("Toggle username visibility"),
+      status_view: z.string().optional().default("<leader>s").describe("View status"),
       session_export: z.string().optional().default("<leader>x").describe("Export session to editor"),
       session_new: z.string().optional().default("<leader>n").describe("Create a new session"),
       session_list: z.string().optional().default("<leader>l").describe("List all sessions"),
       session_timeline: z.string().optional().default("<leader>g").describe("Show session timeline"),
-      session_share: z.string().optional().default("<leader>s").describe("Share current session"),
+      session_share: z.string().optional().default("none").describe("Share current session"),
       session_unshare: z.string().optional().default("none").describe("Unshare current session"),
-      session_interrupt: z.string().optional().default("esc").describe("Interrupt current session"),
+      session_interrupt: z.string().optional().default("escape").describe("Interrupt current session"),
       session_compact: z.string().optional().default("<leader>c").describe("Compact the session"),
-      session_child_cycle: z.string().optional().default("ctrl+right").describe("Cycle to next child session"),
-      session_child_cycle_reverse: z
-        .string()
-        .optional()
-        .default("ctrl+left")
-        .describe("Cycle to previous child session"),
-      messages_page_up: z.string().optional().default("pgup").describe("Scroll messages up by one page"),
-      messages_page_down: z.string().optional().default("pgdown").describe("Scroll messages down by one page"),
+      messages_page_up: z.string().optional().default("pageup").describe("Scroll messages up by one page"),
+      messages_page_down: z.string().optional().default("pagedown").describe("Scroll messages down by one page"),
       messages_half_page_up: z.string().optional().default("ctrl+alt+u").describe("Scroll messages up by half page"),
       messages_half_page_down: z
         .string()
         .optional()
         .default("ctrl+alt+d")
         .describe("Scroll messages down by half page"),
-      messages_first: z.string().optional().default("ctrl+g").describe("Navigate to first message"),
-      messages_last: z.string().optional().default("ctrl+alt+g").describe("Navigate to last message"),
+      messages_first: z.string().optional().default("ctrl+g,home").describe("Navigate to first message"),
+      messages_last: z.string().optional().default("ctrl+alt+g,end").describe("Navigate to last message"),
+      messages_last_user: z.string().optional().default("none").describe("Navigate to last user message"),
       messages_copy: z.string().optional().default("<leader>y").describe("Copy message"),
       messages_undo: z.string().optional().default("<leader>u").describe("Undo message"),
       messages_redo: z.string().optional().default("<leader>r").describe("Redo message"),
+      messages_toggle_conceal: z
+        .string()
+        .optional()
+        .default("<leader>h")
+        .describe("Toggle code block concealment in messages"),
+      tool_details: z.string().optional().default("none").describe("Toggle tool details visibility"),
       model_list: z.string().optional().default("<leader>m").describe("List available models"),
-      model_cycle_recent: z.string().optional().default("f2").describe("Next recent model"),
-      model_cycle_recent_reverse: z.string().optional().default("shift+f2").describe("Previous recent model"),
+      model_cycle_recent: z.string().optional().default("f2").describe("Next recently used model"),
+      model_cycle_recent_reverse: z.string().optional().default("shift+f2").describe("Previous recently used model"),
+      command_list: z.string().optional().default("ctrl+p").describe("List available commands"),
       agent_list: z.string().optional().default("<leader>a").describe("List agents"),
       agent_cycle: z.string().optional().default("tab").describe("Next agent"),
       agent_cycle_reverse: z.string().optional().default("shift+tab").describe("Previous agent"),
       input_clear: z.string().optional().default("ctrl+c").describe("Clear input field"),
+      input_forward_delete: z.string().optional().default("ctrl+d").describe("Forward delete"),
       input_paste: z.string().optional().default("ctrl+v").describe("Paste from clipboard"),
-      input_submit: z.string().optional().default("enter").describe("Submit input"),
-      input_newline: z.string().optional().default("shift+enter,ctrl+j").describe("Insert newline in input"),
-      // Deprecated commands
-      switch_mode: z.string().optional().default("none").describe("@deprecated use agent_cycle. Next mode"),
-      switch_mode_reverse: z
-        .string()
-        .optional()
-        .default("none")
-        .describe("@deprecated use agent_cycle_reverse. Previous mode"),
-      switch_agent: z.string().optional().default("tab").describe("@deprecated use agent_cycle. Next agent"),
-      switch_agent_reverse: z
-        .string()
-        .optional()
-        .default("shift+tab")
-        .describe("@deprecated use agent_cycle_reverse. Previous agent"),
-      file_list: z.string().optional().default("none").describe("@deprecated Currently not available. List files"),
-      file_close: z.string().optional().default("none").describe("@deprecated Close file"),
-      file_search: z.string().optional().default("none").describe("@deprecated Search file"),
-      file_diff_toggle: z.string().optional().default("none").describe("@deprecated Split/unified diff"),
-      messages_previous: z.string().optional().default("none").describe("@deprecated Navigate to previous message"),
-      messages_next: z.string().optional().default("none").describe("@deprecated Navigate to next message"),
-      messages_layout_toggle: z.string().optional().default("none").describe("@deprecated Toggle layout"),
-      messages_revert: z.string().optional().default("none").describe("@deprecated use messages_undo. Revert message"),
+      input_submit: z.string().optional().default("return").describe("Submit input"),
+      input_newline: z.string().optional().default("shift+return,ctrl+j").describe("Insert newline in input"),
+      history_previous: z.string().optional().default("up").describe("Previous history item"),
+      history_next: z.string().optional().default("down").describe("Next history item"),
+      session_child_cycle: z.string().optional().default("<leader>right").describe("Next child session"),
+      session_child_cycle_reverse: z.string().optional().default("<leader>left").describe("Previous child session"),
+      terminal_suspend: z.string().optional().default("ctrl+z").describe("Suspend terminal"),
     })
     .strict()
     .meta({
@@ -386,13 +452,59 @@ export namespace Config {
     })
 
   export const TUI = z.object({
-    scroll_speed: z.number().min(1).optional().default(2).describe("TUI scroll speed"),
+    scroll_speed: z.number().min(0.001).optional().describe("TUI scroll speed"),
+    scroll_acceleration: z
+      .object({
+        enabled: z.boolean().describe("Enable scroll acceleration"),
+      })
+      .optional()
+      .describe("Scroll acceleration settings"),
+    diff_style: z
+      .enum(["auto", "stacked"])
+      .optional()
+      .describe("Control diff rendering style: 'auto' adapts to terminal width, 'stacked' always shows single column"),
   })
 
   export const Layout = z.enum(["auto", "stretch"]).meta({
     ref: "LayoutConfig",
   })
   export type Layout = z.infer<typeof Layout>
+
+  export const Provider = ModelsDev.Provider.partial()
+    .extend({
+      whitelist: z.array(z.string()).optional(),
+      blacklist: z.array(z.string()).optional(),
+      models: z.record(z.string(), ModelsDev.Model.partial()).optional(),
+      options: z
+        .object({
+          apiKey: z.string().optional(),
+          baseURL: z.string().optional(),
+          enterpriseUrl: z.string().optional().describe("GitHub Enterprise URL for copilot authentication"),
+          setCacheKey: z.boolean().optional().describe("Enable promptCacheKey for this provider (default false)"),
+          timeout: z
+            .union([
+              z
+                .number()
+                .int()
+                .positive()
+                .describe(
+                  "Timeout in milliseconds for requests to this provider. Default is 300000 (5 minutes). Set to false to disable timeout.",
+                ),
+              z.literal(false).describe("Disable timeout for this provider entirely."),
+            ])
+            .optional()
+            .describe(
+              "Timeout in milliseconds for requests to this provider. Default is 300000 (5 minutes). Set to false to disable timeout.",
+            ),
+        })
+        .catchall(z.any())
+        .optional(),
+    })
+    .strict()
+    .meta({
+      ref: "ProviderConfig",
+    })
+  export type Provider = z.infer<typeof Provider>
 
   export const Info = z
     .object({
@@ -421,8 +533,17 @@ export namespace Config {
         .boolean()
         .optional()
         .describe("@deprecated Use 'share' field instead. Share newly created sessions automatically"),
-      autoupdate: z.boolean().optional().describe("Automatically update to the latest version"),
+      autoupdate: z
+        .union([z.boolean(), z.literal("notify")])
+        .optional()
+        .describe(
+          "Automatically update to the latest version. Set to true to auto-update, false to disable, or 'notify' to show update notifications",
+        ),
       disabled_providers: z.array(z.string()).optional().describe("Disable providers that are loaded automatically"),
+      enabled_providers: z
+        .array(z.string())
+        .optional()
+        .describe("When set, ONLY these providers will be enabled. All other providers will be ignored"),
       model: z.string().describe("Model to use in the format of provider/model, eg anthropic/claude-2").optional(),
       small_model: z
         .string()
@@ -445,75 +566,54 @@ export namespace Config {
           plan: Agent.optional(),
           build: Agent.optional(),
           general: Agent.optional(),
+          explore: Agent.optional(),
         })
         .catchall(Agent)
         .optional()
         .describe("Agent configuration, see https://opencode.ai/docs/agent"),
       provider: z
-        .record(
-          z.string(),
-          ModelsDev.Provider.partial()
-            .extend({
-              models: z.record(z.string(), ModelsDev.Model.partial()).optional(),
-              options: z
-                .object({
-                  apiKey: z.string().optional(),
-                  baseURL: z.string().optional(),
-                  timeout: z
-                    .union([
-                      z
-                        .number()
-                        .int()
-                        .positive()
-                        .describe(
-                          "Timeout in milliseconds for requests to this provider. Default is 300000 (5 minutes). Set to false to disable timeout.",
-                        ),
-                      z.literal(false).describe("Disable timeout for this provider entirely."),
-                    ])
-                    .optional()
-                    .describe(
-                      "Timeout in milliseconds for requests to this provider. Default is 300000 (5 minutes). Set to false to disable timeout.",
-                    ),
-                })
-                .catchall(z.any())
-                .optional(),
-            })
-            .strict(),
-        )
+        .record(z.string(), Provider)
         .optional()
         .describe("Custom provider configurations and model overrides"),
       mcp: z.record(z.string(), Mcp).optional().describe("MCP (Model Context Protocol) server configurations"),
       formatter: z
-        .record(
-          z.string(),
-          z.object({
-            disabled: z.boolean().optional(),
-            command: z.array(z.string()).optional(),
-            environment: z.record(z.string(), z.string()).optional(),
-            extensions: z.array(z.string()).optional(),
-          }),
-        )
+        .union([
+          z.literal(false),
+          z.record(
+            z.string(),
+            z.object({
+              disabled: z.boolean().optional(),
+              command: z.array(z.string()).optional(),
+              environment: z.record(z.string(), z.string()).optional(),
+              extensions: z.array(z.string()).optional(),
+            }),
+          ),
+        ])
         .optional(),
       lsp: z
-        .record(
-          z.string(),
-          z.union([
-            z.object({
-              disabled: z.literal(true),
-            }),
-            z.object({
-              command: z.array(z.string()),
-              extensions: z.array(z.string()).optional(),
-              disabled: z.boolean().optional(),
-              env: z.record(z.string(), z.string()).optional(),
-              initialization: z.record(z.string(), z.any()).optional(),
-            }),
-          ]),
-        )
+        .union([
+          z.literal(false),
+          z.record(
+            z.string(),
+            z.union([
+              z.object({
+                disabled: z.literal(true),
+              }),
+              z.object({
+                command: z.array(z.string()),
+                extensions: z.array(z.string()).optional(),
+                disabled: z.boolean().optional(),
+                env: z.record(z.string(), z.string()).optional(),
+                initialization: z.record(z.string(), z.any()).optional(),
+              }),
+            ]),
+          ),
+        ])
         .optional()
         .refine(
           (data) => {
             if (!data) return true
+            if (typeof data === "boolean") return true
             const serverIds = new Set(Object.values(LSPServer).map((s) => s.id))
 
             return Object.entries(data).every(([id, config]) => {
@@ -533,9 +633,16 @@ export namespace Config {
           edit: Permission.optional(),
           bash: z.union([Permission, z.record(z.string(), Permission)]).optional(),
           webfetch: Permission.optional(),
+          doom_loop: Permission.optional(),
+          external_directory: Permission.optional(),
         })
         .optional(),
       tools: z.record(z.string(), z.boolean()).optional(),
+      enterprise: z
+        .object({
+          url: z.string().optional().describe("Enterprise URL"),
+        })
+        .optional(),
       experimental: z
         .object({
           hook: z
@@ -560,7 +667,13 @@ export namespace Config {
                 .optional(),
             })
             .optional(),
+          chatMaxRetries: z.number().optional().describe("Number of retries for chat completions on failure"),
           disable_paste_summary: z.boolean().optional(),
+          batch_tool: z.boolean().optional().describe("Enable the batch tool"),
+          primary_tools: z
+            .array(z.string())
+            .optional()
+            .describe("Tools that should only be available to primary agents."),
         })
         .optional(),
     })
@@ -636,7 +749,10 @@ export namespace Config {
               const errMsg = `bad file reference: "${match}"`
               if (error.code === "ENOENT") {
                 throw new InvalidError(
-                  { path: configFilepath, message: errMsg + ` ${resolvedPath} does not exist` },
+                  {
+                    path: configFilepath,
+                    message: errMsg + ` ${resolvedPath} does not exist`,
+                  },
                   { cause: error },
                 )
               }
@@ -680,23 +796,35 @@ export namespace Config {
       }
       const data = parsed.data
       if (data.plugin) {
-        for (let i = 0; i < data.plugin?.length; i++) {
+        for (let i = 0; i < data.plugin.length; i++) {
           const plugin = data.plugin[i]
           try {
-            data.plugin[i] = import.meta.resolve(plugin, configFilepath)
+            data.plugin[i] = import.meta.resolve!(plugin, configFilepath)
           } catch (err) {}
         }
       }
       return data
     }
 
-    throw new InvalidError({ path: configFilepath, issues: parsed.error.issues })
+    throw new InvalidError({
+      path: configFilepath,
+      issues: parsed.error.issues,
+    })
   }
   export const JsonError = NamedError.create(
     "ConfigJsonError",
     z.object({
       path: z.string(),
       message: z.string().optional(),
+    }),
+  )
+
+  export const ConfigDirectoryTypoError = NamedError.create(
+    "ConfigDirectoryTypoError",
+    z.object({
+      path: z.string(),
+      dir: z.string(),
+      suggestion: z.string(),
     }),
   )
 

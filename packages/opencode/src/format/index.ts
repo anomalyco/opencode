@@ -2,6 +2,7 @@ import { Bus } from "../bus"
 import { File } from "../file"
 import { Log } from "../util/log"
 import path from "path"
+import z from "zod"
 
 import * as Formatter from "./formatter"
 import { Config } from "../config/config"
@@ -11,11 +12,33 @@ import { Instance } from "../project/instance"
 export namespace Format {
   const log = Log.create({ service: "format" })
 
+  export const Status = z
+    .object({
+      name: z.string(),
+      extensions: z.string().array(),
+      enabled: z.boolean(),
+    })
+    .meta({
+      ref: "FormatterStatus",
+    })
+  export type Status = z.infer<typeof Status>
+
   const state = Instance.state(async () => {
     const enabled: Record<string, boolean> = {}
     const cfg = await Config.get()
 
-    const formatters = { ...Formatter } as Record<string, Formatter.Info>
+    const formatters: Record<string, Formatter.Info> = {}
+    if (cfg.formatter === false) {
+      log.info("all formatters are disabled")
+      return {
+        enabled,
+        formatters,
+      }
+    }
+
+    for (const item of Object.values(Formatter)) {
+      formatters[item.name] = item
+    }
     for (const [name, item] of Object.entries(cfg.formatter ?? {})) {
       if (item.disabled) {
         delete formatters[name]
@@ -26,6 +49,9 @@ export namespace Format {
         extensions: [],
         ...item,
       })
+
+      if (result.command.length === 0) continue
+
       result.enabled = async () => true
       result.name = name
       formatters[name] = result
@@ -54,7 +80,22 @@ export namespace Format {
       log.info("checking", { name: item.name, ext })
       if (!item.extensions.includes(ext)) continue
       if (!(await isEnabled(item))) continue
+      log.info("enabled", { name: item.name, ext })
       result.push(item)
+    }
+    return result
+  }
+
+  export async function status() {
+    const s = await state()
+    const result: Status[] = []
+    for (const formatter of Object.values(s.formatters)) {
+      const enabled = await isEnabled(formatter)
+      result.push({
+        name: formatter.name,
+        extensions: formatter.extensions,
+        enabled,
+      })
     }
     return result
   }
@@ -83,13 +124,12 @@ export namespace Format {
               ...item.environment,
             })
         } catch (error) {
-          log.error("failed", {
+          log.error("failed to format file", {
             error,
             command: item.command,
             ...item.environment,
+            file,
           })
-          // re-raising
-          throw error
         }
       }
     })

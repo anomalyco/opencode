@@ -1,0 +1,113 @@
+@utility no-scrollbar {
+  &::-webkit-scrollbar {
+    display: none;
+  }
+  & {
+    -ms-overflow-style: none; /* IE and Edge */
+    scrollbar-width: none; /* Firefox */
+  }
+}
+
+@utility truncate-start {
+  text-overflow: ellipsis;
+  overflow: hidden;
+  white-space: nowrap;
+  direction: rtl;
+  text-align: left;
+}
+
+@utility fade-up-text {
+  animation: fadeUp 0.4s ease-out forwards;
+  opacity: 0;
+
+  &:nth-child(1) {
+    animation-delay: 0.1s;
+  }
+  &:nth-child(2) {
+    animation-delay: 0.2s;
+  }
+  &:nth-child(3) {
+    animation-delay: 0.3s;
+  }
+  &:nth-child(4) {
+    animation-delay: 0.4s;
+  }
+  &:nth-child(5) {
+    animation-delay: 0.5s;
+  }
+  &:nth-child(6) {
+    animation-delay: 0.6s;
+  }
+  &:nth-child(7) {
+    animation-delay: 0.7s;
+  }
+  &:nth-child(8) {
+    animation-delay: 0.8s;
+  }
+  &:nth-child(9) {
+    animation-delay: 0.9s;
+  }
+  &:nth-child(10) {
+    animation-delay: 1s;
+  }
+  &:nth-child(11) {
+    animation-delay: 1.1s;
+  }
+  &:nth-child(12) {
+    animation-delay: 1.2s;
+  }
+  &:nth-child(13) {
+    animation-delay: 1.3s;
+  }
+  &:nth-child(14) {
+    animation-delay: 1.4s;
+  }
+  &:nth-child(15) {
+    animation-delay: 1.5s;
+  }
+  &:nth-child(16) {
+    animation-delay: 1.6s;
+  }
+  &:nth-child(17) {
+    animation-delay: 1.7s;
+  }
+  &:nth-child(18) {
+    animation-delay: 1.8s;
+  }
+  &:nth-child(19) {
+    animation-delay: 1.9s;
+  }
+  &:nth-child(20) {
+    animation-delay: 2s;
+  }
+  &:nth-child(21) {
+    animation-delay: 2.1s;
+  }
+  &:nth-child(22) {
+    animation-delay: 2.2s;
+  }
+  &:nth-child(23) {
+    animation-delay: 2.3s;
+  }
+  &:nth-child(24) {
+    animation-delay: 2.4s;
+  }
+  &:nth-child(25) {
+    animation-delay: 2.5s;
+  }
+  &:nth-child(26) {
+    animation-delay: 2.6s;
+  }
+  &:nth-child(27) {
+    animation-delay: 2.7s;
+  }
+  &:nth-child(28) {
+    animation-delay: 2.8s;
+  }
+  &:nth-child(29) {
+    animation-delay: 2.9s;
+  }
+  &:nth-child(30) {
+    animation-delay: 3s;
+  }
+}

@@ -1,6 +1,7 @@
-import { useLocal } from "@/context"
-import type { LocalFile } from "@/context/local"
-import { Collapsible, FileIcon, Tooltip } from "@/ui"
+import { useLocal, type LocalFile } from "@/context/local"
+import { Collapsible } from "@opencode-ai/ui/collapsible"
+import { FileIcon } from "@opencode-ai/ui/file-icon"
+import { Tooltip } from "@opencode-ai/ui/tooltip"
 import { For, Match, Switch, Show, type ComponentProps, type ParentProps } from "solid-js"
 import { Dynamic } from "solid-js/web"
 
@@ -18,8 +19,8 @@ export default function FileTree(props: {
     <Dynamic
       component={p.as ?? "div"}
       classList={{
-        "p-0.5 w-full flex items-center gap-x-2 hover:bg-background-element cursor-pointer": true,
-        "bg-background-element": local.file.active()?.path === p.node.path,
+        "p-0.5 w-full flex items-center gap-x-2 hover:bg-background-element": true,
+        // "bg-background-element": local.file.active()?.path === p.node.path,
         [props.nodeClass ?? ""]: !!props.nodeClass,
       }}
       style={`padding-left: ${level * 10}px`}
@@ -55,7 +56,7 @@ export default function FileTree(props: {
           "text-xs whitespace-nowrap truncate": true,
           "text-text-muted/40": p.node.ignored,
           "text-text-muted/80": !p.node.ignored,
-          "!text-text": local.file.active()?.path === p.node.path,
+          // "!text-text": local.file.active()?.path === p.node.path,
           "!text-primary": local.file.changed(p.node.path),
         }}
       >
@@ -75,17 +76,18 @@ export default function FileTree(props: {
             <Switch>
               <Match when={node.type === "directory"}>
                 <Collapsible
+                  variant="ghost"
                   class="w-full"
                   forceMount={false}
-                  open={local.file.node(node.path)?.expanded}
+                  // open={local.file.node(node.path)?.expanded}
                   onOpenChange={(open) => (open ? local.file.expand(node.path) : local.file.collapse(node.path))}
                 >
                   <Collapsible.Trigger>
                     <Node node={node}>
-                      <Collapsible.Arrow size={16} class="text-text-muted/60 ml-1" />
+                      <Collapsible.Arrow class="text-text-muted/60 ml-1" />
                       <FileIcon
                         node={node}
-                        expanded={local.file.node(node.path).expanded}
+                        // expanded={local.file.node(node.path).expanded}
                         class="text-text-muted/60 -ml-1"
                       />
                     </Node>

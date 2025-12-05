@@ -1,18 +1,20 @@
-import { generateText, type ModelMessage } from "ai"
+import { wrapLanguageModel, type ModelMessage } from "ai"
 import { Session } from "."
 import { Identifier } from "../id/id"
 import { Instance } from "../project/instance"
 import { Provider } from "../provider/provider"
-import { defer } from "../util/defer"
 import { MessageV2 } from "./message-v2"
 import { SystemPrompt } from "./system"
 import { Bus } from "../bus"
-import z from "zod/v4"
-import type { ModelsDev } from "../provider/models"
+import z from "zod"
 import { SessionPrompt } from "./prompt"
 import { Flag } from "../flag/flag"
 import { Token } from "../util/token"
 import { Log } from "../util/log"
+import { ProviderTransform } from "@/provider/transform"
+import { SessionProcessor } from "./processor"
+import { fn } from "@/util/fn"
+import { mergeDeep, pipe } from "remeda"
 
 export namespace SessionCompaction {
   const log = Log.create({ service: "session.compaction" })
@@ -26,7 +28,7 @@ export namespace SessionCompaction {
     ),
   }
 
-  export function isOverflow(input: { tokens: MessageV2.Assistant["tokens"]; model: ModelsDev.Model }) {
+  export function isOverflow(input: { tokens: MessageV2.Assistant["tokens"]; model: Provider.Model }) {
     if (Flag.OPENCODE_DISABLE_AUTOCOMPACT) return false
     const context = input.model.limit.context
     if (context === 0) return false
@@ -45,7 +47,7 @@ export namespace SessionCompaction {
   export async function prune(input: { sessionID: string }) {
     if (Flag.OPENCODE_DISABLE_PRUNE) return
     log.info("pruning")
-    const msgs = await Session.messages(input.sessionID)
+    const msgs = await Session.messages({ sessionID: input.sessionID })
     let total = 0
     let pruned = 0
     const toPrune = []
@@ -82,29 +84,28 @@ export namespace SessionCompaction {
     }
   }
 
-  export async function run(input: { sessionID: string; providerID: string; modelID: string }) {
-    await Session.update(input.sessionID, (draft) => {
-      draft.time.compacting = Date.now()
-    })
-    await using _ = defer(async () => {
-      await Session.update(input.sessionID, (draft) => {
-        draft.time.compacting = undefined
-      })
-    })
-    const toSummarize = await Session.messages(input.sessionID).then(MessageV2.filterSummarized)
-    const model = await Provider.getModel(input.providerID, input.modelID)
-    const system = [
-      ...SystemPrompt.summarize(model.providerID),
-      ...(await SystemPrompt.environment()),
-      ...(await SystemPrompt.custom()),
-    ]
-
+  export async function process(input: {
+    parentID: string
+    messages: MessageV2.WithParts[]
+    sessionID: string
+    model: {
+      providerID: string
+      modelID: string
+    }
+    agent: string
+    abort: AbortSignal
+    auto: boolean
+  }) {
+    const model = await Provider.getModel(input.model.providerID, input.model.modelID)
+    const language = await Provider.getLanguage(model)
+    const system = [...SystemPrompt.compaction(model.providerID)]
     const msg = (await Session.updateMessage({
       id: Identifier.ascending("message"),
       role: "assistant",
+      parentID: input.parentID,
       sessionID: input.sessionID,
-      system,
-      mode: "build",
+      mode: input.agent,
+      summary: true,
       path: {
         cwd: Instance.directory,
         root: Instance.worktree,
@@ -116,15 +117,34 @@ export namespace SessionCompaction {
         reasoning: 0,
         cache: { read: 0, write: 0 },
       },
-      modelID: input.modelID,
+      modelID: input.model.modelID,
       providerID: model.providerID,
       time: {
         created: Date.now(),
       },
     })) as MessageV2.Assistant
-    const generated = await generateText({
-      maxRetries: 10,
-      model: model.language,
+    const processor = SessionProcessor.create({
+      assistantMessage: msg,
+      sessionID: input.sessionID,
+      model: model,
+      abort: input.abort,
+    })
+    const result = await processor.process({
+      onError(error) {
+        log.error("stream error", {
+          error,
+        })
+      },
+      // set to 0, we handle loop
+      maxRetries: 0,
+      providerOptions: ProviderTransform.providerOptions(
+        model.api.npm,
+        model.providerID,
+        pipe({}, mergeDeep(ProviderTransform.options(model, input.sessionID)), mergeDeep(model.options)),
+      ),
+      headers: model.headers,
+      abortSignal: input.abort,
+      tools: model.capabilities.toolcall ? {} : undefined,
       messages: [
         ...system.map(
           (x): ModelMessage => ({
@@ -132,43 +152,103 @@ export namespace SessionCompaction {
             content: x,
           }),
         ),
-        ...MessageV2.toModelMessage(toSummarize),
+        ...MessageV2.toModelMessage(
+          input.messages.filter((m) => {
+            if (m.info.role !== "assistant" || m.info.error === undefined) {
+              return true
+            }
+            if (
+              MessageV2.AbortedError.isInstance(m.info.error) &&
+              m.parts.some((part) => part.type !== "step-start" && part.type !== "reasoning")
+            ) {
+              return true
+            }
+
+            return false
+          }),
+        ),
         {
           role: "user",
           content: [
             {
               type: "text",
-              text: "Provide a detailed but concise summary of our conversation above. Focus on information that would be helpful for continuing the conversation, including what we did, what we're doing, which files we're working on, and what we're going to do next.",
+              text: "Summarize our conversation above. This summary will be the only context available when the conversation continues, so preserve critical information including: what was accomplished, current work in progress, files involved, next steps, and any key user requests or constraints. Be concise but detailed enough that work can continue seamlessly.",
             },
           ],
         },
       ],
+      model: wrapLanguageModel({
+        model: language,
+        middleware: [
+          {
+            async transformParams(args) {
+              if (args.type === "stream") {
+                // @ts-expect-error
+                args.params.prompt = ProviderTransform.message(args.params.prompt, model)
+              }
+              return args.params
+            },
+          },
+        ],
+      }),
     })
-    const usage = Session.getUsage({ model: model.info, usage: generated.usage, metadata: generated.providerMetadata })
-    msg.cost += usage.cost
-    msg.tokens = usage.tokens
-    msg.summary = true
-    msg.time.completed = Date.now()
-    await Session.updateMessage(msg)
-    const part = await Session.updatePart({
-      type: "text",
-      sessionID: input.sessionID,
-      messageID: msg.id,
-      id: Identifier.ascending("part"),
-      text: generated.text,
-      time: {
-        start: Date.now(),
-        end: Date.now(),
-      },
-    })
-
-    Bus.publish(Event.Compacted, {
-      sessionID: input.sessionID,
-    })
-
-    return {
-      info: msg,
-      parts: [part],
+    if (result === "continue" && input.auto) {
+      const continueMsg = await Session.updateMessage({
+        id: Identifier.ascending("message"),
+        role: "user",
+        sessionID: input.sessionID,
+        time: {
+          created: Date.now(),
+        },
+        agent: input.agent,
+        model: input.model,
+      })
+      await Session.updatePart({
+        id: Identifier.ascending("part"),
+        messageID: continueMsg.id,
+        sessionID: input.sessionID,
+        type: "text",
+        synthetic: true,
+        text: "Continue if you have next steps",
+        time: {
+          start: Date.now(),
+          end: Date.now(),
+        },
+      })
     }
+    if (processor.message.error) return "stop"
+    Bus.publish(Event.Compacted, { sessionID: input.sessionID })
+    return "continue"
   }
+
+  export const create = fn(
+    z.object({
+      sessionID: Identifier.schema("session"),
+      agent: z.string(),
+      model: z.object({
+        providerID: z.string(),
+        modelID: z.string(),
+      }),
+      auto: z.boolean(),
+    }),
+    async (input) => {
+      const msg = await Session.updateMessage({
+        id: Identifier.ascending("message"),
+        role: "user",
+        model: input.model,
+        sessionID: input.sessionID,
+        agent: input.agent,
+        time: {
+          created: Date.now(),
+        },
+      })
+      await Session.updatePart({
+        id: Identifier.ascending("part"),
+        messageID: msg.id,
+        sessionID: msg.sessionID,
+        type: "compaction",
+        auto: input.auto,
+      })
+    },
+  )
 }

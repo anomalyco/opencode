@@ -1,6 +1,6 @@
 import "./index.css"
 import { Title, Meta, Link } from "@solidjs/meta"
-import { HttpHeader } from "@solidjs/start"
+// import { HttpHeader } from "@solidjs/start"
 import video from "../asset/lander/opencode-min.mp4"
 import videoPoster from "../asset/lander/opencode-poster.png"
 import { IconCopy, IconCheck } from "../component/icon"
@@ -13,6 +13,7 @@ import { Footer } from "~/component/footer"
 import { Legal } from "~/component/legal"
 import { github } from "~/lib/github"
 import { createMemo } from "solid-js"
+import { config } from "~/config"
 
 function CopyStatus() {
   return (
@@ -41,9 +42,9 @@ export default function Home() {
 
   return (
     <main data-page="opencode">
-      <HttpHeader name="Cache-Control" value="public, max-age=1, s-maxage=3600, stale-while-revalidate=86400" />
-      <Title>OpenCode | The AI coding agent built for the terminal</Title>
-      <Link rel="icon" type="image/svg+xml" href="/favicon-zen.svg" />
+      {/*<HttpHeader name="Cache-Control" value="public, max-age=1, s-maxage=3600, stale-while-revalidate=86400" />*/}
+      <Title>OpenCode | The open source AI coding agent</Title>
+      <Link rel="canonical" href={config.baseUrl} />
       <Meta property="og:image" content="/social-share.png" />
       <Meta name="twitter:image" content="/social-share.png" />
       <div data-component="container">
@@ -52,30 +53,16 @@ export default function Home() {
         <div data-component="content">
           <section data-component="hero">
             <div data-slot="hero-copy">
-              <a
-                data-slot="releases"
-                href={release()?.url ?? "https://github.com/sst/opencode/releases"}
-                target="_blank"
-              >
+              <a data-slot="releases" href={release()?.url ?? `${config.github.repoUrl}/releases`} target="_blank">
                 What’s new in {release()?.name ?? "the latest release"}
               </a>
-              <strong>The AI coding agent built for the terminal</strong>
+              <h1>The open source coding agent</h1>
               <p>
-                OpenCode is fully open source, giving you control and freedom to use any provider, any model, and any
-                editor.
+                OpenCode includes free models or connect from any provider to <br />
+                use other models, including Claude, GPT, Gemini and more.
               </p>
-              <a href="/docs">
-                <span>Read docs </span>
-                <svg width="24" height="24" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg">
-                  <path
-                    d="M6.5 12L17 12M13 16.5L17.5 12L13 7.5"
-                    stroke="currentColor"
-                    stroke-width="1.5"
-                    stroke-linecap="square"
-                  />
-                </svg>
-              </a>
             </div>
+            <p data-slot="installation-instructions">Install and use. No account, no email, and no credit card.</p>
             <div data-slot="installation">
               <Tabs
                 as="section"
@@ -154,6 +141,11 @@ export default function Home() {
                 </div>
               </Tabs>
             </div>
+            <p data-slot="installation-options">
+              Available in terminal, web, and desktop (coming soon).
+              <br />
+              Extensions for VS Code, Cursor, Windsurf, and more.
+            </p>
           </section>
 
           <section data-component="video">
@@ -211,6 +203,17 @@ export default function Home() {
                 </div>
               </li>
             </ul>
+            <a href="/docs">
+              <span>Read docs </span>
+              <svg width="24" height="24" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg">
+                <path
+                  d="M6.5 12L17 12M13 16.5L17.5 12L13 7.5"
+                  stroke="currentColor"
+                  stroke-width="1.5"
+                  stroke-linecap="square"
+                />
+              </svg>
+            </a>
           </section>
 
           <section data-component="growth">
@@ -219,9 +222,10 @@ export default function Home() {
               <div>
                 <span>[*]</span>
                 <p>
-                  With over <strong>26,000</strong> GitHub stars, <strong>188</strong> contributors, and almost{" "}
-                  <strong>3,000</strong> commits, OpenCode is used and trusted by over <strong>200,000</strong>{" "}
-                  developers every month.
+                  With over <strong>{config.github.starsFormatted.full}</strong> GitHub stars,{" "}
+                  <strong>{config.stats.contributors}</strong> contributors, and almost{" "}
+                  <strong>{config.stats.commits}</strong> commits, OpenCode is used and trusted by over{" "}
+                  <strong>{config.stats.monthlyUsers}</strong> developers every month.
                 </p>
               </div>
 
@@ -274,7 +278,7 @@ export default function Home() {
                     </svg>
                   </div>
                   <span>
-                    <figure>Fig 1.</figure> <strong>26K</strong> GitHub Stars
+                    <figure>Fig 1.</figure> <strong>{config.github.starsFormatted.compact}</strong> GitHub Stars
                   </span>
                 </div>
 
@@ -577,7 +581,7 @@ export default function Home() {
                     </svg>
                   </div>
                   <span>
-                    <figure>Fig 2.</figure> <strong>188</strong> Contributors
+                    <figure>Fig 2.</figure> <strong>{config.stats.contributors}</strong> Contributors
                   </span>
                 </div>
 
@@ -619,7 +623,7 @@ export default function Home() {
                     </svg>
                   </div>
                   <span>
-                    <figure>Fig 3.</figure> <strong>200K</strong> Monthly Devs
+                    <figure>Fig 3.</figure> <strong>{config.stats.monthlyUsers}</strong> Monthly Devs
                   </span>
                 </div>
               </div>
@@ -688,11 +692,11 @@ export default function Home() {
               <li>
                 <Faq question="Is OpenCode open source?">
                   Yes, OpenCode is fully open source. The source code is public on{" "}
-                  <a href="https://github.com/sst/opencode" target="_blank">
+                  <a href={config.github.repoUrl} target="_blank">
                     GitHub
                   </a>{" "}
                   under the{" "}
-                  <a href="https://github.com/sst/opencode?tab=MIT-1-ov-file#readme" target="_blank">
+                  <a href={`${config.github.repoUrl}?tab=MIT-1-ov-file#readme`} target="_blank">
                     MIT License
                   </a>
                   , meaning anyone can use, modify, or contribute to its development. Anyone from the community can file

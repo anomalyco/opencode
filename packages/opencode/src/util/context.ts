@@ -2,7 +2,7 @@ import { AsyncLocalStorage } from "async_hooks"
 
 export namespace Context {
   export class NotFound extends Error {
-    constructor(public readonly name: string) {
+    constructor(public override readonly name: string) {
       super(`No context found for ${name}`)
     }
   }
@@ -18,7 +18,7 @@ export namespace Context {
         return result
       },
       provide<R>(value: T, fn: () => R) {
-        return storage.run<R>(value, fn)
+        return storage.run(value, fn)
       },
     }
   }

@@ -60,8 +60,5 @@
     }
   ],
   "release-type": "go",
-  "extra-files": [
-    "internal/version.go",
-    "README.md"
-  ]
+  "extra-files": ["internal/version.go", "README.md"]
 }

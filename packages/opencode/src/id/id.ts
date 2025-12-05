@@ -1,4 +1,4 @@
-import z from "zod/v4"
+import z from "zod"
 import { randomBytes } from "crypto"
 
 export namespace Identifier {
@@ -8,6 +8,7 @@ export namespace Identifier {
     permission: "per",
     user: "usr",
     part: "prt",
+    pty: "pty",
   } as const
 
   export function schema(prefix: keyof typeof prefixes) {
