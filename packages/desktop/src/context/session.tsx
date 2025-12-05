@@ -201,20 +201,14 @@ export const { use: useSession, provider: SessionProvider } = createSimpleContex
           sdk.client.pty.create({ body: { title: `Terminal ${store.terminals.all.length + 1}` } }).then((pty) => {
             const id = pty.data?.id
             if (!id) return
-            batch(() => {
-              setStore("terminals", "all", [
-                ...store.terminals.all,
-                {
-                  id,
-                  title: pty.data?.title ?? "Terminal",
-                  // rows: pty.data?.rows ?? 24,
-                  // cols: pty.data?.cols ?? 80,
-                  // buffer: "",
-                  // scrollY: 0,
-                },
-              ])
-              setStore("terminals", "active", id)
-            })
+            setStore("terminals", "all", [
+              ...store.terminals.all,
+              {
+                id,
+                title: pty.data?.title ?? "Terminal",
+              },
+            ])
+            setStore("terminals", "active", id)
           })
         },
         update(pty: Partial<LocalPTY> & { id: string }) {
@@ -222,6 +216,21 @@ export const { use: useSession, provider: SessionProvider } = createSimpleContex
           sdk.client.pty.update({
             path: { id: pty.id },
             body: { title: pty.title, size: pty.cols && pty.rows ? { rows: pty.rows, cols: pty.cols } : undefined },
+          })
+        },
+        async clone(id: string) {
+          const index = store.terminals.all.findIndex((x) => x.id === id)
+          const pty = store.terminals.all[index]
+          if (!pty) return
+          const clone = await sdk.client.pty.create({
+            body: {
+              title: pty.title,
+            },
+          })
+          if (!clone.data) return
+          setStore("terminals", "all", index, {
+            ...pty,
+            ...clone.data,
           })
         },
         open(id: string) {
