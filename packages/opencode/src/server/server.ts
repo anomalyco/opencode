@@ -208,30 +208,6 @@ export namespace Server {
           return c.json(info)
         },
       )
-      .put(
-        "/pty/:id",
-        describeRoute({
-          description: "Update PTY session",
-          operationId: "pty.update",
-          responses: {
-            200: {
-              description: "Updated session",
-              content: {
-                "application/json": {
-                  schema: resolver(Pty.Info),
-                },
-              },
-            },
-            ...errors(400),
-          },
-        }),
-        validator("param", z.object({ id: z.string() })),
-        validator("json", Pty.UpdateInput),
-        async (c) => {
-          const info = await Pty.update(c.req.valid("param").id, c.req.valid("json"))
-          return c.json(info)
-        },
-      )
       .get(
         "/pty/:id",
         describeRoute({
@@ -255,6 +231,30 @@ export namespace Server {
           if (!info) {
             throw new Storage.NotFoundError({ message: "Session not found" })
           }
+          return c.json(info)
+        },
+      )
+      .put(
+        "/pty/:id",
+        describeRoute({
+          description: "Update PTY session",
+          operationId: "pty.update",
+          responses: {
+            200: {
+              description: "Updated session",
+              content: {
+                "application/json": {
+                  schema: resolver(Pty.Info),
+                },
+              },
+            },
+            ...errors(400),
+          },
+        }),
+        validator("param", z.object({ id: z.string() })),
+        validator("json", Pty.UpdateInput),
+        async (c) => {
+          const info = await Pty.update(c.req.valid("param").id, c.req.valid("json"))
           return c.json(info)
         },
       )
@@ -295,20 +295,14 @@ export namespace Server {
                 },
               },
             },
-            404: {
-              description: "Session not found",
-              content: {
-                "application/json": {
-                  schema: resolver(z.boolean()),
-                },
-              },
-            },
+            ...errors(404),
           },
         }),
         validator("param", z.object({ id: z.string() })),
         upgradeWebSocket((c) => {
           const id = c.req.param("id")
           let handler: ReturnType<typeof Pty.connect>
+          if (!Pty.get(id)) throw new Error("Session not found")
           return {
             onOpen(_event, ws) {
               handler = Pty.connect(id, ws)
