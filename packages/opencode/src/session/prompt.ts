@@ -61,6 +61,7 @@ export namespace SessionPrompt {
         string,
         {
           abort: AbortController
+          loopId: string
           callbacks: {
             resolve(input: MessageV2.WithParts): void
             reject(): void
@@ -209,38 +210,56 @@ export namespace SessionPrompt {
   function start(sessionID: string) {
     const s = state()
     if (s[sessionID]) return
+    const loopId = Identifier.ascending("loop")
     const controller = new AbortController()
     s[sessionID] = {
       abort: controller,
+      loopId,
       callbacks: [],
     }
-    return controller.signal
+    return { signal: controller.signal, loopId }
   }
 
-  export function cancel(sessionID: string) {
-    log.info("cancel", { sessionID })
+  export function cancel(sessionID: string, loopId?: string) {
+    log.info("cancel", { sessionID, loopId })
     const s = state()
     const match = s[sessionID]
     if (!match) return
+    // If loopId is provided, only cancel if it matches the current loop
+    // This prevents the old loop's cleanup from aborting a newly started loop
+    if (loopId && match.loopId !== loopId) return
     match.abort.abort()
-    for (const item of match.callbacks) {
-      item.reject()
-    }
+    const pendingCallbacks = [...match.callbacks]
     delete s[sessionID]
     SessionStatus.set(sessionID, { type: "idle" })
-    return
+
+    // If there were queued requests, restart the loop to handle pending messages
+    if (pendingCallbacks.length > 0) {
+      loop(sessionID)
+        .then((result) => {
+          for (const cb of pendingCallbacks) {
+            cb.resolve(result)
+          }
+        })
+        .catch(() => {
+          for (const cb of pendingCallbacks) {
+            cb.reject()
+          }
+        })
+    }
   }
 
   export const loop = fn(Identifier.schema("session"), async (sessionID) => {
-    const abort = start(sessionID)
-    if (!abort) {
+    const startResult = start(sessionID)
+    if (!startResult) {
       return new Promise<MessageV2.WithParts>((resolve, reject) => {
         const callbacks = state()[sessionID].callbacks
         callbacks.push({ resolve, reject })
       })
     }
 
-    using _ = defer(() => cancel(sessionID))
+    const { signal: abort, loopId } = startResult
+    using _ = defer(() => cancel(sessionID, loopId))
 
     let step = 0
     while (true) {
