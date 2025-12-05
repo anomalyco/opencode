@@ -6,3 +6,4 @@
 - Use this tool when you need to find files containing specific patterns
 - If you need to identify/count the number of matches within files, use the Bash tool with `rg` (ripgrep) directly. Do NOT use `grep`.
 - When you are doing an open ended search that may require multiple rounds of globbing and grepping, use the Task tool instead
+- You can specify an optional timeout in milliseconds (up to 600000ms / 10 minutes). If not specified, searches will timeout after 60000ms (1 minute).
