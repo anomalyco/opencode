@@ -523,10 +523,6 @@ export namespace Config {
         .optional(),
       plugin: z.string().array().optional(),
       snapshot: z.boolean().optional(),
-      open_telemetry: z
-        .boolean()
-        .optional()
-        .describe("Enable OpenTelemetry spans for AI SDK calls (using the 'experimental_telemetry' flag)"),
       share: z
         .enum(["manual", "auto", "disabled"])
         .optional()
@@ -674,6 +670,10 @@ export namespace Config {
           chatMaxRetries: z.number().optional().describe("Number of retries for chat completions on failure"),
           disable_paste_summary: z.boolean().optional(),
           batch_tool: z.boolean().optional().describe("Enable the batch tool"),
+          openTelemetry: z
+            .boolean()
+            .optional()
+            .describe("Enable OpenTelemetry spans for AI SDK calls (using the 'experimental_telemetry' flag)"),
           primary_tools: z
             .array(z.string())
             .optional()

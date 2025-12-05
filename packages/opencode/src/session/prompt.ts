@@ -615,7 +615,7 @@ export namespace SessionPrompt {
             },
           ],
         }),
-        experimental_telemetry: { isEnabled: cfg.open_telemetry },
+        experimental_telemetry: { isEnabled: cfg.experimental?.openTelemetry },
       })
       if (result === "stop") break
       continue
@@ -1467,7 +1467,7 @@ export namespace SessionPrompt {
       ],
       headers: small.headers,
       model: language,
-      experimental_telemetry: { isEnabled: cfg.open_telemetry },
+      experimental_telemetry: { isEnabled: cfg.experimental?.openTelemetry },
     })
       .then((result) => {
         if (result.text)
