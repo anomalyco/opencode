@@ -266,8 +266,10 @@ If this is not set, the agent will continue to iterate until the model chooses t
 ```json title="opencode.json"
 {
   "agent": {
-    "general": {
-      "maxSteps": 10
+    "quick-thinker": {
+      "description": "Fast reasoning with limited iterations",
+      "prompt": "You are a quick thinker. Solve problems with minimal steps.",
+      "maxSteps": 5
     }
   }
 }
