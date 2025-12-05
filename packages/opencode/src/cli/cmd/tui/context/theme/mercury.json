@@ -48,205 +48,62 @@
     "diff-removed-dark": "#fc92b433"
   },
   "theme": {
-    "primary": {
-      "light": "purple-600",
-      "dark": "purple-400"
-    },
-    "secondary": {
-      "light": "purple-700",
-      "dark": "purple-300"
-    },
-    "accent": {
-      "light": "purple-400",
-      "dark": "purple-400"
-    },
-    "error": {
-      "light": "red-700",
-      "dark": "red-400"
-    },
-    "warning": {
-      "light": "orange-700",
-      "dark": "orange-400"
-    },
-    "success": {
-      "light": "green-700",
-      "dark": "green-400"
-    },
-    "info": {
-      "light": "blue-600",
-      "dark": "blue-400"
-    },
-    "text": {
-      "light": "neutral-700",
-      "dark": "neutral-200"
-    },
-    "textMuted": {
-      "light": "neutral-600",
-      "dark": "neutral-300"
-    },
-    "background": {
-      "light": "neutral-000",
-      "dark": "neutral-950"
-    },
-    "backgroundPanel": {
-      "light": "neutral-050",
-      "dark": "neutral-1000"
-    },
-    "backgroundElement": {
-      "light": "neutral-000",
-      "dark": "neutral-800"
-    },
-    "border": {
-      "light": "border-light",
-      "dark": "border-dark"
-    },
-    "borderActive": {
-      "light": "purple-600",
-      "dark": "purple-400"
-    },
-    "borderSubtle": {
-      "light": "border-light-subtle",
-      "dark": "border-dark-subtle"
-    },
-    "diffAdded": {
-      "light": "green-700",
-      "dark": "green-400"
-    },
-    "diffRemoved": {
-      "light": "red-700",
-      "dark": "red-400"
-    },
-    "diffContext": {
-      "light": "neutral-500",
-      "dark": "neutral-400"
-    },
-    "diffHunkHeader": {
-      "light": "neutral-500",
-      "dark": "neutral-400"
-    },
-    "diffHighlightAdded": {
-      "light": "green-700",
-      "dark": "green-400"
-    },
-    "diffHighlightRemoved": {
-      "light": "red-700",
-      "dark": "red-400"
-    },
-    "diffAddedBg": {
-      "light": "diff-added-light",
-      "dark": "diff-added-dark"
-    },
-    "diffRemovedBg": {
-      "light": "diff-removed-light",
-      "dark": "diff-removed-dark"
-    },
-    "diffContextBg": {
-      "light": "neutral-050",
-      "dark": "neutral-900"
-    },
-    "diffLineNumber": {
-      "light": "neutral-600",
-      "dark": "neutral-300"
-    },
-    "diffAddedLineNumberBg": {
-      "light": "diff-added-light",
-      "dark": "diff-added-dark"
-    },
-    "diffRemovedLineNumberBg": {
-      "light": "diff-removed-light",
-      "dark": "diff-removed-dark"
-    },
-    "markdownText": {
-      "light": "neutral-700",
-      "dark": "neutral-200"
-    },
-    "markdownHeading": {
-      "light": "neutral-900",
-      "dark": "neutral-000"
-    },
-    "markdownLink": {
-      "light": "purple-700",
-      "dark": "purple-400"
-    },
-    "markdownLinkText": {
-      "light": "purple-600",
-      "dark": "purple-300"
-    },
-    "markdownCode": {
-      "light": "green-700",
-      "dark": "green-400"
-    },
-    "markdownBlockQuote": {
-      "light": "neutral-500",
-      "dark": "neutral-400"
-    },
-    "markdownEmph": {
-      "light": "orange-700",
-      "dark": "orange-400"
-    },
-    "markdownStrong": {
-      "light": "neutral-900",
-      "dark": "neutral-100"
-    },
-    "markdownHorizontalRule": {
-      "light": "border-light",
-      "dark": "border-dark"
-    },
-    "markdownListItem": {
-      "light": "neutral-900",
-      "dark": "neutral-000"
-    },
-    "markdownListEnumeration": {
-      "light": "purple-600",
-      "dark": "purple-400"
-    },
-    "markdownImage": {
-      "light": "purple-700",
-      "dark": "purple-400"
-    },
-    "markdownImageText": {
-      "light": "purple-600",
-      "dark": "purple-300"
-    },
-    "markdownCodeBlock": {
-      "light": "neutral-700",
-      "dark": "neutral-200"
-    },
-    "syntaxComment": {
-      "light": "neutral-500",
-      "dark": "neutral-400"
-    },
-    "syntaxKeyword": {
-      "light": "purple-700",
-      "dark": "purple-400"
-    },
-    "syntaxFunction": {
-      "light": "purple-600",
-      "dark": "purple-400"
-    },
-    "syntaxVariable": {
-      "light": "blue-600",
-      "dark": "blue-400"
-    },
-    "syntaxString": {
-      "light": "green-700",
-      "dark": "green-400"
-    },
-    "syntaxNumber": {
-      "light": "orange-700",
-      "dark": "orange-400"
-    },
-    "syntaxType": {
-      "light": "blue-600",
-      "dark": "blue-400"
-    },
-    "syntaxOperator": {
-      "light": "purple-700",
-      "dark": "purple-400"
-    },
-    "syntaxPunctuation": {
-      "light": "neutral-700",
-      "dark": "neutral-200"
-    }
+    "primary": { "light": "purple-600", "dark": "purple-400" },
+    "secondary": { "light": "purple-700", "dark": "purple-300" },
+    "accent": { "light": "purple-400", "dark": "purple-400" },
+
+    "error": { "light": "red-700", "dark": "red-400" },
+    "warning": { "light": "orange-700", "dark": "orange-400" },
+    "success": { "light": "green-700", "dark": "green-400" },
+    "info": { "light": "blue-600", "dark": "blue-400" },
+
+    "text": { "light": "neutral-700", "dark": "neutral-200" },
+    "textMuted": { "light": "neutral-500", "dark": "neutral-400" },
+
+    "background": { "light": "neutral-000", "dark": "neutral-950" },
+    "backgroundPanel": { "light": "neutral-050", "dark": "neutral-900" },
+    "backgroundElement": { "light": "neutral-100", "dark": "neutral-800" },
+
+    "border": { "light": "border-light", "dark": "border-dark" },
+    "borderActive": { "light": "purple-600", "dark": "purple-400" },
+    "borderSubtle": { "light": "border-light-subtle", "dark": "border-dark-subtle" },
+
+    "diffAdded": { "light": "green-700", "dark": "green-400" },
+    "diffRemoved": { "light": "red-700", "dark": "red-400" },
+    "diffContext": { "light": "neutral-500", "dark": "neutral-400" },
+    "diffHunkHeader": { "light": "neutral-500", "dark": "neutral-400" },
+    "diffHighlightAdded": { "light": "green-700", "dark": "green-400" },
+    "diffHighlightRemoved": { "light": "red-700", "dark": "red-400" },
+    "diffAddedBg": { "light": "diff-added-light", "dark": "diff-added-dark" },
+    "diffRemovedBg": { "light": "diff-removed-light", "dark": "diff-removed-dark" },
+    "diffContextBg": { "light": "neutral-050", "dark": "neutral-900" },
+    "diffLineNumber": { "light": "neutral-600", "dark": "neutral-300" },
+    "diffAddedLineNumberBg": { "light": "diff-added-light", "dark": "diff-added-dark" },
+    "diffRemovedLineNumberBg": { "light": "diff-removed-light", "dark": "diff-removed-dark" },
+
+    "markdownText": { "light": "neutral-700", "dark": "neutral-200" },
+    "markdownHeading": { "light": "neutral-900", "dark": "neutral-000" },
+    "markdownLink": { "light": "purple-700", "dark": "purple-400" },
+    "markdownLinkText": { "light": "purple-600", "dark": "purple-300" },
+    "markdownCode": { "light": "green-700", "dark": "green-400" },
+    "markdownBlockQuote": { "light": "neutral-500", "dark": "neutral-400" },
+    "markdownEmph": { "light": "orange-700", "dark": "orange-400" },
+    "markdownStrong": { "light": "neutral-900", "dark": "neutral-100" },
+    "markdownHorizontalRule": { "light": "border-light", "dark": "border-dark" },
+    "markdownListItem": { "light": "neutral-900", "dark": "neutral-000" },
+    "markdownListEnumeration": { "light": "purple-600", "dark": "purple-400" },
+    "markdownImage": { "light": "purple-700", "dark": "purple-400" },
+    "markdownImageText": { "light": "purple-600", "dark": "purple-300" },
+    "markdownCodeBlock": { "light": "neutral-700", "dark": "neutral-200" },
+
+    "syntaxComment": { "light": "neutral-500", "dark": "neutral-400" },
+    "syntaxKeyword": { "light": "purple-700", "dark": "purple-400" },
+    "syntaxFunction": { "light": "purple-600", "dark": "purple-400" },
+    "syntaxVariable": { "light": "blue-600", "dark": "blue-400" },
+    "syntaxString": { "light": "green-700", "dark": "green-400" },
+    "syntaxNumber": { "light": "orange-700", "dark": "orange-400" },
+    "syntaxType": { "light": "blue-600", "dark": "blue-400" },
+    "syntaxOperator": { "light": "purple-700", "dark": "purple-400" },
+    "syntaxPunctuation": { "light": "neutral-700", "dark": "neutral-200" }
   }
 }
