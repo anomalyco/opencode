@@ -6,7 +6,15 @@ import os from "os"
 const app = "opencode"
 
 const data = path.join(xdgData!, app)
-const cache = path.join(xdgCache!, app)
+// Fix xdgCache bug on macOS where it returns /home/ instead of /Users/
+const cacheBase = (() => {
+  const isMacOS = os.platform() === "darwin"
+  if (isMacOS && xdgCache && xdgCache.startsWith("/home/")) {
+    return xdgCache.replace(/^\/home\/[^\/]+/, os.homedir())
+  }
+  return xdgCache || path.join(os.homedir(), ".cache")
+})()
+const cache = path.join(cacheBase, app)
 const config = path.join(xdgConfig!, app)
 const state = path.join(xdgState!, app)
 
@@ -28,6 +36,7 @@ await Promise.all([
   fs.mkdir(Global.Path.state, { recursive: true }),
   fs.mkdir(Global.Path.log, { recursive: true }),
   fs.mkdir(Global.Path.bin, { recursive: true }),
+  fs.mkdir(Global.Path.cache, { recursive: true }),
 ])
 
 const CACHE_VERSION = "13"
