@@ -155,17 +155,19 @@ export namespace MCP {
     let status: Status | undefined = undefined
 
     if (mcp.type === "remote") {
-      const hasOAuth = !!mcp.oauth
+      // OAuth is enabled by default for remote servers unless explicitly disabled with oauth: false
+      const oauthDisabled = mcp.oauth === false
+      const oauthConfig = typeof mcp.oauth === "object" ? mcp.oauth : undefined
       let authProvider: McpOAuthProvider | undefined
 
-      if (hasOAuth) {
+      if (!oauthDisabled) {
         authProvider = new McpOAuthProvider(
           key,
           mcp.url,
           {
-            clientId: mcp.oauth!.clientId,
-            clientSecret: mcp.oauth!.clientSecret,
-            scope: mcp.oauth!.scope,
+            clientId: oauthConfig?.clientId,
+            clientSecret: oauthConfig?.clientSecret,
+            scope: oauthConfig?.scope,
           },
           {
             onRedirect: async (url) => {
@@ -181,14 +183,14 @@ export namespace MCP {
           name: "StreamableHTTP",
           transport: new StreamableHTTPClientTransport(new URL(mcp.url), {
             authProvider,
-            requestInit: !hasOAuth && mcp.headers ? { headers: mcp.headers } : undefined,
+            requestInit: oauthDisabled && mcp.headers ? { headers: mcp.headers } : undefined,
           }),
         },
         {
           name: "SSE",
           transport: new SSEClientTransport(new URL(mcp.url), {
             authProvider,
-            requestInit: !hasOAuth && mcp.headers ? { headers: mcp.headers } : undefined,
+            requestInit: oauthDisabled && mcp.headers ? { headers: mcp.headers } : undefined,
           }),
         },
       ]
@@ -366,22 +368,24 @@ export namespace MCP {
       throw new Error(`MCP server ${mcpName} is not a remote server`)
     }
 
-    if (!mcpConfig.oauth) {
-      throw new Error(`MCP server ${mcpName} does not have OAuth configured`)
+    if (mcpConfig.oauth === false) {
+      throw new Error(`MCP server ${mcpName} has OAuth explicitly disabled`)
     }
 
     // Start the callback server
     await McpOAuthCallback.ensureRunning()
 
     // Create a new auth provider for this flow
+    // OAuth config is optional - if not provided, we'll use auto-discovery
+    const oauthConfig = typeof mcpConfig.oauth === "object" ? mcpConfig.oauth : undefined
     let capturedUrl: URL | undefined
     const authProvider = new McpOAuthProvider(
       mcpName,
       mcpConfig.url,
       {
-        clientId: mcpConfig.oauth.clientId,
-        clientSecret: mcpConfig.oauth.clientSecret,
-        scope: mcpConfig.oauth.scope,
+        clientId: oauthConfig?.clientId,
+        clientSecret: oauthConfig?.clientSecret,
+        scope: oauthConfig?.scope,
       },
       {
         onRedirect: async (url) => {
@@ -493,12 +497,12 @@ export namespace MCP {
   }
 
   /**
-   * Check if an MCP server has OAuth configured.
+   * Check if an MCP server supports OAuth (remote servers support OAuth by default unless explicitly disabled).
    */
-  export async function hasOAuthConfig(mcpName: string): Promise<boolean> {
+  export async function supportsOAuth(mcpName: string): Promise<boolean> {
     const cfg = await Config.get()
     const mcpConfig = cfg.mcp?.[mcpName]
-    return mcpConfig?.type === "remote" && !!mcpConfig.oauth
+    return mcpConfig?.type === "remote" && mcpConfig.oauth !== false
   }
 
   /**

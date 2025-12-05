@@ -1103,9 +1103,6 @@ export type McpLocalConfig = {
   timeout?: number
 }
 
-/**
- * OAuth authentication configuration for the MCP server
- */
 export type McpOAuthConfig = {
   /**
    * OAuth client ID. If not provided, dynamic client registration (RFC 7591) will be attempted.
@@ -1140,7 +1137,10 @@ export type McpRemoteConfig = {
   headers?: {
     [key: string]: string
   }
-  oauth?: McpOAuthConfig
+  /**
+   * OAuth authentication configuration for the MCP server. Set to false to disable OAuth auto-detection.
+   */
+  oauth?: McpOAuthConfig | false
   /**
    * Timeout in ms for fetching tools from the MCP server. Defaults to 5000 (5 seconds) if not specified.
    */

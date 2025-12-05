@@ -149,14 +149,15 @@ Here the `url` is the URL of the remote MCP server and with the `headers` option
 
 ### OAuth
 
-For remote MCP servers that require OAuth authentication, you can configure the `oauth` field. OpenCode supports:
+OpenCode automatically handles OAuth authentication for remote MCP servers. When a server requires authentication, OpenCode will:
 
-- **Dynamic Client Registration (RFC 7591)**: If the server supports it, OpenCode will automatically register as a client.
-- **Pre-registered Clients**: If you have a client ID from the MCP server provider, you can configure it directly.
+1. Detect the 401 response and initiate the OAuth flow
+2. Use **Dynamic Client Registration (RFC 7591)** if supported by the server
+3. Store tokens securely for future requests
 
-#### Dynamic Registration
+#### Automatic OAuth
 
-If the MCP server supports dynamic client registration, you can simply add an empty `oauth` object:
+For most OAuth-enabled MCP servers, no special configuration is needed. Just configure the remote server:
 
 ```json title="opencode.json"
 {
@@ -164,16 +165,17 @@ If the MCP server supports dynamic client registration, you can simply add an em
   "mcp": {
     "my-oauth-server": {
       "type": "remote",
-      "url": "https://mcp.example.com/mcp",
-      "oauth": {}
+      "url": "https://mcp.example.com/mcp"
     }
   }
 }
 ```
 
+If the server requires authentication, OpenCode will prompt you to authenticate when you first try to use it.
+
 #### Pre-registered Client
 
-If you have client credentials from the MCP server provider:
+If you have client credentials from the MCP server provider, you can configure them:
 
 ```json title="opencode.json"
 {
@@ -192,17 +194,38 @@ If you have client credentials from the MCP server provider:
 }
 ```
 
+#### Disabling OAuth
+
+If you want to disable automatic OAuth for a server (e.g., for servers that use API keys instead), set `oauth` to `false`:
+
+```json title="opencode.json"
+{
+  "$schema": "https://opencode.ai/config.json",
+  "mcp": {
+    "my-api-key-server": {
+      "type": "remote",
+      "url": "https://mcp.example.com/mcp",
+      "oauth": false,
+      "headers": {
+        "Authorization": "Bearer {env:MY_API_KEY}"
+      }
+    }
+  }
+}
+```
+
 #### OAuth Options
 
-| Option         | Type   | Required | Description                                                                      |
-| -------------- | ------ | -------- | -------------------------------------------------------------------------------- |
-| `clientId`     | String |          | OAuth client ID. If not provided, dynamic client registration will be attempted. |
-| `clientSecret` | String |          | OAuth client secret, if required by the authorization server.                    |
-| `scope`        | String |          | OAuth scopes to request during authorization.                                    |
+| Option         | Type            | Required | Description                                                                      |
+| -------------- | --------------- | -------- | -------------------------------------------------------------------------------- |
+| `oauth`        | Object \| false |          | OAuth config object, or `false` to disable OAuth auto-detection.                 |
+| `clientId`     | String          |          | OAuth client ID. If not provided, dynamic client registration will be attempted. |
+| `clientSecret` | String          |          | OAuth client secret, if required by the authorization server.                    |
+| `scope`        | String          |          | OAuth scopes to request during authorization.                                    |
 
 #### Authenticating
 
-After configuring an OAuth-enabled MCP server, you need to authenticate:
+You can manually trigger authentication or manage credentials:
 
 ```bash
 # Authenticate with a specific MCP server

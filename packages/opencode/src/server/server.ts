@@ -1827,9 +1827,9 @@ export namespace Server {
         }),
         async (c) => {
           const name = c.req.param("name")
-          const hasOAuth = await MCP.hasOAuthConfig(name)
-          if (!hasOAuth) {
-            return c.json({ error: `MCP server ${name} does not have OAuth configured` }, 400)
+          const supportsOAuth = await MCP.supportsOAuth(name)
+          if (!supportsOAuth) {
+            return c.json({ error: `MCP server ${name} does not support OAuth` }, 400)
           }
           const result = await MCP.startAuth(name)
           return c.json(result)
@@ -1884,9 +1884,9 @@ export namespace Server {
         }),
         async (c) => {
           const name = c.req.param("name")
-          const hasOAuth = await MCP.hasOAuthConfig(name)
-          if (!hasOAuth) {
-            return c.json({ error: `MCP server ${name} does not have OAuth configured` }, 400)
+          const supportsOAuth = await MCP.supportsOAuth(name)
+          if (!supportsOAuth) {
+            return c.json({ error: `MCP server ${name} does not support OAuth` }, 400)
           }
           const status = await MCP.authenticate(name)
           return c.json(status)
