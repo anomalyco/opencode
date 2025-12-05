@@ -490,6 +490,10 @@ export namespace Provider {
         ...githubCopilot,
         id: "github-copilot-enterprise",
         name: "GitHub Copilot Enterprise",
+        models: mapValues(githubCopilot.models, (model) => ({
+          ...model,
+          providerID: "github-copilot-enterprise",
+        })),
       }
     }
 
