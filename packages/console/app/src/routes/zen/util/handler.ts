@@ -362,8 +362,8 @@ export async function handler(
       throw new AuthError("Missing API key.")
     }
 
-    const data = await Database.use((tx) => {
-      const query = tx
+    const data = await Database.use((tx) =>
+      tx
         .select({
           apiKey: KeyTable.id,
           workspaceID: KeyTable.workspaceID,
@@ -391,15 +391,18 @@ export async function handler(
         .innerJoin(BillingTable, eq(BillingTable.workspaceID, KeyTable.workspaceID))
         .innerJoin(UserTable, and(eq(UserTable.workspaceID, KeyTable.workspaceID), eq(UserTable.id, KeyTable.userID)))
         .leftJoin(ModelTable, and(eq(ModelTable.workspaceID, KeyTable.workspaceID), eq(ModelTable.model, modelInfo.id)))
-
-      if (modelInfo.byokProvider) {
-        query.leftJoin(
+        .leftJoin(
           ProviderTable,
-          and(eq(ProviderTable.workspaceID, KeyTable.workspaceID), eq(ProviderTable.provider, modelInfo.byokProvider)),
+          modelInfo.byokProvider
+            ? and(
+                eq(ProviderTable.workspaceID, KeyTable.workspaceID),
+                eq(ProviderTable.provider, modelInfo.byokProvider),
+              )
+            : sql`false`,
         )
-      }
-      return query.where(and(eq(KeyTable.key, apiKey), isNull(KeyTable.timeDeleted))).then((rows) => rows[0])
-    })
+        .where(and(eq(KeyTable.key, apiKey), isNull(KeyTable.timeDeleted)))
+        .then((rows) => rows[0]),
+    )
 
     if (!data) throw new AuthError("Invalid API key.")
     logger.metric({
