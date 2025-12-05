@@ -369,10 +369,7 @@ export namespace Config {
       tools: z.record(z.string(), z.boolean()).optional(),
       disable: z.boolean().optional(),
       description: z.string().optional().describe("Description of when to use the agent"),
-      short_description: z
-        .string()
-        .optional()
-        .describe("Short description for display in agent listings"),
+      short_description: z.string().optional().describe("Short description for display in agent listings"),
       mode: z.enum(["subagent", "primary", "all"]).optional(),
       color: z
         .string()
