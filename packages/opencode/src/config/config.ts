@@ -372,7 +372,7 @@ export namespace Config {
       short_description: z
         .string()
         .optional()
-        .describe("Short description for display in agent listings (defaults to truncated description)"),
+        .describe("Short description for display in agent listings"),
       mode: z.enum(["subagent", "primary", "all"]).optional(),
       color: z
         .string()

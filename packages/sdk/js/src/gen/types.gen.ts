@@ -896,7 +896,7 @@ export type AgentConfig = {
    */
   description?: string
   /**
-   * Short description for display in agent listings (defaults to truncated description)
+   * Short description for display in agent listings
    */
   short_description?: string
   mode?: "subagent" | "primary" | "all"
