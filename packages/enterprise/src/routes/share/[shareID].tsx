@@ -12,12 +12,16 @@ import { iife } from "@opencode-ai/util/iife"
 import { Binary } from "@opencode-ai/util/binary"
 import { NamedError } from "@opencode-ai/util/error"
 import { DateTime } from "luxon"
-import { MessageNav } from "@opencode-ai/ui/message-nav"
+import { SessionMessageRail } from "@opencode-ai/ui/session-message-rail"
 import { createStore } from "solid-js/store"
 import z from "zod"
 import NotFound from "../[...404]"
 import { Tabs } from "@opencode-ai/ui/tabs"
 import { preloadMultiFileDiff, PreloadMultiFileDiffResult } from "@pierre/precision-diffs/ssr"
+import { Diff } from "@opencode-ai/ui/diff-ssr"
+import { clientOnly } from "@solidjs/start"
+
+const ClientOnlyDiff = clientOnly(() => import("@opencode-ai/ui/diff").then((m) => ({ default: m.Diff })))
 
 const SessionDataMissingError = NamedError.create(
   "SessionDataMissingError",
@@ -41,6 +45,9 @@ const getData = query(async (shareID) => {
     session_diff_preload: {
       [sessionID: string]: PreloadMultiFileDiffResult<any>[]
     }
+    session_diff_preload_split: {
+      [sessionID: string]: PreloadMultiFileDiffResult<any>[]
+    }
     session_status: {
       [sessionID: string]: SessionStatus
     }
@@ -62,6 +69,9 @@ const getData = query(async (shareID) => {
     session_diff_preload: {
       [share.sessionID]: [],
     },
+    session_diff_preload_split: {
+      [share.sessionID]: [],
+    },
     session_status: {
       [share.sessionID]: {
         type: "idle",
@@ -78,16 +88,28 @@ const getData = query(async (shareID) => {
         break
       case "session_diff":
         result.session_diff[share.sessionID] = item.data
-        result.session_diff_preload[share.sessionID] = await Promise.all(
-          item.data.map(async (diff) =>
-            preloadMultiFileDiff<any>({
-              oldFile: { name: diff.file, contents: diff.before },
-              newFile: { name: diff.file, contents: diff.after },
-              options: createDefaultOptions("unified"),
-              // annotations,
-            }),
-          ),
-        )
+        await Promise.all([
+          Promise.all(
+            item.data.map(async (diff) =>
+              preloadMultiFileDiff<any>({
+                oldFile: { name: diff.file, contents: diff.before },
+                newFile: { name: diff.file, contents: diff.after },
+                options: createDefaultOptions("unified"),
+                // annotations,
+              }),
+            ),
+          ).then((r) => (result.session_diff_preload[share.sessionID] = r)),
+          Promise.all(
+            item.data.map(async (diff) =>
+              preloadMultiFileDiff<any>({
+                oldFile: { name: diff.file, contents: diff.before },
+                newFile: { name: diff.file, contents: diff.after },
+                options: createDefaultOptions("split"),
+                // annotations,
+              }),
+            ),
+          ).then((r) => (result.session_diff_preload_split[share.sessionID] = r)),
+        ])
         break
       case "message":
         result.message[item.data.sessionID] = result.message[item.data.sessionID] ?? []
@@ -169,6 +191,14 @@ export default function () {
                     preloaded: preloaded.find((d) => d.newFile.name === diff.file),
                   }))
                 })
+                const splitDiffs = createMemo(() => {
+                  const diffs = data().session_diff[data().sessionID] ?? []
+                  const preloaded = data().session_diff_preload_split[data().sessionID] ?? []
+                  return diffs.map((diff) => ({
+                    ...diff,
+                    preloaded: preloaded.find((d) => d.newFile.name === diff.file),
+                  }))
+                })
 
                 const title = () => (
                   <div class="flex flex-col gap-4">
@@ -204,6 +234,7 @@ export default function () {
                                 "flex flex-col justify-between !overflow-visible [&_[data-slot=session-turn-message-header]]:top-[-32px]",
                               container: "px-4",
                             }}
+                            diffComponent={ClientOnlyDiff}
                           />
                         )}
                       </For>
@@ -253,43 +284,30 @@ export default function () {
                             classList={{
                               "w-full flex justify-start items-start min-w-0": true,
                               "max-w-146 mx-auto px-6": wide(),
-                              "pr-6 pl-18": !wide(),
+                              "pr-6 pl-18": !wide() && messages().length > 1,
+                              "px-6": !wide() && messages().length === 1,
                             }}
                           >
                             {title()}
                           </div>
                           <div class="flex items-start justify-start h-full min-h-0">
-                            <Show when={messages().length > 1}>
-                              <>
-                                <MessageNav
-                                  class="@6xl:hidden mt-2.5 absolute left-6"
-                                  messages={messages()}
-                                  current={activeMessage()}
-                                  onMessageSelect={setActiveMessage}
-                                  size="compact"
-                                />
-                                <MessageNav
-                                  classList={{
-                                    "hidden @6xl:flex absolute": true,
-                                    "mt-0.5 left-[calc(((100%_-_min(100%,_36.5rem))_/_2)-1.5rem)] -translate-x-full":
-                                      wide(),
-                                    "mt-2.5 left-6": !wide(),
-                                  }}
-                                  messages={messages()}
-                                  current={activeMessage()}
-                                  onMessageSelect={setActiveMessage}
-                                  size={wide() ? "normal" : "compact"}
-                                />
-                              </>
-                            </Show>
+                            <SessionMessageRail
+                              messages={messages()}
+                              current={activeMessage()}
+                              onMessageSelect={setActiveMessage}
+                              wide={wide()}
+                            />
                             <SessionTurn
                               sessionID={data().sessionID}
                               messageID={store.messageId ?? firstUserMessage()!.id!}
                               classes={{
                                 root: "grow",
                                 content: "flex flex-col justify-between items-start",
-                                container: "w-full pb-20 " + (wide() ? "max-w-146 mx-auto px-6" : "pr-6 pl-18"),
+                                container:
+                                  "w-full pb-20 " +
+                                  (wide() ? "max-w-146 mx-auto px-6" : messages().length > 1 ? "pr-6 pl-18" : "px-6"),
                               }}
+                              diffComponent={ClientOnlyDiff}
                             >
                               <div classList={{ "w-full flex items-center justify-center pb-8 shrink-0": true }}>
                                 <Logo class="w-58.5 opacity-12" />
@@ -298,9 +316,22 @@ export default function () {
                           </div>
                         </div>
                         <Show when={diffs().length > 0}>
-                          <div class="relative grow pt-14 flex-1 min-h-0 border-l border-border-weak-base">
+                          <div class="@container relative grow pt-14 flex-1 min-h-0 border-l border-border-weak-base">
                             <SessionReview
+                              class="@4xl:hidden"
                               diffs={diffs()}
+                              diffComponent={Diff}
+                              classes={{
+                                root: "pb-20",
+                                header: "px-6",
+                                container: "px-6",
+                              }}
+                            />
+                            <SessionReview
+                              split
+                              class="hidden @4xl:flex"
+                              diffs={splitDiffs()}
+                              diffComponent={Diff}
                               classes={{
                                 root: "pb-20",
                                 header: "px-6",
@@ -332,6 +363,7 @@ export default function () {
                               <div class="relative h-full pt-8 overflow-y-auto no-scrollbar">
                                 <SessionReview
                                   diffs={diffs()}
+                                  diffComponent={Diff}
                                   classes={{
                                     root: "pb-20",
                                     header: "px-4",

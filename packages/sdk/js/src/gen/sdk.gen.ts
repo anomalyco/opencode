@@ -8,6 +8,23 @@ import type {
   ProjectListResponses,
   ProjectCurrentData,
   ProjectCurrentResponses,
+  PtyListData,
+  PtyListResponses,
+  PtyCreateData,
+  PtyCreateResponses,
+  PtyCreateErrors,
+  PtyRemoveData,
+  PtyRemoveResponses,
+  PtyRemoveErrors,
+  PtyGetData,
+  PtyGetResponses,
+  PtyGetErrors,
+  PtyUpdateData,
+  PtyUpdateResponses,
+  PtyUpdateErrors,
+  PtyConnectData,
+  PtyConnectResponses,
+  PtyConnectErrors,
   ConfigGetData,
   ConfigGetResponses,
   ConfigUpdateData,
@@ -226,6 +243,76 @@ class Project extends _HeyApiClient {
   public current<ThrowOnError extends boolean = false>(options?: Options<ProjectCurrentData, ThrowOnError>) {
     return (options?.client ?? this._client).get<ProjectCurrentResponses, unknown, ThrowOnError>({
       url: "/project/current",
+      ...options,
+    })
+  }
+}
+
+class Pty extends _HeyApiClient {
+  /**
+   * List all PTY sessions
+   */
+  public list<ThrowOnError extends boolean = false>(options?: Options<PtyListData, ThrowOnError>) {
+    return (options?.client ?? this._client).get<PtyListResponses, unknown, ThrowOnError>({
+      url: "/pty",
+      ...options,
+    })
+  }
+
+  /**
+   * Create a new PTY session
+   */
+  public create<ThrowOnError extends boolean = false>(options?: Options<PtyCreateData, ThrowOnError>) {
+    return (options?.client ?? this._client).post<PtyCreateResponses, PtyCreateErrors, ThrowOnError>({
+      url: "/pty",
+      ...options,
+      headers: {
+        "Content-Type": "application/json",
+        ...options?.headers,
+      },
+    })
+  }
+
+  /**
+   * Remove a PTY session
+   */
+  public remove<ThrowOnError extends boolean = false>(options: Options<PtyRemoveData, ThrowOnError>) {
+    return (options.client ?? this._client).delete<PtyRemoveResponses, PtyRemoveErrors, ThrowOnError>({
+      url: "/pty/{id}",
+      ...options,
+    })
+  }
+
+  /**
+   * Get PTY session info
+   */
+  public get<ThrowOnError extends boolean = false>(options: Options<PtyGetData, ThrowOnError>) {
+    return (options.client ?? this._client).get<PtyGetResponses, PtyGetErrors, ThrowOnError>({
+      url: "/pty/{id}",
+      ...options,
+    })
+  }
+
+  /**
+   * Update PTY session
+   */
+  public update<ThrowOnError extends boolean = false>(options: Options<PtyUpdateData, ThrowOnError>) {
+    return (options.client ?? this._client).put<PtyUpdateResponses, PtyUpdateErrors, ThrowOnError>({
+      url: "/pty/{id}",
+      ...options,
+      headers: {
+        "Content-Type": "application/json",
+        ...options.headers,
+      },
+    })
+  }
+
+  /**
+   * Connect to a PTY session
+   */
+  public connect<ThrowOnError extends boolean = false>(options: Options<PtyConnectData, ThrowOnError>) {
+    return (options.client ?? this._client).get<PtyConnectResponses, PtyConnectErrors, ThrowOnError>({
+      url: "/pty/{id}/connect",
       ...options,
     })
   }
@@ -1005,6 +1092,7 @@ export class OpencodeClient extends _HeyApiClient {
   }
   global = new Global({ client: this._client })
   project = new Project({ client: this._client })
+  pty = new Pty({ client: this._client })
   config = new Config({ client: this._client })
   tool = new Tool({ client: this._client })
   instance = new Instance({ client: this._client })

@@ -4,7 +4,7 @@ APP=opencode
 
 MUTED='\033[0;2m'
 RED='\033[0;31m'
-ORANGE='\033[38;2;255;140;0m'
+ORANGE='\033[38;5;214m'
 NC='\033[0m' # No Color
 
 requested_version=${VERSION:-}
@@ -353,10 +353,9 @@ echo -e "${MUTED}█░░█ █░░█ █▀▀▀ █░░█ ${NC}█░
 echo -e "${MUTED}▀▀▀▀ █▀▀▀ ▀▀▀▀ ▀  ▀ ${NC}▀▀▀▀ ▀▀▀▀ ▀▀▀▀ ▀▀▀▀"
 echo -e ""
 echo -e ""
-echo -e "${MUTED}To get started, navigate to a project and run:${NC}"
-echo -e "opencode                   ${MUTED}Use free models${NC}"
-echo -e "opencode auth login        ${MUTED}Add paid provider API keys${NC}"
-echo -e "opencode help              ${MUTED}List commands and options${NC}"
+echo -e "${MUTED}OpenCode includes free models, to start:${NC}"
+echo -e "cd <project>  ${MUTED}# Open directory${NC}"
+echo -e "opencode      ${MUTED}# Run command${NC}"
 echo -e ""
 echo -e "${MUTED}For more information visit ${NC}https://opencode.ai/docs"
 echo -e ""

@@ -352,8 +352,8 @@ export function Autocomplete(props: {
   function select() {
     const selected = options()[store.selected]
     if (!selected) return
-    selected.onSelect?.()
     hide()
+    selected.onSelect?.()
   }
 
   function show(mode: "@" | "/") {
@@ -374,6 +374,10 @@ export function Autocomplete(props: {
     if (store.visible === "/" && !text.endsWith(" ") && text.startsWith("/")) {
       const cursor = props.input().logicalCursor
       props.input().deleteRange(0, 0, cursor.row, cursor.col)
+      // Sync the prompt store immediately since onContentChange is async
+      props.setPrompt((draft) => {
+        draft.input = props.input().plainText
+      })
     }
     command.keybinds(true)
     setStore("visible", false)

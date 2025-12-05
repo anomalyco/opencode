@@ -36,7 +36,7 @@ look at these below.
 
 Subagents are specialized assistants that primary agents can invoke for specific tasks. You can also manually invoke them by **@ mentioning** them in your messages.
 
-OpenCode comes with one built-in subagent, **General**. We'll look at this below.
+OpenCode comes with two built-in subagents, **General** and **Explore**. We'll look at this below.
 
 ---
 
@@ -73,6 +73,14 @@ This agent is useful when you want the LLM to analyze code, suggest changes, or 
 _Mode_: `subagent`
 
 A general-purpose agent for researching complex questions, searching for code, and executing multi-step tasks. Use when searching for keywords or files and you're not confident you'll find the right match in the first few tries.
+
+---
+
+### Explore
+
+_Mode_: `subagent`
+
+A fast agent specialized for exploring codebases. Use this when you need to quickly find files by patterns, search code for keywords, or answer questions about the codebase.
 
 ---
 

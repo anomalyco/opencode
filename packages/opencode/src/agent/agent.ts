@@ -102,8 +102,7 @@ export namespace Agent {
     const result: Record<string, Info> = {
       general: {
         name: "general",
-        description:
-          "General-purpose agent for researching complex questions, searching for code, and executing multi-step tasks. When you are searching for a keyword or file and are not confident that you will find the right match in the first few tries use this agent to perform the search for you.",
+        description: `General-purpose agent for researching complex questions and executing multi-step tasks. Use this agent to execute multiple units of work in parallel.`,
         tools: {
           todoread: false,
           todowrite: false,
@@ -225,6 +224,7 @@ export namespace Agent {
   export async function generate(input: { description: string }) {
     const defaultModel = await Provider.defaultModel()
     const model = await Provider.getModel(defaultModel.providerID, defaultModel.modelID)
+    const language = await Provider.getLanguage(model)
     const system = SystemPrompt.header(defaultModel.providerID)
     system.push(PROMPT_GENERATE)
     const existing = await list()
@@ -242,7 +242,7 @@ export namespace Agent {
           content: `Create an agent configuration based on this request: \"${input.description}\".\n\nIMPORTANT: The following identifiers already exist and must NOT be used: ${existing.map((i) => i.name).join(", ")}\n  Return ONLY the JSON object, no other text, do not wrap in backticks`,
         },
       ],
-      model: model.language,
+      model: language,
       schema: z.object({
         identifier: z.string(),
         whenToUse: z.string(),
