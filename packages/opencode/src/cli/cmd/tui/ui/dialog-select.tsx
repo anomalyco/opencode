@@ -294,21 +294,19 @@ function Option(props: {
           ●
         </text>
       </Show>
-      <box flexGrow={1} flexDirection="column" paddingLeft={3}>
-        <text
-          fg={props.active ? fg : props.current ? theme.primary : theme.text}
-          attributes={props.active ? TextAttributes.BOLD : undefined}
-          overflow="hidden"
-          wrapMode="none"
-        >
-          {Locale.truncate(props.title, 62)}
-        </text>
+      <text
+        flexGrow={1}
+        fg={props.active ? fg : props.current ? theme.primary : theme.text}
+        attributes={props.active ? TextAttributes.BOLD : undefined}
+        overflow="hidden"
+        wrapMode="word"
+        paddingLeft={3}
+      >
+        {Locale.truncate(props.title, 62)}
         <Show when={props.description}>
-          <text fg={props.active ? fg : theme.textMuted} wrapMode="word" overflow="hidden">
-            {props.description}
-          </text>
+          <span style={{ fg: props.active ? fg : theme.textMuted }}> {props.description}</span>
         </Show>
-      </box>
+      </text>
       <Show when={props.footer}>
         <box flexShrink={0}>
           <text fg={props.active ? fg : theme.textMuted}>{props.footer}</text>
