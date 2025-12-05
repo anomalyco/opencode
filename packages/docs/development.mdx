@@ -1,13 +1,9 @@
 ---
-title: 'Development'
-description: 'Preview changes locally to update your docs'
+title: "Development"
+description: "Preview changes locally to update your docs"
 ---
 
-<Info>
-  **Prerequisites**:
-  - Node.js version 19 or higher
-  - A docs repository with a `docs.json` file
-</Info>
+<Info>**Prerequisites**: - Node.js version 19 or higher - A docs repository with a `docs.json` file</Info>
 
 Follow these steps to install and run Mintlify on your operating system.
 
@@ -17,6 +13,7 @@ Follow these steps to install and run Mintlify on your operating system.
 ```bash
 npm i -g mint
 ```
+
 </Step>
 
 <Step title="Preview locally">
@@ -67,7 +64,11 @@ mint broken-links
 If the deployment is successful, you should see the following:
 
 <Frame>
-  <img src="/images/checks-passed.png" alt="Screenshot of a deployment confirmation message that says All checks have passed." style={{ borderRadius: '0.5rem' }} />
+  <img
+    src="/images/checks-passed.png"
+    alt="Screenshot of a deployment confirmation message that says All checks have passed."
+    style={{ borderRadius: "0.5rem" }}
+  />
 </Frame>
 
 ## Code formatting
@@ -83,6 +84,7 @@ We suggest using extensions on your IDE to recognize and format MDX. If you're a
     1. Remove the currently-installed version of the CLI: `npm remove -g mint`
     2. Upgrade to Node v19 or higher.
     3. Reinstall the CLI: `npm i -g mint`
+
   </Accordion>
 
   <Accordion title="Issue: Encountering an unknown error">
