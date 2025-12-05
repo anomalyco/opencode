@@ -149,6 +149,7 @@ export const DEFAULT_THEMES: Record<string, ThemeJson> = {
   synthwave84,
   tokyonight,
   vesper,
+  vercel,
   zenburn,
 }
 
