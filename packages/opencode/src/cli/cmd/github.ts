@@ -1265,6 +1265,8 @@ query($owner: String!, $repo: String!, $number: Int!) {
           `- side: "RIGHT" for new version, "LEFT" for old version (optional, defaults to RIGHT)`,
           `- start_side: Side for start_line in multi-line comments (optional, defaults to RIGHT)`,
           "",
+          "IMPORTANT: Line comments only work on changed files. If the tool fails, include that feedback in your response text instead.",
+          "",
           "For code suggestions, use GitHub's suggestion syntax in the body:",
           "```suggestion",
           "your suggested code here",
