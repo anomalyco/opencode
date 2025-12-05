@@ -1,0 +1,4 @@
+---
+title: 'Delete Plant'
+openapi: 'DELETE /plants/{id}'
+---

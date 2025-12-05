@@ -1,0 +1,4 @@
+---
+title: 'Get Plants'
+openapi: 'GET /plants'
+---
