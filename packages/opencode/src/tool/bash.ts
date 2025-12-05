@@ -15,7 +15,7 @@ import { fileURLToPath } from "url"
 import { Flag } from "@/flag/flag.ts"
 import path from "path"
 import { iife } from "@/util/iife"
-import { ptyToText } from "opentui-ansi-vt"
+import { ptyToText } from "ghostty-opentui"
 
 const DEFAULT_MAX_OUTPUT_LENGTH = 30_000
 const MAX_OUTPUT_LENGTH = (() => {

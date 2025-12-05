@@ -63,18 +63,18 @@ import { useKV } from "../../context/kv.tsx"
 import { Editor } from "../../util/editor"
 import { Footer } from "./footer.tsx"
 import { extend } from "@opentui/solid"
-import { TerminalBufferRenderable } from "opentui-ansi-vt/terminal-buffer"
+import { GhosttyTerminalRenderable } from "ghostty-opentui/terminal-buffer"
 import { usePromptRef } from "../../context/prompt"
 
 declare module "@opentui/solid" {
   interface OpenTUIComponents {
-    "terminal-buffer": typeof TerminalBufferRenderable
+    "ghostty-terminal": typeof GhosttyTerminalRenderable
   }
 }
 
 addDefaultParsers(parsers.parsers)
 
-extend({ "terminal-buffer": TerminalBufferRenderable })
+extend({ "ghostty-terminal": GhosttyTerminalRenderable })
 
 class CustomSpeedScroll implements ScrollAcceleration {
   constructor(private speed: number) {}
@@ -918,7 +918,7 @@ export function Session() {
                         stickyScroll={true}
                         stickyStart="bottom"
                       >
-                        <terminal-buffer ansi={output()} cols={contentWidth()} />
+                        <ghostty-terminal ansi={output()} cols={contentWidth()} />
                       </scrollbox>
                       <box flexShrink={0} paddingLeft={1}>
                         <text fg={theme.textMuted}>
@@ -1494,7 +1494,7 @@ ToolRegistry.register<typeof BashTool>({
         </Show>
         <Show when={displayOutput()}>
           {/* rows here means that the ANSI is rendered via Ghostty as 2 lines per page. Then the result is returned as 20 lines */}
-          <terminal-buffer ansi={displayOutput()} rows={20} limit={20} trimEnd cols={ctx.width} />
+          <ghostty-terminal ansi={displayOutput()} rows={20} limit={20} trimEnd cols={ctx.width} />
         </Show>
         <Show when={truncated() || (!props.output && rawOutput())}>
           <box
