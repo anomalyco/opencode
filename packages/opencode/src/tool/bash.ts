@@ -295,7 +295,7 @@ export const BashTool = Tool.define("bash", async () => {
       const timeoutTimer = setTimeout(() => {
         timedOut = true
         void killTree()
-      }, timeout)
+      }, timeout + 100)
 
       await new Promise<void>((resolve, reject) => {
         const cleanup = () => {
