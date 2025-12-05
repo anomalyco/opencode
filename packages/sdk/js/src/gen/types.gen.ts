@@ -1322,6 +1322,10 @@ export type Config = {
      */
     batch_tool?: boolean
     /**
+     * Enable OpenTelemetry spans for AI SDK calls (using the 'experimental_telemetry' flag)
+     */
+    openTelemetry?: boolean
+    /**
      * Tools that should only be available to primary agents.
      */
     primary_tools?: Array<string>
@@ -1820,9 +1824,9 @@ export type PtyConnectData = {
 
 export type PtyConnectErrors = {
   /**
-   * Session not found
+   * Not found
    */
-  404: boolean
+  404: NotFoundError
 }
 
 export type PtyConnectError = PtyConnectErrors[keyof PtyConnectErrors]
