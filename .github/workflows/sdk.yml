@@ -1,4 +1,4 @@
-name: test
+name: sdk
 
 on:
   push:
@@ -9,8 +9,10 @@ on:
       - production
   workflow_dispatch:
 jobs:
-  test:
+  format:
     runs-on: blacksmith-4vcpu-ubuntu-2404
+    permissions:
+      contents: write
     steps:
       - name: Checkout repository
         uses: actions/checkout@v4
@@ -22,9 +24,15 @@ jobs:
 
       - name: run
         run: |
-          git config --global user.email "bot@opencode.ai"
-          git config --global user.name "opencode"
-          bun turbo typecheck
-          bun turbo test
+          bun ./packages/sdk/js/script/build.ts
+          if [ -z "$(git status --porcelain)" ]; then
+            echo "No changes to commit"
+            exit 0
+          fi
+          git config --local user.email "action@github.com"
+          git config --local user.name "GitHub Action"
+          git add -A
+          git commit -m "chore: regen sdk"
+          git push --no-verify
         env:
           CI: true
