@@ -88,9 +88,19 @@ test("should not match email addresses", () => {
   expect(emailMatches.length).toBe(0)
 })
 
+// Helper function to reduce test code duplication
+async function parseMarkdownWithEnv(markdown: string) {
+  const tempFile = `/tmp/test-agent-${Date.now()}.md`
+  await Bun.write(tempFile, markdown)
+  try {
+    return await ConfigMarkdown.parse(tempFile)
+  } finally {
+    await Bun.file(tempFile).delete()
+  }
+}
+
 // Tests for {env:VAR} interpolation in frontmatter
 test("should interpolate {env:VAR} in frontmatter", async () => {
-  // Set up test environment variable
   process.env.TEST_MODEL = "gpt-4"
   process.env.TEST_DESCRIPTION = "Test agent description"
 
@@ -104,23 +114,15 @@ mode: primary
 
 This is the agent content.`
 
-  const tempFile = `/tmp/test-agent-${Date.now()}.md`
-  await Bun.write(tempFile, markdownWithEnv)
+  const result = await parseMarkdownWithEnv(markdownWithEnv)
 
-  try {
-    const result = await ConfigMarkdown.parse(tempFile)
-
-    expect(result.data.description).toBe("Test agent description")
-    expect(result.data.model).toBe("gpt-4")
-    expect(result.data.mode).toBe("primary")
-    expect(result.content).toContain("Agent Content")
-  } finally {
-    await Bun.file(tempFile).delete()
-  }
+  expect(result.data.description).toBe("Test agent description")
+  expect(result.data.model).toBe("gpt-4")
+  expect(result.data.mode).toBe("primary")
+  expect(result.content).toContain("Agent Content")
 })
 
 test("should handle missing environment variables gracefully", async () => {
-  // Ensure the environment variable is not set
   delete process.env.NONEXISTENT_VAR
 
   const markdownWithMissingEnv = `---
@@ -130,17 +132,10 @@ model: "gpt-3.5-turbo"
 
 # Agent Content`
 
-  const tempFile = `/tmp/test-agent-${Date.now()}.md`
-  await Bun.write(tempFile, markdownWithMissingEnv)
+  const result = await parseMarkdownWithEnv(markdownWithMissingEnv)
 
-  try {
-    const result = await ConfigMarkdown.parse(tempFile)
-
-    expect(result.data.description).toBe("Description with  missing")
-    expect(result.data.model).toBe("gpt-3.5-turbo")
-  } finally {
-    await Bun.file(tempFile).delete()
-  }
+  expect(result.data.description).toBe("Description with  missing")
+  expect(result.data.model).toBe("gpt-3.5-turbo")
 })
 
 test("should interpolate multiple environment variables in same field", async () => {
@@ -154,17 +149,10 @@ model: "gpt-4"
 
 # Agent Content`
 
-  const tempFile = `/tmp/test-agent-${Date.now()}.md`
-  await Bun.write(tempFile, markdownWithMultipleEnv)
+  const result = await parseMarkdownWithEnv(markdownWithMultipleEnv)
 
-  try {
-    const result = await ConfigMarkdown.parse(tempFile)
-
-    expect(result.data.description).toBe("AI Assistant")
-    expect(result.data.model).toBe("gpt-4")
-  } finally {
-    await Bun.file(tempFile).delete()
-  }
+  expect(result.data.description).toBe("AI Assistant")
+  expect(result.data.model).toBe("gpt-4")
 })
 
 test("should not interpolate {env:VAR} in markdown body content", async () => {
@@ -179,15 +167,8 @@ model: "gpt-4"
 
 This should not interpolate: {env:BODY_VAR}`
 
-  const tempFile = `/tmp/test-agent-${Date.now()}.md`
-  await Bun.write(tempFile, markdownWithEnvInBody)
+  const result = await parseMarkdownWithEnv(markdownWithEnvInBody)
 
-  try {
-    const result = await ConfigMarkdown.parse(tempFile)
-
-    expect(result.data.description).toBe("Test agent")
-    expect(result.content).toContain("{env:BODY_VAR}")
-  } finally {
-    await Bun.file(tempFile).delete()
-  }
+  expect(result.data.description).toBe("Test agent")
+  expect(result.content).toContain("{env:BODY_VAR}")
 })
