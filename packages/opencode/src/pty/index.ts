@@ -28,7 +28,6 @@ export namespace Pty {
                   : ""
       }`,
     )
-    console.log(path)
     process.env.BUN_PTY_LIB = path
     const { spawn } = await import("bun-pty")
     return spawn
