@@ -1,6 +1,5 @@
 import { init, Terminal as Term, FitAddon } from "ghostty-web"
 import { ComponentProps, onCleanup, onMount, splitProps } from "solid-js"
-import { createReconnectingWS, ReconnectingWebSocket } from "@solid-primitives/websocket"
 import { useSDK } from "@/context/sdk"
 import { SerializeAddon } from "@/addons/serialize"
 import { LocalPTY } from "@/context/session"
@@ -11,19 +10,20 @@ export interface TerminalProps extends ComponentProps<"div"> {
   pty: LocalPTY
   onSubmit?: () => void
   onCleanup?: (pty: LocalPTY) => void
+  onConnectError?: (error: unknown) => void
 }
 
 export const Terminal = (props: TerminalProps) => {
   const sdk = useSDK()
   let container!: HTMLDivElement
-  const [local, others] = splitProps(props, ["pty", "class", "classList"])
-  let ws: ReconnectingWebSocket
+  const [local, others] = splitProps(props, ["pty", "class", "classList", "onConnectError"])
+  let ws: WebSocket
   let term: Term
   let serializeAddon: SerializeAddon
   let fitAddon: FitAddon
 
   onMount(async () => {
-    ws = createReconnectingWS(sdk.url + `/pty/${local.pty.id}/connect?directory=${encodeURIComponent(sdk.directory)}`)
+    ws = new WebSocket(sdk.url + `/pty/${local.pty.id}/connect?directory=${encodeURIComponent(sdk.directory)}`)
     term = new Term({
       cursorBlink: true,
       fontSize: 14,
@@ -115,6 +115,7 @@ export const Terminal = (props: TerminalProps) => {
     })
     ws.addEventListener("error", (error) => {
       console.error("WebSocket error:", error)
+      props.onConnectError?.(error)
     })
     ws.addEventListener("close", () => {
       console.log("WebSocket disconnected")

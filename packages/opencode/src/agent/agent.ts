@@ -222,6 +222,7 @@ export namespace Agent {
   }
 
   export async function generate(input: { description: string }) {
+    const cfg = await Config.get()
     const defaultModel = await Provider.defaultModel()
     const model = await Provider.getModel(defaultModel.providerID, defaultModel.modelID)
     const language = await Provider.getLanguage(model)
@@ -229,6 +230,7 @@ export namespace Agent {
     system.push(PROMPT_GENERATE)
     const existing = await list()
     const result = await generateObject({
+      experimental_telemetry: { isEnabled: cfg.experimental?.openTelemetry },
       temperature: 0.3,
       prompt: [
         ...system.map(
