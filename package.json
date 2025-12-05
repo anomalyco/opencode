@@ -57,6 +57,7 @@
     "@tsconfig/bun": "catalog:",
     "husky": "9.1.7",
     "prettier": "3.6.2",
+    "quansync": "1.0.0",
     "sst": "3.17.23",
     "turbo": "2.5.6"
   },
