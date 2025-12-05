@@ -196,6 +196,7 @@ export function DialogSelect<T>(props: DialogSelectProps<T>) {
             focusedBackgroundColor={theme.backgroundPanel}
             cursorColor={theme.primary}
             focusedTextColor={theme.textMuted}
+            placeholderColor={theme.placeholderText}
             ref={(r) => {
               input = r
               setTimeout(() => input.focus(), 1)
