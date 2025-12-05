@@ -64,17 +64,6 @@ export namespace Project {
       if (id) Bun.file(path.join(git, "opencode")).write(id)
     }
     timer.stop()
-    if (!id) {
-      const project: Info = {
-        id: "global",
-        worktree: "/",
-        time: {
-          created: Date.now(),
-        },
-      }
-      await Storage.write<Info>(["project", "global"], project)
-      return project
-    }
     worktree = await $`git rev-parse --show-toplevel`
       .quiet()
       .nothrow()
@@ -87,8 +76,9 @@ export namespace Project {
       .cwd(worktree)
       .text()
       .then((x) => path.resolve(worktree, x.trim()))
+    const projectID = id || "global"
     const project: Info = {
-      id,
+      id: projectID,
       worktree,
       vcsDir,
       vcs: "git",
@@ -96,7 +86,7 @@ export namespace Project {
         created: Date.now(),
       },
     }
-    await Storage.write<Info>(["project", id], project)
+    await Storage.write<Info>(["project", projectID], project)
     return project
   }
 
