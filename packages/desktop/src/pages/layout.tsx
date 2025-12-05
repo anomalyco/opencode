@@ -22,9 +22,10 @@ export default function Layout(props: ParentProps) {
   const layout = useLayout()
   const currentDirectory = createMemo(() => base64Decode(params.dir ?? ""))
   const sessions = createMemo(() => globalSync.child(currentDirectory())[0].session ?? [])
-  const currentSession = createMemo(() => sessions().find((s) => s.id === params.id) ?? sessions().at(0))
+  const currentSession = createMemo(() => sessions().find((s) => s.id === params.id))
 
   function navigateToSession(session: Session | undefined) {
+    if (!session) return
     navigate(`/${params.dir}/session/${session?.id}`)
   }
 
@@ -59,6 +60,7 @@ export default function Layout(props: ParentProps) {
               <Select
                 options={sessions()}
                 current={currentSession()}
+                placeholder="Select session"
                 label={(x) => x.title}
                 value={(x) => x.id}
                 onSelect={navigateToSession}

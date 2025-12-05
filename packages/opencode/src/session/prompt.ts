@@ -42,6 +42,7 @@ import { Command } from "../command"
 import { $, fileURLToPath } from "bun"
 import { ConfigMarkdown } from "../config/markdown"
 import { SessionSummary } from "./summary"
+import { Config } from "../config/config"
 import { NamedError } from "@opencode-ai/util/error"
 import { fn } from "@/util/fn"
 import { SessionProcessor } from "./processor"
@@ -433,6 +434,7 @@ export namespace SessionPrompt {
       }
 
       // normal processing
+      const cfg = await Config.get()
       const agent = await Agent.get(lastUser.agent)
       msgs = insertReminders({
         messages: msgs,
@@ -613,6 +615,7 @@ export namespace SessionPrompt {
             },
           ],
         }),
+        experimental_telemetry: { isEnabled: cfg.experimental?.openTelemetry },
       })
       if (result === "stop") break
       continue
@@ -1418,6 +1421,7 @@ export namespace SessionPrompt {
       input.history.filter((m) => m.info.role === "user" && !m.parts.every((p) => "synthetic" in p && p.synthetic))
         .length === 1
     if (!isFirst) return
+    const cfg = await Config.get()
     const small =
       (await Provider.getSmallModel(input.providerID)) ?? (await Provider.getModel(input.providerID, input.modelID))
     const language = await Provider.getLanguage(small)
@@ -1464,6 +1468,7 @@ export namespace SessionPrompt {
       ],
       headers: small.headers,
       model: language,
+      experimental_telemetry: { isEnabled: cfg.experimental?.openTelemetry },
     })
       .then((result) => {
         if (result.text)

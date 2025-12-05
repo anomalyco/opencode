@@ -8,27 +8,30 @@ import { Instance } from "../project/instance"
 import { shell } from "@opencode-ai/util/shell"
 import { lazy } from "@opencode-ai/util/lazy"
 import {} from "process"
+import { Installation } from "@/installation"
 
 export namespace Pty {
   const log = Log.create({ service: "pty" })
 
   const pty = lazy(async () => {
-    const path = require(
-      `bun-pty/rust-pty/target/release/${
-        process.platform === "win32"
-          ? "rust_pty.dll"
-          : process.platform === "linux" && process.arch === "x64"
-            ? "librust_pty.so"
-            : process.platform === "darwin" && process.arch === "x64"
-              ? "librust_pty.dylib"
-              : process.platform === "darwin" && process.arch === "arm64"
-                ? "librust_pty_arm64.dylib"
-                : process.platform === "linux" && process.arch === "arm64"
-                  ? "librust_pty_arm64.so"
-                  : ""
-      }`,
-    )
-    process.env.BUN_PTY_LIB = path
+    if (!Installation.isLocal()) {
+      const path = require(
+        `bun-pty/rust-pty/target/release/${
+          process.platform === "win32"
+            ? "rust_pty.dll"
+            : process.platform === "linux" && process.arch === "x64"
+              ? "librust_pty.so"
+              : process.platform === "darwin" && process.arch === "x64"
+                ? "librust_pty.dylib"
+                : process.platform === "darwin" && process.arch === "arm64"
+                  ? "librust_pty_arm64.dylib"
+                  : process.platform === "linux" && process.arch === "arm64"
+                    ? "librust_pty_arm64.so"
+                    : ""
+        }`,
+      )
+      process.env.BUN_PTY_LIB = path
+    }
     const { spawn } = await import("bun-pty")
     return spawn
   })
