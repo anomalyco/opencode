@@ -655,6 +655,45 @@ export type EventTuiToastShow = {
   }
 }
 
+export type Pty = {
+  id: string
+  title: string
+  command: string
+  args: Array<string>
+  cwd: string
+  status: "running" | "exited"
+  pid: number
+}
+
+export type EventPtyCreated = {
+  type: "pty.created"
+  properties: {
+    info: Pty
+  }
+}
+
+export type EventPtyUpdated = {
+  type: "pty.updated"
+  properties: {
+    info: Pty
+  }
+}
+
+export type EventPtyExited = {
+  type: "pty.exited"
+  properties: {
+    id: string
+    exitCode: number
+  }
+}
+
+export type EventPtyDeleted = {
+  type: "pty.deleted"
+  properties: {
+    id: string
+  }
+}
+
 export type EventServerConnected = {
   type: "server.connected"
   properties: {
@@ -690,6 +729,10 @@ export type Event =
   | EventTuiPromptAppend
   | EventTuiCommandExecute
   | EventTuiToastShow
+  | EventPtyCreated
+  | EventPtyUpdated
+  | EventPtyExited
+  | EventPtyDeleted
   | EventServerConnected
 
 export type GlobalEvent = {
@@ -705,6 +748,21 @@ export type Project = {
   time: {
     created: number
     initialized?: number
+  }
+}
+
+export type BadRequestError = {
+  data: unknown
+  errors: Array<{
+    [key: string]: unknown
+  }>
+  success: false
+}
+
+export type NotFoundError = {
+  name: "NotFoundError"
+  data: {
+    message: string
   }
 }
 
@@ -908,6 +966,10 @@ export type AgentConfig = {
    * Hex color code for the agent (e.g., #FF5733)
    */
   color?: string
+  /**
+   * Maximum number of agentic iterations before forcing text-only response
+   */
+  maxSteps?: number
   permission?: {
     edit?: "ask" | "allow" | "deny"
     bash?:
@@ -928,6 +990,7 @@ export type AgentConfig = {
       }
     | boolean
     | ("subagent" | "primary" | "all")
+    | number
     | {
         edit?: "ask" | "allow" | "deny"
         bash?:
@@ -1260,18 +1323,14 @@ export type Config = {
      */
     batch_tool?: boolean
     /**
+     * Enable OpenTelemetry spans for AI SDK calls (using the 'experimental_telemetry' flag)
+     */
+    openTelemetry?: boolean
+    /**
      * Tools that should only be available to primary agents.
      */
     primary_tools?: Array<string>
   }
-}
-
-export type BadRequestError = {
-  data: unknown
-  errors: Array<{
-    [key: string]: unknown
-  }>
-  success: false
 }
 
 export type ToolIds = Array<string>
@@ -1293,13 +1352,6 @@ export type Path = {
 
 export type VcsInfo = {
   branch: string
-}
-
-export type NotFoundError = {
-  name: "NotFoundError"
-  data: {
-    message: string
-  }
 }
 
 export type TextPartInput = {
@@ -1511,6 +1563,7 @@ export type Agent = {
   options: {
     [key: string]: unknown
   }
+  maxSteps?: number
 }
 
 export type McpStatusConnected = {
@@ -1613,6 +1666,181 @@ export type ProjectCurrentResponses = {
 }
 
 export type ProjectCurrentResponse = ProjectCurrentResponses[keyof ProjectCurrentResponses]
+
+export type PtyListData = {
+  body?: never
+  path?: never
+  query?: {
+    directory?: string
+  }
+  url: "/pty"
+}
+
+export type PtyListResponses = {
+  /**
+   * List of sessions
+   */
+  200: Array<Pty>
+}
+
+export type PtyListResponse = PtyListResponses[keyof PtyListResponses]
+
+export type PtyCreateData = {
+  body?: {
+    command?: string
+    args?: Array<string>
+    cwd?: string
+    title?: string
+    env?: {
+      [key: string]: string
+    }
+  }
+  path?: never
+  query?: {
+    directory?: string
+  }
+  url: "/pty"
+}
+
+export type PtyCreateErrors = {
+  /**
+   * Bad request
+   */
+  400: BadRequestError
+}
+
+export type PtyCreateError = PtyCreateErrors[keyof PtyCreateErrors]
+
+export type PtyCreateResponses = {
+  /**
+   * Created session
+   */
+  200: Pty
+}
+
+export type PtyCreateResponse = PtyCreateResponses[keyof PtyCreateResponses]
+
+export type PtyRemoveData = {
+  body?: never
+  path: {
+    id: string
+  }
+  query?: {
+    directory?: string
+  }
+  url: "/pty/{id}"
+}
+
+export type PtyRemoveErrors = {
+  /**
+   * Not found
+   */
+  404: NotFoundError
+}
+
+export type PtyRemoveError = PtyRemoveErrors[keyof PtyRemoveErrors]
+
+export type PtyRemoveResponses = {
+  /**
+   * Session removed
+   */
+  200: boolean
+}
+
+export type PtyRemoveResponse = PtyRemoveResponses[keyof PtyRemoveResponses]
+
+export type PtyGetData = {
+  body?: never
+  path: {
+    id: string
+  }
+  query?: {
+    directory?: string
+  }
+  url: "/pty/{id}"
+}
+
+export type PtyGetErrors = {
+  /**
+   * Not found
+   */
+  404: NotFoundError
+}
+
+export type PtyGetError = PtyGetErrors[keyof PtyGetErrors]
+
+export type PtyGetResponses = {
+  /**
+   * Session info
+   */
+  200: Pty
+}
+
+export type PtyGetResponse = PtyGetResponses[keyof PtyGetResponses]
+
+export type PtyUpdateData = {
+  body?: {
+    title?: string
+    size?: {
+      rows: number
+      cols: number
+    }
+  }
+  path: {
+    id: string
+  }
+  query?: {
+    directory?: string
+  }
+  url: "/pty/{id}"
+}
+
+export type PtyUpdateErrors = {
+  /**
+   * Bad request
+   */
+  400: BadRequestError
+}
+
+export type PtyUpdateError = PtyUpdateErrors[keyof PtyUpdateErrors]
+
+export type PtyUpdateResponses = {
+  /**
+   * Updated session
+   */
+  200: Pty
+}
+
+export type PtyUpdateResponse = PtyUpdateResponses[keyof PtyUpdateResponses]
+
+export type PtyConnectData = {
+  body?: never
+  path: {
+    id: string
+  }
+  query?: {
+    directory?: string
+  }
+  url: "/pty/{id}/connect"
+}
+
+export type PtyConnectErrors = {
+  /**
+   * Not found
+   */
+  404: NotFoundError
+}
+
+export type PtyConnectError = PtyConnectErrors[keyof PtyConnectErrors]
+
+export type PtyConnectResponses = {
+  /**
+   * Connected session
+   */
+  200: boolean
+}
+
+export type PtyConnectResponse = PtyConnectResponses[keyof PtyConnectResponses]
 
 export type ConfigGetData = {
   body?: never

@@ -95,14 +95,8 @@ export const ReadTool = Tool.define("read", {
     }
 
     const isImage = isImageFile(filepath)
-    const supportsImages = await (async () => {
-      if (!ctx.extra?.["providerID"] || !ctx.extra?.["modelID"]) return false
-      const providerID = ctx.extra["providerID"] as string
-      const modelID = ctx.extra["modelID"] as string
-      const model = await Provider.getModel(providerID, modelID).catch(() => undefined)
-      if (!model) return false
-      return model.capabilities.input.image
-    })()
+    const model = ctx.extra?.model as Provider.Model | undefined
+    const supportsImages = model?.capabilities.input.image ?? false
     if (isImage) {
       if (!supportsImages) {
         throw new Error(`Failed to read image: ${filepath}, model may not be able to read images`)
