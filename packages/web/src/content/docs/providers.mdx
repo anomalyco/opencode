@@ -891,6 +891,61 @@ OpenCode Zen is a list of tested and verified models provided by the OpenCode te
 
 ---
 
+### SAP AI Core
+
+SAP AI Core provides access to 40+ models from OpenAI, Anthropic, Google, Amazon, Meta, Mistral, and AI21 through a unified platform.
+
+1. Go to your [SAP BTP Cockpit](https://account.hana.ondemand.com/), navigate to your SAP AI Core service instance, and create a service key.
+
+   :::tip
+   The service key is a JSON object containing `clientid`, `clientsecret`, `url`, and `serviceurls.AI_API_URL`. You can find your AI Core instance under **Services** > **Instances and Subscriptions** in the BTP Cockpit.
+   :::
+
+2. Run the `/connect` command and search for **SAP AI Core**.
+
+   ```txt
+   /connect
+   ```
+
+3. Enter your service key JSON.
+
+   ```txt
+   ┌ Service key
+   │
+   │
+   └ enter
+   ```
+
+   Or set the `SAP_AI_SERVICE_KEY` environment variable:
+
+   ```bash
+   SAP_AI_SERVICE_KEY='{"clientid":"...","clientsecret":"...","url":"...","serviceurls":{"AI_API_URL":"..."}}' opencode
+   ```
+
+   Or add it to your bash profile:
+
+   ```bash title="~/.bash_profile"
+   export SAP_AI_SERVICE_KEY='{"clientid":"...","clientsecret":"...","url":"...","serviceurls":{"AI_API_URL":"..."}}'
+   ```
+
+4. Optionally set deployment ID and resource group:
+
+   ```bash
+   SAP_AI_DEPLOYMENT_ID=your-deployment-id SAP_AI_RESOURCE_GROUP=your-resource-group opencode
+   ```
+
+   :::note
+   If not set, uses deployment ID `d65d81e7c077e583` (general-purpose) and resource group `default`. Configure these for your specific setup.
+   :::
+
+5. Run the `/models` command to select from 40+ available models.
+
+   ```txt
+   /models
+   ```
+
+---
+
 ### OVHcloud AI Endpoints
 
 1. Head over to the [OVHcloud panel](https://ovh.com/manager). Navigate to the `Public Cloud` section, `AI & Machine Learning` > `AI Endpoints` and in `API Keys` tab, click **Create a new API key**.

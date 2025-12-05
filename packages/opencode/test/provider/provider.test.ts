@@ -1727,3 +1727,39 @@ test("provider options are deeply merged", async () => {
     },
   })
 })
+
+test("custom model inherits npm package from models.dev provider config", async () => {
+  await using tmp = await tmpdir({
+    init: async (dir) => {
+      await Bun.write(
+        path.join(dir, "opencode.json"),
+        JSON.stringify({
+          $schema: "https://opencode.ai/config.json",
+          provider: {
+            openai: {
+              models: {
+                "my-custom-model": {
+                  name: "My Custom Model",
+                  tool_call: true,
+                  limit: { context: 8000, output: 2000 },
+                },
+              },
+            },
+          },
+        }),
+      )
+    },
+  })
+  await Instance.provide({
+    directory: tmp.path,
+    init: async () => {
+      Env.set("OPENAI_API_KEY", "test-api-key")
+    },
+    fn: async () => {
+      const providers = await Provider.list()
+      const model = providers["openai"].models["my-custom-model"]
+      expect(model).toBeDefined()
+      expect(model.api.npm).toBe("@ai-sdk/openai")
+    },
+  })
+})
