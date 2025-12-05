@@ -35,10 +35,10 @@ export function DialogAgent(props: { selectedAgent?: string }) {
       }
 
       // Truncate description based on available space after title
-      const maxDescLen = availableWidth() - item.name.length - 1
-      if (description && maxDescLen > 3) {
-        description = Locale.truncate(description, maxDescLen)
-      } else if (description && maxDescLen <= 3) {
+      const maxDescriptionLength = availableWidth() - item.name.length - 1
+      if (description && maxDescriptionLength > 3) {
+        description = Locale.truncate(description, maxDescriptionLength)
+      } else if (description && maxDescriptionLength <= 3) {
         description = undefined
       }
 
