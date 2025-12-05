@@ -73,8 +73,16 @@ export async function handler(
     const stickyProvider = await stickyTracker?.get()
 
     const retriableRequest = async (retry: RetryOptions = { excludeProviders: [], retryCount: 0 }) => {
-      const providerInfo = selectProvider(zenData, modelInfo, sessionId, isTrial ?? false, retry, stickyProvider)
-      const authInfo = await authenticate(modelInfo, providerInfo)
+      const authInfo = await authenticate(modelInfo)
+      const providerInfo = selectProvider(
+        zenData,
+        authInfo,
+        modelInfo,
+        sessionId,
+        isTrial ?? false,
+        retry,
+        stickyProvider,
+      )
       validateBilling(authInfo, modelInfo)
       validateModelSettings(authInfo)
       updateProviderKey(authInfo, providerInfo)
@@ -291,6 +299,7 @@ export async function handler(
 
   function selectProvider(
     zenData: ZenData,
+    authInfo: AuthInfo,
     modelInfo: ModelInfo,
     sessionId: string,
     isTrial: boolean,
@@ -298,6 +307,10 @@ export async function handler(
     stickyProvider: string | undefined,
   ) {
     const provider = (() => {
+      if (authInfo?.provider?.credentials) {
+        return modelInfo.providers.find((provider) => provider.id === modelInfo.byokProvider)
+      }
+
       if (isTrial) {
         return modelInfo.providers.find((provider) => provider.id === modelInfo.trial!.provider)
       }
@@ -342,7 +355,7 @@ export async function handler(
     }
   }
 
-  async function authenticate(modelInfo: ModelInfo, providerInfo: ProviderInfo) {
+  async function authenticate(modelInfo: ModelInfo) {
     const apiKey = opts.parseApiKey(input.request.headers)
     if (!apiKey || apiKey === "public") {
       if (modelInfo.allowAnonymous) return
@@ -380,7 +393,12 @@ export async function handler(
         .leftJoin(ModelTable, and(eq(ModelTable.workspaceID, KeyTable.workspaceID), eq(ModelTable.model, modelInfo.id)))
         .leftJoin(
           ProviderTable,
-          and(eq(ProviderTable.workspaceID, KeyTable.workspaceID), eq(ProviderTable.provider, providerInfo.id)),
+          modelInfo.byokProvider
+            ? and(
+                eq(ProviderTable.workspaceID, KeyTable.workspaceID),
+                eq(ProviderTable.provider, modelInfo.byokProvider),
+              )
+            : sql`false`,
         )
         .where(and(eq(KeyTable.key, apiKey), isNull(KeyTable.timeDeleted)))
         .then((rows) => rows[0]),
@@ -457,8 +475,7 @@ export async function handler(
   }
 
   function updateProviderKey(authInfo: AuthInfo, providerInfo: ProviderInfo) {
-    if (!authInfo) return
-    if (!authInfo.provider?.credentials) return
+    if (!authInfo?.provider?.credentials) return
     providerInfo.apiKey = authInfo.provider.credentials
   }
 
