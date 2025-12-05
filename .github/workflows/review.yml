@@ -75,4 +75,4 @@ jobs:
             -f 'body=[summary of issue]' -f 'commit_id=${{ steps.pr-details.outputs.sha }}' -f 'path=[path-to-file]' -F \"line=[line]\" -f 'side=RIGHT'
           \`\`\`
 
-          Only create comments for actual violations. If the code follows all guidelines, don't run any gh commands."
+          Only create comments for actual violations. If the code follows all guidelines, comment 'lgtm' AND NOTHING ELSE!!!!."
