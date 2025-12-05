@@ -250,15 +250,20 @@ export namespace SessionPrompt {
       let msgs = await MessageV2.filterCompacted(MessageV2.stream(sessionID))
 
       let lastUser: MessageV2.User | undefined
-      let lastAssistant: MessageV2.Assistant | undefined
+      let lastAssistant: MessageV2.WithParts | undefined
       let lastFinished: MessageV2.Assistant | undefined
       let tasks: (MessageV2.CompactionPart | MessageV2.SubtaskPart)[] = []
       for (let i = msgs.length - 1; i >= 0; i--) {
         const msg = msgs[i]
-        if (!lastUser && msg.info.role === "user") lastUser = msg.info as MessageV2.User
-        if (!lastAssistant && msg.info.role === "assistant") lastAssistant = msg.info as MessageV2.Assistant
-        if (!lastFinished && msg.info.role === "assistant" && msg.info.finish)
+        if (!lastUser && msg.info.role === "user") {
+          lastUser = msg.info as MessageV2.User
+        }
+        if (!lastAssistant && msg.info.role === "assistant") {
+          lastAssistant = msg
+        }
+        if (!lastFinished && msg.info.role === "assistant" && msg.info.finish) {
           lastFinished = msg.info as MessageV2.Assistant
+        }
         if (lastUser && lastFinished) break
         const task = msg.parts.filter((part) => part.type === "compaction" || part.type === "subtask")
         if (task && !lastFinished) {
@@ -267,13 +272,38 @@ export namespace SessionPrompt {
       }
 
       if (!lastUser) throw new Error("No user message found in stream. This should never happen.")
-      if (
-        lastAssistant?.finish &&
-        !["tool-calls", "unknown"].includes(lastAssistant.finish) &&
-        lastUser.id < lastAssistant.id
-      ) {
-        log.info("exiting loop", { sessionID })
-        break
+
+      // Exit Loop When:
+      // • Text + Reasoning → Complete response ready
+      // • Text Only → Normal response ready
+      //
+      // Continue Loop When:
+      // • Reasoning Only → Wait for text content
+      // • Any tool calls pending → Tools must execute first
+      // • Text + Tools → Tools executing needed
+      // • Invalid/error state → Unexpected condition
+
+      const hasReasoningBlocks = lastAssistant?.parts.some((part) => part.type === "reasoning")
+      const hasTextContent = lastAssistant?.parts.some((part) => part.type === "text")
+      const hasOnlyReasoning = hasReasoningBlocks && !hasTextContent
+
+      // Check if there are pending or running tools for the last assistant message
+      const hasPendingTools = lastAssistant
+        ? await hasRunningOrPendingTools((lastAssistant.info as MessageV2.Assistant).id)
+        : false
+
+      if (lastAssistant?.info.role === "assistant" && lastAssistant.info.finish) {
+        const hasToolCalls = lastAssistant.info.finish === "tool-calls"
+        const hasTextAndToolCalls = hasTextContent && hasToolCalls
+        const hasValidFinish = !["tool-calls", "unknown"].includes(lastAssistant.info.finish)
+        const hasValidIds = (lastUser as MessageV2.User).id < (lastAssistant.info as MessageV2.Assistant).id
+        const shouldExit =
+          hasValidFinish && hasValidIds && !hasOnlyReasoning && !hasTextAndToolCalls && !hasPendingTools
+
+        if (shouldExit) {
+          log.info("exiting loop", { sessionID })
+          break
+        }
       }
 
       step++
@@ -1403,6 +1433,18 @@ export namespace SessionPrompt {
     })
 
     return result
+  }
+
+  async function hasRunningOrPendingTools(messageID: string): Promise<boolean> {
+    try {
+      const parts = await MessageV2.parts(messageID)
+      return parts.some(
+        (part) => part.type === "tool" && (part.state.status === "running" || part.state.status === "pending"),
+      )
+    } catch {
+      // If we can't read the parts, assume no pending tools
+      return false
+    }
   }
 
   async function ensureTitle(input: {
