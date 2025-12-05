@@ -954,14 +954,14 @@ Co-authored-by: ${actor} <${actor}@users.noreply.github.com>"`
         })
 
         const eyesReaction = reactions.data.find((r) => r.content === "eyes")
-        if (eyesReaction) {
-          await octoRest.rest.reactions.deleteForIssueComment({
-            owner,
-            repo,
-            comment_id: triggerCommentId,
-            reaction_id: eyesReaction.id,
-          })
-        }
+        if (!eyesReaction) return
+
+        await octoRest.rest.reactions.deleteForIssueComment({
+          owner,
+          repo,
+          comment_id: triggerCommentId,
+          reaction_id: eyesReaction.id,
+        })
       }
 
       async function createComment(body: string) {
