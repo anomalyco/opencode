@@ -7,12 +7,12 @@ import { Keybind } from "@/util/keybind"
 import { Locale } from "@/util/locale"
 import { DialogAgentDetails } from "./dialog-agent-details"
 
-export function DialogAgent(props: { focusedAgent?: string }) {
+export function DialogAgent(props: { selectedAgent?: string }) {
   const local = useLocal()
   const dialog = useDialog()
   const dimensions = useTerminalDimensions()
 
-  const [selectedAgentName, setSelectedAgentName] = createSignal(props.focusedAgent ?? local.agent.current().name)
+  const [selectedAgentName, setSelectedAgentName] = createSignal(props.selectedAgent ?? local.agent.current().name)
 
   const selectedAgentHasDescription = createMemo(() => {
     const agent = local.agent.list().find((a) => a.name === selectedAgentName())
@@ -54,7 +54,7 @@ export function DialogAgent(props: { focusedAgent?: string }) {
     <DialogSelect
       title="Select agent"
       current={local.agent.current().name}
-      defaultSelected={props.focusedAgent}
+      defaultSelected={props.selectedAgent}
       options={options()}
       onMove={(option) => setSelectedAgentName(option.value)}
       onSelect={(option) => {
