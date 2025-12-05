@@ -112,6 +112,7 @@ const AgentCreateCommand = cmd({
 
         const frontmatter: any = {
           description: generated.whenToUse,
+          short_description: generated.shortSummary,
           mode: modeResult,
         }
         if (Object.keys(tools).length > 0) {

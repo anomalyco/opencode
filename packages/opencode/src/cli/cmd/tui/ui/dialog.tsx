@@ -57,7 +57,7 @@ function init() {
   })
 
   useKeyboard((evt) => {
-    if (evt.name === "escape" && store.stack.length > 0) {
+    if (evt.name === "escape" && store.stack.length > 0 && !evt.defaultPrevented) {
       const current = store.stack.at(-1)!
       current.onClose?.()
       setStore("stack", store.stack.slice(0, -1))
@@ -70,8 +70,14 @@ function init() {
   let focus: Renderable | null
   function refocus() {
     setTimeout(() => {
+      // A new dialog was opened in the meantime (e.g., navigating between dialogs)
+      if (store.stack.length > 0) return
+
       if (!focus) return
-      if (focus.isDestroyed) return
+      if (focus.isDestroyed) {
+        focus = null
+        return
+      }
       function find(item: Renderable) {
         for (const child of item.getChildren()) {
           if (child === focus) return true
@@ -80,8 +86,12 @@ function init() {
         return false
       }
       const found = find(renderer.root)
-      if (!found) return
+      if (!found) {
+        focus = null
+        return
+      }
       focus.focus()
+      focus = null
     }, 1)
   }
 
@@ -97,7 +107,7 @@ function init() {
       refocus()
     },
     replace(input: any, onClose?: () => void) {
-      if (store.stack.length === 0) {
+      if (store.stack.length === 0 && (!focus || focus.isDestroyed)) {
         focus = renderer.currentFocusedRenderable
       }
       for (const item of store.stack) {

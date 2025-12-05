@@ -26,6 +26,7 @@ export interface DialogSelectProps<T> {
     onTrigger: (option: DialogSelectOption<T>) => void
   }[]
   current?: T
+  defaultSelected?: T
 }
 
 export interface DialogSelectOption<T = any> {
@@ -53,10 +54,11 @@ export function DialogSelect<T>(props: DialogSelectProps<T>) {
   })
 
   createEffect(() => {
-    if (props.current) {
-      const currentIndex = flat().findIndex((opt) => isDeepEqual(opt.value, props.current))
-      if (currentIndex >= 0) {
-        setStore("selected", currentIndex)
+    const initialValue = props.defaultSelected ?? props.current
+    if (initialValue) {
+      const initialIndex = flat().findIndex((opt) => isDeepEqual(opt.value, initialValue))
+      if (initialIndex >= 0) {
+        setStore("selected", initialIndex)
       }
     }
   })
@@ -101,10 +103,13 @@ export function DialogSelect<T>(props: DialogSelectProps<T>) {
     store.filter
     if (store.filter.length > 0) {
       setStore("selected", 0)
-    } else if (props.current) {
-      const currentIndex = flat().findIndex((opt) => isDeepEqual(opt.value, props.current))
-      if (currentIndex >= 0) {
-        setStore("selected", currentIndex)
+    } else {
+      const initialValue = props.defaultSelected ?? props.current
+      if (initialValue) {
+        const initialIndex = flat().findIndex((opt) => isDeepEqual(opt.value, initialValue))
+        if (initialIndex >= 0) {
+          setStore("selected", initialIndex)
+        }
       }
     }
     scroll.scrollTo(0)

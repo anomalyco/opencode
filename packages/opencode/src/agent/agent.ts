@@ -12,6 +12,7 @@ export namespace Agent {
     .object({
       name: z.string(),
       description: z.string().optional(),
+      shortDescription: z.string().optional(),
       mode: z.enum(["subagent", "primary", "all"]),
       builtIn: z.boolean(),
       topP: z.number().optional(),
@@ -182,7 +183,7 @@ export namespace Agent {
           tools: {},
           builtIn: false,
         }
-      const { name, model, prompt, tools, description, temperature, top_p, mode, permission, color, ...extra } = value
+      const { name, model, prompt, tools, description, short_description, temperature, top_p, mode, permission, color, ...extra } = value
       item.options = {
         ...item.options,
         ...extra,
@@ -199,6 +200,7 @@ export namespace Agent {
         ...item.tools,
       }
       if (description) item.description = description
+      if (short_description) item.shortDescription = short_description
       if (temperature != undefined) item.temperature = temperature
       if (top_p != undefined) item.topP = top_p
       if (mode) item.mode = mode
@@ -244,6 +246,7 @@ export namespace Agent {
       model: model.language,
       schema: z.object({
         identifier: z.string(),
+        shortSummary: z.string(),
         whenToUse: z.string(),
         systemPrompt: z.string(),
       }),

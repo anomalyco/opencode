@@ -895,6 +895,10 @@ export type AgentConfig = {
    * Description of when to use the agent
    */
   description?: string
+  /**
+   * Short description for display in agent listings (defaults to truncated description)
+   */
+  short_description?: string
   mode?: "subagent" | "primary" | "all"
   /**
    * Hex color code for the agent (e.g., #FF5733)
@@ -1452,6 +1456,7 @@ export type File = {
 export type Agent = {
   name: string
   description?: string
+  shortDescription?: string
   mode: "subagent" | "primary" | "all"
   builtIn: boolean
   topP?: number
