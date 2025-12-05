@@ -1,4 +1,4 @@
-import { For, onCleanup, onMount, Show, Match, Switch, createResource, createMemo } from "solid-js"
+import { For, onCleanup, onMount, Show, Match, Switch, createResource, createMemo, createEffect } from "solid-js"
 import { useLocal, type LocalFile } from "@/context/local"
 import { createStore } from "solid-js/store"
 import { PromptInput } from "@/components/prompt-input"
@@ -31,6 +31,7 @@ import { useSession } from "@/context/session"
 import { useLayout } from "@/context/layout"
 import { getDirectory, getFilename } from "@opencode-ai/util/path"
 import { Diff } from "@opencode-ai/ui/diff"
+import { Terminal } from "@/components/terminal"
 
 export default function Page() {
   const layout = useLayout()
@@ -54,6 +55,14 @@ export default function Page() {
     document.removeEventListener("keydown", handleKeyDown)
   })
 
+  createEffect(() => {
+    if (layout.terminal.opened()) {
+      if (session.terminal.all().length === 0) {
+        session.terminal.new()
+      }
+    }
+  })
+
   const handleKeyDown = (event: KeyboardEvent) => {
     if (event.getModifierState(MOD) && event.shiftKey && event.key.toLowerCase() === "p") {
       event.preventDefault()
@@ -71,6 +80,16 @@ export default function Page() {
       const nextTheme = themes[(themes.indexOf(currentTheme) + 1) % themes.length]
       localStorage.setItem("theme", nextTheme)
       document.documentElement.setAttribute("data-theme", nextTheme)
+      return
+    }
+    if (event.ctrlKey && event.key.toLowerCase() === "`") {
+      event.preventDefault()
+      layout.terminal.toggle()
+      return
+    }
+
+    // @ts-expect-error
+    if (document.activeElement?.dataset?.component === "terminal") {
       return
     }
 
@@ -141,7 +160,7 @@ export default function Page() {
   const handleDragOver = (event: DragEvent) => {
     const { draggable, droppable } = event
     if (draggable && droppable) {
-      const currentTabs = session.layout.tabs.opened
+      const currentTabs = session.layout.tabs.all
       const fromIndex = currentTabs?.indexOf(draggable.id.toString())
       const toIndex = currentTabs?.indexOf(droppable.id.toString())
       if (fromIndex !== toIndex && toIndex !== undefined) {
@@ -259,317 +278,397 @@ export default function Page() {
   const wide = createMemo(() => layout.review.state() === "tab" || !session.diffs().length)
 
   return (
-    <div class="relative bg-background-base size-full overflow-x-hidden">
-      <DragDropProvider
-        onDragStart={handleDragStart}
-        onDragEnd={handleDragEnd}
-        onDragOver={handleDragOver}
-        collisionDetector={closestCenter}
-      >
-        <DragDropSensors />
-        <ConstrainDragYAxis />
-        <Tabs value={session.layout.tabs.active ?? "chat"} onChange={session.layout.openTab}>
-          <div class="sticky top-0 shrink-0 flex">
-            <Tabs.List>
-              <Tabs.Trigger value="chat">
-                <div class="flex gap-x-[17px] items-center">
-                  <div>Session</div>
-                  <Tooltip
-                    value={`${new Intl.NumberFormat("en-US", {
-                      notation: "compact",
-                      compactDisplay: "short",
-                    }).format(session.usage.tokens() ?? 0)} Tokens`}
-                    class="flex items-center gap-1.5"
-                  >
-                    <ProgressCircle percentage={session.usage.context() ?? 0} />
-                    <div class="text-14-regular text-text-weak text-left w-7">{session.usage.context() ?? 0}%</div>
-                  </Tooltip>
-                </div>
-              </Tabs.Trigger>
-              <Show when={layout.review.state() === "tab" && session.diffs().length}>
-                <Tabs.Trigger
-                  value="review"
-                  closeButton={
-                    <IconButton icon="collapse" size="normal" variant="ghost" onClick={layout.review.pane} />
-                  }
-                >
-                  <div class="flex items-center gap-3">
-                    <Show when={session.diffs()}>
-                      <DiffChanges changes={session.diffs()} variant="bars" />
-                    </Show>
-                    <div class="flex items-center gap-1.5">
-                      <div>Review</div>
-                      <Show when={session.info()?.summary?.files}>
-                        <div class="text-12-medium text-text-strong h-4 px-2 flex flex-col items-center justify-center rounded-full bg-surface-base">
-                          {session.info()?.summary?.files ?? 0}
-                        </div>
-                      </Show>
-                    </div>
+    <div class="relative bg-background-base size-full overflow-x-hidden flex flex-col items-start">
+      <div class="min-h-0 grow w-full">
+        <DragDropProvider
+          onDragStart={handleDragStart}
+          onDragEnd={handleDragEnd}
+          onDragOver={handleDragOver}
+          collisionDetector={closestCenter}
+        >
+          <DragDropSensors />
+          <ConstrainDragYAxis />
+          <Tabs value={session.layout.tabs.active ?? "chat"} onChange={session.layout.openTab}>
+            <div class="sticky top-0 shrink-0 flex">
+              <Tabs.List>
+                <Tabs.Trigger value="chat">
+                  <div class="flex gap-x-[17px] items-center">
+                    <div>Session</div>
+                    <Tooltip
+                      value={`${new Intl.NumberFormat("en-US", {
+                        notation: "compact",
+                        compactDisplay: "short",
+                      }).format(session.usage.tokens() ?? 0)} Tokens`}
+                      class="flex items-center gap-1.5"
+                    >
+                      <ProgressCircle percentage={session.usage.context() ?? 0} />
+                      <div class="text-14-regular text-text-weak text-left w-7">{session.usage.context() ?? 0}%</div>
+                    </Tooltip>
                   </div>
                 </Tabs.Trigger>
-              </Show>
-              <SortableProvider ids={session.layout.tabs.opened ?? []}>
-                <For each={session.layout.tabs.opened ?? []}>
-                  {(tab) => <SortableTab tab={tab} onTabClick={handleTabClick} onTabClose={session.layout.closeTab} />}
-                </For>
-              </SortableProvider>
-              <div class="bg-background-base h-full flex items-center justify-center border-b border-border-weak-base px-3">
-                <Tooltip value="Open file" class="flex items-center">
-                  <IconButton
-                    icon="plus-small"
-                    variant="ghost"
-                    iconSize="large"
-                    onClick={() => setStore("fileSelectOpen", true)}
-                  />
-                </Tooltip>
-              </div>
-            </Tabs.List>
-          </div>
-          <Tabs.Content value="chat" class="@container select-text flex flex-col flex-1 min-h-0 overflow-y-hidden">
-            <div
-              classList={{
-                "w-full flex-1 min-h-0": true,
-                grid: layout.review.state() === "tab",
-                flex: layout.review.state() === "pane",
-              }}
-            >
+                <Show when={layout.review.state() === "tab" && session.diffs().length}>
+                  <Tabs.Trigger
+                    value="review"
+                    closeButton={
+                      <IconButton icon="collapse" size="normal" variant="ghost" onClick={layout.review.pane} />
+                    }
+                  >
+                    <div class="flex items-center gap-3">
+                      <Show when={session.diffs()}>
+                        <DiffChanges changes={session.diffs()} variant="bars" />
+                      </Show>
+                      <div class="flex items-center gap-1.5">
+                        <div>Review</div>
+                        <Show when={session.info()?.summary?.files}>
+                          <div class="text-12-medium text-text-strong h-4 px-2 flex flex-col items-center justify-center rounded-full bg-surface-base">
+                            {session.info()?.summary?.files ?? 0}
+                          </div>
+                        </Show>
+                      </div>
+                    </div>
+                  </Tabs.Trigger>
+                </Show>
+                <SortableProvider ids={session.layout.tabs.all ?? []}>
+                  <For each={session.layout.tabs.all ?? []}>
+                    {(tab) => (
+                      <SortableTab tab={tab} onTabClick={handleTabClick} onTabClose={session.layout.closeTab} />
+                    )}
+                  </For>
+                </SortableProvider>
+                <div class="bg-background-base h-full flex items-center justify-center border-b border-border-weak-base px-3">
+                  <Tooltip value="Open file" class="flex items-center">
+                    <IconButton
+                      icon="plus-small"
+                      variant="ghost"
+                      iconSize="large"
+                      onClick={() => setStore("fileSelectOpen", true)}
+                    />
+                  </Tooltip>
+                </div>
+              </Tabs.List>
+            </div>
+            <Tabs.Content value="chat" class="@container select-text flex flex-col flex-1 min-h-0 overflow-y-hidden">
               <div
                 classList={{
-                  "relative shrink-0 py-3 flex flex-col gap-6 flex-1 min-h-0 w-full": true,
-                  "max-w-146 mx-auto": !wide(),
+                  "w-full flex-1 min-h-0": true,
+                  grid: layout.review.state() === "tab",
+                  flex: layout.review.state() === "pane",
                 }}
               >
-                <Switch>
-                  <Match when={session.id}>
-                    <div class="flex items-start justify-start h-full min-h-0">
-                      <SessionMessageRail
-                        messages={session.messages.user()}
-                        current={session.messages.active()}
-                        onMessageSelect={session.messages.setActive}
-                        working={session.working()}
-                        wide={wide()}
-                      />
-                      <SessionTurn
-                        sessionID={session.id!}
-                        messageID={session.messages.active()?.id!}
-                        classes={{
-                          root: "pb-20 flex-1 min-w-0",
-                          content: "pb-20",
-                          container:
-                            "w-full " +
-                            (wide()
-                              ? "max-w-146 mx-auto px-6"
-                              : session.messages.user().length > 1
-                                ? "pr-6 pl-18"
-                                : "px-6"),
-                        }}
-                        diffComponent={Diff}
-                      />
-                    </div>
-                  </Match>
-                  <Match when={true}>
-                    <div class="size-full flex flex-col pb-45 justify-end items-start gap-4 flex-[1_0_0] self-stretch max-w-146 mx-auto px-6">
-                      <div class="text-20-medium text-text-weaker">New session</div>
-                      <div class="flex justify-center items-center gap-3">
-                        <Icon name="folder" size="small" />
-                        <div class="text-12-medium text-text-weak">
-                          {getDirectory(sync.data.path.directory)}
-                          <span class="text-text-strong">{getFilename(sync.data.path.directory)}</span>
-                        </div>
-                      </div>
-                      <div class="flex justify-center items-center gap-3">
-                        <Icon name="pencil-line" size="small" />
-                        <div class="text-12-medium text-text-weak">
-                          Last modified&nbsp;
-                          <span class="text-text-strong">
-                            {DateTime.fromMillis(sync.data.project.time.created).toRelative()}
-                          </span>
-                        </div>
-                      </div>
-                    </div>
-                  </Match>
-                </Switch>
-                <div class="absolute inset-x-0 bottom-8 flex flex-col justify-center items-center z-50">
-                  <div class="w-full max-w-146 px-6">
-                    <PromptInput
-                      ref={(el) => {
-                        inputRef = el
-                      }}
-                    />
-                  </div>
-                </div>
-              </div>
-              <Show when={layout.review.state() === "pane" && session.diffs().length}>
                 <div
                   classList={{
-                    "relative grow pt-3 flex-1 min-h-0 border-l border-border-weak-base": true,
+                    "relative shrink-0 py-3 flex flex-col gap-6 flex-1 min-h-0 w-full": true,
+                    "max-w-146 mx-auto": !wide(),
+                  }}
+                >
+                  <Switch>
+                    <Match when={session.id}>
+                      <div class="flex items-start justify-start h-full min-h-0">
+                        <SessionMessageRail
+                          messages={session.messages.user()}
+                          current={session.messages.active()}
+                          onMessageSelect={session.messages.setActive}
+                          working={session.working()}
+                          wide={wide()}
+                        />
+                        <SessionTurn
+                          sessionID={session.id!}
+                          messageID={session.messages.active()?.id!}
+                          classes={{
+                            root: "pb-20 flex-1 min-w-0",
+                            content: "pb-20",
+                            container:
+                              "w-full " +
+                              (wide()
+                                ? "max-w-146 mx-auto px-6"
+                                : session.messages.user().length > 1
+                                  ? "pr-6 pl-18"
+                                  : "px-6"),
+                          }}
+                          diffComponent={Diff}
+                        />
+                      </div>
+                    </Match>
+                    <Match when={true}>
+                      <div class="size-full flex flex-col pb-45 justify-end items-start gap-4 flex-[1_0_0] self-stretch max-w-146 mx-auto px-6">
+                        <div class="text-20-medium text-text-weaker">New session</div>
+                        <div class="flex justify-center items-center gap-3">
+                          <Icon name="folder" size="small" />
+                          <div class="text-12-medium text-text-weak">
+                            {getDirectory(sync.data.path.directory)}
+                            <span class="text-text-strong">{getFilename(sync.data.path.directory)}</span>
+                          </div>
+                        </div>
+                        <div class="flex justify-center items-center gap-3">
+                          <Icon name="pencil-line" size="small" />
+                          <div class="text-12-medium text-text-weak">
+                            Last modified&nbsp;
+                            <span class="text-text-strong">
+                              {DateTime.fromMillis(sync.data.project.time.created).toRelative()}
+                            </span>
+                          </div>
+                        </div>
+                      </div>
+                    </Match>
+                  </Switch>
+                  <div class="absolute inset-x-0 bottom-8 flex flex-col justify-center items-center z-50">
+                    <div class="w-full max-w-146 px-6">
+                      <PromptInput
+                        ref={(el) => {
+                          inputRef = el
+                        }}
+                      />
+                    </div>
+                  </div>
+                </div>
+                <Show when={layout.review.state() === "pane" && session.diffs().length}>
+                  <div
+                    classList={{
+                      "relative grow pt-3 flex-1 min-h-0 border-l border-border-weak-base": true,
+                    }}
+                  >
+                    <SessionReview
+                      classes={{
+                        root: "pb-20",
+                        header: "px-6",
+                        container: "px-6",
+                      }}
+                      diffs={session.diffs()}
+                      diffComponent={Diff}
+                      actions={
+                        <Tooltip value="Open in tab">
+                          <IconButton
+                            icon="expand"
+                            variant="ghost"
+                            onClick={() => {
+                              layout.review.tab()
+                              session.layout.setActiveTab("review")
+                            }}
+                          />
+                        </Tooltip>
+                      }
+                    />
+                  </div>
+                </Show>
+              </div>
+            </Tabs.Content>
+            <Show when={layout.review.state() === "tab" && session.diffs().length}>
+              <Tabs.Content value="review" class="select-text flex flex-col h-full overflow-hidden">
+                <div
+                  classList={{
+                    "relative pt-3 flex-1 min-h-0 overflow-hidden": true,
                   }}
                 >
                   <SessionReview
                     classes={{
-                      root: "pb-20",
+                      root: "pb-40",
                       header: "px-6",
                       container: "px-6",
                     }}
                     diffs={session.diffs()}
                     diffComponent={Diff}
-                    actions={
-                      <Tooltip value="Open in tab">
-                        <IconButton
-                          icon="expand"
-                          variant="ghost"
-                          onClick={() => {
-                            layout.review.tab()
-                            session.layout.setActiveTab("review")
-                          }}
-                        />
-                      </Tooltip>
-                    }
+                    split
                   />
                 </div>
-              </Show>
-            </div>
-          </Tabs.Content>
-          <Show when={layout.review.state() === "tab" && session.diffs().length}>
-            <Tabs.Content value="review" class="select-text flex flex-col h-full overflow-hidden">
+              </Tabs.Content>
+            </Show>
+            <For each={session.layout.tabs.all}>
+              {(tab) => {
+                const [file] = createResource(
+                  () => tab,
+                  async (tab) => {
+                    if (tab.startsWith("file://")) {
+                      return local.file.node(tab.replace("file://", ""))
+                    }
+                    return undefined
+                  },
+                )
+                return (
+                  <Tabs.Content value={tab} class="select-text mt-3">
+                    <Switch>
+                      <Match when={file()}>
+                        {(f) => (
+                          <Code
+                            file={{ name: f().path, contents: f().content?.content ?? "" }}
+                            overflow="scroll"
+                            class="pb-40"
+                          />
+                        )}
+                      </Match>
+                    </Switch>
+                  </Tabs.Content>
+                )
+              }}
+            </For>
+          </Tabs>
+          <DragOverlay>
+            <Show when={store.activeDraggable}>
+              {(draggedFile) => {
+                const [file] = createResource(
+                  () => draggedFile(),
+                  async (tab) => {
+                    if (tab.startsWith("file://")) {
+                      return local.file.node(tab.replace("file://", ""))
+                    }
+                    return undefined
+                  },
+                )
+                return (
+                  <div class="relative px-6 h-12 flex items-center bg-background-stronger border-x border-border-weak-base border-b border-b-transparent">
+                    <Show when={file()}>{(f) => <FileVisual active file={f()} />}</Show>
+                  </div>
+                )
+              }}
+            </Show>
+          </DragOverlay>
+        </DragDropProvider>
+        <Show when={session.layout.tabs.active}>
+          <div class="absolute inset-x-0 px-6 max-w-146 flex flex-col justify-center items-center z-50 mx-auto bottom-8">
+            <PromptInput
+              ref={(el) => {
+                inputRef = el
+              }}
+            />
+          </div>
+        </Show>
+        <div class="hidden shrink-0 w-56 p-2 h-full overflow-y-auto">
+          {/* <FileTree path="" onFileClick={ handleTabClick} /> */}
+        </div>
+        <div class="hidden shrink-0 w-56 p-2">
+          <Show
+            when={local.file.changes().length}
+            fallback={<div class="px-2 text-xs text-text-muted">No changes</div>}
+          >
+            <ul class="">
+              <For each={local.file.changes()}>
+                {(path) => (
+                  <li>
+                    <button
+                      onClick={() => local.file.open(path, { view: "diff-unified", pinned: true })}
+                      class="w-full flex items-center px-2 py-0.5 gap-x-2 text-text-muted grow min-w-0 hover:bg-background-element"
+                    >
+                      <FileIcon node={{ path, type: "file" }} class="shrink-0 size-3" />
+                      <span class="text-xs text-text whitespace-nowrap">{getFilename(path)}</span>
+                      <span class="text-xs text-text-muted/60 whitespace-nowrap truncate min-w-0">
+                        {getDirectory(path)}
+                      </span>
+                    </button>
+                  </li>
+                )}
+              </For>
+            </ul>
+          </Show>
+        </div>
+        <Show when={store.fileSelectOpen}>
+          <SelectDialog
+            defaultOpen
+            title="Select file"
+            placeholder="Search files"
+            emptyMessage="No files found"
+            items={local.file.searchFiles}
+            key={(x) => x}
+            onOpenChange={(open) => setStore("fileSelectOpen", open)}
+            onSelect={(x) => {
+              if (x) {
+                local.file.open(x)
+                return session.layout.openTab("file://" + x)
+              }
+              return undefined
+            }}
+          >
+            {(i) => (
               <div
                 classList={{
-                  "relative pt-3 flex-1 min-h-0 overflow-hidden": true,
+                  "w-full flex items-center justify-between rounded-md": true,
                 }}
               >
-                <SessionReview
-                  classes={{
-                    root: "pb-40",
-                    header: "px-6",
-                    container: "px-6",
-                  }}
-                  diffs={session.diffs()}
-                  diffComponent={Diff}
-                  split
-                />
-              </div>
-            </Tabs.Content>
-          </Show>
-          <For each={session.layout.tabs.opened}>
-            {(tab) => {
-              const [file] = createResource(
-                () => tab,
-                async (tab) => {
-                  if (tab.startsWith("file://")) {
-                    return local.file.node(tab.replace("file://", ""))
-                  }
-                  return undefined
-                },
-              )
-              return (
-                <Tabs.Content value={tab} class="select-text mt-3">
-                  <Switch>
-                    <Match when={file()}>
-                      {(f) => (
-                        <Code
-                          file={{ name: f().path, contents: f().content?.content ?? "" }}
-                          overflow="scroll"
-                          class="pb-40"
-                        />
-                      )}
-                    </Match>
-                  </Switch>
-                </Tabs.Content>
-              )
-            }}
-          </For>
-        </Tabs>
-        <DragOverlay>
-          <Show when={store.activeDraggable}>
-            {(draggedFile) => {
-              const [file] = createResource(
-                () => draggedFile(),
-                async (tab) => {
-                  if (tab.startsWith("file://")) {
-                    return local.file.node(tab.replace("file://", ""))
-                  }
-                  return undefined
-                },
-              )
-              return (
-                <div class="relative px-6 h-12 flex items-center bg-background-stronger border-x border-border-weak-base border-b border-b-transparent">
-                  <Show when={file()}>{(f) => <FileVisual active file={f()} />}</Show>
-                </div>
-              )
-            }}
-          </Show>
-        </DragOverlay>
-      </DragDropProvider>
-      <Show when={session.layout.tabs.active}>
-        <div class="absolute inset-x-0 px-6 max-w-146 flex flex-col justify-center items-center z-50 mx-auto bottom-8">
-          <PromptInput
-            ref={(el) => {
-              inputRef = el
-            }}
-          />
-        </div>
-      </Show>
-      <div class="hidden shrink-0 w-56 p-2 h-full overflow-y-auto">
-        {/* <FileTree path="" onFileClick={ handleTabClick} /> */}
-      </div>
-      <div class="hidden shrink-0 w-56 p-2">
-        <Show when={local.file.changes().length} fallback={<div class="px-2 text-xs text-text-muted">No changes</div>}>
-          <ul class="">
-            <For each={local.file.changes()}>
-              {(path) => (
-                <li>
-                  <button
-                    onClick={() => local.file.open(path, { view: "diff-unified", pinned: true })}
-                    class="w-full flex items-center px-2 py-0.5 gap-x-2 text-text-muted grow min-w-0 hover:bg-background-element"
-                  >
-                    <FileIcon node={{ path, type: "file" }} class="shrink-0 size-3" />
-                    <span class="text-xs text-text whitespace-nowrap">{getFilename(path)}</span>
-                    <span class="text-xs text-text-muted/60 whitespace-nowrap truncate min-w-0">
-                      {getDirectory(path)}
+                <div class="flex items-center gap-x-2 grow min-w-0">
+                  <FileIcon node={{ path: i, type: "file" }} class="shrink-0 size-4" />
+                  <div class="flex items-center text-14-regular">
+                    <span class="text-text-weak whitespace-nowrap overflow-hidden overflow-ellipsis truncate min-w-0">
+                      {getDirectory(i)}
                     </span>
-                  </button>
-                </li>
-              )}
-            </For>
-          </ul>
+                    <span class="text-text-strong whitespace-nowrap">{getFilename(i)}</span>
+                  </div>
+                </div>
+                <div class="flex items-center gap-x-1 text-text-muted/40 shrink-0"></div>
+              </div>
+            )}
+          </SelectDialog>
         </Show>
       </div>
-      <Show when={store.fileSelectOpen}>
-        <SelectDialog
-          defaultOpen
-          title="Select file"
-          placeholder="Search files"
-          emptyMessage="No files found"
-          items={local.file.searchFiles}
-          key={(x) => x}
-          onOpenChange={(open) => setStore("fileSelectOpen", open)}
-          onSelect={(x) => {
-            if (x) {
-              local.file.open(x)
-              return session.layout.openTab("file://" + x)
-            }
-            return undefined
-          }}
+      <Show when={layout.terminal.opened()}>
+        <div
+          class="relative w-full flex flex-col shrink-0 border-t border-border-weak-base"
+          style={{ height: `${layout.terminal.height()}px` }}
         >
-          {(i) => (
-            <div
-              classList={{
-                "w-full flex items-center justify-between rounded-md": true,
-              }}
-            >
-              <div class="flex items-center gap-x-2 grow min-w-0">
-                <FileIcon node={{ path: i, type: "file" }} class="shrink-0 size-4" />
-                <div class="flex items-center text-14-regular">
-                  <span class="text-text-weak whitespace-nowrap overflow-hidden overflow-ellipsis truncate min-w-0">
-                    {getDirectory(i)}
-                  </span>
-                  <span class="text-text-strong whitespace-nowrap">{getFilename(i)}</span>
-                </div>
+          <div
+            class="absolute inset-x-0 top-0 z-10 h-2 -translate-y-1/2 cursor-ns-resize"
+            onMouseDown={(e) => {
+              e.preventDefault()
+              const startY = e.clientY
+              const startHeight = layout.terminal.height()
+              const maxHeight = window.innerHeight * 0.6
+              const minHeight = 100
+              const collapseThreshold = 50
+              let currentHeight = startHeight
+
+              document.body.style.userSelect = "none"
+              document.body.style.overflow = "hidden"
+
+              const onMouseMove = (moveEvent: MouseEvent) => {
+                const deltaY = startY - moveEvent.clientY
+                currentHeight = startHeight + deltaY
+                const clampedHeight = Math.min(maxHeight, Math.max(minHeight, currentHeight))
+                layout.terminal.resize(clampedHeight)
+              }
+
+              const onMouseUp = () => {
+                document.body.style.userSelect = ""
+                document.body.style.overflow = ""
+                document.removeEventListener("mousemove", onMouseMove)
+                document.removeEventListener("mouseup", onMouseUp)
+
+                if (currentHeight < collapseThreshold) {
+                  layout.terminal.close()
+                }
+              }
+
+              document.addEventListener("mousemove", onMouseMove)
+              document.addEventListener("mouseup", onMouseUp)
+            }}
+          />
+          <Tabs variant="alt" value={session.terminal.active()} onChange={session.terminal.open}>
+            <Tabs.List class="h-10">
+              <For each={session.terminal.all()}>
+                {(terminal) => (
+                  <Tabs.Trigger
+                    value={terminal.id}
+                    closeButton={
+                      session.terminal.all().length > 1 && (
+                        <IconButton icon="close" variant="ghost" onClick={() => session.terminal.close(terminal.id)} />
+                      )
+                    }
+                  >
+                    {terminal.title}
+                  </Tabs.Trigger>
+                )}
+              </For>
+              <div class="h-full flex items-center justify-center">
+                <Tooltip value="Open file" class="flex items-center">
+                  <IconButton icon="plus-small" variant="ghost" iconSize="large" onClick={session.terminal.new} />
+                </Tooltip>
               </div>
-              <div class="flex items-center gap-x-1 text-text-muted/40 shrink-0"></div>
-            </div>
-          )}
-        </SelectDialog>
+            </Tabs.List>
+            <For each={session.terminal.all()}>
+              {(terminal) => (
+                <Tabs.Content value={terminal.id}>
+                  <Terminal pty={terminal} onCleanup={session.terminal.update} />
+                </Tabs.Content>
+              )}
+            </For>
+          </Tabs>
+        </div>
       </Show>
     </div>
   )
