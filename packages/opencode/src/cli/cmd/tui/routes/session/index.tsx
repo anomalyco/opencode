@@ -63,7 +63,7 @@ import { useKV } from "../../context/kv.tsx"
 import { Editor } from "../../util/editor"
 import { Footer } from "./footer.tsx"
 import { extend } from "@opentui/solid"
-import { GhosttyTerminalRenderable } from "ghostty-opentui/terminal-buffer"
+import { GhosttyTerminalRenderable } from "ghostty-opentui/opentui"
 import { usePromptRef } from "../../context/prompt"
 
 declare module "@opentui/solid" {
