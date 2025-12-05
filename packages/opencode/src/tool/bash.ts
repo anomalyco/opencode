@@ -234,13 +234,15 @@ export const BashTool = Tool.define("bash", async () => {
       })
 
       const append = (chunk: Buffer) => {
-        output += chunk.toString()
-        ctx.metadata({
-          metadata: {
-            output,
-            description: params.description,
-          },
-        })
+        if (output.length <= MAX_OUTPUT_LENGTH) {
+          output += chunk.toString()
+          ctx.metadata({
+            metadata: {
+              output,
+              description: params.description,
+            },
+          })
+        }
       }
 
       proc.stdout?.on("data", append)
