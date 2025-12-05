@@ -100,6 +100,27 @@ If you need to pass environment variables:
 
 ---
 
+### CodeCompanion.nvim
+
+To use OpenCode as an ACP agent in [CodeCompanion.nvim](https://github.com/olimorris/codecompanion.nvim), add the following to your Neovim config:
+
+```lua
+require("codecompanion").setup({
+  strategies = {
+    chat = {
+      adapter = {
+        name = "opencode",
+        model = "claude-sonnet-4",
+      },
+    },
+  },
+})
+```
+
+This config sets up CodeCompanion to use OpenCode as the ACP agent for chat.
+
+If you need to pass environment variables (like `OPENCODE_API_KEY`), refer to [Configuring Adapters: Environment Variables](https://codecompanion.olimorris.dev/configuration/adapters#environment-variables-setting-an-api-key) in the CodeCompanion.nvim documentation for full details.
+
 ## Support
 
 OpenCode works the same via ACP as it does in the terminal. All features are supported:

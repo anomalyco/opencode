@@ -55,4 +55,7 @@ jobs:
 
           Feel free to ignore if none of these address your specific case.'
 
+          Additionally, if the issue mentions keybinds, keyboard shortcuts, or key bindings, please add a comment mentioning the pinned keybinds issue #4997:
+          'For keybind-related issues, please also check our pinned keybinds documentation: #4997'
+
           If no clear duplicates are found, do not comment."
