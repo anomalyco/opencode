@@ -5,6 +5,8 @@ import { $ } from "bun"
 import { Storage } from "../storage/storage"
 import { Log } from "../util/log"
 import { Flag } from "@/flag/flag"
+import { Session } from "../session"
+import { work } from "../util/queue"
 
 export namespace Project {
   const log = Log.create({ service: "project" })
@@ -64,17 +66,6 @@ export namespace Project {
       if (id) Bun.file(path.join(git, "opencode")).write(id)
     }
     timer.stop()
-    if (!id) {
-      const project: Info = {
-        id: "global",
-        worktree: "/",
-        time: {
-          created: Date.now(),
-        },
-      }
-      await Storage.write<Info>(["project", "global"], project)
-      return project
-    }
     worktree = await $`git rev-parse --show-toplevel`
       .quiet()
       .nothrow()
@@ -87,8 +78,13 @@ export namespace Project {
       .cwd(worktree)
       .text()
       .then((x) => path.resolve(worktree, x.trim()))
+    const projectID = id || "global"
+    const existing = id ? await Storage.read<Info>(["project", id]).catch(() => undefined) : undefined
+    if (!existing) {
+      await migrateFromGlobal(projectID, worktree)
+    }
     const project: Info = {
-      id,
+      id: projectID,
       worktree,
       vcsDir,
       vcs: "git",
@@ -96,8 +92,32 @@ export namespace Project {
         created: Date.now(),
       },
     }
-    await Storage.write<Info>(["project", id], project)
+    await Storage.write<Info>(["project", projectID], project)
     return project
+  }
+
+  async function migrateFromGlobal(newProjectID: string, worktree: string) {
+    const globalProject = await Storage.read<Info>(["project", "global"]).catch(() => undefined)
+    if (!globalProject) return
+
+    const globalSessions = await Storage.list(["session", "global"]).catch(() => [])
+    if (globalSessions.length === 0) return
+
+    log.info("migrating sessions from global", { newProjectID, worktree, count: globalSessions.length })
+
+    await work(10, globalSessions, async (key) => {
+      const sessionID = key[key.length - 1]
+      const session = await Storage.read<Session.Info>(key).catch(() => undefined)
+      if (!session) return
+      if (session.directory && session.directory !== worktree) return
+
+      session.projectID = newProjectID
+      log.info("migrating session", { sessionID, from: "global", to: newProjectID })
+      await Storage.write(["session", newProjectID, sessionID], session)
+      await Storage.remove(key)
+    }).catch((error) => {
+      log.error("failed to migrate sessions from global to project", { error, projectId: newProjectID })
+    })
   }
 
   export async function setInitialized(projectID: string) {

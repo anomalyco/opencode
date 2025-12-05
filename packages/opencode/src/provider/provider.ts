@@ -279,7 +279,7 @@ export namespace Provider {
           project,
           location,
         },
-        async getModel(sdk, modelID) {
+        async getModel(sdk: any, modelID) {
           const id = String(modelID).trim()
           return sdk.languageModel(id)
         },
@@ -294,6 +294,9 @@ export namespace Provider {
       return {
         autoload: !!serviceKey,
         options: serviceKey ? { serviceKey, deploymentId, resourceGroup } : {},
+        async getModel(sdk: any, modelID: string) {
+          return sdk(modelID)
+        },
       }
     },
     zenmux: async () => {
@@ -487,6 +490,10 @@ export namespace Provider {
         ...githubCopilot,
         id: "github-copilot-enterprise",
         name: "GitHub Copilot Enterprise",
+        models: mapValues(githubCopilot.models, (model) => ({
+          ...model,
+          providerID: "github-copilot-enterprise",
+        })),
       }
     }
 

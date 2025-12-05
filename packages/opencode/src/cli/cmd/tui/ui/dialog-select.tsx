@@ -299,11 +299,13 @@ function Option(props: {
         fg={props.active ? fg : props.current ? theme.primary : theme.text}
         attributes={props.active ? TextAttributes.BOLD : undefined}
         overflow="hidden"
-        wrapMode="none"
+        wrapMode="word"
         paddingLeft={3}
       >
         {Locale.truncate(props.title, 62)}
-        <span style={{ fg: props.active ? fg : theme.textMuted }}> {props.description}</span>
+        <Show when={props.description}>
+          <span style={{ fg: props.active ? fg : theme.textMuted }}> {props.description}</span>
+        </Show>
       </text>
       <Show when={props.footer}>
         <box flexShrink={0}>
