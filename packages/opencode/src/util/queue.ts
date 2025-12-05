@@ -24,7 +24,7 @@ export async function work<T>(concurrency: number, items: T[], fn: (item: T) => 
     Array.from({ length: concurrency }, async () => {
       while (true) {
         const item = pending.pop()
-        if (!item) return
+        if (item === undefined) return
         await fn(item)
       }
     }),
