@@ -1,4 +1,4 @@
-import { spawn, type IPty } from "bun-pty"
+import { type IPty } from "bun-pty"
 import z from "zod"
 import { Identifier } from "../id/id"
 import { Log } from "../util/log"
@@ -6,9 +6,33 @@ import { Bus } from "../bus"
 import type { WSContext } from "hono/ws"
 import { Instance } from "../project/instance"
 import { shell } from "@opencode-ai/util/shell"
+import { lazy } from "@opencode-ai/util/lazy"
+import {} from "process"
 
 export namespace Pty {
   const log = Log.create({ service: "pty" })
+
+  const pty = lazy(async () => {
+    const path = require(
+      `bun-pty/rust-pty/target/release/${
+        process.platform === "win32"
+          ? "rust_pty.dll"
+          : process.platform === "linux" && process.arch === "x64"
+            ? "librust_pty.so"
+            : process.platform === "darwin" && process.arch === "x64"
+              ? "librust_pty.dylib"
+              : process.platform === "darwin" && process.arch === "arm64"
+                ? "librust_pty_arm64.dylib"
+                : process.platform === "linux" && process.arch === "arm64"
+                  ? "librust_pty_arm64.so"
+                  : ""
+      }`,
+    )
+    console.log(path)
+    process.env.BUN_PTY_LIB = path
+    const { spawn } = await import("bun-pty")
+    return spawn
+  })
 
   export const Info = z
     .object({
@@ -91,6 +115,7 @@ export namespace Pty {
     const env = { ...process.env, ...input.env } as Record<string, string>
     log.info("creating session", { id, cmd: command, args, cwd })
 
+    const spawn = await pty()
     const ptyProcess = spawn(command, args, {
       name: "xterm-256color",
       cwd,
