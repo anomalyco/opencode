@@ -63,6 +63,7 @@ import { useKV } from "../../context/kv.tsx"
 import { Editor } from "../../util/editor"
 import stripAnsi from "strip-ansi"
 import { Footer } from "./footer.tsx"
+import { usePromptRef } from "../../context/prompt"
 
 addDefaultParsers(parsers.parsers)
 
@@ -99,6 +100,7 @@ export function Session() {
   const sync = useSync()
   const kv = useKV()
   const { theme } = useTheme()
+  const promptRef = usePromptRef()
   const session = createMemo(() => sync.session.get(route.sessionID)!)
   const messages = createMemo(() => sync.data.message[route.sessionID] ?? [])
   const permissions = createMemo(() => sync.data.permission[route.sessionID] ?? [])
@@ -118,6 +120,7 @@ export function Session() {
   const [showTimestamps, setShowTimestamps] = createSignal(kv.get("timestamps", "hide") === "show")
   const [usernameVisible, setUsernameVisible] = createSignal(kv.get("username_visible", true))
   const [showDetails, setShowDetails] = createSignal(kv.get("tool_details_visibility", true))
+  const [showScrollbar, setShowScrollbar] = createSignal(kv.get("scrollbar_visible", false))
   const [diffWrapMode, setDiffWrapMode] = createSignal<"word" | "none">("word")
 
   const wide = createMemo(() => dimensions().width > 120)
@@ -138,7 +141,7 @@ export function Session() {
       return new CustomSpeedScroll(tui.scroll_speed)
     }
 
-    return new CustomSpeedScroll(process.platform === "win32" ? 3 : 1)
+    return new CustomSpeedScroll(3)
   })
 
   createEffect(async () => {
@@ -483,11 +486,26 @@ export function Session() {
     {
       title: showDetails() ? "Hide tool details" : "Show tool details",
       value: "session.toggle.actions",
+      keybind: "tool_details",
       category: "Session",
       onSelect: (dialog) => {
         const newValue = !showDetails()
         setShowDetails(newValue)
         kv.set("tool_details_visibility", newValue)
+        dialog.clear()
+      },
+    },
+    {
+      title: "Toggle session scrollbar",
+      value: "session.toggle.scrollbar",
+      keybind: "scrollbar_toggle",
+      category: "Session",
+      onSelect: (dialog) => {
+        setShowScrollbar((prev) => {
+          const next = !prev
+          kv.set("scrollbar_visible", next)
+          return next
+        })
         dialog.clear()
       },
     },
@@ -555,6 +573,37 @@ export function Session() {
       onSelect: (dialog) => {
         scroll.scrollTo(scroll.scrollHeight)
         dialog.clear()
+      },
+    },
+    {
+      title: "Jump to last user message",
+      value: "session.messages_last_user",
+      keybind: "messages_last_user",
+      category: "Session",
+      onSelect: () => {
+        const messages = sync.data.message[route.sessionID]
+        if (!messages || !messages.length) return
+
+        // Find the most recent user message with non-ignored, non-synthetic text parts
+        for (let i = messages.length - 1; i >= 0; i--) {
+          const message = messages[i]
+          if (!message || message.role !== "user") continue
+
+          const parts = sync.data.part[message.id]
+          if (!parts || !Array.isArray(parts)) continue
+
+          const hasValidTextPart = parts.some(
+            (part) => part && part.type === "text" && !part.synthetic && !part.ignored,
+          )
+
+          if (hasValidTextPart) {
+            const child = scroll.getChildren().find((child) => {
+              return child.id === message.id
+            })
+            if (child) scroll.scrollBy(child.y - scroll.y - 1)
+            break
+          }
+        }
       },
     },
     {
@@ -806,9 +855,9 @@ export function Session() {
             </Show>
             <scrollbox
               ref={(r) => (scroll = r)}
-              scrollbarOptions={{
-                paddingLeft: 2,
-                visible: false,
+              verticalScrollbarOptions={{
+                paddingLeft: 1,
+                visible: showScrollbar(),
                 trackOptions: {
                   backgroundColor: theme.backgroundElement,
                   foregroundColor: theme.border,
@@ -917,7 +966,10 @@ export function Session() {
             </scrollbox>
             <box flexShrink={0}>
               <Prompt
-                ref={(r) => (prompt = r)}
+                ref={(r) => {
+                  prompt = r
+                  promptRef.set(r)
+                }}
                 disabled={permissions().length > 0}
                 onSubmit={() => {
                   toBottom()
