@@ -1065,11 +1065,12 @@ function UserMessage(props: {
               </box>
             </Show>
             <text fg={theme.textMuted}>
-              {ctx.usernameVisible() ? `${sync.data.config.username ?? "You"} ` : "You"}{" "}
+              {ctx.usernameVisible() ? `${sync.data.config.username ?? "You"}` : "You"}
               <Show
                 when={queued()}
                 fallback={
                   <span style={{ fg: theme.textMuted }}>
+                    {ctx.usernameVisible() ? " · " : " "}
                     {ctx.showTimestamps()
                       ? Locale.todayTimeOrDateTime(props.message.time.created)
                       : Locale.time(props.message.time.created)}
