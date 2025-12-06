@@ -69,11 +69,65 @@ export namespace Command {
     return result
   })
 
+  function createBuiltInCommands() {
+    return {
+      [Default.INIT]: {
+        name: Default.INIT,
+        description: "create/update AGENTS.md",
+        template: PROMPT_INITIALIZE.replace("${path}", Instance.worktree),
+      },
+      [Default.REVIEW]: {
+        name: Default.REVIEW,
+        description: "review changes [commit|branch|pr], defaults to uncommitted",
+        template: PROMPT_REVIEW.replace("${path}", Instance.worktree),
+        subtask: true,
+      },
+    } as Record<string, Info>
+  }
+
+  async function loadFreshCommands(): Promise<Record<string, Info>> {
+    const result = createBuiltInCommands()
+    const directories = await Config.directories()
+
+    // Reload commands from markdown files in all config directories
+    for (const dir of directories) {
+      const freshCommands = await Config.loadCommand(dir)
+      for (const [name, command] of Object.entries(freshCommands)) {
+        result[name] = {
+          name,
+          agent: command.agent,
+          model: command.model,
+          description: command.description,
+          template: command.template,
+          subtask: command.subtask,
+        }
+      }
+    }
+
+    return result
+  }
+
   export async function get(name: string) {
+    const cfg = await Config.get()
+
+    // If caching is disabled, reload commands fresh from config each time
+    if (cfg.experimental?.cache_command_markdown_files === false) {
+      const fresh = await loadFreshCommands()
+      return fresh[name]
+    }
+
     return state().then((x) => x[name])
   }
 
   export async function list() {
+    const cfg = await Config.get()
+
+    // If caching is disabled, reload commands fresh from config each time
+    if (cfg.experimental?.cache_command_markdown_files === false) {
+      const fresh = await loadFreshCommands()
+      return Object.values(fresh)
+    }
+
     return state().then((x) => Object.values(x))
   }
 }

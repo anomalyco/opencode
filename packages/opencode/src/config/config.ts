@@ -177,43 +177,44 @@ export namespace Config {
     ).catch(() => {})
   }
 
-  const COMMAND_GLOB = new Bun.Glob("command/**/*.md")
-  async function loadCommand(dir: string) {
-    const result: Record<string, Command> = {}
-    for await (const item of COMMAND_GLOB.scan({
-      absolute: true,
-      followSymlinks: true,
-      dot: true,
-      cwd: dir,
-    })) {
-      const md = await ConfigMarkdown.parse(item)
-      if (!md.data) continue
+   const COMMAND_GLOB = new Bun.Glob("command/**/*.md")
+   
+   export async function loadCommand(dir: string) {
+     const result: Record<string, Command> = {}
+     for await (const item of COMMAND_GLOB.scan({
+       absolute: true,
+       followSymlinks: true,
+       dot: true,
+       cwd: dir,
+     })) {
+       const md = await ConfigMarkdown.parse(item)
+       if (!md.data) continue
 
-      const name = (() => {
-        const patterns = ["/.opencode/command/", "/command/"]
-        const pattern = patterns.find((p) => item.includes(p))
+       const name = (() => {
+         const patterns = ["/.opencode/command/", "/command/"]
+         const pattern = patterns.find((p) => item.includes(p))
 
-        if (pattern) {
-          const index = item.indexOf(pattern)
-          return item.slice(index + pattern.length, -3)
-        }
-        return path.basename(item, ".md")
-      })()
+         if (pattern) {
+           const index = item.indexOf(pattern)
+           return item.slice(index + pattern.length, -3)
+         }
+         return path.basename(item, ".md")
+       })()
 
-      const config = {
-        name,
-        ...md.data,
-        template: md.content.trim(),
-      }
-      const parsed = Command.safeParse(config)
-      if (parsed.success) {
-        result[config.name] = parsed.data
-        continue
-      }
-      throw new InvalidError({ path: item }, { cause: parsed.error })
-    }
-    return result
-  }
+       const config = {
+         name,
+         ...md.data,
+         template: md.content.trim(),
+       }
+       const parsed = Command.safeParse(config)
+       if (parsed.success) {
+         result[config.name] = parsed.data
+         continue
+       }
+       throw new InvalidError({ path: item }, { cause: parsed.error })
+     }
+     return result
+   }
 
   const AGENT_GLOB = new Bun.Glob("agent/**/*.md")
   async function loadAgent(dir: string) {
@@ -650,43 +651,48 @@ export namespace Config {
           url: z.string().optional().describe("Enterprise URL"),
         })
         .optional(),
-      experimental: z
-        .object({
-          hook: z
-            .object({
-              file_edited: z
-                .record(
-                  z.string(),
-                  z
-                    .object({
-                      command: z.string().array(),
-                      environment: z.record(z.string(), z.string()).optional(),
-                    })
-                    .array(),
-                )
-                .optional(),
-              session_completed: z
-                .object({
-                  command: z.string().array(),
-                  environment: z.record(z.string(), z.string()).optional(),
-                })
-                .array()
-                .optional(),
-            })
-            .optional(),
-          chatMaxRetries: z.number().optional().describe("Number of retries for chat completions on failure"),
-          disable_paste_summary: z.boolean().optional(),
-          batch_tool: z.boolean().optional().describe("Enable the batch tool"),
-          openTelemetry: z
-            .boolean()
-            .optional()
-            .describe("Enable OpenTelemetry spans for AI SDK calls (using the 'experimental_telemetry' flag)"),
-          primary_tools: z
-            .array(z.string())
-            .optional()
-            .describe("Tools that should only be available to primary agents."),
-        })
-        .optional(),
+       experimental: z
+         .object({
+           hook: z
+             .object({
+               file_edited: z
+                 .record(
+                   z.string(),
+                   z
+                     .object({
+                       command: z.string().array(),
+                       environment: z.record(z.string(), z.string()).optional(),
+                     })
+                     .array(),
+                 )
+                 .optional(),
+               session_completed: z
+                 .object({
+                   command: z.string().array(),
+                   environment: z.record(z.string(), z.string()).optional(),
+                 })
+                 .array()
+                 .optional(),
+             })
+             .optional(),
+           chatMaxRetries: z.number().optional().describe("Number of retries for chat completions on failure"),
+           disable_paste_summary: z.boolean().optional(),
+           batch_tool: z.boolean().optional().describe("Enable the batch tool"),
+           openTelemetry: z
+             .boolean()
+             .optional()
+             .describe("Enable OpenTelemetry spans for AI SDK calls (using the 'experimental_telemetry' flag)"),
+           primary_tools: z
+             .array(z.string())
+             .optional()
+             .describe("Tools that should only be available to primary agents."),
+           cache_command_markdown_files: z
+             .boolean()
+             .optional()
+             .default(true)
+             .describe("Cache command markdown files on first load. Set to false to reload command files on every execution."),
+         })
+         .optional(),
     })
     .strict()
     .meta({
