@@ -141,23 +141,24 @@ export namespace Session {
       messageID: Identifier.schema("message").optional(),
     }),
     async (input) => {
+      const originalSession = await get(input.sessionID)
       const session = await createNext({
-        directory: Instance.directory,
+        directory: originalSession.directory,
+        parentID: input.sessionID,
       })
+
       const msgs = await messages({ sessionID: input.sessionID })
       for (const msg of msgs) {
-        if (input.messageID && msg.info.id >= input.messageID) break
-        const cloned = await updateMessage({
+        if (input.messageID && msg.info.id > input.messageID) break
+
+        await Storage.write(["message", session.id, msg.info.id], {
           ...msg.info,
           sessionID: session.id,
-          id: Identifier.ascending("message"),
         })
 
         for (const part of msg.parts) {
-          await updatePart({
+          await Storage.write(["part", msg.info.id, part.id], {
             ...part,
-            id: Identifier.ascending("part"),
-            messageID: cloned.id,
             sessionID: session.id,
           })
         }
