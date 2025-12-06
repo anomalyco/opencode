@@ -328,8 +328,17 @@ export namespace AgentSwarm {
     }
 
     private async runTask(task: SwarmTask): Promise<any> {
-      // Actual task execution logic would interface with agents
-      return { success: true, data: `Completed: ${task.description}` }
+      // Find the assigned agent
+      if (!task.assignedAgent) {
+        throw new Error(`No agent assigned to task ${task.id}`)
+      }
+      const agent = this.state.agents?.get(task.assignedAgent);
+      if (!agent) {
+        throw new Error(`Agent ${task.assignedAgent} not found for task ${task.id}`)
+      }
+      // Execute the task using the agent
+      // Assuming Agent has an executeTask method
+      return await agent.executeTask(task);
     }
 
     private timeout(ms: number): Promise<never> {
