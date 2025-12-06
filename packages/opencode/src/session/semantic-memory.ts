@@ -466,7 +466,25 @@ export namespace CodeMemory {
     ): boolean {
       // Check if content violates the decision
       // This is simplified - real implementation would be more sophisticated
-      return false
+      // Basic implementation: if decision says "do not use X" and content contains X, return true
+      const lowerDecision = decision.decision.toLowerCase();
+      const lowerContent = content.toLowerCase();
+      const doNotMatch = lowerDecision.match(/do not use ([\w\-]+)/);
+      if (doNotMatch) {
+        const forbidden = doNotMatch[1];
+        if (lowerContent.includes(forbidden)) {
+          return true;
+        }
+      }
+      // Also check for "avoid X"
+      const avoidMatch = lowerDecision.match(/avoid ([\w\-]+)/);
+      if (avoidMatch) {
+        const forbidden = avoidMatch[1];
+        if (lowerContent.includes(forbidden)) {
+          return true;
+        }
+      }
+      return false;
     }
 
     private isSimilar(text1: string, text2: string): boolean {
