@@ -5,6 +5,7 @@ import { Hono } from "hono"
 import { cors } from "hono/cors"
 import { stream, streamSSE } from "hono/streaming"
 import { proxy } from "hono/proxy"
+import { rateLimitMiddleware } from "hono/rate-limit"
 import { Session } from "../session"
 import z from "zod"
 import { Provider } from "../provider/provider"
@@ -93,6 +94,10 @@ export namespace Server {
           timer.stop()
         }
       })
+      .use(rateLimitMiddleware({
+        windowMs: 15 * 60 * 1000, // 15 minutes
+        limit: 100, // limit each IP to 100 requests per windowMs
+      }))
       .use(cors())
       .get(
         "/global/event",
