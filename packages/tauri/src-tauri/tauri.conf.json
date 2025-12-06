@@ -26,7 +26,7 @@
   },
   "plugins": {
     "updater": {
-      "pubkey": "dW50cnVzdGVkIGNvbW1lbnQ6IG1pbmlzaWduIHB1YmxpYyBrZXk6IDgxNjQ5OUExQjg2MEI3ODAKUldTQXQyQzRvWmxrZ2VOU09ta1IwSVpKSlQ1ZjJsRVh3cmRZcEZKUlF2MzBpTHcwWU82WWRLOXIK",
+      "pubkey": "dW50cnVzdGVkIGNvbW1lbnQ6IG1pbmlzaWduIHB1YmxpYyBrZXk6IEYwMDM5Nzg5OUMzOUExMDQKUldRRW9UbWNpWmNEOENYT01CV0lhOXR1UFhpaXJsK1Z3aU9lZnNtNzE0TDROWVMwVW9XQnFOelkK",
       "endpoints": ["https://github.com/brendonovich/opencode/releases/latest/download/latest.json"]
     }
   }
