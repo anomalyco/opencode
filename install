@@ -99,7 +99,9 @@ else
     fi
 fi
 
-INSTALL_DIR=$HOME/.opencode/bin
+XDG_DATA_HOME="${XDG_DATA_HOME:-$HOME/.local/share}"
+INSTALL_DIR="$XDG_DATA_HOME/opencode/bin"
+LEGACY_DIR="$HOME/.opencode/bin"
 mkdir -p "$INSTALL_DIR"
 
 if [ -z "$requested_version" ]; then
@@ -144,6 +146,19 @@ check_version() {
         else
             print_message info "${MUTED}Version ${NC}$specific_version${MUTED} already installed"
             exit 0
+        fi
+    fi
+}
+
+migrate_legacy_installation() {
+    # Migrate from ~/.opencode/bin to XDG location if needed
+    if [ -d "$LEGACY_DIR" ] && [ "$LEGACY_DIR" != "$INSTALL_DIR" ]; then
+        if [ -f "$LEGACY_DIR/opencode" ]; then
+            print_message info "${MUTED}Migrating from ${NC}$LEGACY_DIR${MUTED} to ${NC}$INSTALL_DIR"
+            mv "$LEGACY_DIR/opencode" "$INSTALL_DIR/opencode" 2>/dev/null || true
+            # Try to clean up empty directories
+            rmdir "$LEGACY_DIR" 2>/dev/null || true
+            rmdir "$HOME/.opencode" 2>/dev/null || true
         fi
     fi
 }
@@ -259,6 +274,7 @@ download_and_install() {
 }
 
 check_version
+migrate_legacy_installation
 download_and_install
 
 
