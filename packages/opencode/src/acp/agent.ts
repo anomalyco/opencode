@@ -24,6 +24,7 @@ import type { ACPConfig, ACPSessionState } from "./types"
 import { Provider } from "../provider/provider"
 import { Installation } from "@/installation"
 import { MessageV2 } from "@/session/message-v2"
+import { Session } from "@/session"
 import { Config } from "@/config/config"
 import { MCP } from "@/mcp"
 import { Todo } from "@/session/todo"
@@ -416,9 +417,17 @@ export namespace ACP {
     }
 
     async loadSession(params: LoadSessionRequest) {
-      const directory = params.cwd
-      const model = await defaultModel(this.config, directory)
       const sessionId = params.sessionId
+
+      const existingSession = await this.sessionManager.load(sessionId)
+      if (!existingSession) {
+        throw RequestError.invalidParams(JSON.stringify({ error: `Session not found: ${sessionId}` }))
+      }
+
+      const directory = existingSession.cwd
+      const model = existingSession.model ?? (await defaultModel(this.config, directory))
+
+      this.setupEventSubscriptions(existingSession)
 
       const providers = await this.sdk.config
         .providers({ throwOnError: true, query: { directory } })
@@ -527,6 +536,8 @@ export namespace ACP {
         })
       }, 0)
 
+      await this.replaySessionHistory(sessionId)
+
       return {
         sessionId,
         models: {
@@ -538,6 +549,80 @@ export namespace ACP {
           currentModeId,
         },
         _meta: {},
+      }
+    }
+
+    private async replaySessionHistory(sessionId: string) {
+      try {
+        const messages = await Session.messages({ sessionID: sessionId })
+
+        for (const msg of messages) {
+          if (msg.info.role === "user") {
+            for (const part of msg.parts) {
+              if (part.type === "text") {
+                this.connection.sessionUpdate({
+                  sessionId,
+                  update: {
+                    sessionUpdate: "user_message_chunk",
+                    content: { type: "text", text: part.text },
+                  },
+                })
+              }
+            }
+          } else if (msg.info.role === "assistant") {
+            for (const part of msg.parts) {
+              if (part.type === "text") {
+                this.connection.sessionUpdate({
+                  sessionId,
+                  update: {
+                    sessionUpdate: "agent_message_chunk",
+                    content: { type: "text", text: part.text },
+                  },
+                })
+              } else if (part.type === "reasoning") {
+                this.connection.sessionUpdate({
+                  sessionId,
+                  update: {
+                    sessionUpdate: "agent_thought_chunk",
+                    content: { type: "text", text: part.text },
+                  },
+                })
+              } else if (part.type === "tool") {
+                const toolState = part.state
+                this.connection.sessionUpdate({
+                  sessionId,
+                  update: {
+                    sessionUpdate: "tool_call",
+                    toolCallId: part.callID,
+                    title: part.tool,
+                    rawInput: toolState.input,
+                    kind: "other",
+                    status: "pending",
+                    locations: [],
+                    _meta: {},
+                  },
+                })
+
+                if (toolState.status === "completed" || toolState.status === "error") {
+                  this.connection.sessionUpdate({
+                    sessionId,
+                    update: {
+                      sessionUpdate: "tool_call_update",
+                      toolCallId: part.callID,
+                      status: toolState.status === "completed" ? "completed" : "failed",
+                      rawOutput: { content: toolState.status === "completed" ? toolState.output : toolState.error },
+                      _meta: {},
+                    },
+                  })
+                }
+              }
+            }
+          }
+        }
+
+        log.info("replayed_session_history", { sessionId, messageCount: messages.length })
+      } catch (error) {
+        log.error("failed to replay session history", { sessionId, error })
       }
     }
 
