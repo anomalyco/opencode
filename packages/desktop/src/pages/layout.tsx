@@ -35,7 +35,7 @@ export default function Layout(props: ParentProps) {
 
   return (
     <div class="relative h-screen flex flex-col">
-      <header class="h-12 shrink-0 bg-background-base border-b border-border-weak-base flex">
+      <header class="h-12 shrink-0 bg-background-base border-b border-border-weak-base flex" data-tauri-drag-region>
         <A
           href="/"
           classList={{
@@ -44,6 +44,7 @@ export default function Layout(props: ParentProps) {
             "border-r border-border-weak-base": true,
           }}
           style={{ width: layout.sidebar.opened() ? `${layout.sidebar.width()}px` : undefined }}
+          data-tauri-drag-region
         >
           <Mark class="shrink-0" />
         </A>
@@ -215,7 +216,7 @@ export default function Layout(props: ParentProps) {
                                   >
                                     <Tooltip placement="right" value={session.title}>
                                       <div
-                                        class="w-full px-2 py-1 rounded-md 
+                                        class="w-full px-2 py-1 rounded-md
                                                group-data-[active=true]/session:bg-surface-raised-base-hover
                                                group-hover/session:bg-surface-raised-base-hover
                                                group-focus/session:bg-surface-raised-base-hover"
