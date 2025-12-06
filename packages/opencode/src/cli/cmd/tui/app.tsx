@@ -169,6 +169,26 @@ function App() {
     console.log(JSON.stringify(route.data))
   })
 
+  // Update terminal window title based on current route and session
+  createEffect(() => {
+    if (route.data.type === "home") {
+      renderer.setTerminalTitle("opencode")
+      return
+    }
+
+    if (route.data.type === "session") {
+      const session = sync.session.get(route.data.sessionID)
+      if (!session || SessionApi.isDefaultTitle(session.title)) {
+        renderer.setTerminalTitle("opencode")
+        return
+      }
+
+      // Truncate title to 40 chars max
+      const title = session.title.length > 40 ? session.title.slice(0, 37) + "..." : session.title
+      renderer.setTerminalTitle(`oc | ${title}`)
+    }
+  })
+
   const args = useArgs()
   onMount(() => {
     batch(() => {
