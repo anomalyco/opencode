@@ -683,27 +683,82 @@ function analyzeFunctionLengths(content: string): Array<{ name: string; lines: n
 }
 
 function calculateComplexity(content: string): number {
-  return 5
+  // Cyclomatic complexity: count control flow statements
+  const controlFlowKeywords = [
+    "if", "for", "while", "case", "catch", "throw", "&&", "||", "?", "else if"
+  ];
+  let complexity = 1; // base complexity
+  const lines = content.split("\n");
+  for (const line of lines) {
+    for (const keyword of controlFlowKeywords) {
+      if (line.includes(keyword)) {
+        complexity++;
+      }
+    }
+  }
+  return complexity;
 }
 
 function findMagicNumbers(content: string): Array<{ value: number; line: number }> {
-  return []
+  // Find numeric literals not part of obvious constants or declarations
+  const results: Array<{ value: number; line: number }> = [];
+  const lines = content.split("\n");
+  const magicNumberRegex = /\b(?<!const\s+|let\s+|var\s+)[-+]?\d+(\.\d+)?\b/g;
+  lines.forEach((line, i) => {
+    const matches = line.match(magicNumberRegex);
+    if (matches) {
+      for (const match of matches) {
+        results.push({ value: Number(match), line: i + 1 });
+      }
+    }
+  });
+  return results;
 }
 
 async function checkForTestFile(file: string): Promise<boolean> {
-  return false
+  // Check if file path or name suggests it's a test file
+  const testPatterns = [/test/i, /\.spec\./i, /\.test\./i, /__tests__/i];
+  return testPatterns.some((pat) => pat.test(file));
 }
 
 function findErrorPaths(content: string): Array<{ line: number }> {
-  return []
+  // Find lines with error handling
+  const results: Array<{ line: number }> = [];
+  const errorRegex = /(catch|throw|console\.error|process\.exit|Error\()/;
+  const lines = content.split("\n");
+  lines.forEach((line, i) => {
+    if (errorRegex.test(line)) {
+      results.push({ line: i + 1 });
+    }
+  });
+  return results;
 }
 
 function findPublicFunctions(content: string): Array<{ name: string; line: number }> {
-  return []
+  // Find exported/public functions
+  const results: Array<{ name: string; line: number }> = [];
+  const lines = content.split("\n");
+  const exportFuncRegex = /(export\s+(function|const|let|var|async function)\s+([a-zA-Z0-9_]+))/;
+  lines.forEach((line, i) => {
+    const match = line.match(exportFuncRegex);
+    if (match) {
+      results.push({ name: match[3], line: i + 1 });
+    }
+  });
+  return results;
 }
 
 function hasDocumentation(content: string, line: number): boolean {
-  return false
+  // Check if the previous lines contain a comment block
+  const lines = content.split("\n");
+  let i = line - 2; // line is 1-based, check above
+  while (i >= 0 && lines[i].trim() === "") {
+    i--;
+  }
+  if (i >= 0 && (lines[i].trim().startsWith("//") || lines[i].trim().startsWith("/*") || lines[i].trim().startsWith("*"))) {
+    return true;
+  }
+  return false;
 }
 
 function findTodos(content: string): Array<{ line: number; text: string }> {
