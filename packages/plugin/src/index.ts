@@ -13,6 +13,7 @@ import type {
 
 import type { BunShell } from "./shell"
 import { type ToolDefinition } from "./tool"
+import { dir } from "console"
 
 export * from "./tool"
 
@@ -172,7 +173,7 @@ export interface Hooks {
   "chat.messages.transform"?: (
     input: {},
     output: {
-      messages: import("ai").ModelMessage[]
+      messages: any[]
     },
   ) => Promise<void>
 }
