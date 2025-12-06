@@ -106,7 +106,6 @@ export const BashTool = Tool.define("bash", async () => {
       if (params.timeout !== undefined && params.timeout < 0) {
         throw new Error(`Invalid timeout value: ${params.timeout}. Timeout must be a positive number.`)
       }
-      const timeout = params.timeout ?? DEFAULT_TIMEOUT
       const tree = await parser().then((p) => p.parse(params.command))
       if (!tree) {
         throw new Error("Failed to parse command")
@@ -144,6 +143,14 @@ export const BashTool = Tool.define("bash", async () => {
       await checkExternalDirectory(cwd)
 
       const permissions = agent.permission.bash
+      const agentBashTimeout = agent.options.bash_timeout as number | undefined
+      const agentBashTimeoutMax = agent.options.bash_timeout_max as number | undefined
+      const defaultTimeout = agentBashTimeout ?? DEFAULT_TIMEOUT
+      const maxTimeout = agentBashTimeoutMax ?? MAX_TIMEOUT
+      // Take the greater of defaultTimeout and params.timeout (if provided)
+      const baseTimeout = params.timeout !== undefined ? Math.max(defaultTimeout, params.timeout) : defaultTimeout
+      // Cap at maxTimeout
+      const timeout = Math.min(baseTimeout, maxTimeout)
 
       const askPatterns = new Set<string>()
       for (const node of tree.rootNode.descendantsOfType("command")) {
@@ -242,6 +249,7 @@ export const BashTool = Tool.define("bash", async () => {
         metadata: {
           output: "",
           description: params.description,
+          timeout,
         },
       })
 
@@ -356,6 +364,7 @@ export const BashTool = Tool.define("bash", async () => {
           output,
           exit: proc.exitCode,
           description: params.description,
+          timeout,
         },
         output,
       }

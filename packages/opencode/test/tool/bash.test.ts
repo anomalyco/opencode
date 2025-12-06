@@ -3,6 +3,8 @@ import path from "path"
 import { BashTool } from "../../src/tool/bash"
 import { Instance } from "../../src/project/instance"
 import { Permission } from "../../src/permission"
+import { Agent } from "../../src/agent/agent"
+import { tmpdir } from "../fixture/fixture"
 
 const ctx = {
   sessionID: "test",
@@ -30,6 +32,110 @@ describe("tool.bash", () => {
         )
         expect(result.metadata.exit).toBe(0)
         expect(result.metadata.output).toContain("test")
+      },
+    })
+  })
+
+  test.each([
+    {
+      name: "loads bash.timeout from agent config",
+      config: { timeout: 5000 },
+      expected: { bash_timeout: 5000, bash_timeout_max: undefined },
+    },
+    {
+      name: "loads bash.timeout_max from agent config",
+      config: { timeout_max: 300000 },
+      expected: { bash_timeout: undefined, bash_timeout_max: 300000 },
+    },
+    {
+      name: "loads both bash.timeout and bash.timeout_max from agent config",
+      config: { timeout: 10000, timeout_max: 200000 },
+      expected: { bash_timeout: 10000, bash_timeout_max: 200000 },
+    },
+  ])("$name", async ({ config, expected }) => {
+    await using tmp = await tmpdir({
+      init: async (dir) => {
+        await Bun.write(
+          path.join(dir, "opencode.json"),
+          JSON.stringify({
+            $schema: "https://opencode.ai/config.json",
+            agent: {
+              build: {
+                bash: config,
+              },
+            },
+          }),
+        )
+      },
+    })
+    await Instance.provide({
+      directory: tmp.path,
+      fn: async () => {
+        const agent = await Agent.get("build")
+        if (expected.bash_timeout !== undefined) {
+          expect(agent.options.bash_timeout).toBe(expected.bash_timeout)
+        }
+        if (expected.bash_timeout_max !== undefined) {
+          expect(agent.options.bash_timeout_max).toBe(expected.bash_timeout_max)
+        }
+      },
+    })
+  })
+
+  test.each([
+    {
+      name: "uses configured bash.timeout when no params.timeout specified",
+      config: { timeout: 5000, timeout_max: 100000 },
+      params: {},
+      expectedTimeout: 5000,
+    },
+    {
+      name: "uses max of bash.timeout and params.timeout",
+      config: { timeout: 5000, timeout_max: 100000 },
+      params: { timeout: 30000 },
+      expectedTimeout: 30000,
+    },
+    {
+      name: "caps timeout at bash.timeout_max",
+      config: { timeout: 5000, timeout_max: 10000 },
+      params: { timeout: 50000 },
+      expectedTimeout: 10000,
+    },
+    {
+      name: "enforces bash.timeout as minimum",
+      config: { timeout: 10000, timeout_max: 100000 },
+      params: { timeout: 2000 },
+      expectedTimeout: 10000,
+    },
+  ])("$name", async ({ config, params, expectedTimeout }) => {
+    await using tmp = await tmpdir({
+      init: async (dir) => {
+        await Bun.write(
+          path.join(dir, "opencode.json"),
+          JSON.stringify({
+            $schema: "https://opencode.ai/config.json",
+            agent: {
+              build: {
+                bash: config,
+              },
+            },
+          }),
+        )
+      },
+    })
+    await Instance.provide({
+      directory: tmp.path,
+      fn: async () => {
+        const result = await bash.execute(
+          {
+            command: "echo 'timeout test'",
+            description: "Test timeout calculation",
+            ...params,
+          },
+          ctx,
+        )
+        expect(result.metadata.exit).toBe(0)
+        expect(result.metadata.timeout).toBe(expectedTimeout)
       },
     })
   })

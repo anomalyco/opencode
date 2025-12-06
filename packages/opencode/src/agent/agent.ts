@@ -195,6 +195,7 @@ export namespace Agent {
         permission,
         color,
         maxSteps,
+        bash,
         ...extra
       } = value
       item.options = {
@@ -217,6 +218,14 @@ export namespace Agent {
       if (top_p != undefined) item.topP = top_p
       if (mode) item.mode = mode
       if (color) item.color = color
+      if (bash) {
+        if (bash.timeout != undefined) {
+          item.options.bash_timeout = bash.timeout
+        }
+        if (bash.timeout_max != undefined) {
+          item.options.bash_timeout_max = bash.timeout_max
+        }
+      }
       // just here for consistency & to prevent it from being added as an option
       if (name) item.name = name
       if (maxSteps != undefined) item.maxSteps = maxSteps

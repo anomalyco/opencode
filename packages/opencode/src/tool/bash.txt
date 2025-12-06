@@ -18,7 +18,7 @@ Before executing the command, please follow these steps:
 
 Usage notes:
   - The command argument is required.
-  - You can specify an optional timeout in milliseconds. If not specified, commands will timeout after 120000ms (2 minutes). Use the `timeout` parameter to control execution time.
+  - You can specify an optional timeout in milliseconds. If not specified, commands will timeout after 120000ms (2 minutes). Use bash.timeout and bash.timeout_max in agent properties to change.
   - The `workdir` parameter specifies the working directory for the command. Defaults to the current working directory. Prefer setting `workdir` over using `cd` in your commands.
   - It is very helpful if you write a clear, concise description of what this command does in 5-10 words.
   - If the output exceeds 30000 characters, output will be truncated before being returned to you.
