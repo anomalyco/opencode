@@ -107,6 +107,79 @@ export function Prompt(props: PromptProps) {
   command.register(() => {
     return [
       {
+        title: "Clear prompt",
+        value: "prompt.clear",
+        category: "Prompt",
+        disabled: true,
+        onSelect: (dialog) => {
+          input.extmarks.clear()
+          input.clear()
+          dialog.clear()
+        },
+      },
+      {
+        title: "Submit prompt",
+        value: "prompt.submit",
+        disabled: true,
+        keybind: "input_submit",
+        category: "Prompt",
+        onSelect: (dialog) => {
+          if (!input.focused) return
+          submit()
+          dialog.clear()
+        },
+      },
+      {
+        title: "Paste",
+        value: "prompt.paste",
+        disabled: true,
+        keybind: "input_paste",
+        category: "Prompt",
+        onSelect: async () => {
+          const content = await Clipboard.read()
+          if (content?.mime.startsWith("image/")) {
+            await pasteImage({
+              filename: "clipboard",
+              mime: content.mime,
+              content: content.data,
+            })
+          }
+        },
+      },
+      {
+        title: "Interrupt session",
+        value: "session.interrupt",
+        keybind: "session_interrupt",
+        disabled: status().type === "idle",
+        category: "Session",
+        onSelect: (dialog) => {
+          if (autocomplete.visible) return
+          if (!input.focused) return
+          // TODO: this should be its own command
+          if (store.mode === "shell") {
+            setStore("mode", "normal")
+            return
+          }
+          if (!props.sessionID) return
+
+          setStore("interrupt", store.interrupt + 1)
+
+          setTimeout(() => {
+            setStore("interrupt", 0)
+          }, 5000)
+
+          if (store.interrupt >= 2) {
+            sdk.client.session.abort({
+              path: {
+                id: props.sessionID,
+              },
+            })
+            setStore("interrupt", 0)
+          }
+          dialog.clear()
+        },
+      },
+      {
         title: "Open editor",
         category: "Session",
         keybind: "editor_open",
@@ -188,79 +261,6 @@ export function Prompt(props: PromptProps) {
           })
           restoreExtmarksFromParts(updatedNonTextParts)
           input.cursorOffset = Bun.stringWidth(content)
-        },
-      },
-      {
-        title: "Clear prompt",
-        value: "prompt.clear",
-        category: "Prompt",
-        disabled: true,
-        onSelect: (dialog) => {
-          input.extmarks.clear()
-          input.clear()
-          dialog.clear()
-        },
-      },
-      {
-        title: "Submit prompt",
-        value: "prompt.submit",
-        disabled: true,
-        keybind: "input_submit",
-        category: "Prompt",
-        onSelect: (dialog) => {
-          if (!input.focused) return
-          submit()
-          dialog.clear()
-        },
-      },
-      {
-        title: "Paste",
-        value: "prompt.paste",
-        disabled: true,
-        keybind: "input_paste",
-        category: "Prompt",
-        onSelect: async () => {
-          const content = await Clipboard.read()
-          if (content?.mime.startsWith("image/")) {
-            await pasteImage({
-              filename: "clipboard",
-              mime: content.mime,
-              content: content.data,
-            })
-          }
-        },
-      },
-      {
-        title: "Interrupt session",
-        value: "session.interrupt",
-        keybind: "session_interrupt",
-        disabled: status().type === "idle",
-        category: "Session",
-        onSelect: (dialog) => {
-          if (autocomplete.visible) return
-          if (!input.focused) return
-          // TODO: this should be its own command
-          if (store.mode === "shell") {
-            setStore("mode", "normal")
-            return
-          }
-          if (!props.sessionID) return
-
-          setStore("interrupt", store.interrupt + 1)
-
-          setTimeout(() => {
-            setStore("interrupt", 0)
-          }, 5000)
-
-          if (store.interrupt >= 2) {
-            sdk.client.session.abort({
-              path: {
-                id: props.sessionID,
-              },
-            })
-            setStore("interrupt", 0)
-          }
-          dialog.clear()
         },
       },
     ]
