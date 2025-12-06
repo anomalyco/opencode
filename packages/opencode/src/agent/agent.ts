@@ -33,6 +33,7 @@ export namespace Agent {
       prompt: z.string().optional(),
       tools: z.record(z.string(), z.boolean()),
       options: z.record(z.string(), z.any()),
+      maxSteps: z.number().int().positive().optional(),
     })
     .meta({
       ref: "Agent",
@@ -182,7 +183,20 @@ export namespace Agent {
           tools: {},
           builtIn: false,
         }
-      const { name, model, prompt, tools, description, temperature, top_p, mode, permission, color, ...extra } = value
+      const {
+        name,
+        model,
+        prompt,
+        tools,
+        description,
+        temperature,
+        top_p,
+        mode,
+        permission,
+        color,
+        maxSteps,
+        ...extra
+      } = value
       item.options = {
         ...item.options,
         ...extra,
@@ -205,6 +219,7 @@ export namespace Agent {
       if (color) item.color = color
       // just here for consistency & to prevent it from being added as an option
       if (name) item.name = name
+      if (maxSteps != undefined) item.maxSteps = maxSteps
 
       if (permission ?? cfg.permission) {
         item.permission = mergeAgentPermissions(cfg.permission ?? {}, permission ?? {})

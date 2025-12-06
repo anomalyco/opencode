@@ -1,0 +1,39 @@
+name: sdk
+
+on:
+  push:
+    branches-ignore:
+      - production
+  pull_request:
+    branches-ignore:
+      - production
+  workflow_dispatch:
+jobs:
+  format:
+    runs-on: blacksmith-4vcpu-ubuntu-2404
+    permissions:
+      contents: write
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+        with:
+          token: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Setup Bun
+        uses: ./.github/actions/setup-bun
+
+      - name: run
+        run: |
+          bun ./packages/sdk/js/script/build.ts
+          (cd packages/opencode && bun dev generate > ../sdk/openapi.json)
+          if [ -z "$(git status --porcelain)" ]; then
+            echo "No changes to commit"
+            exit 0
+          fi
+          git config --local user.email "action@github.com"
+          git config --local user.name "GitHub Action"
+          git add -A
+          git commit -m "chore: regen sdk"
+          git push --no-verify
+        env:
+          CI: true
