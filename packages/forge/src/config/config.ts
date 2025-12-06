@@ -20,6 +20,7 @@ import { ConfigMarkdown } from "./markdown"
 
 export namespace Config {
   const log = Log.create({ service: "config" })
+  const CONFIG_FILES = ["forge.jsonc", "forge.json"]
 
   export const state = Instance.state(async () => {
     const auth = await Auth.all()
@@ -31,7 +32,7 @@ export namespace Config {
       log.debug("loaded custom config", { path: Flag.FORGE_CONFIG })
     }
 
-    for (const file of ["forge.jsonc", "forge.json"]) {
+    for (const file of CONFIG_FILES) {
       const found = await Filesystem.findUp(file, Instance.directory, Instance.worktree)
       for (const resolved of found.toReversed()) {
         result = mergeDeep(result, await loadFile(resolved))
@@ -46,7 +47,8 @@ export namespace Config {
     for (const [key, value] of Object.entries(auth)) {
       if (value.type === "wellknown") {
         process.env[value.key] = value.token
-        const wellknown = (await fetch(`${key}/.well-known/opencode`).then((x) => x.json())) as any
+        const response = await fetch(`${key}/.well-known/forge`)
+        const wellknown = (await response.json()) as any
         result = mergeDeep(result, await load(JSON.stringify(wellknown.config ?? {}), process.cwd()))
       }
     }
@@ -76,7 +78,7 @@ export namespace Config {
       await assertValid(dir)
 
       if (dir.endsWith(".forge") || dir === Flag.FORGE_CONFIG_DIR) {
-        for (const file of ["forge.jsonc", "forge.json"]) {
+        for (const file of CONFIG_FILES) {
           log.debug(`loading config from ${path.join(dir, file)}`)
           result = mergeDeep(result, await loadFile(path.join(dir, file)))
           // to satisy the type checker
@@ -416,8 +418,8 @@ export namespace Config {
         .describe("Toggle code block concealment in messages"),
       mode_cycle: z.string().optional().default("tab").describe("Cycle through session modes"),
       mode_cycle_reverse: z.string().optional().default("shift+tab").describe("Cycle through session modes in reverse"),
-      agent_list: z.string().optional().default("ctrl+x a").describe("List agents"),
-      model_list: z.string().optional().default("ctrl+x m").describe("List available models"),
+      agent_list: z.string().optional().default("<leader>a").describe("List agents"),
+      model_list: z.string().optional().default("<leader>m").describe("List available models"),
       model_cycle_recent: z.string().optional().default("f2").describe("Next recently used model"),
       model_cycle_recent_reverse: z.string().optional().default("shift+f2").describe("Previous recently used model"),
       command_list: z.string().optional().default("ctrl+p").describe("List available commands"),

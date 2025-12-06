@@ -811,10 +811,6 @@ export type KeybindsConfig = {
    */
   command_list?: string
   /**
-   * Previous agent
-   */
-  agent_cycle_reverse?: string
-  /**
    * Clear input field
    */
   input_clear?: string
@@ -988,7 +984,7 @@ export type Config = {
     }
   }
   /**
-   * Command configuration, see https://opencode.ai/docs/commands
+   * Command configuration, see https://forge.dev/docs/commands
    */
   command?: {
     [key: string]: {
@@ -1045,7 +1041,7 @@ export type Config = {
     [key: string]: AgentConfig | undefined
   }
   /**
-   * Agent configuration, see https://opencode.ai/docs/agent
+   * Agent configuration, see https://forge.dev/docs/agent
    */
   agent?: {
     plan?: AgentConfig
@@ -1267,25 +1263,6 @@ export type FilePartInput = {
   filename?: string
   url: string
   source?: FilePartSource
-}
-
-export type AgentPartInput = {
-  id?: string
-  type: "agent"
-  name: string
-  source?: {
-    value: string
-    start: number
-    end: number
-  }
-}
-
-export type SubtaskPartInput = {
-  id?: string
-  type: "subtask"
-  prompt: string
-  description: string
-  agent: string
 }
 
 export type Command = {
@@ -2201,17 +2178,7 @@ export type SessionMessagesResponse = SessionMessagesResponses[keyof SessionMess
 export type SessionPromptData = {
   body?: {
     messageID?: string
-    model?: {
-      providerID: string
-      modelID: string
-    }
-    agent?: string
-    noReply?: boolean
-    system?: string
-    tools?: {
-      [key: string]: boolean
-    }
-    parts: Array<TextPartInput | FilePartInput | AgentPartInput | SubtaskPartInput>
+    parts: Array<TextPartInput | FilePartInput>
   }
   path: {
     /**
@@ -2249,6 +2216,132 @@ export type SessionPromptResponses = {
 }
 
 export type SessionPromptResponse = SessionPromptResponses[keyof SessionPromptResponses]
+
+export type SessionAgentData = {
+  body?: {
+    agent: string
+  }
+  path: {
+    /**
+     * Session ID
+     */
+    id: string
+  }
+  query?: {
+    directory?: string
+  }
+  url: "/session/{id}/agent"
+}
+
+export type SessionAgentErrors = {
+  /**
+   * Bad request
+   */
+  400: BadRequestError
+  /**
+   * Not found
+   */
+  404: NotFoundError
+}
+
+export type SessionAgentError = SessionAgentErrors[keyof SessionAgentErrors]
+
+export type SessionAgentResponses = {
+  /**
+   * Agent updated
+   */
+  200: {
+    agent: string
+    modes: unknown | null
+    models: unknown | null
+  }
+}
+
+export type SessionAgentResponse = SessionAgentResponses[keyof SessionAgentResponses]
+
+export type SessionModeData = {
+  body?: {
+    mode: string
+  }
+  path: {
+    /**
+     * Session ID
+     */
+    id: string
+  }
+  query?: {
+    directory?: string
+  }
+  url: "/session/{id}/mode"
+}
+
+export type SessionModeErrors = {
+  /**
+   * Bad request
+   */
+  400: BadRequestError
+  /**
+   * Not found
+   */
+  404: NotFoundError
+}
+
+export type SessionModeError = SessionModeErrors[keyof SessionModeErrors]
+
+export type SessionModeResponses = {
+  /**
+   * Mode updated
+   */
+  200: {
+    agent: string
+    modes: unknown | null
+    models: unknown | null
+  }
+}
+
+export type SessionModeResponse = SessionModeResponses[keyof SessionModeResponses]
+
+export type SessionModelData = {
+  body?: {
+    model: string
+  }
+  path: {
+    /**
+     * Session ID
+     */
+    id: string
+  }
+  query?: {
+    directory?: string
+  }
+  url: "/session/{id}/model"
+}
+
+export type SessionModelErrors = {
+  /**
+   * Bad request
+   */
+  400: BadRequestError
+  /**
+   * Not found
+   */
+  404: NotFoundError
+}
+
+export type SessionModelError = SessionModelErrors[keyof SessionModelErrors]
+
+export type SessionModelResponses = {
+  /**
+   * Model updated
+   */
+  200: {
+    agent: string
+    modes: unknown | null
+    models: unknown | null
+  }
+}
+
+export type SessionModelResponse = SessionModelResponses[keyof SessionModelResponses]
 
 export type SessionMessageData = {
   body?: never

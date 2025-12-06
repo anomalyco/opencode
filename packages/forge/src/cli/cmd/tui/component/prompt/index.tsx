@@ -771,17 +771,17 @@ export function Prompt(props: PromptProps) {
               syntaxStyle={syntax()}
             />
             <box flexDirection="row" flexShrink={0} paddingTop={1} gap={1}>
-              <Show when={store.mode === "normal" && local.mode.current()}>
-                <text flexShrink={0} fg={theme.textMuted}>
-                  {local.mode.getName(local.mode.current()!)}
-                </text>
-              </Show>
               <text fg={highlight()}>
                 {store.mode === "shell" ? "Shell" : Locale.titlecase(local.agent.current().name)}{" "}
               </text>
               <Show when={store.mode === "normal" && local.model.current()}>
                 <text flexShrink={0} fg={theme.text}>
                   {local.model.label()}
+                </text>
+              </Show>
+              <Show when={store.mode === "normal" && local.mode.current()}>
+                <text flexShrink={0} fg={theme.textMuted}>
+                  {local.mode.getName(local.mode.current()!)}
                 </text>
               </Show>
             </box>

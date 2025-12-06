@@ -10,8 +10,8 @@
     "typecheck": "bun turbo typecheck",
     "prepare": "husky",
     "deploy:site": "vercel --prod",
-    "random": "echo 'Random script'",
-    "hello": "echo 'Hello World!'"
+    "test:integration": "FORGE_RUN_INTEGRATION=1 bun test packages/forge/test/acp/integration",
+    "test": "bun test"
   },
   "workspaces": {
     "packages": [

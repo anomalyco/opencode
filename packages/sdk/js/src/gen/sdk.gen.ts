@@ -72,6 +72,15 @@ import type {
   SessionPromptData,
   SessionPromptResponses,
   SessionPromptErrors,
+  SessionAgentData,
+  SessionAgentResponses,
+  SessionAgentErrors,
+  SessionModeData,
+  SessionModeResponses,
+  SessionModeErrors,
+  SessionModelData,
+  SessionModelResponses,
+  SessionModelErrors,
   SessionMessageData,
   SessionMessageResponses,
   SessionMessageErrors,
@@ -495,6 +504,48 @@ class Session extends _HeyApiClient {
   public prompt<ThrowOnError extends boolean = false>(options: Options<SessionPromptData, ThrowOnError>) {
     return (options.client ?? this._client).post<SessionPromptResponses, SessionPromptErrors, ThrowOnError>({
       url: "/session/{id}/message",
+      ...options,
+      headers: {
+        "Content-Type": "application/json",
+        ...options.headers,
+      },
+    })
+  }
+
+  /**
+   * Select an ACP agent for the session
+   */
+  public agent<ThrowOnError extends boolean = false>(options: Options<SessionAgentData, ThrowOnError>) {
+    return (options.client ?? this._client).post<SessionAgentResponses, SessionAgentErrors, ThrowOnError>({
+      url: "/session/{id}/agent",
+      ...options,
+      headers: {
+        "Content-Type": "application/json",
+        ...options.headers,
+      },
+    })
+  }
+
+  /**
+   * Set the ACP session mode
+   */
+  public mode<ThrowOnError extends boolean = false>(options: Options<SessionModeData, ThrowOnError>) {
+    return (options.client ?? this._client).post<SessionModeResponses, SessionModeErrors, ThrowOnError>({
+      url: "/session/{id}/mode",
+      ...options,
+      headers: {
+        "Content-Type": "application/json",
+        ...options.headers,
+      },
+    })
+  }
+
+  /**
+   * Set the ACP session model
+   */
+  public model<ThrowOnError extends boolean = false>(options: Options<SessionModelData, ThrowOnError>) {
+    return (options.client ?? this._client).post<SessionModelResponses, SessionModelErrors, ThrowOnError>({
+      url: "/session/{id}/model",
       ...options,
       headers: {
         "Content-Type": "application/json",
@@ -952,7 +1003,7 @@ class Event extends _HeyApiClient {
   }
 }
 
-export class OpencodeClient extends _HeyApiClient {
+export class ForgeClient extends _HeyApiClient {
   /**
    * Respond to a permission request
    */

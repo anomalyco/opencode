@@ -7,22 +7,28 @@
  * - Switching modes
  * - Mode change notifications
  *
- * Run with: ANTHROPIC_API_KEY=xxx bun test test/acp/integration/mode-management.test.ts
+ * Run with: FORGE_RUN_INTEGRATION=1 ANTHROPIC_API_KEY=xxx bun test test/acp/integration/mode-management.test.ts
  */
 
 import { ACPClient } from "../../../src/acp/client"
 import type { SessionNotification } from "@agentclientprotocol/sdk"
 import { describe, test, expect } from "bun:test"
 
-describe("ACP Client Mode Management", () => {
-  test(
+function shouldRunIntegration() {
+  if (process.env.FORGE_RUN_INTEGRATION !== "1") return false
+  if (!process.env.ANTHROPIC_API_KEY) return false
+  return true
+}
+
+
+const runIntegration = shouldRunIntegration()
+const describeIntegration = runIntegration ? describe : describe.skip
+const testIntegration = runIntegration ? test : test.skip
+
+describeIntegration("ACP Client Mode Management", () => {
+  testIntegration(
     "should capture modes from createSession response",
     async () => {
-      if (!process.env.ANTHROPIC_API_KEY) {
-        console.log("⊘ Skipping test: ANTHROPIC_API_KEY not set")
-        return
-      }
-
       const client = await ACPClient.create({
         command: "npx",
         args: ["@zed-industries/claude-code-acp"],
@@ -55,14 +61,9 @@ describe("ACP Client Mode Management", () => {
     30000
   )
 
-  test(
+  testIntegration(
     "should return current mode ID",
     async () => {
-      if (!process.env.ANTHROPIC_API_KEY) {
-        console.log("⊘ Skipping test: ANTHROPIC_API_KEY not set")
-        return
-      }
-
       const client = await ACPClient.create({
         command: "npx",
         args: ["@zed-industries/claude-code-acp"],
@@ -88,14 +89,9 @@ describe("ACP Client Mode Management", () => {
     30000
   )
 
-  test(
+  testIntegration(
     "should change mode via setMode()",
     async () => {
-      if (!process.env.ANTHROPIC_API_KEY) {
-        console.log("⊘ Skipping test: ANTHROPIC_API_KEY not set")
-        return
-      }
-
       const client = await ACPClient.create({
         command: "npx",
         args: ["@zed-industries/claude-code-acp"],
@@ -136,14 +132,9 @@ describe("ACP Client Mode Management", () => {
     30000
   )
 
-  test(
+  testIntegration(
     "should trigger onModeChange callback when mode changes",
     async () => {
-      if (!process.env.ANTHROPIC_API_KEY) {
-        console.log("⊘ Skipping test: ANTHROPIC_API_KEY not set")
-        return
-      }
-
       let callbackModeId: string | null = null
 
       const client = await ACPClient.create({
@@ -195,14 +186,9 @@ describe("ACP Client Mode Management", () => {
     30000
   )
 
-  test(
+  testIntegration(
     "should handle current_mode_update notifications from agent",
     async () => {
-      if (!process.env.ANTHROPIC_API_KEY) {
-        console.log("⊘ Skipping test: ANTHROPIC_API_KEY not set")
-        return
-      }
-
       let receivedModeUpdate = false
       let updatedModeId: string | null = null
 
@@ -253,14 +239,9 @@ describe("ACP Client Mode Management", () => {
     30000
   )
 
-  test(
+  testIntegration(
     "should return null when no session exists",
     async () => {
-      if (!process.env.ANTHROPIC_API_KEY) {
-        console.log("⊘ Skipping test: ANTHROPIC_API_KEY not set")
-        return
-      }
-
       const client = await ACPClient.create({
         command: "npx",
         args: ["@zed-industries/claude-code-acp"],

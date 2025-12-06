@@ -7,19 +7,25 @@
  * - Sending prompts
  * - Receiving responses
  *
- * Run with: ANTHROPIC_API_KEY=xxx bun test test/acp/integration/basic-flow.test.ts
+ * Run with: FORGE_RUN_INTEGRATION=1 ANTHROPIC_API_KEY=xxx bun test test/acp/integration/basic-flow.test.ts
  */
 
 import { ACPClient } from "../../../src/acp/client"
 import type { SessionNotification } from "@agentclientprotocol/sdk"
 import { describe, test, expect } from "bun:test"
 
-describe("ACP Client Basic Flow", () => {
-  test("should connect, initialize, create session, and send prompt", async () => {
-    if (!process.env.ANTHROPIC_API_KEY) {
-      console.log("⊘ Skipping test: ANTHROPIC_API_KEY not set")
-      return
-    }
+function shouldRunIntegration() {
+  if (process.env.FORGE_RUN_INTEGRATION !== "1") return false
+  if (!process.env.ANTHROPIC_API_KEY) return false
+  return true
+}
+
+const runIntegration = shouldRunIntegration()
+const describeIntegration = runIntegration ? describe : describe.skip
+const testIntegration = runIntegration ? test : test.skip
+
+describeIntegration("ACP Client Basic Flow", () => {
+  testIntegration("should connect, initialize, create session, and send prompt", async () => {
 
     const messages: string[] = []
 
@@ -28,7 +34,7 @@ describe("ACP Client Basic Flow", () => {
       args: ["@zed-industries/claude-code-acp"],
       cwd: process.cwd(),
       env: {
-        ANTHROPIC_API_KEY: process.env.ANTHROPIC_API_KEY
+        ANTHROPIC_API_KEY: process.env.ANTHROPIC_API_KEY,
       },
       onSessionUpdate: (update: SessionNotification) => {
         if (update.update.sessionUpdate === "agent_message_chunk") {
@@ -65,18 +71,14 @@ describe("ACP Client Basic Flow", () => {
     }
   })
 
-  test("should handle authentication when required", async () => {
-    if (!process.env.ANTHROPIC_API_KEY) {
-      console.log("⊘ Skipping test: ANTHROPIC_API_KEY not set")
-      return
-    }
+  testIntegration("should handle authentication when required", async () => {
 
     const client = await ACPClient.create({
       command: "npx",
       args: ["@zed-industries/claude-code-acp"],
       cwd: process.cwd(),
       env: {
-        ANTHROPIC_API_KEY: process.env.ANTHROPIC_API_KEY
+        ANTHROPIC_API_KEY: process.env.ANTHROPIC_API_KEY,
       },
     })
 
@@ -92,18 +94,14 @@ describe("ACP Client Basic Flow", () => {
     }
   })
 
-  test("should maintain connection state", async () => {
-    if (!process.env.ANTHROPIC_API_KEY) {
-      console.log("⊘ Skipping test: ANTHROPIC_API_KEY not set")
-      return
-    }
+  testIntegration("should maintain connection state", async () => {
 
     const client = await ACPClient.create({
       command: "npx",
       args: ["@zed-industries/claude-code-acp"],
       cwd: process.cwd(),
       env: {
-        ANTHROPIC_API_KEY: process.env.ANTHROPIC_API_KEY
+        ANTHROPIC_API_KEY: process.env.ANTHROPIC_API_KEY,
       },
     })
 

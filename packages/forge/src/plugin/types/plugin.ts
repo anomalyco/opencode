@@ -1,6 +1,6 @@
 import type {
   Event,
-  createOpencodeClient,
+  createForgeClient,
   Project,
   Model,
   Provider,
@@ -17,7 +17,7 @@ import { type ToolDefinition } from "./tool"
 export * from "./tool"
 
 export type PluginInput = {
-  client: ReturnType<typeof createOpencodeClient>
+  client: ReturnType<typeof createForgeClient>
   project: Project
   directory: string
   worktree: string

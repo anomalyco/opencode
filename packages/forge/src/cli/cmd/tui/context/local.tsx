@@ -11,20 +11,55 @@ import { useToast } from "../ui/toast"
 import { RGBA } from "@opentui/core"
 import { ACPClient } from "@/acp/client"
 import { getAllAgents, getAgent, DEFAULT_AGENT, type ACPAgentDefinition } from "@/acp/agents"
-import type { SessionModeId, SessionModeState, SessionModelState, ModelId } from "@agentclientprotocol/sdk"
+import type { SessionModeId, SessionModeState, SessionModelState, AuthMethod } from "@agentclientprotocol/sdk"
 import { useKV } from "./kv"
-import { AuthenticationRequiredError, ACP_ERROR_CODES } from "@/acp/types"
+import { ACPAuthManager } from "@/acp/auth"
+import { AgentConnector, AgentNotInstalledError, ConnectionAbortedError } from "@/acp/connection"
+import { Log } from "@/util/log"
+import { useSDK } from "@tui/context/sdk"
+import { useRoute } from "@tui/context/route"
 
 export const { use: useLocal, provider: LocalProvider } = createSimpleContext({
   name: "Local",
   init: () => {
+    const log = Log.create({ service: "tui-local" })
     const sync = useSync()
     const toast = useToast()
     const kv = useKV()
+    const route = useRoute()
+    const sdk = useSDK()
 
-    const cloneState = <T>(state: T | null | undefined): T | null => {
-      // Break shared references with the ACP client cache so Solid sees real updates
-      return state ? structuredClone(state) : null
+    const currentSessionID = () => {
+      return route.data.type === "session" ? route.data.sessionID : null
+    }
+
+    const postSessionState = async (
+      sessionID: string | null,
+      path: "agent" | "mode" | "model",
+      body: Record<string, any>,
+    ) => {
+      if (!sessionID) return null
+      if (!sdk?.client?.session) throw new Error("SDK client unavailable")
+
+      switch (path) {
+        case "agent":
+          return sdk.client.session.agent({
+            path: { id: sessionID },
+            body: { agent: body.agent },
+          })
+        case "mode":
+          return sdk.client.session.mode({
+            path: { id: sessionID },
+            body: { mode: body.mode },
+          })
+        case "model":
+          return sdk.client.session.model({
+            path: { id: sessionID },
+            body: { model: body.model },
+          })
+        default:
+          throw new Error(`Unsupported session path: ${path}`)
+      }
     }
 
     // Session state for ACP client
@@ -34,7 +69,7 @@ export const { use: useLocal, provider: LocalProvider } = createSimpleContext({
       modes: SessionModeState | null
       models: SessionModelState | null
       client: ACPClient.Instance | null
-      authMethods: any[] | null
+      authMethods: AuthMethod[] | null
     }>({
       sessionId: null,
       agentName: null,
@@ -51,6 +86,8 @@ export const { use: useLocal, provider: LocalProvider } = createSimpleContext({
       }>({
         current: kv.get("agent", DEFAULT_AGENT.name),
       })
+      let lastSyncedAgent: { sessionID: string; agent: string } | null = null
+      let connectVersion = 0
       const { theme } = useTheme()
       const colors = createMemo(() => [
         theme.secondary,
@@ -69,6 +106,7 @@ export const { use: useLocal, provider: LocalProvider } = createSimpleContext({
           return agents().find((x) => x.name === agentStore.current)!
         },
         async set(agentName: string) {
+          const version = ++connectVersion
           const agentDef = getAgent(agentName)
           if (!agentDef) {
             return toast.show({
@@ -78,96 +116,42 @@ export const { use: useLocal, provider: LocalProvider } = createSimpleContext({
             })
           }
 
-          // Check if system agent is installed
-          if (agentDef.installMethod === "system" && agentDef.installCheck) {
-            const checkResult = Bun.spawnSync(["sh", "-c", agentDef.installCheck])
-            if (checkResult.exitCode !== 0) {
-              return toast.show({
-                variant: "warning",
-                message: `Agent ${agentDef.name} is not installed. See: ${agentDef.installGuide}`,
-                duration: 5000,
-              })
-            }
-          }
-
           try {
-            // Dispose existing client if any
-            if (sessionStore.client) {
-              await sessionStore.client.dispose()
-            }
-
-            // Create ACP client
-            const client = await ACPClient.create({
-              command: agentDef.command,
-              args: agentDef.args,
+            // Connect to agent
+            const result = await AgentConnector.connect({
+              agentDef,
               cwd: process.cwd(),
-              env: agentDef.envRequired?.reduce((acc, key) => {
-                const value = process.env[key]
-                if (value) acc[key] = value
-                return acc
-              }, {} as Record<string, string>),
+              existingClient: sessionStore.client,
+              version,
+              onStaleCheck: (currentVersion) => currentVersion !== connectVersion,
             })
 
-            // Initialize
-            const initResp = await client.initialize()
-
-            // Store auth methods for later use
-            const authMethods = initResp.authMethods ?? []
-
-            // Handle auth if needed
-            // Note: Some agents (like Claude Code) don't support authenticate() method
-            // and rely on external auth (e.g., `claude /login`), so we catch that gracefully
-            if (authMethods.length > 0) {
-              try {
-                // For now, just use first auth method
-                // TODO: Prompt user to select auth method
-                await client.authenticate(authMethods[0].id)
-              } catch (authError: any) {
-                // If agent doesn't support authenticate (e.g., Claude Code), that's ok
-                // Authentication will be checked during createSession
-                const isNotImplemented =
-                  authError?.code === ACP_ERROR_CODES.INTERNAL_ERROR &&
-                  authError?.data?.details?.includes("not implemented")
-                if (!isNotImplemented) {
-                  // Re-throw if it's a real auth error
-                  throw authError
-                }
-                // Otherwise silently continue - auth will be validated in createSession
-              }
-            }
-
-            // Create session
-            const sessionResp = await client.createSession()
-            const modes = cloneState<SessionModeState>(sessionResp.modes)
-            const models = cloneState<SessionModelState>(sessionResp.models)
-
             // Store session state
+            // Replace the whole tree in one go so Solid doesn't merge into stale readonly proxies
             batch(() => {
-              setSessionStore("sessionId", sessionResp.sessionId)
-              setSessionStore("agentName", agentName)
-              setSessionStore("modes", modes)
-              setSessionStore("models", models)
-              setSessionStore("client", client)
-              setSessionStore("authMethods", authMethods)
+              setSessionStore({
+                sessionId: result.sessionId,
+                agentName,
+                modes: result.modes,
+                models: result.models,
+                client: result.client,
+                authMethods: result.authMethods,
+              })
               setAgentStore("current", agentName)
               kv.set("agent", agentName)
             })
 
             // Setup mode change listener
-            if (client.getCurrentMode()) {
-              client.onModeChange((newModeId) => {
-                setSessionStore("modes", (currentModes) =>
-                  currentModes ? { ...currentModes, currentModeId: newModeId } : currentModes,
-                )
+            if (result.client.getCurrentMode()) {
+              result.client.onModeChange((newModeId) => {
+                setSessionStore("modes", "currentModeId", newModeId)
               })
             }
 
             // Setup model change listener
-            if (client.getCurrentModel()) {
-              client.onModelChange((newModelId) => {
-                setSessionStore("models", (currentModels) =>
-                  currentModels ? { ...currentModels, currentModelId: newModelId } : currentModels,
-                )
+            if (result.client.getCurrentModel()) {
+              result.client.onModelChange((newModelId) => {
+                setSessionStore("models", "currentModelId", newModelId)
               })
             }
 
@@ -176,33 +160,55 @@ export const { use: useLocal, provider: LocalProvider } = createSimpleContext({
               message: `Connected to ${agentDef.name}`,
               duration: 2000,
             })
+
+            // Sync with server session
+            const sessionID = currentSessionID()
+            if (sessionID) {
+              try {
+                await postSessionState(sessionID, "agent", { agent: agentDef.name })
+              } catch (error) {
+                toast.show({
+                  variant: "warning",
+                  message: `Failed to sync agent to session: ${error instanceof Error ? error.message : String(error)}`,
+                  duration: 4000,
+                })
+              }
+            }
           } catch (error) {
-            // Check if this is an authentication error
-            if (error instanceof AuthenticationRequiredError) {
-              const authMethod = error.authMethods[0]
-              toast.show({
+            // Handle installation errors
+            if (error instanceof AgentNotInstalledError) {
+              return toast.show({
                 variant: "warning",
-                message: `${agentDef.name} requires authentication. ${authMethod?.description || "Please authenticate and try again."}`,
-                duration: 10000,
+                message: `Agent ${error.agentName} is not installed.${error.installGuide ? ` See: ${error.installGuide}` : ""}`,
+                duration: 5000,
               })
+            }
+
+            // Handle connection abortion (race condition)
+            if (error instanceof ConnectionAbortedError) {
+              log.debug("agent.connect.aborted", { agent: agentName })
               return
             }
 
-            // Check for JSON-RPC auth required error (code -32000)
-            const isAuthRequired =
-              typeof error === "object" &&
-              error !== null &&
-              "code" in error &&
-              error.code === ACP_ERROR_CODES.AUTH_REQUIRED
+            // Log the error
+            log.error("agent.connect.failed", {
+              agent: agentName,
+              error: error instanceof Error ? error.message : String(error),
+              stack: error instanceof Error ? error.stack : undefined,
+            })
 
-            if (isAuthRequired) {
-              // Use the auth method description from initialize response
+            // Check if this is an authentication error
+            const authError = ACPAuthManager.isAuthError(error)
+            if (authError.isAuthError) {
               const authMethod = sessionStore.authMethods?.[0]
-              const instruction = authMethod?.description || "Please authenticate and try again."
-
+              const message = ACPAuthManager.formatAuthMessage(
+                agentDef.name,
+                authError.instruction,
+                authMethod
+              )
               toast.show({
                 variant: "warning",
-                message: `Authentication required. ${instruction}`,
+                message,
                 duration: 10000,
               })
               return
@@ -215,7 +221,8 @@ export const { use: useLocal, provider: LocalProvider } = createSimpleContext({
                 ? JSON.stringify(error)
                 : String(error)
 
-            console.error(`Failed to connect to ${agentDef.name}:`, error)
+            // Surface stack traces to stderr and logs while we track down agent init issues
+            console.error(`Failed to connect to ${agentDef.name}:`, error, error instanceof Error ? error.stack : undefined)
 
             toast.show({
               variant: "error",
@@ -253,6 +260,24 @@ export const { use: useLocal, provider: LocalProvider } = createSimpleContext({
           return false
         },
       }
+
+      createEffect(async () => {
+        const sessionID = currentSessionID()
+        if (!sessionID) return
+        const agentName = agentStore.current
+        if (lastSyncedAgent && lastSyncedAgent.sessionID === sessionID && lastSyncedAgent.agent === agentName) return
+
+        try {
+          await postSessionState(sessionID, "agent", { agent: agentName })
+          lastSyncedAgent = { sessionID, agent: agentName }
+        } catch (error) {
+          toast.show({
+            variant: "warning",
+            message: `Failed to sync agent: ${error instanceof Error ? error.message : String(error)}`,
+            duration: 3000,
+          })
+        }
+      })
     })
 
     const mode = iife(() => {
@@ -275,6 +300,17 @@ export const { use: useLocal, provider: LocalProvider } = createSimpleContext({
           try {
             await sessionStore.client.setMode(modeId)
             setSessionStore("modes", "currentModeId", modeId)
+
+            const sessionID = currentSessionID()
+            if (sessionID) {
+              await postSessionState(sessionID, "mode", { mode: modeId }).catch((error) => {
+                toast.show({
+                  variant: "warning",
+                  message: `Failed to sync mode: ${error instanceof Error ? error.message : String(error)}`,
+                  duration: 3000,
+                })
+              })
+            }
           } catch (error) {
             toast.show({
               variant: "error",
@@ -285,12 +321,7 @@ export const { use: useLocal, provider: LocalProvider } = createSimpleContext({
         },
         cycle(direction: 1 | -1 = 1) {
           const modes = sessionStore.modes?.availableModes ?? []
-          console.log("cycle() called", { direction, modesCount: modes.length, modes, currentMode: sessionStore.modes?.currentModeId })
-
-          if (modes.length === 0) {
-            console.log("No modes available, returning early")
-            return
-          }
+          if (modes.length === 0) return
 
           const currentMode = sessionStore.modes?.currentModeId
           const currentIndex = modes.findIndex((m) => m.id === currentMode)
@@ -299,7 +330,6 @@ export const { use: useLocal, provider: LocalProvider } = createSimpleContext({
           if (nextIndex < 0) nextIndex = modes.length + nextIndex
           const nextMode = modes[nextIndex]
 
-          console.log("Cycling to mode:", { currentIndex, nextIndex, nextMode: nextMode.id })
           this.set(nextMode.id)
         },
         getName(modeId: SessionModeId) {
@@ -310,7 +340,7 @@ export const { use: useLocal, provider: LocalProvider } = createSimpleContext({
     })
 
     const model = iife(() => {
-      const label = (modelId: ModelId | null) => {
+      const label = (modelId: string | null) => {
         if (!modelId) return "Default model"
         const models = sessionStore.models?.availableModels ?? []
         const modelInfo = models.find((m) => m.modelId === modelId)
@@ -326,7 +356,7 @@ export const { use: useLocal, provider: LocalProvider } = createSimpleContext({
         label() {
           return label(sessionStore.models?.currentModelId ?? null)
         },
-        async set(modelId: ModelId) {
+        async set(modelId: string) {
           if (!sessionStore.client) {
             return toast.show({
               variant: "warning",
@@ -345,6 +375,17 @@ export const { use: useLocal, provider: LocalProvider } = createSimpleContext({
               message: `Switched to ${modelInfo?.name ?? modelId}`,
               duration: 2000,
             })
+
+            const sessionID = currentSessionID()
+            if (sessionID) {
+              await postSessionState(sessionID, "model", { model: modelId }).catch((error) => {
+                toast.show({
+                  variant: "warning",
+                  message: `Failed to sync model: ${error instanceof Error ? error.message : String(error)}`,
+                  duration: 3000,
+                })
+              })
+            }
           } catch (error) {
             toast.show({
               variant: "error",
@@ -353,18 +394,20 @@ export const { use: useLocal, provider: LocalProvider } = createSimpleContext({
             })
           }
         },
-        cycle() {
+        cycle(direction: 1 | -1 = 1) {
           const models = sessionStore.models?.availableModels ?? []
           if (models.length === 0) return
 
           const currentModel = sessionStore.models?.currentModelId
           const currentIndex = models.findIndex((m) => m.modelId === currentModel)
-          const nextIndex = (currentIndex + 1) % models.length
+          let nextIndex = (currentIndex + direction) % models.length
+          // Handle negative modulo for reverse cycling
+          if (nextIndex < 0) nextIndex = models.length + nextIndex
           const nextModel = models[nextIndex]
 
           this.set(nextModel.modelId)
         },
-        getName(modelId: ModelId) {
+        getName(modelId: string) {
           const models = sessionStore.models?.availableModels ?? []
           return models.find((m) => m.modelId === modelId)?.name ?? modelId
         },

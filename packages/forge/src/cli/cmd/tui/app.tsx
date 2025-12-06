@@ -235,7 +235,7 @@ function App() {
       keybind: "model_cycle_recent",
       category: "Model",
       onSelect: () => {
-        local.model.cycle()
+        local.model.cycle(1)
       },
     },
     {
@@ -244,7 +244,7 @@ function App() {
       keybind: "model_cycle_recent_reverse",
       category: "Model",
       onSelect: () => {
-        local.model.cycle()
+        local.model.cycle(-1)
       },
     },
     {

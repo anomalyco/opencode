@@ -482,7 +482,7 @@ export namespace ACPClient {
 
         // Update local state
         if (currentModes) {
-          currentModes.currentModeId = modeId
+          currentModes = { ...currentModes, currentModeId: modeId }
         }
 
         // Trigger callbacks
@@ -530,7 +530,7 @@ export namespace ACPClient {
 
         // Update local state
         if (currentModels) {
-          currentModels.currentModelId = modelId
+          currentModels = { ...currentModels, currentModelId: modelId }
         }
 
         // Trigger callbacks

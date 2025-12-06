@@ -7,7 +7,7 @@ import { bootstrap } from "../bootstrap"
 import { Command } from "../../command"
 import { EOL } from "os"
 import { select } from "@clack/prompts"
-import { createOpencodeClient, type OpencodeClient } from "@forge/sdk"
+import { createForgeClient, type ForgeClient } from "@forge/sdk"
 import { Server } from "../../server/server"
 import { Provider } from "../../provider/provider"
 
@@ -126,7 +126,7 @@ export const RunCommand = cmd({
       process.exit(1)
     }
 
-    const execute = async (sdk: OpencodeClient, sessionID: string) => {
+    const execute = async (sdk: ForgeClient, sessionID: string) => {
       const printEvent = (color: string, type: string, title: string) => {
         UI.println(
           color + `|`,
@@ -247,7 +247,7 @@ export const RunCommand = cmd({
     }
 
     if (args.attach) {
-      const sdk = createOpencodeClient({ baseUrl: args.attach })
+      const sdk = createForgeClient({ baseUrl: args.attach })
 
       const sessionID = await (async () => {
         if (args.continue) {
@@ -290,7 +290,7 @@ export const RunCommand = cmd({
 
     await bootstrap(process.cwd(), async () => {
       const server = Server.listen({ port: args.port ?? 0, hostname: "127.0.0.1" })
-      const sdk = createOpencodeClient({ baseUrl: `http://${server.hostname}:${server.port}` })
+      const sdk = createForgeClient({ baseUrl: `http://${server.hostname}:${server.port}` })
 
       if (args.command) {
         const exists = await Command.get(args.command)

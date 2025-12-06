@@ -30,6 +30,9 @@ bun test test/acp/          # ACP-specific tests
 bun run typecheck
 ```
 
+**View logs:**
+Logs are located at `~/.local/share/forge/log/dev.log`
+
 ---
 
 ## Architecture Overview
@@ -131,6 +134,10 @@ Agents run as sub-processes of the code editor, and communicate using JSON-RPC o
 
 ## Resources
 
-**High-level architecture questions:** Use `mcp__deepwiki__ask_question` with `repoName: "sst/opencode"` - they built the foundation we forked from
+If asked about any of these project, use `mcp__deepwiki__ask_question` to gather information from the repo:
+
+- OpenCode: sst/opencode
+- Claude Code ACP: zed-industries/claude-code-acp
+- Gemini: google-gemini/gemini-cli
 
 **Agent Client Protocol:** <https://agentclientprotocol.com/llms.txt>

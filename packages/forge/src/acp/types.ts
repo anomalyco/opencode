@@ -1,5 +1,5 @@
 import type { McpServer, AuthMethod } from "@agentclientprotocol/sdk"
-import type { OpencodeClient } from "@forge/sdk"
+import type { ForgeClient } from "@forge/sdk"
 
 export interface ACPSessionState {
   id: string
@@ -14,7 +14,7 @@ export interface ACPSessionState {
 }
 
 export interface ACPConfig {
-  sdk: OpencodeClient
+  sdk: ForgeClient
   defaultModel?: {
     providerID: string
     modelID: string

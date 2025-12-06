@@ -7,7 +7,8 @@ import { Session } from "../session"
 import { Identifier } from "../id/id"
 import { AuthenticationRequiredError } from "./types"
 import { Permission } from "../permission"
-import type { SessionModelState, ModelId } from "@agentclientprotocol/sdk"
+import type { SessionModelState, ModelId, SessionModeState } from "@agentclientprotocol/sdk"
+import { ACPAgentDefinition, DEFAULT_AGENT, getAgent } from "./agents"
 
 const log = Log.create({ service: "acp-orchestrator" })
 
@@ -23,9 +24,11 @@ const log = Log.create({ service: "acp-orchestrator" })
 export namespace ACPOrchestrator {
   interface SessionState {
     sessionID: string
-    client: ACPClient.Instance
-    acpSessionID: string
+    agent: ACPAgentDefinition
+    client: ACPClient.Instance | null
+    acpSessionID: string | null
     models?: SessionModelState
+    modes?: SessionModeState | null
   }
 
   const sessions = new Map<string, SessionState>()
@@ -39,7 +42,7 @@ export namespace ACPOrchestrator {
     sessionID: string
     parts: Array<{ type: "text"; text: string } | { type: "file"; url: string; filename: string; mime: string }>
   }): Promise<MessageV2.WithParts> {
-    const state = await getOrCreateSession(input.sessionID)
+    const state = await ensureClient(input.sessionID)
 
     // Create assistant message
     const assistantMessageID = Identifier.ascending("message")
@@ -61,9 +64,9 @@ export namespace ACPOrchestrator {
           write: 0,
         },
       },
-      modelID: "claude-sonnet-4-5-20250929",
-      providerID: "anthropic",
-      mode: "build",
+      modelID: state.models?.currentModelId ?? "default",
+      providerID: "acp",
+      mode: state.modes?.currentModeId ?? "build",
       path: {
         cwd: Instance.directory,
         root: Instance.directory,
@@ -86,7 +89,7 @@ export namespace ACPOrchestrator {
     const promptText = textParts.join("\n")
 
     // Send prompt to ACP
-    const promptResult = await state.client.sendPrompt(state.acpSessionID, promptText)
+    const promptResult = await state.client!.sendPrompt(state.acpSessionID!, promptText)
 
     log.info("prompt sent", {
       sessionID: input.sessionID,
@@ -111,29 +114,142 @@ export namespace ACPOrchestrator {
   }
 
   /**
-   * Get or create session state, lazily spawning subprocess.
+   * Ensure session state exists and client is ready for the current agent.
    */
-  async function getOrCreateSession(sessionID: string): Promise<SessionState> {
+  async function ensureClient(sessionID: string): Promise<SessionState> {
     let state = sessions.get(sessionID)
 
-    if (state) {
+    if (!state) {
+      state = {
+        sessionID,
+        agent: DEFAULT_AGENT,
+        client: null,
+        acpSessionID: null,
+        modes: undefined,
+        models: undefined,
+      }
+      sessions.set(sessionID, state)
+    }
+
+    if (state.client && state.acpSessionID) {
       return state
     }
 
-    log.info("creating new ACP session", { sessionID })
+    await createClientForState(state)
+    return state
+  }
 
-    const apiKey = process.env.ANTHROPIC_API_KEY
-    if (!apiKey) {
-      throw new Error("ANTHROPIC_API_KEY is required to run ACP orchestrator")
+  /**
+   * Change the ACP agent for a session, recreating the client.
+   */
+  export async function setAgent(sessionID: string, agentName: string): Promise<SessionState> {
+    const agentDef = getAgent(agentName) ?? DEFAULT_AGENT
+    const existing = sessions.get(sessionID)
+    const state: SessionState =
+      existing ??
+      {
+        sessionID,
+        agent: agentDef,
+        client: null,
+        acpSessionID: null,
+        modes: undefined,
+        models: undefined,
+      }
+
+    if (state.agent.name === agentDef.name && state.client && state.acpSessionID) {
+      return state
     }
 
-    // Create ACP client (this spawns the subprocess)
+    if (state.client) {
+      await state.client.dispose()
+    }
+    ACPTranslator.resetSession(sessionID)
+
+    state.agent = agentDef
+    state.client = null
+    state.acpSessionID = null
+    state.modes = undefined
+    state.models = undefined
+
+    sessions.set(sessionID, state)
+    await createClientForState(state)
+    return state
+  }
+
+  /**
+   * Set the mode for a session.
+   */
+  export async function setMode(sessionID: string, modeId: string): Promise<void> {
+    const state = await ensureClient(sessionID)
+    if (!state.modes?.availableModes?.some((m) => m.id === modeId)) {
+      throw new Error(`Mode not available for agent ${state.agent.name}: ${modeId}`)
+    }
+
+    log.info("changing mode", { sessionID, modeId })
+    await state.client!.setMode(modeId as any)
+    state.modes = {
+      ...state.modes,
+      currentModeId: modeId,
+    }
+  }
+
+  /**
+   * Get available models for a session.
+   */
+  export function getModels(sessionID: string): SessionModelState | null {
+    const state = sessions.get(sessionID)
+    if (!state) return null
+    return state.models ?? null
+  }
+
+  /**
+   * Set the model for a session.
+   */
+  export async function setModel(sessionID: string, modelId: ModelId): Promise<void> {
+    const state = await ensureClient(sessionID)
+    if (!state.models?.availableModels?.some((m) => m.modelId === modelId)) {
+      throw new Error(`Model not available for agent ${state.agent.name}: ${modelId}`)
+    }
+
+    log.info("changing model", { sessionID, modelId })
+
+    await state.client!.setModel(modelId)
+
+    // Update stored state
+    const updatedModels = state.client!.getModels()
+    if (updatedModels) {
+      state.models = updatedModels
+    } else {
+      state.models = {
+        availableModels: state.models?.availableModels ?? [],
+        currentModelId: modelId,
+      } as SessionModelState
+    }
+  }
+
+  /**
+   * Expose current state snapshot for UI/API responses.
+   */
+  export function getState(sessionID: string): SessionState | null {
+    return sessions.get(sessionID) ?? null
+  }
+
+  async function createClientForState(state: SessionState) {
+    const { sessionID, agent } = state
+
+    const env: Record<string, string> = {}
+    for (const key of agent.envRequired ?? []) {
+      const value = process.env[key]
+      if (!value) {
+        throw new Error(`Missing required environment variable ${key} for agent ${agent.name}`)
+      }
+      env[key] = value
+    }
+
     const client = await ACPClient.create({
-      command: "npx",
-      args: ["@zed-industries/claude-code-acp"],
-      env: {
-        ANTHROPIC_API_KEY: apiKey,
-      },
+      command: agent.command,
+      args: agent.args,
+      env,
       cwd: Instance.directory,
       onSessionUpdate: async (notification) => {
         log.info("  ┌─ [ORCHESTRATOR] received notification", {
@@ -196,7 +312,6 @@ export namespace ACPOrchestrator {
       },
     })
 
-    // Initialize ACP
     const initResult = await client.initialize()
 
     log.info("ACP initialized", {
@@ -206,7 +321,6 @@ export namespace ACPOrchestrator {
       authMethodsCount: initResult.authMethods?.length ?? 0,
     })
 
-    // Create ACP session (may require authentication)
     let acpSession
     try {
       acpSession = await client.createSession()
@@ -217,8 +331,6 @@ export namespace ACPOrchestrator {
           authMethodsCount: error.authMethods.length,
         })
 
-        // For now, automatically use the first auth method
-        // TODO: In the future, this should prompt the user to select an auth method
         if (error.authMethods.length === 0) {
           throw new Error("Agent requires authentication but provided no auth methods")
         }
@@ -230,7 +342,6 @@ export namespace ACPOrchestrator {
           methodName: authMethod.name,
         })
 
-        // If terminal-auth metadata exists, log instructions for the user
         if (authMethod._meta?.["terminal-auth"]) {
           const terminalAuth = authMethod._meta["terminal-auth"] as {
             command?: string
@@ -242,16 +353,13 @@ export namespace ACPOrchestrator {
             command: terminalAuth.command,
             args: terminalAuth.args,
           })
-          // TODO: Execute the terminal command or prompt user to do so
           throw new Error(
             `Authentication required: Please run '${terminalAuth.command} ${(terminalAuth.args ?? []).join(" ")}' in your terminal`,
           )
         }
 
-        // Attempt authentication with the selected method
         await client.authenticate(authMethod.id)
 
-        // Retry session creation after authentication
         acpSession = await client.createSession()
       } else {
         throw error
@@ -263,8 +371,9 @@ export namespace ACPOrchestrator {
       acpSessionID: acpSession.sessionId,
     })
 
-    // Capture model state if available
     const models = client.getModels()
+    const modes = client.getModes()
+
     if (models) {
       log.info("available models", {
         sessionID,
@@ -273,45 +382,10 @@ export namespace ACPOrchestrator {
       })
     }
 
-    // Store state
-    state = {
-      sessionID,
-      client,
-      acpSessionID: acpSession.sessionId,
-      models,
-    }
-    sessions.set(sessionID, state)
-
-    return state
-  }
-
-  /**
-   * Get available models for a session.
-   */
-  export function getModels(sessionID: string): SessionModelState | null {
-    const state = sessions.get(sessionID)
-    if (!state) return null
-    return state.models ?? null
-  }
-
-  /**
-   * Set the model for a session.
-   */
-  export async function setModel(sessionID: string, modelId: ModelId): Promise<void> {
-    const state = sessions.get(sessionID)
-    if (!state) {
-      throw new Error(`Session not found: ${sessionID}`)
-    }
-
-    log.info("changing model", { sessionID, modelId })
-
-    await state.client.setModel(modelId)
-
-    // Update stored state
-    const updatedModels = state.client.getModels()
-    if (updatedModels) {
-      state.models = updatedModels
-    }
+    state.client = client
+    state.acpSessionID = acpSession.sessionId
+    state.models = models ?? state.models
+    state.modes = modes ?? state.modes
   }
 
   /**
@@ -323,7 +397,9 @@ export namespace ACPOrchestrator {
 
     log.info("cleaning up ACP session", { sessionID })
 
-    await state.client.dispose()
+    if (state.client) {
+      await state.client.dispose()
+    }
     ACPTranslator.resetSession(sessionID)
     sessions.delete(sessionID)
   }

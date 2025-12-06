@@ -1,4 +1,4 @@
-import { createOpencodeClient, type Event } from "@forge/sdk"
+import { createForgeClient, type Event } from "@forge/sdk"
 import { createSimpleContext } from "./helper"
 import { createGlobalEmitter } from "@solid-primitives/event-bus"
 import { batch, onCleanup } from "solid-js"
@@ -7,7 +7,7 @@ export const { use: useSDK, provider: SDKProvider } = createSimpleContext({
   name: "SDK",
   init: (props: { url: string }) => {
     const abort = new AbortController()
-    const sdk = createOpencodeClient({
+    const sdk = createForgeClient({
       baseUrl: props.url,
       signal: abort.signal,
     })

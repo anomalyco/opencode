@@ -44,6 +44,7 @@ import { SessionSummary } from "@/session/summary"
 import { GlobalBus } from "@/bus/global"
 import { SessionStatus } from "@/session/status"
 import { ShareNext } from "@/share/share-next"
+import { ACPOrchestrator } from "../acp/orchestrator"
 
 // @ts-ignore This global is needed to prevent ai-sdk from logging warnings to stdout https://github.com/vercel/ai/blob/2dc67e0ef538307f21368db32d5a12345d98831b/packages/ai/src/logger/log-warnings.ts#L85
 globalThis.AI_SDK_LOG_WARNINGS = false
@@ -900,6 +901,146 @@ export namespace Server {
         async (c) => {
           const diff = await Session.diff(c.req.valid("param").id)
           return c.json(diff)
+        },
+      )
+      .post(
+        "/session/:id/agent",
+        describeRoute({
+          description: "Select an ACP agent for the session",
+          operationId: "session.agent",
+          responses: {
+            200: {
+              description: "Agent updated",
+              content: {
+                "application/json": {
+                  schema: resolver(
+                    z.object({
+                      agent: z.string(),
+                      modes: z.any().nullable(),
+                      models: z.any().nullable(),
+                    }),
+                  ),
+                },
+              },
+            },
+            ...errors(400, 404),
+          },
+        }),
+        validator(
+          "param",
+          z.object({
+            id: z.string().meta({ description: "Session ID" }),
+          }),
+        ),
+        validator(
+          "json",
+          z.object({
+            agent: z.string(),
+          }),
+        ),
+        async (c) => {
+          const sessionID = c.req.valid("param").id
+          const body = c.req.valid("json")
+          const state = await ACPOrchestrator.setAgent(sessionID, body.agent)
+          return c.json({
+            agent: state.agent.name,
+            modes: state.modes ?? null,
+            models: state.models ?? null,
+          })
+        },
+      )
+      .post(
+        "/session/:id/mode",
+        describeRoute({
+          description: "Set the ACP session mode",
+          operationId: "session.mode",
+          responses: {
+            200: {
+              description: "Mode updated",
+              content: {
+                "application/json": {
+                  schema: resolver(
+                    z.object({
+                      agent: z.string(),
+                      modes: z.any().nullable(),
+                      models: z.any().nullable(),
+                    }),
+                  ),
+                },
+              },
+            },
+            ...errors(400, 404),
+          },
+        }),
+        validator(
+          "param",
+          z.object({
+            id: z.string().meta({ description: "Session ID" }),
+          }),
+        ),
+        validator(
+          "json",
+          z.object({
+            mode: z.string(),
+          }),
+        ),
+        async (c) => {
+          const sessionID = c.req.valid("param").id
+          const body = c.req.valid("json")
+          await ACPOrchestrator.setMode(sessionID, body.mode)
+          const state = ACPOrchestrator.getState(sessionID)
+          return c.json({
+            agent: state?.agent.name ?? "unknown",
+            modes: state?.modes ?? null,
+            models: state?.models ?? null,
+          })
+        },
+      )
+      .post(
+        "/session/:id/model",
+        describeRoute({
+          description: "Set the ACP session model",
+          operationId: "session.model",
+          responses: {
+            200: {
+              description: "Model updated",
+              content: {
+                "application/json": {
+                  schema: resolver(
+                    z.object({
+                      agent: z.string(),
+                      modes: z.any().nullable(),
+                      models: z.any().nullable(),
+                    }),
+                  ),
+                },
+              },
+            },
+            ...errors(400, 404),
+          },
+        }),
+        validator(
+          "param",
+          z.object({
+            id: z.string().meta({ description: "Session ID" }),
+          }),
+        ),
+        validator(
+          "json",
+          z.object({
+            model: z.string(),
+          }),
+        ),
+        async (c) => {
+          const sessionID = c.req.valid("param").id
+          const body = c.req.valid("json")
+          await ACPOrchestrator.setModel(sessionID, body.model)
+          const state = ACPOrchestrator.getState(sessionID)
+          return c.json({
+            agent: state?.agent.name ?? "unknown",
+            modes: state?.modes ?? null,
+            models: state?.models ?? null,
+          })
         },
       )
       .get(

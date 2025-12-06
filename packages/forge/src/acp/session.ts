@@ -1,15 +1,15 @@
 import { RequestError, type McpServer } from "@agentclientprotocol/sdk"
 import type { ACPSessionState } from "./types"
 import { Log } from "@/util/log"
-import type { OpencodeClient } from "@forge/sdk"
+import type { ForgeClient } from "@forge/sdk"
 
 const log = Log.create({ service: "acp-session-manager" })
 
 export class ACPSessionManager {
   private sessions = new Map<string, ACPSessionState>()
-  private sdk: OpencodeClient
+  private sdk: ForgeClient
 
-  constructor(sdk: OpencodeClient) {
+  constructor(sdk: ForgeClient) {
     this.sdk = sdk
   }
 

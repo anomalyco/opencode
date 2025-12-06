@@ -2,7 +2,7 @@ import type { Hooks, PluginInput, Plugin as PluginInstance } from "./types/plugi
 import { Config } from "../config/config"
 import { Bus } from "../bus"
 import { Log } from "../util/log"
-import { createOpencodeClient } from "@forge/sdk"
+import { createForgeClient } from "@forge/sdk"
 import { Server } from "../server/server"
 import { BunProc } from "../bun"
 import { Instance } from "../project/instance"
@@ -12,7 +12,7 @@ export namespace Plugin {
   const log = Log.create({ service: "plugin" })
 
   const state = Instance.state(async () => {
-    const client = createOpencodeClient({
+    const client = createForgeClient({
       baseUrl: "http://localhost:4096",
       // @ts-ignore - fetch type incompatibility
       fetch: async (...args) => Server.App().fetch(...args),
@@ -25,6 +25,13 @@ export namespace Plugin {
       worktree: Instance.worktree,
       directory: Instance.directory,
       $: Bun.$,
+    }
+    if (Flag.FORGE_DISABLE_PLUGINS) {
+      log.info("plugins disabled via flag")
+      return {
+        hooks,
+        input,
+      }
     }
     const plugins = [...(config.plugin ?? [])]
     if (!Flag.FORGE_DISABLE_DEFAULT_PLUGINS) {

@@ -1,7 +1,7 @@
-import { createOpencodeClient, createOpencodeServer } from "@forge/sdk"
+import { createForgeClient, createOpencodeServer } from "@forge/sdk"
 
 const server = await createOpencodeServer()
-const client = createOpencodeClient({ baseUrl: server.url })
+const client = createForgeClient({ baseUrl: server.url })
 
 const input = await Array.fromAsync(new Bun.Glob("packages/core/*.ts").scan())
 

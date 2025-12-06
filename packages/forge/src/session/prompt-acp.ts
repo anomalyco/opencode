@@ -5,6 +5,7 @@ import { Log } from "../util/log"
 import { Session } from "."
 import { fn } from "@/util/fn"
 import { ACPOrchestrator } from "../acp/orchestrator"
+import { DEFAULT_AGENT } from "../acp/agents"
 
 export namespace SessionPromptACP {
   const log = Log.create({ service: "session.prompt.acp" })
@@ -46,6 +47,8 @@ export namespace SessionPromptACP {
    */
   export const prompt = fn(PromptInput, async (input) => {
     const session = await Session.get(input.sessionID)
+    const existingState = ACPOrchestrator.getState(input.sessionID)
+    const state = existingState ?? (await ACPOrchestrator.setAgent(input.sessionID, DEFAULT_AGENT.name))
     await Session.touch(input.sessionID)
 
     // Create user message
@@ -57,10 +60,10 @@ export namespace SessionPromptACP {
       time: {
         created: Date.now(),
       },
-      agent: "build",
+      agent: state.agent.name,
       model: {
-        providerID: "anthropic",
-        modelID: "claude-sonnet-4-5-20250929",
+        providerID: "acp",
+        modelID: state.models?.currentModelId ?? "default",
       },
     }
 

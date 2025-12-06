@@ -33,11 +33,5 @@ export function DialogAgents() {
     )
   })
 
-  return (
-    <DialogSelect
-      title="Select ACP agent"
-      current={local.agent.current().name}
-      options={options()}
-    />
-  )
+  return <DialogSelect title="Select agent" current={local.agent.current().name} options={options()} />
 }

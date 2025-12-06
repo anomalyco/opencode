@@ -4,7 +4,6 @@ import { Session } from "../../session"
 import { Log } from "../../util/log"
 
 const log = Log.create({ service: "acp-text-translator" })
-const isForgeSession = (id: string) => id.startsWith("ses-")
 
 /**
  * Handle agent_message_chunk notification (text streaming)
@@ -42,12 +41,8 @@ export async function handleAgentMessageChunk(
   // Save part to storage AND publish Bus event
   log.debug("attempting to save part", { partID: part.id, messageID: part.messageID, deltaLength: delta.length })
   try {
-    if (isForgeSession(sessionID)) {
-      await Session.updatePart({ part, delta })
-      log.debug("successfully saved part", { partID: part.id })
-    } else {
-      log.debug("skipping Session.updatePart for non-forge session", { sessionID })
-    }
+    await Session.updatePart({ part, delta })
+    log.debug("successfully saved part", { partID: part.id })
   } catch (error) {
     // Log the actual error details
     const err = error instanceof Error ? error : new Error(String(error))
@@ -100,14 +95,14 @@ export async function handleAgentThoughtChunk(
   }
 
   // Save part to storage AND publish Bus event
-  log.debug("attempting to save reasoning part", { partID: part.id, messageID: part.messageID, deltaLength: delta.length })
+  log.debug("attempting to save reasoning part", {
+    partID: part.id,
+    messageID: part.messageID,
+    deltaLength: delta.length,
+  })
   try {
-    if (isForgeSession(sessionID)) {
-      await Session.updatePart({ part, delta })
-      log.debug("successfully saved reasoning part", { partID: part.id })
-    } else {
-      log.debug("skipping Session.updatePart for non-forge session", { sessionID })
-    }
+    await Session.updatePart({ part, delta })
+    log.debug("successfully saved reasoning part", { partID: part.id })
   } catch (error) {
     // Log the actual error details
     const err = error instanceof Error ? error : new Error(String(error))
