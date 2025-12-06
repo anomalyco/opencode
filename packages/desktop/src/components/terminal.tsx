@@ -1,10 +1,8 @@
-import { init, Terminal as Term, FitAddon } from "ghostty-web"
+import { Ghostty, Terminal as Term, FitAddon } from "ghostty-web"
 import { ComponentProps, onCleanup, onMount, splitProps } from "solid-js"
 import { useSDK } from "@/context/sdk"
 import { SerializeAddon } from "@/addons/serialize"
 import { LocalPTY } from "@/context/session"
-
-await init()
 
 export interface TerminalProps extends ComponentProps<"div"> {
   pty: LocalPTY
@@ -19,10 +17,14 @@ export const Terminal = (props: TerminalProps) => {
   const [local, others] = splitProps(props, ["pty", "class", "classList", "onConnectError"])
   let ws: WebSocket
   let term: Term
+  let ghostty: Ghostty
   let serializeAddon: SerializeAddon
   let fitAddon: FitAddon
+  let handleResize: () => void
 
   onMount(async () => {
+    ghostty = await Ghostty.load()
+
     ws = new WebSocket(sdk.url + `/pty/${local.pty.id}/connect?directory=${encodeURIComponent(sdk.directory)}`)
     term = new Term({
       cursorBlink: true,
@@ -34,6 +36,7 @@ export const Terminal = (props: TerminalProps) => {
         foreground: "#d4d4d4",
       },
       scrollback: 10_000,
+      ghostty,
     })
     term.attachCustomKeyEventHandler((event) => {
       // allow for ctrl-` to toggle terminal in parent
@@ -60,13 +63,14 @@ export const Terminal = (props: TerminalProps) => {
       if (local.pty.scrollY) {
         term.scrollToLine(local.pty.scrollY)
       }
+      fitAddon.fit()
     }
 
     container.focus()
 
-    fitAddon.fit()
     fitAddon.observeResize()
-    window.addEventListener("resize", () => fitAddon.fit())
+    handleResize = () => fitAddon.fit()
+    window.addEventListener("resize", handleResize)
     term.onResize(async (size) => {
       if (ws && ws.readyState === WebSocket.OPEN) {
         await sdk.client.pty.update({
@@ -118,6 +122,9 @@ export const Terminal = (props: TerminalProps) => {
   })
 
   onCleanup(() => {
+    if (handleResize) {
+      window.removeEventListener("resize", handleResize)
+    }
     if (serializeAddon && props.onCleanup) {
       const buffer = serializeAddon.serialize()
       props.onCleanup({
