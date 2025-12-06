@@ -10,7 +10,7 @@
   "favicon": "/favicon.svg",
   "servers": [{
     "url": "https://opencode.ai/openapi.json"
-  }]
+  }],
   "navigation": {
     "tabs": [
       {
