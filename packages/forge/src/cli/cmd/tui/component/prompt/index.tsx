@@ -449,23 +449,22 @@ export function Prompt(props: PromptProps) {
         },
       })
     } else {
+      // Filter out agent parts - they're for UI only, not for sending to the server
+      const validParts = nonTextParts.filter((p) => p.type !== "agent")
+
       sdk.client.session.prompt({
         path: {
           id: sessionID,
         },
         body: {
           messageID,
-          agent: local.agent.current().name,
           parts: [
             {
-              id: Identifier.ascending("part"),
               type: "text",
               text: inputText,
             },
-            ...nonTextParts.map((x) => ({
-              id: Identifier.ascending("part"),
-              ...x,
-            })),
+            // Spread valid parts (file parts only, since agent parts are filtered out)
+            ...validParts,
           ],
         },
       })

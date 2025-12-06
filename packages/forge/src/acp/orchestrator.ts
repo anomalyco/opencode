@@ -7,8 +7,9 @@ import { Session } from "../session"
 import { Identifier } from "../id/id"
 import { AuthenticationRequiredError } from "./types"
 import { Permission } from "../permission"
-import type { SessionModelState, ModelId, SessionModeState } from "@agentclientprotocol/sdk"
-import { ACPAgentDefinition, DEFAULT_AGENT, getAgent } from "./agents"
+import type { SessionModelState, SessionModeState } from "@agentclientprotocol/sdk"
+import type { ACPAgentDefinition } from "./agents"
+import { DEFAULT_AGENT, getAgent } from "./agents"
 
 const log = Log.create({ service: "acp-orchestrator" })
 
@@ -205,7 +206,7 @@ export namespace ACPOrchestrator {
   /**
    * Set the model for a session.
    */
-  export async function setModel(sessionID: string, modelId: ModelId): Promise<void> {
+  export async function setModel(sessionID: string, modelId: string): Promise<void> {
     const state = await ensureClient(sessionID)
     if (!state.models?.availableModels?.some((m) => m.modelId === modelId)) {
       throw new Error(`Model not available for agent ${state.agent.name}: ${modelId}`)

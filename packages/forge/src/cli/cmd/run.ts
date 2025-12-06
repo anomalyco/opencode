@@ -231,12 +231,11 @@ export const RunCommand = cmd({
           },
         })
       } else {
-        const modelParam = args.model ? Provider.parseModel(args.model) : undefined
+        // Note: agent and model selection is handled through separate HTTP endpoints,
+        // not through the prompt body
         await sdk.session.prompt({
           path: { id: sessionID },
           body: {
-            agent: args.agent || "build",
-            model: modelParam,
             parts: [...fileParts, { type: "text", text: message }],
           },
         })

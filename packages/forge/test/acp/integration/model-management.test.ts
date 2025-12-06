@@ -34,7 +34,7 @@ describeIntegration("ACP Client Model Management", () => {
         args: ["@zed-industries/claude-code-acp"],
         cwd: process.cwd(),
         env: {
-          ANTHROPIC_API_KEY: process.env.ANTHROPIC_API_KEY
+          ANTHROPIC_API_KEY: process.env.ANTHROPIC_API_KEY!
         },
       })
 
@@ -75,7 +75,7 @@ describeIntegration("ACP Client Model Management", () => {
         args: ["@zed-industries/claude-code-acp"],
         cwd: process.cwd(),
         env: {
-          ANTHROPIC_API_KEY: process.env.ANTHROPIC_API_KEY
+          ANTHROPIC_API_KEY: process.env.ANTHROPIC_API_KEY!
         },
       })
 
@@ -109,7 +109,7 @@ describeIntegration("ACP Client Model Management", () => {
         args: ["@zed-industries/claude-code-acp"],
         cwd: process.cwd(),
         env: {
-          ANTHROPIC_API_KEY: process.env.ANTHROPIC_API_KEY
+          ANTHROPIC_API_KEY: process.env.ANTHROPIC_API_KEY!
         },
       })
 
@@ -164,7 +164,7 @@ describeIntegration("ACP Client Model Management", () => {
         args: ["@zed-industries/claude-code-acp"],
         cwd: process.cwd(),
         env: {
-          ANTHROPIC_API_KEY: process.env.ANTHROPIC_API_KEY
+          ANTHROPIC_API_KEY: process.env.ANTHROPIC_API_KEY!
         },
       })
 
@@ -210,7 +210,7 @@ describeIntegration("ACP Client Model Management", () => {
 
         const callbackResult = await Promise.race([modelChangePromise, timeoutPromise])
         expect(callbackResult).toBe(targetModel.modelId)
-        expect(callbackModelId).toBe(targetModel.modelId)
+        expect(callbackModelId!).toBe(targetModel.modelId)
 
         console.log("✓ onModelChange callback triggered with:", callbackModelId)
       } finally {
@@ -231,12 +231,12 @@ describeIntegration("ACP Client Model Management", () => {
         args: ["@zed-industries/claude-code-acp"],
         cwd: process.cwd(),
         env: {
-          ANTHROPIC_API_KEY: process.env.ANTHROPIC_API_KEY
+          ANTHROPIC_API_KEY: process.env.ANTHROPIC_API_KEY!
         },
         onSessionUpdate: (update: SessionNotification) => {
-          if (update.update.sessionUpdate === "current_model_update") {
+          if ((update.update as any).sessionUpdate === "current_model_update") {
             receivedModelUpdate = true
-            updatedModelId = update.update.currentModelId
+            updatedModelId = (update.update as any).currentModelId
             console.log("Received current_model_update:", updatedModelId)
           }
         },
@@ -293,7 +293,7 @@ describeIntegration("ACP Client Model Management", () => {
         args: ["@zed-industries/claude-code-acp"],
         cwd: process.cwd(),
         env: {
-          ANTHROPIC_API_KEY: process.env.ANTHROPIC_API_KEY
+          ANTHROPIC_API_KEY: process.env.ANTHROPIC_API_KEY!
         },
       })
 

@@ -18,7 +18,7 @@ export namespace Plugin {
       fetch: async (...args) => Server.App().fetch(...args),
     })
     const config = await Config.get()
-    const hooks = []
+    const hooks: Hooks[] = []
     const input: PluginInput = {
       client,
       project: Instance.project,
@@ -68,10 +68,8 @@ export namespace Plugin {
     for (const hook of await state().then((x) => x.hooks)) {
       const fn = hook[name]
       if (!fn) continue
-      // @ts-expect-error if you feel adventurous, please fix the typing, make sure to bump the try-counter if you
-      // give up.
-      // try-counter: 2
-      await fn(input, output)
+      // Type assertion needed because hook typing is complex with optional methods
+      await (fn as (input: Input, output: Output) => Promise<void>)(input, output)
     }
     return output
   }

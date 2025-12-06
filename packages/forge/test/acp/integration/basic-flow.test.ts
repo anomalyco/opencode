@@ -34,7 +34,7 @@ describeIntegration("ACP Client Basic Flow", () => {
       args: ["@zed-industries/claude-code-acp"],
       cwd: process.cwd(),
       env: {
-        ANTHROPIC_API_KEY: process.env.ANTHROPIC_API_KEY,
+        ANTHROPIC_API_KEY: process.env.ANTHROPIC_API_KEY!,
       },
       onSessionUpdate: (update: SessionNotification) => {
         if (update.update.sessionUpdate === "agent_message_chunk") {
@@ -78,7 +78,7 @@ describeIntegration("ACP Client Basic Flow", () => {
       args: ["@zed-industries/claude-code-acp"],
       cwd: process.cwd(),
       env: {
-        ANTHROPIC_API_KEY: process.env.ANTHROPIC_API_KEY,
+        ANTHROPIC_API_KEY: process.env.ANTHROPIC_API_KEY!,
       },
     })
 
@@ -101,7 +101,7 @@ describeIntegration("ACP Client Basic Flow", () => {
       args: ["@zed-industries/claude-code-acp"],
       cwd: process.cwd(),
       env: {
-        ANTHROPIC_API_KEY: process.env.ANTHROPIC_API_KEY,
+        ANTHROPIC_API_KEY: process.env.ANTHROPIC_API_KEY!,
       },
     })
 

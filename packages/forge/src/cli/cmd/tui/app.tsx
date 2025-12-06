@@ -250,7 +250,8 @@ function App() {
     {
       title: "Agent cycle",
       value: "agent.cycle",
-      keybind: "agent_cycle",
+      // TODO: Add agent_cycle keybind to KeybindsConfig
+      // keybind: "agent_cycle",
       category: "Agent",
       disabled: true,
       onSelect: () => {
@@ -260,7 +261,8 @@ function App() {
     {
       title: "Agent cycle reverse",
       value: "agent.cycle.reverse",
-      keybind: "agent_cycle_reverse",
+      // TODO: Add agent_cycle_reverse keybind to KeybindsConfig
+      // keybind: "agent_cycle_reverse",
       category: "Agent",
       disabled: true,
       onSelect: () => {

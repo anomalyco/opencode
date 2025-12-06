@@ -34,7 +34,7 @@ describeIntegration("ACP Client Mode Management", () => {
         args: ["@zed-industries/claude-code-acp"],
         cwd: process.cwd(),
         env: {
-          ANTHROPIC_API_KEY: process.env.ANTHROPIC_API_KEY
+          ANTHROPIC_API_KEY: process.env.ANTHROPIC_API_KEY!
         },
       })
 
@@ -69,7 +69,7 @@ describeIntegration("ACP Client Mode Management", () => {
         args: ["@zed-industries/claude-code-acp"],
         cwd: process.cwd(),
         env: {
-          ANTHROPIC_API_KEY: process.env.ANTHROPIC_API_KEY
+          ANTHROPIC_API_KEY: process.env.ANTHROPIC_API_KEY!
         },
       })
 
@@ -97,7 +97,7 @@ describeIntegration("ACP Client Mode Management", () => {
         args: ["@zed-industries/claude-code-acp"],
         cwd: process.cwd(),
         env: {
-          ANTHROPIC_API_KEY: process.env.ANTHROPIC_API_KEY
+          ANTHROPIC_API_KEY: process.env.ANTHROPIC_API_KEY!
         },
       })
 
@@ -142,7 +142,7 @@ describeIntegration("ACP Client Mode Management", () => {
         args: ["@zed-industries/claude-code-acp"],
         cwd: process.cwd(),
         env: {
-          ANTHROPIC_API_KEY: process.env.ANTHROPIC_API_KEY
+          ANTHROPIC_API_KEY: process.env.ANTHROPIC_API_KEY!
         },
       })
 
@@ -176,7 +176,7 @@ describeIntegration("ACP Client Mode Management", () => {
 
         const callbackResult = await Promise.race([modeChangePromise, timeoutPromise])
         expect(callbackResult).toBe(targetMode.id)
-        expect(callbackModeId).toBe(targetMode.id)
+        expect(callbackModeId!).toBe(targetMode.id)
 
         console.log("✓ onModeChange callback triggered with:", callbackModeId)
       } finally {
@@ -197,7 +197,7 @@ describeIntegration("ACP Client Mode Management", () => {
         args: ["@zed-industries/claude-code-acp"],
         cwd: process.cwd(),
         env: {
-          ANTHROPIC_API_KEY: process.env.ANTHROPIC_API_KEY
+          ANTHROPIC_API_KEY: process.env.ANTHROPIC_API_KEY!
         },
         onSessionUpdate: (update: SessionNotification) => {
           if (update.update.sessionUpdate === "current_mode_update") {
@@ -247,7 +247,7 @@ describeIntegration("ACP Client Mode Management", () => {
         args: ["@zed-industries/claude-code-acp"],
         cwd: process.cwd(),
         env: {
-          ANTHROPIC_API_KEY: process.env.ANTHROPIC_API_KEY
+          ANTHROPIC_API_KEY: process.env.ANTHROPIC_API_KEY!
         },
       })
 

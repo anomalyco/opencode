@@ -16,7 +16,6 @@ import {
   type SessionModeId,
   type SetSessionModeResponse,
   type SessionModelState,
-  type ModelId,
   type SetSessionModelResponse,
   PROTOCOL_VERSION,
   ndJsonStream,
@@ -127,17 +126,17 @@ export namespace ACPClient {
      * Get the current model ID
      * Returns null if no session has been created yet or if agent doesn't support models
      */
-    getCurrentModel(): ModelId | null
+    getCurrentModel(): string | null
     /**
      * Set the session model
      * @param modelId - The model ID to switch to (must be in availableModels)
      */
-    setModel(modelId: ModelId): Promise<SetSessionModelResponse>
+    setModel(modelId: string): Promise<SetSessionModelResponse>
     /**
      * Register a callback to be notified when the model changes
      * @param callback - Function to call when model changes
      */
-    onModelChange(callback: (modelId: ModelId) => void): void
+    onModelChange(callback: (modelId: string) => void): void
     /**
      * Get the underlying agent connection
      */
@@ -321,7 +320,7 @@ export namespace ACPClient {
     let currentModes: SessionModeState | null = null
     const modeChangeCallbacks: Array<(modeId: SessionModeId) => void> = []
     let currentModels: SessionModelState | null = null
-    const modelChangeCallbacks: Array<(modelId: ModelId) => void> = []
+    const modelChangeCallbacks: Array<(modelId: string) => void> = []
 
     const instance: Instance = {
       async initialize(): Promise<InitializeResponse> {
@@ -509,11 +508,11 @@ export namespace ACPClient {
         return currentModels
       },
 
-      getCurrentModel(): ModelId | null {
+      getCurrentModel(): string | null {
         return currentModels?.currentModelId ?? null
       },
 
-      async setModel(modelId: ModelId): Promise<SetSessionModelResponse> {
+      async setModel(modelId: string): Promise<SetSessionModelResponse> {
         if (!initialized) {
           throw new Error("Must initialize before setting model")
         }
@@ -549,7 +548,7 @@ export namespace ACPClient {
         return response
       },
 
-      onModelChange(callback: (modelId: ModelId) => void): void {
+      onModelChange(callback: (modelId: string) => void): void {
         modelChangeCallbacks.push(callback)
       },
 

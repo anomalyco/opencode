@@ -25,6 +25,11 @@ interface CapturedFixture {
   notifications: SessionNotification[]
 }
 
+interface StateFixture {
+  description: string
+  events: any[]
+}
+
 /**
  * Capture SessionNotifications for a given prompt
  */
@@ -53,7 +58,7 @@ async function captureNotifications(
 /**
  * Save fixture to JSON file
  */
-async function saveFixture(name: string, fixture: CapturedFixture): Promise<void> {
+async function saveFixture(name: string, fixture: CapturedFixture | StateFixture): Promise<void> {
   await mkdir(FIXTURES_DIR, { recursive: true })
 
   const filePath = join(FIXTURES_DIR, `${name}.json`)

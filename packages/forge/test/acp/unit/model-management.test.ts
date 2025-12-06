@@ -6,7 +6,7 @@
  */
 
 import { describe, expect, test } from "bun:test"
-import type { SessionModelState, ModelId } from "@agentclientprotocol/sdk"
+import type { SessionModelState } from "@agentclientprotocol/sdk"
 import modelFixtures from "../fixtures/data/model-notifications.json"
 
 describe("Model Management (unit)", () => {
@@ -73,10 +73,10 @@ describe("Model Management (unit)", () => {
       expect(modelUpdates.length).toBeGreaterThan(0)
 
       modelUpdates.forEach(update => {
-        expect(update.notification.sessionId).toBeTruthy()
-        expect(update.notification.update.sessionUpdate).toBe("current_model_update")
-        expect(typeof update.notification.update.currentModelId).toBe("string")
-        expect(update.notification.update.currentModelId.length).toBeGreaterThan(0)
+        expect(update.notification?.sessionId).toBeTruthy()
+        expect(update.notification?.update.sessionUpdate).toBe("current_model_update")
+        expect(typeof update.notification?.update.currentModelId).toBe("string")
+        expect(update.notification?.update.currentModelId?.length).toBeGreaterThan(0)
       })
     })
 
@@ -86,10 +86,10 @@ describe("Model Management (unit)", () => {
       expect(modelUpdates.length).toBeGreaterThan(0)
 
       modelUpdates.forEach(update => {
-        expect(update.notification.sessionId).toBeTruthy()
-        expect(update.notification.update.sessionUpdate).toBe("current_model_update")
-        expect(typeof update.notification.update.currentModelId).toBe("string")
-        expect(update.notification.update.currentModelId.length).toBeGreaterThan(0)
+        expect(update.notification?.sessionId).toBeTruthy()
+        expect(update.notification?.update.sessionUpdate).toBe("current_model_update")
+        expect(typeof update.notification?.update.currentModelId).toBe("string")
+        expect(update.notification?.update.currentModelId.length).toBeGreaterThan(0)
       })
     })
   })
@@ -101,12 +101,12 @@ describe("Model Management (unit)", () => {
       // Verify we have a sequence
       if (modelUpdates.length > 0) {
         // Extract model IDs in order
-        const modelSequence = modelUpdates.map(e => e.notification.update.currentModelId)
+        const modelSequence = modelUpdates.map(e => e.notification?.update.currentModelId)
 
         // Verify models are valid strings
         modelSequence.forEach(modelId => {
           expect(typeof modelId).toBe("string")
-          expect(modelId.length).toBeGreaterThan(0)
+          if (modelId) expect(modelId.length).toBeGreaterThan(0)
         })
       }
     })
@@ -115,12 +115,12 @@ describe("Model Management (unit)", () => {
       const fixtureData = modelFixtures.events.find(e => e.type === "initial_session_models")
       const models = fixtureData!.models as SessionModelState
 
-      // Type assertion to verify ModelId compatibility
-      const currentModel: ModelId = models.currentModelId
+      // Type assertion to verify modelId compatibility (modelId is just a string)
+      const currentModel: string = models.currentModelId
       expect(typeof currentModel).toBe("string")
 
       models.availableModels.forEach(model => {
-        const modelId: ModelId = model.modelId
+        const modelId: string = model.modelId
         expect(typeof modelId).toBe("string")
       })
     })

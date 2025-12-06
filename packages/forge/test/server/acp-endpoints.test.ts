@@ -39,7 +39,7 @@ function mockState(): MockState {
     client: null,
     acpSessionID: "acp-mock",
     models: {
-      availableModels: [{ modelId: "default" }],
+      availableModels: [{ modelId: "default", name: "Default Model" }],
       currentModelId: "default",
     },
     modes: {

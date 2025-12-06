@@ -60,12 +60,12 @@ describe("Mode Management (unit)", () => {
     test("should parse mode change to 'plan' if present", () => {
       const modeUpdates = modeFixtures.events.filter(e => e.type === "current_mode_update")
       const planUpdate = modeUpdates.find(e =>
-        e.notification.update.currentModeId === "plan"
+        e.notification?.update.currentModeId === "plan"
       )
 
       if (planUpdate) {
-        expect(planUpdate.notification.update.sessionUpdate).toBe("current_mode_update")
-        expect(planUpdate.notification.update.currentModeId).toBe("plan")
+        expect(planUpdate.notification?.update.sessionUpdate).toBe("current_mode_update")
+        expect(planUpdate.notification?.update.currentModeId).toBe("plan")
       } else {
         // If fixture lacks plan updates, ensure we still have mode updates overall
         expect(modeUpdates.length).toBeGreaterThan(0)
@@ -75,23 +75,23 @@ describe("Mode Management (unit)", () => {
     test("should parse mode change to 'acceptEdits'", () => {
       const modeUpdates = modeFixtures.events.filter(e => e.type === "current_mode_update")
       const acceptEditsUpdate = modeUpdates.find(e =>
-        e.notification.update.currentModeId === "acceptEdits"
+        e.notification?.update.currentModeId === "acceptEdits"
       )
 
       expect(acceptEditsUpdate).toBeTruthy()
-      expect(acceptEditsUpdate!.notification.update.sessionUpdate).toBe("current_mode_update")
-      expect(acceptEditsUpdate!.notification.update.currentModeId).toBe("acceptEdits")
+      expect(acceptEditsUpdate!.notification?.update.sessionUpdate).toBe("current_mode_update")
+      expect(acceptEditsUpdate!.notification?.update.currentModeId).toBe("acceptEdits")
     })
 
     test("should parse mode change back to 'default'", () => {
       const modeUpdates = modeFixtures.events.filter(e => e.type === "current_mode_update")
       const defaultUpdate = modeUpdates.find(e =>
-        e.notification.update.currentModeId === "default" &&
+        e.notification?.update.currentModeId === "default" &&
         e.description.includes("back to")
       )
 
       expect(defaultUpdate).toBeTruthy()
-      expect(defaultUpdate!.notification.update.currentModeId).toBe("default")
+      expect(defaultUpdate!.notification?.update.currentModeId).toBe("default")
     })
 
     test("all mode updates should have valid structure", () => {
@@ -100,10 +100,10 @@ describe("Mode Management (unit)", () => {
       expect(modeUpdates.length).toBeGreaterThan(0)
 
       modeUpdates.forEach(update => {
-        expect(update.notification.sessionId).toBeTruthy()
-        expect(update.notification.update.sessionUpdate).toBe("current_mode_update")
-        expect(typeof update.notification.update.currentModeId).toBe("string")
-        expect(update.notification.update.currentModeId.length).toBeGreaterThan(0)
+        expect(update.notification?.sessionId).toBeTruthy()
+        expect(update.notification?.update.sessionUpdate).toBe("current_mode_update")
+        expect(typeof update.notification?.update.currentModeId).toBe("string")
+        expect(update.notification?.update.currentModeId.length).toBeGreaterThan(0)
       })
     })
   })
@@ -113,7 +113,7 @@ describe("Mode Management (unit)", () => {
       const modeUpdates = modeFixtures.events.filter(e => e.type === "current_mode_update")
 
       // Extract mode IDs in order
-      const modeSequence = modeUpdates.map(e => e.notification.update.currentModeId)
+      const modeSequence = modeUpdates.map(e => e.notification?.update.currentModeId)
 
       // Verify we have a sequence
       expect(modeSequence.length).toBeGreaterThanOrEqual(2)
@@ -121,7 +121,7 @@ describe("Mode Management (unit)", () => {
       // Verify modes are valid
       const validModes = ["default", "acceptEdits", "plan", "bypassPermissions"]
       modeSequence.forEach(modeId => {
-        expect(validModes).toContain(modeId)
+        if (modeId) expect(validModes).toContain(modeId)
       })
     })
 
