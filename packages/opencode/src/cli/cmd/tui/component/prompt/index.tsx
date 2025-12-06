@@ -44,6 +44,8 @@ export type PromptRef = {
   focus(): void
 }
 
+const PLACEHOLDERS = ["Fix a TODO in the codebase", "What is the tech stack of this project?", "Fix broken tests"]
+
 export function Prompt(props: PromptProps) {
   let input: TextareaRenderable
   let anchor: BoxRenderable
@@ -278,7 +280,9 @@ export function Prompt(props: PromptProps) {
     mode: "normal" | "shell"
     extmarkToPartIndex: Map<number, number>
     interrupt: number
+    placeholder: number
   }>({
+    placeholder: Math.floor(Math.random() * PLACEHOLDERS.length),
     prompt: {
       input: "",
       parts: [],
@@ -666,7 +670,7 @@ export function Prompt(props: PromptProps) {
             flexGrow={1}
           >
             <textarea
-              placeholder={props.sessionID ? undefined : "Build anything..."}
+              placeholder={props.sessionID ? undefined : `Ask anything... "${PLACEHOLDERS[store.placeholder]}"`}
               textColor={theme.text}
               focusedTextColor={theme.text}
               minHeight={1}

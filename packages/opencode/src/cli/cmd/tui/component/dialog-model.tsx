@@ -108,6 +108,7 @@ export function DialogModel() {
           pipe(
             provider.models,
             entries(),
+            filter(([_, info]) => info.status !== "deprecated"),
             map(([model, info]) => {
               const value = {
                 providerID: provider.id,
