@@ -75,7 +75,10 @@ export function activate(context: vscode.ExtensionContext) {
     do {
       await new Promise((resolve) => setTimeout(resolve, 200))
       try {
-        await fetch(`http://localhost:${port}/app`)
+        await fetch(`https://localhost:${port}/app`, {
+          method: "GET",
+          headers: {},
+        })
         connected = true
         break
       } catch (e) {}
@@ -91,7 +94,7 @@ export function activate(context: vscode.ExtensionContext) {
   }
 
   async function appendPrompt(port: number, text: string) {
-    await fetch(`http://localhost:${port}/tui/append-prompt`, {
+    await fetch(`https://localhost:${port}/tui/append-prompt`, {
       method: "POST",
       headers: {
         "Content-Type": "application/json",
