@@ -1,8 +1,12 @@
 {
   "name": "@opencode-ai/desktop",
-  "version": "1.0.133",
+  "version": "1.0.134",
   "description": "",
   "type": "module",
+  "exports": {
+    ".": "./src/index.tsx",
+    "./vite": "./vite.js"
+  },
   "scripts": {
     "typecheck": "tsgo --noEmit",
     "start": "vite",
@@ -33,11 +37,13 @@
     "@solid-primitives/resize-observer": "2.1.3",
     "@solid-primitives/scroll": "2.1.3",
     "@solid-primitives/storage": "4.3.3",
+    "@solid-primitives/websocket": "1.3.1",
     "@solidjs/meta": "catalog:",
     "@solidjs/router": "catalog:",
     "@thisbeyond/solid-dnd": "0.7.5",
     "diff": "catalog:",
     "fuzzysort": "catalog:",
+    "ghostty-web": "0.3.0",
     "luxon": "catalog:",
     "marked": "16.2.0",
     "marked-shiki": "1.2.1",

@@ -568,7 +568,7 @@ The `global` region improves availability and reduces errors at no extra cost. U
 
 You can configure opencode to use local models through [llama.cpp's](https://github.com/ggml-org/llama.cpp) llama-server utility
 
-```json title="opencode.json" "llama.cpp" {5, 6, 8, 10-14}
+```json title="opencode.json" "llama.cpp" {5, 6, 8, 10-15}
 {
   "$schema": "https://opencode.ai/config.json",
   "provider": {
@@ -580,12 +580,12 @@ You can configure opencode to use local models through [llama.cpp's](https://git
       },
       "models": {
         "qwen3-coder:a3b": {
-          "name": "Qwen3-Coder: a3b-30b (local)"
+          "name": "Qwen3-Coder: a3b-30b (local)",
+          "limit": {
+            "context": 128000,
+            "output": 65536
+          }
         }
-      },
-      "limit": {
-        "context": 128000,
-        "output": 65536
       }
     }
   }
