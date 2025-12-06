@@ -38,37 +38,6 @@ export namespace Command {
     REVIEW: "review",
   } as const
 
-  const state = Instance.state(async () => {
-    const cfg = await Config.get()
-
-    const result: Record<string, Info> = {
-      [Default.INIT]: {
-        name: Default.INIT,
-        description: "create/update AGENTS.md",
-        template: PROMPT_INITIALIZE.replace("${path}", Instance.worktree),
-      },
-      [Default.REVIEW]: {
-        name: Default.REVIEW,
-        description: "review changes [commit|branch|pr], defaults to uncommitted",
-        template: PROMPT_REVIEW.replace("${path}", Instance.worktree),
-        subtask: true,
-      },
-    }
-
-    for (const [name, command] of Object.entries(cfg.command ?? {})) {
-      result[name] = {
-        name,
-        agent: command.agent,
-        model: command.model,
-        description: command.description,
-        template: command.template,
-        subtask: command.subtask,
-      }
-    }
-
-    return result
-  })
-
   function createBuiltInCommands() {
     return {
       [Default.INIT]: {
@@ -84,6 +53,24 @@ export namespace Command {
       },
     } as Record<string, Info>
   }
+
+  const state = Instance.state(async () => {
+    const cfg = await Config.get()
+    const result = createBuiltInCommands()
+
+    for (const [name, command] of Object.entries(cfg.command ?? {})) {
+      result[name] = {
+        name,
+        agent: command.agent,
+        model: command.model,
+        description: command.description,
+        template: command.template,
+        subtask: command.subtask,
+      }
+    }
+
+    return result
+  })
 
   async function loadFreshCommands(): Promise<Record<string, Info>> {
     const result = createBuiltInCommands()
