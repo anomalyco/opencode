@@ -95,6 +95,16 @@ export function DialogMessage(props: {
             dialog.clear()
           },
         },
+        {
+          title: "Copy Fork Command",
+          value: "session.copy-fork-command",
+          description: "to fork in a new terminal",
+          onSelect: async (dialog) => {
+            const command = `opencode session fork --session ${props.sessionID} --message ${props.messageID}`
+            await Clipboard.copy(command)
+            dialog.clear()
+          },
+        },
       ]}
     />
   )
