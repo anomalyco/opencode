@@ -1522,7 +1522,7 @@ ToolRegistry.register<typeof TaskTool>({
           <box>
             <For each={props.metadata.summary ?? []}>
               {(task) => (
-                <text style={{ fg: theme.textMuted }}>
+                <text style={{ fg: task.state.status === "error" ? theme.error : theme.textMuted }}>
                   ∟ {Locale.titlecase(task.tool)} {task.state.status === "completed" ? task.state.title : ""}
                 </text>
               )}
