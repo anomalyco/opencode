@@ -35,7 +35,7 @@
       "diff": "8.0.2",
       "ai": "5.0.97",
       "hono": "4.10.7",
-      "hono-openapi": "1.1.1",
+      "hono-openapi": "1.1.2",
       "fuzzysort": "3.1.0",
       "luxon": "3.6.1",
       "typescript": "5.8.2",
