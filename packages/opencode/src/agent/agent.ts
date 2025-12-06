@@ -34,6 +34,7 @@ export namespace Agent {
       tools: z.record(z.string(), z.boolean()),
       subagents: z.record(z.string(), z.boolean()),
       options: z.record(z.string(), z.any()),
+      maxSteps: z.number().int().positive().optional(),
     })
     .meta({
       ref: "Agent",
@@ -199,6 +200,7 @@ export namespace Agent {
         mode,
         permission,
         color,
+        maxSteps,
         ...extra
       } = value
       item.options = {
@@ -228,6 +230,7 @@ export namespace Agent {
       if (color) item.color = color
       // just here for consistency & to prevent it from being added as an option
       if (name) item.name = name
+      if (maxSteps != undefined) item.maxSteps = maxSteps
 
       if (permission ?? cfg.permission) {
         item.permission = mergeAgentPermissions(cfg.permission ?? {}, permission ?? {})
@@ -245,6 +248,7 @@ export namespace Agent {
   }
 
   export async function generate(input: { description: string }) {
+    const cfg = await Config.get()
     const defaultModel = await Provider.defaultModel()
     const model = await Provider.getModel(defaultModel.providerID, defaultModel.modelID)
     const language = await Provider.getLanguage(model)
@@ -252,6 +256,7 @@ export namespace Agent {
     system.push(PROMPT_GENERATE)
     const existing = await list()
     const result = await generateObject({
+      experimental_telemetry: { isEnabled: cfg.experimental?.openTelemetry },
       temperature: 0.3,
       prompt: [
         ...system.map(

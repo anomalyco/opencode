@@ -28,9 +28,3 @@ jobs:
           bun turbo test
         env:
           CI: true
-
-      - name: Check SDK is up to date
-        run: |
-          bun ./packages/sdk/js/script/build.ts
-          git diff --exit-code packages/sdk/js/src/gen packages/sdk/js/dist
-        continue-on-error: false

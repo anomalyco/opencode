@@ -257,6 +257,28 @@ If no temperature is specified, OpenCode uses model-specific defaults; typically
 
 ---
 
+### Max steps
+
+Control the maximum number of agentic iterations an agent can perform before being forced to respond with text only. This allows users who wish to control costs to set a limit on agentic actions.
+
+If this is not set, the agent will continue to iterate until the model chooses to stop or the user interrupts the session.
+
+```json title="opencode.json"
+{
+  "agent": {
+    "quick-thinker": {
+      "description": "Fast reasoning with limited iterations",
+      "prompt": "You are a quick thinker. Solve problems with minimal steps.",
+      "maxSteps": 5
+    }
+  }
+}
+```
+
+When the limit is reached, the agent receives a special system prompt instructing it to respond with a summarization of its work and recommended remaining tasks.
+
+---
+
 ### Disable
 
 Set to `true` to disable the agent.
