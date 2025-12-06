@@ -30,7 +30,6 @@ jobs:
             echo "No changes to commit"
             exit 0
           fi
-          bun ./packages/opencode/src/index.ts
           git config --local user.email "action@github.com"
           git config --local user.name "GitHub Action"
           git add -A
