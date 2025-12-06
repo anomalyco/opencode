@@ -42,6 +42,8 @@ Want to take on an issue? Leave a comment and a maintainer may assign it to you 
 > [!NOTE]
 > After touching `packages/opencode/src/server/server.ts`, run "./packages/sdk/js/script/build.ts" to regenerate the JS sdk.
 
+Please try to follow the [style guide](./STYLE_GUIDE.md)
+
 ### Setting up a Debugger
 
 Bun debugging is currently rough around the edges. We hope this guide helps you get set up and avoid some pain points.

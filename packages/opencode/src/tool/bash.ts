@@ -234,13 +234,15 @@ export const BashTool = Tool.define("bash", async () => {
       })
 
       const append = (chunk: Buffer) => {
-        output += chunk.toString()
-        ctx.metadata({
-          metadata: {
-            output,
-            description: params.description,
-          },
-        })
+        if (output.length <= MAX_OUTPUT_LENGTH) {
+          output += chunk.toString()
+          ctx.metadata({
+            metadata: {
+              output,
+              description: params.description,
+            },
+          })
+        }
       }
 
       proc.stdout?.on("data", append)
@@ -295,7 +297,7 @@ export const BashTool = Tool.define("bash", async () => {
       const timeoutTimer = setTimeout(() => {
         timedOut = true
         void killTree()
-      }, timeout)
+      }, timeout + 100)
 
       await new Promise<void>((resolve, reject) => {
         const cleanup = () => {
@@ -316,17 +318,24 @@ export const BashTool = Tool.define("bash", async () => {
         })
       })
 
+      let resultMetadata: String[] = ["<bash_metadata>"]
+
       if (output.length > MAX_OUTPUT_LENGTH) {
         output = output.slice(0, MAX_OUTPUT_LENGTH)
-        output += "\n\n(Output was truncated due to length limit)"
+        resultMetadata.push(`bash tool truncated output as it exceeded ${MAX_OUTPUT_LENGTH} char limit`)
       }
 
       if (timedOut) {
-        output += `\n\n(Command timed out after ${timeout} ms)`
+        resultMetadata.push(`bash tool terminated commmand after exceeding timeout ${timeout} ms`)
       }
 
       if (aborted) {
-        output += "\n\n(Command was aborted)"
+        resultMetadata.push("User aborted the command")
+      }
+
+      if (resultMetadata.length > 1) {
+        resultMetadata.push("</bash_metadata>")
+        output += "\n\n" + resultMetadata.join("\n")
       }
 
       return {
