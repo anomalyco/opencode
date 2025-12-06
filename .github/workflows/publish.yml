@@ -26,6 +26,7 @@ permissions:
 jobs:
   publish:
     runs-on: blacksmith-4vcpu-ubuntu-2404
+    if: github.repository == 'sst/opencode'
     steps:
       - uses: actions/checkout@v3
         with:
@@ -79,3 +80,76 @@ jobs:
           GITHUB_TOKEN: ${{ secrets.SST_GITHUB_TOKEN }}
           AUR_KEY: ${{ secrets.AUR_KEY }}
           OPENCODE_API_KEY: ${{ secrets.OPENCODE_API_KEY }}
+
+  publish-tauri:
+    strategy:
+      matrix:
+        settings:
+          - host: macos-latest
+            target: x86_64-apple-darwin
+          - host: macos-latest
+            target: aarch64-apple-darwin
+          - host: windows-latest
+            target: x86_64-pc-windows-msvc
+          - host: ubuntu-24.04
+            target: x86_64-unknown-linux-gnu
+    runs-on: ${{ matrix.settings.host }}
+    steps:
+      - uses: actions/checkout@v3
+        with:
+          fetch-depth: 0
+
+      - run: git fetch --force --tags
+
+      - uses: ./.github/actions/setup-bun
+
+      - name: install dependencies (ubuntu only)
+        if: startsWith(matrix.settings.host, 'ubuntu')
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y libwebkit2gtk-4.1-dev libappindicator3-dev librsvg2-dev patchelf
+
+      - name: install Rust stable
+        uses: dtolnay/rust-toolchain@stable
+        with:
+          targets: ${{ matrix.settings.target }}
+
+      - uses: Swatinem/rust-cache@v2
+        with:
+          workspaces: packages/tauri/src-tauri
+          shared-key: ${{ matrix.settings.target }}
+
+      - name: Prepare
+        run: |
+          cd packages/tauri
+          bun ./scripts/prepare.ts
+        env:
+          OPENCODE_BUMP: ${{ inputs.bump }}
+          OPENCODE_VERSION: ${{ inputs.version }}
+          OPENCODE_CHANNEL: latest
+          NPM_CONFIG_TOKEN: ${{ secrets.NPM_TOKEN }}
+          GITHUB_TOKEN: ${{ secrets.SST_GITHUB_TOKEN }}
+          AUR_KEY: ${{ secrets.AUR_KEY }}
+          OPENCODE_API_KEY: ${{ secrets.OPENCODE_API_KEY }}
+          RUST_TARGET: ${{ matrix.settings.target }}
+          GH_TOKEN: ${{ github.token }}
+
+      # Fixes AppImage build issues, can be removed when https://github.com/tauri-apps/tauri/pull/12491 is released
+      - run: cargo install tauri-cli --git https://github.com/tauri-apps/tauri --branch feat/truly-portable-appimage
+        if: startsWith(matrix.settings.host, 'ubuntu')
+
+      - name: Build and upload artifacts
+        uses: tauri-apps/tauri-action@390cbe447412ced1303d35abe75287949e43437a
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          TAURI_BUNDLER_NEW_APPIMAGE_FORMAT: true
+          TAURI_SIGNING_PRIVATE_KEY: ${{ secrets.TAURI_SIGNING_PRIVATE_KEY }}
+        with:
+          projectPath: packages/tauri
+          uploadWorkflowArtifacts: true
+          tauriScript: ${{ (startsWith(matrix.settings.host, 'ubuntu') && 'cargo tauri') || '' }}
+          args: --target ${{ matrix.settings.target }}
+          updaterJsonPreferNsis: true
+          releaseDraft: true
+          tagName: ${{ inputs.version }}
+          releaseName: ${{ inputs.version }}
