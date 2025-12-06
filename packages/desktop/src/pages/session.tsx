@@ -84,6 +84,10 @@ export default function Page() {
     }
     if (event.ctrlKey && event.key.toLowerCase() === "`") {
       event.preventDefault()
+      if (event.shiftKey) {
+        session.terminal.new()
+        return
+      }
       layout.terminal.toggle()
       return
     }
@@ -663,7 +667,11 @@ export default function Page() {
             <For each={session.terminal.all()}>
               {(terminal) => (
                 <Tabs.Content value={terminal.id}>
-                  <Terminal pty={terminal} onCleanup={session.terminal.update} />
+                  <Terminal
+                    pty={terminal}
+                    onCleanup={session.terminal.update}
+                    onConnectError={() => session.terminal.clone(terminal.id)}
+                  />
                 </Tabs.Content>
               )}
             </For>

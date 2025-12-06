@@ -139,6 +139,7 @@ export function Session() {
   const [promptDraft, setPromptDraft] = createSignal("")
   const [usernameVisible, setUsernameVisible] = createSignal(kv.get("username_visible", true))
   const [showDetails, setShowDetails] = createSignal(kv.get("tool_details_visibility", true))
+  const [showScrollbar, setShowScrollbar] = createSignal(kv.get("scrollbar_visible", false))
   const [diffWrapMode, setDiffWrapMode] = createSignal<"word" | "none">("word")
 
   const wide = createMemo(() => dimensions().width > 120)
@@ -544,6 +545,20 @@ export function Session() {
       },
     },
     {
+      title: "Toggle session scrollbar",
+      value: "session.toggle.scrollbar",
+      keybind: "scrollbar_toggle",
+      category: "Session",
+      onSelect: (dialog) => {
+        setShowScrollbar((prev) => {
+          const next = !prev
+          kv.set("scrollbar_visible", next)
+          return next
+        })
+        dialog.clear()
+      },
+    },
+    {
       title: "Page up",
       value: "session.page.up",
       keybind: "messages_page_up",
@@ -933,9 +948,9 @@ export function Session() {
                 <>
                   <scrollbox
                     ref={(r) => (scroll = r)}
-                    scrollbarOptions={{
-                      paddingLeft: 2,
-                      visible: false,
+                    verticalScrollbarOptions={{
+                      paddingLeft: 1,
+                      visible: showScrollbar(),
                       trackOptions: {
                         backgroundColor: theme.backgroundElement,
                         foregroundColor: theme.border,

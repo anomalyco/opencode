@@ -791,6 +791,10 @@ export type KeybindsConfig = {
    */
   sidebar_toggle?: string
   /**
+   * Toggle session scrollbar
+   */
+  scrollbar_toggle?: string
+  /**
    * Toggle username visibility
    */
   username_toggle?: string
@@ -966,6 +970,10 @@ export type AgentConfig = {
    * Hex color code for the agent (e.g., #FF5733)
    */
   color?: string
+  /**
+   * Maximum number of agentic iterations before forcing text-only response
+   */
+  maxSteps?: number
   permission?: {
     edit?: "ask" | "allow" | "deny"
     bash?:
@@ -986,6 +994,7 @@ export type AgentConfig = {
       }
     | boolean
     | ("subagent" | "primary" | "all")
+    | number
     | {
         edit?: "ask" | "allow" | "deny"
         bash?:
@@ -1318,6 +1327,10 @@ export type Config = {
      */
     batch_tool?: boolean
     /**
+     * Enable OpenTelemetry spans for AI SDK calls (using the 'experimental_telemetry' flag)
+     */
+    openTelemetry?: boolean
+    /**
      * Tools that should only be available to primary agents.
      */
     primary_tools?: Array<string>
@@ -1554,6 +1567,7 @@ export type Agent = {
   options: {
     [key: string]: unknown
   }
+  maxSteps?: number
 }
 
 export type McpStatusConnected = {
@@ -1816,9 +1830,9 @@ export type PtyConnectData = {
 
 export type PtyConnectErrors = {
   /**
-   * Session not found
+   * Not found
    */
-  404: boolean
+  404: NotFoundError
 }
 
 export type PtyConnectError = PtyConnectErrors[keyof PtyConnectErrors]

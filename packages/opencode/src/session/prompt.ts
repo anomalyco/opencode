@@ -27,6 +27,7 @@ import { Plugin } from "../plugin"
 
 import PROMPT_PLAN from "../session/prompt/plan.txt"
 import BUILD_SWITCH from "../session/prompt/build-switch.txt"
+import MAX_STEPS from "../session/prompt/max-steps.txt"
 import { defer } from "../util/defer"
 import { mergeDeep, pipe } from "remeda"
 import { ToolRegistry } from "../tool/registry"
@@ -42,6 +43,7 @@ import { Command } from "../command"
 import { $, fileURLToPath } from "bun"
 import { ConfigMarkdown } from "../config/markdown"
 import { SessionSummary } from "./summary"
+import { Config } from "../config/config"
 import { NamedError } from "@opencode-ai/util/error"
 import { fn } from "@/util/fn"
 import { SessionProcessor } from "./processor"
@@ -433,7 +435,10 @@ export namespace SessionPrompt {
       }
 
       // normal processing
+      const cfg = await Config.get()
       const agent = await Agent.get(lastUser.agent)
+      const maxSteps = agent.maxSteps ?? Infinity
+      const isLastStep = step >= maxSteps
       msgs = insertReminders({
         messages: msgs,
         agent,
@@ -470,6 +475,7 @@ export namespace SessionPrompt {
         model,
         agent,
         system: lastUser.system,
+        isLastStep,
       })
       const tools = await resolveTools({
         agent,
@@ -560,6 +566,7 @@ export namespace SessionPrompt {
         stopWhen: stepCountIs(1),
         temperature: params.temperature,
         topP: params.topP,
+        toolChoice: isLastStep ? "none" : undefined,
         messages: [
           ...system.map(
             (x): ModelMessage => ({
@@ -582,6 +589,14 @@ export namespace SessionPrompt {
               return false
             }),
           ),
+          ...(isLastStep
+            ? [
+                {
+                  role: "assistant" as const,
+                  content: MAX_STEPS,
+                },
+              ]
+            : []),
         ],
         tools: model.capabilities.toolcall === false ? undefined : tools,
         model: wrapLanguageModel({
@@ -613,6 +628,7 @@ export namespace SessionPrompt {
             },
           ],
         }),
+        experimental_telemetry: { isEnabled: cfg.experimental?.openTelemetry },
       })
       if (result === "stop") break
       continue
@@ -636,7 +652,12 @@ export namespace SessionPrompt {
     return Provider.defaultModel()
   }
 
-  async function resolveSystemPrompt(input: { system?: string; agent: Agent.Info; model: Provider.Model }) {
+  async function resolveSystemPrompt(input: {
+    system?: string
+    agent: Agent.Info
+    model: Provider.Model
+    isLastStep?: boolean
+  }) {
     let system = SystemPrompt.header(input.model.providerID)
     system.push(
       ...(() => {
@@ -647,6 +668,11 @@ export namespace SessionPrompt {
     )
     system.push(...(await SystemPrompt.environment()))
     system.push(...(await SystemPrompt.custom()))
+
+    if (input.isLastStep) {
+      system.push(MAX_STEPS)
+    }
+
     // max 2 system prompt messages for caching purposes
     const [first, ...rest] = system
     system = [first, rest.join("\n")]
@@ -1418,6 +1444,7 @@ export namespace SessionPrompt {
       input.history.filter((m) => m.info.role === "user" && !m.parts.every((p) => "synthetic" in p && p.synthetic))
         .length === 1
     if (!isFirst) return
+    const cfg = await Config.get()
     const small =
       (await Provider.getSmallModel(input.providerID)) ?? (await Provider.getModel(input.providerID, input.modelID))
     const language = await Provider.getLanguage(small)
@@ -1464,6 +1491,7 @@ export namespace SessionPrompt {
       ],
       headers: small.headers,
       model: language,
+      experimental_telemetry: { isEnabled: cfg.experimental?.openTelemetry },
     })
       .then((result) => {
         if (result.text)
