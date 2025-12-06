@@ -289,6 +289,7 @@ export class OpenAIResponsesLanguageModel implements LanguageModelV2 {
       service_tier: openaiOptions?.serviceTier,
       include,
       prompt_cache_key: openaiOptions?.promptCacheKey,
+      prompt_cache_retention: openaiOptions?.promptCacheRetention,
       safety_identifier: openaiOptions?.safetyIdentifier,
       top_logprobs: topLogprobs,
 
@@ -1700,6 +1701,7 @@ const openaiResponsesProviderOptionsSchema = z.object({
   parallelToolCalls: z.boolean().nullish(),
   previousResponseId: z.string().nullish(),
   promptCacheKey: z.string().nullish(),
+  promptCacheRetention: z.enum(["in_memory", "24h"]).nullish(),
   reasoningEffort: z.string().nullish(),
   reasoningSummary: z.string().nullish(),
   safetyIdentifier: z.string().nullish(),
