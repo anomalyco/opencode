@@ -287,9 +287,9 @@ export namespace Provider {
     },
     "sap-ai-core": async () => {
       const auth = await Auth.get("sap-ai-core")
-      let envServiceKey = Env.get("AICORE_SERVICE_KEY") 
+      let envServiceKey = Env.get("AICORE_SERVICE_KEY")
       if (auth?.type === "api" && !envServiceKey) {
-        envServiceKey = auth.key  
+        envServiceKey = auth.key
         Env.set("AICORE_SERVICE_KEY", envServiceKey)
       }
       const deploymentId = Env.get("AICORE_DEPLOYMENT_ID")
