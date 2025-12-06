@@ -52,18 +52,13 @@ export const Terminal = (props: TerminalProps) => {
     term.open(container)
 
     if (local.pty.buffer) {
-      const originalSize = { cols: term.cols, rows: term.rows }
-      let resized = false
       if (local.pty.rows && local.pty.cols) {
         term.resize(local.pty.cols, local.pty.rows)
-        resized = true
       }
+      term.reset()
       term.write(local.pty.buffer)
       if (local.pty.scrollY) {
         term.scrollToLine(local.pty.scrollY)
-      }
-      if (resized) {
-        term.resize(originalSize.cols, originalSize.rows)
       }
     }
 

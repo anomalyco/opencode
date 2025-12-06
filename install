@@ -354,6 +354,7 @@ echo -e "${MUTED}▀▀▀▀ █▀▀▀ ▀▀▀▀ ▀  ▀ ${NC}▀▀▀�
 echo -e ""
 echo -e ""
 echo -e "${MUTED}OpenCode includes free models, to start:${NC}"
+echo -e ""
 echo -e "cd <project>  ${MUTED}# Open directory${NC}"
 echo -e "opencode      ${MUTED}# Run command${NC}"
 echo -e ""
