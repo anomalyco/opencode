@@ -494,14 +494,9 @@ class StringSerializeHandler extends BaseSerializeHandler {
     }
 
     if (!excludeFinalCursorPosition) {
-      // Get cursor position relative to viewport (1-indexed for ANSI)
-      // cursorY is relative to the viewport, cursorX is column position
-      const cursorRow = this._buffer.cursorY + 1 // 1-indexed
-      const cursorCol = this._buffer.cursorX + 1 // 1-indexed
-
-      // Use absolute cursor positioning (CUP - Cursor Position)
-      // This is more reliable than relative moves which depend on knowing
-      // exactly where the cursor ended up after all the content
+      const absoluteCursorRow = (this._buffer.baseY ?? 0) + this._buffer.cursorY
+      const cursorRow = constrain(absoluteCursorRow - this._firstRow + 1, 1, Number.MAX_SAFE_INTEGER)
+      const cursorCol = this._buffer.cursorX + 1
       content += `\u001b[${cursorRow};${cursorCol}H`
     }
 
@@ -549,22 +544,20 @@ export class SerializeAddon implements ITerminalAddon {
       return ""
     }
 
-    const activeBuffer = buffer.active || buffer.normal
-    if (!activeBuffer) {
+    const normalBuffer = buffer.normal || buffer.active
+    const altBuffer = buffer.alternate
+
+    if (!normalBuffer) {
       return ""
     }
 
     let content = options?.range
-      ? this._serializeBufferByRange(activeBuffer, options.range, true)
-      : this._serializeBufferByScrollback(activeBuffer, options?.scrollback)
+      ? this._serializeBufferByRange(normalBuffer, options.range, true)
+      : this._serializeBufferByScrollback(normalBuffer, options?.scrollback)
 
-    // Handle alternate buffer if active and not excluded
-    if (!options?.excludeAltBuffer) {
-      const altBuffer = buffer.alternate
-      if (altBuffer && buffer.active?.type === "alternate") {
-        const alternateContent = this._serializeBufferByScrollback(altBuffer, undefined)
-        content += `\u001b[?1049h\u001b[H${alternateContent}`
-      }
+    if (!options?.excludeAltBuffer && buffer.active?.type === "alternate" && altBuffer) {
+      const alternateContent = this._serializeBufferByScrollback(altBuffer, undefined)
+      content += `\u001b[?1049h\u001b[H${alternateContent}`
     }
 
     return content
