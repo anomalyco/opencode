@@ -26,7 +26,7 @@ permissions:
 jobs:
   publish:
     runs-on: blacksmith-4vcpu-ubuntu-2404
-    if: github.repository == 'sst/opencode'
+    if: github.repository == 'sst/opencode' && github.ref == 'refs/heads/dev'
     steps:
       - uses: actions/checkout@v3
         with:
@@ -99,6 +99,26 @@ jobs:
         with:
           fetch-depth: 0
 
+      - uses: apple-actions/import-codesign-certs@v2
+        if: ${{ runner.os == 'macOS' }}
+        with:
+          keychain: build
+          p12-file-base64: ${{ secrets.APPLE_CERTIFICATE }}
+          p12-password: ${{ secrets.APPLE_CERTIFICATE_PASSWORD }}
+
+      - name: Verify Certificate
+        if: ${{ runner.os == 'macOS' }}
+        run: |
+          CERT_INFO=$(security find-identity -v -p codesigning build.keychain | grep "Developer ID Application")
+          CERT_ID=$(echo "$CERT_INFO" | awk -F'"' '{print $2}')
+          echo "CERT_ID=$CERT_ID" >> $GITHUB_ENV
+          echo "Certificate imported."
+
+      - name: Setup Apple API Key
+        if: ${{ runner.os == 'macOS' }}
+        run: |
+          echo "${{ secrets.APPLE_API_KEY_PATH }}" > $RUNNER_TEMP/apple-api-key.p8
+
       - run: git fetch --force --tags
 
       - uses: ./.github/actions/setup-bun
@@ -144,12 +164,17 @@ jobs:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
           TAURI_BUNDLER_NEW_APPIMAGE_FORMAT: true
           TAURI_SIGNING_PRIVATE_KEY: ${{ secrets.TAURI_SIGNING_PRIVATE_KEY }}
+          TAURI_SIGNING_PRIVATE_KEY_PASSWORD: ${{ secrets.TAURI_SIGNING_PRIVATE_KEY_PASSWORD }}
+          APPLE_CERTIFICATE: ${{ secrets.APPLE_CERTIFICATE }}
+          APPLE_CERTIFICATE_PASSWORD: ${{ secrets.APPLE_CERTIFICATE_PASSWORD }}
+          APPLE_SIGNING_IDENTITY: ${{ env.CERT_ID }}
+          APPLE_API_ISSUER: ${{ secrets.APPLE_API_ISSUER }}
+          APPLE_API_KEY: ${{ secrets.APPLE_API_KEY }}
+          APPLE_API_KEY_PATH: ${{ runner.temp }}/apple-api-key.p8
         with:
           projectPath: packages/tauri
           uploadWorkflowArtifacts: true
           tauriScript: ${{ (startsWith(matrix.settings.host, 'ubuntu') && 'cargo tauri') || '' }}
           args: --target ${{ matrix.settings.target }}
           updaterJsonPreferNsis: true
-          releaseDraft: true
-          tagName: ${{ inputs.version }}
-          releaseName: ${{ inputs.version }}
+          # releaseId: TODO

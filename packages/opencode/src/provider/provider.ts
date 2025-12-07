@@ -535,7 +535,7 @@ export namespace Provider {
             id: model.id ?? existingModel?.api.id ?? modelID,
             npm:
               model.provider?.npm ?? provider.npm ?? existingModel?.api.npm ?? modelsDev[providerID]?.npm ?? providerID,
-            url: provider?.api ?? existingModel?.api.url,
+            url: provider?.api ?? existingModel?.api.url ?? modelsDev[providerID]?.api,
           },
           status: model.status ?? existingModel?.status ?? "active",
           name,
