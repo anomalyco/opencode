@@ -1,7 +1,7 @@
 import z from "zod"
 import { Instance } from "../project/instance"
 import { Log } from "../util/log"
-import { NamedError } from "../util/error"
+import { NamedError } from "@opencode-ai/util/error"
 
 export namespace SessionLock {
   const log = Log.create({ service: "session.lock" })
