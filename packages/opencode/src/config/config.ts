@@ -392,15 +392,6 @@ export namespace Config {
             .describe(
               "Timeout in milliseconds for bash commands executed by this agent. The actual timeout will be the greater of this value and any timeout specified in the command. Must be between 1 and 600000 (10 minutes). If not specified, defaults to 60000 (1 minute).",
             ),
-          timeout_max: z
-            .number()
-            .int()
-            .positive()
-            .max(600000)
-            .optional()
-            .describe(
-              "Maximum timeout in milliseconds for bash commands executed by this agent. Commands will be capped at this value even if a longer timeout is requested. Must be between 1 and 600000 (10 minutes). If not specified, defaults to 600000 (10 minutes).",
-            ),
         })
         .optional(),
       permission: z

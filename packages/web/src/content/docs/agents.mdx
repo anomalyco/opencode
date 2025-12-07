@@ -386,8 +386,7 @@ Control timeout settings for bash commands executed by this agent using the `bas
   "agent": {
     "build": {
       "bash": {
-        "timeout": 120000,
-        "timeout_max": 300000
+        "timeout": 300000
       }
     }
   }
@@ -397,7 +396,6 @@ Control timeout settings for bash commands executed by this agent using the `bas
 **Options:**
 
 - `bash.timeout` - Timeout in milliseconds. Commands requesting shorter timeouts will use this value instead. Defaults to 60000ms (1 minute) if not specified.
-- `bash.timeout_max` - Maximum timeout in milliseconds. All commands are capped at this value, even if a longer timeout is requested. Defaults to 600000ms (10 minutes) if not specified.
 
 ---
 

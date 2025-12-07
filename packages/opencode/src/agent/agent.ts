@@ -222,9 +222,6 @@ export namespace Agent {
         if (bash.timeout != undefined) {
           item.options.bash_timeout = bash.timeout
         }
-        if (bash.timeout_max != undefined) {
-          item.options.bash_timeout_max = bash.timeout_max
-        }
       }
       // just here for consistency & to prevent it from being added as an option
       if (name) item.name = name

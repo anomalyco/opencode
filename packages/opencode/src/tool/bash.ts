@@ -144,13 +144,8 @@ export const BashTool = Tool.define("bash", async () => {
 
       const permissions = agent.permission.bash
       const agentBashTimeout = agent.options.bash_timeout as number | undefined
-      const agentBashTimeoutMax = agent.options.bash_timeout_max as number | undefined
       const defaultTimeout = agentBashTimeout ?? DEFAULT_TIMEOUT
-      const maxTimeout = agentBashTimeoutMax ?? MAX_TIMEOUT
-      // Take the greater of defaultTimeout and params.timeout (if provided)
-      const baseTimeout = params.timeout !== undefined ? Math.max(defaultTimeout, params.timeout) : defaultTimeout
-      // Cap at maxTimeout
-      const timeout = Math.min(baseTimeout, maxTimeout)
+      const timeout = params.timeout !== undefined ? Math.max(defaultTimeout, params.timeout) : defaultTimeout
 
       const askPatterns = new Set<string>()
       for (const node of tree.rootNode.descendantsOfType("command")) {
