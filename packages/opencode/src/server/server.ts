@@ -1804,6 +1804,117 @@ export namespace Server {
           return c.json(result.status)
         },
       )
+      .post(
+        "/mcp/:name/auth",
+        describeRoute({
+          description: "Start OAuth authentication flow for an MCP server",
+          operationId: "mcp.auth.start",
+          responses: {
+            200: {
+              description: "OAuth flow started",
+              content: {
+                "application/json": {
+                  schema: resolver(
+                    z.object({
+                      authorizationUrl: z.string().describe("URL to open in browser for authorization"),
+                    }),
+                  ),
+                },
+              },
+            },
+            ...errors(400, 404),
+          },
+        }),
+        async (c) => {
+          const name = c.req.param("name")
+          const supportsOAuth = await MCP.supportsOAuth(name)
+          if (!supportsOAuth) {
+            return c.json({ error: `MCP server ${name} does not support OAuth` }, 400)
+          }
+          const result = await MCP.startAuth(name)
+          return c.json(result)
+        },
+      )
+      .post(
+        "/mcp/:name/auth/callback",
+        describeRoute({
+          description: "Complete OAuth authentication with authorization code",
+          operationId: "mcp.auth.callback",
+          responses: {
+            200: {
+              description: "OAuth authentication completed",
+              content: {
+                "application/json": {
+                  schema: resolver(MCP.Status),
+                },
+              },
+            },
+            ...errors(400, 404),
+          },
+        }),
+        validator(
+          "json",
+          z.object({
+            code: z.string().describe("Authorization code from OAuth callback"),
+          }),
+        ),
+        async (c) => {
+          const name = c.req.param("name")
+          const { code } = c.req.valid("json")
+          const status = await MCP.finishAuth(name, code)
+          return c.json(status)
+        },
+      )
+      .post(
+        "/mcp/:name/auth/authenticate",
+        describeRoute({
+          description: "Start OAuth flow and wait for callback (opens browser)",
+          operationId: "mcp.auth.authenticate",
+          responses: {
+            200: {
+              description: "OAuth authentication completed",
+              content: {
+                "application/json": {
+                  schema: resolver(MCP.Status),
+                },
+              },
+            },
+            ...errors(400, 404),
+          },
+        }),
+        async (c) => {
+          const name = c.req.param("name")
+          const supportsOAuth = await MCP.supportsOAuth(name)
+          if (!supportsOAuth) {
+            return c.json({ error: `MCP server ${name} does not support OAuth` }, 400)
+          }
+          const status = await MCP.authenticate(name)
+          return c.json(status)
+        },
+      )
+      .delete(
+        "/mcp/:name/auth",
+        describeRoute({
+          description: "Remove OAuth credentials for an MCP server",
+          operationId: "mcp.auth.remove",
+          responses: {
+            200: {
+              description: "OAuth credentials removed",
+              content: {
+                "application/json": {
+                  schema: resolver(z.object({ success: z.literal(true) })),
+                },
+              },
+            },
+            ...errors(404),
+          },
+        }),
+        async (c) => {
+          const name = c.req.param("name")
+          await MCP.removeAuth(name)
+          return c.json({ success: true as const })
+        },
+      )
       .get(
         "/lsp",
         describeRoute({

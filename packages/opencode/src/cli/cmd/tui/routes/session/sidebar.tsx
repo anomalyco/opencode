@@ -104,11 +104,15 @@ export function Sidebar(props: { sessionID: string }) {
                         <text
                           flexShrink={0}
                           style={{
-                            fg: {
-                              connected: theme.success,
-                              failed: theme.error,
-                              disabled: theme.textMuted,
-                            }[item.status],
+                            fg: (
+                              {
+                                connected: theme.success,
+                                failed: theme.error,
+                                disabled: theme.textMuted,
+                                needs_auth: theme.warning,
+                                needs_client_registration: theme.error,
+                              } as Record<string, typeof theme.success>
+                            )[item.status],
                           }}
                         >
                           •
@@ -116,10 +120,14 @@ export function Sidebar(props: { sessionID: string }) {
                         <text fg={theme.text} wrapMode="word">
                           {key}{" "}
                           <span style={{ fg: theme.textMuted }}>
-                            <Switch>
+                            <Switch fallback={item.status}>
                               <Match when={item.status === "connected"}>Connected</Match>
                               <Match when={item.status === "failed" && item}>{(val) => <i>{val().error}</i>}</Match>
-                              <Match when={item.status === "disabled"}>Disabled in configuration</Match>
+                              <Match when={item.status === "disabled"}>Disabled</Match>
+                              <Match when={(item.status as string) === "needs_auth"}>Needs auth</Match>
+                              <Match when={(item.status as string) === "needs_client_registration"}>
+                                Needs client ID
+                              </Match>
                             </Switch>
                           </span>
                         </text>

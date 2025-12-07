@@ -473,7 +473,7 @@
     "diff": "8.0.2",
     "fuzzysort": "3.1.0",
     "hono": "4.10.7",
-    "hono-openapi": "1.1.1",
+    "hono-openapi": "1.1.2",
     "luxon": "3.6.1",
     "remeda": "2.26.0",
     "solid-js": "1.9.10",
@@ -2537,7 +2537,7 @@
 
     "hono": ["hono@4.10.7", "", {}, "sha512-icXIITfw/07Q88nLSkB9aiUrd8rYzSweK681Kjo/TSggaGbOX4RRyxxm71v+3PC8C/j+4rlxGeoTRxQDkaJkUw=="],
 
-    "hono-openapi": ["hono-openapi@1.1.1", "", { "peerDependencies": { "@hono/standard-validator": "^0.1.2", "@standard-community/standard-json": "^0.3.5", "@standard-community/standard-openapi": "^0.2.8", "@types/json-schema": "^7.0.15", "hono": "^4.8.3", "openapi-types": "^12.1.3" }, "optionalPeers": ["@hono/standard-validator", "hono"] }, "sha512-AC3HNhZYPHhnZdSy2Je7GDoTTNxPos6rKRQKVDBbSilY3cWJPqsxRnN6zA4pU7tfxmQEMTqkiLXbw6sAaemB8Q=="],
+    "hono-openapi": ["hono-openapi@1.1.2", "", { "peerDependencies": { "@hono/standard-validator": "^0.2.0", "@standard-community/standard-json": "^0.3.5", "@standard-community/standard-openapi": "^0.2.9", "@types/json-schema": "^7.0.15", "hono": "^4.8.3", "openapi-types": "^12.1.3" }, "optionalPeers": ["@hono/standard-validator", "hono"] }, "sha512-toUcO60MftRBxqcVyxsHNYs2m4vf4xkQaiARAucQx3TiBPDtMNNkoh+C4I1vAretQZiGyaLOZNWn1YxfSyUA5g=="],
 
     "html-entities": ["html-entities@2.3.3", "", {}, "sha512-DV5Ln36z34NNTDgnz0EWGBLZENelNAtkiFA4kyNOG2tDI6Mz1uSWiq1wAKdyjnJwyDiDO7Fa2SO1CTxPXL8VxA=="],
 
