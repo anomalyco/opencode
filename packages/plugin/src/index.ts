@@ -9,12 +9,29 @@ import type {
   Part,
   Auth,
   Config,
+  ChatMessage,
+  ChatMessagePart,
+  ChatMessageTextPart,
+  ChatMessageFilePart,
+  ChatMessageStepStartPart,
+  ChatMessageToolPart,
+  ChatMessageReasoningPart,
 } from "@opencode-ai/sdk"
 
 import type { BunShell } from "./shell"
 import { type ToolDefinition } from "./tool"
 
 export * from "./tool"
+
+export type {
+  ChatMessage,
+  ChatMessagePart,
+  ChatMessageTextPart,
+  ChatMessageFilePart,
+  ChatMessageStepStartPart,
+  ChatMessageToolPart,
+  ChatMessageReasoningPart,
+}
 
 export type ProviderContext = {
   source: "env" | "config" | "custom" | "api"
@@ -173,6 +190,12 @@ export interface Hooks {
       title: string
       output: string
       metadata: any
+    },
+  ) => Promise<void>
+  "chat.messages.transform"?: (
+    input: {},
+    output: {
+      messages: ChatMessage[]
     },
   ) => Promise<void>
 }

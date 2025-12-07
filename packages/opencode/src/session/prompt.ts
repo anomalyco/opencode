@@ -515,6 +515,30 @@ export namespace SessionPrompt {
         })
       }
 
+      const chatMessages = msgs.map(m => {
+        return MessageV2.toChatMessage(m);
+      });
+
+      await Plugin.trigger("chat.messages.transform", {}, { messages: chatMessages })
+
+      const modelMessages: ModelMessage[] = [
+        ...system.map(
+          (x): ModelMessage => ({
+            role: "system",
+            content: x,
+          }),
+        ),
+        ...MessageV2.chatMessagesToModelMessages(chatMessages),
+        ...(isLastStep
+          ? [
+              {
+                role: "assistant" as const,
+                content: MAX_STEPS,
+              },
+            ]
+          : []),
+      ]
+
       const result = await processor.process({
         onError(error) {
           log.error("stream error", {
@@ -567,37 +591,7 @@ export namespace SessionPrompt {
         temperature: params.temperature,
         topP: params.topP,
         toolChoice: isLastStep ? "none" : undefined,
-        messages: [
-          ...system.map(
-            (x): ModelMessage => ({
-              role: "system",
-              content: x,
-            }),
-          ),
-          ...MessageV2.toModelMessage(
-            msgs.filter((m) => {
-              if (m.info.role !== "assistant" || m.info.error === undefined) {
-                return true
-              }
-              if (
-                MessageV2.AbortedError.isInstance(m.info.error) &&
-                m.parts.some((part) => part.type !== "step-start" && part.type !== "reasoning")
-              ) {
-                return true
-              }
-
-              return false
-            }),
-          ),
-          ...(isLastStep
-            ? [
-                {
-                  role: "assistant" as const,
-                  content: MAX_STEPS,
-                },
-              ]
-            : []),
-        ],
+        messages: modelMessages,
         tools: model.capabilities.toolcall === false ? undefined : tools,
         model: wrapLanguageModel({
           model: language,

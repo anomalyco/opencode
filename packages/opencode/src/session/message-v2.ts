@@ -3,6 +3,7 @@ import { Bus } from "../bus"
 import { NamedError } from "@opencode-ai/util/error"
 import { Message } from "./message"
 import { APICallError, convertToModelMessages, LoadAPIKeyError, type ModelMessage, type UIMessage } from "ai"
+import type { ChatMessage, ChatMessageFilePart } from "@opencode-ai/sdk"
 import { Identifier } from "../id/id"
 import { LSP } from "../lsp"
 import { Snapshot } from "@/snapshot"
@@ -662,6 +663,209 @@ export namespace MessageV2 {
               type: "reasoning",
               text: part.text,
               providerMetadata: part.metadata,
+            })
+          }
+        }
+      }
+    }
+
+    return convertToModelMessages(result.filter((msg) => msg.parts.length > 0))
+  }
+
+  export function toChatMessage(message: MessageV2.WithParts): ChatMessage {
+    const info = message.info
+    const parts = message.parts
+    const chatParts: ChatMessage["parts"] = []
+
+    if (info.role === "user") {
+      for (const part of parts) {
+        if (part.type === "text" && !part.ignored) {
+          chatParts.push({
+            type: "text",
+            text: part.text,
+          })
+        }
+        if (part.type === "file" && part.mime !== "text/plain" && part.mime !== "application/x-directory") {
+          chatParts.push({
+            type: "file",
+            url: part.url,
+            mediaType: part.mime,
+            filename: part.filename,
+          })
+        }
+        if (part.type === "compaction") {
+          chatParts.push({
+            type: "text",
+            text: "What did we do so far?",
+          })
+        }
+        if (part.type === "subtask") {
+          chatParts.push({
+            type: "text",
+            text: "The following tool was executed by the user",
+          })
+        }
+      }
+    }
+
+    if (info.role === "assistant") {
+      for (const part of parts) {
+        if (part.type === "text") {
+          chatParts.push({
+            type: "text",
+            text: part.text,
+            providerMetadata: part.metadata,
+          })
+        }
+        if (part.type === "step-start") {
+          chatParts.push({
+            type: "step-start",
+          })
+        }
+        if (part.type === "tool") {
+          if (part.state.status === "completed") {
+            chatParts.push({
+              type: "tool",
+              toolName: part.tool,
+              toolCallId: part.callID,
+              state: "completed",
+              input: part.state.input,
+              output: part.state.output,
+              compacted: !!part.state.time.compacted,
+              callProviderMetadata: part.metadata,
+              attachments: part.state.attachments?.map((attachment) => ({
+                type: "file" as const,
+                url: attachment.url,
+                mediaType: attachment.mime,
+                filename: attachment.filename,
+              })),
+            })
+          }
+          if (part.state.status === "error") {
+            chatParts.push({
+              type: "tool",
+              toolName: part.tool,
+              toolCallId: part.callID,
+              state: "error",
+              input: part.state.input,
+              error: part.state.error,
+              callProviderMetadata: part.metadata,
+            })
+          }
+        }
+        if (part.type === "reasoning") {
+          chatParts.push({
+            type: "reasoning",
+            text: part.text,
+            providerMetadata: part.metadata,
+          })
+        }
+      }
+    }
+
+    return {
+      id: info.id,
+      role: info.role,
+      parts: chatParts,
+    }
+  }
+
+  export function chatMessagesToModelMessages(input: ChatMessage[]): ModelMessage[] {
+    const result: UIMessage[] = []
+
+    for (const msg of input) {
+      if (msg.parts.length === 0) continue
+
+      if (msg.role === "user") {
+        const userMessage: UIMessage = {
+          id: msg.id,
+          role: "user",
+          parts: [],
+        }
+        result.push(userMessage)
+        for (const part of msg.parts) {
+          if (part.type === "text") {
+            userMessage.parts.push({
+              type: "text",
+              text: part.text,
+            })
+          }
+          if (part.type === "file") {
+            userMessage.parts.push({
+              type: "file",
+              url: part.url,
+              mediaType: part.mediaType,
+              filename: part.filename,
+            })
+          }
+        }
+      }
+
+      if (msg.role === "assistant") {
+        const assistantMessage: UIMessage = {
+          id: msg.id,
+          role: "assistant",
+          parts: [],
+        }
+        result.push(assistantMessage)
+        for (const part of msg.parts) {
+          if (part.type === "text") {
+            assistantMessage.parts.push({
+              type: "text",
+              text: part.text,
+              providerMetadata: part.providerMetadata as Record<string, Record<string, unknown>> | undefined,
+            })
+          }
+          if (part.type === "step-start") {
+            assistantMessage.parts.push({
+              type: "step-start",
+            })
+          }
+          if (part.type === "tool") {
+            if (part.attachments?.length) {
+              result.push({
+                id: Identifier.ascending("message"),
+                role: "user",
+                parts: [
+                  {
+                    type: "text",
+                    text: `Tool ${part.toolName} returned an attachment:`,
+                  },
+                  ...part.attachments.map((attachment: ChatMessageFilePart) => ({
+                    type: "file" as const,
+                    url: attachment.url,
+                    mediaType: attachment.mediaType,
+                    filename: attachment.filename,
+                  })),
+                ],
+              })
+            }
+            if (part.state === "completed") {
+              assistantMessage.parts.push({
+                type: ("tool-" + part.toolName) as `tool-${string}`,
+                state: "output-available",
+                toolCallId: part.toolCallId,
+                input: part.input,
+                output: part.compacted ? "[Old tool result content cleared]" : (part.output ?? ""),
+                callProviderMetadata: part.callProviderMetadata as Record<string, Record<string, unknown>> | undefined,
+              })
+            }
+            if (part.state === "error") {
+              assistantMessage.parts.push({
+                type: ("tool-" + part.toolName) as `tool-${string}`,
+                state: "output-error",
+                toolCallId: part.toolCallId,
+                input: part.input,
+                errorText: part.error ?? "",
+                callProviderMetadata: part.callProviderMetadata as Record<string, Record<string, unknown>> | undefined,
+              })
+            }
+          }
+          if (part.type === "reasoning") {
+            assistantMessage.parts.push({
+              type: "reasoning",
+              text: part.text,
+              providerMetadata: part.providerMetadata as Record<string, Record<string, unknown>> | undefined,
             })
           }
         }
