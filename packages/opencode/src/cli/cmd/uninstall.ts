@@ -170,8 +170,7 @@ async function executeUninstall(method: Installation.Method, targets: RemovalTar
     if (err) {
       spinner.stop("Failed to clean shell config", 1)
       errors.push(`Shell config: ${err.message}`)
-    }
-    if (!err) {
+    } else {
       spinner.stop("Cleaned shell config")
     }
   }
@@ -193,8 +192,7 @@ async function executeUninstall(method: Installation.Method, targets: RemovalTar
         spinner.stop(`Package manager uninstall failed`, 1)
         prompts.log.warn(`You may need to run manually: ${cmd.join(" ")}`)
         errors.push(`Package manager: exit code ${result.exitCode}`)
-      }
-      if (result.exitCode === 0) {
+      } else {
         spinner.stop("Package removed")
       }
     }
