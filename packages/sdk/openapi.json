@@ -3326,6 +3326,250 @@
         }
       }
     },
+    "/mcp/{name}/auth": {
+      "post": {
+        "operationId": "mcp.auth.start",
+        "parameters": [
+          {
+            "in": "query",
+            "name": "directory",
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "schema": {
+              "type": "string"
+            },
+            "in": "path",
+            "name": "name",
+            "required": true
+          }
+        ],
+        "description": "Start OAuth authentication flow for an MCP server",
+        "responses": {
+          "200": {
+            "description": "OAuth flow started",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "authorizationUrl": {
+                      "description": "URL to open in browser for authorization",
+                      "type": "string"
+                    }
+                  },
+                  "required": [
+                    "authorizationUrl"
+                  ]
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Bad request",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/BadRequestError"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "Not found",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/NotFoundError"
+                }
+              }
+            }
+          }
+        }
+      },
+      "delete": {
+        "operationId": "mcp.auth.remove",
+        "parameters": [
+          {
+            "in": "query",
+            "name": "directory",
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "schema": {
+              "type": "string"
+            },
+            "in": "path",
+            "name": "name",
+            "required": true
+          }
+        ],
+        "description": "Remove OAuth credentials for an MCP server",
+        "responses": {
+          "200": {
+            "description": "OAuth credentials removed",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "success": {
+                      "type": "boolean",
+                      "const": true
+                    }
+                  },
+                  "required": [
+                    "success"
+                  ]
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "Not found",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/NotFoundError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/mcp/{name}/auth/callback": {
+      "post": {
+        "operationId": "mcp.auth.callback",
+        "parameters": [
+          {
+            "in": "query",
+            "name": "directory",
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "schema": {
+              "type": "string"
+            },
+            "in": "path",
+            "name": "name",
+            "required": true
+          }
+        ],
+        "description": "Complete OAuth authentication with authorization code",
+        "responses": {
+          "200": {
+            "description": "OAuth authentication completed",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/MCPStatus"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Bad request",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/BadRequestError"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "Not found",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/NotFoundError"
+                }
+              }
+            }
+          }
+        },
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "properties": {
+                  "code": {
+                    "description": "Authorization code from OAuth callback",
+                    "type": "string"
+                  }
+                },
+                "required": [
+                  "code"
+                ]
+              }
+            }
+          }
+        }
+      }
+    },
+    "/mcp/{name}/auth/authenticate": {
+      "post": {
+        "operationId": "mcp.auth.authenticate",
+        "parameters": [
+          {
+            "in": "query",
+            "name": "directory",
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "schema": {
+              "type": "string"
+            },
+            "in": "path",
+            "name": "name",
+            "required": true
+          }
+        ],
+        "description": "Start OAuth flow and wait for callback (opens browser)",
+        "responses": {
+          "200": {
+            "description": "OAuth authentication completed",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/MCPStatus"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Bad request",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/BadRequestError"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "Not found",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/NotFoundError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
     "/lsp": {
       "get": {
         "operationId": "lsp.status",
@@ -7176,6 +7420,24 @@
         ],
         "additionalProperties": false
       },
+      "McpOAuthConfig": {
+        "type": "object",
+        "properties": {
+          "clientId": {
+            "description": "OAuth client ID. If not provided, dynamic client registration (RFC 7591) will be attempted.",
+            "type": "string"
+          },
+          "clientSecret": {
+            "description": "OAuth client secret (if required by the authorization server)",
+            "type": "string"
+          },
+          "scope": {
+            "description": "OAuth scopes to request during authorization",
+            "type": "string"
+          }
+        },
+        "additionalProperties": false
+      },
       "McpRemoteConfig": {
         "type": "object",
         "properties": {
@@ -7201,6 +7463,18 @@
             "additionalProperties": {
               "type": "string"
             }
+          },
+          "oauth": {
+            "description": "OAuth authentication configuration for the MCP server. Set to false to disable OAuth auto-detection.",
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/McpOAuthConfig"
+              },
+              {
+                "type": "boolean",
+                "const": false
+              }
+            ]
           },
           "timeout": {
             "description": "Timeout in ms for fetching tools from the MCP server. Defaults to 5000 (5 seconds) if not specified.",
@@ -8645,6 +8919,34 @@
           "error"
         ]
       },
+      "MCPStatusNeedsAuth": {
+        "type": "object",
+        "properties": {
+          "status": {
+            "type": "string",
+            "const": "needs_auth"
+          }
+        },
+        "required": [
+          "status"
+        ]
+      },
+      "MCPStatusNeedsClientRegistration": {
+        "type": "object",
+        "properties": {
+          "status": {
+            "type": "string",
+            "const": "needs_client_registration"
+          },
+          "error": {
+            "type": "string"
+          }
+        },
+        "required": [
+          "status",
+          "error"
+        ]
+      },
       "MCPStatus": {
         "anyOf": [
           {
@@ -8655,6 +8957,12 @@
           },
           {
             "$ref": "#/components/schemas/MCPStatusFailed"
+          },
+          {
+            "$ref": "#/components/schemas/MCPStatusNeedsAuth"
+          },
+          {
+            "$ref": "#/components/schemas/MCPStatusNeedsClientRegistration"
           }
         ]
       },
