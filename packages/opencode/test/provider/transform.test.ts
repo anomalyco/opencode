@@ -126,7 +126,7 @@ describe("ProviderTransform.message - DeepSeek reasoning content", () => {
       capabilities: {
         temperature: true,
         reasoning: true,
-        interleavedThinking: false,
+        interleavedthinking: false,
         attachment: false,
         toolcall: true,
         input: { text: true, audio: false, image: false, video: false, pdf: false },
@@ -181,7 +181,7 @@ describe("ProviderTransform.message - DeepSeek reasoning content", () => {
       capabilities: {
         temperature: true,
         reasoning: true,
-        interleavedThinking: false,
+        interleavedthinking: false,
         attachment: false,
         toolcall: true,
         input: { text: true, audio: false, image: false, video: false, pdf: false },
@@ -234,7 +234,7 @@ describe("ProviderTransform.message - DeepSeek reasoning content", () => {
       capabilities: {
         temperature: true,
         reasoning: true,
-        interleavedThinking: false,
+        interleavedthinking: false,
         attachment: false,
         toolcall: true,
         input: { text: true, audio: false, image: false, video: false, pdf: false },
@@ -280,7 +280,7 @@ describe("ProviderTransform.message - DeepSeek reasoning content", () => {
       capabilities: {
         temperature: true,
         reasoning: false,
-        interleavedThinking: false,
+        interleavedthinking: false,
         attachment: true,
         toolcall: true,
         input: { text: true, audio: false, image: true, video: false, pdf: false },
@@ -339,7 +339,7 @@ describe("ProviderTransform.message - Interleaved thinking", () => {
         reasoning: false,
         attachment: true,
         toolcall: true,
-        interleavedThinking: true,
+        interleavedthinking: true,
         input: { text: true, audio: false, image: false, video: false, pdf: false },
         output: { text: true, audio: false, image: false, video: false, pdf: false },
       },
@@ -369,7 +369,7 @@ describe("ProviderTransform.message - Interleaved thinking", () => {
     ])
   })
 
-  test("Preserves reasoning parts when interleavedThinking is false", () => {
+  test("Preserves reasoning parts when interleavedthinking is false", () => {
     const msgs = [
       {
         role: "assistant",
@@ -392,7 +392,7 @@ describe("ProviderTransform.message - Interleaved thinking", () => {
       capabilities: {
         temperature: true,
         reasoning: false,
-        interleavedThinking: false,
+        interleavedthinking: false,
         attachment: true,
         toolcall: true,
         input: { text: true, audio: false, image: false, video: false, pdf: false },
