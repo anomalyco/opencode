@@ -515,8 +515,6 @@ export namespace SessionPrompt {
         })
       }
 
-      const chatMessages = msgs.map(m => {
-        return MessageV2.toChatMessage(m);
       const chatMessages = msgs.map((m) => MessageV2.toChatMessage(m))
 
       await Plugin.trigger("chat.messages.transform", {}, { messages: chatMessages })
