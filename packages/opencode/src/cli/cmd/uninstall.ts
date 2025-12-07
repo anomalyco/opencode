@@ -285,7 +285,6 @@ async function cleanShellConfig(file: string) {
       if (trimmed.includes(".opencode/bin") || trimmed.includes("fish_add_path")) {
         continue
       }
-      filtered.push("# opencode")
     }
 
     if (
