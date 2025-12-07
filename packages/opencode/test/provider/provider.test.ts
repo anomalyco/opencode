@@ -1763,3 +1763,47 @@ test("custom model inherits npm package from models.dev provider config", async 
     },
   })
 })
+
+test("custom model inherits api.url from models.dev provider", async () => {
+  await using tmp = await tmpdir({
+    init: async (dir) => {
+      await Bun.write(
+        path.join(dir, "opencode.json"),
+        JSON.stringify({
+          $schema: "https://opencode.ai/config.json",
+          provider: {
+            openrouter: {
+              models: {
+                "prime-intellect/intellect-3": {},
+                "deepseek/deepseek-r1-0528": {
+                  name: "DeepSeek R1",
+                },
+              },
+            },
+          },
+        }),
+      )
+    },
+  })
+  await Instance.provide({
+    directory: tmp.path,
+    init: async () => {
+      Env.set("OPENROUTER_API_KEY", "test-api-key")
+    },
+    fn: async () => {
+      const providers = await Provider.list()
+      expect(providers["openrouter"]).toBeDefined()
+
+      // New model not in database should inherit api.url from provider
+      const intellect = providers["openrouter"].models["prime-intellect/intellect-3"]
+      expect(intellect).toBeDefined()
+      expect(intellect.api.url).toBe("https://openrouter.ai/api/v1")
+
+      // Another new model should also inherit api.url
+      const deepseek = providers["openrouter"].models["deepseek/deepseek-r1-0528"]
+      expect(deepseek).toBeDefined()
+      expect(deepseek.api.url).toBe("https://openrouter.ai/api/v1")
+      expect(deepseek.name).toBe("DeepSeek R1")
+    },
+  })
+})

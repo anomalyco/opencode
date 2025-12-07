@@ -1,13 +1,14 @@
 import type { BoxRenderable, TextareaRenderable, KeyEvent } from "@opentui/core"
 import fuzzysort from "fuzzysort"
 import { firstBy } from "remeda"
-import { createMemo, createResource, createEffect, onMount, For, Show } from "solid-js"
+import { createMemo, createResource, createEffect, onMount, onCleanup, For, Show, createSignal } from "solid-js"
 import { createStore } from "solid-js/store"
 import { useSDK } from "@tui/context/sdk"
 import { useSync } from "@tui/context/sync"
 import { useTheme, selectedForeground } from "@tui/context/theme"
 import { SplitBorder } from "@tui/component/border"
 import { useCommandDialog } from "@tui/component/dialog-command"
+import { useTerminalDimensions } from "@opentui/solid"
 import { Locale } from "@/util/locale"
 import type { PromptInfo } from "./history"
 
@@ -41,13 +42,43 @@ export function Autocomplete(props: {
   const sync = useSync()
   const command = useCommandDialog()
   const { theme } = useTheme()
+  const dimensions = useTerminalDimensions()
 
   const [store, setStore] = createStore({
     index: 0,
     selected: 0,
     visible: false as AutocompleteRef["visible"],
-    position: { x: 0, y: 0, width: 0 },
   })
+
+  const [positionTick, setPositionTick] = createSignal(0)
+
+  createEffect(() => {
+    if (store.visible) {
+      let lastPos = { x: 0, y: 0, width: 0 }
+      const interval = setInterval(() => {
+        const anchor = props.anchor()
+        if (anchor.x !== lastPos.x || anchor.y !== lastPos.y || anchor.width !== lastPos.width) {
+          lastPos = { x: anchor.x, y: anchor.y, width: anchor.width }
+          setPositionTick((t) => t + 1)
+        }
+      }, 50)
+
+      onCleanup(() => clearInterval(interval))
+    }
+  })
+
+  const position = createMemo(() => {
+    if (!store.visible) return { x: 0, y: 0, width: 0 }
+    const dims = dimensions()
+    positionTick()
+    const anchor = props.anchor()
+    return {
+      x: anchor.x,
+      y: anchor.y,
+      width: anchor.width,
+    }
+  })
+
   const filter = createMemo(() => {
     if (!store.visible) return
     // Track props.value to make memo reactive to text changes
@@ -118,7 +149,7 @@ export function Autocomplete(props: {
 
       // Add file options
       if (!result.error && result.data) {
-        const width = store.position.width - 4
+        const width = props.anchor().width - 4
         options.push(
           ...result.data.map(
             (item): AutocompleteOption => ({
@@ -361,11 +392,6 @@ export function Autocomplete(props: {
     setStore({
       visible: mode,
       index: props.input().cursorOffset,
-      position: {
-        x: props.anchor().x,
-        y: props.anchor().y,
-        width: props.anchor().width,
-      },
     })
   }
 
@@ -457,9 +483,9 @@ export function Autocomplete(props: {
     <box
       visible={store.visible !== false}
       position="absolute"
-      top={store.position.y - height()}
-      left={store.position.x}
-      width={store.position.width}
+      top={position().y - height()}
+      left={position().x}
+      width={position().width}
       zIndex={100}
       {...SplitBorder}
       borderColor={theme.border}
