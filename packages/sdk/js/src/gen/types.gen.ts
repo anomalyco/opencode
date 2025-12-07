@@ -655,6 +655,45 @@ export type EventTuiToastShow = {
   }
 }
 
+export type Pty = {
+  id: string
+  title: string
+  command: string
+  args: Array<string>
+  cwd: string
+  status: "running" | "exited"
+  pid: number
+}
+
+export type EventPtyCreated = {
+  type: "pty.created"
+  properties: {
+    info: Pty
+  }
+}
+
+export type EventPtyUpdated = {
+  type: "pty.updated"
+  properties: {
+    info: Pty
+  }
+}
+
+export type EventPtyExited = {
+  type: "pty.exited"
+  properties: {
+    id: string
+    exitCode: number
+  }
+}
+
+export type EventPtyDeleted = {
+  type: "pty.deleted"
+  properties: {
+    id: string
+  }
+}
+
 export type EventServerConnected = {
   type: "server.connected"
   properties: {
@@ -690,6 +729,10 @@ export type Event =
   | EventTuiPromptAppend
   | EventTuiCommandExecute
   | EventTuiToastShow
+  | EventPtyCreated
+  | EventPtyUpdated
+  | EventPtyExited
+  | EventPtyDeleted
   | EventServerConnected
 
 export type GlobalEvent = {
@@ -705,6 +748,21 @@ export type Project = {
   time: {
     created: number
     initialized?: number
+  }
+}
+
+export type BadRequestError = {
+  data: unknown
+  errors: Array<{
+    [key: string]: unknown
+  }>
+  success: false
+}
+
+export type NotFoundError = {
+  name: "NotFoundError"
+  data: {
+    message: string
   }
 }
 
@@ -732,6 +790,10 @@ export type KeybindsConfig = {
    * Toggle sidebar
    */
   sidebar_toggle?: string
+  /**
+   * Toggle session scrollbar
+   */
+  scrollbar_toggle?: string
   /**
    * Toggle username visibility
    */
@@ -908,6 +970,10 @@ export type AgentConfig = {
    * Hex color code for the agent (e.g., #FF5733)
    */
   color?: string
+  /**
+   * Maximum number of agentic iterations before forcing text-only response
+   */
+  maxSteps?: number
   permission?: {
     edit?: "ask" | "allow" | "deny"
     bash?:
@@ -928,6 +994,7 @@ export type AgentConfig = {
       }
     | boolean
     | ("subagent" | "primary" | "all")
+    | number
     | {
         edit?: "ask" | "allow" | "deny"
         bash?:
@@ -940,6 +1007,75 @@ export type AgentConfig = {
         external_directory?: "ask" | "allow" | "deny"
       }
     | undefined
+}
+
+export type ProviderConfig = {
+  api?: string
+  name?: string
+  env?: Array<string>
+  id?: string
+  npm?: string
+  models?: {
+    [key: string]: {
+      id?: string
+      name?: string
+      release_date?: string
+      attachment?: boolean
+      reasoning?: boolean
+      temperature?: boolean
+      tool_call?: boolean
+      cost?: {
+        input: number
+        output: number
+        cache_read?: number
+        cache_write?: number
+        context_over_200k?: {
+          input: number
+          output: number
+          cache_read?: number
+          cache_write?: number
+        }
+      }
+      limit?: {
+        context: number
+        output: number
+      }
+      modalities?: {
+        input: Array<"text" | "audio" | "image" | "video" | "pdf">
+        output: Array<"text" | "audio" | "image" | "video" | "pdf">
+      }
+      experimental?: boolean
+      status?: "alpha" | "beta" | "deprecated"
+      options?: {
+        [key: string]: unknown
+      }
+      headers?: {
+        [key: string]: string
+      }
+      provider?: {
+        npm: string
+      }
+    }
+  }
+  whitelist?: Array<string>
+  blacklist?: Array<string>
+  options?: {
+    apiKey?: string
+    baseURL?: string
+    /**
+     * GitHub Enterprise URL for copilot authentication
+     */
+    enterpriseUrl?: string
+    /**
+     * Enable promptCacheKey for this provider (default false)
+     */
+    setCacheKey?: boolean
+    /**
+     * Timeout in milliseconds for requests to this provider. Default is 300000 (5 minutes). Set to false to disable timeout.
+     */
+    timeout?: number | false
+    [key: string]: unknown | string | boolean | (number | false) | undefined
+  }
 }
 
 export type McpLocalConfig = {
@@ -1100,74 +1236,7 @@ export type Config = {
    * Custom provider configurations and model overrides
    */
   provider?: {
-    [key: string]: {
-      api?: string
-      name?: string
-      env?: Array<string>
-      id?: string
-      npm?: string
-      models?: {
-        [key: string]: {
-          id?: string
-          name?: string
-          release_date?: string
-          attachment?: boolean
-          reasoning?: boolean
-          temperature?: boolean
-          tool_call?: boolean
-          cost?: {
-            input: number
-            output: number
-            cache_read?: number
-            cache_write?: number
-            context_over_200k?: {
-              input: number
-              output: number
-              cache_read?: number
-              cache_write?: number
-            }
-          }
-          limit?: {
-            context: number
-            output: number
-          }
-          modalities?: {
-            input: Array<"text" | "audio" | "image" | "video" | "pdf">
-            output: Array<"text" | "audio" | "image" | "video" | "pdf">
-          }
-          experimental?: boolean
-          status?: "alpha" | "beta" | "deprecated"
-          options?: {
-            [key: string]: unknown
-          }
-          headers?: {
-            [key: string]: string
-          }
-          provider?: {
-            npm: string
-          }
-        }
-      }
-      whitelist?: Array<string>
-      blacklist?: Array<string>
-      options?: {
-        apiKey?: string
-        baseURL?: string
-        /**
-         * GitHub Enterprise URL for copilot authentication
-         */
-        enterpriseUrl?: string
-        /**
-         * Enable promptCacheKey for this provider (default false)
-         */
-        setCacheKey?: boolean
-        /**
-         * Timeout in milliseconds for requests to this provider. Default is 300000 (5 minutes). Set to false to disable timeout.
-         */
-        timeout?: number | false
-        [key: string]: unknown | string | boolean | (number | false) | undefined
-      }
-    }
+    [key: string]: ProviderConfig
   }
   /**
    * MCP (Model Context Protocol) server configurations
@@ -1258,18 +1327,14 @@ export type Config = {
      */
     batch_tool?: boolean
     /**
+     * Enable OpenTelemetry spans for AI SDK calls (using the 'experimental_telemetry' flag)
+     */
+    openTelemetry?: boolean
+    /**
      * Tools that should only be available to primary agents.
      */
     primary_tools?: Array<string>
   }
-}
-
-export type BadRequestError = {
-  data: unknown
-  errors: Array<{
-    [key: string]: unknown
-  }>
-  success: false
 }
 
 export type ToolIds = Array<string>
@@ -1291,13 +1356,6 @@ export type Path = {
 
 export type VcsInfo = {
   branch: string
-}
-
-export type NotFoundError = {
-  name: "NotFoundError"
-  data: {
-    message: string
-  }
 }
 
 export type TextPartInput = {
@@ -1354,51 +1412,71 @@ export type Command = {
 
 export type Model = {
   id: string
+  providerID: string
+  api: {
+    id: string
+    url: string
+    npm: string
+  }
   name: string
-  release_date: string
-  attachment: boolean
-  reasoning: boolean
-  temperature: boolean
-  tool_call: boolean
+  capabilities: {
+    temperature: boolean
+    reasoning: boolean
+    attachment: boolean
+    toolcall: boolean
+    input: {
+      text: boolean
+      audio: boolean
+      image: boolean
+      video: boolean
+      pdf: boolean
+    }
+    output: {
+      text: boolean
+      audio: boolean
+      image: boolean
+      video: boolean
+      pdf: boolean
+    }
+  }
   cost: {
     input: number
     output: number
-    cache_read?: number
-    cache_write?: number
-    context_over_200k?: {
+    cache: {
+      read: number
+      write: number
+    }
+    experimentalOver200K?: {
       input: number
       output: number
-      cache_read?: number
-      cache_write?: number
+      cache: {
+        read: number
+        write: number
+      }
     }
   }
   limit: {
     context: number
     output: number
   }
-  modalities?: {
-    input: Array<"text" | "audio" | "image" | "video" | "pdf">
-    output: Array<"text" | "audio" | "image" | "video" | "pdf">
-  }
-  experimental?: boolean
-  status?: "alpha" | "beta" | "deprecated"
+  status: "alpha" | "beta" | "deprecated" | "active"
   options: {
     [key: string]: unknown
   }
-  headers?: {
+  headers: {
     [key: string]: string
-  }
-  provider?: {
-    npm: string
   }
 }
 
 export type Provider = {
-  api?: string
-  name: string
-  env: Array<string>
   id: string
-  npm?: string
+  name: string
+  source: "env" | "config" | "custom" | "api"
+  env: Array<string>
+  key?: string
+  options: {
+    [key: string]: unknown
+  }
   models: {
     [key: string]: Model
   }
@@ -1489,6 +1567,7 @@ export type Agent = {
   options: {
     [key: string]: unknown
   }
+  maxSteps?: number
 }
 
 export type McpStatusConnected = {
@@ -1591,6 +1670,181 @@ export type ProjectCurrentResponses = {
 }
 
 export type ProjectCurrentResponse = ProjectCurrentResponses[keyof ProjectCurrentResponses]
+
+export type PtyListData = {
+  body?: never
+  path?: never
+  query?: {
+    directory?: string
+  }
+  url: "/pty"
+}
+
+export type PtyListResponses = {
+  /**
+   * List of sessions
+   */
+  200: Array<Pty>
+}
+
+export type PtyListResponse = PtyListResponses[keyof PtyListResponses]
+
+export type PtyCreateData = {
+  body?: {
+    command?: string
+    args?: Array<string>
+    cwd?: string
+    title?: string
+    env?: {
+      [key: string]: string
+    }
+  }
+  path?: never
+  query?: {
+    directory?: string
+  }
+  url: "/pty"
+}
+
+export type PtyCreateErrors = {
+  /**
+   * Bad request
+   */
+  400: BadRequestError
+}
+
+export type PtyCreateError = PtyCreateErrors[keyof PtyCreateErrors]
+
+export type PtyCreateResponses = {
+  /**
+   * Created session
+   */
+  200: Pty
+}
+
+export type PtyCreateResponse = PtyCreateResponses[keyof PtyCreateResponses]
+
+export type PtyRemoveData = {
+  body?: never
+  path: {
+    id: string
+  }
+  query?: {
+    directory?: string
+  }
+  url: "/pty/{id}"
+}
+
+export type PtyRemoveErrors = {
+  /**
+   * Not found
+   */
+  404: NotFoundError
+}
+
+export type PtyRemoveError = PtyRemoveErrors[keyof PtyRemoveErrors]
+
+export type PtyRemoveResponses = {
+  /**
+   * Session removed
+   */
+  200: boolean
+}
+
+export type PtyRemoveResponse = PtyRemoveResponses[keyof PtyRemoveResponses]
+
+export type PtyGetData = {
+  body?: never
+  path: {
+    id: string
+  }
+  query?: {
+    directory?: string
+  }
+  url: "/pty/{id}"
+}
+
+export type PtyGetErrors = {
+  /**
+   * Not found
+   */
+  404: NotFoundError
+}
+
+export type PtyGetError = PtyGetErrors[keyof PtyGetErrors]
+
+export type PtyGetResponses = {
+  /**
+   * Session info
+   */
+  200: Pty
+}
+
+export type PtyGetResponse = PtyGetResponses[keyof PtyGetResponses]
+
+export type PtyUpdateData = {
+  body?: {
+    title?: string
+    size?: {
+      rows: number
+      cols: number
+    }
+  }
+  path: {
+    id: string
+  }
+  query?: {
+    directory?: string
+  }
+  url: "/pty/{id}"
+}
+
+export type PtyUpdateErrors = {
+  /**
+   * Bad request
+   */
+  400: BadRequestError
+}
+
+export type PtyUpdateError = PtyUpdateErrors[keyof PtyUpdateErrors]
+
+export type PtyUpdateResponses = {
+  /**
+   * Updated session
+   */
+  200: Pty
+}
+
+export type PtyUpdateResponse = PtyUpdateResponses[keyof PtyUpdateResponses]
+
+export type PtyConnectData = {
+  body?: never
+  path: {
+    id: string
+  }
+  query?: {
+    directory?: string
+  }
+  url: "/pty/{id}/connect"
+}
+
+export type PtyConnectErrors = {
+  /**
+   * Not found
+   */
+  404: NotFoundError
+}
+
+export type PtyConnectError = PtyConnectErrors[keyof PtyConnectErrors]
+
+export type PtyConnectResponses = {
+  /**
+   * Connected session
+   */
+  200: boolean
+}
+
+export type PtyConnectResponse = PtyConnectResponses[keyof PtyConnectResponses]
 
 export type ConfigGetData = {
   body?: never
@@ -2665,7 +2919,55 @@ export type ProviderListResponses = {
    * List of providers
    */
   200: {
-    all: Array<Provider>
+    all: Array<{
+      api?: string
+      name: string
+      env: Array<string>
+      id: string
+      npm?: string
+      models: {
+        [key: string]: {
+          id: string
+          name: string
+          release_date: string
+          attachment: boolean
+          reasoning: boolean
+          temperature: boolean
+          tool_call: boolean
+          cost?: {
+            input: number
+            output: number
+            cache_read?: number
+            cache_write?: number
+            context_over_200k?: {
+              input: number
+              output: number
+              cache_read?: number
+              cache_write?: number
+            }
+          }
+          limit: {
+            context: number
+            output: number
+          }
+          modalities?: {
+            input: Array<"text" | "audio" | "image" | "video" | "pdf">
+            output: Array<"text" | "audio" | "image" | "video" | "pdf">
+          }
+          experimental?: boolean
+          status?: "alpha" | "beta" | "deprecated"
+          options: {
+            [key: string]: unknown
+          }
+          headers?: {
+            [key: string]: string
+          }
+          provider?: {
+            npm: string
+          }
+        }
+      }
+    }>
     default: {
       [key: string]: string
     }

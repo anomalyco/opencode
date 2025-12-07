@@ -375,6 +375,12 @@ export namespace Config {
         .regex(/^#[0-9a-fA-F]{6}$/, "Invalid hex color format")
         .optional()
         .describe("Hex color code for the agent (e.g., #FF5733)"),
+      maxSteps: z
+        .number()
+        .int()
+        .positive()
+        .optional()
+        .describe("Maximum number of agentic iterations before forcing text-only response"),
       permission: z
         .object({
           edit: Permission.optional(),
@@ -398,6 +404,7 @@ export namespace Config {
       editor_open: z.string().optional().default("<leader>e").describe("Open external editor"),
       theme_list: z.string().optional().default("<leader>t").describe("List available themes"),
       sidebar_toggle: z.string().optional().default("<leader>b").describe("Toggle sidebar"),
+      scrollbar_toggle: z.string().optional().default("none").describe("Toggle session scrollbar"),
       username_toggle: z.string().optional().default("none").describe("Toggle username visibility"),
       status_view: z.string().optional().default("<leader>s").describe("View status"),
       session_export: z.string().optional().default("<leader>x").describe("Export session to editor"),
@@ -470,6 +477,42 @@ export namespace Config {
   })
   export type Layout = z.infer<typeof Layout>
 
+  export const Provider = ModelsDev.Provider.partial()
+    .extend({
+      whitelist: z.array(z.string()).optional(),
+      blacklist: z.array(z.string()).optional(),
+      models: z.record(z.string(), ModelsDev.Model.partial()).optional(),
+      options: z
+        .object({
+          apiKey: z.string().optional(),
+          baseURL: z.string().optional(),
+          enterpriseUrl: z.string().optional().describe("GitHub Enterprise URL for copilot authentication"),
+          setCacheKey: z.boolean().optional().describe("Enable promptCacheKey for this provider (default false)"),
+          timeout: z
+            .union([
+              z
+                .number()
+                .int()
+                .positive()
+                .describe(
+                  "Timeout in milliseconds for requests to this provider. Default is 300000 (5 minutes). Set to false to disable timeout.",
+                ),
+              z.literal(false).describe("Disable timeout for this provider entirely."),
+            ])
+            .optional()
+            .describe(
+              "Timeout in milliseconds for requests to this provider. Default is 300000 (5 minutes). Set to false to disable timeout.",
+            ),
+        })
+        .catchall(z.any())
+        .optional(),
+    })
+    .strict()
+    .meta({
+      ref: "ProviderConfig",
+    })
+  export type Provider = z.infer<typeof Provider>
+
   export const Info = z
     .object({
       $schema: z.string().optional().describe("JSON schema reference for configuration validation"),
@@ -536,43 +579,7 @@ export namespace Config {
         .optional()
         .describe("Agent configuration, see https://opencode.ai/docs/agent"),
       provider: z
-        .record(
-          z.string(),
-          ModelsDev.Provider.partial()
-            .extend({
-              whitelist: z.array(z.string()).optional(),
-              blacklist: z.array(z.string()).optional(),
-              models: z.record(z.string(), ModelsDev.Model.partial()).optional(),
-              options: z
-                .object({
-                  apiKey: z.string().optional(),
-                  baseURL: z.string().optional(),
-                  enterpriseUrl: z.string().optional().describe("GitHub Enterprise URL for copilot authentication"),
-                  setCacheKey: z
-                    .boolean()
-                    .optional()
-                    .describe("Enable promptCacheKey for this provider (default false)"),
-                  timeout: z
-                    .union([
-                      z
-                        .number()
-                        .int()
-                        .positive()
-                        .describe(
-                          "Timeout in milliseconds for requests to this provider. Default is 300000 (5 minutes). Set to false to disable timeout.",
-                        ),
-                      z.literal(false).describe("Disable timeout for this provider entirely."),
-                    ])
-                    .optional()
-                    .describe(
-                      "Timeout in milliseconds for requests to this provider. Default is 300000 (5 minutes). Set to false to disable timeout.",
-                    ),
-                })
-                .catchall(z.any())
-                .optional(),
-            })
-            .strict(),
-        )
+        .record(z.string(), Provider)
         .optional()
         .describe("Custom provider configurations and model overrides"),
       mcp: z.record(z.string(), Mcp).optional().describe("MCP (Model Context Protocol) server configurations"),
@@ -670,6 +677,10 @@ export namespace Config {
           chatMaxRetries: z.number().optional().describe("Number of retries for chat completions on failure"),
           disable_paste_summary: z.boolean().optional(),
           batch_tool: z.boolean().optional().describe("Enable the batch tool"),
+          openTelemetry: z
+            .boolean()
+            .optional()
+            .describe("Enable OpenTelemetry spans for AI SDK calls (using the 'experimental_telemetry' flag)"),
           primary_tools: z
             .array(z.string())
             .optional()

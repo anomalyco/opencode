@@ -63,6 +63,7 @@ import { useKV } from "../../context/kv.tsx"
 import { Editor } from "../../util/editor"
 import stripAnsi from "strip-ansi"
 import { Footer } from "./footer.tsx"
+import { usePromptRef } from "../../context/prompt"
 
 addDefaultParsers(parsers.parsers)
 
@@ -99,6 +100,7 @@ export function Session() {
   const sync = useSync()
   const kv = useKV()
   const { theme } = useTheme()
+  const promptRef = usePromptRef()
   const session = createMemo(() => sync.session.get(route.sessionID)!)
   const messages = createMemo(() => sync.data.message[route.sessionID] ?? [])
   const permissions = createMemo(() => sync.data.permission[route.sessionID] ?? [])
@@ -118,6 +120,7 @@ export function Session() {
   const [showTimestamps, setShowTimestamps] = createSignal(kv.get("timestamps", "hide") === "show")
   const [usernameVisible, setUsernameVisible] = createSignal(kv.get("username_visible", true))
   const [showDetails, setShowDetails] = createSignal(kv.get("tool_details_visibility", true))
+  const [showScrollbar, setShowScrollbar] = createSignal(kv.get("scrollbar_visible", false))
   const [diffWrapMode, setDiffWrapMode] = createSignal<"word" | "none">("word")
 
   const wide = createMemo(() => dimensions().width > 120)
@@ -138,7 +141,7 @@ export function Session() {
       return new CustomSpeedScroll(tui.scroll_speed)
     }
 
-    return new CustomSpeedScroll(process.platform === "win32" ? 3 : 1)
+    return new CustomSpeedScroll(3)
   })
 
   createEffect(async () => {
@@ -239,6 +242,34 @@ export function Session() {
 
   const command = useCommandDialog()
   command.register(() => [
+    ...(sync.data.config.share !== "disabled"
+      ? [
+          {
+            title: "Share session",
+            value: "session.share",
+            suggested: route.type === "session",
+            keybind: "session_share" as const,
+            disabled: !!session()?.share?.url,
+            category: "Session",
+            onSelect: async (dialog: any) => {
+              await sdk.client.session
+                .share({
+                  path: {
+                    id: route.sessionID,
+                  },
+                })
+                .then((res) =>
+                  Clipboard.copy(res.data!.share!.url).catch(() =>
+                    toast.show({ message: "Failed to copy URL to clipboard", variant: "error" }),
+                  ),
+                )
+                .then(() => toast.show({ message: "Share URL copied to clipboard!", variant: "success" }))
+                .catch(() => toast.show({ message: "Failed to share session", variant: "error" }))
+              dialog.clear()
+            },
+          },
+        ]
+      : []),
     {
       title: "Rename session",
       value: "session.rename",
@@ -294,33 +325,6 @@ export function Session() {
         dialog.clear()
       },
     },
-    ...(sync.data.config.share !== "disabled"
-      ? [
-          {
-            title: "Share session",
-            value: "session.share",
-            keybind: "session_share" as const,
-            disabled: !!session()?.share?.url,
-            category: "Session",
-            onSelect: async (dialog: any) => {
-              await sdk.client.session
-                .share({
-                  path: {
-                    id: route.sessionID,
-                  },
-                })
-                .then((res) =>
-                  Clipboard.copy(res.data!.share!.url).catch(() =>
-                    toast.show({ message: "Failed to copy URL to clipboard", variant: "error" }),
-                  ),
-                )
-                .then(() => toast.show({ message: "Share URL copied to clipboard!", variant: "success" }))
-                .catch(() => toast.show({ message: "Failed to share session", variant: "error" }))
-              dialog.clear()
-            },
-          },
-        ]
-      : []),
     {
       title: "Unshare session",
       value: "session.unshare",
@@ -446,7 +450,7 @@ export function Session() {
       },
     },
     {
-      title: "Toggle timestamps",
+      title: showTimestamps() ? "Hide timestamps" : "Show timestamps",
       value: "session.toggle.timestamps",
       category: "Session",
       onSelect: (dialog) => {
@@ -489,6 +493,20 @@ export function Session() {
         const newValue = !showDetails()
         setShowDetails(newValue)
         kv.set("tool_details_visibility", newValue)
+        dialog.clear()
+      },
+    },
+    {
+      title: "Toggle session scrollbar",
+      value: "session.toggle.scrollbar",
+      keybind: "scrollbar_toggle",
+      category: "Session",
+      onSelect: (dialog) => {
+        setShowScrollbar((prev) => {
+          const next = !prev
+          kv.set("scrollbar_visible", next)
+          return next
+        })
         dialog.clear()
       },
     },
@@ -838,9 +856,9 @@ export function Session() {
             </Show>
             <scrollbox
               ref={(r) => (scroll = r)}
-              scrollbarOptions={{
-                paddingLeft: 2,
-                visible: false,
+              verticalScrollbarOptions={{
+                paddingLeft: 1,
+                visible: showScrollbar(),
                 trackOptions: {
                   backgroundColor: theme.backgroundElement,
                   foregroundColor: theme.border,
@@ -949,7 +967,10 @@ export function Session() {
             </scrollbox>
             <box flexShrink={0}>
               <Prompt
-                ref={(r) => (prompt = r)}
+                ref={(r) => {
+                  prompt = r
+                  promptRef.set(r)
+                }}
                 disabled={permissions().length > 0}
                 onSubmit={() => {
                   toBottom()
@@ -1045,11 +1066,12 @@ function UserMessage(props: {
               </box>
             </Show>
             <text fg={theme.textMuted}>
-              {ctx.usernameVisible() ? `${sync.data.config.username ?? "You"} ` : "You"}{" "}
+              {ctx.usernameVisible() ? `${sync.data.config.username ?? "You"}` : "You"}
               <Show
                 when={queued()}
                 fallback={
                   <span style={{ fg: theme.textMuted }}>
+                    {ctx.usernameVisible() ? " · " : " "}
                     {ctx.showTimestamps()
                       ? Locale.todayTimeOrDateTime(props.message.time.created)
                       : Locale.time(props.message.time.created)}
@@ -1502,7 +1524,7 @@ ToolRegistry.register<typeof TaskTool>({
           <box>
             <For each={props.metadata.summary ?? []}>
               {(task) => (
-                <text style={{ fg: theme.textMuted }}>
+                <text style={{ fg: task.state.status === "error" ? theme.error : theme.textMuted }}>
                   ∟ {Locale.titlecase(task.tool)} {task.state.status === "completed" ? task.state.title : ""}
                 </text>
               )}
