@@ -15,6 +15,7 @@ export namespace ModelsDev {
     release_date: z.string(),
     attachment: z.boolean(),
     reasoning: z.boolean(),
+    interleaved_thinking: z.boolean().optional(),
     temperature: z.boolean(),
     tool_call: z.boolean(),
     cost: z

@@ -325,6 +325,7 @@ export namespace Provider {
       capabilities: z.object({
         temperature: z.boolean(),
         reasoning: z.boolean(),
+        interleavedThinking: z.boolean(),
         attachment: z.boolean(),
         toolcall: z.boolean(),
         input: z.object({
@@ -426,6 +427,7 @@ export namespace Provider {
       capabilities: {
         temperature: model.temperature,
         reasoning: model.reasoning,
+        interleavedThinking: model.interleaved_thinking ?? false,
         attachment: model.attachment,
         toolcall: model.tool_call,
         input: {
@@ -543,6 +545,7 @@ export namespace Provider {
           capabilities: {
             temperature: model.temperature ?? existingModel?.capabilities.temperature ?? false,
             reasoning: model.reasoning ?? existingModel?.capabilities.reasoning ?? false,
+            interleavedThinking: model.interleaved_thinking ?? existingModel?.capabilities.interleavedThinking ?? false,
             attachment: model.attachment ?? existingModel?.capabilities.attachment ?? false,
             toolcall: model.tool_call ?? existingModel?.capabilities.toolcall ?? true,
             input: {
