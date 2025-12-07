@@ -56,6 +56,7 @@ export namespace Session {
         })
         .optional(),
       title: z.string(),
+      currentAgent: z.string().optional(),
       version: z.string(),
       time: z.object({
         created: z.number(),
