@@ -21,12 +21,12 @@ cmd = "./opencode"
 args = ["acp"]
 
 [agent_servers.opencode.targets.linux-aarch64]
-archive = "https://github.com/sst/opencode/releases/download/v1.0.134/opencode-linux-arm64.zip"
+archive = "https://github.com/sst/opencode/releases/download/v1.0.134/opencode-linux-arm64.tar.gz"
 cmd = "./opencode"
 args = ["acp"]
 
 [agent_servers.opencode.targets.linux-x86_64]
-archive = "https://github.com/sst/opencode/releases/download/v1.0.134/opencode-linux-x64.zip"
+archive = "https://github.com/sst/opencode/releases/download/v1.0.134/opencode-linux-x64.tar.gz"
 cmd = "./opencode"
 args = ["acp"]
 
