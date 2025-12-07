@@ -10,7 +10,7 @@ on:
   workflow_dispatch:
 jobs:
   format:
-    runs-on: ubuntu-latest
+    runs-on: blacksmith-4vcpu-ubuntu-2404
     permissions:
       contents: write
     steps:
@@ -27,3 +27,5 @@ jobs:
           ./script/format.ts
         env:
           CI: true
+          GITHUB_HEAD_REF: ${{ github.head_ref }}
+          GITHUB_REF_NAME: ${{ github.ref_name }}

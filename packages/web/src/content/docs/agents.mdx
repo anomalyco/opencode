@@ -36,7 +36,7 @@ look at these below.
 
 Subagents are specialized assistants that primary agents can invoke for specific tasks. You can also manually invoke them by **@ mentioning** them in your messages.
 
-OpenCode comes with one built-in subagent, **General**. We'll look at this below.
+OpenCode comes with two built-in subagents, **General** and **Explore**. We'll look at this below.
 
 ---
 
@@ -73,6 +73,14 @@ This agent is useful when you want the LLM to analyze code, suggest changes, or 
 _Mode_: `subagent`
 
 A general-purpose agent for researching complex questions, searching for code, and executing multi-step tasks. Use when searching for keywords or files and you're not confident you'll find the right match in the first few tries.
+
+---
+
+### Explore
+
+_Mode_: `subagent`
+
+A fast agent specialized for exploring codebases. Use this when you need to quickly find files by patterns, search code for keywords, or answer questions about the codebase.
 
 ---
 
@@ -246,6 +254,28 @@ Temperature values typically range from 0.0 to 1.0:
 ```
 
 If no temperature is specified, OpenCode uses model-specific defaults; typically 0 for most models, 0.55 for Qwen models.
+
+---
+
+### Max steps
+
+Control the maximum number of agentic iterations an agent can perform before being forced to respond with text only. This allows users who wish to control costs to set a limit on agentic actions.
+
+If this is not set, the agent will continue to iterate until the model chooses to stop or the user interrupts the session.
+
+```json title="opencode.json"
+{
+  "agent": {
+    "quick-thinker": {
+      "description": "Fast reasoning with limited iterations",
+      "prompt": "You are a quick thinker. Solve problems with minimal steps.",
+      "maxSteps": 5
+    }
+  }
+}
+```
+
+When the limit is reached, the agent receives a special system prompt instructing it to respond with a summarization of its work and recommended remaining tasks.
 
 ---
 

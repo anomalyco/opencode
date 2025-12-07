@@ -8,7 +8,7 @@ import { proxy } from "hono/proxy"
 import { Session } from "../session"
 import z from "zod"
 import { Provider } from "../provider/provider"
-import { mapValues } from "remeda"
+import { mapValues, pipe } from "remeda"
 import { NamedError } from "@opencode-ai/util/error"
 import { ModelsDev } from "../provider/models"
 import { Ripgrep } from "../file/ripgrep"
@@ -43,43 +43,12 @@ import { Snapshot } from "@/snapshot"
 import { SessionSummary } from "@/session/summary"
 import { GlobalBus } from "@/bus/global"
 import { SessionStatus } from "@/session/status"
-import { ShareNext } from "@/share/share-next"
+import { upgradeWebSocket, websocket } from "hono/bun"
+import { errors } from "./error"
+import { Pty } from "@/pty"
 
 // @ts-ignore This global is needed to prevent ai-sdk from logging warnings to stdout https://github.com/vercel/ai/blob/2dc67e0ef538307f21368db32d5a12345d98831b/packages/ai/src/logger/log-warnings.ts#L85
 globalThis.AI_SDK_LOG_WARNINGS = false
-
-const ERRORS = {
-  400: {
-    description: "Bad request",
-    content: {
-      "application/json": {
-        schema: resolver(
-          z
-            .object({
-              data: z.any(),
-              errors: z.array(z.record(z.string(), z.any())),
-              success: z.literal(false),
-            })
-            .meta({
-              ref: "BadRequestError",
-            }),
-        ),
-      },
-    },
-  },
-  404: {
-    description: "Not found",
-    content: {
-      "application/json": {
-        schema: resolver(Storage.NotFoundError.Schema),
-      },
-    },
-  },
-} as const
-
-function errors(...codes: number[]) {
-  return Object.fromEntries(codes.map((code) => [code, ERRORS[code as keyof typeof ERRORS]]))
-}
 
 export namespace Server {
   const log = Log.create({ service: "server" })
@@ -193,7 +162,161 @@ export namespace Server {
         }),
       )
       .use(validator("query", z.object({ directory: z.string().optional() })))
+
       .route("/project", ProjectRoute)
+
+      .get(
+        "/pty",
+        describeRoute({
+          description: "List all PTY sessions",
+          operationId: "pty.list",
+          responses: {
+            200: {
+              description: "List of sessions",
+              content: {
+                "application/json": {
+                  schema: resolver(Pty.Info.array()),
+                },
+              },
+            },
+          },
+        }),
+        async (c) => {
+          return c.json(Pty.list())
+        },
+      )
+      .post(
+        "/pty",
+        describeRoute({
+          description: "Create a new PTY session",
+          operationId: "pty.create",
+          responses: {
+            200: {
+              description: "Created session",
+              content: {
+                "application/json": {
+                  schema: resolver(Pty.Info),
+                },
+              },
+            },
+            ...errors(400),
+          },
+        }),
+        validator("json", Pty.CreateInput),
+        async (c) => {
+          const info = await Pty.create(c.req.valid("json"))
+          return c.json(info)
+        },
+      )
+      .get(
+        "/pty/:id",
+        describeRoute({
+          description: "Get PTY session info",
+          operationId: "pty.get",
+          responses: {
+            200: {
+              description: "Session info",
+              content: {
+                "application/json": {
+                  schema: resolver(Pty.Info),
+                },
+              },
+            },
+            ...errors(404),
+          },
+        }),
+        validator("param", z.object({ id: z.string() })),
+        async (c) => {
+          const info = Pty.get(c.req.valid("param").id)
+          if (!info) {
+            throw new Storage.NotFoundError({ message: "Session not found" })
+          }
+          return c.json(info)
+        },
+      )
+      .put(
+        "/pty/:id",
+        describeRoute({
+          description: "Update PTY session",
+          operationId: "pty.update",
+          responses: {
+            200: {
+              description: "Updated session",
+              content: {
+                "application/json": {
+                  schema: resolver(Pty.Info),
+                },
+              },
+            },
+            ...errors(400),
+          },
+        }),
+        validator("param", z.object({ id: z.string() })),
+        validator("json", Pty.UpdateInput),
+        async (c) => {
+          const info = await Pty.update(c.req.valid("param").id, c.req.valid("json"))
+          return c.json(info)
+        },
+      )
+      .delete(
+        "/pty/:id",
+        describeRoute({
+          description: "Remove a PTY session",
+          operationId: "pty.remove",
+          responses: {
+            200: {
+              description: "Session removed",
+              content: {
+                "application/json": {
+                  schema: resolver(z.boolean()),
+                },
+              },
+            },
+            ...errors(404),
+          },
+        }),
+        validator("param", z.object({ id: z.string() })),
+        async (c) => {
+          await Pty.remove(c.req.valid("param").id)
+          return c.json(true)
+        },
+      )
+      .get(
+        "/pty/:id/connect",
+        describeRoute({
+          description: "Connect to a PTY session",
+          operationId: "pty.connect",
+          responses: {
+            200: {
+              description: "Connected session",
+              content: {
+                "application/json": {
+                  schema: resolver(z.boolean()),
+                },
+              },
+            },
+            ...errors(404),
+          },
+        }),
+        validator("param", z.object({ id: z.string() })),
+        upgradeWebSocket((c) => {
+          const id = c.req.param("id")
+          let handler: ReturnType<typeof Pty.connect>
+          if (!Pty.get(id)) throw new Error("Session not found")
+          return {
+            onOpen(_event, ws) {
+              handler = Pty.connect(id, ws)
+            },
+            onMessage(event) {
+              handler?.onMessage(String(event.data))
+            },
+            onClose() {
+              handler?.onClose()
+            },
+          }
+        }),
+      )
+
       .get(
         "/config",
         describeRoute({
@@ -297,8 +420,8 @@ export namespace Server {
           }),
         ),
         async (c) => {
-          const { provider, model } = c.req.valid("query")
-          const tools = await ToolRegistry.tools(provider, model)
+          const { provider } = c.req.valid("query")
+          const tools = await ToolRegistry.tools(provider)
           return c.json(
             tools.map((t) => ({
               id: t.id,
@@ -1026,7 +1149,7 @@ export namespace Server {
         async (c) => {
           c.status(204)
           c.header("Content-Type", "application/json")
-          return stream(c, async (stream) => {
+          return stream(c, async () => {
             const sessionID = c.req.valid("param").id
             const body = c.req.valid("json")
             SessionPrompt.prompt({ ...body, sessionID })
@@ -1232,7 +1355,7 @@ export namespace Server {
                 "application/json": {
                   schema: resolver(
                     z.object({
-                      providers: ModelsDev.Provider.array(),
+                      providers: Provider.Info.array(),
                       default: z.record(z.string(), z.string()),
                     }),
                   ),
@@ -1243,7 +1366,7 @@ export namespace Server {
         }),
         async (c) => {
           using _ = log.time("providers")
-          const providers = await Provider.list().then((x) => mapValues(x, (item) => item.info))
+          const providers = await Provider.list().then((x) => mapValues(x, (item) => item))
           return c.json({
             providers: Object.values(providers),
             default: mapValues(providers, (item) => Provider.sort(Object.values(item.models))[0].id),
@@ -1273,7 +1396,10 @@ export namespace Server {
           },
         }),
         async (c) => {
-          const providers = await ModelsDev.get()
+          const providers = pipe(
+            await ModelsDev.get(),
+            mapValues((x) => Provider.fromModelsDevProvider(x)),
+          )
           const connected = await Provider.list().then((x) => Object.keys(x))
           return c.json({
             all: Object.values(providers),
@@ -1678,6 +1804,117 @@ export namespace Server {
           return c.json(result.status)
         },
       )
+      .post(
+        "/mcp/:name/auth",
+        describeRoute({
+          description: "Start OAuth authentication flow for an MCP server",
+          operationId: "mcp.auth.start",
+          responses: {
+            200: {
+              description: "OAuth flow started",
+              content: {
+                "application/json": {
+                  schema: resolver(
+                    z.object({
+                      authorizationUrl: z.string().describe("URL to open in browser for authorization"),
+                    }),
+                  ),
+                },
+              },
+            },
+            ...errors(400, 404),
+          },
+        }),
+        async (c) => {
+          const name = c.req.param("name")
+          const supportsOAuth = await MCP.supportsOAuth(name)
+          if (!supportsOAuth) {
+            return c.json({ error: `MCP server ${name} does not support OAuth` }, 400)
+          }
+          const result = await MCP.startAuth(name)
+          return c.json(result)
+        },
+      )
+      .post(
+        "/mcp/:name/auth/callback",
+        describeRoute({
+          description: "Complete OAuth authentication with authorization code",
+          operationId: "mcp.auth.callback",
+          responses: {
+            200: {
+              description: "OAuth authentication completed",
+              content: {
+                "application/json": {
+                  schema: resolver(MCP.Status),
+                },
+              },
+            },
+            ...errors(400, 404),
+          },
+        }),
+        validator(
+          "json",
+          z.object({
+            code: z.string().describe("Authorization code from OAuth callback"),
+          }),
+        ),
+        async (c) => {
+          const name = c.req.param("name")
+          const { code } = c.req.valid("json")
+          const status = await MCP.finishAuth(name, code)
+          return c.json(status)
+        },
+      )
+      .post(
+        "/mcp/:name/auth/authenticate",
+        describeRoute({
+          description: "Start OAuth flow and wait for callback (opens browser)",
+          operationId: "mcp.auth.authenticate",
+          responses: {
+            200: {
+              description: "OAuth authentication completed",
+              content: {
+                "application/json": {
+                  schema: resolver(MCP.Status),
+                },
+              },
+            },
+            ...errors(400, 404),
+          },
+        }),
+        async (c) => {
+          const name = c.req.param("name")
+          const supportsOAuth = await MCP.supportsOAuth(name)
+          if (!supportsOAuth) {
+            return c.json({ error: `MCP server ${name} does not support OAuth` }, 400)
+          }
+          const status = await MCP.authenticate(name)
+          return c.json(status)
+        },
+      )
+      .delete(
+        "/mcp/:name/auth",
+        describeRoute({
+          description: "Remove OAuth credentials for an MCP server",
+          operationId: "mcp.auth.remove",
+          responses: {
+            200: {
+              description: "OAuth credentials removed",
+              content: {
+                "application/json": {
+                  schema: resolver(z.object({ success: z.literal(true) })),
+                },
+              },
+            },
+            ...errors(404),
+          },
+        }),
+        async (c) => {
+          const name = c.req.param("name")
+          await MCP.removeAuth(name)
+          return c.json({ success: true as const })
+        },
+      )
       .get(
         "/lsp",
         describeRoute({
@@ -2037,6 +2274,9 @@ export namespace Server {
               await stream.writeSSE({
                 data: JSON.stringify(event),
               })
+              if (event.type === Bus.InstanceDisposed.type) {
+                stream.close()
+              }
             })
             await new Promise<void>((resolve) => {
               stream.onAbort(() => {
@@ -2078,6 +2318,7 @@ export namespace Server {
       hostname: opts.hostname,
       idleTimeout: 0,
       fetch: App().fetch,
+      websocket: websocket,
     })
     return server
   }

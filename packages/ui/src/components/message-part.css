@@ -34,7 +34,7 @@
   align-items: start;
   gap: 8px;
 
-  [data-slot="message-part-tool-error-icon"] {
+  [data-slot="icon-svg"] {
     color: var(--icon-critical-base);
     margin-top: 4px;
   }
