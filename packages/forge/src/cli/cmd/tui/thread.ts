@@ -50,6 +50,11 @@ export const TuiThreadCommand = cmd({
         describe: "hostname to listen on",
         default: "127.0.0.1",
       })
+      .option("plan-agent", {
+        type: "string",
+        alias: ["P"],
+        describe: "agent to use for planning mode (implementation uses --agent/default)",
+      })
       .option("command", {
         type: "string",
         describe: "the command to run, use prompt for args (print mode only)",
@@ -159,6 +164,7 @@ export const TuiThreadCommand = cmd({
         continue: args.continue,
         sessionID: args.session,
         agent: args.agent,
+        planAgent: args["plan-agent"],
         prompt,
       },
       onExit: async () => {

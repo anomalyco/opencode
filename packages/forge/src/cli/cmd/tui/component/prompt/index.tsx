@@ -24,7 +24,18 @@ import { Shimmer } from "../../ui/shimmer"
 import { Log } from "@/util/log"
 import { useToast } from "../../ui/toast"
 import { useArgs } from "@tui/context/args"
-import { applySessionSetup } from "../../../session-init"
+import { applySessionSetup, setAgentAndModel } from "../../../session-init"
+
+type PlanContext = {
+  sessionID: string
+  planAgent: string
+  planModeId: string
+  baseAgent: string | null
+  baseModel: string | null
+  active: boolean
+}
+
+const planContexts = new Map<string, PlanContext>()
 
 export type PromptProps = {
   sessionID?: string
@@ -66,6 +77,7 @@ export function Prompt(props: PromptProps) {
   const switchingAgentName = () => local.session.switchingTo ?? local.agent.current().name
   const [serverSyncing, setServerSyncing] = createSignal(false)
   const isInitializing = () => isSwitchingAgent() || serverSyncing()
+  let planContext: PlanContext | null = null
 
   const textareaKeybindings = createMemo(() => {
     const newlineBindings = keybind.all.input_newline || []
@@ -290,6 +302,85 @@ export function Prompt(props: PromptProps) {
     promptPartTypeId = input.extmarks.registerType("prompt-part")
   })
 
+  createEffect(() => {
+    if (props.sessionID && planContexts.has(props.sessionID)) {
+      planContext = planContexts.get(props.sessionID)!
+    }
+  })
+
+  onMount(() => {
+    const off = (sdk.event as any).on("session.mode.changed", async (evt: any) => {
+      const props = (evt?.properties ?? {}) as { sessionID?: string; agent?: string; modeId?: string }
+      if (!planContext) return
+      if (!planContext.active) return
+      if (!props.sessionID || props.sessionID !== planContext.sessionID) return
+      if (!props.agent || props.agent !== planContext.planAgent) return
+      const modeId = props.modeId
+      // If still in plan mode, just reflect it locally
+      if (modeId === planContext.planModeId) {
+        if (modeId && local.mode.current() !== modeId) {
+          try {
+            await local.mode.set(modeId)
+          } catch (error) {
+            log.error("tui-plan-mode.still-plan.local-set-failed", {
+              sessionID: planContext.sessionID,
+              modeId,
+              error: error instanceof Error ? error.message : String(error),
+            })
+          }
+        }
+        return
+      }
+
+      // Left plan mode: switch back to base agent/model if we have it
+      if (planContext.baseAgent) {
+        try {
+          await setAgentAndModel(sdk.client, planContext.sessionID, planContext.baseAgent, planContext.baseModel ?? undefined)
+          if (planContext.baseModel) {
+            try {
+              await local.model.set(planContext.baseModel)
+            } catch (error) {
+              log.error("tui-plan-switch-back.local-model-set-failed", {
+                sessionID: planContext.sessionID,
+                model: planContext.baseModel,
+                error: error instanceof Error ? error.message : String(error),
+              })
+            }
+          }
+          planContext.active = false
+        } catch (error) {
+          log.error("Failed to switch back after plan mode", {
+            sessionID: planContext.sessionID,
+            agent: planContext.baseAgent,
+            model: planContext.baseModel ?? null,
+            error: error instanceof Error ? error.message : String(error),
+          })
+          planContext.active = false
+        }
+      }
+
+      if (modeId && local.mode.current() !== modeId) {
+        try {
+          await local.mode.set(modeId)
+        } catch (error) {
+          log.error("tui-plan-mode.local-set-failed", {
+            sessionID: planContext.sessionID,
+            modeId,
+            error: error instanceof Error ? error.message : String(error),
+          })
+        }
+      }
+      if (!planContext.active) {
+        planContexts.delete(planContext.sessionID)
+        planContext = null
+      }
+    })
+
+    onCleanup(() => {
+      off?.()
+    })
+  })
+
   function restoreExtmarksFromParts(parts: PromptInfo["parts"]) {
     input.extmarks.clear()
     setStore("extmarkToPartIndex", new Map())
@@ -494,12 +585,40 @@ export function Prompt(props: PromptProps) {
               agent: args.agent ?? null,
               planAgent: args.planAgent ?? null,
             })
-            await applySessionSetup({
+            const setupResult = await applySessionSetup({
               sdk: sdk.client,
               sessionID,
               baseAgentInput: args.agent,
               planAgentInput: args.planAgent,
             })
+            if (setupResult.planAgent && setupResult.planModeId) {
+              planContext = {
+                sessionID,
+                planAgent: setupResult.planAgent,
+                planModeId: setupResult.planModeId,
+                baseAgent: setupResult.baseAgent ?? local.agent.current().name,
+                baseModel: setupResult.baseModel,
+                active: true,
+              }
+              planContexts.set(sessionID, planContext)
+          } else {
+            planContext = null
+          }
+            if (setupResult.planModeId && local.mode.current() !== setupResult.planModeId) {
+              try {
+                await local.mode.set(setupResult.planModeId)
+                log.info("tui-session-setup.plan-mode.local-set", {
+                  sessionID,
+                  mode: setupResult.planModeId,
+                })
+              } catch (error) {
+                log.error("Failed to set plan mode locally", {
+                  sessionID,
+                  mode: setupResult.planModeId,
+                  error: error instanceof Error ? error.message : String(error),
+                })
+              }
+            }
             log.info("tui-session-setup.done", { sessionID })
           } catch (error) {
             log.error("Failed to apply session setup", {
