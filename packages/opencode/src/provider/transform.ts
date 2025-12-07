@@ -223,12 +223,27 @@ export namespace ProviderTransform {
       result["promptCacheKey"] = sessionID
     }
 
-    if (
-      model.providerID === "google" ||
-      (model.providerID.startsWith("opencode") && model.api.id.includes("gemini-3"))
-    ) {
-      result["thinkingConfig"] = {
-        includeThoughts: true,
+    // Enable thinking mode for Gemini models
+    // - Direct Google: providerID === "google"
+    // - OpenCode Zen with Gemini 3: providerID.startsWith("opencode") && model.api.id.includes("gemini-3")
+    // - OpenRouter with Gemini 3: model.api.npm === "@openrouter/ai-sdk-provider" && model.api.id.includes("gemini-3")
+    const isGemini3ViaOpenRouter =
+      model.api.npm === "@openrouter/ai-sdk-provider" && model.api.id.includes("gemini-3")
+    const isDirectGoogle = model.providerID === "google"
+    const isOpencodeGemini3 = model.providerID.startsWith("opencode") && model.api.id.includes("gemini-3")
+
+    if (isDirectGoogle || isOpencodeGemini3 || isGemini3ViaOpenRouter) {
+      // Gemini 3 uses thinkingLevel, Gemini 2.5 uses thinkingBudget
+      // For Gemini 3, we must use thinkingLevel: "HIGH" (not thinkingBudget)
+      if (model.api.id.includes("gemini-3")) {
+        result["thinkingConfig"] = {
+          includeThoughts: true,
+          thinkingLevel: "HIGH",
+        }
+      } else {
+        result["thinkingConfig"] = {
+          includeThoughts: true,
+        }
       }
     }
 
