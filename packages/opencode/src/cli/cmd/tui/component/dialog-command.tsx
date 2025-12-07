@@ -1,5 +1,5 @@
 import { useDialog } from "@tui/ui/dialog"
-import { DialogSelect, type DialogSelectOption } from "@tui/ui/dialog-select"
+import { DialogSelect, type DialogSelectOption, type DialogSelectRef } from "@tui/ui/dialog-select"
 import {
   createContext,
   createMemo,
@@ -18,6 +18,7 @@ const ctx = createContext<Context>()
 
 export type CommandOption = DialogSelectOption & {
   keybind?: keyof KeybindsConfig
+  suggested?: boolean
 }
 
 function init() {
@@ -26,7 +27,19 @@ function init() {
   const dialog = useDialog()
   const keybind = useKeybind()
   const options = createMemo(() => {
-    return registrations().flatMap((x) => x())
+    const all = registrations().flatMap((x) => x())
+    const suggested = all.filter((x) => x.suggested)
+    return [
+      ...suggested.map((x) => ({
+        ...x,
+        category: "Suggested",
+        value: "suggested." + x.value,
+      })),
+      ...all,
+    ].map((x) => ({
+      ...x,
+      footer: x.keybind ? keybind.print(x.keybind) : undefined,
+    }))
   })
   const suspended = () => suspendCount() > 0
 
@@ -99,14 +112,12 @@ export function CommandProvider(props: ParentProps) {
 }
 
 function DialogCommand(props: { options: CommandOption[] }) {
-  const keybind = useKeybind()
+  let ref: DialogSelectRef<string>
   return (
     <DialogSelect
+      ref={(r) => (ref = r)}
       title="Commands"
-      options={props.options.map((x) => ({
-        ...x,
-        footer: x.keybind ? keybind.print(x.keybind) : undefined,
-      }))}
+      options={props.options.filter((x) => !ref?.filter || !x.value.startsWith("suggested."))}
     />
   )
 }

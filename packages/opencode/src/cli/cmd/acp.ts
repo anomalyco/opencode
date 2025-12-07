@@ -17,7 +17,7 @@ process.on("unhandledRejection", (reason, promise) => {
 
 export const AcpCommand = cmd({
   command: "acp",
-  describe: "Start ACP (Agent Client Protocol) server",
+  describe: "start ACP (Agent Client Protocol) server",
   builder: (yargs) => {
     return yargs
       .option("cwd", {
