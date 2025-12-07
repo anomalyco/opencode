@@ -124,7 +124,7 @@ function AutoMethod(props: AutoMethodProps) {
     }
     await sdk.client.instance.dispose()
     await sync.bootstrap()
-    dialog.replace(() => <DialogModel />)
+    dialog.replace(() => <DialogModel providerID={props.providerID} />)
   })
 
   return (
@@ -172,7 +172,7 @@ function CodeMethod(props: CodeMethodProps) {
         if (!error) {
           await sdk.client.instance.dispose()
           await sync.bootstrap()
-          dialog.replace(() => <DialogModel />)
+          dialog.replace(() => <DialogModel providerID={props.providerID} />)
           return
         }
         setError(true)
@@ -229,7 +229,7 @@ function ApiMethod(props: ApiMethodProps) {
         })
         await sdk.client.instance.dispose()
         await sync.bootstrap()
-        dialog.replace(() => <DialogModel />)
+        dialog.replace(() => <DialogModel providerID={props.providerID} />)
       }}
     />
   )

@@ -91,31 +91,29 @@ export function Header() {
               <ContextInfo context={context} cost={cost} />
             </box>
           </Match>
-          <Match when={!shareEnabled()}>
+          <Match when={true}>
             <box flexDirection="row" justifyContent="space-between" gap={1}>
               <Title session={session} />
               <ContextInfo context={context} cost={cost} />
             </box>
-          </Match>
-          <Match when={true}>
-            <Title session={session} />
-            <box flexDirection="row" justifyContent="space-between" gap={1}>
-              <box flexGrow={1} flexShrink={1}>
-                <Switch>
-                  <Match when={session().share?.url}>
-                    <text fg={theme.textMuted} wrapMode="word">
-                      {session().share!.url}
-                    </text>
-                  </Match>
-                  <Match when={true}>
-                    <text fg={theme.text} wrapMode="word">
-                      /share <span style={{ fg: theme.textMuted }}>to create a shareable link</span>
-                    </text>
-                  </Match>
-                </Switch>
+            <Show when={shareEnabled()}>
+              <box flexDirection="row" justifyContent="space-between" gap={1}>
+                <box flexGrow={1} flexShrink={1}>
+                  <Switch>
+                    <Match when={session().share?.url}>
+                      <text fg={theme.textMuted} wrapMode="word">
+                        {session().share!.url}
+                      </text>
+                    </Match>
+                    <Match when={true}>
+                      <text fg={theme.text} wrapMode="word">
+                        /share <span style={{ fg: theme.textMuted }}>copy link</span>
+                      </text>
+                    </Match>
+                  </Switch>
+                </box>
               </box>
-              <ContextInfo context={context} cost={cost} />
-            </box>
+            </Show>
           </Match>
         </Switch>
       </box>

@@ -113,7 +113,10 @@ export namespace ToolRegistry {
     const result = await Promise.all(
       tools
         .filter((t) => {
-          if (t.id === "codesearch" || t.id === "websearch") return providerID === "opencode"
+          // Enable websearch/codesearch for zen users OR via enable flag
+          if (t.id === "codesearch" || t.id === "websearch") {
+            return providerID === "opencode" || Flag.OPENCODE_ENABLE_EXA
+          }
           return true
         })
         .map(async (t) => ({

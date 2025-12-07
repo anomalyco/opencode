@@ -27,3 +27,5 @@ jobs:
           ./script/format.ts
         env:
           CI: true
+          GITHUB_HEAD_REF: ${{ github.head_ref }}
+          GITHUB_REF_NAME: ${{ github.ref_name }}
