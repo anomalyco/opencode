@@ -515,7 +515,18 @@ export namespace SessionPrompt {
         })
       }
 
-      const chatMessages = msgs.map((m) => MessageV2.toChatMessage(m))
+      const chatMessages = msgs.filter((m) => {
+        if (m.info.role !== "assistant" || m.info.error === undefined) {
+          return true
+        }
+        if (
+          MessageV2.AbortedError.isInstance(m.info.error) &&
+          m.parts.some((part) => part.type !== "step-start" && part.type !== "reasoning")
+        ) {
+          return true
+        }
+        return false
+      }).map((m) => MessageV2.toChatMessage(m))
 
       await Plugin.trigger("chat.messages.transform", {}, { messages: chatMessages })
 
