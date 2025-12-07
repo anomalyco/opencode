@@ -240,6 +240,13 @@ export function Session() {
     }
   }
 
+  function goToParent() {
+    const parentID = session()?.parentID
+    if (parentID) {
+      navigate({ type: "session", sessionID: parentID })
+    }
+  }
+
   const command = useCommandDialog()
   command.register(() => [
     ...(sync.data.config.share !== "disabled"
@@ -775,6 +782,17 @@ export function Session() {
       disabled: true,
       onSelect: (dialog) => {
         moveChild(-1)
+        dialog.clear()
+      },
+    },
+    {
+      title: "Go to parent session",
+      value: "session.parent",
+      keybind: "session_parent" as any,
+      category: "Session",
+      disabled: !session()?.parentID,
+      onSelect: (dialog) => {
+        goToParent()
         dialog.clear()
       },
     },

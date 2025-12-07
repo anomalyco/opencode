@@ -97,10 +97,11 @@ A fast agent specialized for exploring codebases. Use this when you need to quic
      ```
 
 3. **Navigation between sessions**: When subagents create their own child sessions, you can navigate between the parent session and all child sessions using:
+   - **\<Leader>+Up** (or your configured `session_parent` keybind) to go directly to the parent session
    - **\<Leader>+Right** (or your configured `session_child_cycle` keybind) to cycle forward through parent → child1 → child2 → ... → parent
    - **\<Leader>+Left** (or your configured `session_child_cycle_reverse` keybind) to cycle backward through parent ← child1 ← child2 ← ... ← parent
 
-   This allows you to seamlessly switch between the main conversation and specialized subagent work.
+   You can also click on any subagent task in the sidebar to navigate directly to that subagent's session.
 
 ---
 
