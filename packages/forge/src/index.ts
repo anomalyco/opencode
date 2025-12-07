@@ -1,10 +1,10 @@
 import yargs from "yargs"
 import { hideBin } from "yargs/helpers"
-import { RunCommand } from "./cli/cmd/run"
 import { GenerateCommand } from "./cli/cmd/generate"
 import { Log } from "./util/log"
 import { AuthCommand } from "./cli/cmd/auth"
 import { AgentCommand } from "./cli/cmd/agent"
+import { AgentsCommand } from "./cli/cmd/agents"
 import { UpgradeCommand } from "./cli/cmd/upgrade"
 import { ModelsCommand } from "./cli/cmd/models"
 import { UI } from "./cli/ui"
@@ -39,6 +39,23 @@ process.on("uncaughtException", (e) => {
 
 const cli = yargs(hideBin(process.argv))
   .scriptName("forge")
+  // Disable wrapping so help lines don't break
+  .wrap(null)
+  .option("agent", {
+    describe: "agent to use (supports [agent]/[model] with fuzzy match)",
+    alias: ["a"],
+    type: "string",
+  })
+  .option("plan-agent", {
+    describe: "agent to use for planning mode",
+    alias: ["P"],
+    type: "string",
+  })
+  .option("impl-agent", {
+    describe: "agent to use for implementation mode",
+    alias: ["I"],
+    type: "string",
+  })
   .help("help", "show help")
   .alias("help", "h")
   .version("version", "show version number", Installation.VERSION)
@@ -72,20 +89,18 @@ const cli = yargs(hideBin(process.argv))
     })
   })
   .usage("\n" + UI.logo())
-  .command(McpCommand)
   .command(TuiThreadCommand)
-  .command(TuiSpawnCommand)
-  .command(AttachCommand)
-  .command(RunCommand)
-  .command(GenerateCommand)
-  .command(DebugCommand)
-  // .command(AuthCommand)
-  .command(AgentCommand)
-  .command(UpgradeCommand)
-  .command(ServeCommand)
-  .command(WebCommand)
+  .command(AgentsCommand)
   .command(ModelsCommand)
+  .command(AttachCommand)
+  .command(DebugCommand)
+  .command(GenerateCommand)
+  .command(McpCommand)
+  .command(ServeCommand)
+  .command(TuiSpawnCommand)
   .command(StatsCommand)
+  .command(UpgradeCommand)
+  .command(WebCommand)
   // .command(ExportCommand)
   // .command(ImportCommand)
   // .command(GithubCommand)

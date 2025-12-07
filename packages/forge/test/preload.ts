@@ -6,7 +6,7 @@ process.env.FORGE_DISABLE_LSP_DOWNLOAD = "true"
 process.env.FORGE_DISABLE_PLUGINS = "true"
 
 Log.init({
-  print: false,
+  print: true, // avoid file writes in test sandboxes
   dev: true,
   level: "DEBUG",
 })

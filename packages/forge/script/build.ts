@@ -99,7 +99,12 @@ for (const item of targets) {
   console.log(`building ${name}`)
   await $`mkdir -p dist/${name}/bin`
 
-  const parserWorker = fs.realpathSync(path.resolve(dir, "./node_modules/@opentui/core/parser.worker.js"))
+  // Try to find parser.worker.js in packages/forge/node_modules first, then fall back to root node_modules
+  let parserWorkerPath = path.resolve(dir, "./node_modules/@opentui/core/parser.worker.js")
+  if (!fs.existsSync(parserWorkerPath)) {
+    parserWorkerPath = path.resolve(dir, "../../node_modules/@opentui/core/parser.worker.js")
+  }
+  const parserWorker = fs.realpathSync(parserWorkerPath)
   const workerPath = "./src/cli/cmd/tui/worker.ts"
 
   await Bun.build({
@@ -111,16 +116,16 @@ for (const item of targets) {
       autoloadBunfig: false,
       autoloadDotenv: false,
       target: name.replace(pkg.name, "bun") as any,
-      outfile: `dist/${name}/bin/opencode`,
-      execArgv: [`--user-agent=opencode/${Script.version}`, "--"],
+      outfile: `dist/${name}/bin/forge`,
+      execArgv: [`--user-agent=forge/${Script.version}`, "--"],
       windows: {},
     },
     entrypoints: ["./src/index.ts", parserWorker, workerPath],
     define: {
-      OPENCODE_VERSION: `'${Script.version}'`,
+      FORGE_VERSION: `'${Script.version}'`,
       OTUI_TREE_SITTER_WORKER_PATH: "/$bunfs/root/" + path.relative(dir, parserWorker).replaceAll("\\", "/"),
-      OPENCODE_WORKER_PATH: workerPath,
-      OPENCODE_CHANNEL: `'${Script.channel}'`,
+      FORGE_WORKER_PATH: workerPath,
+      FORGE_CHANNEL: `'${Script.channel}'`,
     },
   })
 

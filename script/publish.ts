@@ -1,15 +1,16 @@
 #!/usr/bin/env bun
 
 import { $ } from "bun"
-import { createOpencode } from "@opencode-ai/sdk"
-import { Script } from "@opencode-ai/script"
-
-const notes = [] as string[]
+// import { createOpencode } from "@opencode-ai/sdk"
+import { Script } from "@forge/script"
 
 console.log("=== publishing ===\n")
 
+// AI-generated changelog - Commented out (using GitHub auto-generated notes instead)
+// To re-enable: uncomment this block and add Anthropic SDK for Claude-based changelog
+/*
 if (!Script.preview) {
-  const previous = await fetch("https://registry.npmjs.org/opencode-ai/latest")
+  const previous = await fetch("https://registry.npmjs.org/@forge-agents/forge/latest")
     .then((res) => {
       if (!res.ok) throw new Error(res.statusText)
       return res.json()
@@ -17,7 +18,7 @@ if (!Script.preview) {
     .then((data: any) => data.version)
 
   const log =
-    await $`git log v${previous}..HEAD --oneline --format="%h %s" -- packages/opencode packages/sdk packages/plugin`.text()
+    await $`git log v${previous}..HEAD --oneline --format="%h %s" -- packages/forge`.text()
 
   const commits = log
     .split("\n")
@@ -63,6 +64,7 @@ if (!Script.preview) {
       },
     })
     .then((x) => x.data?.parts?.find((y) => y.type === "text")?.text)
+  const notes = [] as string[]
   for (const line of raw?.split("\n") ?? []) {
     if (line.startsWith("- ")) {
       notes.push(line)
@@ -73,6 +75,7 @@ if (!Script.preview) {
   console.log("-----------------------------")
   opencode.server.close()
 }
+*/
 
 const pkgjsons = await Array.fromAsync(
   new Bun.Glob("**/package.json").scan({
@@ -87,23 +90,10 @@ for (const file of pkgjsons) {
   await Bun.file(file).write(pkg)
 }
 
-const extensionToml = new URL("../packages/extensions/zed/extension.toml", import.meta.url).pathname
-let toml = await Bun.file(extensionToml).text()
-toml = toml.replace(/^version = "[^"]+"/m, `version = "${Script.version}"`)
-toml = toml.replaceAll(/releases\/download\/v[^/]+\//g, `releases/download/v${Script.version}/`)
-console.log("updated:", extensionToml)
-await Bun.file(extensionToml).write(toml)
-
 await $`bun install`
 
-console.log("\n=== opencode ===\n")
-await import(`../packages/opencode/script/publish.ts`)
-
-console.log("\n=== sdk ===\n")
-await import(`../packages/sdk/js/script/publish.ts`)
-
-console.log("\n=== plugin ===\n")
-await import(`../packages/plugin/script/publish.ts`)
+console.log("\n=== forge ===\n")
+await import(`../packages/forge/script/publish.ts`)
 
 const dir = new URL("..", import.meta.url).pathname
 process.chdir(dir)
@@ -115,5 +105,5 @@ if (!Script.preview) {
   await $`git cherry-pick HEAD..origin/dev`.nothrow()
   await $`git push origin HEAD --tags --no-verify --force-with-lease`
   await new Promise((resolve) => setTimeout(resolve, 5_000))
-  await $`gh release create v${Script.version} --title "v${Script.version}" --notes ${notes.join("\n") ?? "No notable changes"} ./packages/opencode/dist/*.zip ./packages/opencode/dist/*.tar.gz`
+  await $`gh release create v${Script.version} --title "v${Script.version}" --generate-notes ./packages/forge/dist/*.zip ./packages/forge/dist/*.tar.gz`
 }

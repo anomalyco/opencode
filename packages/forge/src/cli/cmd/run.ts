@@ -1,6 +1,5 @@
 import type { Argv } from "yargs"
 import path from "path"
-import type { SessionModelState, SessionModeState } from "@agentclientprotocol/sdk"
 import { UI } from "../ui"
 import { cmd } from "./cmd"
 import { Flag } from "../../flag/flag"
@@ -8,9 +7,17 @@ import { bootstrap } from "../bootstrap"
 import { Command } from "../../command"
 import { EOL } from "os"
 import { select } from "@clack/prompts"
-import { createForgeClient, type ForgeClient } from "@forge/sdk"
+import { createForgeClient } from "@forge/sdk"
 import { Server } from "../../server/server"
 import { Provider } from "../../provider/provider"
+import {
+  type ModeFlagArgs,
+  applySessionSetup,
+  collectModeFlags,
+  parseAgentInput,
+  setAgentAndModel,
+  validateModeFlags,
+} from "./session-init"
 
 const TOOL: Record<string, [string, string]> = {
   todowrite: ["Todo", UI.Style.TEXT_WARNING_BOLD],
@@ -25,73 +32,24 @@ const TOOL: Record<string, [string, string]> = {
   websearch: ["Search", UI.Style.TEXT_DIM_BOLD],
 }
 
-type ModeFlagArgs = {
-  planAgent: string
-  implementAgent: string
-  planModel?: string
-  implementModel?: string
-}
-
-type ModeSwitchConfig = ModeFlagArgs & {
-  planModeId: string
-  switched: boolean
-}
-
 function fail(message: string): never {
   UI.error(message)
   process.exit(1)
 }
 
-function collectModeFlags(args: Record<string, any>): ModeFlagArgs | null {
-  const planAgent = args["plan-agent"]
-  const implementAgent = args["impl-agent"]
-  const planModel = args["plan-model"]
-  const implementModel = args["impl-model"]
-
-  if (planAgent || implementAgent || planModel || implementModel) {
-    return {
-      planAgent: planAgent ?? "",
-      implementAgent: implementAgent ?? "",
-      planModel: planModel ?? undefined,
-      implementModel: implementModel ?? undefined,
-    }
-  }
-
-  return null
-}
-
-function validateModeFlags(flags: ModeFlagArgs | null, args: Record<string, any>) {
-  if (!flags) return
-
-  if (!flags.planAgent || !flags.implementAgent) {
-    fail("Both --plan-agent and --impl-agent are required when using plan/implement mode flags")
-  }
-
-  if (args.agent) {
-    fail("Cannot combine --agent with --plan-agent/--impl-agent")
-  }
-
-  if (args.model) {
-    fail("Cannot combine --model with --plan-model/--impl-model")
-  }
-
-  if (args.command) {
-    fail("Plan/implement mode flags are only supported with prompts (omit --command)")
-  }
-}
-
-function hasPlanKeyword(value?: string | null) {
-  return typeof value === "string" && value.toLowerCase().includes("plan")
-}
-
-function findPlanModeId(modes: SessionModeState | null | undefined): string | null {
-  if (!modes?.availableModes?.length) return null
-  const match = modes.availableModes.find((mode) => hasPlanKeyword(mode.id) || hasPlanKeyword(mode.name))
-  return match?.id ?? null
-}
-
-function modelSupported(models: SessionModelState | null | undefined, modelId: string) {
-  return models?.availableModels?.some((model) => model.modelId === modelId)
+export type RunHandlerArgs = {
+  message?: string | string[]
+  command?: string
+  continue?: boolean
+  session?: string
+  share?: boolean
+  "plan-agent"?: string
+  agent?: string
+  format?: "default" | "json"
+  file?: string[] | string
+  title?: string
+  attach?: string
+  port?: number
 }
 
 export const RunCommand = cmd({
@@ -123,30 +81,15 @@ export const RunCommand = cmd({
         type: "boolean",
         describe: "share the session",
       })
-      .option("model", {
-        type: "string",
-        alias: ["m"],
-        describe: "model name or ID (e.g., 'haiku', 'sonnet'). Must be supported by the selected agent.",
-      })
       .option("plan-agent", {
         type: "string",
-        describe: "agent to use for planning mode",
-      })
-      .option("impl-agent", {
-        type: "string",
-        describe: "agent to use for implementation mode (shorthand for implement)",
-      })
-      .option("plan-model", {
-        type: "string",
-        describe: "model to use with the planning agent",
-      })
-      .option("impl-model", {
-        type: "string",
-        describe: "model to use with the implementation agent",
+        alias: ["P"],
+        describe: "agent to use for planning mode (implementation uses --agent if set, otherwise the default agent)",
       })
       .option("agent", {
         type: "string",
-        describe: "agent to use (e.g., 'claude', 'gemini')",
+        alias: ["a"],
+        describe: "agent to use (supports [agent]/[model] with fuzzy match, e.g., 'claude/haiku')",
       })
       .option("format", {
         type: "string",
@@ -173,8 +116,13 @@ export const RunCommand = cmd({
         describe: "port for the local server (defaults to random port if no value provided)",
       })
   },
-  handler: async (args) => {
-    let message = args.message.join(" ")
+  handler: async (args) => runNonInteractive(args as RunHandlerArgs),
+})
+
+export async function runNonInteractive(args: RunHandlerArgs) {
+  const messageParts = Array.isArray(args.message) ? args.message : args.message ? [args.message] : []
+  let message = messageParts.join(" ")
+  const format = args.format ?? "default"
 
     const fileParts: any[] = []
     if (args.file) {
@@ -205,7 +153,12 @@ export const RunCommand = cmd({
       }
     }
 
-    if (!process.stdin.isTTY) message += "\n" + (await Bun.stdin.text())
+  if (!process.stdin.isTTY) {
+    const piped = await Bun.stdin.text()
+    if (piped) {
+      message = message ? `${message}\n${piped}` : piped
+    }
+  }
 
     if (message.trim().length === 0 && !args.command) {
       UI.error("You must provide a message or a command")
@@ -213,74 +166,31 @@ export const RunCommand = cmd({
     }
 
     const modeFlags = collectModeFlags(args)
-    validateModeFlags(modeFlags, args)
+    validateModeFlags(modeFlags, args, fail)
+    const baseAgent = parseAgentInput(args.agent)
 
-    const configurePlanMode = async (sdk: ForgeClient, sessionID: string, flags: ModeFlagArgs): Promise<ModeSwitchConfig> => {
-      let agentResult:
-        | Awaited<ReturnType<ForgeClient["session"]["agent"]>>
-        | undefined
-      try {
-        agentResult = await sdk.session.agent({
-          path: { id: sessionID },
-          body: { agent: flags.planAgent },
-        })
-      } catch (error) {
-        fail(`Failed to set planning agent: ${error instanceof Error ? error.message : String(error)}`)
-      }
+    const execute = async (
+      sdk: ReturnType<typeof createForgeClient>,
+      sessionID: string,
+      flags: ModeFlagArgs | null,
+      baseAgentInput: { agent?: string; model?: string },
+    ) => {
+      const setup = await applySessionSetup({
+        sdk,
+        sessionID,
+        baseAgentInput: args.agent,
+        planAgentInput: flags?.planAgent,
+        planModelInput: flags?.planModel,
+      })
+      let planInfo =
+        setup.planAgent && setup.planModeId
+          ? { agent: setup.planAgent, modeId: setup.planModeId }
+          : null
+      const baseTarget =
+        setup.baseAgent != null
+          ? { agent: setup.baseAgent, model: setup.baseModel ?? undefined }
+          : null
 
-      const sessionState = agentResult?.data
-      const agentName = sessionState?.agent ?? flags.planAgent
-      const modes = (sessionState?.modes ?? null) as SessionModeState | null
-
-      if (!modes?.availableModes?.length) {
-        fail(`Agent '${agentName}' does not expose any modes; cannot enter planning mode`)
-      }
-
-      const planModeId = findPlanModeId(modes)
-      if (!planModeId) {
-        fail(`Agent '${agentName}' does not support planning mode`)
-      }
-
-      if (flags.planModel) {
-        const models = (sessionState?.models ?? null) as SessionModelState | null
-        if (!modelSupported(models, flags.planModel)) {
-          fail(`Agent '${agentName}' does not support model '${flags.planModel}'`)
-        }
-
-        try {
-          await sdk.session.model({
-            path: { id: sessionID },
-            body: { model: flags.planModel },
-          })
-        } catch (error) {
-          fail(
-            `Failed to set planning model '${flags.planModel}': ${error instanceof Error ? error.message : String(error)}`,
-          )
-        }
-      }
-
-      try {
-        await sdk.session.mode({
-          path: { id: sessionID },
-          body: { mode: planModeId },
-        })
-      } catch (error) {
-        fail(
-          `Failed to set planning mode '${planModeId}' for agent '${agentName}': ${
-            error instanceof Error ? error.message : String(error)
-          }`,
-        )
-      }
-
-      return {
-        ...flags,
-        planAgent: agentName,
-        planModeId,
-        switched: false,
-      }
-    }
-
-    const execute = async (sdk: ForgeClient, sessionID: string, flags: ModeFlagArgs | null) => {
       const printEvent = (color: string, type: string, title: string) => {
         UI.println(
           color + `|`,
@@ -291,7 +201,7 @@ export const RunCommand = cmd({
       }
 
       const outputJsonEvent = (type: string, data: any) => {
-        if (args.format === "json") {
+        if (format === "json") {
           process.stdout.write(JSON.stringify({ type, timestamp: Date.now(), sessionID, ...data }) + EOL)
           return true
         }
@@ -300,67 +210,32 @@ export const RunCommand = cmd({
 
       const events = await sdk.event.subscribe()
       let errorMsg: string | undefined
-      let modeSwitch: ModeSwitchConfig | null = null
-      let switchingToImplement = false
-
-      const modeEquals = (a: string, b: string) => a.toLowerCase() === b.toLowerCase()
-
-      const switchToImplementAgent = async (): Promise<"ok" | "error"> => {
-        if (!modeSwitch || modeSwitch.switched || switchingToImplement) return "ok"
-        switchingToImplement = true
-
-        try {
-          const agentResult = await sdk.session.agent({
-            path: { id: sessionID },
-            body: { agent: modeSwitch.implementAgent },
-          })
-
-          modeSwitch.implementAgent = agentResult.data?.agent ?? modeSwitch.implementAgent
-
-          if (modeSwitch.implementModel) {
-            const models = (agentResult.data?.models ?? null) as SessionModelState | null
-            if (!modelSupported(models, modeSwitch.implementModel)) {
-              const message = `Agent '${modeSwitch.implementAgent}' does not support model '${modeSwitch.implementModel}'`
-              UI.error(message)
-              errorMsg = errorMsg ? `${errorMsg}${EOL}${message}` : message
-              return "error"
-            }
-
-            await sdk.session.model({
-              path: { id: sessionID },
-              body: { model: modeSwitch.implementModel },
-            })
-          }
-
-          modeSwitch.switched = true
-          return "ok"
-        } catch (error) {
-          const message = `Failed to switch to implement agent '${modeSwitch.implementAgent}': ${
-            error instanceof Error ? error.message : String(error)
-          }`
-          UI.error(message)
-          errorMsg = errorMsg ? `${errorMsg}${EOL}${message}` : message
-          return "error"
-        } finally {
-          switchingToImplement = false
-        }
-      }
 
       const eventProcessor = (async () => {
         for await (const rawEvent of events.stream as AsyncIterable<any>) {
           const event = rawEvent as any
 
-          if (modeSwitch && event.type === "session.mode.changed") {
+          if (event.type === "session.mode.changed") {
+            if (!planInfo || !baseTarget?.agent) continue
             const props = (event.properties ?? {}) as {
               sessionID?: string
               agent?: string
               modeId?: string
             }
 
-            if (props.sessionID === sessionID && props.agent === modeSwitch.planAgent && props.modeId) {
-              if (!modeEquals(props.modeId, modeSwitch.planModeId)) {
-                const result = await switchToImplementAgent()
-                if (result === "error") break
+            if (props.sessionID === sessionID && props.agent === planInfo.agent && props.modeId) {
+              if (props.modeId !== planInfo.modeId) {
+                try {
+                  await setAgentAndModel(sdk, sessionID, baseTarget.agent, baseTarget.model)
+                  planInfo = null
+                } catch (error) {
+                  const message = `Failed to switch back to agent '${baseTarget.agent}': ${
+                    error instanceof Error ? error.message : String(error)
+                  }`
+                  UI.error(message)
+                  errorMsg = errorMsg ? `${errorMsg}${EOL}${message}` : message
+                  break
+                }
               }
             }
           }
@@ -436,16 +311,11 @@ export const RunCommand = cmd({
         }
       })()
 
-      if (flags) {
-        modeSwitch = await configurePlanMode(sdk, sessionID, flags)
-      }
-
       if (args.command) {
         await sdk.session.command({
           path: { id: sessionID },
           body: {
-            agent: args.agent || "build",
-            model: args.model,
+            agent: baseAgentInput.agent || args.agent || "build",
             command: args.command,
             arguments: message,
           },
@@ -504,7 +374,7 @@ export const RunCommand = cmd({
         }
       }
 
-      return await execute(sdk, sessionID, modeFlags)
+      return await execute(sdk, sessionID, modeFlags, baseAgent)
     }
 
     await bootstrap(process.cwd(), async () => {
@@ -557,8 +427,7 @@ export const RunCommand = cmd({
         }
       }
 
-      await execute(sdk, sessionID, modeFlags)
+      await execute(sdk, sessionID, modeFlags, baseAgent)
       server.stop()
     })
-  },
-})
+}

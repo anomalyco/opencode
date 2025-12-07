@@ -1,5 +1,5 @@
 import { Prompt, type PromptRef } from "@tui/component/prompt"
-import { createMemo, Match, onMount, Show, Switch, type ParentProps } from "solid-js"
+import { createEffect, createMemo, createSignal, Match, Show, Switch, type ParentProps } from "solid-js"
 import { useTheme } from "@tui/context/theme"
 import { useKeybind } from "../context/keybind"
 import type { KeybindsConfig } from "@forge/sdk"
@@ -8,6 +8,7 @@ import { Locale } from "@/util/locale"
 import { useSync } from "../context/sync"
 import { Toast } from "../ui/toast"
 import { useArgs } from "../context/args"
+import { useLocal } from "../context/local"
 
 // TODO: what is the best way to do this?
 let once = false
@@ -38,14 +39,29 @@ export function Home() {
     </Show>
   )
 
-  let prompt: PromptRef
+  const [promptRef, setPromptRef] = createSignal<PromptRef>()
+  let promptPreloaded = false
   const args = useArgs()
-  onMount(() => {
+  const local = useLocal()
+  createEffect(() => {
+    if (!args.prompt) return
+    const prompt = promptRef()
+    if (!prompt) return
+    if (promptPreloaded) return
+    promptPreloaded = true
+    prompt.set({ input: args.prompt, parts: [] })
+  })
+
+  createEffect(() => {
     if (once) return
-    if (args.prompt) {
-      prompt.set({ input: args.prompt, parts: [] })
-      once = true
-    }
+    if (!args.prompt) return
+    if (local.session.switching) return
+    const prompt = promptRef()
+    if (!prompt) return
+    once = true
+    queueMicrotask(() => {
+      void prompt.submit().catch((error) => console.error(error))
+    })
   })
 
   return (
@@ -53,12 +69,12 @@ export function Home() {
       <Logo />
       <box width={39}>
         <HelpRow keybind="command_list">Commands</HelpRow>
-        <HelpRow keybind="session_list">List sessions</HelpRow>
-        <HelpRow keybind="model_list">Switch model</HelpRow>
         <HelpRow keybind="agent_list">Switch agent</HelpRow>
+        <HelpRow keybind="model_list">Switch model</HelpRow>
+        <HelpRow keybind="session_list">List sessions</HelpRow>
       </box>
       <box width="100%" maxWidth={75} zIndex={1000} paddingTop={1}>
-        <Prompt ref={(r) => (prompt = r)} hint={Hint} />
+        <Prompt ref={(r) => setPromptRef(r)} hint={Hint} />
       </box>
       <Toast />
     </box>

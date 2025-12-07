@@ -21,6 +21,10 @@ import { TuiEvent } from "../../event"
 import { iife } from "@/util/iife"
 import { Locale } from "@/util/locale"
 import { Shimmer } from "../../ui/shimmer"
+import { Log } from "@/util/log"
+import { useToast } from "../../ui/toast"
+import { useArgs } from "@tui/context/args"
+import { applySessionSetup } from "../../../session-init"
 
 export type PromptProps = {
   sessionID?: string
@@ -37,6 +41,7 @@ export type PromptRef = {
   reset(): void
   blur(): void
   focus(): void
+  submit(): Promise<void>
 }
 
 export function Prompt(props: PromptProps) {
@@ -46,6 +51,7 @@ export function Prompt(props: PromptProps) {
 
   const keybind = useKeybind()
   const local = useLocal()
+  const args = useArgs()
   const sdk = useSDK()
   const route = useRoute()
   const sync = useSync()
@@ -54,6 +60,12 @@ export function Prompt(props: PromptProps) {
   const command = useCommandDialog()
   const renderer = useRenderer()
   const { theme, syntax } = useTheme()
+  const log = Log.Default
+  const toast = useToast()
+  const isSwitchingAgent = () => local.session.switching
+  const switchingAgentName = () => local.session.switchingTo ?? local.agent.current().name
+  const [serverSyncing, setServerSyncing] = createSignal(false)
+  const isInitializing = () => isSwitchingAgent() || serverSyncing()
 
   const textareaKeybindings = createMemo(() => {
     const newlineBindings = keybind.all.input_newline || []
@@ -189,7 +201,7 @@ export function Prompt(props: PromptProps) {
         category: "Prompt",
         onSelect: (dialog) => {
           if (!input.focused) return
-          submit()
+          submitPrompt()
           dialog.clear()
         },
       },
@@ -381,19 +393,41 @@ export function Prompt(props: PromptProps) {
       })
       setStore("extmarkToPartIndex", new Map())
     },
+    submit() {
+      return submitPrompt()
+    },
   })
 
-  async function submit() {
+  async function waitForAgentReady(timeoutMs = 10000) {
+    const start = Date.now()
+    while (isInitializing()) {
+      await new Promise((resolve) => setTimeout(resolve, 50))
+      if (Date.now() - start > timeoutMs) {
+        return false
+      }
+    }
+    return true
+  }
+
+  async function submitPrompt() {
     if (props.disabled) return
     if (autocomplete.visible) return
     if (!store.prompt.input) return
-    const modelId = local.model.current()
-    const sessionID = props.sessionID
-      ? props.sessionID
-      : await (async () => {
-          const sessionID = await sdk.client.session.create({}).then((x) => x.data!.id)
-          return sessionID
-        })()
+    const ready = await waitForAgentReady()
+    if (!ready) return
+    const createdSession = !props.sessionID
+    if (createdSession) {
+      setServerSyncing(true)
+    }
+    let sessionID = props.sessionID
+    try {
+      sessionID = props.sessionID ? props.sessionID : await sdk.client.session.create({}).then((x) => x.data!.id)
+    } catch (error) {
+      if (createdSession) setServerSyncing(false)
+      throw error
+    }
+    if (!sessionID) return
+    const currentModelId = local.model.current()
     const messageID = Identifier.ascending("message")
     let inputText = store.prompt.input
 
@@ -416,26 +450,27 @@ export function Prompt(props: PromptProps) {
     // Filter out text parts (pasted content) since they're now expanded inline
     const nonTextParts = store.prompt.parts.filter((part) => part.type !== "text")
 
-    if (store.mode === "shell") {
-      sdk.client.session.shell({
-        path: {
-          id: sessionID,
-        },
-        body: {
-          agent: local.agent.current().name,
-          command: inputText,
-        },
-      })
-      setStore("mode", "normal")
-    } else if (
-      inputText.startsWith("/") &&
-      iife(() => {
-        const command = inputText.split(" ")[0].slice(1)
-        console.log(command)
-        return sync.data.command.some((x) => x.name === command)
-      })
-    ) {
-      let [command, ...args] = inputText.split(" ")
+    try {
+      if (store.mode === "shell") {
+        sdk.client.session.shell({
+          path: {
+            id: sessionID,
+          },
+          body: {
+            agent: local.agent.current().name,
+            command: inputText,
+          },
+        })
+        setStore("mode", "normal")
+      } else if (
+        inputText.startsWith("/") &&
+        iife(() => {
+          const command = inputText.split(" ")[0].slice(1)
+          console.log(command)
+          return sync.data.command.some((x) => x.name === command)
+        })
+      ) {
+        let [command, ...args] = inputText.split(" ")
       sdk.client.session.command({
         path: {
           id: sessionID,
@@ -444,30 +479,57 @@ export function Prompt(props: PromptProps) {
           command: command.slice(1),
           arguments: args.join(" "),
           agent: local.agent.current().name,
-          model: modelId ?? undefined,
+          model: local.model.current() ?? undefined,
           messageID,
         },
       })
-    } else {
-      // Filter out agent parts - they're for UI only, not for sending to the server
-      const validParts = nonTextParts.filter((p) => p.type !== "agent")
+      } else {
+        // Filter out agent parts - they're for UI only, not for sending to the server
+        const validParts = nonTextParts.filter((p) => p.type !== "agent")
 
-      sdk.client.session.prompt({
-        path: {
-          id: sessionID,
-        },
-        body: {
-          messageID,
-          parts: [
-            {
-              type: "text",
-              text: inputText,
-            },
-            // Spread valid parts (file parts only, since agent parts are filtered out)
-            ...validParts,
-          ],
-        },
-      })
+        if (createdSession) {
+          try {
+            log.info("tui-session-setup.start", {
+              sessionID,
+              agent: args.agent ?? null,
+              planAgent: args.planAgent ?? null,
+            })
+            await applySessionSetup({
+              sdk: sdk.client,
+              sessionID,
+              baseAgentInput: args.agent,
+              planAgentInput: args.planAgent,
+            })
+            log.info("tui-session-setup.done", { sessionID })
+          } catch (error) {
+            log.error("Failed to apply session setup", {
+              sessionID,
+              error: error instanceof Error ? error.message : String(error),
+            })
+          }
+        }
+
+        sdk.client.session.prompt({
+          path: {
+            id: sessionID,
+          },
+          body: {
+            messageID,
+            parts: [
+              {
+                type: "text",
+                text: inputText,
+              },
+              // Spread valid parts (file parts only, since agent parts are filtered out)
+              ...validParts,
+            ],
+          },
+        })
+      }
+    } finally {
+      if (createdSession) {
+        setServerSyncing(false)
+      }
     }
     history.append(store.prompt)
     input.extmarks.clear()
@@ -679,7 +741,7 @@ export function Prompt(props: PromptProps) {
                     input.cursorOffset = input.plainText.length
                 }
               }}
-              onSubmit={submit}
+              onSubmit={submitPrompt}
               onPaste={async (event: PasteEvent) => {
                 if (props.disabled) {
                   event.preventDefault()
@@ -770,18 +832,27 @@ export function Prompt(props: PromptProps) {
               syntaxStyle={syntax()}
             />
             <box flexDirection="row" flexShrink={0} paddingTop={1} gap={1}>
-              <text fg={highlight()}>
-                {store.mode === "shell" ? "Shell" : Locale.titlecase(local.agent.current().name)}{" "}
-              </text>
-              <Show when={store.mode === "normal" && local.model.current()}>
-                <text flexShrink={0} fg={theme.text}>
-                  {local.model.label()}
+              <Show
+                when={!isInitializing()}
+                fallback={
+                  <box flexDirection="row" alignItems="center" gap={1}>
+                    <Shimmer text={`Starting ${Locale.titlecase(switchingAgentName())}...`} color={theme.textMuted} />
+                  </box>
+                }
+              >
+                <text fg={highlight()}>
+                  {store.mode === "shell" ? "Shell" : Locale.titlecase(local.agent.current().name)}{" "}
                 </text>
-              </Show>
-              <Show when={store.mode === "normal" && local.mode.current()}>
-                <text flexShrink={0} fg={theme.textMuted}>
-                  {local.mode.getName(local.mode.current()!)}
-                </text>
+                <Show when={store.mode === "normal" && local.model.current()}>
+                  <text flexShrink={0} fg={theme.text}>
+                    {local.model.label()}
+                  </text>
+                </Show>
+                <Show when={store.mode === "normal" && local.mode.current()}>
+                  <text flexShrink={0} fg={theme.textMuted}>
+                    {local.mode.getName(local.mode.current()!)}
+                  </text>
+                </Show>
               </Show>
             </box>
           </box>

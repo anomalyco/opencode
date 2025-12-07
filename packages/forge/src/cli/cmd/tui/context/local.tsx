@@ -70,6 +70,8 @@ export const { use: useLocal, provider: LocalProvider } = createSimpleContext({
       models: SessionModelState | null
       client: ACPClient.Instance | null
       authMethods: AuthMethod[] | null
+      switching: boolean
+      switchingTo: string | null
     }>({
       sessionId: null,
       agentName: null,
@@ -77,6 +79,8 @@ export const { use: useLocal, provider: LocalProvider } = createSimpleContext({
       models: null,
       client: null,
       authMethods: null,
+      switching: false,
+      switchingTo: null,
     })
 
     const agent = iife(() => {
@@ -106,9 +110,17 @@ export const { use: useLocal, provider: LocalProvider } = createSimpleContext({
           return agents().find((x) => x.name === agentStore.current)!
         },
         async set(agentName: string) {
+          setSessionStore({
+            switching: true,
+            switchingTo: agentName,
+          })
           const version = ++connectVersion
           const agentDef = getAgent(agentName)
           if (!agentDef) {
+            setSessionStore({
+              switching: false,
+              switchingTo: null,
+            })
             return toast.show({
               variant: "warning",
               message: `Agent not found: ${agentName}`,
@@ -154,12 +166,6 @@ export const { use: useLocal, provider: LocalProvider } = createSimpleContext({
                 setSessionStore("models", "currentModelId", newModelId)
               })
             }
-
-            toast.show({
-              variant: "success",
-              message: `Connected to ${agentDef.name}`,
-              duration: 2000,
-            })
 
             // Sync with server session
             const sessionID = currentSessionID()
@@ -230,6 +236,10 @@ export const { use: useLocal, provider: LocalProvider } = createSimpleContext({
               duration: 5000,
             })
           }
+          setSessionStore({
+            switching: false,
+            switchingTo: null,
+          })
         },
         move(direction: 1 | -1) {
           batch(() => {
@@ -369,13 +379,6 @@ export const { use: useLocal, provider: LocalProvider } = createSimpleContext({
             await sessionStore.client.setModel(modelId)
             setSessionStore("models", "currentModelId", modelId)
 
-            const modelInfo = sessionStore.models?.availableModels?.find((m) => m.modelId === modelId)
-            toast.show({
-              variant: "success",
-              message: `Switched to ${modelInfo?.name ?? modelId}`,
-              duration: 2000,
-            })
-
             const sessionID = currentSessionID()
             if (sessionID) {
               await postSessionState(sessionID, "model", { model: modelId }).catch((error) => {
@@ -430,6 +433,18 @@ export const { use: useLocal, provider: LocalProvider } = createSimpleContext({
         },
         get models() {
           return sessionStore.models
+        },
+        get switching() {
+          return sessionStore.switching
+        },
+        get switchingTo() {
+          return sessionStore.switchingTo
+        },
+        setSwitching(flag: boolean, target?: string | null) {
+          setSessionStore({
+            switching: flag,
+            switchingTo: flag ? target ?? sessionStore.switchingTo : null,
+          })
         },
       },
     }

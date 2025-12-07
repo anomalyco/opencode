@@ -10,8 +10,8 @@ process.chdir(dir)
 const { binaries } = await import("./build.ts")
 {
   const name = `${pkg.name}-${process.platform}-${process.arch}`
-  console.log(`smoke test: running dist/${name}/bin/opencode --version`)
-  await $`./dist/${name}/bin/opencode --version`
+  console.log(`smoke test: running dist/${name}/bin/forge --version`)
+  await $`./dist/${name}/bin/forge --version`
 }
 
 await $`mkdir -p ./dist/${pkg.name}`
@@ -21,7 +21,7 @@ await $`cp ./script/postinstall.mjs ./dist/${pkg.name}/postinstall.mjs`
 await Bun.file(`./dist/${pkg.name}/package.json`).write(
   JSON.stringify(
     {
-      name: pkg.name + "-ai",
+      name: "@forge-agents/forge",
       bin: {
         [pkg.name]: `./bin/${pkg.name}`,
       },
@@ -39,14 +39,14 @@ for (const [name] of Object.entries(binaries)) {
   try {
     process.chdir(`./dist/${name}`)
     if (process.platform !== "win32") {
-      await $`chmod 755 -R .`
+      await $`chmod -R 755 .`
     }
-    await $`bun publish --access public --tag ${Script.channel}`
+    await $`bun publish --access public --tag ${Script.channel} --provenance`
   } finally {
     process.chdir(dir)
   }
 }
-await $`cd ./dist/${pkg.name} && bun publish --access public --tag ${Script.channel}`
+await $`cd ./dist/${pkg.name} && bun publish --access public --tag ${Script.channel} --provenance`
 
 if (!Script.preview) {
   const major = Script.version.split(".")[0]
@@ -54,7 +54,7 @@ if (!Script.preview) {
   for (const [name] of Object.entries(binaries)) {
     await $`cd dist/${name} && npm dist-tag add ${name}@${Script.version} ${majorTag}`
   }
-  await $`cd ./dist/${pkg.name} && npm dist-tag add ${pkg.name}-ai@${Script.version} ${majorTag}`
+  await $`cd ./dist/${pkg.name} && npm dist-tag add @forge-agents/forge@${Script.version} ${majorTag}`
 }
 
 if (!Script.preview) {
@@ -67,74 +67,74 @@ if (!Script.preview) {
   }
 
   // Calculate SHA values
-  const arm64Sha = await $`sha256sum ./dist/opencode-linux-arm64.tar.gz | cut -d' ' -f1`.text().then((x) => x.trim())
-  const x64Sha = await $`sha256sum ./dist/opencode-linux-x64.tar.gz | cut -d' ' -f1`.text().then((x) => x.trim())
-  const macX64Sha = await $`sha256sum ./dist/opencode-darwin-x64.zip | cut -d' ' -f1`.text().then((x) => x.trim())
-  const macArm64Sha = await $`sha256sum ./dist/opencode-darwin-arm64.zip | cut -d' ' -f1`.text().then((x) => x.trim())
+  const arm64Sha = await $`sha256sum ./dist/forge-linux-arm64.tar.gz | cut -d' ' -f1`.text().then((x) => x.trim())
+  const x64Sha = await $`sha256sum ./dist/forge-linux-x64.tar.gz | cut -d' ' -f1`.text().then((x) => x.trim())
+  const macX64Sha = await $`sha256sum ./dist/forge-darwin-x64.zip | cut -d' ' -f1`.text().then((x) => x.trim())
+  const macArm64Sha = await $`sha256sum ./dist/forge-darwin-arm64.zip | cut -d' ' -f1`.text().then((x) => x.trim())
 
   const [pkgver, _subver = ""] = Script.version.split(/(-.*)/, 2)
 
+  // AUR Publishing - Commented out (not using AUR for Forge)
+  /*
   // arch
   const binaryPkgbuild = [
-    "# Maintainer: dax",
-    "# Maintainer: adam",
+    "# Maintainer: forge",
     "",
-    "pkgname='opencode-bin'",
+    "pkgname='forge-bin'",
     `pkgver=${pkgver}`,
     `_subver=${_subver}`,
     "options=('!debug' '!strip')",
     "pkgrel=1",
-    "pkgdesc='The AI coding agent built for the terminal.'",
-    "url='https://github.com/sst/opencode'",
+    "pkgdesc='Universal CLI for ACP agents'",
+    "url='https://github.com/forge-agents/forge'",
     "arch=('aarch64' 'x86_64')",
     "license=('MIT')",
-    "provides=('opencode')",
-    "conflicts=('opencode')",
+    "provides=('forge')",
+    "conflicts=('forge')",
     "depends=('fzf' 'ripgrep')",
     "",
-    `source_aarch64=("\${pkgname}_\${pkgver}_aarch64.tar.gz::https://github.com/sst/opencode/releases/download/v\${pkgver}\${_subver}/opencode-linux-arm64.tar.gz")`,
+    `source_aarch64=("\${pkgname}_\${pkgver}_aarch64.tar.gz::https://github.com/forge-agents/forge/releases/download/v\${pkgver}\${_subver}/forge-linux-arm64.tar.gz")`,
     `sha256sums_aarch64=('${arm64Sha}')`,
 
-    `source_x86_64=("\${pkgname}_\${pkgver}_x86_64.tar.gz::https://github.com/sst/opencode/releases/download/v\${pkgver}\${_subver}/opencode-linux-x64.tar.gz")`,
+    `source_x86_64=("\${pkgname}_\${pkgver}_x86_64.tar.gz::https://github.com/forge-agents/forge/releases/download/v\${pkgver}\${_subver}/forge-linux-x64.tar.gz")`,
     `sha256sums_x86_64=('${x64Sha}')`,
     "",
     "package() {",
-    '  install -Dm755 ./opencode "${pkgdir}/usr/bin/opencode"',
+    '  install -Dm755 ./forge "${pkgdir}/usr/bin/forge"',
     "}",
     "",
   ].join("\n")
 
-  // Source-based PKGBUILD for opencode
+  // Source-based PKGBUILD for forge
   const sourcePkgbuild = [
-    "# Maintainer: dax",
-    "# Maintainer: adam",
+    "# Maintainer: forge",
     "",
-    "pkgname='opencode'",
+    "pkgname='forge'",
     `pkgver=${pkgver}`,
     `_subver=${_subver}`,
     "options=('!debug' '!strip')",
     "pkgrel=1",
-    "pkgdesc='The AI coding agent built for the terminal.'",
-    "url='https://github.com/sst/opencode'",
+    "pkgdesc='Universal CLI for ACP agents'",
+    "url='https://github.com/forge-agents/forge'",
     "arch=('aarch64' 'x86_64')",
     "license=('MIT')",
-    "provides=('opencode')",
-    "conflicts=('opencode-bin')",
+    "provides=('forge')",
+    "conflicts=('forge-bin')",
     "depends=('fzf' 'ripgrep')",
-    "makedepends=('git' 'bun-bin' 'go')",
+    "makedepends=('git' 'bun-bin')",
     "",
-    `source=("opencode-\${pkgver}.tar.gz::https://github.com/sst/opencode/archive/v\${pkgver}\${_subver}.tar.gz")`,
+    `source=("forge-\${pkgver}.tar.gz::https://github.com/forge-agents/forge/archive/v\${pkgver}\${_subver}.tar.gz")`,
     `sha256sums=('SKIP')`,
     "",
     "build() {",
-    `  cd "opencode-\${pkgver}"`,
+    `  cd "forge-\${pkgver}"`,
     `  bun install`,
-    "  cd ./packages/opencode",
-    `  OPENCODE_CHANNEL=latest OPENCODE_VERSION=${pkgver} bun run ./script/build.ts --single`,
+    "  cd ./packages/forge",
+    `  FORGE_CHANNEL=latest FORGE_VERSION=${pkgver} bun run ./script/build.ts --single`,
     "}",
     "",
     "package() {",
-    `  cd "opencode-\${pkgver}/packages/opencode"`,
+    `  cd "forge-\${pkgver}/packages/forge"`,
     '  mkdir -p "${pkgdir}/usr/bin"',
     '  target_arch="x64"',
     '  case "$CARCH" in',
@@ -157,19 +157,19 @@ if (!Script.preview) {
     '      base="-baseline"',
     "    fi",
     "  fi",
-    '  bin="dist/opencode-linux-${target_arch}${base}${libc}/bin/opencode"',
+    '  bin="dist/forge-linux-${target_arch}${base}${libc}/bin/forge"',
     '  if [ ! -f "$bin" ]; then',
     '    printf "unable to find binary for %s%s%s\\n" "$target_arch" "$base" "$libc" >&2',
     "    return 1",
     "  fi",
-    '  install -Dm755 "$bin" "${pkgdir}/usr/bin/opencode"',
+    '  install -Dm755 "$bin" "${pkgdir}/usr/bin/forge"',
     "}",
     "",
   ].join("\n")
 
   for (const [pkg, pkgbuild] of [
-    ["opencode-bin", binaryPkgbuild],
-    ["opencode", sourcePkgbuild],
+    ["forge-bin", binaryPkgbuild],
+    ["forge", sourcePkgbuild],
   ]) {
     for (let i = 0; i < 30; i++) {
       try {
@@ -187,50 +187,51 @@ if (!Script.preview) {
       }
     }
   }
+  */
 
   // Homebrew formula
   const homebrewFormula = [
     "# typed: false",
     "# frozen_string_literal: true",
     "",
-    "# This file was generated by GoReleaser. DO NOT EDIT.",
-    "class Opencode < Formula",
-    `  desc "The AI coding agent built for the terminal."`,
-    `  homepage "https://github.com/sst/opencode"`,
+    "# This file was auto-generated. DO NOT EDIT.",
+    "class Forge < Formula",
+    `  desc "Universal CLI for ACP agents"`,
+    `  homepage "https://github.com/forge-agents/forge"`,
     `  version "${Script.version.split("-")[0]}"`,
     "",
     "  on_macos do",
     "    if Hardware::CPU.intel?",
-    `      url "https://github.com/sst/opencode/releases/download/v${Script.version}/opencode-darwin-x64.zip"`,
+    `      url "https://github.com/forge-agents/forge/releases/download/v${Script.version}/forge-darwin-x64.zip"`,
     `      sha256 "${macX64Sha}"`,
     "",
     "      def install",
-    '        bin.install "opencode"',
+    '        bin.install "forge"',
     "      end",
     "    end",
     "    if Hardware::CPU.arm?",
-    `      url "https://github.com/sst/opencode/releases/download/v${Script.version}/opencode-darwin-arm64.zip"`,
+    `      url "https://github.com/forge-agents/forge/releases/download/v${Script.version}/forge-darwin-arm64.zip"`,
     `      sha256 "${macArm64Sha}"`,
     "",
     "      def install",
-    '        bin.install "opencode"',
+    '        bin.install "forge"',
     "      end",
     "    end",
     "  end",
     "",
     "  on_linux do",
     "    if Hardware::CPU.intel? and Hardware::CPU.is_64_bit?",
-    `      url "https://github.com/sst/opencode/releases/download/v${Script.version}/opencode-linux-x64.tar.gz"`,
+    `      url "https://github.com/forge-agents/forge/releases/download/v${Script.version}/forge-linux-x64.tar.gz"`,
     `      sha256 "${x64Sha}"`,
     "      def install",
-    '        bin.install "opencode"',
+    '        bin.install "forge"',
     "      end",
     "    end",
     "    if Hardware::CPU.arm? and Hardware::CPU.is_64_bit?",
-    `      url "https://github.com/sst/opencode/releases/download/v${Script.version}/opencode-linux-arm64.tar.gz"`,
+    `      url "https://github.com/forge-agents/forge/releases/download/v${Script.version}/forge-linux-arm64.tar.gz"`,
     `      sha256 "${arm64Sha}"`,
     "      def install",
-    '        bin.install "opencode"',
+    '        bin.install "forge"',
     "      end",
     "    end",
     "  end",
@@ -240,9 +241,9 @@ if (!Script.preview) {
   ].join("\n")
 
   await $`rm -rf ./dist/homebrew-tap`
-  await $`git clone https://${process.env["GITHUB_TOKEN"]}@github.com/sst/homebrew-tap.git ./dist/homebrew-tap`
-  await Bun.file("./dist/homebrew-tap/opencode.rb").write(homebrewFormula)
-  await $`cd ./dist/homebrew-tap && git add opencode.rb`
+  await $`git clone https://${process.env["GITHUB_TOKEN"]}@github.com/forge-agents/homebrew-tap.git ./dist/homebrew-tap`
+  await Bun.file("./dist/homebrew-tap/forge.rb").write(homebrewFormula)
+  await $`cd ./dist/homebrew-tap && git add forge.rb`
   await $`cd ./dist/homebrew-tap && git commit -m "Update to v${Script.version}"`
   await $`cd ./dist/homebrew-tap && git push`
 }

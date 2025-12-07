@@ -6,24 +6,24 @@ import path from "path"
 import { UI } from "@/cli/ui"
 import { iife } from "@/util/iife"
 import { Log } from "@/util/log"
+import { runNonInteractive, type RunHandlerArgs } from "../run"
 
 declare global {
   const FORGE_WORKER_PATH: string
 }
 
 export const TuiThreadCommand = cmd({
-  command: "$0 [project]",
+  command: "$0 [prompt]",
   describe: "start forge tui",
   builder: (yargs) =>
     yargs
-      .positional("project", {
+      .positional("prompt", {
+        type: "string",
+        describe: "prompt to send",
+      })
+      .option("project", {
         type: "string",
         describe: "path to start forge in",
-      })
-      .option("model", {
-        type: "string",
-        alias: ["m"],
-        describe: "model to use in the format of provider/model",
       })
       .option("continue", {
         alias: ["c"],
@@ -35,14 +35,10 @@ export const TuiThreadCommand = cmd({
         type: "string",
         describe: "session id to continue",
       })
-      .option("prompt", {
+      .option("print", {
         alias: ["p"],
-        type: "string",
-        describe: "prompt to use",
-      })
-      .option("agent", {
-        type: "string",
-        describe: "agent to use",
+        type: "boolean",
+        describe: "Print response and exit",
       })
       .option("port", {
         type: "number",
@@ -53,9 +49,36 @@ export const TuiThreadCommand = cmd({
         type: "string",
         describe: "hostname to listen on",
         default: "127.0.0.1",
+      })
+      .option("command", {
+        type: "string",
+        describe: "the command to run, use prompt for args (print mode only)",
+      })
+      .option("file", {
+        alias: ["f"],
+        type: "string",
+        array: true,
+        describe: "file(s) to attach to prompt (print mode only)",
+      })
+      .option("share", {
+        type: "boolean",
+        describe: "share the session (print mode only)",
+      })
+      .option("title", {
+        type: "string",
+        describe: "title for the session (print mode only, uses truncated prompt if empty string)",
+      })
+      .option("attach", {
+        type: "string",
+        describe: "attach to a running forge server (e.g., http://localhost:4096) (print mode only)",
+      })
+      .option("format", {
+        type: "string",
+        choices: ["default", "json"] as const,
+        default: "default",
+        describe: "output format for print mode",
       }),
-  handler: async (args) => {
-    // Resolve relative paths against PWD to preserve behavior when using --cwd flag
+  handler: async (args: any) => {
     const baseCwd = process.env.PWD ?? process.cwd()
     const cwd = args.project ? path.resolve(baseCwd, args.project) : process.cwd()
     const defaultWorker = new URL("./worker.ts", import.meta.url)
@@ -75,10 +98,41 @@ export const TuiThreadCommand = cmd({
       return
     }
 
+    if (args.command && !args.print) {
+      UI.error("--command is only supported with --print")
+      process.exit(1)
+    }
+
+    if (args.print) {
+      const promptText = args.prompt
+
+      const runArgs: RunHandlerArgs = {
+        message: promptText,
+        command: args.command,
+        continue: args.continue,
+        session: args.session,
+        share: args.share,
+        agent: args.agent,
+        "plan-agent": args["plan-agent"],
+        file: args.file,
+        title: args.title,
+        attach: args.attach,
+        port: args.port,
+        format: args.format as RunHandlerArgs["format"],
+      }
+
+      await runNonInteractive(runArgs)
+      return
+    }
+
     const worker = new Worker(workerPath, {
       env: Object.fromEntries(
         Object.entries(process.env).filter((entry): entry is [string, string] => entry[1] !== undefined),
       ),
+      argv: [
+        ...(args.agent ? ["--agent", args.agent] : []),
+        ...(args["plan-agent"] ? ["--plan-agent", args["plan-agent"]] : []),
+      ],
     })
     worker.onerror = (e) => {
       Log.Default.error(e)
@@ -105,7 +159,6 @@ export const TuiThreadCommand = cmd({
         continue: args.continue,
         sessionID: args.session,
         agent: args.agent,
-        model: args.model,
         prompt,
       },
       onExit: async () => {
