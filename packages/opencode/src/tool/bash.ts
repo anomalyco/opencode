@@ -60,7 +60,7 @@ export const BashTool = Tool.define("bash", async () => {
   const shell = iife(() => {
     const s = process.env.SHELL
     if (s) {
-      const basename = path.basename(s);
+      const basename = path.basename(s)
       if (!new Set(["fish", "nu"]).has(basename)) {
         return s
       }
