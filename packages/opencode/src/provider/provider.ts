@@ -325,7 +325,7 @@ export namespace Provider {
       capabilities: z.object({
         temperature: z.boolean(),
         reasoning: z.boolean(),
-        interleavedThinking: z.boolean(),
+        interleavedThinking: z.boolean().optional(),
         attachment: z.boolean(),
         toolcall: z.boolean(),
         input: z.object({
