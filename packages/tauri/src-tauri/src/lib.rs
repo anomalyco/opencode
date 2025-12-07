@@ -166,7 +166,8 @@ pub fn run() {
                     WebviewWindow::builder(&app, "main", WebviewUrl::App("/".into()))
                         .title("OpenCode")
                         .inner_size(800.0, 600.0)
-                        .decorations(true);
+                        .decorations(true)
+                        .zoom_hotkeys_enabled(true);
 
                 #[cfg(target_os = "macos")]
                 {

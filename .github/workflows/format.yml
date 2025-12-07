@@ -18,7 +18,6 @@ jobs:
         uses: actions/checkout@v4
         with:
           token: ${{ secrets.GITHUB_TOKEN }}
-          ref: ${{ github.head_ref || github.ref }}
 
       - name: Setup Bun
         uses: ./.github/actions/setup-bun
@@ -28,3 +27,5 @@ jobs:
           ./script/format.ts
         env:
           CI: true
+          GITHUB_HEAD_REF: ${{ github.head_ref }}
+          GITHUB_REF_NAME: ${{ github.ref_name }}
