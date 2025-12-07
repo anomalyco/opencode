@@ -9,7 +9,9 @@ import { AuthenticationRequiredError } from "./types"
 import { Permission } from "../permission"
 import type { SessionModelState, SessionModeState } from "@agentclientprotocol/sdk"
 import type { ACPAgentDefinition } from "./agents"
-import { DEFAULT_AGENT, getAgent } from "./agents"
+import { DEFAULT_AGENT, getAgent, matchAgent } from "./agents"
+import { Bus } from "../bus"
+import { SessionMode } from "../session/mode"
 
 const log = Log.create({ service: "acp-orchestrator" })
 
@@ -144,7 +146,16 @@ export namespace ACPOrchestrator {
    * Change the ACP agent for a session, recreating the client.
    */
   export async function setAgent(sessionID: string, agentName: string): Promise<SessionState> {
-    const agentDef = getAgent(agentName) ?? DEFAULT_AGENT
+    const matchResult = matchAgent(agentName)
+    if (!matchResult.success) {
+      if (matchResult.error === "ambiguous") {
+        const matches = matchResult.matches.map((a) => a.name).join(", ")
+        throw new Error(`Ambiguous agent name '${agentName}'. Matches: ${matches}`)
+      } else {
+        throw new Error(`Agent '${agentName}' not found`)
+      }
+    }
+    const agentDef = matchResult.match
     const existing = sessions.get(sessionID)
     const state: SessionState =
       existing ??
@@ -187,11 +198,13 @@ export namespace ACPOrchestrator {
     }
 
     log.info("changing mode", { sessionID, modeId })
+    const previousModeId = state.modes?.currentModeId ?? null
     await state.client!.setMode(modeId as any)
     state.modes = {
       ...state.modes,
       currentModeId: modeId,
     }
+    await publishModeChange(sessionID, state, previousModeId)
   }
 
   /**
@@ -258,6 +271,14 @@ export namespace ACPOrchestrator {
           type: notification.update.sessionUpdate,
           timestamp: new Date().toISOString()
         })
+        if (notification.update.sessionUpdate === "current_mode_update") {
+          const previousModeId = state.modes?.currentModeId ?? null
+          state.modes = {
+            ...(state.modes ?? { availableModes: [] }),
+            currentModeId: notification.update.currentModeId,
+          }
+          await publishModeChange(sessionID, state, previousModeId)
+        }
         await ACPTranslator.translate(sessionID, notification)
         log.info("  └─ [ORCHESTRATOR] translate complete", {
           type: notification.update.sessionUpdate,
@@ -387,6 +408,24 @@ export namespace ACPOrchestrator {
     state.acpSessionID = acpSession.sessionId
     state.models = models ?? state.models
     state.modes = modes ?? state.modes
+  }
+
+  async function publishModeChange(sessionID: string, state: SessionState, previousModeId: string | null) {
+    if (!state.modes?.currentModeId) return
+
+    try {
+      await Bus.publish(SessionMode.Event.Changed, {
+        sessionID,
+        agent: state.agent.name,
+        modeId: state.modes.currentModeId,
+        previousModeId,
+      })
+    } catch (error) {
+      log.warn("failed to publish mode change", {
+        sessionID,
+        error: error instanceof Error ? error.message : String(error),
+      })
+    }
   }
 
   /**

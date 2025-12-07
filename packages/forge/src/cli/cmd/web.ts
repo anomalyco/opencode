@@ -41,7 +41,7 @@ export const WebCommand = cmd({
         describe: "hostname to listen on",
         default: "127.0.0.1",
       }),
-  describe: "starts a headless opencode server",
+  describe: "starts a headless forge server",
   handler: async (args) => {
     const hostname = args.hostname
     const port = args.port

@@ -38,7 +38,7 @@ process.on("uncaughtException", (e) => {
 })
 
 const cli = yargs(hideBin(process.argv))
-  .scriptName("opencode")
+  .scriptName("forge")
   .help("help", "show help")
   .alias("help", "h")
   .version("version", "show version number", Installation.VERSION)
@@ -64,9 +64,9 @@ const cli = yargs(hideBin(process.argv))
     })
 
     process.env.AGENT = "1"
-    process.env.OPENCODE = "1"
+    process.env.FORGE = "1"
 
-    Log.Default.info("opencode", {
+    Log.Default.info("forge", {
       version: Installation.VERSION,
       args: process.argv.slice(2),
     })
@@ -79,17 +79,17 @@ const cli = yargs(hideBin(process.argv))
   .command(RunCommand)
   .command(GenerateCommand)
   .command(DebugCommand)
-  .command(AuthCommand)
+  // .command(AuthCommand)
   .command(AgentCommand)
   .command(UpgradeCommand)
   .command(ServeCommand)
   .command(WebCommand)
   .command(ModelsCommand)
   .command(StatsCommand)
-  .command(ExportCommand)
-  .command(ImportCommand)
-  .command(GithubCommand)
-  .command(PrCommand)
+  // .command(ExportCommand)
+  // .command(ImportCommand)
+  // .command(GithubCommand)
+  // .command(PrCommand)
   .fail((msg) => {
     if (
       msg.startsWith("Unknown argument") ||

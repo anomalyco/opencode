@@ -10,7 +10,7 @@ export const TuiSpawnCommand = cmd({
     yargs
       .positional("project", {
         type: "string",
-        describe: "path to start opencode in",
+        describe: "path to start forge in",
       })
       .option("port", {
         type: "number",

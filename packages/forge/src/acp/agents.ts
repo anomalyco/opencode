@@ -1,3 +1,6 @@
+import type { MatchResult } from "../util/match.js"
+import { fuzzyMatch } from "../util/match.js"
+
 export type ACPAgentInstallMethod = "npx" | "uvx" | "system" | "skip"
 
 export interface ACPAgentDefinition {
@@ -93,6 +96,10 @@ export const ACP_AGENTS: ACPAgentDefinition[] = [
 
 export function getAgent(name: string): ACPAgentDefinition | undefined {
   return ACP_AGENTS.find((agent) => agent.name === name)
+}
+
+export function matchAgent(name: string): MatchResult<ACPAgentDefinition> {
+  return fuzzyMatch(name, ACP_AGENTS, (agent) => agent.name)
 }
 
 export function getAllAgents(): ACPAgentDefinition[] {

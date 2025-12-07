@@ -28,6 +28,8 @@ import { Session as SessionApi } from "@/session"
 import { TuiEvent } from "./event"
 import { KVProvider, useKV } from "./context/kv"
 import { ArgsProvider, useArgs, type Args } from "./context/args"
+import { matchAgent, getAllAgents } from "@/acp/agents"
+import { matchModel } from "@/acp/util"
 
 async function getTerminalBackgroundColor(): Promise<"dark" | "light"> {
   // can't set raw mode if not a TTY
@@ -163,11 +165,70 @@ function App() {
 
   const args = useArgs()
   onMount(async () => {
-    // Always initialize agent (from args, KV store, or default)
-    const agentToUse = args.agent ?? local.agent.current().name
+    // Handle agent selection with matching and fallback
+    let agentToUse: string
+    if (args.agent) {
+      const agentResult = matchAgent(args.agent)
+      if (!agentResult.success) {
+        if (agentResult.error === "ambiguous") {
+          const matchNames = agentResult.matches.map((a) => a.name).join(", ")
+          toast.show({
+            variant: "warning",
+            message: `Ambiguous agent '${args.agent}'. Matches: ${matchNames}. Using default.`,
+            duration: 5000,
+          })
+        } else {
+          const available = getAllAgents()
+            .map((a) => a.name)
+            .join(", ")
+          toast.show({
+            variant: "warning",
+            message: `Agent '${args.agent}' not found. Available: ${available}. Using default.`,
+            duration: 5000,
+          })
+        }
+        agentToUse = local.agent.current().name
+      } else {
+        agentToUse = agentResult.match.name
+      }
+    } else {
+      agentToUse = local.agent.current().name
+    }
     await local.agent.set(agentToUse)
 
-    if (args.model) local.model.set(args.model)
+    // Handle model selection with matching and fallback (only if agent is connected)
+    if (args.model) {
+      const availableModels = local.model.list()
+      if (availableModels.length === 0) {
+        toast.show({
+          variant: "warning",
+          message: `Agent does not support model selection. Using agent default.`,
+          duration: 4000,
+        })
+      } else {
+        const modelResult = matchModel(args.model, availableModels)
+        if (!modelResult.success) {
+          if (modelResult.error === "ambiguous") {
+            const matchNames = modelResult.matches.map((m) => m.modelId).join(", ")
+            toast.show({
+              variant: "warning",
+              message: `Ambiguous model '${args.model}'. Matches: ${matchNames}. Using agent default.`,
+              duration: 5000,
+            })
+          } else {
+            const available = modelResult.available.map((m) => m.modelId).join(", ")
+            toast.show({
+              variant: "warning",
+              message: `Model '${args.model}' not available. Available: ${available}. Using agent default.`,
+              duration: 6000,
+            })
+          }
+        } else {
+          await local.model.set(modelResult.match.modelId)
+        }
+      }
+    }
+
     if (args.sessionID) {
       route.navigate({
         type: "session",
