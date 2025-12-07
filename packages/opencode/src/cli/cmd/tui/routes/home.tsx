@@ -9,6 +9,7 @@ import { useArgs } from "../context/args"
 import { useDirectory } from "../context/directory"
 import { useRoute, useRouteData } from "@tui/context/route"
 import { usePromptRef } from "../context/prompt"
+import { Installation } from "@/installation"
 
 // TODO: what is the best way to do this?
 let once = false
@@ -88,6 +89,10 @@ export function Home() {
             </text>
             <text fg={theme.textMuted}>/status</text>
           </Show>
+        </box>
+        <box flexGrow={1} />
+        <box flexShrink={0}>
+          <text fg={theme.textMuted}>{Installation.VERSION}</text>
         </box>
       </box>
     </>
