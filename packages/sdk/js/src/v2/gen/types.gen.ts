@@ -2766,6 +2766,45 @@ export type SessionSummarizeResponses = {
 
 export type SessionSummarizeResponse = SessionSummarizeResponses[keyof SessionSummarizeResponses]
 
+export type SessionExtractKnowledgeData = {
+  body?: {
+    providerID: string
+    modelID: string
+  }
+  path: {
+    /**
+     * Session ID
+     */
+    id: string
+  }
+  query?: {
+    directory?: string
+  }
+  url: "/session/{id}/extract-knowledge"
+}
+
+export type SessionExtractKnowledgeErrors = {
+  /**
+   * Bad request
+   */
+  400: BadRequestError
+  /**
+   * Not found
+   */
+  404: NotFoundError
+}
+
+export type SessionExtractKnowledgeError = SessionExtractKnowledgeErrors[keyof SessionExtractKnowledgeErrors]
+
+export type SessionExtractKnowledgeResponses = {
+  /**
+   * Knowledge extraction initiated
+   */
+  200: boolean
+}
+
+export type SessionExtractKnowledgeResponse = SessionExtractKnowledgeResponses[keyof SessionExtractKnowledgeResponses]
+
 export type SessionMessagesData = {
   body?: never
   path: {

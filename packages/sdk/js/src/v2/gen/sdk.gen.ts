@@ -83,6 +83,8 @@ import type {
   SessionDeleteResponses,
   SessionDiffErrors,
   SessionDiffResponses,
+  SessionExtractKnowledgeErrors,
+  SessionExtractKnowledgeResponses,
   SessionForkResponses,
   SessionGetErrors,
   SessionGetResponses,
@@ -1145,6 +1147,47 @@ export class Session extends HeyApiClient {
     )
     return (options?.client ?? this.client).post<SessionSummarizeResponses, SessionSummarizeErrors, ThrowOnError>({
       url: "/session/{sessionID}/summarize",
+      ...options,
+      ...params,
+      headers: {
+        "Content-Type": "application/json",
+        ...options?.headers,
+        ...params.headers,
+      },
+    })
+  }
+
+  /**
+   * Extract knowledge from the session
+   */
+  public extractKnowledge<ThrowOnError extends boolean = false>(
+    parameters: {
+      id: string
+      directory?: string
+      providerID?: string
+      modelID?: string
+    },
+    options?: Options<never, ThrowOnError>,
+  ) {
+    const params = buildClientParams(
+      [parameters],
+      [
+        {
+          args: [
+            { in: "path", key: "id" },
+            { in: "query", key: "directory" },
+            { in: "body", key: "providerID" },
+            { in: "body", key: "modelID" },
+          ],
+        },
+      ],
+    )
+    return (options?.client ?? this.client).post<
+      SessionExtractKnowledgeResponses,
+      SessionExtractKnowledgeErrors,
+      ThrowOnError
+    >({
+      url: "/session/{id}/extract-knowledge",
       ...options,
       ...params,
       headers: {

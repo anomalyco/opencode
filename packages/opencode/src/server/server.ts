@@ -2,6 +2,9 @@ import { BusEvent } from "@/bus/bus-event"
 import { Bus } from "@/bus"
 import { GlobalBus } from "@/bus/global"
 import { Log } from "../util/log"
+import path from "path"
+import fs from "fs/promises"
+import { Identifier } from "../id/id"
 import { describeRoute, generateSpecs, validator, resolver, openAPIRouteHandler } from "hono-openapi"
 import { Hono } from "hono"
 import { cors } from "hono/cors"
@@ -1065,6 +1068,105 @@ export namespace Server {
             auto: false,
           })
           await SessionPrompt.loop(sessionID)
+          return c.json(true)
+        },
+      )
+      .post(
+        "/session/:id/extract-knowledge",
+        describeRoute({
+          description: "Extract knowledge from the session",
+          operationId: "session.extractKnowledge",
+          responses: {
+            200: {
+              description: "Knowledge extraction initiated",
+              content: {
+                "application/json": {
+                  schema: resolver(z.boolean()),
+                },
+              },
+            },
+            ...errors(400, 404),
+          },
+        }),
+        validator(
+          "param",
+          z.object({
+            id: z.string().meta({ description: "Session ID" }),
+          }),
+        ),
+        validator(
+          "json",
+          z.object({
+            providerID: z.string(),
+            modelID: z.string(),
+          }),
+        ),
+        async (c) => {
+          const id = c.req.valid("param").id
+          const body = c.req.valid("json")
+          const msgs = await Session.messages({ sessionID: id })
+          let currentAgent = "build"
+          for (let i = msgs.length - 1; i >= 0; i--) {
+            const info = msgs[i].info
+            if (info.role === "user") {
+              currentAgent = info.agent || "build"
+              break
+            }
+          }
+
+          const session = await Session.get(id)
+          const sessDir = path.join(Instance.directory, ".opencode", "sess")
+          await fs.mkdir(sessDir, { recursive: true })
+          const transcriptPath = path.join(sessDir, `${id}.md`)
+
+          let transcript = `# ${session.title}\n\n`
+          transcript += `**Session ID:** ${session.id}\n`
+          transcript += `**Created:** ${new Date(session.time.created).toLocaleString()}\n\n---\n\n`
+
+          for (const msg of msgs) {
+            const role = msg.info.role === "user" ? "User" : "Assistant"
+            transcript += `## ${role}\n\n`
+            for (const part of msg.parts) {
+              if (part.type === "text" && !part.synthetic) {
+                transcript += `${part.text}\n\n`
+              } else if (part.type === "tool" && part.state.status === "completed") {
+                transcript += `\`\`\`\nTool: ${part.tool}\n\`\`\`\n\n`
+              }
+            }
+            transcript += `---\n\n`
+          }
+
+          await Bun.write(transcriptPath, transcript)
+
+          const knowledgeDir = path.join(Instance.directory, ".opencode", "knowledge")
+          await fs.mkdir(knowledgeDir, { recursive: true })
+
+          const prompt = [
+            `Session transcript: ${transcriptPath}`,
+            `Knowledge directory: ${knowledgeDir}`,
+            `Session ID: ${id}`,
+          ].join("\n")
+
+          const msg = await Session.updateMessage({
+            id: Identifier.ascending("message"),
+            role: "user",
+            model: { providerID: body.providerID, modelID: body.modelID },
+            sessionID: id,
+            agent: currentAgent,
+            time: { created: Date.now() },
+          })
+
+          await Session.updatePart({
+            id: Identifier.ascending("part"),
+            messageID: msg.id,
+            sessionID: msg.sessionID,
+            type: "subtask",
+            prompt,
+            description: "Extract knowledge",
+            agent: "knowledge-extractor",
+          })
+
+          await SessionPrompt.loop(id)
           return c.json(true)
         },
       )

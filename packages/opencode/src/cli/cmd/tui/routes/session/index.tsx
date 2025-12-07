@@ -318,6 +318,29 @@ export function Session() {
       },
     },
     {
+      title: "Extract knowledge",
+      value: "session.knowledge",
+      keybind: "session_knowledge",
+      category: "Session",
+      onSelect: (dialog) => {
+        const selectedModel = local.model.current()
+        if (!selectedModel) {
+          toast.show({
+            variant: "warning",
+            message: "Connect a provider to extract knowledge",
+            duration: 3000,
+          })
+          return
+        }
+        sdk.client.session.extractKnowledge({
+          id: route.sessionID,
+          modelID: selectedModel.modelID,
+          providerID: selectedModel.providerID,
+        })
+        dialog.clear()
+      },
+    },
+    {
       title: "Unshare session",
       value: "session.unshare",
       keybind: "session_unshare",
