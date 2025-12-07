@@ -3,6 +3,7 @@ import { Bus } from "../bus"
 import { NamedError } from "@opencode-ai/util/error"
 import { Message } from "./message"
 import { APICallError, convertToModelMessages, LoadAPIKeyError, type ModelMessage, type UIMessage } from "ai"
+import type { SharedV2ProviderMetadata } from "@ai-sdk/provider"
 import type { ChatMessage, ChatMessageFilePart } from "@opencode-ai/sdk"
 import { Identifier } from "../id/id"
 import { LSP } from "../lsp"
@@ -813,7 +814,7 @@ export namespace MessageV2 {
             assistantMessage.parts.push({
               type: "text",
               text: part.text,
-              providerMetadata: part.providerMetadata as Record<string, Record<string, unknown>> | undefined,
+              providerMetadata: part.providerMetadata as SharedV2ProviderMetadata | undefined,
             })
           }
           if (part.type === "step-start") {
@@ -847,7 +848,7 @@ export namespace MessageV2 {
                 toolCallId: part.toolCallId,
                 input: part.input,
                 output: part.compacted ? "[Old tool result content cleared]" : (part.output ?? ""),
-                callProviderMetadata: part.callProviderMetadata as Record<string, Record<string, unknown>> | undefined,
+                callProviderMetadata: part.callProviderMetadata as SharedV2ProviderMetadata | undefined,
               })
             }
             if (part.state === "error") {
@@ -857,7 +858,7 @@ export namespace MessageV2 {
                 toolCallId: part.toolCallId,
                 input: part.input,
                 errorText: part.error ?? "",
-                callProviderMetadata: part.callProviderMetadata as Record<string, Record<string, unknown>> | undefined,
+                callProviderMetadata: part.callProviderMetadata as SharedV2ProviderMetadata | undefined,
               })
             }
           }
@@ -865,7 +866,7 @@ export namespace MessageV2 {
             assistantMessage.parts.push({
               type: "reasoning",
               text: part.text,
-              providerMetadata: part.providerMetadata as Record<string, Record<string, unknown>> | undefined,
+              providerMetadata: part.providerMetadata as SharedV2ProviderMetadata | undefined,
             })
           }
         }
