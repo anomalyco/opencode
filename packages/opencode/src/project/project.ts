@@ -80,7 +80,7 @@ export namespace Project {
       .then((x) => path.resolve(worktree, x.trim()))
     const projectID = id || "global"
     const existing = id ? await Storage.read<Info>(["project", id]).catch(() => undefined) : undefined
-    if (!existing) {
+    if (!existing && id) {
       await migrateFromGlobal(projectID, worktree)
     }
     const project: Info = {
