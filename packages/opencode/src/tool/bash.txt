@@ -7,10 +7,10 @@ Before executing the command, please follow these steps:
    - For example, before running "mkdir foo/bar", first use List to check that "foo" exists and is the intended parent directory
 
 2. Command Execution:
-   - Always quote file paths that contain spaces with double quotes (e.g., cd "path with spaces/file.txt")
+   - Always quote file paths that contain spaces with double quotes (e.g., rm "path with spaces/file.txt")
    - Examples of proper quoting:
-     - cd "/Users/name/My Documents" (correct)
-     - cd /Users/name/My Documents (incorrect - will fail)
+     - mkdir "/Users/name/My Documents" (correct)
+     - mkdir /Users/name/My Documents (incorrect - will fail)
      - python "/path/with spaces/script.py" (correct)
      - python /path/with spaces/script.py (incorrect - will fail)
    - After ensuring proper quoting, execute the command.
@@ -18,20 +18,27 @@ Before executing the command, please follow these steps:
 
 Usage notes:
   - The command argument is required.
-  - You can specify an optional timeout in milliseconds (up to 600000ms / 10 minutes). If not specified, commands will timeout after 120000ms (2 minutes).
+  - You can specify an optional timeout in milliseconds. If not specified, commands will timeout after 120000ms (2 minutes). Use the `timeout` parameter to control execution time.
+  - The `workdir` parameter specifies the working directory for the command. Defaults to the current working directory. Prefer setting `workdir` over using `cd` in your commands.
   - It is very helpful if you write a clear, concise description of what this command does in 5-10 words.
   - If the output exceeds 30000 characters, output will be truncated before being returned to you.
   - VERY IMPORTANT: You MUST avoid using search commands like `find` and `grep`. Instead use Grep, Glob, or Task to search. You MUST avoid read tools like `cat`, `head`, `tail`, and `ls`, and use Read and List to read files.
   - If you _still_ need to run `grep`, STOP. ALWAYS USE ripgrep at `rg` (or /usr/bin/rg) first, which all opencode users have pre-installed.
   - When issuing multiple commands, use the ';' or '&&' operator to separate them. DO NOT use newlines (newlines are ok in quoted strings).
-  - Try to maintain your current working directory throughout the session by using absolute paths and avoiding usage of `cd`. You may use `cd` if the User explicitly requests it.
-    <good-example>
-    pytest /foo/bar/tests
-    </good-example>
-    <bad-example>
-    cd /foo/bar && pytest tests
-    </bad-example>
 
+# Working Directory
+
+The `workdir` parameter sets the working directory for command execution. Prefer using `workdir` over `cd <dir> &&` command chains when you simply need to run a command in a different directory.
+
+<good-example>
+workdir="/foo/bar", command="pytest tests"
+</good-example>
+<good-example>
+command="pytest /foo/bar/tests"
+</good-example>
+<bad-example>
+command="cd /foo/bar && pytest tests"
+</bad-example>
 
 # Committing changes with git
 
