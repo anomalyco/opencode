@@ -235,9 +235,7 @@ export const PromptInput: Component<PromptInputProps> = (props) => {
 
   const abort = () =>
     sdk.client.session.abort({
-      path: {
-        id: session.id!,
-      },
+      sessionID: session.id!,
     })
 
   const handleKeyDown = (event: KeyboardEvent) => {
@@ -329,21 +327,19 @@ export const PromptInput: Component<PromptInputProps> = (props) => {
     session.prompt.set([{ type: "text", content: "", start: 0, end: 0 }], 0)
 
     sdk.client.session.prompt({
-      path: { id: existing.id },
-      body: {
-        agent: local.agent.current()!.name,
-        model: {
-          modelID: local.model.current()!.id,
-          providerID: local.model.current()!.provider.id,
-        },
-        parts: [
-          {
-            type: "text",
-            text,
-          },
-          ...attachmentParts,
-        ],
+      sessionID: existing.id,
+      agent: local.agent.current()!.name,
+      model: {
+        modelID: local.model.current()!.id,
+        providerID: local.model.current()!.provider.id,
       },
+      parts: [
+        {
+          type: "text",
+          text,
+        },
+        ...attachmentParts,
+      ],
     })
   }
 
@@ -456,9 +452,9 @@ export const PromptInput: Component<PromptInputProps> = (props) => {
                     <img src={`https://models.dev/logos/${i.provider.id}.svg`} class="size-6 p-0.5 shrink-0" />
                     <div class="flex gap-x-3 items-baseline flex-[1_0_0]">
                       <span class="text-14-medium text-text-strong overflow-hidden text-ellipsis">{i.name}</span>
-                      <Show when={i.release_date}>
+                      <Show when={false}>
                         <span class="text-12-medium text-text-weak overflow-hidden text-ellipsis truncate min-w-0">
-                          {DateTime.fromFormat(i.release_date, "yyyy-MM-dd").toFormat("LLL yyyy")}
+                          {DateTime.fromFormat("unknown", "yyyy-MM-dd").toFormat("LLL yyyy")}
                         </span>
                       </Show>
                     </div>
