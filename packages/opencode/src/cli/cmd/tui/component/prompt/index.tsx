@@ -75,13 +75,18 @@ export function Prompt(props: PromptProps) {
     }
   }
 
-  const textareaKeybindings = createMemo(() => {
+  const textareaKeybindings = createMemo((): KeyBinding[] => {
     const newlineBindings = keybind.all.input_newline || []
     const submitBindings = keybind.all.input_submit || []
 
     return [
       { name: "return", action: "submit" },
       { name: "return", meta: true, action: "newline" },
+      // Ctrl+Arrow for word navigation (in addition to Alt+Arrow which is default)
+      { name: "right", ctrl: true, action: "word-forward" },
+      { name: "left", ctrl: true, action: "word-backward" },
+      { name: "right", ctrl: true, shift: true, action: "select-word-forward" },
+      { name: "left", ctrl: true, shift: true, action: "select-word-backward" },
       ...newlineBindings.map((binding) => ({
         name: binding.name,
         ctrl: binding.ctrl || undefined,
@@ -96,7 +101,7 @@ export function Prompt(props: PromptProps) {
         shift: binding.shift || undefined,
         action: "submit" as const,
       })),
-    ] satisfies KeyBinding[]
+    ]
   })
 
   const fileStyleId = syntax().getStyleId("extmark.file")!
