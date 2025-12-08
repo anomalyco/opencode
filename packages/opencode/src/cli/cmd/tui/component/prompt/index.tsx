@@ -635,9 +635,18 @@ export function Prompt(props: PromptProps) {
                 }
                 if (store.mode === "normal") autocomplete.onKeyDown(e)
                 if (!autocomplete.visible) {
+                  const isOnFirstRow = input.visualCursor.visualRow === 0
+                  const isOnLastRow = input.visualCursor.visualRow === input.height - 1
+                  const matchesPrevious = keybind.match("history_previous", e)
+                  const matchesNext = keybind.match("history_next", e)
+
+                  // History navigation only triggers on boundary rows:
+                  // - previous: only on first visual row (allows cursor up movement on other rows)
+                  // - next: only on last visual row (allows cursor down movement on other rows)
+                  // This enables Emacs-style cursor navigation (ctrl+p/ctrl+n) within multi-line input
                   if (
-                    (keybind.match("history_previous", e) && input.cursorOffset === 0) ||
-                    (keybind.match("history_next", e) && input.cursorOffset === input.plainText.length)
+                    (keybind.match("history_previous", e) && isOnFirstRow) ||
+                    (keybind.match("history_next", e) && isOnLastRow)
                   ) {
                     const direction = keybind.match("history_previous", e) ? -1 : 1
                     const item = history.move(direction, input.plainText)
@@ -653,9 +662,20 @@ export function Prompt(props: PromptProps) {
                     return
                   }
 
-                  if (keybind.match("history_previous", e) && input.visualCursor.visualRow === 0) input.cursorOffset = 0
-                  if (keybind.match("history_next", e) && input.visualCursor.visualRow === input.height - 1)
-                    input.cursorOffset = input.plainText.length
+                  // Handle Emacs-style cursor navigation (ctrl+p/ctrl+n) within multi-line input
+                  // When NOT on boundary rows, move cursor up/down instead of triggering history
+                  if (matchesPrevious && !isOnFirstRow) {
+                    // Move cursor up one line
+                    input.moveCursorUp()
+                    e.preventDefault()
+                    return
+                  }
+                  if (matchesNext && !isOnLastRow) {
+                    // Move cursor down one line
+                    input.moveCursorDown()
+                    e.preventDefault()
+                    return
+                  }
                 }
               }}
               onSubmit={submit}
