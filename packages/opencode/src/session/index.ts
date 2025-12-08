@@ -15,6 +15,7 @@ import { SessionPrompt } from "./prompt"
 import { fn } from "@/util/fn"
 import { Command } from "../command"
 import { Snapshot } from "@/snapshot"
+import { Tracing } from "../tracing"
 
 import type { Provider } from "@/provider/provider"
 
@@ -173,43 +174,55 @@ export namespace Session {
   })
 
   export async function createNext(input: { id?: string; title?: string; parentID?: string; directory: string }) {
-    const result: Info = {
-      id: Identifier.descending("session", input.id),
-      version: Installation.VERSION,
-      projectID: Instance.project.id,
-      directory: input.directory,
-      parentID: input.parentID,
-      title: input.title ?? createDefaultTitle(!!input.parentID),
-      time: {
-        created: Date.now(),
-        updated: Date.now(),
-      },
-    }
-    log.info("created", result)
-    await Storage.write(["session", Instance.project.id, result.id], result)
-    Bus.publish(Event.Created, {
-      info: result,
-    })
-    const cfg = await Config.get()
-    if (!result.parentID && (Flag.OPENCODE_AUTO_SHARE || cfg.share === "auto"))
-      share(result.id)
-        .then((share) => {
-          update(result.id, (draft) => {
-            draft.share = share
+    return Tracing.startSpan("session.create", async () => {
+      const result: Info = {
+        id: Identifier.descending("session", input.id),
+        version: Installation.VERSION,
+        projectID: Instance.project.id,
+        directory: input.directory,
+        parentID: input.parentID,
+        title: input.title ?? createDefaultTitle(!!input.parentID),
+        time: {
+          created: Date.now(),
+          updated: Date.now(),
+        },
+      }
+      Tracing.setAttributes({
+        "session.id": result.id,
+        "session.project_id": result.projectID,
+        "session.parent_id": result.parentID,
+        "session.title": result.title,
+      })
+      log.info("created", result)
+      await Storage.write(["session", Instance.project.id, result.id], result)
+      Bus.publish(Event.Created, {
+        info: result,
+      })
+      const cfg = await Config.get()
+      if (!result.parentID && (Flag.OPENCODE_AUTO_SHARE || cfg.share === "auto"))
+        share(result.id)
+          .then((share) => {
+            update(result.id, (draft) => {
+              draft.share = share
+            })
           })
-        })
-        .catch(() => {
-          // Silently ignore sharing errors during session creation
-        })
-    Bus.publish(Event.Updated, {
-      info: result,
+          .catch(() => {
+            // Silently ignore sharing errors during session creation
+          })
+      Bus.publish(Event.Updated, {
+        info: result,
+      })
+      Tracing.addEvent("session.created", { "session.id": result.id })
+      return result
     })
-    return result
   }
 
   export const get = fn(Identifier.schema("session"), async (id) => {
-    const read = await Storage.read<Info>(["session", Instance.project.id, id])
-    return read as Info
+    return Tracing.startSpan("session.get", async () => {
+      Tracing.setAttributes({ "session.id": id })
+      const read = await Storage.read<Info>(["session", Instance.project.id, id])
+      return read as Info
+    })
   })
 
   export const getShare = fn(Identifier.schema("session"), async (id) => {
@@ -323,8 +336,9 @@ export namespace Session {
   })
 
   export const remove = fn(Identifier.schema("session"), async (sessionID) => {
-    const project = Instance.project
-    try {
+    return Tracing.startSpan("session.remove", async () => {
+      Tracing.setAttributes({ "session.id": sessionID })
+      const project = Instance.project
       const session = await get(sessionID)
       for (const child of await children(sessionID)) {
         await remove(child.id)
@@ -340,9 +354,8 @@ export namespace Session {
       Bus.publish(Event.Deleted, {
         info: session,
       })
-    } catch (e) {
-      log.error(e)
-    }
+      Tracing.addEvent("session.deleted", { "session.id": sessionID })
+    })
   })
 
   export const updateMessage = fn(MessageV2.Info, async (msg) => {

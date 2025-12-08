@@ -27,6 +27,7 @@ import { EOL } from "os"
 import { WebCommand } from "./cli/cmd/web"
 import { PrCommand } from "./cli/cmd/pr"
 import { SessionCommand } from "./cli/cmd/session"
+import { Tracing } from "./tracing"
 
 process.on("unhandledRejection", (e) => {
   Log.Default.error("rejection", {
@@ -66,6 +67,8 @@ const cli = yargs(hideBin(process.argv))
         return "INFO"
       })(),
     })
+
+    await Tracing.init({})
 
     process.env.AGENT = "1"
     process.env.OPENCODE = "1"

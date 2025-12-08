@@ -1,5 +1,6 @@
 import z from "zod"
 import type { MessageV2 } from "../session/message-v2"
+import { Tracing } from "../tracing"
 
 export namespace Tool {
   interface Metadata {
@@ -46,18 +47,30 @@ export namespace Tool {
         const toolInfo = init instanceof Function ? await init() : init
         const execute = toolInfo.execute
         toolInfo.execute = (args, ctx) => {
-          try {
-            toolInfo.parameters.parse(args)
-          } catch (error) {
-            if (error instanceof z.ZodError && toolInfo.formatValidationError) {
-              throw new Error(toolInfo.formatValidationError(error), { cause: error })
+          return Tracing.startSpan(`tool.${id}`, async () => {
+            Tracing.setAttributes({
+              "tool.id": id,
+              "tool.session_id": ctx.sessionID,
+              "tool.message_id": ctx.messageID,
+              "tool.agent": ctx.agent,
+            })
+            try {
+              toolInfo.parameters.parse(args)
+            } catch (error) {
+              if (error instanceof z.ZodError && toolInfo.formatValidationError) {
+                Tracing.recordError(error as Error)
+                throw new Error(toolInfo.formatValidationError(error), { cause: error })
+              }
+              Tracing.recordError(error as Error)
+              throw new Error(
+                `The ${id} tool was called with invalid arguments: ${error}.\nPlease rewrite the input so it satisfies the expected schema.`,
+                { cause: error },
+              )
             }
-            throw new Error(
-              `The ${id} tool was called with invalid arguments: ${error}.\nPlease rewrite the input so it satisfies the expected schema.`,
-              { cause: error },
-            )
-          }
-          return execute(args, ctx)
+            const result = await execute(args, ctx)
+            Tracing.addEvent("tool.completed", { "tool.id": id })
+            return result
+          })
         }
         return toolInfo
       },
