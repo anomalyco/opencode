@@ -19,7 +19,7 @@ jobs:
         with:
           token: ${{ secrets.GITHUB_TOKEN }}
           repository: ${{ github.event.pull_request.head.repo.full_name || github.repository }}
-          ref: ${{ github.event.pull_request.head.sha || github.sha }}
+          ref: ${{ github.event.pull_request.head.ref || github.ref_name }}
 
       - name: Setup Bun
         uses: ./.github/actions/setup-bun
@@ -29,3 +29,4 @@ jobs:
           ./script/format.ts
         env:
           CI: true
+          PUSH_BRANCH: ${{ github.event.pull_request.head.ref || github.ref_name }}
