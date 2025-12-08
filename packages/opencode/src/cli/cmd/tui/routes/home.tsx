@@ -24,8 +24,12 @@ export function Home() {
     return Object.values(sync.data.mcp).some((x) => x.status === "failed")
   })
 
+  const connectedMcpCount = createMemo(() => {
+    return Object.values(sync.data.mcp).filter((x) => x.status === "connected").length
+  })
+
   const Hint = (
-    <Show when={Object.keys(sync.data.mcp).length > 0}>
+    <Show when={connectedMcpCount() > 0}>
       <box flexShrink={0} flexDirection="row" gap={1}>
         <text fg={theme.text}>
           <Switch>
@@ -35,7 +39,7 @@ export function Home() {
             </Match>
             <Match when={true}>
               <span style={{ fg: theme.success }}>•</span>{" "}
-              {Locale.pluralize(Object.values(sync.data.mcp).length, "{} mcp server", "{} mcp servers")}
+              {Locale.pluralize(connectedMcpCount(), "{} mcp server", "{} mcp servers")}
             </Match>
           </Switch>
         </text>
@@ -85,7 +89,7 @@ export function Home() {
                   <span style={{ fg: theme.success }}>⊙ </span>
                 </Match>
               </Switch>
-              {Object.keys(sync.data.mcp).length} MCP
+              {connectedMcpCount()} MCP
             </text>
             <text fg={theme.textMuted}>/status</text>
           </Show>
