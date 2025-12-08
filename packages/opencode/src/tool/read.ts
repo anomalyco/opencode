@@ -7,7 +7,6 @@ import { FileTime } from "../file/time"
 import DESCRIPTION from "./read.txt"
 import { Filesystem } from "../util/filesystem"
 import { Instance } from "../project/instance"
-import { Provider } from "../provider/provider"
 import { Identifier } from "../id/id"
 import { Permission } from "../permission"
 import { Agent } from "@/agent/agent"
@@ -95,12 +94,7 @@ export const ReadTool = Tool.define("read", {
     }
 
     const isImage = isImageFile(filepath)
-    const model = ctx.extra?.model as Provider.Model | undefined
-    const supportsImages = model?.capabilities.input.image ?? false
     if (isImage) {
-      if (!supportsImages) {
-        throw new Error(`Failed to read image: ${filepath}, model may not be able to read images`)
-      }
       const mime = file.type
       const msg = "Image read successfully"
       return {
