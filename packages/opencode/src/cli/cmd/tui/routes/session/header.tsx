@@ -4,7 +4,7 @@ import { useSync } from "@tui/context/sync"
 import { pipe, sumBy } from "remeda"
 import { useTheme } from "@tui/context/theme"
 import { SplitBorder, EmptyBorder } from "@tui/component/border"
-import type { AssistantMessage, Session } from "@opencode-ai/sdk"
+import type { AssistantMessage, Session } from "@opencode-ai/sdk/v2"
 import { useDirectory } from "../../context/directory"
 import { useKeybind } from "../../context/keybind"
 

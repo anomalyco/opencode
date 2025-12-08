@@ -5,7 +5,7 @@ import { useSync } from "./sync"
 import { makePersisted } from "@solid-primitives/storage"
 import { TextSelection } from "./local"
 import { pipe, sumBy } from "remeda"
-import { AssistantMessage, UserMessage } from "@opencode-ai/sdk"
+import { AssistantMessage, UserMessage } from "@opencode-ai/sdk/v2"
 import { useParams } from "@solidjs/router"
 import { base64Encode } from "@/utils"
 import { useSDK } from "./sdk"
@@ -198,7 +198,7 @@ export const { use: useSession, provider: SessionProvider } = createSimpleContex
         all: createMemo(() => Object.values(store.terminals.all)),
         active: createMemo(() => store.terminals.active),
         new() {
-          sdk.client.pty.create({ body: { title: `Terminal ${store.terminals.all.length + 1}` } }).then((pty) => {
+          sdk.client.pty.create({ title: `Terminal ${store.terminals.all.length + 1}` }).then((pty) => {
             const id = pty.data?.id
             if (!id) return
             setStore("terminals", "all", [
@@ -214,8 +214,9 @@ export const { use: useSession, provider: SessionProvider } = createSimpleContex
         update(pty: Partial<LocalPTY> & { id: string }) {
           setStore("terminals", "all", (x) => x.map((x) => (x.id === pty.id ? { ...x, ...pty } : x)))
           sdk.client.pty.update({
-            path: { id: pty.id },
-            body: { title: pty.title, size: pty.cols && pty.rows ? { rows: pty.rows, cols: pty.cols } : undefined },
+            ptyID: pty.id,
+            title: pty.title,
+            size: pty.cols && pty.rows ? { rows: pty.rows, cols: pty.cols } : undefined,
           })
         },
         async clone(id: string) {
@@ -223,9 +224,7 @@ export const { use: useSession, provider: SessionProvider } = createSimpleContex
           const pty = store.terminals.all[index]
           if (!pty) return
           const clone = await sdk.client.pty.create({
-            body: {
-              title: pty.title,
-            },
+            title: pty.title,
           })
           if (!clone.data) return
           setStore("terminals", "all", index, {
@@ -252,7 +251,7 @@ export const { use: useSession, provider: SessionProvider } = createSimpleContex
               setStore("terminals", "active", previous)
             }
           })
-          await sdk.client.pty.remove({ path: { id } })
+          await sdk.client.pty.remove({ ptyID: id })
         },
         move(id: string, to: number) {
           const index = store.terminals.all.findIndex((f) => f.id === id)

@@ -26,7 +26,8 @@ export const TuiRoute = new Hono()
   .get(
     "/next",
     describeRoute({
-      description: "Get the next TUI request from the queue",
+      summary: "Get next TUI request",
+      description: "Retrieve the next TUI (Terminal User Interface) request from the queue for processing.",
       operationId: "tui.control.next",
       responses: {
         200: {
@@ -47,7 +48,8 @@ export const TuiRoute = new Hono()
   .post(
     "/response",
     describeRoute({
-      description: "Submit a response to the TUI request queue",
+      summary: "Submit TUI response",
+      description: "Submit a response to the TUI request queue to complete a pending request.",
       operationId: "tui.control.response",
       responses: {
         200: {

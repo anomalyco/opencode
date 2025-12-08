@@ -12,7 +12,7 @@ import type {
   FileDiff,
   Todo,
   SessionStatus,
-} from "@opencode-ai/sdk"
+} from "@opencode-ai/sdk/v2"
 import { createStore, produce, reconcile } from "solid-js/store"
 import { Binary } from "@opencode-ai/util/binary"
 import { createSimpleContext } from "@opencode-ai/ui/context"
