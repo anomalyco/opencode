@@ -74,12 +74,10 @@ export const Terminal = (props: TerminalProps) => {
     term.onResize(async (size) => {
       if (ws && ws.readyState === WebSocket.OPEN) {
         await sdk.client.pty.update({
-          path: { id: local.pty.id },
-          body: {
-            size: {
-              cols: size.cols,
-              rows: size.rows,
-            },
+          ptyID: local.pty.id,
+          size: {
+            cols: size.cols,
+            rows: size.rows,
           },
         })
       }
@@ -100,12 +98,10 @@ export const Terminal = (props: TerminalProps) => {
     ws.addEventListener("open", () => {
       console.log("WebSocket connected")
       sdk.client.pty.update({
-        path: { id: local.pty.id },
-        body: {
-          size: {
-            cols: term.cols,
-            rows: term.rows,
-          },
+        ptyID: local.pty.id,
+        size: {
+          cols: term.cols,
+          rows: term.rows,
         },
       })
     })
