@@ -4,7 +4,7 @@ use std::{
     sync::{Arc, Mutex},
     time::{Duration, Instant},
 };
-use tauri::{App, AppHandle, Manager, RunEvent, WebviewUrl, WebviewWindow};
+use tauri::{AppHandle, Manager, RunEvent, WebviewUrl, WebviewWindow};
 use tauri_plugin_dialog::{DialogExt, MessageDialogButtons, MessageDialogResult};
 use tauri_plugin_shell::process::{CommandChild, CommandEvent};
 use tauri_plugin_shell::ShellExt;
@@ -166,7 +166,8 @@ pub fn run() {
                     WebviewWindow::builder(&app, "main", WebviewUrl::App("/".into()))
                         .title("OpenCode")
                         .inner_size(800.0, 600.0)
-                        .decorations(true);
+                        .decorations(true)
+                        .zoom_hotkeys_enabled(true);
 
                 #[cfg(target_os = "macos")]
                 {

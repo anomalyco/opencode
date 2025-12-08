@@ -6,6 +6,7 @@ import { createSimpleContext } from "./helper"
 import aura from "./theme/aura.json" with { type: "json" }
 import ayu from "./theme/ayu.json" with { type: "json" }
 import catppuccin from "./theme/catppuccin.json" with { type: "json" }
+import catppuccinMacchiato from "./theme/catppuccin-macchiato.json" with { type: "json" }
 import cobalt2 from "./theme/cobalt2.json" with { type: "json" }
 import dracula from "./theme/dracula.json" with { type: "json" }
 import everforest from "./theme/everforest.json" with { type: "json" }
@@ -15,6 +16,7 @@ import gruvbox from "./theme/gruvbox.json" with { type: "json" }
 import kanagawa from "./theme/kanagawa.json" with { type: "json" }
 import material from "./theme/material.json" with { type: "json" }
 import matrix from "./theme/matrix.json" with { type: "json" }
+import mercury from "./theme/mercury.json" with { type: "json" }
 import monokai from "./theme/monokai.json" with { type: "json" }
 import nightowl from "./theme/nightowl.json" with { type: "json" }
 import nord from "./theme/nord.json" with { type: "json" }
@@ -91,6 +93,7 @@ type ThemeColors = {
 
 type Theme = ThemeColors & {
   _hasSelectedListItemText: boolean
+  thinkingOpacity: number
 }
 
 export function selectedForeground(theme: Theme): RGBA {
@@ -123,6 +126,7 @@ type ThemeJson = {
   theme: Omit<Record<keyof ThemeColors, ColorValue>, "selectedListItemText" | "backgroundMenu"> & {
     selectedListItemText?: ColorValue
     backgroundMenu?: ColorValue
+    thinkingOpacity?: number
   }
 }
 
@@ -130,6 +134,7 @@ export const DEFAULT_THEMES: Record<string, ThemeJson> = {
   aura,
   ayu,
   catppuccin,
+  ["catppuccin-macchiato"]: catppuccinMacchiato,
   cobalt2,
   dracula,
   everforest,
@@ -139,6 +144,7 @@ export const DEFAULT_THEMES: Record<string, ThemeJson> = {
   kanagawa,
   material,
   matrix,
+  mercury,
   monokai,
   nightowl,
   nord,
@@ -179,9 +185,9 @@ function resolveTheme(theme: ThemeJson, mode: "dark" | "light") {
 
   const resolved = Object.fromEntries(
     Object.entries(theme.theme)
-      .filter(([key]) => key !== "selectedListItemText" && key !== "backgroundMenu")
+      .filter(([key]) => key !== "selectedListItemText" && key !== "backgroundMenu" && key !== "thinkingOpacity")
       .map(([key, value]) => {
-        return [key, resolveColor(value)]
+        return [key, resolveColor(value as ColorValue)]
       }),
   ) as Partial<ThemeColors>
 
@@ -202,9 +208,13 @@ function resolveTheme(theme: ThemeJson, mode: "dark" | "light") {
     resolved.backgroundMenu = resolved.backgroundElement
   }
 
+  // Handle thinkingOpacity - optional with default of 0.6
+  const thinkingOpacity = theme.theme.thinkingOpacity ?? 0.6
+
   return {
     ...resolved,
     _hasSelectedListItemText: hasSelectedListItemText,
+    thinkingOpacity,
   } as Theme
 }
 
@@ -550,7 +560,7 @@ function generateSubtleSyntax(theme: Theme) {
               Math.round(fg.r * 255),
               Math.round(fg.g * 255),
               Math.round(fg.b * 255),
-              Math.round(0.6 * 255),
+              Math.round(theme.thinkingOpacity * 255),
             ),
           },
         }

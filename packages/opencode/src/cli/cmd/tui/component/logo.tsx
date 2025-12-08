@@ -21,9 +21,6 @@ export function Logo() {
           </box>
         )}
       </For>
-      <box flexDirection="row" justifyContent="flex-end">
-        <text fg={theme.textMuted}>{Installation.VERSION}</text>
-      </box>
     </box>
   )
 }
