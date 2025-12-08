@@ -351,12 +351,25 @@ export namespace MCP {
       return
     }
 
-    const result = await create(name, { ...mcp, enabled: true })
+    const result = await create(name, { ...mcp, enabled: true }).catch((error) => {
+      log.error("Failed to connect MCP", {
+        name,
+        error: error instanceof Error ? error.message : String(error),
+      })
+      return {
+        mcpClient: undefined,
+        status: {
+          status: "failed" as const,
+          error: error instanceof Error ? error.message : String(error),
+        },
+      }
+    })
+
     if (!result) {
       const s = await state()
       s.status[name] = {
         status: "failed",
-        error: "Failed to connect",
+        error: "Unknown error during connection",
       }
       return
     }

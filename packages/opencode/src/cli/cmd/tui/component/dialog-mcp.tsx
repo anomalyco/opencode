@@ -50,12 +50,17 @@ export function DialogMcp() {
       keybind: Keybind.parse("space")[0],
       title: "toggle",
       onTrigger: async (option: DialogSelectOption<string>) => {
+        // Prevent toggling while an operation is already in progress
+        if (loading() !== null) return
+
         setLoading(option.value)
         try {
           await local.mcp.toggle(option.value)
           // Refresh MCP status from server
           const status = await sdk.client.mcp.status()
-          sync.set("mcp", status.data!)
+          if (status.data) {
+            sync.set("mcp", status.data)
+          }
         } catch (error) {
           console.error("Failed to toggle MCP:", error)
         } finally {

@@ -68,9 +68,6 @@ export const { use: useLocal, provider: LocalProvider } = createSimpleContext({
         theme.error,
       ])
       return {
-        list() {
-          return agents()
-        },
         current() {
           return agents().find((x) => x.name === agentStore.current)!
         },
@@ -330,12 +327,12 @@ export const { use: useLocal, provider: LocalProvider } = createSimpleContext({
       },
       async toggle(name: string) {
         const status = sync.data.mcp[name]
-        if (status?.status === "disabled") {
-          // Enable: connect the MCP
-          await sdk.client.mcp.connect({ name })
-        } else {
+        if (status?.status === "connected") {
           // Disable: disconnect the MCP
           await sdk.client.mcp.disconnect({ name })
+        } else {
+          // Enable/Retry: connect the MCP (handles disabled, failed, and other states)
+          await sdk.client.mcp.connect({ name })
         }
       },
     }
