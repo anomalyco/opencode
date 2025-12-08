@@ -1243,7 +1243,10 @@ export namespace LSPServer {
           return
         }
 
-        const release = (await releaseResponse.json()) as { tag_name?: string; assets?: { name?: string; browser_download_url?: string }[] }
+        const release = (await releaseResponse.json()) as {
+          tag_name?: string
+          assets?: { name?: string; browser_download_url?: string }[]
+        }
         const version = release.tag_name?.replace("v", "")
         if (!version) {
           log.error("terraform-ls release did not include a version tag")
