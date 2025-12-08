@@ -179,7 +179,9 @@ class HeyApiRegistry<T> {
 
 export class Global extends HeyApiClient {
   /**
-   * Get events
+   * Get global events
+   *
+   * Subscribe to global events from the OpenCode system using server-sent events.
    */
   public event<ThrowOnError extends boolean = false>(options?: Options<never, ThrowOnError>) {
     return (options?.client ?? this.client).sse.get<GlobalEventResponses, unknown, ThrowOnError>({
@@ -193,7 +195,7 @@ export class Project extends HeyApiClient {
   /**
    * List all projects
    *
-   * List all projects
+   * Get a list of projects that have been opened with OpenCode.
    */
   public list<ThrowOnError extends boolean = false>(
     parameters?: {
@@ -210,7 +212,9 @@ export class Project extends HeyApiClient {
   }
 
   /**
-   * Get the current project
+   * Get current project
+   *
+   * Retrieve the currently active project that OpenCode is working with.
    */
   public current<ThrowOnError extends boolean = false>(
     parameters?: {
@@ -229,7 +233,9 @@ export class Project extends HeyApiClient {
 
 export class Pty extends HeyApiClient {
   /**
-   * List all PTY sessions
+   * List PTY sessions
+   *
+   * Get a list of all active pseudo-terminal (PTY) sessions managed by OpenCode.
    */
   public list<ThrowOnError extends boolean = false>(
     parameters?: {
@@ -246,7 +252,9 @@ export class Pty extends HeyApiClient {
   }
 
   /**
-   * Create a new PTY session
+   * Create PTY session
+   *
+   * Create a new pseudo-terminal (PTY) session for running shell commands and processes.
    */
   public create<ThrowOnError extends boolean = false>(
     parameters?: {
@@ -289,7 +297,9 @@ export class Pty extends HeyApiClient {
   }
 
   /**
-   * Remove a PTY session
+   * Remove PTY session
+   *
+   * Remove and terminate a specific pseudo-terminal (PTY) session.
    */
   public remove<ThrowOnError extends boolean = false>(
     parameters: {
@@ -317,7 +327,9 @@ export class Pty extends HeyApiClient {
   }
 
   /**
-   * Get PTY session info
+   * Get PTY session
+   *
+   * Retrieve detailed information about a specific pseudo-terminal (PTY) session.
    */
   public get<ThrowOnError extends boolean = false>(
     parameters: {
@@ -346,6 +358,8 @@ export class Pty extends HeyApiClient {
 
   /**
    * Update PTY session
+   *
+   * Update properties of an existing pseudo-terminal (PTY) session.
    */
   public update<ThrowOnError extends boolean = false>(
     parameters: {
@@ -385,7 +399,9 @@ export class Pty extends HeyApiClient {
   }
 
   /**
-   * Connect to a PTY session
+   * Connect to PTY session
+   *
+   * Establish a WebSocket connection to interact with a pseudo-terminal (PTY) session in real-time.
    */
   public connect<ThrowOnError extends boolean = false>(
     parameters: {
@@ -415,7 +431,9 @@ export class Pty extends HeyApiClient {
 
 export class Config extends HeyApiClient {
   /**
-   * Get config info
+   * Get configuration
+   *
+   * Retrieve the current OpenCode configuration settings and preferences.
    */
   public get<ThrowOnError extends boolean = false>(
     parameters?: {
@@ -432,7 +450,9 @@ export class Config extends HeyApiClient {
   }
 
   /**
-   * Update config
+   * Update configuration
+   *
+   * Update OpenCode configuration settings and preferences.
    */
   public update<ThrowOnError extends boolean = false>(
     parameters?: {
@@ -465,7 +485,9 @@ export class Config extends HeyApiClient {
   }
 
   /**
-   * List all providers
+   * List config providers
+   *
+   * Get a list of all configured AI providers and their default models.
    */
   public providers<ThrowOnError extends boolean = false>(
     parameters?: {
@@ -484,7 +506,9 @@ export class Config extends HeyApiClient {
 
 export class Tool extends HeyApiClient {
   /**
-   * List all tool IDs (including built-in and dynamically registered)
+   * List tool IDs
+   *
+   * Get a list of all available tool IDs, including both built-in tools and dynamically registered tools.
    */
   public ids<ThrowOnError extends boolean = false>(
     parameters?: {
@@ -501,7 +525,9 @@ export class Tool extends HeyApiClient {
   }
 
   /**
-   * List tools with JSON schema parameters for a provider/model
+   * List tools
+   *
+   * Get a list of available tools with their JSON schema parameters for a specific provider and model combination.
    */
   public list<ThrowOnError extends boolean = false>(
     parameters: {
@@ -533,7 +559,9 @@ export class Tool extends HeyApiClient {
 
 export class Instance extends HeyApiClient {
   /**
-   * Dispose the current instance
+   * Dispose instance
+   *
+   * Clean up and dispose the current OpenCode instance, releasing all resources.
    */
   public dispose<ThrowOnError extends boolean = false>(
     parameters?: {
@@ -552,7 +580,9 @@ export class Instance extends HeyApiClient {
 
 export class Path extends HeyApiClient {
   /**
-   * Get the current path
+   * Get paths
+   *
+   * Retrieve the current working directory and related path information for the OpenCode instance.
    */
   public get<ThrowOnError extends boolean = false>(
     parameters?: {
@@ -571,7 +601,9 @@ export class Path extends HeyApiClient {
 
 export class Vcs extends HeyApiClient {
   /**
-   * Get VCS info for the current instance
+   * Get VCS info
+   *
+   * Retrieve version control system (VCS) information for the current project, such as git branch.
    */
   public get<ThrowOnError extends boolean = false>(
     parameters?: {
@@ -590,7 +622,9 @@ export class Vcs extends HeyApiClient {
 
 export class Session extends HeyApiClient {
   /**
-   * List all sessions
+   * List sessions
+   *
+   * Get a list of all OpenCode sessions, sorted by most recently updated.
    */
   public list<ThrowOnError extends boolean = false>(
     parameters?: {
@@ -607,7 +641,9 @@ export class Session extends HeyApiClient {
   }
 
   /**
-   * Create a new session
+   * Create session
+   *
+   * Create a new OpenCode session for interacting with AI assistants and managing conversations.
    */
   public create<ThrowOnError extends boolean = false>(
     parameters?: {
@@ -643,6 +679,8 @@ export class Session extends HeyApiClient {
 
   /**
    * Get session status
+   *
+   * Retrieve the current status of all sessions, including active, idle, and completed states.
    */
   public status<ThrowOnError extends boolean = false>(
     parameters?: {
@@ -659,7 +697,9 @@ export class Session extends HeyApiClient {
   }
 
   /**
-   * Delete a session and all its data
+   * Delete session
+   *
+   * Delete a session and permanently remove all associated data, including messages and history.
    */
   public delete<ThrowOnError extends boolean = false>(
     parameters: {
@@ -688,6 +728,8 @@ export class Session extends HeyApiClient {
 
   /**
    * Get session
+   *
+   * Retrieve detailed information about a specific OpenCode session.
    */
   public get<ThrowOnError extends boolean = false>(
     parameters: {
@@ -715,7 +757,9 @@ export class Session extends HeyApiClient {
   }
 
   /**
-   * Update session properties
+   * Update session
+   *
+   * Update properties of an existing session, such as title or other metadata.
    */
   public update<ThrowOnError extends boolean = false>(
     parameters: {
@@ -750,7 +794,9 @@ export class Session extends HeyApiClient {
   }
 
   /**
-   * Get a session's children
+   * Get session children
+   *
+   * Retrieve all child sessions that were forked from the specified parent session.
    */
   public children<ThrowOnError extends boolean = false>(
     parameters: {
@@ -778,7 +824,9 @@ export class Session extends HeyApiClient {
   }
 
   /**
-   * Get the todo list for a session
+   * Get session todos
+   *
+   * Retrieve the todo list associated with a specific session, showing tasks and action items.
    */
   public todo<ThrowOnError extends boolean = false>(
     parameters: {
@@ -806,7 +854,9 @@ export class Session extends HeyApiClient {
   }
 
   /**
-   * Analyze the app and create an AGENTS.md file
+   * Initialize session
+   *
+   * Analyze the current application and create an AGENTS.md file with project-specific agent configurations.
    */
   public init<ThrowOnError extends boolean = false>(
     parameters: {
@@ -845,7 +895,9 @@ export class Session extends HeyApiClient {
   }
 
   /**
-   * Fork an existing session at a specific message
+   * Fork session
+   *
+   * Create a new session by forking an existing session at a specific message point.
    */
   public fork<ThrowOnError extends boolean = false>(
     parameters: {
@@ -880,7 +932,9 @@ export class Session extends HeyApiClient {
   }
 
   /**
-   * Abort a session
+   * Abort session
+   *
+   * Abort an active session and stop any ongoing AI processing or command execution.
    */
   public abort<ThrowOnError extends boolean = false>(
     parameters: {
@@ -908,7 +962,9 @@ export class Session extends HeyApiClient {
   }
 
   /**
-   * Unshare the session
+   * Unshare session
+   *
+   * Remove the shareable link for a session, making it private again.
    */
   public unshare<ThrowOnError extends boolean = false>(
     parameters: {
@@ -936,7 +992,9 @@ export class Session extends HeyApiClient {
   }
 
   /**
-   * Share a session
+   * Share session
+   *
+   * Create a shareable link for a session, allowing others to view the conversation.
    */
   public share<ThrowOnError extends boolean = false>(
     parameters: {
@@ -964,7 +1022,9 @@ export class Session extends HeyApiClient {
   }
 
   /**
-   * Get the diff for this session
+   * Get session diff
+   *
+   * Get all file changes (diffs) made during this session.
    */
   public diff<ThrowOnError extends boolean = false>(
     parameters: {
@@ -994,7 +1054,9 @@ export class Session extends HeyApiClient {
   }
 
   /**
-   * Summarize the session
+   * Summarize session
+   *
+   * Generate a concise summary of the session using AI compaction to preserve key information.
    */
   public summarize<ThrowOnError extends boolean = false>(
     parameters: {
@@ -1031,7 +1093,9 @@ export class Session extends HeyApiClient {
   }
 
   /**
-   * List messages for a session
+   * Get session messages
+   *
+   * Retrieve all messages in a session, including user prompts and AI responses.
    */
   public messages<ThrowOnError extends boolean = false>(
     parameters: {
@@ -1061,7 +1125,9 @@ export class Session extends HeyApiClient {
   }
 
   /**
-   * Create and send a new message to a session
+   * Send message
+   *
+   * Create and send a new message to a session, streaming the AI response.
    */
   public prompt<ThrowOnError extends boolean = false>(
     parameters: {
@@ -1113,7 +1179,9 @@ export class Session extends HeyApiClient {
   }
 
   /**
-   * Get a message from a session
+   * Get message
+   *
+   * Retrieve a specific message from a session by its message ID.
    */
   public message<ThrowOnError extends boolean = false>(
     parameters: {
@@ -1143,7 +1211,9 @@ export class Session extends HeyApiClient {
   }
 
   /**
-   * Create and send a new message to a session, start if needed and return immediately
+   * Send async message
+   *
+   * Create and send a new message to a session asynchronously, starting the session if needed and returning immediately.
    */
   public promptAsync<ThrowOnError extends boolean = false>(
     parameters: {
@@ -1195,7 +1265,9 @@ export class Session extends HeyApiClient {
   }
 
   /**
-   * Send a new command to a session
+   * Send command
+   *
+   * Send a new command to a session for execution by the AI assistant.
    */
   public command<ThrowOnError extends boolean = false>(
     parameters: {
@@ -1238,7 +1310,9 @@ export class Session extends HeyApiClient {
   }
 
   /**
-   * Run a shell command
+   * Run shell command
+   *
+   * Execute a shell command within the session context and return the AI's response.
    */
   public shell<ThrowOnError extends boolean = false>(
     parameters: {
@@ -1280,7 +1354,9 @@ export class Session extends HeyApiClient {
   }
 
   /**
-   * Revert a message
+   * Revert message
+   *
+   * Revert a specific message in a session, undoing its effects and restoring the previous state.
    */
   public revert<ThrowOnError extends boolean = false>(
     parameters: {
@@ -1317,7 +1393,9 @@ export class Session extends HeyApiClient {
   }
 
   /**
-   * Restore all reverted messages
+   * Restore reverted messages
+   *
+   * Restore all previously reverted messages in a session.
    */
   public unrevert<ThrowOnError extends boolean = false>(
     parameters: {
@@ -1347,7 +1425,9 @@ export class Session extends HeyApiClient {
 
 export class Permission extends HeyApiClient {
   /**
-   * Respond to a permission request
+   * Respond to permission
+   *
+   * Approve or deny a permission request from the AI assistant.
    */
   public respond<ThrowOnError extends boolean = false>(
     parameters: {
@@ -1386,7 +1466,9 @@ export class Permission extends HeyApiClient {
 
 export class Command extends HeyApiClient {
   /**
-   * List all commands
+   * List commands
+   *
+   * Get a list of all available commands in the OpenCode system.
    */
   public list<ThrowOnError extends boolean = false>(
     parameters?: {
@@ -1405,7 +1487,9 @@ export class Command extends HeyApiClient {
 
 export class Oauth extends HeyApiClient {
   /**
-   * Authorize a provider using OAuth
+   * OAuth authorize
+   *
+   * Initiate OAuth authorization for a specific AI provider to get an authorization URL.
    */
   public authorize<ThrowOnError extends boolean = false>(
     parameters: {
@@ -1444,7 +1528,9 @@ export class Oauth extends HeyApiClient {
   }
 
   /**
-   * Handle OAuth callback for a provider
+   * OAuth callback
+   *
+   * Handle the OAuth callback from a provider after user authorization.
    */
   public callback<ThrowOnError extends boolean = false>(
     parameters: {
@@ -1487,7 +1573,9 @@ export class Oauth extends HeyApiClient {
 
 export class Provider extends HeyApiClient {
   /**
-   * List all providers
+   * List providers
+   *
+   * Get a list of all available AI providers, including both available and connected ones.
    */
   public list<ThrowOnError extends boolean = false>(
     parameters?: {
@@ -1504,7 +1592,9 @@ export class Provider extends HeyApiClient {
   }
 
   /**
-   * Get provider authentication methods
+   * Get provider auth methods
+   *
+   * Retrieve available authentication methods for all AI providers.
    */
   public auth<ThrowOnError extends boolean = false>(
     parameters?: {
@@ -1525,7 +1615,9 @@ export class Provider extends HeyApiClient {
 
 export class Find extends HeyApiClient {
   /**
-   * Find text in files
+   * Find text
+   *
+   * Search for text patterns across files in the project using ripgrep.
    */
   public text<ThrowOnError extends boolean = false>(
     parameters: {
@@ -1554,6 +1646,8 @@ export class Find extends HeyApiClient {
 
   /**
    * Find files
+   *
+   * Search for files by name or pattern in the project directory.
    */
   public files<ThrowOnError extends boolean = false>(
     parameters: {
@@ -1583,7 +1677,9 @@ export class Find extends HeyApiClient {
   }
 
   /**
-   * Find workspace symbols
+   * Find symbols
+   *
+   * Search for workspace symbols like functions, classes, and variables using LSP.
    */
   public symbols<ThrowOnError extends boolean = false>(
     parameters: {
@@ -1613,7 +1709,9 @@ export class Find extends HeyApiClient {
 
 export class File extends HeyApiClient {
   /**
-   * List files and directories
+   * List files
+   *
+   * List files and directories in a specified path.
    */
   public list<ThrowOnError extends boolean = false>(
     parameters: {
@@ -1641,7 +1739,9 @@ export class File extends HeyApiClient {
   }
 
   /**
-   * Read a file
+   * Read file
+   *
+   * Read the content of a specified file.
    */
   public read<ThrowOnError extends boolean = false>(
     parameters: {
@@ -1670,6 +1770,8 @@ export class File extends HeyApiClient {
 
   /**
    * Get file status
+   *
+   * Get the git status of all files in the project.
    */
   public status<ThrowOnError extends boolean = false>(
     parameters?: {
@@ -1688,7 +1790,9 @@ export class File extends HeyApiClient {
 
 export class App extends HeyApiClient {
   /**
-   * Write a log entry to the server logs
+   * Write log
+   *
+   * Write a log entry to the server logs with specified level and metadata.
    */
   public log<ThrowOnError extends boolean = false>(
     parameters?: {
@@ -1729,7 +1833,9 @@ export class App extends HeyApiClient {
   }
 
   /**
-   * List all agents
+   * List agents
+   *
+   * Get a list of all available AI agents in the OpenCode system.
    */
   public agents<ThrowOnError extends boolean = false>(
     parameters?: {
@@ -1748,6 +1854,8 @@ export class App extends HeyApiClient {
 
 export class Auth extends HeyApiClient {
   /**
+   * Remove MCP OAuth
+   *
    * Remove OAuth credentials for an MCP server
    */
   public remove<ThrowOnError extends boolean = false>(
@@ -1776,7 +1884,9 @@ export class Auth extends HeyApiClient {
   }
 
   /**
-   * Start OAuth authentication flow for an MCP server
+   * Start MCP OAuth
+   *
+   * Start OAuth authentication flow for a Model Context Protocol (MCP) server.
    */
   public start<ThrowOnError extends boolean = false>(
     parameters: {
@@ -1804,7 +1914,9 @@ export class Auth extends HeyApiClient {
   }
 
   /**
-   * Complete OAuth authentication with authorization code
+   * Complete MCP OAuth
+   *
+   * Complete OAuth authentication for a Model Context Protocol (MCP) server using the authorization code.
    */
   public callback<ThrowOnError extends boolean = false>(
     parameters: {
@@ -1839,6 +1951,8 @@ export class Auth extends HeyApiClient {
   }
 
   /**
+   * Authenticate MCP OAuth
+   *
    * Start OAuth flow and wait for callback (opens browser)
    */
   public authenticate<ThrowOnError extends boolean = false>(
@@ -1869,6 +1983,8 @@ export class Auth extends HeyApiClient {
   }
 
   /**
+   * Set auth credentials
+   *
    * Set authentication credentials
    */
   public set<ThrowOnError extends boolean = false>(
@@ -1906,7 +2022,9 @@ export class Auth extends HeyApiClient {
 
 export class Mcp extends HeyApiClient {
   /**
-   * Get MCP server status
+   * Get MCP status
+   *
+   * Get the status of all Model Context Protocol (MCP) servers.
    */
   public status<ThrowOnError extends boolean = false>(
     parameters?: {
@@ -1923,7 +2041,9 @@ export class Mcp extends HeyApiClient {
   }
 
   /**
-   * Add MCP server dynamically
+   * Add MCP server
+   *
+   * Dynamically add a new Model Context Protocol (MCP) server to the system.
    */
   public add<ThrowOnError extends boolean = false>(
     parameters?: {
@@ -1962,6 +2082,8 @@ export class Mcp extends HeyApiClient {
 
 export class Lsp extends HeyApiClient {
   /**
+   * Get LSP status
+   *
    * Get LSP server status
    */
   public status<ThrowOnError extends boolean = false>(
@@ -1982,6 +2104,8 @@ export class Lsp extends HeyApiClient {
 export class Formatter extends HeyApiClient {
   /**
    * Get formatter status
+   *
+   * Get formatter status
    */
   public status<ThrowOnError extends boolean = false>(
     parameters?: {
@@ -2000,7 +2124,9 @@ export class Formatter extends HeyApiClient {
 
 export class Control extends HeyApiClient {
   /**
-   * Get the next TUI request from the queue
+   * Get next TUI request
+   *
+   * Retrieve the next TUI (Terminal User Interface) request from the queue for processing.
    */
   public next<ThrowOnError extends boolean = false>(
     parameters?: {
@@ -2017,7 +2143,9 @@ export class Control extends HeyApiClient {
   }
 
   /**
-   * Submit a response to the TUI request queue
+   * Submit TUI response
+   *
+   * Submit a response to the TUI request queue to complete a pending request.
    */
   public response<ThrowOnError extends boolean = false>(
     parameters?: {
@@ -2042,6 +2170,8 @@ export class Control extends HeyApiClient {
 
 export class Tui extends HeyApiClient {
   /**
+   * Append TUI prompt
+   *
    * Append prompt to the TUI
    */
   public appendPrompt<ThrowOnError extends boolean = false>(
@@ -2075,7 +2205,9 @@ export class Tui extends HeyApiClient {
   }
 
   /**
-   * Open the help dialog
+   * Open help dialog
+   *
+   * Open the help dialog in the TUI to display user assistance information.
    */
   public openHelp<ThrowOnError extends boolean = false>(
     parameters?: {
@@ -2092,6 +2224,8 @@ export class Tui extends HeyApiClient {
   }
 
   /**
+   * Open sessions dialog
+   *
    * Open the session dialog
    */
   public openSessions<ThrowOnError extends boolean = false>(
@@ -2109,6 +2243,8 @@ export class Tui extends HeyApiClient {
   }
 
   /**
+   * Open themes dialog
+   *
    * Open the theme dialog
    */
   public openThemes<ThrowOnError extends boolean = false>(
@@ -2126,6 +2262,8 @@ export class Tui extends HeyApiClient {
   }
 
   /**
+   * Open models dialog
+   *
    * Open the model dialog
    */
   public openModels<ThrowOnError extends boolean = false>(
@@ -2143,6 +2281,8 @@ export class Tui extends HeyApiClient {
   }
 
   /**
+   * Submit TUI prompt
+   *
    * Submit the prompt
    */
   public submitPrompt<ThrowOnError extends boolean = false>(
@@ -2160,6 +2300,8 @@ export class Tui extends HeyApiClient {
   }
 
   /**
+   * Clear TUI prompt
+   *
    * Clear the prompt
    */
   public clearPrompt<ThrowOnError extends boolean = false>(
@@ -2177,6 +2319,8 @@ export class Tui extends HeyApiClient {
   }
 
   /**
+   * Execute TUI command
+   *
    * Execute a TUI command (e.g. agent_cycle)
    */
   public executeCommand<ThrowOnError extends boolean = false>(
@@ -2210,6 +2354,8 @@ export class Tui extends HeyApiClient {
   }
 
   /**
+   * Show TUI toast
+   *
    * Show a toast notification in the TUI
    */
   public showToast<ThrowOnError extends boolean = false>(
@@ -2249,6 +2395,8 @@ export class Tui extends HeyApiClient {
   }
 
   /**
+   * Publish TUI event
+   *
    * Publish a TUI event
    */
   public publish<ThrowOnError extends boolean = false>(
@@ -2276,6 +2424,8 @@ export class Tui extends HeyApiClient {
 
 export class Event extends HeyApiClient {
   /**
+   * Subscribe to events
+   *
    * Get events
    */
   public subscribe<ThrowOnError extends boolean = false>(

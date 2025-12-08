@@ -3807,6 +3807,7 @@
             "required": true
           }
         ],
+        "summary": "Remove MCP OAuth",
         "description": "Remove OAuth credentials for an MCP server",
         "responses": {
           "200": {
@@ -3947,6 +3948,7 @@
             "required": true
           }
         ],
+        "summary": "Authenticate MCP OAuth",
         "description": "Start OAuth flow and wait for callback (opens browser)",
         "responses": {
           "200": {
@@ -4000,6 +4002,7 @@
             }
           }
         ],
+        "summary": "Get LSP status",
         "description": "Get LSP server status",
         "responses": {
           "200": {
@@ -4036,6 +4039,7 @@
             }
           }
         ],
+        "summary": "Get formatter status",
         "description": "Get formatter status",
         "responses": {
           "200": {
@@ -4072,6 +4076,7 @@
             }
           }
         ],
+        "summary": "Append TUI prompt",
         "description": "Append prompt to the TUI",
         "responses": {
           "200": {
@@ -4166,6 +4171,7 @@
             }
           }
         ],
+        "summary": "Open sessions dialog",
         "description": "Open the session dialog",
         "responses": {
           "200": {
@@ -4199,6 +4205,7 @@
             }
           }
         ],
+        "summary": "Open themes dialog",
         "description": "Open the theme dialog",
         "responses": {
           "200": {
@@ -4232,6 +4239,7 @@
             }
           }
         ],
+        "summary": "Open models dialog",
         "description": "Open the model dialog",
         "responses": {
           "200": {
@@ -4265,6 +4273,7 @@
             }
           }
         ],
+        "summary": "Submit TUI prompt",
         "description": "Submit the prompt",
         "responses": {
           "200": {
@@ -4298,6 +4307,7 @@
             }
           }
         ],
+        "summary": "Clear TUI prompt",
         "description": "Clear the prompt",
         "responses": {
           "200": {
@@ -4331,6 +4341,7 @@
             }
           }
         ],
+        "summary": "Execute TUI command",
         "description": "Execute a TUI command (e.g. agent_cycle)",
         "responses": {
           "200": {
@@ -4391,6 +4402,7 @@
             }
           }
         ],
+        "summary": "Show TUI toast",
         "description": "Show a toast notification in the TUI",
         "responses": {
           "200": {
@@ -4459,6 +4471,7 @@
             }
           }
         ],
+        "summary": "Publish TUI event",
         "description": "Publish a TUI event",
         "responses": {
           "200": {
@@ -4614,6 +4627,7 @@
             "required": true
           }
         ],
+        "summary": "Set auth credentials",
         "description": "Set authentication credentials",
         "responses": {
           "200": {
@@ -4666,6 +4680,7 @@
             }
           }
         ],
+        "summary": "Subscribe to events",
         "description": "Get events",
         "responses": {
           "200": {

@@ -1708,7 +1708,7 @@ export type ProjectCurrentData = {
 
 export type ProjectCurrentResponses = {
   /**
-   * Current project
+   * Current project information
    */
   200: Project
 }
