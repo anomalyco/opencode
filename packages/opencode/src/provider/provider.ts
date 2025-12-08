@@ -287,11 +287,15 @@ export namespace Provider {
     },
     "sap-ai-core": async () => {
       const auth = await Auth.get("sap-ai-core")
-      let envServiceKey = Env.get("AICORE_SERVICE_KEY")
-      if (auth?.type === "api" && !envServiceKey) {
-        envServiceKey = auth.key
-        Env.set("AICORE_SERVICE_KEY", envServiceKey)
-      }
+      const envServiceKey = iife(() => {
+        const envAICoreServiceKey = Env.get("AICORE_SERVICE_KEY")
+        if (envAICoreServiceKey) return envAICoreServiceKey
+        if (auth?.type === "api") {
+          Env.set("AICORE_SERVICE_KEY", auth.key)
+          return auth.key
+        }
+        return undefined
+      })
       const deploymentId = Env.get("AICORE_DEPLOYMENT_ID")
       const resourceGroup = Env.get("AICORE_RESOURCE_GROUP")
 
