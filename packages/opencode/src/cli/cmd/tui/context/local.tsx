@@ -68,6 +68,9 @@ export const { use: useLocal, provider: LocalProvider } = createSimpleContext({
         theme.error,
       ])
       return {
+        list() {
+          return agents()
+        },
         current() {
           return agents().find((x) => x.name === agentStore.current)!
         },
@@ -208,17 +211,6 @@ export const { use: useLocal, provider: LocalProvider } = createSimpleContext({
         },
         favorite() {
           return modelStore.favorite
-        },
-        list() {
-          return sync.data.provider.flatMap((provider) =>
-            Object.entries(provider.models).map(([modelID, model]) => ({
-              ...model,
-              providerID: provider.id,
-              modelID,
-              name: model.name ?? modelID,
-              provider,
-            })),
-          )
         },
         parsed: createMemo(() => {
           const value = currentModel()
