@@ -762,7 +762,7 @@ export namespace SessionPrompt {
       if (!execute) continue
 
       // Wrap execute to add plugin hooks and format output
-      item.execute = async (args, opts) => {
+      item.execute = async (args: any, opts: any) => {
         await Plugin.trigger(
           "tool.execute.before",
           {
@@ -813,7 +813,7 @@ export namespace SessionPrompt {
           content: result.content, // directly return content to preserve ordering when outputting to model
         }
       }
-      item.toModelOutput = (result) => {
+      item.toModelOutput = (result: any) => {
         return {
           type: "text",
           value: result.output,
