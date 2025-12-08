@@ -1,7 +1,7 @@
 import { createStore, produce, reconcile } from "solid-js/store"
 import { batch, createEffect, createMemo } from "solid-js"
 import { uniqueBy } from "remeda"
-import type { FileContent, FileNode, Model, Provider, File as FileStatus } from "@opencode-ai/sdk"
+import type { FileContent, FileNode, Model, Provider, File as FileStatus } from "@opencode-ai/sdk/v2"
 import { createSimpleContext } from "@opencode-ai/ui/context"
 import { useSDK } from "./sdk"
 import { useSync } from "./sync"
@@ -257,7 +257,7 @@ export const { use: useLocal, provider: LocalProvider } = createSimpleContext({
 
       const load = async (path: string) => {
         const relativePath = relative(path)
-        sdk.client.file.read({ query: { path: relativePath } }).then((x) => {
+        sdk.client.file.read({ path: relativePath }).then((x) => {
           setStore(
             "node",
             relativePath,
@@ -305,7 +305,7 @@ export const { use: useLocal, provider: LocalProvider } = createSimpleContext({
       }
 
       const list = async (path: string) => {
-        return sdk.client.file.list({ query: { path: path + "/" } }).then((x) => {
+        return sdk.client.file.list({ path: path + "/" }).then((x) => {
           setStore(
             "node",
             produce((draft) => {
@@ -318,10 +318,9 @@ export const { use: useLocal, provider: LocalProvider } = createSimpleContext({
         })
       }
 
-      const searchFiles = (query: string) =>
-        sdk.client.find.files({ query: { query, dirs: "false" } }).then((x) => x.data!)
+      const searchFiles = (query: string) => sdk.client.find.files({ query, dirs: "false" }).then((x) => x.data!)
       const searchFilesAndDirectories = (query: string) =>
-        sdk.client.find.files({ query: { query, dirs: "true" } }).then((x) => x.data!)
+        sdk.client.find.files({ query, dirs: "true" }).then((x) => x.data!)
 
       sdk.event.listen((e) => {
         const event = e.details

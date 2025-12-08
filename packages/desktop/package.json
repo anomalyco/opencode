@@ -4,7 +4,7 @@
   "description": "",
   "type": "module",
   "exports": {
-    ".": "./src/index.tsx",
+    ".": "./src/index.ts",
     "./vite": "./vite.js"
   },
   "scripts": {

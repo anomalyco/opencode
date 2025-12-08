@@ -175,4 +175,8 @@ export interface Hooks {
       metadata: any
     },
   ) => Promise<void>
+  "experimental.text.complete"?: (
+    input: { sessionID: string; messageID: string; partID: string },
+    output: { text: string },
+  ) => Promise<void>
 }

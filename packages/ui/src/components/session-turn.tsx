@@ -1,19 +1,9 @@
 import { AssistantMessage } from "@opencode-ai/sdk"
 import { useData } from "../context"
+import { useDiffComponent } from "../context/diff"
 import { Binary } from "@opencode-ai/util/binary"
 import { getDirectory, getFilename } from "@opencode-ai/util/path"
-import {
-  createEffect,
-  createMemo,
-  createSignal,
-  For,
-  Match,
-  onMount,
-  ParentProps,
-  Show,
-  Switch,
-  ValidComponent,
-} from "solid-js"
+import { createEffect, createMemo, createSignal, For, Match, onMount, ParentProps, Show, Switch } from "solid-js"
 import { DiffChanges } from "./diff-changes"
 import { Typewriter } from "./typewriter"
 import { Message } from "./message-part"
@@ -36,10 +26,10 @@ export function SessionTurn(
       content?: string
       container?: string
     }
-    diffComponent: ValidComponent
   }>,
 ) {
   const data = useData()
+  const diffComponent = useDiffComponent()
   const match = Binary.search(data.store.session, props.sessionID, (s) => s.id)
   if (!match.found) throw new Error(`Session ${props.sessionID} not found`)
 
@@ -129,7 +119,7 @@ export function SessionTurn(
                   </div>
                 </div>
                 <div data-slot="session-turn-message-content">
-                  <Message message={msg()} parts={parts()} sanitize={sanitizer()} diffComponent={props.diffComponent} />
+                  <Message message={msg()} parts={parts()} sanitize={sanitizer()} />
                 </div>
                 {/* Summary */}
                 <Show when={completed()}>
@@ -180,7 +170,7 @@ export function SessionTurn(
                             </StickyAccordionHeader>
                             <Accordion.Content data-slot="session-turn-accordion-content">
                               <Dynamic
-                                component={props.diffComponent}
+                                component={diffComponent}
                                 before={{
                                   name: diff.file!,
                                   contents: diff.before!,
@@ -206,11 +196,7 @@ export function SessionTurn(
                 <div data-slot="session-turn-response-section">
                   <Switch>
                     <Match when={!completed()}>
-                      <MessageProgress
-                        assistantMessages={assistantMessages}
-                        done={!messageWorking()}
-                        diffComponent={props.diffComponent}
-                      />
+                      <MessageProgress assistantMessages={assistantMessages} done={!messageWorking()} />
                     </Match>
                     <Match when={completed() && hasToolPart()}>
                       <Collapsible variant="ghost" open={detailsExpanded()} onOpenChange={setDetailsExpanded}>
@@ -241,18 +227,10 @@ export function SessionTurn(
                                       message={assistantMessage}
                                       parts={parts().filter((p) => p?.id !== last()?.id)}
                                       sanitize={sanitizer()}
-                                      diffComponent={props.diffComponent}
                                     />
                                   )
                                 }
-                                return (
-                                  <Message
-                                    message={assistantMessage}
-                                    parts={parts()}
-                                    sanitize={sanitizer()}
-                                    diffComponent={props.diffComponent}
-                                  />
-                                )
+                                return <Message message={assistantMessage} parts={parts()} sanitize={sanitizer()} />
                               }}
                             </For>
                             <Show when={error()}>
