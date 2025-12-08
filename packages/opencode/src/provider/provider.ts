@@ -287,13 +287,21 @@ export namespace Provider {
     },
     "sap-ai-core": async () => {
       const auth = await Auth.get("sap-ai-core")
-      const serviceKey = Env.get("SAP_AI_SERVICE_KEY") || (auth?.type === "api" ? auth.key : undefined)
-      const deploymentId = Env.get("SAP_AI_DEPLOYMENT_ID") || "d65d81e7c077e583"
-      const resourceGroup = Env.get("SAP_AI_RESOURCE_GROUP") || "default"
+      const envServiceKey = iife(() => {
+        const envAICoreServiceKey = Env.get("AICORE_SERVICE_KEY")
+        if (envAICoreServiceKey) return envAICoreServiceKey
+        if (auth?.type === "api") {
+          Env.set("AICORE_SERVICE_KEY", auth.key)
+          return auth.key
+        }
+        return undefined
+      })
+      const deploymentId = Env.get("AICORE_DEPLOYMENT_ID")
+      const resourceGroup = Env.get("AICORE_RESOURCE_GROUP")
 
       return {
-        autoload: !!serviceKey,
-        options: serviceKey ? { serviceKey, deploymentId, resourceGroup } : {},
+        autoload: !!envServiceKey,
+        options: envServiceKey ? { deploymentId, resourceGroup } : {},
         async getModel(sdk: any, modelID: string) {
           return sdk(modelID)
         },
@@ -795,7 +803,7 @@ export namespace Provider {
       const mod = await import(installedPath)
 
       const fn = mod[Object.keys(mod).find((key) => key.startsWith("create"))!]
-      const loaded = await fn({
+      const loaded = fn({
         name: model.providerID,
         ...options,
       })

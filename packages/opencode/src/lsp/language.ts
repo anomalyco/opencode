@@ -105,4 +105,7 @@ export const LANGUAGE_EXTENSIONS: Record<string, string> = {
   ".astro": "astro",
   ".ml": "ocaml",
   ".mli": "ocaml",
+  ".tf": "terraform",
+  ".tfvars": "terraform-vars",
+  ".hcl": "hcl",
 } as const
