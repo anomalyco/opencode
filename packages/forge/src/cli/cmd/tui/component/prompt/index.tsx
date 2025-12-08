@@ -24,18 +24,16 @@ import { Shimmer } from "../../ui/shimmer"
 import { Log } from "@/util/log"
 import { useToast } from "../../ui/toast"
 import { useArgs } from "@tui/context/args"
-import { applySessionSetup, setAgentAndModel } from "../../../session-init"
+import { applyAgentEntry, type AgentFlag } from "../../../session-init"
 
-type PlanContext = {
+type AgentQueueContext = {
   sessionID: string
-  planAgent: string
-  planModeId: string
-  baseAgent: string | null
-  baseModel: string | null
-  active: boolean
+  entries: AgentFlag[]
+  index: number
+  active: { agent: string; model: string | null; modeId: string | null } | null
 }
 
-const planContexts = new Map<string, PlanContext>()
+const agentQueues = new Map<string, AgentQueueContext>()
 
 export type PromptProps = {
   sessionID?: string
@@ -77,7 +75,7 @@ export function Prompt(props: PromptProps) {
   const switchingAgentName = () => local.session.switchingTo ?? local.agent.current().name
   const [serverSyncing, setServerSyncing] = createSignal(false)
   const isInitializing = () => isSwitchingAgent() || serverSyncing()
-  let planContext: PlanContext | null = null
+  let agentQueue: AgentQueueContext | null = null
 
   const textareaKeybindings = createMemo(() => {
     const newlineBindings = keybind.all.input_newline || []
@@ -107,6 +105,71 @@ export function Prompt(props: PromptProps) {
   const agentStyleId = syntax().getStyleId("extmark.agent")!
   const pasteStyleId = syntax().getStyleId("extmark.paste")!
   let promptPartTypeId: number
+  const agentEntries = () => args.agents ?? []
+
+  async function syncLocalFromApplied(applied: { agent: string; model: string | null; modeId: string | null }) {
+    if (local.agent.current().name !== applied.agent) {
+      await local.agent.set(applied.agent)
+    }
+    if (applied.model && local.model.current() !== applied.model) {
+      await local.model.set(applied.model).catch((error) => {
+        log.error("tui-agent-queue.local-model.failed", {
+          sessionID: agentQueue?.sessionID ?? null,
+          model: applied.model,
+          error: error instanceof Error ? error.message : String(error),
+        })
+      })
+    }
+    if (applied.modeId && local.mode.current() !== applied.modeId) {
+      await local.mode.set(applied.modeId).catch((error) => {
+        log.error("tui-agent-queue.local-mode.failed", {
+          sessionID: agentQueue?.sessionID ?? null,
+          mode: applied.modeId,
+          error: error instanceof Error ? error.message : String(error),
+        })
+      })
+    }
+  }
+
+  async function applyAgentQueueEntry(
+    sessionID: string,
+    entries: AgentFlag[],
+    index: number,
+    reason: "initial" | "switch",
+  ) {
+    const entry = entries[index]
+    if (!entry || !sdk.client) return
+    local.session.setSwitching(true, entry.name)
+    try {
+      const applied = await applyAgentEntry({ sdk: sdk.client, sessionID, entry })
+      agentQueue = { sessionID, entries, index, active: applied }
+      agentQueues.set(sessionID, agentQueue)
+      await syncLocalFromApplied(applied)
+      log.info("tui-agent-queue.apply", {
+        sessionID,
+        agent: applied.agent,
+        model: applied.model,
+        mode: applied.modeId,
+        reason,
+        index,
+      })
+    } catch (error) {
+      log.error("tui-agent-queue.apply.failed", {
+        sessionID,
+        agent: entry.name,
+        model: entry.model ?? null,
+        mode: entry.mode ?? null,
+        error: error instanceof Error ? error.message : String(error),
+      })
+      toast.show({
+        variant: "error",
+        message: `Failed to set agent '${entry.name}': ${error instanceof Error ? error.message : String(error)}`,
+        duration: 5000,
+      })
+    } finally {
+      local.session.setSwitching(false, null)
+    }
+  }
 
   command.register(() => {
     return [
@@ -303,77 +366,28 @@ export function Prompt(props: PromptProps) {
   })
 
   createEffect(() => {
-    if (props.sessionID && planContexts.has(props.sessionID)) {
-      planContext = planContexts.get(props.sessionID)!
+    const sessionID = props.sessionID
+    if (!sessionID) return
+    if (agentQueues.has(sessionID)) {
+      agentQueue = agentQueues.get(sessionID)!
+      return
     }
+    if (agentEntries().length === 0) return
+    const placeholder: AgentQueueContext = { sessionID, entries: agentEntries(), index: 0, active: null }
+    agentQueue = placeholder
+    agentQueues.set(sessionID, placeholder)
+    void applyAgentQueueEntry(sessionID, agentEntries(), 0, "initial")
   })
 
   onMount(() => {
     const off = (sdk.event as any).on("session.mode.changed", async (evt: any) => {
       const props = (evt?.properties ?? {}) as { sessionID?: string; agent?: string; modeId?: string }
-      if (!planContext) return
-      if (!planContext.active) return
-      if (!props.sessionID || props.sessionID !== planContext.sessionID) return
-      if (!props.agent || props.agent !== planContext.planAgent) return
+      if (!agentQueue || !agentQueue.active) return
+      if (!props.sessionID || props.sessionID !== agentQueue.sessionID) return
       const modeId = props.modeId
-      // If still in plan mode, just reflect it locally
-      if (modeId === planContext.planModeId) {
-        if (modeId && local.mode.current() !== modeId) {
-          try {
-            await local.mode.set(modeId)
-          } catch (error) {
-            log.error("tui-plan-mode.still-plan.local-set-failed", {
-              sessionID: planContext.sessionID,
-              modeId,
-              error: error instanceof Error ? error.message : String(error),
-            })
-          }
-        }
-        return
-      }
-
-      // Left plan mode: switch back to base agent/model if we have it
-      if (planContext.baseAgent) {
-        try {
-          await setAgentAndModel(sdk.client, planContext.sessionID, planContext.baseAgent, planContext.baseModel ?? undefined)
-          if (planContext.baseModel) {
-            try {
-              await local.model.set(planContext.baseModel)
-            } catch (error) {
-              log.error("tui-plan-switch-back.local-model-set-failed", {
-                sessionID: planContext.sessionID,
-                model: planContext.baseModel,
-                error: error instanceof Error ? error.message : String(error),
-              })
-            }
-          }
-          planContext.active = false
-        } catch (error) {
-          log.error("Failed to switch back after plan mode", {
-            sessionID: planContext.sessionID,
-            agent: planContext.baseAgent,
-            model: planContext.baseModel ?? null,
-            error: error instanceof Error ? error.message : String(error),
-          })
-          planContext.active = false
-        }
-      }
-
-      if (modeId && local.mode.current() !== modeId) {
-        try {
-          await local.mode.set(modeId)
-        } catch (error) {
-          log.error("tui-plan-mode.local-set-failed", {
-            sessionID: planContext.sessionID,
-            modeId,
-            error: error instanceof Error ? error.message : String(error),
-          })
-        }
-      }
-      if (!planContext.active) {
-        planContexts.delete(planContext.sessionID)
-        planContext = null
-      }
+      if (!modeId || modeId === agentQueue.active.modeId) return
+      if (agentQueue.index + 1 >= agentQueue.entries.length) return
+      await applyAgentQueueEntry(agentQueue.sessionID, agentQueue.entries, agentQueue.index + 1, "switch")
     })
 
     onCleanup(() => {
@@ -501,6 +515,12 @@ export function Prompt(props: PromptProps) {
   }
 
   async function submitPrompt() {
+    log.info("prompt.submit.start", {
+      hasInput: Boolean(store.prompt.input),
+      createdSession: !props.sessionID,
+      switching: isSwitchingAgent(),
+      serverSyncing: serverSyncing(),
+    })
     if (props.disabled) return
     if (autocomplete.visible) return
     if (!store.prompt.input) return
@@ -578,54 +598,12 @@ export function Prompt(props: PromptProps) {
         // Filter out agent parts - they're for UI only, not for sending to the server
         const validParts = nonTextParts.filter((p) => p.type !== "agent")
 
-        if (createdSession) {
-          try {
-            log.info("tui-session-setup.start", {
-              sessionID,
-              agent: args.agent ?? null,
-              planAgent: args.planAgent ?? null,
-            })
-            const setupResult = await applySessionSetup({
-              sdk: sdk.client,
-              sessionID,
-              baseAgentInput: args.agent,
-              planAgentInput: args.planAgent,
-            })
-            if (setupResult.planAgent && setupResult.planModeId) {
-              planContext = {
-                sessionID,
-                planAgent: setupResult.planAgent,
-                planModeId: setupResult.planModeId,
-                baseAgent: setupResult.baseAgent ?? local.agent.current().name,
-                baseModel: setupResult.baseModel,
-                active: true,
-              }
-              planContexts.set(sessionID, planContext)
-          } else {
-            planContext = null
-          }
-            if (setupResult.planModeId && local.mode.current() !== setupResult.planModeId) {
-              try {
-                await local.mode.set(setupResult.planModeId)
-                log.info("tui-session-setup.plan-mode.local-set", {
-                  sessionID,
-                  mode: setupResult.planModeId,
-                })
-              } catch (error) {
-                log.error("Failed to set plan mode locally", {
-                  sessionID,
-                  mode: setupResult.planModeId,
-                  error: error instanceof Error ? error.message : String(error),
-                })
-              }
-            }
-            log.info("tui-session-setup.done", { sessionID })
-          } catch (error) {
-            log.error("Failed to apply session setup", {
-              sessionID,
-              error: error instanceof Error ? error.message : String(error),
-            })
-          }
+        const entries = agentEntries()
+        if (
+          entries.length > 0 &&
+          (!agentQueue || agentQueue.sessionID !== sessionID || agentQueue.active === null || createdSession)
+        ) {
+          await applyAgentQueueEntry(sessionID, entries, 0, "initial")
         }
 
         sdk.client.session.prompt({

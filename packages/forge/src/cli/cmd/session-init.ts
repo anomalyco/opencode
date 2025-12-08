@@ -3,27 +3,101 @@ import type { ForgeClient } from "@forge/sdk"
 import { matchAgent, getAllAgents } from "@/acp/agents"
 import { Log } from "@/util/log"
 
-export function parseAgentInput(input?: string | null): { agent?: string; model?: string } {
-  if (!input) return {}
+export type AgentFlag = {
+  name: string
+  model?: string
+  mode?: string
+}
+
+export type ResolvedAgent = {
+  agent: string
+  model: string | null
+  modeId: string | null
+}
+
+function parseKeyValueAgent(input: string): AgentFlag {
+  const parts = input
+    .split(/\s+/)
+    .map((p) => p.trim())
+    .filter(Boolean)
+
+  if (parts.length === 0) {
+    throw new Error("Agent value is empty")
+  }
+
+  const result: Partial<AgentFlag> = {}
+
+  for (const part of parts) {
+    const [key, ...rest] = part.split("=")
+    if (!key || rest.length === 0) {
+      throw new Error(`Invalid agent entry "${part}". Use name=... model=... mode=...`)
+    }
+    const value = rest.join("=")
+    if (!value) {
+      throw new Error(`Missing value for "${key}" in agent entry`)
+    }
+    if (key !== "name" && key !== "model" && key !== "mode") {
+      throw new Error(`Unknown agent key "${key}". Allowed keys: name, model, mode`)
+    }
+    if (result[key as keyof AgentFlag]) {
+      throw new Error(`Duplicate key "${key}" in agent entry`)
+    }
+    if (key === "name") result.name = value
+    if (key === "model") result.model = value
+    if (key === "mode") result.mode = value
+  }
+
+  if (!result.name) {
+    throw new Error("Agent name is required (name=...)")
+  }
+
+  return result as AgentFlag
+}
+
+function parseBareAgent(input: string): AgentFlag {
+  if (!input.trim()) throw new Error("Agent value is empty")
   const idx = input.lastIndexOf("/")
   if (idx > 0 && idx < input.length - 1) {
-    return { agent: input.slice(0, idx), model: input.slice(idx + 1) }
+    return { name: input.slice(0, idx), model: input.slice(idx + 1) }
   }
-  return { agent: input }
+  return { name: input }
+}
+
+/**
+ * Parse repeatable --agent strings into structured entries.
+ * Supports either key/value pairs ("name=claude model=opus") or bare values ("claude/opus").
+ */
+export function parseAgentFlags(input?: string | string[] | null): { agents: AgentFlag[]; rawCount: number } {
+  if (input == null) return { agents: [], rawCount: 0 }
+  const values = Array.isArray(input) ? input : [input]
+  const agents: AgentFlag[] = []
+
+  for (const value of values) {
+    if (typeof value !== "string") continue
+    const trimmed = value.trim()
+    if (!trimmed) continue
+    const hasKeyValue = trimmed.includes("=")
+    const parsed = hasKeyValue ? parseKeyValueAgent(trimmed) : parseBareAgent(trimmed)
+    agents.push(parsed)
+  }
+
+  return { agents, rawCount: values.length }
 }
 
 export function modelSupported(models: SessionModelState | null | undefined, modelId: string) {
   return models?.availableModels?.some((model) => model.modelId === modelId)
 }
 
-function hasPlanKeyword(value?: string | null) {
-  return typeof value === "string" && value.toLowerCase().includes("plan")
-}
-
-export function findPlanModeId(modes: SessionModeState | null | undefined): string | null {
+export function findModeId(target: string, modes: SessionModeState | null | undefined): string | null {
   if (!modes?.availableModes?.length) return null
-  const match = modes.availableModes.find((mode) => hasPlanKeyword(mode.id) || hasPlanKeyword(mode.name))
-  return match?.id ?? null
+  const normalized = target.toLowerCase()
+  const exact = modes.availableModes.find((mode) => mode.id === target || mode.name === target)
+  if (exact) return exact.id
+  const loose = modes.availableModes.find(
+    (mode) => mode.id.toLowerCase() === normalized || mode.name.toLowerCase() === normalized,
+  )
+  if (loose) return loose.id
+  return null
 }
 
 export async function setAgentAndModel(
@@ -71,123 +145,79 @@ export async function setAgentAndModel(
   return { agent: updatedAgent, modes, models }
 }
 
-export type ModeFlagArgs = {
-  planAgent: string
-  planModel?: string
-}
-
-export type ModeSwitchConfig = ModeFlagArgs & {
-  planModeId: string
-  switched: boolean
-}
-
-export function collectModeFlags(args: Record<string, any>): ModeFlagArgs | null {
-  const planInput = args["plan-agent"] ?? args.planAgent
-
-  const planParsed = parseAgentInput(planInput)
-
-  if (planParsed.agent) {
-    return {
-      planAgent: planParsed.agent ?? "",
-      planModel: planParsed.model,
-    }
+export function validateAgentFlags(agents: AgentFlag[], rawCount: number, fail: (msg: string) => never) {
+  if (rawCount > 0 && agents.length === 0) {
+    fail("Agent list is empty")
   }
-
-  return null
+  const missingName = agents.find((a) => !a.name || !a.name.trim())
+  if (missingName) fail("Agent name is required")
 }
 
-export function validateModeFlags(flags: ModeFlagArgs | null, args: Record<string, any>, fail: (msg: string) => never) {
-  if (!flags) return
-
-  if (!flags.planAgent) {
-    fail("--plan-agent is required when using plan/implement mode flags")
-  }
-
-  if (args.command) {
-    fail("Plan/implement mode flags are only supported with prompts (omit --command)")
-  }
-}
-
-function resolveAgentInput(input?: string | null): { agent?: string; model?: string } {
-  if (!input) return {}
-  const parsed = parseAgentInput(input)
-  const match = parsed.agent ? matchAgent(parsed.agent) : null
-  if (parsed.agent && !match?.success) {
+function resolveAgentName(name: string) {
+  const match = matchAgent(name)
+  if (!match.success) {
     const available = getAllAgents()
       .map((a) => a.name)
       .join(", ")
-    throw new Error(`Agent '${parsed.agent}' not found. Available: ${available}`)
+    throw new Error(`Agent '${name}' not found. Available: ${available}`)
   }
-  return {
-    agent: match?.success ? match.match.name : parsed.agent,
-    model: parsed.model,
-  }
+  return match.match.name
 }
 
-export async function applySessionSetup(input: {
+function resolveMode(targetMode: string | undefined, modes: SessionModeState | null) {
+  if (!targetMode) return modes?.currentModeId ?? modes?.availableModes?.[0]?.id ?? null
+  const resolved = findModeId(targetMode, modes)
+  if (!resolved) {
+    const available = (modes?.availableModes ?? []).map((m) => m.id).join(", ")
+    throw new Error(`Mode '${targetMode}' not available. Available: ${available || "none"}`)
+  }
+  return resolved
+}
+
+export async function applyAgentEntry(options: {
   sdk: ForgeClient
   sessionID: string
-  baseAgentInput?: string
-  planAgentInput?: string
-  planModelInput?: string
-}): Promise<{
-  sessionID: string
-  baseAgent: string | null
-  baseModel: string | null
-  planAgent: string | null
-  planModel: string | null
-  planModeId: string | null
-}> {
-  const { sdk, sessionID } = input
-  const log = Log.create({ service: "session-setup" })
-  log.info("start", {
-    sessionID,
-    baseAgentInput: input.baseAgentInput ?? null,
-    planAgentInput: input.planAgentInput ?? null,
-    planModelInput: input.planModelInput ?? null,
+  entry: AgentFlag
+  log?: ReturnType<typeof Log.create>
+}): Promise<ResolvedAgent> {
+  const log = options.log ?? Log.create({ service: "session-agent" })
+  const agentName = resolveAgentName(options.entry.name)
+
+  log.info("agent.apply", {
+    sessionID: options.sessionID,
+    agent: agentName,
+    model: options.entry.model ?? null,
+    mode: options.entry.mode ?? null,
   })
-  const baseParsed = resolveAgentInput(input.baseAgentInput)
-  const planParsed = resolveAgentInput(input.planAgentInput)
 
-  let baseAgent: string | null = null
-  let baseModel: string | null = null
-  if (baseParsed.agent) {
-    log.info("set-base-agent", { sessionID, agent: baseParsed.agent, model: baseParsed.model ?? null })
-    const baseResult = await setAgentAndModel(sdk, sessionID, baseParsed.agent, baseParsed.model)
-    baseAgent = baseResult.agent
-    baseModel = baseParsed.model ?? baseResult.models?.currentModelId ?? null
-    log.info("set-base-agent.done", { sessionID, agent: baseAgent, model: baseModel })
+  const { modes, models, agent } = await setAgentAndModel(
+    options.sdk,
+    options.sessionID,
+    agentName,
+    options.entry.model,
+  )
+
+  const modeId = resolveMode(options.entry.mode, modes)
+  if (modeId && modes?.currentModeId !== modeId) {
+    await options.sdk.session.mode({
+      path: { id: options.sessionID },
+      body: { mode: modeId },
+    })
+    log.info("agent.apply.mode", { sessionID: options.sessionID, agent: agentName, mode: modeId })
   }
 
-  let planAgent: string | null = null
-  let planModel: string | null = null
-  let planModeId: string | null = null
-  if (planParsed.agent) {
-    log.info("set-plan-agent", {
-      sessionID,
-      agent: planParsed.agent,
-      model: planParsed.model ?? input.planModelInput ?? null,
-    })
-    const planResult = await setAgentAndModel(sdk, sessionID, planParsed.agent, planParsed.model ?? input.planModelInput)
-    planAgent = planResult.agent
-    planModel = planParsed.model ?? input.planModelInput ?? null
-    planModeId = findPlanModeId(planResult.modes)
-    if (!planModeId) {
-      throw new Error(`Agent '${planAgent}' does not support a planning mode`)
-    }
-    await sdk.session.mode({
-      path: { id: sessionID },
-      body: { mode: planModeId },
-    })
-    log.info("set-plan-mode.done", { sessionID, agent: planAgent, model: planModel, mode: planModeId })
-  }
+  const resolvedModel = options.entry.model ?? models?.currentModelId ?? null
+
+  log.info("agent.apply.done", {
+    sessionID: options.sessionID,
+    agent,
+    model: resolvedModel,
+    mode: modeId,
+  })
 
   return {
-    sessionID,
-    baseAgent,
-    baseModel,
-    planAgent,
-    planModel,
-    planModeId,
+    agent,
+    model: resolvedModel,
+    modeId,
   }
 }

@@ -49,6 +49,14 @@ export const ACP_AGENTS: ACPAgentDefinition[] = [
     installGuide: "https://github.com/MoonshotAI/kimi-cli",
   },
   {
+    name: "OpenHands",
+    description: "All-Hands AI's autonomous coding agent (experimental ACP)",
+    installMethod: "uvx",
+    command: "uvx",
+    args: ["openhands", "acp"],
+    installGuide: "https://docs.openhands.dev/openhands/usage/run-openhands/acp",
+  },
+  {
     name: "Auggie",
     description: "Augment Code's AI coding assistant",
     installMethod: "system",

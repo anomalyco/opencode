@@ -1,41 +1,37 @@
 import { describe, expect, test } from "bun:test"
-import * as run from "./run.util"
+import { parseAgentFlags, validateAgentFlags } from "@/cli/cmd/session-init"
 
-describe("run CLI agent/model parsing", () => {
-  test("parses agent only", () => {
-    const parsed = run.parseAgentInput("claude")
-    expect(parsed).toEqual({ agent: "claude" })
+const fail = (msg: string): never => {
+  throw new Error(msg)
+}
+
+describe("run CLI agent flag parsing", () => {
+  test("parses key/value agent", () => {
+    const parsed = parseAgentFlags('name=claude model=opus mode=plan')
+    expect(parsed.agents).toEqual([{ name: "claude", model: "opus", mode: "plan" }])
   })
 
-  test("parses agent/model", () => {
-    const parsed = run.parseAgentInput("claude/haiku")
-    expect(parsed).toEqual({ agent: "claude", model: "haiku" })
+  test("parses bare agent/model", () => {
+    const parsed = parseAgentFlags("claude/haiku")
+    expect(parsed.agents).toEqual([{ name: "claude", model: "haiku" }])
   })
 
-  test("ignores trailing slash", () => {
-    const parsed = run.parseAgentInput("claude/")
-    expect(parsed).toEqual({ agent: "claude/" })
+  test("parses repeatable order", () => {
+    const parsed = parseAgentFlags(["name=one mode=plan", "name=two mode=impl"])
+    expect(parsed.agents.map((a) => a.name)).toEqual(["one", "two"])
+  })
+
+  test("rejects unknown key", () => {
+    expect(() => parseAgentFlags("foo=bar")).toThrow(/Unknown agent key/)
   })
 })
 
-describe("run CLI plan/impl validation", () => {
-  test("requires both plan and impl agents", () => {
-    expect(() => run.validateModeFlags(run.collectModeFlags({ "plan-agent": "a" }), { command: false })).toThrow()
-    expect(() => run.validateModeFlags(run.collectModeFlags({ "impl-agent": "b" }), { command: false })).toThrow()
+describe("run CLI agent validation", () => {
+  test("rejects missing name", () => {
+    expect(() => validateAgentFlags([{ name: "" } as any], 1, fail)).toThrow(/Agent name is required/)
   })
 
-  test("rejects combining with --agent", () => {
-    expect(() =>
-      run.validateModeFlags(
-        run.collectModeFlags({ "plan-agent": "a", "impl-agent": "b" }),
-        { agent: "c", command: false },
-      ),
-    ).toThrow()
-  })
-
-  test("rejects command mode", () => {
-    expect(() =>
-      run.validateModeFlags(run.collectModeFlags({ "plan-agent": "a", "impl-agent": "b" }), { command: true }),
-    ).toThrow()
+  test("rejects empty provided list", () => {
+    expect(() => validateAgentFlags([], 1, fail)).toThrow(/Agent list is empty/)
   })
 })

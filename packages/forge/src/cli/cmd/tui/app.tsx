@@ -30,7 +30,7 @@ import { KVProvider, useKV } from "./context/kv"
 import { ArgsProvider, useArgs, type Args } from "./context/args"
 import { matchAgent, getAllAgents } from "@/acp/agents"
 import { matchModel } from "@/acp/util"
-import { parseAgentInput } from "../session-init"
+import { findModeId, type AgentFlag } from "../session-init"
 
 async function getTerminalBackgroundColor(): Promise<"dark" | "light"> {
   // can't set raw mode if not a TTY
@@ -165,13 +165,13 @@ function App() {
   })
 
   const args = useArgs()
-  const parsedAgent = parseAgentInput(args.agent)
-  const parsedPlan = parseAgentInput(args.planAgent)
+  const initialAgent = () => (args.agents && args.agents.length > 0 ? (args.agents[0] as AgentFlag) : undefined)
   onMount(async () => {
-    // Handle agent selection with matching and fallback (prefer plan-agent when provided)
+    // Handle agent selection with matching and fallback (use first entry)
     let agentToUse: string
-    const parsedModel = parsedPlan.model ?? parsedAgent.model
-    const targetAgent = parsedPlan.agent ?? parsedAgent.agent
+    const targetAgent = initialAgent()?.name
+    const targetModel = initialAgent()?.model
+    const targetMode = initialAgent()?.mode
     if (targetAgent) {
       const agentResult = matchAgent(targetAgent)
       if (!agentResult.success) {
@@ -202,7 +202,7 @@ function App() {
     await local.agent.set(agentToUse)
 
     // Handle model selection with matching and fallback (only if agent is connected)
-    if (parsedModel) {
+    if (targetModel) {
       const availableModels = local.model.list()
       if (availableModels.length === 0) {
         toast.show({
@@ -211,20 +211,20 @@ function App() {
           duration: 4000,
         })
       } else {
-        const modelResult = matchModel(parsedModel, availableModels)
+        const modelResult = matchModel(targetModel, availableModels)
         if (!modelResult.success) {
           if (modelResult.error === "ambiguous") {
             const matchNames = modelResult.matches.map((m) => m.modelId).join(", ")
             toast.show({
               variant: "warning",
-              message: `Ambiguous model '${parsedModel}'. Matches: ${matchNames}. Using agent default.`,
+              message: `Ambiguous model '${targetModel}'. Matches: ${matchNames}. Using agent default.`,
               duration: 5000,
             })
           } else {
             const available = modelResult.available.map((m) => m.modelId).join(", ")
             toast.show({
               variant: "warning",
-              message: `Model '${parsedModel}' not available. Available: ${available}. Using agent default.`,
+              message: `Model '${targetModel}' not available. Available: ${available}. Using agent default.`,
               duration: 6000,
             })
           }
@@ -241,6 +241,28 @@ function App() {
               local.session.setSwitching(false, null)
             })
         }
+      }
+    }
+
+    if (targetMode) {
+      const availableModes = local.mode.list()
+      const resolvedMode = findModeId(
+        targetMode,
+        availableModes.length ? ({ availableModes, currentModeId: local.mode.current() ?? undefined } as any) : null,
+      )
+      if (!resolvedMode) {
+        const available = availableModes.map((m) => m.id).join(", ")
+        toast.show({
+          variant: "warning",
+          message: `Mode '${targetMode}' not available. Available: ${available || "none"}. Using agent default.`,
+          duration: 5000,
+        })
+      } else if (local.mode.current() !== resolvedMode) {
+        local.session.setSwitching(true, agentToUse)
+        await local.mode
+          .set(resolvedMode)
+          .catch((error) => console.error(error))
+          .finally(() => local.session.setSwitching(false, null))
       }
     }
 

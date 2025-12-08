@@ -38,23 +38,16 @@ process.on("uncaughtException", (e) => {
 })
 
 const cli = yargs(hideBin(process.argv))
+  // Prevent array options (e.g., --agent) from greedily consuming positionals
+  .parserConfiguration({ "greedy-arrays": false })
   .scriptName("forge")
   // Disable wrapping so help lines don't break
   .wrap(null)
   .option("agent", {
-    describe: "agent to use (supports [agent]/[model] with fuzzy match)",
+    describe: 'repeatable agent spec: --agent "name=claude model=opus mode=plan"',
     alias: ["a"],
     type: "string",
-  })
-  .option("plan-agent", {
-    describe: "agent to use for planning mode",
-    alias: ["P"],
-    type: "string",
-  })
-  .option("impl-agent", {
-    describe: "agent to use for implementation mode",
-    alias: ["I"],
-    type: "string",
+    array: true,
   })
   .help("help", "show help")
   .alias("help", "h")

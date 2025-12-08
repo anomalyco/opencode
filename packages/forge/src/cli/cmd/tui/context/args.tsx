@@ -1,8 +1,8 @@
 import { createSimpleContext } from "./helper"
+import type { AgentFlag } from "@/cli/cmd/session-init"
 
 export interface Args {
-  agent?: string
-  planAgent?: string
+  agents?: AgentFlag[]
   prompt?: string
   continue?: boolean
   sessionID?: string

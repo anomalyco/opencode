@@ -9,6 +9,7 @@ import { useSync } from "../context/sync"
 import { Toast } from "../ui/toast"
 import { useArgs } from "../context/args"
 import { useLocal } from "../context/local"
+import { Log } from "@/util/log"
 
 // TODO: what is the best way to do this?
 let once = false
@@ -43,12 +44,18 @@ export function Home() {
   let promptPreloaded = false
   const args = useArgs()
   const local = useLocal()
+  const log = Log.create({ service: "tui-home" })
   createEffect(() => {
+    log.info("prompt.prefill.check", {
+      hasPrompt: Boolean(args.prompt),
+      switching: local.session.switching,
+    })
     if (!args.prompt) return
     const prompt = promptRef()
     if (!prompt) return
     if (promptPreloaded) return
     promptPreloaded = true
+    log.info("prompt.prefill.set", { length: args.prompt.length })
     prompt.set({ input: args.prompt, parts: [] })
   })
 
@@ -59,6 +66,7 @@ export function Home() {
     const prompt = promptRef()
     if (!prompt) return
     once = true
+    log.info("prompt.autosubmit", { length: args.prompt.length })
     queueMicrotask(() => {
       void prompt.submit().catch((error) => console.error(error))
     })

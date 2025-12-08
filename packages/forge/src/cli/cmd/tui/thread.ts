@@ -7,6 +7,7 @@ import { UI } from "@/cli/ui"
 import { iife } from "@/util/iife"
 import { Log } from "@/util/log"
 import { runNonInteractive, type RunHandlerArgs } from "../run"
+import { parseAgentFlags, validateAgentFlags } from "../session-init"
 
 declare global {
   const FORGE_WORKER_PATH: string
@@ -50,10 +51,11 @@ export const TuiThreadCommand = cmd({
         describe: "hostname to listen on",
         default: "127.0.0.1",
       })
-      .option("plan-agent", {
+      .option("agent", {
         type: "string",
-        alias: ["P"],
-        describe: "agent to use for planning mode (implementation uses --agent/default)",
+        alias: ["a"],
+        array: true,
+        describe: 'repeatable agent spec: --agent "name=claude model=haiku mode=plan"',
       })
       .option("command", {
         type: "string",
@@ -108,6 +110,20 @@ export const TuiThreadCommand = cmd({
       process.exit(1)
     }
 
+    let parsedAgents: ReturnType<typeof parseAgentFlags> | null = null
+    if (!args.print) {
+      try {
+        parsedAgents = parseAgentFlags(args.agent)
+        validateAgentFlags(parsedAgents.agents, parsedAgents.rawCount, (msg) => {
+          UI.error(msg)
+          process.exit(1)
+        })
+      } catch (error) {
+        UI.error(error instanceof Error ? error.message : String(error))
+        process.exit(1)
+      }
+    }
+
     if (args.print) {
       const promptText = args.prompt
 
@@ -118,7 +134,6 @@ export const TuiThreadCommand = cmd({
         session: args.session,
         share: args.share,
         agent: args.agent,
-        "plan-agent": args["plan-agent"],
         file: args.file,
         title: args.title,
         attach: args.attach,
@@ -130,14 +145,37 @@ export const TuiThreadCommand = cmd({
       return
     }
 
+    const cliPrompt = (() => {
+      if (typeof args.prompt === "string" && args.prompt.length > 0) return args.prompt
+      if (Array.isArray(args._) && args._.length > 0) {
+        const joined = args._
+          .filter((v) => typeof v === "string")
+          .map((v) => v as string)
+          .join(" ")
+        if (joined.length > 0) return joined
+      }
+      return undefined
+    })()
+    Log.Default.info("tui-thread.args", {
+      rawPrompt: args.prompt,
+      cliPrompt,
+      positional: Array.isArray(args._) ? args._.map((v: any) => String(v)) : [],
+      agentCount: Array.isArray(args.agent) ? args.agent.length : args.agent ? 1 : 0,
+    })
+
     const worker = new Worker(workerPath, {
       env: Object.fromEntries(
         Object.entries(process.env).filter((entry): entry is [string, string] => entry[1] !== undefined),
       ),
-      argv: [
-        ...(args.agent ? ["--agent", args.agent] : []),
-        ...(args["plan-agent"] ? ["--plan-agent", args["plan-agent"]] : []),
-      ],
+      argv: (Array.isArray(args.agent) ? args.agent : args.agent ? [args.agent] : []).flatMap((value) => [
+        "--agent",
+        value,
+      ]),
+    })
+    Log.Default.info("tui-thread.args", {
+      prompt: cliPrompt,
+      positional: Array.isArray(args._) ? args._.map((v: any) => String(v)) : [],
+      agentCount: Array.isArray(args.agent) ? args.agent.length : args.agent ? 1 : 0,
     })
     worker.onerror = (e) => {
       Log.Default.error(e)
@@ -153,23 +191,22 @@ export const TuiThreadCommand = cmd({
       port: args.port,
       hostname: args.hostname,
     })
-    const prompt = await iife(async () => {
-      const piped = !process.stdin.isTTY ? await Bun.stdin.text() : undefined
-      if (!args.prompt) return piped
-      return piped ? piped + "\n" + args.prompt : args.prompt
-    })
-    await tui({
-      url: server.url,
-      args: {
-        continue: args.continue,
-        sessionID: args.session,
-        agent: args.agent,
-        planAgent: args["plan-agent"],
-        prompt,
-      },
-      onExit: async () => {
-        await client.call("shutdown", undefined)
-      },
+      const prompt = await iife(async () => {
+        const piped = !process.stdin.isTTY ? await Bun.stdin.text() : undefined
+        if (!cliPrompt) return piped
+        return piped ? piped + "\n" + cliPrompt : cliPrompt
+      })
+      await tui({
+        url: server.url,
+        args: {
+          continue: args.continue,
+          sessionID: args.session,
+          agents: parsedAgents?.agents ?? [],
+          prompt,
+        },
+        onExit: async () => {
+          await client.call("shutdown", undefined)
+        },
     })
   },
 })
