@@ -528,7 +528,7 @@ export namespace SessionPrompt {
         return false
       }).map((m) => MessageV2.toChatMessage(m))
 
-      await Plugin.trigger("chat.messages.transform", {}, { messages: chatMessages })
+      await Plugin.trigger("experimental.chat.messages.transform", {}, { messages: chatMessages })
 
       const modelMessages: ModelMessage[] = [
         ...system.map(
