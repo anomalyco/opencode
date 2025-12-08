@@ -65,7 +65,7 @@ export default function Layout(props: ParentProps) {
                 label={(x) => x.title}
                 value={(x) => x.id}
                 onSelect={navigateToSession}
-                class="text-14-regular text-text-base max-w-3xs"
+                class="text-14-regular text-text-base max-w-md"
                 variant="ghost"
               />
             </div>
