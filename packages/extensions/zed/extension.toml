@@ -1,6 +1,6 @@
 id = "opencode"
 name = "OpenCode"
-description = "The AI coding agent built for the terminal"
+description = "The open source coding agent."
 version = "1.0.134"
 schema_version = 1
 authors = ["Anomaly"]

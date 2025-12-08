@@ -10,13 +10,16 @@
   "exports": {
     ".": "./src/index.ts",
     "./client": "./src/client.ts",
-    "./server": "./src/server.ts"
+    "./server": "./src/server.ts",
+    "./v2": "./src/v2/index.ts",
+    "./v2/client": "./src/v2/client.ts",
+    "./v2/server": "./src/v2/server.ts"
   },
   "files": [
     "dist"
   ],
   "devDependencies": {
-    "@hey-api/openapi-ts": "0.81.0",
+    "@hey-api/openapi-ts": "0.88.1",
     "@tsconfig/node22": "catalog:",
     "@types/node": "catalog:",
     "typescript": "catalog:",
