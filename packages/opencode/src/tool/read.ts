@@ -93,10 +93,11 @@ export const ReadTool = Tool.define("read", {
       throw new Error(`File not found: ${filepath}`)
     }
 
-    const isImage = isImageFile(filepath)
-    if (isImage) {
+    const isImage = file.type.startsWith("image/")
+    const isPdf = file.type === "application/pdf"
+    if (isImage || isPdf) {
       const mime = file.type
-      const msg = "Image read successfully"
+      const msg = `${isImage ? "Image" : "PDF"} read successfully`
       return {
         title,
         output: msg,
@@ -157,25 +158,6 @@ export const ReadTool = Tool.define("read", {
     }
   },
 })
-
-function isImageFile(filePath: string): string | false {
-  const ext = path.extname(filePath).toLowerCase()
-  switch (ext) {
-    case ".jpg":
-    case ".jpeg":
-      return "JPEG"
-    case ".png":
-      return "PNG"
-    case ".gif":
-      return "GIF"
-    case ".bmp":
-      return "BMP"
-    case ".webp":
-      return "WebP"
-    default:
-      return false
-  }
-}
 
 async function isBinaryFile(filepath: string, file: Bun.BunFile): Promise<boolean> {
   const ext = path.extname(filepath).toLowerCase()
