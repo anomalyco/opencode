@@ -192,7 +192,7 @@ export interface Hooks {
       metadata: any
     },
   ) => Promise<void>
-  "chat.messages.transform"?: (
+  "experimental.chat.messages.transform"?: (
     input: {},
     output: {
       messages: ChatMessage[]
