@@ -7,7 +7,7 @@ import { TextSelection } from "./local"
 import { pipe, sumBy } from "remeda"
 import { AssistantMessage, UserMessage } from "@opencode-ai/sdk/v2"
 import { useParams } from "@solidjs/router"
-import { base64Encode } from "@/utils"
+import { base64Encode } from "@opencode-ai/util/encode"
 import { useSDK } from "./sdk"
 
 export type LocalPTY = {

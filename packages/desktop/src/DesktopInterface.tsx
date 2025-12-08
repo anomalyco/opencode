@@ -13,7 +13,7 @@ import Session from "@/pages/session"
 import { LayoutProvider } from "./context/layout"
 import { GlobalSDKProvider } from "./context/global-sdk"
 import { SessionProvider } from "./context/session"
-import { base64Encode } from "./utils"
+import { base64Encode } from "@opencode-ai/util/encode"
 import { createMemo, Show } from "solid-js"
 
 const host = import.meta.env.VITE_OPENCODE_SERVER_HOST ?? "127.0.0.1"
