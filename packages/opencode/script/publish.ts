@@ -199,6 +199,8 @@ if (!Script.preview) {
     `  homepage "https://github.com/sst/opencode"`,
     `  version "${Script.version.split("-")[0]}"`,
     "",
+    `  depends_on "ripgrep"`,
+    "",
     "  on_macos do",
     "    if Hardware::CPU.intel?",
     `      url "https://github.com/sst/opencode/releases/download/v${Script.version}/opencode-darwin-x64.zip"`,
