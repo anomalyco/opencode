@@ -5,7 +5,7 @@ import type { FileContent, FileNode, Model, Provider, File as FileStatus } from 
 import { createSimpleContext } from "@opencode-ai/ui/context"
 import { useSDK } from "./sdk"
 import { useSync } from "./sync"
-import { base64Encode } from "@/utils"
+import { base64Encode } from "@opencode-ai/util/encode"
 
 export type LocalFile = FileNode &
   Partial<{
