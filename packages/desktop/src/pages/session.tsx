@@ -30,8 +30,8 @@ import { useSync } from "@/context/sync"
 import { useSession } from "@/context/session"
 import { useLayout } from "@/context/layout"
 import { getDirectory, getFilename } from "@opencode-ai/util/path"
-import { Diff } from "@opencode-ai/ui/diff"
 import { Terminal } from "@/components/terminal"
+import { checksum } from "@opencode-ai/util/encode"
 
 export default function Page() {
   const layout = useLayout()
@@ -282,7 +282,7 @@ export default function Page() {
   const wide = createMemo(() => layout.review.state() === "tab" || !session.diffs().length)
 
   return (
-    <div class="relative bg-background-base size-full overflow-x-hidden flex flex-col items-start">
+    <div class="relative bg-background-base size-full overflow-x-hidden flex flex-col">
       <div class="min-h-0 grow w-full">
         <DragDropProvider
           onDragStart={handleDragStart}
@@ -389,7 +389,6 @@ export default function Page() {
                                   ? "pr-6 pl-18"
                                   : "px-6"),
                           }}
-                          diffComponent={Diff}
                         />
                       </div>
                     </Match>
@@ -438,7 +437,6 @@ export default function Page() {
                         container: "px-6",
                       }}
                       diffs={session.diffs()}
-                      diffComponent={Diff}
                       actions={
                         <Tooltip value="Open in tab">
                           <IconButton
@@ -470,7 +468,6 @@ export default function Page() {
                       container: "px-6",
                     }}
                     diffs={session.diffs()}
-                    diffComponent={Diff}
                     split
                   />
                 </div>
@@ -493,7 +490,11 @@ export default function Page() {
                       <Match when={file()}>
                         {(f) => (
                           <Code
-                            file={{ name: f().path, contents: f().content?.content ?? "" }}
+                            file={{
+                              name: f().path,
+                              contents: f().content?.content ?? "",
+                              cacheKey: checksum(f().content?.content ?? ""),
+                            }}
                             overflow="scroll"
                             class="pb-40"
                           />

@@ -3,7 +3,7 @@ import { DateTime } from "luxon"
 import { A, useNavigate, useParams } from "@solidjs/router"
 import { useLayout } from "@/context/layout"
 import { useGlobalSync } from "@/context/global-sync"
-import { base64Decode, base64Encode } from "@/utils"
+import { base64Decode, base64Encode } from "@opencode-ai/util/encode"
 import { Mark } from "@opencode-ai/ui/logo"
 import { Button } from "@opencode-ai/ui/button"
 import { Icon } from "@opencode-ai/ui/icon"
@@ -13,7 +13,7 @@ import { Collapsible } from "@opencode-ai/ui/collapsible"
 import { DiffChanges } from "@opencode-ai/ui/diff-changes"
 import { getFilename } from "@opencode-ai/util/path"
 import { Select } from "@opencode-ai/ui/select"
-import { Session } from "@opencode-ai/sdk/client"
+import { Session } from "@opencode-ai/sdk/v2/client"
 
 export default function Layout(props: ParentProps) {
   const navigate = useNavigate()

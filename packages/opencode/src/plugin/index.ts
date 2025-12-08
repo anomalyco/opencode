@@ -28,8 +28,8 @@ export namespace Plugin {
     }
     const plugins = [...(config.plugin ?? [])]
     if (!Flag.OPENCODE_DISABLE_DEFAULT_PLUGINS) {
-      plugins.push("opencode-copilot-auth@0.0.8")
-      plugins.push("opencode-anthropic-auth@0.0.4")
+      plugins.push("opencode-copilot-auth@0.0.9")
+      plugins.push("opencode-anthropic-auth@0.0.5")
     }
     for (let plugin of plugins) {
       log.info("loading plugin", { path: plugin })
@@ -61,10 +61,14 @@ export namespace Plugin {
     for (const hook of await state().then((x) => x.hooks)) {
       const fn = hook[name]
       if (!fn) continue
-      // @ts-expect-error if you feel adventurous, please fix the typing, make sure to bump the try-counter if you
-      // give up.
-      // try-counter: 2
-      await fn(input, output)
+      try {
+        // @ts-expect-error if you feel adventurous, please fix the typing, make sure to bump the try-counter if you
+        // give up.
+        // try-counter: 2
+        await fn(input, output)
+      } catch (e) {
+        log.error("failed to trigger hook", { name, error: e })
+      }
     }
     return output
   }
