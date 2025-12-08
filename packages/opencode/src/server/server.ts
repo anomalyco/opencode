@@ -1447,10 +1447,19 @@ export namespace Server {
           },
         }),
         async (c) => {
-          const providers = pipe(
-            await ModelsDev.get(),
-            mapValues((x) => Provider.fromModelsDevProvider(x)),
-          )
+          const config = await Config.get()
+          const disabled = new Set(config.disabled_providers ?? [])
+          const enabled = config.enabled_providers ? new Set(config.enabled_providers) : undefined
+
+          const allProviders = await ModelsDev.get()
+          const filteredProviders: Record<string, (typeof allProviders)[string]> = {}
+          for (const [key, value] of Object.entries(allProviders)) {
+            if ((enabled ? enabled.has(key) : true) && !disabled.has(key)) {
+              filteredProviders[key] = value
+            }
+          }
+
+          const providers = mapValues(filteredProviders, (x) => Provider.fromModelsDevProvider(x))
           const connected = await Provider.list().then((x) => Object.keys(x))
           return c.json({
             all: Object.values(providers),
