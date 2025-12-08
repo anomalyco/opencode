@@ -148,9 +148,8 @@ export const TuiThreadCommand = cmd({
     const cliPrompt = (() => {
       if (typeof args.prompt === "string" && args.prompt.length > 0) return args.prompt
       if (Array.isArray(args._) && args._.length > 0) {
-        const joined = args._
-          .filter((v) => typeof v === "string")
-          .map((v) => v as string)
+        const joined = (args._ as unknown[])
+          .filter((v): v is string => typeof v === "string")
           .join(" ")
         if (joined.length > 0) return joined
       }
@@ -167,7 +166,7 @@ export const TuiThreadCommand = cmd({
       env: Object.fromEntries(
         Object.entries(process.env).filter((entry): entry is [string, string] => entry[1] !== undefined),
       ),
-      argv: (Array.isArray(args.agent) ? args.agent : args.agent ? [args.agent] : []).flatMap((value) => [
+      argv: (Array.isArray(args.agent) ? args.agent : args.agent ? [args.agent] : []).flatMap((value: string) => [
         "--agent",
         value,
       ]),
