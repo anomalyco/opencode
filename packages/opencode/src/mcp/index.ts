@@ -86,6 +86,12 @@ export namespace MCP {
 
       await Promise.all(
         Object.entries(config).map(async ([key, mcp]) => {
+          // If disabled by config, mark as disabled without trying to connect
+          if (mcp.enabled === false) {
+            status[key] = { status: "disabled" }
+            return
+          }
+
           const result = await create(key, mcp).catch(() => undefined)
           if (!result) return
 
@@ -319,18 +325,73 @@ export namespace MCP {
   }
 
   export async function status() {
-    return state().then((state) => state.status)
+    const s = await state()
+    const cfg = await Config.get()
+    const config = cfg.mcp ?? {}
+    const result: Record<string, Status> = {}
+
+    // Include all MCPs from config, not just connected ones
+    for (const key of Object.keys(config)) {
+      result[key] = s.status[key] ?? { status: "disabled" }
+    }
+
+    return result
   }
 
   export async function clients() {
     return state().then((state) => state.clients)
   }
 
+  export async function connect(name: string) {
+    const cfg = await Config.get()
+    const config = cfg.mcp ?? {}
+    const mcp = config[name]
+    if (!mcp) {
+      log.error("MCP config not found", { name })
+      return
+    }
+
+    const result = await create(name, { ...mcp, enabled: true })
+
+    if (!result) {
+      const s = await state()
+      s.status[name] = {
+        status: "failed",
+        error: "Unknown error during connection",
+      }
+      return
+    }
+
+    const s = await state()
+    s.status[name] = result.status
+    if (result.mcpClient) {
+      s.clients[name] = result.mcpClient
+    }
+  }
+
+  export async function disconnect(name: string) {
+    const s = await state()
+    const client = s.clients[name]
+    if (client) {
+      await client.close().catch((error) => {
+        log.error("Failed to close MCP client", { name, error })
+      })
+      delete s.clients[name]
+    }
+    s.status[name] = { status: "disabled" }
+  }
+
   export async function tools() {
     const result: Record<string, Tool> = {}
     const s = await state()
     const clientsSnapshot = await clients()
+
     for (const [clientName, client] of Object.entries(clientsSnapshot)) {
+      // Only include tools from connected MCPs (skip disabled ones)
+      if (s.status[clientName]?.status !== "connected") {
+        continue
+      }
+
       const tools = await client.tools().catch((e) => {
         log.error("failed to get tools", { clientName, error: e.message })
         const failedStatus = {
