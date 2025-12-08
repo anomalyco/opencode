@@ -255,3 +255,12 @@ export const dart: Info = {
     return Bun.which("dart") !== null
   },
 }
+
+export const terraform: Info = {
+  name: "terraform",
+  command: ["terraform", "fmt", "$FILE"],
+  extensions: [".tf", ".tfvars"],
+  async enabled() {
+    return Bun.which("terraform") !== null
+  },
+}
