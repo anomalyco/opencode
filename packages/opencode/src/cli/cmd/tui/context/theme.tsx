@@ -573,6 +573,12 @@ function generateSubtleSyntax(theme: Theme) {
 function getSyntaxRules(theme: Theme) {
   return [
     {
+      scope: ["default"],
+      style: {
+        foreground: theme.text,
+      },
+    },
+    {
       scope: ["prompt"],
       style: {
         foreground: theme.accent,
