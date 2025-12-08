@@ -29,9 +29,10 @@ export namespace SessionProcessor {
   }
 
   export function normalizeFinishReason(
-    finishReason: MessageV2.Assistant["finish"],
+    finishReason: MessageV2.Assistant["finish"] | undefined,
     sawToolCall: boolean,
-  ): MessageV2.Assistant["finish"] {
+  ): string {
+    if (finishReason === undefined || finishReason === null) return sawToolCall ? "tool-calls" : "stop"
     if ((finishReason === "tool-calls" || finishReason === "unknown") && !sawToolCall) return "stop"
     return finishReason
   }
