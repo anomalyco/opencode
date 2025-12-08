@@ -148,6 +148,18 @@ import type {
   McpAddData,
   McpAddResponses,
   McpAddErrors,
+  McpAuthRemoveData,
+  McpAuthRemoveResponses,
+  McpAuthRemoveErrors,
+  McpAuthStartData,
+  McpAuthStartResponses,
+  McpAuthStartErrors,
+  McpAuthCallbackData,
+  McpAuthCallbackResponses,
+  McpAuthCallbackErrors,
+  McpAuthAuthenticateData,
+  McpAuthAuthenticateResponses,
+  McpAuthAuthenticateErrors,
   LspStatusData,
   LspStatusResponses,
   FormatterStatusData,
@@ -847,6 +859,68 @@ class App extends _HeyApiClient {
   }
 }
 
+class Auth extends _HeyApiClient {
+  /**
+   * Remove OAuth credentials for an MCP server
+   */
+  public remove<ThrowOnError extends boolean = false>(options: Options<McpAuthRemoveData, ThrowOnError>) {
+    return (options.client ?? this._client).delete<McpAuthRemoveResponses, McpAuthRemoveErrors, ThrowOnError>({
+      url: "/mcp/{name}/auth",
+      ...options,
+    })
+  }
+
+  /**
+   * Start OAuth authentication flow for an MCP server
+   */
+  public start<ThrowOnError extends boolean = false>(options: Options<McpAuthStartData, ThrowOnError>) {
+    return (options.client ?? this._client).post<McpAuthStartResponses, McpAuthStartErrors, ThrowOnError>({
+      url: "/mcp/{name}/auth",
+      ...options,
+    })
+  }
+
+  /**
+   * Complete OAuth authentication with authorization code
+   */
+  public callback<ThrowOnError extends boolean = false>(options: Options<McpAuthCallbackData, ThrowOnError>) {
+    return (options.client ?? this._client).post<McpAuthCallbackResponses, McpAuthCallbackErrors, ThrowOnError>({
+      url: "/mcp/{name}/auth/callback",
+      ...options,
+      headers: {
+        "Content-Type": "application/json",
+        ...options.headers,
+      },
+    })
+  }
+
+  /**
+   * Start OAuth flow and wait for callback (opens browser)
+   */
+  public authenticate<ThrowOnError extends boolean = false>(options: Options<McpAuthAuthenticateData, ThrowOnError>) {
+    return (options.client ?? this._client).post<McpAuthAuthenticateResponses, McpAuthAuthenticateErrors, ThrowOnError>(
+      {
+        url: "/mcp/{name}/auth/authenticate",
+        ...options,
+      },
+    )
+  }
+
+  /**
+   * Set authentication credentials
+   */
+  public set<ThrowOnError extends boolean = false>(options: Options<AuthSetData, ThrowOnError>) {
+    return (options.client ?? this._client).put<AuthSetResponses, AuthSetErrors, ThrowOnError>({
+      url: "/auth/{id}",
+      ...options,
+      headers: {
+        "Content-Type": "application/json",
+        ...options.headers,
+      },
+    })
+  }
+}
+
 class Mcp extends _HeyApiClient {
   /**
    * Get MCP server status
@@ -871,6 +945,7 @@ class Mcp extends _HeyApiClient {
       },
     })
   }
+  auth = new Auth({ client: this._client })
 }
 
 class Lsp extends _HeyApiClient {
@@ -1040,22 +1115,6 @@ class Tui extends _HeyApiClient {
     })
   }
   control = new Control({ client: this._client })
-}
-
-class Auth extends _HeyApiClient {
-  /**
-   * Set authentication credentials
-   */
-  public set<ThrowOnError extends boolean = false>(options: Options<AuthSetData, ThrowOnError>) {
-    return (options.client ?? this._client).put<AuthSetResponses, AuthSetErrors, ThrowOnError>({
-      url: "/auth/{id}",
-      ...options,
-      headers: {
-        "Content-Type": "application/json",
-        ...options.headers,
-      },
-    })
-  }
 }
 
 class Event extends _HeyApiClient {

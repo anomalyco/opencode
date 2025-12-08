@@ -140,9 +140,7 @@ export function Autocomplete(props: {
 
       // Get files from SDK
       const result = await sdk.client.find.files({
-        query: {
-          query: query ?? "",
-        },
+        query: query ?? "",
       })
 
       const options: AutocompleteOption[] = []

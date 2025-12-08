@@ -1103,6 +1103,21 @@ export type McpLocalConfig = {
   timeout?: number
 }
 
+export type McpOAuthConfig = {
+  /**
+   * OAuth client ID. If not provided, dynamic client registration (RFC 7591) will be attempted.
+   */
+  clientId?: string
+  /**
+   * OAuth client secret (if required by the authorization server)
+   */
+  clientSecret?: string
+  /**
+   * OAuth scopes to request during authorization
+   */
+  scope?: string
+}
+
 export type McpRemoteConfig = {
   /**
    * Type of MCP server connection
@@ -1122,6 +1137,10 @@ export type McpRemoteConfig = {
   headers?: {
     [key: string]: string
   }
+  /**
+   * OAuth authentication configuration for the MCP server. Set to false to disable OAuth auto-detection.
+   */
+  oauth?: McpOAuthConfig | false
   /**
    * Timeout in ms for fetching tools from the MCP server. Defaults to 5000 (5 seconds) if not specified.
    */
@@ -1583,7 +1602,21 @@ export type McpStatusFailed = {
   error: string
 }
 
-export type McpStatus = McpStatusConnected | McpStatusDisabled | McpStatusFailed
+export type McpStatusNeedsAuth = {
+  status: "needs_auth"
+}
+
+export type McpStatusNeedsClientRegistration = {
+  status: "needs_client_registration"
+  error: string
+}
+
+export type McpStatus =
+  | McpStatusConnected
+  | McpStatusDisabled
+  | McpStatusFailed
+  | McpStatusNeedsAuth
+  | McpStatusNeedsClientRegistration
 
 export type LspStatus = {
   id: string
@@ -3320,6 +3353,146 @@ export type McpAddResponses = {
 }
 
 export type McpAddResponse = McpAddResponses[keyof McpAddResponses]
+
+export type McpAuthRemoveData = {
+  body?: never
+  path: {
+    name: string
+  }
+  query?: {
+    directory?: string
+  }
+  url: "/mcp/{name}/auth"
+}
+
+export type McpAuthRemoveErrors = {
+  /**
+   * Not found
+   */
+  404: NotFoundError
+}
+
+export type McpAuthRemoveError = McpAuthRemoveErrors[keyof McpAuthRemoveErrors]
+
+export type McpAuthRemoveResponses = {
+  /**
+   * OAuth credentials removed
+   */
+  200: {
+    success: true
+  }
+}
+
+export type McpAuthRemoveResponse = McpAuthRemoveResponses[keyof McpAuthRemoveResponses]
+
+export type McpAuthStartData = {
+  body?: never
+  path: {
+    name: string
+  }
+  query?: {
+    directory?: string
+  }
+  url: "/mcp/{name}/auth"
+}
+
+export type McpAuthStartErrors = {
+  /**
+   * Bad request
+   */
+  400: BadRequestError
+  /**
+   * Not found
+   */
+  404: NotFoundError
+}
+
+export type McpAuthStartError = McpAuthStartErrors[keyof McpAuthStartErrors]
+
+export type McpAuthStartResponses = {
+  /**
+   * OAuth flow started
+   */
+  200: {
+    /**
+     * URL to open in browser for authorization
+     */
+    authorizationUrl: string
+  }
+}
+
+export type McpAuthStartResponse = McpAuthStartResponses[keyof McpAuthStartResponses]
+
+export type McpAuthCallbackData = {
+  body?: {
+    /**
+     * Authorization code from OAuth callback
+     */
+    code: string
+  }
+  path: {
+    name: string
+  }
+  query?: {
+    directory?: string
+  }
+  url: "/mcp/{name}/auth/callback"
+}
+
+export type McpAuthCallbackErrors = {
+  /**
+   * Bad request
+   */
+  400: BadRequestError
+  /**
+   * Not found
+   */
+  404: NotFoundError
+}
+
+export type McpAuthCallbackError = McpAuthCallbackErrors[keyof McpAuthCallbackErrors]
+
+export type McpAuthCallbackResponses = {
+  /**
+   * OAuth authentication completed
+   */
+  200: McpStatus
+}
+
+export type McpAuthCallbackResponse = McpAuthCallbackResponses[keyof McpAuthCallbackResponses]
+
+export type McpAuthAuthenticateData = {
+  body?: never
+  path: {
+    name: string
+  }
+  query?: {
+    directory?: string
+  }
+  url: "/mcp/{name}/auth/authenticate"
+}
+
+export type McpAuthAuthenticateErrors = {
+  /**
+   * Bad request
+   */
+  400: BadRequestError
+  /**
+   * Not found
+   */
+  404: NotFoundError
+}
+
+export type McpAuthAuthenticateError = McpAuthAuthenticateErrors[keyof McpAuthAuthenticateErrors]
+
+export type McpAuthAuthenticateResponses = {
+  /**
+   * OAuth authentication completed
+   */
+  200: McpStatus
+}
+
+export type McpAuthAuthenticateResponse = McpAuthAuthenticateResponses[keyof McpAuthAuthenticateResponses]
 
 export type LspStatusData = {
   body?: never

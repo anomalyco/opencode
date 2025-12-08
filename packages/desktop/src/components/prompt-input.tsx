@@ -235,9 +235,7 @@ export const PromptInput: Component<PromptInputProps> = (props) => {
 
   const abort = () =>
     sdk.client.session.abort({
-      path: {
-        id: session.id!,
-      },
+      sessionID: session.id!,
     })
 
   const handleKeyDown = (event: KeyboardEvent) => {
@@ -329,21 +327,19 @@ export const PromptInput: Component<PromptInputProps> = (props) => {
     session.prompt.set([{ type: "text", content: "", start: 0, end: 0 }], 0)
 
     sdk.client.session.prompt({
-      path: { id: existing.id },
-      body: {
-        agent: local.agent.current()!.name,
-        model: {
-          modelID: local.model.current()!.id,
-          providerID: local.model.current()!.provider.id,
-        },
-        parts: [
-          {
-            type: "text",
-            text,
-          },
-          ...attachmentParts,
-        ],
+      sessionID: existing.id,
+      agent: local.agent.current()!.name,
+      model: {
+        modelID: local.model.current()!.id,
+        providerID: local.model.current()!.provider.id,
       },
+      parts: [
+        {
+          type: "text",
+          text,
+        },
+        ...attachmentParts,
+      ],
     })
   }
 
