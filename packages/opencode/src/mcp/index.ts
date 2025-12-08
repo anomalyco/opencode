@@ -342,18 +342,6 @@ export namespace MCP {
     return state().then((state) => state.clients)
   }
 
-  export async function disconnect(name: string) {
-    const s = await state()
-    const client = s.clients[name]
-    if (client) {
-      await client.close().catch((error) => {
-        log.error("Failed to close MCP client", { name, error })
-      })
-      delete s.clients[name]
-    }
-    s.status[name] = { status: "disabled" }
-  }
-
   export async function connect(name: string) {
     const cfg = await Config.get()
     const config = cfg.mcp ?? {}
@@ -378,6 +366,18 @@ export namespace MCP {
     if (result.mcpClient) {
       s.clients[name] = result.mcpClient
     }
+  }
+
+  export async function disconnect(name: string) {
+    const s = await state()
+    const client = s.clients[name]
+    if (client) {
+      await client.close().catch((error) => {
+        log.error("Failed to close MCP client", { name, error })
+      })
+      delete s.clients[name]
+    }
+    s.status[name] = { status: "disabled" }
   }
 
   export async function tools() {

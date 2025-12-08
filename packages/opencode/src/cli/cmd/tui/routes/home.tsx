@@ -89,7 +89,7 @@ export function Home() {
                   <span style={{ fg: theme.success }}>⊙ </span>
                 </Match>
               </Switch>
-              {Object.keys(sync.data.mcp).length} MCP
+              {connectedMcpCount()} MCP
             </text>
             <text fg={theme.textMuted}>/status</text>
           </Show>

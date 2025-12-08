@@ -3,9 +3,7 @@ import { useLocal } from "@tui/context/local"
 import { useSync } from "@tui/context/sync"
 import { map, pipe, entries, sortBy } from "remeda"
 import { DialogSelect, type DialogSelectRef, type DialogSelectOption } from "@tui/ui/dialog-select"
-import { useDialog } from "@tui/ui/dialog"
 import { useTheme } from "../context/theme"
-import { useKeybind } from "@tui/context/keybind"
 import { Keybind } from "@/util/keybind"
 import { TextAttributes } from "@opentui/core"
 import { useSDK } from "@tui/context/sdk"
@@ -58,6 +56,8 @@ export function DialogMcp() {
           // Refresh MCP status from server
           const status = await sdk.client.mcp.status()
           sync.set("mcp", status.data!)
+        } catch (error) {
+          console.error("Failed to toggle MCP:", error)
         } finally {
           setLoading(null)
         }

@@ -148,10 +148,6 @@ import type {
   McpAddData,
   McpAddResponses,
   McpAddErrors,
-  McpDisconnectData,
-  McpDisconnectResponses,
-  McpConnectData,
-  McpConnectResponses,
   McpAuthRemoveData,
   McpAuthRemoveResponses,
   McpAuthRemoveErrors,
@@ -164,6 +160,10 @@ import type {
   McpAuthAuthenticateData,
   McpAuthAuthenticateResponses,
   McpAuthAuthenticateErrors,
+  McpConnectData,
+  McpConnectResponses,
+  McpDisconnectData,
+  McpDisconnectResponses,
   LspStatusData,
   LspStatusResponses,
   FormatterStatusData,
@@ -951,6 +951,16 @@ class Mcp extends _HeyApiClient {
   }
 
   /**
+   * Connect an MCP server
+   */
+  public connect<ThrowOnError extends boolean = false>(options: Options<McpConnectData, ThrowOnError>) {
+    return (options.client ?? this._client).post<McpConnectResponses, unknown, ThrowOnError>({
+      url: "/mcp/{name}/connect",
+      ...options,
+    })
+  }
+
+  /**
    * Disconnect an MCP server
    */
   public disconnect<ThrowOnError extends boolean = false>(options: Options<McpDisconnectData, ThrowOnError>) {
@@ -960,15 +970,6 @@ class Mcp extends _HeyApiClient {
     })
   }
 
-  /**
-   * Connect an MCP server
-   */
-  public connect<ThrowOnError extends boolean = false>(options: Options<McpConnectData, ThrowOnError>) {
-    return (options.client ?? this._client).post<McpConnectResponses, unknown, ThrowOnError>({
-      url: "/mcp/{name}/connect",
-      ...options,
-    })
-  }
   auth = new Auth({ client: this._client })
 }
 

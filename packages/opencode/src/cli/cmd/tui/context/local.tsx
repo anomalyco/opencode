@@ -332,10 +332,10 @@ export const { use: useLocal, provider: LocalProvider } = createSimpleContext({
         const status = sync.data.mcp[name]
         if (status?.status === "disabled") {
           // Enable: connect the MCP
-          await sdk.client.mcp.connect({ path: { name } })
+          await sdk.client.mcp.connect({ name })
         } else {
           // Disable: disconnect the MCP
-          await sdk.client.mcp.disconnect({ path: { name } })
+          await sdk.client.mcp.disconnect({ name })
         }
       },
     }
