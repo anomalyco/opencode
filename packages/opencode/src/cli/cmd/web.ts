@@ -55,7 +55,7 @@ export const WebCommand = cmd({
 
     if (hostname === "0.0.0.0") {
       // Show localhost for local access
-      const localhostUrl = `http://localhost:${server.port}`
+      const localhostUrl = `http://localhost:${server.port}/web`
       UI.println(UI.Style.TEXT_INFO_BOLD + "  Local access:      ", UI.Style.TEXT_NORMAL, localhostUrl)
 
       // Show network IPs for remote access
@@ -73,7 +73,7 @@ export const WebCommand = cmd({
       // Open localhost in browser
       open(localhostUrl.toString()).catch(() => {})
     } else {
-      const displayUrl = server.url.toString()
+      const displayUrl = server.url.toString() + "web"
       UI.println(UI.Style.TEXT_INFO_BOLD + "  Web interface:    ", UI.Style.TEXT_NORMAL, displayUrl)
       open(displayUrl).catch(() => {})
     }
