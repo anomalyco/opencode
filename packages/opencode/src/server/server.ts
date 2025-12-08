@@ -97,7 +97,8 @@ export namespace Server {
       .get(
         "/global/event",
         describeRoute({
-          description: "Get events",
+          summary: "Get global events",
+          description: "Subscribe to global events from the OpenCode system using server-sent events.",
           operationId: "global.event",
           responses: {
             200: {
@@ -168,7 +169,8 @@ export namespace Server {
       .get(
         "/pty",
         describeRoute({
-          description: "List all PTY sessions",
+          summary: "List PTY sessions",
+          description: "Get a list of all active pseudo-terminal (PTY) sessions managed by OpenCode.",
           operationId: "pty.list",
           responses: {
             200: {
@@ -188,7 +190,8 @@ export namespace Server {
       .post(
         "/pty",
         describeRoute({
-          description: "Create a new PTY session",
+          summary: "Create PTY session",
+          description: "Create a new pseudo-terminal (PTY) session for running shell commands and processes.",
           operationId: "pty.create",
           responses: {
             200: {
@@ -211,7 +214,8 @@ export namespace Server {
       .get(
         "/pty/:ptyID",
         describeRoute({
-          description: "Get PTY session info",
+          summary: "Get PTY session",
+          description: "Retrieve detailed information about a specific pseudo-terminal (PTY) session.",
           operationId: "pty.get",
           responses: {
             200: {
@@ -237,7 +241,8 @@ export namespace Server {
       .put(
         "/pty/:ptyID",
         describeRoute({
-          description: "Update PTY session",
+          summary: "Update PTY session",
+          description: "Update properties of an existing pseudo-terminal (PTY) session.",
           operationId: "pty.update",
           responses: {
             200: {
@@ -261,7 +266,8 @@ export namespace Server {
       .delete(
         "/pty/:ptyID",
         describeRoute({
-          description: "Remove a PTY session",
+          summary: "Remove PTY session",
+          description: "Remove and terminate a specific pseudo-terminal (PTY) session.",
           operationId: "pty.remove",
           responses: {
             200: {
@@ -284,7 +290,9 @@ export namespace Server {
       .get(
         "/pty/:ptyID/connect",
         describeRoute({
-          description: "Connect to a PTY session",
+          summary: "Connect to PTY session",
+          description:
+            "Establish a WebSocket connection to interact with a pseudo-terminal (PTY) session in real-time.",
           operationId: "pty.connect",
           responses: {
             200: {
@@ -320,7 +328,8 @@ export namespace Server {
       .get(
         "/config",
         describeRoute({
-          description: "Get config info",
+          summary: "Get configuration",
+          description: "Retrieve the current OpenCode configuration settings and preferences.",
           operationId: "config.get",
           responses: {
             200: {
@@ -341,7 +350,8 @@ export namespace Server {
       .patch(
         "/config",
         describeRoute({
-          description: "Update config",
+          summary: "Update configuration",
+          description: "Update OpenCode configuration settings and preferences.",
           operationId: "config.update",
           responses: {
             200: {
@@ -365,7 +375,9 @@ export namespace Server {
       .get(
         "/experimental/tool/ids",
         describeRoute({
-          description: "List all tool IDs (including built-in and dynamically registered)",
+          summary: "List tool IDs",
+          description:
+            "Get a list of all available tool IDs, including both built-in tools and dynamically registered tools.",
           operationId: "tool.ids",
           responses: {
             200: {
@@ -386,7 +398,9 @@ export namespace Server {
       .get(
         "/experimental/tool",
         describeRoute({
-          description: "List tools with JSON schema parameters for a provider/model",
+          summary: "List tools",
+          description:
+            "Get a list of available tools with their JSON schema parameters for a specific provider and model combination.",
           operationId: "tool.list",
           responses: {
             200: {
@@ -435,7 +449,8 @@ export namespace Server {
       .post(
         "/instance/dispose",
         describeRoute({
-          description: "Dispose the current instance",
+          summary: "Dispose instance",
+          description: "Clean up and dispose the current OpenCode instance, releasing all resources.",
           operationId: "instance.dispose",
           responses: {
             200: {
@@ -456,7 +471,8 @@ export namespace Server {
       .get(
         "/path",
         describeRoute({
-          description: "Get the current path",
+          summary: "Get paths",
+          description: "Retrieve the current working directory and related path information for the OpenCode instance.",
           operationId: "path.get",
           responses: {
             200: {
@@ -492,7 +508,8 @@ export namespace Server {
       .get(
         "/vcs",
         describeRoute({
-          description: "Get VCS info for the current instance",
+          summary: "Get VCS info",
+          description: "Retrieve version control system (VCS) information for the current project, such as git branch.",
           operationId: "vcs.get",
           responses: {
             200: {
@@ -515,7 +532,8 @@ export namespace Server {
       .get(
         "/session",
         describeRoute({
-          description: "List all sessions",
+          summary: "List sessions",
+          description: "Get a list of all OpenCode sessions, sorted by most recently updated.",
           operationId: "session.list",
           responses: {
             200: {
@@ -537,7 +555,8 @@ export namespace Server {
       .get(
         "/session/status",
         describeRoute({
-          description: "Get session status",
+          summary: "Get session status",
+          description: "Retrieve the current status of all sessions, including active, idle, and completed states.",
           operationId: "session.status",
           responses: {
             200: {
@@ -559,7 +578,8 @@ export namespace Server {
       .get(
         "/session/:sessionID",
         describeRoute({
-          description: "Get session",
+          summary: "Get session",
+          description: "Retrieve detailed information about a specific OpenCode session.",
           operationId: "session.get",
           responses: {
             200: {
@@ -589,7 +609,8 @@ export namespace Server {
       .get(
         "/session/:sessionID/children",
         describeRoute({
-          description: "Get a session's children",
+          summary: "Get session children",
+          description: "Retrieve all child sessions that were forked from the specified parent session.",
           operationId: "session.children",
           responses: {
             200: {
@@ -618,7 +639,8 @@ export namespace Server {
       .get(
         "/session/:sessionID/todo",
         describeRoute({
-          description: "Get the todo list for a session",
+          summary: "Get session todos",
+          description: "Retrieve the todo list associated with a specific session, showing tasks and action items.",
           operationId: "session.todo",
           responses: {
             200: {
@@ -647,7 +669,8 @@ export namespace Server {
       .post(
         "/session",
         describeRoute({
-          description: "Create a new session",
+          summary: "Create session",
+          description: "Create a new OpenCode session for interacting with AI assistants and managing conversations.",
           operationId: "session.create",
           responses: {
             ...errors(400),
@@ -671,7 +694,8 @@ export namespace Server {
       .delete(
         "/session/:sessionID",
         describeRoute({
-          description: "Delete a session and all its data",
+          summary: "Delete session",
+          description: "Delete a session and permanently remove all associated data, including messages and history.",
           operationId: "session.delete",
           responses: {
             200: {
@@ -703,7 +727,8 @@ export namespace Server {
       .patch(
         "/session/:sessionID",
         describeRoute({
-          description: "Update session properties",
+          summary: "Update session",
+          description: "Update properties of an existing session, such as title or other metadata.",
           operationId: "session.update",
           responses: {
             200: {
@@ -745,7 +770,9 @@ export namespace Server {
       .post(
         "/session/:sessionID/init",
         describeRoute({
-          description: "Analyze the app and create an AGENTS.md file",
+          summary: "Initialize session",
+          description:
+            "Analyze the current application and create an AGENTS.md file with project-specific agent configurations.",
           operationId: "session.init",
           responses: {
             200: {
@@ -776,7 +803,8 @@ export namespace Server {
       .post(
         "/session/:sessionID/fork",
         describeRoute({
-          description: "Fork an existing session at a specific message",
+          summary: "Fork session",
+          description: "Create a new session by forking an existing session at a specific message point.",
           operationId: "session.fork",
           responses: {
             200: {
@@ -806,7 +834,8 @@ export namespace Server {
       .post(
         "/session/:sessionID/abort",
         describeRoute({
-          description: "Abort a session",
+          summary: "Abort session",
+          description: "Abort an active session and stop any ongoing AI processing or command execution.",
           operationId: "session.abort",
           responses: {
             200: {
@@ -834,7 +863,8 @@ export namespace Server {
       .post(
         "/session/:sessionID/share",
         describeRoute({
-          description: "Share a session",
+          summary: "Share session",
+          description: "Create a shareable link for a session, allowing others to view the conversation.",
           operationId: "session.share",
           responses: {
             200: {
@@ -864,7 +894,8 @@ export namespace Server {
       .get(
         "/session/:sessionID/diff",
         describeRoute({
-          description: "Get the diff that resulted from this user message",
+          summary: "Get message diff",
+          description: "Get the file changes (diff) that resulted from a specific user message in the session.",
           operationId: "session.diff",
           responses: {
             200: {
@@ -902,7 +933,8 @@ export namespace Server {
       .delete(
         "/session/:sessionID/share",
         describeRoute({
-          description: "Unshare the session",
+          summary: "Unshare session",
+          description: "Remove the shareable link for a session, making it private again.",
           operationId: "session.unshare",
           responses: {
             200: {
@@ -932,7 +964,8 @@ export namespace Server {
       .post(
         "/session/:sessionID/summarize",
         describeRoute({
-          description: "Summarize the session",
+          summary: "Summarize session",
+          description: "Generate a concise summary of the session using AI compaction to preserve key information.",
           operationId: "session.summarize",
           responses: {
             200: {
@@ -987,7 +1020,8 @@ export namespace Server {
       .get(
         "/session/:sessionID/message",
         describeRoute({
-          description: "List messages for a session",
+          summary: "Get session messages",
+          description: "Retrieve all messages in a session, including user prompts and AI responses.",
           operationId: "session.messages",
           responses: {
             200: {
@@ -1025,7 +1059,8 @@ export namespace Server {
       .get(
         "/session/:sessionID/diff",
         describeRoute({
-          description: "Get the diff for this session",
+          summary: "Get session diff",
+          description: "Get all file changes (diffs) made during this session.",
           operationId: "session.diff",
           responses: {
             200: {
@@ -1053,7 +1088,8 @@ export namespace Server {
       .get(
         "/session/:sessionID/message/:messageID",
         describeRoute({
-          description: "Get a message from a session",
+          summary: "Get message",
+          description: "Retrieve a specific message from a session by its message ID.",
           operationId: "session.message",
           responses: {
             200: {
@@ -1091,7 +1127,8 @@ export namespace Server {
       .post(
         "/session/:sessionID/message",
         describeRoute({
-          description: "Create and send a new message to a session",
+          summary: "Send message",
+          description: "Create and send a new message to a session, streaming the AI response.",
           operationId: "session.prompt",
           responses: {
             200: {
@@ -1131,7 +1168,9 @@ export namespace Server {
       .post(
         "/session/:sessionID/prompt_async",
         describeRoute({
-          description: "Create and send a new message to a session, start if needed and return immediately",
+          summary: "Send async message",
+          description:
+            "Create and send a new message to a session asynchronously, starting the session if needed and returning immediately.",
           operationId: "session.prompt_async",
           responses: {
             204: {
@@ -1160,7 +1199,8 @@ export namespace Server {
       .post(
         "/session/:sessionID/command",
         describeRoute({
-          description: "Send a new command to a session",
+          summary: "Send command",
+          description: "Send a new command to a session for execution by the AI assistant.",
           operationId: "session.command",
           responses: {
             200: {
@@ -1196,7 +1236,8 @@ export namespace Server {
       .post(
         "/session/:sessionID/shell",
         describeRoute({
-          description: "Run a shell command",
+          summary: "Run shell command",
+          description: "Execute a shell command within the session context and return the AI's response.",
           operationId: "session.shell",
           responses: {
             200: {
@@ -1227,7 +1268,8 @@ export namespace Server {
       .post(
         "/session/:sessionID/revert",
         describeRoute({
-          description: "Revert a message",
+          summary: "Revert message",
+          description: "Revert a specific message in a session, undoing its effects and restoring the previous state.",
           operationId: "session.revert",
           responses: {
             200: {
@@ -1261,7 +1303,8 @@ export namespace Server {
       .post(
         "/session/:sessionID/unrevert",
         describeRoute({
-          description: "Restore all reverted messages",
+          summary: "Restore reverted messages",
+          description: "Restore all previously reverted messages in a session.",
           operationId: "session.unrevert",
           responses: {
             200: {
@@ -1290,7 +1333,8 @@ export namespace Server {
       .post(
         "/session/:sessionID/permissions/:permissionID",
         describeRoute({
-          description: "Respond to a permission request",
+          summary: "Respond to permission",
+          description: "Approve or deny a permission request from the AI assistant.",
           operationId: "permission.respond",
           responses: {
             200: {
@@ -1327,7 +1371,8 @@ export namespace Server {
       .get(
         "/command",
         describeRoute({
-          description: "List all commands",
+          summary: "List commands",
+          description: "Get a list of all available commands in the OpenCode system.",
           operationId: "command.list",
           responses: {
             200: {
@@ -1348,7 +1393,8 @@ export namespace Server {
       .get(
         "/config/providers",
         describeRoute({
-          description: "List all providers",
+          summary: "List config providers",
+          description: "Get a list of all configured AI providers and their default models.",
           operationId: "config.providers",
           responses: {
             200: {
@@ -1378,7 +1424,8 @@ export namespace Server {
       .get(
         "/provider",
         describeRoute({
-          description: "List all providers",
+          summary: "List providers",
+          description: "Get a list of all available AI providers, including both available and connected ones.",
           operationId: "provider.list",
           responses: {
             200: {
@@ -1413,7 +1460,8 @@ export namespace Server {
       .get(
         "/provider/auth",
         describeRoute({
-          description: "Get provider authentication methods",
+          summary: "Get provider auth methods",
+          description: "Retrieve available authentication methods for all AI providers.",
           operationId: "provider.auth",
           responses: {
             200: {
@@ -1433,7 +1481,8 @@ export namespace Server {
       .post(
         "/provider/:providerID/oauth/authorize",
         describeRoute({
-          description: "Authorize a provider using OAuth",
+          summary: "OAuth authorize",
+          description: "Initiate OAuth authorization for a specific AI provider to get an authorization URL.",
           operationId: "provider.oauth.authorize",
           responses: {
             200: {
@@ -1472,7 +1521,8 @@ export namespace Server {
       .post(
         "/provider/:providerID/oauth/callback",
         describeRoute({
-          description: "Handle OAuth callback for a provider",
+          summary: "OAuth callback",
+          description: "Handle the OAuth callback from a provider after user authorization.",
           operationId: "provider.oauth.callback",
           responses: {
             200: {
@@ -1513,7 +1563,8 @@ export namespace Server {
       .get(
         "/find",
         describeRoute({
-          description: "Find text in files",
+          summary: "Find text",
+          description: "Search for text patterns across files in the project using ripgrep.",
           operationId: "find.text",
           responses: {
             200: {
@@ -1545,7 +1596,8 @@ export namespace Server {
       .get(
         "/find/file",
         describeRoute({
-          description: "Find files",
+          summary: "Find files",
+          description: "Search for files by name or pattern in the project directory.",
           operationId: "find.files",
           responses: {
             200: {
@@ -1579,7 +1631,8 @@ export namespace Server {
       .get(
         "/find/symbol",
         describeRoute({
-          description: "Find workspace symbols",
+          summary: "Find symbols",
+          description: "Search for workspace symbols like functions, classes, and variables using LSP.",
           operationId: "find.symbols",
           responses: {
             200: {
@@ -1610,7 +1663,8 @@ export namespace Server {
       .get(
         "/file",
         describeRoute({
-          description: "List files and directories",
+          summary: "List files",
+          description: "List files and directories in a specified path.",
           operationId: "file.list",
           responses: {
             200: {
@@ -1638,7 +1692,8 @@ export namespace Server {
       .get(
         "/file/content",
         describeRoute({
-          description: "Read a file",
+          summary: "Read file",
+          description: "Read the content of a specified file.",
           operationId: "file.read",
           responses: {
             200: {
@@ -1666,7 +1721,8 @@ export namespace Server {
       .get(
         "/file/status",
         describeRoute({
-          description: "Get file status",
+          summary: "Get file status",
+          description: "Get the git status of all files in the project.",
           operationId: "file.status",
           responses: {
             200: {
@@ -1687,7 +1743,8 @@ export namespace Server {
       .post(
         "/log",
         describeRoute({
-          description: "Write a log entry to the server logs",
+          summary: "Write log",
+          description: "Write a log entry to the server logs with specified level and metadata.",
           operationId: "app.log",
           responses: {
             200: {
@@ -1738,7 +1795,8 @@ export namespace Server {
       .get(
         "/agent",
         describeRoute({
-          description: "List all agents",
+          summary: "List agents",
+          description: "Get a list of all available AI agents in the OpenCode system.",
           operationId: "app.agents",
           responses: {
             200: {
@@ -1759,7 +1817,8 @@ export namespace Server {
       .get(
         "/mcp",
         describeRoute({
-          description: "Get MCP server status",
+          summary: "Get MCP status",
+          description: "Get the status of all Model Context Protocol (MCP) servers.",
           operationId: "mcp.status",
           responses: {
             200: {
@@ -1779,7 +1838,8 @@ export namespace Server {
       .post(
         "/mcp",
         describeRoute({
-          description: "Add MCP server dynamically",
+          summary: "Add MCP server",
+          description: "Dynamically add a new Model Context Protocol (MCP) server to the system.",
           operationId: "mcp.add",
           responses: {
             200: {
@@ -1809,7 +1869,8 @@ export namespace Server {
       .post(
         "/mcp/:name/auth",
         describeRoute({
-          description: "Start OAuth authentication flow for an MCP server",
+          summary: "Start MCP OAuth",
+          description: "Start OAuth authentication flow for a Model Context Protocol (MCP) server.",
           operationId: "mcp.auth.start",
           responses: {
             200: {
@@ -1840,7 +1901,9 @@ export namespace Server {
       .post(
         "/mcp/:name/auth/callback",
         describeRoute({
-          description: "Complete OAuth authentication with authorization code",
+          summary: "Complete MCP OAuth",
+          description:
+            "Complete OAuth authentication for a Model Context Protocol (MCP) server using the authorization code.",
           operationId: "mcp.auth.callback",
           responses: {
             200: {
@@ -1870,6 +1933,7 @@ export namespace Server {
       .post(
         "/mcp/:name/auth/authenticate",
         describeRoute({
+          summary: "Authenticate MCP OAuth",
           description: "Start OAuth flow and wait for callback (opens browser)",
           operationId: "mcp.auth.authenticate",
           responses: {
@@ -1897,6 +1961,7 @@ export namespace Server {
       .delete(
         "/mcp/:name/auth",
         describeRoute({
+          summary: "Remove MCP OAuth",
           description: "Remove OAuth credentials for an MCP server",
           operationId: "mcp.auth.remove",
           responses: {
@@ -1920,6 +1985,7 @@ export namespace Server {
       .get(
         "/lsp",
         describeRoute({
+          summary: "Get LSP status",
           description: "Get LSP server status",
           operationId: "lsp.status",
           responses: {
@@ -1940,6 +2006,7 @@ export namespace Server {
       .get(
         "/formatter",
         describeRoute({
+          summary: "Get formatter status",
           description: "Get formatter status",
           operationId: "formatter.status",
           responses: {
@@ -1960,6 +2027,7 @@ export namespace Server {
       .post(
         "/tui/append-prompt",
         describeRoute({
+          summary: "Append TUI prompt",
           description: "Append prompt to the TUI",
           operationId: "tui.appendPrompt",
           responses: {
@@ -1983,7 +2051,8 @@ export namespace Server {
       .post(
         "/tui/open-help",
         describeRoute({
-          description: "Open the help dialog",
+          summary: "Open help dialog",
+          description: "Open the help dialog in the TUI to display user assistance information.",
           operationId: "tui.openHelp",
           responses: {
             200: {
@@ -2004,6 +2073,7 @@ export namespace Server {
       .post(
         "/tui/open-sessions",
         describeRoute({
+          summary: "Open sessions dialog",
           description: "Open the session dialog",
           operationId: "tui.openSessions",
           responses: {
@@ -2027,6 +2097,7 @@ export namespace Server {
       .post(
         "/tui/open-themes",
         describeRoute({
+          summary: "Open themes dialog",
           description: "Open the theme dialog",
           operationId: "tui.openThemes",
           responses: {
@@ -2050,6 +2121,7 @@ export namespace Server {
       .post(
         "/tui/open-models",
         describeRoute({
+          summary: "Open models dialog",
           description: "Open the model dialog",
           operationId: "tui.openModels",
           responses: {
@@ -2073,6 +2145,7 @@ export namespace Server {
       .post(
         "/tui/submit-prompt",
         describeRoute({
+          summary: "Submit TUI prompt",
           description: "Submit the prompt",
           operationId: "tui.submitPrompt",
           responses: {
@@ -2096,6 +2169,7 @@ export namespace Server {
       .post(
         "/tui/clear-prompt",
         describeRoute({
+          summary: "Clear TUI prompt",
           description: "Clear the prompt",
           operationId: "tui.clearPrompt",
           responses: {
@@ -2119,6 +2193,7 @@ export namespace Server {
       .post(
         "/tui/execute-command",
         describeRoute({
+          summary: "Execute TUI command",
           description: "Execute a TUI command (e.g. agent_cycle)",
           operationId: "tui.executeCommand",
           responses: {
@@ -2158,6 +2233,7 @@ export namespace Server {
       .post(
         "/tui/show-toast",
         describeRoute({
+          summary: "Show TUI toast",
           description: "Show a toast notification in the TUI",
           operationId: "tui.showToast",
           responses: {
@@ -2180,6 +2256,7 @@ export namespace Server {
       .post(
         "/tui/publish",
         describeRoute({
+          summary: "Publish TUI event",
           description: "Publish a TUI event",
           operationId: "tui.publish",
           responses: {
@@ -2219,6 +2296,7 @@ export namespace Server {
       .put(
         "/auth/:providerID",
         describeRoute({
+          summary: "Set auth credentials",
           description: "Set authentication credentials",
           operationId: "auth.set",
           responses: {
@@ -2250,6 +2328,7 @@ export namespace Server {
       .get(
         "/event",
         describeRoute({
+          summary: "Subscribe to events",
           description: "Get events",
           operationId: "event.subscribe",
           responses: {

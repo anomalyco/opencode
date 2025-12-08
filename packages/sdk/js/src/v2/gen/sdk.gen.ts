@@ -192,6 +192,8 @@ export class Global extends HeyApiClient {
 export class Project extends HeyApiClient {
   /**
    * List all projects
+   *
+   * List all projects
    */
   public list<ThrowOnError extends boolean = false>(
     parameters?: {
