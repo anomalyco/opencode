@@ -6,6 +6,8 @@ import { MetaProvider } from "@solidjs/meta"
 import { Font } from "@opencode-ai/ui/font"
 import { Favicon } from "@opencode-ai/ui/favicon"
 import { MarkedProvider } from "@opencode-ai/ui/context/marked"
+import { DiffComponentProvider } from "@opencode-ai/ui/context/diff"
+import { Diff } from "@opencode-ai/ui/diff"
 import { GlobalSyncProvider, useGlobalSync } from "./context/global-sync"
 import Layout from "@/pages/layout"
 import DirectoryLayout from "@/pages/directory-layout"
@@ -35,38 +37,40 @@ if (import.meta.env.DEV && !(root instanceof HTMLElement)) {
 render(
   () => (
     <MarkedProvider>
-      <GlobalSDKProvider url={url}>
-        <GlobalSyncProvider>
-          <LayoutProvider>
-            <MetaProvider>
-              <Font />
-              <Router root={Layout}>
-                <Route
-                  path="/"
-                  component={() => {
-                    const globalSync = useGlobalSync()
-                    const slug = createMemo(() => base64Encode(globalSync.data.defaultProject!.worktree))
-                    return <Navigate href={`${slug()}/session`} />
-                  }}
-                />
-                <Route path="/:dir" component={DirectoryLayout}>
-                  <Route path="/" component={() => <Navigate href="session" />} />
+      <DiffComponentProvider component={Diff}>
+        <GlobalSDKProvider url={url}>
+          <GlobalSyncProvider>
+            <LayoutProvider>
+              <MetaProvider>
+                <Font />
+                <Router root={Layout}>
                   <Route
-                    path="/session/:id?"
-                    component={(p) => (
-                      <Show when={p.params.id || true} keyed>
-                        <SessionProvider>
-                          <Session />
-                        </SessionProvider>
-                      </Show>
-                    )}
+                    path="/"
+                    component={() => {
+                      const globalSync = useGlobalSync()
+                      const slug = createMemo(() => base64Encode(globalSync.data.defaultProject!.worktree))
+                      return <Navigate href={`${slug()}/session`} />
+                    }}
                   />
-                </Route>
-              </Router>
-            </MetaProvider>
-          </LayoutProvider>
-        </GlobalSyncProvider>
-      </GlobalSDKProvider>
+                  <Route path="/:dir" component={DirectoryLayout}>
+                    <Route path="/" component={() => <Navigate href="session" />} />
+                    <Route
+                      path="/session/:id?"
+                      component={(p) => (
+                        <Show when={p.params.id || true} keyed>
+                          <SessionProvider>
+                            <Session />
+                          </SessionProvider>
+                        </Show>
+                      )}
+                    />
+                  </Route>
+                </Router>
+              </MetaProvider>
+            </LayoutProvider>
+          </GlobalSyncProvider>
+        </GlobalSDKProvider>
+      </DiffComponentProvider>
     </MarkedProvider>
   ),
   root!,
