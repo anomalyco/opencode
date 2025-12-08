@@ -2371,19 +2371,11 @@ export namespace Server {
           })
         },
       )
-      .all("/web/*", async (c) => {
-        return proxy(`https://desktop.opencode.ai${c.req.path.replace(/^\/web/, "")}?url=/web`, {
-          ...c.req,
-          headers: {
-            host: "desktop.opencode.ai",
-          },
-        })
-      })
       .all("/*", async (c) => {
-        return proxy(`https://desktop.opencode.ai${c.req.path}?url=/web`, {
+        return proxy(`https://desktop.dev.opencode.ai${c.req.path}`, {
           ...c.req,
           headers: {
-            host: "desktop.opencode.ai",
+            host: "desktop.dev.opencode.ai",
           },
         })
       }),
