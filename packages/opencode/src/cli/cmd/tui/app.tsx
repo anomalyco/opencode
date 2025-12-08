@@ -1,6 +1,6 @@
 import { render, useKeyboard, useRenderer, useTerminalDimensions } from "@opentui/solid"
 import { Clipboard } from "@tui/util/clipboard"
-import { TextAttributes } from "@opentui/core"
+import { MouseParser, TextAttributes } from "@opentui/core"
 import { RouteProvider, useRoute } from "@tui/context/route"
 import { Switch, Match, createEffect, untrack, ErrorBoundary, createSignal, onMount, batch, Show, on } from "solid-js"
 import { Installation } from "@/installation"
@@ -167,6 +167,30 @@ function App() {
   const sync = useSync()
   const exit = useExit()
   const promptRef = usePromptRef()
+
+  const [consoleOpen, setConsoleOpen] = createSignal(!!process.env["SHOW_CONSOLE"])
+
+  onMount(() => {
+    const parser = new MouseParser()
+    renderer.prependInputHandler((sequence: string) => {
+      if (!consoleOpen()) return false
+
+      const mouse = parser.parseMouseEvent(Buffer.from(sequence))
+      if (!mouse || mouse.type !== "up" || mouse.button !== 0) return false
+
+      const height = Math.floor(renderer.terminalHeight * 0.3)
+      if (mouse.y >= renderer.terminalHeight - height) {
+        const logs = renderer.console.getCachedLogs()
+        if (logs) {
+          Clipboard.copy(logs)
+            .then(() => toast.show({ message: "Console logs copied to clipboard", variant: "info" }))
+            .catch(() => toast.show({ message: "Failed to copy console logs", variant: "error" }))
+        }
+        return true
+      }
+      return false
+    })
+  })
 
   createEffect(() => {
     console.log(JSON.stringify(route.data))
@@ -422,9 +446,10 @@ function App() {
     {
       title: "Toggle console",
       category: "System",
-      value: "app.fps",
+      value: "app.console",
       onSelect: (dialog) => {
         renderer.console.toggle()
+        setConsoleOpen((v) => !v)
         dialog.clear()
       },
     },
