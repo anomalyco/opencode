@@ -11,7 +11,7 @@ import {
 } from "solid-js"
 import { useKeyboard } from "@opentui/solid"
 import { useKeybind } from "@tui/context/keybind"
-import type { KeybindsConfig } from "@opencode-ai/sdk"
+import type { KeybindsConfig } from "@opencode-ai/sdk/v2"
 
 type Context = ReturnType<typeof init>
 const ctx = createContext<Context>()
