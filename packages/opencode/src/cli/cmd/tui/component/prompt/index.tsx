@@ -17,7 +17,7 @@ import { useRenderer } from "@opentui/solid"
 import { Editor } from "@tui/util/editor"
 import { useExit } from "../../context/exit"
 import { Clipboard } from "../../util/clipboard"
-import type { FilePart } from "@opencode-ai/sdk"
+import type { FilePart } from "@opencode-ai/sdk/v2"
 import { TuiEvent } from "../../event"
 import { iife } from "@/util/iife"
 import { Locale } from "@/util/locale"
@@ -37,11 +37,14 @@ export type PromptProps = {
 
 export type PromptRef = {
   focused: boolean
+  current: PromptInfo
   set(prompt: PromptInfo): void
   reset(): void
   blur(): void
   focus(): void
 }
+
+const PLACEHOLDERS = ["Fix a TODO in the codebase", "What is the tech stack of this project?", "Fix broken tests"]
 
 export function Prompt(props: PromptProps) {
   let input: TextareaRenderable
@@ -103,6 +106,77 @@ export function Prompt(props: PromptProps) {
 
   command.register(() => {
     return [
+      {
+        title: "Clear prompt",
+        value: "prompt.clear",
+        category: "Prompt",
+        disabled: true,
+        onSelect: (dialog) => {
+          input.extmarks.clear()
+          input.clear()
+          dialog.clear()
+        },
+      },
+      {
+        title: "Submit prompt",
+        value: "prompt.submit",
+        disabled: true,
+        keybind: "input_submit",
+        category: "Prompt",
+        onSelect: (dialog) => {
+          if (!input.focused) return
+          submit()
+          dialog.clear()
+        },
+      },
+      {
+        title: "Paste",
+        value: "prompt.paste",
+        disabled: true,
+        keybind: "input_paste",
+        category: "Prompt",
+        onSelect: async () => {
+          const content = await Clipboard.read()
+          if (content?.mime.startsWith("image/")) {
+            await pasteImage({
+              filename: "clipboard",
+              mime: content.mime,
+              content: content.data,
+            })
+          }
+        },
+      },
+      {
+        title: "Interrupt session",
+        value: "session.interrupt",
+        keybind: "session_interrupt",
+        disabled: status().type === "idle",
+        category: "Session",
+        onSelect: (dialog) => {
+          if (autocomplete.visible) return
+          if (!input.focused) return
+          // TODO: this should be its own command
+          if (store.mode === "shell") {
+            setStore("mode", "normal")
+            return
+          }
+          if (!props.sessionID) return
+
+          setStore("interrupt", store.interrupt + 1)
+
+          setTimeout(() => {
+            setStore("interrupt", 0)
+          }, 5000)
+
+          if (store.interrupt >= 2) {
+            sdk.client.session.abort({
+              sessionID: props.sessionID,
+            })
+            setStore("interrupt", 0)
+          }
+          dialog.clear()
+        },
+      },
       {
         title: "Open editor",
         category: "Session",
@@ -187,79 +261,6 @@ export function Prompt(props: PromptProps) {
           input.cursorOffset = Bun.stringWidth(content)
         },
       },
-      {
-        title: "Clear prompt",
-        value: "prompt.clear",
-        category: "Prompt",
-        disabled: true,
-        onSelect: (dialog) => {
-          input.extmarks.clear()
-          input.clear()
-          dialog.clear()
-        },
-      },
-      {
-        title: "Submit prompt",
-        value: "prompt.submit",
-        disabled: true,
-        keybind: "input_submit",
-        category: "Prompt",
-        onSelect: (dialog) => {
-          if (!input.focused) return
-          submit()
-          dialog.clear()
-        },
-      },
-      {
-        title: "Paste",
-        value: "prompt.paste",
-        disabled: true,
-        keybind: "input_paste",
-        category: "Prompt",
-        onSelect: async () => {
-          const content = await Clipboard.read()
-          if (content?.mime.startsWith("image/")) {
-            await pasteImage({
-              filename: "clipboard",
-              mime: content.mime,
-              content: content.data,
-            })
-          }
-        },
-      },
-      {
-        title: "Interrupt session",
-        value: "session.interrupt",
-        keybind: "session_interrupt",
-        disabled: status().type === "idle",
-        category: "Session",
-        onSelect: (dialog) => {
-          if (autocomplete.visible) return
-          if (!input.focused) return
-          // TODO: this should be its own command
-          if (store.mode === "shell") {
-            setStore("mode", "normal")
-            return
-          }
-          if (!props.sessionID) return
-
-          setStore("interrupt", store.interrupt + 1)
-
-          setTimeout(() => {
-            setStore("interrupt", 0)
-          }, 5000)
-
-          if (store.interrupt >= 2) {
-            sdk.client.session.abort({
-              path: {
-                id: props.sessionID,
-              },
-            })
-            setStore("interrupt", 0)
-          }
-          dialog.clear()
-        },
-      },
     ]
   })
 
@@ -269,7 +270,7 @@ export function Prompt(props: PromptProps) {
 
   createEffect(() => {
     if (props.disabled) input.cursorColor = theme.backgroundElement
-    if (!props.disabled) input.cursorColor = theme.primary
+    if (!props.disabled) input.cursorColor = theme.text
   })
 
   const [store, setStore] = createStore<{
@@ -277,7 +278,9 @@ export function Prompt(props: PromptProps) {
     mode: "normal" | "shell"
     extmarkToPartIndex: Map<number, number>
     interrupt: number
+    placeholder: number
   }>({
+    placeholder: Math.floor(Math.random() * PLACEHOLDERS.length),
     prompt: {
       input: "",
       parts: [],
@@ -377,6 +380,9 @@ export function Prompt(props: PromptProps) {
     get focused() {
       return input.focused
     },
+    get current() {
+      return store.prompt
+    },
     focus() {
       input.focus()
     },
@@ -439,17 +445,13 @@ export function Prompt(props: PromptProps) {
 
     if (store.mode === "shell") {
       sdk.client.session.shell({
-        path: {
-          id: sessionID,
+        sessionID,
+        agent: local.agent.current().name,
+        model: {
+          providerID: selectedModel.providerID,
+          modelID: selectedModel.modelID,
         },
-        body: {
-          agent: local.agent.current().name,
-          model: {
-            providerID: selectedModel.providerID,
-            modelID: selectedModel.modelID,
-          },
-          command: inputText,
-        },
+        command: inputText,
       })
       setStore("mode", "normal")
     } else if (
@@ -462,39 +464,31 @@ export function Prompt(props: PromptProps) {
     ) {
       let [command, ...args] = inputText.split(" ")
       sdk.client.session.command({
-        path: {
-          id: sessionID,
-        },
-        body: {
-          command: command.slice(1),
-          arguments: args.join(" "),
-          agent: local.agent.current().name,
-          model: `${selectedModel.providerID}/${selectedModel.modelID}`,
-          messageID,
-        },
+        sessionID,
+        command: command.slice(1),
+        arguments: args.join(" "),
+        agent: local.agent.current().name,
+        model: `${selectedModel.providerID}/${selectedModel.modelID}`,
+        messageID,
       })
     } else {
       sdk.client.session.prompt({
-        path: {
-          id: sessionID,
-        },
-        body: {
-          ...selectedModel,
-          messageID,
-          agent: local.agent.current().name,
-          model: selectedModel,
-          parts: [
-            {
-              id: Identifier.ascending("part"),
-              type: "text",
-              text: inputText,
-            },
-            ...nonTextParts.map((x) => ({
-              id: Identifier.ascending("part"),
-              ...x,
-            })),
-          ],
-        },
+        sessionID,
+        ...selectedModel,
+        messageID,
+        agent: local.agent.current().name,
+        model: selectedModel,
+        parts: [
+          {
+            id: Identifier.ascending("part"),
+            type: "text",
+            text: inputText,
+          },
+          ...nonTextParts.map((x) => ({
+            id: Identifier.ascending("part"),
+            ...x,
+          })),
+        ],
       })
     }
     history.append(store.prompt)
@@ -662,7 +656,7 @@ export function Prompt(props: PromptProps) {
             flexGrow={1}
           >
             <textarea
-              placeholder={props.sessionID ? undefined : "Build anything..."}
+              placeholder={props.sessionID ? undefined : `Ask anything... "${PLACEHOLDERS[store.placeholder]}"`}
               textColor={theme.text}
               focusedTextColor={theme.text}
               minHeight={1}
@@ -805,12 +799,12 @@ export function Prompt(props: PromptProps) {
               ref={(r: TextareaRenderable) => {
                 input = r
                 setTimeout(() => {
-                  input.cursorColor = highlight()
+                  input.cursorColor = theme.text
                 }, 0)
               }}
               onMouseDown={(r: MouseEvent) => r.target?.focus()}
               focusedBackgroundColor={theme.backgroundElement}
-              cursorColor={highlight()}
+              cursorColor={theme.text}
               syntaxStyle={syntax()}
             />
             <box flexDirection="row" flexShrink={0} paddingTop={1} gap={1}>

@@ -8,12 +8,12 @@ import {
   ToolPart,
   UserMessage,
 } from "@opencode-ai/sdk"
+import { useDiffComponent } from "../context/diff"
 import { BasicTool } from "./basic-tool"
 import { GenericTool } from "./basic-tool"
 import { Card } from "./card"
 import { Icon } from "./icon"
 import { Checkbox } from "./checkbox"
-import { Diff } from "./diff"
 import { DiffChanges } from "./diff-changes"
 import { Markdown } from "./markdown"
 import { getDirectory, getFilename } from "@opencode-ai/util/path"
@@ -337,6 +337,7 @@ ToolRegistry.register({
 ToolRegistry.register({
   name: "edit",
   render(props) {
+    const diffComponent = useDiffComponent()
     return (
       <BasicTool
         icon="code-lines"
@@ -361,7 +362,8 @@ ToolRegistry.register({
       >
         <Show when={props.metadata.filediff}>
           <div data-component="edit-content">
-            <Diff
+            <Dynamic
+              component={diffComponent}
               before={{
                 name: getFilename(props.metadata.filediff.path),
                 contents: props.metadata.filediff.before,

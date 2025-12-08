@@ -325,12 +325,33 @@ export namespace Config {
       ref: "McpLocalConfig",
     })
 
+  export const McpOAuth = z
+    .object({
+      clientId: z
+        .string()
+        .optional()
+        .describe("OAuth client ID. If not provided, dynamic client registration (RFC 7591) will be attempted."),
+      clientSecret: z.string().optional().describe("OAuth client secret (if required by the authorization server)"),
+      scope: z.string().optional().describe("OAuth scopes to request during authorization"),
+    })
+    .strict()
+    .meta({
+      ref: "McpOAuthConfig",
+    })
+  export type McpOAuth = z.infer<typeof McpOAuth>
+
   export const McpRemote = z
     .object({
       type: z.literal("remote").describe("Type of MCP server connection"),
       url: z.string().describe("URL of the remote MCP server"),
       enabled: z.boolean().optional().describe("Enable or disable the MCP server on startup"),
       headers: z.record(z.string(), z.string()).optional().describe("Headers to send with the request"),
+      oauth: z
+        .union([McpOAuth, z.literal(false)])
+        .optional()
+        .describe(
+          "OAuth authentication configuration for the MCP server. Set to false to disable OAuth auto-detection.",
+        ),
       timeout: z
         .number()
         .int()
@@ -375,6 +396,12 @@ export namespace Config {
         .regex(/^#[0-9a-fA-F]{6}$/, "Invalid hex color format")
         .optional()
         .describe("Hex color code for the agent (e.g., #FF5733)"),
+      maxSteps: z
+        .number()
+        .int()
+        .positive()
+        .optional()
+        .describe("Maximum number of agentic iterations before forcing text-only response"),
       permission: z
         .object({
           edit: Permission.optional(),
@@ -398,6 +425,8 @@ export namespace Config {
       editor_open: z.string().optional().default("<leader>e").describe("Open external editor"),
       theme_list: z.string().optional().default("<leader>t").describe("List available themes"),
       sidebar_toggle: z.string().optional().default("<leader>b").describe("Toggle sidebar"),
+      scrollbar_toggle: z.string().optional().default("none").describe("Toggle session scrollbar"),
+      username_toggle: z.string().optional().default("none").describe("Toggle username visibility"),
       status_view: z.string().optional().default("<leader>s").describe("View status"),
       session_export: z.string().optional().default("<leader>x").describe("Export session to editor"),
       session_new: z.string().optional().default("<leader>n").describe("Create a new session"),
@@ -417,6 +446,7 @@ export namespace Config {
         .describe("Scroll messages down by half page"),
       messages_first: z.string().optional().default("ctrl+g,home").describe("Navigate to first message"),
       messages_last: z.string().optional().default("ctrl+alt+g,end").describe("Navigate to last message"),
+      messages_last_user: z.string().optional().default("none").describe("Navigate to last user message"),
       messages_copy: z.string().optional().default("<leader>y").describe("Copy message"),
       messages_undo: z.string().optional().default("<leader>u").describe("Undo message"),
       messages_redo: z.string().optional().default("<leader>r").describe("Redo message"),
@@ -425,6 +455,7 @@ export namespace Config {
         .optional()
         .default("<leader>h")
         .describe("Toggle code block concealment in messages"),
+      tool_details: z.string().optional().default("none").describe("Toggle tool details visibility"),
       model_list: z.string().optional().default("<leader>m").describe("List available models"),
       model_cycle_recent: z.string().optional().default("f2").describe("Next recently used model"),
       model_cycle_recent_reverse: z.string().optional().default("shift+f2").describe("Previous recently used model"),
@@ -466,6 +497,42 @@ export namespace Config {
     ref: "LayoutConfig",
   })
   export type Layout = z.infer<typeof Layout>
+
+  export const Provider = ModelsDev.Provider.partial()
+    .extend({
+      whitelist: z.array(z.string()).optional(),
+      blacklist: z.array(z.string()).optional(),
+      models: z.record(z.string(), ModelsDev.Model.partial()).optional(),
+      options: z
+        .object({
+          apiKey: z.string().optional(),
+          baseURL: z.string().optional(),
+          enterpriseUrl: z.string().optional().describe("GitHub Enterprise URL for copilot authentication"),
+          setCacheKey: z.boolean().optional().describe("Enable promptCacheKey for this provider (default false)"),
+          timeout: z
+            .union([
+              z
+                .number()
+                .int()
+                .positive()
+                .describe(
+                  "Timeout in milliseconds for requests to this provider. Default is 300000 (5 minutes). Set to false to disable timeout.",
+                ),
+              z.literal(false).describe("Disable timeout for this provider entirely."),
+            ])
+            .optional()
+            .describe(
+              "Timeout in milliseconds for requests to this provider. Default is 300000 (5 minutes). Set to false to disable timeout.",
+            ),
+        })
+        .catchall(z.any())
+        .optional(),
+    })
+    .strict()
+    .meta({
+      ref: "ProviderConfig",
+    })
+  export type Provider = z.infer<typeof Provider>
 
   export const Info = z
     .object({
@@ -533,43 +600,7 @@ export namespace Config {
         .optional()
         .describe("Agent configuration, see https://opencode.ai/docs/agent"),
       provider: z
-        .record(
-          z.string(),
-          ModelsDev.Provider.partial()
-            .extend({
-              whitelist: z.array(z.string()).optional(),
-              blacklist: z.array(z.string()).optional(),
-              models: z.record(z.string(), ModelsDev.Model.partial()).optional(),
-              options: z
-                .object({
-                  apiKey: z.string().optional(),
-                  baseURL: z.string().optional(),
-                  enterpriseUrl: z.string().optional().describe("GitHub Enterprise URL for copilot authentication"),
-                  setCacheKey: z
-                    .boolean()
-                    .optional()
-                    .describe("Enable promptCacheKey for this provider (default false)"),
-                  timeout: z
-                    .union([
-                      z
-                        .number()
-                        .int()
-                        .positive()
-                        .describe(
-                          "Timeout in milliseconds for requests to this provider. Default is 300000 (5 minutes). Set to false to disable timeout.",
-                        ),
-                      z.literal(false).describe("Disable timeout for this provider entirely."),
-                    ])
-                    .optional()
-                    .describe(
-                      "Timeout in milliseconds for requests to this provider. Default is 300000 (5 minutes). Set to false to disable timeout.",
-                    ),
-                })
-                .catchall(z.any())
-                .optional(),
-            })
-            .strict(),
-        )
+        .record(z.string(), Provider)
         .optional()
         .describe("Custom provider configurations and model overrides"),
       mcp: z.record(z.string(), Mcp).optional().describe("MCP (Model Context Protocol) server configurations"),
@@ -667,6 +698,14 @@ export namespace Config {
           chatMaxRetries: z.number().optional().describe("Number of retries for chat completions on failure"),
           disable_paste_summary: z.boolean().optional(),
           batch_tool: z.boolean().optional().describe("Enable the batch tool"),
+          openTelemetry: z
+            .boolean()
+            .optional()
+            .describe("Enable OpenTelemetry spans for AI SDK calls (using the 'experimental_telemetry' flag)"),
+          primary_tools: z
+            .array(z.string())
+            .optional()
+            .describe("Tools that should only be available to primary agents."),
         })
         .optional(),
     })

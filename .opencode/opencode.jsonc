@@ -1,9 +1,10 @@
 {
   "$schema": "https://opencode.ai/config.json",
   "plugin": ["opencode-openai-codex-auth"],
-  "enterprise": {
-    "url": "https://enterprise.dev.opencode.ai",
-  },
+  // "enterprise": {
+  //   "url": "https://enterprise.dev.opencode.ai",
+  // },
+  "instructions": ["STYLE_GUIDE.md"],
   "provider": {
     "opencode": {
       "options": {
