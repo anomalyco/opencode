@@ -11,6 +11,11 @@ import { Bus } from "../bus"
 export namespace LSP {
   const log = Log.create({ service: "lsp" })
 
+  // Diagnostics budget (keeps noisy LSPs from inflating token usage)
+  const MAX_PER_FILE = 50
+  const MAX_TOTAL_CHARS = 8_000
+  const MAX_MESSAGE_CHARS = 200
+
   export const Event = {
     Updated: Bus.event("lsp.updated", z.object({})),
   }
@@ -254,15 +259,75 @@ export namespace LSP {
   }
 
   export async function diagnostics() {
-    const results: Record<string, LSPClient.Diagnostic[]> = {}
+    const collected: Record<string, LSPClient.Diagnostic[]> = {}
     for (const result of await run(async (client) => client.diagnostics)) {
       for (const [path, diagnostics] of result.entries()) {
-        const arr = results[path] || []
+        const arr = collected[path] || []
         arr.push(...diagnostics)
-        results[path] = arr
+        collected[path] = arr
       }
     }
-    return results
+    return budgetDiagnostics(collected)
+  }
+
+  export function budgetDiagnostics(input: Record<string, LSPClient.Diagnostic[]>) {
+    let totalChars = 0
+    const orderedPaths = Object.keys(input).toSorted()
+    const output: Record<string, LSPClient.Diagnostic[]> = {}
+
+    for (const path of orderedPaths) {
+      const seen = new Set<string>()
+      const bySeverity = [...input[path]].toSorted((a, b) => (a.severity ?? 3) - (b.severity ?? 3))
+      const capped: LSPClient.Diagnostic[] = []
+      let dropped = 0
+
+      for (const diag of bySeverity) {
+        const message = trimMessage(diag.message)
+        const key = `${diag.range.start.line}:${diag.range.start.character}:${diag.range.end.line}:${diag.range.end.character}:${message}`
+        if (seen.has(key)) {
+          dropped++
+          continue
+        }
+        seen.add(key)
+
+        if (capped.length >= MAX_PER_FILE) {
+          dropped++
+          continue
+        }
+
+        const candidate = { ...diag, message }
+        const size = JSON.stringify(candidate).length
+        if (totalChars + size > MAX_TOTAL_CHARS) {
+          dropped++
+          continue
+        }
+
+        totalChars += size
+        capped.push(candidate)
+      }
+
+      if (dropped > 0) {
+        const summary: LSPClient.Diagnostic = {
+          message: `${dropped} more diagnostics truncated`,
+          severity: 3,
+          range: {
+            start: { line: 0, character: 0 },
+            end: { line: 0, character: 0 },
+          },
+        }
+        capped.push(summary)
+      }
+
+      if (capped.length > 0) output[path] = capped
+      if (totalChars >= MAX_TOTAL_CHARS) break
+    }
+
+    return output
+  }
+
+  function trimMessage(message: string) {
+    if (message.length <= MAX_MESSAGE_CHARS) return message
+    return message.slice(0, MAX_MESSAGE_CHARS) + " …"
   }
 
   export async function hover(input: { file: string; line: number; character: number }) {
