@@ -2,6 +2,7 @@ import { FileDiff, Message, Model, Part, Session, SessionStatus, UserMessage } f
 import { SessionTurn } from "@opencode-ai/ui/session-turn"
 import { SessionReview } from "@opencode-ai/ui/session-review"
 import { DataProvider } from "@opencode-ai/ui/context"
+import { DiffComponentProvider } from "@opencode-ai/ui/context/diff"
 import { createAsync, query, useParams } from "@solidjs/router"
 import { createEffect, createMemo, ErrorBoundary, For, Match, Show, Switch } from "solid-js"
 import { Share } from "~/core/share"
@@ -18,7 +19,7 @@ import z from "zod"
 import NotFound from "../[...404]"
 import { Tabs } from "@opencode-ai/ui/tabs"
 import { preloadMultiFileDiff, PreloadMultiFileDiffResult } from "@pierre/precision-diffs/ssr"
-import { Diff } from "@opencode-ai/ui/diff-ssr"
+import { Diff as SSRDiff } from "@opencode-ai/ui/diff-ssr"
 import { clientOnly } from "@solidjs/start"
 
 const ClientOnlyDiff = clientOnly(() => import("@opencode-ai/ui/diff").then((m) => ({ default: m.Diff })))
@@ -157,234 +158,240 @@ export default function () {
           const info = createMemo(() => data().session[match().index])
 
           return (
-            <DataProvider data={data()} directory={info().directory}>
-              {iife(() => {
-                const [store, setStore] = createStore({
-                  messageId: undefined as string | undefined,
-                })
-                const messages = createMemo(() =>
-                  data().sessionID
-                    ? (data().message[data().sessionID]?.filter((m) => m.role === "user") ?? []).sort(
-                        (a, b) => b.time.created - a.time.created,
-                      )
-                    : [],
-                )
-                const firstUserMessage = createMemo(() => messages().at(0))
-                const activeMessage = createMemo(
-                  () => messages().find((m) => m.id === store.messageId) ?? firstUserMessage(),
-                )
-                function setActiveMessage(message: UserMessage | undefined) {
-                  if (message) {
-                    setStore("messageId", message.id)
-                  } else {
-                    setStore("messageId", undefined)
+            <DiffComponentProvider component={ClientOnlyDiff}>
+              <DataProvider data={data()} directory={info().directory}>
+                {iife(() => {
+                  const [store, setStore] = createStore({
+                    messageId: undefined as string | undefined,
+                  })
+                  const messages = createMemo(() =>
+                    data().sessionID
+                      ? (data().message[data().sessionID]?.filter((m) => m.role === "user") ?? []).sort(
+                          (a, b) => b.time.created - a.time.created,
+                        )
+                      : [],
+                  )
+                  const firstUserMessage = createMemo(() => messages().at(0))
+                  const activeMessage = createMemo(
+                    () => messages().find((m) => m.id === store.messageId) ?? firstUserMessage(),
+                  )
+                  function setActiveMessage(message: UserMessage | undefined) {
+                    if (message) {
+                      setStore("messageId", message.id)
+                    } else {
+                      setStore("messageId", undefined)
+                    }
                   }
-                }
-                const provider = createMemo(() => activeMessage()?.model?.providerID)
-                const modelID = createMemo(() => activeMessage()?.model?.modelID)
-                const model = createMemo(() => data().model[data().sessionID]?.find((m) => m.id === modelID()))
-                const diffs = createMemo(() => {
-                  const diffs = data().session_diff[data().sessionID] ?? []
-                  const preloaded = data().session_diff_preload[data().sessionID] ?? []
-                  return diffs.map((diff) => ({
-                    ...diff,
-                    preloaded: preloaded.find((d) => d.newFile.name === diff.file),
-                  }))
-                })
-                const splitDiffs = createMemo(() => {
-                  const diffs = data().session_diff[data().sessionID] ?? []
-                  const preloaded = data().session_diff_preload_split[data().sessionID] ?? []
-                  return diffs.map((diff) => ({
-                    ...diff,
-                    preloaded: preloaded.find((d) => d.newFile.name === diff.file),
-                  }))
-                })
+                  const provider = createMemo(() => activeMessage()?.model?.providerID)
+                  const modelID = createMemo(() => activeMessage()?.model?.modelID)
+                  const model = createMemo(() => data().model[data().sessionID]?.find((m) => m.id === modelID()))
+                  const diffs = createMemo(() => {
+                    const diffs = data().session_diff[data().sessionID] ?? []
+                    const preloaded = data().session_diff_preload[data().sessionID] ?? []
+                    return diffs.map((diff) => ({
+                      ...diff,
+                      preloaded: preloaded.find((d) => d.newFile.name === diff.file),
+                    }))
+                  })
+                  const splitDiffs = createMemo(() => {
+                    const diffs = data().session_diff[data().sessionID] ?? []
+                    const preloaded = data().session_diff_preload_split[data().sessionID] ?? []
+                    return diffs.map((diff) => ({
+                      ...diff,
+                      preloaded: preloaded.find((d) => d.newFile.name === diff.file),
+                    }))
+                  })
 
-                const title = () => (
-                  <div class="flex flex-col gap-4">
-                    <div class="h-8 flex gap-4 items-center justify-start self-stretch">
-                      <div class="pl-[2.5px] pr-2 flex items-center gap-1.75 bg-surface-strong shadow-xs-border-base">
-                        <Mark class="shrink-0 w-3 my-0.5" />
-                        <div class="text-12-mono text-text-base">v{info().version}</div>
-                      </div>
-                      <div class="flex gap-2 items-center">
-                        <img src={`https://models.dev/logos/${provider()}.svg`} class="size-3.5 shrink-0 dark:invert" />
-                        <div class="text-12-regular text-text-base">{model()?.name ?? modelID()}</div>
-                      </div>
-                      <div class="text-12-regular text-text-weaker">
-                        {DateTime.fromMillis(info().time.created).toFormat("dd MMM yyyy, HH:mm")}
-                      </div>
-                    </div>
-                    <div class="text-left text-16-medium text-text-strong">{info().title}</div>
-                  </div>
-                )
-
-                const turns = () => (
-                  <div class="relative mt-2 pt-6 pb-8 min-w-0 w-full h-full overflow-y-auto no-scrollbar">
-                    <div class="px-4">{title()}</div>
-                    <div class="flex flex-col gap-15 items-start justify-start mt-4">
-                      <For each={messages()}>
-                        {(message) => (
-                          <SessionTurn
-                            sessionID={data().sessionID}
-                            messageID={message.id}
-                            classes={{
-                              root: "min-w-0 w-full relative",
-                              content:
-                                "flex flex-col justify-between !overflow-visible [&_[data-slot=session-turn-message-header]]:top-[-32px]",
-                              container: "px-4",
-                            }}
-                            diffComponent={ClientOnlyDiff}
+                  const title = () => (
+                    <div class="flex flex-col gap-4">
+                      <div class="h-8 flex gap-4 items-center justify-start self-stretch">
+                        <div class="pl-[2.5px] pr-2 flex items-center gap-1.75 bg-surface-strong shadow-xs-border-base">
+                          <Mark class="shrink-0 w-3 my-0.5" />
+                          <div class="text-12-mono text-text-base">v{info().version}</div>
+                        </div>
+                        <div class="flex gap-2 items-center">
+                          <img
+                            src={`https://models.dev/logos/${provider()}.svg`}
+                            class="size-3.5 shrink-0 dark:invert"
                           />
-                        )}
-                      </For>
-                    </div>
-                    <div class="px-4 flex items-center justify-center pt-20 pb-8 shrink-0">
-                      <Logo class="w-58.5 opacity-12" />
-                    </div>
-                  </div>
-                )
-
-                const wide = createMemo(() => diffs().length === 0)
-
-                return (
-                  <div class="relative bg-background-stronger w-screen h-screen overflow-hidden flex flex-col">
-                    <header class="h-12 px-6 py-2 flex items-center justify-between self-stretch bg-background-base border-b border-border-weak-base">
-                      <div class="">
-                        <a href="https://opencode.ai">
-                          <Mark />
-                        </a>
+                          <div class="text-12-regular text-text-base">{model()?.name ?? modelID()}</div>
+                        </div>
+                        <div class="text-12-regular text-text-weaker">
+                          {DateTime.fromMillis(info().time.created).toFormat("dd MMM yyyy, HH:mm")}
+                        </div>
                       </div>
-                      <div class="flex gap-3 items-center">
-                        <IconButton
-                          as={"a"}
-                          href="https://github.com/sst/opencode"
-                          target="_blank"
-                          icon="github"
-                          variant="ghost"
-                        />
-                        <IconButton
-                          as={"a"}
-                          href="https://opencode.ai/discord"
-                          target="_blank"
-                          icon="discord"
-                          variant="ghost"
-                        />
+                      <div class="text-left text-16-medium text-text-strong">{info().title}</div>
+                    </div>
+                  )
+
+                  const turns = () => (
+                    <div class="relative mt-2 pt-6 pb-8 min-w-0 w-full h-full overflow-y-auto no-scrollbar">
+                      <div class="px-4">{title()}</div>
+                      <div class="flex flex-col gap-15 items-start justify-start mt-4">
+                        <For each={messages()}>
+                          {(message) => (
+                            <SessionTurn
+                              sessionID={data().sessionID}
+                              messageID={message.id}
+                              classes={{
+                                root: "min-w-0 w-full relative",
+                                content:
+                                  "flex flex-col justify-between !overflow-visible [&_[data-slot=session-turn-message-header]]:top-[-32px]",
+                                container: "px-4",
+                              }}
+                            />
+                          )}
+                        </For>
                       </div>
-                    </header>
-                    <div class="select-text flex flex-col flex-1 min-h-0">
-                      <div classList={{ "hidden w-full flex-1 min-h-0": true, "md:flex": wide(), "lg:flex": !wide() }}>
+                      <div class="px-4 flex items-center justify-center pt-20 pb-8 shrink-0">
+                        <Logo class="w-58.5 opacity-12" />
+                      </div>
+                    </div>
+                  )
+
+                  const wide = createMemo(() => diffs().length === 0)
+
+                  return (
+                    <div class="relative bg-background-stronger w-screen h-screen overflow-hidden flex flex-col">
+                      <header class="h-12 px-6 py-2 flex items-center justify-between self-stretch bg-background-base border-b border-border-weak-base">
+                        <div class="">
+                          <a href="https://opencode.ai">
+                            <Mark />
+                          </a>
+                        </div>
+                        <div class="flex gap-3 items-center">
+                          <IconButton
+                            as={"a"}
+                            href="https://github.com/sst/opencode"
+                            target="_blank"
+                            icon="github"
+                            variant="ghost"
+                          />
+                          <IconButton
+                            as={"a"}
+                            href="https://opencode.ai/discord"
+                            target="_blank"
+                            icon="discord"
+                            variant="ghost"
+                          />
+                        </div>
+                      </header>
+                      <div class="select-text flex flex-col flex-1 min-h-0">
                         <div
-                          classList={{
-                            "@container relative shrink-0 pt-14 flex flex-col gap-10 min-h-0 w-full": true,
-                            "mx-auto max-w-146": !wide(),
-                          }}
+                          classList={{ "hidden w-full flex-1 min-h-0": true, "md:flex": wide(), "lg:flex": !wide() }}
                         >
                           <div
                             classList={{
-                              "w-full flex justify-start items-start min-w-0": true,
-                              "max-w-146 mx-auto px-6": wide(),
-                              "pr-6 pl-18": !wide() && messages().length > 1,
-                              "px-6": !wide() && messages().length === 1,
+                              "@container relative shrink-0 pt-14 flex flex-col gap-10 min-h-0 w-full": true,
+                              "mx-auto max-w-146": !wide(),
                             }}
                           >
-                            {title()}
-                          </div>
-                          <div class="flex items-start justify-start h-full min-h-0">
-                            <SessionMessageRail
-                              messages={messages()}
-                              current={activeMessage()}
-                              onMessageSelect={setActiveMessage}
-                              wide={wide()}
-                            />
-                            <SessionTurn
-                              sessionID={data().sessionID}
-                              messageID={store.messageId ?? firstUserMessage()!.id!}
-                              classes={{
-                                root: "grow",
-                                content: "flex flex-col justify-between items-start",
-                                container:
-                                  "w-full pb-20 " +
-                                  (wide() ? "max-w-146 mx-auto px-6" : messages().length > 1 ? "pr-6 pl-18" : "px-6"),
+                            <div
+                              classList={{
+                                "w-full flex justify-start items-start min-w-0": true,
+                                "max-w-146 mx-auto px-6": wide(),
+                                "pr-6 pl-18": !wide() && messages().length > 1,
+                                "px-6": !wide() && messages().length === 1,
                               }}
-                              diffComponent={ClientOnlyDiff}
                             >
-                              <div classList={{ "w-full flex items-center justify-center pb-8 shrink-0": true }}>
-                                <Logo class="w-58.5 opacity-12" />
-                              </div>
-                            </SessionTurn>
+                              {title()}
+                            </div>
+                            <div class="flex items-start justify-start h-full min-h-0">
+                              <SessionMessageRail
+                                messages={messages()}
+                                current={activeMessage()}
+                                onMessageSelect={setActiveMessage}
+                                wide={wide()}
+                              />
+                              <SessionTurn
+                                sessionID={data().sessionID}
+                                messageID={store.messageId ?? firstUserMessage()!.id!}
+                                classes={{
+                                  root: "grow",
+                                  content: "flex flex-col justify-between items-start",
+                                  container:
+                                    "w-full pb-20 " +
+                                    (wide() ? "max-w-146 mx-auto px-6" : messages().length > 1 ? "pr-6 pl-18" : "px-6"),
+                                }}
+                              >
+                                <div classList={{ "w-full flex items-center justify-center pb-8 shrink-0": true }}>
+                                  <Logo class="w-58.5 opacity-12" />
+                                </div>
+                              </SessionTurn>
+                            </div>
                           </div>
-                        </div>
-                        <Show when={diffs().length > 0}>
-                          <div class="@container relative grow pt-14 flex-1 min-h-0 border-l border-border-weak-base">
-                            <SessionReview
-                              class="@4xl:hidden"
-                              diffs={diffs()}
-                              diffComponent={Diff}
-                              classes={{
-                                root: "pb-20",
-                                header: "px-6",
-                                container: "px-6",
-                              }}
-                            />
-                            <SessionReview
-                              split
-                              class="hidden @4xl:flex"
-                              diffs={splitDiffs()}
-                              diffComponent={Diff}
-                              classes={{
-                                root: "pb-20",
-                                header: "px-6",
-                                container: "px-6",
-                              }}
-                            />
-                          </div>
-                        </Show>
-                      </div>
-                      <Switch>
-                        <Match when={diffs().length > 0}>
-                          <Tabs classList={{ "md:hidden": wide(), "lg:hidden": !wide() }}>
-                            <Tabs.List>
-                              <Tabs.Trigger value="session" class="w-1/2" classes={{ button: "w-full" }}>
-                                Session
-                              </Tabs.Trigger>
-                              <Tabs.Trigger value="review" class="w-1/2 !border-r-0" classes={{ button: "w-full" }}>
-                                5 Files Changed
-                              </Tabs.Trigger>
-                            </Tabs.List>
-                            <Tabs.Content value="session" class="!overflow-hidden">
-                              {turns()}
-                            </Tabs.Content>
-                            <Tabs.Content
-                              forceMount
-                              value="review"
-                              class="!overflow-hidden hidden data-[selected]:block"
-                            >
-                              <div class="relative h-full pt-8 overflow-y-auto no-scrollbar">
+                          <Show when={diffs().length > 0}>
+                            <DiffComponentProvider component={SSRDiff}>
+                              <div class="@container relative grow pt-14 flex-1 min-h-0 border-l border-border-weak-base">
                                 <SessionReview
+                                  class="@4xl:hidden"
                                   diffs={diffs()}
-                                  diffComponent={Diff}
                                   classes={{
                                     root: "pb-20",
-                                    header: "px-4",
-                                    container: "px-4",
+                                    header: "px-6",
+                                    container: "px-6",
+                                  }}
+                                />
+                                <SessionReview
+                                  split
+                                  class="hidden @4xl:flex"
+                                  diffs={splitDiffs()}
+                                  classes={{
+                                    root: "pb-20",
+                                    header: "px-6",
+                                    container: "px-6",
                                   }}
                                 />
                               </div>
-                            </Tabs.Content>
-                          </Tabs>
-                        </Match>
-                        <Match when={true}>
-                          <div classList={{ "!overflow-hidden": true, "md:hidden": wide(), "lg:hidden": !wide() }}>
-                            {turns()}
-                          </div>
-                        </Match>
-                      </Switch>
+                            </DiffComponentProvider>
+                          </Show>
+                        </div>
+                        <Switch>
+                          <Match when={diffs().length > 0}>
+                            <Tabs classList={{ "md:hidden": wide(), "lg:hidden": !wide() }}>
+                              <Tabs.List>
+                                <Tabs.Trigger value="session" class="w-1/2" classes={{ button: "w-full" }}>
+                                  Session
+                                </Tabs.Trigger>
+                                <Tabs.Trigger value="review" class="w-1/2 !border-r-0" classes={{ button: "w-full" }}>
+                                  5 Files Changed
+                                </Tabs.Trigger>
+                              </Tabs.List>
+                              <Tabs.Content value="session" class="!overflow-hidden">
+                                {turns()}
+                              </Tabs.Content>
+                              <Tabs.Content
+                                forceMount
+                                value="review"
+                                class="!overflow-hidden hidden data-[selected]:block"
+                              >
+                                <div class="relative h-full pt-8 overflow-y-auto no-scrollbar">
+                                  <DiffComponentProvider component={SSRDiff}>
+                                    <SessionReview
+                                      diffs={diffs()}
+                                      classes={{
+                                        root: "pb-20",
+                                        header: "px-4",
+                                        container: "px-4",
+                                      }}
+                                    />
+                                  </DiffComponentProvider>
+                                </div>
+                              </Tabs.Content>
+                            </Tabs>
+                          </Match>
+                          <Match when={true}>
+                            <div classList={{ "!overflow-hidden": true, "md:hidden": wide(), "lg:hidden": !wide() }}>
+                              {turns()}
+                            </div>
+                          </Match>
+                        </Switch>
+                      </div>
                     </div>
-                  </div>
-                )
-              })}
-            </DataProvider>
+                  )
+                })}
+              </DataProvider>
+            </DiffComponentProvider>
           )
         }}
       </Show>
