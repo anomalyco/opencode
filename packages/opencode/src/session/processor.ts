@@ -318,7 +318,7 @@ export namespace SessionProcessor {
                   if (currentText) {
                     currentText.text = currentText.text.trimEnd()
                     const textOutput = await Plugin.trigger(
-                      "text.complete",
+                      "experimental.text.complete",
                       {
                         sessionID: input.sessionID,
                         messageID: input.assistantMessage.id,
@@ -363,7 +363,7 @@ export namespace SessionProcessor {
                 message: retry,
                 next: Date.now() + delay,
               })
-              await SessionRetry.sleep(delay, input.abort).catch(() => { })
+              await SessionRetry.sleep(delay, input.abort).catch(() => {})
               continue
             }
             input.assistantMessage.error = error
