@@ -6,7 +6,7 @@ import { onCleanup, onMount } from "solid-js"
 export function DialogThemeList() {
   const theme = useTheme()
   const options = Object.keys(theme.all())
-    .sort((a, b) => a.localeCompare(b, undefined, { sensitivity: 'base' }))
+    .sort((a, b) => a.localeCompare(b, undefined, { sensitivity: "base" }))
     .map((value) => ({
       title: value,
       value: value,

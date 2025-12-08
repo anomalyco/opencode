@@ -41,13 +41,16 @@ export namespace Auth {
 
   export async function all(): Promise<Record<string, Info>> {
     const file = Bun.file(filepath)
-    const data = await file.json().catch(() => ({} as Record<string, unknown>))
-    return Object.entries(data).reduce((acc, [key, value]) => {
-      const parsed = Info.safeParse(value)
-      if (!parsed.success) return acc
-      acc[key] = parsed.data
-      return acc
-    }, {} as Record<string, Info>)
+    const data = await file.json().catch(() => ({}) as Record<string, unknown>)
+    return Object.entries(data).reduce(
+      (acc, [key, value]) => {
+        const parsed = Info.safeParse(value)
+        if (!parsed.success) return acc
+        acc[key] = parsed.data
+        return acc
+      },
+      {} as Record<string, Info>,
+    )
   }
 
   export async function set(key: string, info: Info) {
