@@ -11,6 +11,7 @@ import { createStore } from "solid-js/store"
 import { type FileDiff } from "@opencode-ai/sdk"
 import { PreloadMultiFileDiffResult } from "@pierre/precision-diffs/ssr"
 import { Dynamic } from "solid-js/web"
+import { checksum } from "@opencode-ai/util/encode"
 
 export interface SessionReviewProps {
   split?: boolean
@@ -105,10 +106,12 @@ export const SessionReview = (props: SessionReviewProps) => {
                     before={{
                       name: diff.file!,
                       contents: diff.before!,
+                      cacheKey: checksum(diff.before),
                     }}
                     after={{
                       name: diff.file!,
                       contents: diff.after!,
+                      cacheKey: checksum(diff.after),
                     }}
                   />
                 </Accordion.Content>
