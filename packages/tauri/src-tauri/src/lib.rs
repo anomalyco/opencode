@@ -4,7 +4,7 @@ use std::{
     sync::{Arc, Mutex},
     time::{Duration, Instant},
 };
-use tauri::{App, AppHandle, Manager, RunEvent, WebviewUrl, WebviewWindow};
+use tauri::{AppHandle, Manager, RunEvent, WebviewUrl, WebviewWindow};
 use tauri_plugin_dialog::{DialogExt, MessageDialogButtons, MessageDialogResult};
 use tauri_plugin_shell::process::{CommandChild, CommandEvent};
 use tauri_plugin_shell::ShellExt;
