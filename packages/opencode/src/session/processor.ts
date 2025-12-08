@@ -28,6 +28,14 @@ export namespace SessionProcessor {
     }
   }
 
+  export function normalizeFinishReason(
+    finishReason: MessageV2.Assistant["finish"],
+    sawToolCall: boolean,
+  ): MessageV2.Assistant["finish"] {
+    if ((finishReason === "tool-calls" || finishReason === "unknown") && !sawToolCall) return "stop"
+    return finishReason
+  }
+
   export function create(input: {
     assistantMessage: MessageV2.Assistant
     sessionID: string
@@ -52,6 +60,7 @@ export namespace SessionProcessor {
           try {
             let currentText: MessageV2.TextPart | undefined
             let reasoningMap: Record<string, MessageV2.ReasoningPart> = {}
+            let sawToolCall = false
             const stream = streamText(streamInput)
 
             for await (const value of stream.fullStream) {
@@ -126,6 +135,7 @@ export namespace SessionProcessor {
                   break
 
                 case "tool-call": {
+                  sawToolCall = true
                   const match = toolcalls[value.toolCallId]
                   if (match) {
                     const part = await Session.updatePart({
@@ -248,17 +258,20 @@ export namespace SessionProcessor {
                   break
 
                 case "finish-step":
+                  // Some OpenAI-compatible providers can send finish_reason "tool_calls" without emitting any
+                  // tool-call deltas. If we never saw a tool call, treat this as a normal stop to avoid hanging.
+                  const normalizedFinishReason = normalizeFinishReason(value.finishReason, sawToolCall)
                   const usage = Session.getUsage({
                     model: input.model,
                     usage: value.usage,
                     metadata: value.providerMetadata,
                   })
-                  input.assistantMessage.finish = value.finishReason
+                  input.assistantMessage.finish = normalizedFinishReason
                   input.assistantMessage.cost += usage.cost
                   input.assistantMessage.tokens = usage.tokens
                   await Session.updatePart({
                     id: Identifier.ascending("part"),
-                    reason: value.finishReason,
+                    reason: normalizedFinishReason,
                     snapshot: await Snapshot.track(),
                     messageID: input.assistantMessage.id,
                     sessionID: input.assistantMessage.sessionID,
