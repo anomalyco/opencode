@@ -67,9 +67,6 @@ const cli = yargs(hideBin(process.argv))
         return "INFO"
       })(),
     })
-
-    await Tracing.init({})
-
     process.env.AGENT = "1"
     process.env.OPENCODE = "1"
 
@@ -112,8 +109,16 @@ const cli = yargs(hideBin(process.argv))
   })
   .strict()
 
+// Ensure telemetry is initialized before creating the root CLI span.
+await Tracing.init({})
+
 try {
-  await cli.parse()
+  // Set global active span so that all subsequent operations are included as
+  // children and not orphaned.
+  await Tracing.startSpan("cli", async () => {
+    Tracing.setAttributes({ "cli.args": process.argv.slice(2).join(" ") })
+    await cli.parse()
+  })
 } catch (e) {
   let data: Record<string, any> = {}
   if (e instanceof NamedError) {
