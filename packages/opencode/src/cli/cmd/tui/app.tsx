@@ -163,7 +163,7 @@ function App() {
   const { theme, mode, setMode } = useTheme()
   const sync = useSync()
   const exit = useExit()
-  const promptRef = usePromptRef()
+
   const [consoleVisible, setConsoleVisible] = createSignal(false)
 
   createEffect(() => {
