@@ -5,6 +5,7 @@ import { useLayout } from "@/context/layout"
 import { useGlobalSync } from "@/context/global-sync"
 import { base64Decode, base64Encode } from "@opencode-ai/util/encode"
 import { Mark } from "@opencode-ai/ui/logo"
+import { ResizeHandle } from "@opencode-ai/ui/resize-handle"
 import { Button } from "@opencode-ai/ui/button"
 import { Icon } from "@opencode-ai/ui/icon"
 import { IconButton } from "@opencode-ai/ui/icon-button"
@@ -116,41 +117,14 @@ export default function Layout(props: ParentProps) {
           style={{ width: layout.sidebar.opened() ? `${layout.sidebar.width()}px` : undefined }}
         >
           <Show when={layout.sidebar.opened()}>
-            <div
-              class="absolute inset-y-0 right-0 z-10 w-2 translate-x-1/2 cursor-ew-resize"
-              onMouseDown={(e) => {
-                e.preventDefault()
-                const startX = e.clientX
-                const startWidth = layout.sidebar.width()
-                const maxWidth = window.innerWidth * 0.3
-                const minWidth = 150
-                const collapseThreshold = 80
-                let currentWidth = startWidth
-
-                document.body.style.userSelect = "none"
-                document.body.style.overflow = "hidden"
-
-                const onMouseMove = (moveEvent: MouseEvent) => {
-                  const deltaX = moveEvent.clientX - startX
-                  currentWidth = startWidth + deltaX
-                  const clampedWidth = Math.min(maxWidth, Math.max(minWidth, currentWidth))
-                  layout.sidebar.resize(clampedWidth)
-                }
-
-                const onMouseUp = () => {
-                  document.body.style.userSelect = ""
-                  document.body.style.overflow = ""
-                  document.removeEventListener("mousemove", onMouseMove)
-                  document.removeEventListener("mouseup", onMouseUp)
-
-                  if (currentWidth < collapseThreshold) {
-                    layout.sidebar.close()
-                  }
-                }
-
-                document.addEventListener("mousemove", onMouseMove)
-                document.addEventListener("mouseup", onMouseUp)
-              }}
+            <ResizeHandle
+              direction="horizontal"
+              size={layout.sidebar.width()}
+              min={150}
+              max={window.innerWidth * 0.3}
+              collapseThreshold={80}
+              onResize={layout.sidebar.resize}
+              onCollapse={layout.sidebar.close}
             />
           </Show>
           <div class="grow flex flex-col items-start self-stretch gap-4 p-2 min-h-0">
