@@ -7,7 +7,7 @@ import { useSDK } from "../context/sdk"
 import { DialogPrompt } from "../ui/dialog-prompt"
 import { useTheme } from "../context/theme"
 import { TextAttributes } from "@opentui/core"
-import type { ProviderAuthAuthorization } from "@opencode-ai/sdk"
+import type { ProviderAuthAuthorization } from "@opencode-ai/sdk/v2"
 import { DialogModel } from "./dialog-model"
 
 const PROVIDER_PRIORITY: Record<string, number> = {
@@ -64,12 +64,8 @@ export function createDialogProviderOptions() {
           const method = methods[index]
           if (method.type === "oauth") {
             const result = await sdk.client.provider.oauth.authorize({
-              path: {
-                id: provider.id,
-              },
-              body: {
-                method: index,
-              },
+              providerID: provider.id,
+              method: index,
             })
             if (result.data?.method === "code") {
               dialog.replace(() => (
@@ -111,12 +107,8 @@ function AutoMethod(props: AutoMethodProps) {
 
   onMount(async () => {
     const result = await sdk.client.provider.oauth.callback({
-      path: {
-        id: props.providerID,
-      },
-      body: {
-        method: props.index,
-      },
+      providerID: props.providerID,
+      method: props.index,
     })
     if (result.error) {
       dialog.clear()
@@ -161,13 +153,9 @@ function CodeMethod(props: CodeMethodProps) {
       placeholder="Authorization code"
       onConfirm={async (value) => {
         const { error } = await sdk.client.provider.oauth.callback({
-          path: {
-            id: props.providerID,
-          },
-          body: {
-            method: props.index,
-            code: value,
-          },
+          providerID: props.providerID,
+          method: props.index,
+          code: value,
         })
         if (!error) {
           await sdk.client.instance.dispose()
@@ -219,10 +207,8 @@ function ApiMethod(props: ApiMethodProps) {
       onConfirm={async (value) => {
         if (!value) return
         sdk.client.auth.set({
-          path: {
-            id: props.providerID,
-          },
-          body: {
+          providerID: props.providerID,
+          auth: {
             type: "api",
             key: value,
           },

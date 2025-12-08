@@ -1,7 +1,7 @@
 import { RequestError, type McpServer } from "@agentclientprotocol/sdk"
 import type { ACPSessionState } from "./types"
 import { Log } from "@/util/log"
-import type { OpencodeClient } from "@opencode-ai/sdk"
+import type { OpencodeClient } from "@opencode-ai/sdk/v2"
 
 const log = Log.create({ service: "acp-session-manager" })
 
@@ -15,16 +15,14 @@ export class ACPSessionManager {
 
   async create(cwd: string, mcpServers: McpServer[], model?: ACPSessionState["model"]): Promise<ACPSessionState> {
     const session = await this.sdk.session
-      .create({
-        body: {
+      .create(
+        {
           title: `ACP Session ${crypto.randomUUID()}`,
-        },
-        query: {
           directory: cwd,
         },
-        throwOnError: true,
-      })
-      .then((x) => x.data)
+        { throwOnError: true },
+      )
+      .then((x) => x.data!)
 
     const sessionId = session.id
     const resolvedModel = model
