@@ -1200,6 +1200,8 @@ export namespace LSPServer {
           cwd: root,
         }),
       }
+    },
+  }
   export const BashLS: Info = {
     id: "bash",
     extensions: [".sh", ".bash", ".zsh", ".ksh"],
