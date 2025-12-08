@@ -580,6 +580,7 @@ export namespace Server {
         describeRoute({
           summary: "Get session",
           description: "Retrieve detailed information about a specific OpenCode session.",
+          tags: ["Session"],
           operationId: "session.get",
           responses: {
             200: {
@@ -610,6 +611,7 @@ export namespace Server {
         "/session/:sessionID/children",
         describeRoute({
           summary: "Get session children",
+          tags: ["Session"],
           description: "Retrieve all child sessions that were forked from the specified parent session.",
           operationId: "session.children",
           responses: {
