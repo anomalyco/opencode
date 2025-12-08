@@ -4,12 +4,14 @@ import { DiffChanges } from "./diff-changes"
 import { FileIcon } from "./file-icon"
 import { Icon } from "./icon"
 import { StickyAccordionHeader } from "./sticky-accordion-header"
+import { useDiffComponent } from "../context/diff"
 import { getDirectory, getFilename } from "@opencode-ai/util/path"
-import { For, Match, Show, Switch, ValidComponent, type JSX } from "solid-js"
+import { For, Match, Show, Switch, type JSX } from "solid-js"
 import { createStore } from "solid-js/store"
 import { type FileDiff } from "@opencode-ai/sdk"
 import { PreloadMultiFileDiffResult } from "@pierre/precision-diffs/ssr"
 import { Dynamic } from "solid-js/web"
+import { checksum } from "@opencode-ai/util/encode"
 
 export interface SessionReviewProps {
   split?: boolean
@@ -18,10 +20,10 @@ export interface SessionReviewProps {
   classes?: { root?: string; header?: string; container?: string }
   actions?: JSX.Element
   diffs: (FileDiff & { preloaded?: PreloadMultiFileDiffResult<any> })[]
-  diffComponent: ValidComponent
 }
 
 export const SessionReview = (props: SessionReviewProps) => {
+  const diffComponent = useDiffComponent()
   const [store, setStore] = createStore({
     open: props.diffs.map((d) => d.file),
   })
@@ -98,16 +100,18 @@ export const SessionReview = (props: SessionReviewProps) => {
                 </StickyAccordionHeader>
                 <Accordion.Content data-slot="session-review-accordion-content">
                   <Dynamic
-                    component={props.diffComponent}
+                    component={diffComponent}
                     preloadedDiff={diff.preloaded}
                     diffStyle={props.split ? "split" : "unified"}
                     before={{
                       name: diff.file!,
                       contents: diff.before!,
+                      cacheKey: checksum(diff.before),
                     }}
                     after={{
                       name: diff.file!,
                       contents: diff.after!,
+                      cacheKey: checksum(diff.after),
                     }}
                   />
                 </Accordion.Content>

@@ -1,35 +1,20 @@
 name: Guidelines Check
 
 on:
-  pull_request_target:
-    types: [opened, ready_for_review]
   issue_comment:
     types: [created]
 
 jobs:
   check-guidelines:
     if: |
-      (github.event_name == 'pull_request_target' &&
-       github.event.pull_request.draft == false) ||
-      (github.event_name == 'issue_comment' &&
-       github.event.issue.pull_request &&
-       startsWith(github.event.comment.body, '/review'))
+      github.event.issue.pull_request &&
+      startsWith(github.event.comment.body, '/review') &&
+      contains(fromJson('["OWNER","MEMBER"]'), github.event.comment.author_association)
     runs-on: blacksmith-4vcpu-ubuntu-2404
     permissions:
       contents: read
       pull-requests: write
     steps:
-      - name: Check if user has write permission
-        if: github.event_name == 'issue_comment'
-        run: |
-          PERMISSION=$(gh api /repos/${{ github.repository }}/collaborators/${{ github.event.comment.user.login }}/permission --jq '.permission')
-          if [[ "$PERMISSION" != "write" && "$PERMISSION" != "admin" ]]; then
-            echo "User does not have write permission"
-            exit 1
-          fi
-        env:
-          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-
       - name: Get PR number
         id: pr-number
         run: |
@@ -61,9 +46,10 @@ jobs:
           ANTHROPIC_API_KEY: ${{ secrets.ANTHROPIC_API_KEY }}
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
           OPENCODE_PERMISSION: '{ "bash": { "gh*": "allow", "gh pr review*": "deny", "*": "deny" } }'
+          PR_TITLE: ${{ steps.pr-details.outputs.title }}
         run: |
           PR_BODY=$(jq -r .body pr_data.json)
-          opencode run -m anthropic/claude-sonnet-4-5 "A new pull request has been created: '${{ steps.pr-details.outputs.title }}'
+          opencode run -m anthropic/claude-opus-4-5 "A new pull request has been created: '${PR_TITLE}'
 
           <pr-number>
           ${{ steps.pr-number.outputs.number }}
@@ -90,4 +76,4 @@ jobs:
             -f 'body=[summary of issue]' -f 'commit_id=${{ steps.pr-details.outputs.sha }}' -f 'path=[path-to-file]' -F \"line=[line]\" -f 'side=RIGHT'
           \`\`\`
 
-          Only create comments for actual violations. If the code follows all guidelines, don't run any gh commands."
+          Only create comments for actual violations. If the code follows all guidelines, comment on the issue using gh cli: 'lgtm' AND NOTHING ELSE!!!!."

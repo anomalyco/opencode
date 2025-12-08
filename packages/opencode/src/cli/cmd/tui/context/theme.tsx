@@ -15,6 +15,7 @@ import gruvbox from "./theme/gruvbox.json" with { type: "json" }
 import kanagawa from "./theme/kanagawa.json" with { type: "json" }
 import material from "./theme/material.json" with { type: "json" }
 import matrix from "./theme/matrix.json" with { type: "json" }
+import mercury from "./theme/mercury.json" with { type: "json" }
 import monokai from "./theme/monokai.json" with { type: "json" }
 import nightowl from "./theme/nightowl.json" with { type: "json" }
 import nord from "./theme/nord.json" with { type: "json" }
@@ -25,6 +26,7 @@ import rosepine from "./theme/rosepine.json" with { type: "json" }
 import solarized from "./theme/solarized.json" with { type: "json" }
 import synthwave84 from "./theme/synthwave84.json" with { type: "json" }
 import tokyonight from "./theme/tokyonight.json" with { type: "json" }
+import vercel from "./theme/vercel.json" with { type: "json" }
 import vesper from "./theme/vesper.json" with { type: "json" }
 import zenburn from "./theme/zenburn.json" with { type: "json" }
 import { useKV } from "./kv"
@@ -138,6 +140,7 @@ export const DEFAULT_THEMES: Record<string, ThemeJson> = {
   kanagawa,
   material,
   matrix,
+  mercury,
   monokai,
   nightowl,
   nord,
@@ -149,6 +152,7 @@ export const DEFAULT_THEMES: Record<string, ThemeJson> = {
   synthwave84,
   tokyonight,
   vesper,
+  vercel,
   zenburn,
 }
 

@@ -29,7 +29,7 @@ export const AuthListCommand = cmd({
     const homedir = os.homedir()
     const displayPath = authPath.startsWith(homedir) ? authPath.replace(homedir, "~") : authPath
     prompts.intro(`Credentials ${UI.Style.TEXT_DIM}${displayPath}`)
-    const results = await Auth.all().then((x) => Object.entries(x))
+    const results = Object.entries(await Auth.all())
     const database = await ModelsDev.get()
 
     for (const [providerID, result] of results) {
