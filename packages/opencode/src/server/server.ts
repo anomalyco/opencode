@@ -2380,7 +2380,7 @@ export namespace Server {
         })
       })
       .all("/*", async (c) => {
-        return proxy(`https://desktop.opencode.ai?url=/web`, {
+        return proxy(`https://desktop.opencode.ai${c.req.path}?url=/web`, {
           ...c.req,
           headers: {
             host: "desktop.opencode.ai",
