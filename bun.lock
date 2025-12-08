@@ -458,7 +458,7 @@
     "@hono/zod-validator": "0.4.2",
     "@kobalte/core": "0.13.11",
     "@openauthjs/openauth": "0.0.0-20250322224806",
-    "@pierre/precision-diffs": "0.6.0-beta.3",
+    "@pierre/precision-diffs": "0.6.0-beta.10",
     "@solidjs/meta": "0.29.4",
     "@solidjs/router": "0.15.4",
     "@solidjs/start": "https://pkg.pr.new/@solidjs/start@dfb2020",
@@ -1273,7 +1273,7 @@
 
     "@petamoriken/float16": ["@petamoriken/float16@3.9.3", "", {}, "sha512-8awtpHXCx/bNpFt4mt2xdkgtgVvKqty8VbjHI/WWWQuEw+KLzFot3f4+LkQY9YmOtq7A5GdOnqoIC8Pdygjk2g=="],
 
-    "@pierre/precision-diffs": ["@pierre/precision-diffs@0.6.0-beta.3", "", { "dependencies": { "@shikijs/core": "3.15.0", "@shikijs/transformers": "3.15.0", "diff": "8.0.2", "fast-deep-equal": "3.1.3", "hast-util-to-html": "9.0.5", "shiki": "3.15.0" }, "peerDependencies": { "react": "^18.3.1 || ^19.0.0", "react-dom": "^18.3.1 || ^19.0.0" } }, "sha512-1FBm9jhLWZvs7BqN3yG2Wh9SpGuO1us2QsKZlQqSwyCctMr9DRGzYQJ9lF6yR03LHzXs3fuIzO++d9sCObYzrQ=="],
+    "@pierre/precision-diffs": ["@pierre/precision-diffs@0.6.0-beta.10", "", { "dependencies": { "@shikijs/core": "3.15.0", "@shikijs/transformers": "3.15.0", "diff": "8.0.2", "fast-deep-equal": "3.1.3", "hast-util-to-html": "9.0.5", "lru_map": "0.4.1", "shiki": "3.15.0" }, "peerDependencies": { "react": "^18.3.1 || ^19.0.0", "react-dom": "^18.3.1 || ^19.0.0" } }, "sha512-2rdd1Q1xJbB0Z4oUbm0Ybrr2gLFEdvNetZLadJboZSFL7Q4gFujdQZfXfV3vB9X+esjt++v0nzb3mioW25BOTA=="],
 
     "@pkgjs/parseargs": ["@pkgjs/parseargs@0.11.0", "", {}, "sha512-+1VkjdD0QBLPodGrJUeqarH8VAIvQODIbwh9XpP5Syisf7YoQgsJKPNFoqqLQlu+VQ/tVSshMR6loPMn8U+dPg=="],
 
@@ -2818,6 +2818,8 @@
     "lru-cache": ["lru-cache@6.0.0", "", { "dependencies": { "yallist": "^4.0.0" } }, "sha512-Jo6dJ04CmSjuznwJSS3pUeWmd/H0ffTlkXXgwZi+eq1UCmqQwCh+eLsYOYCwY991i2Fah4h1BEMCx4qThGbsiA=="],
 
     "lru.min": ["lru.min@1.1.3", "", {}, "sha512-Lkk/vx6ak3rYkRR0Nhu4lFUT2VDnQSxBe8Hbl7f36358p6ow8Bnvr8lrLt98H8J1aGxfhbX4Fs5tYg2+FTwr5Q=="],
+
+    "lru_map": ["lru_map@0.4.1", "", {}, "sha512-I+lBvqMMFfqaV8CJCISjI3wbjmwVu/VyOoU7+qtu9d7ioW5klMgsTTiUOUp+DJvfTTzKXoPbyC6YfgkNcyPSOg=="],
 
     "luxon": ["luxon@3.6.1", "", {}, "sha512-tJLxrKJhO2ukZ5z0gyjY1zPh3Rh88Ej9P7jNrZiHMUXHae1yvI2imgOZtL1TO8TW6biMMKfTtAOoEJANgtWBMQ=="],
 
