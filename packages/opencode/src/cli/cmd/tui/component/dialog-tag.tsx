@@ -16,9 +16,7 @@ export function DialogTag(props: { onSelect?: (value: string) => void }) {
     () => [store.filter],
     async () => {
       const result = await sdk.client.find.files({
-        query: {
-          query: store.filter,
-        },
+        query: store.filter,
       })
       if (result.error) return []
       const sliced = (result.data ?? []).slice(0, 5)

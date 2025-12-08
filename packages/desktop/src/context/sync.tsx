@@ -28,7 +28,7 @@ export const { use: useSync, provider: SyncProvider } = createSimpleContext({
       status: () => sdk.client.session.status().then((x) => setStore("session_status", x.data!)),
       config: () => sdk.client.config.get().then((x) => setStore("config", x.data!)),
       changes: () => sdk.client.file.status().then((x) => setStore("changes", x.data!)),
-      node: () => sdk.client.file.list({ query: { path: "/" } }).then((x) => setStore("node", x.data!)),
+      node: () => sdk.client.file.list({ path: "/" }).then((x) => setStore("node", x.data!)),
     }
 
     Promise.all(Object.values(load).map((p) => p())).then(() => setStore("ready", true))
@@ -49,10 +49,10 @@ export const { use: useSync, provider: SyncProvider } = createSimpleContext({
         },
         async sync(sessionID: string, _isRetry = false) {
           const [session, messages, todo, diff] = await Promise.all([
-            sdk.client.session.get({ path: { id: sessionID }, throwOnError: true }),
-            sdk.client.session.messages({ path: { id: sessionID }, query: { limit: 100 } }),
-            sdk.client.session.todo({ path: { id: sessionID } }),
-            sdk.client.session.diff({ path: { id: sessionID } }),
+            sdk.client.session.get({ sessionID }, { throwOnError: true }),
+            sdk.client.session.messages({ sessionID, limit: 100 }),
+            sdk.client.session.todo({ sessionID }),
+            sdk.client.session.diff({ sessionID }),
           ])
           setStore(
             produce((draft) => {
