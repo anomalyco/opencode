@@ -1,5 +1,5 @@
 import { useGlobalSync } from "@/context/global-sync"
-import { base64Encode } from "@/utils"
+import { base64Encode } from "@opencode-ai/util/encode"
 import { For } from "solid-js"
 import { A } from "@solidjs/router"
 import { Button } from "@opencode-ai/ui/button"

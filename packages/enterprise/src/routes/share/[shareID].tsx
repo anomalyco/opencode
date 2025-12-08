@@ -354,7 +354,7 @@ export default function () {
                                   Session
                                 </Tabs.Trigger>
                                 <Tabs.Trigger value="review" class="w-1/2 !border-r-0" classes={{ button: "w-full" }}>
-                                  5 Files Changed
+                                  {diffs().length} Files Changed
                                 </Tabs.Trigger>
                               </Tabs.List>
                               <Tabs.Content value="session" class="!overflow-hidden">
