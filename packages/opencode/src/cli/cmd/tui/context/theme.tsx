@@ -93,6 +93,7 @@ type ThemeColors = {
 
 type Theme = ThemeColors & {
   _hasSelectedListItemText: boolean
+  thinkingOpacity: number
 }
 
 export function selectedForeground(theme: Theme): RGBA {
@@ -125,6 +126,7 @@ type ThemeJson = {
   theme: Omit<Record<keyof ThemeColors, ColorValue>, "selectedListItemText" | "backgroundMenu"> & {
     selectedListItemText?: ColorValue
     backgroundMenu?: ColorValue
+    thinkingOpacity?: number
   }
 }
 
@@ -183,9 +185,9 @@ function resolveTheme(theme: ThemeJson, mode: "dark" | "light") {
 
   const resolved = Object.fromEntries(
     Object.entries(theme.theme)
-      .filter(([key]) => key !== "selectedListItemText" && key !== "backgroundMenu")
+      .filter(([key]) => key !== "selectedListItemText" && key !== "backgroundMenu" && key !== "thinkingOpacity")
       .map(([key, value]) => {
-        return [key, resolveColor(value)]
+        return [key, resolveColor(value as ColorValue)]
       }),
   ) as Partial<ThemeColors>
 
@@ -206,9 +208,13 @@ function resolveTheme(theme: ThemeJson, mode: "dark" | "light") {
     resolved.backgroundMenu = resolved.backgroundElement
   }
 
+  // Handle thinkingOpacity - optional with default of 0.6
+  const thinkingOpacity = theme.theme.thinkingOpacity ?? 0.6
+
   return {
     ...resolved,
     _hasSelectedListItemText: hasSelectedListItemText,
+    thinkingOpacity,
   } as Theme
 }
 
@@ -554,7 +560,7 @@ function generateSubtleSyntax(theme: Theme) {
               Math.round(fg.r * 255),
               Math.round(fg.g * 255),
               Math.round(fg.b * 255),
-              Math.round(0.6 * 255),
+              Math.round(theme.thinkingOpacity * 255),
             ),
           },
         }
