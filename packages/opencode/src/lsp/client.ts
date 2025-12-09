@@ -1,9 +1,10 @@
+import { BusEvent } from "@/bus/bus-event"
+import { Bus } from "@/bus"
 import path from "path"
 import { createMessageConnection, StreamMessageReader, StreamMessageWriter } from "vscode-jsonrpc/node"
 import type { Diagnostic as VSCodeDiagnostic } from "vscode-languageserver-types"
 import { Log } from "../util/log"
 import { LANGUAGE_EXTENSIONS } from "./language"
-import { Bus } from "../bus"
 import z from "zod"
 import type { LSPServer } from "./server"
 import { NamedError } from "@opencode-ai/util/error"
@@ -25,7 +26,7 @@ export namespace LSPClient {
   )
 
   export const Event = {
-    Diagnostics: Bus.event(
+    Diagnostics: BusEvent.define(
       "lsp.client.diagnostics",
       z.object({
         serverID: z.string(),

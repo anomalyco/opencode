@@ -189,14 +189,14 @@ export namespace MCP {
           name: "StreamableHTTP",
           transport: new StreamableHTTPClientTransport(new URL(mcp.url), {
             authProvider,
-            requestInit: oauthDisabled && mcp.headers ? { headers: mcp.headers } : undefined,
+            requestInit: mcp.headers ? { headers: mcp.headers } : undefined,
           }),
         },
         {
           name: "SSE",
           transport: new SSEClientTransport(new URL(mcp.url), {
             authProvider,
-            requestInit: oauthDisabled && mcp.headers ? { headers: mcp.headers } : undefined,
+            requestInit: mcp.headers ? { headers: mcp.headers } : undefined,
           }),
         },
       ]

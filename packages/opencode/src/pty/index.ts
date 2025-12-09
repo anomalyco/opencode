@@ -1,8 +1,9 @@
+import { BusEvent } from "@/bus/bus-event"
+import { Bus } from "@/bus"
 import { type IPty } from "bun-pty"
 import z from "zod"
 import { Identifier } from "../id/id"
 import { Log } from "../util/log"
-import { Bus } from "../bus"
 import type { WSContext } from "hono/ws"
 import { Instance } from "../project/instance"
 import { shell } from "@opencode-ai/util/shell"
@@ -73,10 +74,10 @@ export namespace Pty {
   export type UpdateInput = z.infer<typeof UpdateInput>
 
   export const Event = {
-    Created: Bus.event("pty.created", z.object({ info: Info })),
-    Updated: Bus.event("pty.updated", z.object({ info: Info })),
-    Exited: Bus.event("pty.exited", z.object({ id: Identifier.schema("pty"), exitCode: z.number() })),
-    Deleted: Bus.event("pty.deleted", z.object({ id: Identifier.schema("pty") })),
+    Created: BusEvent.define("pty.created", z.object({ info: Info })),
+    Updated: BusEvent.define("pty.updated", z.object({ info: Info })),
+    Exited: BusEvent.define("pty.exited", z.object({ id: Identifier.schema("pty"), exitCode: z.number() })),
+    Deleted: BusEvent.define("pty.deleted", z.object({ id: Identifier.schema("pty") })),
   }
 
   interface ActiveSession {

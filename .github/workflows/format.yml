@@ -8,9 +8,14 @@ on:
     branches-ignore:
       - production
   workflow_dispatch:
+  workflow_run:
+    workflows: ["sdk"]
+    types:
+      - completed
 jobs:
   format:
     runs-on: blacksmith-4vcpu-ubuntu-2404
+    if: github.event.workflow_run.conclusion == 'success'
     permissions:
       contents: write
     steps:
