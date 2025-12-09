@@ -70,6 +70,12 @@ export namespace Project {
           id = roots[0]
           if (id) Bun.file(path.join(git, "opencode")).write(id)
         }
+        if (!id)
+          return {
+            id: "global",
+            worktree,
+            vcs: "git",
+          }
         worktree = await $`git rev-parse --show-toplevel`
           .quiet()
           .nothrow()
@@ -101,7 +107,7 @@ export namespace Project {
         await migrateFromGlobal(id, worktree)
       }
     }
-    if (!existing.icon) discover(existing)
+    discover(existing)
     await Storage.write<Info>(["project", id], {
       ...existing,
       worktree,
@@ -120,7 +126,9 @@ export namespace Project {
     return existing
   }
 
-  export async function discover(input: Pick<Info, "id" | "worktree">) {
+  export async function discover(input: Info) {
+    if (input.vcs !== "git") return
+    if (input.icon) return
     const glob = new Bun.Glob("**/{favicon,icon,logo}.{ico,png,svg,jpg,jpeg,webp}")
     for await (const match of glob.scan({
       cwd: input.worktree,

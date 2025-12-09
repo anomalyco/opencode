@@ -49,13 +49,13 @@ describe("Project.discover", () => {
     const pngData = Buffer.from([0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a])
     await Bun.write(path.join(tmp.path, "favicon.png"), pngData)
 
-    await Project.discover({ id: project.id, worktree: tmp.path })
+    await Project.discover(project)
 
     const updated = await Storage.read<Project.Info>(["project", project.id])
     expect(updated.icon).toBeDefined()
     expect(updated.icon?.url).toStartWith("data:")
     expect(updated.icon?.url).toContain("base64")
-    expect(updated.icon?.color).toBe("#000000")
+    expect(updated.icon?.color).toBeUndefined()
   })
 
   test("should discover icon.svg in subdirectory", async () => {
@@ -65,7 +65,7 @@ describe("Project.discover", () => {
     await $`mkdir -p ${path.join(tmp.path, "public")}`.quiet()
     await Bun.write(path.join(tmp.path, "public", "icon.svg"), "<svg></svg>")
 
-    await Project.discover({ id: project.id, worktree: tmp.path })
+    await Project.discover(project)
 
     const updated = await Storage.read<Project.Info>(["project", project.id])
     expect(updated.icon).toBeDefined()
@@ -80,7 +80,7 @@ describe("Project.discover", () => {
     const icoData = Buffer.from([0x00, 0x00, 0x01, 0x00])
     await Bun.write(path.join(tmp.path, "logo.ico"), icoData)
 
-    await Project.discover({ id: project.id, worktree: tmp.path })
+    await Project.discover(project)
 
     const updated = await Storage.read<Project.Info>(["project", project.id])
     expect(updated.icon).toBeDefined()
@@ -93,7 +93,7 @@ describe("Project.discover", () => {
 
     await Bun.write(path.join(tmp.path, "favicon.txt"), "not an image")
 
-    await Project.discover({ id: project.id, worktree: tmp.path })
+    await Project.discover(project)
 
     const updated = await Storage.read<Project.Info>(["project", project.id])
     expect(updated.icon).toBeUndefined()
@@ -110,7 +110,7 @@ describe("Project.discover", () => {
     const pngData = Buffer.from([0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a])
     await Bun.write(path.join(tmp.path, "favicon.png"), pngData)
 
-    await Project.discover({ id: project.id, worktree: tmp.path })
+    await Project.discover(project)
 
     const updated = await Storage.read<Project.Info>(["project", project.id])
     expect(updated.icon?.color).toBe("#ff0000")
