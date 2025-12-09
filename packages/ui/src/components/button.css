@@ -57,6 +57,9 @@
     &[data-selected="true"]:not(:disabled) {
       background-color: var(--surface-raised-base-hover);
     }
+    &[data-active="true"] {
+      background-color: var(--surface-raised-base-active);
+    }
   }
 
   &[data-variant="secondary"] {

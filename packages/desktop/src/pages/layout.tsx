@@ -140,6 +140,42 @@ export default function Layout(props: ParentProps) {
     return <></>
   }
 
+  const ProjectVisual = (props: { directory: string; class?: string }): JSX.Element => {
+    const name = createMemo(() => getFilename(props.directory))
+    return (
+      <Switch>
+        <Match when={layout.sidebar.opened()}>
+          <Button
+            as={"div"}
+            variant="ghost"
+            data-active
+            class="flex items-center justify-between gap-3 w-full px-1 self-stretch h-8 border-none"
+          >
+            <div class="flex items-center gap-3 p-0 text-left min-w-0 grow">
+              <div class="size-6 shrink-0">
+                <Avatar fallback={name()} background="var(--surface-info-base)" class="size-full" />
+              </div>
+              <span class="truncate text-14-medium text-text-strong">{name()}</span>
+            </div>
+          </Button>
+        </Match>
+        <Match when={true}>
+          <Button
+            variant="ghost"
+            size="large"
+            class="flex items-center justify-center p-0 aspect-square border-none"
+            data-selected={props.directory === currentDirectory()}
+            onClick={() => navigateToProject(props.directory)}
+          >
+            <div class="size-6 shrink-0">
+              <Avatar fallback={name()} background="var(--surface-info-base)" class="size-full" />
+            </div>
+          </Button>
+        </Match>
+      </Switch>
+    )
+  }
+
   const SortableProject = (props: { project: { directory: string; expanded: boolean } }): JSX.Element => {
     const sortable = createSortable(props.project.directory)
     const [projectStore] = globalSync.child(props.project.directory)
@@ -147,7 +183,7 @@ export default function Layout(props: ParentProps) {
     const name = createMemo(() => getFilename(props.project.directory))
     return (
       // @ts-ignore
-      <div use:sortable classList={{ "opacity-0": sortable.isActiveDraggable }}>
+      <div use:sortable classList={{ "opacity-30": sortable.isActiveDraggable }}>
         <Switch>
           <Match when={layout.sidebar.opened()}>
             <Collapsible variant="ghost" defaultOpen class="gap-2 shrink-0">
@@ -239,17 +275,7 @@ export default function Layout(props: ParentProps) {
           </Match>
           <Match when={true}>
             <Tooltip placement="right" value={props.project.directory}>
-              <Button
-                variant="ghost"
-                size="large"
-                class="flex items-center justify-center p-0 aspect-square border-none"
-                data-selected={props.project.directory === currentDirectory()}
-                onClick={() => navigateToProject(props.project.directory)}
-              >
-                <div class="size-6 shrink-0 inset-0">
-                  <Avatar fallback={name()} background="var(--surface-info-base)" class="size-full" />
-                </div>
-              </Button>
+              <ProjectVisual directory={props.project.directory} />
             </Tooltip>
           </Match>
         </Switch>
@@ -258,16 +284,11 @@ export default function Layout(props: ParentProps) {
   }
 
   const ProjectDragOverlay = (): JSX.Element => {
-    const activeName = createMemo(() => {
-      if (!store.activeDraggable) return undefined
-      return getFilename(store.activeDraggable)
-    })
     return (
-      <Show when={activeName()}>
-        {(name) => (
-          <div class="flex items-center gap-3 px-2 py-1 bg-background-stronger rounded-md border border-border-weak-base">
-            <Avatar fallback={name()} background="var(--surface-info-base)" class="size-6" />
-            <span class="text-14-medium text-text-strong">{name()}</span>
+      <Show when={store.activeDraggable}>
+        {(directory) => (
+          <div class="bg-background-base rounded-md">
+            <ProjectVisual directory={directory()} />
           </div>
         )}
       </Show>
