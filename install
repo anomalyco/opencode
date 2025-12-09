@@ -5,7 +5,7 @@ APP=opencode
 MUTED='\033[0;2m'
 RED='\033[0;31m'
 ORANGE='\033[38;5;214m'
-NC='\033[0m' # No Color
+NC='\033[0m'
 
 requested_version=${VERSION:-}
 
@@ -14,7 +14,6 @@ os=$(echo "$raw_os" | tr '[:upper:]' '[:lower:]')
 case "$raw_os" in
   Darwin*) os="darwin" ;;
   Linux*) os="linux" ;;
-  MINGW*|MSYS*|CYGWIN*) os="windows" ;;
 esac
 
 arch=$(uname -m)
@@ -34,7 +33,7 @@ fi
 
 combo="$os-$arch"
 case "$combo" in
-  linux-x64|linux-arm64|darwin-x64|darwin-arm64|windows-x64)
+  linux-x64|linux-arm64|darwin-x64|darwin-arm64)
     ;;
   *)
     echo -e "${RED}Unsupported OS/Arch: $os/$arch${NC}"
@@ -42,9 +41,9 @@ case "$combo" in
     ;;
 esac
 
-archive_ext=".zip"
-if [ "$os" = "linux" ]; then
-  archive_ext=".tar.gz"
+archive_ext=".tar.gz"
+if [ "$os" = "darwin" ]; then
+  archive_ext=".zip"
 fi
 
 is_musl=false
@@ -85,7 +84,6 @@ if [ "$is_musl" = "true" ]; then
 fi
 
 filename="$APP-$target$archive_ext"
-
 
 if [ "$os" = "linux" ]; then
     if ! command -v tar >/dev/null 2>&1; then
@@ -132,10 +130,6 @@ print_message() {
 check_version() {
     if command -v opencode >/dev/null 2>&1; then
         opencode_path=$(which opencode)
-
-
-        ## TODO: check if version is installed
-        # installed_version=$(opencode version)
         installed_version="0.0.1"
         installed_version=$(echo $installed_version | awk '{print $2}')
 
@@ -195,7 +189,6 @@ download_with_progress() {
     rm -f "$tracefile"
     mkfifo "$tracefile"
 
-    # Hide cursor
     printf "\033[?25l" >&4
 
     trap "trap - RETURN; rm -f \"$tracefile\"; printf '\033[?25h' >&4; exec 4>&-" RETURN
@@ -242,10 +235,7 @@ download_and_install() {
     print_message info "\n${MUTED}Installing ${NC}opencode ${MUTED}version: ${NC}$specific_version"
     mkdir -p opencodetmp && cd opencodetmp
     
-    if [[ "$os" == "windows" ]] || ! download_with_progress "$url" "$filename"; then
-        # Fallback to standard curl on Windows or if custom progress fails
-        curl -# -L -o "$filename" "$url"
-    fi
+    download_with_progress "$url" "$filename"
 
     if [ "$os" = "linux" ]; then
         tar -xzf "$filename"
@@ -260,7 +250,6 @@ download_and_install() {
 
 check_version
 download_and_install
-
 
 add_to_path() {
     local config_file=$1
@@ -298,7 +287,6 @@ case $current_shell in
         config_files="$HOME/.ashrc $HOME/.profile /etc/profile"
     ;;
     *)
-        # Default case if none of the above matches
         config_files="$HOME/.bashrc $HOME/.bash_profile $XDG_CONFIG_HOME/bash/.bashrc $XDG_CONFIG_HOME/bash/.bash_profile"
     ;;
 esac
@@ -312,7 +300,7 @@ for file in $config_files; do
 done
 
 if [[ -z $config_file ]]; then
-    print_message error "No config file found for $current_shell. Checked files: ${config_files[@]}"
+    print_message error "No config file found for $current_shell. Checked: ${config_files[@]}"
     exit 1
 fi
 
@@ -321,21 +309,12 @@ if [[ ":$PATH:" != *":$INSTALL_DIR:"* ]]; then
         fish)
             add_to_path "$config_file" "fish_add_path $INSTALL_DIR"
         ;;
-        zsh)
-            add_to_path "$config_file" "export PATH=$INSTALL_DIR:\$PATH"
-        ;;
-        bash)
-            add_to_path "$config_file" "export PATH=$INSTALL_DIR:\$PATH"
-        ;;
-        ash)
-            add_to_path "$config_file" "export PATH=$INSTALL_DIR:\$PATH"
-        ;;
-        sh)
+        zsh|bash|ash|sh)
             add_to_path "$config_file" "export PATH=$INSTALL_DIR:\$PATH"
         ;;
         *)
             export PATH=$INSTALL_DIR:$PATH
-            print_message warning "Manually add the directory to $config_file (or similar):"
+            print_message warning "Manually add the directory to $config_file:"
             print_message info "  export PATH=$INSTALL_DIR:\$PATH"
         ;;
     esac
@@ -347,7 +326,7 @@ if [ -n "${GITHUB_ACTIONS-}" ] && [ "${GITHUB_ACTIONS}" == "true" ]; then
 fi
 
 echo -e ""
-echo -e "${MUTED}                    ${NC}             ▄     "
+echo -e "${MUTED}                    ${NC}             ▄     "
 echo -e "${MUTED}█▀▀█ █▀▀█ █▀▀█ █▀▀▄ ${NC}█▀▀▀ █▀▀█ █▀▀█ █▀▀█"
 echo -e "${MUTED}█░░█ █░░█ █▀▀▀ █░░█ ${NC}█░░░ █░░█ █░░█ █▀▀▀"
 echo -e "${MUTED}▀▀▀▀ █▀▀▀ ▀▀▀▀ ▀  ▀ ${NC}▀▀▀▀ ▀▀▀▀ ▀▀▀▀ ▀▀▀▀"
@@ -355,10 +334,8 @@ echo -e ""
 echo -e ""
 echo -e "${MUTED}OpenCode includes free models, to start:${NC}"
 echo -e ""
-echo -e "cd <project>  ${MUTED}# Open directory${NC}"
-echo -e "opencode      ${MUTED}# Run command${NC}"
+echo -e "cd <project>"
+echo -e "opencode"
 echo -e ""
-echo -e "${MUTED}For more information visit ${NC}https://opencode.ai/docs"
+echo -e "${MUTED}For more information: ${NC}https://opencode.ai/docs"
 echo -e ""
-echo -e ""
-
