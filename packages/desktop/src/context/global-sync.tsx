@@ -51,7 +51,6 @@ export const { use: useGlobalSync, provider: GlobalSyncProvider } = createSimple
   init: () => {
     const [globalStore, setGlobalStore] = createStore<{
       ready: boolean
-      defaultProject?: Project // TODO: remove this when we can select projects
       projects: Project[]
       children: Record<string, State>
     }>({
@@ -75,7 +74,7 @@ export const { use: useGlobalSync, provider: GlobalSyncProvider } = createSimple
           session_status: {},
           session_diff: {},
           todo: {},
-          limit: 10,
+          limit: 5,
           message: {},
           part: {},
           node: [],
@@ -165,11 +164,11 @@ export const { use: useGlobalSync, provider: GlobalSyncProvider } = createSimple
       sdk.client.project.list().then((x) =>
         setGlobalStore(
           "projects",
-          x.data!.filter((x) => !x.worktree.includes("opencode-test")),
+          x
+            .data!.filter((x) => !x.worktree.includes("opencode-test") && x.vcs)
+            .sort((a, b) => b.time.created - a.time.created),
         ),
       ),
-      // TODO: remove this when we can select projects
-      sdk.client.project.current().then((x) => setGlobalStore("defaultProject", x.data)),
     ]).then(() => setGlobalStore("ready", true))
 
     return {

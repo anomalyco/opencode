@@ -18,6 +18,8 @@ jobs:
         uses: actions/checkout@v4
         with:
           token: ${{ secrets.GITHUB_TOKEN }}
+          repository: ${{ github.event.pull_request.head.repo.full_name || github.repository }}
+          ref: ${{ github.event.pull_request.head.ref || github.ref_name }}
 
       - name: Setup Bun
         uses: ./.github/actions/setup-bun
@@ -34,6 +36,6 @@ jobs:
           git config --local user.name "GitHub Action"
           git add -A
           git commit -m "chore: regen sdk"
-          git push --no-verify
+          git push origin HEAD:${{ github.event.pull_request.head.ref || github.ref_name }} --no-verify
         env:
           CI: true
