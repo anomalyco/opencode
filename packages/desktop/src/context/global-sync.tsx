@@ -19,15 +19,15 @@ import { createSimpleContext } from "@opencode-ai/ui/context"
 import { useGlobalSDK } from "./global-sdk"
 
 const PASTEL_COLORS = [
-  "#FFB3BA", // pastel pink
+  "#FCEAFD", // pastel pink
   "#FFDFBA", // pastel peach
   "#FFFFBA", // pastel yellow
   "#BAFFC9", // pastel green
-  "#BAE1FF", // pastel blue
-  "#E0BBE4", // pastel lavender
+  "#EAF6FD", // pastel blue
+  "#EFEAFD", // pastel lavender
   "#FEC8D8", // pastel rose
   "#D4F0F0", // pastel cyan
-  "#FFDAC1", // pastel coral
+  "#FDF0EA", // pastel coral
   "#C1E1C1", // pastel mint
 ]
 
