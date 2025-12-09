@@ -127,7 +127,18 @@ export namespace BunProc {
 
     await runInstall()
 
-    parsed.dependencies[pkg] = version
+    // Resolve actual version from installed package when using "latest"
+    // This ensures subsequent starts use the cached version until explicitly updated
+    let resolvedVersion = version
+    if (version === "latest") {
+      const installedPkgJson = Bun.file(path.join(mod, "package.json"))
+      const installedPkg = await installedPkgJson.json().catch(() => null)
+      if (installedPkg?.version) {
+        resolvedVersion = installedPkg.version
+      }
+    }
+
+    parsed.dependencies[pkg] = resolvedVersion
     await Bun.write(pkgjson.name!, JSON.stringify(parsed, null, 2))
     return mod
   }
