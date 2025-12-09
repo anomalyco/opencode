@@ -1,5 +1,5 @@
 import { useFilteredList } from "@opencode-ai/ui/hooks"
-import { createEffect, on, Component, Show, For, onMount, onCleanup, Switch, Match } from "solid-js"
+import { createEffect, on, Component, Show, For, onMount, onCleanup, Switch, Match, createSignal } from "solid-js"
 import { createStore } from "solid-js/store"
 import { createFocusSignal } from "@solid-primitives/active-element"
 import { useLocal } from "@/context/local"
@@ -22,6 +22,8 @@ interface PromptInputProps {
   ref?: (el: HTMLDivElement) => void
 }
 
+const PLACEHOLDERS = ["Fix a TODO in the codebase", "What is the tech stack of this project?", "Fix broken tests"]
+
 export const PromptInput: Component<PromptInputProps> = (props) => {
   const navigate = useNavigate()
   const sdk = useSDK()
@@ -34,6 +36,15 @@ export const PromptInput: Component<PromptInputProps> = (props) => {
     popoverIsOpen: boolean
   }>({
     popoverIsOpen: false,
+  })
+
+  const [placeholder, setPlaceholder] = createSignal(Math.floor(Math.random() * PLACEHOLDERS.length))
+
+  onMount(() => {
+    const interval = setInterval(() => {
+      setPlaceholder((prev) => (prev + 1) % PLACEHOLDERS.length)
+    }, 5000)
+    onCleanup(() => clearInterval(interval))
   })
 
   createEffect(() => {
@@ -403,7 +414,7 @@ export const PromptInput: Component<PromptInputProps> = (props) => {
           />
           <Show when={!session.prompt.dirty()}>
             <div class="absolute top-0 left-0 px-5 py-3 text-14-regular text-text-weak pointer-events-none">
-              Plan and build anything
+              Ask anything... "{PLACEHOLDERS[placeholder()]}"
             </div>
           </Show>
         </div>
