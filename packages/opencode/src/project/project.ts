@@ -22,8 +22,8 @@ export namespace Project {
       name: z.string().optional(),
       icon: z
         .object({
-          url: z.string(),
-          color: z.string(),
+          url: z.string().optional(),
+          color: z.string().optional(),
         })
         .optional(),
       time: z.object({
@@ -135,8 +135,8 @@ export namespace Project {
       const url = `data:${mime};base64,${base64}`
       await Storage.update<Info>(["project", input.id], (draft) => {
         draft.icon = {
+          ...draft.icon,
           url,
-          color: draft.icon?.color ?? "#000000",
         }
       })
       return
