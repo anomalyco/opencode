@@ -745,8 +745,10 @@ export type GlobalEvent = {
 export type Project = {
   id: string
   worktree: string
-  vcsDir?: string
   vcs?: "git"
+  name?: string
+  icon?: string
+  color?: string
   time: {
     created: number
     updated?: number
@@ -1715,6 +1717,43 @@ export type ProjectCurrentResponses = {
 }
 
 export type ProjectCurrentResponse = ProjectCurrentResponses[keyof ProjectCurrentResponses]
+
+export type ProjectUpdateData = {
+  body?: {
+    name?: string
+    icon?: string
+    color?: string
+  }
+  path: {
+    projectID: string
+  }
+  query?: {
+    directory?: string
+  }
+  url: "/project/{projectID}"
+}
+
+export type ProjectUpdateErrors = {
+  /**
+   * Bad request
+   */
+  400: BadRequestError
+  /**
+   * Not found
+   */
+  404: NotFoundError
+}
+
+export type ProjectUpdateError = ProjectUpdateErrors[keyof ProjectUpdateErrors]
+
+export type ProjectUpdateResponses = {
+  /**
+   * Updated project information
+   */
+  200: Project
+}
+
+export type ProjectUpdateResponse = ProjectUpdateResponses[keyof ProjectUpdateResponses]
 
 export type PtyListData = {
   body?: never
