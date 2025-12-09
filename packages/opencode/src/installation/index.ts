@@ -1,8 +1,9 @@
+import { BusEvent } from "@/bus/bus-event"
+import { Bus } from "@/bus"
 import path from "path"
 import { $ } from "bun"
 import z from "zod"
 import { NamedError } from "@opencode-ai/util/error"
-import { Bus } from "../bus"
 import { Log } from "../util/log"
 import { iife } from "@/util/iife"
 
@@ -17,13 +18,13 @@ export namespace Installation {
   export type Method = Awaited<ReturnType<typeof method>>
 
   export const Event = {
-    Updated: Bus.event(
+    Updated: BusEvent.define(
       "installation.updated",
       z.object({
         version: z.string(),
       }),
     ),
-    UpdateAvailable: Bus.event(
+    UpdateAvailable: BusEvent.define(
       "installation.update-available",
       z.object({
         version: z.string(),

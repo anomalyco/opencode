@@ -273,8 +273,8 @@ export namespace ProviderTransform {
     return options
   }
 
-  export function providerOptions(npm: string | undefined, providerID: string, options: { [x: string]: any }) {
-    switch (npm) {
+  export function providerOptions(model: Provider.Model, options: { [x: string]: any }) {
+    switch (model.api.npm) {
       case "@ai-sdk/openai":
       case "@ai-sdk/azure":
         return {
@@ -302,7 +302,7 @@ export namespace ProviderTransform {
         }
       default:
         return {
-          [providerID]: options,
+          [model.providerID]: options,
         }
     }
   }
