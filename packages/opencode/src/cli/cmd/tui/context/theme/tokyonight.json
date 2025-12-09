@@ -83,6 +83,10 @@
       "dark": "darkStep2",
       "light": "lightStep2"
     },
+    "sidebarBackgroundPanel": {
+      "dark": "darkStep2",
+      "light": "lightStep2"
+    },
     "backgroundElement": {
       "dark": "darkStep3",
       "light": "lightStep3"

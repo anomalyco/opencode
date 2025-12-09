@@ -49,6 +49,7 @@
     "textMuted": { "dark": "darkGray", "light": "lightGray" },
     "background": { "dark": "darkBg0", "light": "lightBg0" },
     "backgroundPanel": { "dark": "darkBg1", "light": "lightBg1" },
+    "sidebarBackgroundPanel": { "dark": "darkBg1", "light": "lightBg1" },
     "backgroundElement": { "dark": "darkBg2", "light": "lightBg2" },
     "border": { "dark": "darkBg3", "light": "lightBg3" },
     "borderActive": { "dark": "darkFg1", "light": "lightFg1" },
