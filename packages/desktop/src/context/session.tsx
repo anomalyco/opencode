@@ -26,7 +26,7 @@ export const { use: useSession, provider: SessionProvider } = createSimpleContex
     const params = useParams()
     const sync = useSync()
     const name = createMemo(
-      () => `${base64Encode(sync.data.project.worktree)}/session${params.id ? "/" + params.id : ""}.v1`,
+      () => `${base64Encode(sync.data.project.worktree)}/session${params.id ? "/" + params.id : ""}.v2`,
     )
 
     const [store, setStore] = makePersisted(
