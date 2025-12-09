@@ -28,7 +28,7 @@ import {
 import type { DragEvent, Transformer } from "@thisbeyond/solid-dnd"
 import type { JSX } from "solid-js"
 import { useSync } from "@/context/sync"
-import { useSession } from "@/context/session"
+import { useSession, type LocalPTY } from "@/context/session"
 import { useLayout } from "@/context/layout"
 import { getDirectory, getFilename } from "@opencode-ai/util/path"
 import { Terminal } from "@/components/terminal"
@@ -43,6 +43,7 @@ export default function Page() {
     clickTimer: undefined as number | undefined,
     fileSelectOpen: false,
     activeDraggable: undefined as string | undefined,
+    activeTerminalDraggable: undefined as string | undefined,
   })
   let inputRef!: HTMLDivElement
 
@@ -176,6 +177,49 @@ export default function Page() {
 
   const handleDragEnd = () => {
     setStore("activeDraggable", undefined)
+  }
+
+  const handleTerminalDragStart = (event: unknown) => {
+    const id = getDraggableId(event)
+    if (!id) return
+    setStore("activeTerminalDraggable", id)
+  }
+
+  const handleTerminalDragOver = (event: DragEvent) => {
+    const { draggable, droppable } = event
+    if (draggable && droppable) {
+      const terminals = session.terminal.all()
+      const fromIndex = terminals.findIndex((t) => t.id === draggable.id.toString())
+      const toIndex = terminals.findIndex((t) => t.id === droppable.id.toString())
+      if (fromIndex !== -1 && toIndex !== -1 && fromIndex !== toIndex) {
+        session.terminal.move(draggable.id.toString(), toIndex)
+      }
+    }
+  }
+
+  const handleTerminalDragEnd = () => {
+    setStore("activeTerminalDraggable", undefined)
+  }
+
+  const SortableTerminalTab = (props: { terminal: LocalPTY }): JSX.Element => {
+    const sortable = createSortable(props.terminal.id)
+    return (
+      // @ts-ignore
+      <div use:sortable classList={{ "h-full": true, "opacity-0": sortable.isActiveDraggable }}>
+        <div class="relative h-full">
+          <Tabs.Trigger
+            value={props.terminal.id}
+            closeButton={
+              session.terminal.all().length > 1 && (
+                <IconButton icon="close" variant="ghost" onClick={() => session.terminal.close(props.terminal.id)} />
+              )
+            }
+          >
+            {props.terminal.title}
+          </Tabs.Trigger>
+        </div>
+      </div>
+    )
   }
 
   const FileVisual = (props: { file: LocalFile; active?: boolean }): JSX.Element => {
@@ -618,40 +662,54 @@ export default function Page() {
             onResize={layout.terminal.resize}
             onCollapse={layout.terminal.close}
           />
-          <Tabs variant="alt" value={session.terminal.active()} onChange={session.terminal.open}>
-            <Tabs.List class="h-10">
+          <DragDropProvider
+            onDragStart={handleTerminalDragStart}
+            onDragEnd={handleTerminalDragEnd}
+            onDragOver={handleTerminalDragOver}
+            collisionDetector={closestCenter}
+          >
+            <DragDropSensors />
+            <ConstrainDragYAxis />
+            <Tabs variant="alt" value={session.terminal.active()} onChange={session.terminal.open}>
+              <Tabs.List class="h-10">
+                <SortableProvider ids={session.terminal.all().map((t) => t.id)}>
+                  <For each={session.terminal.all()}>{(terminal) => <SortableTerminalTab terminal={terminal} />}</For>
+                </SortableProvider>
+                <div class="h-full flex items-center justify-center">
+                  <Tooltip value="Open file" class="flex items-center">
+                    <IconButton icon="plus-small" variant="ghost" iconSize="large" onClick={session.terminal.new} />
+                  </Tooltip>
+                </div>
+              </Tabs.List>
               <For each={session.terminal.all()}>
                 {(terminal) => (
-                  <Tabs.Trigger
-                    value={terminal.id}
-                    closeButton={
-                      session.terminal.all().length > 1 && (
-                        <IconButton icon="close" variant="ghost" onClick={() => session.terminal.close(terminal.id)} />
-                      )
-                    }
-                  >
-                    {terminal.title}
-                  </Tabs.Trigger>
+                  <Tabs.Content value={terminal.id}>
+                    <Terminal
+                      pty={terminal}
+                      onCleanup={session.terminal.update}
+                      onConnectError={() => session.terminal.clone(terminal.id)}
+                    />
+                  </Tabs.Content>
                 )}
               </For>
-              <div class="h-full flex items-center justify-center">
-                <Tooltip value="Open file" class="flex items-center">
-                  <IconButton icon="plus-small" variant="ghost" iconSize="large" onClick={session.terminal.new} />
-                </Tooltip>
-              </div>
-            </Tabs.List>
-            <For each={session.terminal.all()}>
-              {(terminal) => (
-                <Tabs.Content value={terminal.id}>
-                  <Terminal
-                    pty={terminal}
-                    onCleanup={session.terminal.update}
-                    onConnectError={() => session.terminal.clone(terminal.id)}
-                  />
-                </Tabs.Content>
-              )}
-            </For>
-          </Tabs>
+            </Tabs>
+            <DragOverlay>
+              <Show when={store.activeTerminalDraggable}>
+                {(draggedId) => {
+                  const terminal = createMemo(() => session.terminal.all().find((t) => t.id === draggedId()))
+                  return (
+                    <Show when={terminal()}>
+                      {(t) => (
+                        <div class="relative p-1 h-10 flex items-center bg-background-stronger text-14-regular">
+                          {t().title}
+                        </div>
+                      )}
+                    </Show>
+                  )
+                }}
+              </Show>
+            </DragOverlay>
+          </DragDropProvider>
         </div>
       </Show>
     </div>
