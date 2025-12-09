@@ -51,7 +51,7 @@ export default function Home() {
             <ul class="flex flex-col gap-2">
               <For
                 each={sync.data.projects
-                  .sort((a, b) => (b.time.updated ?? b.time.created) - (a.time.updated ?? a.time.created))
+                  .toSorted((a, b) => (b.time.updated ?? b.time.created) - (a.time.updated ?? a.time.created))
                   .slice(0, 5)}
               >
                 {(project) => (

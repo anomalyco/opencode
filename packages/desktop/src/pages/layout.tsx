@@ -149,7 +149,7 @@ export default function Layout(props: ParentProps) {
             as={"div"}
             variant="ghost"
             data-active
-            class="flex items-center justify-between gap-3 w-full px-1 self-stretch h-8 border-none"
+            class="flex items-center justify-between gap-3 w-full px-1 self-stretch h-8 border-none rounded-lg"
           >
             <div class="flex items-center gap-3 p-0 text-left min-w-0 grow">
               <div class="size-6 shrink-0">
@@ -168,7 +168,7 @@ export default function Layout(props: ParentProps) {
           <Button
             variant="ghost"
             size="large"
-            class="flex items-center justify-center p-0 aspect-square border-none"
+            class="flex items-center justify-center p-0 aspect-square border-none rounded-lg"
             data-selected={props.project.worktree === currentDirectory()}
             onClick={() => navigateToProject(props.project.worktree)}
           >
@@ -200,7 +200,7 @@ export default function Layout(props: ParentProps) {
               <Button
                 as={"div"}
                 variant="ghost"
-                class="group/session flex items-center justify-between gap-3 w-full px-1 self-stretch h-auto border-none"
+                class="group/session flex items-center justify-between gap-3 w-full px-1 self-stretch h-auto border-none rounded-lg"
               >
                 <Collapsible.Trigger class="group/trigger flex items-center gap-3 p-0 text-left min-w-0 grow border-none">
                   <div class="size-6 shrink-0">
@@ -419,7 +419,7 @@ export default function Layout(props: ParentProps) {
               <Button
                 variant="ghost"
                 size="large"
-                class="group/sidebar-toggle shrink-0 w-full text-left justify-start"
+                class="group/sidebar-toggle shrink-0 w-full text-left justify-start rounded-lg"
                 onClick={layout.sidebar.toggle}
               >
                 <div class="relative -ml-px flex items-center justify-center size-4 [&>*]:absolute [&>*]:inset-0">
@@ -468,7 +468,7 @@ export default function Layout(props: ParentProps) {
             <Show when={platform.openDirectoryPickerDialog}>
               <Tooltip placement="right" value="Open project" inactive={layout.sidebar.opened()}>
                 <Button
-                  class="flex w-full text-left justify-start text-12-medium text-text-base stroke-[1.5px]"
+                  class="flex w-full text-left justify-start text-12-medium text-text-base stroke-[1.5px] rounded-lg"
                   variant="ghost"
                   size="large"
                   icon="folder-add-left"
@@ -481,7 +481,7 @@ export default function Layout(props: ParentProps) {
             <Tooltip placement="right" value="Settings" inactive={layout.sidebar.opened()}>
               <Button
                 disabled
-                class="flex w-full text-left justify-start text-12-medium text-text-base stroke-[1.5px]"
+                class="flex w-full text-left justify-start text-12-medium text-text-base stroke-[1.5px] rounded-lg"
                 variant="ghost"
                 size="large"
                 icon="settings-gear"
@@ -494,7 +494,7 @@ export default function Layout(props: ParentProps) {
                 as={"a"}
                 href="https://opencode.ai/desktop-feedback"
                 target="_blank"
-                class="flex w-full text-left justify-start text-12-medium text-text-base stroke-[1.5px]"
+                class="flex w-full text-left justify-start text-12-medium text-text-base stroke-[1.5px] rounded-lg"
                 variant="ghost"
                 size="large"
                 icon="bubble-5"
