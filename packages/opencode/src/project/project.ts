@@ -10,6 +10,7 @@ import { work } from "../util/queue"
 import { fn } from "@opencode-ai/util/fn"
 import { BusEvent } from "@/bus/bus-event"
 import { iife } from "@/util/iife"
+import { GlobalBus } from "@/bus/global"
 
 export namespace Project {
   const log = Log.create({ service: "project" })
@@ -19,8 +20,12 @@ export namespace Project {
       worktree: z.string(),
       vcs: z.literal("git").optional(),
       name: z.string().optional(),
-      icon: z.string().optional(),
-      color: z.string().optional(),
+      icon: z
+        .object({
+          url: z.string(),
+          color: z.string(),
+        })
+        .optional(),
       time: z.object({
         created: z.number(),
         updated: z.number().optional(),
@@ -39,7 +44,7 @@ export namespace Project {
   export async function fromDirectory(directory: string) {
     log.info("fromDirectory", { directory })
 
-    const { id, worktree } = await iife(async () => {
+    const { id, worktree, vcs } = await iife(async () => {
       const matches = Filesystem.up({ targets: [".git"], start: directory })
       const git = await matches.next().then((x) => x.value)
       await matches.return()
@@ -81,37 +86,36 @@ export namespace Project {
       }
     })
 
-    if (!git) {
-      const project: Info = {
-        id: "global",
-        worktree: "/",
-        vcs: Info.shape.vcs.parse(Flag.OPENCODE_FAKE_VCS),
+    let existing = await Storage.read<Info>(["project", id]).catch(() => undefined)
+    if (!existing) {
+      existing = {
+        id,
+        worktree,
+        vcs: vcs as Info["vcs"],
         time: {
           created: Date.now(),
-          updated: Date.now(),
         },
       }
-      await Storage.write<Info>(["project", "global"], project)
-      return project
+      if (id !== "global") {
+        await migrateFromGlobal(id, worktree)
+      }
     }
-    const projectID = id || "global"
-    const existing = id ? await Storage.read<Info>(["project", id]).catch(() => undefined) : undefined
-    if (!existing && id) {
-      await migrateFromGlobal(projectID, worktree)
-    }
-    const project: Info = {
+    await Storage.write<Info>(["project", id], {
       ...existing,
-      id: projectID,
       worktree,
-      vcs: "git",
+      vcs: vcs as Info["vcs"],
       time: {
-        created: Date.now(),
-        ...existing?.time,
+        ...existing.time,
         updated: Date.now(),
       },
-    }
-    await Storage.write<Info>(["project", projectID], project)
-    return project
+    })
+    GlobalBus.emit("event", {
+      payload: {
+        type: Event.Updated.type,
+        properties: existing,
+      },
+    })
+    return existing!
   }
 
   async function migrateFromGlobal(newProjectID: string, worktree: string) {
@@ -153,14 +157,12 @@ export namespace Project {
     z.object({
       projectID: z.string(),
       name: z.string().optional(),
-      icon: z.string().optional(),
-      color: z.string().optional(),
+      icon: Info.shape.icon.optional(),
     }),
     async (input) => {
       return await Storage.update<Info>(["project", input.projectID], (draft) => {
         if (input.name !== undefined) draft.name = input.name
         if (input.icon !== undefined) draft.icon = input.icon
-        if (input.color !== undefined) draft.color = input.color
         draft.time.updated = Date.now()
       })
     },
