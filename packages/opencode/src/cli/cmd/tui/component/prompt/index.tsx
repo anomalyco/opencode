@@ -1,4 +1,4 @@
-import { BoxRenderable, TextareaRenderable, MouseEvent, PasteEvent, t, dim, fg, type KeyBinding } from "@opentui/core"
+import { BoxRenderable, TextareaRenderable, MouseEvent, PasteEvent, type KeyBinding } from "@opentui/core"
 import { createEffect, createMemo, type JSX, onMount, createSignal, onCleanup, Show, Switch, Match } from "solid-js"
 import "opentui-spinner/solid"
 import { useLocal } from "@tui/context/local"
@@ -656,7 +656,8 @@ export function Prompt(props: PromptProps) {
             flexGrow={1}
           >
             <textarea
-              placeholder={props.sessionID ? undefined : t`${fg(theme.placeholderText)(`Ask anything... "${PLACEHOLDERS[store.placeholder]}"`)}`}
+              placeholder={props.sessionID ? undefined : `Ask anything... "${PLACEHOLDERS[store.placeholder]}"`}
+              placeholderColor={theme.placeholderText}
               textColor={theme.text}
               focusedTextColor={theme.text}
               minHeight={1}
