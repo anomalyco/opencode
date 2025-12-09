@@ -8,7 +8,6 @@ use tauri::{AppHandle, Manager, RunEvent, WebviewUrl, WebviewWindow};
 use tauri_plugin_dialog::{DialogExt, MessageDialogButtons, MessageDialogResult};
 use tauri_plugin_shell::process::{CommandChild, CommandEvent};
 use tauri_plugin_shell::ShellExt;
-use tauri_plugin_updater::UpdaterExt;
 use tokio::net::TcpSocket;
 
 #[derive(Clone)]
@@ -102,13 +101,10 @@ pub fn run() {
     let mut builder = tauri::Builder::default()
         .plugin(tauri_plugin_dialog::init())
         .plugin(tauri_plugin_shell::init())
+        .plugin(tauri_plugin_process::init())
         .plugin(tauri_plugin_opener::init())
         .setup(move |app| {
             let app = app.handle().clone();
-
-            if updater_enabled {
-                tauri::async_runtime::spawn(run_updater(app.clone()));
-            }
 
             tauri::async_runtime::spawn(async move {
                 let port = get_sidecar_port();
@@ -141,7 +137,7 @@ pub fn run() {
 
                     let timestamp = Instant::now();
                     loop {
-                        if timestamp.elapsed() > Duration::from_secs(3) {
+                        if timestamp.elapsed() > Duration::from_secs(7) {
                             todo!("Handle server spawn timeout");
                         }
 
@@ -167,7 +163,13 @@ pub fn run() {
                         .title("OpenCode")
                         .inner_size(800.0, 600.0)
                         .decorations(true)
-                        .zoom_hotkeys_enabled(true);
+                        .zoom_hotkeys_enabled(true)
+                        .initialization_script(format!(
+                            r#"
+                          window.__OPENCODE__ ??= {{}};
+                          window.__OPENCODE__.updaterEnabled = {updater_enabled}
+                        "#
+                        ));
 
                 #[cfg(target_os = "macos")]
                 {
@@ -193,78 +195,24 @@ pub fn run() {
             if let RunEvent::Exit = event {
                 println!("Received Exit");
 
-                let _ = app
-                    .state::<ServerState>()
+                let Some(server_state) = app.try_state::<ServerState>() else {
+                    println!("Server not running");
+                    return;
+                };
+
+                let Some(server_state) = server_state
                     .0
                     .lock()
                     .expect("Failed to acquire mutex lock")
                     .take()
-                    .expect("State not found")
-                    .kill();
+                else {
+                    println!("Server state missing");
+                    return;
+                };
+
+                let _ = server_state.kill();
 
                 println!("Killed server");
             }
         });
-}
-
-async fn run_updater(app: AppHandle) {
-    let update = match app
-        .updater_builder()
-        .version_comparator(|v, r| {
-            dbg!(&v, &r);
-            r.version > v
-        })
-        .build()
-        .unwrap()
-        .check()
-        .await
-    {
-        Ok(u) => u,
-        Err(e) => {
-            dbg!(e);
-            app.dialog()
-                .message("Failed to check for updates")
-                .show(|_| {});
-            return;
-        }
-    };
-
-    dbg!(update.is_some());
-
-    let Some(update) = update else {
-        return;
-    };
-
-    let Ok(update_bytes) = update.download(|_, _| {}, || {}).await else {
-        return;
-    };
-
-    let should_update = app
-        .dialog()
-        .message(format!(
-            "Version {} of OpenCode is available, would you like to install it?",
-            &update.version
-        ))
-        .buttons(MessageDialogButtons::YesNo)
-        .blocking_show();
-
-    if !should_update {
-        return;
-    }
-
-    if update.install(update_bytes).is_err() {
-        app.dialog()
-            .message("Failed to install update")
-            .blocking_show();
-    }
-
-    let should_restart = app
-        .dialog()
-        .message("Update installed successfully, would you like to restart OpenCode?")
-        .buttons(MessageDialogButtons::YesNo)
-        .blocking_show();
-
-    if should_restart {
-        app.restart();
-    }
 }

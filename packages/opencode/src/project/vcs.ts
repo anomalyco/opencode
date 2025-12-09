@@ -1,8 +1,9 @@
+import { BusEvent } from "@/bus/bus-event"
+import { Bus } from "@/bus"
 import { $ } from "bun"
 import path from "path"
 import z from "zod"
 import { Log } from "@/util/log"
-import { Bus } from "@/bus"
 import { Instance } from "./instance"
 import { FileWatcher } from "@/file/watcher"
 
@@ -10,7 +11,7 @@ const log = Log.create({ service: "vcs" })
 
 export namespace Vcs {
   export const Event = {
-    BranchUpdated: Bus.event(
+    BranchUpdated: BusEvent.define(
       "vcs.branch.updated",
       z.object({
         branch: z.string().optional(),
@@ -39,16 +40,14 @@ export namespace Vcs {
 
   const state = Instance.state(
     async () => {
-      const vcsDir = Instance.project.vcsDir
-      if (Instance.project.vcs !== "git" || !vcsDir) {
+      if (Instance.project.vcs !== "git") {
         return { branch: async () => undefined, unsubscribe: undefined }
       }
       let current = await currentBranch()
       log.info("initialized", { branch: current })
 
-      const head = path.join(vcsDir, "HEAD")
       const unsubscribe = Bus.subscribe(FileWatcher.Event.Updated, async (evt) => {
-        if (evt.properties.file !== head) return
+        if (evt.properties.file.endsWith("HEAD")) return
         const next = await currentBranch()
         if (next !== current) {
           log.info("branch changed", { from: current, to: next })

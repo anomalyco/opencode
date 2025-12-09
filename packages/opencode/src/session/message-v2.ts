@@ -1,5 +1,6 @@
+import { BusEvent } from "@/bus/bus-event"
+import { Bus } from "@/bus"
 import z from "zod"
-import { Bus } from "../bus"
 import { NamedError } from "@opencode-ai/util/error"
 import { Message } from "./message"
 import { APICallError, convertToModelMessages, LoadAPIKeyError, type ModelMessage, type UIMessage } from "ai"
@@ -375,27 +376,27 @@ export namespace MessageV2 {
   export type Info = z.infer<typeof Info>
 
   export const Event = {
-    Updated: Bus.event(
+    Updated: BusEvent.define(
       "message.updated",
       z.object({
         info: Info,
       }),
     ),
-    Removed: Bus.event(
+    Removed: BusEvent.define(
       "message.removed",
       z.object({
         sessionID: z.string(),
         messageID: z.string(),
       }),
     ),
-    PartUpdated: Bus.event(
+    PartUpdated: BusEvent.define(
       "message.part.updated",
       z.object({
         part: Part,
         delta: z.string().optional(),
       }),
     ),
-    PartRemoved: Bus.event(
+    PartRemoved: BusEvent.define(
       "message.part.removed",
       z.object({
         sessionID: z.string(),
