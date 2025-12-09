@@ -212,8 +212,10 @@ export namespace Ripgrep {
     maxDepth?: number
     maxFileSize?: string
     timeoutMs?: number
+    follow?: boolean
   }) {
-    const args = [await filepath(), "--files", "--follow", "--hidden", "--glob=!.git/*"]
+    const args = [await filepath(), "--files", "--hidden", "--glob=!.git/*"]
+    if (input.follow) args.push("--follow")
     if (input.glob) {
       for (const g of input.glob) {
         args.push(`--glob=${g}`)

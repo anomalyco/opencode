@@ -14,10 +14,6 @@ const DEFAULT_IGNORE = [
   "**/__pycache__/**",
 ]
 
-const DEFAULT_MAX_DEPTH = 10
-const DEFAULT_MAX_FILE_SIZE = "5M"
-const DEFAULT_TIMEOUT_MS = 8000
-
 export const GlobTool = Tool.define("glob", {
   description: DESCRIPTION,
   parameters: z.object({
@@ -28,37 +24,59 @@ export const GlobTool = Tool.define("glob", {
       .describe(
         `The directory to search in. If not specified, the current working directory will be used. IMPORTANT: Omit this field to use the default directory. DO NOT enter "undefined" or "null" - simply omit it for the default behavior. Must be a valid directory path if provided.`,
       ),
+    follow: z.boolean().optional().describe("Follow symlinks (can be expensive); defaults to false"),
   }),
   async execute(params) {
-    let search = params.path ?? Instance.directory
-    search = path.isAbsolute(search) ? search : path.resolve(Instance.directory, search)
+    const root = Instance.worktree
+    let search = params.path ?? root
+    search = path.isAbsolute(search) ? search : path.resolve(root, search)
+    const rel = path.relative(root, search)
+    if (rel.startsWith("..")) {
+      search = root
+    }
+
+    async function searchOnce(options: { maxDepth?: number; timeoutMs?: number; maxFileSize?: string }) {
+      const files: { path: string; mtime: number }[] = []
+      let truncated = false
+      for await (const file of Ripgrep.files({
+        cwd: search,
+        glob: [params.pattern],
+        ignore: DEFAULT_IGNORE,
+        maxDepth: options.maxDepth,
+        maxFileSize: options.maxFileSize,
+        timeoutMs: options.timeoutMs,
+        follow: params.follow ?? false,
+      })) {
+        if (files.length >= limit) {
+          truncated = true
+          break
+        }
+        const full = path.resolve(search, file)
+        const stats = await Bun.file(full)
+          .stat()
+          .then((x) => x.mtime.getTime())
+          .catch(() => 0)
+        files.push({ path: full, mtime: stats })
+      }
+      files.sort((a, b) => b.mtime - a.mtime)
+      return { files, truncated }
+    }
 
     const limit = 100
-    const files = []
-    let truncated = false
-    for await (const file of Ripgrep.files({
-      cwd: search,
-      glob: [params.pattern],
-      ignore: DEFAULT_IGNORE,
-      maxDepth: DEFAULT_MAX_DEPTH,
-      maxFileSize: DEFAULT_MAX_FILE_SIZE,
-      timeoutMs: DEFAULT_TIMEOUT_MS,
-    })) {
-      if (files.length >= limit) {
-        truncated = true
-        break
-      }
-      const full = path.resolve(search, file)
-      const stats = await Bun.file(full)
-        .stat()
-        .then((x) => x.mtime.getTime())
-        .catch(() => 0)
-      files.push({
-        path: full,
-        mtime: stats,
-      })
+    const stage1 = await searchOnce({ maxDepth: 8, maxFileSize: "10M", timeoutMs: 4000 })
+    const needMore = stage1.files.length < limit && !stage1.truncated
+    const stage2 = needMore ? await searchOnce({}) : { files: [], truncated: false }
+
+    const combined = [...stage1.files, ...stage2.files]
+    const seen = new Set<string>()
+    const deduped = []
+    for (const f of combined) {
+      if (seen.has(f.path)) continue
+      seen.add(f.path)
+      deduped.push(f)
     }
-    files.sort((a, b) => b.mtime - a.mtime)
+    const truncated = stage1.truncated || stage2.truncated
+    const files = deduped.slice(0, limit)
 
     const output = []
     if (files.length === 0) output.push("No files found")
