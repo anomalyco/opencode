@@ -1,6 +1,8 @@
 // @refresh reload
 import { render } from "solid-js/web"
 import { DesktopInterface, PlatformProvider, Platform } from "@opencode-ai/desktop"
+import { runUpdater } from "./updater";
+import { onMount } from "solid-js";
 
 const root = document.getElementById("root")
 if (import.meta.env.DEV && !(root instanceof HTMLElement)) {
@@ -12,10 +14,14 @@ if (import.meta.env.DEV && !(root instanceof HTMLElement)) {
 const platform: Platform = {}
 
 render(
-  () => (
-    <PlatformProvider value={platform}>
+  () => {
+    onMount(() => {
+      if(window.__OPENCODE__.updaterEnabled) runUpdater();
+    });
+
+    return <PlatformProvider value={platform}>
       <DesktopInterface />
     </PlatformProvider>
-  ),
+  },
   root!,
 )
