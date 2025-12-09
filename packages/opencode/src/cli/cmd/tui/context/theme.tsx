@@ -22,6 +22,7 @@ import nightowl from "./theme/nightowl.json" with { type: "json" }
 import nord from "./theme/nord.json" with { type: "json" }
 import onedark from "./theme/one-dark.json" with { type: "json" }
 import opencode from "./theme/opencode.json" with { type: "json" }
+import orng from "./theme/orng.json" with { type: "json" }
 import palenight from "./theme/palenight.json" with { type: "json" }
 import rosepine from "./theme/rosepine.json" with { type: "json" }
 import solarized from "./theme/solarized.json" with { type: "json" }
@@ -150,6 +151,7 @@ export const DEFAULT_THEMES: Record<string, ThemeJson> = {
   nord,
   ["one-dark"]: onedark,
   opencode,
+  orng,
   palenight,
   rosepine,
   solarized,
