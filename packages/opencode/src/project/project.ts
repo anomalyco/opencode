@@ -141,6 +141,7 @@ export namespace Project {
       }),
     )
     const shortest = matches.sort((a, b) => a.length - b.length)[0]
+    if (!shortest) return
     const file = Bun.file(shortest)
     const buffer = await file.arrayBuffer()
     const base64 = Buffer.from(buffer).toString("base64")
