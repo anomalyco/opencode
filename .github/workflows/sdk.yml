@@ -28,6 +28,7 @@ jobs:
         run: |
           bun ./packages/sdk/js/script/build.ts
           (cd packages/opencode && bun dev generate > ../sdk/openapi.json)
+          bun x prettier --write packages/sdk/js/src/openapi.ts
           if [ -z "$(git status --porcelain)" ]; then
             echo "No changes to commit"
             exit 0
