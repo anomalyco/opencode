@@ -1,7 +1,7 @@
 // @refresh reload
 import { render } from "solid-js/web"
-import { DesktopInterface } from "@/DesktopInterface"
-import { Platform, PlatformProvider } from "@/PlatformContext"
+import { App } from "@/app"
+import { Platform, PlatformProvider } from "@/context/platform"
 
 const root = document.getElementById("root")
 if (import.meta.env.DEV && !(root instanceof HTMLElement)) {
@@ -10,12 +10,17 @@ if (import.meta.env.DEV && !(root instanceof HTMLElement)) {
   )
 }
 
-const platform: Platform = {}
+const platform: Platform = {
+  platform: "web",
+  openLink(url: string) {
+    window.open(url, "_blank")
+  },
+}
 
 render(
   () => (
     <PlatformProvider value={platform}>
-      <DesktopInterface />
+      <App />
     </PlatformProvider>
   ),
   root!,

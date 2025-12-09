@@ -220,7 +220,6 @@ export default function Page() {
     onTabClose: (tab: string) => void
   }): JSX.Element => {
     const sortable = createSortable(props.tab)
-
     const [file] = createResource(
       () => props.tab,
       async (tab) => {
@@ -230,7 +229,6 @@ export default function Page() {
         return undefined
       },
     )
-
     return (
       // @ts-ignore
       <div use:sortable classList={{ "h-full": true, "opacity-0": sortable.isActiveDraggable }}>
@@ -576,8 +574,7 @@ export default function Page() {
             onOpenChange={(open) => setStore("fileSelectOpen", open)}
             onSelect={(x) => {
               if (x) {
-                local.file.open(x)
-                return session.layout.openTab("file://" + x)
+                return local.file.open(x).then(() => session.layout.openTab("file://" + x))
               }
               return undefined
             }}

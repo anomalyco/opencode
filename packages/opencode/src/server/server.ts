@@ -1447,10 +1447,19 @@ export namespace Server {
           },
         }),
         async (c) => {
-          const providers = pipe(
-            await ModelsDev.get(),
-            mapValues((x) => Provider.fromModelsDevProvider(x)),
-          )
+          const config = await Config.get()
+          const disabled = new Set(config.disabled_providers ?? [])
+          const enabled = config.enabled_providers ? new Set(config.enabled_providers) : undefined
+
+          const allProviders = await ModelsDev.get()
+          const filteredProviders: Record<string, (typeof allProviders)[string]> = {}
+          for (const [key, value] of Object.entries(allProviders)) {
+            if ((enabled ? enabled.has(key) : true) && !disabled.has(key)) {
+              filteredProviders[key] = value
+            }
+          }
+
+          const providers = mapValues(filteredProviders, (x) => Provider.fromModelsDevProvider(x))
           const connected = await Provider.list().then((x) => Object.keys(x))
           return c.json({
             all: Object.values(providers),
@@ -1982,6 +1991,52 @@ export namespace Server {
           const name = c.req.param("name")
           await MCP.removeAuth(name)
           return c.json({ success: true as const })
+        },
+      )
+      .post(
+        "/mcp/:name/connect",
+        describeRoute({
+          description: "Connect an MCP server",
+          operationId: "mcp.connect",
+          responses: {
+            200: {
+              description: "MCP server connected successfully",
+              content: {
+                "application/json": {
+                  schema: resolver(z.boolean()),
+                },
+              },
+            },
+          },
+        }),
+        validator("param", z.object({ name: z.string() })),
+        async (c) => {
+          const { name } = c.req.valid("param")
+          await MCP.connect(name)
+          return c.json(true)
+        },
+      )
+      .post(
+        "/mcp/:name/disconnect",
+        describeRoute({
+          description: "Disconnect an MCP server",
+          operationId: "mcp.disconnect",
+          responses: {
+            200: {
+              description: "MCP server disconnected successfully",
+              content: {
+                "application/json": {
+                  schema: resolver(z.boolean()),
+                },
+              },
+            },
+          },
+        }),
+        validator("param", z.object({ name: z.string() })),
+        async (c) => {
+          const { name } = c.req.valid("param")
+          await MCP.disconnect(name)
+          return c.json(true)
         },
       )
       .get(

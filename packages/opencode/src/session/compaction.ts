@@ -140,8 +140,7 @@ export namespace SessionCompaction {
       // set to 0, we handle loop
       maxRetries: 0,
       providerOptions: ProviderTransform.providerOptions(
-        model.api.npm,
-        model.providerID,
+        model,
         pipe({}, mergeDeep(ProviderTransform.options(model, input.sessionID)), mergeDeep(model.options)),
       ),
       headers: model.headers,
@@ -193,7 +192,13 @@ export namespace SessionCompaction {
           },
         ],
       }),
-      experimental_telemetry: { isEnabled: cfg.experimental?.openTelemetry },
+      experimental_telemetry: {
+        isEnabled: cfg.experimental?.openTelemetry,
+        metadata: {
+          userId: cfg.username ?? "unknown",
+          sessionId: input.sessionID,
+        },
+      },
     })
     if (result === "continue" && input.auto) {
       const continueMsg = await Session.updateMessage({

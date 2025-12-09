@@ -335,7 +335,7 @@ export const { use: useLocal, provider: LocalProvider } = createSimpleContext({
 
       return {
         node: async (path: string) => {
-          if (!store.node[path]) {
+          if (!store.node[path] || store.node[path].loaded === false) {
             await init(path)
           }
           return store.node[path]
