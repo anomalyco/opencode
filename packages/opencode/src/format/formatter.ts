@@ -255,3 +255,23 @@ export const dart: Info = {
     return Bun.which("dart") !== null
   },
 }
+
+export const ocamlformat: Info = {
+  name: "ocamlformat",
+  command: ["ocamlformat", "-i", "$FILE"],
+  extensions: [".ml", ".mli"],
+  async enabled() {
+    if (!Bun.which("ocamlformat")) return false
+    const items = await Filesystem.findUp(".ocamlformat", Instance.directory, Instance.worktree)
+    return items.length > 0
+  },
+}
+
+export const terraform: Info = {
+  name: "terraform",
+  command: ["terraform", "fmt", "$FILE"],
+  extensions: [".tf", ".tfvars"],
+  async enabled() {
+    return Bun.which("terraform") !== null
+  },
+}
