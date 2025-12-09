@@ -34,6 +34,6 @@ jobs:
           git config --local user.name "GitHub Action"
           git add -A
           git commit -m "chore: regen sdk"
-          git push --no-verify
+          git push origin HEAD:${{ github.event.pull_request.head.ref || github.ref_name }} --no-verify
         env:
           CI: true
