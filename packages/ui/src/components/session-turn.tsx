@@ -1,7 +1,6 @@
 import { AssistantMessage } from "@opencode-ai/sdk"
 import { useData } from "../context"
 import { useDiffComponent } from "../context/diff"
-import { Binary } from "@opencode-ai/util/binary"
 import { getDirectory, getFilename } from "@opencode-ai/util/path"
 import { checksum } from "@opencode-ai/util/encode"
 import { createEffect, createMemo, createSignal, For, Match, onMount, ParentProps, Show, Switch } from "solid-js"
@@ -31,9 +30,6 @@ export function SessionTurn(
 ) {
   const data = useData()
   const diffComponent = useDiffComponent()
-  const match = Binary.search(data.store.session, props.sessionID, (s) => s.id)
-  if (!match.found) throw new Error(`Session ${props.sessionID} not found`)
-
   const sanitizer = createMemo(() => (data.directory ? new RegExp(`${data.directory}/`, "g") : undefined))
   const messages = createMemo(() => (props.sessionID ? (data.store.message[props.sessionID] ?? []) : []))
   const userMessages = createMemo(() =>

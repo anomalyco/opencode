@@ -1,5 +1,7 @@
+import { BusEvent } from "@/bus/bus-event"
+import { Bus } from "@/bus"
+import { GlobalBus } from "@/bus/global"
 import { Log } from "../util/log"
-import { Bus } from "../bus"
 import { describeRoute, generateSpecs, validator, resolver, openAPIRouteHandler } from "hono-openapi"
 import { Hono } from "hono"
 import { cors } from "hono/cors"
@@ -8,7 +10,7 @@ import { proxy } from "hono/proxy"
 import { Session } from "../session"
 import z from "zod"
 import { Provider } from "../provider/provider"
-import { mapValues, pipe } from "remeda"
+import { mapValues } from "remeda"
 import { NamedError } from "@opencode-ai/util/error"
 import { ModelsDev } from "../provider/models"
 import { Ripgrep } from "../file/ripgrep"
@@ -41,7 +43,6 @@ import type { ContentfulStatusCode } from "hono/utils/http-status"
 import { TuiEvent } from "@/cli/cmd/tui/event"
 import { Snapshot } from "@/snapshot"
 import { SessionSummary } from "@/session/summary"
-import { GlobalBus } from "@/bus/global"
 import { SessionStatus } from "@/session/status"
 import { upgradeWebSocket, websocket } from "hono/bun"
 import { errors } from "./error"
@@ -54,7 +55,7 @@ export namespace Server {
   const log = Log.create({ service: "server" })
 
   export const Event = {
-    Connected: Bus.event("server.connected", z.object({})),
+    Connected: BusEvent.define("server.connected", z.object({})),
   }
 
   const app = new Hono()
@@ -109,7 +110,7 @@ export namespace Server {
                     z
                       .object({
                         directory: z.string(),
-                        payload: Bus.payloads(),
+                        payload: BusEvent.payloads(),
                       })
                       .meta({
                         ref: "GlobalEvent",
@@ -2393,7 +2394,7 @@ export namespace Server {
               description: "Event stream",
               content: {
                 "text/event-stream": {
-                  schema: resolver(Bus.payloads()),
+                  schema: resolver(BusEvent.payloads()),
                 },
               },
             },
