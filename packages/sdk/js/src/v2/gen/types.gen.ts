@@ -29,7 +29,7 @@ export type Project = {
   }
   time: {
     created: number
-    updated?: number
+    updated: number
     initialized?: number
   }
 }
