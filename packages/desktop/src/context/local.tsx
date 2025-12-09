@@ -257,7 +257,7 @@ export const { use: useLocal, provider: LocalProvider } = createSimpleContext({
 
       const load = async (path: string) => {
         const relativePath = relative(path)
-        sdk.client.file.read({ path: relativePath }).then((x) => {
+        await sdk.client.file.read({ path: relativePath }).then((x) => {
           setStore(
             "node",
             relativePath,
@@ -335,7 +335,7 @@ export const { use: useLocal, provider: LocalProvider } = createSimpleContext({
 
       return {
         node: async (path: string) => {
-          if (!store.node[path] || store.node[path].loaded === false) {
+          if (!store.node[path] || !store.node[path].loaded) {
             await init(path)
           }
           return store.node[path]

@@ -66,6 +66,16 @@ export const { use: useLayout, provider: LayoutProvider } = createSimpleContext(
         collapse(directory: string) {
           setStore("projects", (x) => x.map((x) => (x.directory === directory ? { ...x, expanded: false } : x)))
         },
+        move(directory: string, toIndex: number) {
+          setStore("projects", (projects) => {
+            const fromIndex = projects.findIndex((x) => x.directory === directory)
+            if (fromIndex === -1 || fromIndex === toIndex) return projects
+            const result = [...projects]
+            const [item] = result.splice(fromIndex, 1)
+            result.splice(toIndex, 0, item)
+            return result
+          })
+        },
       },
       sidebar: {
         opened: createMemo(() => store.sidebar.opened),

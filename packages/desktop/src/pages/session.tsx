@@ -574,7 +574,7 @@ export default function Page() {
             onOpenChange={(open) => setStore("fileSelectOpen", open)}
             onSelect={(x) => {
               if (x) {
-                return local.file.open(x).then(() => session.layout.openTab("file://" + x))
+                return session.layout.openTab("file://" + x)
               }
               return undefined
             }}
