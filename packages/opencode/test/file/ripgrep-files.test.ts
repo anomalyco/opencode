@@ -24,4 +24,19 @@ describe("Ripgrep.files", () => {
 
     await fs.rm(dir, { recursive: true, force: true })
   })
+
+  test("respects max depth", async () => {
+    const dir = await fs.mkdtemp(path.join(os.tmpdir(), "rg-depth-"))
+    const deepDir = path.join(dir, "a", "b", "c")
+    await fs.mkdir(deepDir, { recursive: true })
+    await fs.writeFile(path.join(dir, "root.txt"), "root")
+    await fs.writeFile(path.join(deepDir, "deep.txt"), "deep")
+
+    const files = await Array.fromAsync(Ripgrep.files({ cwd: dir, maxDepth: 2 }))
+
+    expect(files.some((f) => f.endsWith("root.txt"))).toBe(true)
+    expect(files.some((f) => f.endsWith("deep.txt"))).toBe(false)
+
+    await fs.rm(dir, { recursive: true, force: true })
+  })
 })

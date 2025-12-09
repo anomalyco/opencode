@@ -205,7 +205,14 @@ export namespace Ripgrep {
     return filepath
   }
 
-  export async function* files(input: { cwd: string; glob?: string[]; ignore?: string[]; maxDepth?: number }) {
+  export async function* files(input: {
+    cwd: string
+    glob?: string[]
+    ignore?: string[]
+    maxDepth?: number
+    maxFileSize?: string
+    timeoutMs?: number
+  }) {
     const args = [await filepath(), "--files", "--follow", "--hidden", "--glob=!.git/*"]
     if (input.glob) {
       for (const g of input.glob) {
@@ -219,6 +226,9 @@ export namespace Ripgrep {
     }
     if (input.maxDepth !== undefined) {
       args.push(`--max-depth=${input.maxDepth}`)
+    }
+    if (input.maxFileSize) {
+      args.push(`--max-filesize=${input.maxFileSize}`)
     }
 
     // Bun.spawn should throw this, but it incorrectly reports that the executable does not exist.
@@ -243,6 +253,13 @@ export namespace Ripgrep {
     let buffer = ""
 
     let interrupted = true
+    let timedOut = false
+    const timeout = input.timeoutMs
+      ? setTimeout(() => {
+          timedOut = true
+          proc.kill()
+        }, input.timeoutMs)
+      : undefined
     try {
       while (true) {
         const { done, value } = await reader.read()
@@ -263,8 +280,10 @@ export namespace Ripgrep {
       if (buffer) yield buffer
     } finally {
       reader.releaseLock()
-      if (interrupted && proc.exitCode === null) proc.kill()
+      if (timeout) clearTimeout(timeout)
+      if ((interrupted || timedOut) && proc.exitCode === null) proc.kill()
       await proc.exited
+      if (timedOut) throw new Error("ripgrep timed out")
     }
   }
 

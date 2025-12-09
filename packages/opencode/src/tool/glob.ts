@@ -6,20 +6,17 @@ import { Ripgrep } from "../file/ripgrep"
 import { Instance } from "../project/instance"
 
 const DEFAULT_IGNORE = [
-  "**/node_modules/**",
   "**/.venv/**",
   "**/.direnv/**",
   "**/.cache/**",
-  "**/dist/**",
-  "**/build/**",
-  "**/out/**",
-  "**/.next/**",
-  "**/target/**",
-  "**/coverage/**",
   "**/tmp/**",
   "**/temp/**",
   "**/__pycache__/**",
 ]
+
+const DEFAULT_MAX_DEPTH = 10
+const DEFAULT_MAX_FILE_SIZE = "5M"
+const DEFAULT_TIMEOUT_MS = 8000
 
 export const GlobTool = Tool.define("glob", {
   description: DESCRIPTION,
@@ -39,7 +36,14 @@ export const GlobTool = Tool.define("glob", {
     const limit = 100
     const files = []
     let truncated = false
-    for await (const file of Ripgrep.files({ cwd: search, glob: [params.pattern], ignore: DEFAULT_IGNORE })) {
+    for await (const file of Ripgrep.files({
+      cwd: search,
+      glob: [params.pattern],
+      ignore: DEFAULT_IGNORE,
+      maxDepth: DEFAULT_MAX_DEPTH,
+      maxFileSize: DEFAULT_MAX_FILE_SIZE,
+      timeoutMs: DEFAULT_TIMEOUT_MS,
+    })) {
       if (files.length >= limit) {
         truncated = true
         break
