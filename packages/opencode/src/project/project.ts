@@ -108,7 +108,7 @@ export namespace Project {
       }
     }
     discover(existing)
-    await Storage.write<Info>(["project", id], {
+    const result: Info = {
       ...existing,
       worktree,
       vcs: vcs as Info["vcs"],
@@ -116,14 +116,15 @@ export namespace Project {
         ...existing.time,
         updated: Date.now(),
       },
-    })
+    }
+    await Storage.write<Info>(["project", id], result)
     GlobalBus.emit("event", {
       payload: {
         type: Event.Updated.type,
-        properties: existing,
+        properties: result,
       },
     })
-    return existing
+    return result
   }
 
   export async function discover(input: Info) {

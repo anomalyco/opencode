@@ -469,7 +469,7 @@ test("snapshot state isolation between projects", async () => {
   })
 })
 
-test.only("patch detects changes in secondary worktree", async () => {
+test("patch detects changes in secondary worktree", async () => {
   await using tmp = await bootstrap()
   const worktreePath = `${tmp.path}-worktree`
   await $`git worktree add ${worktreePath} HEAD`.cwd(tmp.path).quiet()
