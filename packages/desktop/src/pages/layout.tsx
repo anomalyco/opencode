@@ -17,19 +17,27 @@ import { getFilename } from "@opencode-ai/util/path"
 import { Select } from "@opencode-ai/ui/select"
 import { DropdownMenu } from "@opencode-ai/ui/dropdown-menu"
 import { Session } from "@opencode-ai/sdk/v2/client"
+import { usePlatform } from "@/context/platform"
+import { createStore } from "solid-js/store"
 
 export default function Layout(props: ParentProps) {
-  const navigate = useNavigate()
+  const [store, setStore] = createStore({
+    lastSession: {} as { [directory: string]: string },
+  })
+
   const params = useParams()
   const globalSync = useGlobalSync()
   const layout = useLayout()
+  const platform = usePlatform()
+  const navigate = useNavigate()
   const currentDirectory = createMemo(() => base64Decode(params.dir ?? ""))
   const sessions = createMemo(() => globalSync.child(currentDirectory())[0].session ?? [])
   const currentSession = createMemo(() => sessions().find((s) => s.id === params.id))
 
   function navigateToProject(directory: string | undefined) {
     if (!directory) return
-    navigate(`/${base64Encode(directory)}`)
+    const lastSession = store.lastSession[directory]
+    navigate(`/${base64Encode(directory)}${lastSession ? `/session/${lastSession}` : ""}`)
   }
 
   function navigateToSession(session: Session | undefined) {
@@ -37,19 +45,36 @@ export default function Layout(props: ParentProps) {
     navigate(`/${params.dir}/session/${session?.id}`)
   }
 
+  function openProject(directory: string, navigate = true) {
+    layout.projects.open(directory)
+    if (navigate) navigateToProject(directory)
+  }
+
   function closeProject(directory: string) {
     layout.projects.close(directory)
     navigate("/")
   }
 
-  const handleOpenProject = async () => {
-    // layout.projects.open(dir.)
+  async function chooseProject() {
+    const result = await platform.openDirectoryPickerDialog?.({
+      title: "Open project",
+      multiple: true,
+    })
+    if (Array.isArray(result)) {
+      for (const directory of result) {
+        openProject(directory, false)
+      }
+      navigateToProject(result[0])
+    } else if (result) {
+      openProject(result)
+    }
   }
 
-  // createEffect(() => {
-  //   if (!params.dir) return
-  //   layout.projects.setLastSession(base64Decode(params.dir), params.id)
-  // })
+  createEffect(() => {
+    if (!params.dir || !params.id) return
+    const directory = base64Decode(params.dir)
+    setStore("lastSession", directory, params.id)
+  })
 
   return (
     <div class="relative h-screen flex flex-col">
@@ -89,7 +114,7 @@ export default function Layout(props: ParentProps) {
                 <Select
                   options={sessions()}
                   current={currentSession()}
-                  placeholder="Select session"
+                  placeholder="New session"
                   label={(x) => x.title}
                   value={(x) => x.id}
                   onSelect={navigateToSession}
@@ -97,9 +122,11 @@ export default function Layout(props: ParentProps) {
                   variant="ghost"
                 />
               </div>
-              <Button as={A} href={`/${params.dir}/session`} icon="plus-small">
-                New session
-              </Button>
+              <Show when={currentSession()}>
+                <Button as={A} href={`/${params.dir}/session`} icon="plus-small">
+                  New session
+                </Button>
+              </Show>
             </div>
             <div class="flex items-center gap-4">
               <Tooltip
@@ -155,7 +182,7 @@ export default function Layout(props: ParentProps) {
               onCollapse={layout.sidebar.close}
             />
           </Show>
-          <div class="grow flex flex-col items-start self-stretch gap-4 p-2 min-h-0">
+          <div class="flex flex-col items-start self-stretch gap-4 p-2 min-h-0 overflow-hidden">
             <Tooltip class="shrink-0" placement="right" value="Toggle sidebar" inactive={layout.sidebar.opened()}>
               <Button
                 variant="ghost"
@@ -187,7 +214,7 @@ export default function Layout(props: ParentProps) {
                 </Show>
               </Button>
             </Tooltip>
-            <div class="size-full min-w-8 flex flex-col gap-2 grow min-h-0 overflow-y-auto no-scrollbar">
+            <div class="w-full min-w-8 flex flex-col gap-2 min-h-0 overflow-y-auto no-scrollbar">
               <For each={layout.projects.list()}>
                 {(project) => {
                   const [store] = globalSync.child(project.directory)
@@ -196,7 +223,7 @@ export default function Layout(props: ParentProps) {
                   return (
                     <Switch>
                       <Match when={layout.sidebar.opened()}>
-                        <Collapsible variant="ghost" defaultOpen class="gap-2">
+                        <Collapsible variant="ghost" defaultOpen class="gap-2 shrink-0">
                           <Button
                             as={"div"}
                             variant="ghost"
@@ -232,7 +259,7 @@ export default function Layout(props: ParentProps) {
                                   </DropdownMenu.Content>
                                 </DropdownMenu.Portal>
                               </DropdownMenu>
-                              <Tooltip placement="bottom" value="New session">
+                              <Tooltip placement="top" value="New session">
                                 <IconButton as={A} href={`${slug()}/session`} icon="plus-small" variant="ghost" />
                               </Tooltip>
                             </div>
@@ -300,11 +327,11 @@ export default function Layout(props: ParentProps) {
                       <Match when={true}>
                         <Tooltip placement="right" value={project.directory}>
                           <Button
-                            as={A}
-                            href={`${slug()}/session`}
                             variant="ghost"
                             size="large"
                             class="flex items-center justify-center p-0 aspect-square border-none"
+                            data-selected={project.directory === currentDirectory()}
+                            onClick={() => navigateToProject(project.directory)}
                           >
                             <div class="size-6 shrink-0 inset-0">
                               <Avatar fallback={name()} background="var(--surface-info-base)" class="size-full" />
@@ -319,18 +346,19 @@ export default function Layout(props: ParentProps) {
             </div>
           </div>
           <div class="flex flex-col gap-1.5 self-stretch items-start shrink-0 px-2 py-3">
-            <Tooltip placement="right" value="Open project" inactive={layout.sidebar.opened()}>
-              <Button
-                disabled
-                class="flex w-full text-left justify-start text-12-medium text-text-base stroke-[1.5px]"
-                variant="ghost"
-                size="large"
-                icon="folder-add-left"
-                onClick={handleOpenProject}
-              >
-                <Show when={layout.sidebar.opened()}>Open project</Show>
-              </Button>
-            </Tooltip>
+            <Show when={platform.openDirectoryPickerDialog}>
+              <Tooltip placement="right" value="Open project" inactive={layout.sidebar.opened()}>
+                <Button
+                  class="flex w-full text-left justify-start text-12-medium text-text-base stroke-[1.5px]"
+                  variant="ghost"
+                  size="large"
+                  icon="folder-add-left"
+                  onClick={chooseProject}
+                >
+                  <Show when={layout.sidebar.opened()}>Open project</Show>
+                </Button>
+              </Tooltip>
+            </Show>
             <Tooltip placement="right" value="Settings" inactive={layout.sidebar.opened()}>
               <Button
                 disabled

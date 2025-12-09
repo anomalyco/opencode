@@ -54,6 +54,9 @@
       opacity: 0.7;
       cursor: not-allowed;
     }
+    &[data-selected="true"]:not(:disabled) {
+      background-color: var(--surface-raised-base-hover);
+    }
   }
 
   &[data-variant="secondary"] {

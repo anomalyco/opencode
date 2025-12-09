@@ -74,7 +74,7 @@ export const { use: useGlobalSync, provider: GlobalSyncProvider } = createSimple
           session_status: {},
           session_diff: {},
           todo: {},
-          limit: 10,
+          limit: 5,
           message: {},
           part: {},
           node: [],

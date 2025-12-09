@@ -1,20 +1,36 @@
 import { useGlobalSync } from "@/context/global-sync"
-import { For, Match, Switch } from "solid-js"
+import { For, Match, Show, Switch } from "solid-js"
 import { Button } from "@opencode-ai/ui/button"
 import { Logo } from "@opencode-ai/ui/logo"
 import { useLayout } from "@/context/layout"
 import { useNavigate } from "@solidjs/router"
 import { base64Encode } from "@opencode-ai/util/encode"
 import { Icon } from "@opencode-ai/ui/icon"
+import { usePlatform } from "@/context/platform"
 
 export default function Home() {
-  const navigate = useNavigate()
   const sync = useGlobalSync()
   const layout = useLayout()
+  const platform = usePlatform()
+  const navigate = useNavigate()
 
   function openProject(directory: string) {
     layout.projects.open(directory)
     navigate(`/${base64Encode(directory)}`)
+  }
+
+  async function chooseProject() {
+    const result = await platform.openDirectoryPickerDialog?.({
+      title: "Open project",
+      multiple: true,
+    })
+    if (Array.isArray(result)) {
+      for (const directory of result) {
+        openProject(directory)
+      }
+    } else if (result) {
+      openProject(result)
+    }
   }
 
   return (
@@ -25,9 +41,11 @@ export default function Home() {
           <div class="mt-20 w-full flex flex-col gap-4">
             <div class="flex gap-2 items-center justify-between pl-3">
               <div class="text-14-medium text-text-strong">Recent projects</div>
-              <Button icon="folder-add-left" size="normal" class="pl-2 pr-3">
-                Open project
-              </Button>
+              <Show when={platform.openDirectoryPickerDialog}>
+                <Button icon="folder-add-left" size="normal" class="pl-2 pr-3" onClick={chooseProject}>
+                  Open project
+                </Button>
+              </Show>
             </div>
             <ol class="flex flex-col gap-2">
               <For each={sync.data.projects.slice(0, 5)}>
@@ -54,7 +72,11 @@ export default function Home() {
               <div class="text-12-regular text-text-weak">Get started by opening a local project</div>
             </div>
             <div />
-            <Button class="px-3">Open project</Button>
+            <Show when={platform.openDirectoryPickerDialog}>
+              <Button class="px-3" onClick={chooseProject}>
+                Open project
+              </Button>
+            </Show>
           </div>
         </Match>
       </Switch>

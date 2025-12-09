@@ -1,9 +1,9 @@
 import { createStore, produce } from "solid-js/store"
 import { createSimpleContext } from "@opencode-ai/ui/context"
-import { batch, createEffect, createMemo } from "solid-js"
+import { batch, createEffect, createMemo, onMount } from "solid-js"
 import { useSync } from "./sync"
 import { makePersisted } from "@solid-primitives/storage"
-import { TextSelection } from "./local"
+import { TextSelection, useLocal } from "./local"
 import { pipe, sumBy } from "remeda"
 import { AssistantMessage, UserMessage } from "@opencode-ai/sdk/v2"
 import { useParams } from "@solidjs/router"
@@ -25,6 +25,7 @@ export const { use: useSession, provider: SessionProvider } = createSimpleContex
     const sdk = useSDK()
     const params = useParams()
     const sync = useSync()
+    const local = useLocal()
     const name = createMemo(
       () => `${base64Encode(sync.data.project.worktree)}/session${params.id ? "/" + params.id : ""}.v2`,
     )
@@ -54,6 +55,14 @@ export const { use: useSession, provider: SessionProvider } = createSimpleContex
         name: name(),
       },
     )
+
+    onMount(() => {
+      store.tabs.all.forEach((tab) => {
+        if (tab.startsWith("file://")) {
+          local.file.open(tab.replace("file://", ""))
+        }
+      })
+    })
 
     createEffect(() => {
       if (!params.id) return
