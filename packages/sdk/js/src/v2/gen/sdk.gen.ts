@@ -244,8 +244,10 @@ export class Project extends HeyApiClient {
       projectID: string
       directory?: string
       name?: string
-      icon?: string
-      color?: string
+      icon?: {
+        url: string
+        color: string
+      }
     },
     options?: Options<never, ThrowOnError>,
   ) {
@@ -258,7 +260,6 @@ export class Project extends HeyApiClient {
             { in: "query", key: "directory" },
             { in: "body", key: "name" },
             { in: "body", key: "icon" },
-            { in: "body", key: "color" },
           ],
         },
       ],

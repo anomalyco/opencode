@@ -4,13 +4,6 @@ export type ClientOptions = {
   baseUrl: `${string}://${string}` | (string & {})
 }
 
-export type EventServerInstanceDisposed = {
-  type: "server.instance.disposed"
-  properties: {
-    directory: string
-  }
-}
-
 export type EventInstallationUpdated = {
   type: "installation.updated"
   properties: {
@@ -22,6 +15,34 @@ export type EventInstallationUpdateAvailable = {
   type: "installation.update-available"
   properties: {
     version: string
+  }
+}
+
+export type Project = {
+  id: string
+  worktree: string
+  vcs?: "git"
+  name?: string
+  icon?: {
+    url: string
+    color: string
+  }
+  time: {
+    created: number
+    updated?: number
+    initialized?: number
+  }
+}
+
+export type EventProjectUpdated = {
+  type: "project.updated"
+  properties: Project
+}
+
+export type EventServerInstanceDisposed = {
+  type: "server.instance.disposed"
+  properties: {
+    directory: string
   }
 }
 
@@ -704,9 +725,10 @@ export type EventServerConnected = {
 }
 
 export type Event =
-  | EventServerInstanceDisposed
   | EventInstallationUpdated
   | EventInstallationUpdateAvailable
+  | EventProjectUpdated
+  | EventServerInstanceDisposed
   | EventLspClientDiagnostics
   | EventLspUpdated
   | EventMessageUpdated
@@ -740,20 +762,6 @@ export type Event =
 export type GlobalEvent = {
   directory: string
   payload: Event
-}
-
-export type Project = {
-  id: string
-  worktree: string
-  vcs?: "git"
-  name?: string
-  icon?: string
-  color?: string
-  time: {
-    created: number
-    updated?: number
-    initialized?: number
-  }
 }
 
 export type BadRequestError = {
@@ -1721,8 +1729,10 @@ export type ProjectCurrentResponse = ProjectCurrentResponses[keyof ProjectCurren
 export type ProjectUpdateData = {
   body?: {
     name?: string
-    icon?: string
-    color?: string
+    icon?: {
+      url: string
+      color: string
+    }
   }
   path: {
     projectID: string
