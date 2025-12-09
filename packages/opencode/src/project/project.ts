@@ -130,7 +130,7 @@ export namespace Project {
   export async function discover(input: Info) {
     if (input.vcs !== "git") return
     if (input.icon) return
-    const glob = new Bun.Glob("**/{favicon,icon,logo}.{ico,png,svg,jpg,jpeg,webp}")
+    const glob = new Bun.Glob("**/{favicon}.{ico,png,svg,jpg,jpeg,webp}")
     for await (const match of glob.scan({
       cwd: input.worktree,
       absolute: true,
@@ -143,11 +143,11 @@ export namespace Project {
       const base64 = Buffer.from(buffer).toString("base64")
       const mime = file.type || "image/png"
       const url = `data:${mime};base64,${base64}`
-      await Storage.update<Info>(["project", input.id], (draft) => {
-        draft.icon = {
-          ...draft.icon,
+      await update({
+        projectID: input.id,
+        icon: {
           url,
-        }
+        },
       })
       return
     }
