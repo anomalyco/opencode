@@ -131,26 +131,28 @@ export namespace Project {
     if (input.vcs !== "git") return
     if (input.icon) return
     const glob = new Bun.Glob("**/{favicon}.{ico,png,svg,jpg,jpeg,webp}")
-    for await (const match of glob.scan({
-      cwd: input.worktree,
-      absolute: true,
-      onlyFiles: true,
-      followSymlinks: false,
-      dot: false,
-    })) {
-      const file = Bun.file(match)
-      const buffer = await file.arrayBuffer()
-      const base64 = Buffer.from(buffer).toString("base64")
-      const mime = file.type || "image/png"
-      const url = `data:${mime};base64,${base64}`
-      await update({
-        projectID: input.id,
-        icon: {
-          url,
-        },
-      })
-      return
-    }
+    const matches = await Array.fromAsync(
+      glob.scan({
+        cwd: input.worktree,
+        absolute: true,
+        onlyFiles: true,
+        followSymlinks: false,
+        dot: false,
+      }),
+    )
+    const shortest = matches.sort((a, b) => a.length - b.length)[0]
+    const file = Bun.file(shortest)
+    const buffer = await file.arrayBuffer()
+    const base64 = Buffer.from(buffer).toString("base64")
+    const mime = file.type || "image/png"
+    const url = `data:${mime};base64,${base64}`
+    await update({
+      projectID: input.id,
+      icon: {
+        url,
+      },
+    })
+    return
   }
 
   async function migrateFromGlobal(newProjectID: string, worktree: string) {
