@@ -140,8 +140,7 @@ export namespace SessionCompaction {
       // set to 0, we handle loop
       maxRetries: 0,
       providerOptions: ProviderTransform.providerOptions(
-        model.api.npm,
-        model.providerID,
+        model,
         pipe({}, mergeDeep(ProviderTransform.options(model, input.sessionID)), mergeDeep(model.options)),
       ),
       headers: model.headers,

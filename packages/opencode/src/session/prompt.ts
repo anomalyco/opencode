@@ -562,7 +562,7 @@ export namespace SessionPrompt {
           OUTPUT_TOKEN_MAX,
         ),
         abortSignal: abort,
-        providerOptions: ProviderTransform.providerOptions(model.api.npm, model.providerID, params.options),
+        providerOptions: ProviderTransform.providerOptions(model, params.options),
         stopWhen: stepCountIs(1),
         temperature: params.temperature,
         topP: params.topP,
@@ -1458,7 +1458,7 @@ export namespace SessionPrompt {
     await generateText({
       // use higher # for reasoning models since reasoning tokens eat up a lot of the budget
       maxOutputTokens: small.capabilities.reasoning ? 3000 : 20,
-      providerOptions: ProviderTransform.providerOptions(small.api.npm, small.providerID, options),
+      providerOptions: ProviderTransform.providerOptions(small, options),
       messages: [
         ...SystemPrompt.title(small.providerID).map(
           (x): ModelMessage => ({
