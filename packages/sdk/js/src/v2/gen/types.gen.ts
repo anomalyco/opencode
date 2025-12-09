@@ -749,6 +749,7 @@ export type Project = {
   vcs?: "git"
   time: {
     created: number
+    updated?: number
     initialized?: number
   }
 }
