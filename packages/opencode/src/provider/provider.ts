@@ -349,6 +349,12 @@ export namespace Provider {
           video: z.boolean(),
           pdf: z.boolean(),
         }),
+        interleaved: z.union([
+          z.boolean(),
+          z.object({
+            field: z.enum(["reasoning_content", "reasoning_details"]),
+          }),
+        ]),
       }),
       cost: z.object({
         input: z.number(),
@@ -450,6 +456,7 @@ export namespace Provider {
           video: model.modalities?.output?.includes("video") ?? false,
           pdf: model.modalities?.output?.includes("pdf") ?? false,
         },
+        interleaved: model.interleaved ?? false,
       },
     }
   }
@@ -567,6 +574,7 @@ export namespace Provider {
               video: model.modalities?.output?.includes("video") ?? existingModel?.capabilities.output.video ?? false,
               pdf: model.modalities?.output?.includes("pdf") ?? existingModel?.capabilities.output.pdf ?? false,
             },
+            interleaved: model.interleaved ?? false,
           },
           cost: {
             input: model?.cost?.input ?? existingModel?.cost?.input ?? 0,

@@ -211,7 +211,15 @@ export namespace LSPServer {
 
   export const Biome: Info = {
     id: "biome",
-    root: NearestRoot(["biome.json", "biome.jsonc", "package-lock.json", "bun.lockb", "bun.lock", "pnpm-lock.yaml", "yarn.lock"]),
+    root: NearestRoot([
+      "biome.json",
+      "biome.jsonc",
+      "package-lock.json",
+      "bun.lockb",
+      "bun.lock",
+      "pnpm-lock.yaml",
+      "yarn.lock",
+    ]),
     extensions: [
       ".ts",
       ".tsx",
