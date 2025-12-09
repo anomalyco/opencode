@@ -9,7 +9,8 @@
     "dev": "vite",
     "build": "bun run typecheck && vite build",
     "preview": "vite preview",
-    "tauri": "tauri"
+    "tauri": "tauri",
+    "typecheck": "tsgo --noEmit"
   },
   "dependencies": {
     "@opencode-ai/desktop": "workspace:*",

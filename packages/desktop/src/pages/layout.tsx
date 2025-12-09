@@ -1,10 +1,11 @@
-import { createMemo, For, ParentProps, Show } from "solid-js"
+import { createEffect, createMemo, For, Match, ParentProps, Show, Switch } from "solid-js"
 import { DateTime } from "luxon"
 import { A, useNavigate, useParams } from "@solidjs/router"
 import { useLayout } from "@/context/layout"
 import { useGlobalSync } from "@/context/global-sync"
 import { base64Decode, base64Encode } from "@opencode-ai/util/encode"
 import { Mark } from "@opencode-ai/ui/logo"
+import { Avatar } from "@opencode-ai/ui/avatar"
 import { ResizeHandle } from "@opencode-ai/ui/resize-handle"
 import { Button } from "@opencode-ai/ui/button"
 import { Icon } from "@opencode-ai/ui/icon"
@@ -14,6 +15,7 @@ import { Collapsible } from "@opencode-ai/ui/collapsible"
 import { DiffChanges } from "@opencode-ai/ui/diff-changes"
 import { getFilename } from "@opencode-ai/util/path"
 import { Select } from "@opencode-ai/ui/select"
+import { DropdownMenu } from "@opencode-ai/ui/dropdown-menu"
 import { Session } from "@opencode-ai/sdk/v2/client"
 
 export default function Layout(props: ParentProps) {
@@ -25,14 +27,29 @@ export default function Layout(props: ParentProps) {
   const sessions = createMemo(() => globalSync.child(currentDirectory())[0].session ?? [])
   const currentSession = createMemo(() => sessions().find((s) => s.id === params.id))
 
+  function navigateToProject(directory: string | undefined) {
+    if (!directory) return
+    navigate(`/${base64Encode(directory)}`)
+  }
+
   function navigateToSession(session: Session | undefined) {
     if (!session) return
     navigate(`/${params.dir}/session/${session?.id}`)
   }
 
+  function closeProject(directory: string) {
+    layout.projects.close(directory)
+    navigate("/")
+  }
+
   const handleOpenProject = async () => {
     // layout.projects.open(dir.)
   }
+
+  // createEffect(() => {
+  //   if (!params.dir) return
+  //   layout.projects.setLastSession(base64Decode(params.dir), params.id)
+  // })
 
   return (
     <div class="relative h-screen flex flex-col">
@@ -50,61 +67,72 @@ export default function Layout(props: ParentProps) {
           <Mark class="shrink-0" />
         </A>
         <div class="pl-4 px-6 flex items-center justify-between gap-4 w-full">
-          <div class="flex items-center gap-3">
-            <div class="flex items-center gap-2">
-              <Select
-                options={layout.projects.list().map((project) => getFilename(project.directory))}
-                current={getFilename(currentDirectory())}
-                class="text-14-regular text-text-base"
-                variant="ghost"
-              />
-              <div class="text-text-weaker">/</div>
-              <Select
-                options={sessions()}
-                current={currentSession()}
-                placeholder="Select session"
-                label={(x) => x.title}
-                value={(x) => x.id}
-                onSelect={navigateToSession}
-                class="text-14-regular text-text-base max-w-md"
-                variant="ghost"
-              />
-            </div>
-            <Button as={A} href={`/${params.dir}/session`} icon="plus-small">
-              New session
-            </Button>
-          </div>
-          <div class="flex items-center gap-4">
-            <Tooltip
-              class="shrink-0"
-              value={
-                <div class="flex items-center gap-2">
-                  <span>Toggle terminal</span>
-                  <span class="text-icon-base text-12-medium">Ctrl `</span>
-                </div>
-              }
-            >
-              <Button variant="ghost" class="group/terminal-toggle size-6 p-0" onClick={layout.terminal.toggle}>
-                <div class="relative flex items-center justify-center size-4 [&>*]:absolute [&>*]:inset-0">
-                  <Icon
-                    size="small"
-                    name={layout.terminal.opened() ? "layout-bottom-full" : "layout-bottom"}
-                    class="group-hover/terminal-toggle:hidden"
-                  />
-                  <Icon
-                    size="small"
-                    name="layout-bottom-partial"
-                    class="hidden group-hover/terminal-toggle:inline-block"
-                  />
-                  <Icon
-                    size="small"
-                    name={layout.terminal.opened() ? "layout-bottom" : "layout-bottom-full"}
-                    class="hidden group-active/terminal-toggle:inline-block"
-                  />
-                </div>
+          <Show when={params.dir && layout.projects.list().length > 0}>
+            <div class="flex items-center gap-3">
+              <div class="flex items-center gap-2">
+                <Select
+                  options={layout.projects.list().map((project) => getFilename(project.directory))}
+                  current={getFilename(currentDirectory())}
+                  onSelect={(x) => (x ? navigateToProject(x) : undefined)}
+                  class="text-14-regular text-text-base"
+                  variant="ghost"
+                >
+                  {/* @ts-ignore */}
+                  {(i) => (
+                    <div class="flex items-center gap-2">
+                      <Icon name="folder" size="small" />
+                      <div class="text-text-strong">{i}</div>
+                    </div>
+                  )}
+                </Select>
+                <div class="text-text-weaker">/</div>
+                <Select
+                  options={sessions()}
+                  current={currentSession()}
+                  placeholder="Select session"
+                  label={(x) => x.title}
+                  value={(x) => x.id}
+                  onSelect={navigateToSession}
+                  class="text-14-regular text-text-base max-w-md"
+                  variant="ghost"
+                />
+              </div>
+              <Button as={A} href={`/${params.dir}/session`} icon="plus-small">
+                New session
               </Button>
-            </Tooltip>
-          </div>
+            </div>
+            <div class="flex items-center gap-4">
+              <Tooltip
+                class="shrink-0"
+                value={
+                  <div class="flex items-center gap-2">
+                    <span>Toggle terminal</span>
+                    <span class="text-icon-base text-12-medium">Ctrl `</span>
+                  </div>
+                }
+              >
+                <Button variant="ghost" class="group/terminal-toggle size-6 p-0" onClick={layout.terminal.toggle}>
+                  <div class="relative flex items-center justify-center size-4 [&>*]:absolute [&>*]:inset-0">
+                    <Icon
+                      size="small"
+                      name={layout.terminal.opened() ? "layout-bottom-full" : "layout-bottom"}
+                      class="group-hover/terminal-toggle:hidden"
+                    />
+                    <Icon
+                      size="small"
+                      name="layout-bottom-partial"
+                      class="hidden group-hover/terminal-toggle:inline-block"
+                    />
+                    <Icon
+                      size="small"
+                      name={layout.terminal.opened() ? "layout-bottom" : "layout-bottom-full"}
+                      class="hidden group-active/terminal-toggle:inline-block"
+                    />
+                  </div>
+                </Button>
+              </Tooltip>
+            </div>
+          </Show>
         </div>
       </header>
       <div class="h-[calc(100vh-3rem)] flex">
@@ -159,84 +187,135 @@ export default function Layout(props: ParentProps) {
                 </Show>
               </Button>
             </Tooltip>
-            <div class="flex flex-col justify-center items-start gap-4 self-stretch min-h-0">
-              <div class="hidden @[4rem]:flex size-full flex-col grow overflow-y-auto no-scrollbar">
-                <For each={layout.projects.list()}>
-                  {(project) => {
-                    const [store] = globalSync.child(project.directory)
-                    const slug = createMemo(() => base64Encode(project.directory))
-                    return (
-                      <Collapsible variant="ghost" defaultOpen class="gap-2">
-                        <Button
-                          as={"div"}
-                          variant="ghost"
-                          class="flex items-center justify-between gap-3 w-full h-8 pl-2 pr-2.25 self-stretch"
-                        >
-                          <Collapsible.Trigger class="p-0 text-left text-14-medium text-text-strong grow min-w-0 truncate">
-                            {getFilename(project.directory)}
-                          </Collapsible.Trigger>
-                          <IconButton as={A} href={`${slug()}/session`} icon="plus-small" size="normal" />
-                        </Button>
-                        <Collapsible.Content>
-                          <nav class="w-full flex flex-col gap-1.5">
-                            <For each={store.session}>
-                              {(session) => {
-                                const updated = createMemo(() => DateTime.fromMillis(session.time.updated))
-                                return (
-                                  <A
-                                    data-active={session.id === params.id}
-                                    href={`${slug()}/session/${session.id}`}
-                                    class="group/session focus:outline-none cursor-default"
-                                  >
-                                    <Tooltip placement="right" value={session.title}>
-                                      <div
-                                        class="w-full px-2 py-1 rounded-md
+            <div class="size-full min-w-8 flex flex-col gap-2 grow min-h-0 overflow-y-auto no-scrollbar">
+              <For each={layout.projects.list()}>
+                {(project) => {
+                  const [store] = globalSync.child(project.directory)
+                  const slug = createMemo(() => base64Encode(project.directory))
+                  const name = createMemo(() => getFilename(project.directory))
+                  return (
+                    <Switch>
+                      <Match when={layout.sidebar.opened()}>
+                        <Collapsible variant="ghost" defaultOpen class="gap-2">
+                          <Button
+                            as={"div"}
+                            variant="ghost"
+                            class="group/session flex items-center justify-between gap-3 w-full px-1 self-stretch h-auto border-none"
+                          >
+                            <Collapsible.Trigger class="group/trigger flex items-center gap-3 p-0 text-left min-w-0 grow border-none">
+                              <div class="size-6 shrink-0">
+                                <Avatar
+                                  fallback={name()}
+                                  background="var(--surface-info-base)"
+                                  class="size-full group-hover/session:hidden"
+                                />
+                                <Icon
+                                  name="chevron-right"
+                                  size="large"
+                                  class="hidden size-full items-center justify-center text-text-subtle group-hover/session:flex group-data-[expanded]/trigger:rotate-90 transition-transform duration-50"
+                                />
+                              </div>
+                              <span class="truncate text-14-medium text-text-strong">{name()}</span>
+                            </Collapsible.Trigger>
+                            <div class="flex invisible gap-1 items-center group-hover/session:visible has-[[data-expanded]]:visible">
+                              <DropdownMenu>
+                                <DropdownMenu.Trigger as={IconButton} icon="dot-grid" variant="ghost" />
+                                <DropdownMenu.Portal>
+                                  <DropdownMenu.Content>
+                                    <DropdownMenu.Item onSelect={() => closeProject(project.directory)}>
+                                      <DropdownMenu.ItemLabel>Close Project</DropdownMenu.ItemLabel>
+                                    </DropdownMenu.Item>
+                                    {/* <DropdownMenu.Separator /> */}
+                                    {/* <DropdownMenu.Item> */}
+                                    {/*   <DropdownMenu.ItemLabel>Action 2</DropdownMenu.ItemLabel> */}
+                                    {/* </DropdownMenu.Item> */}
+                                  </DropdownMenu.Content>
+                                </DropdownMenu.Portal>
+                              </DropdownMenu>
+                              <Tooltip placement="bottom" value="New session">
+                                <IconButton as={A} href={`${slug()}/session`} icon="plus-small" variant="ghost" />
+                              </Tooltip>
+                            </div>
+                          </Button>
+                          <Collapsible.Content>
+                            <nav class="hidden @[4rem]:flex w-full flex-col gap-1.5">
+                              <For each={store.session}>
+                                {(session) => {
+                                  const updated = createMemo(() => DateTime.fromMillis(session.time.updated))
+                                  return (
+                                    <A
+                                      data-active={session.id === params.id}
+                                      href={`${slug()}/session/${session.id}`}
+                                      class="group/session focus:outline-none cursor-default"
+                                    >
+                                      <Tooltip placement="right" value={session.title}>
+                                        <div
+                                          class="w-full pl-4 pr-2 py-1 rounded-md
                                                group-data-[active=true]/session:bg-surface-raised-base-hover
                                                group-hover/session:bg-surface-raised-base-hover
                                                group-focus/session:bg-surface-raised-base-hover"
-                                      >
-                                        <div class="flex items-center self-stretch gap-6 justify-between">
-                                          <span class="text-14-regular text-text-strong overflow-hidden text-ellipsis truncate">
-                                            {session.title}
-                                          </span>
-                                          <span class="text-12-regular text-text-weak text-right whitespace-nowrap">
-                                            {Math.abs(updated().diffNow().as("seconds")) < 60
-                                              ? "Now"
-                                              : updated()
-                                                  .toRelative({ style: "short", unit: ["days", "hours", "minutes"] })
-                                                  ?.replace(" ago", "")
-                                                  ?.replace(/ days?/, "d")
-                                                  ?.replace(" min.", "m")
-                                                  ?.replace(" hr.", "h")}
-                                          </span>
+                                        >
+                                          <div class="flex items-center self-stretch gap-6 justify-between">
+                                            <span class="text-14-regular text-text-strong overflow-hidden text-ellipsis truncate">
+                                              {session.title}
+                                            </span>
+                                            <span class="text-12-regular text-text-weak text-right whitespace-nowrap">
+                                              {Math.abs(updated().diffNow().as("seconds")) < 60
+                                                ? "Now"
+                                                : updated()
+                                                    .toRelative({
+                                                      style: "short",
+                                                      unit: ["days", "hours", "minutes"],
+                                                    })
+                                                    ?.replace(" ago", "")
+                                                    ?.replace(/ days?/, "d")
+                                                    ?.replace(" min.", "m")
+                                                    ?.replace(" hr.", "h")}
+                                            </span>
+                                          </div>
+                                          <div class="hidden _flex justify-between items-center self-stretch">
+                                            <span class="text-12-regular text-text-weak">{`${session.summary?.files || "No"} file${session.summary?.files !== 1 ? "s" : ""} changed`}</span>
+                                            <Show when={session.summary}>
+                                              {(summary) => <DiffChanges changes={summary()} />}
+                                            </Show>
+                                          </div>
                                         </div>
-                                        <div class="hidden _flex justify-between items-center self-stretch">
-                                          <span class="text-12-regular text-text-weak">{`${session.summary?.files || "No"} file${session.summary?.files !== 1 ? "s" : ""} changed`}</span>
-                                          <Show when={session.summary}>
-                                            {(summary) => <DiffChanges changes={summary()} />}
-                                          </Show>
-                                        </div>
-                                      </div>
-                                    </Tooltip>
-                                  </A>
-                                )
-                              }}
-                            </For>
-                          </nav>
-                          {/* <Show when={sync.session.more()}> */}
-                          {/*   <button */}
-                          {/*     class="shrink-0 self-start p-3 text-12-medium text-text-weak hover:text-text-strong" */}
-                          {/*     onClick={() => sync.session.fetch()} */}
-                          {/*   > */}
-                          {/*     Show more */}
-                          {/*   </button> */}
-                          {/* </Show> */}
-                        </Collapsible.Content>
-                      </Collapsible>
-                    )
-                  }}
-                </For>
-              </div>
+                                      </Tooltip>
+                                    </A>
+                                  )
+                                }}
+                              </For>
+                            </nav>
+                            {/* <Show when={sync.session.more()}> */}
+                            {/*   <button */}
+                            {/*     class="shrink-0 self-start p-3 text-12-medium text-text-weak hover:text-text-strong" */}
+                            {/*     onClick={() => sync.session.fetch()} */}
+                            {/*   > */}
+                            {/*     Show more */}
+                            {/*   </button> */}
+                            {/* </Show> */}
+                          </Collapsible.Content>
+                        </Collapsible>
+                      </Match>
+                      <Match when={true}>
+                        <Tooltip placement="right" value={project.directory}>
+                          <Button
+                            as={A}
+                            href={`${slug()}/session`}
+                            variant="ghost"
+                            size="large"
+                            class="flex items-center justify-center p-0 aspect-square border-none"
+                          >
+                            <div class="size-6 shrink-0 inset-0">
+                              <Avatar fallback={name()} background="var(--surface-info-base)" class="size-full" />
+                            </div>
+                          </Button>
+                        </Tooltip>
+                      </Match>
+                    </Switch>
+                  )
+                }}
+              </For>
             </div>
           </div>
           <div class="flex flex-col gap-1.5 self-stretch items-start shrink-0 px-2 py-3">
