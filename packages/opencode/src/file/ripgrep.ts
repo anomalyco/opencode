@@ -205,12 +205,20 @@ export namespace Ripgrep {
     return filepath
   }
 
-  export async function* files(input: { cwd: string; glob?: string[] }) {
+  export async function* files(input: { cwd: string; glob?: string[]; ignore?: string[]; maxDepth?: number }) {
     const args = [await filepath(), "--files", "--follow", "--hidden", "--glob=!.git/*"]
     if (input.glob) {
       for (const g of input.glob) {
         args.push(`--glob=${g}`)
       }
+    }
+    if (input.ignore) {
+      for (const g of input.ignore) {
+        args.push(`--glob=!${g}`)
+      }
+    }
+    if (input.maxDepth !== undefined) {
+      args.push(`--max-depth=${input.maxDepth}`)
     }
 
     // Bun.spawn should throw this, but it incorrectly reports that the executable does not exist.
@@ -234,10 +242,14 @@ export namespace Ripgrep {
     const decoder = new TextDecoder()
     let buffer = ""
 
+    let interrupted = true
     try {
       while (true) {
         const { done, value } = await reader.read()
-        if (done) break
+        if (done) {
+          interrupted = false
+          break
+        }
 
         buffer += decoder.decode(value, { stream: true })
         const lines = buffer.split("\n")
@@ -251,6 +263,7 @@ export namespace Ripgrep {
       if (buffer) yield buffer
     } finally {
       reader.releaseLock()
+      if (interrupted && proc.exitCode === null) proc.kill()
       await proc.exited
     }
   }

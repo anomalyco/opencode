@@ -5,6 +5,22 @@ import DESCRIPTION from "./glob.txt"
 import { Ripgrep } from "../file/ripgrep"
 import { Instance } from "../project/instance"
 
+const DEFAULT_IGNORE = [
+  "**/node_modules/**",
+  "**/.venv/**",
+  "**/.direnv/**",
+  "**/.cache/**",
+  "**/dist/**",
+  "**/build/**",
+  "**/out/**",
+  "**/.next/**",
+  "**/target/**",
+  "**/coverage/**",
+  "**/tmp/**",
+  "**/temp/**",
+  "**/__pycache__/**",
+]
+
 export const GlobTool = Tool.define("glob", {
   description: DESCRIPTION,
   parameters: z.object({
@@ -23,10 +39,7 @@ export const GlobTool = Tool.define("glob", {
     const limit = 100
     const files = []
     let truncated = false
-    for await (const file of Ripgrep.files({
-      cwd: search,
-      glob: [params.pattern],
-    })) {
+    for await (const file of Ripgrep.files({ cwd: search, glob: [params.pattern], ignore: DEFAULT_IGNORE })) {
       if (files.length >= limit) {
         truncated = true
         break
