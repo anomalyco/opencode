@@ -82,7 +82,9 @@ jobs:
           OPENCODE_API_KEY: ${{ secrets.OPENCODE_API_KEY }}
 
   publish-tauri:
+    continue-on-error: true
     strategy:
+      fail-fast: false
       matrix:
         settings:
           - host: macos-latest
