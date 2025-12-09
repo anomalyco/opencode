@@ -94,6 +94,7 @@ export namespace Project {
         vcs: vcs as Info["vcs"],
         time: {
           created: Date.now(),
+          updated: Date.now(),
         },
       }
       if (id !== "global") {
