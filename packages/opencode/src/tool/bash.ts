@@ -16,12 +16,8 @@ import { Flag } from "@/flag/flag.ts"
 import path from "path"
 import { iife } from "@/util/iife"
 
-const DEFAULT_MAX_OUTPUT_LENGTH = 30_000
-const MAX_OUTPUT_LENGTH = (() => {
-  const parsed = Number(Flag.OPENCODE_EXPERIMENTAL_BASH_MAX_OUTPUT_LENGTH)
-  return Number.isInteger(parsed) && parsed > 0 ? parsed : DEFAULT_MAX_OUTPUT_LENGTH
-})()
-const DEFAULT_TIMEOUT = 2 * 60 * 1000
+const MAX_OUTPUT_LENGTH = Flag.OPENCODE_EXPERIMENTAL_BASH_MAX_OUTPUT_LENGTH || 30_000
+const DEFAULT_TIMEOUT = Flag.OPENCODE_EXPERIMENTAL_BASH_DEFAULT_TIMEOUT || 2 * 60 * 1000
 const SIGKILL_TIMEOUT_MS = 200
 
 export const log = Log.create({ service: "bash-tool" })
