@@ -1,4 +1,4 @@
-import type { Message, Session, Part, FileDiff, SessionStatus } from "@opencode-ai/sdk"
+import type { Message, Session, Part, FileDiff, SessionStatus } from "@opencode-ai/sdk/v2"
 import { createSimpleContext } from "./helper"
 import { PreloadMultiFileDiffResult } from "@pierre/precision-diffs/ssr"
 

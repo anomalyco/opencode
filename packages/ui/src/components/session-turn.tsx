@@ -1,4 +1,4 @@
-import { AssistantMessage } from "@opencode-ai/sdk"
+import { AssistantMessage } from "@opencode-ai/sdk/v2"
 import { useData } from "../context"
 import { useDiffComponent } from "../context/diff"
 import { getDirectory, getFilename } from "@opencode-ai/util/path"

@@ -16,7 +16,7 @@ import { DiffChanges } from "@opencode-ai/ui/diff-changes"
 import { getFilename } from "@opencode-ai/util/path"
 import { Select } from "@opencode-ai/ui/select"
 import { DropdownMenu } from "@opencode-ai/ui/dropdown-menu"
-import { Session } from "@opencode-ai/sdk/v2/client"
+import { Session, Project } from "@opencode-ai/sdk/v2/client"
 import { usePlatform } from "@/context/platform"
 import { createStore } from "solid-js/store"
 import {
@@ -106,8 +106,8 @@ export default function Layout(props: ParentProps) {
     const { draggable, droppable } = event
     if (draggable && droppable) {
       const projects = layout.projects.list()
-      const fromIndex = projects.findIndex((p) => p.directory === draggable.id.toString())
-      const toIndex = projects.findIndex((p) => p.directory === droppable.id.toString())
+      const fromIndex = projects.findIndex((p) => p.worktree === draggable.id.toString())
+      const toIndex = projects.findIndex((p) => p.worktree === droppable.id.toString())
       if (fromIndex !== toIndex && toIndex !== -1) {
         layout.projects.move(draggable.id.toString(), toIndex)
       }
@@ -176,11 +176,11 @@ export default function Layout(props: ParentProps) {
     )
   }
 
-  const SortableProject = (props: { project: { directory: string; expanded: boolean } }): JSX.Element => {
-    const sortable = createSortable(props.project.directory)
-    const [projectStore] = globalSync.child(props.project.directory)
-    const slug = createMemo(() => base64Encode(props.project.directory))
-    const name = createMemo(() => getFilename(props.project.directory))
+  const SortableProject = (props: { project: Project & { expanded: boolean } }): JSX.Element => {
+    const sortable = createSortable(props.project.worktree)
+    const [projectStore] = globalSync.child(props.project.worktree)
+    const slug = createMemo(() => base64Encode(props.project.worktree))
+    const name = createMemo(() => getFilename(props.project.worktree))
     return (
       // @ts-ignore
       <div use:sortable classList={{ "opacity-30": sortable.isActiveDraggable }}>
@@ -194,11 +194,18 @@ export default function Layout(props: ParentProps) {
               >
                 <Collapsible.Trigger class="group/trigger flex items-center gap-3 p-0 text-left min-w-0 grow border-none">
                   <div class="size-6 shrink-0">
-                    <Avatar
-                      fallback={name()}
-                      background="var(--surface-info-base)"
-                      class="size-full group-hover/session:hidden"
-                    />
+                    <Switch>
+                      <Match when={props.project.icon?.url}>
+                        {(url) => <img src={url()} class="size-full group-hover/session:hidden" />}
+                      </Match>
+                      <Match when={true}>
+                        <Avatar
+                          fallback={name()}
+                          background={props.project.icon?.color ?? "var(--surface-info-base)"}
+                          class="size-full group-hover/session:hidden"
+                        />
+                      </Match>
+                    </Switch>
                     <Icon
                       name="chevron-right"
                       size="large"
@@ -212,7 +219,7 @@ export default function Layout(props: ParentProps) {
                     <DropdownMenu.Trigger as={IconButton} icon="dot-grid" variant="ghost" />
                     <DropdownMenu.Portal>
                       <DropdownMenu.Content>
-                        <DropdownMenu.Item onSelect={() => closeProject(props.project.directory)}>
+                        <DropdownMenu.Item onSelect={() => closeProject(props.project.worktree)}>
                           <DropdownMenu.ItemLabel>Close Project</DropdownMenu.ItemLabel>
                         </DropdownMenu.Item>
                       </DropdownMenu.Content>
@@ -274,8 +281,8 @@ export default function Layout(props: ParentProps) {
             </Collapsible>
           </Match>
           <Match when={true}>
-            <Tooltip placement="right" value={props.project.directory}>
-              <ProjectVisual directory={props.project.directory} />
+            <Tooltip placement="right" value={props.project.worktree}>
+              <ProjectVisual directory={props.project.worktree} />
             </Tooltip>
           </Match>
         </Switch>
@@ -315,7 +322,7 @@ export default function Layout(props: ParentProps) {
             <div class="flex items-center gap-3">
               <div class="flex items-center gap-2">
                 <Select
-                  options={layout.projects.list().map((project) => project.directory)}
+                  options={layout.projects.list().map((project) => project.worktree)}
                   current={currentDirectory()}
                   label={(x) => getFilename(x)}
                   onSelect={(x) => (x ? navigateToProject(x) : undefined)}
@@ -443,7 +450,7 @@ export default function Layout(props: ParentProps) {
               <DragDropSensors />
               <ConstrainDragXAxis />
               <div class="w-full min-w-8 flex flex-col gap-2 min-h-0 overflow-y-auto no-scrollbar">
-                <SortableProvider ids={layout.projects.list().map((p) => p.directory)}>
+                <SortableProvider ids={layout.projects.list().map((p) => p.worktree)}>
                   <For each={layout.projects.list()}>{(project) => <SortableProject project={project} />}</For>
                 </SortableProvider>
               </div>
