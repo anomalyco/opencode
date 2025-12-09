@@ -68,7 +68,7 @@ export const PromptInput: Component<PromptInputProps> = (props) => {
 
   const handleFileSelect = (path: string | undefined) => {
     if (!path) return
-    addPart({ type: "file", path, content: "@" + getFilename(path), start: 0, end: 0 })
+    addPart({ type: "file", path, content: "@" + path, start: 0, end: 0 })
   }
 
   const { flat, active, onInput, onKeyDown, refetch } = useFilteredList<string>({
