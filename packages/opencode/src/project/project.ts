@@ -28,7 +28,7 @@ export namespace Project {
         .optional(),
       time: z.object({
         created: z.number(),
-        updated: z.number().optional(),
+        updated: z.number(),
         initialized: z.number().optional(),
       }),
     })
