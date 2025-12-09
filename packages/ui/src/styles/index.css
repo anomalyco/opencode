@@ -6,6 +6,7 @@
 @import "./base.css" layer(base);
 
 @import "../components/accordion.css" layer(components);
+@import "../components/avatar.css" layer(components);
 @import "../components/basic-tool.css" layer(components);
 @import "../components/button.css" layer(components);
 @import "../components/card.css" layer(components);
@@ -14,6 +15,7 @@
 @import "../components/collapsible.css" layer(components);
 @import "../components/diff.css" layer(components);
 @import "../components/diff-changes.css" layer(components);
+@import "../components/dropdown-menu.css" layer(components);
 @import "../components/dialog.css" layer(components);
 @import "../components/file-icon.css" layer(components);
 @import "../components/icon.css" layer(components);

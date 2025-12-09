@@ -628,7 +628,13 @@ export namespace SessionPrompt {
             },
           ],
         }),
-        experimental_telemetry: { isEnabled: cfg.experimental?.openTelemetry },
+        experimental_telemetry: {
+          isEnabled: cfg.experimental?.openTelemetry,
+          metadata: {
+            userId: cfg.username ?? "unknown",
+            sessionId: sessionID,
+          },
+        },
       })
       if (result === "stop") break
       continue
@@ -1491,7 +1497,13 @@ export namespace SessionPrompt {
       ],
       headers: small.headers,
       model: language,
-      experimental_telemetry: { isEnabled: cfg.experimental?.openTelemetry },
+      experimental_telemetry: {
+        isEnabled: cfg.experimental?.openTelemetry,
+        metadata: {
+          userId: cfg.username ?? "unknown",
+          sessionId: input.session.id,
+        },
+      },
     })
       .then((result) => {
         if (result.text)
