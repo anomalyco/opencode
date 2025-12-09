@@ -18,6 +18,31 @@ import { Binary } from "@opencode-ai/util/binary"
 import { createSimpleContext } from "@opencode-ai/ui/context"
 import { useGlobalSDK } from "./global-sdk"
 
+const PASTEL_COLORS = [
+  "#FFB3BA", // pastel pink
+  "#FFDFBA", // pastel peach
+  "#FFFFBA", // pastel yellow
+  "#BAFFC9", // pastel green
+  "#BAE1FF", // pastel blue
+  "#E0BBE4", // pastel lavender
+  "#FEC8D8", // pastel rose
+  "#D4F0F0", // pastel cyan
+  "#FFDAC1", // pastel coral
+  "#C1E1C1", // pastel mint
+]
+
+function randomPastelColor() {
+  return PASTEL_COLORS[Math.floor(Math.random() * PASTEL_COLORS.length)]
+}
+
+async function ensureProjectColor(project: Project, sdk: ReturnType<typeof useGlobalSDK>): Promise<Project> {
+  if (project.icon?.color) return project
+  const color = randomPastelColor()
+  const updated = { ...project, icon: { ...project.icon, color } }
+  sdk.client.project.update({ projectID: project.id, icon: { color } })
+  return updated
+}
+
 type State = {
   ready: boolean
   provider: Provider[]
@@ -92,17 +117,19 @@ export const { use: useGlobalSync, provider: GlobalSyncProvider } = createSimple
       if (directory === "global") {
         switch (event.type) {
           case "project.updated": {
-            const result = Binary.search(globalStore.projects, event.properties.id, (s) => s.id)
-            if (result.found) {
-              setGlobalStore("projects", result.index, reconcile(event.properties))
-              break
-            }
-            setGlobalStore(
-              "projects",
-              produce((draft) => {
-                draft.splice(result.index, 0, event.properties)
-              }),
-            )
+            ensureProjectColor(event.properties, sdk).then((project) => {
+              const result = Binary.search(globalStore.projects, project.id, (s) => s.id)
+              if (result.found) {
+                setGlobalStore("projects", result.index, reconcile(project))
+                return
+              }
+              setGlobalStore(
+                "projects",
+                produce((draft) => {
+                  draft.splice(result.index, 0, project)
+                }),
+              )
+            })
             break
           }
         }
@@ -180,14 +207,14 @@ export const { use: useGlobalSync, provider: GlobalSyncProvider } = createSimple
     })
 
     Promise.all([
-      sdk.client.project.list().then((x) =>
+      sdk.client.project.list().then(async (x) => {
+        const filtered = x.data!.filter((p) => !p.worktree.includes("opencode-test") && p.vcs)
+        const projects = await Promise.all(filtered.map((p) => ensureProjectColor(p, sdk)))
         setGlobalStore(
           "projects",
-          x
-            .data!.filter((x) => !x.worktree.includes("opencode-test") && x.vcs)
-            .sort((a, b) => a.id.localeCompare(b.id)),
-        ),
-      ),
+          projects.sort((a, b) => a.id.localeCompare(b.id)),
+        )
+      }),
     ]).then(() => setGlobalStore("ready", true))
 
     return {
