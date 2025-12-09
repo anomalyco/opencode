@@ -1600,6 +1600,7 @@ ToolRegistry.register<typeof EditTool>({
               showLineNumbers={true}
               width="100%"
               wrapMode={ctx.diffWrapMode()}
+              fg={theme.text}
               addedBg={theme.diffAddedBg}
               removedBg={theme.diffRemovedBg}
               contextBg={theme.diffContextBg}

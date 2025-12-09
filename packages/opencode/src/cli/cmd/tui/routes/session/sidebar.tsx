@@ -248,7 +248,7 @@ export function Sidebar(props: { sessionID: string }) {
           </box>
         </scrollbox>
 
-        <box flexShrink={0} gap={1}>
+        <box flexShrink={0} gap={1} paddingTop={1}>
           <Show when={!hasProviders()}>
             <box
               backgroundColor={theme.backgroundElement}
@@ -275,7 +275,7 @@ export function Sidebar(props: { sessionID: string }) {
               </box>
             </box>
           </Show>
-          <text fg={theme.textMuted}>{directory()}</text>
+          <text fg={theme.text}>{directory()}</text>
           <text fg={theme.textMuted}>
             <span style={{ fg: theme.success }}>•</span> <b>Open</b>
             <span style={{ fg: theme.text }}>
