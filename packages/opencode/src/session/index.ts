@@ -1,7 +1,8 @@
+import { BusEvent } from "@/bus/bus-event"
+import { Bus } from "@/bus"
 import { Decimal } from "decimal.js"
 import z from "zod"
 import { type LanguageModelUsage, type ProviderMetadata } from "ai"
-import { Bus } from "../bus"
 import { Config } from "../config/config"
 import { Flag } from "../flag/flag"
 import { Identifier } from "../id/id"
@@ -85,32 +86,32 @@ export namespace Session {
   export type ShareInfo = z.output<typeof ShareInfo>
 
   export const Event = {
-    Created: Bus.event(
+    Created: BusEvent.define(
       "session.created",
       z.object({
         info: Info,
       }),
     ),
-    Updated: Bus.event(
+    Updated: BusEvent.define(
       "session.updated",
       z.object({
         info: Info,
       }),
     ),
-    Deleted: Bus.event(
+    Deleted: BusEvent.define(
       "session.deleted",
       z.object({
         info: Info,
       }),
     ),
-    Diff: Bus.event(
+    Diff: BusEvent.define(
       "session.diff",
       z.object({
         sessionID: z.string(),
         diff: Snapshot.FileDiff.array(),
       }),
     ),
-    Error: Bus.event(
+    Error: BusEvent.define(
       "session.error",
       z.object({
         sessionID: z.string().optional(),

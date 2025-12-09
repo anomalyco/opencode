@@ -11,8 +11,8 @@ export namespace Flag {
   export const OPENCODE_ENABLE_EXPERIMENTAL_MODELS = truthy("OPENCODE_ENABLE_EXPERIMENTAL_MODELS")
   export const OPENCODE_DISABLE_AUTOCOMPACT = truthy("OPENCODE_DISABLE_AUTOCOMPACT")
   export const OPENCODE_FAKE_VCS = process.env["OPENCODE_FAKE_VCS"]
-  export const OPENCODE_EXPERIMENTAL_BASH_MAX_OUTPUT_LENGTH =
-    process.env["OPENCODE_EXPERIMENTAL_BASH_MAX_OUTPUT_LENGTH"]
+  export const OPENCODE_EXPERIMENTAL_BASH_MAX_OUTPUT_LENGTH = number("OPENCODE_EXPERIMENTAL_BASH_MAX_OUTPUT_LENGTH")
+  export const OPENCODE_EXPERIMENTAL_BASH_DEFAULT_TIMEOUT = number("OPENCODE_EXPERIMENTAL_BASH_DEFAULT_TIMEOUT")
 
   // Experimental
   export const OPENCODE_EXPERIMENTAL = truthy("OPENCODE_EXPERIMENTAL")
@@ -24,5 +24,12 @@ export namespace Flag {
   function truthy(key: string) {
     const value = process.env[key]?.toLowerCase()
     return value === "true" || value === "1"
+  }
+
+  function number(key: string) {
+    const value = process.env[key]
+    if (!value) return undefined
+    const parsed = Number(value)
+    return Number.isInteger(parsed) && parsed > 0 ? parsed : undefined
   }
 }
