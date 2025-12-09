@@ -14,6 +14,9 @@ const DEFAULT_IGNORE = [
   "**/__pycache__/**",
 ]
 
+const FOLLOW_WARNING =
+  "Following symlinks can scan large or cyclical directories and may spike CPU. Only enable if you need it."
+
 export const GlobTool = Tool.define("glob", {
   description: DESCRIPTION,
   parameters: z.object({
@@ -86,6 +89,10 @@ export const GlobTool = Tool.define("glob", {
         output.push("")
         output.push("(Results are truncated. Consider using a more specific path or pattern.)")
       }
+    }
+    if (params.follow) {
+      output.push("")
+      output.push(FOLLOW_WARNING)
     }
 
     return {
