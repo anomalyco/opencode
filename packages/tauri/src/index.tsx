@@ -1,6 +1,10 @@
 // @refresh reload
 import { render } from "solid-js/web"
-import { DesktopInterface, PlatformProvider, Platform } from "@opencode-ai/desktop"
+import { App, PlatformProvider, Platform } from "@opencode-ai/desktop"
+import { runUpdater } from "./updater"
+import { onMount } from "solid-js"
+import { open, save } from "@tauri-apps/plugin-dialog"
+import { open as shellOpen } from "@tauri-apps/plugin-shell"
 
 const root = document.getElementById("root")
 if (import.meta.env.DEV && !(root instanceof HTMLElement)) {
@@ -9,13 +13,54 @@ if (import.meta.env.DEV && !(root instanceof HTMLElement)) {
   )
 }
 
-const platform: Platform = {}
+const platform: Platform = {
+  platform: "tauri",
 
-render(
-  () => (
+  async openDirectoryPickerDialog(opts) {
+    const result = await open({
+      directory: true,
+      multiple: opts?.multiple ?? false,
+      title: opts?.title ?? "Choose a folder",
+    })
+    return result
+  },
+
+  async openFilePickerDialog(opts) {
+    const result = await open({
+      directory: false,
+      multiple: opts?.multiple ?? false,
+      title: opts?.title ?? "Choose a file",
+    })
+    return result
+  },
+
+  async saveFilePickerDialog(opts) {
+    const result = await save({
+      title: opts?.title ?? "Save file",
+      defaultPath: opts?.defaultPath,
+    })
+    return result
+  },
+
+  openLink(url: string) {
+    shellOpen(url)
+  },
+}
+
+declare global {
+  interface Window {
+    __OPENCODE__?: { updaterEnabled?: boolean }
+  }
+}
+
+render(() => {
+  onMount(() => {
+    if (window.__OPENCODE__?.updaterEnabled) runUpdater()
+  })
+
+  return (
     <PlatformProvider value={platform}>
-      <DesktopInterface />
+      <App />
     </PlatformProvider>
-  ),
-  root!,
-)
+  )
+}, root!)
