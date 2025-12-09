@@ -26,6 +26,7 @@ export function DialogSessionList() {
     const today = new Date().toDateString()
     return sync.data.session
       .filter((x) => x.parentID === undefined)
+      .toSorted((a, b) => b.time.updated - a.time.updated)
       .map((x) => {
         const date = new Date(x.time.updated)
         let category = date.toDateString()
@@ -74,9 +75,7 @@ export function DialogSessionList() {
           onTrigger: async (option) => {
             if (toDelete() === option.value) {
               sdk.client.session.delete({
-                path: {
-                  id: option.value,
-                },
+                sessionID: option.value,
               })
               setToDelete(undefined)
               // dialog.clear()

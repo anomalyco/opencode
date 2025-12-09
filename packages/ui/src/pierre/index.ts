@@ -9,21 +9,7 @@ export type DiffProps<T = {}> = FileDiffOptions<T> & {
   classList?: ComponentProps<"div">["classList"]
 }
 
-export function createDefaultOptions<T>(style: FileDiffOptions<T>["diffStyle"]) {
-  return {
-    theme: "OpenCode",
-    themeType: "system",
-    disableLineNumbers: false,
-    overflow: "wrap",
-    diffStyle: style ?? "unified",
-    diffIndicators: "bars",
-    disableBackground: false,
-    expansionLineCount: 20,
-    lineDiffType: style === "split" ? "word-alt" : "none",
-    maxLineDiffLength: 1000,
-    maxLineLengthForHighlighting: 1000,
-    disableFileHeader: true,
-    unsafeCSS: `
+const unsafeCSS = `
 [data-pjs-header],
 [data-pjs] {
   [data-separator-wrapper] {
@@ -46,7 +32,23 @@ export function createDefaultOptions<T>(style: FileDiffOptions<T>["diffStyle"]) 
   [data-separator-content] {
     height: 24px !important;
   }
-}`,
+}`
+
+export function createDefaultOptions<T>(style: FileDiffOptions<T>["diffStyle"]) {
+  return {
+    theme: "OpenCode",
+    themeType: "system",
+    disableLineNumbers: false,
+    overflow: "wrap",
+    diffStyle: style ?? "unified",
+    diffIndicators: "bars",
+    disableBackground: false,
+    expansionLineCount: 20,
+    lineDiffType: style === "split" ? "word-alt" : "none",
+    maxLineDiffLength: 1000,
+    maxLineLengthForHighlighting: 1000,
+    disableFileHeader: true,
+    unsafeCSS,
     // hunkSeparators(hunkData: HunkData) {
     //   const fragment = document.createDocumentFragment()
     //   const numCol = document.createElement("div")

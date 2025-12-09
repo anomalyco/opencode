@@ -1,15 +1,4 @@
-import {
-  For,
-  JSXElement,
-  Match,
-  Show,
-  Switch,
-  ValidComponent,
-  createEffect,
-  createMemo,
-  createSignal,
-  onCleanup,
-} from "solid-js"
+import { For, JSXElement, Match, Show, Switch, createEffect, createMemo, createSignal, onCleanup } from "solid-js"
 import { Part } from "./message-part"
 import { Spinner } from "./spinner"
 import { useData } from "../context/data"
@@ -17,7 +6,6 @@ import type { AssistantMessage as AssistantMessageType, ToolPart } from "@openco
 
 export interface MessageProgressProps {
   assistantMessages: () => AssistantMessageType[]
-  diffComponent: ValidComponent
   done?: boolean
 }
 
@@ -172,12 +160,7 @@ export function MessageProgress(props: MessageProgressProps) {
                       )
                       return (
                         <div data-slot="message-progress-item">
-                          <Part
-                            message={message()!}
-                            part={part}
-                            sanitize={sanitizer()}
-                            diffComponent={props.diffComponent}
-                          />
+                          <Part message={message()!} part={part} sanitize={sanitizer()} />
                         </div>
                       )
                     }}
