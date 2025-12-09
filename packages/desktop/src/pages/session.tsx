@@ -9,6 +9,7 @@ import { Icon } from "@opencode-ai/ui/icon"
 import { Tooltip } from "@opencode-ai/ui/tooltip"
 import { DiffChanges } from "@opencode-ai/ui/diff-changes"
 import { ProgressCircle } from "@opencode-ai/ui/progress-circle"
+import { ResizeHandle } from "@opencode-ai/ui/resize-handle"
 import { Tabs } from "@opencode-ai/ui/tabs"
 import { Code } from "@opencode-ai/ui/code"
 import { SessionTurn } from "@opencode-ai/ui/session-turn"
@@ -30,8 +31,8 @@ import { useSync } from "@/context/sync"
 import { useSession } from "@/context/session"
 import { useLayout } from "@/context/layout"
 import { getDirectory, getFilename } from "@opencode-ai/util/path"
-import { Diff } from "@opencode-ai/ui/diff"
 import { Terminal } from "@/components/terminal"
+import { checksum } from "@opencode-ai/util/encode"
 
 export default function Page() {
   const layout = useLayout()
@@ -282,7 +283,7 @@ export default function Page() {
   const wide = createMemo(() => layout.review.state() === "tab" || !session.diffs().length)
 
   return (
-    <div class="relative bg-background-base size-full overflow-x-hidden flex flex-col items-start">
+    <div class="relative bg-background-base size-full overflow-x-hidden flex flex-col">
       <div class="min-h-0 grow w-full">
         <DragDropProvider
           onDragStart={handleDragStart}
@@ -389,7 +390,6 @@ export default function Page() {
                                   ? "pr-6 pl-18"
                                   : "px-6"),
                           }}
-                          diffComponent={Diff}
                         />
                       </div>
                     </Match>
@@ -438,7 +438,6 @@ export default function Page() {
                         container: "px-6",
                       }}
                       diffs={session.diffs()}
-                      diffComponent={Diff}
                       actions={
                         <Tooltip value="Open in tab">
                           <IconButton
@@ -470,7 +469,6 @@ export default function Page() {
                       container: "px-6",
                     }}
                     diffs={session.diffs()}
-                    diffComponent={Diff}
                     split
                   />
                 </div>
@@ -493,7 +491,11 @@ export default function Page() {
                       <Match when={file()}>
                         {(f) => (
                           <Code
-                            file={{ name: f().path, contents: f().content?.content ?? "" }}
+                            file={{
+                              name: f().path,
+                              contents: f().content?.content ?? "",
+                              cacheKey: checksum(f().content?.content ?? ""),
+                            }}
                             overflow="scroll"
                             class="pb-40"
                           />
@@ -606,41 +608,14 @@ export default function Page() {
           class="relative w-full flex flex-col shrink-0 border-t border-border-weak-base"
           style={{ height: `${layout.terminal.height()}px` }}
         >
-          <div
-            class="absolute inset-x-0 top-0 z-10 h-2 -translate-y-1/2 cursor-ns-resize"
-            onMouseDown={(e) => {
-              e.preventDefault()
-              const startY = e.clientY
-              const startHeight = layout.terminal.height()
-              const maxHeight = window.innerHeight * 0.6
-              const minHeight = 100
-              const collapseThreshold = 50
-              let currentHeight = startHeight
-
-              document.body.style.userSelect = "none"
-              document.body.style.overflow = "hidden"
-
-              const onMouseMove = (moveEvent: MouseEvent) => {
-                const deltaY = startY - moveEvent.clientY
-                currentHeight = startHeight + deltaY
-                const clampedHeight = Math.min(maxHeight, Math.max(minHeight, currentHeight))
-                layout.terminal.resize(clampedHeight)
-              }
-
-              const onMouseUp = () => {
-                document.body.style.userSelect = ""
-                document.body.style.overflow = ""
-                document.removeEventListener("mousemove", onMouseMove)
-                document.removeEventListener("mouseup", onMouseUp)
-
-                if (currentHeight < collapseThreshold) {
-                  layout.terminal.close()
-                }
-              }
-
-              document.addEventListener("mousemove", onMouseMove)
-              document.addEventListener("mouseup", onMouseUp)
-            }}
+          <ResizeHandle
+            direction="vertical"
+            size={layout.terminal.height()}
+            min={100}
+            max={window.innerHeight * 0.6}
+            collapseThreshold={50}
+            onResize={layout.terminal.resize}
+            onCollapse={layout.terminal.close}
           />
           <Tabs variant="alt" value={session.terminal.active()} onChange={session.terminal.open}>
             <Tabs.List class="h-10">

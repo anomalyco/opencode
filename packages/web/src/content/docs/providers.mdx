@@ -173,6 +173,10 @@ Or if you already have an API key, you can select **Manually enter API Key** and
 
 ### Azure OpenAI
 
+:::note
+If you encounter "I'm sorry, but I cannot assist with that request" errors, try changing the content filter from **DefaultV2** to **Default** in your Azure resource.
+:::
+
 1. Head over to the [Azure portal](https://portal.azure.com/) and create an **Azure OpenAI** resource. You'll need:
    - **Resource name**: This becomes part of your API endpoint (`https://RESOURCE_NAME.openai.azure.com/`)
    - **API key**: Either `KEY 1` or `KEY 2` from your resource
@@ -694,6 +698,33 @@ To use Kimi K2 from Moonshot AI:
 
 ---
 
+### Nebius Token Factory
+
+1. Head over to the [Nebius Token Factory console](https://tokenfactory.nebius.com/), create an account, and click **Add Key**.
+
+2. Run the `/connect` command and search for **Nebius Token Factory**.
+
+   ```txt
+   /connect
+   ```
+
+3. Enter your Nebius Token Factory API key.
+
+   ```txt
+   ┌ API key
+   │
+   │
+   └ enter
+   ```
+
+4. Run the `/models` command to select a model like _Kimi K2 Instruct_.
+
+   ```txt
+   /models
+   ```
+
+---
+
 ### Ollama
 
 You can configure opencode to use local models through Ollama.
@@ -916,26 +947,26 @@ SAP AI Core provides access to 40+ models from OpenAI, Anthropic, Google, Amazon
    └ enter
    ```
 
-   Or set the `SAP_AI_SERVICE_KEY` environment variable:
+   Or set the `AICORE_SERVICE_KEY` environment variable:
 
    ```bash
-   SAP_AI_SERVICE_KEY='{"clientid":"...","clientsecret":"...","url":"...","serviceurls":{"AI_API_URL":"..."}}' opencode
+   AICORE_SERVICE_KEY='{"clientid":"...","clientsecret":"...","url":"...","serviceurls":{"AI_API_URL":"..."}}' opencode
    ```
 
    Or add it to your bash profile:
 
    ```bash title="~/.bash_profile"
-   export SAP_AI_SERVICE_KEY='{"clientid":"...","clientsecret":"...","url":"...","serviceurls":{"AI_API_URL":"..."}}'
+   export AICORE_SERVICE_KEY='{"clientid":"...","clientsecret":"...","url":"...","serviceurls":{"AI_API_URL":"..."}}'
    ```
 
 4. Optionally set deployment ID and resource group:
 
    ```bash
-   SAP_AI_DEPLOYMENT_ID=your-deployment-id SAP_AI_RESOURCE_GROUP=your-resource-group opencode
+   AICORE_DEPLOYMENT_ID=your-deployment-id AICORE_RESOURCE_GROUP=your-resource-group opencode
    ```
 
    :::note
-   If not set, uses deployment ID `d65d81e7c077e583` (general-purpose) and resource group `default`. Configure these for your specific setup.
+   These settings are optional and should be configured according to your SAP AI Core setup.
    :::
 
 5. Run the `/models` command to select from 40+ available models.

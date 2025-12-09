@@ -10,6 +10,7 @@ import { SessionSummary } from "./summary"
 import { Bus } from "@/bus"
 import { SessionRetry } from "./retry"
 import { SessionStatus } from "./status"
+import { Plugin } from "@/plugin"
 import type { Provider } from "@/provider/provider"
 
 export namespace SessionProcessor {
@@ -316,6 +317,16 @@ export namespace SessionProcessor {
                 case "text-end":
                   if (currentText) {
                     currentText.text = currentText.text.trimEnd()
+                    const textOutput = await Plugin.trigger(
+                      "experimental.text.complete",
+                      {
+                        sessionID: input.sessionID,
+                        messageID: input.assistantMessage.id,
+                        partID: currentText.id,
+                      },
+                      { text: currentText.text },
+                    )
+                    currentText.text = textOutput.text
                     currentText.time = {
                       start: Date.now(),
                       end: Date.now(),

@@ -91,7 +91,7 @@ export namespace SessionSummary {
     if (textPart && !userMsg.summary?.title) {
       const result = await generateText({
         maxOutputTokens: small.capabilities.reasoning ? 1500 : 20,
-        providerOptions: ProviderTransform.providerOptions(small.api.npm, small.providerID, options),
+        providerOptions: ProviderTransform.providerOptions(small, options),
         messages: [
           ...SystemPrompt.title(small.providerID).map(
             (x): ModelMessage => ({
@@ -138,7 +138,7 @@ export namespace SessionSummary {
         const result = await generateText({
           model: language,
           maxOutputTokens: 100,
-          providerOptions: ProviderTransform.providerOptions(small.api.npm, small.providerID, options),
+          providerOptions: ProviderTransform.providerOptions(small, options),
           messages: [
             ...SystemPrompt.summarize(small.providerID).map(
               (x): ModelMessage => ({

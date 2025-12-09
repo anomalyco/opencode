@@ -11,7 +11,8 @@ import { DialogProvider as DialogProviderList } from "@tui/component/dialog-prov
 import { SDKProvider, useSDK } from "@tui/context/sdk"
 import { SyncProvider, useSync } from "@tui/context/sync"
 import { LocalProvider, useLocal } from "@tui/context/local"
-import { DialogModel } from "@tui/component/dialog-model"
+import { DialogModel, useConnected } from "@tui/component/dialog-model"
+import { DialogMcp } from "@tui/component/dialog-mcp"
 import { DialogStatus } from "@tui/component/dialog-status"
 import { DialogThemeList } from "@tui/component/dialog-theme-list"
 import { DialogHelp } from "./ui/dialog-help"
@@ -169,6 +170,26 @@ function App() {
     console.log(JSON.stringify(route.data))
   })
 
+  // Update terminal window title based on current route and session
+  createEffect(() => {
+    if (route.data.type === "home") {
+      renderer.setTerminalTitle("opencode")
+      return
+    }
+
+    if (route.data.type === "session") {
+      const session = sync.session.get(route.data.sessionID)
+      if (!session || SessionApi.isDefaultTitle(session.title)) {
+        renderer.setTerminalTitle("opencode")
+        return
+      }
+
+      // Truncate title to 40 chars max
+      const title = session.title.length > 40 ? session.title.slice(0, 37) + "..." : session.title
+      renderer.setTerminalTitle(`oc | ${title}`)
+    }
+  })
+
   const args = useArgs()
   onMount(() => {
     batch(() => {
@@ -213,18 +234,21 @@ function App() {
     ),
   )
 
+  const connected = useConnected()
   command.register(() => [
     {
       title: "Switch session",
       value: "session.list",
       keybind: "session_list",
       category: "Session",
+      suggested: sync.data.session.length > 0,
       onSelect: () => {
         dialog.replace(() => <DialogSessionList />)
       },
     },
     {
       title: "New session",
+      suggested: route.data.type === "session",
       value: "session.new",
       keybind: "session_new",
       category: "Session",
@@ -243,6 +267,7 @@ function App() {
       title: "Switch model",
       value: "model.list",
       keybind: "model_list",
+      suggested: true,
       category: "Agent",
       onSelect: () => {
         dialog.replace(() => <DialogModel />)
@@ -250,6 +275,7 @@ function App() {
     },
     {
       title: "Model cycle",
+      disabled: true,
       value: "model.cycle_recent",
       keybind: "model_cycle_recent",
       category: "Agent",
@@ -259,6 +285,7 @@ function App() {
     },
     {
       title: "Model cycle reverse",
+      disabled: true,
       value: "model.cycle_recent_reverse",
       keybind: "model_cycle_recent_reverse",
       category: "Agent",
@@ -273,6 +300,14 @@ function App() {
       category: "Agent",
       onSelect: () => {
         dialog.replace(() => <DialogAgent />)
+      },
+    },
+    {
+      title: "Toggle MCPs",
+      value: "mcp.list",
+      category: "Agent",
+      onSelect: () => {
+        dialog.replace(() => <DialogMcp />)
       },
     },
     {
@@ -296,6 +331,15 @@ function App() {
       },
     },
     {
+      title: "Connect provider",
+      value: "provider.connect",
+      suggested: !connected(),
+      onSelect: () => {
+        dialog.replace(() => <DialogProviderList />)
+      },
+      category: "Provider",
+    },
+    {
       title: "View status",
       keybind: "status_view",
       value: "opencode.status",
@@ -309,14 +353,6 @@ function App() {
       value: "theme.switch",
       onSelect: () => {
         dialog.replace(() => <DialogThemeList />)
-      },
-      category: "System",
-    },
-    {
-      title: "Connect provider",
-      value: "provider.connect",
-      onSelect: () => {
-        dialog.replace(() => <DialogProviderList />)
       },
       category: "System",
     },

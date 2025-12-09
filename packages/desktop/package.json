@@ -1,10 +1,10 @@
 {
   "name": "@opencode-ai/desktop",
-  "version": "1.0.134",
+  "version": "1.0.137",
   "description": "",
   "type": "module",
   "exports": {
-    ".": "./src/index.tsx",
+    ".": "./src/index.ts",
     "./vite": "./vite.js"
   },
   "scripts": {
