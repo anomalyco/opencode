@@ -4,7 +4,7 @@
   justify-content: center;
   border-style: solid;
   border-width: 1px;
-  border-radius: var(--radius-sm);
+  border-radius: var(--radius-lg);
   text-decoration: none;
   user-select: none;
   cursor: default;
