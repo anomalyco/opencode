@@ -119,7 +119,29 @@ export namespace Project {
     return existing
   }
 
-  async function discover(input: Pick<Info, "id" | "worktree">) {}
+  export async function discover(input: Pick<Info, "id" | "worktree">) {
+    const glob = new Bun.Glob("**/{favicon,icon,logo}.{ico,png,svg,jpg,jpeg,webp}")
+    for await (const match of glob.scan({
+      cwd: input.worktree,
+      absolute: true,
+      onlyFiles: true,
+      followSymlinks: false,
+      dot: false,
+    })) {
+      const file = Bun.file(match)
+      const buffer = await file.arrayBuffer()
+      const base64 = Buffer.from(buffer).toString("base64")
+      const mime = file.type || "image/png"
+      const url = `data:${mime};base64,${base64}`
+      await Storage.update<Info>(["project", input.id], (draft) => {
+        draft.icon = {
+          url,
+          color: draft.icon?.color ?? "#000000",
+        }
+      })
+      return
+    }
+  }
 
   async function migrateFromGlobal(newProjectID: string, worktree: string) {
     const globalProject = await Storage.read<Info>(["project", "global"]).catch(() => undefined)

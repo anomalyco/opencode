@@ -1,6 +1,7 @@
 import { describe, expect, test } from "bun:test"
 import { Project } from "../../src/project/project"
 import { Log } from "../../src/util/log"
+import { Storage } from "../../src/storage/storage"
 import { $ } from "bun"
 import path from "path"
 import { tmpdir } from "../fixture/fixture"
@@ -37,5 +38,81 @@ describe("Project.fromDirectory", () => {
     const opencodeFile = path.join(tmp.path, ".git", "opencode")
     const fileExists = await Bun.file(opencodeFile).exists()
     expect(fileExists).toBe(true)
+  })
+})
+
+describe("Project.discover", () => {
+  test("should discover favicon.png in root", async () => {
+    await using tmp = await tmpdir({ git: true })
+    const project = await Project.fromDirectory(tmp.path)
+
+    const pngData = Buffer.from([0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a])
+    await Bun.write(path.join(tmp.path, "favicon.png"), pngData)
+
+    await Project.discover({ id: project.id, worktree: tmp.path })
+
+    const updated = await Storage.read<Project.Info>(["project", project.id])
+    expect(updated.icon).toBeDefined()
+    expect(updated.icon?.url).toStartWith("data:")
+    expect(updated.icon?.url).toContain("base64")
+    expect(updated.icon?.color).toBe("#000000")
+  })
+
+  test("should discover icon.svg in subdirectory", async () => {
+    await using tmp = await tmpdir({ git: true })
+    const project = await Project.fromDirectory(tmp.path)
+
+    await $`mkdir -p ${path.join(tmp.path, "public")}`.quiet()
+    await Bun.write(path.join(tmp.path, "public", "icon.svg"), "<svg></svg>")
+
+    await Project.discover({ id: project.id, worktree: tmp.path })
+
+    const updated = await Storage.read<Project.Info>(["project", project.id])
+    expect(updated.icon).toBeDefined()
+    expect(updated.icon?.url).toStartWith("data:")
+    expect(updated.icon?.url).toContain("base64")
+  })
+
+  test("should discover logo.ico", async () => {
+    await using tmp = await tmpdir({ git: true })
+    const project = await Project.fromDirectory(tmp.path)
+
+    const icoData = Buffer.from([0x00, 0x00, 0x01, 0x00])
+    await Bun.write(path.join(tmp.path, "logo.ico"), icoData)
+
+    await Project.discover({ id: project.id, worktree: tmp.path })
+
+    const updated = await Storage.read<Project.Info>(["project", project.id])
+    expect(updated.icon).toBeDefined()
+    expect(updated.icon?.url).toStartWith("data:")
+  })
+
+  test("should not discover non-image files", async () => {
+    await using tmp = await tmpdir({ git: true })
+    const project = await Project.fromDirectory(tmp.path)
+
+    await Bun.write(path.join(tmp.path, "favicon.txt"), "not an image")
+
+    await Project.discover({ id: project.id, worktree: tmp.path })
+
+    const updated = await Storage.read<Project.Info>(["project", project.id])
+    expect(updated.icon).toBeUndefined()
+  })
+
+  test("should preserve existing color when discovering icon", async () => {
+    await using tmp = await tmpdir({ git: true })
+    const project = await Project.fromDirectory(tmp.path)
+
+    await Storage.update<Project.Info>(["project", project.id], (draft) => {
+      draft.icon = { url: "", color: "#ff0000" }
+    })
+
+    const pngData = Buffer.from([0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a])
+    await Bun.write(path.join(tmp.path, "favicon.png"), pngData)
+
+    await Project.discover({ id: project.id, worktree: tmp.path })
+
+    const updated = await Storage.read<Project.Info>(["project", project.id])
+    expect(updated.icon?.color).toBe("#ff0000")
   })
 })
