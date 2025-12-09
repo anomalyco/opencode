@@ -28,7 +28,7 @@ curl -fsSL https://opencode.ai/install | bash
 npm i -g opencode-ai@latest        # or bun/pnpm/yarn
 scoop bucket add extras; scoop install extras/opencode  # Windows
 choco install opencode             # Windows
-brew install opencode              # macOS and Linux
+brew install sst/tap/opencode  # macOS and Linux (uses the official SST tap: https://github.com/sst/homebrew-tap, so you get updates faster than via the main Homebrew index, where opencode can appear with a delay)
 paru -S opencode-bin               # Arch Linux
 mise use --pin -g ubi:sst/opencode # Any OS
 nix run nixpkgs#opencode           # or github:sst/opencode for latest dev branch
