@@ -50,6 +50,7 @@ type ThemeColors = {
   selectedListItemText: RGBA
   background: RGBA
   backgroundPanel: RGBA
+  sidebarBackgroundPanel: RGBA
   backgroundElement: RGBA
   backgroundMenu: RGBA
   border: RGBA
@@ -124,9 +125,10 @@ type ColorValue = HexColor | RefName | Variant | RGBA
 type ThemeJson = {
   $schema?: string
   defs?: Record<string, HexColor | RefName>
-  theme: Omit<Record<keyof ThemeColors, ColorValue>, "selectedListItemText" | "backgroundMenu"> & {
+  theme: Omit<Record<keyof ThemeColors, ColorValue>, "selectedListItemText" | "backgroundMenu" | "sidebarBackgroundPanel"> & {
     selectedListItemText?: ColorValue
     backgroundMenu?: ColorValue
+    sidebarBackgroundPanel?: ColorValue
     thinkingOpacity?: number
   }
 }
@@ -187,7 +189,7 @@ function resolveTheme(theme: ThemeJson, mode: "dark" | "light") {
 
   const resolved = Object.fromEntries(
     Object.entries(theme.theme)
-      .filter(([key]) => key !== "selectedListItemText" && key !== "backgroundMenu" && key !== "thinkingOpacity")
+      .filter(([key]) => key !== "selectedListItemText" && key !== "backgroundMenu" && key !== "sidebarBackgroundPanel" && key !== "thinkingOpacity")
       .map(([key, value]) => {
         return [key, resolveColor(value as ColorValue)]
       }),
@@ -208,6 +210,13 @@ function resolveTheme(theme: ThemeJson, mode: "dark" | "light") {
     resolved.backgroundMenu = resolveColor(theme.theme.backgroundMenu)
   } else {
     resolved.backgroundMenu = resolved.backgroundElement
+  }
+
+  // Handle sidebarBackgroundPanel - optional with fallback to backgroundPanel
+  if (theme.theme.sidebarBackgroundPanel !== undefined) {
+    resolved.sidebarBackgroundPanel = resolveColor(theme.theme.sidebarBackgroundPanel)
+  } else {
+    resolved.sidebarBackgroundPanel = resolved.backgroundPanel
   }
 
   // Handle thinkingOpacity - optional with default of 0.6
@@ -407,6 +416,7 @@ function generateSystem(colors: TerminalColors, mode: "dark" | "light"): ThemeJs
       // Background colors
       background: bg,
       backgroundPanel: grays[2],
+      sidebarBackgroundPanel: grays[2],
       backgroundElement: grays[3],
       backgroundMenu: grays[3],
 
