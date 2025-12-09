@@ -201,6 +201,7 @@ export namespace MessageV2 {
     .object({
       status: z.literal("pending"),
       input: z.record(z.string(), z.any()),
+      title: z.string().optional(),
       raw: z.string(),
     })
     .meta({

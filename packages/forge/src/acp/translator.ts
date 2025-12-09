@@ -17,7 +17,7 @@ export namespace ACPTranslator {
   interface TranslatorState {
     sessionID: string
     messageID: string
-    partID: string
+    currentTextPartID: string
     textAccumulator: string
     reasoningPartID: string
     reasoningAccumulator: string
@@ -32,7 +32,7 @@ export namespace ACPTranslator {
       state = {
         sessionID,
         messageID: Identifier.ascending("message"),
-        partID: Identifier.ascending("part"),
+        currentTextPartID: "",
         textAccumulator: "",
         reasoningPartID: Identifier.ascending("part"),
         reasoningAccumulator: "",
@@ -62,13 +62,17 @@ export namespace ACPTranslator {
     try {
       switch (notifType) {
         case "agent_message_chunk": {
-          await TextTranslator.handleAgentMessageChunk(sessionID, state.messageID, state.partID, notification, {
-            current: state.textAccumulator,
-          })
-          // Update accumulator after handler runs
-          if (notification.update.content.type === "text") {
-            state.textAccumulator += notification.update.content.text
+          if (!state.currentTextPartID) {
+            state.currentTextPartID = Identifier.ascending("part")
           }
+          const result = await TextTranslator.handleAgentMessageChunk(
+            sessionID,
+            state.messageID,
+            state.currentTextPartID,
+            notification,
+            { current: state.textAccumulator },
+          )
+          state.textAccumulator = result.textAccumulator
           break
         }
 
@@ -85,6 +89,8 @@ export namespace ACPTranslator {
 
         case "tool_call": {
           await ToolTranslator.handleToolCall(sessionID, state.messageID, notification, state.toolCallMap)
+          state.currentTextPartID = ""
+          state.textAccumulator = ""
           break
         }
 
@@ -178,7 +184,7 @@ export namespace ACPTranslator {
   export function startNewMessage(sessionID: string, messageID: string): void {
     const state = getOrCreateState(sessionID)
     state.messageID = messageID
-    state.partID = Identifier.ascending("part")
+    state.currentTextPartID = ""
     state.textAccumulator = ""
     state.reasoningPartID = Identifier.ascending("part")
     state.reasoningAccumulator = ""

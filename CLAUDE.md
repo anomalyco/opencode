@@ -120,6 +120,10 @@ Agents run as sub-processes of the code editor, and communicate using JSON-RPC o
 
 **Learn more:** <https://agentclientprotocol.com/llms.txt>
 
+For reference examples on client implementations, refer to `zed-industries/zed`.
+
+For reference examples on agent implementations, refer to `zed-industries/claude-code-acp` or `google-gemini/gemini-cli`.
+
 **Our implementation:** `packages/forge/src/acp/` - we manage agent subprocesses and translate protocol messages into UI updates.
 
 ## Common Tasks
@@ -139,5 +143,6 @@ If asked about any of these project, use `mcp__deepwiki__ask_question` to gather
 - OpenCode: sst/opencode
 - Claude Code ACP: zed-industries/claude-code-acp
 - Gemini: google-gemini/gemini-cli
+- Zed: zed-industries/zed
 
 **Agent Client Protocol:** <https://agentclientprotocol.com/llms.txt>

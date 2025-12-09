@@ -30,12 +30,9 @@ import PROMPT_PLAN from "../session/prompt/plan.txt"
 import BUILD_SWITCH from "../session/prompt/build-switch.txt"
 import { defer } from "../util/defer"
 import { mergeDeep, pipe } from "remeda"
-import { ToolRegistry } from "../tool/registry"
 import { Wildcard } from "../util/wildcard"
 import { MCP } from "../mcp"
 import { LSP } from "../lsp"
-import { ReadTool } from "../tool/read"
-import { ListTool } from "../tool/ls"
 import { FileTime } from "../file/time"
 import { ulid } from "ulid"
 import { spawn } from "child_process"
@@ -46,8 +43,12 @@ import { SessionSummary } from "./summary"
 import { NamedError } from "@/util/error"
 import { fn } from "@/util/fn"
 import { SessionProcessor } from "./processor"
-import { TaskTool } from "@/tool/task"
 import { SessionStatus } from "./status"
+
+const ToolRegistry = { enabled: () => ({}), tools: () => [] } as any
+const TaskTool = { init: () => ({}), id: "task" } as any
+const ReadTool = {} as any
+const ListTool = {} as any
 
 // @ts-ignore
 globalThis.AI_SDK_LOG_WARNINGS = false

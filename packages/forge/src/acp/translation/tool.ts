@@ -8,6 +8,18 @@ import { Log } from "../../util/log"
 const log = Log.create({ service: "acp-tool-translator" })
 
 /**
+ * Convert snake_case keys to camelCase to match our tool definitions
+ */
+function toCamelCase(obj: Record<string, unknown>): Record<string, unknown> {
+  const result: Record<string, unknown> = {}
+  for (const [key, value] of Object.entries(obj)) {
+    const camelKey = key.replace(/_([a-z])/g, (_, letter) => letter.toUpperCase())
+    result[camelKey] = value
+  }
+  return result
+}
+
+/**
  * Map ACP tool call status to forge ToolPart status (1:1 mapping)
  */
 function mapStatus(acpStatus?: ToolCallStatus): MessageV2.ToolPart["state"]["status"] {
@@ -59,11 +71,23 @@ export async function handleToolCall(
     kind: update.kind,
     title: update.title,
     status: update.status,
+    rawInput: update.rawInput,
   })
 
-  // Create new ToolPart for this tool call
-  const partID = Identifier.ascending("part")
-  toolCallMap.set(update.toolCallId, partID)
+  // Check if this toolCallId already exists (Claude Code ACP can send multiple tool_call notifications)
+  // Per https://github.com/zed-industries/claude-code-acp/issues/122:
+  // "a tool_call event will replace the entire current tool call at that id"
+  const existingPartID = toolCallMap.get(update.toolCallId)
+  const partID = existingPartID || Identifier.ascending("part")
+
+  if (existingPartID) {
+    log.info("    │  [TOOL_CALL] duplicate toolCallId detected, REPLACING existing part", {
+      toolCallId: update.toolCallId,
+      partID: existingPartID,
+    })
+  } else {
+    toolCallMap.set(update.toolCallId, partID)
+  }
 
   const status = mapStatus(update.status)
 
@@ -79,7 +103,8 @@ export async function handleToolCall(
         ? {
             status: "pending",
             input: update.rawInput || {},
-            raw: update.title,
+            title: update.title,
+            raw: update.title || "",
           }
         : status === "completed"
           ? {
@@ -151,6 +176,7 @@ export async function handleToolCallUpdate(
     toolCallId: update.toolCallId,
     status: update.status,
     hasContent: !!update.content,
+    rawInput: update.rawInput,
   })
 
   // Find existing tool part
@@ -199,7 +225,9 @@ export async function handleToolCallUpdate(
   const title =
     update.title !== null && update.title !== undefined
       ? update.title
-      : existingPart.state.status === "running" || existingPart.state.status === "completed"
+      : existingPart.state.status === "pending" ||
+          existingPart.state.status === "running" ||
+          existingPart.state.status === "completed"
         ? existingPart.state.title
         : undefined
 
@@ -223,6 +251,7 @@ export async function handleToolCallUpdate(
         ? {
             status: "pending",
             input: mergedMetadata.rawInput || existingPart.state.input,
+            title: title || (existingPart.state.status === "pending" ? existingPart.state.title : undefined),
             raw: title || (existingPart.state.status === "pending" ? existingPart.state.raw : ""),
           }
         : status === "completed"

@@ -14,14 +14,16 @@ export async function handleAgentMessageChunk(
   partID: string,
   notification: SessionNotification,
   textAccumulator: { current: string },
-): Promise<void> {
-  if (notification.update.sessionUpdate !== "agent_message_chunk") return
+): Promise<{ textAccumulator: string }> {
+  if (notification.update.sessionUpdate !== "agent_message_chunk") {
+    return { textAccumulator: textAccumulator.current }
+  }
   if (notification.update.content.type !== "text") {
     log.warn("non-text agent_message_chunk received", {
       sessionID,
       contentType: notification.update.content.type,
     })
-    return
+    return { textAccumulator: textAccumulator.current }
   }
 
   const delta = notification.update.content.text
@@ -38,13 +40,11 @@ export async function handleAgentMessageChunk(
     },
   }
 
-  // Save part to storage AND publish Bus event
   log.debug("attempting to save part", { partID: part.id, messageID: part.messageID, deltaLength: delta.length })
   try {
     await Session.updatePart({ part, delta })
     log.debug("successfully saved part", { partID: part.id })
   } catch (error) {
-    // Log the actual error details
     const err = error instanceof Error ? error : new Error(String(error))
     log.error("failed to save part", {
       error: err.message,
@@ -59,6 +59,8 @@ export async function handleAgentMessageChunk(
     delta: delta.substring(0, 50),
     totalLength: textAccumulator.current.length,
   })
+
+  return { textAccumulator: textAccumulator.current }
 }
 
 /**

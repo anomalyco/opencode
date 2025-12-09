@@ -26,7 +26,6 @@ import { Command } from "../command"
 import { ProviderAuth } from "../provider/auth"
 import { Global } from "../global"
 import { ProjectRoute } from "./project"
-import { ToolRegistry } from "../tool/registry"
 import { zodToJsonSchema } from "zod-to-json-schema"
 import { SessionPrompt } from "../session/prompt"
 import { SessionPromptACP } from "../session/prompt-acp"
@@ -258,7 +257,7 @@ export namespace Server {
           },
         }),
         async (c) => {
-          return c.json(await ToolRegistry.ids())
+          return c.json([])
         },
       )
       .get(
@@ -298,16 +297,7 @@ export namespace Server {
           }),
         ),
         async (c) => {
-          const { provider, model } = c.req.valid("query")
-          const tools = await ToolRegistry.tools(provider, model)
-          return c.json(
-            tools.map((t) => ({
-              id: t.id,
-              description: t.description,
-              // Handle both Zod schemas and plain JSON schemas
-              parameters: (t.parameters as any)?._def ? zodToJsonSchema(t.parameters as any) : t.parameters,
-            })),
-          )
+          return c.json([])
         },
       )
       .post(

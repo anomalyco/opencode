@@ -225,6 +225,7 @@ export type ToolStatePending = {
   input: {
     [key: string]: unknown
   }
+  title?: string
   raw: string
 }
 
@@ -471,40 +472,6 @@ export type EventSessionCompacted = {
   }
 }
 
-export type EventFileEdited = {
-  type: "file.edited"
-  properties: {
-    file: string
-  }
-}
-
-export type Todo = {
-  /**
-   * Brief description of the task
-   */
-  content: string
-  /**
-   * Current status of the task: pending, in_progress, completed, cancelled
-   */
-  status: string
-  /**
-   * Priority level of the task: high, medium, low
-   */
-  priority: string
-  /**
-   * Unique identifier for the todo item
-   */
-  id: string
-}
-
-export type EventTodoUpdated = {
-  type: "todo.updated"
-  properties: {
-    sessionID: string
-    todos: Array<Todo>
-  }
-}
-
 export type EventCommandExecuted = {
   type: "command.executed"
   properties: {
@@ -581,6 +548,13 @@ export type EventSessionError = {
   }
 }
 
+export type EventFileEdited = {
+  type: "file.edited"
+  properties: {
+    file: string
+  }
+}
+
 export type EventTuiPromptAppend = {
   type: "tui.prompt.append"
   properties: {
@@ -625,10 +599,40 @@ export type EventTuiToastShow = {
   }
 }
 
-export type EventServerConnected = {
-  type: "server.connected"
+export type EventSessionModeChanged = {
+  type: "session.mode.changed"
   properties: {
-    [key: string]: unknown
+    sessionID: string
+    agent: string
+    modeId: string
+    previousModeId: string | null
+  }
+}
+
+export type Todo = {
+  /**
+   * Brief description of the task
+   */
+  content: string
+  /**
+   * Current status of the task: pending, in_progress, completed, cancelled
+   */
+  status: string
+  /**
+   * Priority level of the task: high, medium, low
+   */
+  priority: string
+  /**
+   * Unique identifier for the todo item
+   */
+  id: string
+}
+
+export type EventTodoUpdated = {
+  type: "todo.updated"
+  properties: {
+    sessionID: string
+    todos: Array<Todo>
   }
 }
 
@@ -637,6 +641,13 @@ export type EventFileWatcherUpdated = {
   properties: {
     file: string
     event: "add" | "change" | "unlink"
+  }
+}
+
+export type EventServerConnected = {
+  type: "server.connected"
+  properties: {
+    [key: string]: unknown
   }
 }
 
@@ -653,19 +664,20 @@ export type Event =
   | EventSessionStatus
   | EventSessionIdle
   | EventSessionCompacted
-  | EventFileEdited
-  | EventTodoUpdated
   | EventCommandExecuted
   | EventSessionCreated
   | EventSessionUpdated
   | EventSessionDeleted
   | EventSessionDiff
   | EventSessionError
+  | EventFileEdited
   | EventTuiPromptAppend
   | EventTuiCommandExecute
   | EventTuiToastShow
-  | EventServerConnected
+  | EventSessionModeChanged
+  | EventTodoUpdated
   | EventFileWatcherUpdated
+  | EventServerConnected
 
 export type GlobalEvent = {
   directory: string
