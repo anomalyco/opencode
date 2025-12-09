@@ -192,7 +192,13 @@ export namespace SessionCompaction {
           },
         ],
       }),
-      experimental_telemetry: { isEnabled: cfg.experimental?.openTelemetry },
+      experimental_telemetry: {
+        isEnabled: cfg.experimental?.openTelemetry,
+        metadata: {
+          userId: cfg.username ?? "unknown",
+          sessionId: input.sessionID,
+        },
+      },
     })
     if (result === "continue" && input.auto) {
       const continueMsg = await Session.updateMessage({

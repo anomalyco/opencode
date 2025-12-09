@@ -111,7 +111,13 @@ export namespace SessionSummary {
         ],
         headers: small.headers,
         model: language,
-        experimental_telemetry: { isEnabled: cfg.experimental?.openTelemetry },
+        experimental_telemetry: {
+          isEnabled: cfg.experimental?.openTelemetry,
+          metadata: {
+            userId: cfg.username ?? "unknown",
+            sessionId: assistantMsg.sessionID,
+          },
+        },
       })
       log.info("title", { title: result.text })
       userMsg.summary.title = result.text
@@ -153,7 +159,13 @@ export namespace SessionSummary {
             },
           ],
           headers: small.headers,
-          experimental_telemetry: { isEnabled: cfg.experimental?.openTelemetry },
+          experimental_telemetry: {
+            isEnabled: cfg.experimental?.openTelemetry,
+            metadata: {
+              userId: cfg.username ?? "unknown",
+              sessionId: assistantMsg.sessionID,
+            },
+          },
         }).catch(() => {})
         if (result) summary = result.text
       }
