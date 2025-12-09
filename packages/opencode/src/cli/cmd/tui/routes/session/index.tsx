@@ -1057,6 +1057,7 @@ function UserMessage(props: {
                   </Show>
                 }
               >
+                <span> </span>
                 <span style={{ bg: theme.accent, fg: theme.backgroundPanel, bold: true }}> QUEUED </span>
               </Show>
             </text>
