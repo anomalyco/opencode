@@ -42,8 +42,6 @@ export const { use: useSync, provider: SyncProvider } = createSimpleContext({
         return store.ready
       },
       get project() {
-        console.log("project", store.project)
-        console.log("projects", globalSync.data.projects)
         const match = Binary.search(globalSync.data.projects, store.project, (p) => p.id)
         if (match.found) return globalSync.data.projects[match.index]
         return undefined
