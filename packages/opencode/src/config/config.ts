@@ -671,6 +671,10 @@ export namespace Config {
           url: z.string().optional().describe("Enterprise URL"),
         })
         .optional(),
+      bun_no_cache: z
+        .boolean()
+        .optional()
+        .describe("Disable Bun cache when installing packages (adds --no-cache flag)"),
       experimental: z
         .object({
           hook: z

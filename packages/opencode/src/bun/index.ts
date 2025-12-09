@@ -4,6 +4,7 @@ import { Log } from "../util/log"
 import path from "path"
 import { NamedError } from "@opencode-ai/util/error"
 import { readableStreamToText } from "bun"
+import { Config } from "../config/config"
 import { createRequire } from "module"
 import { Lock } from "../util/lock"
 
@@ -75,6 +76,12 @@ export namespace BunProc {
 
     // Build command arguments
     const args = ["add", "--force", "--exact", "--cwd", Global.Path.cache, pkg + "@" + version]
+
+    // Add --no-cache flag if configured
+    const config = await Config.get()
+    if (config.bun_no_cache) {
+      args.push("--no-cache")
+    }
 
     // Let Bun handle registry resolution:
     // - If .npmrc files exist, Bun will use them automatically
