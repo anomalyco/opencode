@@ -196,7 +196,7 @@ export default function Layout(props: ParentProps) {
                   return (
                     <Switch>
                       <Match when={layout.sidebar.opened()}>
-                        <Collapsible variant="ghost" defaultOpen class="gap-2">
+                        <Collapsible variant="ghost" defaultOpen>
                           <Button
                             as={"div"}
                             variant="ghost"

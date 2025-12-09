@@ -24,7 +24,7 @@ const url =
     ? `http://${host}:${port}`
     : "/")
 
-export function DesktopInterface() {
+export function App() {
   return (
     <MarkedProvider>
       <DiffComponentProvider component={Diff}>
