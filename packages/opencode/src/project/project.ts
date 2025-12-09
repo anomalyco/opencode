@@ -38,7 +38,7 @@ export namespace Project {
   export type Info = z.infer<typeof Info>
 
   export const Event = {
-    Updated: BusEvent.define("project.updated", z.object(Info)),
+    Updated: BusEvent.define("project.updated", Info),
   }
 
   export async function fromDirectory(directory: string) {
@@ -100,6 +100,7 @@ export namespace Project {
         await migrateFromGlobal(id, worktree)
       }
     }
+    if (!existing.icon) discover(existing)
     await Storage.write<Info>(["project", id], {
       ...existing,
       worktree,
@@ -115,8 +116,10 @@ export namespace Project {
         properties: existing,
       },
     })
-    return existing!
+    return existing
   }
+
+  async function discover(input: Pick<Info, "id" | "worktree">) {}
 
   async function migrateFromGlobal(newProjectID: string, worktree: string) {
     const globalProject = await Storage.read<Info>(["project", "global"]).catch(() => undefined)
