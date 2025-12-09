@@ -64,7 +64,7 @@ export const { use: useGlobalSync, provider: GlobalSyncProvider } = createSimple
     function child(directory: string) {
       if (!children[directory]) {
         setGlobalStore("children", directory, {
-          project: { id: "", worktree: "", time: { created: 0, initialized: 0 } },
+          project: { id: "", worktree: "", time: { created: 0, initialized: 0, updated: 0 } },
           config: {},
           path: { state: "", config: "", worktree: "", directory: "" },
           ready: false,
