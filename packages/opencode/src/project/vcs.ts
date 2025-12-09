@@ -1,8 +1,9 @@
+import { BusEvent } from "@/bus/bus-event"
+import { Bus } from "@/bus"
 import { $ } from "bun"
 import path from "path"
 import z from "zod"
 import { Log } from "@/util/log"
-import { Bus } from "@/bus"
 import { Instance } from "./instance"
 import { FileWatcher } from "@/file/watcher"
 
@@ -10,7 +11,7 @@ const log = Log.create({ service: "vcs" })
 
 export namespace Vcs {
   export const Event = {
-    BranchUpdated: Bus.event(
+    BranchUpdated: BusEvent.define(
       "vcs.branch.updated",
       z.object({
         branch: z.string().optional(),

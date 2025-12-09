@@ -8,6 +8,8 @@ import { Flag } from "@/flag/flag"
 import { Session } from "../session"
 import { work } from "../util/queue"
 import { fn } from "@opencode-ai/util/fn"
+import { BusEvent } from "@/bus/bus-event"
+import { iife } from "@/util/iife"
 
 export namespace Project {
   const log = Log.create({ service: "project" })
@@ -30,11 +32,55 @@ export namespace Project {
     })
   export type Info = z.infer<typeof Info>
 
+  export const Event = {
+    Updated: BusEvent.define("project.updated", z.object(Info)),
+  }
+
   export async function fromDirectory(directory: string) {
     log.info("fromDirectory", { directory })
-    const matches = Filesystem.up({ targets: [".git"], start: directory })
-    const git = await matches.next().then((x) => x.value)
-    await matches.return()
+
+    const { id, worktree } = await iife(async () => {
+      const matches = Filesystem.up({ targets: [".git"], start: directory })
+      const git = await matches.next().then((x) => x.value)
+      await matches.return()
+      if (git) {
+        let worktree = path.dirname(git)
+        let id = await Bun.file(path.join(git, "opencode"))
+          .text()
+          .then((x) => x.trim())
+          .catch(() => {})
+        if (!id) {
+          const roots = await $`git rev-list --max-parents=0 --all`
+            .quiet()
+            .nothrow()
+            .cwd(worktree)
+            .text()
+            .then((x) =>
+              x
+                .split("\n")
+                .filter(Boolean)
+                .map((x) => x.trim())
+                .toSorted(),
+            )
+          id = roots[0]
+          if (id) Bun.file(path.join(git, "opencode")).write(id)
+        }
+        worktree = await $`git rev-parse --show-toplevel`
+          .quiet()
+          .nothrow()
+          .cwd(worktree)
+          .text()
+          .then((x) => path.resolve(worktree, x.trim()))
+        return { id, worktree, vcs: "git" }
+      }
+
+      return {
+        id: "global",
+        worktree: "/",
+        vcs: Info.shape.vcs.parse(Flag.OPENCODE_FAKE_VCS),
+      }
+    })
+
     if (!git) {
       const project: Info = {
         id: "global",
@@ -48,33 +94,6 @@ export namespace Project {
       await Storage.write<Info>(["project", "global"], project)
       return project
     }
-    let worktree = path.dirname(git)
-    let id = await Bun.file(path.join(git, "opencode"))
-      .text()
-      .then((x) => x.trim())
-      .catch(() => {})
-    if (!id) {
-      const roots = await $`git rev-list --max-parents=0 --all`
-        .quiet()
-        .nothrow()
-        .cwd(worktree)
-        .text()
-        .then((x) =>
-          x
-            .split("\n")
-            .filter(Boolean)
-            .map((x) => x.trim())
-            .toSorted(),
-        )
-      id = roots[0]
-      if (id) Bun.file(path.join(git, "opencode")).write(id)
-    }
-    worktree = await $`git rev-parse --show-toplevel`
-      .quiet()
-      .nothrow()
-      .cwd(worktree)
-      .text()
-      .then((x) => path.resolve(worktree, x.trim()))
     const projectID = id || "global"
     const existing = id ? await Storage.read<Info>(["project", id]).catch(() => undefined) : undefined
     if (!existing && id) {
