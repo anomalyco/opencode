@@ -24,8 +24,8 @@ export type Project = {
   vcs?: "git"
   name?: string
   icon?: {
-    url: string
-    color: string
+    url?: string
+    color?: string
   }
   time: {
     created: number
@@ -1730,8 +1730,8 @@ export type ProjectUpdateData = {
   body?: {
     name?: string
     icon?: {
-      url: string
-      color: string
+      url?: string
+      color?: string
     }
   }
   path: {

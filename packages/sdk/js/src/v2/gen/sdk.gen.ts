@@ -245,8 +245,8 @@ export class Project extends HeyApiClient {
       directory?: string
       name?: string
       icon?: {
-        url: string
-        color: string
+        url?: string
+        color?: string
       }
     },
     options?: Options<never, ThrowOnError>,
