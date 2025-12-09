@@ -307,9 +307,13 @@ export function Autocomplete(props: {
       },
       {
         display: "/status",
-        aliases: ["/mcp"],
         description: "show status",
         onSelect: () => command.trigger("opencode.status"),
+      },
+      {
+        display: "/mcp",
+        description: "toggle MCPs",
+        onSelect: () => command.trigger("mcp.list"),
       },
       {
         display: "/theme",
@@ -493,7 +497,7 @@ export function Autocomplete(props: {
           each={options()}
           fallback={
             <box paddingLeft={1} paddingRight={1}>
-              <text>No matching items</text>
+              <text fg={theme.textMuted}>No matching items</text>
             </box>
           }
         >

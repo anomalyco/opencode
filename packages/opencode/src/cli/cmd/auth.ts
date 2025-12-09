@@ -143,7 +143,10 @@ export const AuthLoginCommand = cmd({
               map((x) => ({
                 label: x.name,
                 value: x.id,
-                hint: priority[x.id] <= 1 ? "recommended" : undefined,
+                hint: {
+                  opencode: "recommended",
+                  anthropic: "Claude Max or API key",
+                }[x.id],
               })),
             ),
             {
