@@ -22,7 +22,7 @@ type State = {
   ready: boolean
   provider: Provider[]
   agent: Agent[]
-  project: Project
+  project: string
   config: Config
   path: Path
   session: Session[]
@@ -60,11 +60,10 @@ export const { use: useGlobalSync, provider: GlobalSyncProvider } = createSimple
     })
 
     const children: Record<string, ReturnType<typeof createStore<State>>> = {}
-
     function child(directory: string) {
       if (!children[directory]) {
         setGlobalStore("children", directory, {
-          project: { id: "", worktree: "", time: { created: 0, initialized: 0, updated: 0 } },
+          project: "",
           config: {},
           path: { state: "", config: "", worktree: "", directory: "" },
           ready: false,
@@ -88,9 +87,29 @@ export const { use: useGlobalSync, provider: GlobalSyncProvider } = createSimple
     const sdk = useGlobalSDK()
     sdk.event.listen((e) => {
       const directory = e.name
-      const [store, setStore] = child(directory)
-
       const event = e.details
+
+      if (directory === "global") {
+        switch (event.type) {
+          case "project.updated": {
+            const result = Binary.search(globalStore.projects, event.properties.id, (s) => s.id)
+            if (result.found) {
+              setGlobalStore("projects", result.index, reconcile(event.properties))
+              break
+            }
+            setGlobalStore(
+              "projects",
+              produce((draft) => {
+                draft.splice(result.index, 0, event.properties)
+              }),
+            )
+            break
+          }
+        }
+        return
+      }
+
+      const [store, setStore] = child(directory)
       switch (event.type) {
         case "session.updated": {
           const result = Binary.search(store.session, event.properties.info.id, (s) => s.id)
@@ -166,7 +185,7 @@ export const { use: useGlobalSync, provider: GlobalSyncProvider } = createSimple
           "projects",
           x
             .data!.filter((x) => !x.worktree.includes("opencode-test") && x.vcs)
-            .sort((a, b) => b.time.created - a.time.created),
+            .sort((a, b) => a.id.localeCompare(b.id)),
         ),
       ),
     ]).then(() => setGlobalStore("ready", true))

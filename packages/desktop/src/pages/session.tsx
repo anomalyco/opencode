@@ -401,15 +401,19 @@ export default function Page() {
                             <span class="text-text-strong">{getFilename(sync.data.path.directory)}</span>
                           </div>
                         </div>
-                        <div class="flex justify-center items-center gap-3">
-                          <Icon name="pencil-line" size="small" />
-                          <div class="text-12-medium text-text-weak">
-                            Last modified&nbsp;
-                            <span class="text-text-strong">
-                              {DateTime.fromMillis(sync.data.project.time.created).toRelative()}
-                            </span>
-                          </div>
-                        </div>
+                        <Show when={sync.project}>
+                          {(project) => (
+                            <div class="flex justify-center items-center gap-3">
+                              <Icon name="pencil-line" size="small" />
+                              <div class="text-12-medium text-text-weak">
+                                Last modified&nbsp;
+                                <span class="text-text-strong">
+                                  {DateTime.fromMillis(project().time.updated ?? project().time.created).toRelative()}
+                                </span>
+                              </div>
+                            </div>
+                          )}
+                        </Show>
                       </div>
                     </Match>
                   </Switch>

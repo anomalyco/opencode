@@ -7,6 +7,7 @@ import { useNavigate } from "@solidjs/router"
 import { base64Encode } from "@opencode-ai/util/encode"
 import { Icon } from "@opencode-ai/ui/icon"
 import { usePlatform } from "@/context/platform"
+import { DateTime } from "luxon"
 
 export default function Home() {
   const sync = useGlobalSync()
@@ -47,8 +48,12 @@ export default function Home() {
                 </Button>
               </Show>
             </div>
-            <ol class="flex flex-col gap-2">
-              <For each={sync.data.projects.slice(0, 5)}>
+            <ul class="flex flex-col gap-2">
+              <For
+                each={sync.data.projects
+                  .sort((a, b) => (b.time.updated ?? b.time.created) - (a.time.updated ?? a.time.created))
+                  .slice(0, 5)}
+              >
                 {(project) => (
                   <Button
                     size="large"
@@ -57,11 +62,13 @@ export default function Home() {
                     onClick={() => openProject(project.worktree)}
                   >
                     {project.worktree}
-                    <div class="text-14-regular text-text-weak">10m ago</div>
+                    <div class="text-14-regular text-text-weak">
+                      {DateTime.fromMillis(project.time.updated ?? project.time.created).toRelative()}
+                    </div>
                   </Button>
                 )}
               </For>
-            </ol>
+            </ul>
           </div>
         </Match>
         <Match when={true}>

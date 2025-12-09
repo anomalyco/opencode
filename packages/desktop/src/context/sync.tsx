@@ -13,7 +13,7 @@ export const { use: useSync, provider: SyncProvider } = createSimpleContext({
     const [store, setStore] = globalSync.child(sdk.directory)
 
     const load = {
-      project: () => sdk.client.project.current().then((x) => setStore("project", x.data!)),
+      project: () => sdk.client.project.current().then((x) => setStore("project", x.data!.id)),
       provider: () => sdk.client.config.providers().then((x) => setStore("provider", x.data!.providers)),
       path: () => sdk.client.path.get().then((x) => setStore("path", x.data!)),
       agent: () => sdk.client.app.agents().then((x) => setStore("agent", x.data ?? [])),
@@ -40,6 +40,13 @@ export const { use: useSync, provider: SyncProvider } = createSimpleContext({
       set: setStore,
       get ready() {
         return store.ready
+      },
+      get project() {
+        console.log("project", store.project)
+        console.log("projects", globalSync.data.projects)
+        const match = Binary.search(globalSync.data.projects, store.project, (p) => p.id)
+        if (match.found) return globalSync.data.projects[match.index]
+        return undefined
       },
       session: {
         get(sessionID: string) {
