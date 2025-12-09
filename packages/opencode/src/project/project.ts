@@ -18,6 +18,7 @@ export namespace Project {
       vcs: z.literal("git").optional(),
       time: z.object({
         created: z.number(),
+        updated: z.number().optional(),
         initialized: z.number().optional(),
       }),
     })
@@ -38,6 +39,7 @@ export namespace Project {
         vcs: Info.shape.vcs.parse(Flag.OPENCODE_FAKE_VCS),
         time: {
           created: Date.now(),
+          updated: Date.now(),
         },
       }
       await Storage.write<Info>(["project", "global"], project)
@@ -84,12 +86,15 @@ export namespace Project {
       await migrateFromGlobal(projectID, worktree)
     }
     const project: Info = {
+      ...existing,
       id: projectID,
       worktree,
       vcsDir,
       vcs: "git",
       time: {
         created: Date.now(),
+        ...existing?.time,
+        updated: Date.now(),
       },
     }
     await Storage.write<Info>(["project", projectID], project)
