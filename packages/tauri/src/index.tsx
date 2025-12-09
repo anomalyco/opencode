@@ -13,10 +13,17 @@ if (import.meta.env.DEV && !(root instanceof HTMLElement)) {
 
 const platform: Platform = {}
 
-render(() => {
-  onMount(() => {
-    if (window.__OPENCODE__.updaterEnabled) runUpdater()
-  })
+declare global {
+  interface Window {
+    __OPENCODE__?: { updaterEnabled?: boolean }
+  }
+}
+
+render(
+  () => {
+    onMount(() => {
+      if(window.__OPENCODE__?.updaterEnabled) runUpdater();
+    });
 
   return (
     <PlatformProvider value={platform}>
