@@ -12,6 +12,7 @@ import { Provider } from "@/provider/provider"
 import { useArgs } from "./args"
 import { useSDK } from "./sdk"
 import { RGBA } from "@opentui/core"
+import { readPrefs, writePrefs, type SessionPref } from "./session-pref"
 
 export const { use: useLocal, provider: LocalProvider } = createSimpleContext({
   name: "Local",
@@ -19,6 +20,37 @@ export const { use: useLocal, provider: LocalProvider } = createSimpleContext({
     const sync = useSync()
     const sdk = useSDK()
     const toast = useToast()
+
+    const pref = iife(() => {
+      const [store, setStore] = createStore<Record<string, SessionPref>>({})
+
+      readPrefs()
+        .then((data) => {
+          setStore(() => data)
+        })
+        .catch(() => {})
+
+      function snapshot() {
+        return JSON.parse(JSON.stringify(store)) as Record<string, SessionPref>
+      }
+
+      function setSession(sessionID: string, value: SessionPref) {
+        setStore(sessionID, value)
+        writePrefs(snapshot())
+      }
+
+      return {
+        get(sessionID: string) {
+          return store[sessionID]
+        },
+        setAgent(sessionID: string, agent: string) {
+          setSession(sessionID, { ...(store[sessionID] ?? {}), agent })
+        },
+        setModel(sessionID: string, model: { providerID: string; modelID: string }) {
+          setSession(sessionID, { ...(store[sessionID] ?? {}), model })
+        },
+      }
+    })
 
     function isModelValid(model: { providerID: string; modelID: string }) {
       const provider = sync.data.provider.find((x) => x.id === model.providerID)
@@ -333,6 +365,7 @@ export const { use: useLocal, provider: LocalProvider } = createSimpleContext({
       model,
       agent,
       mcp,
+      pref,
     }
     return result
   },

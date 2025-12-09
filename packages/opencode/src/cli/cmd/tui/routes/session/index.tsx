@@ -98,6 +98,8 @@ export function Session() {
   const route = useRouteData("session")
   const { navigate } = useRoute()
   const sync = useSync()
+  const local = useLocal()
+  const lastSession = { id: undefined as string | undefined }
   const kv = useKV()
   const { theme } = useTheme()
   const promptRef = usePromptRef()
@@ -163,6 +165,48 @@ export function Session() {
   const toast = useToast()
   const sdk = useSDK()
 
+  createEffect(() => {
+    if (!sync.data.provider.length) return
+    if (!sync.data.agent.length) return
+    if (!local.model.ready) return
+    const next = route.sessionID
+
+    if (lastSession.id) {
+      const prevAgent = local.agent.current().name
+      const prevModel = local.model.current()
+      local.pref.setAgent(lastSession.id, prevAgent)
+      if (prevModel) local.pref.setModel(lastSession.id, prevModel)
+    }
+
+    const pref = local.pref.get(next)
+    if (pref?.agent) local.agent.set(pref.agent)
+    if (pref?.model) local.model.set(pref.model)
+    if (!pref?.agent) local.pref.setAgent(next, local.agent.current().name)
+    const currentModel = local.model.current()
+    if (!pref?.model && currentModel) local.pref.setModel(next, currentModel)
+
+    lastSession.id = next
+  })
+
+  createEffect(
+    on(
+      () => [route.sessionID, local.agent.current().name] as const,
+      ([sessionID, agentName]) => {
+        local.pref.setAgent(sessionID, agentName)
+      },
+    ),
+  )
+
+  createEffect(
+    on(
+      () => [route.sessionID, local.model.current()] as const,
+      ([sessionID, model]) => {
+        if (!model) return
+        local.pref.setModel(sessionID, model)
+      },
+    ),
+  )
+
   // Auto-navigate to whichever session currently needs permission input
   createEffect(() => {
     const currentSession = session()
@@ -217,8 +261,6 @@ export function Session() {
       if (scroll) scroll.scrollTo(scroll.scrollHeight)
     }, 50)
   }
-
-  const local = useLocal()
 
   function moveChild(direction: number) {
     const parentID = session()?.parentID ?? session()?.id
