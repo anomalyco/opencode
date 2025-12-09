@@ -19,11 +19,10 @@ declare global {
   }
 }
 
-render(
-  () => {
-    onMount(() => {
-      if(window.__OPENCODE__?.updaterEnabled) runUpdater();
-    });
+render(() => {
+  onMount(() => {
+    if (window.__OPENCODE__?.updaterEnabled) runUpdater()
+  })
 
   return (
     <PlatformProvider value={platform}>
