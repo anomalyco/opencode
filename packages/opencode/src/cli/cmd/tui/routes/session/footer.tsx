@@ -4,13 +4,19 @@ import { useSync } from "../../context/sync"
 import { useDirectory } from "../../context/directory"
 import { useConnected } from "../../component/dialog-model"
 import { createStore } from "solid-js/store"
+import { useRoute } from "../../context/route"
 
 export function Footer() {
   const { theme } = useTheme()
   const sync = useSync()
+  const route = useRoute()
   const mcp = createMemo(() => Object.keys(sync.data.mcp))
   const mcpError = createMemo(() => Object.values(sync.data.mcp).some((x) => x.status === "failed"))
   const lsp = createMemo(() => Object.keys(sync.data.lsp))
+  const permissions = createMemo(() => {
+    if (route.data.type !== "session") return []
+    return sync.data.permission[route.data.sessionID] ?? []
+  })
   const directory = useDirectory()
   const connected = useConnected()
 
@@ -51,6 +57,12 @@ export function Footer() {
             </text>
           </Match>
           <Match when={connected()}>
+            <Show when={permissions().length > 0}>
+              <text fg={theme.warning}>
+                <span style={{ fg: theme.warning }}>◉</span> {permissions().length} Permission
+                {permissions().length > 1 ? "s" : ""}
+              </text>
+            </Show>
             <text fg={theme.text}>
               <span style={{ fg: theme.success }}>•</span> {lsp().length} LSP
             </text>
