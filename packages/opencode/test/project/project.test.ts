@@ -18,7 +18,6 @@ describe("Project.fromDirectory", () => {
     expect(project.id).toBe("global")
     expect(project.vcs).toBe("git")
     expect(project.worktree).toBe(tmp.path)
-    expect(project.vcsDir).toBe(path.join(tmp.path, ".git"))
 
     const opencodeFile = path.join(tmp.path, ".git", "opencode")
     const fileExists = await Bun.file(opencodeFile).exists()

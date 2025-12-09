@@ -7,6 +7,7 @@ import { Log } from "../util/log"
 import { Flag } from "@/flag/flag"
 import { Session } from "../session"
 import { work } from "../util/queue"
+import { fn } from "@opencode-ai/util/fn"
 
 export namespace Project {
   const log = Log.create({ service: "project" })
@@ -14,8 +15,9 @@ export namespace Project {
     .object({
       id: z.string(),
       worktree: z.string(),
-      vcsDir: z.string().optional(),
       vcs: z.literal("git").optional(),
+      name: z.string().optional(),
+      icon: z.string().optional(),
       time: z.object({
         created: z.number(),
         updated: z.number().optional(),
@@ -46,7 +48,6 @@ export namespace Project {
       return project
     }
     let worktree = path.dirname(git)
-    const timer = log.time("git.rev-parse")
     let id = await Bun.file(path.join(git, "opencode"))
       .text()
       .then((x) => x.trim())
@@ -67,14 +68,7 @@ export namespace Project {
       id = roots[0]
       if (id) Bun.file(path.join(git, "opencode")).write(id)
     }
-    timer.stop()
     worktree = await $`git rev-parse --show-toplevel`
-      .quiet()
-      .nothrow()
-      .cwd(worktree)
-      .text()
-      .then((x) => path.resolve(worktree, x.trim()))
-    const vcsDir = await $`git rev-parse --git-dir`
       .quiet()
       .nothrow()
       .cwd(worktree)
@@ -89,7 +83,6 @@ export namespace Project {
       ...existing,
       id: projectID,
       worktree,
-      vcsDir,
       vcs: "git",
       time: {
         created: Date.now(),
@@ -135,4 +128,19 @@ export namespace Project {
     const keys = await Storage.list(["project"])
     return await Promise.all(keys.map((x) => Storage.read<Info>(x)))
   }
+
+  export const update = fn(
+    z.object({
+      projectID: z.string(),
+      name: z.string().optional(),
+      icon: z.string().optional(),
+    }),
+    async (input) => {
+      return await Storage.update<Info>(["project", input.projectID], (draft) => {
+        if (input.name !== undefined) draft.name = input.name
+        if (input.icon !== undefined) draft.icon = input.icon
+        draft.time.updated = Date.now()
+      })
+    },
+  )
 }
