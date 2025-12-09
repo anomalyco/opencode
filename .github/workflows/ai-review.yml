@@ -1,0 +1,44 @@
+name: AI Review
+
+on:
+  pull_request:
+    types: [opened, synchronize, reopened, ready_for_review]
+
+jobs:
+  review:
+    if: github.event.pull_request.draft == false
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - uses: oven-sh/setup-bun@v2
+        with:
+          bun-version: 1.3.3
+
+      - name: Run AI review
+        id: review
+        env:
+          OPENAI_API_KEY: ${{ secrets.OPENAI_API_KEY }}
+          AI_REVIEW_MODEL: ${{ vars.AI_REVIEW_MODEL || 'gpt-4o-mini' }}
+        run: |
+          bun run packages/opencode/script/ai-review.ts --base ${{ github.event.pull_request.base.sha }} --head ${{ github.event.pull_request.head.sha }} --output /tmp/review.md
+
+      - name: Comment on PR
+        if: env.OPENAI_API_KEY != ''
+        uses: actions/github-script@v7
+        with:
+          github-token: ${{ secrets.GITHUB_TOKEN }}
+          script: |
+            const fs = require('fs');
+            const body = fs.readFileSync('/tmp/review.md', 'utf8');
+            const {owner, repo, number} = context.issue;
+            const marker = '<!-- ai-review -->';
+            const comments = await github.rest.issues.listComments({owner, repo, issue_number: number, per_page: 100});
+            const existing = comments.data.find(c => c.user?.login === 'github-actions[bot]' && c.body?.includes(marker));
+            if (existing) {
+              await github.rest.issues.updateComment({owner, repo, comment_id: existing.id, body});
+            } else {
+              await github.rest.issues.createComment({owner, repo, issue_number: number, body});
+            }
