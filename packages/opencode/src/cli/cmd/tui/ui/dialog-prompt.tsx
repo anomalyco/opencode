@@ -1,4 +1,4 @@
-import { TextareaRenderable, TextAttributes, t, fg } from "@opentui/core"
+import { TextareaRenderable, TextAttributes } from "@opentui/core"
 import { useTheme } from "../context/theme"
 import { useDialog, type DialogContext } from "./dialog"
 import { onMount, type JSX } from "solid-js"
@@ -48,7 +48,8 @@ export function DialogPrompt(props: DialogPromptProps) {
           keyBindings={[{ name: "return", action: "submit" }]}
           ref={(val: TextareaRenderable) => (textarea = val)}
           initialValue={props.value}
-          placeholder={t`${fg(theme.placeholderText)(props.placeholder ?? "Enter text")}`}
+          placeholder={props.placeholder ?? "Enter text"}
+          placeholderColor={theme.placeholderText}
           textColor={theme.text}
           focusedTextColor={theme.text}
           cursorColor={theme.text}
