@@ -140,8 +140,8 @@ export default function Layout(props: ParentProps) {
     return <></>
   }
 
-  const ProjectVisual = (props: { directory: string; class?: string }): JSX.Element => {
-    const name = createMemo(() => getFilename(props.directory))
+  const ProjectVisual = (props: { project: Project & { expanded: boolean }; class?: string }): JSX.Element => {
+    const name = createMemo(() => getFilename(props.project.worktree))
     return (
       <Switch>
         <Match when={layout.sidebar.opened()}>
@@ -153,7 +153,12 @@ export default function Layout(props: ParentProps) {
           >
             <div class="flex items-center gap-3 p-0 text-left min-w-0 grow">
               <div class="size-6 shrink-0">
-                <Avatar fallback={name()} background="var(--surface-info-base)" class="size-full" />
+                <Avatar
+                  fallback={name()}
+                  src={props.project.icon?.url}
+                  background={props.project.icon?.color ?? "var(--surface-info-base)"}
+                  class="size-full"
+                />
               </div>
               <span class="truncate text-14-medium text-text-strong">{name()}</span>
             </div>
@@ -164,11 +169,16 @@ export default function Layout(props: ParentProps) {
             variant="ghost"
             size="large"
             class="flex items-center justify-center p-0 aspect-square border-none"
-            data-selected={props.directory === currentDirectory()}
-            onClick={() => navigateToProject(props.directory)}
+            data-selected={props.project.worktree === currentDirectory()}
+            onClick={() => navigateToProject(props.project.worktree)}
           >
             <div class="size-6 shrink-0">
-              <Avatar fallback={name()} background="var(--surface-info-base)" class="size-full" />
+              <Avatar
+                fallback={name()}
+                src={props.project.icon?.url}
+                background={props.project.icon?.color ?? "var(--surface-info-base)"}
+                class="size-full"
+              />
             </div>
           </Button>
         </Match>
@@ -194,18 +204,12 @@ export default function Layout(props: ParentProps) {
               >
                 <Collapsible.Trigger class="group/trigger flex items-center gap-3 p-0 text-left min-w-0 grow border-none">
                   <div class="size-6 shrink-0">
-                    <Switch>
-                      <Match when={props.project.icon?.url}>
-                        {(url) => <img src={url()} class="size-full group-hover/session:hidden" />}
-                      </Match>
-                      <Match when={true}>
-                        <Avatar
-                          fallback={name()}
-                          background={props.project.icon?.color ?? "var(--surface-info-base)"}
-                          class="size-full group-hover/session:hidden"
-                        />
-                      </Match>
-                    </Switch>
+                    <Avatar
+                      fallback={name()}
+                      src={props.project.icon?.url}
+                      background={props.project.icon?.color ?? "var(--surface-info-base)"}
+                      class="size-full group-hover/session:hidden"
+                    />
                     <Icon
                       name="chevron-right"
                       size="large"
@@ -282,7 +286,7 @@ export default function Layout(props: ParentProps) {
           </Match>
           <Match when={true}>
             <Tooltip placement="right" value={props.project.worktree}>
-              <ProjectVisual directory={props.project.worktree} />
+              <ProjectVisual project={props.project} />
             </Tooltip>
           </Match>
         </Switch>
@@ -291,11 +295,12 @@ export default function Layout(props: ParentProps) {
   }
 
   const ProjectDragOverlay = (): JSX.Element => {
+    const project = createMemo(() => layout.projects.list().find((p) => p.worktree === store.activeDraggable))
     return (
-      <Show when={store.activeDraggable}>
-        {(directory) => (
+      <Show when={project()}>
+        {(p) => (
           <div class="bg-background-base rounded-md">
-            <ProjectVisual directory={directory()} />
+            <ProjectVisual project={p()} />
           </div>
         )}
       </Show>
