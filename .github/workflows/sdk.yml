@@ -18,6 +18,8 @@ jobs:
         uses: actions/checkout@v4
         with:
           token: ${{ secrets.GITHUB_TOKEN }}
+          repository: ${{ github.event.pull_request.head.repo.full_name || github.repository }}
+          ref: ${{ github.event.pull_request.head.ref || github.ref_name }}
 
       - name: Setup Bun
         uses: ./.github/actions/setup-bun
@@ -26,6 +28,7 @@ jobs:
         run: |
           bun ./packages/sdk/js/script/build.ts
           (cd packages/opencode && bun dev generate > ../sdk/openapi.json)
+          bun x prettier --write packages/sdk/js/src/openapi.ts
           if [ -z "$(git status --porcelain)" ]; then
             echo "No changes to commit"
             exit 0
@@ -34,6 +37,7 @@ jobs:
           git config --local user.name "GitHub Action"
           git add -A
           git commit -m "chore: regen sdk"
-          git push --no-verify
+          git push origin HEAD:${PUSH_BRANCH} --no-verify
         env:
           CI: true
+          PUSH_BRANCH: ${{ github.event.pull_request.head.ref || github.ref_name }}

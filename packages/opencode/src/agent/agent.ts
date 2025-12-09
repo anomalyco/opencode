@@ -245,7 +245,12 @@ export namespace Agent {
     system.push(PROMPT_GENERATE)
     const existing = await list()
     const result = await generateObject({
-      experimental_telemetry: { isEnabled: cfg.experimental?.openTelemetry },
+      experimental_telemetry: {
+        isEnabled: cfg.experimental?.openTelemetry,
+        metadata: {
+          userId: cfg.username ?? "unknown",
+        },
+      },
       temperature: 0.3,
       prompt: [
         ...system.map(
