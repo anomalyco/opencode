@@ -1120,7 +1120,7 @@ function ToolPart(props: { last: boolean; part: ToolPart; message: AssistantMess
   const component = createMemo(() => {
     const metadata = props.part.state.status === "pending" ? {} : (props.part.state.metadata ?? {})
     const input = props.part.state.input ?? {}
-    const title = props.part.state.title
+    const title = "title" in props.part.state ? props.part.state.title : undefined
     const permissions = sync.data.permission[props.message.sessionID] ?? []
     const permissionIndex = permissions.findIndex((x) => x.callID === props.part.callID)
     const permission = permissions[permissionIndex]

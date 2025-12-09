@@ -249,6 +249,7 @@ export namespace MessageV2 {
       status: z.literal("error"),
       input: z.record(z.string(), z.any()),
       error: z.string(),
+      title: z.string().optional(),
       metadata: z.record(z.string(), z.any()).optional(),
       time: z.object({
         start: z.number(),

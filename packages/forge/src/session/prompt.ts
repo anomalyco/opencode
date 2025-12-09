@@ -346,7 +346,7 @@ export namespace SessionPrompt {
               messageID: assistantMessage.id,
               sessionID: sessionID,
               abort,
-              async metadata(input) {
+              async metadata(input: any) {
                 await Session.updatePart({
                   ...part,
                   type: "tool",
@@ -686,7 +686,7 @@ export namespace SessionPrompt {
             callID: options.toolCallId,
             extra: input.model,
             agent: input.agent.name,
-            metadata: async (val) => {
+            metadata: async (val: any) => {
               const match = input.processor.partFromToolCall(options.toolCallId)
               if (match && match.state.status === "running") {
                 await Session.updatePart({
@@ -898,7 +898,7 @@ export namespace SessionPrompt {
                 ]
 
                 await ReadTool.init()
-                  .then(async (t) => {
+                  .then(async (t: any) => {
                     const result = await t.execute(args, {
                       sessionID: input.sessionID,
                       abort: new AbortController().signal,
@@ -924,9 +924,9 @@ export namespace SessionPrompt {
                       },
                     )
                   })
-                  .catch((error) => {
+                  .catch((error: unknown) => {
                     log.error("failed to read file", { error })
-                    const message = error instanceof Error ? error.message : error.toString()
+                    const message = error instanceof Error ? error.message : String(error)
                     Bus.publish(Session.Event.Error, {
                       sessionID: input.sessionID,
                       error: new NamedError.Unknown({
@@ -948,7 +948,7 @@ export namespace SessionPrompt {
 
               if (part.mime === "application/x-directory") {
                 const args = { path: filepath }
-                const result = await ListTool.init().then((t) =>
+                const result = await ListTool.init().then((t: any) =>
                   t.execute(args, {
                     sessionID: input.sessionID,
                     abort: new AbortController().signal,
