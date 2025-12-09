@@ -1,15 +1,14 @@
-import { createMemo } from "solid-js"
+import { createMemo, onMount } from "solid-js"
 import { useLocal } from "@tui/context/local"
-import { DialogSelect, type DialogSelectRef } from "@tui/ui/dialog-select"
+import { DialogSelect } from "@tui/ui/dialog-select"
 import { useDialog } from "@tui/ui/dialog"
 import { sortBy } from "remeda"
-import { useTheme } from "@tui/context/theme"
-import { RGBA } from "@opentui/core"
 
 export function DialogAgents() {
   const local = useLocal()
   const dialog = useDialog()
-  const { theme } = useTheme()
+
+  onMount(() => dialog.setSize("large"))
 
   const options = createMemo(() => {
     return sortBy(
