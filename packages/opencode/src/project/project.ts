@@ -18,6 +18,7 @@ export namespace Project {
       vcs: z.literal("git").optional(),
       name: z.string().optional(),
       icon: z.string().optional(),
+      color: z.string().optional(),
       time: z.object({
         created: z.number(),
         updated: z.number().optional(),
@@ -134,11 +135,13 @@ export namespace Project {
       projectID: z.string(),
       name: z.string().optional(),
       icon: z.string().optional(),
+      color: z.string().optional(),
     }),
     async (input) => {
       return await Storage.update<Info>(["project", input.projectID], (draft) => {
         if (input.name !== undefined) draft.name = input.name
         if (input.icon !== undefined) draft.icon = input.icon
+        if (input.color !== undefined) draft.color = input.color
         draft.time.updated = Date.now()
       })
     },

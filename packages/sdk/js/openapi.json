@@ -123,7 +123,7 @@
           }
         ],
         "summary": "Update project",
-        "description": "Update project properties such as name and icon.",
+        "description": "Update project properties such as name, icon and color.",
         "responses": {
           "200": {
             "description": "Updated project information",
@@ -166,6 +166,9 @@
                     "type": "string"
                   },
                   "icon": {
+                    "type": "string"
+                  },
+                  "color": {
                     "type": "string"
                   }
                 }
@@ -7426,6 +7429,9 @@
             "type": "string"
           },
           "icon": {
+            "type": "string"
+          },
+          "color": {
             "type": "string"
           },
           "time": {
