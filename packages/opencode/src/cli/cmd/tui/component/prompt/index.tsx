@@ -200,7 +200,7 @@ export function Prompt(props: PromptProps) {
           const content = await Editor.open({ value, renderer })
           if (!content) return
 
-          input.setText(content, { history: false })
+          input.setText(content)
 
           // Update positions for nonTextParts based on their location in new content
           // Filter out parts whose virtual text was deleted
@@ -391,7 +391,7 @@ export function Prompt(props: PromptProps) {
       input.blur()
     },
     set(prompt) {
-      input.setText(prompt.input, { history: false })
+      input.setText(prompt.input)
       setStore("prompt", prompt)
       restoreExtmarksFromParts(prompt.parts)
       input.gotoBufferEnd()
@@ -414,6 +414,11 @@ export function Prompt(props: PromptProps) {
     if (props.disabled) return
     if (autocomplete.visible) return
     if (!store.prompt.input) return
+    const trimmed = store.prompt.input.trim()
+    if (trimmed === "exit" || trimmed === "quit" || trimmed === ":q") {
+      exit()
+      return
+    }
     const selectedModel = local.model.current()
     if (!selectedModel) {
       promptModelWarning()
@@ -687,17 +692,6 @@ export function Prompt(props: PromptProps) {
                   setStore("extmarkToPartIndex", new Map())
                   return
                 }
-                if (keybind.match("input_forward_delete", e) && store.prompt.input !== "") {
-                  const cursorOffset = input.cursorOffset
-                  if (cursorOffset < input.plainText.length) {
-                    const text = input.plainText
-                    const newText = text.slice(0, cursorOffset) + text.slice(cursorOffset + 1)
-                    input.setText(newText)
-                    input.cursorOffset = cursorOffset
-                  }
-                  e.preventDefault()
-                  return
-                }
                 if (keybind.match("app_exit", e)) {
                   await exit()
                   return
@@ -724,7 +718,7 @@ export function Prompt(props: PromptProps) {
                     const item = history.move(direction, input.plainText)
 
                     if (item) {
-                      input.setText(item.input, { history: false })
+                      input.setText(item.input)
                       setStore("prompt", item)
                       restoreExtmarksFromParts(item.parts)
                       e.preventDefault()
