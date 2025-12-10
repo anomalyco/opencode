@@ -62,6 +62,7 @@ export const { use: useSync, provider: SyncProvider } = createSimpleContext({
       }
       formatter: FormatterStatus[]
       vcs: VcsInfo | undefined
+      directory: string
     }>({
       provider_next: {
         all: [],
@@ -86,6 +87,7 @@ export const { use: useSync, provider: SyncProvider } = createSimpleContext({
       mcp: {},
       formatter: [],
       vcs: undefined,
+      directory: "",
     })
 
     const sdk = useSDK()
@@ -286,6 +288,7 @@ export const { use: useSync, provider: SyncProvider } = createSimpleContext({
             sdk.client.session.status().then((x) => setStore("session_status", x.data!)),
             sdk.client.provider.auth().then((x) => setStore("provider_auth", x.data ?? {})),
             sdk.client.vcs.get().then((x) => setStore("vcs", x.data)),
+            sdk.client.path.get().then((x) => setStore("directory", x.data?.directory ?? "")),
           ]).then(() => {
             setStore("status", "complete")
           })
