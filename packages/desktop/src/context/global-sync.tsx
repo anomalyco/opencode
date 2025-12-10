@@ -97,7 +97,7 @@ export const { use: useGlobalSync, provider: GlobalSyncProvider } = createSimple
         setGlobalStore("children", directory, {
           project: "",
           config: {},
-          path: { state: "", config: "", worktree: "", directory: "" },
+          path: { state: "", config: "", worktree: "", directory: "", home: "" },
           ready: false,
           agent: [],
           provider: [],
