@@ -1503,11 +1503,15 @@ ToolRegistry.register<typeof TaskTool>({
         <Show when={props.metadata.summary?.length}>
           <box>
             <For each={props.metadata.summary ?? []}>
-              {(task) => (
-                <text style={{ fg: task.state.status === "error" ? theme.error : theme.textMuted }}>
-                  ∟ {Locale.titlecase(task.tool)} {task.state.status === "completed" ? task.state.title : ""}
-                </text>
-              )}
+              {(task, index) => {
+                const summary = props.metadata.summary ?? []
+                return (
+                  <text style={{ fg: task.state.status === "error" ? theme.error : theme.textMuted }}>
+                    {index() === summary.length - 1 ? "└" : "├"} {Locale.titlecase(task.tool)}{" "}
+                    {task.state.status === "completed" ? task.state.title : ""}
+                  </text>
+                )
+              }}
             </For>
           </box>
         </Show>
