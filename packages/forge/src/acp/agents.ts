@@ -9,7 +9,6 @@ export interface ACPAgentDefinition {
   installMethod: ACPAgentInstallMethod
   command: string
   args: string[]
-  envRequired?: string[]
   installCheck?: string
   installGuide?: string
 }
@@ -37,7 +36,6 @@ export const ACP_AGENTS: ACPAgentDefinition[] = [
     installMethod: "npx",
     command: "npx",
     args: ["@google/gemini-cli", "--experimental-acp"],
-    envRequired: ["GEMINI_API_KEY"],
     installGuide: "https://github.com/google-gemini/gemini-cli",
   },
   {
@@ -49,12 +47,28 @@ export const ACP_AGENTS: ACPAgentDefinition[] = [
     installGuide: "https://github.com/MoonshotAI/kimi-cli",
   },
   {
+    name: "Fast Agent",
+    description: "Framework for multimodal agents with ACP support (requires Python 3.13+)",
+    installMethod: "uvx",
+    command: "uvx",
+    args: ["--python", "3.13", "fast-agent-acp"],
+    installGuide: "https://github.com/evalstate/fast-agent",
+  },
+  {
     name: "OpenHands",
     description: "All-Hands AI's autonomous coding agent (experimental ACP)",
     installMethod: "uvx",
     command: "uvx",
     args: ["openhands", "acp"],
     installGuide: "https://docs.openhands.dev/openhands/usage/run-openhands/acp",
+  },
+  {
+    name: "Mistral Vibe",
+    description: "Mistral AI's coding agent with ACP support",
+    installMethod: "uvx",
+    command: "uvx",
+    args: ["mistral-vibe", "vibe-acp"],
+    installGuide: "https://github.com/mistralai/mistral-vibe",
   },
   {
     name: "Auggie",
