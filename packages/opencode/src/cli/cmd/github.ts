@@ -446,8 +446,7 @@ export const GithubRunCommand = cmd({
         // 2. Local PR
         // 3. Fork PR
         if (
-          context.eventName === "pull_request" ||
-          context.eventName === "pull_request_review_comment" ||
+          ["pull_request", "pull_request_review_comment"].includes(context.eventName) ||
           issueEvent?.issue.pull_request
         ) {
           const prData = await fetchPR()
