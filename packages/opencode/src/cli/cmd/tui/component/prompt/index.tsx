@@ -410,6 +410,11 @@ export function Prompt(props: PromptProps) {
     if (props.disabled) return
     if (autocomplete.visible) return
     if (!store.prompt.input) return
+    const trimmed = store.prompt.input.trim()
+    if (trimmed === "exit" || trimmed === "quit" || trimmed === ":q") {
+      exit()
+      return
+    }
     const selectedModel = local.model.current()
     if (!selectedModel) {
       promptModelWarning()
