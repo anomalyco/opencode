@@ -11,6 +11,8 @@ on:
       - snapshot-*
 
 concurrency: ${{ github.workflow }}-${{ github.ref }}
+permissions:
+  id-token: write
 
 jobs:
   publish:
