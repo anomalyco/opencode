@@ -4,6 +4,7 @@
   "version": "1.0.138",
   "type": "module",
   "scripts": {
+    "typecheck": "tsgo -b",
     "predev": "bun ./scripts/predev.ts",
     "dev": "vite",
     "build": "bun run typecheck && vite build",
