@@ -362,7 +362,7 @@ export namespace SessionPrompt {
               },
             },
           )
-          .catch(() => { })
+          .catch(() => {})
         assistantMessage.finish = "tool-calls"
         assistantMessage.time.completed = Date.now()
         await Session.updateMessage(assistantMessage)
@@ -539,11 +539,11 @@ export namespace SessionPrompt {
         ),
         ...(isLastStep
           ? [
-            {
-              role: "assistant" as const,
-              content: MAX_STEPS,
-            },
-          ]
+              {
+                role: "assistant" as const,
+                content: MAX_STEPS,
+              },
+            ]
           : []),
       ]
       const result = await processor.process({
@@ -576,10 +576,10 @@ export namespace SessionPrompt {
         headers: {
           ...(model.providerID.startsWith("opencode")
             ? {
-              "x-opencode-project": Instance.project.id,
-              "x-opencode-session": sessionID,
-              "x-opencode-request": lastUser.id,
-            }
+                "x-opencode-project": Instance.project.id,
+                "x-opencode-session": sessionID,
+                "x-opencode-request": lastUser.id,
+              }
             : undefined),
           ...model.headers,
         },
@@ -947,7 +947,7 @@ export namespace SessionPrompt {
                       agent: input.agent!,
                       messageID: info.id,
                       extra: { bypassCwdCheck: true, model },
-                      metadata: async () => { },
+                      metadata: async () => {},
                     })
                     pieces.push({
                       id: Identifier.ascending("part"),
@@ -1007,7 +1007,7 @@ export namespace SessionPrompt {
                     agent: input.agent!,
                     messageID: info.id,
                     extra: { bypassCwdCheck: true },
-                    metadata: async () => { },
+                    metadata: async () => {},
                   }),
                 )
                 return [
@@ -1418,14 +1418,14 @@ export namespace SessionPrompt {
     const parts =
       (agent.mode === "subagent" && command.subtask !== false) || command.subtask === true
         ? [
-          {
-            type: "subtask" as const,
-            agent: agent.name,
-            description: command.description ?? "",
-            // TODO: how can we make task tool accept a more complex input?
-            prompt: await resolvePromptParts(template).then((x) => x.find((y) => y.type === "text")?.text ?? ""),
-          },
-        ]
+            {
+              type: "subtask" as const,
+              agent: agent.name,
+              description: command.description ?? "",
+              // TODO: how can we make task tool accept a more complex input?
+              prompt: await resolvePromptParts(template).then((x) => x.find((y) => y.type === "text")?.text ?? ""),
+            },
+          ]
         : await resolvePromptParts(template)
 
     const result = (await prompt({
