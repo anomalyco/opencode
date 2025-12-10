@@ -1460,12 +1460,15 @@ export namespace Server {
             }
           }
 
-          const providers = mapValues(filteredProviders, (x) => Provider.fromModelsDevProvider(x))
-          const connected = await Provider.list().then((x) => Object.keys(x))
+          const connected = await Provider.list()
+          const providers = Object.assign(
+            mapValues(filteredProviders, (x) => Provider.fromModelsDevProvider(x)),
+            connected,
+          )
           return c.json({
             all: Object.values(providers),
             default: mapValues(providers, (item) => Provider.sort(Object.values(item.models))[0].id),
-            connected,
+            connected: Object.keys(connected),
           })
         },
       )

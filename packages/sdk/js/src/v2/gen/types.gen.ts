@@ -928,10 +928,6 @@ export type KeybindsConfig = {
    */
   input_clear?: string
   /**
-   * Forward delete
-   */
-  input_forward_delete?: string
-  /**
    * Paste from clipboard
    */
   input_paste?: string
@@ -1039,6 +1035,7 @@ export type ProviderConfig = {
     [key: string]: {
       id?: string
       name?: string
+      family?: string
       release_date?: string
       attachment?: boolean
       reasoning?: boolean
@@ -1465,6 +1462,7 @@ export type Model = {
     npm: string
   }
   name: string
+  family?: string
   capabilities: {
     temperature: boolean
     reasoning: boolean
@@ -3031,6 +3029,7 @@ export type ProviderListResponses = {
         [key: string]: {
           id: string
           name: string
+          family?: string
           release_date: string
           attachment: boolean
           reasoning: boolean
