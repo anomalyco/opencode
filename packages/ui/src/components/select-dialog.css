@@ -103,18 +103,29 @@
       display: flex;
       flex-direction: column;
       align-items: flex-start;
-      gap: 4px;
       align-self: stretch;
 
       [data-slot="select-dialog-item"] {
         display: flex;
         width: 100%;
-        height: 32px;
-        padding: 4px 8px 4px 4px;
+        height: 28px;
+        padding: 4px 10px;
         align-items: center;
+        color: var(--text-strong);
+
+        /* text-14-medium */
+        font-family: var(--font-family-sans);
+        font-size: 14px;
+        font-style: normal;
+        font-weight: var(--font-weight-medium);
+        line-height: var(--line-height-large); /* 142.857% */
+        letter-spacing: var(--letter-spacing-normal);
 
         &[data-active="true"] {
           border-radius: var(--radius-md);
+          background: var(--surface-raised-base-hover);
+        }
+        &[data-selected="true"] {
           background: var(--surface-raised-base-hover);
         }
       }

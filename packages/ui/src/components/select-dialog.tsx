@@ -145,6 +145,7 @@ export function SelectDialog<T>(props: SelectDialogProps<T>) {
                           data-slot="select-dialog-item"
                           data-key={others.key(item)}
                           data-active={others.key(item) === active()}
+                          data-selected={item === others.current}
                           onClick={() => handleSelect(item)}
                           onMouseMove={() => {
                             setStore("mouseActive", true)
@@ -152,6 +153,7 @@ export function SelectDialog<T>(props: SelectDialogProps<T>) {
                           }}
                         >
                           {others.children(item)}
+                          <Icon name="check-small" size="small" />
                         </button>
                       )}
                     </For>

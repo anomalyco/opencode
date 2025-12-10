@@ -3,7 +3,6 @@ import { createEffect, on, Component, Show, For, onMount, onCleanup, Switch, Mat
 import { createStore } from "solid-js/store"
 import { createFocusSignal } from "@solid-primitives/active-element"
 import { useLocal } from "@/context/local"
-import { DateTime } from "luxon"
 import { ContentPart, DEFAULT_PROMPT, isPromptEqual, Prompt, useSession } from "@/context/session"
 import { useSDK } from "@/context/sdk"
 import { useNavigate } from "@solidjs/router"
@@ -14,10 +13,9 @@ import { Button } from "@opencode-ai/ui/button"
 import { Icon } from "@opencode-ai/ui/icon"
 import { Tooltip } from "@opencode-ai/ui/tooltip"
 import { IconButton } from "@opencode-ai/ui/icon-button"
-import { ProviderIcon } from "@opencode-ai/ui/provider-icon"
 import { Select } from "@opencode-ai/ui/select"
+import { Tag } from "@opencode-ai/ui/tag"
 import { getDirectory, getFilename } from "@opencode-ai/util/path"
-import { type IconName } from "@opencode-ai/ui/icons/provider"
 
 interface PromptInputProps {
   class?: string
@@ -486,20 +484,10 @@ export const PromptInput: Component<PromptInputProps> = (props) => {
               }
             >
               {(i) => (
-                <div class="w-full flex items-center justify-between gap-x-3">
-                  <div class="flex items-center gap-x-2.5 text-text-muted grow min-w-0">
-                    {/* <ProviderIcon name={i.provider.id as IconName} class="size-6 p-0.5 shrink-0" /> */}
-                    <div class="flex gap-x-3 items-baseline flex-[1_0_0]">
-                      <span class="text-14-medium text-text-strong overflow-hidden text-ellipsis">{i.name}</span>
-                      <Show when={false}>
-                        <span class="text-12-medium text-text-weak overflow-hidden text-ellipsis truncate min-w-0">
-                          {DateTime.fromFormat("unknown", "yyyy-MM-dd").toFormat("LLL yyyy")}
-                        </span>
-                      </Show>
-                    </div>
-                  </div>
+                <div class="w-full flex items-center gap-x-2.5">
+                  <span>{i.name}</span>
                   <Show when={!i.cost || i.cost?.input === 0}>
-                    <div class="overflow-hidden text-12-medium text-text-strong">Free</div>
+                    <Tag>Free</Tag>
                   </Show>
                 </div>
               )}
