@@ -133,6 +133,16 @@ export namespace Config {
 
     if (!result.keybinds) result.keybinds = Info.shape.keybinds.parse({})
 
+    // Set defaultAgent if not specified
+    if (!result.default_agent) result.default_agent = "build"
+
+    // Validate that the default agent is not disabled
+    if (result.agent && result.agent[result.default_agent]?.disable) {
+      throw new Error(
+        `Cannot disable the default agent '${result.default_agent}'. Please either enable it or specify a different default agent in your configuration.`,
+      )
+    }
+
     return {
       config: result,
       directories,
@@ -589,6 +599,7 @@ export namespace Config {
         .catchall(Agent)
         .optional()
         .describe("@deprecated Use `agent` field instead."),
+      default_agent: z.string().optional().describe("Default agent to use when no specific agent is specified"),
       agent: z
         .object({
           plan: Agent.optional(),

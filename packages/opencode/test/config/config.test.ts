@@ -501,3 +501,89 @@ test("deduplicates duplicate plugins from global and local configs", async () =>
     },
   })
 })
+
+test("sets default agent to 'build' when not specified", async () => {
+  await using tmp = await tmpdir({
+    init: async (dir) => {
+      await Bun.write(
+        path.join(dir, "opencode.json"),
+        JSON.stringify({
+          $schema: "https://opencode.ai/config.json",
+          agent: {
+            build: {
+              model: "test/model",
+              description: "build agent",
+            },
+          },
+        }),
+      )
+    },
+  })
+  await Instance.provide({
+    directory: tmp.path,
+    fn: async () => {
+      const config = await Config.get()
+      expect(config.defaultAgent).toBe("build")
+    },
+  })
+})
+
+test("uses specified defaultAgent when provided", async () => {
+  await using tmp = await tmpdir({
+    init: async (dir) => {
+      await Bun.write(
+        path.join(dir, "opencode.json"),
+        JSON.stringify({
+          $schema: "https://opencode.ai/config.json",
+          defaultAgent: "custom",
+          agent: {
+            build: {
+              model: "test/model",
+              description: "build agent",
+            },
+            custom: {
+              model: "test/model",
+              description: "custom agent",
+            },
+          },
+        }),
+      )
+    },
+  })
+  await Instance.provide({
+    directory: tmp.path,
+    fn: async () => {
+      const config = await Config.get()
+      expect(config.defaultAgent).toBe("custom")
+    },
+  })
+})
+
+test("throws error when defaultAgent is disabled", async () => {
+  await using tmp = await tmpdir({
+    init: async (dir) => {
+      await Bun.write(
+        path.join(dir, "opencode.json"),
+        JSON.stringify({
+          $schema: "https://opencode.ai/config.json",
+          defaultAgent: "build",
+          agent: {
+            build: {
+              model: "test/model",
+              description: "build agent",
+              disable: true,
+            },
+          },
+        }),
+      )
+    },
+  })
+  await Instance.provide({
+    directory: tmp.path,
+    fn: async () => {
+      expect(Config.get()).rejects.toThrow(
+        "Cannot disable the default agent 'build'. Please either enable it or specify a different default agent in your configuration.",
+      )
+    },
+  })
+})
