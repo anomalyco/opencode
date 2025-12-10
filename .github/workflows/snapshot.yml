@@ -11,6 +11,8 @@ on:
       - snapshot-*
 
 concurrency: ${{ github.workflow }}-${{ github.ref }}
+permissions:
+  id-token: write
 
 jobs:
   publish:
@@ -22,17 +24,17 @@ jobs:
 
       - run: git fetch --force --tags
 
-      - uses: actions/setup-go@v5
+      - uses: actions/setup-node@v4
         with:
-          go-version: ">=1.24.0"
-          cache: true
-          cache-dependency-path: go.sum
+          node-version: "20"
+          registry-url: "https://registry.npmjs.org"
 
       - uses: ./.github/actions/setup-bun
 
       - name: Publish
         run: |
+          npm install -g npm@latest
           ./script/publish.ts
         env:
           GITHUB_TOKEN: ${{ secrets.SST_GITHUB_TOKEN }}
-          NPM_CONFIG_TOKEN: ${{ secrets.NPM_TOKEN }}
+          NPM_CONFIG_PROVENANCE: false
