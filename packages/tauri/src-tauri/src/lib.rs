@@ -175,7 +175,8 @@ pub fn run() {
                         .initialization_script(format!(
                             r#"
                           window.__OPENCODE__ ??= {{}};
-                          window.__OPENCODE__.updaterEnabled = {updater_enabled}
+                          window.__OPENCODE__.updaterEnabled = {updater_enabled};
+                          window.__OPENCODE__.port = {port};
                         "#
                         ));
 
