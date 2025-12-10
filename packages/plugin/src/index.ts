@@ -9,13 +9,31 @@ import type {
   Part,
   Auth,
   Config,
-  ChatMessage,
-  ChatMessagePart,
-  ChatMessageTextPart,
-  ChatMessageFilePart,
-  ChatMessageStepStartPart,
-  ChatMessageToolPart,
-  ChatMessageReasoningPart,
+  SessionMessage,
+  SessionMessageInfo,
+  SessionMessageUser,
+  SessionMessageAssistant,
+  SessionMessagePart,
+  SessionMessagePartBase,
+  SessionMessageTextPart,
+  SessionMessageReasoningPart,
+  SessionMessageFilePart,
+  SessionMessageToolPart,
+  SessionMessageStepStartPart,
+  SessionMessageStepFinishPart,
+  SessionMessageSnapshotPart,
+  SessionMessagePatchPart,
+  SessionMessageAgentPart,
+  SessionMessageCompactionPart,
+  SessionMessageSubtaskPart,
+  SessionMessageRetryPart,
+  SessionMessageToolState,
+  SessionMessageToolStatePending,
+  SessionMessageToolStateRunning,
+  SessionMessageToolStateCompleted,
+  SessionMessageToolStateError,
+  SessionMessageContentError,
+  SessionMessageFileDiff,
 } from "@opencode-ai/sdk"
 
 import type { BunShell } from "./shell"
@@ -24,13 +42,31 @@ import { type ToolDefinition } from "./tool"
 export * from "./tool"
 
 export type {
-  ChatMessage,
-  ChatMessagePart,
-  ChatMessageTextPart,
-  ChatMessageFilePart,
-  ChatMessageStepStartPart,
-  ChatMessageToolPart,
-  ChatMessageReasoningPart,
+  SessionMessage,
+  SessionMessageInfo,
+  SessionMessageUser,
+  SessionMessageAssistant,
+  SessionMessagePart,
+  SessionMessagePartBase,
+  SessionMessageTextPart,
+  SessionMessageReasoningPart,
+  SessionMessageFilePart,
+  SessionMessageToolPart,
+  SessionMessageStepStartPart,
+  SessionMessageStepFinishPart,
+  SessionMessageSnapshotPart,
+  SessionMessagePatchPart,
+  SessionMessageAgentPart,
+  SessionMessageCompactionPart,
+  SessionMessageSubtaskPart,
+  SessionMessageRetryPart,
+  SessionMessageToolState,
+  SessionMessageToolStatePending,
+  SessionMessageToolStateRunning,
+  SessionMessageToolStateCompleted,
+  SessionMessageToolStateError,
+  SessionMessageContentError,
+  SessionMessageFileDiff,
 }
 
 export type ProviderContext = {
@@ -195,7 +231,7 @@ export interface Hooks {
   "experimental.chat.messages.transform"?: (
     input: {},
     output: {
-      messages: ChatMessage[]
+      messages: SessionMessage[]
     },
   ) => Promise<void>
   "experimental.text.complete"?: (

@@ -515,20 +515,22 @@ export namespace SessionPrompt {
         })
       }
 
-      const chatMessages = msgs.filter((m) => {
-        if (m.info.role !== "assistant" || m.info.error === undefined) {
-          return true
-        }
-        if (
-          MessageV2.AbortedError.isInstance(m.info.error) &&
-          m.parts.some((part) => part.type !== "step-start" && part.type !== "reasoning")
-        ) {
-          return true
-        }
-        return false
-      }).map((m) => MessageV2.toChatMessage(m))
+      const sessionMessages = msgs
+        .filter((m) => {
+          if (m.info.role !== "assistant" || m.info.error === undefined) {
+            return true
+          }
+          if (
+            MessageV2.AbortedError.isInstance(m.info.error) &&
+            m.parts.some((part) => part.type !== "step-start" && part.type !== "reasoning")
+          ) {
+            return true
+          }
+          return false
+        })
+        .map((m) => MessageV2.toSessionMessage(m))
 
-      await Plugin.trigger("experimental.chat.messages.transform", {}, { messages: chatMessages })
+      await Plugin.trigger("experimental.chat.messages.transform", {}, { messages: sessionMessages })
 
       const modelMessages: ModelMessage[] = [
         ...system.map(
@@ -537,7 +539,7 @@ export namespace SessionPrompt {
             content: x,
           }),
         ),
-        ...MessageV2.chatMessagesToModelMessages(chatMessages),
+        ...MessageV2.sessionMessagesToModelMessages(sessionMessages),
         ...(isLastStep
           ? [
               {
