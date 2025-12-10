@@ -18,41 +18,9 @@ import { Binary } from "@opencode-ai/util/binary"
 import { createSimpleContext } from "@opencode-ai/ui/context"
 import { useGlobalSDK } from "./global-sdk"
 
-const PASTEL_COLORS = [
-  "#FCEAFD", // pastel pink
-  "#FFDFBA", // pastel peach
-  "#FFFFBA", // pastel yellow
-  "#BAFFC9", // pastel green
-  "#EAF6FD", // pastel blue
-  "#EFEAFD", // pastel lavender
-  "#FEC8D8", // pastel rose
-  "#D4F0F0", // pastel cyan
-  "#FDF0EA", // pastel coral
-  "#C1E1C1", // pastel mint
-]
-
-function pickAvailableColor(usedColors: Set<string>) {
-  const available = PASTEL_COLORS.filter((c) => !usedColors.has(c))
-  if (available.length === 0) return PASTEL_COLORS[Math.floor(Math.random() * PASTEL_COLORS.length)]
-  return available[Math.floor(Math.random() * available.length)]
-}
-
-async function ensureProjectColor(
-  project: Project,
-  sdk: ReturnType<typeof useGlobalSDK>,
-  usedColors: Set<string>,
-): Promise<Project> {
-  if (project.icon?.color) return project
-  const color = pickAvailableColor(usedColors)
-  usedColors.add(color)
-  const updated = { ...project, icon: { ...project.icon, color } }
-  sdk.client.project.update({ projectID: project.id, icon: { color } })
-  return updated
-}
-
 type State = {
   ready: boolean
-  provider: Provider[]
+  // provider: Provider[]
   agent: Agent[]
   project: string
   config: Config
@@ -84,10 +52,12 @@ export const { use: useGlobalSync, provider: GlobalSyncProvider } = createSimple
     const [globalStore, setGlobalStore] = createStore<{
       ready: boolean
       projects: Project[]
+      providers: Provider[]
       children: Record<string, State>
     }>({
       ready: false,
       projects: [],
+      providers: [],
       children: {},
     })
 
@@ -100,7 +70,7 @@ export const { use: useGlobalSync, provider: GlobalSyncProvider } = createSimple
           path: { state: "", config: "", worktree: "", directory: "", home: "" },
           ready: false,
           agent: [],
-          provider: [],
+          // provider: [],
           session: [],
           session_status: {},
           session_diff: {},
@@ -124,20 +94,17 @@ export const { use: useGlobalSync, provider: GlobalSyncProvider } = createSimple
       if (directory === "global") {
         switch (event.type) {
           case "project.updated": {
-            const usedColors = new Set(globalStore.projects.map((p) => p.icon?.color).filter(Boolean) as string[])
-            ensureProjectColor(event.properties, sdk, usedColors).then((project) => {
-              const result = Binary.search(globalStore.projects, project.id, (s) => s.id)
-              if (result.found) {
-                setGlobalStore("projects", result.index, reconcile(project))
-                return
-              }
-              setGlobalStore(
-                "projects",
-                produce((draft) => {
-                  draft.splice(result.index, 0, project)
-                }),
-              )
-            })
+            const result = Binary.search(globalStore.projects, event.properties.id, (s) => s.id)
+            if (result.found) {
+              setGlobalStore("projects", result.index, reconcile(event.properties))
+              return
+            }
+            setGlobalStore(
+              "projects",
+              produce((draft) => {
+                draft.splice(result.index, 0, event.properties)
+              }),
+            )
             break
           }
         }
@@ -216,13 +183,15 @@ export const { use: useGlobalSync, provider: GlobalSyncProvider } = createSimple
 
     Promise.all([
       sdk.client.project.list().then(async (x) => {
-        const filtered = x.data!.filter((p) => !p.worktree.includes("opencode-test") && p.vcs)
-        const usedColors = new Set(filtered.map((p) => p.icon?.color).filter(Boolean) as string[])
-        const projects = await Promise.all(filtered.map((p) => ensureProjectColor(p, sdk, usedColors)))
         setGlobalStore(
           "projects",
-          projects.sort((a, b) => a.id.localeCompare(b.id)),
+          x
+            .data!.filter((p) => !p.worktree.includes("opencode-test") && p.vcs)
+            .sort((a, b) => a.id.localeCompare(b.id)),
         )
+      }),
+      sdk.client.provider.list().then((x) => {
+        setGlobalStore("providers", x.data ?? [])
       }),
     ]).then(() => setGlobalStore("ready", true))
 

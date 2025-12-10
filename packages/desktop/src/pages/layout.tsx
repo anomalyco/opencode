@@ -29,6 +29,8 @@ import {
   useDragDropContext,
 } from "@thisbeyond/solid-dnd"
 import type { DragEvent, Transformer } from "@thisbeyond/solid-dnd"
+import { SelectDialog } from "@opencode-ai/ui/select-dialog"
+import { Tag } from "@opencode-ai/ui/tag"
 
 export default function Layout(props: ParentProps) {
   const [store, setStore] = createStore({
@@ -44,9 +46,14 @@ export default function Layout(props: ParentProps) {
   const currentDirectory = createMemo(() => base64Decode(params.dir ?? ""))
   const sessions = createMemo(() => globalSync.child(currentDirectory())[0].session ?? [])
   const currentSession = createMemo(() => sessions().find((s) => s.id === params.id))
+  const providers = createMemo(() => globalSync.data.providers)
   const hasProviders = createMemo(() => {
     const [projectStore] = globalSync.child(currentDirectory())
     return projectStore.provider.filter((p) => p.id !== "opencode").length > 0
+  })
+
+  createEffect(() => {
+    console.log(providers())
   })
 
   function navigateToProject(directory: string | undefined) {
@@ -550,6 +557,37 @@ export default function Layout(props: ParentProps) {
           </div>
         </div>
         <main class="size-full overflow-x-hidden flex flex-col items-start">{props.children}</main>
+        <Show when={true}>
+          <SelectDialog
+            defaultOpen
+            title="Connect provider"
+            placeholder="Search providers"
+            key={(x) => x?.id}
+            items={providers()}
+            // current={local.model.current()}
+            filterKeys={["provider.name", "name", "id"]}
+            // groupBy={(x) => (local.model.recent().includes(x) ? "Recent" : x.provider.name)}
+            // groupBy={(x) => x.provider.name}
+            onSelect={(x) =>
+              // local.model.set(x ? { modelID: x.id, providerID: x.provider.id } : undefined, { recent: true })
+              {
+                return
+              }
+            }
+          >
+            {(i) => (
+              <div class="w-full flex items-center gap-x-2.5">
+                <span>{i.name}</span>
+                <Show when={!i.cost || i.cost?.input === 0}>
+                  <Tag>Free</Tag>
+                </Show>
+                <Show when={i.latest}>
+                  <Tag>Latest</Tag>
+                </Show>
+              </div>
+            )}
+          </SelectDialog>
+        </Show>
       </div>
     </div>
   )

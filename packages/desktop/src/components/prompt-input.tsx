@@ -483,6 +483,11 @@ export const PromptInput: Component<PromptInputProps> = (props) => {
                   <Icon name="chevron-down" size="small" />
                 </Button>
               }
+              actions={
+                <Button class="h-7 -my-1 text-14-medium" icon="plus-small" tabIndex={-1}>
+                  Connect provider
+                </Button>
+              }
             >
               {(i) => (
                 <div class="w-full flex items-center gap-x-2.5">

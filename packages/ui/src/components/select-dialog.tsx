@@ -15,6 +15,7 @@ interface SelectDialogProps<T>
   children: (item: T) => JSX.Element
   onSelect?: (value: T | undefined) => void
   onKeyEvent?: (event: KeyboardEvent, item: T | undefined) => void
+  actions?: JSX.Element
 }
 
 export function SelectDialog<T>(props: SelectDialogProps<T>) {
@@ -98,7 +99,8 @@ export function SelectDialog<T>(props: SelectDialogProps<T>) {
     <Dialog modal {...dialog} onOpenChange={handleOpenChange}>
       <Dialog.Header>
         <Dialog.Title>{others.title}</Dialog.Title>
-        <Dialog.CloseButton ref={closeButton} tabIndex={-1} />
+        <Show when={others.actions}>{others.actions}</Show>
+        <Dialog.CloseButton ref={closeButton} tabIndex={-1} style={{ display: others.actions ? "none" : undefined }} />
       </Dialog.Header>
       <div data-slot="select-dialog-content">
         <div data-component="select-dialog-input">
@@ -136,7 +138,7 @@ export function SelectDialog<T>(props: SelectDialogProps<T>) {
             fallback={
               <div data-slot="select-dialog-empty-state">
                 <div data-slot="select-dialog-message">
-                  {props.emptyMessage ?? "No search results"} for{" "}
+                  {props.emptyMessage ?? "No results"} for{" "}
                   <span data-slot="select-dialog-filter">&quot;{filter()}&quot;</span>
                 </div>
               </div>

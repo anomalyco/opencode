@@ -75,7 +75,6 @@
     position: relative;
     display: flex;
     flex-direction: column;
-    gap: 4px;
 
     [data-slot="select-dialog-header"] {
       display: flex;
