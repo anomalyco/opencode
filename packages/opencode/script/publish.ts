@@ -41,7 +41,8 @@ for (const [name] of Object.entries(binaries)) {
     if (process.platform !== "win32") {
       await $`chmod 755 -R .`
     }
-    await $`bun publish --access public --tag ${Script.channel}`
+    await $`bun pm pack`
+    await $`npm publish *.tgz --access public --tag ${Script.channel}`
   } finally {
     process.chdir(dir)
   }
