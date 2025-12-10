@@ -24,6 +24,7 @@ on:
 concurrency: ${{ github.workflow }}-${{ github.ref }}
 
 permissions:
+  id-token: write
   contents: write
   packages: write
 
