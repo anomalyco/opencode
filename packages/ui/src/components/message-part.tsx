@@ -7,7 +7,7 @@ import {
   TextPart,
   ToolPart,
   UserMessage,
-} from "@opencode-ai/sdk"
+} from "@opencode-ai/sdk/v2"
 import { useDiffComponent } from "../context/diff"
 import { BasicTool } from "./basic-tool"
 import { GenericTool } from "./basic-tool"
