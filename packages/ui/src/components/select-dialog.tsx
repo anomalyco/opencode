@@ -1,4 +1,4 @@
-import { createEffect, Show, For, type JSX, splitProps } from "solid-js"
+import { createEffect, Show, For, type JSX, splitProps, createSignal } from "solid-js"
 import { createStore } from "solid-js/store"
 import { FilteredListProps, useFilteredList } from "@opencode-ai/ui/hooks"
 import { Dialog, DialogProps } from "./dialog"
@@ -21,7 +21,7 @@ export function SelectDialog<T>(props: SelectDialogProps<T>) {
   const [dialog, others] = splitProps(props, ["trigger", "onOpenChange", "defaultOpen"])
   let closeButton!: HTMLButtonElement
   let inputRef: HTMLInputElement | undefined
-  let scrollRef: HTMLDivElement | undefined
+  let [scrollRef, setScrollRef] = createSignal<HTMLDivElement | undefined>(undefined)
   const [store, setStore] = createStore({
     mouseActive: false,
   })
@@ -38,18 +38,28 @@ export function SelectDialog<T>(props: SelectDialogProps<T>) {
 
   createEffect(() => {
     filter()
-    scrollRef?.scrollTo(0, 0)
+    scrollRef()?.scrollTo(0, 0)
     reset()
+  })
+
+  createEffect(() => {
+    if (!scrollRef()) return
+    if (!others.current) return
+    const key = others.key(others.current)
+    requestAnimationFrame(() => {
+      const element = scrollRef()!.querySelector(`[data-key="${key}"]`)
+      element?.scrollIntoView({ block: "center" })
+    })
   })
 
   createEffect(() => {
     const all = flat()
     if (store.mouseActive || all.length === 0) return
     if (active() === others.key(all[0])) {
-      scrollRef?.scrollTo(0, 0)
+      scrollRef()?.scrollTo(0, 0)
       return
     }
-    const element = scrollRef?.querySelector(`[data-key="${active()}"]`)
+    const element = scrollRef()?.querySelector(`[data-key="${active()}"]`)
     element?.scrollIntoView({ block: "nearest", behavior: "smooth" })
   })
 
@@ -120,7 +130,7 @@ export function SelectDialog<T>(props: SelectDialogProps<T>) {
             />
           </Show>
         </div>
-        <Dialog.Body ref={scrollRef} data-component="select-dialog" class="no-scrollbar">
+        <Dialog.Body ref={setScrollRef} data-component="select-dialog" class="no-scrollbar">
           <Show
             when={flat().length > 0}
             fallback={

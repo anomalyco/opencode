@@ -3,7 +3,7 @@
   display: flex;
   flex-direction: column;
   overflow: hidden;
-  gap: 12px;
+  gap: 20px;
   padding: 0 10px;
 }
 
@@ -38,7 +38,7 @@
 [data-component="select-dialog"] {
   display: flex;
   flex-direction: column;
-  gap: 12px;
+  gap: 20px;
 
   [data-slot="select-dialog-empty-state"] {
     display: flex;

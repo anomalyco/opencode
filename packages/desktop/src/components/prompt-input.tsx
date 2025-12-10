@@ -461,7 +461,8 @@ export const PromptInput: Component<PromptInputProps> = (props) => {
               items={local.model.list()}
               current={local.model.current()}
               filterKeys={["provider.name", "name", "id"]}
-              groupBy={(x) => (local.model.recent().includes(x) ? "Recent" : x.provider.name)}
+              // groupBy={(x) => (local.model.recent().includes(x) ? "Recent" : x.provider.name)}
+              groupBy={(x) => x.provider.name}
               sortGroupsBy={(a, b) => {
                 const order = ["opencode", "anthropic", "github-copilot", "openai", "google", "openrouter", "vercel"]
                 if (a.category === "Recent" && b.category !== "Recent") return -1
