@@ -24,7 +24,33 @@ interface PromptInputProps {
   ref?: (el: HTMLDivElement) => void
 }
 
-const PLACEHOLDERS = ["Fix a TODO in the codebase", "What is the tech stack of this project?", "Fix broken tests"]
+const PLACEHOLDERS = [
+  "Fix a TODO in the codebase",
+  "What is the tech stack of this project?",
+  "Fix broken tests",
+  "Explain how authentication works",
+  "Find and fix security vulnerabilities",
+  "Add unit tests for the user service",
+  "Refactor this function to be more readable",
+  "What does this error mean?",
+  "Help me debug this issue",
+  "Generate API documentation",
+  "Optimize database queries",
+  "Add input validation",
+  "Create a new component for...",
+  "How do I deploy this project?",
+  "Review my code for best practices",
+  "Add error handling to this function",
+  "Explain this regex pattern",
+  "Convert this to TypeScript",
+  "Add logging throughout the codebase",
+  "What dependencies are outdated?",
+  "Help me write a migration script",
+  "Implement caching for this endpoint",
+  "Add pagination to this list",
+  "Create a CLI command for...",
+  "How do environment variables work here?",
+]
 
 export const PromptInput: Component<PromptInputProps> = (props) => {
   const navigate = useNavigate()
@@ -45,7 +71,7 @@ export const PromptInput: Component<PromptInputProps> = (props) => {
   onMount(() => {
     const interval = setInterval(() => {
       setPlaceholder((prev) => (prev + 1) % PLACEHOLDERS.length)
-    }, 5000)
+    }, 6500)
     onCleanup(() => clearInterval(interval))
   })
 
