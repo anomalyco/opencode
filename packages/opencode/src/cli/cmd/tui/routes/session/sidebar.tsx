@@ -58,7 +58,7 @@ export function Sidebar(props: { sessionID: string }) {
   return (
     <Show when={session()}>
       <box
-        backgroundColor={theme.sidebarBackgroundPanel}
+        backgroundColor={theme.backgroundSidebar}
         width={42}
         paddingTop={1}
         paddingBottom={1}
