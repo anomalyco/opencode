@@ -108,29 +108,30 @@ pub fn run() {
 
             tauri::async_runtime::spawn(async move {
                 let port = get_sidecar_port();
-                let socket_connected = is_server_running(port).await;
 
-                let should_spawn_sidecar = if socket_connected {
-                    let res = app
-                        .dialog()
-                        .message(
-                            "OpenCode Server is already running, would you like to restart it?",
-                        )
-                        .buttons(MessageDialogButtons::YesNo)
-                        .blocking_show_with_result();
+                let should_spawn_sidecar = !is_server_running(port).await;
 
-                    match res {
-                        MessageDialogResult::Yes => {
-                            if let Err(e) = find_and_kill_process_on_port(port) {
-                                eprintln!("Failed to kill process on port {}: {}", port, e);
-                            }
-                            true
-                        }
-                        _ => false,
-                    }
-                } else {
-                    true
-                };
+                // if server_running {
+                //     let res = app
+                //         .dialog()
+                //         .message(
+                //             "OpenCode Server is already running, would you like to restart it?",
+                //         )
+                //         .buttons(MessageDialogButtons::YesNo)
+                //         .blocking_show_with_result();
+
+                //     match res {
+                //         MessageDialogResult::Yes => {
+                //             if let Err(e) = find_and_kill_process_on_port(port) {
+                //                 eprintln!("Failed to kill process on port {}: {}", port, e);
+                //             }
+                //             true
+                //         }
+                //         _ => false,
+                //     }
+                // } else {
+                //     true
+                // };
 
                 let child = if should_spawn_sidecar {
                     let child = spawn_sidecar(&app, port);

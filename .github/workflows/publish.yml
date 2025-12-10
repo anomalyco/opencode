@@ -81,7 +81,7 @@ jobs:
           NPM_CONFIG_PROVENANCE: false
 
   publish-tauri:
-    if: inputs.bump || inputs.version
+    if: false # inputs.bump || inputs.version
     continue-on-error: true
     strategy:
       fail-fast: false
