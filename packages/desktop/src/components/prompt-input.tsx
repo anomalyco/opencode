@@ -621,6 +621,12 @@ export const PromptInput: Component<PromptInputProps> = (props) => {
                                     </div>
                                   )}
                                 </List>
+                                <Button variant="ghost" class="w-full justify-start">
+                                  <div class="flex items-center gap-2">
+                                    <Icon name="plus-small" />
+                                    <div class="text-text-strong">View all providers</div>
+                                  </div>
+                                </Button>
                               </div>
                             </div>
                           </div>
