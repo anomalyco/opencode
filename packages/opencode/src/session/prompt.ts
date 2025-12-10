@@ -602,7 +602,12 @@ export namespace SessionPrompt {
               args,
             },
           )
-          const result = await item.execute(args, {
+
+          const displayArgs = (args as any).__display || args
+          const execArgs = { ...args }
+          delete (execArgs as any).__display
+          
+          const result = await item.execute(execArgs, {
             sessionID: input.sessionID,
             abort: options.abortSignal!,
             messageID: input.processor.message.id,
@@ -612,18 +617,19 @@ export namespace SessionPrompt {
             metadata: async (val) => {
               const match = input.processor.partFromToolCall(options.toolCallId)
               if (match && match.state.status === "running") {
-                await Session.updatePart({
-                  ...match,
-                  state: {
-                    title: val.title,
-                    metadata: val.metadata,
-                    status: "running",
-                    input: args,
-                    time: {
-                      start: Date.now(),
-                    },
+                // Keep in-memory toolcall state in sync so processor can preserve display input
+                match.state = {
+                  ...match.state,
+                  title: val.title,
+                  metadata: val.metadata,
+                  status: "running",
+                  input: displayArgs,
+                  time: match.state.time ?? {
+                    start: Date.now(),
                   },
-                })
+                }
+
+                await Session.updatePart(match)
               }
             },
           })

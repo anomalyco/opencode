@@ -186,7 +186,7 @@ export namespace SessionProcessor {
                       ...match,
                       state: {
                         status: "completed",
-                        input: value.input,
+                        input: match.state.input !== undefined ? match.state.input : value.input,
                         output: value.output.output,
                         metadata: value.output.metadata,
                         title: value.output.title,
@@ -210,7 +210,7 @@ export namespace SessionProcessor {
                       ...match,
                       state: {
                         status: "error",
-                        input: value.input,
+                        input: match.state.input !== undefined ? match.state.input : value.input,
                         error: (value.error as any).toString(),
                         metadata: value.error instanceof Permission.RejectedError ? value.error.metadata : undefined,
                         time: {
