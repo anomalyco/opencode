@@ -8,6 +8,7 @@ import { createEffect, createMemo, ErrorBoundary, For, Match, Show, Switch } fro
 import { Share } from "~/core/share"
 import { Logo, Mark } from "@opencode-ai/ui/logo"
 import { IconButton } from "@opencode-ai/ui/icon-button"
+import { ProviderIcon } from "@opencode-ai/ui/provider-icon"
 import { createDefaultOptions } from "@opencode-ai/ui/pierre"
 import { iife } from "@opencode-ai/util/iife"
 import { Binary } from "@opencode-ai/util/binary"
@@ -21,6 +22,7 @@ import { Tabs } from "@opencode-ai/ui/tabs"
 import { preloadMultiFileDiff, PreloadMultiFileDiffResult } from "@pierre/precision-diffs/ssr"
 import { Diff as SSRDiff } from "@opencode-ai/ui/diff-ssr"
 import { clientOnly } from "@solidjs/start"
+import { IconName } from "../../../../ui/src/components/provider-icons/types"
 
 const ClientOnlyDiff = clientOnly(() => import("@opencode-ai/ui/diff").then((m) => ({ default: m.Diff })))
 
@@ -210,10 +212,7 @@ export default function () {
                           <div class="text-12-mono text-text-base">v{info().version}</div>
                         </div>
                         <div class="flex gap-2 items-center">
-                          <img
-                            src={`https://models.dev/logos/${provider()}.svg`}
-                            class="size-3.5 shrink-0 dark:invert"
-                          />
+                          <ProviderIcon name={provider() as IconName} class="size-3.5 shrink-0 text-icon-strong-base" />
                           <div class="text-12-regular text-text-base">{model()?.name ?? modelID()}</div>
                         </div>
                         <div class="text-12-regular text-text-weaker">

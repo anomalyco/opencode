@@ -14,8 +14,10 @@ import { Button } from "@opencode-ai/ui/button"
 import { Icon } from "@opencode-ai/ui/icon"
 import { Tooltip } from "@opencode-ai/ui/tooltip"
 import { IconButton } from "@opencode-ai/ui/icon-button"
+import { ProviderIcon } from "@opencode-ai/ui/provider-icon"
 import { Select } from "@opencode-ai/ui/select"
 import { getDirectory, getFilename } from "@opencode-ai/util/path"
+import { IconName } from "../../../ui/src/components/provider-icons/types"
 
 interface PromptInputProps {
   class?: string
@@ -460,7 +462,7 @@ export const PromptInput: Component<PromptInputProps> = (props) => {
               {(i) => (
                 <div class="w-full flex items-center justify-between gap-x-3">
                   <div class="flex items-center gap-x-2.5 text-text-muted grow min-w-0">
-                    <img src={`https://models.dev/logos/${i.provider.id}.svg`} class="size-6 p-0.5 shrink-0" />
+                    <ProviderIcon name={i.provider.id as IconName} class="size-6 p-0.5 shrink-0" />
                     <div class="flex gap-x-3 items-baseline flex-[1_0_0]">
                       <span class="text-14-medium text-text-strong overflow-hidden text-ellipsis">{i.name}</span>
                       <Show when={false}>
