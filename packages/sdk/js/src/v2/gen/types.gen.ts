@@ -575,6 +575,7 @@ export type Session = {
     created: number
     updated: number
     compacting?: number
+    archived?: number
   }
   revert?: {
     messageID: string
@@ -1391,6 +1392,7 @@ export type ToolListItem = {
 export type ToolList = Array<ToolListItem>
 
 export type Path = {
+  home: string
   state: string
   config: string
   worktree: string
@@ -2249,6 +2251,9 @@ export type SessionGetResponse = SessionGetResponses[keyof SessionGetResponses]
 export type SessionUpdateData = {
   body?: {
     title?: string
+    time: {
+      archived?: number
+    }
   }
   path: {
     sessionID: string
