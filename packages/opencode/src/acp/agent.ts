@@ -461,15 +461,13 @@ export namespace ACP {
           description: "compact the session",
         })
 
-      const availableModes = agents
-        .filter((agent) => agent.mode !== "subagent")
-        .map((agent) => ({
-          id: agent.name,
-          name: agent.name,
-          description: agent.description,
-        }))
-
-      const currentModeId = availableModes.find((m) => m.name === "build")?.id ?? availableModes[0].id
+      const availableAgents = agents.filter((agent) => agent.mode !== "subagent")
+      const availableModes = availableAgents.map((agent) => ({
+        id: agent.name,
+        name: agent.name,
+        description: agent.description,
+      }))
+      const currentModeId = availableAgents.find((agent) => agent.default)!.name
 
       const mcpServers: Record<string, Config.Mcp> = {}
       for (const server of params.mcpServers) {
