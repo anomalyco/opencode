@@ -114,6 +114,28 @@ export namespace ProviderTransform {
       })
     }
 
+    // For models with interleaved thinking enabled, convert reasoning parts to text parts
+    // so the reasoning content is included in the API request. This is necessary because
+    // the AI SDK's OpenAI provider ignores reasoning parts when converting to chat messages.
+    if (model.capabilities.interleavedthinking) {
+      return msgs.map((msg) => {
+        if (msg.role === "assistant" && Array.isArray(msg.content)) {
+          // Convert reasoning parts to text parts
+          msg.content = msg.content.map((part: any) => {
+            if (part.type === "reasoning" && part.text) {
+              return {
+                type: "text",
+                text: part.text,
+                providerOptions: part.providerOptions,
+              }
+            }
+            return part
+          })
+        }
+        return msg
+      })
+    }
+
     return msgs
   }
 

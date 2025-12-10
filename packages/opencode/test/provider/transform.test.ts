@@ -126,6 +126,7 @@ describe("ProviderTransform.message - DeepSeek reasoning content", () => {
       capabilities: {
         temperature: true,
         reasoning: true,
+        interleavedthinking: false,
         attachment: false,
         toolcall: true,
         input: { text: true, audio: false, image: false, video: false, pdf: false },
@@ -181,6 +182,7 @@ describe("ProviderTransform.message - DeepSeek reasoning content", () => {
       capabilities: {
         temperature: true,
         reasoning: true,
+        interleavedthinking: false,
         attachment: false,
         toolcall: true,
         input: { text: true, audio: false, image: false, video: false, pdf: false },
@@ -234,6 +236,7 @@ describe("ProviderTransform.message - DeepSeek reasoning content", () => {
       capabilities: {
         temperature: true,
         reasoning: true,
+        interleavedthinking: false,
         attachment: false,
         toolcall: true,
         input: { text: true, audio: false, image: false, video: false, pdf: false },
@@ -280,6 +283,7 @@ describe("ProviderTransform.message - DeepSeek reasoning content", () => {
       capabilities: {
         temperature: true,
         reasoning: false,
+        interleavedthinking: false,
         attachment: true,
         toolcall: true,
         input: { text: true, audio: false, image: true, video: false, pdf: false },
@@ -305,5 +309,116 @@ describe("ProviderTransform.message - DeepSeek reasoning content", () => {
       { type: "text", text: "Answer" },
     ])
     expect(result[0].providerOptions?.openaiCompatible?.reasoning_content).toBeUndefined()
+  })
+})
+
+describe("ProviderTransform.message - Interleaved thinking", () => {
+  test("Converts reasoning parts to text parts", () => {
+    const msgs = [
+      {
+        role: "assistant",
+        content: [
+          { type: "reasoning", text: "Let me analyze this step by step..." },
+          {
+            type: "tool-call",
+            toolCallId: "test",
+            toolName: "bash",
+            input: { command: "git diff" },
+          },
+        ],
+      },
+    ] as any[]
+
+    const result = ProviderTransform.message(msgs, {
+      id: "openai/gpt-4",
+      providerID: "openai",
+      api: {
+        id: "gpt-4",
+        url: "https://api.openai.com",
+        npm: "@ai-sdk/openai",
+      },
+      name: "GPT-4",
+      capabilities: {
+        temperature: true,
+        reasoning: false,
+        attachment: true,
+        toolcall: true,
+        interleavedthinking: true,
+        input: { text: true, audio: false, image: false, video: false, pdf: false },
+        output: { text: true, audio: false, image: false, video: false, pdf: false },
+      },
+      cost: {
+        input: 0.03,
+        output: 0.06,
+        cache: { read: 0.001, write: 0.002 },
+      },
+      limit: {
+        context: 128000,
+        output: 4096,
+      },
+      status: "active",
+      options: {},
+      headers: {},
+    })
+
+    expect(result).toHaveLength(1)
+    expect(result[0].content).toEqual([
+      { type: "text", text: "Let me analyze this step by step...", providerOptions: undefined },
+      {
+        type: "tool-call",
+        toolCallId: "test",
+        toolName: "bash",
+        input: { command: "git diff" },
+      },
+    ])
+  })
+
+  test("Preserves reasoning parts when interleavedthinking is false", () => {
+    const msgs = [
+      {
+        role: "assistant",
+        content: [
+          { type: "reasoning", text: "Reasoning that should stay as-is" },
+          { type: "text", text: "Answer" },
+        ],
+      },
+    ] as any[]
+
+    const result = ProviderTransform.message(msgs, {
+      id: "openai/gpt-4",
+      providerID: "openai",
+      api: {
+        id: "gpt-4",
+        url: "https://api.openai.com",
+        npm: "@ai-sdk/openai",
+      },
+      name: "GPT-4",
+      capabilities: {
+        temperature: true,
+        reasoning: false,
+        interleavedthinking: false,
+        attachment: true,
+        toolcall: true,
+        input: { text: true, audio: false, image: false, video: false, pdf: false },
+        output: { text: true, audio: false, image: false, video: false, pdf: false },
+      },
+      cost: {
+        input: 0.03,
+        output: 0.06,
+        cache: { read: 0.001, write: 0.002 },
+      },
+      limit: {
+        context: 128000,
+        output: 4096,
+      },
+      status: "active",
+      options: {},
+      headers: {},
+    })
+
+    expect(result[0].content).toEqual([
+      { type: "reasoning", text: "Reasoning that should stay as-is" },
+      { type: "text", text: "Answer" },
+    ])
   })
 })
