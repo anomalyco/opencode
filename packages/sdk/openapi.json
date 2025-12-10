@@ -7134,11 +7134,6 @@
             "default": "ctrl+c",
             "type": "string"
           },
-          "input_forward_delete": {
-            "description": "Forward delete",
-            "default": "ctrl+d",
-            "type": "string"
-          },
           "input_paste": {
             "description": "Paste from clipboard",
             "default": "ctrl+v",
