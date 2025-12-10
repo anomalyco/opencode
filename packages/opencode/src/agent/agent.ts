@@ -13,6 +13,7 @@ export namespace Agent {
       name: z.string(),
       description: z.string().optional(),
       mode: z.enum(["subagent", "primary", "all"]),
+      default: z.boolean().optional(),
       builtIn: z.boolean(),
       topP: z.number().optional(),
       temperature: z.number().optional(),
@@ -224,6 +225,8 @@ export namespace Agent {
       if (permission ?? cfg.permission) {
         item.permission = mergeAgentPermissions(cfg.permission ?? {}, permission ?? {})
       }
+
+      if (key == cfg.default_agent) result[key].default = true
     }
     return result
   })
