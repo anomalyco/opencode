@@ -15,8 +15,14 @@ import { GlobalSDKProvider } from "./context/global-sdk"
 import { SessionProvider } from "./context/session"
 import { Show } from "solid-js"
 
+declare global {
+  interface Window {
+    __OPENCODE__?: { updaterEnabled?: boolean; port?: number }
+  }
+}
+
 const host = import.meta.env.VITE_OPENCODE_SERVER_HOST ?? "127.0.0.1"
-const port = import.meta.env.VITE_OPENCODE_SERVER_PORT ?? "4096"
+const port = window.__OPENCODE__?.port ?? import.meta.env.VITE_OPENCODE_SERVER_PORT ?? "4096"
 
 const url =
   new URLSearchParams(document.location.search).get("url") ||

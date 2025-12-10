@@ -38,7 +38,7 @@ export default function Home() {
     <div class="mx-auto mt-55">
       <Logo class="w-xl opacity-12" />
       <Switch>
-        <Match when={sync.data.projects.length > 0}>
+        <Match when={sync.data.project.length > 0}>
           <div class="mt-20 w-full flex flex-col gap-4">
             <div class="flex gap-2 items-center justify-between pl-3">
               <div class="text-14-medium text-text-strong">Recent projects</div>
@@ -50,7 +50,7 @@ export default function Home() {
             </div>
             <ul class="flex flex-col gap-2">
               <For
-                each={sync.data.projects
+                each={sync.data.project
                   .toSorted((a, b) => (b.time.updated ?? b.time.created) - (a.time.updated ?? a.time.created))
                   .slice(0, 5)}
               >
