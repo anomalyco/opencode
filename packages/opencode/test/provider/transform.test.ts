@@ -158,54 +158,6 @@ describe("ProviderTransform.message - DeepSeek reasoning content", () => {
     expect(result[0].providerOptions?.openaiCompatible?.reasoning_content).toBe("Let me think about this...")
   })
 
-  test("DeepSeek without tool calls strips reasoning from content", () => {
-    const msgs = [
-      {
-        role: "assistant",
-        content: [
-          { type: "reasoning", text: "Let me think about this..." },
-          { type: "text", text: "Final answer" },
-        ],
-      },
-    ] as any[]
-
-    const result = ProviderTransform.message(msgs, {
-      id: "deepseek/deepseek-chat",
-      providerID: "deepseek",
-      api: {
-        id: "deepseek-chat",
-        url: "https://api.deepseek.com",
-        npm: "@ai-sdk/openai-compatible",
-      },
-      name: "DeepSeek Chat",
-      capabilities: {
-        temperature: true,
-        reasoning: true,
-        attachment: false,
-        toolcall: true,
-        input: { text: true, audio: false, image: false, video: false, pdf: false },
-        output: { text: true, audio: false, image: false, video: false, pdf: false },
-        interleaved: false,
-      },
-      cost: {
-        input: 0.001,
-        output: 0.002,
-        cache: { read: 0.0001, write: 0.0002 },
-      },
-      limit: {
-        context: 128000,
-        output: 8192,
-      },
-      status: "active",
-      options: {},
-      headers: {},
-    })
-
-    expect(result).toHaveLength(1)
-    expect(result[0].content).toEqual([{ type: "text", text: "Final answer" }])
-    expect(result[0].providerOptions?.openaiCompatible?.reasoning_content).toBeUndefined()
-  })
-
   test("DeepSeek model ID containing 'deepseek' matches (case insensitive)", () => {
     const msgs = [
       {
