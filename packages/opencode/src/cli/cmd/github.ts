@@ -944,34 +944,59 @@ Co-authored-by: ${actor} <${actor}@users.noreply.github.com>"`
       }
 
       async function addReaction(reaction: "eyes") {
-        if (!triggerCommentId) return
         console.log("Adding reaction...")
-        return await octoRest.rest.reactions.createForIssueComment({
-          owner,
-          repo,
-          comment_id: triggerCommentId,
-          content: reaction,
-        })
+        if (triggerCommentId) {
+          return await octoRest.rest.reactions.createForIssueComment({
+            owner,
+            repo,
+            comment_id: triggerCommentId,
+            content: reaction,
+          })
+        } else {
+          return await octoRest.rest.reactions.createForIssue({
+            owner,
+            repo,
+            issue_number: issueId,
+            content: reaction,
+          })
+        }
       }
 
       async function removeReaction() {
-        if (!triggerCommentId) return
         console.log("Removing reaction...")
-        const reactions = await octoRest.rest.reactions.listForIssueComment({
-          owner,
-          repo,
-          comment_id: triggerCommentId,
-        })
+        if (triggerCommentId) {
+          const reactions = await octoRest.rest.reactions.listForIssueComment({
+            owner,
+            repo,
+            comment_id: triggerCommentId,
+          })
 
-        const eyesReaction = reactions.data.find((r) => r.content === "eyes")
-        if (!eyesReaction) return
+          const eyesReaction = reactions.data.find((r) => r.content === "eyes")
+          if (!eyesReaction) return
 
-        await octoRest.rest.reactions.deleteForIssueComment({
-          owner,
-          repo,
-          comment_id: triggerCommentId,
-          reaction_id: eyesReaction.id,
-        })
+          await octoRest.rest.reactions.deleteForIssueComment({
+            owner,
+            repo,
+            comment_id: triggerCommentId,
+            reaction_id: eyesReaction.id,
+          })
+        } else {
+          const reactions = await octoRest.rest.reactions.listForIssue({
+            owner,
+            repo,
+            issue_number: issueId,
+          })
+
+          const eyesReaction = reactions.data.find((r) => r.content === "eyes")
+          if (!eyesReaction) return
+
+          await octoRest.rest.reactions.deleteForIssue({
+            owner,
+            repo,
+            issue_number: issueId,
+            reaction_id: eyesReaction.id,
+          })
+        }
       }
 
       async function createComment(body: string) {
