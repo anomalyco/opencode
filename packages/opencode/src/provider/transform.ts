@@ -224,26 +224,20 @@ export namespace ProviderTransform {
     }
 
     // Enable thinking mode for Gemini models
-    // - Direct Google: providerID === "google"
-    // - OpenCode Zen with Gemini 3: providerID.startsWith("opencode") && model.api.id.includes("gemini-3")
-    // - OpenRouter with Gemini 3: model.api.npm === "@openrouter/ai-sdk-provider" && model.api.id.includes("gemini-3")
-    const isGemini3ViaOpenRouter =
-      model.api.npm === "@openrouter/ai-sdk-provider" && model.api.id.includes("gemini-3")
-    const isDirectGoogle = model.providerID === "google"
-    const isOpencodeGemini3 = model.providerID.startsWith("opencode") && model.api.id.includes("gemini-3")
+    const isGemini3 = model.api.id.includes("gemini-3")
+    const isGoogle = model.providerID === "google"
+    const isOpencode = model.providerID.startsWith("opencode") && isGemini3
+    const isOpenRouter = model.api.npm === "@openrouter/ai-sdk-provider" && isGemini3
 
-    if (isDirectGoogle || isOpencodeGemini3 || isGemini3ViaOpenRouter) {
-      // Gemini 3 uses thinkingLevel, Gemini 2.5 uses thinkingBudget
-      // For Gemini 3, we must use thinkingLevel: "HIGH" (not thinkingBudget)
-      if (model.api.id.includes("gemini-3")) {
-        result["thinkingConfig"] = {
-          includeThoughts: true,
-          thinkingLevel: "HIGH",
-        }
-      } else {
-        result["thinkingConfig"] = {
-          includeThoughts: true,
-        }
+    if (isOpenRouter) {
+      // OpenRouter expects OpenAI-compatible reasoning format, not Gemini-native thinkingConfig
+      result["reasoning"] = { effort: "high" }
+    }
+    if (isGoogle || isOpencode) {
+      // Gemini 3 requires thinkingLevel, Gemini 2.5 only needs includeThoughts
+      result["thinkingConfig"] = {
+        includeThoughts: true,
+        ...(isGemini3 && { thinkingLevel: "HIGH" }),
       }
     }
 
