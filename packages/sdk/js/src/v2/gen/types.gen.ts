@@ -1267,6 +1267,10 @@ export type Config = {
     [key: string]: AgentConfig | undefined
   }
   /**
+   * Default agent to use when no specific agent is specified
+   */
+  default_agent?: string
+  /**
    * Agent configuration, see https://opencode.ai/docs/agent
    */
   agent?: {
@@ -1594,6 +1598,7 @@ export type Agent = {
   name: string
   description?: string
   mode: "subagent" | "primary" | "all"
+  default?: boolean
   builtIn: boolean
   topP?: number
   temperature?: number
