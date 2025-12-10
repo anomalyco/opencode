@@ -7,7 +7,7 @@ import { graphql } from "@octokit/graphql"
 import * as core from "@actions/core"
 import * as github from "@actions/github"
 import type { Context } from "@actions/github/lib/context"
-import type { IssueCommentEvent, PullRequestReviewCommentEvent } from "@octokit/webhooks-types"
+import type { IssueCommentEvent, PullRequestReviewCommentEvent, PullRequestEvent } from "@octokit/webhooks-types"
 import { UI } from "../ui"
 import { cmd } from "./cmd"
 import { ModelsDev } from "../../provider/models"
@@ -380,7 +380,9 @@ export const GithubRunCommand = cmd({
       const isMock = args.token || args.event
 
       const context = isMock ? (JSON.parse(args.event!) as Context) : github.context
-      if (context.eventName !== "issue_comment" && context.eventName !== "pull_request_review_comment") {
+      if (
+        !["issue_comment", "pull_request_review_comment", "pull_request"].includes(context.eventName)
+      ) {
         core.setFailed(`Unsupported event type: ${context.eventName}`)
         process.exit(1)
       }
@@ -389,14 +391,16 @@ export const GithubRunCommand = cmd({
       const runId = normalizeRunId()
       const share = normalizeShare()
       const { owner, repo } = context.repo
-      const payload = context.payload as IssueCommentEvent | PullRequestReviewCommentEvent
+      const payload = context.payload as IssueCommentEvent | PullRequestReviewCommentEvent | PullRequestEvent
+      const isCommentEvent = context.eventName !== "pull_request"
+      const commentPayload = isCommentEvent ? (payload as IssueCommentEvent | PullRequestReviewCommentEvent) : undefined
       const issueEvent = isIssueCommentEvent(payload) ? payload : undefined
       const actor = context.actor
 
       const issueId =
-        context.eventName === "pull_request_review_comment"
-          ? (payload as PullRequestReviewCommentEvent).pull_request.number
-          : (payload as IssueCommentEvent).issue.number
+        context.eventName === "issue_comment"
+          ? (payload as IssueCommentEvent).issue.number
+          : (payload as PullRequestEvent | PullRequestReviewCommentEvent).pull_request.number
       const runUrl = `/${owner}/${repo}/actions/runs/${runId}`
       const shareBaseUrl = isMock ? "https://dev.opencode.ai" : "https://opencode.ai"
 
@@ -441,7 +445,11 @@ export const GithubRunCommand = cmd({
         // 1. Issue
         // 2. Local PR
         // 3. Fork PR
-        if (context.eventName === "pull_request_review_comment" || issueEvent?.issue.pull_request) {
+        if (
+          context.eventName === "pull_request" ||
+          context.eventName === "pull_request_review_comment" ||
+          issueEvent?.issue.pull_request
+        ) {
           const prData = await fetchPR()
           // Local PR
           if (prData.headRepository.nameWithOwner === prData.baseRepository.nameWithOwner) {
@@ -539,7 +547,7 @@ export const GithubRunCommand = cmd({
       }
 
       function isIssueCommentEvent(
-        event: IssueCommentEvent | PullRequestReviewCommentEvent,
+        event: IssueCommentEvent | PullRequestReviewCommentEvent | PullRequestEvent,
       ): event is IssueCommentEvent {
         return "issue" in event
       }
@@ -569,7 +577,10 @@ export const GithubRunCommand = cmd({
 
         const reviewContext = getReviewCommentContext()
         let prompt = (() => {
-          const body = payload.comment.body.trim()
+          if (!isCommentEvent) {
+            return "Review this pull request"
+          }
+          const body = commentPayload!.comment.body.trim()
           if (body === "/opencode" || body === "/oc") {
             if (reviewContext) {
               return `Review this code change and suggest improvements for the commented lines:\n\nFile: ${reviewContext.file}\nLines: ${reviewContext.line}\n\n${reviewContext.diffHunk}`
@@ -1029,7 +1040,7 @@ query($owner: String!, $repo: String!, $number: Int!) {
         const comments = (issue.comments?.nodes || [])
           .filter((c) => {
             const id = parseInt(c.databaseId)
-            return id !== commentId && id !== payload.comment.id
+            return id !== commentId && (!isCommentEvent || id !== commentPayload!.comment.id)
           })
           .map((c) => `  - ${c.author.login} at ${c.createdAt}: ${c.body}`)
 
@@ -1148,7 +1159,7 @@ query($owner: String!, $repo: String!, $number: Int!) {
         const comments = (pr.comments?.nodes || [])
           .filter((c) => {
             const id = parseInt(c.databaseId)
-            return id !== commentId && id !== payload.comment.id
+            return id !== commentId && (!isCommentEvent || id !== commentPayload!.comment.id)
           })
           .map((c) => `- ${c.author.login} at ${c.createdAt}: ${c.body}`)
 
