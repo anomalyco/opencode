@@ -270,14 +270,20 @@ export namespace LSP {
     return budgetDiagnostics(collected)
   }
 
-  export function budgetDiagnostics(input: Record<string, LSPClient.Diagnostic[]>) {
+  const DEFAULT_SEVERITY = 3
+
+  export function budgetDiagnostics(
+    input: Record<string, LSPClient.Diagnostic[]>,
+  ): Record<string, LSPClient.Diagnostic[]> {
     let totalChars = 0
     const orderedPaths = Object.keys(input).toSorted()
     const output: Record<string, LSPClient.Diagnostic[]> = {}
 
     for (const path of orderedPaths) {
       const seen = new Set<string>()
-      const bySeverity = [...input[path]].toSorted((a, b) => (a.severity ?? 3) - (b.severity ?? 3))
+      const bySeverity = [...input[path]].toSorted(
+        (a, b) => (a.severity ?? DEFAULT_SEVERITY) - (b.severity ?? DEFAULT_SEVERITY),
+      )
       const capped: LSPClient.Diagnostic[] = []
       let dropped = 0
 
@@ -309,7 +315,7 @@ export namespace LSP {
       if (dropped > 0) {
         const summary: LSPClient.Diagnostic = {
           message: `${dropped} more diagnostics truncated`,
-          severity: 3,
+          severity: DEFAULT_SEVERITY,
           range: {
             start: { line: 0, character: 0 },
             end: { line: 0, character: 0 },
