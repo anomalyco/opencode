@@ -1,3 +1,5 @@
+import { BusEvent } from "@/bus/bus-event"
+import { Bus } from "@/bus"
 import { wrapLanguageModel, type ModelMessage } from "ai"
 import { Session } from "."
 import { Identifier } from "../id/id"
@@ -5,7 +7,6 @@ import { Instance } from "../project/instance"
 import { Provider } from "../provider/provider"
 import { MessageV2 } from "./message-v2"
 import { SystemPrompt } from "./system"
-import { Bus } from "../bus"
 import z from "zod"
 import { SessionPrompt } from "./prompt"
 import { Flag } from "../flag/flag"
@@ -21,7 +22,7 @@ export namespace SessionCompaction {
   const log = Log.create({ service: "session.compaction" })
 
   export const Event = {
-    Compacted: Bus.event(
+    Compacted: BusEvent.define(
       "session.compacted",
       z.object({
         sessionID: z.string(),
@@ -140,9 +141,9 @@ export namespace SessionCompaction {
       // set to 0, we handle loop
       maxRetries: 0,
       providerOptions: ProviderTransform.providerOptions(
-        model.api.npm,
-        model.providerID,
+        model,
         pipe({}, mergeDeep(ProviderTransform.options(model, input.sessionID)), mergeDeep(model.options)),
+        [],
       ),
       headers: model.headers,
       abortSignal: input.abort,
@@ -193,7 +194,13 @@ export namespace SessionCompaction {
           },
         ],
       }),
-      experimental_telemetry: { isEnabled: cfg.experimental?.openTelemetry },
+      experimental_telemetry: {
+        isEnabled: cfg.experimental?.openTelemetry,
+        metadata: {
+          userId: cfg.username ?? "unknown",
+          sessionId: input.sessionID,
+        },
+      },
     })
     if (result === "continue" && input.auto) {
       const continueMsg = await Session.updateMessage({

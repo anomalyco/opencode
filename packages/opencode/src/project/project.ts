@@ -7,6 +7,10 @@ import { Log } from "../util/log"
 import { Flag } from "@/flag/flag"
 import { Session } from "../session"
 import { work } from "../util/queue"
+import { fn } from "@opencode-ai/util/fn"
+import { BusEvent } from "@/bus/bus-event"
+import { iife } from "@/util/iife"
+import { GlobalBus } from "@/bus/global"
 
 export namespace Project {
   const log = Log.create({ service: "project" })
@@ -14,10 +18,17 @@ export namespace Project {
     .object({
       id: z.string(),
       worktree: z.string(),
-      vcsDir: z.string().optional(),
       vcs: z.literal("git").optional(),
+      name: z.string().optional(),
+      icon: z
+        .object({
+          url: z.string().optional(),
+          color: z.string().optional(),
+        })
+        .optional(),
       time: z.object({
         created: z.number(),
+        updated: z.number(),
         initialized: z.number().optional(),
       }),
     })
@@ -26,74 +37,123 @@ export namespace Project {
     })
   export type Info = z.infer<typeof Info>
 
+  export const Event = {
+    Updated: BusEvent.define("project.updated", Info),
+  }
+
   export async function fromDirectory(directory: string) {
     log.info("fromDirectory", { directory })
-    const matches = Filesystem.up({ targets: [".git"], start: directory })
-    const git = await matches.next().then((x) => x.value)
-    await matches.return()
-    if (!git) {
-      const project: Info = {
+
+    const { id, worktree, vcs } = await iife(async () => {
+      const matches = Filesystem.up({ targets: [".git"], start: directory })
+      const git = await matches.next().then((x) => x.value)
+      await matches.return()
+      if (git) {
+        let worktree = path.dirname(git)
+        let id = await Bun.file(path.join(git, "opencode"))
+          .text()
+          .then((x) => x.trim())
+          .catch(() => {})
+        if (!id) {
+          const roots = await $`git rev-list --max-parents=0 --all`
+            .quiet()
+            .nothrow()
+            .cwd(worktree)
+            .text()
+            .then((x) =>
+              x
+                .split("\n")
+                .filter(Boolean)
+                .map((x) => x.trim())
+                .toSorted(),
+            )
+          id = roots[0]
+          if (id) Bun.file(path.join(git, "opencode")).write(id)
+        }
+        if (!id)
+          return {
+            id: "global",
+            worktree,
+            vcs: "git",
+          }
+        worktree = await $`git rev-parse --show-toplevel`
+          .quiet()
+          .nothrow()
+          .cwd(worktree)
+          .text()
+          .then((x) => path.resolve(worktree, x.trim()))
+        return { id, worktree, vcs: "git" }
+      }
+
+      return {
         id: "global",
         worktree: "/",
         vcs: Info.shape.vcs.parse(Flag.OPENCODE_FAKE_VCS),
+      }
+    })
+
+    let existing = await Storage.read<Info>(["project", id]).catch(() => undefined)
+    if (!existing) {
+      existing = {
+        id,
+        worktree,
+        vcs: vcs as Info["vcs"],
         time: {
           created: Date.now(),
+          updated: Date.now(),
         },
       }
-      await Storage.write<Info>(["project", "global"], project)
-      return project
+      if (id !== "global") {
+        await migrateFromGlobal(id, worktree)
+      }
     }
-    let worktree = path.dirname(git)
-    const timer = log.time("git.rev-parse")
-    let id = await Bun.file(path.join(git, "opencode"))
-      .text()
-      .then((x) => x.trim())
-      .catch(() => {})
-    if (!id) {
-      const roots = await $`git rev-list --max-parents=0 --all`
-        .quiet()
-        .nothrow()
-        .cwd(worktree)
-        .text()
-        .then((x) =>
-          x
-            .split("\n")
-            .filter(Boolean)
-            .map((x) => x.trim())
-            .toSorted(),
-        )
-      id = roots[0]
-      if (id) Bun.file(path.join(git, "opencode")).write(id)
-    }
-    timer.stop()
-    worktree = await $`git rev-parse --show-toplevel`
-      .quiet()
-      .nothrow()
-      .cwd(worktree)
-      .text()
-      .then((x) => path.resolve(worktree, x.trim()))
-    const vcsDir = await $`git rev-parse --git-dir`
-      .quiet()
-      .nothrow()
-      .cwd(worktree)
-      .text()
-      .then((x) => path.resolve(worktree, x.trim()))
-    const projectID = id || "global"
-    const existing = id ? await Storage.read<Info>(["project", id]).catch(() => undefined) : undefined
-    if (!existing && id) {
-      await migrateFromGlobal(projectID, worktree)
-    }
-    const project: Info = {
-      id: projectID,
+    if (Flag.OPENCODE_EXPERIMENTAL) discover(existing)
+    const result: Info = {
+      ...existing,
       worktree,
-      vcsDir,
-      vcs: "git",
+      vcs: vcs as Info["vcs"],
       time: {
-        created: Date.now(),
+        ...existing.time,
+        updated: Date.now(),
       },
     }
-    await Storage.write<Info>(["project", projectID], project)
-    return project
+    await Storage.write<Info>(["project", id], result)
+    GlobalBus.emit("event", {
+      payload: {
+        type: Event.Updated.type,
+        properties: result,
+      },
+    })
+    return result
+  }
+
+  export async function discover(input: Info) {
+    if (input.vcs !== "git") return
+    if (input.icon?.url) return
+    const glob = new Bun.Glob("**/{favicon}.{ico,png,svg,jpg,jpeg,webp}")
+    const matches = await Array.fromAsync(
+      glob.scan({
+        cwd: input.worktree,
+        absolute: true,
+        onlyFiles: true,
+        followSymlinks: false,
+        dot: false,
+      }),
+    )
+    const shortest = matches.sort((a, b) => a.length - b.length)[0]
+    if (!shortest) return
+    const file = Bun.file(shortest)
+    const buffer = await file.arrayBuffer()
+    const base64 = Buffer.from(buffer).toString("base64")
+    const mime = file.type || "image/png"
+    const url = `data:${mime};base64,${base64}`
+    await update({
+      projectID: input.id,
+      icon: {
+        url,
+      },
+    })
+    return
   }
 
   async function migrateFromGlobal(newProjectID: string, worktree: string) {
@@ -130,4 +190,32 @@ export namespace Project {
     const keys = await Storage.list(["project"])
     return await Promise.all(keys.map((x) => Storage.read<Info>(x)))
   }
+
+  export const update = fn(
+    z.object({
+      projectID: z.string(),
+      name: z.string().optional(),
+      icon: Info.shape.icon.optional(),
+    }),
+    async (input) => {
+      const result = await Storage.update<Info>(["project", input.projectID], (draft) => {
+        if (input.name !== undefined) draft.name = input.name
+        if (input.icon !== undefined) {
+          draft.icon = {
+            ...draft.icon,
+          }
+          if (input.icon.url !== undefined) draft.icon.url = input.icon.url
+          if (input.icon.color !== undefined) draft.icon.color = input.icon.color
+        }
+        draft.time.updated = Date.now()
+      })
+      GlobalBus.emit("event", {
+        payload: {
+          type: Event.Updated.type,
+          properties: result,
+        },
+      })
+      return result
+    },
+  )
 }

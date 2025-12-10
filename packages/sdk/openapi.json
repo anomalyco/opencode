@@ -102,6 +102,93 @@
         ]
       }
     },
+    "/project/{projectID}": {
+      "patch": {
+        "operationId": "project.update",
+        "parameters": [
+          {
+            "in": "query",
+            "name": "directory",
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "in": "path",
+            "name": "projectID",
+            "schema": {
+              "type": "string"
+            },
+            "required": true
+          }
+        ],
+        "summary": "Update project",
+        "description": "Update project properties such as name, icon and color.",
+        "responses": {
+          "200": {
+            "description": "Updated project information",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Project"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Bad request",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/BadRequestError"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "Not found",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/NotFoundError"
+                }
+              }
+            }
+          }
+        },
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "properties": {
+                  "name": {
+                    "type": "string"
+                  },
+                  "icon": {
+                    "type": "object",
+                    "properties": {
+                      "url": {
+                        "type": "string"
+                      },
+                      "color": {
+                        "type": "string"
+                      }
+                    }
+                  }
+                }
+              }
+            }
+          }
+        },
+        "x-codeSamples": [
+          {
+            "lang": "js",
+            "source": "import { createOpencodeClient } from \"@opencode-ai/sdk\n\nconst client = createOpencodeClient()\nawait client.project.update({\n  ...\n})"
+          }
+        ]
+      }
+    },
     "/pty": {
       "get": {
         "operationId": "pty.list",
@@ -2716,6 +2803,25 @@
                                 "tool_call": {
                                   "type": "boolean"
                                 },
+                                "interleaved": {
+                                  "anyOf": [
+                                    {
+                                      "type": "boolean",
+                                      "const": true
+                                    },
+                                    {
+                                      "type": "object",
+                                      "properties": {
+                                        "field": {
+                                          "type": "string",
+                                          "enum": ["reasoning_content", "reasoning_details"]
+                                        }
+                                      },
+                                      "required": ["field"],
+                                      "additionalProperties": false
+                                    }
+                                  ]
+                                },
                                 "cost": {
                                   "type": "object",
                                   "properties": {
@@ -4642,25 +4748,6 @@
   },
   "components": {
     "schemas": {
-      "Event.server.instance.disposed": {
-        "type": "object",
-        "properties": {
-          "type": {
-            "type": "string",
-            "const": "server.instance.disposed"
-          },
-          "properties": {
-            "type": "object",
-            "properties": {
-              "directory": {
-                "type": "string"
-              }
-            },
-            "required": ["directory"]
-          }
-        },
-        "required": ["type", "properties"]
-      },
       "Event.installation.updated": {
         "type": "object",
         "properties": {
@@ -4695,6 +4782,83 @@
               }
             },
             "required": ["version"]
+          }
+        },
+        "required": ["type", "properties"]
+      },
+      "Project": {
+        "type": "object",
+        "properties": {
+          "id": {
+            "type": "string"
+          },
+          "worktree": {
+            "type": "string"
+          },
+          "vcs": {
+            "type": "string",
+            "const": "git"
+          },
+          "name": {
+            "type": "string"
+          },
+          "icon": {
+            "type": "object",
+            "properties": {
+              "url": {
+                "type": "string"
+              },
+              "color": {
+                "type": "string"
+              }
+            }
+          },
+          "time": {
+            "type": "object",
+            "properties": {
+              "created": {
+                "type": "number"
+              },
+              "updated": {
+                "type": "number"
+              },
+              "initialized": {
+                "type": "number"
+              }
+            },
+            "required": ["created", "updated"]
+          }
+        },
+        "required": ["id", "worktree", "time"]
+      },
+      "Event.project.updated": {
+        "type": "object",
+        "properties": {
+          "type": {
+            "type": "string",
+            "const": "project.updated"
+          },
+          "properties": {
+            "$ref": "#/components/schemas/Project"
+          }
+        },
+        "required": ["type", "properties"]
+      },
+      "Event.server.instance.disposed": {
+        "type": "object",
+        "properties": {
+          "type": {
+            "type": "string",
+            "const": "server.instance.disposed"
+          },
+          "properties": {
+            "type": "object",
+            "properties": {
+              "directory": {
+                "type": "string"
+              }
+            },
+            "required": ["directory"]
           }
         },
         "required": ["type", "properties"]
@@ -6634,13 +6798,16 @@
       "Event": {
         "anyOf": [
           {
-            "$ref": "#/components/schemas/Event.server.instance.disposed"
-          },
-          {
             "$ref": "#/components/schemas/Event.installation.updated"
           },
           {
             "$ref": "#/components/schemas/Event.installation.update-available"
+          },
+          {
+            "$ref": "#/components/schemas/Event.project.updated"
+          },
+          {
+            "$ref": "#/components/schemas/Event.server.instance.disposed"
           },
           {
             "$ref": "#/components/schemas/Event.lsp.client.diagnostics"
@@ -6742,37 +6909,6 @@
           }
         },
         "required": ["directory", "payload"]
-      },
-      "Project": {
-        "type": "object",
-        "properties": {
-          "id": {
-            "type": "string"
-          },
-          "worktree": {
-            "type": "string"
-          },
-          "vcsDir": {
-            "type": "string"
-          },
-          "vcs": {
-            "type": "string",
-            "const": "git"
-          },
-          "time": {
-            "type": "object",
-            "properties": {
-              "created": {
-                "type": "number"
-              },
-              "initialized": {
-                "type": "number"
-              }
-            },
-            "required": ["created"]
-          }
-        },
-        "required": ["id", "worktree", "time"]
       },
       "BadRequestError": {
         "type": "object",
@@ -6998,11 +7134,6 @@
             "default": "ctrl+c",
             "type": "string"
           },
-          "input_forward_delete": {
-            "description": "Forward delete",
-            "default": "ctrl+d",
-            "type": "string"
-          },
           "input_paste": {
             "description": "Paste from clipboard",
             "default": "ctrl+v",
@@ -7183,6 +7314,25 @@
                 },
                 "tool_call": {
                   "type": "boolean"
+                },
+                "interleaved": {
+                  "anyOf": [
+                    {
+                      "type": "boolean",
+                      "const": true
+                    },
+                    {
+                      "type": "object",
+                      "properties": {
+                        "field": {
+                          "type": "string",
+                          "enum": ["reasoning_content", "reasoning_details"]
+                        }
+                      },
+                      "required": ["field"],
+                      "additionalProperties": false
+                    }
+                  ]
                 },
                 "cost": {
                   "type": "object",
@@ -8193,9 +8343,26 @@
                   }
                 },
                 "required": ["text", "audio", "image", "video", "pdf"]
+              },
+              "interleaved": {
+                "anyOf": [
+                  {
+                    "type": "boolean"
+                  },
+                  {
+                    "type": "object",
+                    "properties": {
+                      "field": {
+                        "type": "string",
+                        "enum": ["reasoning_content", "reasoning_details"]
+                      }
+                    },
+                    "required": ["field"]
+                  }
+                ]
               }
             },
-            "required": ["temperature", "reasoning", "attachment", "toolcall", "input", "output"]
+            "required": ["temperature", "reasoning", "attachment", "toolcall", "input", "output", "interleaved"]
           },
           "cost": {
             "type": "object",
