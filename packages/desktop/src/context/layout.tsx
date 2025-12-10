@@ -66,7 +66,7 @@ export const { use: useLayout, provider: LayoutProvider } = createSimpleContext(
         open(directory: string) {
           if (store.projects.find((x) => x.worktree === directory)) return
           loadProjectSessions(directory)
-          setStore("projects", (x) => [...x, { worktree: directory, expanded: true }])
+          setStore("projects", (x) => [{ worktree: directory, expanded: true }, ...x])
         },
         close(directory: string) {
           setStore("projects", (x) => x.filter((x) => x.worktree !== directory))
