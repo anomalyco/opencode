@@ -380,9 +380,7 @@ export const GithubRunCommand = cmd({
       const isMock = args.token || args.event
 
       const context = isMock ? (JSON.parse(args.event!) as Context) : github.context
-      if (
-        !["issue_comment", "pull_request_review_comment", "pull_request"].includes(context.eventName)
-      ) {
+      if (!["issue_comment", "pull_request_review_comment", "pull_request"].includes(context.eventName)) {
         core.setFailed(`Unsupported event type: ${context.eventName}`)
         process.exit(1)
       }
