@@ -199,7 +199,7 @@ export function Prompt(props: PromptProps) {
           const content = await Editor.open({ value, renderer })
           if (!content) return
 
-          input.setText(content, { history: false })
+          input.setText(content)
 
           // Update positions for nonTextParts based on their location in new content
           // Filter out parts whose virtual text was deleted
@@ -390,7 +390,7 @@ export function Prompt(props: PromptProps) {
       input.blur()
     },
     set(prompt) {
-      input.setText(prompt.input, { history: false })
+      input.setText(prompt.input)
       setStore("prompt", prompt)
       restoreExtmarksFromParts(prompt.parts)
       input.gotoBufferEnd()
@@ -714,7 +714,7 @@ export function Prompt(props: PromptProps) {
                     const item = history.move(direction, input.plainText)
 
                     if (item) {
-                      input.setText(item.input, { history: false })
+                      input.setText(item.input)
                       setStore("prompt", item)
                       restoreExtmarksFromParts(item.parts)
                       e.preventDefault()
