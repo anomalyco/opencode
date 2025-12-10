@@ -112,8 +112,8 @@ const cli = yargs(hideBin(process.argv))
 
 try {
   await cli.parse()
-} catch (e) {
-  let data: Record<string, any> = {}
+} catch (e: unknown) {
+  let data: Record<string, unknown> = {}
   if (e instanceof NamedError) {
     const obj = e.toObject()
     Object.assign(data, {

@@ -218,7 +218,7 @@ export namespace SessionProcessor {
                       state: {
                         status: "error",
                         input: value.input,
-                        error: (value.error as any).toString(),
+                        error: value.error instanceof Error ? value.error.message : String(value.error),
                         metadata: value.error instanceof Permission.RejectedError ? value.error.metadata : undefined,
                         time: {
                           start: match.state.time.start,
