@@ -38,12 +38,11 @@ await Bun.file(`./dist/${pkg.name}/package.json`).write(
 
 const tasks = Object.entries(binaries).map(async ([name]) => {
   try {
-    process.chdir(`./dist/${name}`)
     if (process.platform !== "win32") {
-      await $`chmod 755 -R .`
+      await $`chmod 755 -R .`.cwd(`./dist/${name}`)
     }
-    await $`bun pm pack`
-    await $`npm publish *.tgz --access public --tag ${Script.channel}`
+    await $`bun pm pack`.cwd(`./dist/${name}`)
+    await $`npm publish *.tgz --access public --tag ${Script.channel}`.cwd(`./dist/${name}`)
   } finally {
     process.chdir(dir)
   }
