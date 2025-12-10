@@ -10,7 +10,7 @@ on:
     inputs:
       bump:
         description: "Bump major, minor, or patch"
-        required: true
+        required: false
         type: choice
         options:
           - major
