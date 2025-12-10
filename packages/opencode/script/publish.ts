@@ -35,7 +35,8 @@ await Bun.file(`./dist/${pkg.name}/package.json`).write(
     2,
   ),
 )
-for (const [name] of Object.entries(binaries)) {
+
+const tasks = Object.entries(binaries).map(async ([name]) => {
   try {
     process.chdir(`./dist/${name}`)
     if (process.platform !== "win32") {
@@ -46,7 +47,8 @@ for (const [name] of Object.entries(binaries)) {
   } finally {
     process.chdir(dir)
   }
-}
+})
+await Promise.all(tasks)
 await $`cd ./dist/${pkg.name} && bun pm pack && npm publish *.tgz --access public --tag ${Script.channel}`
 
 if (!Script.preview) {
