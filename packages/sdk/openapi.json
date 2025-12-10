@@ -2788,6 +2788,9 @@
                                 "name": {
                                   "type": "string"
                                 },
+                                "family": {
+                                  "type": "string"
+                                },
                                 "release_date": {
                                   "type": "string"
                                 },
@@ -7300,6 +7303,9 @@
                 "name": {
                   "type": "string"
                 },
+                "family": {
+                  "type": "string"
+                },
                 "release_date": {
                   "type": "string"
                 },
@@ -8285,6 +8291,9 @@
             "required": ["id", "url", "npm"]
           },
           "name": {
+            "type": "string"
+          },
+          "family": {
             "type": "string"
           },
           "capabilities": {
