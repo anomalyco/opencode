@@ -502,40 +502,14 @@ test("deduplicates duplicate plugins from global and local configs", async () =>
   })
 })
 
-test("sets default agent to 'build' when not specified", async () => {
+test("uses specified default_agent when provided", async () => {
   await using tmp = await tmpdir({
     init: async (dir) => {
       await Bun.write(
         path.join(dir, "opencode.json"),
         JSON.stringify({
           $schema: "https://opencode.ai/config.json",
-          agent: {
-            build: {
-              model: "test/model",
-              description: "build agent",
-            },
-          },
-        }),
-      )
-    },
-  })
-  await Instance.provide({
-    directory: tmp.path,
-    fn: async () => {
-      const config = await Config.get()
-      expect(config.default_agent).toBe("build")
-    },
-  })
-})
-
-test("uses specified defaultAgent when provided", async () => {
-  await using tmp = await tmpdir({
-    init: async (dir) => {
-      await Bun.write(
-        path.join(dir, "opencode.json"),
-        JSON.stringify({
-          $schema: "https://opencode.ai/config.json",
-          defaultAgent: "custom",
+          default_agent: "custom",
           agent: {
             build: {
               model: "test/model",
@@ -559,19 +533,24 @@ test("uses specified defaultAgent when provided", async () => {
   })
 })
 
-test("throws error when defaultAgent is disabled", async () => {
+test("falls back when default_agent is disabled", async () => {
   await using tmp = await tmpdir({
     init: async (dir) => {
       await Bun.write(
         path.join(dir, "opencode.json"),
         JSON.stringify({
           $schema: "https://opencode.ai/config.json",
-          defaultAgent: "build",
+          default_agent: "build",
           agent: {
             build: {
               model: "test/model",
               description: "build agent",
               disable: true,
+            },
+            custom: {
+              model: "test/model",
+              description: "custom agent",
+              mode: "primary",
             },
           },
         }),
@@ -581,9 +560,29 @@ test("throws error when defaultAgent is disabled", async () => {
   await Instance.provide({
     directory: tmp.path,
     fn: async () => {
-      expect(Config.get()).rejects.toThrow(
-        "Cannot disable the default agent 'build'. Please either enable it or specify a different default agent in your configuration.",
+      const config = await Config.get()
+      expect(config.default_agent).toBe("custom")
+    },
+  })
+})
+
+test("falls back when configured default_agent does not exist", async () => {
+  await using tmp = await tmpdir({
+    init: async (dir) => {
+      await Bun.write(
+        path.join(dir, "opencode.json"),
+        JSON.stringify({
+          $schema: "https://opencode.ai/config.json",
+          default_agent: "nonexistent-agent",
+        }),
       )
+    },
+  })
+  await Instance.provide({
+    directory: tmp.path,
+    fn: async () => {
+      const config = await Config.get()
+      expect(config.default_agent).toBe("build")
     },
   })
 })

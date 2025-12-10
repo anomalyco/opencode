@@ -32,6 +32,15 @@ export namespace Config {
     return merged
   }
 
+  function firstPrimaryAgent(agents: Record<string, Agent>): string {
+    for (const [name, config] of Object.entries(agents)) {
+      if (config.mode !== "subagent" && !config.disable) {
+        return name
+      }
+    }
+    return "build"
+  }
+
   export const state = Instance.state(async () => {
     const auth = await Auth.all()
     let result = await global()
@@ -128,14 +137,11 @@ export namespace Config {
 
     if (!result.keybinds) result.keybinds = Info.shape.keybinds.parse({})
 
-    // Set defaultAgent if not specified
-    if (!result.default_agent) result.default_agent = "build"
-
-    // Validate that the default agent is not disabled
-    if (result.agent && result.agent[result.default_agent]?.disable) {
-      throw new Error(
-        `Cannot disable the default agent '${result.default_agent}'. Please either enable it or specify a different default agent in your configuration.`,
-      )
+    if (!result.default_agent || !(result.default_agent in result.agent)) {
+      log.warn(`default_agent not found in agents, selecting first primary agent`)
+      log.debug(`available agents: ${Object.keys(result.agent).join(", ")}`)
+      result.default_agent = firstPrimaryAgent(result.agent)
+      log.debug(`selected fallback agent: ${result.default_agent}`)
     }
 
     return {
