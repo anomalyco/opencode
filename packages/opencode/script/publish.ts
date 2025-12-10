@@ -47,7 +47,7 @@ for (const [name] of Object.entries(binaries)) {
     process.chdir(dir)
   }
 }
-await $`cd ./dist/${pkg.name} && bun publish --access public --tag ${Script.channel}`
+await $`cd ./dist/${pkg.name} && bun pm pack && npm publish *.tgz --access public --tag ${Script.channel}`
 
 if (!Script.preview) {
   const major = Script.version.split(".")[0]
