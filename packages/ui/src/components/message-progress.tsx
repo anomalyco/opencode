@@ -2,7 +2,7 @@ import { For, JSXElement, Match, Show, Switch, createEffect, createMemo, createS
 import { Part } from "./message-part"
 import { Spinner } from "./spinner"
 import { useData } from "../context/data"
-import type { AssistantMessage as AssistantMessageType, ToolPart } from "@opencode-ai/sdk"
+import type { AssistantMessage as AssistantMessageType, ToolPart } from "@opencode-ai/sdk/v2"
 
 export interface MessageProgressProps {
   assistantMessages: () => AssistantMessageType[]

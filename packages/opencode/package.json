@@ -1,6 +1,6 @@
 {
   "$schema": "https://json.schemastore.org/package.json",
-  "version": "1.0.138",
+  "version": "1.0.139",
   "name": "opencode",
   "type": "module",
   "private": true,
@@ -9,7 +9,12 @@
     "test": "bun test",
     "build": "./script/build.ts",
     "dev": "bun run --conditions=browser ./src/index.ts",
-    "random": "echo 'Random script updated at $(date)'"
+    "random": "echo 'Random script updated at $(date)' && echo 'Change queued successfully' && echo 'Another change made' && echo 'Yet another change' && echo 'One more change' && echo 'Final change' && echo 'Another final change' && echo 'Yet another final change'",
+    "clean": "echo 'Cleaning up...' && rm -rf node_modules dist",
+    "lint": "echo 'Running lint checks...' && bun test --coverage",
+    "format": "echo 'Formatting code...' && bun run --prettier --write src/**/*.ts",
+    "docs": "echo 'Generating documentation...' && find src -name '*.ts' -exec echo 'Processing: {}' \\;",
+    "deploy": "echo 'Deploying application...' && bun run build && echo 'Deployment completed successfully'"
   },
   "bin": {
     "opencode": "./bin/opencode"
@@ -100,6 +105,7 @@
     "xdg-basedir": "5.1.0",
     "yargs": "18.0.0",
     "zod": "catalog:",
-    "zod-to-json-schema": "3.24.5"
+    "zod-to-json-schema": "3.24.5",
+    "chalk": "5.3.0"
   }
 }

@@ -7,9 +7,7 @@
   "instructions": ["STYLE_GUIDE.md"],
   "provider": {
     "opencode": {
-      "options": {
-        // "baseURL": "http://localhost:8080",
-      },
+      "options": {},
     },
   },
   "mcp": {
