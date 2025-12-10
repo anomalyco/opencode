@@ -94,6 +94,11 @@ export default function Layout(props: ParentProps) {
     setStore("lastSession", directory, params.id)
   })
 
+  createEffect(() => {
+    const sidebarWidth = layout.sidebar.opened() ? layout.sidebar.width() : 48
+    document.documentElement.style.setProperty("--dialog-left-margin", `${sidebarWidth}px`)
+  })
+
   function getDraggableId(event: unknown): string | undefined {
     if (typeof event !== "object" || event === null) return undefined
     if (!("draggable" in event)) return undefined

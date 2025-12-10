@@ -153,7 +153,7 @@ export function SelectDialog<T>(props: SelectDialogProps<T>) {
                           }}
                         >
                           {others.children(item)}
-                          <Icon name="check-small" size="small" />
+                          <Icon data-slot="select-dialog-item-selected-icon" name="check-small" />
                         </button>
                       )}
                     </For>

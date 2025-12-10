@@ -16,6 +16,7 @@
 [data-component="dialog"] {
   position: fixed;
   inset: 0;
+  margin-left: var(--dialog-left-margin);
   z-index: 50;
   display: flex;
   align-items: center;
@@ -24,7 +25,7 @@
   [data-slot="dialog-container"] {
     position: relative;
     z-index: 50;
-    width: min(calc(100vw - 16px), 624px);
+    width: min(calc(100vw - 16px), 480px);
     height: min(calc(100vh - 16px), 512px);
     display: flex;
     flex-direction: column;

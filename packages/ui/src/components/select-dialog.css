@@ -121,12 +121,19 @@
         line-height: var(--line-height-large); /* 142.857% */
         letter-spacing: var(--letter-spacing-normal);
 
+        [data-slot="select-dialog-item-selected-icon"] {
+          display: none;
+          color: var(--icon-strong-base);
+        }
+
         &[data-active="true"] {
           border-radius: var(--radius-md);
           background: var(--surface-raised-base-hover);
         }
         &[data-selected="true"] {
-          background: var(--surface-raised-base-hover);
+          [data-slot="select-dialog-item-selected-icon"] {
+            display: block;
+          }
         }
       }
     }
