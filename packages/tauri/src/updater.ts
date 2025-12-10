@@ -20,7 +20,9 @@ export async function runUpdater(onDownloadEvent?: (progress: DownloadEvent) => 
     return false
   }
 
-  const shouldUpdate = await ask(`Version ${update.version} of OpenCode has been downloaded, would you like to install it and relaunch?`)
+  const shouldUpdate = await ask(
+    `Version ${update.version} of OpenCode has been downloaded, would you like to install it and relaunch?`,
+  )
   if (!shouldUpdate) return
 
   try {
