@@ -657,7 +657,7 @@ export function Prompt(props: PromptProps) {
           >
             <textarea
               placeholder={props.sessionID ? undefined : `Ask anything... "${PLACEHOLDERS[store.placeholder]}"`}
-              placeholderColor={theme.placeholderText}
+
               textColor={theme.text}
               focusedTextColor={theme.text}
               minHeight={1}

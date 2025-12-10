@@ -49,7 +49,7 @@ export function DialogPrompt(props: DialogPromptProps) {
           ref={(val: TextareaRenderable) => (textarea = val)}
           initialValue={props.value}
           placeholder={props.placeholder ?? "Enter text"}
-          placeholderColor={theme.placeholderText}
+
           textColor={theme.text}
           focusedTextColor={theme.text}
           cursorColor={theme.text}
