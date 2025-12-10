@@ -25,7 +25,7 @@ export async function tmpdir<T>(options?: TmpDirOptions<T>) {
   const result = {
     [Symbol.asyncDispose]: async () => {
       await options?.dispose?.(dirpath)
-      await fs.rm(dirpath, { recursive: true, force: true })
+      // await fs.rm(dirpath, { recursive: true, force: true })
     },
     path: realpath,
     extra: extra as T,
