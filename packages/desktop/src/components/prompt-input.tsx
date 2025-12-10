@@ -17,7 +17,7 @@ import { IconButton } from "@opencode-ai/ui/icon-button"
 import { ProviderIcon } from "@opencode-ai/ui/provider-icon"
 import { Select } from "@opencode-ai/ui/select"
 import { getDirectory, getFilename } from "@opencode-ai/util/path"
-import { IconName } from "../../../ui/src/components/provider-icons/types"
+import { type IconName } from "@opencode-ai/ui/icons/provider"
 
 interface PromptInputProps {
   class?: string

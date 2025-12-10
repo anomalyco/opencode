@@ -22,7 +22,7 @@ import { Tabs } from "@opencode-ai/ui/tabs"
 import { preloadMultiFileDiff, PreloadMultiFileDiffResult } from "@pierre/precision-diffs/ssr"
 import { Diff as SSRDiff } from "@opencode-ai/ui/diff-ssr"
 import { clientOnly } from "@solidjs/start"
-import { IconName } from "../../../../ui/src/components/provider-icons/types"
+import { type IconName } from "@opencode-ai/ui/icons/provider"
 
 const ClientOnlyDiff = clientOnly(() => import("@opencode-ai/ui/diff").then((m) => ({ default: m.Diff })))
 
