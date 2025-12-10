@@ -22,11 +22,10 @@ jobs:
 
       - run: git fetch --force --tags
 
-      - uses: actions/setup-go@v5
+      - uses: actions/setup-node@v4
         with:
-          go-version: ">=1.24.0"
-          cache: true
-          cache-dependency-path: go.sum
+          node-version: "20"
+          registry-url: "https://registry.npmjs.org"
 
       - uses: ./.github/actions/setup-bun
 
