@@ -42,7 +42,7 @@ for (const [name] of Object.entries(binaries)) {
       await $`chmod 755 -R .`
     }
     await $`bun pm pack`
-    await $`npm publish *.tgz --access public --tag ${Script.channel} --provenance`
+    await $`npm publish *.tgz --access public --tag ${Script.channel}`
   } finally {
     process.chdir(dir)
   }
