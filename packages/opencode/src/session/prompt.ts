@@ -515,6 +515,37 @@ export namespace SessionPrompt {
         })
       }
 
+      const messages = [
+        ...system.map(
+          (x): ModelMessage => ({
+            role: "system",
+            content: x,
+          }),
+        ),
+        ...MessageV2.toModelMessage(
+          msgs.filter((m) => {
+            if (m.info.role !== "assistant" || m.info.error === undefined) {
+              return true
+            }
+            if (
+              MessageV2.AbortedError.isInstance(m.info.error) &&
+              m.parts.some((part) => part.type !== "step-start" && part.type !== "reasoning")
+            ) {
+              return true
+            }
+
+            return false
+          }),
+        ),
+        ...(isLastStep
+          ? [
+              {
+                role: "assistant" as const,
+                content: MAX_STEPS,
+              },
+            ]
+          : []),
+      ]
       const result = await processor.process({
         onError(error) {
           log.error("stream error", {
@@ -562,42 +593,12 @@ export namespace SessionPrompt {
           OUTPUT_TOKEN_MAX,
         ),
         abortSignal: abort,
-        providerOptions: ProviderTransform.providerOptions(model, params.options),
+        providerOptions: ProviderTransform.providerOptions(model, params.options, messages),
         stopWhen: stepCountIs(1),
         temperature: params.temperature,
         topP: params.topP,
         toolChoice: isLastStep ? "none" : undefined,
-        messages: [
-          ...system.map(
-            (x): ModelMessage => ({
-              role: "system",
-              content: x,
-            }),
-          ),
-          ...MessageV2.toModelMessage(
-            msgs.filter((m) => {
-              if (m.info.role !== "assistant" || m.info.error === undefined) {
-                return true
-              }
-              if (
-                MessageV2.AbortedError.isInstance(m.info.error) &&
-                m.parts.some((part) => part.type !== "step-start" && part.type !== "reasoning")
-              ) {
-                return true
-              }
-
-              return false
-            }),
-          ),
-          ...(isLastStep
-            ? [
-                {
-                  role: "assistant" as const,
-                  content: MAX_STEPS,
-                },
-              ]
-            : []),
-        ],
+        messages,
         tools: model.capabilities.toolcall === false ? undefined : tools,
         model: wrapLanguageModel({
           model: language,
@@ -1464,7 +1465,7 @@ export namespace SessionPrompt {
     await generateText({
       // use higher # for reasoning models since reasoning tokens eat up a lot of the budget
       maxOutputTokens: small.capabilities.reasoning ? 3000 : 20,
-      providerOptions: ProviderTransform.providerOptions(small, options),
+      providerOptions: ProviderTransform.providerOptions(small, options, []),
       messages: [
         ...SystemPrompt.title(small.providerID).map(
           (x): ModelMessage => ({
