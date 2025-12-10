@@ -2788,6 +2788,9 @@
                                 "name": {
                                   "type": "string"
                                 },
+                                "family": {
+                                  "type": "string"
+                                },
                                 "release_date": {
                                   "type": "string"
                                 },
@@ -7134,11 +7137,6 @@
             "default": "ctrl+c",
             "type": "string"
           },
-          "input_forward_delete": {
-            "description": "Forward delete",
-            "default": "ctrl+d",
-            "type": "string"
-          },
           "input_paste": {
             "description": "Paste from clipboard",
             "default": "ctrl+v",
@@ -7303,6 +7301,9 @@
                   "type": "string"
                 },
                 "name": {
+                  "type": "string"
+                },
+                "family": {
                   "type": "string"
                 },
                 "release_date": {
@@ -8290,6 +8291,9 @@
             "required": ["id", "url", "npm"]
           },
           "name": {
+            "type": "string"
+          },
+          "family": {
             "type": "string"
           },
           "capabilities": {

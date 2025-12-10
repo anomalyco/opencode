@@ -143,7 +143,6 @@ export namespace SessionCompaction {
       providerOptions: ProviderTransform.providerOptions(
         model,
         pipe({}, mergeDeep(ProviderTransform.options(model, input.sessionID)), mergeDeep(model.options)),
-        [],
       ),
       headers: model.headers,
       abortSignal: input.abort,
