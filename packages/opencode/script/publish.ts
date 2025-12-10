@@ -44,7 +44,6 @@ const tasks = Object.entries(binaries).map(async ([name]) => {
     await $`bun pm pack`.cwd(`./dist/${name}`)
     await $`npm publish *.tgz --access public --tag ${Script.channel}`.cwd(`./dist/${name}`)
   } finally {
-    process.chdir(dir)
   }
 })
 await Promise.all(tasks)
