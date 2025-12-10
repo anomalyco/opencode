@@ -40,13 +40,11 @@ jobs:
 
       - uses: ./.github/actions/setup-bun
 
-      - name: Install makepkg
+      - name: Setup SSH for AUR
+        if: inputs.bump || inputs.version
         run: |
           sudo apt-get update
           sudo apt-get install -y pacman-package-manager
-
-      - name: Setup SSH for AUR
-        run: |
           mkdir -p ~/.ssh
           echo "${{ secrets.AUR_KEY }}" > ~/.ssh/id_rsa
           chmod 600 ~/.ssh/id_rsa
@@ -55,6 +53,7 @@ jobs:
           ssh-keyscan -H aur.archlinux.org >> ~/.ssh/known_hosts || true
 
       - name: Install OpenCode
+        if: inputs.bump || inputs.version
         run: curl -fsSL https://opencode.ai/install | bash
 
       - name: Login to GitHub Container Registry
@@ -81,7 +80,7 @@ jobs:
           NPM_CONFIG_PROVENANCE: false
 
   publish-tauri:
-    if: github.repository == 'sst/opencode' && github.ref == 'refs/heads/DISABLED'
+    if: inputs.bump || inputs.version
     continue-on-error: true
     strategy:
       fail-fast: false
