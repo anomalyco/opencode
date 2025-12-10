@@ -11,7 +11,7 @@
   display: flex;
   height: 40px;
   flex-shrink: 0;
-  padding: 4px 10px 4px 6px;
+  padding: 4px 10px 4px 16px;
   align-items: center;
   gap: 12px;
   align-self: stretch;
@@ -121,6 +121,9 @@
         letter-spacing: var(--letter-spacing-normal);
 
         [data-slot="select-dialog-item-selected-icon"] {
+          color: var(--icon-strong-base);
+        }
+        [data-slot="select-dialog-item-active-icon"] {
           display: none;
           color: var(--icon-strong-base);
         }
@@ -128,11 +131,12 @@
         &[data-active="true"] {
           border-radius: var(--radius-md);
           background: var(--surface-raised-base-hover);
-        }
-        &[data-selected="true"] {
-          [data-slot="select-dialog-item-selected-icon"] {
+          [data-slot="select-dialog-item-active-icon"] {
             display: block;
           }
+        }
+        &:active {
+          background: var(--surface-raised-base-active);
         }
       }
     }

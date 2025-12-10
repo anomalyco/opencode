@@ -40,9 +40,14 @@ export const { use: useLayout, provider: LayoutProvider } = createSimpleContext(
         },
       }),
       {
-        name: "default-layout.v6",
+        name: "default-layout.v7",
       },
     )
+    const [ephemeral, setEphemeral] = createStore({
+      dialog: {
+        open: undefined as undefined | "provider" | "model",
+      },
+    })
 
     function pickAvailableColor() {
       const available = PASTEL_COLORS.filter((c) => !colors().has(c))
@@ -51,7 +56,7 @@ export const { use: useLayout, provider: LayoutProvider } = createSimpleContext(
     }
 
     function enrich(project: { worktree: string; expanded: boolean }) {
-      const metadata = globalSync.data.projects.find((x) => x.worktree === project.worktree)
+      const metadata = globalSync.data.project.find((x) => x.worktree === project.worktree)
       if (!metadata) return []
       return [
         {
@@ -166,6 +171,17 @@ export const { use: useLayout, provider: LayoutProvider } = createSimpleContext(
         },
         tab() {
           setStore("review", "state", "tab")
+        },
+      },
+      dialog: {
+        opened: createMemo(() => ephemeral.dialog?.open),
+        open(dialog: "provider" | "model") {
+          setEphemeral("dialog", "open", dialog)
+        },
+        close(dialog: "provider" | "model") {
+          if (ephemeral.dialog?.open === dialog) {
+            setEphemeral("dialog", "open", undefined)
+          }
         },
       },
     }

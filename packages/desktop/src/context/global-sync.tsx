@@ -1,7 +1,6 @@
 import type {
   Message,
   Agent,
-  Provider,
   Session,
   Part,
   Config,
@@ -12,6 +11,7 @@ import type {
   FileDiff,
   Todo,
   SessionStatus,
+  ProviderListResponse,
 } from "@opencode-ai/sdk/v2"
 import { createStore, produce, reconcile } from "solid-js/store"
 import { Binary } from "@opencode-ai/util/binary"
@@ -20,9 +20,9 @@ import { useGlobalSDK } from "./global-sdk"
 
 type State = {
   ready: boolean
-  // provider: Provider[]
   agent: Agent[]
   project: string
+  provider: ProviderListResponse
   config: Config
   path: Path
   session: Session[]
@@ -49,15 +49,16 @@ type State = {
 export const { use: useGlobalSync, provider: GlobalSyncProvider } = createSimpleContext({
   name: "GlobalSync",
   init: () => {
+    const sdk = useGlobalSDK()
     const [globalStore, setGlobalStore] = createStore<{
       ready: boolean
-      projects: Project[]
-      providers: Provider[]
+      project: Project[]
+      provider: ProviderListResponse
       children: Record<string, State>
     }>({
       ready: false,
-      projects: [],
-      providers: [],
+      project: [],
+      provider: { all: [], connected: [], default: {} },
       children: {},
     })
 
@@ -66,11 +67,11 @@ export const { use: useGlobalSync, provider: GlobalSyncProvider } = createSimple
       if (!children[directory]) {
         setGlobalStore("children", directory, {
           project: "",
+          provider: { all: [], connected: [], default: {} },
           config: {},
           path: { state: "", config: "", worktree: "", directory: "", home: "" },
           ready: false,
           agent: [],
-          // provider: [],
           session: [],
           session_status: {},
           session_diff: {},
@@ -86,7 +87,6 @@ export const { use: useGlobalSync, provider: GlobalSyncProvider } = createSimple
       return children[directory]
     }
 
-    const sdk = useGlobalSDK()
     sdk.event.listen((e) => {
       const directory = e.name
       const event = e.details
@@ -94,13 +94,13 @@ export const { use: useGlobalSync, provider: GlobalSyncProvider } = createSimple
       if (directory === "global") {
         switch (event.type) {
           case "project.updated": {
-            const result = Binary.search(globalStore.projects, event.properties.id, (s) => s.id)
+            const result = Binary.search(globalStore.project, event.properties.id, (s) => s.id)
             if (result.found) {
-              setGlobalStore("projects", result.index, reconcile(event.properties))
+              setGlobalStore("project", result.index, reconcile(event.properties))
               return
             }
             setGlobalStore(
-              "projects",
+              "project",
               produce((draft) => {
                 draft.splice(result.index, 0, event.properties)
               }),
@@ -184,14 +184,14 @@ export const { use: useGlobalSync, provider: GlobalSyncProvider } = createSimple
     Promise.all([
       sdk.client.project.list().then(async (x) => {
         setGlobalStore(
-          "projects",
+          "project",
           x
             .data!.filter((p) => !p.worktree.includes("opencode-test") && p.vcs)
             .sort((a, b) => a.id.localeCompare(b.id)),
         )
       }),
       sdk.client.provider.list().then((x) => {
-        setGlobalStore("providers", x.data ?? [])
+        setGlobalStore("provider", x.data ?? {})
       }),
     ]).then(() => setGlobalStore("ready", true))
 

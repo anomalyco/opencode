@@ -16,6 +16,7 @@ import { IconButton } from "@opencode-ai/ui/icon-button"
 import { Select } from "@opencode-ai/ui/select"
 import { Tag } from "@opencode-ai/ui/tag"
 import { getDirectory, getFilename } from "@opencode-ai/util/path"
+import { useLayout } from "@/context/layout"
 
 interface PromptInputProps {
   class?: string
@@ -56,6 +57,7 @@ export const PromptInput: Component<PromptInputProps> = (props) => {
   const sync = useSync()
   const local = useLocal()
   const session = useSession()
+  const layout = useLayout()
   let editorRef!: HTMLDivElement
 
   const [store, setStore] = createStore<{
@@ -453,54 +455,67 @@ export const PromptInput: Component<PromptInputProps> = (props) => {
               class="capitalize"
               variant="ghost"
             />
-            <SelectDialog
-              title="Select model"
-              placeholder="Search models"
-              emptyMessage="No model results"
-              key={(x) => `${x.provider.id}:${x.id}`}
-              items={local.model.list()}
-              current={local.model.current()}
-              filterKeys={["provider.name", "name", "id"]}
-              // groupBy={(x) => (local.model.recent().includes(x) ? "Recent" : x.provider.name)}
-              groupBy={(x) => x.provider.name}
-              sortGroupsBy={(a, b) => {
-                const order = ["opencode", "anthropic", "github-copilot", "openai", "google", "openrouter", "vercel"]
-                if (a.category === "Recent" && b.category !== "Recent") return -1
-                if (b.category === "Recent" && a.category !== "Recent") return 1
-                const aProvider = a.items[0].provider.id
-                const bProvider = b.items[0].provider.id
-                if (order.includes(aProvider) && !order.includes(bProvider)) return -1
-                if (!order.includes(aProvider) && order.includes(bProvider)) return 1
-                return order.indexOf(aProvider) - order.indexOf(bProvider)
-              }}
-              onSelect={(x) =>
-                local.model.set(x ? { modelID: x.id, providerID: x.provider.id } : undefined, { recent: true })
-              }
-              trigger={
-                <Button as="div" variant="ghost">
-                  {local.model.current()?.name ?? "Select model"}
-                  <span class="ml-0.5 text-text-weak text-12-regular">{local.model.current()?.provider.name}</span>
-                  <Icon name="chevron-down" size="small" />
-                </Button>
-              }
-              actions={
-                <Button class="h-7 -my-1 text-14-medium" icon="plus-small" tabIndex={-1}>
-                  Connect provider
-                </Button>
-              }
-            >
-              {(i) => (
-                <div class="w-full flex items-center gap-x-2.5">
-                  <span>{i.name}</span>
-                  <Show when={!i.cost || i.cost?.input === 0}>
-                    <Tag>Free</Tag>
-                  </Show>
-                  <Show when={i.latest}>
-                    <Tag>Latest</Tag>
-                  </Show>
-                </div>
-              )}
-            </SelectDialog>
+            <Button as="div" variant="ghost" onClick={() => layout.dialog.open("model")}>
+              {local.model.current()?.name ?? "Select model"}
+              <span class="ml-0.5 text-text-weak text-12-regular">{local.model.current()?.provider.name}</span>
+              <Icon name="chevron-down" size="small" />
+            </Button>
+            <Show when={layout.dialog.opened() === "model"}>
+              <SelectDialog
+                defaultOpen
+                onOpenChange={(open) => {
+                  if (open) {
+                    layout.dialog.open("model")
+                  } else {
+                    layout.dialog.close("model")
+                  }
+                }}
+                title="Select model"
+                placeholder="Search models"
+                emptyMessage="No model results"
+                key={(x) => `${x.provider.id}:${x.id}`}
+                items={local.model.list()}
+                current={local.model.current()}
+                filterKeys={["provider.name", "name", "id"]}
+                // groupBy={(x) => (local.model.recent().includes(x) ? "Recent" : x.provider.name)}
+                groupBy={(x) => x.provider.name}
+                sortGroupsBy={(a, b) => {
+                  const order = ["opencode", "anthropic", "github-copilot", "openai", "google", "openrouter", "vercel"]
+                  if (a.category === "Recent" && b.category !== "Recent") return -1
+                  if (b.category === "Recent" && a.category !== "Recent") return 1
+                  const aProvider = a.items[0].provider.id
+                  const bProvider = b.items[0].provider.id
+                  if (order.includes(aProvider) && !order.includes(bProvider)) return -1
+                  if (!order.includes(aProvider) && order.includes(bProvider)) return 1
+                  return order.indexOf(aProvider) - order.indexOf(bProvider)
+                }}
+                onSelect={(x) =>
+                  local.model.set(x ? { modelID: x.id, providerID: x.provider.id } : undefined, { recent: true })
+                }
+                actions={
+                  <Button
+                    class="h-7 -my-1 text-14-medium"
+                    icon="plus-small"
+                    tabIndex={-1}
+                    onClick={() => layout.dialog.open("provider")}
+                  >
+                    Connect provider
+                  </Button>
+                }
+              >
+                {(i) => (
+                  <div class="w-full flex items-center gap-x-2.5">
+                    <span>{i.name}</span>
+                    <Show when={!i.cost || i.cost?.input === 0}>
+                      <Tag>Free</Tag>
+                    </Show>
+                    <Show when={i.latest}>
+                      <Tag>Latest</Tag>
+                    </Show>
+                  </div>
+                )}
+              </SelectDialog>
+            </Show>
           </div>
           <Tooltip
             placement="top"

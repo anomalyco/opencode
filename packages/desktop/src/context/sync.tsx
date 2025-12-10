@@ -14,7 +14,7 @@ export const { use: useSync, provider: SyncProvider } = createSimpleContext({
 
     const load = {
       project: () => sdk.client.project.current().then((x) => setStore("project", x.data!.id)),
-      provider: () => sdk.client.config.providers().then((x) => setStore("provider", x.data!.providers)),
+      provider: () => sdk.client.provider.list().then((x) => setStore("provider", x.data!)),
       path: () => sdk.client.path.get().then((x) => setStore("path", x.data!)),
       agent: () => sdk.client.app.agents().then((x) => setStore("agent", x.data ?? [])),
       session: () =>
@@ -42,8 +42,8 @@ export const { use: useSync, provider: SyncProvider } = createSimpleContext({
         return store.ready
       },
       get project() {
-        const match = Binary.search(globalSync.data.projects, store.project, (p) => p.id)
-        if (match.found) return globalSync.data.projects[match.index]
+        const match = Binary.search(globalSync.data.project, store.project, (p) => p.id)
+        if (match.found) return globalSync.data.project[match.index]
         return undefined
       },
       session: {

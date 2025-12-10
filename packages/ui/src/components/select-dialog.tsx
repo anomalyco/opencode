@@ -2,7 +2,7 @@ import { createEffect, Show, For, type JSX, splitProps, createSignal } from "sol
 import { createStore } from "solid-js/store"
 import { FilteredListProps, useFilteredList } from "@opencode-ai/ui/hooks"
 import { Dialog, DialogProps } from "./dialog"
-import { Icon } from "./icon"
+import { Icon, IconProps } from "./icon"
 import { Input } from "./input"
 import { IconButton } from "./icon-button"
 
@@ -16,6 +16,7 @@ interface SelectDialogProps<T>
   onSelect?: (value: T | undefined) => void
   onKeyEvent?: (event: KeyboardEvent, item: T | undefined) => void
   actions?: JSX.Element
+  activeIcon?: IconProps["name"]
 }
 
 export function SelectDialog<T>(props: SelectDialogProps<T>) {
@@ -165,7 +166,12 @@ export function SelectDialog<T>(props: SelectDialogProps<T>) {
                           }}
                         >
                           {others.children(item)}
-                          <Icon data-slot="select-dialog-item-selected-icon" name="check-small" />
+                          <Show when={item === others.current}>
+                            <Icon data-slot="select-dialog-item-selected-icon" name="check-small" />
+                          </Show>
+                          <Show when={others.activeIcon}>
+                            {(icon) => <Icon data-slot="select-dialog-item-active-icon" name={icon()} />}
+                          </Show>
                         </button>
                       )}
                     </For>
