@@ -1231,8 +1231,12 @@ export namespace SessionPrompt {
       },
     }
     await Session.updatePart(part)
-    const shell = process.env["SHELL"] ?? "bash"
-    const shellName = path.basename(shell)
+    const shell =
+      process.env["SHELL"] ??
+      (process.platform === "win32"
+        ? process.env["COMSPEC"] || "cmd.exe"
+        : "bash")
+    const shellName = path.basename(shell).toLowerCase()
 
     const invocations: Record<string, { args: string[] }> = {
       nu: {
@@ -1262,6 +1266,14 @@ export namespace SessionPrompt {
           `,
         ],
       },
+      // Windows cmd.exe
+      "cmd.exe": {
+        args: ["/c", input.command],
+      },
+      // Windows PowerShell
+      "powershell.exe": {
+        args: ["-NoProfile", "-Command", input.command],
+      },
       // Fallback: any shell that doesn't match those above
       "": {
         args: ["-c", "-l", `${input.command}`],
@@ -1273,7 +1285,7 @@ export namespace SessionPrompt {
 
     const proc = spawn(shell, args, {
       cwd: Instance.directory,
-      detached: true,
+      detached: process.platform !== "win32",
       stdio: ["ignore", "pipe", "pipe"],
       env: {
         ...process.env,
