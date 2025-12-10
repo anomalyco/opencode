@@ -184,7 +184,8 @@ export namespace Installation {
       return reg.endsWith("/") ? reg.slice(0, -1) : reg
     })
     const [major] = VERSION.split(".").map((x) => Number(x))
-    const channel = CHANNEL === "latest" ? `latest-${major}` : CHANNEL
+    // const channel = CHANNEL === "latest" ? `latest-${major}` : CHANNEL
+    const channel = CHANNEL
     return fetch(`${registry}/opencode-ai/${channel}`)
       .then((res) => {
         if (!res.ok) throw new Error(res.statusText)
