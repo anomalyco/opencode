@@ -129,7 +129,7 @@ export namespace Project {
 
   export async function discover(input: Info) {
     if (input.vcs !== "git") return
-    if (input.icon) return
+    if (input.icon?.url) return
     const glob = new Bun.Glob("**/{favicon}.{ico,png,svg,jpg,jpeg,webp}")
     const matches = await Array.fromAsync(
       glob.scan({
@@ -198,11 +198,24 @@ export namespace Project {
       icon: Info.shape.icon.optional(),
     }),
     async (input) => {
-      return await Storage.update<Info>(["project", input.projectID], (draft) => {
+      const result = await Storage.update<Info>(["project", input.projectID], (draft) => {
         if (input.name !== undefined) draft.name = input.name
-        if (input.icon !== undefined) draft.icon = input.icon
+        if (input.icon !== undefined) {
+          draft.icon = {
+            ...draft.icon,
+          }
+          if (input.icon.url !== undefined) draft.icon.url = input.icon.url
+          if (input.icon.color !== undefined) draft.icon.color = input.icon.color
+        }
         draft.time.updated = Date.now()
       })
+      GlobalBus.emit("event", {
+        payload: {
+          type: Event.Updated.type,
+          properties: result,
+        },
+      })
+      return result
     },
   )
 }
