@@ -928,10 +928,6 @@ export type KeybindsConfig = {
    */
   input_clear?: string
   /**
-   * Forward delete
-   */
-  input_forward_delete?: string
-  /**
    * Paste from clipboard
    */
   input_paste?: string
