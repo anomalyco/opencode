@@ -33,6 +33,29 @@ export namespace FileWatcher {
     return createWrapper(binding) as typeof import("@parcel/watcher")
   })
 
+  // WORKAROUND: Timeout for watcher subscribe - hangs indefinitely on x86 emulation via Rosetta (parcel-bundler/watcher#159)
+  // On timeout: no auto-detection of branch switches or external file changes
+  const SUBSCRIBE_TIMEOUT_MS = 5000
+
+  async function subscribeWithTimeout(
+    dir: string,
+    callback: ParcelWatcher.SubscribeCallback,
+    options: Parameters<typeof ParcelWatcher.subscribe>[2],
+  ): Promise<ParcelWatcher.AsyncSubscription | null> {
+    const timeout = new Promise<null>((resolve) => {
+      setTimeout(() => {
+        log.error("watcher subscribe timeout", { dir })
+        resolve(null)
+      }, SUBSCRIBE_TIMEOUT_MS)
+    })
+    try {
+      return await Promise.race([watcher().subscribe(dir, callback, options), timeout])
+    } catch (e) {
+      log.warn("watcher subscribe failed", { dir, error: e })
+      return null
+    }
+  }
+
   const state = Instance.state(
     async () => {
       if (Instance.project.vcs !== "git") return {}
@@ -57,11 +80,11 @@ export namespace FileWatcher {
         }
       }
 
-      const subs = []
+      const subs: (ParcelWatcher.AsyncSubscription | null)[] = []
       const cfgIgnores = cfg.watcher?.ignore ?? []
 
       subs.push(
-        await watcher().subscribe(Instance.directory, subscribe, {
+        await subscribeWithTimeout(Instance.directory, subscribe, {
           ignore: [...FileIgnore.PATTERNS, ...cfgIgnores],
           backend,
         }),
@@ -70,7 +93,7 @@ export namespace FileWatcher {
       const vcsDir = await $`git rev-parse --git-dir`.quiet().nothrow().cwd(Instance.worktree).text()
       if (vcsDir && !cfgIgnores.includes(".git") && !cfgIgnores.includes(vcsDir)) {
         subs.push(
-          await watcher().subscribe(vcsDir, subscribe, {
+          await subscribeWithTimeout(vcsDir, subscribe, {
             ignore: ["hooks", "info", "logs", "objects", "refs", "worktrees", "modules", "lfs"],
             backend,
           }),
