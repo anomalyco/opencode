@@ -488,7 +488,7 @@ export const PromptInput: Component<PromptInputProps> = (props) => {
               {(i) => (
                 <div class="w-full flex items-center justify-between gap-x-3">
                   <div class="flex items-center gap-x-2.5 text-text-muted grow min-w-0">
-                    <ProviderIcon name={i.provider.id as IconName} class="size-6 p-0.5 shrink-0" />
+                    {/* <ProviderIcon name={i.provider.id as IconName} class="size-6 p-0.5 shrink-0" /> */}
                     <div class="flex gap-x-3 items-baseline flex-[1_0_0]">
                       <span class="text-14-medium text-text-strong overflow-hidden text-ellipsis">{i.name}</span>
                       <Show when={false}>

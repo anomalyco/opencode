@@ -20,6 +20,7 @@ interface SelectDialogProps<T>
 export function SelectDialog<T>(props: SelectDialogProps<T>) {
   const [dialog, others] = splitProps(props, ["trigger", "onOpenChange", "defaultOpen"])
   let closeButton!: HTMLButtonElement
+  let inputRef: HTMLInputElement | undefined
   let scrollRef: HTMLDivElement | undefined
   const [store, setStore] = createStore({
     mouseActive: false,
@@ -87,77 +88,80 @@ export function SelectDialog<T>(props: SelectDialogProps<T>) {
     <Dialog modal {...dialog} onOpenChange={handleOpenChange}>
       <Dialog.Header>
         <Dialog.Title>{others.title}</Dialog.Title>
-        <Dialog.CloseButton ref={closeButton} style={{ display: "none" }} />
+        <Dialog.CloseButton ref={closeButton} tabIndex={-1} />
       </Dialog.Header>
-      <div data-component="select-dialog-input">
-        <div data-slot="select-dialog-input-container">
-          <Icon name="magnifying-glass" />
-          <Input
-            data-slot="select-dialog-input"
-            type="text"
-            value={filter()}
-            onChange={(value) => handleInput(value)}
-            onKeyDown={handleKey}
-            placeholder={others.placeholder}
-            autofocus
-            spellcheck={false}
-            autocorrect="off"
-            autocomplete="off"
-            autocapitalize="off"
-          />
+      <div data-slot="select-dialog-content">
+        <div data-component="select-dialog-input">
+          <div data-slot="select-dialog-input-container">
+            <Icon name="magnifying-glass" />
+            <Input
+              ref={inputRef}
+              autofocus
+              data-slot="select-dialog-input"
+              type="text"
+              value={filter()}
+              onChange={(value) => handleInput(value)}
+              onKeyDown={handleKey}
+              placeholder={others.placeholder}
+              spellcheck={false}
+              autocorrect="off"
+              autocomplete="off"
+              autocapitalize="off"
+            />
+          </div>
+          <Show when={filter()}>
+            <IconButton
+              icon="circle-x"
+              variant="ghost"
+              onClick={() => {
+                onInput("")
+                reset()
+              }}
+            />
+          </Show>
         </div>
-        <Show when={filter()}>
-          <IconButton
-            icon="circle-x"
-            variant="ghost"
-            onClick={() => {
-              onInput("")
-              reset()
-            }}
-          />
-        </Show>
-      </div>
-      <Dialog.Body ref={scrollRef} data-component="select-dialog" class="no-scrollbar">
-        <Show
-          when={flat().length > 0}
-          fallback={
-            <div data-slot="select-dialog-empty-state">
-              <div data-slot="select-dialog-message">
-                {props.emptyMessage ?? "No search results"} for{" "}
-                <span data-slot="select-dialog-filter">&quot;{filter()}&quot;</span>
-              </div>
-            </div>
-          }
-        >
-          <For each={grouped()}>
-            {(group) => (
-              <div data-slot="select-dialog-group">
-                <Show when={group.category}>
-                  <div data-slot="select-dialog-header">{group.category}</div>
-                </Show>
-                <div data-slot="select-dialog-list">
-                  <For each={group.items}>
-                    {(item) => (
-                      <button
-                        data-slot="select-dialog-item"
-                        data-key={others.key(item)}
-                        data-active={others.key(item) === active()}
-                        onClick={() => handleSelect(item)}
-                        onMouseMove={() => {
-                          setStore("mouseActive", true)
-                          setActive(others.key(item))
-                        }}
-                      >
-                        {others.children(item)}
-                      </button>
-                    )}
-                  </For>
+        <Dialog.Body ref={scrollRef} data-component="select-dialog" class="no-scrollbar">
+          <Show
+            when={flat().length > 0}
+            fallback={
+              <div data-slot="select-dialog-empty-state">
+                <div data-slot="select-dialog-message">
+                  {props.emptyMessage ?? "No search results"} for{" "}
+                  <span data-slot="select-dialog-filter">&quot;{filter()}&quot;</span>
                 </div>
               </div>
-            )}
-          </For>
-        </Show>
-      </Dialog.Body>
+            }
+          >
+            <For each={grouped()}>
+              {(group) => (
+                <div data-slot="select-dialog-group">
+                  <Show when={group.category}>
+                    <div data-slot="select-dialog-header">{group.category}</div>
+                  </Show>
+                  <div data-slot="select-dialog-list">
+                    <For each={group.items}>
+                      {(item) => (
+                        <button
+                          data-slot="select-dialog-item"
+                          data-key={others.key(item)}
+                          data-active={others.key(item) === active()}
+                          onClick={() => handleSelect(item)}
+                          onMouseMove={() => {
+                            setStore("mouseActive", true)
+                            setActive(others.key(item))
+                          }}
+                        >
+                          {others.children(item)}
+                        </button>
+                      )}
+                    </For>
+                  </div>
+                </div>
+              )}
+            </For>
+          </Show>
+        </Dialog.Body>
+      </div>
     </Dialog>
   )
 }
