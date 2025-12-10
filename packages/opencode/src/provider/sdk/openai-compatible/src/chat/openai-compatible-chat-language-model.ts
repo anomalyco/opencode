@@ -227,7 +227,7 @@ export class OpenAICompatibleChatLanguageModel implements LanguageModelV2 {
     }
 
     // reasoning content:
-    const reasoning = choice.message.reasoning_content ?? choice.message.reasoning
+    const reasoning = choice.message.reasoning_content ?? choice.message.reasoning ?? choice.message.reasoning_text
     if (reasoning != null && reasoning.length > 0) {
       content.push({
         type: "reasoning",
@@ -679,6 +679,7 @@ const OpenAICompatibleChatResponseSchema = z.object({
       message: z.object({
         role: z.literal("assistant").nullish(),
         content: z.string().nullish(),
+        reasoning_text: z.string().nullish(),
         reasoning_content: z.string().nullish(),
         reasoning: z.string().nullish(),
         tool_calls: z
