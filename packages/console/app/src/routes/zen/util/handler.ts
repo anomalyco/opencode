@@ -588,7 +588,7 @@ export async function handler(
       tx
         .update(KeyTable)
         .set({ timeUsed: sql`now()` })
-        .where(eq(KeyTable.id, authInfo.apiKeyId)),
+        .where(and(eq(KeyTable.workspaceID, authInfo.workspaceID), eq(KeyTable.id, authInfo.apiKeyId))),
     )
   }
 
