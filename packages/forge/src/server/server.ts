@@ -32,7 +32,7 @@ import { SessionPromptACP } from "../session/prompt-acp"
 import { SessionCompaction } from "../session/compaction"
 import { SessionRevert } from "../session/revert"
 import { lazy } from "../util/lazy"
-import { Todo } from "../session/todo"
+import { Plan } from "../session/plan"
 import { InstanceBootstrap } from "../project/bootstrap"
 import { MCP } from "../mcp"
 import { Storage } from "../storage/storage"
@@ -460,16 +460,16 @@ export namespace Server {
         },
       )
       .get(
-        "/session/:id/todo",
+        "/session/:id/plan",
         describeRoute({
-          description: "Get the todo list for a session",
-          operationId: "session.todo",
+          description: "Get the plan for a session",
+          operationId: "session.plan",
           responses: {
             200: {
-              description: "Todo list",
+              description: "Plan entries",
               content: {
                 "application/json": {
-                  schema: resolver(Todo.Info.array()),
+                  schema: resolver(Plan.Entry.array()),
                 },
               },
             },
@@ -484,8 +484,8 @@ export namespace Server {
         ),
         async (c) => {
           const sessionID = c.req.valid("param").id
-          const todos = await Todo.get(sessionID)
-          return c.json(todos)
+          const entries = await Plan.get(sessionID)
+          return c.json(entries)
         },
       )
       .post(

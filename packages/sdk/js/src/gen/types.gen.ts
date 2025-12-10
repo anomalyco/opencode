@@ -267,6 +267,7 @@ export type ToolStateError = {
     [key: string]: unknown
   }
   error: string
+  title?: string
   metadata?: {
     [key: string]: unknown
   }
@@ -599,6 +600,29 @@ export type EventTuiToastShow = {
   }
 }
 
+export type PlanEntry = {
+  /**
+   * Human-readable description of the task
+   */
+  content: string
+  /**
+   * Relative importance of the task
+   */
+  priority: "high" | "medium" | "low"
+  /**
+   * Execution status of the task
+   */
+  status: "pending" | "in_progress" | "completed"
+}
+
+export type EventPlanUpdated = {
+  type: "plan.updated"
+  properties: {
+    sessionID: string
+    entries: Array<PlanEntry>
+  }
+}
+
 export type EventSessionModeChanged = {
   type: "session.mode.changed"
   properties: {
@@ -606,33 +630,6 @@ export type EventSessionModeChanged = {
     agent: string
     modeId: string
     previousModeId: string | null
-  }
-}
-
-export type Todo = {
-  /**
-   * Brief description of the task
-   */
-  content: string
-  /**
-   * Current status of the task: pending, in_progress, completed, cancelled
-   */
-  status: string
-  /**
-   * Priority level of the task: high, medium, low
-   */
-  priority: string
-  /**
-   * Unique identifier for the todo item
-   */
-  id: string
-}
-
-export type EventTodoUpdated = {
-  type: "todo.updated"
-  properties: {
-    sessionID: string
-    todos: Array<Todo>
   }
 }
 
@@ -674,8 +671,8 @@ export type Event =
   | EventTuiPromptAppend
   | EventTuiCommandExecute
   | EventTuiToastShow
+  | EventPlanUpdated
   | EventSessionModeChanged
-  | EventTodoUpdated
   | EventFileWatcherUpdated
   | EventServerConnected
 
@@ -1874,7 +1871,7 @@ export type SessionChildrenResponses = {
 
 export type SessionChildrenResponse = SessionChildrenResponses[keyof SessionChildrenResponses]
 
-export type SessionTodoData = {
+export type SessionPlanData = {
   body?: never
   path: {
     /**
@@ -1885,10 +1882,10 @@ export type SessionTodoData = {
   query?: {
     directory?: string
   }
-  url: "/session/{id}/todo"
+  url: "/session/{id}/plan"
 }
 
-export type SessionTodoErrors = {
+export type SessionPlanErrors = {
   /**
    * Bad request
    */
@@ -1899,16 +1896,16 @@ export type SessionTodoErrors = {
   404: NotFoundError
 }
 
-export type SessionTodoError = SessionTodoErrors[keyof SessionTodoErrors]
+export type SessionPlanError = SessionPlanErrors[keyof SessionPlanErrors]
 
-export type SessionTodoResponses = {
+export type SessionPlanResponses = {
   /**
-   * Todo list
+   * Plan entries
    */
-  200: Array<Todo>
+  200: Array<PlanEntry>
 }
 
-export type SessionTodoResponse = SessionTodoResponses[keyof SessionTodoResponses]
+export type SessionPlanResponse = SessionPlanResponses[keyof SessionPlanResponses]
 
 export type SessionInitData = {
   body?: {

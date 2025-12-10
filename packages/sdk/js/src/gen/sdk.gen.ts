@@ -43,9 +43,9 @@ import type {
   SessionChildrenData,
   SessionChildrenResponses,
   SessionChildrenErrors,
-  SessionTodoData,
-  SessionTodoResponses,
-  SessionTodoErrors,
+  SessionPlanData,
+  SessionPlanResponses,
+  SessionPlanErrors,
   SessionInitData,
   SessionInitResponses,
   SessionInitErrors,
@@ -397,11 +397,11 @@ class Session extends _HeyApiClient {
   }
 
   /**
-   * Get the todo list for a session
+   * Get the plan for a session
    */
-  public todo<ThrowOnError extends boolean = false>(options: Options<SessionTodoData, ThrowOnError>) {
-    return (options.client ?? this._client).get<SessionTodoResponses, SessionTodoErrors, ThrowOnError>({
-      url: "/session/{id}/todo",
+  public plan<ThrowOnError extends boolean = false>(options: Options<SessionPlanData, ThrowOnError>) {
+    return (options.client ?? this._client).get<SessionPlanResponses, SessionPlanErrors, ThrowOnError>({
+      url: "/session/{id}/plan",
       ...options,
     })
   }

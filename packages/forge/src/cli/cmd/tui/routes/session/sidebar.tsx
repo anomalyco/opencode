@@ -10,12 +10,12 @@ export function Sidebar(props: { sessionID: string }) {
   const { theme } = useTheme()
   const session = createMemo(() => sync.session.get(props.sessionID)!)
   const diff = createMemo(() => sync.data.session_diff[props.sessionID] ?? [])
-  const todo = createMemo(() => sync.data.todo[props.sessionID] ?? [])
+  const plan = createMemo(() => sync.data.plan[props.sessionID] ?? [])
   const messages = createMemo(() => sync.data.message[props.sessionID] ?? [])
 
   const [mcpExpanded, setMcpExpanded] = createSignal(true)
   const [diffExpanded, setDiffExpanded] = createSignal(true)
-  const [todoExpanded, setTodoExpanded] = createSignal(true)
+  const [planExpanded, setPlanExpanded] = createSignal(true)
   const [lspExpanded, setLspExpanded] = createSignal(true)
 
   const cost = createMemo(() => {
@@ -141,27 +141,45 @@ export function Sidebar(props: { sessionID: string }) {
               </Show>
             </box>
           </Show>
-          <Show when={todo().length > 0}>
+          <Show when={plan().length > 0}>
             <box>
               <box
                 flexDirection="row"
                 gap={1}
-                onMouseDown={() => todo().length > 2 && setTodoExpanded(!todoExpanded())}
+                onMouseDown={() => plan().length > 2 && setPlanExpanded(!planExpanded())}
               >
-                <Show when={todo().length > 2}>
-                  <text fg={theme.text}>{todoExpanded() ? "▼" : "▶"}</text>
+                <Show when={plan().length > 2}>
+                  <text fg={theme.text}>{planExpanded() ? "▼" : "▶"}</text>
                 </Show>
                 <text fg={theme.text}>
-                  <b>Todo</b>
+                  <b>Plan</b>
                 </text>
               </box>
-              <Show when={todo().length <= 2 || todoExpanded()}>
-                <For each={todo()}>
-                  {(todo) => (
-                    <text style={{ fg: todo.status === "in_progress" ? theme.success : theme.textMuted }}>
-                      [{todo.status === "completed" ? "✓" : " "}] {todo.content}
-                    </text>
-                  )}
+              <Show when={plan().length <= 2 || planExpanded()}>
+                <For each={plan()}>
+                  {(entry) => {
+                    // Status circle
+                    let statusSymbol = "○" // pending - empty circle
+                    let statusColor = theme.textMuted
+                    if (entry.status === "in_progress") {
+                      statusSymbol = "◐" // in progress - half circle
+                      statusColor = theme.warning // yellow
+                    } else if (entry.status === "completed") {
+                      statusSymbol = "✓" // completed - check
+                      statusColor = theme.accent // purple/blue
+                    }
+
+                    const textColor = entry.status === "in_progress" ? theme.text : theme.textMuted
+
+                    return (
+                      <box flexDirection="row" gap={2}>
+                        <text style={{ fg: statusColor }}>{statusSymbol}</text>
+                        <text style={{ fg: textColor }}>
+                          {entry.content} • {entry.priority}
+                        </text>
+                      </box>
+                    )
+                  }}
                 </For>
               </Show>
             </box>

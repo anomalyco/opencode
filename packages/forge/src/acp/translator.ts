@@ -5,6 +5,7 @@ import { Identifier } from "../id/id"
 import { Log } from "../util/log"
 import * as TextTranslator from "./translation/text"
 import * as ToolTranslator from "./translation/tool"
+import * as PlanTranslator from "./translation/plan"
 
 const log = Log.create({ service: "acp-translator" })
 
@@ -100,8 +101,7 @@ export namespace ACPTranslator {
         }
 
         case "plan": {
-          // For MVP, we're not handling plans yet
-          await showDebugToast("Plan update received", notification)
+          await PlanTranslator.handlePlan(sessionID, notification)
           break
         }
 

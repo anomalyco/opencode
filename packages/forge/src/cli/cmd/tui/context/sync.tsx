@@ -5,7 +5,7 @@ import type {
   Session,
   Part,
   Config,
-  Todo,
+  PlanEntry,
   Command,
   Permission,
   LspStatus,
@@ -45,8 +45,8 @@ export const { use: useSync, provider: SyncProvider } = createSimpleContext({
       session_diff: {
         [sessionID: string]: Snapshot.FileDiff[]
       }
-      todo: {
-        [sessionID: string]: Todo[]
+      plan: {
+        [sessionID: string]: PlanEntry[]
       }
       message: {
         [sessionID: string]: Message[]
@@ -76,7 +76,7 @@ export const { use: useSync, provider: SyncProvider } = createSimpleContext({
       session: [],
       session_status: {},
       session_diff: {},
-      todo: {},
+      plan: {},
       message: {},
       part: {},
       lsp: [],
@@ -124,8 +124,8 @@ export const { use: useSync, provider: SyncProvider } = createSimpleContext({
           break
         }
 
-        case "todo.updated":
-          setStore("todo", event.properties.sessionID, event.properties.todos)
+        case "plan.updated":
+          setStore("plan", event.properties.sessionID, event.properties.entries)
           break
 
         case "session.diff":
@@ -317,10 +317,10 @@ export const { use: useSync, provider: SyncProvider } = createSimpleContext({
           if (store.message[sessionID]) return
           const now = Date.now()
           console.log("syncing", sessionID)
-          const [session, messages, todo, diff] = await Promise.all([
+          const [session, messages, plan, diff] = await Promise.all([
             sdk.client.session.get({ path: { id: sessionID }, throwOnError: true }),
             sdk.client.session.messages({ path: { id: sessionID }, query: { limit: 100 } }),
-            sdk.client.session.todo({ path: { id: sessionID } }),
+            sdk.client.session.plan({ path: { id: sessionID } }),
             sdk.client.session.diff({ path: { id: sessionID } }),
           ])
           console.log("fetched in " + (Date.now() - now), sessionID)
@@ -329,7 +329,7 @@ export const { use: useSync, provider: SyncProvider } = createSimpleContext({
               const match = Binary.search(draft.session, sessionID, (s) => s.id)
               if (match.found) draft.session[match.index] = session.data!
               if (!match.found) draft.session.splice(match.index, 0, session.data!)
-              draft.todo[sessionID] = todo.data ?? []
+              draft.plan[sessionID] = plan.data ?? []
               draft.message[sessionID] = messages.data!.map((x) => x.info)
               for (const message of messages.data!) {
                 draft.part[message.info.id] = message.parts
