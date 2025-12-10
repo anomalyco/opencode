@@ -91,6 +91,7 @@ jobs:
           NPM_CONFIG_PROVENANCE: false
 
   publish-tauri:
+    if: github.repository == 'sst/opencode' && github.ref == 'refs/heads/dev'
     continue-on-error: true
     strategy:
       fail-fast: false
