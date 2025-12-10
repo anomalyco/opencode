@@ -1,74 +1,33 @@
-import { createEffect, Show, For, type JSX, splitProps, createSignal } from "solid-js"
-import { createStore } from "solid-js/store"
-import { FilteredListProps, useFilteredList } from "@opencode-ai/ui/hooks"
+import { createEffect, Show, type JSX, splitProps, createSignal } from "solid-js"
 import { Dialog, DialogProps } from "./dialog"
-import { Icon, IconProps } from "./icon"
+import { Icon } from "./icon"
 import { Input } from "./input"
 import { IconButton } from "./icon-button"
+import { List, ListRef, ListProps } from "./list"
 
 interface SelectDialogProps<T>
-  extends FilteredListProps<T>,
+  extends Omit<ListProps<T>, "filter">,
     Pick<DialogProps, "trigger" | "onOpenChange" | "defaultOpen"> {
   title: string
   placeholder?: string
-  emptyMessage?: string
-  children: (item: T) => JSX.Element
-  onSelect?: (value: T | undefined) => void
-  onKeyEvent?: (event: KeyboardEvent, item: T | undefined) => void
   actions?: JSX.Element
-  activeIcon?: IconProps["name"]
 }
 
 export function SelectDialog<T>(props: SelectDialogProps<T>) {
   const [dialog, others] = splitProps(props, ["trigger", "onOpenChange", "defaultOpen"])
   let closeButton!: HTMLButtonElement
   let inputRef: HTMLInputElement | undefined
-  let [scrollRef, setScrollRef] = createSignal<HTMLDivElement | undefined>(undefined)
-  const [store, setStore] = createStore({
-    mouseActive: false,
-  })
-
-  const { filter, grouped, flat, reset, clear, active, setActive, onKeyDown, onInput } = useFilteredList<T>({
-    items: others.items,
-    key: others.key,
-    filterKeys: others.filterKeys,
-    current: others.current,
-    groupBy: others.groupBy,
-    sortBy: others.sortBy,
-    sortGroupsBy: others.sortGroupsBy,
-  })
+  const [filter, setFilter] = createSignal("")
+  let listRef: ListRef | undefined
 
   createEffect(() => {
-    filter()
-    scrollRef()?.scrollTo(0, 0)
-    reset()
-  })
-
-  createEffect(() => {
-    if (!scrollRef()) return
-    if (!others.current) return
-    const key = others.key(others.current)
+    if (!props.current) return
+    const key = props.key(props.current)
     requestAnimationFrame(() => {
-      const element = scrollRef()!.querySelector(`[data-key="${key}"]`)
+      const element = document.querySelector(`[data-key="${key}"]`)
       element?.scrollIntoView({ block: "center" })
     })
   })
-
-  createEffect(() => {
-    const all = flat()
-    if (store.mouseActive || all.length === 0) return
-    if (active() === others.key(all[0])) {
-      scrollRef()?.scrollTo(0, 0)
-      return
-    }
-    const element = scrollRef()?.querySelector(`[data-key="${active()}"]`)
-    element?.scrollIntoView({ block: "nearest", behavior: "smooth" })
-  })
-
-  const handleInput = (value: string) => {
-    onInput(value)
-    reset()
-  }
 
   const handleSelect = (item: T | undefined) => {
     others.onSelect?.(item)
@@ -76,23 +35,12 @@ export function SelectDialog<T>(props: SelectDialogProps<T>) {
   }
 
   const handleKey = (e: KeyboardEvent) => {
-    setStore("mouseActive", false)
     if (e.key === "Escape") return
-
-    const all = flat()
-    const selected = all.find((x) => others.key(x) === active())
-    props.onKeyEvent?.(e, selected)
-
-    if (e.key === "Enter") {
-      e.preventDefault()
-      if (selected) handleSelect(selected)
-    } else {
-      onKeyDown(e)
-    }
+    listRef?.onKeyDown(e)
   }
 
   const handleOpenChange = (open: boolean) => {
-    if (!open) clear()
+    if (!open) setFilter("")
     props.onOpenChange?.(open)
   }
 
@@ -113,7 +61,7 @@ export function SelectDialog<T>(props: SelectDialogProps<T>) {
               data-slot="select-dialog-input"
               type="text"
               value={filter()}
-              onChange={(value) => handleInput(value)}
+              onChange={setFilter}
               onKeyDown={handleKey}
               placeholder={others.placeholder}
               spellcheck={false}
@@ -123,63 +71,29 @@ export function SelectDialog<T>(props: SelectDialogProps<T>) {
             />
           </div>
           <Show when={filter()}>
-            <IconButton
-              icon="circle-x"
-              variant="ghost"
-              onClick={() => {
-                onInput("")
-                reset()
-              }}
-            />
+            <IconButton icon="circle-x" variant="ghost" onClick={() => setFilter("")} />
           </Show>
         </div>
-        <Dialog.Body ref={setScrollRef} data-component="select-dialog" class="no-scrollbar">
-          <Show
-            when={flat().length > 0}
-            fallback={
-              <div data-slot="select-dialog-empty-state">
-                <div data-slot="select-dialog-message">
-                  {props.emptyMessage ?? "No results"} for{" "}
-                  <span data-slot="select-dialog-filter">&quot;{filter()}&quot;</span>
-                </div>
-              </div>
-            }
+        <Dialog.Body>
+          <List
+            ref={(ref) => {
+              listRef = ref
+            }}
+            items={others.items}
+            key={others.key}
+            filterKeys={others.filterKeys}
+            current={others.current}
+            groupBy={others.groupBy}
+            sortBy={others.sortBy}
+            sortGroupsBy={others.sortGroupsBy}
+            emptyMessage={others.emptyMessage}
+            activeIcon={others.activeIcon}
+            filter={filter()}
+            onSelect={handleSelect}
+            onKeyEvent={others.onKeyEvent}
           >
-            <For each={grouped()}>
-              {(group) => (
-                <div data-slot="select-dialog-group">
-                  <Show when={group.category}>
-                    <div data-slot="select-dialog-header">{group.category}</div>
-                  </Show>
-                  <div data-slot="select-dialog-list">
-                    <For each={group.items}>
-                      {(item) => (
-                        <button
-                          data-slot="select-dialog-item"
-                          data-key={others.key(item)}
-                          data-active={others.key(item) === active()}
-                          data-selected={item === others.current}
-                          onClick={() => handleSelect(item)}
-                          onMouseMove={() => {
-                            setStore("mouseActive", true)
-                            setActive(others.key(item))
-                          }}
-                        >
-                          {others.children(item)}
-                          <Show when={item === others.current}>
-                            <Icon data-slot="select-dialog-item-selected-icon" name="check-small" />
-                          </Show>
-                          <Show when={others.activeIcon}>
-                            {(icon) => <Icon data-slot="select-dialog-item-active-icon" name={icon()} />}
-                          </Show>
-                        </button>
-                      )}
-                    </For>
-                  </div>
-                </div>
-              )}
-            </For>
-          </Show>
+            {others.children}
+          </List>
         </Dialog.Body>
       </div>
     </Dialog>
