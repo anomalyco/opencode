@@ -226,7 +226,7 @@ export namespace Agent {
         item.permission = mergeAgentPermissions(cfg.permission ?? {}, permission ?? {})
       }
 
-      if (key == cfg.default_agent) result[key].default = true
+      if (key === cfg.default_agent) result[key].default = true
     }
     return result
   })

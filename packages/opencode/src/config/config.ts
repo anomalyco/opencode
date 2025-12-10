@@ -137,7 +137,7 @@ export namespace Config {
 
     if (!result.keybinds) result.keybinds = Info.shape.keybinds.parse({})
 
-    if (!result.default_agent || !(result.default_agent in result.agent)) {
+    if (!result.default_agent || !(result.default_agent in result.agent) || result.agent[result.default_agent]?.disable) {
       log.warn(`default_agent not found in agents, selecting first primary agent`)
       log.debug(`available agents: ${Object.keys(result.agent).join(", ")}`)
       result.default_agent = firstPrimaryAgent(result.agent)
