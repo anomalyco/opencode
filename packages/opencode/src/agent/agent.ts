@@ -252,7 +252,7 @@ export namespace Agent {
         },
       },
       temperature: 0.3,
-      prompt: [
+      messages: [
         ...system.map(
           (item): ModelMessage => ({
             role: "system",
