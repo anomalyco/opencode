@@ -353,10 +353,6 @@ export class OpenAICompatibleChatLanguageModel implements LanguageModelV2 {
     const providerOptionsName = this.providerOptionsName
     let isActiveReasoning = false
     let isActiveText = false
-    const log = Log.create()
-
-    let thoughtSigReasoningText: string = ""
-    let thoughtSigReasoningOpaque: string = ""
 
     return {
       stream: response.pipeThrough(
@@ -367,7 +363,6 @@ export class OpenAICompatibleChatLanguageModel implements LanguageModelV2 {
 
           // TODO we lost type safety on Chunk, most likely due to the error schema. MUST FIX
           transform(chunk, controller) {
-            log.info(chunk)
             // Emit raw chunk if requested (before anything else)
             if (options.includeRawChunks) {
               controller.enqueue({ type: "raw", rawValue: chunk.rawValue })
@@ -455,12 +450,6 @@ export class OpenAICompatibleChatLanguageModel implements LanguageModelV2 {
                 id: "reasoning-0",
                 delta: reasoningContent,
               })
-
-              thoughtSigReasoningText += reasoningContent
-            }
-
-            if (delta.reasoning_opaque) {
-              thoughtSigReasoningOpaque = delta.reasoning_opaque
             }
 
             if (delta.content) {
@@ -610,10 +599,6 @@ export class OpenAICompatibleChatLanguageModel implements LanguageModelV2 {
             }
 
             const providerMetadata: SharedV2ProviderMetadata = {
-              [providerOptionsName]: {
-                reasoningOpaque: thoughtSigReasoningOpaque,
-                reasoningText: thoughtSigReasoningText,
-              },
               ...metadataExtractor?.buildMetadata(),
             }
             const log = Log.create()
@@ -720,8 +705,6 @@ const createOpenAICompatibleChatChunkSchema = <ERROR_SCHEMA extends z.core.$ZodT
               reasoning: z.string().nullish(),
               // Copilot sets `reasoning_text`
               reasoning_text: z.string().nullish(),
-              // For Gemini 3 Pro's thought signatures
-              reasoning_opaque: z.string().nullish(),
               tool_calls: z
                 .array(
                   z.object({

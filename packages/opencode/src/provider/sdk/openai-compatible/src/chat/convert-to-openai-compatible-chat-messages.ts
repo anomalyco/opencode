@@ -20,7 +20,6 @@ export function convertToOpenAICompatibleChatMessages(
   const messages: OpenAICompatibleChatPrompt = [];
   for (const { role, content, ...message } of prompt) {
     const metadata = getOpenAIMetadata({ ...message });
-    logger.error(`provider options: ${JSON.stringify(message.providerOptions)}`);
     switch (role) {
       case 'system': {
         messages.push({ role: 'system', content, ...metadata });
@@ -84,7 +83,6 @@ export function convertToOpenAICompatibleChatMessages(
           function: { name: string; arguments: string };
         }> = [];
         for (const part of content) {
-          logger.error(`provider options (part): ${JSON.stringify(part.providerOptions)}`);
           const partMetadata = getOpenAIMetadata(part);
           switch (part.type) {
             case 'text': {
