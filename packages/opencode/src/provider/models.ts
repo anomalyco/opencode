@@ -17,6 +17,16 @@ export namespace ModelsDev {
     reasoning: z.boolean(),
     temperature: z.boolean(),
     tool_call: z.boolean(),
+    interleaved: z
+      .union([
+        z.literal(true),
+        z
+          .object({
+            field: z.enum(["reasoning_content", "reasoning_details"]),
+          })
+          .strict(),
+      ])
+      .optional(),
     cost: z
       .object({
         input: z.number(),

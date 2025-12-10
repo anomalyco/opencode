@@ -12,7 +12,7 @@ export const { use: useLayout, provider: LayoutProvider } = createSimpleContext(
     const globalSync = useGlobalSync()
     const [store, setStore] = makePersisted(
       createStore({
-        projects: [] as { directory: string; expanded: boolean }[],
+        projects: [] as { worktree: string; expanded: boolean }[],
         sidebar: {
           opened: false,
           width: 280,
@@ -26,7 +26,7 @@ export const { use: useLayout, provider: LayoutProvider } = createSimpleContext(
         },
       }),
       {
-        name: "default-layout.v4",
+        name: "default-layout.v6",
       },
     )
 
@@ -43,32 +43,43 @@ export const { use: useLayout, provider: LayoutProvider } = createSimpleContext(
 
     onMount(() => {
       Promise.all(
-        store.projects.map(({ directory }) => {
-          return loadProjectSessions(directory)
+        store.projects.map(({ worktree }) => {
+          return loadProjectSessions(worktree)
         }),
       )
     })
 
+    function enrich(project: { worktree: string; expanded: boolean }) {
+      const metadata = globalSync.data.projects.find((x) => x.worktree === project.worktree)
+      if (!metadata) return []
+      return [
+        {
+          ...project,
+          ...metadata,
+        },
+      ]
+    }
+
     return {
       projects: {
-        list: createMemo(() => store.projects),
+        list: createMemo(() => store.projects.flatMap(enrich)),
         open(directory: string) {
-          if (store.projects.find((x) => x.directory === directory)) return
+          if (store.projects.find((x) => x.worktree === directory)) return
           loadProjectSessions(directory)
-          setStore("projects", (x) => [...x, { directory, expanded: true }])
+          setStore("projects", (x) => [...x, { worktree: directory, expanded: true }])
         },
         close(directory: string) {
-          setStore("projects", (x) => x.filter((x) => x.directory !== directory))
+          setStore("projects", (x) => x.filter((x) => x.worktree !== directory))
         },
         expand(directory: string) {
-          setStore("projects", (x) => x.map((x) => (x.directory === directory ? { ...x, expanded: true } : x)))
+          setStore("projects", (x) => x.map((x) => (x.worktree === directory ? { ...x, expanded: true } : x)))
         },
         collapse(directory: string) {
-          setStore("projects", (x) => x.map((x) => (x.directory === directory ? { ...x, expanded: false } : x)))
+          setStore("projects", (x) => x.map((x) => (x.worktree === directory ? { ...x, expanded: false } : x)))
         },
         move(directory: string, toIndex: number) {
           setStore("projects", (projects) => {
-            const fromIndex = projects.findIndex((x) => x.directory === directory)
+            const fromIndex = projects.findIndex((x) => x.worktree === directory)
             if (fromIndex === -1 || fromIndex === toIndex) return projects
             const result = [...projects]
             const [item] = result.splice(fromIndex, 1)
