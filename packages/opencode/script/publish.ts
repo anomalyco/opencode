@@ -36,26 +36,24 @@ await Bun.file(`./dist/${pkg.name}/package.json`).write(
   ),
 )
 
+const tags = [Script.channel]
+if (!Script.preview) {
+  const major = Script.version.split(".")[0]
+  tags.push(`latest-${major}`)
+}
+
 const tasks = Object.entries(binaries).map(async ([name]) => {
-  try {
-    if (process.platform !== "win32") {
-      await $`chmod 755 -R .`.cwd(`./dist/${name}`)
-    }
-    await $`bun pm pack`.cwd(`./dist/${name}`)
-    await $`npm publish *.tgz --access public --tag ${Script.channel}`.cwd(`./dist/${name}`)
-  } finally {
+  if (process.platform !== "win32") {
+    await $`chmod 755 -R .`.cwd(`./dist/${name}`)
+  }
+  await $`bun pm pack`.cwd(`./dist/${name}`)
+  for (const tag of tags) {
+    await $`npm publish *.tgz --access public --tag ${tag}`.cwd(`./dist/${name}`)
   }
 })
 await Promise.all(tasks)
-await $`cd ./dist/${pkg.name} && bun pm pack && npm publish *.tgz --access public --tag ${Script.channel}`
-
-if (!Script.preview) {
-  const major = Script.version.split(".")[0]
-  const majorTag = `latest-${major}`
-  for (const [name] of Object.entries(binaries)) {
-    await $`cd dist/${name} && npm dist-tag add ${name}@${Script.version} ${majorTag}`
-  }
-  await $`cd ./dist/${pkg.name} && npm dist-tag add ${pkg.name}-ai@${Script.version} ${majorTag}`
+for (const tag of tags) {
+  await $`cd ./dist/${pkg.name} && bun pm pack && npm publish *.tgz --access public --tag ${tag}`
 }
 
 if (!Script.preview) {
