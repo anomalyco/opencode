@@ -37,10 +37,6 @@ await Bun.file(`./dist/${pkg.name}/package.json`).write(
 )
 
 const tags = [Script.channel]
-if (!Script.preview) {
-  const major = Script.version.split(".")[0]
-  tags[0] = `latest-${major}`
-}
 
 const tasks = Object.entries(binaries).map(async ([name]) => {
   if (process.platform !== "win32") {

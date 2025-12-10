@@ -9,7 +9,7 @@ const notes = [] as string[]
 console.log("=== publishing ===\n")
 
 if (!Script.preview) {
-  const previous = await fetch("https://registry.npmjs.org/opencode-ai/latest-1")
+  const previous = await fetch("https://registry.npmjs.org/opencode-ai/latest")
     .then((res) => {
       if (!res.ok) throw new Error(res.statusText)
       return res.json()
