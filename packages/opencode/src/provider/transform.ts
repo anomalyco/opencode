@@ -223,21 +223,12 @@ export namespace ProviderTransform {
       result["promptCacheKey"] = sessionID
     }
 
-    // Enable thinking mode for Gemini models
-    const isGemini3 = model.api.id.includes("gemini-3")
-    const isGoogle = model.providerID === "google"
-    const isOpencode = model.providerID.startsWith("opencode") && isGemini3
-    const isOpenRouter = model.api.npm === "@openrouter/ai-sdk-provider" && isGemini3
-
-    if (isOpenRouter) {
-      // OpenRouter expects OpenAI-compatible reasoning format, not Gemini-native thinkingConfig
+    if (model.api.npm === "@openrouter/ai-sdk-provider" && model.api.id.includes("gemini-3")) {
       result["reasoning"] = { effort: "high" }
     }
-    if (isGoogle || isOpencode) {
-      // Gemini 3 requires thinkingLevel, Gemini 2.5 only needs includeThoughts
+    if (model.api.npm === "@ai-sdk/google" || model.api.npm === "@ai-sdk/google-vertex") {
       result["thinkingConfig"] = {
         includeThoughts: true,
-        ...(isGemini3 && { thinkingLevel: "HIGH" }),
       }
     }
 
