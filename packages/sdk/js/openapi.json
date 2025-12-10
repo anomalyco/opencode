@@ -2803,6 +2803,25 @@
                                 "tool_call": {
                                   "type": "boolean"
                                 },
+                                "interleaved": {
+                                  "anyOf": [
+                                    {
+                                      "type": "boolean",
+                                      "const": true
+                                    },
+                                    {
+                                      "type": "object",
+                                      "properties": {
+                                        "field": {
+                                          "type": "string",
+                                          "enum": ["reasoning_content", "reasoning_details"]
+                                        }
+                                      },
+                                      "required": ["field"],
+                                      "additionalProperties": false
+                                    }
+                                  ]
+                                },
                                 "cost": {
                                   "type": "object",
                                   "properties": {
@@ -7301,6 +7320,25 @@
                 "tool_call": {
                   "type": "boolean"
                 },
+                "interleaved": {
+                  "anyOf": [
+                    {
+                      "type": "boolean",
+                      "const": true
+                    },
+                    {
+                      "type": "object",
+                      "properties": {
+                        "field": {
+                          "type": "string",
+                          "enum": ["reasoning_content", "reasoning_details"]
+                        }
+                      },
+                      "required": ["field"],
+                      "additionalProperties": false
+                    }
+                  ]
+                },
                 "cost": {
                   "type": "object",
                   "properties": {
@@ -8310,9 +8348,26 @@
                   }
                 },
                 "required": ["text", "audio", "image", "video", "pdf"]
+              },
+              "interleaved": {
+                "anyOf": [
+                  {
+                    "type": "boolean"
+                  },
+                  {
+                    "type": "object",
+                    "properties": {
+                      "field": {
+                        "type": "string",
+                        "enum": ["reasoning_content", "reasoning_details"]
+                      }
+                    },
+                    "required": ["field"]
+                  }
+                ]
               }
             },
-            "required": ["temperature", "reasoning", "attachment", "toolcall", "input", "output"]
+            "required": ["temperature", "reasoning", "attachment", "toolcall", "input", "output", "interleaved"]
           },
           "cost": {
             "type": "object",

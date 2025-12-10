@@ -7,7 +7,6 @@ import { TextSelection } from "./local"
 import { pipe, sumBy } from "remeda"
 import { AssistantMessage, UserMessage } from "@opencode-ai/sdk/v2"
 import { useParams } from "@solidjs/router"
-import { base64Encode } from "@opencode-ai/util/encode"
 import { useSDK } from "./sdk"
 
 export type LocalPTY = {
@@ -25,9 +24,7 @@ export const { use: useSession, provider: SessionProvider } = createSimpleContex
     const sdk = useSDK()
     const params = useParams()
     const sync = useSync()
-    const name = createMemo(
-      () => `${base64Encode(sync.data.project.worktree)}/session${params.id ? "/" + params.id : ""}.v2`,
-    )
+    const name = createMemo(() => `${params.dir}/session${params.id ? "/" + params.id : ""}.v3`)
 
     const [store, setStore] = makePersisted(
       createStore<{
