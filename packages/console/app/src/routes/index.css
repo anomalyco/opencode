@@ -16,6 +16,8 @@
   --color-background-strong-hover: hsl(0, 5%, 18%);
   --color-background-interactive: hsl(62, 84%, 88%);
   --color-background-interactive-weaker: hsl(64, 74%, 95%);
+  --color-surface-raised-base: hsla(0, 100%, 3%, 0.01);
+  --color-surface-raised-base-active: hsla(0, 100%, 17%, 0.06);
 
   --color-text: hsl(0, 1%, 39%);
   --color-text-weak: hsl(0, 1%, 60%);
@@ -24,7 +26,7 @@
   --color-text-inverted: hsl(0, 20%, 99%);
 
   --color-border: hsl(30, 2%, 81%);
-  --color-border-weak: hsl(0, 1%, 85%);
+  --color-border-weak: hsla(0, 100%, 3%, 0.12);
 
   --color-icon: hsl(0, 1%, 55%);
 }
@@ -59,6 +61,14 @@ body {
 @supports (background: -webkit-named-image(i)) {
   [data-page="opencode"] {
     border-top: 1px solid var(--color-border-weak);
+  }
+}
+
+[data-slot="br"] {
+  display: block;
+
+  @media (max-width: 60rem) {
+    display: none;
   }
 }
 
@@ -465,6 +475,68 @@ body {
     }
   }
 
+  [data-component="desktop-app-available"] {
+    background: var(--color-surface-raised-base);
+    border: 1px solid var(--color-border-weak);
+    display: flex;
+    margin-bottom: 48px;
+
+    [data-slot="desktop-icon"] {
+      border-right: 1px solid var(--color-border-weak);
+      width: 56px;
+      height: 72px;
+      background: var(--color-surface-raised-base-active);
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      position: relative;
+
+      img {
+        width: 40px;
+        height: 40px;
+        opacity: 100%;
+      }
+
+      [data-slot="dot"] {
+        border-radius: 100px;
+        width: 6px;
+        height: 6px;
+        background: var(--color-background-strong);
+        position: absolute;
+        bottom: 5px;
+        left: 24px;
+        opacity: 0;
+      }
+    }
+
+    &:has([data-slot="desktop-copy"]:hover) [data-slot="desktop-icon"] img {
+      animation: iconBounce 1s ease-in-out forwards;
+    }
+
+    &:has([data-slot="desktop-copy"]:hover) [data-slot="desktop-icon"] [data-slot="dot"] {
+      opacity: 0.4;
+      transition: opacity 0.3s ease-out 1s;
+    }
+
+
+
+    [data-slot="desktop-copy"] {
+      display: flex;
+      align-items: center;
+      padding: 20px;
+      gap: 16px;
+
+      span {
+        color: var(--color-text-strong);
+        line-height: 1;
+      }
+
+      a {
+        color: var(--color-text-weak);
+      }
+    }
+  }
+
   [data-slot="hero-copy"] {
     [data-slot="releases"] {
       background: none;
@@ -502,7 +574,7 @@ body {
 
     p {
       color: var(--color-text);
-      margin-bottom: 40px;
+      margin-bottom: 32px;
       max-width: 82%;
 
       @media (max-width: 50rem) {
@@ -518,7 +590,6 @@ body {
       border-radius: 4px;
       font-weight: 500;
       cursor: pointer;
-      margin-bottom: 80px;
       display: flex;
       width: fit-content;
       gap: 12px;
@@ -1138,5 +1209,35 @@ body {
       color: var(--color-text);
       text-decoration: underline;
     }
+  }
+}
+
+@keyframes iconBounce {
+  0%, 100% {
+    transform: translateY(0);
+  }
+  50% {
+    transform: translateY(-10px);
+  }
+}
+  25% {
+    transform: translateY(-10px);
+  }
+  50% {
+    transform: translateY(0);
+  }
+  75% {
+    transform: translateY(-10px);
+  }
+}
+
+@keyframes dotAppear {
+  0% {
+    opacity: 0;
+    transform: scale(0);
+  }
+  100% {
+    opacity: 0.5;
+    transform: scale(1);
   }
 }
