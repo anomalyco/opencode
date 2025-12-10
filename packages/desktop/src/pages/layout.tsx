@@ -44,6 +44,10 @@ export default function Layout(props: ParentProps) {
   const currentDirectory = createMemo(() => base64Decode(params.dir ?? ""))
   const sessions = createMemo(() => globalSync.child(currentDirectory())[0].session ?? [])
   const currentSession = createMemo(() => sessions().find((s) => s.id === params.id))
+  const hasProviders = createMemo(() => {
+    const [projectStore] = globalSync.child(currentDirectory())
+    return projectStore.provider.filter((p) => p.id !== "opencode").length > 0
+  })
 
   function navigateToProject(directory: string | undefined) {
     if (!directory) return
@@ -81,6 +85,8 @@ export default function Layout(props: ParentProps) {
       openProject(result)
     }
   }
+
+  async function connectProvider() {}
 
   createEffect(() => {
     if (!params.dir || !params.id) return
@@ -465,6 +471,40 @@ export default function Layout(props: ParentProps) {
             </DragDropProvider>
           </div>
           <div class="flex flex-col gap-1.5 self-stretch items-start shrink-0 px-2 py-3">
+            <Switch>
+              <Match when={!hasProviders() && layout.sidebar.opened()}>
+                <div class="rounded-md bg-background-stronger shadow-xs-border-base">
+                  <div class="p-3 flex flex-col gap-2">
+                    <div class="text-12-medium text-text-strong">Getting started</div>
+                    <div class="text-text-base">OpenCode includes free models so you can start immediately.</div>
+                    <div class="text-text-base">Connect any provider to use models, inc. Claude, GPT, Gemini etc.</div>
+                  </div>
+                  <Tooltip placement="right" value="Connect provider" inactive={layout.sidebar.opened()}>
+                    <Button
+                      class="flex w-full text-left justify-start text-12-medium text-text-base stroke-[1.5px] rounded-lg rounded-t-none shadow-none border-t border-border-weak-base pl-[7px]"
+                      size="large"
+                      icon="plus-small"
+                      onClick={connectProvider}
+                    >
+                      <Show when={layout.sidebar.opened()}>Connect provider</Show>
+                    </Button>
+                  </Tooltip>
+                </div>
+              </Match>
+              <Match when={true}>
+                <Tooltip placement="right" value="Connect provider" inactive={layout.sidebar.opened()}>
+                  <Button
+                    class="flex w-full text-left justify-start text-12-medium text-text-base stroke-[1.5px] rounded-lg"
+                    variant="ghost"
+                    size="large"
+                    icon="plus-small"
+                    onClick={connectProvider}
+                  >
+                    <Show when={layout.sidebar.opened()}>Connect provider</Show>
+                  </Button>
+                </Tooltip>
+              </Match>
+            </Switch>
             <Show when={platform.openDirectoryPickerDialog}>
               <Tooltip placement="right" value="Open project" inactive={layout.sidebar.opened()}>
                 <Button
