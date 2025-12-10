@@ -35,19 +35,19 @@ await Bun.file(`./dist/${pkg.name}/package.json`).write(
     2,
   ),
 )
-for (const [name] of Object.entries(binaries)) {
+
+const tasks = Object.entries(binaries).map(async ([name]) => {
   try {
-    process.chdir(`./dist/${name}`)
     if (process.platform !== "win32") {
-      await $`chmod 755 -R .`
+      await $`chmod 755 -R .`.cwd(`./dist/${name}`)
     }
-    await $`bun pm pack`
-    await $`npm publish *.tgz --access public --tag ${Script.channel}`
+    await $`bun pm pack`.cwd(`./dist/${name}`)
+    await $`npm publish *.tgz --access public --tag ${Script.channel}`.cwd(`./dist/${name}`)
   } finally {
-    process.chdir(dir)
   }
-}
-await $`cd ./dist/${pkg.name} && bun publish --access public --tag ${Script.channel}`
+})
+await Promise.all(tasks)
+await $`cd ./dist/${pkg.name} && bun pm pack && npm publish *.tgz --access public --tag ${Script.channel}`
 
 if (!Script.preview) {
   const major = Script.version.split(".")[0]
