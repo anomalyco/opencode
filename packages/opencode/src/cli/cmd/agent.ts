@@ -234,7 +234,7 @@ const AgentListCommand = cmd({
         })
 
         for (const agent of sortedAgents) {
-          process.stdout.write(`${agent.name} (${agent.mode})${EOL}`)
+          process.stdout.write(`${agent.name} (${agent.mode}${agent.default ? ", default" : ""})${EOL}`)
         }
       },
     })
