@@ -35,4 +35,3 @@ jobs:
           ./script/publish.ts
         env:
           GITHUB_TOKEN: ${{ secrets.SST_GITHUB_TOKEN }}
-          NPM_CONFIG_TOKEN: ${{ secrets.NPM_TOKEN }}
