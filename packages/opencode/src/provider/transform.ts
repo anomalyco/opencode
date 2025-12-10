@@ -228,6 +228,7 @@ export namespace ProviderTransform {
     }
     if (model.api.npm === "@ai-sdk/google" || model.api.npm === "@ai-sdk/google-vertex") {
       result["thinkingConfig"] = {
+        thinkingLevel: "high",
         includeThoughts: true,
       }
     }
