@@ -5,6 +5,7 @@ import { withNetworkOptions, resolveNetworkOptions } from "../network"
 import { Flag } from "../../flag/flag"
 import open from "open"
 import { networkInterfaces } from "os"
+import { Wildcard } from "@/util/wildcard"
 
 function getNetworkIPs() {
   const nets = networkInterfaces()
@@ -30,14 +31,20 @@ function getNetworkIPs() {
 
 export const WebCommand = cmd({
   command: "web",
-  builder: (yargs) => withNetworkOptions(yargs),
+  builder: (yargs) =>
+    withNetworkOptions(yargs).option("tools", {
+      type: "string",
+      describe:
+        "comma-separated tool patterns to enable/disable (e.g., '-*,read,write,webfetch' to only enable those three)",
+    }),
   describe: "start opencode server and open web interface",
   handler: async (args) => {
     if (!Flag.OPENCODE_SERVER_PASSWORD) {
       UI.println(UI.Style.TEXT_WARNING_BOLD + "!  " + "OPENCODE_SERVER_PASSWORD is not set; server is unsecured.")
     }
     const opts = await resolveNetworkOptions(args)
-    const server = Server.listen(opts)
+    const tools = Wildcard.parseToolsPattern(args.tools)
+    const server = Server.listen({ ...opts, tools })
     UI.empty()
     UI.println(UI.logo("  "))
     UI.empty()

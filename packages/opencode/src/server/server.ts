@@ -54,6 +54,12 @@ export namespace Server {
     return _url ?? new URL("http://localhost:4096")
   }
 
+  let defaultTools: Record<string, boolean> | undefined
+
+  export function getDefaultTools() {
+    return defaultTools
+  }
+
   const app = new Hono()
   export const App: () => Hono = lazy(
     () =>
@@ -560,8 +566,17 @@ export namespace Server {
     return result
   }
 
-  export function listen(opts: { port: number; hostname: string; mdns?: boolean; cors?: string[] }) {
+  export function listen(opts: {
+    port: number
+    hostname: string
+    mdns?: boolean
+    cors?: string[]
+    tools?: Record<string, boolean>
+  }) {
     _corsWhitelist = opts.cors ?? []
+    if (opts.tools) {
+      defaultTools = opts.tools
+    }
 
     const args = {
       hostname: opts.hostname,

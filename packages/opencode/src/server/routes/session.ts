@@ -16,6 +16,7 @@ import { Log } from "../../util/log"
 import { PermissionNext } from "@/permission/next"
 import { errors } from "../error"
 import { lazy } from "../../util/lazy"
+import { Server } from "../server"
 
 const log = Log.create({ service: "server" })
 
@@ -730,7 +731,9 @@ export const SessionRoutes = lazy(() =>
         return stream(c, async (stream) => {
           const sessionID = c.req.valid("param").sessionID
           const body = c.req.valid("json")
-          const msg = await SessionPrompt.prompt({ ...body, sessionID })
+          const defaults = Server.getDefaultTools()
+          const tools = defaults || body.tools ? { ...defaults, ...body.tools } : undefined
+          const msg = await SessionPrompt.prompt({ ...body, sessionID, tools })
           stream.write(JSON.stringify(msg))
         })
       },
@@ -762,7 +765,9 @@ export const SessionRoutes = lazy(() =>
         return stream(c, async () => {
           const sessionID = c.req.valid("param").sessionID
           const body = c.req.valid("json")
-          SessionPrompt.prompt({ ...body, sessionID })
+          const defaults = Server.getDefaultTools()
+          const tools = defaults || body.tools ? { ...defaults, ...body.tools } : undefined
+          SessionPrompt.prompt({ ...body, sessionID, tools })
         })
       },
     )

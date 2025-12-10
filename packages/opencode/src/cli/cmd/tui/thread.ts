@@ -71,6 +71,11 @@ export const TuiThreadCommand = cmd({
       .option("agent", {
         type: "string",
         describe: "agent to use",
+      })
+      .option("tools", {
+        type: "string",
+        describe:
+          "comma-separated tool patterns to enable/disable (e.g., '-*,read,write,webfetch' to only enable those three)",
       }),
   handler: async (args) => {
     // Resolve relative paths against PWD to preserve behavior when using --cwd flag
@@ -150,6 +155,7 @@ export const TuiThreadCommand = cmd({
         agent: args.agent,
         model: args.model,
         prompt,
+        tools: args.tools,
       },
       onExit: async () => {
         await client.call("shutdown", undefined)

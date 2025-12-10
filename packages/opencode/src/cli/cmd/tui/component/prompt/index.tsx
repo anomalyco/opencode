@@ -31,6 +31,8 @@ import { DialogAlert } from "../../ui/dialog-alert"
 import { useToast } from "../../ui/toast"
 import { useKV } from "../../context/kv"
 import { useTextareaKeybindings } from "../textarea-keybindings"
+import { useArgs } from "../../context/args"
+import { Wildcard } from "@/util/wildcard"
 
 export type PromptProps = {
   sessionID?: string
@@ -66,6 +68,7 @@ export function Prompt(props: PromptProps) {
   const sync = useSync()
   const dialog = useDialog()
   const toast = useToast()
+  const args = useArgs()
   const status = createMemo(() => sync.data.session_status?.[props.sessionID ?? ""] ?? { type: "idle" })
   const history = usePromptHistory()
   const stash = usePromptStash()
@@ -577,6 +580,7 @@ export function Prompt(props: PromptProps) {
           })),
       })
     } else {
+      const tools = Wildcard.parseToolsPattern(args.tools)
       sdk.client.session
         .prompt({
           sessionID,
@@ -585,6 +589,7 @@ export function Prompt(props: PromptProps) {
           agent: local.agent.current().name,
           model: selectedModel,
           variant,
+          ...(tools && { tools }),
           parts: [
             {
               id: Identifier.ascending("part"),
