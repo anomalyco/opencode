@@ -999,11 +999,13 @@ export namespace Server {
           const sessionID = c.req.valid("param").sessionID
           const body = c.req.valid("json")
           const msgs = await Session.messages({ sessionID })
-          let currentAgent = "build"
+          const cfg = await Config.get()
+
+          let currentAgent = cfg.default_agent!
           for (let i = msgs.length - 1; i >= 0; i--) {
             const info = msgs[i].info
             if (info.role === "user") {
-              currentAgent = info.agent || "build"
+              currentAgent = info.agent
               break
             }
           }

@@ -832,7 +832,8 @@ export namespace SessionPrompt {
   }
 
   async function createUserMessage(input: PromptInput) {
-    const agent = await Agent.get(input.agent ?? "build")
+    const cfg = await Config.get()
+    const agent = await Agent.get(input.agent ?? cfg.default_agent!)
     const info: MessageV2.Info = {
       id: input.messageID ?? Identifier.ascending("message"),
       role: "user",

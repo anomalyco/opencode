@@ -10,6 +10,7 @@ import { select } from "@clack/prompts"
 import { createOpencodeClient, type OpencodeClient } from "@opencode-ai/sdk/v2"
 import { Server } from "../../server/server"
 import { Provider } from "../../provider/provider"
+import { Config } from "@/config/config"
 
 const TOOL: Record<string, [string, string]> = {
   todowrite: ["Todo", UI.Style.TEXT_WARNING_BOLD],
@@ -221,10 +222,11 @@ export const RunCommand = cmd({
         }
       })()
 
+      const cfg = await Config.get()
       if (args.command) {
         await sdk.session.command({
           sessionID,
-          agent: args.agent || "build",
+          agent: args.agent || cfg.default_agent!,
           model: args.model,
           command: args.command,
           arguments: message,
@@ -233,7 +235,7 @@ export const RunCommand = cmd({
         const modelParam = args.model ? Provider.parseModel(args.model) : undefined
         await sdk.session.prompt({
           sessionID,
-          agent: args.agent || "build",
+          agent: args.agent || cfg.default_agent!,
           model: modelParam,
           parts: [...fileParts, { type: "text", text: message }],
         })

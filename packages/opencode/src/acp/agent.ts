@@ -565,13 +565,14 @@ export namespace ACP {
       const sessionID = params.sessionId
       const session = this.sessionManager.get(sessionID)
       const directory = session.cwd
+      const globalCfg = await Config.get()
 
       const current = session.model
       const model = current ?? (await defaultModel(this.config, directory))
       if (!current) {
         this.sessionManager.setModel(session.id, model)
       }
-      const agent = session.modeId ?? "build"
+      const agent = session.modeId ?? globalCfg.default_agent!
 
       const parts: Array<
         { type: "text"; text: string } | { type: "file"; url: string; filename: string; mime: string }
