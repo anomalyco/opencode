@@ -41,27 +41,12 @@ export const ModelsCommand = cmd({
 
     const agent = agentMatch.match
 
-    // Build environment variables
-    const env: Record<string, string> = {}
-    for (const key of agent.envRequired ?? []) {
-      const value = process.env[key]
-      if (!value) {
-        UI.error(`Missing required environment variable ${key} for agent ${agent.name}${EOL}`)
-        if (agent.installGuide) {
-          UI.error(`See installation guide: ${agent.installGuide}${EOL}`)
-        }
-        process.exit(1)
-      }
-      env[key] = value
-    }
-
     let client: ACPClient.Instance | undefined
     try {
       // Create ACP client
       client = await ACPClient.create({
         command: agent.command,
         args: agent.args,
-        env,
         cwd: process.cwd(),
       })
 

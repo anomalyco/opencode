@@ -251,19 +251,9 @@ export namespace ACPOrchestrator {
   async function createClientForState(state: SessionState) {
     const { sessionID, agent } = state
 
-    const env: Record<string, string> = {}
-    for (const key of agent.envRequired ?? []) {
-      const value = process.env[key]
-      if (!value) {
-        throw new Error(`Missing required environment variable ${key} for agent ${agent.name}`)
-      }
-      env[key] = value
-    }
-
     const client = await ACPClient.create({
       command: agent.command,
       args: agent.args,
-      env,
       cwd: Instance.directory,
       onSessionUpdate: async (notification) => {
         log.info("  ┌─ [ORCHESTRATOR] received notification", {

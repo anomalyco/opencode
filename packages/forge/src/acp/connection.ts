@@ -112,11 +112,6 @@ export class AgentConnector {
         command: agentDef.command,
         args: agentDef.args,
         cwd,
-        env: agentDef.envRequired?.reduce((acc, key) => {
-          const value = process.env[key]
-          if (value) acc[key] = value
-          return acc
-        }, {} as Record<string, string>),
       })
       log.debug("agent.connect.created", { agent: agentDef.name })
 
