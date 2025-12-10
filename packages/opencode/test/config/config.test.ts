@@ -523,7 +523,7 @@ test("sets default agent to 'build' when not specified", async () => {
     directory: tmp.path,
     fn: async () => {
       const config = await Config.get()
-      expect(config.defaultAgent).toBe("build")
+      expect(config.default_agent).toBe("build")
     },
   })
 })
@@ -554,7 +554,7 @@ test("uses specified defaultAgent when provided", async () => {
     directory: tmp.path,
     fn: async () => {
       const config = await Config.get()
-      expect(config.defaultAgent).toBe("custom")
+      expect(config.default_agent).toBe("custom")
     },
   })
 })
