@@ -1,4 +1,4 @@
-name: sdk
+name: generate
 
 on:
   push:
@@ -8,8 +8,9 @@ on:
     branches-ignore:
       - production
   workflow_dispatch:
+
 jobs:
-  format:
+  generate:
     runs-on: blacksmith-4vcpu-ubuntu-2404
     permissions:
       contents: write
@@ -24,20 +25,14 @@ jobs:
       - name: Setup Bun
         uses: ./.github/actions/setup-bun
 
-      - name: run
+      - name: Generate SDK
         run: |
           bun ./packages/sdk/js/script/build.ts
           (cd packages/opencode && bun dev generate > ../sdk/openapi.json)
           bun x prettier --write packages/sdk/openapi.json
-          if [ -z "$(git status --porcelain)" ]; then
-            echo "No changes to commit"
-            exit 0
-          fi
-          git config --local user.email "action@github.com"
-          git config --local user.name "GitHub Action"
-          git add -A
-          git commit -m "chore: regen sdk"
-          git push origin HEAD:${PUSH_BRANCH} --no-verify
+
+      - name: Format
+        run: ./script/format.ts
         env:
           CI: true
           PUSH_BRANCH: ${{ github.event.pull_request.head.ref || github.ref_name }}
