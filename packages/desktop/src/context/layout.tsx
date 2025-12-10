@@ -1,14 +1,18 @@
 import { createStore } from "solid-js/store"
-import { createMemo } from "solid-js"
+import { createMemo, onMount } from "solid-js"
 import { createSimpleContext } from "@opencode-ai/ui/context"
 import { makePersisted } from "@solid-primitives/storage"
+import { useGlobalSync } from "./global-sync"
+import { useGlobalSDK } from "./global-sdk"
 
 export const { use: useLayout, provider: LayoutProvider } = createSimpleContext({
   name: "Layout",
   init: () => {
+    const globalSdk = useGlobalSDK()
+    const globalSync = useGlobalSync()
     const [store, setStore] = makePersisted(
       createStore({
-        projects: [] as { directory: string; expanded: boolean; lastSession?: string }[],
+        projects: [] as { worktree: string; expanded: boolean }[],
         sidebar: {
           opened: false,
           width: 280,
@@ -22,31 +26,66 @@ export const { use: useLayout, provider: LayoutProvider } = createSimpleContext(
         },
       }),
       {
-        name: "default-layout.v4",
+        name: "default-layout.v6",
       },
     )
 
+    async function loadProjectSessions(directory: string) {
+      const [, setStore] = globalSync.child(directory)
+      globalSdk.client.session.list({ directory }).then((x) => {
+        const sessions = (x.data ?? [])
+          .slice()
+          .sort((a, b) => a.id.localeCompare(b.id))
+          .slice(0, 5)
+        setStore("session", sessions)
+      })
+    }
+
+    onMount(() => {
+      Promise.all(
+        store.projects.map(({ worktree }) => {
+          return loadProjectSessions(worktree)
+        }),
+      )
+    })
+
+    function enrich(project: { worktree: string; expanded: boolean }) {
+      const metadata = globalSync.data.projects.find((x) => x.worktree === project.worktree)
+      if (!metadata) return []
+      return [
+        {
+          ...project,
+          ...metadata,
+        },
+      ]
+    }
+
     return {
       projects: {
-        list: createMemo(() => store.projects),
+        list: createMemo(() => store.projects.flatMap(enrich)),
         open(directory: string) {
-          if (store.projects.find((x) => x.directory === directory)) return
-          setStore("projects", (x) => [...x, { directory, expanded: true }])
+          if (store.projects.find((x) => x.worktree === directory)) return
+          loadProjectSessions(directory)
+          setStore("projects", (x) => [...x, { worktree: directory, expanded: true }])
         },
         close(directory: string) {
-          setStore("projects", (x) => x.filter((x) => x.directory !== directory))
+          setStore("projects", (x) => x.filter((x) => x.worktree !== directory))
         },
         expand(directory: string) {
-          setStore("projects", (x) => x.map((x) => (x.directory === directory ? { ...x, expanded: true } : x)))
+          setStore("projects", (x) => x.map((x) => (x.worktree === directory ? { ...x, expanded: true } : x)))
         },
         collapse(directory: string) {
-          setStore("projects", (x) => x.map((x) => (x.directory === directory ? { ...x, expanded: false } : x)))
+          setStore("projects", (x) => x.map((x) => (x.worktree === directory ? { ...x, expanded: false } : x)))
         },
-        lastSession(directory: string) {
-          return store.projects.find((x) => x.directory === directory)?.lastSession
-        },
-        setLastSession(directory: string, session: string | undefined) {
-          setStore("projects", (x) => x.map((x) => (x.directory === directory ? { ...x, lastSession: session } : x)))
+        move(directory: string, toIndex: number) {
+          setStore("projects", (projects) => {
+            const fromIndex = projects.findIndex((x) => x.worktree === directory)
+            if (fromIndex === -1 || fromIndex === toIndex) return projects
+            const result = [...projects]
+            const [item] = result.splice(fromIndex, 1)
+            result.splice(toIndex, 0, item)
+            return result
+          })
         },
       },
       sidebar: {

@@ -1,5 +1,5 @@
 import { useFilteredList } from "@opencode-ai/ui/hooks"
-import { createEffect, on, Component, Show, For, onMount, onCleanup, Switch, Match } from "solid-js"
+import { createEffect, on, Component, Show, For, onMount, onCleanup, Switch, Match, createSignal } from "solid-js"
 import { createStore } from "solid-js/store"
 import { createFocusSignal } from "@solid-primitives/active-element"
 import { useLocal } from "@/context/local"
@@ -14,13 +14,43 @@ import { Button } from "@opencode-ai/ui/button"
 import { Icon } from "@opencode-ai/ui/icon"
 import { Tooltip } from "@opencode-ai/ui/tooltip"
 import { IconButton } from "@opencode-ai/ui/icon-button"
+import { ProviderIcon } from "@opencode-ai/ui/provider-icon"
 import { Select } from "@opencode-ai/ui/select"
 import { getDirectory, getFilename } from "@opencode-ai/util/path"
+import { type IconName } from "@opencode-ai/ui/icons/provider"
 
 interface PromptInputProps {
   class?: string
   ref?: (el: HTMLDivElement) => void
 }
+
+const PLACEHOLDERS = [
+  "Fix a TODO in the codebase",
+  "What is the tech stack of this project?",
+  "Fix broken tests",
+  "Explain how authentication works",
+  "Find and fix security vulnerabilities",
+  "Add unit tests for the user service",
+  "Refactor this function to be more readable",
+  "What does this error mean?",
+  "Help me debug this issue",
+  "Generate API documentation",
+  "Optimize database queries",
+  "Add input validation",
+  "Create a new component for...",
+  "How do I deploy this project?",
+  "Review my code for best practices",
+  "Add error handling to this function",
+  "Explain this regex pattern",
+  "Convert this to TypeScript",
+  "Add logging throughout the codebase",
+  "What dependencies are outdated?",
+  "Help me write a migration script",
+  "Implement caching for this endpoint",
+  "Add pagination to this list",
+  "Create a CLI command for...",
+  "How do environment variables work here?",
+]
 
 export const PromptInput: Component<PromptInputProps> = (props) => {
   const navigate = useNavigate()
@@ -34,6 +64,15 @@ export const PromptInput: Component<PromptInputProps> = (props) => {
     popoverIsOpen: boolean
   }>({
     popoverIsOpen: false,
+  })
+
+  const [placeholder, setPlaceholder] = createSignal(Math.floor(Math.random() * PLACEHOLDERS.length))
+
+  onMount(() => {
+    const interval = setInterval(() => {
+      setPlaceholder((prev) => (prev + 1) % PLACEHOLDERS.length)
+    }, 6500)
+    onCleanup(() => clearInterval(interval))
   })
 
   createEffect(() => {
@@ -68,7 +107,7 @@ export const PromptInput: Component<PromptInputProps> = (props) => {
 
   const handleFileSelect = (path: string | undefined) => {
     if (!path) return
-    addPart({ type: "file", path, content: "@" + getFilename(path), start: 0, end: 0 })
+    addPart({ type: "file", path, content: "@" + path, start: 0, end: 0 })
   }
 
   const { flat, active, onInput, onKeyDown, refetch } = useFilteredList<string>({
@@ -403,7 +442,7 @@ export const PromptInput: Component<PromptInputProps> = (props) => {
           />
           <Show when={!session.prompt.dirty()}>
             <div class="absolute top-0 left-0 px-5 py-3 text-14-regular text-text-weak pointer-events-none">
-              Plan and build anything
+              Ask anything... "{PLACEHOLDERS[placeholder()]}"
             </div>
           </Show>
         </div>
@@ -449,7 +488,7 @@ export const PromptInput: Component<PromptInputProps> = (props) => {
               {(i) => (
                 <div class="w-full flex items-center justify-between gap-x-3">
                   <div class="flex items-center gap-x-2.5 text-text-muted grow min-w-0">
-                    <img src={`https://models.dev/logos/${i.provider.id}.svg`} class="size-6 p-0.5 shrink-0" />
+                    <ProviderIcon name={i.provider.id as IconName} class="size-6 p-0.5 shrink-0" />
                     <div class="flex gap-x-3 items-baseline flex-[1_0_0]">
                       <span class="text-14-medium text-text-strong overflow-hidden text-ellipsis">{i.name}</span>
                       <Show when={false}>
