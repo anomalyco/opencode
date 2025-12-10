@@ -39,7 +39,7 @@ await Bun.file(`./dist/${pkg.name}/package.json`).write(
 const tags = [Script.channel]
 if (!Script.preview) {
   const major = Script.version.split(".")[0]
-  tags.push(`latest-${major}`)
+  tags[0] = `latest-${major}`
 }
 
 const tasks = Object.entries(binaries).map(async ([name]) => {
