@@ -1156,8 +1156,17 @@
                 "properties": {
                   "title": {
                     "type": "string"
+                  },
+                  "time": {
+                    "type": "object",
+                    "properties": {
+                      "archived": {
+                        "type": "number"
+                      }
+                    }
                   }
-                }
+                },
+                "required": ["time"]
               }
             }
           }
@@ -6382,6 +6391,9 @@
               },
               "compacting": {
                 "type": "number"
+              },
+              "archived": {
+                "type": "number"
               }
             },
             "required": ["created", "updated"]
@@ -8095,6 +8107,9 @@
       "Path": {
         "type": "object",
         "properties": {
+          "home": {
+            "type": "string"
+          },
           "state": {
             "type": "string"
           },
@@ -8108,7 +8123,7 @@
             "type": "string"
           }
         },
-        "required": ["state", "config", "worktree", "directory"]
+        "required": ["home", "state", "config", "worktree", "directory"]
       },
       "VcsInfo": {
         "type": "object",
