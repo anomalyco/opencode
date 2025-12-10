@@ -13,6 +13,11 @@ if (process.versions.bun !== expectedBunVersion) {
   throw new Error(`This script requires bun@${expectedBunVersion}, but you are using bun@${process.versions.bun}`)
 }
 
+console.log({
+  OPENCODE_CHANNEL: process.env["OPENCODE_CHANNEL"],
+  OPENCODE_BUMP: process.env["OPENCODE_BUMP"],
+  OPENCODE_VERSION: process.env["OPENCODE_VERSION"],
+})
 const CHANNEL = await (async () => {
   if (process.env["OPENCODE_CHANNEL"]) return process.env["OPENCODE_CHANNEL"]
   if (process.env["OPENCODE_BUMP"]) return "latest"
