@@ -1,5 +1,5 @@
 use std::{
-    net::SocketAddr,
+    net::{SocketAddr, TcpListener},
     process::Command,
     sync::{Arc, Mutex},
     time::{Duration, Instant},
@@ -18,7 +18,13 @@ fn get_sidecar_port() -> u16 {
         .map(|s| s.to_string())
         .or_else(|| std::env::var("OPENCODE_PORT").ok())
         .and_then(|port_str| port_str.parse().ok())
-        .unwrap_or(4096)
+        .unwrap_or_else(|| {
+            TcpListener::bind("127.0.0.1:0")
+                .expect("Failed to bind to find free port")
+                .local_addr()
+                .expect("Failed to get local address")
+                .port()
+        })
 }
 
 fn find_and_kill_process_on_port(port: u16) -> Result<(), Box<dyn std::error::Error>> {
@@ -60,6 +66,7 @@ fn spawn_sidecar(app: &AppHandle, port: u16) -> CommandChild {
         .shell()
         .sidecar("opencode")
         .unwrap()
+        .env("OPENCODE_EXPERIMENTAL_ICON_DISCOVERY", "true")
         .args(["serve", &format!("--port={port}")])
         .spawn()
         .expect("Failed to spawn opencode");
