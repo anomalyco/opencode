@@ -39,6 +39,17 @@ export namespace Clipboard {
           return { data: imageBuffer.toString("base64"), mime: "image/png" }
         }
       }
+      console.log("clipboard read: powershell failed or no image")
+
+      // Try PowerShell for text in WSL
+      console.log("clipboard read: trying powershell for text")
+      const textScript = "Add-Type -AssemblyName System.Windows.Forms; [System.Windows.Forms.Clipboard]::GetText()"
+      const textResult = await $`powershell.exe -command "${textScript}"`.nothrow().text()
+      if (textResult?.trim()) {
+        console.log("clipboard read: powershell text succeeded")
+        return { data: textResult.trim(), mime: "text/plain" }
+      }
+      console.log("clipboard read: powershell text failed")
     }
 
     if (os === "linux") {
