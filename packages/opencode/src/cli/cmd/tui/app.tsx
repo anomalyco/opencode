@@ -168,12 +168,19 @@ function App() {
   const exit = useExit()
   const promptRef = usePromptRef()
 
-  const [consoleOpen, setConsoleOpen] = createSignal(!!process.env["SHOW_CONSOLE"])
+  // Track console state to match opentui's 3-state toggle behavior:
+  // - hidden → show+focus (visible=true, focused=true)
+  // - visible+focused → hide (visible=false, focused=false)
+  // - visible+unfocused → focus (visible=true, focused=true)
+  const [consoleState, setConsoleState] = createSignal<{ visible: boolean; focused: boolean }>({
+    visible: !!process.env["SHOW_CONSOLE"],
+    focused: !!process.env["SHOW_CONSOLE"], // show() also focuses
+  })
 
   onMount(() => {
     const parser = new MouseParser()
     renderer.prependInputHandler((sequence: string) => {
-      if (!consoleOpen()) return false
+      if (!consoleState().visible) return false
 
       const mouse = parser.parseMouseEvent(Buffer.from(sequence))
       if (!mouse || mouse.type !== "up" || mouse.button !== 0) return false
@@ -449,7 +456,15 @@ function App() {
       value: "app.console",
       onSelect: (dialog) => {
         renderer.console.toggle()
-        setConsoleOpen((v) => !v)
+        // Mirror opentui's 3-state toggle behavior:
+        // visible+focused → hide, visible+unfocused → focus, hidden → show+focus
+        setConsoleState((s) => {
+          if (s.visible) {
+            if (s.focused) return { visible: false, focused: false }
+            return { visible: true, focused: true }
+          }
+          return { visible: true, focused: true }
+        })
         dialog.clear()
       },
     },
