@@ -2,12 +2,14 @@
 // xdg-basedir reads env vars at import time, so we must set these first
 import os from "os"
 import path from "path"
+import fs from "fs/promises"
 
-const testDataDir = path.join(os.tmpdir(), "opencode-test-data-" + process.pid)
-process.env["XDG_DATA_HOME"] = testDataDir
-process.env["XDG_CACHE_HOME"] = path.join(testDataDir, "cache")
-process.env["XDG_CONFIG_HOME"] = path.join(testDataDir, "config")
-process.env["XDG_STATE_HOME"] = path.join(testDataDir, "state")
+const dir = path.join(os.tmpdir(), "opencode-test-data-" + process.pid)
+await fs.mkdir(dir, { recursive: true })
+process.env["XDG_DATA_HOME"] = path.join(dir, "data")
+process.env["XDG_CACHE_HOME"] = path.join(dir, "cache")
+process.env["XDG_CONFIG_HOME"] = path.join(dir, "config")
+process.env["XDG_STATE_HOME"] = path.join(dir, "state")
 
 // Clear provider env vars to ensure clean test state
 delete process.env["ANTHROPIC_API_KEY"]
