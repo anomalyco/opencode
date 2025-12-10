@@ -489,6 +489,9 @@ export const PromptInput: Component<PromptInputProps> = (props) => {
                   <Show when={!i.cost || i.cost?.input === 0}>
                     <Tag>Free</Tag>
                   </Show>
+                  <Show when={i.latest}>
+                    <Tag>Latest</Tag>
+                  </Show>
                 </div>
               )}
             </SelectDialog>

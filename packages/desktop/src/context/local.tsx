@@ -25,6 +25,7 @@ export type View = LocalFile["view"]
 
 export type LocalModel = Omit<Model, "provider"> & {
   provider: Provider
+  latest?: boolean
 }
 export type ModelKey = { providerID: string; modelID: string }
 
@@ -114,7 +115,17 @@ export const { use: useLocal, provider: LocalProvider } = createSimpleContext({
       })
 
       const list = createMemo(() =>
-        sync.data.provider.flatMap((p) => Object.values(p.models).map((m) => ({ ...m, provider: p }) as LocalModel)),
+        sync.data.provider.flatMap((p) =>
+          Object.values(p.models).map(
+            (m) =>
+              ({
+                ...m,
+                name: m.name.replace("(latest)", "").trim(),
+                provider: p,
+                latest: m.name.includes("(latest)"),
+              }) as LocalModel,
+          ),
+        ),
       )
       const find = (key: ModelKey) => list().find((m) => m.id === key?.modelID && m.provider.id === key.providerID)
 
