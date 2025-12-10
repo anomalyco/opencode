@@ -1231,11 +1231,7 @@ export namespace SessionPrompt {
       },
     }
     await Session.updatePart(part)
-    const shell =
-      process.env["SHELL"] ??
-      (process.platform === "win32"
-        ? process.env["COMSPEC"] || "cmd.exe"
-        : "bash")
+    const shell = process.env["SHELL"] ?? (process.platform === "win32" ? process.env["COMSPEC"] || "cmd.exe" : "bash")
     const shellName = path.basename(shell).toLowerCase()
 
     const invocations: Record<string, { args: string[] }> = {
