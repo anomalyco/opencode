@@ -129,10 +129,14 @@ export const { use: useLocal, provider: LocalProvider } = createSimpleContext({
           }
 
           try {
+            // Get MCP config from sync data (loaded from server)
+            const mcpConfig = sync.data.config.mcp
+
             // Connect to agent
             const result = await AgentConnector.connect({
               agentDef,
               cwd: process.cwd(),
+              mcp: mcpConfig,
               existingClient: sessionStore.client,
               version,
               onStaleCheck: (currentVersion) => currentVersion !== connectVersion,

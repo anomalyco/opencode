@@ -23,6 +23,8 @@ export interface AgentConnectionResult {
 export interface AgentConnectionOptions {
   agentDef: ACPAgentDefinition
   cwd: string
+  /** MCP configuration to pass to the agent */
+  mcp?: Record<string, import("../config/config").Config.Mcp>
   /** Existing client to dispose before connecting (for reconnection scenarios) */
   existingClient?: ACPClient.Instance | null
   /** Version number for race condition handling */
@@ -91,7 +93,7 @@ export class AgentConnector {
   static async connect(
     options: AgentConnectionOptions
   ): Promise<AgentConnectionResult> {
-    const { agentDef, cwd, existingClient, version = 0, onStaleCheck } = options
+    const { agentDef, cwd, mcp, existingClient, version = 0, onStaleCheck } = options
 
     log.debug("agent.connect.start", { agent: agentDef.name })
 
@@ -112,6 +114,7 @@ export class AgentConnector {
         command: agentDef.command,
         args: agentDef.args,
         cwd,
+        mcp,
       })
       log.debug("agent.connect.created", { agent: agentDef.name })
 

@@ -16,26 +16,28 @@ export function Sidebar(props: { sessionID: string }) {
   const [mcpExpanded, setMcpExpanded] = createSignal(true)
   const [diffExpanded, setDiffExpanded] = createSignal(true)
   const [planExpanded, setPlanExpanded] = createSignal(true)
-  const [lspExpanded, setLspExpanded] = createSignal(true)
 
-  const cost = createMemo(() => {
-    const total = messages().reduce((sum, x) => sum + (x.role === "assistant" ? x.cost : 0), 0)
-    return new Intl.NumberFormat("en-US", {
-      style: "currency",
-      currency: "USD",
-    }).format(total)
-  })
-
-  const context = createMemo(() => {
-    const last = messages().findLast((x) => x.role === "assistant" && x.tokens.output > 0) as AssistantMessage
-    if (!last) return
-    const total =
-      last.tokens.input + last.tokens.output + last.tokens.reasoning + last.tokens.cache.read + last.tokens.cache.write
-    return {
-      tokens: total.toLocaleString(),
-      percentage: null,
-    }
-  })
+  // NOTE: Cost/Context calculations commented out - ACP agents don't provide token/cost data
+  // Always shows $0.00 and 0 tokens, which is misleading for users
+  //
+  // const cost = createMemo(() => {
+  //   const total = messages().reduce((sum, x) => sum + (x.role === "assistant" ? x.cost : 0), 0)
+  //   return new Intl.NumberFormat("en-US", {
+  //     style: "currency",
+  //     currency: "USD",
+  //   }).format(total)
+  // })
+  //
+  // const context = createMemo(() => {
+  //   const last = messages().findLast((x) => x.role === "assistant" && x.tokens.output > 0) as AssistantMessage
+  //   if (!last) return
+  //   const total =
+  //     last.tokens.input + last.tokens.output + last.tokens.reasoning + last.tokens.cache.read + last.tokens.cache.write
+  //   return {
+  //     tokens: total.toLocaleString(),
+  //     percentage: null,
+  //   }
+  // })
 
   return (
     <Show when={session()}>
@@ -49,14 +51,15 @@ export function Sidebar(props: { sessionID: string }) {
               <text fg={theme.textMuted}>{session().share!.url}</text>
             </Show>
           </box>
-          <box>
+          {/* Cost/Context section commented out - not available from ACP agents */}
+          {/* <box>
             <text fg={theme.text}>
               <b>Context</b>
             </text>
             <text fg={theme.textMuted}>{context()?.tokens ?? 0} tokens</text>
             <text fg={theme.textMuted}>{context()?.percentage ?? 0}% used</text>
             <text fg={theme.textMuted}>{cost()} spent</text>
-          </box>
+          </box> */}
           <Show when={Object.keys(sync.data.mcp).length > 0}>
             <box>
               <box
@@ -103,44 +106,7 @@ export function Sidebar(props: { sessionID: string }) {
               </Show>
             </box>
           </Show>
-          <Show when={sync.data.lsp.length > 0}>
-            <box>
-              <box
-                flexDirection="row"
-                gap={1}
-                onMouseDown={() => sync.data.lsp.length > 2 && setLspExpanded(!lspExpanded())}
-              >
-                <Show when={sync.data.lsp.length > 2}>
-                  <text fg={theme.text}>{lspExpanded() ? "▼" : "▶"}</text>
-                </Show>
-                <text fg={theme.text}>
-                  <b>LSP</b>
-                </text>
-              </box>
-              <Show when={sync.data.lsp.length <= 2 || lspExpanded()}>
-                <For each={sync.data.lsp}>
-                  {(item) => (
-                    <box flexDirection="row" gap={1}>
-                      <text
-                        flexShrink={0}
-                        style={{
-                          fg: {
-                            connected: theme.success,
-                            error: theme.error,
-                          }[item.status],
-                        }}
-                      >
-                        •
-                      </text>
-                      <text fg={theme.textMuted}>
-                        {item.id} {item.root}
-                      </text>
-                    </box>
-                  )}
-                </For>
-              </Show>
-            </box>
-          </Show>
+          {/* LSP section removed - Forge-internal only, ACP agents have no access */}
           <Show when={plan().length > 0}>
             <box>
               <box
@@ -158,24 +124,43 @@ export function Sidebar(props: { sessionID: string }) {
               <Show when={plan().length <= 2 || planExpanded()}>
                 <For each={plan()}>
                   {(entry) => {
-                    // Status circle
-                    let statusSymbol = "○" // pending - empty circle
-                    let statusColor = theme.textMuted
+                    // Status checkbox
+                    let statusSymbol = "☐" // incomplete/in_progress - empty checkbox
+                    let statusColor = theme.text
+                    let textColor = theme.text // default to normal white
+                    let displayContent = entry.content
+
                     if (entry.status === "in_progress") {
-                      statusSymbol = "◐" // in progress - half circle
-                      statusColor = theme.warning // yellow
+                      statusSymbol = "☐" // in progress - empty checkbox
+                      statusColor = theme.text
+                      textColor = theme.text
+                      displayContent = entry.content // bold handled by wrapper
                     } else if (entry.status === "completed") {
-                      statusSymbol = "✓" // completed - check
-                      statusColor = theme.accent // purple/blue
+                      statusSymbol = "☒" // completed - x'd out checkbox
+                      statusColor = theme.textMuted
+                      textColor = theme.textMuted
+                      // Apply strikethrough using Unicode combining character
+                      displayContent = entry.content
+                        .split("")
+                        .map((char) => char + "\u0336")
+                        .join("")
                     }
 
-                    const textColor = entry.status === "in_progress" ? theme.text : theme.textMuted
-
                     return (
-                      <box flexDirection="row" gap={2}>
-                        <text style={{ fg: statusColor }}>{statusSymbol}</text>
+                      <box flexDirection="row">
+                        <text style={{ fg: statusColor }} flexShrink={0}>
+                          {statusSymbol}{" "}
+                        </text>
                         <text style={{ fg: textColor }}>
-                          {entry.content} • {entry.priority}
+                          {entry.status === "in_progress" ? (
+                            <b>
+                              {displayContent} • {entry.priority}
+                            </b>
+                          ) : (
+                            <>
+                              {displayContent} • {entry.priority}
+                            </>
+                          )}
                         </text>
                       </box>
                     )

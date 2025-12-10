@@ -17,6 +17,7 @@ import {
   type SetSessionModeResponse,
   type SessionModelState,
   type SetSessionModelResponse,
+  type McpCapabilities,
   PROTOCOL_VERSION,
   ndJsonStream,
 } from "@agentclientprotocol/sdk"
@@ -24,6 +25,7 @@ import { Log } from "@/util/log"
 import type { Subprocess } from "bun"
 import { AuthenticationRequiredError } from "./types"
 import { Permission } from "../permission"
+import { transformMcpServers } from "./mcp-transform"
 
 const log = Log.create({ service: "acp-client" })
 
@@ -52,6 +54,10 @@ export namespace ACPClient {
      * Current working directory
      */
     cwd: string
+    /**
+     * MCP configuration (optional - will be transformed for agent)
+     */
+    mcp?: Record<string, import("../config/config").Config.Mcp>
     /**
      * Client capabilities to advertise
      */
@@ -317,6 +323,7 @@ export namespace ACPClient {
     let initialized = false
     let currentSessionId: string | undefined
     let authMethods: AuthMethod[] = []
+    let mcpCapabilities: McpCapabilities | undefined
     let currentModes: SessionModeState | null = null
     const modeChangeCallbacks: Array<(modeId: SessionModeId) => void> = []
     let currentModels: SessionModelState | null = null
@@ -340,14 +347,16 @@ export namespace ACPClient {
         const response = await connection.initialize(request)
         initialized = true
 
-        // Store auth methods from response
+        // Store auth methods and MCP capabilities from response
         authMethods = response.authMethods ?? []
+        mcpCapabilities = response.agentCapabilities?.mcpCapabilities
 
         log.info("initialized", {
           protocolVersion: response.protocolVersion,
           agentName: response.agentInfo?.name,
           agentVersion: response.agentInfo?.version,
           authMethodsCount: authMethods.length,
+          mcpCapabilities,
         })
 
         return response
@@ -384,9 +393,17 @@ export namespace ACPClient {
 
         log.info("creating session", { cwd: config.cwd })
 
+        // Transform MCP configuration to ACP format (if provided)
+        const mcpServers = transformMcpServers(config.mcp, mcpCapabilities)
+
+        log.info("transformed MCP servers", {
+          count: mcpServers.length,
+          servers: mcpServers.map((s) => s.name),
+        })
+
         const request: NewSessionRequest = {
           cwd: config.cwd,
-          mcpServers: [],
+          mcpServers,
         }
 
         try {
