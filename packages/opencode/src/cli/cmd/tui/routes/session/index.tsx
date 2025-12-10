@@ -1057,6 +1057,7 @@ function UserMessage(props: {
                   </Show>
                 }
               >
+                <span> </span>
                 <span style={{ bg: theme.accent, fg: theme.backgroundPanel, bold: true }}> QUEUED </span>
               </Show>
             </text>
@@ -1600,6 +1601,7 @@ ToolRegistry.register<typeof EditTool>({
               showLineNumbers={true}
               width="100%"
               wrapMode={ctx.diffWrapMode()}
+              fg={theme.text}
               addedBg={theme.diffAddedBg}
               removedBg={theme.diffRemovedBg}
               contextBg={theme.diffContextBg}

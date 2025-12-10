@@ -273,8 +273,24 @@ export namespace ProviderTransform {
     return options
   }
 
-  export function providerOptions(npm: string | undefined, providerID: string, options: { [x: string]: any }) {
-    switch (npm) {
+  export function providerOptions(model: Provider.Model, options: { [x: string]: any }, messages: ModelMessage[]) {
+    if (model.capabilities.interleaved && typeof model.capabilities.interleaved === "object") {
+      const cot = []
+      const assistantMessages = messages.filter((msg) => msg.role === "assistant")
+      for (const msg of assistantMessages) {
+        for (const part of msg.content) {
+          if (typeof part === "string") {
+            continue
+          }
+          if (part.type === "reasoning") {
+            cot.push(part)
+          }
+        }
+      }
+      options[model.capabilities.interleaved.field] = cot
+    }
+
+    switch (model.api.npm) {
       case "@ai-sdk/openai":
       case "@ai-sdk/azure":
         return {
@@ -302,7 +318,7 @@ export namespace ProviderTransform {
         }
       default:
         return {
-          [providerID]: options,
+          [model.providerID]: options,
         }
     }
   }

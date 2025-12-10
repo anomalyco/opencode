@@ -2,11 +2,15 @@ name: publish
 run-name: "${{ format('release {0}', inputs.bump) }}"
 
 on:
+  push:
+    branches:
+      - dev
+      - snapshot-*
   workflow_dispatch:
     inputs:
       bump:
         description: "Bump major, minor, or patch"
-        required: true
+        required: false
         type: choice
         options:
           - major
@@ -20,6 +24,7 @@ on:
 concurrency: ${{ github.workflow }}-${{ github.ref }}
 
 permissions:
+  id-token: write
   contents: write
   packages: write
 
@@ -34,20 +39,13 @@ jobs:
 
       - run: git fetch --force --tags
 
-      - uses: actions/setup-go@v5
-        with:
-          go-version: ">=1.24.0"
-          cache: true
-          cache-dependency-path: go.sum
-
       - uses: ./.github/actions/setup-bun
 
-      - name: Install makepkg
+      - name: Setup SSH for AUR
+        if: inputs.bump || inputs.version
         run: |
           sudo apt-get update
           sudo apt-get install -y pacman-package-manager
-      - name: Setup SSH for AUR
-        run: |
           mkdir -p ~/.ssh
           echo "${{ secrets.AUR_KEY }}" > ~/.ssh/id_rsa
           chmod 600 ~/.ssh/id_rsa
@@ -56,11 +54,8 @@ jobs:
           ssh-keyscan -H aur.archlinux.org >> ~/.ssh/known_hosts || true
 
       - name: Install OpenCode
+        if: inputs.bump || inputs.version
         run: curl -fsSL https://opencode.ai/install | bash
-
-      - name: Setup npm auth
-        run: |
-          echo "//registry.npmjs.org/:_authToken=${{ secrets.NPM_TOKEN }}" > ~/.npmrc
 
       - name: Login to GitHub Container Registry
         uses: docker/login-action@v3
@@ -69,20 +64,27 @@ jobs:
           username: ${{ github.repository_owner }}
           password: ${{ secrets.GITHUB_TOKEN }}
 
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "24"
+          registry-url: "https://registry.npmjs.org"
+
       - name: Publish
         run: |
           ./script/publish.ts
         env:
           OPENCODE_BUMP: ${{ inputs.bump }}
           OPENCODE_VERSION: ${{ inputs.version }}
-          OPENCODE_CHANNEL: latest
-          NPM_CONFIG_TOKEN: ${{ secrets.NPM_TOKEN }}
-          GITHUB_TOKEN: ${{ secrets.SST_GITHUB_TOKEN }}
-          AUR_KEY: ${{ secrets.AUR_KEY }}
           OPENCODE_API_KEY: ${{ secrets.OPENCODE_API_KEY }}
+          AUR_KEY: ${{ secrets.AUR_KEY }}
+          GITHUB_TOKEN: ${{ secrets.SST_GITHUB_TOKEN }}
+          NPM_CONFIG_PROVENANCE: false
 
   publish-tauri:
+    if: false # inputs.bump || inputs.version
+    continue-on-error: true
     strategy:
+      fail-fast: false
       matrix:
         settings:
           - host: macos-latest

@@ -130,6 +130,7 @@ describe("ProviderTransform.message - DeepSeek reasoning content", () => {
         toolcall: true,
         input: { text: true, audio: false, image: false, video: false, pdf: false },
         output: { text: true, audio: false, image: false, video: false, pdf: false },
+        interleaved: false,
       },
       cost: {
         input: 0.001,
@@ -184,6 +185,7 @@ describe("ProviderTransform.message - DeepSeek reasoning content", () => {
         toolcall: true,
         input: { text: true, audio: false, image: false, video: false, pdf: false },
         output: { text: true, audio: false, image: false, video: false, pdf: false },
+        interleaved: false,
       },
       cost: {
         input: 0.001,
@@ -236,6 +238,7 @@ describe("ProviderTransform.message - DeepSeek reasoning content", () => {
         toolcall: true,
         input: { text: true, audio: false, image: false, video: false, pdf: false },
         output: { text: true, audio: false, image: false, video: false, pdf: false },
+        interleaved: false,
       },
       cost: {
         input: 0.001,
@@ -281,6 +284,7 @@ describe("ProviderTransform.message - DeepSeek reasoning content", () => {
         toolcall: true,
         input: { text: true, audio: false, image: true, video: false, pdf: false },
         output: { text: true, audio: false, image: false, video: false, pdf: false },
+        interleaved: false,
       },
       cost: {
         input: 0.03,

@@ -18,11 +18,36 @@ import { Binary } from "@opencode-ai/util/binary"
 import { createSimpleContext } from "@opencode-ai/ui/context"
 import { useGlobalSDK } from "./global-sdk"
 
+const PASTEL_COLORS = [
+  "#FCEAFD", // pastel pink
+  "#FFDFBA", // pastel peach
+  "#FFFFBA", // pastel yellow
+  "#BAFFC9", // pastel green
+  "#EAF6FD", // pastel blue
+  "#EFEAFD", // pastel lavender
+  "#FEC8D8", // pastel rose
+  "#D4F0F0", // pastel cyan
+  "#FDF0EA", // pastel coral
+  "#C1E1C1", // pastel mint
+]
+
+function randomPastelColor() {
+  return PASTEL_COLORS[Math.floor(Math.random() * PASTEL_COLORS.length)]
+}
+
+async function ensureProjectColor(project: Project, sdk: ReturnType<typeof useGlobalSDK>): Promise<Project> {
+  if (project.icon?.color) return project
+  const color = randomPastelColor()
+  const updated = { ...project, icon: { ...project.icon, color } }
+  sdk.client.project.update({ projectID: project.id, icon: { color } })
+  return updated
+}
+
 type State = {
   ready: boolean
   provider: Provider[]
   agent: Agent[]
-  project: Project
+  project: string
   config: Config
   path: Path
   session: Session[]
@@ -51,7 +76,6 @@ export const { use: useGlobalSync, provider: GlobalSyncProvider } = createSimple
   init: () => {
     const [globalStore, setGlobalStore] = createStore<{
       ready: boolean
-      defaultProject?: Project // TODO: remove this when we can select projects
       projects: Project[]
       children: Record<string, State>
     }>({
@@ -61,11 +85,10 @@ export const { use: useGlobalSync, provider: GlobalSyncProvider } = createSimple
     })
 
     const children: Record<string, ReturnType<typeof createStore<State>>> = {}
-
     function child(directory: string) {
       if (!children[directory]) {
         setGlobalStore("children", directory, {
-          project: { id: "", worktree: "", time: { created: 0, initialized: 0 } },
+          project: "",
           config: {},
           path: { state: "", config: "", worktree: "", directory: "" },
           ready: false,
@@ -75,7 +98,7 @@ export const { use: useGlobalSync, provider: GlobalSyncProvider } = createSimple
           session_status: {},
           session_diff: {},
           todo: {},
-          limit: 10,
+          limit: 5,
           message: {},
           part: {},
           node: [],
@@ -89,9 +112,31 @@ export const { use: useGlobalSync, provider: GlobalSyncProvider } = createSimple
     const sdk = useGlobalSDK()
     sdk.event.listen((e) => {
       const directory = e.name
-      const [store, setStore] = child(directory)
-
       const event = e.details
+
+      if (directory === "global") {
+        switch (event.type) {
+          case "project.updated": {
+            ensureProjectColor(event.properties, sdk).then((project) => {
+              const result = Binary.search(globalStore.projects, project.id, (s) => s.id)
+              if (result.found) {
+                setGlobalStore("projects", result.index, reconcile(project))
+                return
+              }
+              setGlobalStore(
+                "projects",
+                produce((draft) => {
+                  draft.splice(result.index, 0, project)
+                }),
+              )
+            })
+            break
+          }
+        }
+        return
+      }
+
+      const [store, setStore] = child(directory)
       switch (event.type) {
         case "session.updated": {
           const result = Binary.search(store.session, event.properties.info.id, (s) => s.id)
@@ -162,14 +207,14 @@ export const { use: useGlobalSync, provider: GlobalSyncProvider } = createSimple
     })
 
     Promise.all([
-      sdk.client.project.list().then((x) =>
+      sdk.client.project.list().then(async (x) => {
+        const filtered = x.data!.filter((p) => !p.worktree.includes("opencode-test") && p.vcs)
+        const projects = await Promise.all(filtered.map((p) => ensureProjectColor(p, sdk)))
         setGlobalStore(
           "projects",
-          x.data!.filter((x) => !x.worktree.includes("opencode-test")),
-        ),
-      ),
-      // TODO: remove this when we can select projects
-      sdk.client.project.current().then((x) => setGlobalStore("defaultProject", x.data)),
+          projects.sort((a, b) => a.id.localeCompare(b.id)),
+        )
+      }),
     ]).then(() => setGlobalStore("ready", true))
 
     return {

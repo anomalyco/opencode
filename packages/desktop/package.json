@@ -1,6 +1,6 @@
 {
   "name": "@opencode-ai/desktop",
-  "version": "1.0.134",
+  "version": "1.0.141",
   "description": "",
   "type": "module",
   "exports": {
@@ -8,7 +8,7 @@
     "./vite": "./vite.js"
   },
   "scripts": {
-    "typecheck": "tsgo --noEmit",
+    "typecheck": "tsgo -b",
     "start": "vite",
     "dev": "vite",
     "build": "vite build",

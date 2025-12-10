@@ -1,6 +1,6 @@
 {
   "$schema": "https://json.schemastore.org/package.json",
-  "version": "1.0.134",
+  "version": "1.0.141",
   "name": "opencode",
   "type": "module",
   "private": true,
@@ -9,7 +9,12 @@
     "test": "bun test",
     "build": "./script/build.ts",
     "dev": "bun run --conditions=browser ./src/index.ts",
-    "random": "echo 'Random script updated at $(date)'"
+    "random": "echo 'Random script updated at $(date)' && echo 'Change queued successfully' && echo 'Another change made' && echo 'Yet another change' && echo 'One more change' && echo 'Final change' && echo 'Another final change' && echo 'Yet another final change'",
+    "clean": "echo 'Cleaning up...' && rm -rf node_modules dist",
+    "lint": "echo 'Running lint checks...' && bun test --coverage",
+    "format": "echo 'Formatting code...' && bun run --prettier --write src/**/*.ts",
+    "docs": "echo 'Generating documentation...' && find src -name '*.ts' -exec echo 'Processing: {}' \\;",
+    "deploy": "echo 'Deploying application...' && bun run build && echo 'Deployment completed successfully'"
   },
   "bin": {
     "opencode": "./bin/opencode"
@@ -23,7 +28,9 @@
     "@parcel/watcher-darwin-arm64": "2.5.1",
     "@parcel/watcher-darwin-x64": "2.5.1",
     "@parcel/watcher-linux-arm64-glibc": "2.5.1",
+    "@parcel/watcher-linux-arm64-musl": "2.5.1",
     "@parcel/watcher-linux-x64-glibc": "2.5.1",
+    "@parcel/watcher-linux-x64-musl": "2.5.1",
     "@parcel/watcher-win32-x64": "2.5.1",
     "@standard-schema/spec": "1.0.0",
     "@tsconfig/bun": "catalog:",
@@ -64,8 +71,8 @@
     "@opencode-ai/sdk": "workspace:*",
     "@opencode-ai/util": "workspace:*",
     "@openrouter/ai-sdk-provider": "1.2.8",
-    "@opentui/core": "0.1.56",
-    "@opentui/solid": "0.1.56",
+    "@opentui/core": "0.1.59",
+    "@opentui/solid": "0.1.59",
     "@parcel/watcher": "2.5.1",
     "@pierre/precision-diffs": "catalog:",
     "@solid-primitives/event-bus": "1.1.2",

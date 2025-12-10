@@ -266,3 +266,12 @@ export const ocamlformat: Info = {
     return items.length > 0
   },
 }
+
+export const terraform: Info = {
+  name: "terraform",
+  command: ["terraform", "fmt", "$FILE"],
+  extensions: [".tf", ".tfvars"],
+  async enabled() {
+    return Bun.which("terraform") !== null
+  },
+}
