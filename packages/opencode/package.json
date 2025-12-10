@@ -70,7 +70,7 @@
     "@opencode-ai/script": "workspace:*",
     "@opencode-ai/sdk": "workspace:*",
     "@opencode-ai/util": "workspace:*",
-    "@openrouter/ai-sdk-provider": "1.2.8",
+    "@openrouter/ai-sdk-provider": "1.5.2",
     "@opentui/core": "0.1.60",
     "@opentui/solid": "0.1.60",
     "@parcel/watcher": "2.5.1",

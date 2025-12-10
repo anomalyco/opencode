@@ -405,12 +405,12 @@ export const GithubRunCommand = cmd({
       let appToken: string
       let octoRest: Octokit
       let octoGraph: typeof graphql
-      let commentId: number
       let gitConfig: string
       let session: { id: string; title: string; version: string }
       let shareId: string | undefined
       let exitCode = 0
       type PromptFiles = Awaited<ReturnType<typeof getUserPrompt>>["promptFiles"]
+      const triggerCommentId = isCommentEvent ? commentPayload!.comment.id : undefined
 
       try {
         const actionToken = isMock ? args.token! : await getOidcToken()
@@ -424,8 +424,7 @@ export const GithubRunCommand = cmd({
         await configureGit(appToken)
         await assertPermissions()
 
-        const comment = await createComment()
-        commentId = comment.data.id
+        await addReaction("eyes")
 
         // Setup opencode session
         const repoData = await fetchRepo()
@@ -460,7 +459,8 @@ export const GithubRunCommand = cmd({
               await pushToLocalBranch(summary, uncommittedChanges)
             }
             const hasShared = prData.comments.nodes.some((c) => c.body.includes(`${shareBaseUrl}/s/${shareId}`))
-            await updateComment(`${response}${footer({ image: !hasShared })}`)
+            await createComment(`${response}${footer({ image: !hasShared })}`)
+            await removeReaction()
           }
           // Fork PR
           else {
@@ -474,7 +474,8 @@ export const GithubRunCommand = cmd({
               await pushToForkBranch(summary, prData, uncommittedChanges)
             }
             const hasShared = prData.comments.nodes.some((c) => c.body.includes(`${shareBaseUrl}/s/${shareId}`))
-            await updateComment(`${response}${footer({ image: !hasShared })}`)
+            await createComment(`${response}${footer({ image: !hasShared })}`)
+            await removeReaction()
           }
         }
         // Issue
@@ -494,9 +495,11 @@ export const GithubRunCommand = cmd({
               summary,
               `${response}\n\nCloses #${issueId}${footer({ image: true })}`,
             )
-            await updateComment(`Created PR #${pr}${footer({ image: true })}`)
+            await createComment(`Created PR #${pr}${footer({ image: true })}`)
+            await removeReaction()
           } else {
-            await updateComment(`${response}${footer({ image: true })}`)
+            await createComment(`${response}${footer({ image: true })}`)
+            await removeReaction()
           }
         }
       } catch (e: any) {
@@ -508,7 +511,8 @@ export const GithubRunCommand = cmd({
         } else if (e instanceof Error) {
           msg = e.message
         }
-        await updateComment(`${msg}${footer()}`)
+        await createComment(`${msg}${footer()}`)
+        await removeReaction()
         core.setFailed(msg)
         // Also output the clean error message for the action to capture
         //core.setOutput("prepare_error", e.message);
@@ -939,24 +943,43 @@ Co-authored-by: ${actor} <${actor}@users.noreply.github.com>"`
         if (!["admin", "write"].includes(permission)) throw new Error(`User ${actor} does not have write permissions`)
       }
 
-      async function createComment() {
+      async function addReaction(reaction: "eyes") {
+        if (!triggerCommentId) return
+        console.log("Adding reaction...")
+        return await octoRest.rest.reactions.createForIssueComment({
+          owner,
+          repo,
+          comment_id: triggerCommentId,
+          content: reaction,
+        })
+      }
+
+      async function removeReaction() {
+        if (!triggerCommentId) return
+        console.log("Removing reaction...")
+        const reactions = await octoRest.rest.reactions.listForIssueComment({
+          owner,
+          repo,
+          comment_id: triggerCommentId,
+        })
+
+        const eyesReaction = reactions.data.find((r) => r.content === "eyes")
+        if (!eyesReaction) return
+
+        await octoRest.rest.reactions.deleteForIssueComment({
+          owner,
+          repo,
+          comment_id: triggerCommentId,
+          reaction_id: eyesReaction.id,
+        })
+      }
+
+      async function createComment(body: string) {
         console.log("Creating comment...")
         return await octoRest.rest.issues.createComment({
           owner,
           repo,
           issue_number: issueId,
-          body: `[Working...](${runUrl})`,
-        })
-      }
-
-      async function updateComment(body: string) {
-        if (!commentId) return
-
-        console.log("Updating comment...")
-        return await octoRest.rest.issues.updateComment({
-          owner,
-          repo,
-          comment_id: commentId,
           body,
         })
       }
@@ -1037,7 +1060,7 @@ query($owner: String!, $repo: String!, $number: Int!) {
         const comments = (issue.comments?.nodes || [])
           .filter((c) => {
             const id = parseInt(c.databaseId)
-            return id !== commentId && (!isCommentEvent || id !== commentPayload!.comment.id)
+            return !isCommentEvent || id !== triggerCommentId
           })
           .map((c) => `  - ${c.author.login} at ${c.createdAt}: ${c.body}`)
 
@@ -1156,7 +1179,7 @@ query($owner: String!, $repo: String!, $number: Int!) {
         const comments = (pr.comments?.nodes || [])
           .filter((c) => {
             const id = parseInt(c.databaseId)
-            return id !== commentId && (!isCommentEvent || id !== commentPayload!.comment.id)
+            return !isCommentEvent || id !== triggerCommentId
           })
           .map((c) => `- ${c.author.login} at ${c.createdAt}: ${c.body}`)
 
