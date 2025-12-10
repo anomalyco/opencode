@@ -1088,7 +1088,7 @@ query($owner: String!, $repo: String!, $number: Int!) {
         const comments = (issue.comments?.nodes || [])
           .filter((c) => {
             const id = parseInt(c.databaseId)
-            return !isCommentEvent || id !== triggerCommentId
+            return id !== triggerCommentId
           })
           .map((c) => `  - ${c.author.login} at ${c.createdAt}: ${c.body}`)
 
@@ -1207,7 +1207,7 @@ query($owner: String!, $repo: String!, $number: Int!) {
         const comments = (pr.comments?.nodes || [])
           .filter((c) => {
             const id = parseInt(c.databaseId)
-            return !isCommentEvent || id !== triggerCommentId
+            return id !== triggerCommentId
           })
           .map((c) => `- ${c.author.login} at ${c.createdAt}: ${c.body}`)
 
