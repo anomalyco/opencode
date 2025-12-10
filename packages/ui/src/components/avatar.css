@@ -13,6 +13,11 @@
   color: oklch(from var(--avatar-bg) calc(l * 0.72) calc(c * 8) h);
 }
 
+[data-component="avatar"][data-has-image] {
+  background-color: transparent;
+  border: none;
+}
+
 [data-component="avatar"][data-size="small"] {
   width: 1.25rem;
   height: 1.25rem;
