@@ -520,22 +520,23 @@ export namespace SessionPrompt {
         })
       }
 
+      // Use JSON.stringify/parse to effectively make a deep copy of the message
+      // history, so that modifications made by plugins do not affect the original
+      // messages
       const sessionMessages = JSON.parse(
         JSON.stringify(
-          msgs
-            .filter((m) => {
-              if (m.info.role !== "assistant" || m.info.error === undefined) {
-                return true
-              }
-              if (
-                MessageV2.AbortedError.isInstance(m.info.error) &&
-                m.parts.some((part) => part.type !== "step-start" && part.type !== "reasoning")
-              ) {
-                return true
-              }
-              return false
-            })
-            .map((m) => MessageV2.toSessionMessage(m)),
+          msgs.filter((m) => {
+            if (m.info.role !== "assistant" || m.info.error === undefined) {
+              return true
+            }
+            if (
+              MessageV2.AbortedError.isInstance(m.info.error) &&
+              m.parts.some((part) => part.type !== "step-start" && part.type !== "reasoning")
+            ) {
+              return true
+            }
+            return false
+          }),
         ),
       )
 

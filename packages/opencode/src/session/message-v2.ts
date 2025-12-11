@@ -533,13 +533,6 @@ export namespace MessageV2 {
     return convertToModelMessages(result.filter((msg) => msg.parts.length > 0))
   }
 
-  export function toSessionMessage(message: MessageV2.WithParts): SessionMessage {
-    return {
-      info: message.info,
-      parts: message.parts,
-    }
-  }
-
   export function sessionMessagesToModelMessages(input: SessionMessage[]): ModelMessage[] {
     const result: UIMessage[] = []
 
