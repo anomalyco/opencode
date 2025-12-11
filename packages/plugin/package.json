@@ -1,7 +1,7 @@
 {
   "$schema": "https://json.schemastore.org/package.json",
-  "name": "@opencode-ai/plugin",
-  "version": "1.0.143",
+  "name": "@alisasasasaasas/opencode-plugin",
+  "version": "0.0.0-dev-202512111736",
   "type": "module",
   "scripts": {
     "typecheck": "tsgo --noEmit",
@@ -15,7 +15,7 @@
     "dist"
   ],
   "dependencies": {
-    "@opencode-ai/sdk": "workspace:*",
+    "@alisasasasaasas/opencode-sdk": "workspace:*",
     "zod": "catalog:"
   },
   "devDependencies": {

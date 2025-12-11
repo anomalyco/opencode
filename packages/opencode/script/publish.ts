@@ -3,25 +3,39 @@ import { $ } from "bun"
 import pkg from "../package.json"
 import { Script } from "@opencode-ai/script"
 import { fileURLToPath } from "url"
+import path from "path"
 
 const dir = fileURLToPath(new URL("..", import.meta.url))
 process.chdir(dir)
 
 const { binaries } = await import("./build.ts")
 {
-  const name = `${pkg.name}-${process.platform}-${process.arch}`
-  console.log(`smoke test: running dist/${name}/bin/opencode --version`)
-  await $`./dist/${name}/bin/opencode --version`
+  const os = process.platform === "win32" ? "windows" : process.platform
+  const name = `${pkg.name}-${os}-${process.arch}`
+  const exe = process.platform === "win32" ? "opencode.exe" : "opencode"
+  const binPath = path.join(dir, "dist", name, "bin", exe)
+  console.log(`smoke test: running ${binPath} --version`)
+  await $`${binPath} --version`
 }
 
-await $`mkdir -p ./dist/${pkg.name}`
-await $`cp -r ./bin ./dist/${pkg.name}/bin`
-await $`cp ./script/postinstall.mjs ./dist/${pkg.name}/postinstall.mjs`
+import fs from "fs"
+
+fs.mkdirSync(`./dist/${pkg.name}`, { recursive: true })
+fs.cpSync("./bin", `./dist/${pkg.name}/bin`, { recursive: true })
+fs.cpSync("./script/postinstall.mjs", `./dist/${pkg.name}/postinstall.mjs`)
+// Copy README from root for npm package display
+fs.cpSync(path.join(dir, "../../README.md"), `./dist/${pkg.name}/README.md`)
+
+// Transform binaries to use scoped package names for optionalDependencies
+const scopedBinaries: Record<string, string> = {}
+for (const [name, version] of Object.entries(binaries)) {
+  scopedBinaries[`@alisasasasaasas/${name}`] = version
+}
 
 await Bun.file(`./dist/${pkg.name}/package.json`).write(
   JSON.stringify(
     {
-      name: pkg.name + "-ai",
+      name: `@alisasasasaasas/${pkg.name}-ai`,
       bin: {
         [pkg.name]: `./bin/${pkg.name}`,
       },
@@ -29,7 +43,7 @@ await Bun.file(`./dist/${pkg.name}/package.json`).write(
         postinstall: "bun ./postinstall.mjs || node ./postinstall.mjs",
       },
       version: Script.version,
-      optionalDependencies: binaries,
+      optionalDependencies: scopedBinaries,
     },
     null,
     2,
@@ -38,19 +52,26 @@ await Bun.file(`./dist/${pkg.name}/package.json`).write(
 
 const tags = [Script.channel]
 
-const tasks = Object.entries(binaries).map(async ([name]) => {
+// Run sequentially to avoid Bun path issues on Windows
+for (const [name] of Object.entries(binaries)) {
+  const distDir = path.join(dir, "dist", name)
   if (process.platform !== "win32") {
-    await $`chmod 755 -R .`.cwd(`./dist/${name}`)
+    await $`chmod 755 -R .`.cwd(distDir)
   }
-  await $`bun pm pack`.cwd(`./dist/${name}`)
+  process.chdir(distDir)
+  await $`npm pack`
   for (const tag of tags) {
-    await $`npm publish *.tgz --access public --tag ${tag}`.cwd(`./dist/${name}`)
+    await $`npm publish *.tgz --access public --tag ${tag}`
   }
-})
-await Promise.all(tasks)
-for (const tag of tags) {
-  await $`cd ./dist/${pkg.name} && bun pm pack && npm publish *.tgz --access public --tag ${tag}`
+  process.chdir(dir)
 }
+const mainDistDir = path.join(dir, "dist", pkg.name)
+process.chdir(mainDistDir)
+for (const tag of tags) {
+  await $`npm pack`
+  await $`npm publish *.tgz --access public --tag ${tag}`
+}
+process.chdir(dir)
 
 if (!Script.preview) {
   for (const key of Object.keys(binaries)) {

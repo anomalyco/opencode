@@ -89,7 +89,7 @@ if (!skipInstall) {
   await $`bun install --os="*" --cpu="*" @parcel/watcher@${pkg.dependencies["@parcel/watcher"]}`
 }
 for (const item of targets) {
-  const name = [
+  const baseName = [
     pkg.name,
     // changing to win32 flags npm for some reason
     item.os === "win32" ? "windows" : item.os,
@@ -99,8 +99,10 @@ for (const item of targets) {
   ]
     .filter(Boolean)
     .join("-")
-  console.log(`building ${name}`)
-  await $`mkdir -p dist/${name}/bin`
+  // Use scoped package name for npm publishing
+  const scopedName = `@alisasasasaasas/${baseName}`
+  console.log(`building ${baseName}`)
+  await $`mkdir -p dist/${baseName}/bin`
 
   const parserWorker = fs.realpathSync(path.resolve(dir, "./node_modules/@opentui/core/parser.worker.js"))
   const workerPath = "./src/cli/cmd/tui/worker.ts"
@@ -117,8 +119,8 @@ for (const item of targets) {
     compile: {
       autoloadBunfig: false,
       autoloadDotenv: false,
-      target: name.replace(pkg.name, "bun") as any,
-      outfile: `dist/${name}/bin/opencode`,
+      target: baseName.replace(pkg.name, "bun") as any,
+      outfile: `dist/${baseName}/bin/opencode`,
       execArgv: [`--user-agent=opencode/${Script.version}`, "--"],
       windows: {},
     },
@@ -132,11 +134,11 @@ for (const item of targets) {
     },
   })
 
-  await $`rm -rf ./dist/${name}/bin/tui`
-  await Bun.file(`dist/${name}/package.json`).write(
+  await $`rm -rf ./dist/${baseName}/bin/tui`
+  await Bun.file(`dist/${baseName}/package.json`).write(
     JSON.stringify(
       {
-        name,
+        name: scopedName,
         version: Script.version,
         os: [item.os],
         cpu: [item.arch],
@@ -145,7 +147,7 @@ for (const item of targets) {
       2,
     ),
   )
-  binaries[name] = Script.version
+  binaries[baseName] = Script.version
 }
 
 export { binaries }

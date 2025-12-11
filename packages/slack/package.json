@@ -1,13 +1,13 @@
 {
   "name": "@opencode-ai/slack",
-  "version": "1.0.143",
+  "version": "0.0.0-dev-202512111736",
   "type": "module",
   "scripts": {
     "dev": "bun run src/index.ts",
     "typecheck": "tsgo --noEmit"
   },
   "dependencies": {
-    "@opencode-ai/sdk": "workspace:*",
+    "@alisasasasaasas/opencode-sdk": "workspace:*",
     "@slack/bolt": "^3.17.1"
   },
   "devDependencies": {

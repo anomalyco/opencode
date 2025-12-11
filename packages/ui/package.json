@@ -1,6 +1,6 @@
 {
   "name": "@opencode-ai/ui",
-  "version": "1.0.143",
+  "version": "0.0.0-dev-202512111736",
   "type": "module",
   "exports": {
     "./*": "./src/components/*.tsx",
@@ -32,7 +32,7 @@
   },
   "dependencies": {
     "@kobalte/core": "catalog:",
-    "@opencode-ai/sdk": "workspace:*",
+    "@alisasasasaasas/opencode-sdk": "workspace:*",
     "@opencode-ai/util": "workspace:*",
     "@pierre/precision-diffs": "catalog:",
     "@shikijs/transformers": "3.9.2",

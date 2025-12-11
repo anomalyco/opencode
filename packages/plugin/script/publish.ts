@@ -1,8 +1,9 @@
 #!/usr/bin/env bun
 import { Script } from "@opencode-ai/script"
 import { $ } from "bun"
+import { fileURLToPath } from "url"
 
-const dir = new URL("..", import.meta.url).pathname
+const dir = fileURLToPath(new URL("..", import.meta.url))
 process.chdir(dir)
 
 await $`bun tsc`
@@ -17,5 +18,6 @@ for (const [key, value] of Object.entries(pkg.exports)) {
   }
 }
 await Bun.write("package.json", JSON.stringify(pkg, null, 2))
-await $`bun pm pack && npm publish *.tgz --tag ${Script.channel} --access public`
+await $`npm pack`
+await $`npm publish *.tgz --tag ${Script.channel} --access public`
 await Bun.write("package.json", JSON.stringify(original, null, 2))

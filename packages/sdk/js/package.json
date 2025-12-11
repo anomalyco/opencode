@@ -1,19 +1,37 @@
 {
   "$schema": "https://json.schemastore.org/package.json",
-  "name": "@opencode-ai/sdk",
-  "version": "1.0.143",
+  "name": "@alisasasasaasas/opencode-sdk",
+  "version": "0.0.0-dev-202512111736",
   "type": "module",
   "scripts": {
     "typecheck": "tsgo --noEmit",
     "build": "./script/build.ts"
   },
   "exports": {
-    ".": "./src/index.ts",
-    "./client": "./src/client.ts",
-    "./server": "./src/server.ts",
-    "./v2": "./src/v2/index.ts",
-    "./v2/client": "./src/v2/client.ts",
-    "./v2/server": "./src/v2/server.ts"
+    ".": {
+      "import": "./dist/index.js",
+      "types": "./dist/index.d.ts"
+    },
+    "./client": {
+      "import": "./dist/client.js",
+      "types": "./dist/client.d.ts"
+    },
+    "./server": {
+      "import": "./dist/server.js",
+      "types": "./dist/server.d.ts"
+    },
+    "./v2": {
+      "import": "./dist/v2/index.js",
+      "types": "./dist/v2/index.d.ts"
+    },
+    "./v2/client": {
+      "import": "./dist/v2/client.js",
+      "types": "./dist/v2/client.d.ts"
+    },
+    "./v2/server": {
+      "import": "./dist/v2/server.js",
+      "types": "./dist/v2/server.d.ts"
+    }
   },
   "files": [
     "dist"

@@ -3,22 +3,19 @@
 import { Script } from "@opencode-ai/script"
 import { $ } from "bun"
 
-const dir = new URL("..", import.meta.url).pathname
+import { fileURLToPath } from "url"
+
+const dir = fileURLToPath(new URL("..", import.meta.url))
 process.chdir(dir)
 
 await import("./build")
 
 const pkg = await import("../package.json").then((m) => m.default)
 const original = JSON.parse(JSON.stringify(pkg))
-for (const [key, value] of Object.entries(pkg.exports)) {
-  const file = value.replace("./src/", "./dist/").replace(".ts", "")
-  /// @ts-expect-error
-  pkg.exports[key] = {
-    import: file + ".js",
-    types: file + ".d.ts",
-  }
-}
+// exports are already in correct format with import/types pointing to dist
 await Bun.write("package.json", JSON.stringify(pkg, null, 2))
-await $`bun pm pack`
-await $`npm publish *.tgz --tag ${Script.channel} --access public`
+await $`npm pack`
+// Windows doesn't expand *.tgz, use explicit filename
+const tgzName = `${pkg.name.replace("@", "").replace("/", "-")}-${pkg.version}.tgz`
+await $`npm publish ${tgzName} --tag ${Script.channel} --access public`
 await Bun.write("package.json", JSON.stringify(original, null, 2))

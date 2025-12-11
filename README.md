@@ -9,10 +9,24 @@
 </p>
 <p align="center">The AI coding agent built for the terminal.</p>
 <p align="center">
-  <a href="https://opencode.ai/discord"><img alt="Discord" src="https://img.shields.io/discord/1391832426048651334?style=flat-square&label=discord" /></a>
-  <a href="https://www.npmjs.com/package/opencode-ai"><img alt="npm" src="https://img.shields.io/npm/v/opencode-ai?style=flat-square" /></a>
-  <a href="https://github.com/sst/opencode/actions/workflows/publish.yml"><img alt="Build status" src="https://img.shields.io/github/actions/workflow/status/sst/opencode/publish.yml?style=flat-square&branch=dev" /></a>
+  <a href="https://www.npmjs.com/package/@alisasasasaasas/opencode-ai"><img alt="npm" src="https://img.shields.io/npm/v/@alisasasasaasas/opencode-ai?style=flat-square" /></a>
 </p>
+
+## 🔀 Fork Notice
+
+This is a **fork of [sst/opencode](https://github.com/sst/opencode)** with additional AI providers:
+
+### ✨ Additional Providers
+
+| Provider | Description |
+|----------|-------------|
+| **Qwen CLI** | Alibaba's Qwen models via CLI authentication |
+| **Gemini CLI** | Google's Gemini models via CLI authentication |
+| **[Codex CLI](https://github.com/numman-ali/opencode-openai-codex-auth)** | OpenAI Codex models via CLI authentication (plugin) |
+
+These providers allow you to use Qwen, Gemini, and Codex models with CLI-based authentication, making it easier to use these models without complex API key setup.
+
+---
 
 [![OpenCode Terminal UI](packages/web/src/assets/lander/screenshot.png)](https://opencode.ai)
 
@@ -21,21 +35,15 @@
 ### Installation
 
 ```bash
-# YOLO
-curl -fsSL https://opencode.ai/install | bash
+# Install from npm (this fork)
+npm i -g @alisasasasaasas/opencode-ai@dev
 
-# Package managers
-npm i -g opencode-ai@latest        # or bun/pnpm/yarn
-scoop bucket add extras; scoop install extras/opencode  # Windows
-choco install opencode             # Windows
-brew install opencode              # macOS and Linux
-paru -S opencode-bin               # Arch Linux
-mise use -g ubi:sst/opencode # Any OS
-nix run nixpkgs#opencode           # or github:sst/opencode for latest dev branch
+# Original opencode (not this fork)
+# npm i -g opencode-ai@latest
 ```
 
 > [!TIP]
-> Remove versions older than 0.1.x before installing.
+> Remove versions of the original opencode before installing this fork.
 
 #### Installation Directory
 
