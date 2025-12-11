@@ -40,7 +40,12 @@ export class ACPSessionManager {
     return state
   }
 
-  async load(sessionId: string, cwd: string, mcpServers: McpServer[], model?: ACPSessionState["model"]): Promise<ACPSessionState> {
+  async load(
+    sessionId: string,
+    cwd: string,
+    mcpServers: McpServer[],
+    model?: ACPSessionState["model"],
+  ): Promise<ACPSessionState> {
     const session = await this.sdk.session
       .get(
         {
