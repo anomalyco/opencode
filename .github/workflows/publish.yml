@@ -85,7 +85,6 @@ jobs:
 
   publish-tauri:
     needs: publish
-    if: inputs.bump || inputs.version
     continue-on-error: true
     strategy:
       fail-fast: false
