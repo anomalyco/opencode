@@ -33,6 +33,9 @@ export namespace Config {
   }
 
   function firstPrimaryAgent(agents: Record<string, Agent>): string {
+    const build = agents["build"]
+    if (build && !build.disable) return "build"
+
     for (const [name, config] of Object.entries(agents)) {
       if (config.mode !== "subagent" && !config.disable) {
         return name
