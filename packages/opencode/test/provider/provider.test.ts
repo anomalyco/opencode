@@ -1807,3 +1807,115 @@ test("custom model inherits api.url from models.dev provider", async () => {
     },
   })
 })
+
+// Vertex Express Mode Tests
+test("Google Vertex Express mode with API key", async () => {
+  await using tmp = await tmpdir({
+    init: async (dir) => {
+      await Bun.write(
+        path.join(dir, "opencode.json"),
+        JSON.stringify({
+          $schema: "https://opencode.ai/config.json",
+        }),
+      )
+    },
+  })
+
+  await Instance.provide({
+    directory: tmp.path,
+    init: async () => {
+      // Set up Vertex Express mode with API key
+      Env.set("GOOGLE_VERTEX_API_KEY", "test-vertex-api-key")
+      Env.set("GOOGLE_CLOUD_PROJECT", "express-project")
+    },
+    fn: async () => {
+      const providers = await Provider.list()
+
+      // Vertex provider should be loaded with Express configuration
+      expect(providers["google-vertex"]).toBeDefined()
+      expect(providers["google-vertex"].source).toBe("env")
+
+      // Check that the provider has the expected structure
+      const vertexProvider = providers["google-vertex"]
+      expect(vertexProvider.env).toContain("GOOGLE_VERTEX_API_KEY")
+
+      // Verify models are available
+      expect(Object.keys(vertexProvider.models).length).toBeGreaterThan(0)
+    },
+  })
+})
+
+test("Google Vertex Express mode provider options", async () => {
+  await using tmp = await tmpdir({
+    init: async (dir) => {
+      await Bun.write(
+        path.join(dir, "opencode.json"),
+        JSON.stringify({
+          $schema: "https://opencode.ai/config.json",
+        }),
+      )
+    },
+  })
+
+  await Instance.provide({
+    directory: tmp.path,
+    init: async () => {
+      // Set up Vertex Express mode
+      Env.set("GOOGLE_VERTEX_API_KEY", "test-api-key")
+    },
+    fn: async () => {
+      const providers = await Provider.list()
+      const vertexProvider = providers["google-vertex"]
+
+      // Provider should be autoloaded with Express configuration
+      expect(vertexProvider).toBeDefined()
+
+      // Check that the provider options include Express settings
+      const sdk = await Provider.getProvider("google-vertex")
+      expect(sdk).toBeDefined()
+
+      // Verify that the SDK has the required V3 methods
+      expect(sdk).toHaveProperty("languageModel")
+      expect(sdk).toHaveProperty("embeddingModel")
+      expect(sdk).toHaveProperty("rerankingModel")
+    },
+  })
+})
+
+test("Google Vertex Express mode model loading", async () => {
+  await using tmp = await tmpdir({
+    init: async (dir) => {
+      await Bun.write(
+        path.join(dir, "opencode.json"),
+        JSON.stringify({
+          $schema: "https://opencode.ai/config.json",
+        }),
+      )
+    },
+  })
+
+  await Instance.provide({
+    directory: tmp.path,
+    init: async () => {
+      Env.set("GOOGLE_VERTEX_API_KEY", "test-api-key")
+    },
+    fn: async () => {
+      const providers = await Provider.list()
+      const vertexProvider = providers["google-vertex"]
+
+      // Should have models available
+      expect(vertexProvider.models).toBeDefined()
+      const modelIds = Object.keys(vertexProvider.models)
+      expect(modelIds.length).toBeGreaterThan(0)
+
+      // Check that models have proper structure
+      const firstModelId = modelIds[0]
+      const firstModel = vertexProvider.models[firstModelId]
+
+      expect(firstModel).toBeDefined()
+      expect(firstModel.id).toBe(firstModelId)
+      expect(firstModel.providerID).toBe("google-vertex")
+      expect(firstModel.name).toBeDefined()
+    },
+  })
+})
