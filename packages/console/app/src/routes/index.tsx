@@ -52,8 +52,6 @@ export default function Home() {
 
         <div data-component="content">
           <section data-component="hero">
-            
-
             <div data-slot="hero-copy">
               {/*<a data-slot="releases"*/}
               {/*   href={release()?.url ?? `${config.github.repoUrl}/releases`}*/}

@@ -169,7 +169,6 @@ export function Header(props: { zen?: boolean; hideGetStarted?: boolean }) {
               </Match>
             </Switch>
           </li>
-
         </ul>
       </nav>
       <nav data-component="nav-mobile">
@@ -181,7 +180,7 @@ export function Header(props: { zen?: boolean; hideGetStarted?: boolean }) {
           class="nav-toggle"
           onClick={() => setStore("mobileMenuOpen", !store.mobileMenuOpen)}
         >
-        <span class="sr-only">Open menu</span>
+          <span class="sr-only">Open menu</span>
           <Switch>
             <Match when={store.mobileMenuOpen}>
               <svg
