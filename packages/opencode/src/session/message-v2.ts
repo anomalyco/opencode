@@ -4,8 +4,6 @@ import z from "zod"
 import { NamedError } from "@opencode-ai/util/error"
 import { Message } from "./message"
 import { APICallError, convertToModelMessages, LoadAPIKeyError, type ModelMessage, type UIMessage } from "ai"
-import type { SharedV2ProviderMetadata } from "@ai-sdk/provider"
-
 import { Identifier } from "../id/id"
 import { LSP } from "../lsp"
 import { Snapshot } from "@/snapshot"
