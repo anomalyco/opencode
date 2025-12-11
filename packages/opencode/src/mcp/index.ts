@@ -407,6 +407,7 @@ export namespace MCP {
       for (const [toolName, tool] of Object.entries(tools)) {
         const sanitizedClientName = clientName.replace(/[^a-zA-Z0-9_-]/g, "_")
         const sanitizedToolName = toolName.replace(/[^a-zA-Z0-9_-]/g, "_")
+        // @ts-expect-error - MCP tools are V2 but compatible at runtime
         result[sanitizedClientName + "_" + sanitizedToolName] = tool
       }
     }

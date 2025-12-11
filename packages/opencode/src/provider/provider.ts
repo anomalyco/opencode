@@ -29,18 +29,51 @@ import { createOpenaiCompatible as createGitHubCopilotOpenAICompatible } from ".
 export namespace Provider {
   const log = Log.create({ service: "provider" })
 
+  // Wrapper functions to adapt beta providers to the V3 Provider interface
+  function wrapProviderV2ToV3(createFn: (options?: any) => any): (options: any) => SDK {
+    return (options: any) => {
+      const provider = createFn(options)
+      return {
+        ...provider,
+        // Add missing methods for V3 compatibility
+        embeddingModel: (modelId: string) => {
+          throw new Error(`Embedding models not supported by ${options?.name || "this provider"}`)
+        },
+        rerankingModel: (modelId: string) => {
+          throw new Error(`Reranking models not supported by ${options?.name || "this provider"}`)
+        },
+      }
+    }
+  }
+
+  // Special wrapper for Google Vertex providers that have optional rerankingModel
+  function wrapGoogleVertexProvider(createFn: (options?: any) => any): (options: any) => SDK {
+    return (options: any) => {
+      const provider = createFn(options)
+      return {
+        ...provider,
+        // Ensure rerankingModel is always defined
+        rerankingModel:
+          provider.rerankingModel ||
+          ((modelId: string) => {
+            throw new Error(`Reranking models not supported by ${options?.name || "this provider"}`)
+          }),
+      }
+    }
+  }
+
   const BUNDLED_PROVIDERS: Record<string, (options: any) => SDK> = {
-    "@ai-sdk/amazon-bedrock": createAmazonBedrock,
-    "@ai-sdk/anthropic": createAnthropic,
-    "@ai-sdk/azure": createAzure,
-    "@ai-sdk/google": createGoogleGenerativeAI,
-    "@ai-sdk/google-vertex": createVertex,
-    "@ai-sdk/google-vertex/anthropic": createVertexAnthropic,
-    "@ai-sdk/openai": createOpenAI,
-    "@ai-sdk/openai-compatible": createOpenAICompatible,
-    "@openrouter/ai-sdk-provider": createOpenRouter,
+    "@ai-sdk/amazon-bedrock": wrapProviderV2ToV3(createAmazonBedrock),
+    "@ai-sdk/anthropic": wrapProviderV2ToV3(createAnthropic),
+    "@ai-sdk/azure": wrapProviderV2ToV3(createAzure),
+    "@ai-sdk/google": wrapProviderV2ToV3(createGoogleGenerativeAI),
+    "@ai-sdk/google-vertex": wrapGoogleVertexProvider(createVertex),
+    "@ai-sdk/google-vertex/anthropic": wrapGoogleVertexProvider(createVertexAnthropic),
+    "@ai-sdk/openai": wrapProviderV2ToV3(createOpenAI),
+    "@ai-sdk/openai-compatible": wrapProviderV2ToV3(createOpenAICompatible),
+    "@openrouter/ai-sdk-provider": wrapProviderV2ToV3(createOpenRouter),
     // @ts-ignore (TODO: kill this code so we dont have to maintain it)
-    "@ai-sdk/github-copilot": createGitHubCopilotOpenAICompatible,
+    "@ai-sdk/github-copilot": wrapProviderV2ToV3(createGitHubCopilotOpenAICompatible),
   }
 
   type CustomModelLoader = (sdk: any, modelID: string, options?: Record<string, any>) => Promise<any>
