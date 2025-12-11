@@ -25,6 +25,9 @@ import { createOpenAI } from "@ai-sdk/openai"
 import { createOpenAICompatible } from "@ai-sdk/openai-compatible"
 import { createOpenRouter, type LanguageModelV2 } from "@openrouter/ai-sdk-provider"
 import { createOpenaiCompatible as createGitHubCopilotOpenAICompatible } from "./sdk/openai-compatible/src"
+import { createGeminiCloudCode } from "./gemini-provider"
+import { geminiAuth } from "./gemini-auth"
+import { qwenAuth } from "./qwen-auth"
 
 export namespace Provider {
   const log = Log.create({ service: "provider" })
@@ -38,9 +41,11 @@ export namespace Provider {
     "@ai-sdk/google-vertex/anthropic": createVertexAnthropic,
     "@ai-sdk/openai": createOpenAI,
     "@ai-sdk/openai-compatible": createOpenAICompatible,
+
     "@openrouter/ai-sdk-provider": createOpenRouter,
     // @ts-ignore (TODO: kill this code so we dont have to maintain it)
     "@ai-sdk/github-copilot": createGitHubCopilotOpenAICompatible,
+    "gemini-cloud-code": createGeminiCloudCode,
   }
 
   type CustomModelLoader = (sdk: any, modelID: string, options?: Record<string, any>) => Promise<any>
@@ -318,6 +323,36 @@ export namespace Provider {
         },
       }
     },
+    gemini: async () => {
+      try {
+        await geminiAuth.getAccessToken()
+        return {
+          autoload: true,
+          options: {},
+        }
+      } catch (e) {
+        return { autoload: false }
+      }
+    },
+    qwen: async () => {
+      try {
+        const apiKey = await qwenAuth.getAccessToken()
+        const baseURL = await qwenAuth.getBaseURL()
+        return {
+          autoload: true,
+          options: {
+             baseURL,
+             apiKey,
+             headers: {
+               "Origin": "https://chat.qwen.ai",
+               "Referer": "https://chat.qwen.ai/",
+             }
+          },
+        }
+      } catch (e) {
+        return { autoload: false }
+      }
+    },
   }
 
   export const Model = z
@@ -479,6 +514,107 @@ export namespace Provider {
     const config = await Config.get()
     const modelsDev = await ModelsDev.get()
     const database = mapValues(modelsDev, fromModelsDevProvider)
+
+    // Inject manual providers
+    database["gemini"] = {
+      id: "gemini",
+      name: "Gemini",
+      source: "custom",
+      env: [],
+      options: {},
+      models: {
+        "gemini-2.5-flash": {
+          id: "gemini-2.5-flash",
+          providerID: "gemini",
+          name: "Gemini 2.5 Flash",
+          status: "active",
+          headers: {},
+          options: {},
+          api: { id: "gemini-2.5-flash", url: "", npm: "gemini-cloud-code" },
+          cost: { input: 0.1 / 1000000, output: 0.4 / 1000000, cache: { read: 0, write: 0 } },
+          limit: { context: 1000000, output: 8192 },
+          capabilities: {
+            temperature: true,
+            reasoning: false,
+            attachment: false,
+            toolcall: true,
+            input: { text: true, audio: false, image: false, video: false, pdf: false },
+            output: { text: true, audio: false, image: false, video: false, pdf: false },
+            interleaved: false,
+          },
+        },
+        "gemini-2.5-pro": {
+          id: "gemini-2.5-pro",
+          providerID: "gemini",
+          name: "Gemini 2.5 Pro",
+          status: "active",
+          headers: {},
+          options: {},
+          api: { id: "gemini-2.5-pro", url: "", npm: "gemini-cloud-code" },
+          cost: { input: 0.0, output: 0.0, cache: { read: 0, write: 0 } }, // Unknown pricing, set to 0 for now
+          limit: { context: 2000000, output: 8192 },
+          capabilities: {
+            temperature: true,
+            reasoning: false,
+            attachment: false,
+            toolcall: true,
+            input: { text: true, audio: false, image: false, video: false, pdf: false },
+            output: { text: true, audio: false, image: false, video: false, pdf: false },
+            interleaved: false,
+          },
+        },
+      },
+    }
+
+    database["qwen"] = {
+      id: "qwen",
+      name: "Qwen",
+      source: "custom",
+      env: [],
+      options: {},
+      models: {
+        "coder-model": {
+          id: "coder-model",
+          providerID: "qwen",
+          name: "Qwen Coder (coder-model)",
+          status: "active",
+          headers: {},
+          options: {},
+          api: { id: "coder-model", url: "", npm: "@ai-sdk/openai-compatible" },
+          cost: { input: 0, output: 0, cache: { read: 0, write: 0 } },
+          limit: { context: 32000, output: 8192 },
+          capabilities: {
+            temperature: true,
+            reasoning: false,
+            attachment: false,
+            toolcall: true,
+            input: { text: true, audio: false, image: false, video: false, pdf: false },
+            output: { text: true, audio: false, image: false, video: false, pdf: false },
+            interleaved: false,
+          },
+        },
+        "vision-model": {
+          id: "vision-model",
+          providerID: "qwen",
+          name: "Qwen Vision (vision-model)",
+          status: "active",
+          headers: {},
+          options: {},
+          api: { id: "vision-model", url: "", npm: "@ai-sdk/openai-compatible" },
+          cost: { input: 0, output: 0, cache: { read: 0, write: 0 } },
+          limit: { context: 32000, output: 8192 },
+          capabilities: {
+            temperature: true,
+            reasoning: false,
+            attachment: false,
+            toolcall: true,
+            input: { text: true, audio: false, image: true, video: false, pdf: false },
+            output: { text: true, audio: false, image: false, video: false, pdf: false },
+            interleaved: false,
+          },
+        },
+      },
+    }
 
     const disabled = new Set(config.disabled_providers ?? [])
     const enabled = config.enabled_providers ? new Set(config.enabled_providers) : null
