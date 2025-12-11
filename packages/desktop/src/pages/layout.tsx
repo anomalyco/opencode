@@ -38,6 +38,7 @@ import { Dialog } from "@opencode-ai/ui/dialog"
 import { iife } from "@opencode-ai/util/iife"
 import { List, ListRef } from "@opencode-ai/ui/list"
 import { Input } from "@opencode-ai/ui/input"
+import { showToast, Toast } from "@opencode-ai/ui/toast"
 import { useGlobalSDK } from "@/context/global-sdk"
 
 export default function Layout(props: ParentProps) {
@@ -760,6 +761,12 @@ export default function Layout(props: ParentProps) {
                             })
                             await globalSDK.client.global.dispose()
                             setTimeout(() => {
+                              showToast({
+                                variant: "success",
+                                icon: "circle-check",
+                                title: `${provider().name} connected`,
+                                description: `${provider().name} models are now available to use.`,
+                              })
                               layout.connect.complete()
                             }, 500)
                           }
@@ -792,8 +799,8 @@ export default function Layout(props: ParentProps) {
                                 </Match>
                                 <Match when={true}>
                                   <div class="text-14-regular text-text-base">
-                                    Enter your {provider.name} API key to connect your account and use {provider.name}{" "}
-                                    models in OpenCode.
+                                    Enter your {provider().name} API key to connect your account and use{" "}
+                                    {provider().name} models in OpenCode.
                                   </div>
                                 </Match>
                               </Switch>
@@ -801,7 +808,7 @@ export default function Layout(props: ParentProps) {
                                 <Input
                                   autofocus
                                   type="text"
-                                  label={`${provider.name} API key`}
+                                  label={`${provider().name} API key`}
                                   placeholder="API key"
                                   name="apiKey"
                                   value={formStore.value}
@@ -825,6 +832,7 @@ export default function Layout(props: ParentProps) {
           })}
         </Show>
       </div>
+      <Toast.Region />
     </div>
   )
 }
