@@ -33,8 +33,7 @@ import type { DragEvent, Transformer } from "@thisbeyond/solid-dnd"
 import { SelectDialog } from "@opencode-ai/ui/select-dialog"
 import { Tag } from "@opencode-ai/ui/tag"
 import { IconName } from "@opencode-ai/ui/icons/provider"
-
-const popularProviders = ["opencode", "anthropic", "github-copilot", "openai", "google", "openrouter", "vercel"]
+import { popularProviders, useProviders } from "@/hooks/use-providers"
 
 export default function Layout(props: ParentProps) {
   const [store, setStore] = createStore({
@@ -50,18 +49,7 @@ export default function Layout(props: ParentProps) {
   const currentDirectory = createMemo(() => base64Decode(params.dir ?? ""))
   const sessions = createMemo(() => globalSync.child(currentDirectory())[0].session ?? [])
   const currentSession = createMemo(() => sessions().find((s) => s.id === params.id))
-  const providers = createMemo(() => {
-    if (currentDirectory()) {
-      const [projectStore] = globalSync.child(currentDirectory())
-      return projectStore.provider
-    }
-    return globalSync.data.provider
-  })
-  const connectedProviders = createMemo(() =>
-    providers().all.filter(
-      (p) => providers().connected.includes(p.id) && Object.values(p.models).find((m) => m.cost?.input),
-    ),
-  )
+  const providers = useProviders()
 
   function navigateToProject(directory: string | undefined) {
     if (!directory) return
@@ -493,7 +481,7 @@ export default function Layout(props: ParentProps) {
           </div>
           <div class="flex flex-col gap-1.5 self-stretch items-start shrink-0 px-2 py-3">
             <Switch>
-              <Match when={!connectedProviders().length && layout.sidebar.opened()}>
+              <Match when={!providers().connected().length && layout.sidebar.opened()}>
                 <div class="rounded-md bg-background-stronger shadow-xs-border-base">
                   <div class="p-3 flex flex-col gap-2">
                     <div class="text-12-medium text-text-strong">Getting started</div>
@@ -599,6 +587,7 @@ export default function Layout(props: ParentProps) {
             {(i) => (
               <div class="px-1.25 w-full flex items-center gap-x-4">
                 <ProviderIcon
+                  data-slot="list-item-extra-icon"
                   id={i.id as IconName}
                   // TODO: clean this up after we update icon in models.dev
                   classList={{

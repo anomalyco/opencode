@@ -31,6 +31,31 @@
         ]
       }
     },
+    "/global/dispose": {
+      "post": {
+        "operationId": "global.dispose",
+        "summary": "Dispose instance",
+        "description": "Clean up and dispose all OpenCode instances, releasing all resources.",
+        "responses": {
+          "200": {
+            "description": "Global disposed",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "boolean"
+                }
+              }
+            }
+          }
+        },
+        "x-codeSamples": [
+          {
+            "lang": "js",
+            "source": "import { createOpencodeClient } from \"@opencode-ai/sdk\n\nconst client = createOpencodeClient()\nawait client.global.dispose({\n  ...\n})"
+          }
+        ]
+      }
+    },
     "/project": {
       "get": {
         "operationId": "project.list",
@@ -6810,6 +6835,20 @@
         },
         "required": ["type", "properties"]
       },
+      "Event.global.disposed": {
+        "type": "object",
+        "properties": {
+          "type": {
+            "type": "string",
+            "const": "global.disposed"
+          },
+          "properties": {
+            "type": "object",
+            "properties": {}
+          }
+        },
+        "required": ["type", "properties"]
+      },
       "Event": {
         "anyOf": [
           {
@@ -6910,6 +6949,9 @@
           },
           {
             "$ref": "#/components/schemas/Event.server.connected"
+          },
+          {
+            "$ref": "#/components/schemas/Event.global.disposed"
           }
         ]
       },

@@ -7,6 +7,7 @@ export interface InputProps
     Partial<Pick<ComponentProps<typeof Kobalte>, "value" | "onChange" | "onKeyDown">> {
   label?: string
   hideLabel?: boolean
+  hidden?: boolean
   description?: string
 }
 
@@ -14,6 +15,7 @@ export function Input(props: InputProps) {
   const [local, others] = splitProps(props, [
     "class",
     "label",
+    "hidden",
     "hideLabel",
     "description",
     "value",
@@ -21,7 +23,13 @@ export function Input(props: InputProps) {
     "onKeyDown",
   ])
   return (
-    <Kobalte data-component="input" value={local.value} onChange={local.onChange} onKeyDown={local.onKeyDown}>
+    <Kobalte
+      data-component="input"
+      style={{ height: local.hidden ? 0 : undefined }}
+      value={local.value}
+      onChange={local.onChange}
+      onKeyDown={local.onKeyDown}
+    >
       <Show when={local.label}>
         <Kobalte.Label data-slot="input-label" classList={{ "sr-only": local.hideLabel }}>
           {local.label}
