@@ -1363,7 +1363,8 @@ export namespace SessionPrompt {
   export async function command(input: CommandInput) {
     log.info("command", input)
     const command = await Command.get(input.command)
-    const agentName = command.agent ?? input.agent ?? "build"
+    const cfg = await Config.get()
+    const agentName = command.agent ?? input.agent ?? cfg.default_agent!
 
     const raw = input.arguments.match(argsRegex) ?? []
     const args = raw.map((arg) => arg.replace(quoteTrimRegex, ""))
