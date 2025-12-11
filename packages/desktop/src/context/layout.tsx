@@ -45,15 +45,18 @@ export const { use: useLayout, provider: LayoutProvider } = createSimpleContext(
         name: "default-layout.v7",
       },
     )
-    const [ephemeral, setEphemeral] = createStore({
+    const [ephemeral, setEphemeral] = createStore<{
       connect: {
-        provider: undefined as undefined | string,
-        state: undefined as undefined | "pending" | "complete" | "error",
-        error: undefined as undefined | string,
-      },
+        provider?: string
+        state?: "pending" | "complete" | "error"
+        error?: string
+      }
       dialog: {
-        open: undefined as undefined | Dialog,
-      },
+        open?: Dialog
+      }
+    }>({
+      connect: {},
+      dialog: {},
     })
     const usedColors = new Set<string>()
 
@@ -177,22 +180,30 @@ export const { use: useLayout, provider: LayoutProvider } = createSimpleContext(
       dialog: {
         opened: createMemo(() => ephemeral.dialog?.open),
         open(dialog: Dialog) {
-          setEphemeral("dialog", "open", dialog)
-          if (dialog !== "connect") {
-            setEphemeral("connect", {})
-          }
+          batch(() => {
+            // if (dialog !== "connect") {
+            //   setEphemeral("connect", {})
+            // }
+            setEphemeral("dialog", "open", dialog)
+          })
         },
         close(dialog: Dialog) {
-          if (ephemeral.dialog?.open === dialog) {
-            setEphemeral("dialog", "open", undefined)
-            setEphemeral("connect", {})
+          if (ephemeral.dialog.open === dialog) {
+            setEphemeral(
+              produce((state) => {
+                state.dialog.open = undefined
+                state.connect = {}
+              }),
+            )
           }
         },
         connect(provider: string) {
-          batch(() => {
-            setEphemeral("dialog", "open", "connect")
-            setEphemeral("connect", { provider, state: "pending" })
-          })
+          setEphemeral(
+            produce((state) => {
+              state.dialog.open = "connect"
+              state.connect = { provider, state: "pending" }
+            }),
+          )
         },
       },
       connect: {
