@@ -13,7 +13,7 @@ import { Header } from "~/component/header"
 import { Footer } from "~/component/footer"
 import { Legal } from "~/component/legal"
 import { github } from "~/lib/github"
-import { createMemo } from "solid-js"
+import { createMemo, createSignal } from "solid-js"
 import { config } from "~/config"
 import avatarDavid from "~/asset/lander/avatar-david.png"
 
@@ -29,6 +29,18 @@ function CopyStatus() {
 export default function Home() {
   const githubData = createAsync(() => github())
   const release = createMemo(() => githubData()?.release)
+
+  const [isAnimating, setIsAnimating] = createSignal(false)
+
+  const handleDesktopCopyHover = () => {
+    if (!isAnimating()) {
+      setIsAnimating(true)
+      // Animation duration is 1s for icon + 1s delay + 0.3s for dot = ~2.3s total
+      setTimeout(() => {
+        setIsAnimating(false)
+      }, 2300)
+    }
+  }
 
   const handleCopyClick = (event: Event) => {
     const button = event.currentTarget as HTMLButtonElement
@@ -54,12 +66,12 @@ export default function Home() {
 
         <div data-component="content">
           <section data-component="hero">
-            <div data-component="desktop-app-available">
+            <div data-component="desktop-app-available" data-animating={isAnimating() ? "" : undefined}>
               <div data-slot="desktop-icon">
                 <img src={desktopAppIcon} alt="" />
                 <div data-slot="dot"></div>
               </div>
-              <div data-slot="desktop-copy">
+              <div data-slot="desktop-copy" onMouseEnter={handleDesktopCopyHover}>
                 <span>Now available on desktop for macOS, Windows, and Linux.</span> <a href="/download">Learn more</a>
               </div>
             </div>
