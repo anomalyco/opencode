@@ -51,7 +51,7 @@ export function MessageNav(
   return (
     <Switch>
       <Match when={local.size === "compact"}>
-        <Tooltip openDelay={0} closeDelay={300} placement="left-start" gutter={-65} shift={-16} overlap>
+        <Tooltip openDelay={0} closeDelay={300} placement="right-start" gutter={-40} shift={-10} overlap>
           <Tooltip.Trigger as="div">{content()}</Tooltip.Trigger>
           <Tooltip.Portal>
             <Tooltip.Content data-slot="message-nav-tooltip">
