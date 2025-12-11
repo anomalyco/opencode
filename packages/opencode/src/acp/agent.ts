@@ -632,7 +632,7 @@ export namespace ACP {
               .sessionUpdate({
                 sessionId,
                 update: {
-                  sessionUpdate: "agent_message_chunk",
+                  sessionUpdate: "agent_thought_chunk",
                   content: {
                     type: "text",
                     text: part.text,
