@@ -185,9 +185,7 @@ export const { use: useLayout, provider: LayoutProvider } = createSimpleContext(
         close(dialog: Dialog) {
           if (ephemeral.dialog?.open === dialog) {
             setEphemeral("dialog", "open", undefined)
-            if (dialog === "connect") {
-              setEphemeral("connect", {})
-            }
+            setEphemeral("connect", {})
           }
         },
         connect(provider: string) {

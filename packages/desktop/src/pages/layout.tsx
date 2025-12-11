@@ -487,7 +487,7 @@ export default function Layout(props: ParentProps) {
           </div>
           <div class="flex flex-col gap-1.5 self-stretch items-start shrink-0 px-2 py-3">
             <Switch>
-              <Match when={!providers().connected().length && layout.sidebar.opened()}>
+              <Match when={!providers().paid().length && layout.sidebar.opened()}>
                 <div class="rounded-md bg-background-stronger shadow-xs-border-base">
                   <div class="p-3 flex flex-col gap-2">
                     <div class="text-12-medium text-text-strong">Getting started</div>
