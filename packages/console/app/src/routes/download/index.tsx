@@ -1,8 +1,10 @@
 import "./index.css"
 import { Title, Meta, Link } from "@solidjs/meta"
+import { A } from "@solidjs/router"
 import { Header } from "~/component/header"
 import { Footer } from "~/component/footer"
 import { IconCopy, IconCheck } from "~/component/icon"
+import { Faq } from "~/component/faq"
 import desktopAppIcon from "../../asset/lander/opencode-desktop-icon.png"
 import { Legal } from "~/component/legal"
 import { config } from "~/config"
@@ -56,7 +58,9 @@ export default function Download() {
           </section>
 
           <section data-component="download-section">
-            <div data-component="section-label"><span>[1]</span> OpenCode Terminal</div>
+            <div data-component="section-label">
+              <span>[1]</span> OpenCode Terminal
+            </div>
             <div data-component="section-content">
               <button
                 data-component="cli-row"
@@ -95,8 +99,8 @@ export default function Download() {
           </section>
 
           <section data-component="download-section">
-            <div data-component="section-label"><span>[2]</span> OpenCode Desktop
-              (Beta)
+            <div data-component="section-label">
+              <span>[2]</span> OpenCode Desktop (Beta)
             </div>
             <div data-component="section-content">
               <div data-component="download-row">
@@ -199,15 +203,14 @@ export default function Download() {
           </section>
 
           <section data-component="download-section">
-            <div data-component="section-label"><span>[3]</span> OpenCode
-              Extensions
+            <div data-component="section-label">
+              <span>[3]</span> OpenCode Extensions
             </div>
             <div data-component="section-content">
               <div data-component="download-row">
                 <div data-component="download-info">
                   <span data-slot="icon">
-                    <svg width="24" height="24" viewBox="0 0 24 24" fill="none"
-                         xmlns="http://www.w3.org/2000/svg">
+                    <svg width="24" height="24" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg">
                       <g clip-path="url(#clip0_2614_159777)">
                         <path
                           d="M21.7899 4.15451L17.6755 2.17514C17.1968 1.94389 16.6274 2.04139 16.253 2.41576L8.37242 9.60639L4.93805 7.00201C4.6193 6.75764 4.16992 6.77764 3.87367 7.04764L2.77367 8.05014C2.4093 8.37889 2.4093 8.95201 2.77055 9.28076L5.7493 11.9989L2.77055 14.717C2.4093 15.0458 2.4093 15.6189 2.77367 15.9476L3.87367 16.9501C4.17305 17.2201 4.6193 17.2401 4.93805 16.9958L8.37242 14.3883L16.2568 21.582C16.628 21.9564 17.1974 22.0539 17.6762 21.8226L21.7943 19.8401C22.2274 19.632 22.5005 19.1958 22.5005 18.7139V5.27951C22.5005 4.80076 22.2237 4.36139 21.7912 4.15326L21.7899 4.15451ZM17.5024 16.5408L11.5193 11.9995L17.5024 7.45826V16.5408Z"
@@ -216,15 +219,14 @@ export default function Download() {
                       </g>
                       <defs>
                         <clipPath id="clip0_2614_159777">
-                          <rect width="20" height="20" fill="white"
-                                transform="translate(2.5 2)" />
+                          <rect width="20" height="20" fill="white" transform="translate(2.5 2)" />
                         </clipPath>
                       </defs>
                     </svg>
                   </span>
                   <span>VS Code</span>
                 </div>
-                <a href="#" data-component="action-button">
+                <a href="https://opencode.ai/docs/ide/" data-component="action-button">
                   Install
                 </a>
               </div>
@@ -232,8 +234,7 @@ export default function Download() {
               <div data-component="download-row">
                 <div data-component="download-info">
                   <span data-slot="icon">
-                    <svg width="24" height="24" viewBox="0 0 24 24" fill="none"
-                         xmlns="http://www.w3.org/2000/svg">
+                    <svg width="24" height="24" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg">
                       <g clip-path="url(#clip0_2614_159762)">
                         <path
                           d="M20.1613 6.73388L12.4027 2.11135C12.1535 1.96288 11.8461 1.96288 11.597 2.11135L3.83874 6.73388C3.6293 6.85867 3.5 7.08946 3.5 7.33942V16.6608C3.5 16.9107 3.6293 17.1415 3.83874 17.2663L11.5973 21.8888C11.8465 22.0373 12.1539 22.0373 12.403 21.8888L20.1616 17.2663C20.3711 17.1415 20.5004 16.9107 20.5004 16.6608V7.33942C20.5004 7.08946 20.3711 6.85867 20.1616 6.73388H20.1613ZM19.6739 7.71304L12.1841 21.1002C12.1335 21.1905 11.9998 21.1536 11.9998 21.0491V12.2833C11.9998 12.1082 11.9091 11.9462 11.762 11.8582L4.40586 7.47548C4.31844 7.42324 4.35413 7.28529 4.45539 7.28529H19.435C19.6477 7.28529 19.7806 7.52322 19.6743 7.71341H19.6739V7.71304Z"
@@ -242,15 +243,14 @@ export default function Download() {
                       </g>
                       <defs>
                         <clipPath id="clip0_2614_159762">
-                          <rect width="17" height="20" fill="white"
-                                transform="translate(3.5 2)" />
+                          <rect width="17" height="20" fill="white" transform="translate(3.5 2)" />
                         </clipPath>
                       </defs>
                     </svg>
                   </span>
                   <span>Cursor</span>
                 </div>
-                <a href="#" data-component="action-button">
+                <a href="https://opencode.ai/docs/ide/" data-component="action-button">
                   Install
                 </a>
               </div>
@@ -258,8 +258,7 @@ export default function Download() {
               <div data-component="download-row">
                 <div data-component="download-info">
                   <span data-slot="icon">
-                    <svg width="24" height="24" viewBox="0 0 24 24" fill="none"
-                         xmlns="http://www.w3.org/2000/svg">
+                    <svg width="24" height="24" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg">
                       <path
                         d="M4.375 3.25C4.02982 3.25 3.75 3.52982 3.75 3.875V17.625H2.5V3.875C2.5 2.83947 3.33947 2 4.375 2H21.1206C21.9558 2 22.374 3.00982 21.7835 3.60042L11.4698 13.9141H14.375V12.625H15.625V14.2266C15.625 14.7443 15.2053 15.1641 14.6875 15.1641H10.2198L8.07139 17.3125H17.8125V9.5H19.0625V17.3125C19.0625 18.0029 18.5029 18.5625 17.8125 18.5625H6.82139L4.63389 20.75H20.625C20.9701 20.75 21.25 20.4701 21.25 20.125V6.375H22.5V20.125C22.5 21.1606 21.6606 22 20.625 22H3.87944C3.04422 22 2.62594 20.9901 3.21653 20.3996L13.4911 10.125H10.625V11.375H9.375V9.8125C9.375 9.29474 9.79474 8.875 10.3125 8.875H14.7411L16.9286 6.6875H7.1875V14.5H5.9375V6.6875C5.9375 5.99714 6.49714 5.4375 7.1875 5.4375H18.1786L20.3661 3.25H4.375Z"
                         fill="currentColor"
@@ -268,7 +267,7 @@ export default function Download() {
                   </span>
                   <span>Zed</span>
                 </div>
-                <a href="#" data-component="action-button">
+                <a href="https://opencode.ai/docs/ide/" data-component="action-button">
                   Install
                 </a>
               </div>
@@ -276,8 +275,7 @@ export default function Download() {
               <div data-component="download-row">
                 <div data-component="download-info">
                   <span data-slot="icon">
-                    <svg width="24" height="24" viewBox="0 0 24 24" fill="none"
-                         xmlns="http://www.w3.org/2000/svg">
+                    <svg width="24" height="24" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg">
                       <path
                         d="M21.8156 6.00325H21.625C20.6219 6.00162 19.8079 6.8448 19.8079 7.88581V12.0961C19.8079 12.9368 19.1384 13.6179 18.3415 13.6179C17.8681 13.6179 17.3955 13.3706 17.115 12.9555L12.9722 6.814C12.6285 6.30403 12.0691 6 11.4637 6C10.5192 6 9.66922 6.83345 9.66922 7.86232V12.0969C9.66922 12.9376 9.00519 13.6187 8.20289 13.6187C7.72791 13.6187 7.25603 13.3714 6.97557 12.9563L2.33983 6.08351C2.23514 5.92783 2 6.00487 2 6.1946V9.86649C2 10.0522 2.05469 10.2322 2.15702 10.3846L6.71933 17.1471C6.98886 17.5468 7.38651 17.8435 7.84507 17.9514C8.9927 18.2221 10.0489 17.3052 10.0489 16.1369V11.9047C10.0489 11.064 10.7051 10.3829 11.5152 10.3829H11.5176C12.0059 10.3829 12.4636 10.6302 12.7441 11.0453L16.8877 17.186C17.2322 17.6968 17.7627 18 18.3954 18C19.361 18 20.1883 17.1657 20.1883 16.1377V11.9039C20.1883 11.0632 20.8446 10.3821 21.6547 10.3821H21.8164C21.9179 10.3821 22 10.297 22 10.1916V6.19377C22 6.08839 21.9179 6.00325 21.8164 6.00325H21.8156Z"
                         fill="currentColor"
@@ -286,7 +284,7 @@ export default function Download() {
                   </span>
                   <span>Windsurf</span>
                 </div>
-                <a href="#" data-component="action-button">
+                <a href="https://opencode.ai/docs/ide/" data-component="action-button">
                   Install
                 </a>
               </div>
@@ -294,44 +292,40 @@ export default function Download() {
               <div data-component="download-row">
                 <div data-component="download-info">
                   <span data-slot="icon">
-                    <svg width="24" height="24" viewBox="0 0 24 24" fill="none"
-                         xmlns="http://www.w3.org/2000/svg">
-<path
-  d="M11.6179 1.49887C10.99 1.90169 10.8089 2.73615 11.2135 3.36183C13.4375 6.80593 13.9624 9.40369 13.7347 11.6802C12.8142 16.0398 10.8133 16.9242 9.06476 16.9242C7.35756 16.9242 7.81472 14.1145 9.09798 13.2922C9.86402 12.8139 10.8452 12.503 11.5983 12.503C12.3445 12.503 12.9495 11.9 12.9495 11.156C12.9495 10.4117 12.3445 9.80871 11.5983 9.80871C10.7187 9.80871 9.85588 9.99351 9.05046 10.3081C9.21502 9.53173 9.27574 8.69265 9.063 7.80077C8.74004 6.44645 7.81032 5.15285 6.19596 3.89885C5.91326 3.67885 5.55466 3.58007 5.19892 3.62407C4.84318 3.66807 4.51956 3.85111 4.29934 4.13315C3.8413 4.72055 3.94734 5.56711 4.5365 6.02405C5.85166 7.04551 6.28594 7.80165 6.43444 8.42403C6.58294 9.04641 6.46348 9.71411 6.16516 10.6315C5.7839 11.8679 5.34126 12.9716 5.14722 14.0301C5.05174 14.551 5.0436 15.118 5.01896 15.5709C4.07186 14.6478 3.70116 13.429 3.70116 11.6481C3.70094 10.9041 3.09594 10.3008 2.34992 10.3011C1.60434 10.3017 1.00022 10.9045 1 11.6481C1 14.0804 1.71126 16.3948 3.61756 17.9388C5.34324 19.5829 9.73158 18.9752 9.73158 21.6146C9.73158 22.3595 10.8219 22.722 11.5679 22.722C12.3331 22.722 13.296 22.2105 13.296 21.6146C13.296 18.6199 16.4519 16.7999 21.6472 16.8078C22.3935 16.8089 22.9989 16.2063 23 15.4623C23.0013 14.718 22.3976 14.1137 21.6514 14.1123C21.2961 14.1119 20.9498 14.124 20.6084 14.1442C21.1892 12.7783 21.4468 11.2743 21.3936 9.64987C21.3689 8.90605 20.7446 8.32305 19.999 8.34725C19.2525 8.37145 18.6678 8.99471 18.6922 9.73897C18.7626 11.8659 18.6829 13.7652 17.0983 14.7664C16.6477 15.0509 16.1239 15.2977 15.6271 15.2977C16.0128 14.2487 16.3041 13.1415 16.4233 11.948C16.4994 11.1863 16.5076 10.2815 16.4207 9.57859C16.2858 8.48959 16.123 7.25451 16.5364 6.32413C16.9078 5.52289 17.7398 5.18739 18.9615 5.18739C19.707 5.18673 20.3112 4.58371 20.3114 3.84033C20.3118 3.09607 19.7075 2.49239 18.9615 2.49173C17.146 2.49173 15.7699 3.44719 14.9898 4.60153C14.5819 3.73033 14.0852 2.83251 13.485 1.90323C13.2912 1.60293 12.9858 1.39195 12.6358 1.31605C12.4624 1.27843 12.2834 1.27513 12.1087 1.30637C11.934 1.33783 11.7672 1.40317 11.6179 1.49887Z"
-  fill="currentColor" />
-</svg>
-
+                    <svg width="24" height="24" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg">
+                      <path
+                        d="M11.6179 1.49887C10.99 1.90169 10.8089 2.73615 11.2135 3.36183C13.4375 6.80593 13.9624 9.40369 13.7347 11.6802C12.8142 16.0398 10.8133 16.9242 9.06476 16.9242C7.35756 16.9242 7.81472 14.1145 9.09798 13.2922C9.86402 12.8139 10.8452 12.503 11.5983 12.503C12.3445 12.503 12.9495 11.9 12.9495 11.156C12.9495 10.4117 12.3445 9.80871 11.5983 9.80871C10.7187 9.80871 9.85588 9.99351 9.05046 10.3081C9.21502 9.53173 9.27574 8.69265 9.063 7.80077C8.74004 6.44645 7.81032 5.15285 6.19596 3.89885C5.91326 3.67885 5.55466 3.58007 5.19892 3.62407C4.84318 3.66807 4.51956 3.85111 4.29934 4.13315C3.8413 4.72055 3.94734 5.56711 4.5365 6.02405C5.85166 7.04551 6.28594 7.80165 6.43444 8.42403C6.58294 9.04641 6.46348 9.71411 6.16516 10.6315C5.7839 11.8679 5.34126 12.9716 5.14722 14.0301C5.05174 14.551 5.0436 15.118 5.01896 15.5709C4.07186 14.6478 3.70116 13.429 3.70116 11.6481C3.70094 10.9041 3.09594 10.3008 2.34992 10.3011C1.60434 10.3017 1.00022 10.9045 1 11.6481C1 14.0804 1.71126 16.3948 3.61756 17.9388C5.34324 19.5829 9.73158 18.9752 9.73158 21.6146C9.73158 22.3595 10.8219 22.722 11.5679 22.722C12.3331 22.722 13.296 22.2105 13.296 21.6146C13.296 18.6199 16.4519 16.7999 21.6472 16.8078C22.3935 16.8089 22.9989 16.2063 23 15.4623C23.0013 14.718 22.3976 14.1137 21.6514 14.1123C21.2961 14.1119 20.9498 14.124 20.6084 14.1442C21.1892 12.7783 21.4468 11.2743 21.3936 9.64987C21.3689 8.90605 20.7446 8.32305 19.999 8.34725C19.2525 8.37145 18.6678 8.99471 18.6922 9.73897C18.7626 11.8659 18.6829 13.7652 17.0983 14.7664C16.6477 15.0509 16.1239 15.2977 15.6271 15.2977C16.0128 14.2487 16.3041 13.1415 16.4233 11.948C16.4994 11.1863 16.5076 10.2815 16.4207 9.57859C16.2858 8.48959 16.123 7.25451 16.5364 6.32413C16.9078 5.52289 17.7398 5.18739 18.9615 5.18739C19.707 5.18673 20.3112 4.58371 20.3114 3.84033C20.3118 3.09607 19.7075 2.49239 18.9615 2.49173C17.146 2.49173 15.7699 3.44719 14.9898 4.60153C14.5819 3.73033 14.0852 2.83251 13.485 1.90323C13.2912 1.60293 12.9858 1.39195 12.6358 1.31605C12.4624 1.27843 12.2834 1.27513 12.1087 1.30637C11.934 1.33783 11.7672 1.40317 11.6179 1.49887Z"
+                        fill="currentColor"
+                      />
+                    </svg>
                   </span>
                   <span>VSCodium</span>
                 </div>
-                <a href="#" data-component="action-button">
+                <a href="https://opencode.ai/docs/ide/" data-component="action-button">
                   Install
                 </a>
               </div>
-
             </div>
           </section>
 
           <section data-component="download-section">
-            <div data-component="section-label"><span>[4]</span> OpenCode
-              Integrations
+            <div data-component="section-label">
+              <span>[4]</span> OpenCode Integrations
             </div>
             <div data-component="section-content">
               <div data-component="download-row">
                 <div data-component="download-info">
                   <span data-slot="icon">
-                    <svg width="24" height="24" viewBox="0 0 24 24" fill="none"
-                         xmlns="http://www.w3.org/2000/svg">
-<path
-  d="M12 1.94922C17.525 1.94922 22 6.42422 22 11.9492C21.9995 14.0445 21.3419 16.0868 20.1198 17.7887C18.8977 19.4907 17.1727 20.7665 15.1875 21.4367C14.6875 21.5367 14.5 21.2242 14.5 20.9617C14.5 20.6242 14.5125 19.5492 14.5125 18.2117C14.5125 17.2742 14.2 16.6742 13.8375 16.3617C16.0625 16.1117 18.4 15.2617 18.4 11.4242C18.4 10.3242 18.0125 9.43672 17.375 8.73672C17.475 8.48672 17.825 7.46172 17.275 6.08672C17.275 6.08672 16.4375 5.81172 14.525 7.11172C13.725 6.88672 12.875 6.77422 12.025 6.77422C11.175 6.77422 10.325 6.88672 9.525 7.11172C7.6125 5.82422 6.775 6.08672 6.775 6.08672C6.225 7.46172 6.575 8.48672 6.675 8.73672C6.0375 9.43672 5.65 10.3367 5.65 11.4242C5.65 15.2492 7.975 16.1117 10.2 16.3617C9.9125 16.6117 9.65 17.0492 9.5625 17.6992C8.9875 17.9617 7.55 18.3867 6.65 16.8742C6.4625 16.5742 5.9 15.8367 5.1125 15.8492C4.275 15.8617 4.775 16.3242 5.125 16.5117C5.55 16.7492 6.0375 17.6367 6.15 17.9242C6.35 18.4867 7 19.5617 9.5125 19.0992C9.5125 19.9367 9.525 20.7242 9.525 20.9617C9.525 21.2242 9.3375 21.5242 8.8375 21.4367C6.8458 20.7738 5.11342 19.5005 3.88611 17.7975C2.65881 16.0945 1.9989 14.0484 2 11.9492C2 6.42422 6.475 1.94922 12 1.94922Z"
-  fill="currentColor" />
-</svg>
-
+                    <svg width="24" height="24" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg">
+                      <path
+                        d="M12 1.94922C17.525 1.94922 22 6.42422 22 11.9492C21.9995 14.0445 21.3419 16.0868 20.1198 17.7887C18.8977 19.4907 17.1727 20.7665 15.1875 21.4367C14.6875 21.5367 14.5 21.2242 14.5 20.9617C14.5 20.6242 14.5125 19.5492 14.5125 18.2117C14.5125 17.2742 14.2 16.6742 13.8375 16.3617C16.0625 16.1117 18.4 15.2617 18.4 11.4242C18.4 10.3242 18.0125 9.43672 17.375 8.73672C17.475 8.48672 17.825 7.46172 17.275 6.08672C17.275 6.08672 16.4375 5.81172 14.525 7.11172C13.725 6.88672 12.875 6.77422 12.025 6.77422C11.175 6.77422 10.325 6.88672 9.525 7.11172C7.6125 5.82422 6.775 6.08672 6.775 6.08672C6.225 7.46172 6.575 8.48672 6.675 8.73672C6.0375 9.43672 5.65 10.3367 5.65 11.4242C5.65 15.2492 7.975 16.1117 10.2 16.3617C9.9125 16.6117 9.65 17.0492 9.5625 17.6992C8.9875 17.9617 7.55 18.3867 6.65 16.8742C6.4625 16.5742 5.9 15.8367 5.1125 15.8492C4.275 15.8617 4.775 16.3242 5.125 16.5117C5.55 16.7492 6.0375 17.6367 6.15 17.9242C6.35 18.4867 7 19.5617 9.5125 19.0992C9.5125 19.9367 9.525 20.7242 9.525 20.9617C9.525 21.2242 9.3375 21.5242 8.8375 21.4367C6.8458 20.7738 5.11342 19.5005 3.88611 17.7975C2.65881 16.0945 1.9989 14.0484 2 11.9492C2 6.42422 6.475 1.94922 12 1.94922Z"
+                        fill="currentColor"
+                      />
+                    </svg>
                   </span>
                   <span>GitHub</span>
                 </div>
-                <a href="https://opencode.ai/docs/github/"
-                   data-component="action-button">
+                <a href="https://opencode.ai/docs/github/" data-component="action-button">
                   Install
                 </a>
               </div>
@@ -339,13 +333,12 @@ export default function Download() {
               <div data-component="download-row">
                 <div data-component="download-info">
                   <span data-slot="icon">
-                    <svg width="24" height="24" viewBox="0 0 24 24" fill="none"
-                         xmlns="http://www.w3.org/2000/svg">
-<path
-  d="M20.7011 10.1255L20.6758 10.0583L18.2257 3.41877C18.1759 3.28864 18.0876 3.17824 17.9736 3.10343C17.8595 3.02989 17.7264 2.99447 17.5924 3.00196C17.4583 3.00944 17.3296 3.05947 17.2238 3.14528C17.1191 3.23356 17.0432 3.35318 17.0063 3.48787L15.352 8.74347H8.65334L6.99905 3.48787C6.96317 3.35245 6.88708 3.23223 6.7816 3.14431C6.67576 3.05849 6.54711 3.00847 6.41303 3.00098C6.27894 2.9935 6.14587 3.02892 6.03178 3.10246C5.91802 3.17757 5.82983 3.28787 5.77965 3.4178L3.32493 10.0545L3.30056 10.1216C2.94787 11.0785 2.90433 12.1286 3.17652 13.1134C3.44871 14.0983 4.02187 14.9645 4.80957 15.5816L4.81801 15.5884L4.8405 15.605L8.57273 18.5072L10.4192 19.9584L11.5439 20.8401C11.6755 20.9438 11.8361 21 12.0013 21C12.1665 21 12.3271 20.9438 12.4587 20.8401L13.5834 19.9584L15.4298 18.5072L19.1846 15.5874L19.1939 15.5797C19.9799 14.9625 20.5517 14.0971 20.8235 13.1136C21.0952 12.1301 21.0523 11.0815 20.7011 10.1255Z"
-  fill="currentColor" />
-</svg>
-
+                    <svg width="24" height="24" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg">
+                      <path
+                        d="M20.7011 10.1255L20.6758 10.0583L18.2257 3.41877C18.1759 3.28864 18.0876 3.17824 17.9736 3.10343C17.8595 3.02989 17.7264 2.99447 17.5924 3.00196C17.4583 3.00944 17.3296 3.05947 17.2238 3.14528C17.1191 3.23356 17.0432 3.35318 17.0063 3.48787L15.352 8.74347H8.65334L6.99905 3.48787C6.96317 3.35245 6.88708 3.23223 6.7816 3.14431C6.67576 3.05849 6.54711 3.00847 6.41303 3.00098C6.27894 2.9935 6.14587 3.02892 6.03178 3.10246C5.91802 3.17757 5.82983 3.28787 5.77965 3.4178L3.32493 10.0545L3.30056 10.1216C2.94787 11.0785 2.90433 12.1286 3.17652 13.1134C3.44871 14.0983 4.02187 14.9645 4.80957 15.5816L4.81801 15.5884L4.8405 15.605L8.57273 18.5072L10.4192 19.9584L11.5439 20.8401C11.6755 20.9438 11.8361 21 12.0013 21C12.1665 21 12.3271 20.9438 12.4587 20.8401L13.5834 19.9584L15.4298 18.5072L19.1846 15.5874L19.1939 15.5797C19.9799 14.9625 20.5517 14.0971 20.8235 13.1136C21.0952 12.1301 21.0523 11.0815 20.7011 10.1255Z"
+                        fill="currentColor"
+                      />
+                    </svg>
                   </span>
                   <span>GitLab</span>
                 </div>
@@ -353,11 +346,71 @@ export default function Download() {
                   Install
                 </a>
               </div>
-
             </div>
           </section>
-
         </div>
+
+        <section data-component="faq">
+          <div data-slot="section-title">
+            <h3>FAQ</h3>
+          </div>
+          <ul>
+            <li>
+              <Faq question="What is OpenCode?">
+                OpenCode is an open source agent that helps you write and run code with any AI model. It's available as
+                a terminal-based interface, desktop app, or IDE extension.
+              </Faq>
+            </li>
+            <li>
+              <Faq question="How do I use OpenCode?">
+                The easiest way to get started is to read the <a href="/docs">intro</a>.
+              </Faq>
+            </li>
+            <li>
+              <Faq question="Do I need extra AI subscriptions to use OpenCode?">
+                Not necessarily, but probably. You'll need an AI subscription if you want to connect OpenCode to a paid
+                provider, although you can work with{" "}
+                <a href="/docs/providers/#lm-studio" target="_blank">
+                  local models
+                </a>{" "}
+                for free. While we encourage users to use <A href="/zen">Zen</A>, OpenCode works with all popular
+                providers such as OpenAI, Anthropic, xAI etc.
+              </Faq>
+            </li>
+            <li>
+              <Faq question="Can I only use OpenCode in the terminal?">
+                Not anymore! OpenCode is now available as an app for your desktop.
+              </Faq>
+            </li>
+            <li>
+              <Faq question="How much does OpenCode cost?">
+                OpenCode is 100% free to use. Any additional costs will come from your subscription to a model provider.
+                While OpenCode works with any model provider, we recommend using <A href="/zen">Zen</A>.
+              </Faq>
+            </li>
+            <li>
+              <Faq question="What about data and privacy?">
+                Your data and information is only stored when you create sharable links in OpenCode. Learn more about{" "}
+                <a href="/docs/share/#privacy">share pages</a>.
+              </Faq>
+            </li>
+            <li>
+              <Faq question="Is OpenCode open source?">
+                Yes, OpenCode is fully open source. The source code is public on{" "}
+                <a href={config.github.repoUrl} target="_blank">
+                  GitHub
+                </a>{" "}
+                under the{" "}
+                <a href={`${config.github.repoUrl}?tab=MIT-1-ov-file#readme`} target="_blank">
+                  MIT License
+                </a>
+                , meaning anyone can use, modify, or contribute to its development. Anyone from the community can file
+                issues, submit pull requests, and extend functionality.
+              </Faq>
+            </li>
+          </ul>
+        </section>
+
         <Footer />
       </div>
       <Legal />
