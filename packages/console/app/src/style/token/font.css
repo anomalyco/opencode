@@ -1,3 +1,11 @@
+@font-face {
+  font-family: "Berkeley Mono";
+  src: url("/fonts/berkley-mono.woff2") format("woff2");
+  font-weight: 400;
+  font-style: normal;
+  font-display: swap;
+}
+
 body {
   --font-size-2xs: 0.6875rem;
   --font-size-xs: 0.75rem;
@@ -15,6 +23,7 @@ body {
   --font-size-9xl: 8rem;
 
   --font-mono:
-    "IBM Plex Mono", ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, "Liberation Mono", "Courier New", monospace;
+    "Berkeley Mono", "IBM Plex Mono", ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, "Liberation Mono",
+    "Courier New", monospace;
   --font-sans: var(--font-mono);
 }
