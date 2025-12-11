@@ -57,6 +57,10 @@ function ToastDescription(props: ToastDescriptionProps & ComponentProps<"div">) 
   return <Kobalte.Description data-slot="toast-description" {...props} />
 }
 
+function ToastActions(props: ComponentProps<"div">) {
+  return <div data-slot="toast-actions" {...props} />
+}
+
 function ToastCloseButton(props: ToastCloseButtonProps & ComponentProps<"button">) {
   return <Kobalte.CloseButton data-slot="toast-close-button" as={IconButton} icon="close" variant="ghost" {...props} />
 }
@@ -75,6 +79,7 @@ export const Toast = Object.assign(ToastRoot, {
   Content: ToastContent,
   Title: ToastTitle,
   Description: ToastDescription,
+  Actions: ToastActions,
   CloseButton: ToastCloseButton,
   ProgressTrack: ToastProgressTrack,
   ProgressFill: ToastProgressFill,
@@ -84,31 +89,44 @@ export { toaster }
 
 export type ToastVariant = "default" | "success" | "error" | "loading"
 
+export interface ToastAction {
+  label: string
+  onClick: () => void
+}
+
 export interface ToastOptions {
   title?: string
   description?: string
   icon?: IconProps["name"]
   variant?: ToastVariant
   duration?: number
+  actions?: ToastAction[]
 }
 
 export function showToast(options: ToastOptions | string) {
   const opts = typeof options === "string" ? { description: options } : options
   return toaster.show((props) => (
     <Toast toastId={props.toastId} duration={opts.duration} data-variant={opts.variant ?? "default"}>
-      <div data-slot="toast-inner">
-        <Show when={opts.icon}>
-          <Toast.Icon name={opts.icon!} />
+      <Show when={opts.icon}>
+        <Toast.Icon name={opts.icon!} />
+      </Show>
+      <Toast.Content>
+        <Show when={opts.title}>
+          <Toast.Title>{opts.title}</Toast.Title>
         </Show>
-        <Toast.Content>
-          <Show when={opts.title}>
-            <Toast.Title>{opts.title}</Toast.Title>
-          </Show>
-          <Show when={opts.description}>
-            <Toast.Description>{opts.description}</Toast.Description>
-          </Show>
-        </Toast.Content>
-      </div>
+        <Show when={opts.description}>
+          <Toast.Description>{opts.description}</Toast.Description>
+        </Show>
+        <Show when={opts.actions?.length}>
+          <Toast.Actions>
+            {opts.actions!.map((action) => (
+              <button data-slot="toast-action" onClick={action.onClick}>
+                {action.label}
+              </button>
+            ))}
+          </Toast.Actions>
+        </Show>
+      </Toast.Content>
       <Toast.CloseButton />
     </Toast>
   ))

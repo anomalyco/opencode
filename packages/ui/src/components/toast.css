@@ -120,6 +120,34 @@
     margin: 0;
   }
 
+  [data-slot="toast-actions"] {
+    display: flex;
+    gap: 16px;
+    margin-top: 8px;
+  }
+
+  [data-slot="toast-action"] {
+    background: none;
+    border: none;
+    padding: 0;
+    cursor: pointer;
+
+    color: rgba(253, 252, 252, 0.94);
+    font-family: var(--font-family-sans);
+    font-size: var(--font-size-base);
+    font-weight: var(--font-weight-medium);
+    line-height: var(--line-height-large);
+    letter-spacing: var(--letter-spacing-normal);
+
+    &:hover {
+      text-decoration: underline;
+    }
+
+    &:last-child {
+      color: rgba(253, 249, 249, 0.5);
+    }
+  }
+
   [data-slot="toast-close-button"] {
     flex-shrink: 0;
   }
