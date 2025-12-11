@@ -481,19 +481,23 @@ export namespace Config {
       input_select_down: z.string().optional().default("shift+down").describe("Select down in input"),
       input_line_home: z.string().optional().default("ctrl+a").describe("Move to start of line in input"),
       input_line_end: z.string().optional().default("ctrl+e").describe("Move to end of line in input"),
-      input_select_line_home: z.string().optional().default("none").describe("Select to start of line in input"),
-      input_select_line_end: z.string().optional().default("none").describe("Select to end of line in input"),
-      input_visual_line_home: z.string().optional().default("none").describe("Move to start of visual line in input"),
-      input_visual_line_end: z.string().optional().default("none").describe("Move to end of visual line in input"),
+      input_select_line_home: z
+        .string()
+        .optional()
+        .default("ctrl+shift+a")
+        .describe("Select to start of line in input"),
+      input_select_line_end: z.string().optional().default("ctrl+shift+e").describe("Select to end of line in input"),
+      input_visual_line_home: z.string().optional().default("alt+a").describe("Move to start of visual line in input"),
+      input_visual_line_end: z.string().optional().default("alt+e").describe("Move to end of visual line in input"),
       input_select_visual_line_home: z
         .string()
         .optional()
-        .default("none")
+        .default("alt+shift+a")
         .describe("Select to start of visual line in input"),
       input_select_visual_line_end: z
         .string()
         .optional()
-        .default("none")
+        .default("alt+shift+e")
         .describe("Select to end of visual line in input"),
       input_buffer_home: z.string().optional().default("home").describe("Move to start of buffer in input"),
       input_buffer_end: z.string().optional().default("end").describe("Move to end of buffer in input"),
@@ -503,15 +507,23 @@ export namespace Config {
         .default("shift+home")
         .describe("Select to start of buffer in input"),
       input_select_buffer_end: z.string().optional().default("shift+end").describe("Select to end of buffer in input"),
-      input_delete_line: z.string().optional().default("alt+d").describe("Delete line in input"),
+      input_delete_line: z.string().optional().default("ctrl+shift+d").describe("Delete line in input"),
       input_delete_to_line_end: z.string().optional().default("ctrl+k").describe("Delete to end of line in input"),
       input_delete_to_line_start: z.string().optional().default("ctrl+u").describe("Delete to start of line in input"),
       input_backspace: z.string().optional().default("backspace,shift+backspace").describe("Backspace in input"),
-      input_delete: z.string().optional().default("delete,shift+delete").describe("Delete character in input"),
+      input_delete: z.string().optional().default("ctrl+d,delete,shift+delete").describe("Delete character in input"),
       input_undo: z.string().optional().default("ctrl+-,cmd+z").describe("Undo in input"),
       input_redo: z.string().optional().default("ctrl+.,cmd+shift+z").describe("Redo in input"),
-      input_word_forward: z.string().optional().default("alt+f,alt+right").describe("Move word forward in input"),
-      input_word_backward: z.string().optional().default("alt+b,alt+left").describe("Move word backward in input"),
+      input_word_forward: z
+        .string()
+        .optional()
+        .default("alt+f,alt+right,ctrl+right")
+        .describe("Move word forward in input"),
+      input_word_backward: z
+        .string()
+        .optional()
+        .default("alt+b,alt+left,ctrl+left")
+        .describe("Move word backward in input"),
       input_select_word_forward: z
         .string()
         .optional()
@@ -522,11 +534,15 @@ export namespace Config {
         .optional()
         .default("alt+shift+b,alt+shift+left")
         .describe("Select word backward in input"),
-      input_delete_word_forward: z.string().optional().default("ctrl+d").describe("Delete word forward in input"),
+      input_delete_word_forward: z
+        .string()
+        .optional()
+        .default("alt+d,alt+delete,ctrl+delete")
+        .describe("Delete word forward in input"),
       input_delete_word_backward: z
         .string()
         .optional()
-        .default("ctrl+w,alt+backspace")
+        .default("ctrl+w,ctrl+backspace,alt+backspace")
         .describe("Delete word backward in input"),
       history_previous: z.string().optional().default("up").describe("Previous history item"),
       history_next: z.string().optional().default("down").describe("Next history item"),
