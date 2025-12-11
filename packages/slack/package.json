@@ -1,6 +1,6 @@
 {
   "name": "@opencode-ai/slack",
-  "version": "1.0.149",
+  "version": "1.0.150",
   "type": "module",
   "scripts": {
     "dev": "bun run src/index.ts",
