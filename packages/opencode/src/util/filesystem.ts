@@ -1,13 +1,19 @@
-import { exists } from "fs/promises"
+import { exists, realpath } from "fs/promises"
 import { dirname, join, normalize, relative } from "path"
 import { tmpdir } from "os"
 
 export namespace Filesystem {
   const systemTmpDir = normalize(tmpdir())
+  // on macOS /tmp is a symlink to /private/tmp, resolve it
+  const tmpDirResolved = await realpath("/tmp").catch(() => null)
 
   export function isAllowedPath(projectDir: string, filepath: string) {
     const normalized = normalize(filepath)
-    return contains(projectDir, normalized) || contains(systemTmpDir, normalized) || contains("/tmp", normalized)
+    if (contains(projectDir, normalized)) return true
+    if (contains(systemTmpDir, normalized)) return true
+    if (contains("/tmp", normalized)) return true
+    if (tmpDirResolved && contains(tmpDirResolved, normalized)) return true
+    return false
   }
   export function overlaps(a: string, b: string) {
     const relA = relative(a, b)
