@@ -164,6 +164,7 @@ export function Session() {
 
   const toast = useToast()
   const sdk = useSDK()
+  const [lastSessionId, setLastSessionId] = createSignal<string | undefined>(undefined)
 
   createEffect(() => {
     if (!sync.data.provider.length) return
@@ -171,11 +172,11 @@ export function Session() {
     if (!local.model.ready) return
     const next = route.sessionID
 
-    if (lastSession.id) {
+    if (lastSessionId()) {
       const prevAgent = local.agent.current().name
       const prevModel = local.model.current()
-      local.pref.setAgent(lastSession.id, prevAgent)
-      if (prevModel) local.pref.setModel(lastSession.id, prevModel)
+      local.pref.setAgent(lastSessionId()!, prevAgent)
+      if (prevModel) local.pref.setModel(lastSessionId()!, prevModel)
     }
 
     const pref = local.pref.get(next)
@@ -185,7 +186,7 @@ export function Session() {
     const currentModel = local.model.current()
     if (!pref?.model && currentModel) local.pref.setModel(next, currentModel)
 
-    lastSession.id = next
+    setLastSessionId(next)
   })
 
   createEffect(
