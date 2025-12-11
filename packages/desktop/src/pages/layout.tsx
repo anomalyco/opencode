@@ -1,4 +1,4 @@
-import { createEffect, createMemo, For, Match, onMount, ParentProps, Show, Switch, type JSX } from "solid-js"
+import { createEffect, createMemo, For, Match, onCleanup, onMount, ParentProps, Show, Switch, type JSX } from "solid-js"
 import { DateTime } from "luxon"
 import { A, useNavigate, useParams } from "@solidjs/router"
 import { useLayout } from "@/context/layout"
@@ -38,7 +38,7 @@ import { Dialog } from "@opencode-ai/ui/dialog"
 import { iife } from "@opencode-ai/util/iife"
 import { Link } from "@/components/link"
 import { List, ListRef } from "@opencode-ai/ui/list"
-import { Input } from "@opencode-ai/ui/input"
+import { TextField } from "@opencode-ai/ui/text-field"
 import { showToast, Toast } from "@opencode-ai/ui/toast"
 import { useGlobalSDK } from "@/context/global-sdk"
 import { Spinner } from "@opencode-ai/ui/spinner"
@@ -683,16 +683,37 @@ export default function Layout(props: ParentProps) {
               }
             }
 
+            let listRef: ListRef | undefined
+            function handleKey(e: KeyboardEvent) {
+              if (e.key === "Enter" && e.target instanceof HTMLInputElement) {
+                return
+              }
+              if (e.key === "Escape") return
+              listRef?.onKeyDown(e)
+            }
+
             onMount(() => {
               if (methods().length === 1) {
                 selectMethod(0)
               }
+
+              document.addEventListener("keydown", handleKey)
+              onCleanup(() => {
+                document.removeEventListener("keydown", handleKey)
+              })
             })
 
-            let listRef: ListRef | undefined
-            function handleKey(e: KeyboardEvent) {
-              if (e.key === "Escape") return
-              listRef?.onKeyDown(e)
+            async function complete() {
+              await globalSDK.client.global.dispose()
+              setTimeout(() => {
+                showToast({
+                  variant: "success",
+                  icon: "circle-check",
+                  title: `${provider().name} connected`,
+                  description: `${provider().name} models are now available to use.`,
+                })
+                layout.connect.complete()
+              }, 500)
             }
 
             return (
@@ -753,7 +774,6 @@ export default function Layout(props: ParentProps) {
                         <Match when={store.method === undefined}>
                           <div class="text-14-regular text-text-base">Select login method for {provider().name}.</div>
                           <div class="">
-                            <Input hidden type="text" class="opacity-0 size-0" autofocus onKeyDown={handleKey} />
                             <List
                               ref={(ref) => (listRef = ref)}
                               items={methods}
@@ -820,16 +840,7 @@ export default function Layout(props: ParentProps) {
                                   key: apiKey,
                                 },
                               })
-                              await globalSDK.client.global.dispose()
-                              setTimeout(() => {
-                                showToast({
-                                  variant: "success",
-                                  icon: "circle-check",
-                                  title: `${provider().name} connected`,
-                                  description: `${provider().name} models are now available to use.`,
-                                })
-                                layout.connect.complete()
-                              }, 500)
+                              await complete()
                             }
 
                             return (
@@ -862,7 +873,7 @@ export default function Layout(props: ParentProps) {
                                   </Match>
                                 </Switch>
                                 <form onSubmit={handleSubmit} class="flex flex-col items-start gap-4">
-                                  <Input
+                                  <TextField
                                     autofocus
                                     type="text"
                                     label={`${provider().name} API key`}
@@ -915,16 +926,7 @@ export default function Layout(props: ParentProps) {
                                     code,
                                   })
                                   if (!error) {
-                                    await globalSDK.client.global.dispose()
-                                    setTimeout(() => {
-                                      showToast({
-                                        variant: "success",
-                                        icon: "circle-check",
-                                        title: `${provider().name} connected`,
-                                        description: `${provider().name} models are now available to use.`,
-                                      })
-                                      layout.connect.complete()
-                                    }, 500)
+                                    await complete()
                                     return
                                   }
                                   setFormStore("error", "Invalid authorization code")
@@ -938,7 +940,7 @@ export default function Layout(props: ParentProps) {
                                       OpenCode.
                                     </div>
                                     <form onSubmit={handleSubmit} class="flex flex-col items-start gap-4">
-                                      <Input
+                                      <TextField
                                         autofocus
                                         type="text"
                                         label={`${store.method?.label} authorization code`}
@@ -958,12 +960,48 @@ export default function Layout(props: ParentProps) {
                               })}
                             </Match>
                             <Match when={store.authorization?.method === "auto"}>
-                              <div class="flex flex-col gap-6">
-                                <div class="text-14-regular text-text-base">
-                                  Visit <Link href={store.authorization!.url}>this link</Link> and enter the code below
-                                  to connect your account and use {provider().name} models in OpenCode.
-                                </div>
-                              </div>
+                              {iife(() => {
+                                const code = createMemo(() => {
+                                  const instructions = store.authorization?.instructions
+                                  if (instructions?.includes(":")) {
+                                    return instructions?.split(":")[1]?.trim()
+                                  }
+                                  return instructions
+                                })
+
+                                onMount(async () => {
+                                  const result = await globalSDK.client.provider.oauth.callback({
+                                    providerID: providerID(),
+                                    method: methodIndex(),
+                                  })
+                                  if (result.error) {
+                                    // TODO: show error
+                                    layout.dialog.close("connect")
+                                    return
+                                  }
+                                  await complete()
+                                })
+
+                                return (
+                                  <div class="flex flex-col gap-6">
+                                    <div class="text-14-regular text-text-base">
+                                      Visit <Link href={store.authorization!.url}>this link</Link> and enter the code
+                                      below to connect your account and use {provider().name} models in OpenCode.
+                                    </div>
+                                    <TextField
+                                      label="Confirmation code"
+                                      class="font-mono"
+                                      value={code()}
+                                      readOnly
+                                      copyable
+                                    />
+                                    <div class="text-14-regular text-text-base flex items-center gap-4">
+                                      <Spinner />
+                                      <span>Waiting for authorization...</span>
+                                    </div>
+                                  </div>
+                                )
+                              })}
                             </Match>
                           </Switch>
                         </Match>

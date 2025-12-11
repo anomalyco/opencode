@@ -105,6 +105,9 @@
         &:active {
           background: var(--surface-raised-base-active);
         }
+        &:focus-visible {
+          outline: none;
+        }
       }
     }
   }

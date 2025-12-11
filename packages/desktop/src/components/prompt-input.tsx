@@ -33,7 +33,6 @@ import { popularProviders, useProviders } from "@/hooks/use-providers"
 import { Dialog } from "@opencode-ai/ui/dialog"
 import { List, ListRef } from "@opencode-ai/ui/list"
 import { iife } from "@opencode-ai/util/iife"
-import { Input } from "@opencode-ai/ui/input"
 import { ProviderIcon } from "@opencode-ai/ui/provider-icon"
 import { IconName } from "@opencode-ai/ui/icons/provider"
 
@@ -557,6 +556,14 @@ export const PromptInput: Component<PromptInputProps> = (props) => {
                       if (e.key === "Escape") return
                       listRef?.onKeyDown(e)
                     }
+
+                    onMount(() => {
+                      document.addEventListener("keydown", handleKey)
+                      onCleanup(() => {
+                        document.removeEventListener("keydown", handleKey)
+                      })
+                    })
+
                     return (
                       <Dialog
                         modal
@@ -574,7 +581,6 @@ export const PromptInput: Component<PromptInputProps> = (props) => {
                           <Dialog.CloseButton tabIndex={-1} />
                         </Dialog.Header>
                         <Dialog.Body>
-                          <Input hidden type="text" class="opacity-0 size-0" autofocus onKeyDown={handleKey} />
                           <div class="flex flex-col gap-3 px-2.5">
                             <div class="text-14-medium text-text-base px-2.5">Free models provided by OpenCode</div>
                             <List
