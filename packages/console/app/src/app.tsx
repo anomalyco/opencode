@@ -13,7 +13,7 @@ export default function App() {
       root={(props) => (
         <MetaProvider>
           <Title>opencode</Title>
-          <Meta name="description" content="OpenCode - The AI coding agent built for the terminal." />
+          <Meta name="description" content="OpenCode - The open source coding agent." />
           <Favicon />
           <Suspense>{props.children}</Suspense>
         </MetaProvider>

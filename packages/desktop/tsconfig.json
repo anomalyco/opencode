@@ -20,5 +20,5 @@
       "@/*": ["./src/*"]
     }
   },
-  "exclude": ["dist"]
+  "exclude": ["dist", "ts-dist"]
 }

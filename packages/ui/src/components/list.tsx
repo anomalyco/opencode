@@ -4,6 +4,7 @@ import { FilteredListProps, useFilteredList } from "@opencode-ai/ui/hooks"
 import { Icon, IconProps } from "./icon"
 
 export interface ListProps<T> extends FilteredListProps<T> {
+  class?: string
   children: (item: T) => JSX.Element
   emptyMessage?: string
   onKeyEvent?: (event: KeyboardEvent, item: T | undefined) => void
@@ -90,7 +91,7 @@ export function List<T>(props: ListProps<T> & { ref?: (ref: ListRef) => void }) 
   })
 
   return (
-    <div ref={setScrollRef} data-component="list">
+    <div ref={setScrollRef} data-component="list" classList={{ [props.class ?? ""]: !!props.class }}>
       <Show
         when={flat().length > 0}
         fallback={
