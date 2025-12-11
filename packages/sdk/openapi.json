@@ -7203,7 +7203,172 @@
           },
           "input_newline": {
             "description": "Insert newline in input",
-            "default": "shift+return,ctrl+j",
+            "default": "shift+return,ctrl+return,alt+return,ctrl+j",
+            "type": "string"
+          },
+          "input_move_left": {
+            "description": "Move cursor left in input",
+            "default": "left,ctrl+b",
+            "type": "string"
+          },
+          "input_move_right": {
+            "description": "Move cursor right in input",
+            "default": "right,ctrl+f",
+            "type": "string"
+          },
+          "input_move_up": {
+            "description": "Move cursor up in input",
+            "default": "up",
+            "type": "string"
+          },
+          "input_move_down": {
+            "description": "Move cursor down in input",
+            "default": "down",
+            "type": "string"
+          },
+          "input_select_left": {
+            "description": "Select left in input",
+            "default": "shift+left",
+            "type": "string"
+          },
+          "input_select_right": {
+            "description": "Select right in input",
+            "default": "shift+right",
+            "type": "string"
+          },
+          "input_select_up": {
+            "description": "Select up in input",
+            "default": "shift+up",
+            "type": "string"
+          },
+          "input_select_down": {
+            "description": "Select down in input",
+            "default": "shift+down",
+            "type": "string"
+          },
+          "input_line_home": {
+            "description": "Move to start of line in input",
+            "default": "ctrl+a",
+            "type": "string"
+          },
+          "input_line_end": {
+            "description": "Move to end of line in input",
+            "default": "ctrl+e",
+            "type": "string"
+          },
+          "input_select_line_home": {
+            "description": "Select to start of line in input",
+            "default": "none",
+            "type": "string"
+          },
+          "input_select_line_end": {
+            "description": "Select to end of line in input",
+            "default": "none",
+            "type": "string"
+          },
+          "input_visual_line_home": {
+            "description": "Move to start of visual line in input",
+            "default": "none",
+            "type": "string"
+          },
+          "input_visual_line_end": {
+            "description": "Move to end of visual line in input",
+            "default": "none",
+            "type": "string"
+          },
+          "input_select_visual_line_home": {
+            "description": "Select to start of visual line in input",
+            "default": "none",
+            "type": "string"
+          },
+          "input_select_visual_line_end": {
+            "description": "Select to end of visual line in input",
+            "default": "none",
+            "type": "string"
+          },
+          "input_buffer_home": {
+            "description": "Move to start of buffer in input",
+            "default": "home",
+            "type": "string"
+          },
+          "input_buffer_end": {
+            "description": "Move to end of buffer in input",
+            "default": "end",
+            "type": "string"
+          },
+          "input_select_buffer_home": {
+            "description": "Select to start of buffer in input",
+            "default": "shift+home",
+            "type": "string"
+          },
+          "input_select_buffer_end": {
+            "description": "Select to end of buffer in input",
+            "default": "shift+end",
+            "type": "string"
+          },
+          "input_delete_line": {
+            "description": "Delete line in input",
+            "default": "alt+d",
+            "type": "string"
+          },
+          "input_delete_to_line_end": {
+            "description": "Delete to end of line in input",
+            "default": "ctrl+k",
+            "type": "string"
+          },
+          "input_delete_to_line_start": {
+            "description": "Delete to start of line in input",
+            "default": "ctrl+u",
+            "type": "string"
+          },
+          "input_backspace": {
+            "description": "Backspace in input",
+            "default": "backspace,shift+backspace",
+            "type": "string"
+          },
+          "input_delete": {
+            "description": "Delete character in input",
+            "default": "delete,shift+delete",
+            "type": "string"
+          },
+          "input_undo": {
+            "description": "Undo in input",
+            "default": "ctrl+-,cmd+z",
+            "type": "string"
+          },
+          "input_redo": {
+            "description": "Redo in input",
+            "default": "ctrl+.,cmd+shift+z",
+            "type": "string"
+          },
+          "input_word_forward": {
+            "description": "Move word forward in input",
+            "default": "alt+f,alt+right",
+            "type": "string"
+          },
+          "input_word_backward": {
+            "description": "Move word backward in input",
+            "default": "alt+b,alt+left",
+            "type": "string"
+          },
+          "input_select_word_forward": {
+            "description": "Select word forward in input",
+            "default": "alt+shift+f,alt+shift+right",
+            "type": "string"
+          },
+          "input_select_word_backward": {
+            "description": "Select word backward in input",
+            "default": "alt+shift+b,alt+shift+left",
+            "type": "string"
+          },
+          "input_delete_word_forward": {
+            "description": "Delete word forward in input",
+            "default": "ctrl+d",
+            "type": "string"
+          },
+          "input_delete_word_backward": {
+            "description": "Delete word backward in input",
+            "default": "ctrl+w,alt+backspace",
             "type": "string"
           },
           "history_previous": {
