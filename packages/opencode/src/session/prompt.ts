@@ -29,7 +29,7 @@ import PROMPT_PLAN from "../session/prompt/plan.txt"
 import BUILD_SWITCH from "../session/prompt/build-switch.txt"
 import MAX_STEPS from "../session/prompt/max-steps.txt"
 import { defer } from "../util/defer"
-import { mergeDeep, pipe } from "remeda"
+import { clone, mergeDeep, pipe } from "remeda"
 import { ToolRegistry } from "../tool/registry"
 import { Wildcard } from "../util/wildcard"
 import { MCP } from "../mcp"
@@ -520,28 +520,33 @@ export namespace SessionPrompt {
         })
       }
 
-      const messages = [
+      // Deep copy message history so that modifications made by plugins do not
+      // affect the original messages
+      const sessionMessages = clone(
+        msgs.filter((m) => {
+          if (m.info.role !== "assistant" || m.info.error === undefined) {
+            return true
+          }
+          if (
+            MessageV2.AbortedError.isInstance(m.info.error) &&
+            m.parts.some((part) => part.type !== "step-start" && part.type !== "reasoning")
+          ) {
+            return true
+          }
+          return false
+        }),
+      )
+
+      await Plugin.trigger("experimental.chat.messages.transform", {}, { messages: sessionMessages })
+
+      const messages: ModelMessage[] = [
         ...system.map(
           (x): ModelMessage => ({
             role: "system",
             content: x,
           }),
         ),
-        ...MessageV2.toModelMessage(
-          msgs.filter((m) => {
-            if (m.info.role !== "assistant" || m.info.error === undefined) {
-              return true
-            }
-            if (
-              MessageV2.AbortedError.isInstance(m.info.error) &&
-              m.parts.some((part) => part.type !== "step-start" && part.type !== "reasoning")
-            ) {
-              return true
-            }
-
-            return false
-          }),
-        ),
+        ...MessageV2.toModelMessage(sessionMessages),
         ...(isLastStep
           ? [
               {
@@ -551,6 +556,7 @@ export namespace SessionPrompt {
             ]
           : []),
       ]
+
       const result = await processor.process({
         onError(error) {
           log.error("stream error", {
