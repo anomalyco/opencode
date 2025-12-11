@@ -97,6 +97,10 @@ export const { use: useGlobalSync, provider: GlobalSyncProvider } = createSimple
 
       if (directory === "global") {
         switch (event.type) {
+          case "global.disposed": {
+            bootstrap()
+            break
+          }
           case "project.updated": {
             const result = Binary.search(globalStore.project, event.properties.id, (s) => s.id)
             if (result.found) {
@@ -117,10 +121,6 @@ export const { use: useGlobalSync, provider: GlobalSyncProvider } = createSimple
 
       const [store, setStore] = child(directory)
       switch (event.type) {
-        // case "server.instance.disposed": {
-        //   bootstrap()
-        //   break
-        // }
         case "session.updated": {
           const result = Binary.search(store.session, event.properties.info.id, (s) => s.id)
           if (result.found) {

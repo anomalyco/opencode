@@ -745,14 +745,14 @@ export default function Layout(props: ParentProps) {
                           }
 
                           setFormStore("error", undefined)
-                          globalSDK.client.auth.set({
+                          await globalSDK.client.auth.set({
                             providerID,
                             auth: {
                               type: "api",
                               key: apiKey,
                             },
                           })
-                          await globalSDK.client.instance.dispose()
+                          await globalSDK.client.global.dispose()
                         }
 
                         return (
