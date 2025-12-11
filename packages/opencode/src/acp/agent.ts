@@ -467,7 +467,7 @@ export namespace ACP {
         name: agent.name,
         description: agent.description,
       }))
-      const currentModeId = availableAgents.find((agent) => agent.default)?.name ?? availableAgents[0]?.name
+      const currentModeId = availableAgents.find((agent) => agent.default)?.name!
 
       const mcpServers: Record<string, Config.Mcp> = {}
       for (const server of params.mcpServers) {
