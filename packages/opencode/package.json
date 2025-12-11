@@ -53,7 +53,7 @@
     "@ai-sdk/anthropic": "2.0.50",
     "@ai-sdk/azure": "2.0.73",
     "@ai-sdk/google": "2.0.44",
-    "@ai-sdk/google-vertex": "3.0.81",
+    "@ai-sdk/google-vertex": "4.0.0-beta.109",
     "@ai-sdk/mcp": "0.0.8",
     "@ai-sdk/openai": "2.0.71",
     "@ai-sdk/openai-compatible": "1.0.27",

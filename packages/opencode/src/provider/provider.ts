@@ -252,16 +252,15 @@ export namespace Provider {
       }
     },
     "google-vertex": async () => {
+      const apiKey = Env.get("GOOGLE_VERTEX_API_KEY")
       const project = Env.get("GOOGLE_CLOUD_PROJECT") ?? Env.get("GCP_PROJECT") ?? Env.get("GCLOUD_PROJECT")
       const location = Env.get("GOOGLE_CLOUD_LOCATION") ?? Env.get("VERTEX_LOCATION") ?? "us-east5"
-      const autoload = Boolean(project)
+      const options = Boolean(apiKey) ? { apiKey, project: "express", location: "global" } : { project, location }
+      const autoload = Boolean(apiKey) || Boolean(project)
       if (!autoload) return { autoload: false }
       return {
         autoload: true,
-        options: {
-          project,
-          location,
-        },
+        options,
         async getModel(sdk: any, modelID: string) {
           const id = String(modelID).trim()
           return sdk.languageModel(id)
