@@ -3,7 +3,6 @@ import { Title, Meta, Link } from "@solidjs/meta"
 // import { HttpHeader } from "@solidjs/start"
 import video from "../asset/lander/opencode-min.mp4"
 import videoPoster from "../asset/lander/opencode-poster.png"
-import desktopAppIcon from "../asset/lander/desktop-app-icon.png"
 import { IconCopy, IconCheck } from "../component/icon"
 import { A, createAsync } from "@solidjs/router"
 import { EmailSignup } from "~/component/email-signup"
@@ -13,9 +12,8 @@ import { Header } from "~/component/header"
 import { Footer } from "~/component/footer"
 import { Legal } from "~/component/legal"
 import { github } from "~/lib/github"
-import { createMemo, createSignal } from "solid-js"
+import { createMemo } from "solid-js"
 import { config } from "~/config"
-import avatarDavid from "~/asset/lander/avatar-david.png"
 
 function CopyStatus() {
   return (
@@ -29,18 +27,6 @@ function CopyStatus() {
 export default function Home() {
   const githubData = createAsync(() => github())
   const release = createMemo(() => githubData()?.release)
-
-  const [isAnimating, setIsAnimating] = createSignal(false)
-
-  const handleDesktopCopyHover = () => {
-    if (!isAnimating()) {
-      setIsAnimating(true)
-      // Animation duration is 6s for dot fade in/out
-      setTimeout(() => {
-        setIsAnimating(false)
-      }, 6000)
-    }
-  }
 
   const handleCopyClick = (event: Event) => {
     const button = event.currentTarget as HTMLButtonElement
@@ -66,14 +52,10 @@ export default function Home() {
 
         <div data-component="content">
           <section data-component="hero">
-            <div data-component="desktop-app-available" data-animating={isAnimating() ? "" : undefined}>
-              <div data-slot="desktop-icon">
-                <img src={desktopAppIcon} alt="" />
-                <div data-slot="dot"></div>
-              </div>
-              <div data-slot="desktop-copy" onMouseEnter={handleDesktopCopyHover}>
-                <span>Now available on desktop for macOS, Windows, and Linux.</span> <a href="/download">Learn more</a>
-              </div>
+            <div data-component="desktop-app-banner">
+              <span data-slot="badge">New</span>
+              <span data-slot="text">Desktop app available in beta on macOS, Windows, and Linux.</span>
+              <a href="/download">Download now</a>
             </div>
 
             <div data-slot="hero-copy">
@@ -87,96 +69,85 @@ export default function Home() {
                 Free models included or connect any model from any provider, <span data-slot="br"></span>including
                 Claude, GPT, Gemini and more.
               </p>
-              <a href="/download">
-                <span>Get started for free</span>
-                <svg width="24" height="24" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg">
-                  <path
-                    d="M6.5 12L17 12M13 16.5L17.5 12L13 7.5"
-                    stroke="currentColor"
-                    stroke-width="1.5"
-                    stroke-linecap="square"
-                  />
-                </svg>
-              </a>
             </div>
-            {/*<div data-slot="installation">*/}
-            {/*  <Tabs*/}
-            {/*    as="section"*/}
-            {/*    aria-label="Install options"*/}
-            {/*    class="tabs"*/}
-            {/*    data-component="tabs"*/}
-            {/*    data-active="curl"*/}
-            {/*    defaultValue="curl"*/}
-            {/*  >*/}
-            {/*    <Tabs.List data-slot="tablist">*/}
-            {/*      <Tabs.Trigger value="curl" data-slot="tab">*/}
-            {/*        curl*/}
-            {/*      </Tabs.Trigger>*/}
-            {/*      <Tabs.Trigger value="npm" data-slot="tab">*/}
-            {/*        npm*/}
-            {/*      </Tabs.Trigger>*/}
-            {/*      <Tabs.Trigger value="bun" data-slot="tab">*/}
-            {/*        bun*/}
-            {/*      </Tabs.Trigger>*/}
-            {/*      <Tabs.Trigger value="brew" data-slot="tab">*/}
-            {/*        brew*/}
-            {/*      </Tabs.Trigger>*/}
-            {/*      <Tabs.Trigger value="paru" data-slot="tab">*/}
-            {/*        paru*/}
-            {/*      </Tabs.Trigger>*/}
-            {/*      <Tabs.Indicator />*/}
-            {/*    </Tabs.List>*/}
-            {/*    <div data-slot="panels">*/}
-            {/*      <Tabs.Content as="pre" data-slot="panel" value="curl">*/}
-            {/*        <button data-copy data-slot="command" onClick={handleCopyClick}>*/}
-            {/*          <span data-slot="command-script">*/}
-            {/*            <span>curl -fsSL </span>*/}
-            {/*            <span data-slot="protocol">https://</span>*/}
-            {/*            <span data-slot="highlight">opencode.ai/install</span>*/}
-            {/*            <span> | bash</span>*/}
-            {/*          </span>*/}
-            {/*          <CopyStatus />*/}
-            {/*        </button>*/}
-            {/*      </Tabs.Content>*/}
-            {/*      <Tabs.Content as="pre" data-slot="panel" value="npm">*/}
-            {/*        <button data-copy data-slot="command" onClick={handleCopyClick}>*/}
-            {/*          <span>*/}
-            {/*            <span data-slot="protocol">npm i -g </span>*/}
-            {/*            <span data-slot="highlight">opencode-ai</span>*/}
-            {/*          </span>*/}
-            {/*          <CopyStatus />*/}
-            {/*        </button>*/}
-            {/*      </Tabs.Content>*/}
-            {/*      <Tabs.Content as="pre" data-slot="panel" value="bun">*/}
-            {/*        <button data-copy data-slot="command" onClick={handleCopyClick}>*/}
-            {/*          <span>*/}
-            {/*            <span data-slot="protocol">bun add -g </span>*/}
-            {/*            <span data-slot="highlight">opencode-ai</span>*/}
-            {/*          </span>*/}
-            {/*          <CopyStatus />*/}
-            {/*        </button>*/}
-            {/*      </Tabs.Content>*/}
-            {/*      <Tabs.Content as="pre" data-slot="panel" value="brew">*/}
-            {/*        <button data-copy data-slot="command" onClick={handleCopyClick}>*/}
-            {/*          <span>*/}
-            {/*            <span data-slot="protocol">brew install </span>*/}
-            {/*            <span data-slot="highlight">opencode</span>*/}
-            {/*          </span>*/}
-            {/*          <CopyStatus />*/}
-            {/*        </button>*/}
-            {/*      </Tabs.Content>*/}
-            {/*      <Tabs.Content as="pre" data-slot="panel" value="paru">*/}
-            {/*        <button data-copy data-slot="command" onClick={handleCopyClick}>*/}
-            {/*          <span>*/}
-            {/*            <span data-slot="protocol">paru -S </span>*/}
-            {/*            <span data-slot="highlight">opencode</span>*/}
-            {/*          </span>*/}
-            {/*          <CopyStatus />*/}
-            {/*        </button>*/}
-            {/*      </Tabs.Content>*/}
-            {/*    </div>*/}
-            {/*  </Tabs>*/}
-            {/*</div>*/}
+            <div data-slot="installation">
+              <Tabs
+                as="section"
+                aria-label="Install options"
+                class="tabs"
+                data-component="tabs"
+                data-active="curl"
+                defaultValue="curl"
+              >
+                <Tabs.List data-slot="tablist">
+                  <Tabs.Trigger value="curl" data-slot="tab">
+                    curl
+                  </Tabs.Trigger>
+                  <Tabs.Trigger value="npm" data-slot="tab">
+                    npm
+                  </Tabs.Trigger>
+                  <Tabs.Trigger value="bun" data-slot="tab">
+                    bun
+                  </Tabs.Trigger>
+                  <Tabs.Trigger value="brew" data-slot="tab">
+                    brew
+                  </Tabs.Trigger>
+                  <Tabs.Trigger value="paru" data-slot="tab">
+                    paru
+                  </Tabs.Trigger>
+                  <Tabs.Indicator />
+                </Tabs.List>
+                <div data-slot="panels">
+                  <Tabs.Content as="pre" data-slot="panel" value="curl">
+                    <button data-copy data-slot="command" onClick={handleCopyClick}>
+                      <span data-slot="command-script">
+                        <span>curl -fsSL </span>
+                        <span data-slot="protocol">https://</span>
+                        <span data-slot="highlight">opencode.ai/install</span>
+                        <span> | bash</span>
+                      </span>
+                      <CopyStatus />
+                    </button>
+                  </Tabs.Content>
+                  <Tabs.Content as="pre" data-slot="panel" value="npm">
+                    <button data-copy data-slot="command" onClick={handleCopyClick}>
+                      <span>
+                        <span data-slot="protocol">npm i -g </span>
+                        <span data-slot="highlight">opencode-ai</span>
+                      </span>
+                      <CopyStatus />
+                    </button>
+                  </Tabs.Content>
+                  <Tabs.Content as="pre" data-slot="panel" value="bun">
+                    <button data-copy data-slot="command" onClick={handleCopyClick}>
+                      <span>
+                        <span data-slot="protocol">bun add -g </span>
+                        <span data-slot="highlight">opencode-ai</span>
+                      </span>
+                      <CopyStatus />
+                    </button>
+                  </Tabs.Content>
+                  <Tabs.Content as="pre" data-slot="panel" value="brew">
+                    <button data-copy data-slot="command" onClick={handleCopyClick}>
+                      <span>
+                        <span data-slot="protocol">brew install </span>
+                        <span data-slot="highlight">opencode</span>
+                      </span>
+                      <CopyStatus />
+                    </button>
+                  </Tabs.Content>
+                  <Tabs.Content as="pre" data-slot="panel" value="paru">
+                    <button data-copy data-slot="command" onClick={handleCopyClick}>
+                      <span>
+                        <span data-slot="protocol">paru -S </span>
+                        <span data-slot="highlight">opencode</span>
+                      </span>
+                      <CopyStatus />
+                    </button>
+                  </Tabs.Content>
+                </div>
+              </Tabs>
+            </div>
           </section>
 
           <section data-component="video">
