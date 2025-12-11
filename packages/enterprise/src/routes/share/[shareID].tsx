@@ -212,7 +212,7 @@ export default function () {
                           <div class="text-12-mono text-text-base">v{info().version}</div>
                         </div>
                         <div class="flex gap-2 items-center">
-                          <ProviderIcon name={provider() as IconName} class="size-3.5 shrink-0 text-icon-strong-base" />
+                          <ProviderIcon id={provider() as IconName} class="size-3.5 shrink-0 text-icon-strong-base" />
                           <div class="text-12-regular text-text-base">{model()?.name ?? modelID()}</div>
                         </div>
                         <div class="text-12-regular text-text-weaker">

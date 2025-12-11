@@ -4,6 +4,20 @@ import { createSimpleContext } from "@opencode-ai/ui/context"
 import { makePersisted } from "@solid-primitives/storage"
 import { useGlobalSync } from "./global-sync"
 import { useGlobalSDK } from "./global-sdk"
+import { Project } from "@opencode-ai/sdk/v2"
+
+const PASTEL_COLORS = [
+  "#FCEAFD", // pastel pink
+  "#FFDFBA", // pastel peach
+  "#FFFFBA", // pastel yellow
+  "#BAFFC9", // pastel green
+  "#EAF6FD", // pastel blue
+  "#EFEAFD", // pastel lavender
+  "#FEC8D8", // pastel rose
+  "#D4F0F0", // pastel cyan
+  "#FDF0EA", // pastel coral
+  "#C1E1C1", // pastel mint
+]
 
 export const { use: useLayout, provider: LayoutProvider } = createSimpleContext({
   name: "Layout",
@@ -26,9 +40,44 @@ export const { use: useLayout, provider: LayoutProvider } = createSimpleContext(
         },
       }),
       {
-        name: "default-layout.v6",
+        name: "default-layout.v7",
       },
     )
+    const [ephemeral, setEphemeral] = createStore({
+      dialog: {
+        open: undefined as undefined | "provider" | "model",
+      },
+    })
+    const usedColors = new Set<string>()
+
+    function pickAvailableColor() {
+      const available = PASTEL_COLORS.filter((c) => !usedColors.has(c))
+      if (available.length === 0) return PASTEL_COLORS[Math.floor(Math.random() * PASTEL_COLORS.length)]
+      return available[Math.floor(Math.random() * available.length)]
+    }
+
+    function enrich(project: { worktree: string; expanded: boolean }) {
+      const metadata = globalSync.data.project.find((x) => x.worktree === project.worktree)
+      if (!metadata) return []
+      return [
+        {
+          ...project,
+          ...metadata,
+        },
+      ]
+    }
+
+    function colorize(project: Project & { expanded: boolean }) {
+      if (project.icon?.color) return project
+      const color = pickAvailableColor()
+      usedColors.add(color)
+      project.icon = { ...project.icon, color }
+      globalSdk.client.project.update({ projectID: project.id, icon: { color } })
+      return project
+    }
+
+    const enriched = createMemo(() => store.projects.flatMap(enrich))
+    const list = createMemo(() => enriched().flatMap(colorize))
 
     async function loadProjectSessions(directory: string) {
       const [, setStore] = globalSync.child(directory)
@@ -43,30 +92,19 @@ export const { use: useLayout, provider: LayoutProvider } = createSimpleContext(
 
     onMount(() => {
       Promise.all(
-        store.projects.map(({ worktree }) => {
-          return loadProjectSessions(worktree)
+        store.projects.map((project) => {
+          return loadProjectSessions(project.worktree)
         }),
       )
     })
 
-    function enrich(project: { worktree: string; expanded: boolean }) {
-      const metadata = globalSync.data.projects.find((x) => x.worktree === project.worktree)
-      if (!metadata) return []
-      return [
-        {
-          ...project,
-          ...metadata,
-        },
-      ]
-    }
-
     return {
       projects: {
-        list: createMemo(() => store.projects.flatMap(enrich)),
+        list,
         open(directory: string) {
           if (store.projects.find((x) => x.worktree === directory)) return
           loadProjectSessions(directory)
-          setStore("projects", (x) => [...x, { worktree: directory, expanded: true }])
+          setStore("projects", (x) => [{ worktree: directory, expanded: true }, ...x])
         },
         close(directory: string) {
           setStore("projects", (x) => x.filter((x) => x.worktree !== directory))
@@ -127,6 +165,17 @@ export const { use: useLayout, provider: LayoutProvider } = createSimpleContext(
         },
         tab() {
           setStore("review", "state", "tab")
+        },
+      },
+      dialog: {
+        opened: createMemo(() => ephemeral.dialog?.open),
+        open(dialog: "provider" | "model") {
+          setEphemeral("dialog", "open", dialog)
+        },
+        close(dialog: "provider" | "model") {
+          if (ephemeral.dialog?.open === dialog) {
+            setEphemeral("dialog", "open", undefined)
+          }
         },
       },
     }
