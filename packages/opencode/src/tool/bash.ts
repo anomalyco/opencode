@@ -82,7 +82,7 @@ export const BashTool = Tool.define("bash", async () => {
   log.info("bash tool using shell", { shell })
 
   return {
-    description: DESCRIPTION,
+    description: DESCRIPTION.replaceAll("${directory}", Instance.directory),
     parameters: z.object({
       command: z.string().describe("The command to execute"),
       timeout: z.number().describe("Optional timeout in milliseconds").optional(),
