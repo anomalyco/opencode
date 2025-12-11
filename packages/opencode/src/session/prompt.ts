@@ -520,20 +520,24 @@ export namespace SessionPrompt {
         })
       }
 
-      const sessionMessages = msgs
-        .filter((m) => {
-          if (m.info.role !== "assistant" || m.info.error === undefined) {
-            return true
-          }
-          if (
-            MessageV2.AbortedError.isInstance(m.info.error) &&
-            m.parts.some((part) => part.type !== "step-start" && part.type !== "reasoning")
-          ) {
-            return true
-          }
-          return false
-        })
-        .map((m) => MessageV2.toSessionMessage(m))
+      const sessionMessages = JSON.parse(
+        JSON.stringify(
+          msgs
+            .filter((m) => {
+              if (m.info.role !== "assistant" || m.info.error === undefined) {
+                return true
+              }
+              if (
+                MessageV2.AbortedError.isInstance(m.info.error) &&
+                m.parts.some((part) => part.type !== "step-start" && part.type !== "reasoning")
+              ) {
+                return true
+              }
+              return false
+            })
+            .map((m) => MessageV2.toSessionMessage(m)),
+        ),
+      )
 
       await Plugin.trigger("experimental.chat.messages.transform", {}, { messages: sessionMessages })
 

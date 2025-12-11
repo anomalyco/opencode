@@ -1,10 +1,16 @@
+/*
+ * SessionMessage type that mimics the MessageV2.WithParts structure.
+ * The SessionMessage type is exposed through the experimental.chat.messages.transform hook to allow
+ * plugins to transform messages before they are converted into Vercel AI's
+ * ModelMessage type.
+ * */
+
 export interface SessionMessagePartBase {
   id: string
   sessionID: string
   messageID: string
 }
 
-// File Part Source types
 export interface SessionMessageFilePartSourceText {
   value: string
   start: number
@@ -31,7 +37,6 @@ export interface SessionMessageSymbolSource {
 
 export type SessionMessageFilePartSource = SessionMessageFileSource | SessionMessageSymbolSource
 
-// Part types
 export interface SessionMessageSnapshotPart extends SessionMessagePartBase {
   type: "snapshot"
   snapshot: string
@@ -125,7 +130,6 @@ export interface SessionMessageStepFinishPart extends SessionMessagePartBase {
   }
 }
 
-// Tool state types
 export interface SessionMessageToolStatePending {
   status: "pending"
   input: Record<string, unknown>
@@ -250,7 +254,6 @@ export interface SessionMessageFileDiff {
   deletions: number
 }
 
-// Message Info types
 export interface SessionMessageUser {
   id: string
   sessionID: string

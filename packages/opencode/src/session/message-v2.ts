@@ -534,7 +534,6 @@ export namespace MessageV2 {
   }
 
   export function toSessionMessage(message: MessageV2.WithParts): SessionMessage {
-    // Lossless conversion - SessionMessage mirrors MessageV2.WithParts exactly
     return {
       info: message.info,
       parts: message.parts,
