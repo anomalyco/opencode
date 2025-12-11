@@ -579,54 +579,61 @@ export const PromptInput: Component<PromptInputProps> = (props) => {
                           </div>
                           <div class="px-1.5 pb-1.5">
                             <div class="w-full rounded-sm border border-border-weak-base bg-surface-raised-base">
-                              <div class="w-full flex flex-col items-start gap-4 px-1.5 pt-4 pb-6">
+                              <div class="w-full flex flex-col items-start gap-4 px-1.5 pt-4 pb-4">
                                 <div class="px-2 text-14-medium text-text-base">
                                   Add more models from popular providers
                                 </div>
-                                <List
-                                  class="w-full"
-                                  key={(x) => x?.id}
-                                  items={providers().popular()}
-                                  activeIcon="plus-small"
-                                  sortBy={(a, b) => {
-                                    if (popularProviders.includes(a.id) && popularProviders.includes(b.id))
-                                      return popularProviders.indexOf(a.id) - popularProviders.indexOf(b.id)
-                                    return a.name.localeCompare(b.name)
-                                  }}
-                                  onSelect={(x) => {
-                                    layout.dialog.close("model")
-                                  }}
-                                >
-                                  {(i) => (
-                                    <div class="w-full flex items-center gap-x-4">
-                                      <ProviderIcon
-                                        data-slot="list-item-extra-icon"
-                                        id={i.id as IconName}
-                                        // TODO: clean this up after we update icon in models.dev
-                                        classList={{
-                                          "text-icon-weak-base": true,
-                                          "size-4 mx-0.5": i.id === "opencode",
-                                          "size-5": i.id !== "opencode",
-                                        }}
-                                      />
-                                      <span>{i.name}</span>
-                                      <Show when={i.id === "opencode"}>
-                                        <Tag>Recommended</Tag>
-                                      </Show>
-                                      <Show when={i.id === "anthropic"}>
-                                        <div class="text-14-regular text-text-weak">
-                                          Connect with Claude Pro/Max or API key
-                                        </div>
-                                      </Show>
-                                    </div>
-                                  )}
-                                </List>
-                                <Button variant="ghost" class="w-full justify-start">
-                                  <div class="flex items-center gap-2">
-                                    <Icon name="plus-small" />
-                                    <div class="text-text-strong">View all providers</div>
-                                  </div>
-                                </Button>
+                                <div class="w-full">
+                                  <List
+                                    class="w-full"
+                                    key={(x) => x?.id}
+                                    items={providers().popular()}
+                                    activeIcon="plus-small"
+                                    sortBy={(a, b) => {
+                                      if (popularProviders.includes(a.id) && popularProviders.includes(b.id))
+                                        return popularProviders.indexOf(a.id) - popularProviders.indexOf(b.id)
+                                      return a.name.localeCompare(b.name)
+                                    }}
+                                    onSelect={(x) => {
+                                      if (!x) return
+                                      layout.dialog.connect(x.id)
+                                    }}
+                                  >
+                                    {(i) => (
+                                      <div class="w-full flex items-center gap-x-4">
+                                        <ProviderIcon
+                                          data-slot="list-item-extra-icon"
+                                          id={i.id as IconName}
+                                          // TODO: clean this up after we update icon in models.dev
+                                          classList={{
+                                            "text-icon-weak-base": true,
+                                            "size-4 mx-0.5": i.id === "opencode",
+                                            "size-5": i.id !== "opencode",
+                                          }}
+                                        />
+                                        <span>{i.name}</span>
+                                        <Show when={i.id === "opencode"}>
+                                          <Tag>Recommended</Tag>
+                                        </Show>
+                                        <Show when={i.id === "anthropic"}>
+                                          <div class="text-14-regular text-text-weak">
+                                            Connect with Claude Pro/Max or API key
+                                          </div>
+                                        </Show>
+                                      </div>
+                                    )}
+                                  </List>
+                                  <Button
+                                    variant="ghost"
+                                    class="w-full justify-start px-[11px] py-3.5 gap-4.5 text-14-medium"
+                                    icon="dot-grid"
+                                    onClick={() => {
+                                      layout.dialog.open("provider")
+                                    }}
+                                  >
+                                    View all providers
+                                  </Button>
+                                </div>
                               </div>
                             </div>
                           </div>

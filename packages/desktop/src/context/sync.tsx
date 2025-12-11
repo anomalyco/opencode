@@ -11,28 +11,6 @@ export const { use: useSync, provider: SyncProvider } = createSimpleContext({
     const globalSync = useGlobalSync()
     const sdk = useSDK()
     const [store, setStore] = globalSync.child(sdk.directory)
-
-    const load = {
-      project: () => sdk.client.project.current().then((x) => setStore("project", x.data!.id)),
-      provider: () => sdk.client.provider.list().then((x) => setStore("provider", x.data!)),
-      path: () => sdk.client.path.get().then((x) => setStore("path", x.data!)),
-      agent: () => sdk.client.app.agents().then((x) => setStore("agent", x.data ?? [])),
-      session: () =>
-        sdk.client.session.list().then((x) => {
-          const sessions = (x.data ?? [])
-            .slice()
-            .sort((a, b) => a.id.localeCompare(b.id))
-            .slice(0, store.limit)
-          setStore("session", sessions)
-        }),
-      status: () => sdk.client.session.status().then((x) => setStore("session_status", x.data!)),
-      config: () => sdk.client.config.get().then((x) => setStore("config", x.data!)),
-      changes: () => sdk.client.file.status().then((x) => setStore("changes", x.data!)),
-      node: () => sdk.client.file.list({ path: "/" }).then((x) => setStore("node", x.data!)),
-    }
-
-    Promise.all(Object.values(load).map((p) => p())).then(() => setStore("ready", true))
-
     const absolute = (path: string) => (store.path.directory + "/" + path).replace("//", "/")
 
     return {
@@ -78,11 +56,16 @@ export const { use: useSync, provider: SyncProvider } = createSimpleContext({
         },
         fetch: async (count = 10) => {
           setStore("limit", (x) => x + count)
-          await load.session()
+          await sdk.client.session.list().then((x) => {
+            const sessions = (x.data ?? [])
+              .slice()
+              .sort((a, b) => a.id.localeCompare(b.id))
+              .slice(0, store.limit)
+            setStore("session", sessions)
+          })
         },
         more: createMemo(() => store.session.length >= store.limit),
       },
-      load,
       absolute,
       get directory() {
         return store.path.directory

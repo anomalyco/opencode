@@ -65,8 +65,8 @@ export function List<T>(props: ListProps<T> & { ref?: (ref: ListRef) => void }) 
     element?.scrollIntoView({ block: "nearest", behavior: "smooth" })
   })
 
-  const handleSelect = (item: T | undefined) => {
-    props.onSelect?.(item)
+  const handleSelect = (item: T | undefined, index: number) => {
+    props.onSelect?.(item, index)
   }
 
   const handleKey = (e: KeyboardEvent) => {
@@ -75,11 +75,12 @@ export function List<T>(props: ListProps<T> & { ref?: (ref: ListRef) => void }) 
 
     const all = flat()
     const selected = all.find((x) => props.key(x) === active())
+    const index = selected ? all.indexOf(selected) : -1
     props.onKeyEvent?.(e, selected)
 
     if (e.key === "Enter") {
       e.preventDefault()
-      if (selected) handleSelect(selected)
+      if (selected) handleSelect(selected, index)
     } else {
       onKeyDown(e)
     }
@@ -110,13 +111,13 @@ export function List<T>(props: ListProps<T> & { ref?: (ref: ListRef) => void }) 
               </Show>
               <div data-slot="list-items">
                 <For each={group.items}>
-                  {(item) => (
+                  {(item, i) => (
                     <button
                       data-slot="list-item"
                       data-key={props.key(item)}
                       data-active={props.key(item) === active()}
                       data-selected={item === props.current}
-                      onClick={() => handleSelect(item)}
+                      onClick={() => handleSelect(item, i())}
                       onMouseMove={() => {
                         setStore("mouseActive", true)
                         setActive(props.key(item))
