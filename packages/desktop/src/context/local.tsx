@@ -70,10 +70,12 @@ export const { use: useLocal, provider: LocalProvider } = createSimpleContext({
 
     const agent = (() => {
       const list = createMemo(() => sync.data.agent.filter((x) => x.mode !== "subagent"))
+      const defaultAgent = createMemo(() => list().find((x) => x.default)!)
+
       const [store, setStore] = createStore<{
         current: string
       }>({
-        current: list()[0].name,
+        current: defaultAgent().name,
       })
       return {
         list,
@@ -81,7 +83,7 @@ export const { use: useLocal, provider: LocalProvider } = createSimpleContext({
           return list().find((x) => x.name === store.current)!
         },
         set(name: string | undefined) {
-          setStore("current", name ?? list()[0].name)
+          setStore("current", name ?? defaultAgent().name)
         },
         move(direction: 1 | -1) {
           let next = list().findIndex((x) => x.name === store.current) + direction
