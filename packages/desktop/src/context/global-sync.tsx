@@ -12,11 +12,13 @@ import type {
   Todo,
   SessionStatus,
   ProviderListResponse,
+  ProviderAuthResponse,
 } from "@opencode-ai/sdk/v2"
 import { createStore, produce, reconcile } from "solid-js/store"
 import { Binary } from "@opencode-ai/util/binary"
 import { createSimpleContext } from "@opencode-ai/ui/context"
 import { useGlobalSDK } from "./global-sdk"
+import { onMount } from "solid-js"
 
 type State = {
   ready: boolean
@@ -54,11 +56,13 @@ export const { use: useGlobalSync, provider: GlobalSyncProvider } = createSimple
       ready: boolean
       project: Project[]
       provider: ProviderListResponse
+      provider_auth: ProviderAuthResponse
       children: Record<string, State>
     }>({
       ready: false,
       project: [],
       provider: { all: [], connected: [], default: {} },
+      provider_auth: {},
       children: {},
     })
 
@@ -113,6 +117,10 @@ export const { use: useGlobalSync, provider: GlobalSyncProvider } = createSimple
 
       const [store, setStore] = child(directory)
       switch (event.type) {
+        // case "server.instance.disposed": {
+        //   bootstrap()
+        //   break
+        // }
         case "session.updated": {
           const result = Binary.search(store.session, event.properties.info.id, (s) => s.id)
           if (result.found) {
@@ -181,19 +189,28 @@ export const { use: useGlobalSync, provider: GlobalSyncProvider } = createSimple
       }
     })
 
-    Promise.all([
-      sdk.client.project.list().then(async (x) => {
-        setGlobalStore(
-          "project",
-          x
-            .data!.filter((p) => !p.worktree.includes("opencode-test") && p.vcs)
-            .sort((a, b) => a.id.localeCompare(b.id)),
-        )
-      }),
-      sdk.client.provider.list().then((x) => {
-        setGlobalStore("provider", x.data ?? {})
-      }),
-    ]).then(() => setGlobalStore("ready", true))
+    async function bootstrap() {
+      return Promise.all([
+        sdk.client.project.list().then(async (x) => {
+          setGlobalStore(
+            "project",
+            x
+              .data!.filter((p) => !p.worktree.includes("opencode-test") && p.vcs)
+              .sort((a, b) => a.id.localeCompare(b.id)),
+          )
+        }),
+        sdk.client.provider.list().then((x) => {
+          setGlobalStore("provider", x.data ?? {})
+        }),
+        sdk.client.provider.auth().then((x) => {
+          setGlobalStore("provider_auth", x.data ?? {})
+        }),
+      ]).then(() => setGlobalStore("ready", true))
+    }
+
+    onMount(() => {
+      bootstrap()
+    })
 
     return {
       data: globalStore,
@@ -201,6 +218,7 @@ export const { use: useGlobalSync, provider: GlobalSyncProvider } = createSimple
         return globalStore.ready
       },
       child,
+      bootstrap,
     }
   },
 })

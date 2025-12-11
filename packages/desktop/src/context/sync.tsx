@@ -1,5 +1,5 @@
 import { produce } from "solid-js/store"
-import { createMemo } from "solid-js"
+import { createMemo, onMount } from "solid-js"
 import { Binary } from "@opencode-ai/util/binary"
 import { createSimpleContext } from "@opencode-ai/ui/context"
 import { useGlobalSync } from "./global-sync"
@@ -31,7 +31,24 @@ export const { use: useSync, provider: SyncProvider } = createSimpleContext({
       node: () => sdk.client.file.list({ path: "/" }).then((x) => setStore("node", x.data!)),
     }
 
-    Promise.all(Object.values(load).map((p) => p())).then(() => setStore("ready", true))
+    async function bootstrap() {
+      return Promise.all(Object.values(load).map((p) => p())).then(() => setStore("ready", true))
+    }
+
+    onMount(() => {
+      bootstrap()
+    })
+
+    sdk.event.listen((e) => {
+      if (e.name !== sdk.directory) return
+      const event = e.details
+      switch (event.type) {
+        case "server.instance.disposed": {
+          bootstrap()
+          break
+        }
+      }
+    })
 
     const absolute = (path: string) => (store.path.directory + "/" + path).replace("//", "/")
 
@@ -82,7 +99,7 @@ export const { use: useSync, provider: SyncProvider } = createSimpleContext({
         },
         more: createMemo(() => store.session.length >= store.limit),
       },
-      load,
+      bootstrap,
       absolute,
       get directory() {
         return store.path.directory

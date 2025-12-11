@@ -1,5 +1,5 @@
 import { createStore } from "solid-js/store"
-import { createMemo, onMount } from "solid-js"
+import { batch, createMemo, onMount } from "solid-js"
 import { createSimpleContext } from "@opencode-ai/ui/context"
 import { makePersisted } from "@solid-primitives/storage"
 import { useGlobalSync } from "./global-sync"
@@ -18,6 +18,8 @@ const PASTEL_COLORS = [
   "#FDF0EA", // pastel coral
   "#C1E1C1", // pastel mint
 ]
+
+type Dialog = "provider" | "model" | "connect"
 
 export const { use: useLayout, provider: LayoutProvider } = createSimpleContext({
   name: "Layout",
@@ -44,8 +46,11 @@ export const { use: useLayout, provider: LayoutProvider } = createSimpleContext(
       },
     )
     const [ephemeral, setEphemeral] = createStore({
+      connect: {
+        provider: undefined as undefined | string,
+      },
       dialog: {
-        open: undefined as undefined | "provider" | "model",
+        open: undefined as undefined | Dialog,
       },
     })
     const usedColors = new Set<string>()
@@ -169,14 +174,23 @@ export const { use: useLayout, provider: LayoutProvider } = createSimpleContext(
       },
       dialog: {
         opened: createMemo(() => ephemeral.dialog?.open),
-        open(dialog: "provider" | "model") {
+        open(dialog: Dialog) {
           setEphemeral("dialog", "open", dialog)
         },
-        close(dialog: "provider" | "model") {
+        close(dialog: Dialog) {
           if (ephemeral.dialog?.open === dialog) {
             setEphemeral("dialog", "open", undefined)
           }
         },
+        connect(provider: string) {
+          batch(() => {
+            setEphemeral("dialog", "open", "connect")
+            setEphemeral("connect", "provider", provider)
+          })
+        },
+      },
+      connect: {
+        provider: createMemo(() => ephemeral.connect.provider),
       },
     }
   },
