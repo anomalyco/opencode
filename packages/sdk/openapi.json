@@ -7258,32 +7258,32 @@
           },
           "input_select_line_home": {
             "description": "Select to start of line in input",
-            "default": "none",
+            "default": "ctrl+shift+a",
             "type": "string"
           },
           "input_select_line_end": {
             "description": "Select to end of line in input",
-            "default": "none",
+            "default": "ctrl+shift+e",
             "type": "string"
           },
           "input_visual_line_home": {
             "description": "Move to start of visual line in input",
-            "default": "none",
+            "default": "alt+a",
             "type": "string"
           },
           "input_visual_line_end": {
             "description": "Move to end of visual line in input",
-            "default": "none",
+            "default": "alt+e",
             "type": "string"
           },
           "input_select_visual_line_home": {
             "description": "Select to start of visual line in input",
-            "default": "none",
+            "default": "alt+shift+a",
             "type": "string"
           },
           "input_select_visual_line_end": {
             "description": "Select to end of visual line in input",
-            "default": "none",
+            "default": "alt+shift+e",
             "type": "string"
           },
           "input_buffer_home": {
@@ -7308,7 +7308,7 @@
           },
           "input_delete_line": {
             "description": "Delete line in input",
-            "default": "alt+d",
+            "default": "ctrl+shift+d",
             "type": "string"
           },
           "input_delete_to_line_end": {
@@ -7328,7 +7328,7 @@
           },
           "input_delete": {
             "description": "Delete character in input",
-            "default": "delete,shift+delete",
+            "default": "ctrl+d,delete,shift+delete",
             "type": "string"
           },
           "input_undo": {
@@ -7343,12 +7343,12 @@
           },
           "input_word_forward": {
             "description": "Move word forward in input",
-            "default": "alt+f,alt+right",
+            "default": "alt+f,alt+right,ctrl+right",
             "type": "string"
           },
           "input_word_backward": {
             "description": "Move word backward in input",
-            "default": "alt+b,alt+left",
+            "default": "alt+b,alt+left,ctrl+left",
             "type": "string"
           },
           "input_select_word_forward": {
@@ -7363,12 +7363,12 @@
           },
           "input_delete_word_forward": {
             "description": "Delete word forward in input",
-            "default": "ctrl+d",
+            "default": "alt+d,alt+delete,ctrl+delete",
             "type": "string"
           },
           "input_delete_word_backward": {
             "description": "Delete word backward in input",
-            "default": "ctrl+w,alt+backspace",
+            "default": "ctrl+w,ctrl+backspace,alt+backspace",
             "type": "string"
           },
           "history_previous": {
