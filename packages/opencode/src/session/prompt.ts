@@ -590,6 +590,7 @@ export namespace SessionPrompt {
                 "x-opencode-project": Instance.project.id,
                 "x-opencode-session": sessionID,
                 "x-opencode-request": lastUser.id,
+                "x-opencode-client": Flag.OPENCODE_CLIENT,
               }
             : undefined),
           ...model.headers,

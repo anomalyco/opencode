@@ -67,6 +67,7 @@ fn spawn_sidecar(app: &AppHandle, port: u16) -> CommandChild {
         .sidecar("opencode")
         .unwrap()
         .env("OPENCODE_EXPERIMENTAL_ICON_DISCOVERY", "true")
+        .env("OPENCODE_CLIENT", "desktop")
         .args(["serve", &format!("--port={port}")])
         .spawn()
         .expect("Failed to spawn opencode");
