@@ -12,11 +12,6 @@ import type {
   Config,
 } from "@opencode-ai/sdk"
 
-export type WithParts = {
-  info: Message
-  parts: Part[]
-}
-
 import type { BunShell } from "./shell"
 import { type ToolDefinition } from "./tool"
 
@@ -184,7 +179,10 @@ export interface Hooks {
   "experimental.chat.messages.transform"?: (
     input: {},
     output: {
-      messages: WithParts[]
+      messages: {
+        info: Message
+        parts: Part[]
+      }[]
     },
   ) => Promise<void>
   "experimental.text.complete"?: (
