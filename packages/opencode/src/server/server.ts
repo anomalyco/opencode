@@ -56,6 +56,7 @@ export namespace Server {
 
   export const Event = {
     Connected: BusEvent.define("server.connected", z.object({})),
+    Disposed: BusEvent.define("global.disposed", z.object({})),
   }
 
   const app = new Hono()
@@ -138,6 +139,35 @@ export namespace Server {
               })
             })
           })
+        },
+      )
+      .post(
+        "/global/dispose",
+        describeRoute({
+          summary: "Dispose instance",
+          description: "Clean up and dispose all OpenCode instances, releasing all resources.",
+          operationId: "global.dispose",
+          responses: {
+            200: {
+              description: "Global disposed",
+              content: {
+                "application/json": {
+                  schema: resolver(z.boolean()),
+                },
+              },
+            },
+          },
+        }),
+        async (c) => {
+          await Instance.disposeAll()
+          GlobalBus.emit("event", {
+            directory: "global",
+            payload: {
+              type: Event.Disposed.type,
+              properties: {},
+            },
+          })
+          return c.json(true)
         },
       )
       .use(async (c, next) => {
