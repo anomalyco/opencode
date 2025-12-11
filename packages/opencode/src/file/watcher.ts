@@ -42,39 +42,29 @@ export namespace FileWatcher {
     callback: ParcelWatcher.SubscribeCallback,
     options: Parameters<typeof ParcelWatcher.subscribe>[2],
   ): Promise<ParcelWatcher.AsyncSubscription | null> {
-    const timeout = new Promise<null>((resolve) => {
-      setTimeout(() => {
-        log.error("watcher subscribe timeout", { dir })
-        resolve(null)
-      }, SUBSCRIBE_TIMEOUT_MS)
-    })
-    try {
-      return await Promise.race([watcher().subscribe(dir, callback, options), timeout])
-    } catch (e) {
-      log.warn("watcher subscribe failed", { dir, error: e })
-      return null
-    }
-  async function subscribeWithTimeout(
-    dir: string,
-    callback: ParcelWatcher.SubscribeCallback,
-    options: Parameters<typeof ParcelWatcher.subscribe>[2],
-  ): Promise<ParcelWatcher.AsyncSubscription | null> {
-    let timeoutId: Timer
-    const timeout = new Promise<null>((resolve) => {
-      timeoutId = setTimeout(() => {
-        log.error("watcher subscribe timeout", { dir })
-        resolve(null)
-      }, SUBSCRIBE_TIMEOUT_MS)
-    })
-    return Promise.race([
+    let timeoutId: Timer | undefined
+    let resolved = false
+    const result = await Promise.race([
       watcher()
         .subscribe(dir, callback, options)
-        .finally(() => clearTimeout(timeoutId)),
-      timeout,
+        .then((sub) => {
+          resolved = true
+          return sub
+        }),
+      new Promise<null>((resolve) => {
+        timeoutId = setTimeout(() => {
+          if (!resolved) {
+            log.error("watcher subscribe timeout", { dir })
+            resolve(null)
+          }
+        }, SUBSCRIBE_TIMEOUT_MS)
+      }),
     ]).catch((e) => {
-      log.warn("watcher subscribe failed", { dir, error: e })
+      log.error("watcher subscribe failed", { dir, error: e })
       return null
     })
+    if (timeoutId) clearTimeout(timeoutId)
+    return result
   }
 
   const state = Instance.state(
@@ -104,21 +94,19 @@ export namespace FileWatcher {
       const subs: (ParcelWatcher.AsyncSubscription | null)[] = []
       const cfgIgnores = cfg.watcher?.ignore ?? []
 
-      subs.push(
-        await subscribeWithTimeout(Instance.directory, subscribe, {
-          ignore: [...FileIgnore.PATTERNS, ...cfgIgnores],
-          backend,
-        }),
-      )
+      const subDir = await subscribeWithTimeout(Instance.directory, subscribe, {
+        ignore: [...FileIgnore.PATTERNS, ...cfgIgnores],
+        backend,
+      })
+      if (subDir) subs.push(subDir)
 
-      const vcsDir = await $`git rev-parse --git-dir`.quiet().nothrow().cwd(Instance.worktree).text()
+      const vcsDir = (await $`git rev-parse --git-dir`.quiet().nothrow().cwd(Instance.worktree).text()).trim()
       if (vcsDir && !cfgIgnores.includes(".git") && !cfgIgnores.includes(vcsDir)) {
-        subs.push(
-          await subscribeWithTimeout(vcsDir, subscribe, {
-            ignore: ["hooks", "info", "logs", "objects", "refs", "worktrees", "modules", "lfs"],
-            backend,
-          }),
-        )
+        const subGit = await subscribeWithTimeout(vcsDir, subscribe, {
+          ignore: ["hooks", "info", "logs", "objects", "refs", "worktrees", "modules", "lfs"],
+          backend,
+        })
+        if (subGit) subs.push(subGit)
       }
 
       return { subs }
