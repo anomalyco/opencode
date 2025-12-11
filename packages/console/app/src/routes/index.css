@@ -332,7 +332,7 @@ body {
     display: flex;
     flex-direction: column;
     max-width: 100%;
-    padding: calc(var(--vertical-padding) * 2) var(--padding);
+    padding: calc(var(--vertical-padding) * 1.5) var(--padding);
 
     @media (max-width: 30rem) {
       padding: var(--vertical-padding) var(--padding);
@@ -514,8 +514,7 @@ body {
     }
 
     &[data-animating] [data-slot="desktop-icon"] [data-slot="dot"] {
-      opacity: 0.4;
-      transition: opacity 0.3s ease-out 1s;
+      animation: dotFadeInOut 6s ease-out forwards;
     }
 
 
@@ -1241,5 +1240,20 @@ body {
   100% {
     opacity: 0.5;
     transform: scale(1);
+  }
+}
+
+@keyframes dotFadeInOut {
+  0%, 16% {
+    opacity: 0;
+  }
+  20% {
+    opacity: 0.4;
+  }
+  90% {
+    opacity: 0.4;
+  }
+  100% {
+    opacity: 0;
   }
 }

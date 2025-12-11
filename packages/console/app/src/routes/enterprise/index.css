@@ -289,7 +289,7 @@
   [data-component="enterprise-column-1"] {
     h1 {
       font-size: 1.5rem;
-      font-weight: 500;
+      font-weight: 700;
       color: var(--color-text-strong);
       margin-bottom: 1rem;
     }
@@ -441,7 +441,7 @@
 
       h3 {
         font-size: 16px;
-        font-weight: 500;
+        font-weight: 700;
         color: var(--color-text-strong);
         margin-bottom: 12px;
       }
