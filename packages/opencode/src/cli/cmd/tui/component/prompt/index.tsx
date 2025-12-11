@@ -46,6 +46,60 @@ export type PromptRef = {
 
 const PLACEHOLDERS = ["Fix a TODO in the codebase", "What is the tech stack of this project?", "Fix broken tests"]
 
+const TEXTAREA_ACTIONS = [
+  "submit",
+  "newline",
+  "move-left",
+  "move-right",
+  "move-up",
+  "move-down",
+  "select-left",
+  "select-right",
+  "select-up",
+  "select-down",
+  "line-home",
+  "line-end",
+  "select-line-home",
+  "select-line-end",
+  "visual-line-home",
+  "visual-line-end",
+  "select-visual-line-home",
+  "select-visual-line-end",
+  "buffer-home",
+  "buffer-end",
+  "select-buffer-home",
+  "select-buffer-end",
+  "delete-line",
+  "delete-to-line-end",
+  "delete-to-line-start",
+  "backspace",
+  "delete",
+  "undo",
+  "redo",
+  "word-forward",
+  "word-backward",
+  "select-word-forward",
+  "select-word-backward",
+  "delete-word-forward",
+  "delete-word-backward",
+] as const
+
+function mapTextareaKeybindings(
+  keybinds: Record<string, { ctrl: boolean; meta: boolean; shift: boolean; leader: boolean; name: string }[]>,
+  action: (typeof TEXTAREA_ACTIONS)[number],
+): KeyBinding[] {
+  const configKey = `input_${action.replace(/-/g, "_")}`
+  const bindings = keybinds[configKey]
+  if (!bindings) return []
+  return bindings.map((binding) => ({
+    name: binding.name,
+    ctrl: binding.ctrl || undefined,
+    meta: binding.meta || undefined,
+    shift: binding.shift || undefined,
+    action,
+  }))
+}
+
 export function Prompt(props: PromptProps) {
   let input: TextareaRenderable
   let anchor: BoxRenderable
@@ -76,26 +130,12 @@ export function Prompt(props: PromptProps) {
   }
 
   const textareaKeybindings = createMemo(() => {
-    const newlineBindings = keybind.all.input_newline || []
-    const submitBindings = keybind.all.input_submit || []
+    const keybinds = keybind.all
 
     return [
       { name: "return", action: "submit" },
       { name: "return", meta: true, action: "newline" },
-      ...newlineBindings.map((binding) => ({
-        name: binding.name,
-        ctrl: binding.ctrl || undefined,
-        meta: binding.meta || undefined,
-        shift: binding.shift || undefined,
-        action: "newline" as const,
-      })),
-      ...submitBindings.map((binding) => ({
-        name: binding.name,
-        ctrl: binding.ctrl || undefined,
-        meta: binding.meta || undefined,
-        shift: binding.shift || undefined,
-        action: "submit" as const,
-      })),
+      ...TEXTAREA_ACTIONS.flatMap((action) => mapTextareaKeybindings(keybinds, action)),
     ] satisfies KeyBinding[]
   })
 
