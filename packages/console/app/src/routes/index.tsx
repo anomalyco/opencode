@@ -188,15 +188,9 @@ export default function Home() {
           <section data-component="what">
             <div data-slot="section-title">
               <h3>What is OpenCode?</h3>
-              <p>OpenCode is an open source agent that helps you write and run code directly from the terminal.</p>
+              <p>OpenCode is an open source agent that helps you write code in your terminal, IDE, or desktop.</p>
             </div>
             <ul>
-              <li>
-                <span>[*]</span>
-                <div>
-                  <strong>Native TUI</strong> A responsive, native, themeable terminal UI
-                </div>
-              </li>
               <li>
                 <span>[*]</span>
                 <div>
@@ -230,7 +224,7 @@ export default function Home() {
               <li>
                 <span>[*]</span>
                 <div>
-                  <strong>Any editor</strong> OpenCode runs in your terminal, pair it with any IDE
+                  <strong>Any editor</strong> Available as a terminal interface, desktop app, and IDE extension
                 </div>
               </li>
             </ul>
@@ -682,9 +676,8 @@ export default function Home() {
             <ul>
               <li>
                 <Faq question="What is OpenCode?">
-                  OpenCode is an open source agent that helps you write and run code directly from the terminal. You can
-                  pair OpenCode with any AI model, and because it’s terminal-based you can pair it with your preferred
-                  code editor.
+                  OpenCode is an open source agent that helps you write and run code with any AI model. It's available
+                  as a terminal-based interface, desktop app, or IDE extension.
                 </Faq>
               </li>
               <li>
@@ -705,7 +698,7 @@ export default function Home() {
               </li>
               <li>
                 <Faq question="Can I only use OpenCode in the terminal?">
-                  Yes, for now. We are actively working on a desktop app. Join the waitlist for early access.
+                  Not anymore! OpenCode is now available as an app for your desktop.
                 </Faq>
               </li>
               <li>

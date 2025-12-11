@@ -9,6 +9,7 @@ import { Avatar } from "@opencode-ai/ui/avatar"
 import { ResizeHandle } from "@opencode-ai/ui/resize-handle"
 import { Button } from "@opencode-ai/ui/button"
 import { Icon } from "@opencode-ai/ui/icon"
+import { ProviderIcon } from "@opencode-ai/ui/provider-icon"
 import { IconButton } from "@opencode-ai/ui/icon-button"
 import { Tooltip } from "@opencode-ai/ui/tooltip"
 import { Collapsible } from "@opencode-ai/ui/collapsible"
@@ -29,6 +30,10 @@ import {
   useDragDropContext,
 } from "@thisbeyond/solid-dnd"
 import type { DragEvent, Transformer } from "@thisbeyond/solid-dnd"
+import { SelectDialog } from "@opencode-ai/ui/select-dialog"
+import { Tag } from "@opencode-ai/ui/tag"
+import { IconName } from "@opencode-ai/ui/icons/provider"
+import { popularProviders, useProviders } from "@/hooks/use-providers"
 
 export default function Layout(props: ParentProps) {
   const [store, setStore] = createStore({
@@ -44,6 +49,7 @@ export default function Layout(props: ParentProps) {
   const currentDirectory = createMemo(() => base64Decode(params.dir ?? ""))
   const sessions = createMemo(() => globalSync.child(currentDirectory())[0].session ?? [])
   const currentSession = createMemo(() => sessions().find((s) => s.id === params.id))
+  const providers = useProviders()
 
   function navigateToProject(directory: string | undefined) {
     if (!directory) return
@@ -82,10 +88,19 @@ export default function Layout(props: ParentProps) {
     }
   }
 
+  async function connectProvider() {
+    layout.dialog.open("provider")
+  }
+
   createEffect(() => {
     if (!params.dir || !params.id) return
     const directory = base64Decode(params.dir)
     setStore("lastSession", directory, params.id)
+  })
+
+  createEffect(() => {
+    const sidebarWidth = layout.sidebar.opened() ? layout.sidebar.width() : 48
+    document.documentElement.style.setProperty("--dialog-left-margin", `${sidebarWidth}px`)
   })
 
   function getDraggableId(event: unknown): string | undefined {
@@ -465,10 +480,44 @@ export default function Layout(props: ParentProps) {
             </DragDropProvider>
           </div>
           <div class="flex flex-col gap-1.5 self-stretch items-start shrink-0 px-2 py-3">
+            <Switch>
+              <Match when={!providers().connected().length && layout.sidebar.opened()}>
+                <div class="rounded-md bg-background-stronger shadow-xs-border-base">
+                  <div class="p-3 flex flex-col gap-2">
+                    <div class="text-12-medium text-text-strong">Getting started</div>
+                    <div class="text-text-base">OpenCode includes free models so you can start immediately.</div>
+                    <div class="text-text-base">Connect any provider to use models, inc. Claude, GPT, Gemini etc.</div>
+                  </div>
+                  <Tooltip placement="right" value="Connect provider" inactive={layout.sidebar.opened()}>
+                    <Button
+                      class="flex w-full text-left justify-start text-12-medium text-text-strong stroke-[1.5px] rounded-lg rounded-t-none shadow-none border-t border-border-weak-base pl-2.25 pb-px"
+                      size="large"
+                      icon="plus-small"
+                      onClick={connectProvider}
+                    >
+                      <Show when={layout.sidebar.opened()}>Connect provider</Show>
+                    </Button>
+                  </Tooltip>
+                </div>
+              </Match>
+              <Match when={true}>
+                <Tooltip placement="right" value="Connect provider" inactive={layout.sidebar.opened()}>
+                  <Button
+                    class="flex w-full text-left justify-start text-12-medium text-text-base stroke-[1.5px] rounded-lg px-2"
+                    variant="ghost"
+                    size="large"
+                    icon="plus-small"
+                    onClick={connectProvider}
+                  >
+                    <Show when={layout.sidebar.opened()}>Connect provider</Show>
+                  </Button>
+                </Tooltip>
+              </Match>
+            </Switch>
             <Show when={platform.openDirectoryPickerDialog}>
               <Tooltip placement="right" value="Open project" inactive={layout.sidebar.opened()}>
                 <Button
-                  class="flex w-full text-left justify-start text-12-medium text-text-base stroke-[1.5px] rounded-lg"
+                  class="flex w-full text-left justify-start text-12-medium text-text-base stroke-[1.5px] rounded-lg px-2"
                   variant="ghost"
                   size="large"
                   icon="folder-add-left"
@@ -481,7 +530,7 @@ export default function Layout(props: ParentProps) {
             <Tooltip placement="right" value="Settings" inactive={layout.sidebar.opened()}>
               <Button
                 disabled
-                class="flex w-full text-left justify-start text-12-medium text-text-base stroke-[1.5px] rounded-lg"
+                class="flex w-full text-left justify-start text-12-medium text-text-base stroke-[1.5px] rounded-lg px-2"
                 variant="ghost"
                 size="large"
                 icon="settings-gear"
@@ -494,7 +543,7 @@ export default function Layout(props: ParentProps) {
                 as={"a"}
                 href="https://opencode.ai/desktop-feedback"
                 target="_blank"
-                class="flex w-full text-left justify-start text-12-medium text-text-base stroke-[1.5px] rounded-lg"
+                class="flex w-full text-left justify-start text-12-medium text-text-base stroke-[1.5px] rounded-lg px-2"
                 variant="ghost"
                 size="large"
                 icon="bubble-5"
@@ -505,6 +554,59 @@ export default function Layout(props: ParentProps) {
           </div>
         </div>
         <main class="size-full overflow-x-hidden flex flex-col items-start">{props.children}</main>
+        <Show when={layout.dialog.opened() === "provider"}>
+          <SelectDialog
+            defaultOpen
+            title="Connect provider"
+            placeholder="Search providers"
+            activeIcon="plus-small"
+            key={(x) => x?.id}
+            items={providers().all}
+            // current={local.model.current()}
+            filterKeys={["id", "name"]}
+            groupBy={(x) => (popularProviders.includes(x.id) ? "Popular" : "Other")}
+            sortBy={(a, b) => {
+              if (popularProviders.includes(a.id) && popularProviders.includes(b.id))
+                return popularProviders.indexOf(a.id) - popularProviders.indexOf(b.id)
+              return a.name.localeCompare(b.name)
+            }}
+            sortGroupsBy={(a, b) => {
+              if (a.category === "Popular" && b.category !== "Popular") return -1
+              if (b.category === "Popular" && a.category !== "Popular") return 1
+              return 0
+            }}
+            // onSelect={(x) => }
+            onOpenChange={(open) => {
+              if (open) {
+                layout.dialog.open("provider")
+              } else {
+                layout.dialog.close("provider")
+              }
+            }}
+          >
+            {(i) => (
+              <div class="px-1.25 w-full flex items-center gap-x-4">
+                <ProviderIcon
+                  data-slot="list-item-extra-icon"
+                  id={i.id as IconName}
+                  // TODO: clean this up after we update icon in models.dev
+                  classList={{
+                    "text-icon-weak-base": true,
+                    "size-4 mx-0.5": i.id === "opencode",
+                    "size-5": i.id !== "opencode",
+                  }}
+                />
+                <span>{i.name}</span>
+                <Show when={i.id === "opencode"}>
+                  <Tag>Recommended</Tag>
+                </Show>
+                <Show when={i.id === "anthropic"}>
+                  <div class="text-14-regular text-text-weak">Connect with Claude Pro/Max or API key</div>
+                </Show>
+              </div>
+            )}
+          </SelectDialog>
+        </Show>
       </div>
     </div>
   )
