@@ -26,7 +26,9 @@ function CopyStatus() {
 }
 
 export default function Download() {
-  const release = createAsync(() => getLatestRelease())
+  const release = createAsync(() => getLatestRelease(), {
+    deferStream: true,
+  })
   const download = () => {
     const version = release()
     if (!version) return null
