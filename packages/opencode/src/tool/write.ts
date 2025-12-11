@@ -21,7 +21,7 @@ export const WriteTool = Tool.define("write", {
     const agent = await Agent.get(ctx.agent)
 
     const filepath = path.isAbsolute(params.filePath) ? params.filePath : path.join(Instance.directory, params.filePath)
-    if (!Filesystem.contains(Instance.directory, filepath)) {
+    if (!Filesystem.isAllowedPath(Instance.directory, filepath)) {
       const parentDir = path.dirname(filepath)
       if (agent.permission.external_directory === "ask") {
         await Permission.ask({

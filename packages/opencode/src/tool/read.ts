@@ -30,7 +30,7 @@ export const ReadTool = Tool.define("read", {
     const title = path.relative(Instance.worktree, filepath)
     const agent = await Agent.get(ctx.agent)
 
-    if (!ctx.extra?.["bypassCwdCheck"] && !Filesystem.contains(Instance.directory, filepath)) {
+    if (!ctx.extra?.["bypassCwdCheck"] && !Filesystem.isAllowedPath(Instance.directory, filepath)) {
       const parentDir = path.dirname(filepath)
       if (agent.permission.external_directory === "ask") {
         await Permission.ask({

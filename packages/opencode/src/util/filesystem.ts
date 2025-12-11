@@ -1,7 +1,14 @@
 import { exists } from "fs/promises"
-import { dirname, join, relative } from "path"
+import { dirname, join, normalize, relative } from "path"
+import { tmpdir } from "os"
 
 export namespace Filesystem {
+  const systemTmpDir = normalize(tmpdir())
+
+  export function isAllowedPath(projectDir: string, filepath: string) {
+    const normalized = normalize(filepath)
+    return contains(projectDir, normalized) || contains(systemTmpDir, normalized) || contains("/tmp", normalized)
+  }
   export function overlaps(a: string, b: string) {
     const relA = relative(a, b)
     const relB = relative(b, a)

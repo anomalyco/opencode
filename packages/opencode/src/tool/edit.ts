@@ -42,7 +42,7 @@ export const EditTool = Tool.define("edit", {
     const agent = await Agent.get(ctx.agent)
 
     const filePath = path.isAbsolute(params.filePath) ? params.filePath : path.join(Instance.directory, params.filePath)
-    if (!Filesystem.contains(Instance.directory, filePath)) {
+    if (!Filesystem.isAllowedPath(Instance.directory, filePath)) {
       const parentDir = path.dirname(filePath)
       if (agent.permission.external_directory === "ask") {
         await Permission.ask({
