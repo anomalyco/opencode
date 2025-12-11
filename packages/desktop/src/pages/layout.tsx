@@ -440,7 +440,7 @@ export default function Layout(props: ParentProps) {
               <Button
                 variant="ghost"
                 size="large"
-                class="group/sidebar-toggle shrink-0 w-full text-left justify-start rounded-lg"
+                class="group/sidebar-toggle shrink-0 w-full text-left justify-start rounded-lg px-2"
                 onClick={layout.sidebar.toggle}
               >
                 <div class="relative -ml-px flex items-center justify-center size-4 [&>*]:absolute [&>*]:inset-0">
@@ -615,7 +615,7 @@ export default function Layout(props: ParentProps) {
             )}
           </SelectDialog>
         </Show>
-        <Show when={layout.dialog?.opened() === "connect"}>
+        <Show when={layout.dialog.opened() === "connect"}>
           {iife(() => {
             const [store, setStore] = createStore({
               method: undefined as undefined | ProviderAuthMethod,
@@ -753,6 +753,7 @@ export default function Layout(props: ParentProps) {
                             },
                           })
                           await globalSDK.client.global.dispose()
+                          layout.connect.complete()
                         }
 
                         return (

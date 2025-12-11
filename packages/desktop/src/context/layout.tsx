@@ -1,4 +1,4 @@
-import { createStore } from "solid-js/store"
+import { createStore, produce } from "solid-js/store"
 import { batch, createMemo, onMount } from "solid-js"
 import { createSimpleContext } from "@opencode-ai/ui/context"
 import { makePersisted } from "@solid-primitives/storage"
@@ -48,6 +48,8 @@ export const { use: useLayout, provider: LayoutProvider } = createSimpleContext(
     const [ephemeral, setEphemeral] = createStore({
       connect: {
         provider: undefined as undefined | string,
+        state: undefined as undefined | "pending" | "complete" | "error",
+        error: undefined as undefined | string,
       },
       dialog: {
         open: undefined as undefined | Dialog,
@@ -176,21 +178,47 @@ export const { use: useLayout, provider: LayoutProvider } = createSimpleContext(
         opened: createMemo(() => ephemeral.dialog?.open),
         open(dialog: Dialog) {
           setEphemeral("dialog", "open", dialog)
+          if (dialog !== "connect") {
+            setEphemeral("connect", {})
+          }
         },
         close(dialog: Dialog) {
           if (ephemeral.dialog?.open === dialog) {
             setEphemeral("dialog", "open", undefined)
+            if (dialog === "connect") {
+              setEphemeral("connect", {})
+            }
           }
         },
         connect(provider: string) {
           batch(() => {
             setEphemeral("dialog", "open", "connect")
-            setEphemeral("connect", "provider", provider)
+            setEphemeral("connect", { provider, state: "pending" })
           })
         },
       },
       connect: {
         provider: createMemo(() => ephemeral.connect.provider),
+        state: createMemo(() => ephemeral.connect.state),
+        complete() {
+          setEphemeral(
+            produce((state) => {
+              state.dialog.open = "model"
+              state.connect.state = "complete"
+            }),
+          )
+        },
+        error(message: string) {
+          setEphemeral(
+            produce((state) => {
+              state.connect.state = "error"
+              state.connect.error = message
+            }),
+          )
+        },
+        clear() {
+          setEphemeral("connect", {})
+        },
       },
     }
   },

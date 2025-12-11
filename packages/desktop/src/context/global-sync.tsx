@@ -1,19 +1,20 @@
-import type {
-  Message,
-  Agent,
-  Session,
-  Part,
-  Config,
-  Path,
-  File,
-  FileNode,
-  Project,
-  FileDiff,
-  Todo,
-  SessionStatus,
-  ProviderListResponse,
-  ProviderAuthResponse,
-} from "@opencode-ai/sdk/v2"
+import {
+  type Message,
+  type Agent,
+  type Session,
+  type Part,
+  type Config,
+  type Path,
+  type File,
+  type FileNode,
+  type Project,
+  type FileDiff,
+  type Todo,
+  type SessionStatus,
+  type ProviderListResponse,
+  type ProviderAuthResponse,
+  createOpencodeClient,
+} from "@opencode-ai/sdk/v2/client"
 import { createStore, produce, reconcile } from "solid-js/store"
 import { Binary } from "@opencode-ai/util/binary"
 import { createSimpleContext } from "@opencode-ai/ui/context"
@@ -51,7 +52,7 @@ type State = {
 export const { use: useGlobalSync, provider: GlobalSyncProvider } = createSimpleContext({
   name: "GlobalSync",
   init: () => {
-    const sdk = useGlobalSDK()
+    const globalSDK = useGlobalSDK()
     const [globalStore, setGlobalStore] = createStore<{
       ready: boolean
       project: Project[]
@@ -65,6 +66,33 @@ export const { use: useGlobalSync, provider: GlobalSyncProvider } = createSimple
       provider_auth: {},
       children: {},
     })
+
+    async function bootstrapInstance(directory: string) {
+      const [store, setStore] = child(directory)
+      const sdk = createOpencodeClient({
+        baseUrl: globalSDK.url,
+        directory,
+      })
+      const load = {
+        project: () => sdk.project.current().then((x) => setStore("project", x.data!.id)),
+        provider: () => sdk.provider.list().then((x) => setStore("provider", x.data!)),
+        path: () => sdk.path.get().then((x) => setStore("path", x.data!)),
+        agent: () => sdk.app.agents().then((x) => setStore("agent", x.data ?? [])),
+        session: () =>
+          sdk.session.list().then((x) => {
+            const sessions = (x.data ?? [])
+              .slice()
+              .sort((a, b) => a.id.localeCompare(b.id))
+              .slice(0, store.limit)
+            setStore("session", sessions)
+          }),
+        status: () => sdk.session.status().then((x) => setStore("session_status", x.data!)),
+        config: () => sdk.config.get().then((x) => setStore("config", x.data!)),
+        changes: () => sdk.file.status().then((x) => setStore("changes", x.data!)),
+        node: () => sdk.file.list({ path: "/" }).then((x) => setStore("node", x.data!)),
+      }
+      await Promise.all(Object.values(load).map((p) => p())).then(() => setStore("ready", true))
+    }
 
     const children: Record<string, ReturnType<typeof createStore<State>>> = {}
     function child(directory: string) {
@@ -87,11 +115,12 @@ export const { use: useGlobalSync, provider: GlobalSyncProvider } = createSimple
           changes: [],
         })
         children[directory] = createStore(globalStore.children[directory])
+        bootstrapInstance(directory)
       }
       return children[directory]
     }
 
-    sdk.event.listen((e) => {
+    globalSDK.event.listen((e) => {
       const directory = e.name
       const event = e.details
 
@@ -121,6 +150,10 @@ export const { use: useGlobalSync, provider: GlobalSyncProvider } = createSimple
 
       const [store, setStore] = child(directory)
       switch (event.type) {
+        case "server.instance.disposed": {
+          bootstrapInstance(directory)
+          break
+        }
         case "session.updated": {
           const result = Binary.search(store.session, event.properties.info.id, (s) => s.id)
           if (result.found) {
@@ -191,7 +224,7 @@ export const { use: useGlobalSync, provider: GlobalSyncProvider } = createSimple
 
     async function bootstrap() {
       return Promise.all([
-        sdk.client.project.list().then(async (x) => {
+        globalSDK.client.project.list().then(async (x) => {
           setGlobalStore(
             "project",
             x
@@ -199,10 +232,10 @@ export const { use: useGlobalSync, provider: GlobalSyncProvider } = createSimple
               .sort((a, b) => a.id.localeCompare(b.id)),
           )
         }),
-        sdk.client.provider.list().then((x) => {
+        globalSDK.client.provider.list().then((x) => {
           setGlobalStore("provider", x.data ?? {})
         }),
-        sdk.client.provider.auth().then((x) => {
+        globalSDK.client.provider.auth().then((x) => {
           setGlobalStore("provider_auth", x.data ?? {})
         }),
       ]).then(() => setGlobalStore("ready", true))
