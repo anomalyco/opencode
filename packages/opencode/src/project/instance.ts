@@ -57,7 +57,9 @@ export const Instance = {
       directory: Instance.directory,
       payload: {
         type: "server.instance.disposed",
-        properties: {},
+        properties: {
+          directory: Instance.directory,
+        },
       },
     })
   },
