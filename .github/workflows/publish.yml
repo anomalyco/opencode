@@ -55,7 +55,7 @@ jobs:
 
       - name: Install OpenCode
         if: inputs.bump || inputs.version
-        run: curl -fsSL https://opencode.ai/install | bash
+        run: bun i -g opencode-ai@1.0.143
 
       - name: Login to GitHub Container Registry
         uses: docker/login-action@v3
