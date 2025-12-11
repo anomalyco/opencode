@@ -1,7 +1,7 @@
 import { createEffect, createMemo, For, Match, onCleanup, onMount, ParentProps, Show, Switch, type JSX } from "solid-js"
 import { DateTime } from "luxon"
 import { A, useNavigate, useParams } from "@solidjs/router"
-import { useLayout } from "@/context/layout"
+import { useLayout, getAvatarColors } from "@/context/layout"
 import { useGlobalSync } from "@/context/global-sync"
 import { base64Decode, base64Encode } from "@opencode-ai/util/encode"
 import { Mark } from "@opencode-ai/ui/logo"
@@ -180,7 +180,7 @@ export default function Layout(props: ParentProps) {
                 <Avatar
                   fallback={name()}
                   src={props.project.icon?.url}
-                  background={props.project.icon?.color ?? "var(--surface-info-base)"}
+                  {...getAvatarColors(props.project.icon?.color)}
                   class="size-full"
                 />
               </div>
@@ -200,7 +200,7 @@ export default function Layout(props: ParentProps) {
               <Avatar
                 fallback={name()}
                 src={props.project.icon?.url}
-                background={props.project.icon?.color ?? "var(--surface-info-base)"}
+                {...getAvatarColors(props.project.icon?.color)}
                 class="size-full"
               />
             </div>
@@ -231,7 +231,7 @@ export default function Layout(props: ParentProps) {
                     <Avatar
                       fallback={name()}
                       src={props.project.icon?.url}
-                      background={props.project.icon?.color ?? "var(--surface-info-base)"}
+                      {...getAvatarColors(props.project.icon?.color)}
                       class="size-full group-hover/session:hidden"
                     />
                     <Icon
