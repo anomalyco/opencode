@@ -188,7 +188,7 @@ export const BashTool = Tool.define("bash", async () => {
           const action = Wildcard.allStructured({ head: command[0], tail: command.slice(1) }, permissions)
           if (action === "deny") {
             throw new Error(
-              `The user has specifically restricted access to this command, you are not allowed to execute it. Here is the configuration: ${JSON.stringify(permissions)}`,
+              `The user has specifically restricted access to this command: "${command.join(" ")}", you are not allowed to execute it. The user has these settings configured: ${JSON.stringify(permissions)}`,
             )
           }
           if (action === "ask") {
