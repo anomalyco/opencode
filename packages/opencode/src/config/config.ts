@@ -137,11 +137,13 @@ export namespace Config {
 
     if (!result.keybinds) result.keybinds = Info.shape.keybinds.parse({})
 
-    if (!result.default_agent || !(result.default_agent in result.agent) || result.agent[result.default_agent]?.disable) {
-      log.warn(`default_agent not found in agents, selecting first primary agent`)
-      log.debug(`available agents: ${Object.keys(result.agent).join(", ")}`)
+    if (
+      !result.default_agent ||
+      !(result.default_agent in result.agent) ||
+      result.agent[result.default_agent]?.disable
+    ) {
+      log.warn(`default_agent not available, fallback to the first primary agent`)
       result.default_agent = firstPrimaryAgent(result.agent)
-      log.debug(`selected fallback agent: ${result.default_agent}`)
     }
 
     return {
