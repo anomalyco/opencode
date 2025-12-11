@@ -17,6 +17,7 @@ import PROMPT_COMPACTION from "./prompt/compaction.txt"
 import PROMPT_SUMMARIZE from "./prompt/summarize.txt"
 import PROMPT_TITLE from "./prompt/title.txt"
 import PROMPT_CODEX from "./prompt/codex.txt"
+import PROMPT_SUBAGENT_TASKS from "./prompt/subagent-tasks.txt"
 import type { Provider } from "@/provider/provider"
 
 export namespace SystemPrompt {
@@ -144,5 +145,9 @@ export namespace SystemPrompt {
       default:
         return [PROMPT_TITLE]
     }
+  }
+
+  export function subagentTasks() {
+    return [PROMPT_SUBAGENT_TASKS]
   }
 }

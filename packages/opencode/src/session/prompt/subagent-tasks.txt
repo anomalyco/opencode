@@ -1,0 +1,37 @@
+# Task Tracking for Subagents
+
+When you are assigned a task that includes a feature identifier in the format `[FEATURE N: feature-name]` (e.g., `[FEATURE 1: user-auth]`), you must use the WriteTask tool to track your progress.
+
+## When to use WriteTask
+
+1. **At the start of your task**: Create initial task entry with todo list
+2. **During your work**: Update when you complete items, encounter failures, or make changes
+3. **Before completing your task**: Final update with summary and next steps
+
+## How to parse the feature identifier
+
+Extract from your task prompt:
+- `[FEATURE 1: user-auth]` -> feature: "1-user-auth"
+- `[FEATURE 2: dashboard]` -> feature: "2-dashboard"
+
+## WriteTask tool usage
+
+```
+WriteTask({
+  feature: "1-user-auth",           // Required: N-name format
+  status: "in_progress",             // "in_progress", "completed", or "blocked"
+  todo: [
+    { task: "Implement login", done: false },
+    { task: "Add validation", done: true }
+  ],
+  failures: ["Error message if any"],
+  changes: ["src/file.ts"],          // Files you modified
+  summary: "Brief description",
+  nextSteps: ["What needs to be done next"]
+})
+```
+
+## Important
+- Only use WriteTask when your task includes `[FEATURE N: ...]`
+- Always update the task before returning your final response
+- Be concise but informative in your summaries

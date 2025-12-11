@@ -475,6 +475,7 @@ export namespace SessionPrompt {
         model,
         agent,
         system: lastUser.system,
+        sessionID,
         isLastStep,
       })
       const tools = await resolveTools({
@@ -663,8 +664,13 @@ export namespace SessionPrompt {
     system?: string
     agent: Agent.Info
     model: Provider.Model
+    sessionID: string
     isLastStep?: boolean
   }) {
+    // Check if this is a subagent session
+    const session = await Session.get(input.sessionID)
+    const isSubagent = !!session?.parentID
+
     let system = SystemPrompt.header(input.model.providerID)
     system.push(
       ...(() => {
@@ -675,6 +681,11 @@ export namespace SessionPrompt {
     )
     system.push(...(await SystemPrompt.environment()))
     system.push(...(await SystemPrompt.custom()))
+
+    // Add subagent task instructions for child sessions
+    if (isSubagent) {
+      system.push(...SystemPrompt.subagentTasks())
+    }
 
     if (input.isLastStep) {
       system.push(MAX_STEPS)
