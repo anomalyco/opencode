@@ -318,6 +318,16 @@ export namespace Provider {
         },
       }
     },
+    cerebras: async () => {
+      return {
+        autoload: false,
+        options: {
+          headers: {
+            "X-Cerebras-3rd-Party-Integration": "opencode",
+          },
+        },
+      }
+    },
   }
 
   export const Model = z
