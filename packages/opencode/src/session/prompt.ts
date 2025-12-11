@@ -338,6 +338,7 @@ export namespace SessionPrompt {
             },
           },
         })) as MessageV2.ToolPart
+        let executionError: Error | undefined
         const result = await taskTool
           .execute(
             {
@@ -362,7 +363,11 @@ export namespace SessionPrompt {
               },
             },
           )
-          .catch(() => {})
+          .catch((error) => {
+            executionError = error
+            log.error("subtask execution failed", { error, agent: task.agent, description: task.description })
+            return undefined
+          })
         assistantMessage.finish = "tool-calls"
         assistantMessage.time.completed = Date.now()
         await Session.updateMessage(assistantMessage)
@@ -388,7 +393,7 @@ export namespace SessionPrompt {
             ...part,
             state: {
               status: "error",
-              error: "Tool execution failed",
+              error: executionError ? `Tool execution failed: ${executionError.message}` : "Tool execution failed",
               time: {
                 start: part.state.status === "running" ? part.state.time.start : Date.now(),
                 end: Date.now(),
@@ -515,6 +520,37 @@ export namespace SessionPrompt {
         })
       }
 
+      const messages = [
+        ...system.map(
+          (x): ModelMessage => ({
+            role: "system",
+            content: x,
+          }),
+        ),
+        ...MessageV2.toModelMessage(
+          msgs.filter((m) => {
+            if (m.info.role !== "assistant" || m.info.error === undefined) {
+              return true
+            }
+            if (
+              MessageV2.AbortedError.isInstance(m.info.error) &&
+              m.parts.some((part) => part.type !== "step-start" && part.type !== "reasoning")
+            ) {
+              return true
+            }
+
+            return false
+          }),
+        ),
+        ...(isLastStep
+          ? [
+              {
+                role: "assistant" as const,
+                content: MAX_STEPS,
+              },
+            ]
+          : []),
+      ]
       const result = await processor.process({
         onError(error) {
           log.error("stream error", {
@@ -562,42 +598,12 @@ export namespace SessionPrompt {
           OUTPUT_TOKEN_MAX,
         ),
         abortSignal: abort,
-        providerOptions: ProviderTransform.providerOptions(model.api.npm, model.providerID, params.options),
+        providerOptions: ProviderTransform.providerOptions(model, params.options),
         stopWhen: stepCountIs(1),
         temperature: params.temperature,
         topP: params.topP,
         toolChoice: isLastStep ? "none" : undefined,
-        messages: [
-          ...system.map(
-            (x): ModelMessage => ({
-              role: "system",
-              content: x,
-            }),
-          ),
-          ...MessageV2.toModelMessage(
-            msgs.filter((m) => {
-              if (m.info.role !== "assistant" || m.info.error === undefined) {
-                return true
-              }
-              if (
-                MessageV2.AbortedError.isInstance(m.info.error) &&
-                m.parts.some((part) => part.type !== "step-start" && part.type !== "reasoning")
-              ) {
-                return true
-              }
-
-              return false
-            }),
-          ),
-          ...(isLastStep
-            ? [
-                {
-                  role: "assistant" as const,
-                  content: MAX_STEPS,
-                },
-              ]
-            : []),
-        ],
+        messages,
         tools: model.capabilities.toolcall === false ? undefined : tools,
         model: wrapLanguageModel({
           model: language,
@@ -628,7 +634,13 @@ export namespace SessionPrompt {
             },
           ],
         }),
-        experimental_telemetry: { isEnabled: cfg.experimental?.openTelemetry },
+        experimental_telemetry: {
+          isEnabled: cfg.experimental?.openTelemetry,
+          metadata: {
+            userId: cfg.username ?? "unknown",
+            sessionId: sessionID,
+          },
+        },
       })
       if (result === "stop") break
       continue
@@ -1224,8 +1236,8 @@ export namespace SessionPrompt {
       },
     }
     await Session.updatePart(part)
-    const shell = process.env["SHELL"] ?? "bash"
-    const shellName = path.basename(shell)
+    const shell = process.env["SHELL"] ?? (process.platform === "win32" ? process.env["COMSPEC"] || "cmd.exe" : "bash")
+    const shellName = path.basename(shell).toLowerCase()
 
     const invocations: Record<string, { args: string[] }> = {
       nu: {
@@ -1255,6 +1267,14 @@ export namespace SessionPrompt {
           `,
         ],
       },
+      // Windows cmd.exe
+      "cmd.exe": {
+        args: ["/c", input.command],
+      },
+      // Windows PowerShell
+      "powershell.exe": {
+        args: ["-NoProfile", "-Command", input.command],
+      },
       // Fallback: any shell that doesn't match those above
       "": {
         args: ["-c", "-l", `${input.command}`],
@@ -1266,7 +1286,7 @@ export namespace SessionPrompt {
 
     const proc = spawn(shell, args, {
       cwd: Instance.directory,
-      detached: true,
+      detached: process.platform !== "win32",
       stdio: ["ignore", "pipe", "pipe"],
       env: {
         ...process.env,
@@ -1458,7 +1478,7 @@ export namespace SessionPrompt {
     await generateText({
       // use higher # for reasoning models since reasoning tokens eat up a lot of the budget
       maxOutputTokens: small.capabilities.reasoning ? 3000 : 20,
-      providerOptions: ProviderTransform.providerOptions(small.api.npm, small.providerID, options),
+      providerOptions: ProviderTransform.providerOptions(small, options),
       messages: [
         ...SystemPrompt.title(small.providerID).map(
           (x): ModelMessage => ({
@@ -1491,7 +1511,13 @@ export namespace SessionPrompt {
       ],
       headers: small.headers,
       model: language,
-      experimental_telemetry: { isEnabled: cfg.experimental?.openTelemetry },
+      experimental_telemetry: {
+        isEnabled: cfg.experimental?.openTelemetry,
+        metadata: {
+          userId: cfg.username ?? "unknown",
+          sessionId: input.session.id,
+        },
+      },
     })
       .then((result) => {
         if (result.text)

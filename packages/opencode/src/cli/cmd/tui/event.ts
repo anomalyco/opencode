@@ -1,9 +1,10 @@
+import { BusEvent } from "@/bus/bus-event"
 import { Bus } from "@/bus"
 import z from "zod"
 
 export const TuiEvent = {
-  PromptAppend: Bus.event("tui.prompt.append", z.object({ text: z.string() })),
-  CommandExecute: Bus.event(
+  PromptAppend: BusEvent.define("tui.prompt.append", z.object({ text: z.string() })),
+  CommandExecute: BusEvent.define(
     "tui.command.execute",
     z.object({
       command: z.union([
@@ -27,7 +28,7 @@ export const TuiEvent = {
       ]),
     }),
   ),
-  ToastShow: Bus.event(
+  ToastShow: BusEvent.define(
     "tui.toast.show",
     z.object({
       title: z.string().optional(),

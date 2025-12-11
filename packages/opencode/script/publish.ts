@@ -35,26 +35,21 @@ await Bun.file(`./dist/${pkg.name}/package.json`).write(
     2,
   ),
 )
-for (const [name] of Object.entries(binaries)) {
-  try {
-    process.chdir(`./dist/${name}`)
-    if (process.platform !== "win32") {
-      await $`chmod 755 -R .`
-    }
-    await $`bun publish --access public --tag ${Script.channel}`
-  } finally {
-    process.chdir(dir)
-  }
-}
-await $`cd ./dist/${pkg.name} && bun publish --access public --tag ${Script.channel}`
 
-if (!Script.preview) {
-  const major = Script.version.split(".")[0]
-  const majorTag = `latest-${major}`
-  for (const [name] of Object.entries(binaries)) {
-    await $`cd dist/${name} && npm dist-tag add ${name}@${Script.version} ${majorTag}`
+const tags = [Script.channel]
+
+const tasks = Object.entries(binaries).map(async ([name]) => {
+  if (process.platform !== "win32") {
+    await $`chmod 755 -R .`.cwd(`./dist/${name}`)
   }
-  await $`cd ./dist/${pkg.name} && npm dist-tag add ${pkg.name}-ai@${Script.version} ${majorTag}`
+  await $`bun pm pack`.cwd(`./dist/${name}`)
+  for (const tag of tags) {
+    await $`npm publish *.tgz --access public --tag ${tag}`.cwd(`./dist/${name}`)
+  }
+})
+await Promise.all(tasks)
+for (const tag of tags) {
+  await $`cd ./dist/${pkg.name} && bun pm pack && npm publish *.tgz --access public --tag ${tag}`
 }
 
 if (!Script.preview) {
@@ -90,7 +85,7 @@ if (!Script.preview) {
     "license=('MIT')",
     "provides=('opencode')",
     "conflicts=('opencode')",
-    "depends=('fzf' 'ripgrep')",
+    "depends=('ripgrep')",
     "",
     `source_aarch64=("\${pkgname}_\${pkgver}_aarch64.tar.gz::https://github.com/sst/opencode/releases/download/v\${pkgver}\${_subver}/opencode-linux-arm64.tar.gz")`,
     `sha256sums_aarch64=('${arm64Sha}')`,
@@ -120,7 +115,7 @@ if (!Script.preview) {
     "license=('MIT')",
     "provides=('opencode')",
     "conflicts=('opencode-bin')",
-    "depends=('fzf' 'ripgrep')",
+    "depends=('ripgrep')",
     "makedepends=('git' 'bun-bin' 'go')",
     "",
     `source=("opencode-\${pkgver}.tar.gz::https://github.com/sst/opencode/archive/v\${pkgver}\${_subver}.tar.gz")`,
@@ -198,6 +193,8 @@ if (!Script.preview) {
     `  desc "The AI coding agent built for the terminal."`,
     `  homepage "https://github.com/sst/opencode"`,
     `  version "${Script.version.split("-")[0]}"`,
+    "",
+    `  depends_on "ripgrep"`,
     "",
     "  on_macos do",
     "    if Hardware::CPU.intel?",

@@ -7,8 +7,10 @@
     "core:default",
     "opener:default",
     "core:window:allow-start-dragging",
+    "core:webview:allow-set-webview-zoom",
     "shell:default",
     "updater:default",
-    "dialog:default"
+    "dialog:default",
+    "process:default"
   ]
 }

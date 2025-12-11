@@ -17,5 +17,5 @@ for (const [key, value] of Object.entries(pkg.exports)) {
   }
 }
 await Bun.write("package.json", JSON.stringify(pkg, null, 2))
-await $`bun publish --tag ${Script.channel} --access public`
+await $`bun pm pack && npm publish *.tgz --tag ${Script.channel} --access public`
 await Bun.write("package.json", JSON.stringify(original, null, 2))

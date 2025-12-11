@@ -4,13 +4,6 @@ export type ClientOptions = {
   baseUrl: `${string}://${string}` | (string & {})
 }
 
-export type EventServerInstanceDisposed = {
-  type: "server.instance.disposed"
-  properties: {
-    directory: string
-  }
-}
-
 export type EventInstallationUpdated = {
   type: "installation.updated"
   properties: {
@@ -22,6 +15,34 @@ export type EventInstallationUpdateAvailable = {
   type: "installation.update-available"
   properties: {
     version: string
+  }
+}
+
+export type Project = {
+  id: string
+  worktree: string
+  vcs?: "git"
+  name?: string
+  icon?: {
+    url?: string
+    color?: string
+  }
+  time: {
+    created: number
+    updated: number
+    initialized?: number
+  }
+}
+
+export type EventProjectUpdated = {
+  type: "project.updated"
+  properties: Project
+}
+
+export type EventServerInstanceDisposed = {
+  type: "server.instance.disposed"
+  properties: {
+    directory: string
   }
 }
 
@@ -554,6 +575,7 @@ export type Session = {
     created: number
     updated: number
     compacting?: number
+    archived?: number
   }
   revert?: {
     messageID: string
@@ -703,10 +725,18 @@ export type EventServerConnected = {
   }
 }
 
+export type EventGlobalDisposed = {
+  type: "global.disposed"
+  properties: {
+    [key: string]: unknown
+  }
+}
+
 export type Event =
-  | EventServerInstanceDisposed
   | EventInstallationUpdated
   | EventInstallationUpdateAvailable
+  | EventProjectUpdated
+  | EventServerInstanceDisposed
   | EventLspClientDiagnostics
   | EventLspUpdated
   | EventMessageUpdated
@@ -736,21 +766,11 @@ export type Event =
   | EventPtyExited
   | EventPtyDeleted
   | EventServerConnected
+  | EventGlobalDisposed
 
 export type GlobalEvent = {
   directory: string
   payload: Event
-}
-
-export type Project = {
-  id: string
-  worktree: string
-  vcsDir?: string
-  vcs?: "git"
-  time: {
-    created: number
-    initialized?: number
-  }
 }
 
 export type BadRequestError = {
@@ -917,10 +937,6 @@ export type KeybindsConfig = {
    */
   input_clear?: string
   /**
-   * Forward delete
-   */
-  input_forward_delete?: string
-  /**
    * Paste from clipboard
    */
   input_paste?: string
@@ -932,6 +948,138 @@ export type KeybindsConfig = {
    * Insert newline in input
    */
   input_newline?: string
+  /**
+   * Move cursor left in input
+   */
+  input_move_left?: string
+  /**
+   * Move cursor right in input
+   */
+  input_move_right?: string
+  /**
+   * Move cursor up in input
+   */
+  input_move_up?: string
+  /**
+   * Move cursor down in input
+   */
+  input_move_down?: string
+  /**
+   * Select left in input
+   */
+  input_select_left?: string
+  /**
+   * Select right in input
+   */
+  input_select_right?: string
+  /**
+   * Select up in input
+   */
+  input_select_up?: string
+  /**
+   * Select down in input
+   */
+  input_select_down?: string
+  /**
+   * Move to start of line in input
+   */
+  input_line_home?: string
+  /**
+   * Move to end of line in input
+   */
+  input_line_end?: string
+  /**
+   * Select to start of line in input
+   */
+  input_select_line_home?: string
+  /**
+   * Select to end of line in input
+   */
+  input_select_line_end?: string
+  /**
+   * Move to start of visual line in input
+   */
+  input_visual_line_home?: string
+  /**
+   * Move to end of visual line in input
+   */
+  input_visual_line_end?: string
+  /**
+   * Select to start of visual line in input
+   */
+  input_select_visual_line_home?: string
+  /**
+   * Select to end of visual line in input
+   */
+  input_select_visual_line_end?: string
+  /**
+   * Move to start of buffer in input
+   */
+  input_buffer_home?: string
+  /**
+   * Move to end of buffer in input
+   */
+  input_buffer_end?: string
+  /**
+   * Select to start of buffer in input
+   */
+  input_select_buffer_home?: string
+  /**
+   * Select to end of buffer in input
+   */
+  input_select_buffer_end?: string
+  /**
+   * Delete line in input
+   */
+  input_delete_line?: string
+  /**
+   * Delete to end of line in input
+   */
+  input_delete_to_line_end?: string
+  /**
+   * Delete to start of line in input
+   */
+  input_delete_to_line_start?: string
+  /**
+   * Backspace in input
+   */
+  input_backspace?: string
+  /**
+   * Delete character in input
+   */
+  input_delete?: string
+  /**
+   * Undo in input
+   */
+  input_undo?: string
+  /**
+   * Redo in input
+   */
+  input_redo?: string
+  /**
+   * Move word forward in input
+   */
+  input_word_forward?: string
+  /**
+   * Move word backward in input
+   */
+  input_word_backward?: string
+  /**
+   * Select word forward in input
+   */
+  input_select_word_forward?: string
+  /**
+   * Select word backward in input
+   */
+  input_select_word_backward?: string
+  /**
+   * Delete word forward in input
+   */
+  input_delete_word_forward?: string
+  /**
+   * Delete word backward in input
+   */
+  input_delete_word_backward?: string
   /**
    * Previous history item
    */
@@ -1028,11 +1176,17 @@ export type ProviderConfig = {
     [key: string]: {
       id?: string
       name?: string
+      family?: string
       release_date?: string
       attachment?: boolean
       reasoning?: boolean
       temperature?: boolean
       tool_call?: boolean
+      interleaved?:
+        | true
+        | {
+            field: "reasoning_content" | "reasoning_details"
+          }
       cost?: {
         input: number
         output: number
@@ -1378,6 +1532,7 @@ export type ToolListItem = {
 export type ToolList = Array<ToolListItem>
 
 export type Path = {
+  home: string
   state: string
   config: string
   worktree: string
@@ -1449,6 +1604,7 @@ export type Model = {
     npm: string
   }
   name: string
+  family?: string
   capabilities: {
     temperature: boolean
     reasoning: boolean
@@ -1468,6 +1624,11 @@ export type Model = {
       video: boolean
       pdf: boolean
     }
+    interleaved:
+      | boolean
+      | {
+          field: "reasoning_content" | "reasoning_details"
+        }
   }
   cost: {
     input: number
@@ -1679,6 +1840,22 @@ export type GlobalEventResponses = {
 
 export type GlobalEventResponse = GlobalEventResponses[keyof GlobalEventResponses]
 
+export type GlobalDisposeData = {
+  body?: never
+  path?: never
+  query?: never
+  url: "/global/dispose"
+}
+
+export type GlobalDisposeResponses = {
+  /**
+   * Global disposed
+   */
+  200: boolean
+}
+
+export type GlobalDisposeResponse = GlobalDisposeResponses[keyof GlobalDisposeResponses]
+
 export type ProjectListData = {
   body?: never
   path?: never
@@ -1714,6 +1891,45 @@ export type ProjectCurrentResponses = {
 }
 
 export type ProjectCurrentResponse = ProjectCurrentResponses[keyof ProjectCurrentResponses]
+
+export type ProjectUpdateData = {
+  body?: {
+    name?: string
+    icon?: {
+      url?: string
+      color?: string
+    }
+  }
+  path: {
+    projectID: string
+  }
+  query?: {
+    directory?: string
+  }
+  url: "/project/{projectID}"
+}
+
+export type ProjectUpdateErrors = {
+  /**
+   * Bad request
+   */
+  400: BadRequestError
+  /**
+   * Not found
+   */
+  404: NotFoundError
+}
+
+export type ProjectUpdateError = ProjectUpdateErrors[keyof ProjectUpdateErrors]
+
+export type ProjectUpdateResponses = {
+  /**
+   * Updated project information
+   */
+  200: Project
+}
+
+export type ProjectUpdateResponse = ProjectUpdateResponses[keyof ProjectUpdateResponses]
 
 export type PtyListData = {
   body?: never
@@ -2191,6 +2407,9 @@ export type SessionGetResponse = SessionGetResponses[keyof SessionGetResponses]
 export type SessionUpdateData = {
   body?: {
     title?: string
+    time: {
+      archived?: number
+    }
   }
   path: {
     sessionID: string
@@ -2971,11 +3190,17 @@ export type ProviderListResponses = {
         [key: string]: {
           id: string
           name: string
+          family?: string
           release_date: string
           attachment: boolean
           reasoning: boolean
           temperature: boolean
           tool_call: boolean
+          interleaved?:
+            | true
+            | {
+                field: "reasoning_content" | "reasoning_details"
+              }
           cost?: {
             input: number
             output: number

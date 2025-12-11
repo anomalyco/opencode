@@ -7,7 +7,6 @@ import { TextSelection } from "./local"
 import { pipe, sumBy } from "remeda"
 import { AssistantMessage, UserMessage } from "@opencode-ai/sdk/v2"
 import { useParams } from "@solidjs/router"
-import { base64Encode } from "@opencode-ai/util/encode"
 import { useSDK } from "./sdk"
 
 export type LocalPTY = {
@@ -25,9 +24,7 @@ export const { use: useSession, provider: SessionProvider } = createSimpleContex
     const sdk = useSDK()
     const params = useParams()
     const sync = useSync()
-    const name = createMemo(
-      () => `${base64Encode(sync.data.project.worktree)}/session${params.id ? "/" + params.id : ""}.v2`,
-    )
+    const name = createMemo(() => `${params.dir}/session${params.id ? "/" + params.id : ""}.v3`)
 
     const [store, setStore] = makePersisted(
       createStore<{
@@ -97,7 +94,7 @@ export const { use: useSession, provider: SessionProvider } = createSimpleContex
       () => messages().findLast((x) => x.role === "assistant" && x.tokens.output > 0) as AssistantMessage,
     )
     const model = createMemo(() =>
-      last() ? sync.data.provider.find((x) => x.id === last().providerID)?.models[last().modelID] : undefined,
+      last() ? sync.data.provider.all.find((x) => x.id === last().providerID)?.models[last().modelID] : undefined,
     )
     const diffs = createMemo(() => (params.id ? (sync.data.session_diff[params.id] ?? []) : []))
 
