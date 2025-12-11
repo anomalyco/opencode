@@ -3,6 +3,7 @@ import { Context } from "../util/context"
 import { Project } from "./project"
 import { State } from "./state"
 import { iife } from "@/util/iife"
+import { GlobalBus } from "@/bus/global"
 
 interface Context {
   directory: string
@@ -52,6 +53,13 @@ export const Instance = {
     Log.Default.info("disposing instance", { directory: Instance.directory })
     await State.dispose(Instance.directory)
     cache.delete(Instance.directory)
+    GlobalBus.emit("event", {
+      directory: Instance.directory,
+      payload: {
+        type: "server.instance.disposed",
+        properties: {},
+      },
+    })
   },
   async disposeAll() {
     Log.Default.info("disposing all instances")

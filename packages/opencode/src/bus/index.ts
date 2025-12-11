@@ -35,10 +35,6 @@ export namespace Bus {
       for (const sub of [...wildcard]) {
         sub(event)
       }
-      GlobalBus.emit("event", {
-        directory: Instance.directory,
-        payload: event,
-      })
     },
   )
 
