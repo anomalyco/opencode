@@ -74,12 +74,17 @@ export namespace ProviderTransform {
       return result
     }
 
+    // TODO: rm later
+    const bugged =
+      (model.id === "kimi-k2-thinking" && model.providerID === "opencode") ||
+      (model.id === "moonshotai/Kimi-K2-Thinking" && model.providerID === "baseten")
     if (
       model.providerID === "deepseek" ||
       model.api.id.toLowerCase().includes("deepseek") ||
       (model.capabilities.interleaved &&
         typeof model.capabilities.interleaved === "object" &&
-        model.capabilities.interleaved.field === "reasoning_content")
+        model.capabilities.interleaved.field === "reasoning_content" &&
+        !bugged)
     ) {
       return msgs.map((msg) => {
         if (msg.role === "assistant" && Array.isArray(msg.content)) {
