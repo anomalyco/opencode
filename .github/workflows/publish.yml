@@ -129,10 +129,10 @@ jobs:
       - uses: ./.github/actions/setup-bun
 
       - name: install dependencies (ubuntu only)
-        if: startsWith(matrix.settings.host, 'ubuntu')
+        if: contains(matrix.settings.host, 'ubuntu')
         run: |
           sudo apt-get update
-          sudo apt-get install -y libwebkit2gtk-4.1-dev libappindicator3-dev librsvg2-dev patchelf libglib2.0-dev
+          sudo apt-get install -y libwebkit2gtk-4.1-dev libappindicator3-dev librsvg2-dev patchelf
 
       - name: install Rust stable
         uses: dtolnay/rust-toolchain@stable
@@ -161,7 +161,7 @@ jobs:
 
       # Fixes AppImage build issues, can be removed when https://github.com/tauri-apps/tauri/pull/12491 is released
       - run: cargo install tauri-cli --git https://github.com/tauri-apps/tauri --branch feat/truly-portable-appimage
-        if: startsWith(matrix.settings.host, 'ubuntu')
+        if: contains(matrix.settings.host, 'ubuntu')
 
       - name: Build and upload artifacts
         uses: tauri-apps/tauri-action@390cbe447412ced1303d35abe75287949e43437a
@@ -179,7 +179,7 @@ jobs:
         with:
           projectPath: packages/tauri
           uploadWorkflowArtifacts: true
-          tauriScript: ${{ (startsWith(matrix.settings.host, 'ubuntu') && 'cargo tauri') || '' }}
+          tauriScript: ${{ (contains(matrix.settings.host, 'ubuntu') && 'cargo tauri') || '' }}
           args: --target ${{ matrix.settings.target }}
           updaterJsonPreferNsis: true
           releaseId: ${{ needs.publish.outputs.releaseId }}
