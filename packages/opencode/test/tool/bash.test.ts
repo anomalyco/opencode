@@ -376,8 +376,8 @@ describe("tool.bash permissions", () => {
           bash.execute(
             {
               command: "ls",
-              workdir: "/tmp",
-              description: "List /tmp",
+              workdir: "/usr",
+              description: "List /usr",
             },
             ctx,
           ),
