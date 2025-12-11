@@ -487,7 +487,7 @@ export default function Layout(props: ParentProps) {
           </div>
           <div class="flex flex-col gap-1.5 self-stretch items-start shrink-0 px-2 py-3">
             <Switch>
-              <Match when={!providers().paid().length && layout.sidebar.opened()}>
+              <Match when={!providers.paid().length && layout.sidebar.opened()}>
                 <div class="rounded-md bg-background-stronger shadow-xs-border-base">
                   <div class="p-3 flex flex-col gap-2">
                     <div class="text-12-medium text-text-strong">Getting started</div>
@@ -567,7 +567,7 @@ export default function Layout(props: ParentProps) {
             placeholder="Search providers"
             activeIcon="plus-small"
             key={(x) => x?.id}
-            items={providers().all}
+            items={providers.all}
             filterKeys={["id", "name"]}
             groupBy={(x) => (popularProviders.includes(x.id) ? "Popular" : "Other")}
             sortBy={(a, b) => {
@@ -620,16 +620,19 @@ export default function Layout(props: ParentProps) {
             const [store, setStore] = createStore({
               method: undefined as undefined | ProviderAuthMethod,
             })
-            const providerID = layout.connect.provider()!
-            const provider = globalSync.data.provider.all.find((x) => x.id === providerID)!
-            const methods = globalSync.data.provider_auth[providerID] ?? [
-              {
-                type: "api",
-                label: "API key",
-              },
-            ]
-            if (methods.length === 1) {
-              setStore("method", methods[0])
+            const providerID = createMemo(() => layout.connect.provider()!)
+            const provider = createMemo(() => globalSync.data.provider.all.find((x) => x.id === providerID())!)
+            const methods = createMemo(
+              () =>
+                globalSync.data.provider_auth[providerID()] ?? [
+                  {
+                    type: "api",
+                    label: "API key",
+                  },
+                ],
+            )
+            if (methods().length === 1) {
+              setStore("method", methods()[0])
             }
 
             let listRef: ListRef | undefined
@@ -670,145 +673,151 @@ export default function Layout(props: ParentProps) {
                 <Dialog.Body>
                   <div class="flex flex-col gap-6 px-2.5 pb-3">
                     <div class="px-2.5 flex gap-4 items-center">
-                      <ProviderIcon id={providerID as IconName} class="size-5 shrink-0 icon-strong-base" />
-                      <div class="text-16-medium text-text-strong">Connect {provider.name}</div>
+                      <ProviderIcon id={providerID() as IconName} class="size-5 shrink-0 icon-strong-base" />
+                      <div class="text-16-medium text-text-strong">Connect {provider().name}</div>
                     </div>
-                    <Show when={store.method === undefined}>
-                      <div class="px-2.5 text-14-regular text-text-base">Select login method for {provider.name}.</div>
-                      <div class="">
-                        <Input hidden type="text" class="opacity-0 size-0" autofocus onKeyDown={handleKey} />
-                        <List
-                          ref={(ref) => (listRef = ref)}
-                          items={methods}
-                          key={(m) => m?.label}
-                          onSelect={(method) => {
-                            if (!method) return
-                            setStore("method", method)
+                    <Switch>
+                      <Match when={store.method === undefined}>
+                        <div class="px-2.5 text-14-regular text-text-base">
+                          Select login method for {provider().name}.
+                        </div>
+                        <div class="">
+                          <Input hidden type="text" class="opacity-0 size-0" autofocus onKeyDown={handleKey} />
+                          <List
+                            ref={(ref) => (listRef = ref)}
+                            items={methods}
+                            key={(m) => m?.label}
+                            onSelect={(method) => {
+                              if (!method) return
+                              setStore("method", method)
 
-                            if (method.type === "oauth") {
-                              // const result = await sdk.client.provider.oauth.authorize({
-                              //   providerID: provider.id,
-                              //   method: index,
-                              // })
-                              // if (result.data?.method === "code") {
-                              //   dialog.replace(() => (
-                              //     <CodeMethod
-                              //       providerID={provider.id}
-                              //       title={method.label}
-                              //       index={index}
-                              //       authorization={result.data!}
-                              //     />
-                              //   ))
-                              // }
-                              // if (result.data?.method === "auto") {
-                              //   dialog.replace(() => (
-                              //     <AutoMethod
-                              //       providerID={provider.id}
-                              //       title={method.label}
-                              //       index={index}
-                              //       authorization={result.data!}
-                              //     />
-                              //   ))
-                              // }
+                              if (method.type === "oauth") {
+                                // const result = await sdk.client.provider.oauth.authorize({
+                                //   providerID: provider.id,
+                                //   method: index,
+                                // })
+                                // if (result.data?.method === "code") {
+                                //   dialog.replace(() => (
+                                //     <CodeMethod
+                                //       providerID={provider.id}
+                                //       title={method.label}
+                                //       index={index}
+                                //       authorization={result.data!}
+                                //     />
+                                //   ))
+                                // }
+                                // if (result.data?.method === "auto") {
+                                //   dialog.replace(() => (
+                                //     <AutoMethod
+                                //       providerID={provider.id}
+                                //       title={method.label}
+                                //       index={index}
+                                //       authorization={result.data!}
+                                //     />
+                                //   ))
+                                // }
+                              }
+                              if (method.type === "api") {
+                                // return dialog.replace(() => <ApiMethod providerID={provider.id} title={method.label} />)
+                              }
+                            }}
+                          >
+                            {(i) => (
+                              <div class="w-full flex items-center gap-x-2.5">
+                                {/* TODO: add checkmark thing */}
+                                <span>{i.label}</span>
+                              </div>
+                            )}
+                          </List>
+                        </div>
+                      </Match>
+                      <Match when={store.method?.type === "api"}>
+                        {iife(() => {
+                          const [formStore, setFormStore] = createStore({
+                            value: "",
+                            error: undefined as string | undefined,
+                          })
+
+                          async function handleSubmit(e: SubmitEvent) {
+                            e.preventDefault()
+
+                            const form = e.currentTarget as HTMLFormElement
+                            const formData = new FormData(form)
+                            const apiKey = formData.get("apiKey") as string
+
+                            if (!apiKey?.trim()) {
+                              setFormStore("error", "API key is required")
+                              return
                             }
-                            if (method.type === "api") {
-                              // return dialog.replace(() => <ApiMethod providerID={provider.id} title={method.label} />)
-                            }
-                          }}
-                        >
-                          {(i) => (
-                            <div class="w-full flex items-center gap-x-2.5">
-                              {/* TODO: add checkmark thing */}
-                              <span>{i.label}</span>
-                            </div>
-                          )}
-                        </List>
-                      </div>
-                    </Show>
-                    <Show when={store.method?.type === "api"}>
-                      {iife(() => {
-                        const [formStore, setFormStore] = createStore({
-                          value: "",
-                          error: undefined as string | undefined,
-                        })
 
-                        async function handleSubmit(e: SubmitEvent) {
-                          e.preventDefault()
-
-                          const form = e.currentTarget as HTMLFormElement
-                          const formData = new FormData(form)
-                          const apiKey = formData.get("apiKey") as string
-
-                          if (!apiKey?.trim()) {
-                            setFormStore("error", "API key is required")
-                            return
+                            setFormStore("error", undefined)
+                            await globalSDK.client.auth.set({
+                              providerID: providerID(),
+                              auth: {
+                                type: "api",
+                                key: apiKey,
+                              },
+                            })
+                            await globalSDK.client.global.dispose()
+                            setTimeout(() => {
+                              layout.connect.complete()
+                            }, 500)
                           }
 
-                          setFormStore("error", undefined)
-                          await globalSDK.client.auth.set({
-                            providerID,
-                            auth: {
-                              type: "api",
-                              key: apiKey,
-                            },
-                          })
-                          await globalSDK.client.global.dispose()
-                          layout.connect.complete()
-                        }
-
-                        return (
-                          <div class="px-2.5 pb-10 flex flex-col gap-6">
-                            <Switch>
-                              <Match when={provider.id === "opencode"}>
-                                <div class="flex flex-col gap-4">
-                                  <div class="text-14-regular text-text-base">
-                                    OpenCode Zen gives you access to a curated set of reliable optimized models for
-                                    coding agents.
+                          return (
+                            <div class="px-2.5 pb-10 flex flex-col gap-6">
+                              <Switch>
+                                <Match when={provider().id === "opencode"}>
+                                  <div class="flex flex-col gap-4">
+                                    <div class="text-14-regular text-text-base">
+                                      OpenCode Zen gives you access to a curated set of reliable optimized models for
+                                      coding agents.
+                                    </div>
+                                    <div class="text-14-regular text-text-base">
+                                      With a single API key you’ll get access to models such as Claude, GPT, Gemini, GLM
+                                      and more.
+                                    </div>
+                                    <div class="text-14-regular text-text-base">
+                                      Visit{" "}
+                                      <button
+                                        tabIndex={-1}
+                                        class="text-text-strong underline"
+                                        onClick={() => platform.openLink("https://opencode.ai/zen")}
+                                      >
+                                        opencode.ai/zen
+                                      </button>{" "}
+                                      to collect your API key.
+                                    </div>
                                   </div>
+                                </Match>
+                                <Match when={true}>
                                   <div class="text-14-regular text-text-base">
-                                    With a single API key you’ll get access to models such as Claude, GPT, Gemini, GLM
-                                    and more.
+                                    Enter your {provider.name} API key to connect your account and use {provider.name}{" "}
+                                    models in OpenCode.
                                   </div>
-                                  <div class="text-14-regular text-text-base">
-                                    Visit{" "}
-                                    <button
-                                      tabIndex={-1}
-                                      class="text-text-strong underline"
-                                      onClick={() => platform.openLink("https://opencode.ai/zen")}
-                                    >
-                                      opencode.ai/zen
-                                    </button>{" "}
-                                    to collect your API key.
-                                  </div>
-                                </div>
-                              </Match>
-                              <Match when={true}>
-                                <div class="text-14-regular text-text-base">
-                                  Enter your {provider.name} API key to connect your account and use {provider.name}{" "}
-                                  models in OpenCode.
-                                </div>
-                              </Match>
-                            </Switch>
-                            <form onSubmit={handleSubmit} class="flex flex-col items-start gap-4">
-                              <Input
-                                autofocus
-                                type="text"
-                                label={`${provider.name} API key`}
-                                placeholder="API key"
-                                name="apiKey"
-                                value={formStore.value}
-                                onChange={setFormStore.bind(null, "value")}
-                                validationState={formStore.error ? "invalid" : undefined}
-                                error={formStore.error}
-                              />
-                              <Button class="w-auto" type="submit" size="large" variant="primary">
-                                Submit
-                              </Button>
-                            </form>
-                          </div>
-                        )
-                      })}
-                    </Show>
+                                </Match>
+                              </Switch>
+                              <form onSubmit={handleSubmit} class="flex flex-col items-start gap-4">
+                                <Input
+                                  autofocus
+                                  type="text"
+                                  label={`${provider.name} API key`}
+                                  placeholder="API key"
+                                  name="apiKey"
+                                  value={formStore.value}
+                                  onChange={setFormStore.bind(null, "value")}
+                                  validationState={formStore.error ? "invalid" : undefined}
+                                  error={formStore.error}
+                                />
+                                <Button class="w-auto" type="submit" size="large" variant="primary">
+                                  Submit
+                                </Button>
+                              </form>
+                            </div>
+                          )
+                        })}
+                      </Match>
+                    </Switch>
                   </div>
                 </Dialog.Body>
               </Dialog>
