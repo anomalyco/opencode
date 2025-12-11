@@ -199,7 +199,6 @@ export type SessionMessagePart =
   | SessionMessageStepFinishPart
   | SessionMessageToolPart
 
-// Error types - uses NamedError structure { name, data }
 export interface SessionMessageAPIError {
   name: "APIError"
   data: {
@@ -245,7 +244,6 @@ export type SessionMessageContentError =
   | SessionMessageAbortedError
   | SessionMessageUnknownError
 
-// File diff for summary
 export interface SessionMessageFileDiff {
   file: string
   before: string
