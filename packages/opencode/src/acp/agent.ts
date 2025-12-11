@@ -431,7 +431,7 @@ export namespace ACP {
 
         this.setupEventSubscriptions(state)
 
-        // Reply session history
+        // Replay session history
         const messages = await this.sdk.session
           .messages(
             {
