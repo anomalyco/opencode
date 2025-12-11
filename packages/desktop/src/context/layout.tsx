@@ -48,9 +48,10 @@ export const { use: useLayout, provider: LayoutProvider } = createSimpleContext(
         open: undefined as undefined | "provider" | "model",
       },
     })
+    const usedColors = new Set<string>()
 
     function pickAvailableColor() {
-      const available = PASTEL_COLORS.filter((c) => !colors().has(c))
+      const available = PASTEL_COLORS.filter((c) => !usedColors.has(c))
       if (available.length === 0) return PASTEL_COLORS[Math.floor(Math.random() * PASTEL_COLORS.length)]
       return available[Math.floor(Math.random() * available.length)]
     }
@@ -69,6 +70,7 @@ export const { use: useLayout, provider: LayoutProvider } = createSimpleContext(
     function colorize(project: Project & { expanded: boolean }) {
       if (project.icon?.color) return project
       const color = pickAvailableColor()
+      usedColors.add(color)
       project.icon = { ...project.icon, color }
       globalSdk.client.project.update({ projectID: project.id, icon: { color } })
       return project
@@ -76,14 +78,6 @@ export const { use: useLayout, provider: LayoutProvider } = createSimpleContext(
 
     const enriched = createMemo(() => store.projects.flatMap(enrich))
     const list = createMemo(() => enriched().flatMap(colorize))
-    const colors = createMemo(
-      () =>
-        new Set(
-          list()
-            .map((p) => p.icon?.color)
-            .filter(Boolean),
-        ),
-    )
 
     async function loadProjectSessions(directory: string) {
       const [, setStore] = globalSync.child(directory)

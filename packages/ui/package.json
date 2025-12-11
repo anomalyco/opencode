@@ -17,7 +17,6 @@
   "scripts": {
     "typecheck": "tsgo --noEmit",
     "dev": "vite",
-    "build": "vite build",
     "generate:tailwind": "bun run script/tailwind.ts"
   },
   "devDependencies": {
