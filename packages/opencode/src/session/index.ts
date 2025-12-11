@@ -223,34 +223,13 @@ export namespace Session {
     if (cfg.share === "disabled") {
       throw new Error("Sharing is disabled in configuration")
     }
-
-    if (cfg.enterprise?.url) {
-      const { ShareNext } = await import("@/share/share-next")
-      const share = await ShareNext.create(id)
-      await update(id, (draft) => {
-        draft.share = {
-          url: share.url,
-        }
-      })
-    }
-
-    const session = await get(id)
-    if (session.share) return session.share
-    const { Share } = await import("../share/share")
-    const share = await Share.create(id)
+    const { ShareNext } = await import("@/share/share-next")
+    const share = await ShareNext.create(id)
     await update(id, (draft) => {
       draft.share = {
         url: share.url,
       }
     })
-    await Storage.write(["share", id], share)
-    await Share.sync("session/info/" + id, session)
-    for (const msg of await messages({ sessionID: id })) {
-      await Share.sync("session/message/" + id + "/" + msg.info.id, msg.info)
-      for (const part of msg.parts) {
-        await Share.sync("session/part/" + id + "/" + msg.info.id + "/" + part.id, part)
-      }
-    }
     return share
   })
 
