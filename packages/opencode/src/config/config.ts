@@ -38,7 +38,12 @@ export namespace Config {
         return name
       }
     }
-    return "build"
+
+    throw new InvalidError({
+      path: path.join(Instance.directory, "opencode.jsonc"),
+      message:
+        "No available primary agent found. Please ensure at least one primary agent is configured and not disabled.",
+    })
   }
 
   export const state = Instance.state(async () => {
@@ -138,11 +143,12 @@ export namespace Config {
     if (!result.keybinds) result.keybinds = Info.shape.keybinds.parse({})
 
     if (
-      !result.default_agent ||
-      !(result.default_agent in result.agent) ||
-      result.agent[result.default_agent]?.disable
+      !result.default_agent || // not configured
+      !(result.default_agent in result.agent) || // not exist
+      result.agent[result.default_agent]?.disable || // disabled
+      result.agent[result.default_agent]?.mode === "subagent" // not primary
     ) {
-      log.warn(`default_agent not available, fallback to the first primary agent`)
+      log.warn(`default agent not available, fallback to the first primary agent`)
       result.default_agent = firstPrimaryAgent(result.agent)
     }
 
