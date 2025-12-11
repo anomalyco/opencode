@@ -54,6 +54,27 @@ export namespace FileWatcher {
       log.warn("watcher subscribe failed", { dir, error: e })
       return null
     }
+  async function subscribeWithTimeout(
+    dir: string,
+    callback: ParcelWatcher.SubscribeCallback,
+    options: Parameters<typeof ParcelWatcher.subscribe>[2],
+  ): Promise<ParcelWatcher.AsyncSubscription | null> {
+    let timeoutId: Timer
+    const timeout = new Promise<null>((resolve) => {
+      timeoutId = setTimeout(() => {
+        log.error("watcher subscribe timeout", { dir })
+        resolve(null)
+      }, SUBSCRIBE_TIMEOUT_MS)
+    })
+    return Promise.race([
+      watcher()
+        .subscribe(dir, callback, options)
+        .finally(() => clearTimeout(timeoutId)),
+      timeout,
+    ]).catch((e) => {
+      log.warn("watcher subscribe failed", { dir, error: e })
+      return null
+    })
   }
 
   const state = Instance.state(
