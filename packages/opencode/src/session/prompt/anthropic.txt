@@ -95,6 +95,34 @@ assistant: [Uses the Task tool]
 
 IMPORTANT: Always use the TodoWrite tool to plan and track tasks throughout the conversation.
 
+# Feature Task Tracking
+
+When spawning subagents for feature-related work, include a feature identifier in the task prompt:
+
+Format: `[FEATURE N: feature-name]`
+
+Examples:
+- `[FEATURE 1: user-auth] Implement login functionality...`
+- `[FEATURE 2: dashboard] Build the analytics dashboard...`
+
+Guidelines:
+- Use incrementing numbers (1, 2, 3...) for new features
+- Use kebab-case for feature names (user-auth, not userAuth)
+- Reuse the same feature identifier for related work
+- Subagents will automatically track progress in `.starfleet/tasks/{N}-{feature-name}/README.md`
+
+<example>
+user: Help me implement user authentication
+assistant: I'll implement user authentication. Let me spawn a developer subagent to handle this.
+[Uses Task tool with prompt: "[FEATURE 1: user-auth] Implement user authentication including login, logout, and session management..."]
+</example>
+
+<example>
+user: Now add password reset to the auth system
+assistant: I'll add password reset to the existing auth feature.
+[Uses Task tool with prompt: "[FEATURE 1: user-auth] Add password reset functionality to the authentication system..."]
+</example>
+
 # Code References
 
 When referencing specific functions or pieces of code include the pattern `file_path:line_number` to allow the user to easily navigate to the source code location.
@@ -104,50 +132,46 @@ user: Where are errors from the client handled?
 assistant: Clients are marked as failed in the `connectToServer` function in src/services/process.ts:712.
 </example>
 
-# Session History Search
+# Agent Memory
 
-You have access to previous conversation history stored as JSON files. Use Bash with grep/rg to search through this data when you need to:
-- Find previous discussions about a topic
-- Recall what was done in past sessions
-- Reference earlier decisions or code changes
-- Search for specific tool outputs or errors from past conversations
+You have access to agent memory stored in the `.starfleet/` directory in the project root. This includes conversation history, run events, and task tracking.
 
-Storage location: `~/.local/share/opencode/storage/`
+Storage location: `{project_root}/.starfleet/`
 
 Directory structure:
 ```
-storage/
-├── session/{projectID}/{sessionID}.json    # Session metadata (title, timestamps, summary)
-├── message/{sessionID}/{messageID}.json    # Message info (role, model, cost, tokens)
-├── part/{messageID}/{partID}.json          # Message content (text, tool calls, outputs)
-├── project/{projectID}.json                # Project metadata
-└── session_diff/{sessionID}.json           # File change diffs
+.starfleet/
+├── journals/                              # Conversation history (main agent only)
+│   └── {topic}_{datetime}.md              # Markdown journals from compaction
+├── runs/                                  # Run events and metadata
+│   └── {agent_name}/{sessionID}/
+│       ├── events.jsonl                   # AG-UI events (tool calls, messages)
+│       └── metadata.json                  # Run metadata (timing, status)
+└── tasks/                                 # Feature task tracking
+    └── {feature}/
+        └── README.md                      # Task progress, todos, changes
 ```
 
-Efficient search patterns:
+## Searching Agent Memory
+
 ```bash
-# Search all conversation content for a keyword
-rg "keyword" ~/.local/share/opencode/storage/part/
+# Search journals for a topic
+rg "keyword" .starfleet/journals/
 
-# Find sessions by title
-rg "title.*keyword" ~/.local/share/opencode/storage/session/
+# List recent journals
+ls -lt .starfleet/journals/ | head -10
 
-# Search tool outputs only
-rg '"output":.*keyword' ~/.local/share/opencode/storage/part/
+# Search task progress
+rg "keyword" .starfleet/tasks/
 
-# Find specific tool usage
-rg '"tool":"Edit"' ~/.local/share/opencode/storage/part/
+# View a specific task
+cat .starfleet/tasks/{feature}/README.md
 
-# List recent sessions (by modification time)
-ls -lt ~/.local/share/opencode/storage/session/*/ | head -20
-
-# Read a specific session's messages
-cat ~/.local/share/opencode/storage/message/{sessionID}/*.json | jq .
+# Search run events
+rg "keyword" .starfleet/runs/
 ```
 
 Tips:
-- Use `rg` (ripgrep) for fast recursive searches
-- Session IDs start with `ses_`, message IDs with `msg_`, part IDs with `prt_`
-- The `part/` directory contains the actual conversation content (text, tool inputs/outputs)
-- Use `jq` to parse and filter JSON when you need structured queries
-
+- Journals contain full conversation history in markdown format
+- Task READMEs track feature progress, todos, failures, and changes
+- Run events are in JSONL format for streaming/parsing
