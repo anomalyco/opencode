@@ -37,6 +37,7 @@ export function DialogTimeline(props: {
         },
       })
     }
+    result.reverse()
     return result
   })
 
