@@ -23,6 +23,7 @@ import { SessionCompaction } from "./compaction"
 import { Instance } from "../project/instance"
 import { Bus } from "../bus"
 import { ProviderTransform } from "../provider/transform"
+import { ClaudeCache } from "../provider/claude-cache"
 import { SystemPrompt } from "./system"
 import { Plugin } from "../plugin"
 
@@ -612,7 +613,14 @@ export namespace SessionPrompt {
         topP: params.topP,
         toolChoice: isLastStep ? "none" : undefined,
         messages,
-        tools: model.capabilities.toolcall === false ? undefined : tools,
+        tools:
+          model.capabilities.toolcall === false
+            ? undefined
+            : ProviderTransform.applyToolCaching(
+                tools,
+                model,
+                ClaudeCache.resolveConfig(provider?.options?.cache, agent.cache),
+              ),
         model: wrapLanguageModel({
           model: language,
           middleware: [
@@ -678,16 +686,37 @@ export namespace SessionPrompt {
     model: Provider.Model
     isLastStep?: boolean
   }) {
-    let system = SystemPrompt.header(input.model.providerID)
-    system.push(
-      ...(() => {
-        if (input.system) return [input.system]
-        if (input.agent.prompt) return [input.agent.prompt]
-        return SystemPrompt.provider(input.model)
-      })(),
-    )
-    system.push(...(await SystemPrompt.environment()))
-    system.push(...(await SystemPrompt.custom()))
+    const system = SystemPrompt.header(input.model.providerID)
+
+    if (Flag.OPENCODE_LEGACY_CACHE) {
+      // Legacy order (pre-optimization): agent/system first, then environment, then custom
+      // This was the original order before cache optimization changes
+      if (input.system) {
+        system.push(input.system)
+      } else if (input.agent.prompt) {
+        system.push(input.agent.prompt)
+      } else {
+        system.push(...SystemPrompt.provider(input.model))
+      }
+      system.push(...(await SystemPrompt.environment()))
+      system.push(...(await SystemPrompt.custom()))
+    } else {
+      // Optimized order for cache sharing across agents:
+      // 1. Header (stable, small)
+      // 2. Custom instructions (AGENTS.md, instruction files - stable, shared across agents)
+      // 3. Provider prompt (stable, shared across agents using same provider)
+      // 4. Agent-specific prompt (varies by agent - placed last for cache prefix sharing)
+      // 5. Environment (semi-volatile, contains date)
+      system.push(...(await SystemPrompt.custom()))
+      system.push(...SystemPrompt.provider(input.model))
+      if (input.system) {
+        system.push(input.system)
+      }
+      if (input.agent.prompt) {
+        system.push(input.agent.prompt)
+      }
+      system.push(...(await SystemPrompt.environment()))
+    }
 
     if (input.isLastStep) {
       system.push(MAX_STEPS)
@@ -695,8 +724,7 @@ export namespace SessionPrompt {
 
     // max 2 system prompt messages for caching purposes
     const [first, ...rest] = system
-    system = [first, rest.join("\n")]
-    return system
+    return [first, rest.join("\n")]
   }
 
   async function resolveTools(input: {

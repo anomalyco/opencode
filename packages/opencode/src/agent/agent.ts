@@ -34,6 +34,7 @@ export namespace Agent {
       tools: z.record(z.string(), z.boolean()),
       options: z.record(z.string(), z.any()),
       maxSteps: z.number().int().positive().optional(),
+      cache: Config.CacheConfig.optional(),
     })
     .meta({
       ref: "Agent",
@@ -195,6 +196,7 @@ export namespace Agent {
         permission,
         color,
         maxSteps,
+        cache,
         ...extra
       } = value
       item.options = {
@@ -220,6 +222,7 @@ export namespace Agent {
       // just here for consistency & to prevent it from being added as an option
       if (name) item.name = name
       if (maxSteps != undefined) item.maxSteps = maxSteps
+      if (cache) item.cache = cache
 
       if (permission ?? cfg.permission) {
         item.permission = mergeAgentPermissions(cfg.permission ?? {}, permission ?? {})

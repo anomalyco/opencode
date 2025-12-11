@@ -381,6 +381,24 @@ export namespace Config {
   })
   export type Command = z.infer<typeof Command>
 
+  export const CacheTtl = z.enum(["5m", "1h"]).describe("Cache TTL: '5m' (5 minutes, default) or '1h' (1 hour)")
+  export type CacheTtl = z.infer<typeof CacheTtl>
+
+  export const CacheConfig = z
+    .object({
+      enabled: z
+        .boolean()
+        .optional()
+        .describe("Enable prompt caching for Anthropic-compatible providers (default: true)"),
+      toolsTtl: CacheTtl.optional().describe("TTL for tool definitions cache (default: '5m')"),
+      instructionsTtl: CacheTtl.optional().describe("TTL for system instructions cache (default: '5m')"),
+    })
+    .strict()
+    .meta({
+      ref: "CacheConfig",
+    })
+  export type CacheConfig = z.infer<typeof CacheConfig>
+
   export const Agent = z
     .object({
       model: z.string().optional(),
@@ -411,6 +429,7 @@ export namespace Config {
           external_directory: Permission.optional(),
         })
         .optional(),
+      cache: CacheConfig.optional().describe("Cache configuration for this agent (overrides provider settings)"),
     })
     .catchall(z.any())
     .meta({
@@ -600,6 +619,9 @@ export namespace Config {
             .describe(
               "Timeout in milliseconds for requests to this provider. Default is 300000 (5 minutes). Set to false to disable timeout.",
             ),
+          cache: CacheConfig.optional().describe(
+            "Prompt caching configuration for Anthropic-compatible providers. Agents can override these settings.",
+          ),
         })
         .catchall(z.any())
         .optional(),

@@ -3,6 +3,7 @@ import { unique } from "remeda"
 import type { JSONSchema } from "zod/v4/core"
 import type { Provider } from "./provider"
 import type { ModelsDev } from "./models"
+import { ClaudeCache } from "./claude-cache"
 
 type Modality = NonNullable<ModelsDev.Model["modalities"]>["input"][number]
 
@@ -126,21 +127,6 @@ export namespace ProviderTransform {
     const system = msgs.filter((msg) => msg.role === "system").slice(0, 2)
     const final = msgs.filter((msg) => msg.role !== "system").slice(-2)
 
-    const providerOptions = {
-      anthropic: {
-        cacheControl: { type: "ephemeral" },
-      },
-      openrouter: {
-        cache_control: { type: "ephemeral" },
-      },
-      bedrock: {
-        cachePoint: { type: "ephemeral" },
-      },
-      openaiCompatible: {
-        cache_control: { type: "ephemeral" },
-      },
-    }
-
     for (const msg of unique([...system, ...final])) {
       const shouldUseContentOptions = providerID !== "anthropic" && Array.isArray(msg.content) && msg.content.length > 0
 
@@ -149,7 +135,7 @@ export namespace ProviderTransform {
         if (lastContent && typeof lastContent === "object") {
           lastContent.providerOptions = {
             ...lastContent.providerOptions,
-            ...providerOptions,
+            ...ClaudeCache.providerOptions,
           }
           continue
         }
@@ -157,11 +143,23 @@ export namespace ProviderTransform {
 
       msg.providerOptions = {
         ...msg.providerOptions,
-        ...providerOptions,
+        ...ClaudeCache.providerOptions,
       }
     }
 
     return msgs
+  }
+
+  /**
+   * Apply cache control to tools. Delegates to ClaudeCache module.
+   * @see ClaudeCache.applyToTools
+   */
+  export function applyToolCaching<T extends { providerOptions?: Record<string, unknown> }>(
+    tools: Record<string, T>,
+    model: Provider.Model,
+    config?: ClaudeCache.CacheConfig,
+  ): Record<string, T> {
+    return ClaudeCache.applyToTools(tools, model, config)
   }
 
   function unsupportedParts(msgs: ModelMessage[], model: Provider.Model): ModelMessage[] {
