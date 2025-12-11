@@ -1,11 +1,18 @@
 import { exists, realpath } from "fs/promises"
+import { realpathSync } from "fs"
 import { dirname, join, normalize, relative } from "path"
 import { tmpdir } from "os"
 
 export namespace Filesystem {
   const systemTmpDir = normalize(tmpdir())
   // on macOS /tmp is a symlink to /private/tmp, resolve it
-  const tmpDirResolved = await realpath("/tmp").catch(() => null)
+  const tmpDirResolved = (() => {
+    try {
+      return realpathSync("/tmp")
+    } catch {
+      return null
+    }
+  })()
 
   export function isAllowedPath(projectDir: string, filepath: string) {
     const normalized = normalize(filepath)
