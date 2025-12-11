@@ -536,17 +536,17 @@ export default function Layout(props: ParentProps) {
                 </Button>
               </Tooltip>
             </Show>
-            <Tooltip placement="right" value="Settings" inactive={layout.sidebar.opened()}>
-              <Button
-                disabled
-                class="flex w-full text-left justify-start text-12-medium text-text-base stroke-[1.5px] rounded-lg px-2"
-                variant="ghost"
-                size="large"
-                icon="settings-gear"
-              >
-                <Show when={layout.sidebar.opened()}>Settings</Show>
-              </Button>
-            </Tooltip>
+            {/* <Tooltip placement="right" value="Settings" inactive={layout.sidebar.opened()}> */}
+            {/*   <Button */}
+            {/*     disabled */}
+            {/*     class="flex w-full text-left justify-start text-12-medium text-text-base stroke-[1.5px] rounded-lg px-2" */}
+            {/*     variant="ghost" */}
+            {/*     size="large" */}
+            {/*     icon="settings-gear" */}
+            {/*   > */}
+            {/*     <Show when={layout.sidebar.opened()}>Settings</Show> */}
+            {/*   </Button> */}
+            {/* </Tooltip> */}
             <Tooltip placement="right" value="Share feedback" inactive={layout.sidebar.opened()}>
               <Button
                 as={"a"}
