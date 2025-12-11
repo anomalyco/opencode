@@ -512,6 +512,49 @@ The `global` region improves availability and reduces errors at no extra cost. U
 
 ---
 
+#### Google Vertex Express Mode
+
+For easier setup, you can use Google Vertex Express Mode with an API key.
+
+1. Generate a Vertex Express API key in the Google Cloud Console
+2. Set the `GOOGLE_VERTEX_API_KEY` environment variable:
+
+   ```bash title="~/.bash_profile"
+   export GOOGLE_VERTEX_API_KEY="your-express-api-key"
+   ```
+
+You don't need to set GOOGLE_CLOUD_LOCATION or GOOGLE_CLOUD_PROJECT for Vertex
+Express.
+
+Or run the `/connect` command and search for Vertex.
+
+   ```txt
+   /connect
+   ```
+
+Enter the API key for the provider.
+
+   ```txt
+   ┌ API key
+   │
+   │
+   └ enter
+   ```
+
+3. Run the `/models` command to select the one you want.
+
+   ```txt
+   /models
+   ```
+
+:::note
+Express Mode uses the global endpoint for better performance and availability. Use standard Vertex AI for production workloads requiring regional data residency.
+:::
+
+For more information, see the [Google Vertex AI Express documentation](https://cloud.google.com/vertex-ai/generative-ai/docs/partner-models/use-partner-models#express-mode).
+
+---
+
 ### Groq
 
 1. Head over to the [Groq console](https://console.groq.com/), click **Create API Key**, and copy the key.
