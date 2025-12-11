@@ -1,5 +1,6 @@
 import { Log } from "../util/log"
 import path from "path"
+import { pathToFileURL } from "url"
 import os from "os"
 import z from "zod"
 import { Filesystem } from "../util/filesystem"
@@ -297,7 +298,7 @@ export namespace Config {
       dot: true,
       cwd: dir,
     })) {
-      plugins.push("file://" + item)
+      plugins.push(pathToFileURL(item).href)
     }
     return plugins
   }
