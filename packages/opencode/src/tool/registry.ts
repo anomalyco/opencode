@@ -7,6 +7,7 @@ import { BatchTool } from "./batch"
 import { ReadTool } from "./read"
 import { TaskTool } from "./task"
 import { TodoWriteTool, TodoReadTool } from "./todo"
+import { WriteTaskTool } from "./write-task"
 import { WebFetchTool } from "./webfetch"
 import { WriteTool } from "./write"
 import { InvalidTool } from "./invalid"
@@ -94,6 +95,7 @@ export namespace ToolRegistry {
       EditTool,
       WriteTool,
       TaskTool,
+      WriteTaskTool,
       WebFetchTool,
       TodoWriteTool,
       TodoReadTool,
