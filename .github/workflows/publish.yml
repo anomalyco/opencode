@@ -132,7 +132,7 @@ jobs:
         if: startsWith(matrix.settings.host, 'ubuntu')
         run: |
           sudo apt-get update
-          sudo apt-get install -y libwebkit2gtk-4.1-dev libappindicator3-dev librsvg2-dev patchelf
+          sudo apt-get install -y libwebkit2gtk-4.1-dev libappindicator3-dev librsvg2-dev patchelf libglib2.0-dev
 
       - name: install Rust stable
         uses: dtolnay/rust-toolchain@stable
