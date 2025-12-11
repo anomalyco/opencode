@@ -56,7 +56,7 @@ export default function Download() {
           </section>
 
           <section data-component="download-section">
-            <div data-component="section-label">OpenCode CLI</div>
+            <div data-component="section-label"><span>[1]</span> OpenCode Terminal</div>
             <div data-component="section-content">
               <button
                 data-component="cli-row"
@@ -95,7 +95,9 @@ export default function Download() {
           </section>
 
           <section data-component="download-section">
-            <div data-component="section-label">OpenCode Desktop (Beta)</div>
+            <div data-component="section-label"><span>[2]</span> OpenCode Desktop
+              (Beta)
+            </div>
             <div data-component="section-content">
               <div data-component="download-row">
                 <div data-component="download-info">
@@ -107,7 +109,9 @@ export default function Download() {
                       />
                     </svg>
                   </span>
-                  <span>macOS (Apple Silicon)</span>
+                  <span>
+                    macOS (<span data-slot="hide-narrow">Apple </span>Silicon)
+                  </span>
                 </div>
                 <a href="#" data-component="action-button">
                   Download
@@ -195,12 +199,15 @@ export default function Download() {
           </section>
 
           <section data-component="download-section">
-            <div data-component="section-label">OpenCode Extensions</div>
+            <div data-component="section-label"><span>[3]</span> OpenCode
+              Extensions
+            </div>
             <div data-component="section-content">
               <div data-component="download-row">
                 <div data-component="download-info">
                   <span data-slot="icon">
-                    <svg width="24" height="24" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg">
+                    <svg width="24" height="24" viewBox="0 0 24 24" fill="none"
+                         xmlns="http://www.w3.org/2000/svg">
                       <g clip-path="url(#clip0_2614_159777)">
                         <path
                           d="M21.7899 4.15451L17.6755 2.17514C17.1968 1.94389 16.6274 2.04139 16.253 2.41576L8.37242 9.60639L4.93805 7.00201C4.6193 6.75764 4.16992 6.77764 3.87367 7.04764L2.77367 8.05014C2.4093 8.37889 2.4093 8.95201 2.77055 9.28076L5.7493 11.9989L2.77055 14.717C2.4093 15.0458 2.4093 15.6189 2.77367 15.9476L3.87367 16.9501C4.17305 17.2201 4.6193 17.2401 4.93805 16.9958L8.37242 14.3883L16.2568 21.582C16.628 21.9564 17.1974 22.0539 17.6762 21.8226L21.7943 19.8401C22.2274 19.632 22.5005 19.1958 22.5005 18.7139V5.27951C22.5005 4.80076 22.2237 4.36139 21.7912 4.15326L21.7899 4.15451ZM17.5024 16.5408L11.5193 11.9995L17.5024 7.45826V16.5408Z"
@@ -209,7 +216,8 @@ export default function Download() {
                       </g>
                       <defs>
                         <clipPath id="clip0_2614_159777">
-                          <rect width="20" height="20" fill="white" transform="translate(2.5 2)" />
+                          <rect width="20" height="20" fill="white"
+                                transform="translate(2.5 2)" />
                         </clipPath>
                       </defs>
                     </svg>
@@ -224,7 +232,8 @@ export default function Download() {
               <div data-component="download-row">
                 <div data-component="download-info">
                   <span data-slot="icon">
-                    <svg width="24" height="24" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg">
+                    <svg width="24" height="24" viewBox="0 0 24 24" fill="none"
+                         xmlns="http://www.w3.org/2000/svg">
                       <g clip-path="url(#clip0_2614_159762)">
                         <path
                           d="M20.1613 6.73388L12.4027 2.11135C12.1535 1.96288 11.8461 1.96288 11.597 2.11135L3.83874 6.73388C3.6293 6.85867 3.5 7.08946 3.5 7.33942V16.6608C3.5 16.9107 3.6293 17.1415 3.83874 17.2663L11.5973 21.8888C11.8465 22.0373 12.1539 22.0373 12.403 21.8888L20.1616 17.2663C20.3711 17.1415 20.5004 16.9107 20.5004 16.6608V7.33942C20.5004 7.08946 20.3711 6.85867 20.1616 6.73388H20.1613ZM19.6739 7.71304L12.1841 21.1002C12.1335 21.1905 11.9998 21.1536 11.9998 21.0491V12.2833C11.9998 12.1082 11.9091 11.9462 11.762 11.8582L4.40586 7.47548C4.31844 7.42324 4.35413 7.28529 4.45539 7.28529H19.435C19.6477 7.28529 19.7806 7.52322 19.6743 7.71341H19.6739V7.71304Z"
@@ -233,7 +242,8 @@ export default function Download() {
                       </g>
                       <defs>
                         <clipPath id="clip0_2614_159762">
-                          <rect width="17" height="20" fill="white" transform="translate(3.5 2)" />
+                          <rect width="17" height="20" fill="white"
+                                transform="translate(3.5 2)" />
                         </clipPath>
                       </defs>
                     </svg>
@@ -248,7 +258,8 @@ export default function Download() {
               <div data-component="download-row">
                 <div data-component="download-info">
                   <span data-slot="icon">
-                    <svg width="24" height="24" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg">
+                    <svg width="24" height="24" viewBox="0 0 24 24" fill="none"
+                         xmlns="http://www.w3.org/2000/svg">
                       <path
                         d="M4.375 3.25C4.02982 3.25 3.75 3.52982 3.75 3.875V17.625H2.5V3.875C2.5 2.83947 3.33947 2 4.375 2H21.1206C21.9558 2 22.374 3.00982 21.7835 3.60042L11.4698 13.9141H14.375V12.625H15.625V14.2266C15.625 14.7443 15.2053 15.1641 14.6875 15.1641H10.2198L8.07139 17.3125H17.8125V9.5H19.0625V17.3125C19.0625 18.0029 18.5029 18.5625 17.8125 18.5625H6.82139L4.63389 20.75H20.625C20.9701 20.75 21.25 20.4701 21.25 20.125V6.375H22.5V20.125C22.5 21.1606 21.6606 22 20.625 22H3.87944C3.04422 22 2.62594 20.9901 3.21653 20.3996L13.4911 10.125H10.625V11.375H9.375V9.8125C9.375 9.29474 9.79474 8.875 10.3125 8.875H14.7411L16.9286 6.6875H7.1875V14.5H5.9375V6.6875C5.9375 5.99714 6.49714 5.4375 7.1875 5.4375H18.1786L20.3661 3.25H4.375Z"
                         fill="currentColor"
@@ -265,7 +276,8 @@ export default function Download() {
               <div data-component="download-row">
                 <div data-component="download-info">
                   <span data-slot="icon">
-                    <svg width="24" height="24" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg">
+                    <svg width="24" height="24" viewBox="0 0 24 24" fill="none"
+                         xmlns="http://www.w3.org/2000/svg">
                       <path
                         d="M21.8156 6.00325H21.625C20.6219 6.00162 19.8079 6.8448 19.8079 7.88581V12.0961C19.8079 12.9368 19.1384 13.6179 18.3415 13.6179C17.8681 13.6179 17.3955 13.3706 17.115 12.9555L12.9722 6.814C12.6285 6.30403 12.0691 6 11.4637 6C10.5192 6 9.66922 6.83345 9.66922 7.86232V12.0969C9.66922 12.9376 9.00519 13.6187 8.20289 13.6187C7.72791 13.6187 7.25603 13.3714 6.97557 12.9563L2.33983 6.08351C2.23514 5.92783 2 6.00487 2 6.1946V9.86649C2 10.0522 2.05469 10.2322 2.15702 10.3846L6.71933 17.1471C6.98886 17.5468 7.38651 17.8435 7.84507 17.9514C8.9927 18.2221 10.0489 17.3052 10.0489 16.1369V11.9047C10.0489 11.064 10.7051 10.3829 11.5152 10.3829H11.5176C12.0059 10.3829 12.4636 10.6302 12.7441 11.0453L16.8877 17.186C17.2322 17.6968 17.7627 18 18.3954 18C19.361 18 20.1883 17.1657 20.1883 16.1377V11.9039C20.1883 11.0632 20.8446 10.3821 21.6547 10.3821H21.8164C21.9179 10.3821 22 10.297 22 10.1916V6.19377C22 6.08839 21.9179 6.00325 21.8164 6.00325H21.8156Z"
                         fill="currentColor"
@@ -278,8 +290,35 @@ export default function Download() {
                   Install
                 </a>
               </div>
+
             </div>
           </section>
+
+          <section data-component="download-section">
+            <div data-component="section-label"><span>[4]</span> OpenCode
+              Integrations
+            </div>
+            <div data-component="section-content">
+              <div data-component="download-row">
+                <div data-component="download-info">
+                  <span data-slot="icon">
+                    <svg width="24" height="24" viewBox="0 0 24 24" fill="none"
+                         xmlns="http://www.w3.org/2000/svg">
+<path
+  d="M12 1.94922C17.525 1.94922 22 6.42422 22 11.9492C21.9995 14.0445 21.3419 16.0868 20.1198 17.7887C18.8977 19.4907 17.1727 20.7665 15.1875 21.4367C14.6875 21.5367 14.5 21.2242 14.5 20.9617C14.5 20.6242 14.5125 19.5492 14.5125 18.2117C14.5125 17.2742 14.2 16.6742 13.8375 16.3617C16.0625 16.1117 18.4 15.2617 18.4 11.4242C18.4 10.3242 18.0125 9.43672 17.375 8.73672C17.475 8.48672 17.825 7.46172 17.275 6.08672C17.275 6.08672 16.4375 5.81172 14.525 7.11172C13.725 6.88672 12.875 6.77422 12.025 6.77422C11.175 6.77422 10.325 6.88672 9.525 7.11172C7.6125 5.82422 6.775 6.08672 6.775 6.08672C6.225 7.46172 6.575 8.48672 6.675 8.73672C6.0375 9.43672 5.65 10.3367 5.65 11.4242C5.65 15.2492 7.975 16.1117 10.2 16.3617C9.9125 16.6117 9.65 17.0492 9.5625 17.6992C8.9875 17.9617 7.55 18.3867 6.65 16.8742C6.4625 16.5742 5.9 15.8367 5.1125 15.8492C4.275 15.8617 4.775 16.3242 5.125 16.5117C5.55 16.7492 6.0375 17.6367 6.15 17.9242C6.35 18.4867 7 19.5617 9.5125 19.0992C9.5125 19.9367 9.525 20.7242 9.525 20.9617C9.525 21.2242 9.3375 21.5242 8.8375 21.4367C6.8458 20.7738 5.11342 19.5005 3.88611 17.7975C2.65881 16.0945 1.9989 14.0484 2 11.9492C2 6.42422 6.475 1.94922 12 1.94922Z"
+  fill="currentColor" />
+</svg>
+
+                  </span>
+                  <span>GitHub</span>
+                </div>
+                <a href="#" data-component="action-button">
+                  Install
+                </a>
+              </div>
+            </div>
+          </section>
+
         </div>
         <Footer />
       </div>

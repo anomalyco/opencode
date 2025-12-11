@@ -227,6 +227,14 @@ body {
         justify-content: space-between;
         align-items: center;
         gap: 48px;
+
+        @media (max-width: 55rem) {
+          gap: 32px;
+        }
+
+        @media (max-width: 48rem) {
+          gap: 24px;
+        }
         li {
           display: inline-block;
           a {
@@ -247,6 +255,10 @@ body {
             border-radius: 4px;
             font-weight: 500;
             text-decoration: none;
+
+            @media (max-width: 55rem) {
+              display: none;
+            }
           }
           [data-slot="cta-button"]:hover {
             background: var(--color-background-strong-hover);
@@ -500,28 +512,62 @@ body {
       font-weight: 500;
       padding: 4px 8px;
       line-height: 1;
+      flex-shrink: 0;
+    }
+
+    [data-slot="content"] {
+      display: flex;
+      align-items: center;
+      gap: 4px;
     }
 
     [data-slot="text"] {
       color: var(--color-text-strong);
       line-height: 1.4;
+
+      @media (max-width: 30.625rem) {
+        display: none;
+      }
     }
 
-    a {
+    [data-slot="platforms"] {
+      @media (max-width: 49.125rem) {
+        display: none;
+      }
+    }
+
+    [data-slot="link"] {
       color: var(--color-text-weak);
+      white-space: nowrap;
+      text-decoration: none;
+
+      @media (max-width: 30.625rem) {
+        display: none;
+      }
+    }
+
+    [data-slot="link"]:hover {
+      color: var(--color-text);
       text-decoration: underline;
       text-underline-offset: 2px;
       text-decoration-thickness: 1px;
-      margin-left: 4px;
+    }
+
+    [data-slot="link-mobile"] {
+      display: none;
+      color: var(--color-text-strong);
       white-space: nowrap;
+      text-decoration: none;
+
+      @media (max-width: 30.625rem) {
+        display: inline;
+      }
     }
 
-    a:hover {
-      color: var(--color-text);
-    }
-
-    @media (max-width: 40rem) {
-      flex-wrap: wrap;
+    [data-slot="link-mobile"]:hover {
+      text-decoration: underline;
+      text-underline-offset: 2px;
+      text-decoration-thickness: 1px;
     }
   }
 

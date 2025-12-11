@@ -149,6 +149,14 @@ body {
         justify-content: space-between;
         align-items: center;
         gap: 48px;
+
+        @media (max-width: 55rem) {
+          gap: 32px;
+        }
+
+        @media (max-width: 48rem) {
+          gap: 24px;
+        }
         li {
           display: inline-block;
           a {
@@ -169,6 +177,10 @@ body {
             border-radius: 4px;
             font-weight: 500;
             text-decoration: none;
+
+            @media (max-width: 55rem) {
+              display: none;
+            }
           }
           [data-slot="cta-button"]:hover {
             background: var(--color-background-strong-hover);

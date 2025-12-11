@@ -54,8 +54,17 @@ export default function Home() {
           <section data-component="hero">
             <div data-component="desktop-app-banner">
               <span data-slot="badge">New</span>
-              <span data-slot="text">Desktop app available in beta on macOS, Windows, and Linux.</span>
-              <a href="/download">Download now</a>
+              <div data-slot="content">
+                <span data-slot="text">
+                  Desktop app available in beta<span data-slot="platforms"> on macOS, Windows, and Linux</span>.
+                </span>
+                <a href="/download" data-slot="link">
+                  Download now
+                </a>
+                <a href="/download" data-slot="link-mobile">
+                  Download the desktop beta now
+                </a>
+              </div>
             </div>
 
             <div data-slot="hero-copy">
