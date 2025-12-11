@@ -490,6 +490,7 @@ export namespace Config {
       .enum(["auto", "stacked"])
       .optional()
       .describe("Control diff rendering style: 'auto' adapts to terminal width, 'stacked' always shows single column"),
+    cursor_blinking: z.boolean().optional().describe("Enable or disable cursor blinking in the prompt input box"),
   })
 
   export const Layout = z.enum(["auto", "stretch"]).meta({

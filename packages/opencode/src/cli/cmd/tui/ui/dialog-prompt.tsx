@@ -1,7 +1,8 @@
 import { TextareaRenderable, TextAttributes } from "@opentui/core"
 import { useTheme } from "../context/theme"
 import { useDialog, type DialogContext } from "./dialog"
-import { onMount, type JSX } from "solid-js"
+import { useSync } from "../context/sync"
+import { createMemo, onMount, type JSX } from "solid-js"
 import { useKeyboard } from "@opentui/solid"
 
 export type DialogPromptProps = {
@@ -16,7 +17,13 @@ export type DialogPromptProps = {
 export function DialogPrompt(props: DialogPromptProps) {
   const dialog = useDialog()
   const { theme } = useTheme()
+  const sync = useSync()
   let textarea: TextareaRenderable
+
+  const cursorStyle = createMemo(() => ({
+    style: "block" as const,
+    blinking: sync.data.config.tui?.cursor_blinking ?? true,
+  }))
 
   useKeyboard((evt) => {
     if (evt.name === "return") {
@@ -52,6 +59,7 @@ export function DialogPrompt(props: DialogPromptProps) {
           textColor={theme.text}
           focusedTextColor={theme.text}
           cursorColor={theme.text}
+          cursorStyle={cursorStyle()}
         />
       </box>
       <box paddingBottom={1} gap={1} flexDirection="row">
