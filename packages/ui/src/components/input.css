@@ -1,7 +1,9 @@
 [data-component="input"] {
+  width: 100%;
   /* [data-slot="input-label"] {} */
 
   [data-slot="input-input"] {
+    width: 100%;
     color: var(--text-strong);
 
     /* text-14-regular */

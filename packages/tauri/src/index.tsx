@@ -47,12 +47,6 @@ const platform: Platform = {
   },
 }
 
-declare global {
-  interface Window {
-    __OPENCODE__?: { updaterEnabled?: boolean }
-  }
-}
-
 render(() => {
   onMount(() => {
     if (window.__OPENCODE__?.updaterEnabled) runUpdater()

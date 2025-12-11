@@ -144,7 +144,7 @@ export function tui(input: { url: string; args: Args; onExit?: () => Promise<voi
         targetFps: 60,
         gatherStats: false,
         exitOnCtrlC: false,
-        useKittyKeyboard: true,
+        useKittyKeyboard: {},
       },
     )
   })
@@ -186,7 +186,7 @@ function App() {
 
       // Truncate title to 40 chars max
       const title = session.title.length > 40 ? session.title.slice(0, 37) + "..." : session.title
-      renderer.setTerminalTitle(`oc | ${title}`)
+      renderer.setTerminalTitle(`OC | ${title}`)
     }
   })
 

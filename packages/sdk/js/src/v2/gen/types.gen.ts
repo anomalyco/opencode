@@ -575,6 +575,7 @@ export type Session = {
     created: number
     updated: number
     compacting?: number
+    archived?: number
   }
   revert?: {
     messageID: string
@@ -724,6 +725,13 @@ export type EventServerConnected = {
   }
 }
 
+export type EventGlobalDisposed = {
+  type: "global.disposed"
+  properties: {
+    [key: string]: unknown
+  }
+}
+
 export type Event =
   | EventInstallationUpdated
   | EventInstallationUpdateAvailable
@@ -758,6 +766,7 @@ export type Event =
   | EventPtyExited
   | EventPtyDeleted
   | EventServerConnected
+  | EventGlobalDisposed
 
 export type GlobalEvent = {
   directory: string
@@ -928,10 +937,6 @@ export type KeybindsConfig = {
    */
   input_clear?: string
   /**
-   * Forward delete
-   */
-  input_forward_delete?: string
-  /**
    * Paste from clipboard
    */
   input_paste?: string
@@ -1039,6 +1044,7 @@ export type ProviderConfig = {
     [key: string]: {
       id?: string
       name?: string
+      family?: string
       release_date?: string
       attachment?: boolean
       reasoning?: boolean
@@ -1394,6 +1400,7 @@ export type ToolListItem = {
 export type ToolList = Array<ToolListItem>
 
 export type Path = {
+  home: string
   state: string
   config: string
   worktree: string
@@ -1465,6 +1472,7 @@ export type Model = {
     npm: string
   }
   name: string
+  family?: string
   capabilities: {
     temperature: boolean
     reasoning: boolean
@@ -1699,6 +1707,22 @@ export type GlobalEventResponses = {
 }
 
 export type GlobalEventResponse = GlobalEventResponses[keyof GlobalEventResponses]
+
+export type GlobalDisposeData = {
+  body?: never
+  path?: never
+  query?: never
+  url: "/global/dispose"
+}
+
+export type GlobalDisposeResponses = {
+  /**
+   * Global disposed
+   */
+  200: boolean
+}
+
+export type GlobalDisposeResponse = GlobalDisposeResponses[keyof GlobalDisposeResponses]
 
 export type ProjectListData = {
   body?: never
@@ -2251,6 +2275,9 @@ export type SessionGetResponse = SessionGetResponses[keyof SessionGetResponses]
 export type SessionUpdateData = {
   body?: {
     title?: string
+    time: {
+      archived?: number
+    }
   }
   path: {
     sessionID: string
@@ -3031,6 +3058,7 @@ export type ProviderListResponses = {
         [key: string]: {
           id: string
           name: string
+          family?: string
           release_date: string
           attachment: boolean
           reasoning: boolean
