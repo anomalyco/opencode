@@ -5,7 +5,7 @@ import { NamedError } from "@opencode-ai/util/error"
 import { Message } from "./message"
 import { APICallError, convertToModelMessages, LoadAPIKeyError, type ModelMessage, type UIMessage } from "ai"
 import type { SharedV2ProviderMetadata } from "@ai-sdk/provider"
-import type { SessionMessage, SessionMessageFilePart } from "@opencode-ai/sdk"
+
 import { Identifier } from "../id/id"
 import { LSP } from "../lsp"
 import { Snapshot } from "@/snapshot"
@@ -524,124 +524,6 @@ export namespace MessageV2 {
               type: "reasoning",
               text: part.text,
               providerMetadata: part.metadata,
-            })
-          }
-        }
-      }
-    }
-
-    return convertToModelMessages(result.filter((msg) => msg.parts.length > 0))
-  }
-
-  export function sessionMessagesToModelMessages(input: SessionMessage[]): ModelMessage[] {
-    const result: UIMessage[] = []
-
-    for (const msg of input) {
-      if (msg.parts.length === 0) continue
-
-      if (msg.info.role === "user") {
-        const userMessage: UIMessage = {
-          id: msg.info.id,
-          role: "user",
-          parts: [],
-        }
-        result.push(userMessage)
-        for (const part of msg.parts) {
-          if (part.type === "text" && !part.ignored) {
-            userMessage.parts.push({
-              type: "text",
-              text: part.text,
-            })
-          }
-          // text/plain and directory files are converted into text parts, ignore them
-          if (part.type === "file" && part.mime !== "text/plain" && part.mime !== "application/x-directory") {
-            userMessage.parts.push({
-              type: "file",
-              url: part.url,
-              mediaType: part.mime,
-              filename: part.filename,
-            })
-          }
-          if (part.type === "compaction") {
-            userMessage.parts.push({
-              type: "text",
-              text: "What did we do so far?",
-            })
-          }
-          if (part.type === "subtask") {
-            userMessage.parts.push({
-              type: "text",
-              text: "The following tool was executed by the user",
-            })
-          }
-        }
-      }
-
-      if (msg.info.role === "assistant") {
-        const assistantMessage: UIMessage = {
-          id: msg.info.id,
-          role: "assistant",
-          parts: [],
-        }
-        result.push(assistantMessage)
-        for (const part of msg.parts) {
-          if (part.type === "text") {
-            assistantMessage.parts.push({
-              type: "text",
-              text: part.text,
-              providerMetadata: part.metadata as SharedV2ProviderMetadata | undefined,
-            })
-          }
-          if (part.type === "step-start") {
-            assistantMessage.parts.push({
-              type: "step-start",
-            })
-          }
-          if (part.type === "tool") {
-            if (part.state.status === "completed") {
-              if (part.state.attachments?.length) {
-                result.push({
-                  id: Identifier.ascending("message"),
-                  role: "user",
-                  parts: [
-                    {
-                      type: "text",
-                      text: `Tool ${part.tool} returned an attachment:`,
-                    },
-                    ...part.state.attachments.map((attachment: SessionMessageFilePart) => ({
-                      type: "file" as const,
-                      url: attachment.url,
-                      mediaType: attachment.mime,
-                      filename: attachment.filename,
-                    })),
-                  ],
-                })
-              }
-              assistantMessage.parts.push({
-                type: ("tool-" + part.tool) as `tool-${string}`,
-                state: "output-available",
-                toolCallId: part.callID,
-                input: part.state.input,
-                output: part.state.time.compacted ? "[Old tool result content cleared]" : part.state.output,
-                callProviderMetadata: part.metadata as SharedV2ProviderMetadata | undefined,
-              })
-            }
-            if (part.state.status === "error") {
-              assistantMessage.parts.push({
-                type: ("tool-" + part.tool) as `tool-${string}`,
-                state: "output-error",
-                toolCallId: part.callID,
-                input: part.state.input,
-                errorText: part.state.error,
-                callProviderMetadata: part.metadata as SharedV2ProviderMetadata | undefined,
-              })
-            }
-          }
-          if (part.type === "reasoning") {
-            assistantMessage.parts.push({
-              type: "reasoning",
-              text: part.text,
-              providerMetadata: part.metadata as SharedV2ProviderMetadata | undefined,
             })
           }
         }

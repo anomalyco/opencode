@@ -542,14 +542,14 @@ export namespace SessionPrompt {
 
       await Plugin.trigger("experimental.chat.messages.transform", {}, { messages: sessionMessages })
 
-      const modelMessages: ModelMessage[] = [
+      const messages: ModelMessage[] = [
         ...system.map(
           (x): ModelMessage => ({
             role: "system",
             content: x,
           }),
         ),
-        ...MessageV2.sessionMessagesToModelMessages(sessionMessages),
+        ...MessageV2.toModelMessage(sessionMessages),
         ...(isLastStep
           ? [
               {
@@ -612,7 +612,7 @@ export namespace SessionPrompt {
         temperature: params.temperature,
         topP: params.topP,
         toolChoice: isLastStep ? "none" : undefined,
-        messages: modelMessages,
+        messages,
         tools: model.capabilities.toolcall === false ? undefined : tools,
         model: wrapLanguageModel({
           model: language,

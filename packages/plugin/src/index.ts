@@ -6,68 +6,21 @@ import type {
   Provider,
   Permission,
   UserMessage,
+  Message,
   Part,
   Auth,
   Config,
-  SessionMessage,
-  SessionMessageInfo,
-  SessionMessageUser,
-  SessionMessageAssistant,
-  SessionMessagePart,
-  SessionMessagePartBase,
-  SessionMessageTextPart,
-  SessionMessageReasoningPart,
-  SessionMessageFilePart,
-  SessionMessageToolPart,
-  SessionMessageStepStartPart,
-  SessionMessageStepFinishPart,
-  SessionMessageSnapshotPart,
-  SessionMessagePatchPart,
-  SessionMessageAgentPart,
-  SessionMessageCompactionPart,
-  SessionMessageSubtaskPart,
-  SessionMessageRetryPart,
-  SessionMessageToolState,
-  SessionMessageToolStatePending,
-  SessionMessageToolStateRunning,
-  SessionMessageToolStateCompleted,
-  SessionMessageToolStateError,
-  SessionMessageContentError,
-  SessionMessageFileDiff,
 } from "@opencode-ai/sdk"
+
+export type WithParts = {
+  info: Message
+  parts: Part[]
+}
 
 import type { BunShell } from "./shell"
 import { type ToolDefinition } from "./tool"
 
 export * from "./tool"
-
-export type {
-  SessionMessage,
-  SessionMessageInfo,
-  SessionMessageUser,
-  SessionMessageAssistant,
-  SessionMessagePart,
-  SessionMessagePartBase,
-  SessionMessageTextPart,
-  SessionMessageReasoningPart,
-  SessionMessageFilePart,
-  SessionMessageToolPart,
-  SessionMessageStepStartPart,
-  SessionMessageStepFinishPart,
-  SessionMessageSnapshotPart,
-  SessionMessagePatchPart,
-  SessionMessageAgentPart,
-  SessionMessageCompactionPart,
-  SessionMessageSubtaskPart,
-  SessionMessageRetryPart,
-  SessionMessageToolState,
-  SessionMessageToolStatePending,
-  SessionMessageToolStateRunning,
-  SessionMessageToolStateCompleted,
-  SessionMessageToolStateError,
-  SessionMessageContentError,
-  SessionMessageFileDiff,
-}
 
 export type ProviderContext = {
   source: "env" | "config" | "custom" | "api"
@@ -231,7 +184,7 @@ export interface Hooks {
   "experimental.chat.messages.transform"?: (
     input: {},
     output: {
-      messages: SessionMessage[]
+      messages: WithParts[]
     },
   ) => Promise<void>
   "experimental.text.complete"?: (
