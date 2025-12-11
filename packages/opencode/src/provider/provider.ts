@@ -323,34 +323,14 @@ export namespace Provider {
         },
       }
     },
-    gemini: async () => {
-      try {
-        await geminiAuth.getAccessToken()
-        return {
-          autoload: true,
-          options: {},
-        }
-      } catch (e) {
-        return { autoload: false }
-      }
-    },
-    qwen: async () => {
-      try {
-        const apiKey = await qwenAuth.getAccessToken()
-        const baseURL = await qwenAuth.getBaseURL()
-        return {
-          autoload: true,
-          options: {
-             baseURL,
-             apiKey,
-             headers: {
-               "Origin": "https://chat.qwen.ai",
-               "Referer": "https://chat.qwen.ai/",
-             }
+    cerebras: async () => {
+      return {
+        autoload: false,
+        options: {
+          headers: {
+            "X-Cerebras-3rd-Party-Integration": "opencode",
           },
-        }
-      } catch (e) {
-        return { autoload: false }
+        },
       }
     },
   }

@@ -34,7 +34,7 @@ const fetchSvgContent = async (svgPath: string): Promise<string> => {
   }
 }
 
-export function Header(props: { zen?: boolean }) {
+export function Header(props: { zen?: boolean; hideGetStarted?: boolean }) {
   const navigate = useNavigate()
   const githubData = createAsync(() => github())
   const starCount = createMemo(() =>
@@ -169,6 +169,21 @@ export function Header(props: { zen?: boolean }) {
               </Match>
             </Switch>
           </li>
+          <Show when={!props.hideGetStarted}>
+            <li>
+              <A href="/download" data-slot="cta-button">
+                <svg width="18" height="18" viewBox="0 0 18 18" fill="none" xmlns="http://www.w3.org/2000/svg">
+                  <path
+                    d="M12.1875 9.75L9.00001 12.9375L5.8125 9.75M9.00001 2.0625L9 12.375M14.4375 15.9375H3.5625"
+                    stroke="currentColor"
+                    stroke-width="1.5"
+                    stroke-linecap="square"
+                  />
+                </svg>
+                Free
+              </A>
+            </li>
+          </Show>
         </ul>
       </nav>
       <nav data-component="nav-mobile">
@@ -243,6 +258,13 @@ export function Header(props: { zen?: boolean }) {
                     </Match>
                   </Switch>
                 </li>
+                <Show when={!props.hideGetStarted}>
+                  <li>
+                    <A href="/download" data-slot="cta-button">
+                      Get started for free
+                    </A>
+                  </li>
+                </Show>
               </ul>
             </nav>
           </div>

@@ -6,6 +6,7 @@ import { createSimpleContext } from "@opencode-ai/ui/context"
 import { useSDK } from "./sdk"
 import { useSync } from "./sync"
 import { base64Encode } from "@opencode-ai/util/encode"
+import { useProviders } from "@/hooks/use-providers"
 
 export type LocalFile = FileNode &
   Partial<{
@@ -37,10 +38,17 @@ export const { use: useLocal, provider: LocalProvider } = createSimpleContext({
   init: () => {
     const sdk = useSDK()
     const sync = useSync()
+    const providers = useProviders()
 
     function isModelValid(model: ModelKey) {
-      const provider = sync.data.provider?.all.find((x) => x.id === model.providerID)
-      return !!provider?.models[model.modelID] && sync.data.provider?.connected.includes(model.providerID)
+      const provider = providers().all.find((x) => x.id === model.providerID)
+      return (
+        !!provider?.models[model.modelID] &&
+        providers()
+          .connected()
+          .map((p) => p.id)
+          .includes(model.providerID)
+      )
     }
 
     function getFirstValidModel(...modelFns: (() => ModelKey | undefined)[]) {
@@ -115,8 +123,8 @@ export const { use: useLocal, provider: LocalProvider } = createSimpleContext({
       })
 
       const list = createMemo(() =>
-        sync.data.provider.all
-          .filter((p) => sync.data.provider.connected.includes(p.id))
+        providers()
+          .connected()
           .flatMap((p) =>
             Object.values(p.models).map((m) => ({
               ...m,
@@ -145,11 +153,11 @@ export const { use: useLocal, provider: LocalProvider } = createSimpleContext({
           }
         }
 
-        for (const p of sync.data.provider.connected) {
-          if (p in sync.data.provider.default) {
+        for (const p of providers().connected()) {
+          if (p.id in providers().default) {
             return {
-              providerID: p,
-              modelID: sync.data.provider.default[p],
+              providerID: p.id,
+              modelID: providers().default[p.id],
             }
           }
         }

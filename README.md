@@ -7,7 +7,7 @@
     </picture>
   </a>
 </p>
-<p align="center">The AI coding agent built for the terminal.</p>
+<p align="center">The open source AI coding agent.</p>
 <p align="center">
   <a href="https://www.npmjs.com/package/@alisasasasaasas/opencode-ai"><img alt="npm" src="https://img.shields.io/npm/v/@alisasasasaasas/opencode-ai?style=flat-square" /></a>
 </p>

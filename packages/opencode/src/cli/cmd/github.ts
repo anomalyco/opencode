@@ -124,6 +124,8 @@ type IssueQueryResponse = {
   }
 }
 
+const AGENT_USERNAME = "opencode-agent[bot]"
+const AGENT_REACTION = "eyes"
 const WORKFLOW_FILE = ".github/workflows/opencode.yml"
 
 export const GithubCommand = cmd({
@@ -422,7 +424,7 @@ export const GithubRunCommand = cmd({
         await configureGit(appToken)
         await assertPermissions()
 
-        await addReaction("eyes")
+        await addReaction()
 
         // Setup opencode session
         const repoData = await fetchRepo()
@@ -812,8 +814,8 @@ export const GithubRunCommand = cmd({
 
         await $`git config --local --unset-all ${config}`
         await $`git config --local ${config} "AUTHORIZATION: basic ${newCredentials}"`
-        await $`git config --global user.name "opencode-agent[bot]"`
-        await $`git config --global user.email "opencode-agent[bot]@users.noreply.github.com"`
+        await $`git config --global user.name "${AGENT_USERNAME}"`
+        await $`git config --global user.email "${AGENT_USERNAME}@users.noreply.github.com"`
       }
 
       async function restoreGitConfig() {
@@ -935,13 +937,13 @@ Co-authored-by: ${actor} <${actor}@users.noreply.github.com>"`
         if (!["admin", "write"].includes(permission)) throw new Error(`User ${actor} does not have write permissions`)
       }
 
-      async function addReaction(reaction: "eyes") {
+      async function addReaction() {
         console.log("Adding reaction...")
         return await octoRest.rest.reactions.createForIssueComment({
           owner,
           repo,
           comment_id: triggerCommentId,
-          content: reaction,
+          content: AGENT_REACTION,
         })
       }
 
@@ -951,9 +953,10 @@ Co-authored-by: ${actor} <${actor}@users.noreply.github.com>"`
           owner,
           repo,
           comment_id: triggerCommentId,
+          content: AGENT_REACTION,
         })
 
-        const eyesReaction = reactions.data.find((r) => r.content === "eyes")
+        const eyesReaction = reactions.data.find((r) => r.user?.login === AGENT_USERNAME)
         if (!eyesReaction) return
 
         await octoRest.rest.reactions.deleteForIssueComment({

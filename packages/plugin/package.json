@@ -1,7 +1,7 @@
 {
   "$schema": "https://json.schemastore.org/package.json",
-  "name": "@alisasasasaasas/opencode-plugin",
-  "version": "0.0.0-dev-202512111736",
+  "name": "@opencode-ai/plugin",
+  "version": "1.0.149",
   "type": "module",
   "scripts": {
     "typecheck": "tsgo --noEmit",
