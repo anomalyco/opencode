@@ -3,6 +3,7 @@ import { domain, shortDomain } from "./stage"
 
 const storage = new sst.cloudflare.Bucket("EnterpriseStorage")
 
+/*
 const enterprise = new sst.cloudflare.x.SolidStart("Enterprise", {
   domain: shortDomain,
   path: "packages/enterprise",
@@ -15,3 +16,4 @@ const enterprise = new sst.cloudflare.x.SolidStart("Enterprise", {
     OPENCODE_STORAGE_BUCKET: storage.name,
   },
 })
+*/
