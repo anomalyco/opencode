@@ -20,6 +20,7 @@
     "@solidjs/meta": "catalog:",
     "hono": "catalog:",
     "hono-openapi": "catalog:",
+    "js-base64": "3.7.7",
     "luxon": "catalog:",
     "nitro": "3.0.1-alpha.1",
     "solid-js": "catalog:",
