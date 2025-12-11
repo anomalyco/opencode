@@ -512,8 +512,8 @@ export namespace Config {
       input_delete_to_line_start: z.string().optional().default("ctrl+u").describe("Delete to start of line in input"),
       input_backspace: z.string().optional().default("backspace,shift+backspace").describe("Backspace in input"),
       input_delete: z.string().optional().default("ctrl+d,delete,shift+delete").describe("Delete character in input"),
-      input_undo: z.string().optional().default("ctrl+-").describe("Undo in input"),
-      input_redo: z.string().optional().default("ctrl+.").describe("Redo in input"),
+      input_undo: z.string().optional().default("ctrl+-,super+z").describe("Undo in input"),
+      input_redo: z.string().optional().default("ctrl+.,super+shift+z").describe("Redo in input"),
       input_word_forward: z
         .string()
         .optional()

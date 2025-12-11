@@ -307,19 +307,18 @@
   --border-weaker-focus: var(--smoke-light-alpha-6);
   --button-ghost-hover: var(--smoke-light-alpha-2);
   --button-ghost-hover2: var(--smoke-light-alpha-3);
-  --avatar-background-pink: #FEEEF8;
-  --avatar-background-mint: #E1FBF4 ;
-  --avatar-background-orange: #FFF1E7 ;
-  --avatar-background-purple: #F9F1FE;
-  --avatar-background-cyan: #E7F9FB;
-  --avatar-background-lime: #EEFADC;
-  --avatar-text-pink: #CD1D8D;
-  --avatar-text-mint: #147D6F ;
-  --avatar-text-orange: #ED5F00 ;
-  --avatar-text-purple: #8445BC;
-  --avatar-text-cyan: #0894B3;
-  --avatar-text-lime: #5D770D;
-
+  --avatar-background-pink: #feeef8;
+  --avatar-background-mint: #e1fbf4;
+  --avatar-background-orange: #fff1e7;
+  --avatar-background-purple: #f9f1fe;
+  --avatar-background-cyan: #e7f9fb;
+  --avatar-background-lime: #eefadc;
+  --avatar-text-pink: #cd1d8d;
+  --avatar-text-mint: #147d6f;
+  --avatar-text-orange: #ed5f00;
+  --avatar-text-purple: #8445bc;
+  --avatar-text-cyan: #0894b3;
+  --avatar-text-lime: #5d770d;
 
   @media (prefers-color-scheme: dark) {
     color-scheme: dark;
@@ -564,18 +563,18 @@
     --border-weaker-focus: var(--smoke-dark-alpha-6);
     --button-ghost-hover: var(--smoke-dark-alpha-2);
     --button-ghost-hover2: var(--smoke-dark-alpha-3);
-    --avatar-background-pink: #501B3F;
-    --avatar-background-mint: #033A34;
-    --avatar-background-orange: #5F2A06;
+    --avatar-background-pink: #501b3f;
+    --avatar-background-mint: #033a34;
+    --avatar-background-orange: #5f2a06;
     --avatar-background-purple: #432155;
-    --avatar-background-cyan: #0F3058;
-    --avatar-background-lime: #2B3711;
-    --avatar-text-pink: #E34BA9;
-    --avatar-text-mint: #95F3D9 ;
-    --avatar-text-orange: #FF802B ;
-    --avatar-text-purple: #9D5BD2;
-    --avatar-text-cyan: #369EFF;
-    --avatar-text-lime: #C4F042;
+    --avatar-background-cyan: #0f3058;
+    --avatar-background-lime: #2b3711;
+    --avatar-text-pink: #e34ba9;
+    --avatar-text-mint: #95f3d9;
+    --avatar-text-orange: #ff802b;
+    --avatar-text-purple: #9d5bd2;
+    --avatar-text-cyan: #369eff;
+    --avatar-text-lime: #c4f042;
   }
 }
 

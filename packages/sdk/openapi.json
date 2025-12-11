@@ -7333,12 +7333,12 @@
           },
           "input_undo": {
             "description": "Undo in input",
-            "default": "ctrl+-",
+            "default": "ctrl+-,super+z",
             "type": "string"
           },
           "input_redo": {
             "description": "Redo in input",
-            "default": "ctrl+.",
+            "default": "ctrl+.,super+shift+z",
             "type": "string"
           },
           "input_word_forward": {

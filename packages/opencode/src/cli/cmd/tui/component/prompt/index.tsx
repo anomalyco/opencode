@@ -10,6 +10,7 @@ import { useSync } from "@tui/context/sync"
 import { Identifier } from "@/id/id"
 import { createStore, produce } from "solid-js/store"
 import { useKeybind } from "@tui/context/keybind"
+import { Keybind } from "@/util/keybind"
 import { usePromptHistory, type PromptInfo } from "./history"
 import { type AutocompleteRef, Autocomplete } from "./autocomplete"
 import { useCommandDialog } from "../dialog-command"
@@ -85,7 +86,7 @@ const TEXTAREA_ACTIONS = [
 ] as const
 
 function mapTextareaKeybindings(
-  keybinds: Record<string, { ctrl: boolean; meta: boolean; shift: boolean; leader: boolean; name: string }[]>,
+  keybinds: Record<string, Keybind.Info[]>,
   action: (typeof TEXTAREA_ACTIONS)[number],
 ): KeyBinding[] {
   const configKey = `input_${action.replace(/-/g, "_")}`
@@ -96,6 +97,7 @@ function mapTextareaKeybindings(
     ctrl: binding.ctrl || undefined,
     meta: binding.meta || undefined,
     shift: binding.shift || undefined,
+    super: binding.super || undefined,
     action,
   }))
 }
