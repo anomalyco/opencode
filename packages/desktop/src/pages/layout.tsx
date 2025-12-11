@@ -9,6 +9,7 @@ import { Avatar } from "@opencode-ai/ui/avatar"
 import { ResizeHandle } from "@opencode-ai/ui/resize-handle"
 import { Button } from "@opencode-ai/ui/button"
 import { Icon } from "@opencode-ai/ui/icon"
+import { ProviderIcon } from "@opencode-ai/ui/provider-icon"
 import { IconButton } from "@opencode-ai/ui/icon-button"
 import { Tooltip } from "@opencode-ai/ui/tooltip"
 import { Collapsible } from "@opencode-ai/ui/collapsible"
@@ -16,7 +17,7 @@ import { DiffChanges } from "@opencode-ai/ui/diff-changes"
 import { getFilename } from "@opencode-ai/util/path"
 import { Select } from "@opencode-ai/ui/select"
 import { DropdownMenu } from "@opencode-ai/ui/dropdown-menu"
-import { Session, Project } from "@opencode-ai/sdk/v2/client"
+import { Session, Project, ProviderAuthMethod } from "@opencode-ai/sdk/v2/client"
 import { usePlatform } from "@/context/platform"
 import { createStore } from "solid-js/store"
 import {
@@ -29,6 +30,15 @@ import {
   useDragDropContext,
 } from "@thisbeyond/solid-dnd"
 import type { DragEvent, Transformer } from "@thisbeyond/solid-dnd"
+import { SelectDialog } from "@opencode-ai/ui/select-dialog"
+import { Tag } from "@opencode-ai/ui/tag"
+import { IconName } from "@opencode-ai/ui/icons/provider"
+import { popularProviders, useProviders } from "@/hooks/use-providers"
+import { Dialog } from "@opencode-ai/ui/dialog"
+import { iife } from "@opencode-ai/util/iife"
+import { List, ListRef } from "@opencode-ai/ui/list"
+import { Input } from "@opencode-ai/ui/input"
+import { useGlobalSDK } from "@/context/global-sdk"
 
 export default function Layout(props: ParentProps) {
   const [store, setStore] = createStore({
@@ -37,6 +47,7 @@ export default function Layout(props: ParentProps) {
   })
 
   const params = useParams()
+  const globalSDK = useGlobalSDK()
   const globalSync = useGlobalSync()
   const layout = useLayout()
   const platform = usePlatform()
@@ -44,6 +55,7 @@ export default function Layout(props: ParentProps) {
   const currentDirectory = createMemo(() => base64Decode(params.dir ?? ""))
   const sessions = createMemo(() => globalSync.child(currentDirectory())[0].session ?? [])
   const currentSession = createMemo(() => sessions().find((s) => s.id === params.id))
+  const providers = useProviders()
 
   function navigateToProject(directory: string | undefined) {
     if (!directory) return
@@ -82,10 +94,19 @@ export default function Layout(props: ParentProps) {
     }
   }
 
+  async function connectProvider() {
+    layout.dialog.open("provider")
+  }
+
   createEffect(() => {
     if (!params.dir || !params.id) return
     const directory = base64Decode(params.dir)
     setStore("lastSession", directory, params.id)
+  })
+
+  createEffect(() => {
+    const sidebarWidth = layout.sidebar.opened() ? layout.sidebar.width() : 48
+    document.documentElement.style.setProperty("--dialog-left-margin", `${sidebarWidth}px`)
   })
 
   function getDraggableId(event: unknown): string | undefined {
@@ -419,7 +440,7 @@ export default function Layout(props: ParentProps) {
               <Button
                 variant="ghost"
                 size="large"
-                class="group/sidebar-toggle shrink-0 w-full text-left justify-start rounded-lg"
+                class="group/sidebar-toggle shrink-0 w-full text-left justify-start rounded-lg px-2"
                 onClick={layout.sidebar.toggle}
               >
                 <div class="relative -ml-px flex items-center justify-center size-4 [&>*]:absolute [&>*]:inset-0">
@@ -465,10 +486,44 @@ export default function Layout(props: ParentProps) {
             </DragDropProvider>
           </div>
           <div class="flex flex-col gap-1.5 self-stretch items-start shrink-0 px-2 py-3">
+            <Switch>
+              <Match when={!providers().paid().length && layout.sidebar.opened()}>
+                <div class="rounded-md bg-background-stronger shadow-xs-border-base">
+                  <div class="p-3 flex flex-col gap-2">
+                    <div class="text-12-medium text-text-strong">Getting started</div>
+                    <div class="text-text-base">OpenCode includes free models so you can start immediately.</div>
+                    <div class="text-text-base">Connect any provider to use models, inc. Claude, GPT, Gemini etc.</div>
+                  </div>
+                  <Tooltip placement="right" value="Connect provider" inactive={layout.sidebar.opened()}>
+                    <Button
+                      class="flex w-full text-left justify-start text-12-medium text-text-strong stroke-[1.5px] rounded-lg rounded-t-none shadow-none border-t border-border-weak-base pl-2.25 pb-px"
+                      size="large"
+                      icon="plus-small"
+                      onClick={connectProvider}
+                    >
+                      <Show when={layout.sidebar.opened()}>Connect provider</Show>
+                    </Button>
+                  </Tooltip>
+                </div>
+              </Match>
+              <Match when={true}>
+                <Tooltip placement="right" value="Connect provider" inactive={layout.sidebar.opened()}>
+                  <Button
+                    class="flex w-full text-left justify-start text-12-medium text-text-base stroke-[1.5px] rounded-lg px-2"
+                    variant="ghost"
+                    size="large"
+                    icon="plus-small"
+                    onClick={connectProvider}
+                  >
+                    <Show when={layout.sidebar.opened()}>Connect provider</Show>
+                  </Button>
+                </Tooltip>
+              </Match>
+            </Switch>
             <Show when={platform.openDirectoryPickerDialog}>
               <Tooltip placement="right" value="Open project" inactive={layout.sidebar.opened()}>
                 <Button
-                  class="flex w-full text-left justify-start text-12-medium text-text-base stroke-[1.5px] rounded-lg"
+                  class="flex w-full text-left justify-start text-12-medium text-text-base stroke-[1.5px] rounded-lg px-2"
                   variant="ghost"
                   size="large"
                   icon="folder-add-left"
@@ -481,7 +536,7 @@ export default function Layout(props: ParentProps) {
             <Tooltip placement="right" value="Settings" inactive={layout.sidebar.opened()}>
               <Button
                 disabled
-                class="flex w-full text-left justify-start text-12-medium text-text-base stroke-[1.5px] rounded-lg"
+                class="flex w-full text-left justify-start text-12-medium text-text-base stroke-[1.5px] rounded-lg px-2"
                 variant="ghost"
                 size="large"
                 icon="settings-gear"
@@ -494,7 +549,7 @@ export default function Layout(props: ParentProps) {
                 as={"a"}
                 href="https://opencode.ai/desktop-feedback"
                 target="_blank"
-                class="flex w-full text-left justify-start text-12-medium text-text-base stroke-[1.5px] rounded-lg"
+                class="flex w-full text-left justify-start text-12-medium text-text-base stroke-[1.5px] rounded-lg px-2"
                 variant="ghost"
                 size="large"
                 icon="bubble-5"
@@ -505,6 +560,261 @@ export default function Layout(props: ParentProps) {
           </div>
         </div>
         <main class="size-full overflow-x-hidden flex flex-col items-start">{props.children}</main>
+        <Show when={layout.dialog.opened() === "provider"}>
+          <SelectDialog
+            defaultOpen
+            title="Connect provider"
+            placeholder="Search providers"
+            activeIcon="plus-small"
+            key={(x) => x?.id}
+            items={providers().all}
+            filterKeys={["id", "name"]}
+            groupBy={(x) => (popularProviders.includes(x.id) ? "Popular" : "Other")}
+            sortBy={(a, b) => {
+              if (popularProviders.includes(a.id) && popularProviders.includes(b.id))
+                return popularProviders.indexOf(a.id) - popularProviders.indexOf(b.id)
+              return a.name.localeCompare(b.name)
+            }}
+            sortGroupsBy={(a, b) => {
+              if (a.category === "Popular" && b.category !== "Popular") return -1
+              if (b.category === "Popular" && a.category !== "Popular") return 1
+              return 0
+            }}
+            onSelect={(x) => {
+              if (!x) return
+              layout.dialog.connect(x.id)
+            }}
+            onOpenChange={(open) => {
+              if (open) {
+                layout.dialog.open("provider")
+              } else {
+                layout.dialog.close("provider")
+              }
+            }}
+          >
+            {(i) => (
+              <div class="px-1.25 w-full flex items-center gap-x-4">
+                <ProviderIcon
+                  data-slot="list-item-extra-icon"
+                  id={i.id as IconName}
+                  // TODO: clean this up after we update icon in models.dev
+                  classList={{
+                    "text-icon-weak-base": true,
+                    "size-4 mx-0.5": i.id === "opencode",
+                    "size-5": i.id !== "opencode",
+                  }}
+                />
+                <span>{i.name}</span>
+                <Show when={i.id === "opencode"}>
+                  <Tag>Recommended</Tag>
+                </Show>
+                <Show when={i.id === "anthropic"}>
+                  <div class="text-14-regular text-text-weak">Connect with Claude Pro/Max or API key</div>
+                </Show>
+              </div>
+            )}
+          </SelectDialog>
+        </Show>
+        <Show when={layout.dialog.opened() === "connect"}>
+          {iife(() => {
+            const [store, setStore] = createStore({
+              method: undefined as undefined | ProviderAuthMethod,
+            })
+            const providerID = layout.connect.provider()!
+            const provider = globalSync.data.provider.all.find((x) => x.id === providerID)!
+            const methods = globalSync.data.provider_auth[providerID] ?? [
+              {
+                type: "api",
+                label: "API key",
+              },
+            ]
+            if (methods.length === 1) {
+              setStore("method", methods[0])
+            }
+
+            let listRef: ListRef | undefined
+            const handleKey = (e: KeyboardEvent) => {
+              if (e.key === "Escape") return
+              listRef?.onKeyDown(e)
+            }
+
+            return (
+              <Dialog
+                modal
+                defaultOpen
+                onOpenChange={(open) => {
+                  if (open) {
+                    layout.dialog.open("connect")
+                  } else {
+                    layout.dialog.close("connect")
+                  }
+                }}
+              >
+                <Dialog.Header class="px-4.5">
+                  <Dialog.Title class="flex items-center">
+                    <IconButton
+                      tabIndex={-1}
+                      icon="arrow-left"
+                      variant="ghost"
+                      onClick={() => {
+                        if (store.method && methods.length > 1) {
+                          setStore("method", undefined)
+                          return
+                        }
+                        layout.dialog.open("provider")
+                      }}
+                    />
+                  </Dialog.Title>
+                  <Dialog.CloseButton tabIndex={-1} />
+                </Dialog.Header>
+                <Dialog.Body>
+                  <div class="flex flex-col gap-6 px-2.5 pb-3">
+                    <div class="px-2.5 flex gap-4 items-center">
+                      <ProviderIcon id={providerID as IconName} class="size-5 shrink-0 icon-strong-base" />
+                      <div class="text-16-medium text-text-strong">Connect {provider.name}</div>
+                    </div>
+                    <Show when={store.method === undefined}>
+                      <div class="px-2.5 text-14-regular text-text-base">Select login method for {provider.name}.</div>
+                      <div class="">
+                        <Input hidden type="text" class="opacity-0 size-0" autofocus onKeyDown={handleKey} />
+                        <List
+                          ref={(ref) => (listRef = ref)}
+                          items={methods}
+                          key={(m) => m?.label}
+                          onSelect={(method) => {
+                            if (!method) return
+                            setStore("method", method)
+
+                            if (method.type === "oauth") {
+                              // const result = await sdk.client.provider.oauth.authorize({
+                              //   providerID: provider.id,
+                              //   method: index,
+                              // })
+                              // if (result.data?.method === "code") {
+                              //   dialog.replace(() => (
+                              //     <CodeMethod
+                              //       providerID={provider.id}
+                              //       title={method.label}
+                              //       index={index}
+                              //       authorization={result.data!}
+                              //     />
+                              //   ))
+                              // }
+                              // if (result.data?.method === "auto") {
+                              //   dialog.replace(() => (
+                              //     <AutoMethod
+                              //       providerID={provider.id}
+                              //       title={method.label}
+                              //       index={index}
+                              //       authorization={result.data!}
+                              //     />
+                              //   ))
+                              // }
+                            }
+                            if (method.type === "api") {
+                              // return dialog.replace(() => <ApiMethod providerID={provider.id} title={method.label} />)
+                            }
+                          }}
+                        >
+                          {(i) => (
+                            <div class="w-full flex items-center gap-x-2.5">
+                              {/* TODO: add checkmark thing */}
+                              <span>{i.label}</span>
+                            </div>
+                          )}
+                        </List>
+                      </div>
+                    </Show>
+                    <Show when={store.method?.type === "api"}>
+                      {iife(() => {
+                        const [formStore, setFormStore] = createStore({
+                          value: "",
+                          error: undefined as string | undefined,
+                        })
+
+                        async function handleSubmit(e: SubmitEvent) {
+                          e.preventDefault()
+
+                          const form = e.currentTarget as HTMLFormElement
+                          const formData = new FormData(form)
+                          const apiKey = formData.get("apiKey") as string
+
+                          if (!apiKey?.trim()) {
+                            setFormStore("error", "API key is required")
+                            return
+                          }
+
+                          setFormStore("error", undefined)
+                          await globalSDK.client.auth.set({
+                            providerID,
+                            auth: {
+                              type: "api",
+                              key: apiKey,
+                            },
+                          })
+                          await globalSDK.client.global.dispose()
+                          layout.connect.complete()
+                        }
+
+                        return (
+                          <div class="px-2.5 pb-10 flex flex-col gap-6">
+                            <Switch>
+                              <Match when={provider.id === "opencode"}>
+                                <div class="flex flex-col gap-4">
+                                  <div class="text-14-regular text-text-base">
+                                    OpenCode Zen gives you access to a curated set of reliable optimized models for
+                                    coding agents.
+                                  </div>
+                                  <div class="text-14-regular text-text-base">
+                                    With a single API key you’ll get access to models such as Claude, GPT, Gemini, GLM
+                                    and more.
+                                  </div>
+                                  <div class="text-14-regular text-text-base">
+                                    Visit{" "}
+                                    <button
+                                      tabIndex={-1}
+                                      class="text-text-strong underline"
+                                      onClick={() => platform.openLink("https://opencode.ai/zen")}
+                                    >
+                                      opencode.ai/zen
+                                    </button>{" "}
+                                    to collect your API key.
+                                  </div>
+                                </div>
+                              </Match>
+                              <Match when={true}>
+                                <div class="text-14-regular text-text-base">
+                                  Enter your {provider.name} API key to connect your account and use {provider.name}{" "}
+                                  models in OpenCode.
+                                </div>
+                              </Match>
+                            </Switch>
+                            <form onSubmit={handleSubmit} class="flex flex-col items-start gap-4">
+                              <Input
+                                autofocus
+                                type="text"
+                                label={`${provider.name} API key`}
+                                placeholder="API key"
+                                name="apiKey"
+                                value={formStore.value}
+                                onChange={setFormStore.bind(null, "value")}
+                                validationState={formStore.error ? "invalid" : undefined}
+                                error={formStore.error}
+                              />
+                              <Button class="w-auto" type="submit" size="large" variant="primary">
+                                Submit
+                              </Button>
+                            </form>
+                          </div>
+                        )
+                      })}
+                    </Show>
+                  </div>
+                </Dialog.Body>
+              </Dialog>
+            )
+          })}
+        </Show>
       </div>
     </div>
   )

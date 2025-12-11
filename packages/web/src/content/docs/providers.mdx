@@ -568,6 +568,119 @@ The `global` region improves availability and reduces errors at no extra cost. U
 
 ---
 
+### Helicone
+
+[Helicone](https://helicone.ai) is an LLM observability platform that provides logging, monitoring, and analytics for your AI applications. The Helicone AI Gateway routes your requests to the appropriate provider automatically based on the model.
+
+1. Head over to [Helicone](https://helicone.ai), create an account, and generate an API key from your dashboard.
+
+2. Run the `/connect` command and search for **Helicone**.
+
+   ```txt
+   /connect
+   ```
+
+3. Enter your Helicone API key.
+
+   ```txt
+   ┌ API key
+   │
+   │
+   └ enter
+   ```
+
+4. Run the `/models` command to select a model.
+
+   ```txt
+   /models
+   ```
+
+For more providers and advanced features like caching and rate limiting, check the [Helicone documentation](https://docs.helicone.ai).
+
+#### Optional Configs
+
+In the event you see a feature or model from Helicone that isn't configured automatically through opencode, you can always configure it yourself.
+
+Here's [Helicone's Model Directory](https://helicone.ai/models), you'll need this to grab the IDs of the models you want to add.
+
+```jsonc title="~/.config/opencode/opencode.jsonc"
+{
+  "$schema": "https://opencode.ai/config.json",
+  "provider": {
+    "helicone": {
+      "npm": "@ai-sdk/openai-compatible",
+      "name": "Helicone",
+      "options": {
+        "baseURL": "https://ai-gateway.helicone.ai",
+      },
+      "models": {
+        "gpt-4o": {
+          // Model ID (from Helicone's model directory page)
+          "name": "GPT-4o", // Your own custom name for the model
+        },
+        "claude-sonnet-4-20250514": {
+          "name": "Claude Sonnet 4",
+        },
+      },
+    },
+  },
+}
+```
+
+#### Custom Headers
+
+Helicone supports custom headers for features like caching, user tracking, and session management. Add them to your provider config using `options.headers`:
+
+```jsonc title="~/.config/opencode/opencode.jsonc"
+{
+  "$schema": "https://opencode.ai/config.json",
+  "provider": {
+    "helicone": {
+      "npm": "@ai-sdk/openai-compatible",
+      "name": "Helicone",
+      "options": {
+        "baseURL": "https://ai-gateway.helicone.ai",
+        "headers": {
+          "Helicone-Cache-Enabled": "true",
+          "Helicone-User-Id": "opencode",
+        },
+      },
+    },
+  },
+}
+```
+
+##### Session tracking
+
+Helicone's [Sessions](https://docs.helicone.ai/features/sessions) feature lets you group related LLM requests together. Use the [opencode-helicone-session](https://github.com/H2Shami/opencode-helicone-session) plugin to automatically log each OpenCode conversation as a session in Helicone.
+
+```bash
+npm install -g opencode-helicone-session
+```
+
+Add it to your config.
+
+```json title="opencode.json"
+{
+  "plugin": ["opencode-helicone-session"]
+}
+```
+
+The plugin injects `Helicone-Session-Id` and `Helicone-Session-Name` headers into your requests. In Helicone's Sessions page, you'll see each OpenCode conversation listed as a separate session.
+
+##### Common Helicone headers
+
+| Header                     | Description                                                   |
+| -------------------------- | ------------------------------------------------------------- |
+| `Helicone-Cache-Enabled`   | Enable response caching (`true`/`false`)                      |
+| `Helicone-User-Id`         | Track metrics by user                                         |
+| `Helicone-Property-[Name]` | Add custom properties (e.g., `Helicone-Property-Environment`) |
+| `Helicone-Prompt-Id`       | Associate requests with prompt versions                       |
+
+See the [Helicone Header Directory](https://docs.helicone.ai/helicone-headers/header-directory) for all available headers.
+
+---
+
 ### llama.cpp
 
 You can configure opencode to use local models through [llama.cpp's](https://github.com/ggml-org/llama.cpp) llama-server utility

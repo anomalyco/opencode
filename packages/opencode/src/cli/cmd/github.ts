@@ -125,6 +125,7 @@ type IssueQueryResponse = {
 }
 
 const AGENT_USERNAME = "opencode-agent[bot]"
+const AGENT_REACTION = "eyes"
 const WORKFLOW_FILE = ".github/workflows/opencode.yml"
 
 export const GithubCommand = cmd({
@@ -425,7 +426,7 @@ export const GithubRunCommand = cmd({
         await configureGit(appToken)
         await assertPermissions()
 
-        await addReaction("eyes")
+        await addReaction()
 
         // Setup opencode session
         const repoData = await fetchRepo()
@@ -944,21 +945,21 @@ Co-authored-by: ${actor} <${actor}@users.noreply.github.com>"`
         if (!["admin", "write"].includes(permission)) throw new Error(`User ${actor} does not have write permissions`)
       }
 
-      async function addReaction(reaction: "eyes") {
+      async function addReaction() {
         console.log("Adding reaction...")
         if (triggerCommentId) {
           return await octoRest.rest.reactions.createForIssueComment({
             owner,
             repo,
             comment_id: triggerCommentId,
-            content: reaction,
+            content: AGENT_REACTION,
           })
         } else {
           return await octoRest.rest.reactions.createForIssue({
             owner,
             repo,
             issue_number: issueId,
-            content: reaction,
+            content: AGENT_REACTION,
           })
         }
       }
@@ -970,7 +971,7 @@ Co-authored-by: ${actor} <${actor}@users.noreply.github.com>"`
             owner,
             repo,
             comment_id: triggerCommentId,
-            content: "eyes",
+            content: AGENT_REACTION,
           })
 
           const eyesReaction = reactions.data.find((r) => r.user?.login === AGENT_USERNAME)
@@ -987,7 +988,7 @@ Co-authored-by: ${actor} <${actor}@users.noreply.github.com>"`
             owner,
             repo,
             issue_number: issueId,
-            content: "eyes",
+            content: AGENT_REACTION,
           })
 
           const eyesReaction = reactions.data.find((r) => r.user?.login === AGENT_USERNAME)

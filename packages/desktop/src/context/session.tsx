@@ -94,7 +94,7 @@ export const { use: useSession, provider: SessionProvider } = createSimpleContex
       () => messages().findLast((x) => x.role === "assistant" && x.tokens.output > 0) as AssistantMessage,
     )
     const model = createMemo(() =>
-      last() ? sync.data.provider.find((x) => x.id === last().providerID)?.models[last().modelID] : undefined,
+      last() ? sync.data.provider.all.find((x) => x.id === last().providerID)?.models[last().modelID] : undefined,
     )
     const diffs = createMemo(() => (params.id ? (sync.data.session_diff[params.id] ?? []) : []))
 

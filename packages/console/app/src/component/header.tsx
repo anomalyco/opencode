@@ -34,7 +34,7 @@ const fetchSvgContent = async (svgPath: string): Promise<string> => {
   }
 }
 
-export function Header(props: { zen?: boolean }) {
+export function Header(props: { zen?: boolean; hideGetStarted?: boolean }) {
   const navigate = useNavigate()
   const githubData = createAsync(() => github())
   const starCount = createMemo(() =>
@@ -169,6 +169,13 @@ export function Header(props: { zen?: boolean }) {
               </Match>
             </Switch>
           </li>
+          <Show when={!props.hideGetStarted}>
+            <li>
+              <A href="/download" data-slot="cta-button">
+                Get started
+              </A>
+            </li>
+          </Show>
         </ul>
       </nav>
       <nav data-component="nav-mobile">
@@ -243,6 +250,13 @@ export function Header(props: { zen?: boolean }) {
                     </Match>
                   </Switch>
                 </li>
+                <Show when={!props.hideGetStarted}>
+                  <li>
+                    <A href="/download" data-slot="cta-button">
+                      Get started
+                    </A>
+                  </li>
+                </Show>
               </ul>
             </nav>
           </div>
