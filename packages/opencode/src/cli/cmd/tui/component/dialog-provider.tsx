@@ -122,7 +122,9 @@ function AutoMethod(props: AutoMethodProps) {
   return (
     <box paddingLeft={2} paddingRight={2} gap={1} paddingBottom={1}>
       <box flexDirection="row" justifyContent="space-between">
-        <text attributes={TextAttributes.BOLD}>{props.title}</text>
+        <text attributes={TextAttributes.BOLD} fg={theme.text}>
+          {props.title}
+        </text>
         <text fg={theme.textMuted}>esc</text>
       </box>
       <box gap={1}>
