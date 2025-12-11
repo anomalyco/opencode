@@ -60,6 +60,7 @@ export namespace Session {
         created: z.number(),
         updated: z.number(),
         compacting: z.number().optional(),
+        archived: z.number().optional(),
       }),
       revert: z
         .object({
