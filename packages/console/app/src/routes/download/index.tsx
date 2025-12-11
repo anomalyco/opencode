@@ -31,7 +31,7 @@ export default function Download() {
       <Link rel="canonical" href={`${config.baseUrl}/download`} />
       <Meta name="description" content="Download OpenCode for macOS, Windows, and Linux" />
       <div data-component="container">
-        <Header />
+        <Header hideGetStarted />
 
         <div data-component="content">
           <section data-component="download-hero">
