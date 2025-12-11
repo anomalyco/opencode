@@ -42,6 +42,7 @@ export const { use: useSync, provider: SyncProvider } = createSimpleContext({
     sdk.event.listen((e) => {
       if (e.name !== sdk.directory) return
       const event = e.details
+      console.log(event)
       switch (event.type) {
         case "server.instance.disposed": {
           bootstrap()
