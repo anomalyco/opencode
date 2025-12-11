@@ -15,7 +15,7 @@ export function MessageNav(
 ) {
   const [local, others] = splitProps(props, ["messages", "current", "size", "working", "onMessageSelect"])
   const lastUserMessage = createMemo(() => {
-    return local.messages?.at(0)
+    return local.messages?.at(-1)
   })
 
   const content = () => (

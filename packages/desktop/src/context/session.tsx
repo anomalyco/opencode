@@ -62,10 +62,10 @@ export const { use: useSession, provider: SessionProvider } = createSimpleContex
     const userMessages = createMemo(() =>
       messages()
         .filter((m) => m.role === "user")
-        .sort((a, b) => b.id.localeCompare(a.id)),
+        .sort((a, b) => a.id.localeCompare(b.id)),
     )
     const lastUserMessage = createMemo(() => {
-      return userMessages()?.at(0)
+      return userMessages()?.at(-1)
     })
     const activeMessage = createMemo(() => {
       if (!store.messageId) return lastUserMessage()

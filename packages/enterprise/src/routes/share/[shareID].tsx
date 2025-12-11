@@ -209,7 +209,7 @@ export default function () {
                     const messages = createMemo(() =>
                       data().sessionID
                         ? (data().message[data().sessionID]?.filter((m) => m.role === "user") ?? []).sort(
-                            (a, b) => b.time.created - a.time.created,
+                            (a, b) => a.time.created - b.time.created,
                           )
                         : [],
                     )
