@@ -51,25 +51,6 @@ export interface RunMetadata {
   parent_session_id: string | null
 }
 
-// Journal message interface
-export interface JournalMessage {
-  role: "user" | "assistant"
-  content: string
-  tool_calls?: Array<{
-    tool: string
-    input: unknown
-    output: unknown
-  }>
-}
-
-// Journal interface for conversation history
-export interface Journal {
-  session_id: string
-  written_at: string
-  trigger: "compaction" | "session_end" | "manual"
-  messages: JournalMessage[]
-}
-
 export namespace AgentMemory {
   const log = Log.create({ service: "agent-memory" })
 
@@ -132,20 +113,6 @@ export namespace AgentMemory {
       await fs.writeFile(metadataFile, JSON.stringify(metadata, null, 2))
     } catch (e) {
       log.debug("writeMetadata failed", { error: e })
-    }
-  }
-
-  // Write journal.json
-  // Note: Journal functions will be updated in Phase 3
-  export async function writeJournal(journal: Journal): Promise<void> {
-    const agentName = getSessionAgentName(journal.session_id)
-    const runDir = await ensureRunDir(journal.session_id, agentName)
-    if (!runDir) return
-    const journalFile = path.join(runDir, "journal.json")
-    try {
-      await fs.writeFile(journalFile, JSON.stringify(journal, null, 2))
-    } catch (e) {
-      log.debug("writeJournal failed", { error: e })
     }
   }
 
@@ -478,76 +445,149 @@ export namespace AgentMemory {
     log.info("AgentMemory initialized")
   }
 
-  // Create and write journal for a session
-  export async function createJournal(
-    sessionID: string,
-    trigger: "compaction" | "session_end" | "manual",
-  ): Promise<void> {
+  // Get the journals directory: {worktree}/.starfleet/journals/
+  async function getJournalsDir(): Promise<string | null> {
     try {
+      const { Instance } = await import("../project/instance")
+      const worktree = Instance.worktree
+      if (worktree) {
+        return path.join(worktree, ".starfleet", "journals")
+      }
+    } catch {
+      // Instance context not available
+    }
+    return null
+  }
+
+  // Convert topic to filename-safe string
+  function slugify(text: string): string {
+    return text
+      .toLowerCase()
+      .replace(/[^a-z0-9]+/g, "-")
+      .replace(/^-|-$/g, "")
+      .substring(0, 50)
+  }
+
+  // Format datetime for filename (colons replaced with dashes)
+  function formatDatetimeForFilename(date: Date): string {
+    return date.toISOString().replace(/:/g, "-").replace(/\.\d{3}Z$/, "")
+  }
+
+  // Generate markdown content from messages
+  function generateMarkdownContent(
+    messages: MessageV2.WithParts[],
+    topic: string,
+    sessionID: string,
+    datetime: Date,
+  ): string {
+    const lines: string[] = []
+
+    // Header
+    lines.push(`# ${topic}`)
+    lines.push("")
+    lines.push(`**Session**: ${sessionID}`)
+    lines.push(`**Date**: ${datetime.toISOString()}`)
+
+    for (const msg of messages) {
+      lines.push("")
+      lines.push("---")
+      lines.push("")
+
+      if (msg.info.role === "user") {
+        lines.push("## User")
+        // Extract text content
+        const textParts = msg.parts.filter((p): p is MessageV2.TextPart => p.type === "text")
+        const text = textParts.map((p) => p.text).join("\n")
+        if (text) {
+          lines.push(text)
+        }
+      } else if (msg.info.role === "assistant") {
+        lines.push("## Assistant")
+
+        // Extract text content first
+        const textParts = msg.parts.filter((p): p is MessageV2.TextPart => p.type === "text")
+        const text = textParts.map((p) => p.text).join("\n")
+        if (text) {
+          lines.push(text)
+        }
+
+        // Extract tool calls
+        const toolParts = msg.parts.filter((p): p is MessageV2.ToolPart => p.type === "tool")
+        for (const toolPart of toolParts) {
+          if (toolPart.state.status === "completed") {
+            lines.push("")
+            lines.push(`### Tool: ${toolPart.tool}`)
+            lines.push("**Input**:")
+            lines.push("```json")
+            lines.push(JSON.stringify(toolPart.state.input, null, 2))
+            lines.push("```")
+            lines.push("**Output**:")
+            lines.push("```")
+            lines.push(toolPart.state.output)
+            lines.push("```")
+          } else if (toolPart.state.status === "error") {
+            lines.push("")
+            lines.push(`### Tool: ${toolPart.tool}`)
+            lines.push("**Input**:")
+            lines.push("```json")
+            lines.push(JSON.stringify(toolPart.state.input, null, 2))
+            lines.push("```")
+            lines.push("**Error**:")
+            lines.push("```")
+            lines.push(toolPart.state.error)
+            lines.push("```")
+          }
+        }
+      }
+    }
+
+    return lines.join("\n")
+  }
+
+  // Create and write journal for a session (main agent only)
+  export async function createJournal(input: {
+    sessionID: string
+    messages: MessageV2.WithParts[]
+    topic: string
+  }): Promise<void> {
+    try {
+      const { sessionID, messages, topic } = input
+
       // Dynamic import to avoid circular dependencies
       const { Session } = await import("../session")
 
-      // Fetch all messages with their parts (returns in chronological order)
-      const messagesWithParts = await Session.messages({ sessionID })
-
-      // Transform to journal format
-      const journalMessages: JournalMessage[] = []
-
-      for (const msg of messagesWithParts) {
-        const journalMsg: JournalMessage = {
-          role: msg.info.role as "user" | "assistant",
-          content: "",
-        }
-
-        // Extract text content
-        const textParts = msg.parts.filter((p): p is MessageV2.TextPart => p.type === "text")
-        journalMsg.content = textParts.map((p) => p.text).join("\n")
-
-        // Extract tool calls for assistant messages
-        if (msg.info.role === "assistant") {
-          const toolParts = msg.parts.filter((p): p is MessageV2.ToolPart => p.type === "tool")
-          const completedToolCalls: Array<{ tool: string; input: unknown; output: unknown }> = []
-
-          for (const p of toolParts) {
-            if (p.state.status === "completed") {
-              completedToolCalls.push({
-                tool: p.tool,
-                input: p.state.input,
-                output: p.state.output,
-              })
-            } else if (p.state.status === "error") {
-              completedToolCalls.push({
-                tool: p.tool,
-                input: p.state.input,
-                output: p.state.error,
-              })
-            }
-          }
-
-          if (completedToolCalls.length > 0) {
-            journalMsg.tool_calls = completedToolCalls
-          }
-        }
-
-        // Only add if there's content
-        if (journalMsg.content || journalMsg.tool_calls?.length) {
-          journalMessages.push(journalMsg)
-        }
+      // Check if this is a main agent session (no parentID)
+      const session = await Session.get(sessionID)
+      if (session.parentID) {
+        log.debug("Skipping journal for subagent session", { sessionID, parentID: session.parentID })
+        return
       }
 
-      // Create journal object
-      const journal: Journal = {
-        session_id: sessionID,
-        written_at: timestamp(),
-        trigger,
-        messages: journalMessages,
+      // Get journals directory
+      const journalsDir = await getJournalsDir()
+      if (!journalsDir) {
+        log.debug("Could not get journals directory")
+        return
       }
+
+      // Ensure journals directory exists
+      await fs.mkdir(journalsDir, { recursive: true })
+
+      // Generate filename
+      const datetime = new Date()
+      const slugifiedTopic = slugify(topic)
+      const datetimeStr = formatDatetimeForFilename(datetime)
+      const filename = `${slugifiedTopic}_${datetimeStr}.md`
+      const journalPath = path.join(journalsDir, filename)
+
+      // Generate markdown content
+      const content = generateMarkdownContent(messages, topic, sessionID, datetime)
 
       // Write to file
-      await writeJournal(journal)
-      log.info("Journal created", { sessionID, trigger, messageCount: journalMessages.length })
+      await fs.writeFile(journalPath, content)
+      log.info("Journal created", { sessionID, topic, path: journalPath, messageCount: messages.length })
     } catch (e) {
-      log.debug("createJournal failed", { sessionID, error: e })
+      log.debug("createJournal failed", { sessionID: input.sessionID, error: e })
     }
   }
 }

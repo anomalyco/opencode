@@ -22,6 +22,35 @@ import { AgentMemory } from "../storage/agent-memory"
 export namespace SessionCompaction {
   const log = Log.create({ service: "session.compaction" })
 
+  /**
+   * Extracts the title from the compaction response.
+   * The compaction prompt asks the LLM to start with "TITLE: xxx" on the first line.
+   * Falls back to "Conversation Summary" if not found.
+   */
+  async function extractTitleFromProcessor(processor: SessionProcessor.Info): Promise<string> {
+    const parts = await MessageV2.parts(processor.message.id)
+    if (!parts || parts.length === 0) return "Conversation Summary"
+
+    // Find the first text part in the response
+    for (const part of parts) {
+      if (part.type === "text" && part.text) {
+        const firstLine = part.text.split("\n")[0].trim()
+        // Check for "TITLE: xxx" pattern (case-insensitive)
+        const match = firstLine.match(/^TITLE:\s*(.+)$/i)
+        if (match) {
+          return match[1].trim()
+        }
+        // If no TITLE: pattern, use the first line as a fallback if it's short enough
+        if (firstLine.length > 0 && firstLine.length <= 100) {
+          return firstLine
+        }
+        break
+      }
+    }
+
+    return "Conversation Summary"
+  }
+
   export const Event = {
     Compacted: BusEvent.define(
       "session.compacted",
@@ -99,9 +128,6 @@ export namespace SessionCompaction {
     abort: AbortSignal
     auto: boolean
   }) {
-    // Create journal before compaction to preserve conversation history
-    AgentMemory.createJournal(input.sessionID, "compaction").catch(() => {})
-
     const cfg = await Config.get()
     const model = await Provider.getModel(input.model.providerID, input.model.modelID)
     const language = await Provider.getLanguage(model)
@@ -205,6 +231,15 @@ export namespace SessionCompaction {
         },
       },
     })
+
+    // After compaction completes, extract title and create journal with captured messages
+    const topic = await extractTitleFromProcessor(processor)
+    AgentMemory.createJournal({
+      sessionID: input.sessionID,
+      messages: input.messages,
+      topic,
+    }).catch(() => {})
+
     if (result === "continue" && input.auto) {
       const continueMsg = await Session.updateMessage({
         id: Identifier.ascending("message"),
