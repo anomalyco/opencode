@@ -7230,6 +7230,16 @@
             "description": "Suspend terminal",
             "default": "ctrl+z",
             "type": "string"
+          },
+          "word_forward": {
+            "description": "Move cursor forward by one word",
+            "default": "ctrl+meta+right",
+            "type": "string"
+          },
+          "word_backward": {
+            "description": "Move cursor backward by one word",
+            "default": "ctrl+meta+left",
+            "type": "string"
           }
         },
         "additionalProperties": false

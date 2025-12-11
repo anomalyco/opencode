@@ -78,6 +78,8 @@ export function Prompt(props: PromptProps) {
   const textareaKeybindings = createMemo(() => {
     const newlineBindings = keybind.all.input_newline || []
     const submitBindings = keybind.all.input_submit || []
+    const wordForwardBindings = keybind.all.word_forward || []
+    const wordBackwardBindings = keybind.all.word_backward || []
 
     return [
       { name: "return", action: "submit" },
@@ -95,6 +97,20 @@ export function Prompt(props: PromptProps) {
         meta: binding.meta || undefined,
         shift: binding.shift || undefined,
         action: "submit" as const,
+      })),
+      ...wordForwardBindings.map((binding) => ({
+        name: binding.name,
+        ctrl: binding.ctrl || undefined,
+        meta: binding.meta || undefined,
+        shift: binding.shift || undefined,
+        action: "word-forward" as const,
+      })),
+      ...wordBackwardBindings.map((binding) => ({
+        name: binding.name,
+        ctrl: binding.ctrl || undefined,
+        meta: binding.meta || undefined,
+        shift: binding.shift || undefined,
+        action: "word-backward" as const,
       })),
     ] satisfies KeyBinding[]
   })

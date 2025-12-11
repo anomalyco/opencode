@@ -968,6 +968,14 @@ export type KeybindsConfig = {
    * Suspend terminal
    */
   terminal_suspend?: string
+  /**
+   * Move cursor forward by one word
+   */
+  word_forward?: string
+  /**
+   * Move cursor backward by one word
+   */
+  word_backward?: string
 }
 
 export type AgentConfig = {
