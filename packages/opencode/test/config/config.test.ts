@@ -501,3 +501,26 @@ test("deduplicates duplicate plugins from global and local configs", async () =>
     },
   })
 })
+
+test("handles TUI cursor blinking configuration", async () => {
+  await using tmp = await tmpdir({
+    init: async (dir) => {
+      await Bun.write(
+        path.join(dir, "opencode.json"),
+        JSON.stringify({
+          $schema: "https://opencode.ai/config.json",
+          tui: {
+            cursor_blinking: false,
+          },
+        }),
+      )
+    },
+  })
+  await Instance.provide({
+    directory: tmp.path,
+    fn: async () => {
+      const config = await Config.get()
+      expect(config.tui?.cursor_blinking).toBe(false)
+    },
+  })
+})

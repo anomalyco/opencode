@@ -1214,6 +1214,10 @@ export type Config = {
      * Control diff rendering style: 'auto' adapts to terminal width, 'stacked' always shows single column
      */
     diff_style?: "auto" | "stacked"
+    /**
+     * Enable or disable cursor blinking in the prompt input box
+     */
+    cursor_blinking?: boolean
   }
   /**
    * Command configuration, see https://opencode.ai/docs/commands

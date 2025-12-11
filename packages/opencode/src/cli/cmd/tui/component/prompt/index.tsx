@@ -64,6 +64,11 @@ export function Prompt(props: PromptProps) {
   const renderer = useRenderer()
   const { theme, syntax } = useTheme()
 
+  const cursorStyle = createMemo(() => ({
+    style: "block" as const,
+    blinking: sync.data.config.tui?.cursor_blinking ?? true,
+  }))
+
   function promptModelWarning() {
     toast.show({
       variant: "warning",
@@ -271,6 +276,7 @@ export function Prompt(props: PromptProps) {
   createEffect(() => {
     if (props.disabled) input.cursorColor = theme.backgroundElement
     if (!props.disabled) input.cursorColor = theme.text
+    input.cursorStyle = cursorStyle()
   })
 
   const [store, setStore] = createStore<{
@@ -794,11 +800,13 @@ export function Prompt(props: PromptProps) {
                 input = r
                 setTimeout(() => {
                   input.cursorColor = theme.text
+                  input.cursorStyle = cursorStyle()
                 }, 0)
               }}
               onMouseDown={(r: MouseEvent) => r.target?.focus()}
               focusedBackgroundColor={theme.backgroundElement}
               cursorColor={theme.text}
+              cursorStyle={cursorStyle()}
               syntaxStyle={syntax()}
             />
             <box flexDirection="row" flexShrink={0} paddingTop={1} gap={1}>
