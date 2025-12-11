@@ -84,7 +84,7 @@ export default function Home() {
               {/*</a>*/}
               <h1>The open source AI coding agent</h1>
               <p>
-                Free models by default or connect any model from any provider, <span data-slot="br"></span>including
+                Free models included or connect any model from any provider, <span data-slot="br"></span>including
                 Claude, GPT, Gemini and more.
               </p>
               <a href="/download">
