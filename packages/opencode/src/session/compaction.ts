@@ -17,6 +17,7 @@ import { ProviderTransform } from "@/provider/transform"
 import { SessionProcessor } from "./processor"
 import { fn } from "@/util/fn"
 import { mergeDeep, pipe } from "remeda"
+import { AgentMemory } from "../storage/agent-memory"
 
 export namespace SessionCompaction {
   const log = Log.create({ service: "session.compaction" })
@@ -98,6 +99,9 @@ export namespace SessionCompaction {
     abort: AbortSignal
     auto: boolean
   }) {
+    // Create journal before compaction to preserve conversation history
+    AgentMemory.createJournal(input.sessionID, "compaction").catch(() => {})
+
     const cfg = await Config.get()
     const model = await Provider.getModel(input.model.providerID, input.model.modelID)
     const language = await Provider.getLanguage(model)
