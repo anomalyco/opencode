@@ -1,11 +1,3 @@
-@font-face {
-  font-family: "Berkeley Mono";
-  src: url("/fonts/berkley-mono.woff2") format("woff2");
-  font-weight: 400;
-  font-style: normal;
-  font-display: swap;
-}
-
 body {
   --font-size-2xs: 0.6875rem;
   --font-size-xs: 0.75rem;

@@ -1,6 +1,5 @@
 [data-component="input"] {
   width: 100%;
-  /* [data-slot="input-label"] {} */
 
   [data-slot="input-input"] {
     width: 100%;
@@ -20,6 +19,81 @@
 
     &::placeholder {
       color: var(--text-weak);
+    }
+  }
+
+  &[data-variant="normal"] {
+    display: flex;
+    flex-direction: column;
+    align-items: flex-start;
+    gap: 8px;
+
+    [data-slot="input-label"] {
+      color: var(--text-weak);
+
+      /* text-12-medium */
+      font-family: var(--font-family-sans);
+      font-size: var(--font-size-small);
+      font-style: normal;
+      font-weight: var(--font-weight-medium);
+      line-height: 18px; /* 150% */
+      letter-spacing: var(--letter-spacing-normal);
+    }
+
+    [data-slot="input-input"] {
+      color: var(--text-strong);
+
+      display: flex;
+      height: 32px;
+      padding: 2px 12px;
+      align-items: center;
+      gap: 8px;
+      align-self: stretch;
+
+      border-radius: var(--radius-md);
+      border: 1px solid var(--border-weak-base);
+      background: var(--input-base);
+
+      /* text-14-regular */
+      font-family: var(--font-family-sans);
+      font-size: 14px;
+      font-style: normal;
+      font-weight: var(--font-weight-regular);
+      line-height: var(--line-height-large); /* 142.857% */
+      letter-spacing: var(--letter-spacing-normal);
+
+      &:focus {
+        outline: none;
+
+        /* border/shadow-xs/select */
+        box-shadow:
+          0 0 0 3px var(--border-weak-selected),
+          0 0 0 1px var(--border-selected),
+          0 1px 2px -1px rgba(19, 16, 16, 0.25),
+          0 1px 2px 0 rgba(19, 16, 16, 0.08),
+          0 1px 3px 0 rgba(19, 16, 16, 0.12);
+      }
+
+      &[data-invalid] {
+        background: var(--surface-critical-weak);
+        border: 1px solid var(--border-critical-selected);
+      }
+
+      &::placeholder {
+        color: var(--text-weak);
+      }
+    }
+
+    [data-slot="input-error"] {
+      color: var(--text-on-critical-base);
+
+      /* text-12-medium */
+      font-family: var(--font-family-sans);
+      font-size: var(--font-size-small);
+      font-style: normal;
+      font-weight: var(--font-weight-medium);
+      line-height: 18px; /* 150% */
+      letter-spacing: var(--letter-spacing-normal);
     }
   }
 }
