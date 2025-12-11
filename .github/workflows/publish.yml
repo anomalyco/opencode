@@ -70,8 +70,8 @@ jobs:
           registry-url: "https://registry.npmjs.org"
 
       - name: Publish
-        run: |
-          ./script/publish.ts
+        id: publish
+        run: ./script/publish.ts
         env:
           OPENCODE_BUMP: ${{ inputs.bump }}
           OPENCODE_VERSION: ${{ inputs.version }}
@@ -79,9 +79,13 @@ jobs:
           AUR_KEY: ${{ secrets.AUR_KEY }}
           GITHUB_TOKEN: ${{ secrets.SST_GITHUB_TOKEN }}
           NPM_CONFIG_PROVENANCE: false
+    outputs:
+      releaseId: ${{ steps.publish.outputs.releaseId }}
+      tagName: ${{ steps.publish.outputs.tagName }}
 
   publish-tauri:
-    if: false # inputs.bump || inputs.version
+    needs: publish
+    if: inputs.bump || inputs.version
     continue-on-error: true
     strategy:
       fail-fast: false
@@ -179,4 +183,5 @@ jobs:
           tauriScript: ${{ (startsWith(matrix.settings.host, 'ubuntu') && 'cargo tauri') || '' }}
           args: --target ${{ matrix.settings.target }}
           updaterJsonPreferNsis: true
-          # releaseId: TODO
+          releaseId: ${{ needs.publish.outputs.releaseId }}
+          tagName: ${{ needs.publish.outputs.tagName }}
