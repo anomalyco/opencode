@@ -8,6 +8,7 @@ const enterprise = new sst.cloudflare.x.SolidStart("Enterprise", {
   path: "packages/enterprise",
   buildCommand: "bun run build:cloudflare",
   environment: {
+    OPENCODE_BASE_URL: "/t",
     OPENCODE_STORAGE_ADAPTER: "r2",
     OPENCODE_STORAGE_ACCOUNT_ID: sst.cloudflare.DEFAULT_ACCOUNT_ID,
     OPENCODE_STORAGE_ACCESS_KEY_ID: SECRET.R2AccessKey.value,
