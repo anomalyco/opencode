@@ -103,7 +103,16 @@ export namespace Config {
       result.agent = mergeDeep(result.agent, await loadAgent(dir))
       result.agent = mergeDeep(result.agent, await loadMode(dir))
       result.plugin.push(...(await loadPlugin(dir)))
+
+      // Load agents from npm packages in node_modules
+      const nodeModulesDir = path.join(dir, "node_modules")
+      result.agent = mergeDeep(result.agent, await loadPackageAgents(nodeModulesDir))
     }
+
+    // Also scan project root node_modules for package agents
+    const projectNodeModules = path.join(Instance.worktree, "node_modules")
+    result.agent = mergeDeep(result.agent, await loadPackageAgents(projectNodeModules))
+
     await Promise.allSettled(promises)
 
     // Migrate deprecated mode field to agent field
@@ -301,6 +310,206 @@ export namespace Config {
       plugins.push(pathToFileURL(item).href)
     }
     return plugins
+  }
+
+  const PACKAGE_PROMPT_GLOB = new Bun.Glob("prompts/**/*.md")
+  const PACKAGE_AGENT_GLOB = new Bun.Glob("agent/**/*.md")
+
+  /**
+   * Load agents from installed npm packages that contain prompts/ or agent/ directories.
+   * Scans node_modules for packages with prompt files (e.g., @openpets/gitlab).
+   */
+  export async function loadPackageAgents(nodeModulesDir: string): Promise<Record<string, Agent>> {
+    const result: Record<string, Agent> = {}
+
+    const nodeModulesPath = path.resolve(nodeModulesDir)
+    const dirExists = await fs
+      .stat(nodeModulesPath)
+      .then((s) => s.isDirectory())
+      .catch(() => false)
+    if (!dirExists) {
+      return result
+    }
+
+    // Scan for packages with prompts
+    const packages = await discoverPromptPackages(nodeModulesPath)
+
+    for (const pkg of packages) {
+      const agents = await loadAgentsFromPackage(pkg)
+      for (const [name, agent] of Object.entries(agents)) {
+        result[name] = agent
+      }
+    }
+
+    return result
+  }
+
+  interface PromptPackage {
+    name: string
+    path: string
+    promptsDir?: string
+    agentDir?: string
+  }
+
+  async function discoverPromptPackages(nodeModulesPath: string): Promise<PromptPackage[]> {
+    const packages: PromptPackage[] = []
+
+    const entries = await fs.readdir(nodeModulesPath, { withFileTypes: true }).catch(() => [])
+
+    for (const entry of entries) {
+      const entryPath = path.join(nodeModulesPath, entry.name)
+      // Check if it's a directory (following symlinks since bun uses symlinks in node_modules)
+      const isDir = await fs
+        .stat(entryPath)
+        .then((s) => s.isDirectory())
+        .catch(() => false)
+      if (!isDir) continue
+
+      // Handle scoped packages (@scope/package)
+      if (entry.name.startsWith("@")) {
+        const scopePath = entryPath
+        const scopedEntries = await fs.readdir(scopePath, { withFileTypes: true }).catch(() => [])
+
+        for (const scopedEntry of scopedEntries) {
+          const scopedPath = path.join(scopePath, scopedEntry.name)
+          // Check if it's a directory (following symlinks)
+          const isScopedDir = await fs
+            .stat(scopedPath)
+            .then((s) => s.isDirectory())
+            .catch(() => false)
+          if (!isScopedDir) continue
+
+          const pkg = await checkPackageForPrompts(scopedPath, `${entry.name}/${scopedEntry.name}`)
+          if (pkg) packages.push(pkg)
+        }
+      } else {
+        // Regular package
+        const pkg = await checkPackageForPrompts(entryPath, entry.name)
+        if (pkg) packages.push(pkg)
+      }
+    }
+
+    return packages
+  }
+
+  async function checkPackageForPrompts(pkgPath: string, pkgName: string): Promise<PromptPackage | null> {
+    const pkgJsonPath = path.join(pkgPath, "package.json")
+    const pkgJsonFile = Bun.file(pkgJsonPath)
+
+    if (!(await pkgJsonFile.exists())) return null
+
+    const pkgJson = await pkgJsonFile.json().catch(() => null)
+    if (!pkgJson) return null
+
+    // Check if package has prompts/** or agent/** in files array
+    const files: string[] = pkgJson.files || []
+    const hasPrompts = files.some((f: string) => f.startsWith("prompts/") || f === "prompts/**/*")
+    const hasAgents = files.some((f: string) => f.startsWith("agent/") || f === "agent/**/*")
+
+    // Also check for actual directories
+    const promptsDir = path.join(pkgPath, "prompts")
+    const agentDir = path.join(pkgPath, "agent")
+
+    const promptsDirExists = await fs
+      .stat(promptsDir)
+      .then(() => true)
+      .catch(() => false)
+    const agentDirExists = await fs
+      .stat(agentDir)
+      .then(() => true)
+      .catch(() => false)
+
+    if (!hasPrompts && !hasAgents && !promptsDirExists && !agentDirExists) return null
+
+    return {
+      name: pkgName,
+      path: pkgPath,
+      promptsDir: promptsDirExists ? promptsDir : undefined,
+      agentDir: agentDirExists ? agentDir : undefined,
+    }
+  }
+
+  async function loadAgentsFromPackage(pkg: PromptPackage): Promise<Record<string, Agent>> {
+    const result: Record<string, Agent> = {}
+
+    // Load from prompts/ directory
+    if (pkg.promptsDir) {
+      for await (const item of PACKAGE_PROMPT_GLOB.scan({
+        absolute: true,
+        followSymlinks: true,
+        dot: true,
+        cwd: pkg.path,
+      })) {
+        const agent = await parsePackagePromptFile(item, pkg)
+        if (agent) {
+          result[agent.name] = agent.config
+        }
+      }
+    }
+
+    // Load from agent/ directory (standard opencode format)
+    if (pkg.agentDir) {
+      for await (const item of PACKAGE_AGENT_GLOB.scan({
+        absolute: true,
+        followSymlinks: true,
+        dot: true,
+        cwd: pkg.path,
+      })) {
+        const md = await ConfigMarkdown.parse(item)
+        if (!md.data) continue
+
+        const relativePath = path.relative(pkg.agentDir, item)
+        const agentName = relativePath.replace(/\.md$/, "").replace(/\//g, "/")
+        const prefixedName = `${pkg.name}/${agentName}`
+
+        const config = {
+          name: prefixedName,
+          ...md.data,
+          prompt: md.content.trim(),
+        }
+        const parsed = Agent.safeParse(config)
+        if (parsed.success) {
+          result[prefixedName] = parsed.data
+        }
+      }
+    }
+
+    return result
+  }
+
+  async function parsePackagePromptFile(
+    filePath: string,
+    pkg: PromptPackage,
+  ): Promise<{ name: string; config: Agent } | null> {
+    const md = await ConfigMarkdown.parse(filePath)
+
+    // Get relative path from prompts/ directory
+    const relativePath = path.relative(pkg.promptsDir!, filePath)
+    const baseName = relativePath.replace(/\.md$/, "").replace(/\//g, "/")
+
+    // Skip README files
+    if (baseName.toLowerCase() === "readme") return null
+
+    // Create agent name with package prefix (e.g., @openpets/gitlab/pr-review)
+    const agentName = `${pkg.name}/${baseName}`
+
+    // Extract frontmatter or use defaults
+    const frontmatter = md.data || {}
+
+    const config: Agent = {
+      description: frontmatter.description || `Prompt from ${pkg.name}: ${baseName}`,
+      prompt: md.content.trim(),
+      mode: frontmatter.mode || "subagent",
+      ...frontmatter,
+    }
+
+    const parsed = Agent.safeParse(config)
+    if (!parsed.success) {
+      log.warn("invalid package prompt", { path: filePath, errors: parsed.error })
+      return null
+    }
+
+    return { name: agentName, config: parsed.data }
   }
 
   export const McpLocal = z

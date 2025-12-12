@@ -187,7 +187,8 @@ export function Autocomplete(props: {
       .filter((agent) => !agent.builtIn && agent.mode !== "primary")
       .map(
         (agent): AutocompleteOption => ({
-          display: "@" + agent.name,
+          // Avoid double @ for scoped package agents (e.g., @openpets/coder/pr-review)
+          display: agent.name.startsWith("@") ? agent.name : "@" + agent.name,
           onSelect: () => {
             insertPart(agent.name, {
               type: "agent",
