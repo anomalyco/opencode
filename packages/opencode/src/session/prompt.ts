@@ -1098,6 +1098,8 @@ export namespace SessionPrompt {
         }
 
         if (part.type === "agent") {
+          const perm = Wildcard.all(part.name, agent.permission.task ?? {})
+          const hint = perm === "deny" ? " . Invoked by user; guaranteed to exist." : ""
           return [
             {
               id: Identifier.ascending("part"),
@@ -1112,8 +1114,11 @@ export namespace SessionPrompt {
               type: "text",
               synthetic: true,
               text:
-                "Use the above message and context to generate a prompt and call the task tool with subagent: " +
-                part.name,
+                // An extra space is added here. Otherwise the 'Use' gets appended 
+                // to user's last word; making a combined word
+                " Use the above message and context to generate a prompt and call the task tool with subagent: " +
+                part.name +
+                hint,
             },
           ]
         }
