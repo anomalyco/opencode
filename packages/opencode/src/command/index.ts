@@ -71,10 +71,43 @@ export namespace Command {
   })
 
   export async function get(name: string) {
-    return state().then((x) => x[name])
+    const command = await state().then((x) => x[name])
+    if (command) return command
+
+    // Check if this is an MCP prompt
+    const { MCP } = await import("../mcp")
+    const mcpPrompts = await MCP.prompts()
+    const prompt = mcpPrompts[name]
+    if (prompt) {
+      return {
+        name,
+        description: prompt.description,
+        // the template will be fetched when the command is executed so this is
+        // just a placeholder
+        template: "$ARGUMENTS",
+      } satisfies Info
+    }
+
+    return undefined
   }
 
   export async function list() {
-    return state().then((x) => Object.values(x))
+    const commands = await state().then((x) => Object.values(x))
+
+    // Add MCP prompts as commands
+    const { MCP } = await import("../mcp")
+    const mcpPrompts = await MCP.prompts()
+
+    for (const [key, prompt] of Object.entries(mcpPrompts)) {
+      commands.push({
+        name: key,
+        description: prompt.description,
+        // the template will be fetched when the command is executed so this is
+        // just a placeholder
+        template: "$ARGUMENTS",
+      })
+    }
+
+    return commands
   }
 }

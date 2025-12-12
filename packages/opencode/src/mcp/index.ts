@@ -1,5 +1,5 @@
 import { type Tool } from "ai"
-import { experimental_createMCPClient } from "@ai-sdk/mcp"
+import { experimental_createMCPClient, type experimental_MCPClient as MCPClient } from "@ai-sdk/mcp"
 import { StreamableHTTPClientTransport } from "@modelcontextprotocol/sdk/client/streamableHttp.js"
 import { SSEClientTransport } from "@modelcontextprotocol/sdk/client/sse.js"
 import { StdioClientTransport } from "@modelcontextprotocol/sdk/client/stdio.js"
@@ -77,6 +77,13 @@ export namespace MCP {
   type TransportWithAuth = StreamableHTTPClientTransport | SSEClientTransport
   const pendingOAuthTransports = new Map<string, TransportWithAuth>()
 
+  // Prompt cache types
+  type PromptInfo = Awaited<ReturnType<MCPClient["listPrompts"]>>["prompts"][number]
+  type PromptCache = {
+    prompts: Record<string, PromptInfo>
+    keyMapping: Record<string, { clientName: string; promptName: string }>
+  }
+
   const state = Instance.state(
     async () => {
       const cfg = await Config.get()
@@ -121,6 +128,84 @@ export namespace MCP {
     },
   )
 
+  // Helper function to fetch prompts for a specific client
+  async function fetchPromptsForClient(clientName: string, client: Client, cache: PromptCache): Promise<void> {
+    const prompts = await client.listPrompts().catch((e) => {
+      log.error("failed to get prompts", { clientName, error: e.message })
+      return undefined
+    })
+
+    if (!prompts) {
+      return
+    }
+
+    for (const prompt of prompts.prompts) {
+      const sanitizedClientName = clientName.replace(/[^a-zA-Z0-9_-]/g, "_")
+      const sanitizedPromptName = prompt.name.replace(/[^a-zA-Z0-9_-]/g, "_")
+      const key = "mcp." + sanitizedClientName + "." + sanitizedPromptName
+
+      cache.prompts[key] = prompt
+      cache.keyMapping[key] = {
+        clientName,
+        promptName: prompt.name,
+      }
+    }
+  }
+
+  // Prompt cache state
+  const promptState = Instance.state(async () => {
+    const cache: PromptCache = {
+      prompts: {},
+      keyMapping: {},
+    }
+
+    // Proactively fetch prompts from all connected clients
+    const s = await state()
+    const clientsSnapshot = await clients()
+
+    await Promise.all(
+      Object.entries(clientsSnapshot).map(async ([clientName, client]) => {
+        if (s.status[clientName]?.status !== "connected") {
+          return
+        }
+
+        await fetchPromptsForClient(clientName, client, cache)
+      }),
+    )
+
+    return cache
+  })
+
+  // Invalidate prompts for a specific MCP server
+  async function invalidatePrompts(clientName: string) {
+    const cache = await promptState()
+    const clientsSnapshot = await clients()
+    const client = clientsSnapshot[clientName]
+
+    // Remove all prompts from this client
+    const keysToRemove = Object.entries(cache.keyMapping)
+      .filter(([_, mapping]) => mapping.clientName === clientName)
+      .map(([key]) => key)
+
+    for (const key of keysToRemove) {
+      delete cache.prompts[key]
+      delete cache.keyMapping[key]
+    }
+
+    // Re-fetch if client is still connected
+    if (client) {
+      const s = await state()
+      if (s.status[clientName]?.status === "connected") {
+        await fetchPromptsForClient(clientName, client, cache)
+      }
+    }
+
+    log.info("invalidated prompts for client", {
+      clientName,
+      removedCount: keysToRemove.length,
+    })
+  }
+
   export async function add(name: string, mcp: Config.Mcp) {
     const s = await state()
     const result = await create(name, mcp)
@@ -142,6 +227,10 @@ export namespace MCP {
     }
     s.clients[name] = result.mcpClient
     s.status[name] = result.status
+
+    // Fetch prompts for the newly added client
+    const cache = await promptState()
+    await fetchPromptsForClient(name, result.mcpClient, cache)
 
     return {
       status: s.status,
@@ -366,6 +455,9 @@ export namespace MCP {
     s.status[name] = result.status
     if (result.mcpClient) {
       s.clients[name] = result.mcpClient
+
+      // Invalidate and refresh prompts for the reconnected client
+      await invalidatePrompts(name)
     }
   }
 
@@ -379,6 +471,9 @@ export namespace MCP {
       delete s.clients[name]
     }
     s.status[name] = { status: "disabled" }
+
+    // Remove prompts for the disconnected client
+    await invalidatePrompts(name)
   }
 
   export async function tools() {
@@ -411,6 +506,37 @@ export namespace MCP {
       }
     }
     return result
+  }
+
+  export async function prompts() {
+    const cache = await promptState()
+    return cache.prompts
+  }
+
+  export async function getPrompt(key: string, args?: Record<string, unknown>) {
+    const cache = await promptState()
+    const mapping = cache.keyMapping[key]
+
+    if (!mapping) {
+      log.warn("prompt not found in cache", { key })
+      return undefined
+    }
+
+    const clientsSnapshot = await clients()
+    const client = clientsSnapshot[mapping.clientName]
+
+    if (!client) {
+      log.warn("client not found for prompt", {
+        key,
+        clientName: mapping.clientName,
+      })
+      return undefined
+    }
+
+    return client.getPrompt({
+      name: mapping.promptName,
+      arguments: args,
+    })
   }
 
   /**

@@ -1375,42 +1375,88 @@ export namespace SessionPrompt {
   export async function command(input: CommandInput) {
     log.info("command", input)
     const command = await Command.get(input.command)
+    if (!command) {
+      throw new Error(`Command not found: ${input.command}`)
+    }
     const agentName = command.agent ?? input.agent ?? "build"
 
-    const raw = input.arguments.match(argsRegex) ?? []
-    const args = raw.map((arg) => arg.replace(quoteTrimRegex, ""))
+    // Check if this is an MCP prompt
+    const { MCP } = await import("../mcp")
+    const mcp_prompts = await MCP.prompts()
+    const is_mcp_prompt = !!mcp_prompts[input.command]
 
-    const placeholders = command.template.match(placeholderRegex) ?? []
-    let last = 0
-    for (const item of placeholders) {
-      const value = Number(item.slice(1))
-      if (value > last) last = value
-    }
+    let template = ""
+    if (is_mcp_prompt) {
+      // Parse arguments for MCP prompt
+      const raw = input.arguments.match(argsRegex) ?? []
+      const args = raw.map((arg) => arg.replace(quoteTrimRegex, ""))
 
-    // Let the final placeholder swallow any extra arguments so prompts read naturally
-    const withArgs = command.template.replaceAll(placeholderRegex, (_, index) => {
-      const position = Number(index)
-      const argIndex = position - 1
-      if (argIndex >= args.length) return ""
-      if (position === last) return args.slice(argIndex).join(" ")
-      return args[argIndex]
-    })
-    let template = withArgs.replaceAll("$ARGUMENTS", input.arguments)
+      // Get the prompt info to extract argument names
+      const prompt_info = mcp_prompts[input.command]
+      const mcp_args: Record<string, unknown> = {}
 
-    const shell = ConfigMarkdown.shell(template)
-    if (shell.length > 0) {
-      const results = await Promise.all(
-        shell.map(async ([, cmd]) => {
-          try {
-            return await $`${{ raw: cmd }}`.nothrow().text()
-          } catch (error) {
-            return `Error executing command: ${error instanceof Error ? error.message : String(error)}`
+      // Map positional arguments to named arguments
+      if (prompt_info.arguments) {
+        prompt_info.arguments.forEach((arg, index) => {
+          if (index < args.length) {
+            mcp_args[arg.name] = args[index]
           }
-        }),
-      )
-      let index = 0
-      template = template.replace(bashRegex, () => results[index++])
+        })
+      }
+
+      // Get the actual prompt from the MCP server
+      const mcp_prompt = await MCP.getPrompt(input.command, mcp_args)
+      if (mcp_prompt) {
+        // Convert MCP prompt messages to a template string
+        template = mcp_prompt.messages
+          .map((msg) => {
+            if (msg.content.type === "text") {
+              return msg.content.text
+            }
+            return ""
+          })
+          .join("\n\n")
+      } else {
+        template = input.arguments
+      }
+    } else {
+      // Regular command - process template normally
+      const raw = input.arguments.match(argsRegex) ?? []
+      const args = raw.map((arg) => arg.replace(quoteTrimRegex, ""))
+
+      const placeholders = command.template.match(placeholderRegex) ?? []
+      let last = 0
+      for (const item of placeholders) {
+        const value = Number(item.slice(1))
+        if (value > last) last = value
+      }
+
+      // Let the final placeholder swallow any extra arguments so prompts read naturally
+      const withArgs = command.template.replaceAll(placeholderRegex, (_, index) => {
+        const position = Number(index)
+        const argIndex = position - 1
+        if (argIndex >= args.length) return ""
+        if (position === last) return args.slice(argIndex).join(" ")
+        return args[argIndex]
+      })
+      template = withArgs.replaceAll("$ARGUMENTS", input.arguments)
+
+      const shell = ConfigMarkdown.shell(template)
+      if (shell.length > 0) {
+        const results = await Promise.all(
+          shell.map(async ([, cmd]) => {
+            try {
+              return await $`${{ raw: cmd }}`.nothrow().text()
+            } catch (error) {
+              return `Error executing command: ${error instanceof Error ? error.message : String(error)}`
+            }
+          }),
+        )
+        let index = 0
+        template = template.replace(bashRegex, () => results[index++])
+      }
     }
+
     template = template.trim()
 
     const model = await (async () => {
