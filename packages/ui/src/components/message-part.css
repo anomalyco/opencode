@@ -29,6 +29,16 @@
   }
 }
 
+[data-component="reasoning-part"] {
+  width: 100%;
+  opacity: 0.5;
+
+  [data-component="markdown"] {
+    margin-top: 24px;
+    font-style: italic !important;
+  }
+}
+
 [data-component="tool-error"] {
   display: flex;
   align-items: start;

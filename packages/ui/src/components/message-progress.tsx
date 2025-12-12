@@ -86,30 +86,30 @@ export function MessageProgress(props: MessageProgressProps) {
     if (last.type === "tool") {
       switch (last.tool) {
         case "task":
-          return "Delegating work..."
+          return "Delegating work"
         case "todowrite":
         case "todoread":
-          return "Planning next steps..."
+          return "Planning next steps"
         case "read":
-          return "Gathering context..."
+          return "Gathering context"
         case "list":
         case "grep":
         case "glob":
-          return "Searching the codebase..."
+          return "Searching the codebase"
         case "webfetch":
-          return "Searching the web..."
+          return "Searching the web"
         case "edit":
         case "write":
-          return "Making edits..."
+          return "Making edits"
         case "bash":
-          return "Running commands..."
+          return "Running commands"
         default:
           break
       }
     } else if (last.type === "reasoning") {
-      return "Thinking..."
+      return "Thinking"
     } else if (last.type === "text") {
-      return "Gathering thoughts..."
+      return "Gathering thoughts"
     }
     return undefined
   })

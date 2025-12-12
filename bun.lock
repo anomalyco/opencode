@@ -398,6 +398,7 @@
         "@tailwindcss/vite": "catalog:",
         "@tsconfig/node22": "catalog:",
         "@types/bun": "catalog:",
+        "@types/luxon": "catalog:",
         "tailwindcss": "catalog:",
         "typescript": "catalog:",
         "vite": "catalog:",

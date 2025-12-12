@@ -22,6 +22,7 @@
   },
   "devDependencies": {
     "@types/bun": "catalog:",
+    "@types/luxon": "catalog:",
     "@tsconfig/node22": "catalog:",
     "typescript": "catalog:",
     "vite": "catalog:",
