@@ -29,9 +29,7 @@ Models and their harnesses are co-dependent. ACP lets you run each model in its 
 
 For a deeper dive, see Viv Trivedy's great article [Claude Code SDK: HaaS (Harness as a Service)](https://www.vtrivedy.com/posts/claude-code-sdk-haas-harness-as-a-service).
 
-## Usage
-
-### Supported Agents
+## Supported Agents
 
 Forge supports all agents listed at [agentclientprotocol.com/overview/agents](https://agentclientprotocol.com/overview/agents):
 
@@ -54,6 +52,8 @@ Forge supports all agents listed at [agentclientprotocol.com/overview/agents](ht
 - [VT Code](https://github.com/vinhnx/vtcode/blob/main/README.md#zed-ide-integration-agent-client-protocol)
 
 Run `forge agents` to see the full list.
+
+## Usage
 
 ### Multi-Agent Workflows
 
