@@ -2126,7 +2126,7 @@
         ]
       }
     },
-    "/session/{id}/message/{messageID}/part/{partID}": {
+    "/session/{sessionID}/message/{messageID}/part/{partID}": {
       "delete": {
         "operationId": "part.delete",
         "parameters": [
@@ -2139,7 +2139,7 @@
           },
           {
             "in": "path",
-            "name": "id",
+            "name": "sessionID",
             "schema": {
               "type": "string"
             },
@@ -2217,7 +2217,7 @@
           },
           {
             "in": "path",
-            "name": "id",
+            "name": "sessionID",
             "schema": {
               "type": "string"
             },

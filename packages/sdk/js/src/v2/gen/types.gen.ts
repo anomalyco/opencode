@@ -2889,7 +2889,7 @@ export type PartDeleteData = {
     /**
      * Session ID
      */
-    id: string
+    sessionID: string
     /**
      * Message ID
      */
@@ -2902,7 +2902,7 @@ export type PartDeleteData = {
   query?: {
     directory?: string
   }
-  url: "/session/{id}/message/{messageID}/part/{partID}"
+  url: "/session/{sessionID}/message/{messageID}/part/{partID}"
 }
 
 export type PartDeleteErrors = {
@@ -2933,7 +2933,7 @@ export type PartUpdateData = {
     /**
      * Session ID
      */
-    id: string
+    sessionID: string
     /**
      * Message ID
      */
@@ -2946,7 +2946,7 @@ export type PartUpdateData = {
   query?: {
     directory?: string
   }
-  url: "/session/{id}/message/{messageID}/part/{partID}"
+  url: "/session/{sessionID}/message/{messageID}/part/{partID}"
 }
 
 export type PartUpdateErrors = {

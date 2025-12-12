@@ -1497,7 +1497,7 @@ export class Part extends HeyApiClient {
    */
   public delete<ThrowOnError extends boolean = false>(
     parameters: {
-      id: string
+      sessionID: string
       messageID: string
       partID: string
       directory?: string
@@ -1509,7 +1509,7 @@ export class Part extends HeyApiClient {
       [
         {
           args: [
-            { in: "path", key: "id" },
+            { in: "path", key: "sessionID" },
             { in: "path", key: "messageID" },
             { in: "path", key: "partID" },
             { in: "query", key: "directory" },
@@ -1518,7 +1518,7 @@ export class Part extends HeyApiClient {
       ],
     )
     return (options?.client ?? this.client).delete<PartDeleteResponses, PartDeleteErrors, ThrowOnError>({
-      url: "/session/{id}/message/{messageID}/part/{partID}",
+      url: "/session/{sessionID}/message/{messageID}/part/{partID}",
       ...options,
       ...params,
     })
@@ -1529,7 +1529,7 @@ export class Part extends HeyApiClient {
    */
   public update<ThrowOnError extends boolean = false>(
     parameters: {
-      id: string
+      sessionID: string
       messageID: string
       partID: string
       directory?: string
@@ -1542,7 +1542,7 @@ export class Part extends HeyApiClient {
       [
         {
           args: [
-            { in: "path", key: "id" },
+            { in: "path", key: "sessionID" },
             { in: "path", key: "messageID" },
             { in: "path", key: "partID" },
             { in: "query", key: "directory" },
@@ -1552,7 +1552,7 @@ export class Part extends HeyApiClient {
       ],
     )
     return (options?.client ?? this.client).patch<PartUpdateResponses, PartUpdateErrors, ThrowOnError>({
-      url: "/session/{id}/message/{messageID}/part/{partID}",
+      url: "/session/{sessionID}/message/{messageID}/part/{partID}",
       ...options,
       ...params,
       headers: {

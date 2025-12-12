@@ -1170,7 +1170,7 @@ export namespace Server {
         },
       )
       .delete(
-        "/session/:id/message/:messageID/part/:partID",
+        "/session/:sessionID/message/:messageID/part/:partID",
         describeRoute({
           description: "Delete a part from a message",
           operationId: "part.delete",
@@ -1189,7 +1189,7 @@ export namespace Server {
         validator(
           "param",
           z.object({
-            id: z.string().meta({ description: "Session ID" }),
+            sessionID: z.string().meta({ description: "Session ID" }),
             messageID: z.string().meta({ description: "Message ID" }),
             partID: z.string().meta({ description: "Part ID" }),
           }),
@@ -1197,7 +1197,7 @@ export namespace Server {
         async (c) => {
           const params = c.req.valid("param")
           await Session.removePart({
-            sessionID: params.id,
+            sessionID: params.sessionID,
             messageID: params.messageID,
             partID: params.partID,
           })
@@ -1205,7 +1205,7 @@ export namespace Server {
         },
       )
       .patch(
-        "/session/:id/message/:messageID/part/:partID",
+        "/session/:sessionID/message/:messageID/part/:partID",
         describeRoute({
           description: "Update a part in a message",
           operationId: "part.update",
@@ -1224,7 +1224,7 @@ export namespace Server {
         validator(
           "param",
           z.object({
-            id: z.string().meta({ description: "Session ID" }),
+            sessionID: z.string().meta({ description: "Session ID" }),
             messageID: z.string().meta({ description: "Message ID" }),
             partID: z.string().meta({ description: "Part ID" }),
           }),
@@ -1233,7 +1233,7 @@ export namespace Server {
         async (c) => {
           const params = c.req.valid("param")
           const body = c.req.valid("json")
-          if (body.id !== params.partID || body.messageID !== params.messageID || body.sessionID !== params.id) {
+          if (body.id !== params.partID || body.messageID !== params.messageID || body.sessionID !== params.sessionID) {
             throw new Error("Part IDs in body must match URL parameters")
           }
           const part = await Session.updatePart(body)
