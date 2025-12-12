@@ -16,7 +16,6 @@ import { A, useNavigate, useParams } from "@solidjs/router"
 import { useLayout, getAvatarColors } from "@/context/layout"
 import { useGlobalSync } from "@/context/global-sync"
 import { base64Decode, base64Encode } from "@opencode-ai/util/encode"
-import { Mark } from "@opencode-ai/ui/logo"
 import { Avatar } from "@opencode-ai/ui/avatar"
 import { ResizeHandle } from "@opencode-ai/ui/resize-handle"
 import { Button } from "@opencode-ai/ui/button"
@@ -27,7 +26,6 @@ import { Tooltip } from "@opencode-ai/ui/tooltip"
 import { Collapsible } from "@opencode-ai/ui/collapsible"
 import { DiffChanges } from "@opencode-ai/ui/diff-changes"
 import { getFilename } from "@opencode-ai/util/path"
-import { Select } from "@opencode-ai/ui/select"
 import { DropdownMenu } from "@opencode-ai/ui/dropdown-menu"
 import { Session, Project, ProviderAuthMethod, ProviderAuthAuthorization } from "@opencode-ai/sdk/v2/client"
 import { usePlatform } from "@/context/platform"
@@ -56,6 +54,7 @@ import { useGlobalSDK } from "@/context/global-sdk"
 import { Spinner } from "@opencode-ai/ui/spinner"
 import { useNotification } from "@/context/notification"
 import { Binary } from "@opencode-ai/util/binary"
+import { Header } from "@/components/header"
 
 export default function Layout(props: ParentProps) {
   const [store, setStore] = createStore({
@@ -70,9 +69,6 @@ export default function Layout(props: ParentProps) {
   const platform = usePlatform()
   const notification = useNotification()
   const navigate = useNavigate()
-  const currentDirectory = createMemo(() => base64Decode(params.dir ?? ""))
-  const sessions = createMemo(() => globalSync.child(currentDirectory())[0].session ?? [])
-  const currentSession = createMemo(() => sessions().find((s) => s.id === params.id))
   const providers = useProviders()
 
   function navigateToProject(directory: string | undefined) {
@@ -226,6 +222,7 @@ export default function Layout(props: ParentProps) {
 
   const ProjectVisual = (props: { project: Project & { expanded: boolean }; class?: string }): JSX.Element => {
     const name = createMemo(() => getFilename(props.project.worktree))
+    const current = createMemo(() => base64Decode(params.dir ?? ""))
     return (
       <Switch>
         <Match when={layout.sidebar.opened()}>
@@ -246,7 +243,7 @@ export default function Layout(props: ParentProps) {
             variant="ghost"
             size="large"
             class="flex items-center justify-center p-0 aspect-square border-none rounded-lg"
-            data-selected={props.project.worktree === currentDirectory()}
+            data-selected={props.project.worktree === current()}
             onClick={() => navigateToProject(props.project.worktree)}
           >
             <ProjectAvatar project={props.project} notify />
@@ -259,10 +256,10 @@ export default function Layout(props: ParentProps) {
   const SortableProject = (props: { project: Project & { expanded: boolean } }): JSX.Element => {
     const notification = useNotification()
     const sortable = createSortable(props.project.worktree)
-    const [projectStore, setProjectStore] = globalSync.child(props.project.worktree)
-    const sessions = createMemo(() => projectStore.session.filter((s) => !s.time.archived))
     const slug = createMemo(() => base64Encode(props.project.worktree))
     const name = createMemo(() => getFilename(props.project.worktree))
+    const [store, setStore] = globalSync.child(props.project.worktree)
+    const sessions = createMemo(() => store.session ?? [])
     const [expanded, setExpanded] = createSignal(true)
     return (
       // @ts-ignore
@@ -313,7 +310,7 @@ export default function Layout(props: ParentProps) {
                           sessionID: session.id,
                           time: { archived: Date.now() },
                         })
-                        setProjectStore(
+                        setStore(
                           produce((draft) => {
                             const match = Binary.search(draft.session, session.id, (s) => s.id)
                             if (match.found) draft.session.splice(match.index, 1)
@@ -427,91 +424,7 @@ export default function Layout(props: ParentProps) {
 
   return (
     <div class="relative flex-1 flex flex-col">
-      <header class="h-12 shrink-0 bg-background-base border-b border-border-weak-base flex" data-tauri-drag-region>
-        <A
-          href="/"
-          classList={{
-            "w-12 shrink-0 px-4 py-3.5": true,
-            "flex items-center justify-start self-stretch": true,
-            "border-r border-border-weak-base": true,
-          }}
-          style={{ width: layout.sidebar.opened() ? `${layout.sidebar.width()}px` : undefined }}
-          data-tauri-drag-region
-        >
-          <Mark class="shrink-0" />
-        </A>
-        <div class="pl-4 px-6 flex items-center justify-between gap-4 w-full">
-          <Show when={params.dir && layout.projects.list().length > 0}>
-            <div class="flex items-center gap-3">
-              <div class="flex items-center gap-2">
-                <Select
-                  options={layout.projects.list().map((project) => project.worktree)}
-                  current={currentDirectory()}
-                  label={(x) => getFilename(x)}
-                  onSelect={(x) => (x ? navigateToProject(x) : undefined)}
-                  class="text-14-regular text-text-base"
-                  variant="ghost"
-                >
-                  {/* @ts-ignore */}
-                  {(i) => (
-                    <div class="flex items-center gap-2">
-                      <Icon name="folder" size="small" />
-                      <div class="text-text-strong">{getFilename(i)}</div>
-                    </div>
-                  )}
-                </Select>
-                <div class="text-text-weaker">/</div>
-                <Select
-                  options={sessions()}
-                  current={currentSession()}
-                  placeholder="New session"
-                  label={(x) => x.title}
-                  value={(x) => x.id}
-                  onSelect={navigateToSession}
-                  class="text-14-regular text-text-base max-w-md"
-                  variant="ghost"
-                />
-              </div>
-              <Show when={currentSession()}>
-                <Button as={A} href={`/${params.dir}/session`} icon="plus-small">
-                  New session
-                </Button>
-              </Show>
-            </div>
-            <div class="flex items-center gap-4">
-              <Tooltip
-                class="shrink-0"
-                value={
-                  <div class="flex items-center gap-2">
-                    <span>Toggle terminal</span>
-                    <span class="text-icon-base text-12-medium">Ctrl `</span>
-                  </div>
-                }
-              >
-                <Button variant="ghost" class="group/terminal-toggle size-6 p-0" onClick={layout.terminal.toggle}>
-                  <div class="relative flex items-center justify-center size-4 [&>*]:absolute [&>*]:inset-0">
-                    <Icon
-                      size="small"
-                      name={layout.terminal.opened() ? "layout-bottom-full" : "layout-bottom"}
-                      class="group-hover/terminal-toggle:hidden"
-                    />
-                    <Icon
-                      size="small"
-                      name="layout-bottom-partial"
-                      class="hidden group-hover/terminal-toggle:inline-block"
-                    />
-                    <Icon
-                      size="small"
-                      name={layout.terminal.opened() ? "layout-bottom" : "layout-bottom-full"}
-                      class="hidden group-active/terminal-toggle:inline-block"
-                    />
-                  </div>
-                </Button>
-              </Tooltip>
-            </div>
-          </Show>
-        </div>
-      </header>
+      <Header navigateToProject={navigateToProject} navigateToSession={navigateToSession} />
       <div class="h-[calc(100%-3rem)] flex">
         <div
           classList={{
