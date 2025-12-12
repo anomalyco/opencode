@@ -136,6 +136,8 @@ export function Session() {
     return false
   })
   const contentWidth = createMemo(() => dimensions().width - (sidebarVisible() ? 42 : 0) - 4)
+  const headerVisible = createMemo(() => !sidebarVisible() && !kv.get("header_hidden", false))
+  const footerVisible = createMemo(() => !sidebarVisible() && !kv.get("footer_hidden", false))
 
   const scrollAcceleration = createMemo(() => {
     const tui = sync.data.config.tui
@@ -959,9 +961,16 @@ export function Session() {
       }}
     >
       <box flexDirection="row">
-        <box flexGrow={1} paddingBottom={1} paddingTop={1} paddingLeft={2} paddingRight={2} gap={1}>
+        <box
+          flexGrow={1}
+          paddingBottom={footerVisible() ? 1 : 0}
+          paddingTop={1}
+          paddingLeft={2}
+          paddingRight={2}
+          gap={1}
+        >
           <Show when={session()}>
-            <Show when={!sidebarVisible()}>
+            <Show when={headerVisible()}>
               <Header />
             </Show>
             <scrollbox
@@ -1089,9 +1098,10 @@ export function Session() {
                   toBottom()
                 }}
                 sessionID={route.sessionID}
+                footerVisible={footerVisible()}
               />
             </box>
-            <Show when={!sidebarVisible()}>
+            <Show when={footerVisible()}>
               <Footer />
             </Show>
           </Show>

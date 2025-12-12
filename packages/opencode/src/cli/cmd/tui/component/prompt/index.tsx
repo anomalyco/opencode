@@ -27,6 +27,7 @@ import { useDialog } from "@tui/ui/dialog"
 import { DialogProvider as DialogProviderConnect } from "../dialog-provider"
 import { DialogAlert } from "../../ui/dialog-alert"
 import { useToast } from "../../ui/toast"
+import { useKV } from "../../context/kv"
 
 export type PromptProps = {
   sessionID?: string
@@ -35,6 +36,7 @@ export type PromptProps = {
   ref?: (ref: PromptRef) => void
   hint?: JSX.Element
   showPlaceholder?: boolean
+  footerVisible?: boolean
 }
 
 export type PromptRef = {
@@ -117,6 +119,12 @@ export function Prompt(props: PromptProps) {
   const dialog = useDialog()
   const toast = useToast()
   const status = createMemo(() => sync.data.session_status?.[props.sessionID ?? ""] ?? { type: "idle" })
+  const kv = useKV()
+  const permissions = createMemo(() => {
+    if (!props.sessionID) return []
+    return sync.data.permission[props.sessionID] ?? []
+  })
+  const shortcutsVisible = createMemo(() => !kv.get("shortcuts_hidden", false))
   const history = usePromptHistory()
   const command = useCommandDialog()
   const renderer = useRenderer()
@@ -881,17 +889,50 @@ export function Prompt(props: PromptProps) {
               cursorColor={theme.text}
               syntaxStyle={syntax()}
             />
-            <box flexDirection="row" flexShrink={0} paddingTop={1} gap={1}>
-              <text fg={highlight()}>
-                {store.mode === "shell" ? "Shell" : Locale.titlecase(local.agent.current().name)}{" "}
-              </text>
-              <Show when={store.mode === "normal"}>
-                <box flexDirection="row" gap={1}>
-                  <text flexShrink={0} fg={keybind.leader ? theme.textMuted : theme.text}>
-                    {local.model.parsed().model}
-                  </text>
-                  <text fg={theme.textMuted}>{local.model.parsed().provider}</text>
-                </box>
+            <box flexDirection="row" flexShrink={0} paddingTop={1} gap={1} justifyContent="space-between">
+              <box flexDirection="row" gap={1}>
+                <text fg={highlight()}>
+                  {store.mode === "shell" ? "Shell" : Locale.titlecase(local.agent.current().name)}{" "}
+                </text>
+                <Show when={store.mode === "normal"}>
+                  <box flexDirection="row" gap={1}>
+                    <text flexShrink={0} fg={keybind.leader ? theme.textMuted : theme.text}>
+                      {local.model.parsed().model}
+                    </text>
+                    <text fg={theme.textMuted}>{local.model.parsed().provider}</text>
+                  </box>
+                </Show>
+              </box>
+              <Show when={store.mode === "normal" && props.sessionID && !props.footerVisible}>
+                <Switch>
+                  <Match when={permissions().length > 0}>
+                    <text fg={theme.warning}>
+                      <span style={{ fg: theme.warning }}>◉</span> {permissions().length} Permission
+                      {permissions().length > 1 ? "s" : ""} pending
+                    </text>
+                  </Match>
+                  <Match when={status().type !== "idle"}>
+                    <box flexDirection="row" gap={1} flexShrink={0}>
+                      <spinner color={spinnerDef().color} frames={spinnerDef().frames} interval={40} />
+                      <text fg={store.interrupt > 0 ? theme.primary : theme.text}>
+                        esc{" "}
+                        <span style={{ fg: store.interrupt > 0 ? theme.primary : theme.textMuted }}>
+                          {store.interrupt > 0 ? "again to interrupt" : "interrupt"}
+                        </span>
+                      </text>
+                    </box>
+                  </Match>
+                  <Match when={shortcutsVisible()}>
+                    <box gap={2} flexDirection="row" flexShrink={0}>
+                      <text fg={theme.text}>
+                        {keybind.print("agent_cycle")} <span style={{ fg: theme.textMuted }}>switch agent</span>
+                      </text>
+                      <text fg={theme.text}>
+                        {keybind.print("command_list")} <span style={{ fg: theme.textMuted }}>commands</span>
+                      </text>
+                    </box>
+                  </Match>
+                </Switch>
               </Show>
             </box>
           </box>
@@ -922,103 +963,117 @@ export function Prompt(props: PromptProps) {
             }
           />
         </box>
-        <box flexDirection="row" justifyContent="space-between">
-          <Show when={status().type !== "idle"} fallback={<text />}>
-            <box
-              flexDirection="row"
-              gap={1}
-              flexGrow={1}
-              justifyContent={status().type === "retry" ? "space-between" : "flex-start"}
-            >
-              <box flexShrink={0} flexDirection="row" gap={1}>
-                {/* @ts-ignore // SpinnerOptions doesn't support marginLeft */}
-                <spinner marginLeft={1} color={spinnerDef().color} frames={spinnerDef().frames} interval={40} />
-                <box flexDirection="row" gap={1} flexShrink={0}>
-                  {(() => {
-                    const retry = createMemo(() => {
-                      const s = status()
-                      if (s.type !== "retry") return
-                      return s
-                    })
-                    const message = createMemo(() => {
-                      const r = retry()
-                      if (!r) return
-                      if (r.message.includes("exceeded your current quota") && r.message.includes("gemini"))
-                        return "gemini is way too hot right now"
-                      if (r.message.length > 80) return r.message.slice(0, 80) + "..."
-                      return r.message
-                    })
-                    const isTruncated = createMemo(() => {
-                      const r = retry()
-                      if (!r) return false
-                      return r.message.length > 120
-                    })
-                    const [seconds, setSeconds] = createSignal(0)
-                    onMount(() => {
-                      const timer = setInterval(() => {
-                        const next = retry()?.next
-                        if (next) setSeconds(Math.round((next - Date.now()) / 1000))
-                      }, 1000)
-
-                      onCleanup(() => {
-                        clearInterval(timer)
+        <Show when={store.mode === "shell"}>
+          <box gap={2} flexDirection="row">
+            <text fg={theme.text}>
+              esc <span style={{ fg: theme.textMuted }}>exit shell mode</span>
+            </text>
+          </box>
+        </Show>
+        <Show when={store.mode !== "shell"}>
+          <box flexDirection="row" justifyContent="space-between">
+            <Show when={props.footerVisible && status().type !== "idle"} fallback={<text />}>
+              <box
+                flexDirection="row"
+                gap={1}
+                flexGrow={1}
+                justifyContent={status().type === "retry" ? "space-between" : "flex-start"}
+              >
+                <box flexShrink={0} flexDirection="row" gap={1}>
+                  {/* @ts-ignore // SpinnerOptions doesn't support marginLeft */}
+                  <spinner marginLeft={1} color={spinnerDef().color} frames={spinnerDef().frames} interval={40} />
+                  <box flexDirection="row" gap={1} flexShrink={0}>
+                    {(() => {
+                      const retry = createMemo(() => {
+                        const s = status()
+                        if (s.type !== "retry") return
+                        return s
                       })
-                    })
-                    const handleMessageClick = () => {
-                      const r = retry()
-                      if (!r) return
-                      if (isTruncated()) {
-                        DialogAlert.show(dialog, "Retry Error", r.message)
+                      const message = createMemo(() => {
+                        const r = retry()
+                        if (!r) return
+                        if (r.message.includes("exceeded your current quota") && r.message.includes("gemini"))
+                          return "gemini is way too hot right now"
+                        if (r.message.length > 80) return r.message.slice(0, 80) + "..."
+                        return r.message
+                      })
+                      const isTruncated = createMemo(() => {
+                        const r = retry()
+                        if (!r) return false
+                        return r.message.length > 120
+                      })
+                      const [seconds, setSeconds] = createSignal(0)
+                      onMount(() => {
+                        const timer = setInterval(() => {
+                          const next = retry()?.next
+                          if (next) setSeconds(Math.round((next - Date.now()) / 1000))
+                        }, 1000)
+
+                        onCleanup(() => {
+                          clearInterval(timer)
+                        })
+                      })
+                      const handleMessageClick = () => {
+                        const r = retry()
+                        if (!r) return
+                        if (isTruncated()) {
+                          DialogAlert.show(dialog, "Retry Error", r.message)
+                        }
                       }
-                    }
 
-                    const retryText = () => {
-                      const r = retry()
-                      if (!r) return ""
-                      const baseMessage = message()
-                      const truncatedHint = isTruncated() ? " (click to expand)" : ""
-                      const retryInfo = ` [retrying ${seconds() > 0 ? `in ${seconds()}s ` : ""}attempt #${r.attempt}]`
-                      return baseMessage + truncatedHint + retryInfo
-                    }
+                      const retryText = () => {
+                        const r = retry()
+                        if (!r) return ""
+                        const baseMessage = message()
+                        const truncatedHint = isTruncated() ? " (click to expand)" : ""
+                        const retryInfo = ` [retrying ${seconds() > 0 ? `in ${seconds()}s ` : ""}attempt #${r.attempt}]`
+                        return baseMessage + truncatedHint + retryInfo
+                      }
 
-                    return (
-                      <Show when={retry()}>
-                        <box onMouseUp={handleMessageClick}>
-                          <text fg={theme.error}>{retryText()}</text>
-                        </box>
-                      </Show>
-                    )
-                  })()}
+                      return (
+                        <Show when={retry()}>
+                          <box onMouseUp={handleMessageClick}>
+                            <text fg={theme.error}>{retryText()}</text>
+                          </box>
+                        </Show>
+                      )
+                    })()}
+                  </box>
                 </box>
+                <text fg={store.interrupt > 0 ? theme.primary : theme.text}>
+                  esc{" "}
+                  <span style={{ fg: store.interrupt > 0 ? theme.primary : theme.textMuted }}>
+                    {store.interrupt > 0 ? "again to interrupt" : "interrupt"}
+                  </span>
+                </text>
               </box>
-              <text fg={store.interrupt > 0 ? theme.primary : theme.text}>
-                esc{" "}
-                <span style={{ fg: store.interrupt > 0 ? theme.primary : theme.textMuted }}>
-                  {store.interrupt > 0 ? "again to interrupt" : "interrupt"}
-                </span>
-              </text>
-            </box>
-          </Show>
-          <Show when={status().type !== "retry"}>
-            <box gap={2} flexDirection="row">
-              <Switch>
-                <Match when={store.mode === "normal"}>
+            </Show>
+            <Show when={!props.sessionID && status().type === "idle" && shortcutsVisible()}>
+              <box flexDirection="row" justifyContent="flex-end" flexGrow={1}>
+                <box gap={2} flexDirection="row">
                   <text fg={theme.text}>
                     {keybind.print("agent_cycle")} <span style={{ fg: theme.textMuted }}>switch agent</span>
                   </text>
                   <text fg={theme.text}>
                     {keybind.print("command_list")} <span style={{ fg: theme.textMuted }}>commands</span>
                   </text>
-                </Match>
-                <Match when={store.mode === "shell"}>
+                </box>
+              </box>
+            </Show>
+            <Show when={props.sessionID && props.footerVisible && status().type === "idle" && shortcutsVisible()}>
+              <box flexDirection="row" justifyContent="flex-end" flexGrow={1}>
+                <box gap={2} flexDirection="row">
                   <text fg={theme.text}>
-                    esc <span style={{ fg: theme.textMuted }}>exit shell mode</span>
+                    {keybind.print("agent_cycle")} <span style={{ fg: theme.textMuted }}>switch agent</span>
                   </text>
-                </Match>
-              </Switch>
-            </box>
-          </Show>
-        </box>
+                  <text fg={theme.text}>
+                    {keybind.print("command_list")} <span style={{ fg: theme.textMuted }}>commands</span>
+                  </text>
+                </box>
+              </box>
+            </Show>
+          </box>
+        </Show>
       </box>
     </>
   )

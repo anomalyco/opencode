@@ -169,6 +169,9 @@ function App() {
   const local = useLocal()
   const kv = useKV()
   const command = useCommandDialog()
+  const [shortcutsHidden, setShortcutsHidden] = createSignal(kv.get("shortcuts_hidden", false))
+  const [headerHidden, setHeaderHidden] = createSignal(kv.get("header_hidden", false))
+  const [footerHidden, setFooterHidden] = createSignal(kv.get("footer_hidden", false))
   const sdk = useSDK()
   const toast = useToast()
   const { theme, mode, setMode } = useTheme()
@@ -447,6 +450,45 @@ function App() {
       value: "app.fps",
       onSelect: (dialog) => {
         renderer.console.toggle()
+        dialog.clear()
+      },
+    },
+    {
+      title: shortcutsHidden() ? "Show shortcuts" : "Hide shortcuts",
+      value: "app.shortcuts.toggle",
+      category: "System",
+      onSelect: (dialog) => {
+        setShortcutsHidden((prev) => {
+          const next = !prev
+          kv.set("shortcuts_hidden", next)
+          return next
+        })
+        dialog.clear()
+      },
+    },
+    {
+      title: headerHidden() ? "Show header" : "Hide header",
+      value: "app.header.toggle",
+      category: "System",
+      onSelect: (dialog) => {
+        setHeaderHidden((prev) => {
+          const next = !prev
+          kv.set("header_hidden", next)
+          return next
+        })
+        dialog.clear()
+      },
+    },
+    {
+      title: footerHidden() ? "Show footer" : "Hide footer",
+      value: "app.footer.toggle",
+      category: "System",
+      onSelect: (dialog) => {
+        setFooterHidden((prev) => {
+          const next = !prev
+          kv.set("footer_hidden", next)
+          return next
+        })
         dialog.clear()
       },
     },

@@ -73,6 +73,7 @@ export function Home() {
               promptRef.set(r)
             }}
             hint={Hint}
+            footerVisible={false}
           />
         </box>
         <Toast />
