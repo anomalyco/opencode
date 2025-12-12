@@ -1,17 +1,17 @@
 ---
 title: GitHub
-description: Use opencode in GitHub issues and pull-requests.
+description: Use OpenCode in GitHub issues and pull-requests.
 ---
 
-opencode integrates with your GitHub workflow. Mention `/opencode` or `/oc` in your comment, and opencode will execute tasks within your GitHub Actions runner.
+OpenCode integrates with your GitHub workflow. Mention `/opencode` or `/oc` in your comment, and OpenCode will execute tasks within your GitHub Actions runner.
 
 ---
 
 ## Features
 
-- **Triage issues**: Ask opencode to look into an issue and explain it to you.
-- **Fix and implement**: Ask opencode to fix an issue or implement a feature. And it will work in a new branch and submits a PR with all the changes.
-- **Secure**: opencode runs inside your GitHub's runners.
+- **Triage issues**: Ask OpenCode to look into an issue and explain it to you.
+- **Fix and implement**: Ask OpenCode to fix an issue or implement a feature. And it will work in a new branch and submits a PR with all the changes.
+- **Secure**: OpenCode runs inside your GitHub's runners.
 
 ---
 
@@ -62,7 +62,7 @@ Or you can set it up manually.
            with:
              fetch-depth: 1
 
-         - name: Run opencode
+         - name: Run OpenCode
            uses: sst/opencode/github@latest
            env:
              ANTHROPIC_API_KEY: ${{ secrets.ANTHROPIC_API_KEY }}
@@ -80,11 +80,12 @@ Or you can set it up manually.
 
 ## Configuration
 
-- `model`: The model to use with opencode. Takes the format of `provider/model`. This is **required**.
-- `share`: Whether to share the opencode session. Defaults to **true** for public repositories.
-- `token`: Optional GitHub access token for performing operations such as creating comments, committing changes, and opening pull requests. By default, opencode uses the installation access token from the opencode GitHub App, so commits, comments, and pull requests appear as coming from the app.
+- `model`: The model to use with OpenCode. Takes the format of `provider/model`. This is **required**.
+- `share`: Whether to share the OpenCode session. Defaults to **true** for public repositories.
+- `prompt`: Optional custom prompt to override the default behavior. Use this to customize how OpenCode processes requests.
+- `token`: Optional GitHub access token for performing operations such as creating comments, committing changes, and opening pull requests. By default, OpenCode uses the installation access token from the OpenCode GitHub App, so commits, comments, and pull requests appear as coming from the app.
 
-  Alternatively, you can use the GitHub Action runner's [built-in `GITHUB_TOKEN`](https://docs.github.com/en/actions/tutorials/authenticate-with-github_token) without installing the opencode GitHub App. Just make sure to grant the required permissions in your workflow:
+  Alternatively, you can use the GitHub Action runner's [built-in `GITHUB_TOKEN`](https://docs.github.com/en/actions/tutorials/authenticate-with-github_token) without installing the OpenCode GitHub App. Just make sure to grant the required permissions in your workflow:
 
   ```yaml
   permissions:
@@ -98,9 +99,28 @@ Or you can set it up manually.
 
 ---
 
+## Custom prompts
+
+Override the default prompt to customize OpenCode's behavior for your workflow.
+
+```yaml title=".github/workflows/opencode.yml"
+- uses: sst/opencode/github@latest
+  with:
+    model: anthropic/claude-sonnet-4-5
+    prompt: |
+      Review this pull request:
+      - Check for code quality issues
+      - Look for potential bugs
+      - Suggest improvements
+```
+
+This is useful for enforcing specific review criteria, coding standards, or focus areas relevant to your project.
+
+---
+
 ## Examples
 
-Here are some examples of how you can use opencode in GitHub.
+Here are some examples of how you can use OpenCode in GitHub.
 
 - **Explain an issue**
 
@@ -110,7 +130,7 @@ Here are some examples of how you can use opencode in GitHub.
   /opencode explain this issue
   ```
 
-  opencode will read the entire thread, including all comments, and reply with a clear explanation.
+  OpenCode will read the entire thread, including all comments, and reply with a clear explanation.
 
 - **Fix an issue**
 
@@ -120,7 +140,7 @@ Here are some examples of how you can use opencode in GitHub.
   /opencode fix this
   ```
 
-  And opencode will create a new branch, implement the changes, and open a PR with the changes.
+  And OpenCode will create a new branch, implement the changes, and open a PR with the changes.
 
 - **Review PRs and make changes**
 
@@ -130,18 +150,18 @@ Here are some examples of how you can use opencode in GitHub.
   Delete the attachment from S3 when the note is removed /oc
   ```
 
-  opencode will implement the requested change and commit it to the same PR.
+  OpenCode will implement the requested change and commit it to the same PR.
 
 - **Review specific code lines**
 
-  Leave a comment directly on code lines in the PR's "Files" tab. opencode automatically detects the file, line numbers, and diff context to provide precise responses.
+  Leave a comment directly on code lines in the PR's "Files" tab. OpenCode automatically detects the file, line numbers, and diff context to provide precise responses.
 
   ```
   [Comment on specific lines in Files tab]
   /oc add error handling here
   ```
 
-  When commenting on specific lines, opencode receives:
+  When commenting on specific lines, OpenCode receives:
   - The exact file being reviewed
   - The specific lines of code
   - The surrounding diff context

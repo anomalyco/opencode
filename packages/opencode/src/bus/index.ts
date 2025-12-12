@@ -1,17 +1,19 @@
 import z from "zod"
-import type { ZodType } from "zod"
 import { Log } from "../util/log"
 import { Instance } from "../project/instance"
+import { BusEvent } from "./bus-event"
 import { GlobalBus } from "./global"
 
 export namespace Bus {
   const log = Log.create({ service: "bus" })
   type Subscription = (event: any) => void
-  const disposedEventType = "server.instance.disposed"
 
-  export type EventDefinition = ReturnType<typeof event>
-
-  const registry = new Map<string, EventDefinition>()
+  export const InstanceDisposed = BusEvent.define(
+    "server.instance.disposed",
+    z.object({
+      directory: z.string(),
+    }),
+  )
 
   const state = Instance.state(
     () => {
@@ -25,7 +27,7 @@ export namespace Bus {
       const wildcard = entry.subscriptions.get("*")
       if (!wildcard) return
       const event = {
-        type: disposedEventType,
+        type: InstanceDisposed.type,
         properties: {
           directory: Instance.directory,
         },
@@ -36,46 +38,7 @@ export namespace Bus {
     },
   )
 
-  export function event<Type extends string, Properties extends ZodType>(type: Type, properties: Properties) {
-    const result = {
-      type,
-      properties,
-    }
-    registry.set(type, result)
-    return result
-  }
-
-  export const InstanceDisposed = event(
-    disposedEventType,
-    z.object({
-      directory: z.string(),
-    }),
-  )
-
-  export function payloads() {
-    return z
-      .discriminatedUnion(
-        "type",
-        registry
-          .entries()
-          .map(([type, def]) => {
-            return z
-              .object({
-                type: z.literal(type),
-                properties: def.properties,
-              })
-              .meta({
-                ref: "Event" + "." + def.type,
-              })
-          })
-          .toArray() as any,
-      )
-      .meta({
-        ref: "Event",
-      })
-  }
-
-  export async function publish<Definition extends EventDefinition>(
+  export async function publish<Definition extends BusEvent.Definition>(
     def: Definition,
     properties: z.output<Definition["properties"]>,
   ) {
@@ -100,14 +63,14 @@ export namespace Bus {
     return Promise.all(pending)
   }
 
-  export function subscribe<Definition extends EventDefinition>(
+  export function subscribe<Definition extends BusEvent.Definition>(
     def: Definition,
     callback: (event: { type: Definition["type"]; properties: z.infer<Definition["properties"]> }) => void,
   ) {
     return raw(def.type, callback)
   }
 
-  export function once<Definition extends EventDefinition>(
+  export function once<Definition extends BusEvent.Definition>(
     def: Definition,
     callback: (event: {
       type: Definition["type"]

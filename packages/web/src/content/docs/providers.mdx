@@ -173,6 +173,10 @@ Or if you already have an API key, you can select **Manually enter API Key** and
 
 ### Azure OpenAI
 
+:::note
+If you encounter "I'm sorry, but I cannot assist with that request" errors, try changing the content filter from **DefaultV2** to **Default** in your Azure resource.
+:::
+
 1. Head over to the [Azure portal](https://portal.azure.com/) and create an **Azure OpenAI** resource. You'll need:
    - **Resource name**: This becomes part of your API endpoint (`https://RESOURCE_NAME.openai.azure.com/`)
    - **API key**: Either `KEY 1` or `KEY 2` from your resource
@@ -564,11 +568,124 @@ The `global` region improves availability and reduces errors at no extra cost. U
 
 ---
 
+### Helicone
+
+[Helicone](https://helicone.ai) is an LLM observability platform that provides logging, monitoring, and analytics for your AI applications. The Helicone AI Gateway routes your requests to the appropriate provider automatically based on the model.
+
+1. Head over to [Helicone](https://helicone.ai), create an account, and generate an API key from your dashboard.
+
+2. Run the `/connect` command and search for **Helicone**.
+
+   ```txt
+   /connect
+   ```
+
+3. Enter your Helicone API key.
+
+   ```txt
+   ┌ API key
+   │
+   │
+   └ enter
+   ```
+
+4. Run the `/models` command to select a model.
+
+   ```txt
+   /models
+   ```
+
+For more providers and advanced features like caching and rate limiting, check the [Helicone documentation](https://docs.helicone.ai).
+
+#### Optional Configs
+
+In the event you see a feature or model from Helicone that isn't configured automatically through opencode, you can always configure it yourself.
+
+Here's [Helicone's Model Directory](https://helicone.ai/models), you'll need this to grab the IDs of the models you want to add.
+
+```jsonc title="~/.config/opencode/opencode.jsonc"
+{
+  "$schema": "https://opencode.ai/config.json",
+  "provider": {
+    "helicone": {
+      "npm": "@ai-sdk/openai-compatible",
+      "name": "Helicone",
+      "options": {
+        "baseURL": "https://ai-gateway.helicone.ai",
+      },
+      "models": {
+        "gpt-4o": {
+          // Model ID (from Helicone's model directory page)
+          "name": "GPT-4o", // Your own custom name for the model
+        },
+        "claude-sonnet-4-20250514": {
+          "name": "Claude Sonnet 4",
+        },
+      },
+    },
+  },
+}
+```
+
+#### Custom Headers
+
+Helicone supports custom headers for features like caching, user tracking, and session management. Add them to your provider config using `options.headers`:
+
+```jsonc title="~/.config/opencode/opencode.jsonc"
+{
+  "$schema": "https://opencode.ai/config.json",
+  "provider": {
+    "helicone": {
+      "npm": "@ai-sdk/openai-compatible",
+      "name": "Helicone",
+      "options": {
+        "baseURL": "https://ai-gateway.helicone.ai",
+        "headers": {
+          "Helicone-Cache-Enabled": "true",
+          "Helicone-User-Id": "opencode",
+        },
+      },
+    },
+  },
+}
+```
+
+##### Session tracking
+
+Helicone's [Sessions](https://docs.helicone.ai/features/sessions) feature lets you group related LLM requests together. Use the [opencode-helicone-session](https://github.com/H2Shami/opencode-helicone-session) plugin to automatically log each OpenCode conversation as a session in Helicone.
+
+```bash
+npm install -g opencode-helicone-session
+```
+
+Add it to your config.
+
+```json title="opencode.json"
+{
+  "plugin": ["opencode-helicone-session"]
+}
+```
+
+The plugin injects `Helicone-Session-Id` and `Helicone-Session-Name` headers into your requests. In Helicone's Sessions page, you'll see each OpenCode conversation listed as a separate session.
+
+##### Common Helicone headers
+
+| Header                     | Description                                                   |
+| -------------------------- | ------------------------------------------------------------- |
+| `Helicone-Cache-Enabled`   | Enable response caching (`true`/`false`)                      |
+| `Helicone-User-Id`         | Track metrics by user                                         |
+| `Helicone-Property-[Name]` | Add custom properties (e.g., `Helicone-Property-Environment`) |
+| `Helicone-Prompt-Id`       | Associate requests with prompt versions                       |
+
+See the [Helicone Header Directory](https://docs.helicone.ai/helicone-headers/header-directory) for all available headers.
+
+---
+
 ### llama.cpp
 
 You can configure opencode to use local models through [llama.cpp's](https://github.com/ggml-org/llama.cpp) llama-server utility
 
-```json title="opencode.json" "llama.cpp" {5, 6, 8, 10-14}
+```json title="opencode.json" "llama.cpp" {5, 6, 8, 10-15}
 {
   "$schema": "https://opencode.ai/config.json",
   "provider": {
@@ -580,12 +697,12 @@ You can configure opencode to use local models through [llama.cpp's](https://git
       },
       "models": {
         "qwen3-coder:a3b": {
-          "name": "Qwen3-Coder: a3b-30b (local)"
+          "name": "Qwen3-Coder: a3b-30b (local)",
+          "limit": {
+            "context": 128000,
+            "output": 65536
+          }
         }
-      },
-      "limit": {
-        "context": 128000,
-        "output": 65536
       }
     }
   }
@@ -687,6 +804,33 @@ To use Kimi K2 from Moonshot AI:
    ```
 
 4. Run the `/models` command to select _Kimi K2_.
+
+   ```txt
+   /models
+   ```
+
+---
+
+### Nebius Token Factory
+
+1. Head over to the [Nebius Token Factory console](https://tokenfactory.nebius.com/), create an account, and click **Add Key**.
+
+2. Run the `/connect` command and search for **Nebius Token Factory**.
+
+   ```txt
+   /connect
+   ```
+
+3. Enter your Nebius Token Factory API key.
+
+   ```txt
+   ┌ API key
+   │
+   │
+   └ enter
+   ```
+
+4. Run the `/models` command to select a model like _Kimi K2 Instruct_.
 
    ```txt
    /models
@@ -887,6 +1031,61 @@ OpenCode Zen is a list of tested and verified models provided by the OpenCode te
        }
      }
    }
+   ```
+
+---
+
+### SAP AI Core
+
+SAP AI Core provides access to 40+ models from OpenAI, Anthropic, Google, Amazon, Meta, Mistral, and AI21 through a unified platform.
+
+1. Go to your [SAP BTP Cockpit](https://account.hana.ondemand.com/), navigate to your SAP AI Core service instance, and create a service key.
+
+   :::tip
+   The service key is a JSON object containing `clientid`, `clientsecret`, `url`, and `serviceurls.AI_API_URL`. You can find your AI Core instance under **Services** > **Instances and Subscriptions** in the BTP Cockpit.
+   :::
+
+2. Run the `/connect` command and search for **SAP AI Core**.
+
+   ```txt
+   /connect
+   ```
+
+3. Enter your service key JSON.
+
+   ```txt
+   ┌ Service key
+   │
+   │
+   └ enter
+   ```
+
+   Or set the `AICORE_SERVICE_KEY` environment variable:
+
+   ```bash
+   AICORE_SERVICE_KEY='{"clientid":"...","clientsecret":"...","url":"...","serviceurls":{"AI_API_URL":"..."}}' opencode
+   ```
+
+   Or add it to your bash profile:
+
+   ```bash title="~/.bash_profile"
+   export AICORE_SERVICE_KEY='{"clientid":"...","clientsecret":"...","url":"...","serviceurls":{"AI_API_URL":"..."}}'
+   ```
+
+4. Optionally set deployment ID and resource group:
+
+   ```bash
+   AICORE_DEPLOYMENT_ID=your-deployment-id AICORE_RESOURCE_GROUP=your-resource-group opencode
+   ```
+
+   :::note
+   These settings are optional and should be configured according to your SAP AI Core setup.
+   :::
+
+5. Run the `/models` command to select from 40+ available models.
+
+   ```txt
+   /models
    ```
 
 ---

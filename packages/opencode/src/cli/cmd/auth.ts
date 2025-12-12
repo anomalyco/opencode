@@ -10,6 +10,154 @@ import { Config } from "../../config/config"
 import { Global } from "../../global"
 import { Plugin } from "../../plugin"
 import { Instance } from "../../project/instance"
+import type { Hooks } from "@opencode-ai/plugin"
+
+type PluginAuth = NonNullable<Hooks["auth"]>
+
+/**
+ * Handle plugin-based authentication flow.
+ * Returns true if auth was handled, false if it should fall through to default handling.
+ */
+async function handlePluginAuth(plugin: { auth: PluginAuth }, provider: string): Promise<boolean> {
+  let index = 0
+  if (plugin.auth.methods.length > 1) {
+    const method = await prompts.select({
+      message: "Login method",
+      options: [
+        ...plugin.auth.methods.map((x, index) => ({
+          label: x.label,
+          value: index.toString(),
+        })),
+      ],
+    })
+    if (prompts.isCancel(method)) throw new UI.CancelledError()
+    index = parseInt(method)
+  }
+  const method = plugin.auth.methods[index]
+
+  // Handle prompts for all auth types
+  await new Promise((resolve) => setTimeout(resolve, 10))
+  const inputs: Record<string, string> = {}
+  if (method.prompts) {
+    for (const prompt of method.prompts) {
+      if (prompt.condition && !prompt.condition(inputs)) {
+        continue
+      }
+      if (prompt.type === "select") {
+        const value = await prompts.select({
+          message: prompt.message,
+          options: prompt.options,
+        })
+        if (prompts.isCancel(value)) throw new UI.CancelledError()
+        inputs[prompt.key] = value
+      } else {
+        const value = await prompts.text({
+          message: prompt.message,
+          placeholder: prompt.placeholder,
+          validate: prompt.validate ? (v) => prompt.validate!(v ?? "") : undefined,
+        })
+        if (prompts.isCancel(value)) throw new UI.CancelledError()
+        inputs[prompt.key] = value
+      }
+    }
+  }
+
+  if (method.type === "oauth") {
+    const authorize = await method.authorize(inputs)
+
+    if (authorize.url) {
+      prompts.log.info("Go to: " + authorize.url)
+    }
+
+    if (authorize.method === "auto") {
+      if (authorize.instructions) {
+        prompts.log.info(authorize.instructions)
+      }
+      const spinner = prompts.spinner()
+      spinner.start("Waiting for authorization...")
+      const result = await authorize.callback()
+      if (result.type === "failed") {
+        spinner.stop("Failed to authorize", 1)
+      }
+      if (result.type === "success") {
+        const saveProvider = result.provider ?? provider
+        if ("refresh" in result) {
+          const { type: _, provider: __, refresh, access, expires, ...extraFields } = result
+          await Auth.set(saveProvider, {
+            type: "oauth",
+            refresh,
+            access,
+            expires,
+            ...extraFields,
+          })
+        }
+        if ("key" in result) {
+          await Auth.set(saveProvider, {
+            type: "api",
+            key: result.key,
+          })
+        }
+        spinner.stop("Login successful")
+      }
+    }
+
+    if (authorize.method === "code") {
+      const code = await prompts.text({
+        message: "Paste the authorization code here: ",
+        validate: (x) => (x && x.length > 0 ? undefined : "Required"),
+      })
+      if (prompts.isCancel(code)) throw new UI.CancelledError()
+      const result = await authorize.callback(code)
+      if (result.type === "failed") {
+        prompts.log.error("Failed to authorize")
+      }
+      if (result.type === "success") {
+        const saveProvider = result.provider ?? provider
+        if ("refresh" in result) {
+          const { type: _, provider: __, refresh, access, expires, ...extraFields } = result
+          await Auth.set(saveProvider, {
+            type: "oauth",
+            refresh,
+            access,
+            expires,
+            ...extraFields,
+          })
+        }
+        if ("key" in result) {
+          await Auth.set(saveProvider, {
+            type: "api",
+            key: result.key,
+          })
+        }
+        prompts.log.success("Login successful")
+      }
+    }
+
+    prompts.outro("Done")
+    return true
+  }
+
+  if (method.type === "api") {
+    if (method.authorize) {
+      const result = await method.authorize(inputs)
+      if (result.type === "failed") {
+        prompts.log.error("Failed to authorize")
+      }
+      if (result.type === "success") {
+        const saveProvider = result.provider ?? provider
+        await Auth.set(saveProvider, {
+          type: "api",
+          key: result.key,
+        })
+        prompts.log.success("Login successful")
+      }
+      prompts.outro("Done")
+      return true
+    }
+  }
+
+  return false
+}
 
 export const AuthCommand = cmd({
   command: "auth",
@@ -29,7 +177,7 @@ export const AuthListCommand = cmd({
     const homedir = os.homedir()
     const displayPath = authPath.startsWith(homedir) ? authPath.replace(homedir, "~") : authPath
     prompts.intro(`Credentials ${UI.Style.TEXT_DIM}${displayPath}`)
-    const results = await Auth.all().then((x) => Object.entries(x))
+    const results = Object.entries(await Auth.all())
     const database = await ModelsDev.get()
 
     for (const [providerID, result] of results) {
@@ -143,7 +291,10 @@ export const AuthLoginCommand = cmd({
               map((x) => ({
                 label: x.name,
                 value: x.id,
-                hint: priority[x.id] <= 1 ? "recommended" : undefined,
+                hint: {
+                  opencode: "recommended",
+                  anthropic: "Claude Max or API key",
+                }[x.id],
               })),
             ),
             {
@@ -157,142 +308,8 @@ export const AuthLoginCommand = cmd({
 
         const plugin = await Plugin.list().then((x) => x.find((x) => x.auth?.provider === provider))
         if (plugin && plugin.auth) {
-          let index = 0
-          if (plugin.auth.methods.length > 1) {
-            const method = await prompts.select({
-              message: "Login method",
-              options: [
-                ...plugin.auth.methods.map((x, index) => ({
-                  label: x.label,
-                  value: index.toString(),
-                })),
-              ],
-            })
-            if (prompts.isCancel(method)) throw new UI.CancelledError()
-            index = parseInt(method)
-          }
-          const method = plugin.auth.methods[index]
-
-          // Handle prompts for all auth types
-          await new Promise((resolve) => setTimeout(resolve, 10))
-          const inputs: Record<string, string> = {}
-          if (method.prompts) {
-            for (const prompt of method.prompts) {
-              if (prompt.condition && !prompt.condition(inputs)) {
-                continue
-              }
-              if (prompt.type === "select") {
-                const value = await prompts.select({
-                  message: prompt.message,
-                  options: prompt.options,
-                })
-                if (prompts.isCancel(value)) throw new UI.CancelledError()
-                inputs[prompt.key] = value
-              } else {
-                const value = await prompts.text({
-                  message: prompt.message,
-                  placeholder: prompt.placeholder,
-                  validate: prompt.validate ? (v) => prompt.validate!(v ?? "") : undefined,
-                })
-                if (prompts.isCancel(value)) throw new UI.CancelledError()
-                inputs[prompt.key] = value
-              }
-            }
-          }
-
-          if (method.type === "oauth") {
-            const authorize = await method.authorize(inputs)
-
-            if (authorize.url) {
-              prompts.log.info("Go to: " + authorize.url)
-            }
-
-            if (authorize.method === "auto") {
-              if (authorize.instructions) {
-                prompts.log.info(authorize.instructions)
-              }
-              const spinner = prompts.spinner()
-              spinner.start("Waiting for authorization...")
-              const result = await authorize.callback()
-              if (result.type === "failed") {
-                spinner.stop("Failed to authorize", 1)
-              }
-              if (result.type === "success") {
-                const saveProvider = result.provider ?? provider
-                if ("refresh" in result) {
-                  const { type: _, provider: __, refresh, access, expires, ...extraFields } = result
-                  await Auth.set(saveProvider, {
-                    type: "oauth",
-                    refresh,
-                    access,
-                    expires,
-                    ...extraFields,
-                  })
-                }
-                if ("key" in result) {
-                  await Auth.set(saveProvider, {
-                    type: "api",
-                    key: result.key,
-                  })
-                }
-                spinner.stop("Login successful")
-              }
-            }
-
-            if (authorize.method === "code") {
-              const code = await prompts.text({
-                message: "Paste the authorization code here: ",
-                validate: (x) => (x && x.length > 0 ? undefined : "Required"),
-              })
-              if (prompts.isCancel(code)) throw new UI.CancelledError()
-              const result = await authorize.callback(code)
-              if (result.type === "failed") {
-                prompts.log.error("Failed to authorize")
-              }
-              if (result.type === "success") {
-                const saveProvider = result.provider ?? provider
-                if ("refresh" in result) {
-                  const { type: _, provider: __, refresh, access, expires, ...extraFields } = result
-                  await Auth.set(saveProvider, {
-                    type: "oauth",
-                    refresh,
-                    access,
-                    expires,
-                    ...extraFields,
-                  })
-                }
-                if ("key" in result) {
-                  await Auth.set(saveProvider, {
-                    type: "api",
-                    key: result.key,
-                  })
-                }
-                prompts.log.success("Login successful")
-              }
-            }
-
-            prompts.outro("Done")
-            return
-          }
-
-          if (method.type === "api") {
-            if (method.authorize) {
-              const result = await method.authorize(inputs)
-              if (result.type === "failed") {
-                prompts.log.error("Failed to authorize")
-              }
-              if (result.type === "success") {
-                const saveProvider = result.provider ?? provider
-                await Auth.set(saveProvider, {
-                  type: "api",
-                  key: result.key,
-                })
-                prompts.log.success("Login successful")
-              }
-              prompts.outro("Done")
-              return
-            }
-          }
+          const handled = await handlePluginAuth({ auth: plugin.auth }, provider)
+          if (handled) return
         }
 
         if (provider === "other") {
@@ -303,6 +320,14 @@ export const AuthLoginCommand = cmd({
           if (prompts.isCancel(provider)) throw new UI.CancelledError()
           provider = provider.replace(/^@ai-sdk\//, "")
           if (prompts.isCancel(provider)) throw new UI.CancelledError()
+
+          // Check if a plugin provides auth for this custom provider
+          const customPlugin = await Plugin.list().then((x) => x.find((x) => x.auth?.provider === provider))
+          if (customPlugin && customPlugin.auth) {
+            const handled = await handlePluginAuth({ auth: customPlugin.auth }, provider)
+            if (handled) return
+          }
+
           prompts.log.warn(
             `This only stores a credential for ${provider} - you will need configure it in opencode.json, check the docs for examples.`,
           )

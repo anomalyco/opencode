@@ -1,11 +1,12 @@
 import { createStore, produce, reconcile } from "solid-js/store"
 import { batch, createEffect, createMemo } from "solid-js"
 import { uniqueBy } from "remeda"
-import type { FileContent, FileNode, Model, Provider, File as FileStatus } from "@opencode-ai/sdk"
+import type { FileContent, FileNode, Model, Provider, File as FileStatus } from "@opencode-ai/sdk/v2"
 import { createSimpleContext } from "@opencode-ai/ui/context"
 import { useSDK } from "./sdk"
 import { useSync } from "./sync"
-import { base64Encode } from "@/utils"
+import { base64Encode } from "@opencode-ai/util/encode"
+import { useProviders } from "@/hooks/use-providers"
 
 export type LocalFile = FileNode &
   Partial<{
@@ -25,6 +26,7 @@ export type View = LocalFile["view"]
 
 export type LocalModel = Omit<Model, "provider"> & {
   provider: Provider
+  latest?: boolean
 }
 export type ModelKey = { providerID: string; modelID: string }
 
@@ -36,10 +38,17 @@ export const { use: useLocal, provider: LocalProvider } = createSimpleContext({
   init: () => {
     const sdk = useSDK()
     const sync = useSync()
+    const providers = useProviders()
 
     function isModelValid(model: ModelKey) {
-      const provider = sync.data.provider.find((x) => x.id === model.providerID)
-      return !!provider?.models[model.modelID]
+      const provider = providers.all().find((x) => x.id === model.providerID)
+      return (
+        !!provider?.models[model.modelID] &&
+        providers
+          .connected()
+          .map((p) => p.id)
+          .includes(model.providerID)
+      )
     }
 
     function getFirstValidModel(...modelFns: (() => ModelKey | undefined)[]) {
@@ -114,7 +123,14 @@ export const { use: useLocal, provider: LocalProvider } = createSimpleContext({
       })
 
       const list = createMemo(() =>
-        sync.data.provider.flatMap((p) => Object.values(p.models).map((m) => ({ ...m, provider: p }) as LocalModel)),
+        providers.connected().flatMap((p) =>
+          Object.values(p.models).map((m) => ({
+            ...m,
+            name: m.name.replace("(latest)", "").trim(),
+            provider: p,
+            latest: m.name.includes("(latest)"),
+          })),
+        ),
       )
       const find = (key: ModelKey) => list().find((m) => m.id === key?.modelID && m.provider.id === key.providerID)
 
@@ -134,12 +150,17 @@ export const { use: useLocal, provider: LocalProvider } = createSimpleContext({
             return item
           }
         }
-        const provider = sync.data.provider[0]
-        const model = Object.values(provider.models)[0]
-        return {
-          providerID: provider.id,
-          modelID: model.id,
+
+        for (const p of providers.connected()) {
+          if (p.id in providers.default()) {
+            return {
+              providerID: p.id,
+              modelID: providers.default()[p.id],
+            }
+          }
         }
+
+        throw new Error("No default model found")
       })
 
       const currentModel = createMemo(() => {
@@ -257,7 +278,7 @@ export const { use: useLocal, provider: LocalProvider } = createSimpleContext({
 
       const load = async (path: string) => {
         const relativePath = relative(path)
-        sdk.client.file.read({ query: { path: relativePath } }).then((x) => {
+        await sdk.client.file.read({ path: relativePath }).then((x) => {
           setStore(
             "node",
             relativePath,
@@ -305,7 +326,7 @@ export const { use: useLocal, provider: LocalProvider } = createSimpleContext({
       }
 
       const list = async (path: string) => {
-        return sdk.client.file.list({ query: { path: path + "/" } }).then((x) => {
+        return sdk.client.file.list({ path: path + "/" }).then((x) => {
           setStore(
             "node",
             produce((draft) => {
@@ -318,10 +339,9 @@ export const { use: useLocal, provider: LocalProvider } = createSimpleContext({
         })
       }
 
-      const searchFiles = (query: string) =>
-        sdk.client.find.files({ query: { query, dirs: "false" } }).then((x) => x.data!)
+      const searchFiles = (query: string) => sdk.client.find.files({ query, dirs: "false" }).then((x) => x.data!)
       const searchFilesAndDirectories = (query: string) =>
-        sdk.client.find.files({ query: { query, dirs: "true" } }).then((x) => x.data!)
+        sdk.client.find.files({ query, dirs: "true" }).then((x) => x.data!)
 
       sdk.event.listen((e) => {
         const event = e.details
@@ -336,7 +356,7 @@ export const { use: useLocal, provider: LocalProvider } = createSimpleContext({
 
       return {
         node: async (path: string) => {
-          if (!store.node[path]) {
+          if (!store.node[path] || !store.node[path].loaded) {
             await init(path)
           }
           return store.node[path]

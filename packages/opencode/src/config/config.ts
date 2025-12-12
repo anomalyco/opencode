@@ -1,5 +1,6 @@
 import { Log } from "../util/log"
 import path from "path"
+import { pathToFileURL } from "url"
 import os from "os"
 import z from "zod"
 import { Filesystem } from "../util/filesystem"
@@ -297,7 +298,7 @@ export namespace Config {
       dot: true,
       cwd: dir,
     })) {
-      plugins.push("file://" + item)
+      plugins.push(pathToFileURL(item).href)
     }
     return plugins
   }
@@ -325,12 +326,33 @@ export namespace Config {
       ref: "McpLocalConfig",
     })
 
+  export const McpOAuth = z
+    .object({
+      clientId: z
+        .string()
+        .optional()
+        .describe("OAuth client ID. If not provided, dynamic client registration (RFC 7591) will be attempted."),
+      clientSecret: z.string().optional().describe("OAuth client secret (if required by the authorization server)"),
+      scope: z.string().optional().describe("OAuth scopes to request during authorization"),
+    })
+    .strict()
+    .meta({
+      ref: "McpOAuthConfig",
+    })
+  export type McpOAuth = z.infer<typeof McpOAuth>
+
   export const McpRemote = z
     .object({
       type: z.literal("remote").describe("Type of MCP server connection"),
       url: z.string().describe("URL of the remote MCP server"),
       enabled: z.boolean().optional().describe("Enable or disable the MCP server on startup"),
       headers: z.record(z.string(), z.string()).optional().describe("Headers to send with the request"),
+      oauth: z
+        .union([McpOAuth, z.literal(false)])
+        .optional()
+        .describe(
+          "OAuth authentication configuration for the MCP server. Set to false to disable OAuth auto-detection.",
+        ),
       timeout: z
         .number()
         .int()
@@ -375,6 +397,12 @@ export namespace Config {
         .regex(/^#[0-9a-fA-F]{6}$/, "Invalid hex color format")
         .optional()
         .describe("Hex color code for the agent (e.g., #FF5733)"),
+      maxSteps: z
+        .number()
+        .int()
+        .positive()
+        .optional()
+        .describe("Maximum number of agentic iterations before forcing text-only response"),
       permission: z
         .object({
           edit: Permission.optional(),
@@ -398,6 +426,7 @@ export namespace Config {
       editor_open: z.string().optional().default("<leader>e").describe("Open external editor"),
       theme_list: z.string().optional().default("<leader>t").describe("List available themes"),
       sidebar_toggle: z.string().optional().default("<leader>b").describe("Toggle sidebar"),
+      scrollbar_toggle: z.string().optional().default("none").describe("Toggle session scrollbar"),
       username_toggle: z.string().optional().default("none").describe("Toggle username visibility"),
       status_view: z.string().optional().default("<leader>s").describe("View status"),
       session_export: z.string().optional().default("<leader>x").describe("Export session to editor"),
@@ -436,10 +465,86 @@ export namespace Config {
       agent_cycle: z.string().optional().default("tab").describe("Next agent"),
       agent_cycle_reverse: z.string().optional().default("shift+tab").describe("Previous agent"),
       input_clear: z.string().optional().default("ctrl+c").describe("Clear input field"),
-      input_forward_delete: z.string().optional().default("ctrl+d").describe("Forward delete"),
       input_paste: z.string().optional().default("ctrl+v").describe("Paste from clipboard"),
       input_submit: z.string().optional().default("return").describe("Submit input"),
-      input_newline: z.string().optional().default("shift+return,ctrl+j").describe("Insert newline in input"),
+      input_newline: z
+        .string()
+        .optional()
+        .default("shift+return,ctrl+return,alt+return,ctrl+j")
+        .describe("Insert newline in input"),
+      input_move_left: z.string().optional().default("left,ctrl+b").describe("Move cursor left in input"),
+      input_move_right: z.string().optional().default("right,ctrl+f").describe("Move cursor right in input"),
+      input_move_up: z.string().optional().default("up").describe("Move cursor up in input"),
+      input_move_down: z.string().optional().default("down").describe("Move cursor down in input"),
+      input_select_left: z.string().optional().default("shift+left").describe("Select left in input"),
+      input_select_right: z.string().optional().default("shift+right").describe("Select right in input"),
+      input_select_up: z.string().optional().default("shift+up").describe("Select up in input"),
+      input_select_down: z.string().optional().default("shift+down").describe("Select down in input"),
+      input_line_home: z.string().optional().default("ctrl+a").describe("Move to start of line in input"),
+      input_line_end: z.string().optional().default("ctrl+e").describe("Move to end of line in input"),
+      input_select_line_home: z
+        .string()
+        .optional()
+        .default("ctrl+shift+a")
+        .describe("Select to start of line in input"),
+      input_select_line_end: z.string().optional().default("ctrl+shift+e").describe("Select to end of line in input"),
+      input_visual_line_home: z.string().optional().default("alt+a").describe("Move to start of visual line in input"),
+      input_visual_line_end: z.string().optional().default("alt+e").describe("Move to end of visual line in input"),
+      input_select_visual_line_home: z
+        .string()
+        .optional()
+        .default("alt+shift+a")
+        .describe("Select to start of visual line in input"),
+      input_select_visual_line_end: z
+        .string()
+        .optional()
+        .default("alt+shift+e")
+        .describe("Select to end of visual line in input"),
+      input_buffer_home: z.string().optional().default("home").describe("Move to start of buffer in input"),
+      input_buffer_end: z.string().optional().default("end").describe("Move to end of buffer in input"),
+      input_select_buffer_home: z
+        .string()
+        .optional()
+        .default("shift+home")
+        .describe("Select to start of buffer in input"),
+      input_select_buffer_end: z.string().optional().default("shift+end").describe("Select to end of buffer in input"),
+      input_delete_line: z.string().optional().default("ctrl+shift+d").describe("Delete line in input"),
+      input_delete_to_line_end: z.string().optional().default("ctrl+k").describe("Delete to end of line in input"),
+      input_delete_to_line_start: z.string().optional().default("ctrl+u").describe("Delete to start of line in input"),
+      input_backspace: z.string().optional().default("backspace,shift+backspace").describe("Backspace in input"),
+      input_delete: z.string().optional().default("ctrl+d,delete,shift+delete").describe("Delete character in input"),
+      input_undo: z.string().optional().default("ctrl+-,super+z").describe("Undo in input"),
+      input_redo: z.string().optional().default("ctrl+.,super+shift+z").describe("Redo in input"),
+      input_word_forward: z
+        .string()
+        .optional()
+        .default("alt+f,alt+right,ctrl+right")
+        .describe("Move word forward in input"),
+      input_word_backward: z
+        .string()
+        .optional()
+        .default("alt+b,alt+left,ctrl+left")
+        .describe("Move word backward in input"),
+      input_select_word_forward: z
+        .string()
+        .optional()
+        .default("alt+shift+f,alt+shift+right")
+        .describe("Select word forward in input"),
+      input_select_word_backward: z
+        .string()
+        .optional()
+        .default("alt+shift+b,alt+shift+left")
+        .describe("Select word backward in input"),
+      input_delete_word_forward: z
+        .string()
+        .optional()
+        .default("alt+d,alt+delete,ctrl+delete")
+        .describe("Delete word forward in input"),
+      input_delete_word_backward: z
+        .string()
+        .optional()
+        .default("ctrl+w,ctrl+backspace,alt+backspace")
+        .describe("Delete word backward in input"),
       history_previous: z.string().optional().default("up").describe("Previous history item"),
       history_next: z.string().optional().default("down").describe("Next history item"),
       session_child_cycle: z.string().optional().default("<leader>right").describe("Next child session"),
@@ -670,6 +775,10 @@ export namespace Config {
           chatMaxRetries: z.number().optional().describe("Number of retries for chat completions on failure"),
           disable_paste_summary: z.boolean().optional(),
           batch_tool: z.boolean().optional().describe("Enable the batch tool"),
+          openTelemetry: z
+            .boolean()
+            .optional()
+            .describe("Enable OpenTelemetry spans for AI SDK calls (using the 'experimental_telemetry' flag)"),
           primary_tools: z
             .array(z.string())
             .optional()

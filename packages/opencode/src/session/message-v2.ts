@@ -1,5 +1,6 @@
+import { BusEvent } from "@/bus/bus-event"
+import { Bus } from "@/bus"
 import z from "zod"
-import { Bus } from "../bus"
 import { NamedError } from "@opencode-ai/util/error"
 import { Message } from "./message"
 import { APICallError, convertToModelMessages, LoadAPIKeyError, type ModelMessage, type UIMessage } from "ai"
@@ -375,27 +376,27 @@ export namespace MessageV2 {
   export type Info = z.infer<typeof Info>
 
   export const Event = {
-    Updated: Bus.event(
+    Updated: BusEvent.define(
       "message.updated",
       z.object({
         info: Info,
       }),
     ),
-    Removed: Bus.event(
+    Removed: BusEvent.define(
       "message.removed",
       z.object({
         sessionID: z.string(),
         messageID: z.string(),
       }),
     ),
-    PartUpdated: Bus.event(
+    PartUpdated: BusEvent.define(
       "message.part.updated",
       z.object({
         part: Part,
         delta: z.string().optional(),
       }),
     ),
-    PartRemoved: Bus.event(
+    PartRemoved: BusEvent.define(
       "message.part.removed",
       z.object({
         sessionID: z.string(),
@@ -410,147 +411,6 @@ export namespace MessageV2 {
     parts: z.array(Part),
   })
   export type WithParts = z.infer<typeof WithParts>
-
-  export function fromV1(v1: Message.Info) {
-    if (v1.role === "assistant") {
-      const info: Assistant = {
-        id: v1.id,
-        parentID: "",
-        sessionID: v1.metadata.sessionID,
-        role: "assistant",
-        time: {
-          created: v1.metadata.time.created,
-          completed: v1.metadata.time.completed,
-        },
-        cost: v1.metadata.assistant!.cost,
-        path: v1.metadata.assistant!.path,
-        summary: v1.metadata.assistant!.summary,
-        tokens: v1.metadata.assistant!.tokens,
-        modelID: v1.metadata.assistant!.modelID,
-        providerID: v1.metadata.assistant!.providerID,
-        mode: "build",
-        error: v1.metadata.error,
-      }
-      const parts = v1.parts.flatMap((part): Part[] => {
-        const base = {
-          id: Identifier.ascending("part"),
-          messageID: v1.id,
-          sessionID: v1.metadata.sessionID,
-        }
-        if (part.type === "text") {
-          return [
-            {
-              ...base,
-              type: "text",
-              text: part.text,
-            },
-          ]
-        }
-        if (part.type === "step-start") {
-          return [
-            {
-              ...base,
-              type: "step-start",
-            },
-          ]
-        }
-        if (part.type === "tool-invocation") {
-          return [
-            {
-              ...base,
-              type: "tool",
-              callID: part.toolInvocation.toolCallId,
-              tool: part.toolInvocation.toolName,
-              state: (() => {
-                if (part.toolInvocation.state === "partial-call") {
-                  return {
-                    status: "pending",
-                    input: {},
-                    raw: "",
-                  }
-                }
-
-                const { title, time, ...metadata } = v1.metadata.tool[part.toolInvocation.toolCallId] ?? {}
-                if (part.toolInvocation.state === "call") {
-                  return {
-                    status: "running",
-                    input: part.toolInvocation.args,
-                    time: {
-                      start: time?.start,
-                    },
-                  }
-                }
-
-                if (part.toolInvocation.state === "result") {
-                  return {
-                    status: "completed",
-                    input: part.toolInvocation.args,
-                    output: part.toolInvocation.result,
-                    title,
-                    time,
-                    metadata,
-                  }
-                }
-                throw new Error("unknown tool invocation state")
-              })(),
-            },
-          ]
-        }
-        return []
-      })
-      return {
-        info,
-        parts,
-      }
-    }
-
-    if (v1.role === "user") {
-      const info: User = {
-        id: v1.id,
-        sessionID: v1.metadata.sessionID,
-        role: "user",
-        time: {
-          created: v1.metadata.time.created,
-        },
-        agent: "build",
-        model: {
-          providerID: "opencode",
-          modelID: "opencode",
-        },
-      }
-      const parts = v1.parts.flatMap((part): Part[] => {
-        const base = {
-          id: Identifier.ascending("part"),
-          messageID: v1.id,
-          sessionID: v1.metadata.sessionID,
-        }
-        if (part.type === "text") {
-          return [
-            {
-              ...base,
-              type: "text",
-              text: part.text,
-            },
-          ]
-        }
-        if (part.type === "file") {
-          return [
-            {
-              ...base,
-              type: "file",
-              mime: part.mediaType,
-              filename: part.filename,
-              url: part.url,
-            },
-          ]
-        }
-        return []
-      })
-      return { info, parts }
-    }
-
-    throw new Error("unknown message type")
-  }
 
   export function toModelMessage(
     input: {
@@ -754,7 +614,7 @@ export namespace MessageV2 {
           try {
             const body = JSON.parse(e.responseBody)
             // try to extract common error message fields
-            const errMsg = body.message || body.error
+            const errMsg = body.message || body.error || body.error?.message
             if (errMsg && typeof errMsg === "string") {
               return `${msg}: ${errMsg}`
             }

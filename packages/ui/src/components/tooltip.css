@@ -1,13 +1,13 @@
-/* [data-component="tooltip-trigger"] { */
-/*   display: flex; */
-/*   align-items: center; */
-/* } */
+[data-component="tooltip-trigger"] {
+  display: flex;
+}
 
 [data-component="tooltip"] {
   z-index: 1000;
   max-width: 320px;
   border-radius: var(--radius-md);
   background-color: var(--surface-float-base);
+  color: var(--text-inverted-base);
   color: rgba(253, 252, 252, 0.94);
   padding: 2px 8px;
   border: 0.5px solid rgba(253, 252, 252, 0.2);
