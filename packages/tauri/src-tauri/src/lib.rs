@@ -4,7 +4,7 @@ use std::{
     sync::{Arc, Mutex},
     time::{Duration, Instant},
 };
-use tauri::{AppHandle, Manager, RunEvent, WebviewUrl, WebviewWindow};
+use tauri::{AppHandle, LogicalSize, Manager, Monitor, RunEvent, WebviewUrl, WebviewWindow};
 use tauri_plugin_dialog::{DialogExt, MessageDialogButtons, MessageDialogResult};
 use tauri_plugin_shell::process::{CommandChild, CommandEvent};
 use tauri_plugin_shell::ShellExt;
@@ -169,10 +169,15 @@ pub fn run() {
                     None
                 };
 
+                let primary_monitor = app.primary_monitor().ok().flatten();
+                let size = primary_monitor
+                    .map(|m| m.size().to_logical(m.scale_factor()))
+                    .unwrap_or(LogicalSize::new(1920, 1080));
+
                 let mut window_builder =
                     WebviewWindow::builder(&app, "main", WebviewUrl::App("/".into()))
                         .title("OpenCode")
-                        .inner_size(800.0, 600.0)
+                        .inner_size(size.width as f64, size.height as f64)
                         .decorations(true)
                         .zoom_hotkeys_enabled(true)
                         .initialization_script(format!(
