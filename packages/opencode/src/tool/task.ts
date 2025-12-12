@@ -40,23 +40,27 @@ export const TaskTool = Tool.define("task", async () => {
       if (!agent) throw new Error(`Unknown agent type: ${params.subagent_type} is not a valid agent type`)
       const calling = await Agent.get(ctx.agent)
       if (calling) {
-        const perm = Wildcard.all(params.subagent_type, calling.permission.task ?? {})
-        if (perm === "deny") {
-          throw new Error(`Agent '${params.subagent_type}' is not available to ${ctx.agent}`)
-        }
-        if (perm === "ask") {
-          await Permission.ask({
-            type: "task",
-            title: `Invoke subagent: ${params.subagent_type}`,
-            pattern: params.subagent_type,
-            callID: ctx.callID,
-            sessionID: ctx.sessionID,
-            messageID: ctx.messageID,
-            metadata: {
-              subagent: params.subagent_type,
-              description: params.description,
-            },
-          })
+        const userInvokedAgents = (ctx.extra?.userInvokedAgents ?? []) as string[]
+        // Skip permission check if user explicitly invoked this agent via @ autocomplete
+        if (!userInvokedAgents.includes(params.subagent_type)) {
+          const perm = Wildcard.all(params.subagent_type, calling.permission.task ?? {})
+          if (perm === "deny") {
+            throw new Error(`Agent '${params.subagent_type}' is not available to ${ctx.agent}`)
+          }
+          if (perm === "ask") {
+            await Permission.ask({
+              type: "task",
+              title: `Invoke subagent: ${params.subagent_type}`,
+              pattern: params.subagent_type,
+              callID: ctx.callID,
+              sessionID: ctx.sessionID,
+              messageID: ctx.messageID,
+              metadata: {
+                subagent: params.subagent_type,
+                description: params.description,
+              },
+            })
+          }
         }
       }
       const session = await iife(async () => {

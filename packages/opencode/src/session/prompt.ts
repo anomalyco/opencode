@@ -483,12 +483,17 @@ export namespace SessionPrompt {
         system: lastUser.system,
         isLastStep,
       })
+      const userInvokedAgents = msgs
+        .filter((m) => m.info.role === "user")
+        .flatMap((m) => m.parts.filter((p) => p.type === "agent") as MessageV2.AgentPart[])
+        .map((p) => p.name)
       const tools = await resolveTools({
         agent,
         sessionID,
         model,
         tools: lastUser.tools,
         processor,
+        userInvokedAgents,
       })
       const provider = await Provider.getProvider(model.providerID)
       const params = await Plugin.trigger(
@@ -705,6 +710,7 @@ export namespace SessionPrompt {
     sessionID: string
     tools?: Record<string, boolean>
     processor: SessionProcessor.Info
+    userInvokedAgents: string[]
   }) {
     const tools: Record<string, AITool> = {}
     const enabledTools = pipe(
@@ -736,7 +742,7 @@ export namespace SessionPrompt {
             abort: options.abortSignal!,
             messageID: input.processor.message.id,
             callID: options.toolCallId,
-            extra: { model: input.model },
+            extra: { model: input.model, userInvokedAgents: input.userInvokedAgents },
             agent: input.agent.name,
             metadata: async (val) => {
               const match = input.processor.partFromToolCall(options.toolCallId)
