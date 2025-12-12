@@ -10,6 +10,7 @@ import { Legal } from "~/component/legal"
 import { config } from "~/config"
 
 const getLatestRelease = query(async () => {
+  "use server"
   const response = await fetch("https://api.github.com/repos/sst/opencode/releases/latest")
   if (!response.ok) return null
   const data = await response.json()
