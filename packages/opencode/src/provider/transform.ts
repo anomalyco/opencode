@@ -272,7 +272,7 @@ export namespace ProviderTransform {
     const options: Record<string, any> = {}
 
     if (model.providerID === "openai" || model.api.id.includes("gpt-5")) {
-      if (model.api.id.includes("5.1")) {
+      if (model.api.id.includes("5.")) {
         options["reasoningEffort"] = "low"
       } else {
         options["reasoningEffort"] = "minimal"

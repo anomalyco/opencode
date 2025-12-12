@@ -13,6 +13,7 @@
     "dialog:default",
     "process:default",
     "store:default",
-    "window-state:default"
+    "window-state:default",
+    "os:default"
   ]
 }
