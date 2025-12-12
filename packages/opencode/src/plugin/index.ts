@@ -2,7 +2,7 @@ import type { Hooks, PluginInput, Plugin as PluginInstance } from "@opencode-ai/
 import { Config } from "../config/config"
 import { Bus } from "../bus"
 import { Log } from "../util/log"
-import { createOpencodeClient } from "@opencode-ai/sdk"
+import { createOpencodeClient } from "@opencode-ai/sdk/v2"
 import { Server } from "../server/server"
 import { BunProc } from "../bun"
 import { Instance } from "../project/instance"
