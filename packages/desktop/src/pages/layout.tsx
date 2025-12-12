@@ -426,7 +426,7 @@ export default function Layout(props: ParentProps) {
   }
 
   return (
-    <div class="relative h-screen flex flex-col">
+    <div class="relative flex-1 flex flex-col">
       <header class="h-12 shrink-0 bg-background-base border-b border-border-weak-base flex" data-tauri-drag-region>
         <A
           href="/"
@@ -512,7 +512,7 @@ export default function Layout(props: ParentProps) {
           </Show>
         </div>
       </header>
-      <div class="h-[calc(100vh-3rem)] flex">
+      <div class="h-[calc(100%-3rem)] flex">
         <div
           classList={{
             "relative @container w-12 pb-5 shrink-0 bg-background-base": true,
