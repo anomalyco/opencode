@@ -35,6 +35,7 @@
     "@opencode-ai/util": "workspace:*",
     "@shikijs/transformers": "3.9.2",
     "@solid-primitives/active-element": "2.1.3",
+    "@solid-primitives/audio": "1.4.2",
     "@solid-primitives/event-bus": "1.1.2",
     "@solid-primitives/resize-observer": "2.1.3",
     "@solid-primitives/scroll": "2.1.3",
