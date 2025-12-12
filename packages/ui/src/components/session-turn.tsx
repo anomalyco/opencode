@@ -60,8 +60,8 @@ export function SessionTurn(
   const working = createMemo(() => status()?.type !== "idle")
 
   let scrollRef: HTMLDivElement | undefined
-  let contentRef: HTMLDivElement | undefined
-  let stickyHeaderRef: HTMLDivElement | undefined
+  const [contentRef, setContentRef] = createSignal<HTMLDivElement>()
+  const [stickyHeaderRef, setStickyHeaderRef] = createSignal<HTMLDivElement>()
   const [userScrolled, setUserScrolled] = createSignal(false)
   const [stickyHeaderHeight, setStickyHeaderHeight] = createSignal(0)
 
@@ -86,25 +86,19 @@ export function SessionTurn(
     }
   })
 
-  onMount(() => {
-    if (!contentRef) return
-    createResizeObserver(contentRef, () => {
-      if (!scrollRef || userScrolled() || !working()) return
-      scrollRef.scrollTop = scrollRef.scrollHeight
-    })
+  createResizeObserver(contentRef, () => {
+    if (!scrollRef || userScrolled() || !working()) return
+    scrollRef.scrollTop = scrollRef.scrollHeight
   })
 
-  onMount(() => {
-    if (!stickyHeaderRef) return
-    createResizeObserver(stickyHeaderRef, ({ height }) => {
-      setStickyHeaderHeight(height + 8)
-    })
+  createResizeObserver(stickyHeaderRef, ({ height }) => {
+    setStickyHeaderHeight(height + 8)
   })
 
   return (
     <div data-component="session-turn" class={props.classes?.root}>
       <div ref={scrollRef} onScroll={handleScroll} data-slot="session-turn-content" class={props.classes?.content}>
-        <div ref={contentRef} onClick={handleInteraction}>
+        <div ref={setContentRef} onClick={handleInteraction}>
           <Show when={message()}>
             {(message) => {
               const assistantMessages = createMemo(() => {
@@ -257,7 +251,7 @@ export function SessionTurn(
                   style={{ "--sticky-header-height": `${stickyHeaderHeight()}px` }}
                 >
                   {/* Sticky Header */}
-                  <div ref={stickyHeaderRef} data-slot="session-turn-sticky-header">
+                  <div ref={setStickyHeaderRef} data-slot="session-turn-sticky-header">
                     <div data-slot="session-turn-message-header">
                       <div data-slot="session-turn-message-title">
                         <Switch>
