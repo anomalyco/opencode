@@ -1310,6 +1310,13 @@ export type McpRemoteConfig = {
   timeout?: number
 }
 
+export type McpOverrideConfig = {
+  /**
+   * Enable or disable the MCP server on startup
+   */
+  enabled: boolean
+}
+
 /**
  * @deprecated Always uses stretch layout.
  */
@@ -1424,7 +1431,7 @@ export type Config = {
    * MCP (Model Context Protocol) server configurations
    */
   mcp?: {
-    [key: string]: McpLocalConfig | McpRemoteConfig
+    [key: string]: McpLocalConfig | McpRemoteConfig | McpOverrideConfig
   }
   formatter?:
     | false
@@ -3559,7 +3566,7 @@ export type McpStatusResponse = McpStatusResponses[keyof McpStatusResponses]
 export type McpAddData = {
   body?: {
     name: string
-    config: McpLocalConfig | McpRemoteConfig
+    config: McpLocalConfig | McpRemoteConfig | McpOverrideConfig
   }
   path?: never
   query?: {

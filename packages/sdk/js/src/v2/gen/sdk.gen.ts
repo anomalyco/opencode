@@ -45,6 +45,7 @@ import type {
   McpConnectResponses,
   McpDisconnectResponses,
   McpLocalConfig,
+  McpOverrideConfig,
   McpRemoteConfig,
   McpStatusResponses,
   PathGetResponses,
@@ -2112,7 +2113,7 @@ export class Mcp extends HeyApiClient {
     parameters?: {
       directory?: string
       name?: string
-      config?: McpLocalConfig | McpRemoteConfig
+      config?: McpLocalConfig | McpRemoteConfig | McpOverrideConfig
     },
     options?: Options<never, ThrowOnError>,
   ) {
