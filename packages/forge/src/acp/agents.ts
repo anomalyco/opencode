@@ -114,6 +114,40 @@ export const ACP_AGENTS: ACPAgentDefinition[] = [
     args: [],
     installGuide: "https://github.com/docker/cagent",
   },
+  {
+    name: "Code Assistant",
+    description: "Rust-based coding agent with streaming and tool execution support",
+    installMethod: "system",
+    command: "code-assistant",
+    args: ["acp"],
+    installCheck: "which code-assistant",
+    installGuide: "https://github.com/stippi/code-assistant",
+  },
+  {
+    name: "LLMling-Agent",
+    description: "Python-based agent framework with file and terminal access",
+    installMethod: "uvx",
+    command: "uvx",
+    args: ["llmling-agent", "acp", "config.yml", "--file-access", "--terminal-access"],
+    installGuide: "https://phil65.github.io/llmling-agent/advanced/acp_integration/",
+  },
+  {
+    name: "Qwen Code",
+    description: "AI-powered coding agent optimized for Qwen3-Coder models (experimental ACP)",
+    installMethod: "npx",
+    command: "npx",
+    args: ["@qwen-code/qwen-code@latest", "--experimental-acp"],
+    installGuide: "https://github.com/QwenLM/qwen-code",
+  },
+  {
+    name: "VT Code",
+    description: "Rust-based coding agent with ACP support",
+    installMethod: "system",
+    command: "vtcode",
+    args: ["acp"],
+    installCheck: "which vtcode",
+    installGuide: "https://github.com/vinhnx/vtcode",
+  },
 ]
 
 export function getAgent(name: string): ACPAgentDefinition | undefined {

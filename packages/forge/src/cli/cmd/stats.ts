@@ -30,7 +30,7 @@ interface SessionStats {
 
 export const StatsCommand = cmd({
   command: "stats",
-  describe: "show token usage and cost statistics",
+  describe: false as any,
   builder: (yargs: Argv) => {
     return yargs
       .option("days", {

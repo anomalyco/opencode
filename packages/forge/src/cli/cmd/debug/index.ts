@@ -10,6 +10,7 @@ import { SnapshotCommand } from "./snapshot"
 
 export const DebugCommand = cmd({
   command: "debug",
+  describe: false as any,
   builder: (yargs) =>
     yargs
       .command(ConfigCommand)

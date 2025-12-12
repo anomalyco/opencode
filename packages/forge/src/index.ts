@@ -45,7 +45,7 @@ const cli = yargs(hideBin(process.argv))
   .wrap(null)
   .option("agent", {
     describe: 'repeatable agent spec: --agent "name=claude model=opus mode=plan"',
-    alias: ["a"],
+    alias: "a",
     type: "string",
     array: true,
   })

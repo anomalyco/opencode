@@ -22,6 +22,11 @@ export const TuiThreadCommand = cmd({
         type: "string",
         describe: "prompt to send",
       })
+      .option("print", {
+        alias: ["p"],
+        type: "boolean",
+        describe: "Run headless, print response and exit",
+      })
       .option("project", {
         type: "string",
         describe: "path to start forge in",
@@ -36,54 +41,51 @@ export const TuiThreadCommand = cmd({
         type: "string",
         describe: "session id to continue",
       })
-      .option("print", {
-        alias: ["p"],
-        type: "boolean",
-        describe: "Print response and exit",
-      })
       .option("port", {
         type: "number",
         describe: "port to listen on",
         default: 0,
+        hidden: true,
       })
       .option("hostname", {
         type: "string",
         describe: "hostname to listen on",
         default: "127.0.0.1",
-      })
-      .option("agent", {
-        type: "string",
-        alias: ["a"],
-        array: true,
-        describe: 'repeatable agent spec: --agent "name=claude model=haiku mode=plan"',
+        hidden: true,
       })
       .option("command", {
         type: "string",
         describe: "the command to run, use prompt for args (print mode only)",
+        hidden: true,
       })
       .option("file", {
         alias: ["f"],
         type: "string",
         array: true,
         describe: "file(s) to attach to prompt (print mode only)",
+        hidden: true,
       })
       .option("share", {
         type: "boolean",
         describe: "share the session (print mode only)",
+        hidden: true,
       })
       .option("title", {
         type: "string",
         describe: "title for the session (print mode only, uses truncated prompt if empty string)",
+        hidden: true,
       })
       .option("attach", {
         type: "string",
         describe: "attach to a running forge server (e.g., http://localhost:4096) (print mode only)",
+        hidden: true,
       })
       .option("format", {
         type: "string",
         choices: ["default", "json"] as const,
         default: "default",
         describe: "output format for print mode",
+        hidden: true,
       }),
   handler: async (args: any) => {
     const baseCwd = process.env.PWD ?? process.cwd()

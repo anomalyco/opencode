@@ -6,6 +6,7 @@ import { upgrade } from "@/cli/upgrade"
 
 export const TuiSpawnCommand = cmd({
   command: "spawn [project]",
+  describe: false as any,
   builder: (yargs) =>
     yargs
       .positional("project", {
