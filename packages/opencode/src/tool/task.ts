@@ -15,10 +15,7 @@ import { Permission } from "../permission"
 export { DESCRIPTION as TASK_DESCRIPTION }
 
 export function filterSubagents(agents: Agent.Info[], permissions: Record<string, Config.Permission>) {
-  return agents.filter((a) => {
-    if (a.visible === false) return false
-    return Wildcard.all(a.name, permissions) !== "deny"
-  })
+  return agents.filter((a) => Wildcard.all(a.name, permissions) !== "deny")
 }
 import { Config } from "../config/config"
 

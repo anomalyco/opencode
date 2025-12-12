@@ -96,10 +96,8 @@ describe("filterSubagents - permission.task filtering", () => {
     expect(result).toHaveLength(3)
     expect(result.map((a) => a.name)).toEqual(["general", "code-reviewer", "orchestrator-fast"])
   })
-})
 
-describe("filterSubagents - visible property filtering", () => {
-  test("excludes agents with visible: false", () => {
+  test("visible: false does not affect filtering (visible only affects autocomplete)", () => {
     const agents = [
       { name: "general", mode: "subagent", visible: false },
       { name: "code-reviewer", mode: "subagent", visible: true },
@@ -107,77 +105,19 @@ describe("filterSubagents - visible property filtering", () => {
     ] as Agent.Info[]
 
     const result = filterSubagents(agents, {})
-    expect(result).toHaveLength(2)
-    expect(result.map((a) => a.name)).toEqual(["code-reviewer", "orchestrator"])
+    expect(result).toHaveLength(3)
+    expect(result.map((a) => a.name)).toEqual(["general", "code-reviewer", "orchestrator"])
   })
 
-  test("includes agents with visible: true", () => {
-    const agents = [
-      { name: "general", mode: "subagent", visible: true },
-      { name: "code-reviewer", mode: "subagent", visible: true },
-    ] as Agent.Info[]
-
-    const result = filterSubagents(agents, {})
-    expect(result).toHaveLength(2)
-    expect(result.map((a) => a.name)).toEqual(["general", "code-reviewer"])
-  })
-
-  test("includes agents with visible: undefined (default visible)", () => {
-    const agents = [
-      { name: "general", mode: "subagent" },
-      { name: "code-reviewer", mode: "subagent", visible: undefined },
-    ] as Agent.Info[]
-
-    const result = filterSubagents(agents, {})
-    expect(result).toHaveLength(2)
-    expect(result.map((a) => a.name)).toEqual(["general", "code-reviewer"])
-  })
-
-  test("visible: false takes precedence over permission allow", () => {
+  test("visible: false agents can be filtered by permission.task deny", () => {
     const agents = [
       { name: "general", mode: "subagent", visible: false },
-      { name: "code-reviewer", mode: "subagent", visible: true },
+      { name: "orchestrator-coder", mode: "subagent", visible: false },
     ] as Agent.Info[]
 
-    const result = filterSubagents(agents, { general: "allow", "code-reviewer": "allow" })
+    const result = filterSubagents(agents, { general: "deny" })
     expect(result).toHaveLength(1)
-    expect(result.map((a) => a.name)).toEqual(["code-reviewer"])
-  })
-
-  test("visible: false combined with permission deny excludes agent", () => {
-    const agents = [
-      { name: "general", mode: "subagent", visible: false },
-      { name: "code-reviewer", mode: "subagent", visible: true },
-    ] as Agent.Info[]
-
-    const result = filterSubagents(agents, { general: "deny", "code-reviewer": "deny" })
-    expect(result).toHaveLength(0)
-  })
-
-  test("edge case: all agents have visible: false", () => {
-    const agents = [
-      { name: "general", mode: "subagent", visible: false },
-      { name: "code-reviewer", mode: "subagent", visible: false },
-    ] as Agent.Info[]
-
-    const result = filterSubagents(agents, {})
-    expect(result).toHaveLength(0)
-    expect(result).toEqual([])
-  })
-
-  test("mixed visible states with permissions", () => {
-    const agents = [
-      { name: "general", mode: "subagent", visible: true },
-      { name: "code-reviewer", mode: "subagent", visible: false },
-      { name: "orchestrator-fast", mode: "subagent" },
-      { name: "orchestrator-slow", mode: "subagent", visible: false },
-    ] as Agent.Info[]
-
-    const result = filterSubagents(agents, {
-      "orchestrator-fast": "deny",
-    })
-    expect(result).toHaveLength(1)
-    expect(result.map((a) => a.name)).toEqual(["general"])
+    expect(result.map((a) => a.name)).toEqual(["orchestrator-coder"])
   })
 })
 
