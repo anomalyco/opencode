@@ -242,6 +242,15 @@ export function SessionTurn(
                 }
               })
 
+              // Auto-collapse steps when done working (if user hasn't interacted)
+              createEffect((prev) => {
+                const isWorking = working()
+                if (prev && !isWorking && !userScrolled()) {
+                  setStore("detailsExpanded", false)
+                }
+                return isWorking
+              }, working())
+
               return (
                 <div
                   data-message={message().id}

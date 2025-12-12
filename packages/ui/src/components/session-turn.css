@@ -30,6 +30,7 @@
   }
 
   [data-slot="session-turn-sticky-header"] {
+    width: 100%;
     position: sticky;
     top: 0;
     background-color: var(--background-stronger);
