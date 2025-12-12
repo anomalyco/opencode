@@ -25,11 +25,6 @@ type ErrorNotification = NotificationBase & {
 
 export type Notification = TurnCompleteNotification | ErrorNotification
 
-export type AudioSettings = {
-  enabled: boolean
-  volume: number
-}
-
 export const { use: useNotification, provider: NotificationProvider } = createSimpleContext({
   name: "Notification",
   init: () => {
@@ -39,10 +34,6 @@ export const { use: useNotification, provider: NotificationProvider } = createSi
     const [store, setStore] = makePersisted(
       createStore({
         list: [] as Notification[],
-        audio: {
-          enabled: true,
-          volume: 1,
-        } as AudioSettings,
       }),
       {
         name: "notification.v1",
@@ -64,10 +55,7 @@ export const { use: useNotification, provider: NotificationProvider } = createSi
       }
       switch (event.type) {
         case "session.idle": {
-          if (store.audio.enabled) {
-            idlePlayer.setVolume(store.audio.volume)
-            idlePlayer.play()
-          }
+          idlePlayer.play()
           const session = event.properties.sessionID
           setStore("list", store.list.length, {
             ...base,
@@ -111,18 +99,6 @@ export const { use: useNotification, provider: NotificationProvider } = createSi
         },
         markViewed(directory: string) {
           setStore("list", (n) => n.directory === directory, "viewed", true)
-        },
-      },
-      audio: {
-        get settings() {
-          return store.audio
-        },
-        setEnabled(enabled: boolean) {
-          setStore("audio", "enabled", enabled)
-        },
-        setVolume(volume: number) {
-          const clamped = Math.max(0, Math.min(1, volume))
-          setStore("audio", "volume", clamped)
         },
       },
     }
