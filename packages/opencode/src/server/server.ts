@@ -1309,6 +1309,38 @@ export namespace Server {
         },
       )
       .post(
+        "/session/:sessionID/rules",
+        describeRoute({
+          summary: "Save rules",
+          description: "Append content to project AGENTS.md file.",
+          operationId: "session.rules",
+          responses: {
+            200: {
+              description: "Content saved",
+              content: {
+                "application/json": {
+                  schema: resolver(z.boolean()),
+                },
+              },
+            },
+            ...errors(400, 404),
+          },
+        }),
+        validator(
+          "param",
+          z.object({
+            sessionID: z.string().meta({ description: "Session ID" }),
+          }),
+        ),
+        validator("json", SessionPrompt.RulesInput.omit({ sessionID: true })),
+        async (c) => {
+          const sessionID = c.req.valid("param").sessionID
+          const body = c.req.valid("json")
+          await SessionPrompt.rules({ ...body, sessionID })
+          return c.json(true)
+        },
+      )
+      .post(
         "/session/:sessionID/revert",
         describeRoute({
           summary: "Revert message",

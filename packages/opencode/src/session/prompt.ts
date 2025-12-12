@@ -25,6 +25,7 @@ import { Bus } from "../bus"
 import { ProviderTransform } from "../provider/transform"
 import { SystemPrompt } from "./system"
 import { Plugin } from "../plugin"
+import { TuiEvent } from "@/cli/cmd/tui/event"
 
 import PROMPT_PLAN from "../session/prompt/plan.txt"
 import BUILD_SWITCH from "../session/prompt/build-switch.txt"
@@ -1351,6 +1352,28 @@ export namespace SessionPrompt {
       await Session.updatePart(part)
     }
     return { info: msg, parts: [part] }
+  }
+
+  export const RulesInput = z.object({
+    sessionID: Identifier.schema("session"),
+    content: z.string(),
+  })
+  export type RulesInput = z.infer<typeof RulesInput>
+  export async function rules(input: RulesInput) {
+    const agentsPath = path.join(Instance.worktree, "AGENTS.md")
+    const file = Bun.file(agentsPath)
+    const exists = await file.exists()
+
+    const content = exists ? await file.text() : ""
+    const newContent = content === "" ? input.content + "\n" : content.trimEnd() + "\n\n" + input.content + "\n"
+
+    await Bun.write(agentsPath, newContent)
+
+    await Bus.publish(TuiEvent.ToastShow, {
+      message: "Saved to AGENTS.md",
+      variant: "success",
+      duration: 3000,
+    })
   }
 
   export const CommandInput = z.object({

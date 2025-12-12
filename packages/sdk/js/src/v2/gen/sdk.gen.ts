@@ -99,6 +99,8 @@ import type {
   SessionPromptResponses,
   SessionRevertErrors,
   SessionRevertResponses,
+  SessionRulesErrors,
+  SessionRulesResponses,
   SessionShareErrors,
   SessionShareResponses,
   SessionShellErrors,
@@ -1406,6 +1408,43 @@ export class Session extends HeyApiClient {
     )
     return (options?.client ?? this.client).post<SessionShellResponses, SessionShellErrors, ThrowOnError>({
       url: "/session/{sessionID}/shell",
+      ...options,
+      ...params,
+      headers: {
+        "Content-Type": "application/json",
+        ...options?.headers,
+        ...params.headers,
+      },
+    })
+  }
+
+  /**
+   * Save rules
+   *
+   * Append content to project AGENTS.md file.
+   */
+  public rules<ThrowOnError extends boolean = false>(
+    parameters: {
+      sessionID: string
+      directory?: string
+      content?: string
+    },
+    options?: Options<never, ThrowOnError>,
+  ) {
+    const params = buildClientParams(
+      [parameters],
+      [
+        {
+          args: [
+            { in: "path", key: "sessionID" },
+            { in: "query", key: "directory" },
+            { in: "body", key: "content" },
+          ],
+        },
+      ],
+    )
+    return (options?.client ?? this.client).post<SessionRulesResponses, SessionRulesErrors, ThrowOnError>({
+      url: "/session/{sessionID}/rules",
       ...options,
       ...params,
       headers: {

@@ -203,6 +203,10 @@ export function Prompt(props: PromptProps) {
             setStore("mode", "normal")
             return
           }
+          if (store.mode === "rules") {
+            setStore("mode", "normal")
+            return
+          }
           if (!props.sessionID) return
 
           setStore("interrupt", store.interrupt + 1)
@@ -318,7 +322,7 @@ export function Prompt(props: PromptProps) {
 
   const [store, setStore] = createStore<{
     prompt: PromptInfo
-    mode: "normal" | "shell"
+    mode: "normal" | "shell" | "rules"
     extmarkToPartIndex: Map<number, number>
     interrupt: number
     placeholder: number
@@ -502,6 +506,12 @@ export function Prompt(props: PromptProps) {
         command: inputText,
       })
       setStore("mode", "normal")
+    } else if (store.mode === "rules") {
+      sdk.client.session.rules({
+        sessionID,
+        content: inputText,
+      })
+      setStore("mode", "normal")
     } else if (
       inputText.startsWith("/") &&
       iife(() => {
@@ -640,9 +650,15 @@ export function Prompt(props: PromptProps) {
   const highlight = createMemo(() => {
     if (keybind.leader) return theme.border
     if (store.mode === "shell") return theme.primary
+    if (store.mode === "rules") return theme.success
     return local.agent.color(local.agent.current().name)
   })
 
+  const modeLabel = createMemo(() => {
+    if (store.mode === "shell") return "Shell"
+    if (store.mode === "rules") return "Rules"
+    return Locale.titlecase(local.agent.current().name)
+  })
   const spinnerDef = createMemo(() => {
     const color = local.agent.color(local.agent.current().name)
     return {
@@ -740,7 +756,19 @@ export function Prompt(props: PromptProps) {
                   e.preventDefault()
                   return
                 }
+                if (e.name === "#" && input.visualCursor.offset === 0) {
+                  setStore("mode", "rules")
+                  e.preventDefault()
+                  return
+                }
                 if (store.mode === "shell") {
+                  if ((e.name === "backspace" && input.visualCursor.offset === 0) || e.name === "escape") {
+                    setStore("mode", "normal")
+                    e.preventDefault()
+                    return
+                  }
+                }
+                if (store.mode === "rules") {
                   if ((e.name === "backspace" && input.visualCursor.offset === 0) || e.name === "escape") {
                     setStore("mode", "normal")
                     e.preventDefault()
@@ -845,9 +873,7 @@ export function Prompt(props: PromptProps) {
               syntaxStyle={syntax()}
             />
             <box flexDirection="row" flexShrink={0} paddingTop={1} gap={1}>
-              <text fg={highlight()}>
-                {store.mode === "shell" ? "Shell" : Locale.titlecase(local.agent.current().name)}{" "}
-              </text>
+              <text fg={highlight()}>{modeLabel()} </text>
               <Show when={store.mode === "normal"}>
                 <box flexDirection="row" gap={1}>
                   <text flexShrink={0} fg={theme.text}>
@@ -977,6 +1003,11 @@ export function Prompt(props: PromptProps) {
                 <Match when={store.mode === "shell"}>
                   <text fg={theme.text}>
                     esc <span style={{ fg: theme.textMuted }}>exit shell mode</span>
+                  </text>
+                </Match>
+                <Match when={store.mode === "rules"}>
+                  <text fg={theme.text}>
+                    esc <span style={{ fg: theme.textMuted }}>exit rules mode</span>
                   </text>
                 </Match>
               </Switch>
