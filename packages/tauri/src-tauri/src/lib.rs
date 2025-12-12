@@ -5,6 +5,8 @@ use std::{
     time::{Duration, Instant},
 };
 use tauri::{AppHandle, LogicalSize, Manager, Monitor, RunEvent, WebviewUrl, WebviewWindow};
+#[cfg(target_os = "macos")]
+use tauri::TitleBarStyle;
 use tauri_plugin_dialog::{DialogExt, MessageDialogButtons, MessageDialogResult};
 use tauri_plugin_shell::process::{CommandChild, CommandEvent};
 use tauri_plugin_shell::ShellExt;
@@ -107,6 +109,7 @@ pub fn run() {
     let updater_enabled = option_env!("TAURI_SIGNING_PRIVATE_KEY").is_some();
 
     let mut builder = tauri::Builder::default()
+        .plugin(tauri_plugin_os::init())
         .plugin(tauri_plugin_window_state::Builder::new().build())
         .plugin(tauri_plugin_store::Builder::new().build())
         .plugin(tauri_plugin_dialog::init())
@@ -190,7 +193,9 @@ pub fn run() {
 
                 #[cfg(target_os = "macos")]
                 {
-                    window_builder = window_builder.hidden_title(true);
+                    window_builder = window_builder
+                        .title_bar_style(TitleBarStyle::Overlay)
+                        .hidden_title(true);
                 }
 
                 window_builder.build().expect("Failed to create window");

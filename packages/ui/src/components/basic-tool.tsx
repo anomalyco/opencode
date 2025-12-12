@@ -21,12 +21,13 @@ export interface BasicToolProps {
   trigger: TriggerTitle | JSX.Element
   children?: JSX.Element
   hideDetails?: boolean
+  defaultOpen?: boolean
 }
 
 export function BasicTool(props: BasicToolProps) {
   const resolved = children(() => props.children)
   return (
-    <Collapsible>
+    <Collapsible defaultOpen={props.defaultOpen}>
       <Collapsible.Trigger>
         <div data-component="tool-trigger">
           <div data-slot="basic-tool-tool-trigger-content">
