@@ -533,10 +533,22 @@ export namespace MCP {
       return undefined
     }
 
-    return client.getPrompt({
-      name: mapping.promptName,
-      arguments: args,
-    })
+    const result = await client
+      .getPrompt({
+        name: mapping.promptName,
+        arguments: args,
+      })
+      .catch((e) => {
+        log.error("failed to get prompt from MCP server", {
+          key,
+          clientName: mapping.clientName,
+          promptName: mapping.promptName,
+          error: e.message,
+        })
+        return undefined
+      })
+
+    return result
   }
 
   /**

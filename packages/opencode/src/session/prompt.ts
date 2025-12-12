@@ -1406,19 +1406,21 @@ export namespace SessionPrompt {
 
       // Get the actual prompt from the MCP server
       const mcp_prompt = await MCP.getPrompt(input.command, mcp_args)
-      if (mcp_prompt) {
-        // Convert MCP prompt messages to a template string
-        template = mcp_prompt.messages
-          .map((msg) => {
-            if (msg.content.type === "text") {
-              return msg.content.text
-            }
-            return ""
-          })
-          .join("\n\n")
-      } else {
-        template = input.arguments
+      if (!mcp_prompt) {
+        throw new Error(
+          `Failed to load MCP prompt: ${input.command}. The MCP server may be disconnected or the prompt may not exist.`,
+        )
       }
+
+      // Convert MCP prompt messages to a template string
+      template = mcp_prompt.messages
+        .map((msg) => {
+          if (msg.content.type === "text") {
+            return msg.content.text
+          }
+          return ""
+        })
+        .join("\n\n")
     } else {
       // Regular command - process template normally
       const raw = input.arguments.match(argsRegex) ?? []
