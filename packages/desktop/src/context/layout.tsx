@@ -7,15 +7,10 @@ import { useGlobalSDK } from "./global-sdk"
 import { Project } from "@opencode-ai/sdk/v2"
 
 const AVATAR_COLOR_KEYS = ["pink", "mint", "orange", "purple", "cyan", "lime"] as const
-
 export type AvatarColorKey = (typeof AVATAR_COLOR_KEYS)[number]
 
-export function isAvatarColorKey(value: string): value is AvatarColorKey {
-  return AVATAR_COLOR_KEYS.includes(value as AvatarColorKey)
-}
-
 export function getAvatarColors(key?: string) {
-  if (key && isAvatarColorKey(key)) {
+  if (key && AVATAR_COLOR_KEYS.includes(key as AvatarColorKey)) {
     return {
       background: `var(--avatar-background-${key})`,
       foreground: `var(--avatar-text-${key})`,
@@ -50,7 +45,7 @@ export const { use: useLayout, provider: LayoutProvider } = createSimpleContext(
         },
       }),
       {
-        name: "default-layout.v7",
+        name: "layout.v1",
       },
     )
     const [ephemeral, setEphemeral] = createStore<{
@@ -97,21 +92,10 @@ export const { use: useLayout, provider: LayoutProvider } = createSimpleContext(
     const enriched = createMemo(() => store.projects.flatMap(enrich))
     const list = createMemo(() => enriched().flatMap(colorize))
 
-    async function loadProjectSessions(directory: string) {
-      const [, setStore] = globalSync.child(directory)
-      globalSdk.client.session.list({ directory }).then((x) => {
-        const sessions = (x.data ?? [])
-          .slice()
-          .sort((a, b) => a.id.localeCompare(b.id))
-          .slice(0, 5)
-        setStore("session", sessions)
-      })
-    }
-
     onMount(() => {
       Promise.all(
         store.projects.map((project) => {
-          return loadProjectSessions(project.worktree)
+          return globalSync.project.loadSessions(project.worktree)
         }),
       )
     })
@@ -121,7 +105,7 @@ export const { use: useLayout, provider: LayoutProvider } = createSimpleContext(
         list,
         open(directory: string) {
           if (store.projects.find((x) => x.worktree === directory)) return
-          loadProjectSessions(directory)
+          globalSync.project.loadSessions(directory)
           setStore("projects", (x) => [{ worktree: directory, expanded: true }, ...x])
         },
         close(directory: string) {

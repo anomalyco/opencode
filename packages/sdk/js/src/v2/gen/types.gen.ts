@@ -2407,7 +2407,7 @@ export type SessionGetResponse = SessionGetResponses[keyof SessionGetResponses]
 export type SessionUpdateData = {
   body?: {
     title?: string
-    time: {
+    time?: {
       archived?: number
     }
   }
