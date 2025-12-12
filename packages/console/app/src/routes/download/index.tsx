@@ -8,20 +8,7 @@ import { Faq } from "~/component/faq"
 import desktopAppIcon from "../../asset/lander/opencode-desktop-icon.png"
 import { Legal } from "~/component/legal"
 import { config } from "~/config"
-
-const getLatestRelease = query(async () => {
-  "use server"
-  const response = await fetch("https://api.github.com/repos/sst/opencode/releases/latest", {
-    headers: {
-      "User-Agent":
-        "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/108.0.0.0 Safari/537.36",
-    },
-  })
-
-  if (!response.ok) return null
-  const data = await response.json()
-  return data.tag_name as string
-}, "latest-release")
+import { github } from "~/lib/github"
 
 function CopyStatus() {
   return (
@@ -33,11 +20,11 @@ function CopyStatus() {
 }
 
 export default function Download() {
-  const release = createAsync(() => getLatestRelease(), {
+  const githubData = createAsync(() => github(), {
     deferStream: true,
   })
   const download = () => {
-    const version = release()
+    const version = githubData()?.release.tag_name
     if (!version) return null
     return `https://github.com/sst/opencode/releases/download/${version}`
   }
