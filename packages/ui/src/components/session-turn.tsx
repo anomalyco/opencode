@@ -73,6 +73,12 @@ export function SessionTurn(
     }
   }
 
+  function handleInteraction() {
+    if (working()) {
+      setUserScrolled(true)
+    }
+  }
+
   createEffect(() => {
     if (!working()) {
       setUserScrolled(false)
@@ -90,7 +96,7 @@ export function SessionTurn(
   return (
     <div data-component="session-turn" class={props.classes?.root}>
       <div ref={scrollRef} onScroll={handleScroll} data-slot="session-turn-content" class={props.classes?.content}>
-        <div ref={contentRef}>
+        <div ref={contentRef} onClick={handleInteraction}>
           <Show when={message()}>
             {(message) => {
               const assistantMessages = createMemo(() => {
@@ -233,35 +239,29 @@ export function SessionTurn(
                   data-slot="session-turn-message-container"
                   class={props.classes?.container}
                 >
-                  {/* Title */}
-                  <div data-slot="session-turn-message-header">
-                    <div data-slot="session-turn-message-title">
-                      <Switch>
-                        <Match when={working()}>
-                          <Typewriter as="h1" text={message().summary?.title} data-slot="session-turn-typewriter" />
-                        </Match>
-                        <Match when={true}>
-                          <h1>{message().summary?.title}</h1>
-                        </Match>
-                      </Switch>
+                  {/* Sticky Header */}
+                  <div data-slot="session-turn-sticky-header">
+                    <div data-slot="session-turn-message-header">
+                      <div data-slot="session-turn-message-title">
+                        <Switch>
+                          <Match when={working()}>
+                            <Typewriter as="h1" text={message().summary?.title} data-slot="session-turn-typewriter" />
+                          </Match>
+                          <Match when={true}>
+                            <h1>{message().summary?.title}</h1>
+                          </Match>
+                        </Switch>
+                      </div>
                     </div>
-                  </div>
-                  <div data-slot="session-turn-message-content">
-                    <Message message={message()} parts={parts()} />
-                  </div>
-                  {/* Response */}
-                  <div data-slot="session-turn-response-section">
-                    <Collapsible
-                      variant="ghost"
-                      open={store.detailsExpanded}
-                      onOpenChange={(open) => setStore("detailsExpanded", open)}
-                      data-slot="session-turn-collapsible"
-                    >
-                      <Collapsible.Trigger
-                        as={Button}
+                    <div data-slot="session-turn-message-content">
+                      <Message message={message()} parts={parts()} />
+                    </div>
+                    <div data-slot="session-turn-response-trigger">
+                      <Button
                         data-slot="session-turn-collapsible-trigger-content"
                         variant="ghost"
                         size="small"
+                        onClick={() => setStore("detailsExpanded", !store.detailsExpanded)}
                       >
                         <Show when={working()}>
                           <Spinner />
@@ -274,41 +274,42 @@ export function SessionTurn(
                         <span>·</span>
                         <span>{store.duration}</span>
                         <Icon name="chevron-grabber-vertical" size="small" />
-                      </Collapsible.Trigger>
-                      <Collapsible.Content>
-                        <div data-slot="session-turn-collapsible-content-inner">
-                          <For each={assistantMessages()}>
-                            {(assistantMessage) => {
-                              const parts = createMemo(() => data.store.part[assistantMessage.id] ?? [])
-                              const last = createMemo(() =>
-                                parts()
-                                  .filter((p) => p?.type === "text")
-                                  .at(-1),
-                              )
-                              return (
-                                <Switch>
-                                  <Match when={lastTextPartShown() && lastTextPart()?.id === last()?.id}>
-                                    <Message
-                                      message={assistantMessage}
-                                      parts={parts().filter((p) => p?.id !== last()?.id)}
-                                    />
-                                  </Match>
-                                  <Match when={true}>
-                                    <Message message={assistantMessage} parts={parts()} />
-                                  </Match>
-                                </Switch>
-                              )
-                            }}
-                          </For>
-                          <Show when={error()}>
-                            <Card variant="error" class="error-card">
-                              {error()?.data?.message as string}
-                            </Card>
-                          </Show>
-                        </div>
-                      </Collapsible.Content>
-                    </Collapsible>
+                      </Button>
+                    </div>
                   </div>
+                  {/* Response */}
+                  <Show when={store.detailsExpanded}>
+                    <div data-slot="session-turn-collapsible-content-inner">
+                      <For each={assistantMessages()}>
+                        {(assistantMessage) => {
+                          const parts = createMemo(() => data.store.part[assistantMessage.id] ?? [])
+                          const last = createMemo(() =>
+                            parts()
+                              .filter((p) => p?.type === "text")
+                              .at(-1),
+                          )
+                          return (
+                            <Switch>
+                              <Match when={lastTextPartShown() && lastTextPart()?.id === last()?.id}>
+                                <Message
+                                  message={assistantMessage}
+                                  parts={parts().filter((p) => p?.id !== last()?.id)}
+                                />
+                              </Match>
+                              <Match when={true}>
+                                <Message message={assistantMessage} parts={parts()} />
+                              </Match>
+                            </Switch>
+                          )
+                        }}
+                      </For>
+                      <Show when={error()}>
+                        <Card variant="error" class="error-card">
+                          {error()?.data?.message as string}
+                        </Card>
+                      </Show>
+                    </div>
+                  </Show>
                   {/* Summary */}
                   <Show when={!working()}>
                     <div data-slot="session-turn-summary-section">

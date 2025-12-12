@@ -29,20 +29,32 @@
     gap: 32px;
   }
 
+  [data-slot="session-turn-sticky-header"] {
+    position: sticky;
+    top: 0;
+    background-color: var(--background-stronger);
+    z-index: 20;
+    display: flex;
+    flex-direction: column;
+    gap: 8px;
+    padding-bottom: 8px;
+  }
+
   [data-slot="session-turn-message-header"] {
     display: flex;
     align-items: center;
     gap: 8px;
     align-self: stretch;
-    position: sticky;
-    top: 0;
-    background-color: var(--background-stronger);
-    z-index: 20;
     height: 32px;
   }
 
-  [data-slot="session-turn-message-content"] {
-    margin-top: -24px;
+  /* [data-slot="session-turn-message-content"] { */
+  /* } */
+
+  [data-slot="session-turn-response-trigger"] {
+    width: calc(100% + 9px);
+    margin-left: -9px;
+    padding-left: 9px;
   }
 
   [data-slot="session-turn-message-title"] {
