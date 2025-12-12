@@ -317,5 +317,9 @@
     flex-direction: column;
     align-self: stretch;
     gap: 12px;
+
+    > :first-child > [data-component="markdown"]:first-child {
+      margin-top: 0;
+    }
   }
 }
