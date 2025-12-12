@@ -1383,7 +1383,8 @@ export namespace SessionPrompt {
     // Check if this is an MCP prompt
     const { MCP } = await import("../mcp")
     const mcp_prompts = await MCP.prompts()
-    const is_mcp_prompt = !!mcp_prompts[input.command]
+    const mcpPrompts = await MCP.prompts()
+    const isMcpPrompt = !!mcpPrompts[input.command]
 
     let template = ""
     if (is_mcp_prompt) {
