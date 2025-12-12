@@ -42,10 +42,10 @@ export function SessionTurn(
   const userMessages = createMemo(() =>
     messages()
       .filter((m) => m.role === "user")
-      .sort((a, b) => b.id.localeCompare(a.id)),
+      .sort((a, b) => a.id.localeCompare(b.id)),
   )
   const lastUserMessage = createMemo(() => {
-    return userMessages()?.at(0)
+    return userMessages()?.at(-1)
   })
   const message = createMemo(() => userMessages()?.find((m) => m.id === props.messageID))
 
