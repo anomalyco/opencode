@@ -1284,8 +1284,9 @@ export namespace SessionPrompt {
         args: ["-NoProfile", "-Command", input.command],
       },
       // Fallback: any shell that doesn't match those above
+      //  - No -l, for max compatibility
       "": {
-        args: ["-c", "-l", `${input.command}`],
+        args: ["-c", `${input.command}`],
       },
     }
 
