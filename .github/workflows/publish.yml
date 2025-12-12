@@ -55,7 +55,7 @@ jobs:
 
       - name: Install OpenCode
         if: inputs.bump || inputs.version
-        run: curl -fsSL https://opencode.ai/install | bash
+        run: bun i -g opencode-ai@1.0.143
 
       - name: Login to GitHub Container Registry
         uses: docker/login-action@v3
@@ -70,8 +70,8 @@ jobs:
           registry-url: "https://registry.npmjs.org"
 
       - name: Publish
-        run: |
-          ./script/publish.ts
+        id: publish
+        run: ./script/publish.ts
         env:
           OPENCODE_BUMP: ${{ inputs.bump }}
           OPENCODE_VERSION: ${{ inputs.version }}
@@ -79,9 +79,12 @@ jobs:
           AUR_KEY: ${{ secrets.AUR_KEY }}
           GITHUB_TOKEN: ${{ secrets.SST_GITHUB_TOKEN }}
           NPM_CONFIG_PROVENANCE: false
+    outputs:
+      releaseId: ${{ steps.publish.outputs.releaseId }}
+      tagName: ${{ steps.publish.outputs.tagName }}
 
   publish-tauri:
-    if: false # inputs.bump || inputs.version
+    needs: publish
     continue-on-error: true
     strategy:
       fail-fast: false
@@ -91,9 +94,9 @@ jobs:
             target: x86_64-apple-darwin
           - host: macos-latest
             target: aarch64-apple-darwin
-          - host: windows-latest
+          - host: blacksmith-4vcpu-windows-2025
             target: x86_64-pc-windows-msvc
-          - host: ubuntu-24.04
+          - host: blacksmith-4vcpu-ubuntu-2404
             target: x86_64-unknown-linux-gnu
     runs-on: ${{ matrix.settings.host }}
     steps:
@@ -126,7 +129,7 @@ jobs:
       - uses: ./.github/actions/setup-bun
 
       - name: install dependencies (ubuntu only)
-        if: startsWith(matrix.settings.host, 'ubuntu')
+        if: contains(matrix.settings.host, 'ubuntu')
         run: |
           sudo apt-get update
           sudo apt-get install -y libwebkit2gtk-4.1-dev libappindicator3-dev librsvg2-dev patchelf
@@ -158,7 +161,7 @@ jobs:
 
       # Fixes AppImage build issues, can be removed when https://github.com/tauri-apps/tauri/pull/12491 is released
       - run: cargo install tauri-cli --git https://github.com/tauri-apps/tauri --branch feat/truly-portable-appimage
-        if: startsWith(matrix.settings.host, 'ubuntu')
+        if: contains(matrix.settings.host, 'ubuntu')
 
       - name: Build and upload artifacts
         uses: tauri-apps/tauri-action@390cbe447412ced1303d35abe75287949e43437a
@@ -176,7 +179,9 @@ jobs:
         with:
           projectPath: packages/tauri
           uploadWorkflowArtifacts: true
-          tauriScript: ${{ (startsWith(matrix.settings.host, 'ubuntu') && 'cargo tauri') || '' }}
+          tauriScript: ${{ (contains(matrix.settings.host, 'ubuntu') && 'cargo tauri') || '' }}
           args: --target ${{ matrix.settings.target }}
           updaterJsonPreferNsis: true
-          # releaseId: TODO
+          releaseId: ${{ needs.publish.outputs.releaseId }}
+          tagName: ${{ needs.publish.outputs.tagName }}
+          releaseAssetNamePattern: opencode-desktop-[platform]-[arch][ext]

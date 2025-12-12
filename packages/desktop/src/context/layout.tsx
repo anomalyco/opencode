@@ -1,23 +1,33 @@
-import { createStore } from "solid-js/store"
-import { createMemo, onMount } from "solid-js"
+import { createStore, produce } from "solid-js/store"
+import { batch, createMemo, onMount } from "solid-js"
 import { createSimpleContext } from "@opencode-ai/ui/context"
 import { makePersisted } from "@solid-primitives/storage"
 import { useGlobalSync } from "./global-sync"
 import { useGlobalSDK } from "./global-sdk"
 import { Project } from "@opencode-ai/sdk/v2"
 
-const PASTEL_COLORS = [
-  "#FCEAFD", // pastel pink
-  "#FFDFBA", // pastel peach
-  "#FFFFBA", // pastel yellow
-  "#BAFFC9", // pastel green
-  "#EAF6FD", // pastel blue
-  "#EFEAFD", // pastel lavender
-  "#FEC8D8", // pastel rose
-  "#D4F0F0", // pastel cyan
-  "#FDF0EA", // pastel coral
-  "#C1E1C1", // pastel mint
-]
+const AVATAR_COLOR_KEYS = ["pink", "mint", "orange", "purple", "cyan", "lime"] as const
+
+export type AvatarColorKey = (typeof AVATAR_COLOR_KEYS)[number]
+
+export function isAvatarColorKey(value: string): value is AvatarColorKey {
+  return AVATAR_COLOR_KEYS.includes(value as AvatarColorKey)
+}
+
+export function getAvatarColors(key?: string) {
+  if (key && isAvatarColorKey(key)) {
+    return {
+      background: `var(--avatar-background-${key})`,
+      foreground: `var(--avatar-text-${key})`,
+    }
+  }
+  return {
+    background: "var(--surface-info-base)",
+    foreground: "var(--text-base)",
+  }
+}
+
+type Dialog = "provider" | "model" | "connect"
 
 export const { use: useLayout, provider: LayoutProvider } = createSimpleContext({
   name: "Layout",
@@ -43,16 +53,24 @@ export const { use: useLayout, provider: LayoutProvider } = createSimpleContext(
         name: "default-layout.v7",
       },
     )
-    const [ephemeral, setEphemeral] = createStore({
+    const [ephemeral, setEphemeral] = createStore<{
+      connect: {
+        provider?: string
+        state?: "pending" | "complete" | "error"
+        error?: string
+      }
       dialog: {
-        open: undefined as undefined | "provider" | "model",
-      },
+        open?: Dialog
+      }
+    }>({
+      connect: {},
+      dialog: {},
     })
-    const usedColors = new Set<string>()
+    const usedColors = new Set<AvatarColorKey>()
 
-    function pickAvailableColor() {
-      const available = PASTEL_COLORS.filter((c) => !usedColors.has(c))
-      if (available.length === 0) return PASTEL_COLORS[Math.floor(Math.random() * PASTEL_COLORS.length)]
+    function pickAvailableColor(): AvatarColorKey {
+      const available = AVATAR_COLOR_KEYS.filter((c) => !usedColors.has(c))
+      if (available.length === 0) return AVATAR_COLOR_KEYS[Math.floor(Math.random() * AVATAR_COLOR_KEYS.length)]
       return available[Math.floor(Math.random() * available.length)]
     }
 
@@ -169,13 +187,54 @@ export const { use: useLayout, provider: LayoutProvider } = createSimpleContext(
       },
       dialog: {
         opened: createMemo(() => ephemeral.dialog?.open),
-        open(dialog: "provider" | "model") {
-          setEphemeral("dialog", "open", dialog)
+        open(dialog: Dialog) {
+          batch(() => {
+            // if (dialog !== "connect") {
+            //   setEphemeral("connect", {})
+            // }
+            setEphemeral("dialog", "open", dialog)
+          })
         },
-        close(dialog: "provider" | "model") {
-          if (ephemeral.dialog?.open === dialog) {
-            setEphemeral("dialog", "open", undefined)
+        close(dialog: Dialog) {
+          if (ephemeral.dialog.open === dialog) {
+            setEphemeral(
+              produce((state) => {
+                state.dialog.open = undefined
+                state.connect = {}
+              }),
+            )
           }
+        },
+        connect(provider: string) {
+          setEphemeral(
+            produce((state) => {
+              state.dialog.open = "connect"
+              state.connect = { provider, state: "pending" }
+            }),
+          )
+        },
+      },
+      connect: {
+        provider: createMemo(() => ephemeral.connect.provider),
+        state: createMemo(() => ephemeral.connect.state),
+        complete() {
+          setEphemeral(
+            produce((state) => {
+              state.dialog.open = "model"
+              state.connect.state = "complete"
+            }),
+          )
+        },
+        error(message: string) {
+          setEphemeral(
+            produce((state) => {
+              state.connect.state = "error"
+              state.connect.error = message
+            }),
+          )
+        },
+        clear() {
+          setEphemeral("connect", {})
         },
       },
     }
