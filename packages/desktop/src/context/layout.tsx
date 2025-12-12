@@ -92,21 +92,10 @@ export const { use: useLayout, provider: LayoutProvider } = createSimpleContext(
     const enriched = createMemo(() => store.projects.flatMap(enrich))
     const list = createMemo(() => enriched().flatMap(colorize))
 
-    async function loadProjectSessions(directory: string) {
-      const [, setStore] = globalSync.child(directory)
-      globalSdk.client.session.list({ directory }).then((x) => {
-        const sessions = (x.data ?? [])
-          .slice()
-          .sort((a, b) => a.id.localeCompare(b.id))
-          .slice(0, 5)
-        setStore("session", sessions)
-      })
-    }
-
     onMount(() => {
       Promise.all(
         store.projects.map((project) => {
-          return loadProjectSessions(project.worktree)
+          return globalSync.project.loadSessions(project.worktree)
         }),
       )
     })
@@ -116,7 +105,7 @@ export const { use: useLayout, provider: LayoutProvider } = createSimpleContext(
         list,
         open(directory: string) {
           if (store.projects.find((x) => x.worktree === directory)) return
-          loadProjectSessions(directory)
+          globalSync.project.loadSessions(directory)
           setStore("projects", (x) => [{ worktree: directory, expanded: true }, ...x])
         },
         close(directory: string) {

@@ -69,8 +69,19 @@ export const { use: useGlobalSync, provider: GlobalSyncProvider } = createSimple
       children: {},
     })
 
+    async function loadSessions(directory: string) {
+      globalSDK.client.session.list({ directory }).then((x) => {
+        const sessions = (x.data ?? [])
+          .slice()
+          .filter((s) => !s.time.archived)
+          .sort((a, b) => a.id.localeCompare(b.id))
+          .slice(0, 5)
+        setGlobalStore("children", directory, "session", sessions)
+      })
+    }
+
     async function bootstrapInstance(directory: string) {
-      const [store, setStore] = child(directory)
+      const [, setStore] = child(directory)
       const sdk = createOpencodeClient({
         baseUrl: globalSDK.url,
         directory,
@@ -80,14 +91,7 @@ export const { use: useGlobalSync, provider: GlobalSyncProvider } = createSimple
         provider: () => sdk.provider.list().then((x) => setStore("provider", x.data!)),
         path: () => sdk.path.get().then((x) => setStore("path", x.data!)),
         agent: () => sdk.app.agents().then((x) => setStore("agent", x.data ?? [])),
-        session: () =>
-          sdk.session.list().then((x) => {
-            const sessions = (x.data ?? [])
-              .slice()
-              .sort((a, b) => a.id.localeCompare(b.id))
-              .slice(0, store.limit)
-            setStore("session", sessions)
-          }),
+        session: () => loadSessions(directory),
         status: () => sdk.session.status().then((x) => setStore("session_status", x.data!)),
         config: () => sdk.config.get().then((x) => setStore("config", x.data!)),
         changes: () => sdk.file.status().then((x) => setStore("changes", x.data!)),
@@ -158,6 +162,12 @@ export const { use: useGlobalSync, provider: GlobalSyncProvider } = createSimple
         }
         case "session.updated": {
           const result = Binary.search(store.session, event.properties.info.id, (s) => s.id)
+          if (event.properties.info.time.archived) {
+            if (result.found) {
+              setStore("session", (s) => s.filter((x) => x.id !== event.properties.info.id))
+            }
+            break
+          }
           if (result.found) {
             setStore("session", result.index, reconcile(event.properties.info))
             break
@@ -257,6 +267,9 @@ export const { use: useGlobalSync, provider: GlobalSyncProvider } = createSimple
       },
       child,
       bootstrap,
+      project: {
+        loadSessions,
+      },
     }
   },
 })

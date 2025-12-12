@@ -55,6 +55,7 @@ import { showToast, Toast } from "@opencode-ai/ui/toast"
 import { useGlobalSDK } from "@/context/global-sdk"
 import { Spinner } from "@opencode-ai/ui/spinner"
 import { useNotification } from "@/context/notification"
+import { Binary } from "@opencode-ai/util/binary"
 
 export default function Layout(props: ParentProps) {
   const [store, setStore] = createStore({
@@ -258,7 +259,8 @@ export default function Layout(props: ParentProps) {
   const SortableProject = (props: { project: Project & { expanded: boolean } }): JSX.Element => {
     const notification = useNotification()
     const sortable = createSortable(props.project.worktree)
-    const [projectStore] = globalSync.child(props.project.worktree)
+    const [projectStore, setProjectStore] = globalSync.child(props.project.worktree)
+    const sessions = createMemo(() => projectStore.session.filter((s) => !s.time.archived))
     const slug = createMemo(() => base64Encode(props.project.worktree))
     const name = createMemo(() => getFilename(props.project.worktree))
     const [expanded, setExpanded] = createSignal(true)
@@ -300,21 +302,33 @@ export default function Layout(props: ParentProps) {
               </Button>
               <Collapsible.Content>
                 <nav class="hidden @[4rem]:flex w-full flex-col gap-1.5">
-                  <For each={projectStore.session}>
+                  <For each={sessions()}>
                     {(session) => {
                       const updated = createMemo(() => DateTime.fromMillis(session.time.updated))
                       const notifications = createMemo(() => notification.session.unseen(session.id))
                       const hasError = createMemo(() => notifications().some((n) => n.type === "error"))
+                      async function archive(session: Session) {
+                        await globalSDK.client.session.update({
+                          directory: session.directory,
+                          sessionID: session.id,
+                          time: { archived: Date.now() },
+                        })
+                        setProjectStore(
+                          produce((draft) => {
+                            const match = Binary.search(draft.session, session.id, (s) => s.id)
+                            if (match.found) draft.session.splice(match.index, 1)
+                          }),
+                        )
+                      }
                       return (
                         <A
-                          data-active={session.id === params.id}
                           href={`${slug()}/session/${session.id}`}
                           class="group/session focus:outline-none cursor-default"
                         >
                           <Tooltip placement="right" value={session.title}>
                             <div
-                              class="relative w-full pl-4 pr-2 py-1 rounded-md
-                                     group-data-[active=true]/session:bg-surface-raised-base-hover
+                              class="relative w-full pl-4 pr-1 py-1 rounded-md
+                                     group-[.active]/session:bg-surface-raised-base-hover
                                      group-hover/session:bg-surface-raised-base-hover
                                      group-focus/session:bg-surface-raised-base-hover"
                             >
@@ -322,40 +336,68 @@ export default function Layout(props: ParentProps) {
                                 <span class="text-14-regular text-text-strong overflow-hidden text-ellipsis truncate">
                                   {session.title}
                                 </span>
-                                <Switch>
-                                  <Match when={hasError()}>
-                                    <div class="size-1.5 shrink-0 mr-1 rounded-full bg-text-diff-delete-base" />
-                                  </Match>
-                                  <Match when={notifications().length > 0}>
-                                    <div class="size-1.5 shrink-0 mr-1 rounded-full bg-text-interactive-base" />
-                                  </Match>
-                                  <Match when={true}>
-                                    <span class="text-12-regular text-text-weak text-right whitespace-nowrap">
-                                      {Math.abs(updated().diffNow().as("seconds")) < 60
-                                        ? "Now"
-                                        : updated()
-                                            .toRelative({
-                                              style: "short",
-                                              unit: ["days", "hours", "minutes"],
-                                            })
-                                            ?.replace(" ago", "")
-                                            ?.replace(/ days?/, "d")
-                                            ?.replace(" min.", "m")
-                                            ?.replace(" hr.", "h")}
-                                    </span>
-                                  </Match>
-                                </Switch>
+                                <div class="shrink-0 group-hover/session:hidden mr-1">
+                                  <Switch>
+                                    <Match when={hasError()}>
+                                      <div class="size-1.5 mr-1.5 rounded-full bg-text-diff-delete-base" />
+                                    </Match>
+                                    <Match when={notifications().length > 0}>
+                                      <div class="size-1.5 mr-1.5 rounded-full bg-text-interactive-base" />
+                                    </Match>
+                                    <Match when={true}>
+                                      <span class="text-12-regular text-text-weak text-right whitespace-nowrap">
+                                        {Math.abs(updated().diffNow().as("seconds")) < 60
+                                          ? "Now"
+                                          : updated()
+                                              .toRelative({
+                                                style: "short",
+                                                unit: ["days", "hours", "minutes"],
+                                              })
+                                              ?.replace(" ago", "")
+                                              ?.replace(/ days?/, "d")
+                                              ?.replace(" min.", "m")
+                                              ?.replace(" hr.", "h")}
+                                      </span>
+                                    </Match>
+                                  </Switch>
+                                </div>
+                                <div class="hidden group-hover/session:flex group-active/session:flex text-text-base gap-1">
+                                  {/* <IconButton icon="dot-grid" variant="ghost" /> */}
+                                  <Tooltip placement="right" value="Archive session">
+                                    <IconButton icon="archive" variant="ghost" onClick={() => archive(session)} />
+                                  </Tooltip>
+                                </div>
                               </div>
-                              <div class="hidden _flex justify-between items-center self-stretch">
-                                <span class="text-12-regular text-text-weak">{`${session.summary?.files || "No"} file${session.summary?.files !== 1 ? "s" : ""} changed`}</span>
-                                <Show when={session.summary}>{(summary) => <DiffChanges changes={summary()} />}</Show>
-                              </div>
+                              <Show when={session.summary?.files}>
+                                <div class="flex justify-between items-center self-stretch">
+                                  <span class="text-12-regular text-text-weak">{`${session.summary?.files || "No"} file${session.summary?.files !== 1 ? "s" : ""} changed`}</span>
+                                  <Show when={session.summary}>{(summary) => <DiffChanges changes={summary()} />}</Show>
+                                </div>
+                              </Show>
                             </div>
                           </Tooltip>
                         </A>
                       )
                     }}
                   </For>
+                  <Show when={sessions().length === 0}>
+                    <A href={`${slug()}/session`} class="group/session focus:outline-none cursor-default">
+                      <Tooltip placement="right" value="New session">
+                        <div
+                          class="relative w-full pl-4 pr-1 py-1 rounded-md
+                                 group-[.active]/session:bg-surface-raised-base-hover
+                                 group-hover/session:bg-surface-raised-base-hover
+                                 group-focus/session:bg-surface-raised-base-hover"
+                        >
+                          <div class="flex items-center self-stretch gap-6 justify-between">
+                            <span class="text-14-regular text-text-strong overflow-hidden text-ellipsis truncate">
+                              New session
+                            </span>
+                          </div>
+                        </div>
+                      </Tooltip>
+                    </A>
+                  </Show>
                 </nav>
               </Collapsible.Content>
             </Collapsible>
