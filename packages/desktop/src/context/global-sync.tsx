@@ -69,37 +69,6 @@ export const { use: useGlobalSync, provider: GlobalSyncProvider } = createSimple
       children: {},
     })
 
-    async function loadSessions(directory: string) {
-      globalSDK.client.session.list({ directory }).then((x) => {
-        const sessions = (x.data ?? [])
-          .slice()
-          .filter((s) => !s.time.archived)
-          .sort((a, b) => a.id.localeCompare(b.id))
-          .slice(0, 5)
-        setGlobalStore("children", directory, "session", sessions)
-      })
-    }
-
-    async function bootstrapInstance(directory: string) {
-      const [, setStore] = child(directory)
-      const sdk = createOpencodeClient({
-        baseUrl: globalSDK.url,
-        directory,
-      })
-      const load = {
-        project: () => sdk.project.current().then((x) => setStore("project", x.data!.id)),
-        provider: () => sdk.provider.list().then((x) => setStore("provider", x.data!)),
-        path: () => sdk.path.get().then((x) => setStore("path", x.data!)),
-        agent: () => sdk.app.agents().then((x) => setStore("agent", x.data ?? [])),
-        session: () => loadSessions(directory),
-        status: () => sdk.session.status().then((x) => setStore("session_status", x.data!)),
-        config: () => sdk.config.get().then((x) => setStore("config", x.data!)),
-        changes: () => sdk.file.status().then((x) => setStore("changes", x.data!)),
-        node: () => sdk.file.list({ path: "/" }).then((x) => setStore("node", x.data!)),
-      }
-      await Promise.all(Object.values(load).map((p) => p())).then(() => setStore("ready", true))
-    }
-
     const children: Record<string, ReturnType<typeof createStore<State>>> = {}
     function child(directory: string) {
       if (!children[directory]) {
@@ -124,6 +93,38 @@ export const { use: useGlobalSync, provider: GlobalSyncProvider } = createSimple
         bootstrapInstance(directory)
       }
       return children[directory]
+    }
+
+    async function loadSessions(directory: string) {
+      globalSDK.client.session.list({ directory }).then((x) => {
+        const sessions = (x.data ?? [])
+          .slice()
+          .filter((s) => !s.time.archived)
+          .sort((a, b) => a.id.localeCompare(b.id))
+          .slice(0, 5)
+        const [, setStore] = child(directory)
+        setStore("session", sessions)
+      })
+    }
+
+    async function bootstrapInstance(directory: string) {
+      const [, setStore] = child(directory)
+      const sdk = createOpencodeClient({
+        baseUrl: globalSDK.url,
+        directory,
+      })
+      const load = {
+        project: () => sdk.project.current().then((x) => setStore("project", x.data!.id)),
+        provider: () => sdk.provider.list().then((x) => setStore("provider", x.data!)),
+        path: () => sdk.path.get().then((x) => setStore("path", x.data!)),
+        agent: () => sdk.app.agents().then((x) => setStore("agent", x.data ?? [])),
+        session: () => loadSessions(directory),
+        status: () => sdk.session.status().then((x) => setStore("session_status", x.data!)),
+        config: () => sdk.config.get().then((x) => setStore("config", x.data!)),
+        changes: () => sdk.file.status().then((x) => setStore("changes", x.data!)),
+        node: () => sdk.file.list({ path: "/" }).then((x) => setStore("node", x.data!)),
+      }
+      await Promise.all(Object.values(load).map((p) => p())).then(() => setStore("ready", true))
     }
 
     globalSDK.event.listen((e) => {
@@ -164,7 +165,12 @@ export const { use: useGlobalSync, provider: GlobalSyncProvider } = createSimple
           const result = Binary.search(store.session, event.properties.info.id, (s) => s.id)
           if (event.properties.info.time.archived) {
             if (result.found) {
-              setStore("session", (s) => s.filter((x) => x.id !== event.properties.info.id))
+              setStore(
+                "session",
+                produce((draft) => {
+                  draft.splice(result.index, 1)
+                }),
+              )
             }
             break
           }
