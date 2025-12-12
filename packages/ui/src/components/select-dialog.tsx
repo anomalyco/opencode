@@ -3,7 +3,7 @@ import { Dialog, DialogProps } from "./dialog"
 import { Icon } from "./icon"
 import { IconButton } from "./icon-button"
 import { List, ListRef, ListProps } from "./list"
-import { Input } from "./input"
+import { TextField } from "./text-field"
 
 interface SelectDialogProps<T>
   extends Omit<ListProps<T>, "filter">,
@@ -55,7 +55,7 @@ export function SelectDialog<T>(props: SelectDialogProps<T>) {
         <div data-component="select-dialog-input">
           <div data-slot="select-dialog-input-container">
             <Icon name="magnifying-glass" />
-            <Input
+            <TextField
               ref={inputRef}
               autofocus
               variant="ghost"

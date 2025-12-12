@@ -1,8 +1,10 @@
 import { TextField as Kobalte } from "@kobalte/core/text-field"
-import { Show, splitProps } from "solid-js"
+import { createSignal, Show, splitProps } from "solid-js"
 import type { ComponentProps } from "solid-js"
+import { IconButton } from "./icon-button"
+import { Tooltip } from "./tooltip"
 
-export interface InputProps
+export interface TextFieldProps
   extends ComponentProps<typeof Kobalte.Input>,
     Partial<
       Pick<
@@ -20,13 +22,13 @@ export interface InputProps
     > {
   label?: string
   hideLabel?: boolean
-  hidden?: boolean
   description?: string
   error?: string
   variant?: "normal" | "ghost"
+  copyable?: boolean
 }
 
-export function Input(props: InputProps) {
+export function TextField(props: TextFieldProps) {
   const [local, others] = splitProps(props, [
     "name",
     "defaultValue",
@@ -39,12 +41,21 @@ export function Input(props: InputProps) {
     "readOnly",
     "class",
     "label",
-    "hidden",
     "hideLabel",
     "description",
     "error",
     "variant",
+    "copyable",
   ])
+  const [copied, setCopied] = createSignal(false)
+
+  async function handleCopy() {
+    const value = local.value ?? local.defaultValue ?? ""
+    await navigator.clipboard.writeText(value)
+    setCopied(true)
+    setTimeout(() => setCopied(false), 2000)
+  }
+
   return (
     <Kobalte
       data-component="input"
@@ -57,7 +68,6 @@ export function Input(props: InputProps) {
       required={local.required}
       disabled={local.disabled}
       readOnly={local.readOnly}
-      style={{ height: local.hidden ? 0 : undefined }}
       validationState={local.validationState}
     >
       <Show when={local.label}>
@@ -65,7 +75,20 @@ export function Input(props: InputProps) {
           {local.label}
         </Kobalte.Label>
       </Show>
-      <Kobalte.Input {...others} data-slot="input-input" class={local.class} />
+      <div data-slot="input-wrapper">
+        <Kobalte.Input {...others} data-slot="input-input" class={local.class} />
+        <Show when={local.copyable}>
+          <Tooltip value={copied() ? "Copied" : "Copy to clipboard"} placement="top" gutter={8}>
+            <IconButton
+              type="button"
+              icon={copied() ? "check" : "copy"}
+              variant="ghost"
+              onClick={handleCopy}
+              data-slot="input-copy-button"
+            />
+          </Tooltip>
+        </Show>
+      </div>
       <Show when={local.description}>
         <Kobalte.Description data-slot="input-description">{local.description}</Kobalte.Description>
       </Show>
@@ -73,3 +96,8 @@ export function Input(props: InputProps) {
     </Kobalte>
   )
 }
+
+/** @deprecated Use TextField instead */
+export const Input = TextField
+/** @deprecated Use TextFieldProps instead */
+export type InputProps = TextFieldProps

@@ -47,6 +47,9 @@ const icons = {
   "layout-bottom-partial": `<path d="M2.5 17.5L2.5 12.2059L17.5 12.2059L17.5 17.5L2.5 17.5Z" fill="currentColor" fill-opacity="40%" /><path d="M2.5 17.5L2.5 2.5M2.5 17.5L17.5 17.5M2.5 17.5L2.5 12.2059M2.5 2.5L17.5 2.5M2.5 2.5L2.5 12.2059M17.5 2.5L17.5 17.5M17.5 2.5L17.5 12.2059M17.5 17.5L17.5 12.2059M17.5 12.2059L2.5 12.2059" stroke="currentColor" stroke-linecap="square"/>`,
   "layout-bottom-full": `<path d="M2.5 17.5L2.5 12.2059L17.5 12.2059L17.5 17.5L2.5 17.5Z" fill="currentColor"/><path d="M2.5 17.5L2.5 2.5M2.5 17.5L17.5 17.5M2.5 17.5L2.5 12.2059M2.5 2.5L17.5 2.5M2.5 2.5L2.5 12.2059M17.5 2.5L17.5 17.5M17.5 2.5L17.5 12.2059M17.5 17.5L17.5 12.2059M17.5 12.2059L2.5 12.2059" stroke="currentColor" stroke-linecap="square"/>`,
   "dot-grid": `<path d="M2.08398 9.16602H3.75065V10.8327H2.08398V9.16602Z" fill="currentColor"/><path d="M10.834 9.16602H9.16732V10.8327H10.834V9.16602Z" fill="currentColor"/><path d="M16.2507 9.16602H17.9173V10.8327H16.2507V9.16602Z" fill="currentColor"/><path d="M2.08398 9.16602H3.75065V10.8327H2.08398V9.16602Z" stroke="currentColor"/><path d="M10.834 9.16602H9.16732V10.8327H10.834V9.16602Z" stroke="currentColor"/><path d="M16.2507 9.16602H17.9173V10.8327H16.2507V9.16602Z" stroke="currentColor"/>`,
+  "circle-check": `<path d="M12.4987 7.91732L8.7487 12.5007L7.08203 10.834M17.9154 10.0007C17.9154 14.3729 14.371 17.9173 9.9987 17.9173C5.62644 17.9173 2.08203 14.3729 2.08203 10.0007C2.08203 5.6284 5.62644 2.08398 9.9987 2.08398C14.371 2.08398 17.9154 5.6284 17.9154 10.0007Z" stroke="currentColor" stroke-linecap="square"/>`,
+  copy: `<path d="M6.2513 6.24935V2.91602H17.0846V13.7493H13.7513M13.7513 6.24935V17.0827H2.91797V6.24935H13.7513Z" stroke="currentColor" stroke-linecap="round"/>`,
+  check: `<path d="M5 11.9657L8.37838 14.7529L15 5.83398" stroke="currentColor" stroke-linecap="square"/>`,
 }
 
 export interface IconProps extends ComponentProps<"svg"> {

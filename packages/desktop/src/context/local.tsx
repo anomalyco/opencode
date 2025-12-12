@@ -41,10 +41,10 @@ export const { use: useLocal, provider: LocalProvider } = createSimpleContext({
     const providers = useProviders()
 
     function isModelValid(model: ModelKey) {
-      const provider = providers().all.find((x) => x.id === model.providerID)
+      const provider = providers.all().find((x) => x.id === model.providerID)
       return (
         !!provider?.models[model.modelID] &&
-        providers()
+        providers
           .connected()
           .map((p) => p.id)
           .includes(model.providerID)
@@ -123,16 +123,14 @@ export const { use: useLocal, provider: LocalProvider } = createSimpleContext({
       })
 
       const list = createMemo(() =>
-        providers()
-          .connected()
-          .flatMap((p) =>
-            Object.values(p.models).map((m) => ({
-              ...m,
-              name: m.name.replace("(latest)", "").trim(),
-              provider: p,
-              latest: m.name.includes("(latest)"),
-            })),
-          ),
+        providers.connected().flatMap((p) =>
+          Object.values(p.models).map((m) => ({
+            ...m,
+            name: m.name.replace("(latest)", "").trim(),
+            provider: p,
+            latest: m.name.includes("(latest)"),
+          })),
+        ),
       )
       const find = (key: ModelKey) => list().find((m) => m.id === key?.modelID && m.provider.id === key.providerID)
 
@@ -153,11 +151,11 @@ export const { use: useLocal, provider: LocalProvider } = createSimpleContext({
           }
         }
 
-        for (const p of providers().connected()) {
-          if (p.id in providers().default) {
+        for (const p of providers.connected()) {
+          if (p.id in providers.default()) {
             return {
               providerID: p.id,
-              modelID: providers().default[p.id],
+              modelID: providers.default()[p.id],
             }
           }
         }

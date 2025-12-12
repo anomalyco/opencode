@@ -184,4 +184,4 @@ jobs:
           updaterJsonPreferNsis: true
           releaseId: ${{ needs.publish.outputs.releaseId }}
           tagName: ${{ needs.publish.outputs.tagName }}
-          assetName: opencode-desktop-[platform]-[arch][ext]
+          releaseAssetNamePattern: opencode-desktop-[platform]-[arch][ext]

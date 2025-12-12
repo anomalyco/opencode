@@ -11,6 +11,8 @@
     "shell:default",
     "updater:default",
     "dialog:default",
-    "process:default"
+    "process:default",
+    "store:default",
+    "window-state:default"
   ]
 }

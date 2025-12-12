@@ -1,7 +1,7 @@
 {
   "name": "@opencode-ai/tauri",
   "private": true,
-  "version": "1.0.149",
+  "version": "1.0.150",
   "type": "module",
   "scripts": {
     "typecheck": "tsgo -b",
@@ -18,7 +18,9 @@
     "@tauri-apps/plugin-opener": "^2",
     "@tauri-apps/plugin-process": "~2",
     "@tauri-apps/plugin-shell": "~2",
+    "@tauri-apps/plugin-store": "~2",
     "@tauri-apps/plugin-updater": "~2",
+    "@tauri-apps/plugin-window-state": "~2",
     "solid-js": "catalog:"
   },
   "devDependencies": {

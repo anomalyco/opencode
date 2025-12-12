@@ -1,5 +1,17 @@
 import { useFilteredList } from "@opencode-ai/ui/hooks"
-import { createEffect, on, Component, Show, For, onMount, onCleanup, Switch, Match, createSignal } from "solid-js"
+import {
+  createEffect,
+  on,
+  Component,
+  Show,
+  For,
+  onMount,
+  onCleanup,
+  Switch,
+  Match,
+  createSignal,
+  createMemo,
+} from "solid-js"
 import { createStore } from "solid-js/store"
 import { createFocusSignal } from "@solid-primitives/active-element"
 import { useLocal } from "@/context/local"
@@ -21,7 +33,6 @@ import { popularProviders, useProviders } from "@/hooks/use-providers"
 import { Dialog } from "@opencode-ai/ui/dialog"
 import { List, ListRef } from "@opencode-ai/ui/list"
 import { iife } from "@opencode-ai/util/iife"
-import { Input } from "@opencode-ai/ui/input"
 import { ProviderIcon } from "@opencode-ai/ui/provider-icon"
 import { IconName } from "@opencode-ai/ui/icons/provider"
 
@@ -470,60 +481,73 @@ export const PromptInput: Component<PromptInputProps> = (props) => {
             </Button>
             <Show when={layout.dialog.opened() === "model"}>
               <Switch>
-                <Match when={providers().connected().length > 0}>
-                  <SelectDialog
-                    defaultOpen
-                    onOpenChange={(open) => {
-                      if (open) {
-                        layout.dialog.open("model")
-                      } else {
-                        layout.dialog.close("model")
-                      }
-                    }}
-                    title="Select model"
-                    placeholder="Search models"
-                    emptyMessage="No model results"
-                    key={(x) => `${x.provider.id}:${x.id}`}
-                    items={local.model.list()}
-                    current={local.model.current()}
-                    filterKeys={["provider.name", "name", "id"]}
-                    // groupBy={(x) => (local.model.recent().includes(x) ? "Recent" : x.provider.name)}
-                    groupBy={(x) => x.provider.name}
-                    sortGroupsBy={(a, b) => {
-                      if (a.category === "Recent" && b.category !== "Recent") return -1
-                      if (b.category === "Recent" && a.category !== "Recent") return 1
-                      const aProvider = a.items[0].provider.id
-                      const bProvider = b.items[0].provider.id
-                      if (popularProviders.includes(aProvider) && !popularProviders.includes(bProvider)) return -1
-                      if (!popularProviders.includes(aProvider) && popularProviders.includes(bProvider)) return 1
-                      return popularProviders.indexOf(aProvider) - popularProviders.indexOf(bProvider)
-                    }}
-                    onSelect={(x) =>
-                      local.model.set(x ? { modelID: x.id, providerID: x.provider.id } : undefined, { recent: true })
-                    }
-                    actions={
-                      <Button
-                        class="h-7 -my-1 text-14-medium"
-                        icon="plus-small"
-                        tabIndex={-1}
-                        onClick={() => layout.dialog.open("provider")}
+                <Match when={providers.paid().length > 0}>
+                  {iife(() => {
+                    const models = createMemo(() =>
+                      local.model
+                        .list()
+                        .filter((m) =>
+                          layout.connect.state() === "complete" ? m.provider.id === layout.connect.provider() : true,
+                        ),
+                    )
+                    return (
+                      <SelectDialog
+                        defaultOpen
+                        onOpenChange={(open) => {
+                          if (open) {
+                            layout.dialog.open("model")
+                          } else {
+                            layout.dialog.close("model")
+                          }
+                        }}
+                        title="Select model"
+                        placeholder="Search models"
+                        emptyMessage="No model results"
+                        key={(x) => `${x.provider.id}:${x.id}`}
+                        items={models}
+                        current={local.model.current()}
+                        filterKeys={["provider.name", "name", "id"]}
+                        // groupBy={(x) => (local.model.recent().includes(x) ? "Recent" : x.provider.name)}
+                        groupBy={(x) => x.provider.name}
+                        sortGroupsBy={(a, b) => {
+                          if (a.category === "Recent" && b.category !== "Recent") return -1
+                          if (b.category === "Recent" && a.category !== "Recent") return 1
+                          const aProvider = a.items[0].provider.id
+                          const bProvider = b.items[0].provider.id
+                          if (popularProviders.includes(aProvider) && !popularProviders.includes(bProvider)) return -1
+                          if (!popularProviders.includes(aProvider) && popularProviders.includes(bProvider)) return 1
+                          return popularProviders.indexOf(aProvider) - popularProviders.indexOf(bProvider)
+                        }}
+                        onSelect={(x) =>
+                          local.model.set(x ? { modelID: x.id, providerID: x.provider.id } : undefined, {
+                            recent: true,
+                          })
+                        }
+                        actions={
+                          <Button
+                            class="h-7 -my-1 text-14-medium"
+                            icon="plus-small"
+                            tabIndex={-1}
+                            onClick={() => layout.dialog.open("provider")}
+                          >
+                            Connect provider
+                          </Button>
+                        }
                       >
-                        Connect provider
-                      </Button>
-                    }
-                  >
-                    {(i) => (
-                      <div class="w-full flex items-center gap-x-2.5">
-                        <span>{i.name}</span>
-                        <Show when={!i.cost || i.cost?.input === 0}>
-                          <Tag>Free</Tag>
-                        </Show>
-                        <Show when={i.latest}>
-                          <Tag>Latest</Tag>
-                        </Show>
-                      </div>
-                    )}
-                  </SelectDialog>
+                        {(i) => (
+                          <div class="w-full flex items-center gap-x-2.5">
+                            <span>{i.name}</span>
+                            <Show when={i.provider.id === "opencode" && (!i.cost || i.cost?.input === 0)}>
+                              <Tag>Free</Tag>
+                            </Show>
+                            <Show when={i.latest}>
+                              <Tag>Latest</Tag>
+                            </Show>
+                          </div>
+                        )}
+                      </SelectDialog>
+                    )
+                  })}
                 </Match>
                 <Match when={true}>
                   {iife(() => {
@@ -532,6 +556,14 @@ export const PromptInput: Component<PromptInputProps> = (props) => {
                       if (e.key === "Escape") return
                       listRef?.onKeyDown(e)
                     }
+
+                    onMount(() => {
+                      document.addEventListener("keydown", handleKey)
+                      onCleanup(() => {
+                        document.removeEventListener("keydown", handleKey)
+                      })
+                    })
+
                     return (
                       <Dialog
                         modal
@@ -549,12 +581,11 @@ export const PromptInput: Component<PromptInputProps> = (props) => {
                           <Dialog.CloseButton tabIndex={-1} />
                         </Dialog.Header>
                         <Dialog.Body>
-                          <Input hidden type="text" class="opacity-0 size-0" autofocus onKeyDown={handleKey} />
                           <div class="flex flex-col gap-3 px-2.5">
                             <div class="text-14-medium text-text-base px-2.5">Free models provided by OpenCode</div>
                             <List
                               ref={(ref) => (listRef = ref)}
-                              items={local.model.list()}
+                              items={local.model.list}
                               current={local.model.current()}
                               key={(x) => `${x.provider.id}:${x.id}`}
                               onSelect={(x) => {
@@ -587,7 +618,7 @@ export const PromptInput: Component<PromptInputProps> = (props) => {
                                   <List
                                     class="w-full"
                                     key={(x) => x?.id}
-                                    items={providers().popular()}
+                                    items={providers.popular}
                                     activeIcon="plus-small"
                                     sortBy={(a, b) => {
                                       if (popularProviders.includes(a.id) && popularProviders.includes(b.id))

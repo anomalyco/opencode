@@ -52,8 +52,6 @@ export default function Home() {
 
         <div data-component="content">
           <section data-component="hero">
-            
-
             <div data-slot="hero-copy">
               {/*<a data-slot="releases"*/}
               {/*   href={release()?.url ?? `${config.github.repoUrl}/releases`}*/}
@@ -654,13 +652,21 @@ export default function Home() {
               </li>
               <li>
                 <Faq question="Do I need extra AI subscriptions to use OpenCode?">
-                  Not necessarily, but probably. You’ll need an AI subscription if you want to connect OpenCode to a
-                  paid provider, although you can work with{" "}
+                  Not necessarily, OpenCode comes with a set of free models that you can use without creating an
+                  account. Aside from these, you can use any of the popular coding models by creating a{" "}
+                  <A href="/zen">Zen</A> account. While we encourage users to use Zen, OpenCode also works with all
+                  popular providers such as OpenAI, Anthropic, xAI etc. You can even connect your{" "}
                   <a href="/docs/providers/#lm-studio" target="_blank">
                     local models
-                  </a>{" "}
-                  for free. While we encourage users to use <A href="/zen">Zen</A>, OpenCode works with all popular
-                  providers such as OpenAI, Anthropic, xAI etc.
+                  </a>
+                  .
+                </Faq>
+              </li>
+              <li>
+                <Faq question="Can I use my existing AI subscriptions with OpenCode?">
+                  Yes, OpenCode supports subscription plans from all major providers. You can use your Claude Pro/Max,
+                  ChatGPT Plus/Pro, or GitHub Copilot subscriptions. <a href="/docs/providers/#directory">Learn more</a>
+                  .
                 </Faq>
               </li>
               <li>
@@ -670,13 +676,14 @@ export default function Home() {
               </li>
               <li>
                 <Faq question="How much does OpenCode cost?">
-                  OpenCode is 100% free to use. Any additional costs will come from your subscription to a model
-                  provider. While OpenCode works with any model provider, we recommend using <A href="/zen">Zen</A>.
+                  OpenCode is 100% free to use. It also comes with a set of free models. There might be additional costs
+                  if you connect any other provider.
                 </Faq>
               </li>
               <li>
                 <Faq question="What about data and privacy?">
-                  Your data and information is only stored when you create sharable links in OpenCode. Learn more about{" "}
+                  Your data and information is only stored when you use our free models or create sharable links. Learn
+                  more about <a href="/docs/zen/#privacy">our models</a> and{" "}
                   <a href="/docs/share/#privacy">share pages</a>.
                 </Faq>
               </li>

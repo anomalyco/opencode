@@ -5,7 +5,7 @@ import { createStore } from "solid-js/store"
 import { createList } from "solid-list"
 
 export interface FilteredListProps<T> {
-  items: T[] | ((filter: string) => Promise<T[]>)
+  items: (filter: string) => T[] | Promise<T[]>
   key: (item: T) => string
   filterKeys?: string[]
   current?: T
@@ -22,7 +22,7 @@ export function useFilteredList<T>(props: FilteredListProps<T>) {
     () => store.filter,
     async (filter) => {
       const needle = filter?.toLowerCase()
-      const all = (typeof props.items === "function" ? await props.items(needle) : props.items) || []
+      const all = (await props.items(needle)) || []
       const result = pipe(
         all,
         (x) => {

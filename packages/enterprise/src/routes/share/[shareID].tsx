@@ -141,7 +141,10 @@ export default function () {
   const data = createAsync(
     async () => {
       if (!params.shareID) throw new Error("Missing shareID")
-      return getData(params.shareID)
+      const now = Date.now()
+      const data = getData(params.shareID)
+      console.log("getData", Date.now() - now)
+      return data
     },
     {
       deferStream: true,
@@ -206,7 +209,7 @@ export default function () {
                     const messages = createMemo(() =>
                       data().sessionID
                         ? (data().message[data().sessionID]?.filter((m) => m.role === "user") ?? []).sort(
-                            (a, b) => b.time.created - a.time.created,
+                            (a, b) => a.time.created - b.time.created,
                           )
                         : [],
                     )
