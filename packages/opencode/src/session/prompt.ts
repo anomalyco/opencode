@@ -65,6 +65,7 @@ export namespace SessionPrompt {
         {
           abort: AbortController
           callbacks: {
+            messageID: string
             resolve(input: MessageV2.WithParts): void
             reject(): void
           }[]
@@ -206,7 +207,7 @@ export namespace SessionPrompt {
       return message
     }
 
-    return loop(input.sessionID)
+    return loop(input.sessionID, message.info.id)
   })
 
   function start(sessionID: string) {
@@ -234,12 +235,39 @@ export namespace SessionPrompt {
     return
   }
 
-  export const loop = fn(Identifier.schema("session"), async (sessionID) => {
+  export function queued(sessionID: string) {
+    const s = state()
+    const match = s[sessionID]
+    if (!match) return []
+    return match.callbacks.map((c) => c.messageID).filter(Boolean)
+  }
+
+  export async function cancelQueued(sessionID: string, messageID: string) {
+    log.info("cancelQueued", { sessionID, messageID })
+    const s = state()
+    const match = s[sessionID]
+    if (!match) return
+
+    const index = match.callbacks.findIndex((c) => c.messageID === messageID)
+    if (index === -1) return
+
+    const [removed] = match.callbacks.splice(index, 1)
+    removed.reject()
+
+    const messages = await Session.messages({ sessionID })
+    const message = messages.find((m) => m.info.id === messageID)
+    if (!message) return
+
+    await Session.removeMessage({ sessionID, messageID })
+    return message
+  }
+
+  export async function loop(sessionID: string, messageID?: string) {
     const abort = start(sessionID)
     if (!abort) {
       return new Promise<MessageV2.WithParts>((resolve, reject) => {
         const callbacks = state()[sessionID].callbacks
-        callbacks.push({ resolve, reject })
+        callbacks.push({ messageID: messageID!, resolve, reject })
       })
     }
 
@@ -663,7 +691,7 @@ export namespace SessionPrompt {
       return item
     }
     throw new Error("Impossible")
-  })
+  }
 
   async function lastModel(sessionID: string) {
     for await (const item of MessageV2.stream(sessionID)) {

@@ -121,6 +121,16 @@ export function Prompt(props: PromptProps) {
   const renderer = useRenderer()
   const { theme, syntax } = useTheme()
 
+  const queuedMessages = createMemo(() => {
+    if (!props.sessionID) return []
+    const messages = sync.data.message[props.sessionID] ?? []
+    if (status().type !== "busy") return []
+    const sorted = [...messages].sort((a, b) => a.id.localeCompare(b.id))
+    const pending = sorted.findLast((m) => m.role === "assistant" && m.time.completed === undefined)
+    if (!pending) return []
+    return sorted.filter((m) => m.role === "user" && m.id > pending.id)
+  })
+
   function promptModelWarning() {
     toast.show({
       variant: "warning",
@@ -749,6 +759,26 @@ export function Prompt(props: PromptProps) {
                 }
                 if (store.mode === "normal") autocomplete.onKeyDown(e)
                 if (!autocomplete.visible) {
+                  if (keybind.match("history_previous", e) && input.plainText === "" && queuedMessages().length > 0) {
+                    const queued = queuedMessages()
+                    const last = queued.at(-1)
+                    if (last && props.sessionID) {
+                      const { data: msg } = await sdk.client.session.cancelQueue({
+                        sessionID: props.sessionID,
+                        messageID: last.id,
+                      })
+                      if (msg) {
+                        const text = msg.parts
+                          .filter((p) => p.type === "text")
+                          .map((p) => p.text)
+                          .join("")
+                        input.setText(text)
+                        input.cursorOffset = text.length
+                      }
+                    }
+                    e.preventDefault()
+                    return
+                  }
                   if (
                     (keybind.match("history_previous", e) && input.cursorOffset === 0) ||
                     (keybind.match("history_next", e) && input.cursorOffset === input.plainText.length)

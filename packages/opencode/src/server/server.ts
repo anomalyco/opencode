@@ -903,6 +903,66 @@ export namespace Server {
           return c.json(true)
         },
       )
+      .get(
+        "/session/:sessionID/queue",
+        describeRoute({
+          summary: "Get queued messages",
+          description: "Get list of message IDs that are queued and waiting to be processed.",
+          operationId: "session.queue",
+          responses: {
+            200: {
+              description: "List of queued message IDs",
+              content: {
+                "application/json": {
+                  schema: resolver(z.array(z.string())),
+                },
+              },
+            },
+            ...errors(400, 404),
+          },
+        }),
+        validator(
+          "param",
+          z.object({
+            sessionID: z.string(),
+          }),
+        ),
+        async (c) => {
+          const queued = SessionPrompt.queued(c.req.valid("param").sessionID)
+          return c.json(queued)
+        },
+      )
+      .delete(
+        "/session/:sessionID/queue/:messageID",
+        describeRoute({
+          summary: "Cancel queued message",
+          description: "Cancel a queued message that has not yet been processed by the agent.",
+          operationId: "session.cancelQueue",
+          responses: {
+            200: {
+              description: "Cancelled message with parts",
+              content: {
+                "application/json": {
+                  schema: resolver(MessageV2.WithParts.nullable()),
+                },
+              },
+            },
+            ...errors(400, 404),
+          },
+        }),
+        validator(
+          "param",
+          z.object({
+            sessionID: z.string(),
+            messageID: z.string(),
+          }),
+        ),
+        async (c) => {
+          const { sessionID, messageID } = c.req.valid("param")
+          const message = await SessionPrompt.cancelQueued(sessionID, messageID)
+          return c.json(message ?? null)
+        },
+      )
       .post(
         "/session/:sessionID/share",
         describeRoute({
