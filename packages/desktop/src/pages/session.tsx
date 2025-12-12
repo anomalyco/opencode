@@ -415,7 +415,6 @@ export default function Page() {
                           messages={session.messages.user()}
                           current={session.messages.active()}
                           onMessageSelect={session.messages.setActive}
-                          working={session.working()}
                           wide={wide()}
                         />
                         <SessionTurn

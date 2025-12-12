@@ -29,5 +29,6 @@ jobs:
         uses: sst/opencode/github@latest
         env:
           OPENCODE_API_KEY: ${{ secrets.OPENCODE_API_KEY }}
+          OPENCODE_PERMISSION: '{"bash": "deny"}'
         with:
           model: opencode/claude-haiku-4-5

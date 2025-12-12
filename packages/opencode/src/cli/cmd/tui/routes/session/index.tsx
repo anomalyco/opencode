@@ -289,6 +289,7 @@ export function Session() {
               if (child) scroll.scrollBy(child.y - scroll.y - 1)
             }}
             sessionID={route.sessionID}
+            setPrompt={(promptInfo) => prompt.set(promptInfo)}
           />
         ))
       },
@@ -894,7 +895,7 @@ export function Session() {
                                 <box marginTop={1}>
                                   <For each={revert()!.diffFiles}>
                                     {(file) => (
-                                      <text>
+                                      <text fg={theme.text}>
                                         {file.filename}
                                         <Show when={file.additions > 0}>
                                           <span style={{ fg: theme.diffAdded }}> +{file.additions}</span>
@@ -1503,11 +1504,15 @@ ToolRegistry.register<typeof TaskTool>({
         <Show when={props.metadata.summary?.length}>
           <box>
             <For each={props.metadata.summary ?? []}>
-              {(task) => (
-                <text style={{ fg: task.state.status === "error" ? theme.error : theme.textMuted }}>
-                  ∟ {Locale.titlecase(task.tool)} {task.state.status === "completed" ? task.state.title : ""}
-                </text>
-              )}
+              {(task, index) => {
+                const summary = props.metadata.summary ?? []
+                return (
+                  <text style={{ fg: task.state.status === "error" ? theme.error : theme.textMuted }}>
+                    {index() === summary.length - 1 ? "└" : "├"} {Locale.titlecase(task.tool)}{" "}
+                    {task.state.status === "completed" ? task.state.title : ""}
+                  </text>
+                )
+              }}
             </For>
           </box>
         </Show>

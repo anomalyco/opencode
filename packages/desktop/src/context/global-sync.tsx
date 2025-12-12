@@ -1,60 +1,31 @@
-import type {
-  Message,
-  Agent,
-  Provider,
-  Session,
-  Part,
-  Config,
-  Path,
-  File,
-  FileNode,
-  Project,
-  FileDiff,
-  Todo,
-  SessionStatus,
-} from "@opencode-ai/sdk/v2"
+import {
+  type Message,
+  type Agent,
+  type Session,
+  type Part,
+  type Config,
+  type Path,
+  type File,
+  type FileNode,
+  type Project,
+  type FileDiff,
+  type Todo,
+  type SessionStatus,
+  type ProviderListResponse,
+  type ProviderAuthResponse,
+  createOpencodeClient,
+} from "@opencode-ai/sdk/v2/client"
 import { createStore, produce, reconcile } from "solid-js/store"
 import { Binary } from "@opencode-ai/util/binary"
 import { createSimpleContext } from "@opencode-ai/ui/context"
 import { useGlobalSDK } from "./global-sdk"
-
-const PASTEL_COLORS = [
-  "#FCEAFD", // pastel pink
-  "#FFDFBA", // pastel peach
-  "#FFFFBA", // pastel yellow
-  "#BAFFC9", // pastel green
-  "#EAF6FD", // pastel blue
-  "#EFEAFD", // pastel lavender
-  "#FEC8D8", // pastel rose
-  "#D4F0F0", // pastel cyan
-  "#FDF0EA", // pastel coral
-  "#C1E1C1", // pastel mint
-]
-
-function pickAvailableColor(usedColors: Set<string>) {
-  const available = PASTEL_COLORS.filter((c) => !usedColors.has(c))
-  if (available.length === 0) return PASTEL_COLORS[Math.floor(Math.random() * PASTEL_COLORS.length)]
-  return available[Math.floor(Math.random() * available.length)]
-}
-
-async function ensureProjectColor(
-  project: Project,
-  sdk: ReturnType<typeof useGlobalSDK>,
-  usedColors: Set<string>,
-): Promise<Project> {
-  if (project.icon?.color) return project
-  const color = pickAvailableColor(usedColors)
-  usedColors.add(color)
-  const updated = { ...project, icon: { ...project.icon, color } }
-  sdk.client.project.update({ projectID: project.id, icon: { color } })
-  return updated
-}
+import { onMount } from "solid-js"
 
 type State = {
   ready: boolean
-  provider: Provider[]
   agent: Agent[]
   project: string
+  provider: ProviderListResponse
   config: Config
   path: Path
   session: Session[]
@@ -81,26 +52,58 @@ type State = {
 export const { use: useGlobalSync, provider: GlobalSyncProvider } = createSimpleContext({
   name: "GlobalSync",
   init: () => {
+    const globalSDK = useGlobalSDK()
     const [globalStore, setGlobalStore] = createStore<{
       ready: boolean
-      projects: Project[]
+      project: Project[]
+      provider: ProviderListResponse
+      provider_auth: ProviderAuthResponse
       children: Record<string, State>
     }>({
       ready: false,
-      projects: [],
+      project: [],
+      provider: { all: [], connected: [], default: {} },
+      provider_auth: {},
       children: {},
     })
+
+    async function bootstrapInstance(directory: string) {
+      const [store, setStore] = child(directory)
+      const sdk = createOpencodeClient({
+        baseUrl: globalSDK.url,
+        directory,
+      })
+      const load = {
+        project: () => sdk.project.current().then((x) => setStore("project", x.data!.id)),
+        provider: () => sdk.provider.list().then((x) => setStore("provider", x.data!)),
+        path: () => sdk.path.get().then((x) => setStore("path", x.data!)),
+        agent: () => sdk.app.agents().then((x) => setStore("agent", x.data ?? [])),
+        session: () =>
+          sdk.session.list().then((x) => {
+            const sessions = (x.data ?? [])
+              .slice()
+              .sort((a, b) => a.id.localeCompare(b.id))
+              .slice(0, store.limit)
+            setStore("session", sessions)
+          }),
+        status: () => sdk.session.status().then((x) => setStore("session_status", x.data!)),
+        config: () => sdk.config.get().then((x) => setStore("config", x.data!)),
+        changes: () => sdk.file.status().then((x) => setStore("changes", x.data!)),
+        node: () => sdk.file.list({ path: "/" }).then((x) => setStore("node", x.data!)),
+      }
+      await Promise.all(Object.values(load).map((p) => p())).then(() => setStore("ready", true))
+    }
 
     const children: Record<string, ReturnType<typeof createStore<State>>> = {}
     function child(directory: string) {
       if (!children[directory]) {
         setGlobalStore("children", directory, {
           project: "",
+          provider: { all: [], connected: [], default: {} },
           config: {},
-          path: { state: "", config: "", worktree: "", directory: "" },
+          path: { state: "", config: "", worktree: "", directory: "", home: "" },
           ready: false,
           agent: [],
-          provider: [],
           session: [],
           session_status: {},
           session_diff: {},
@@ -112,32 +115,33 @@ export const { use: useGlobalSync, provider: GlobalSyncProvider } = createSimple
           changes: [],
         })
         children[directory] = createStore(globalStore.children[directory])
+        bootstrapInstance(directory)
       }
       return children[directory]
     }
 
-    const sdk = useGlobalSDK()
-    sdk.event.listen((e) => {
+    globalSDK.event.listen((e) => {
       const directory = e.name
       const event = e.details
 
       if (directory === "global") {
         switch (event.type) {
+          case "global.disposed": {
+            bootstrap()
+            break
+          }
           case "project.updated": {
-            const usedColors = new Set(globalStore.projects.map((p) => p.icon?.color).filter(Boolean) as string[])
-            ensureProjectColor(event.properties, sdk, usedColors).then((project) => {
-              const result = Binary.search(globalStore.projects, project.id, (s) => s.id)
-              if (result.found) {
-                setGlobalStore("projects", result.index, reconcile(project))
-                return
-              }
-              setGlobalStore(
-                "projects",
-                produce((draft) => {
-                  draft.splice(result.index, 0, project)
-                }),
-              )
-            })
+            const result = Binary.search(globalStore.project, event.properties.id, (s) => s.id)
+            if (result.found) {
+              setGlobalStore("project", result.index, reconcile(event.properties))
+              return
+            }
+            setGlobalStore(
+              "project",
+              produce((draft) => {
+                draft.splice(result.index, 0, event.properties)
+              }),
+            )
             break
           }
         }
@@ -146,6 +150,10 @@ export const { use: useGlobalSync, provider: GlobalSyncProvider } = createSimple
 
       const [store, setStore] = child(directory)
       switch (event.type) {
+        case "server.instance.disposed": {
+          bootstrapInstance(directory)
+          break
+        }
         case "session.updated": {
           const result = Binary.search(store.session, event.properties.info.id, (s) => s.id)
           if (result.found) {
@@ -214,17 +222,28 @@ export const { use: useGlobalSync, provider: GlobalSyncProvider } = createSimple
       }
     })
 
-    Promise.all([
-      sdk.client.project.list().then(async (x) => {
-        const filtered = x.data!.filter((p) => !p.worktree.includes("opencode-test") && p.vcs)
-        const usedColors = new Set(filtered.map((p) => p.icon?.color).filter(Boolean) as string[])
-        const projects = await Promise.all(filtered.map((p) => ensureProjectColor(p, sdk, usedColors)))
-        setGlobalStore(
-          "projects",
-          projects.sort((a, b) => a.id.localeCompare(b.id)),
-        )
-      }),
-    ]).then(() => setGlobalStore("ready", true))
+    async function bootstrap() {
+      return Promise.all([
+        globalSDK.client.project.list().then(async (x) => {
+          setGlobalStore(
+            "project",
+            x
+              .data!.filter((p) => !p.worktree.includes("opencode-test") && p.vcs)
+              .sort((a, b) => a.id.localeCompare(b.id)),
+          )
+        }),
+        globalSDK.client.provider.list().then((x) => {
+          setGlobalStore("provider", x.data ?? {})
+        }),
+        globalSDK.client.provider.auth().then((x) => {
+          setGlobalStore("provider_auth", x.data ?? {})
+        }),
+      ]).then(() => setGlobalStore("ready", true))
+    }
+
+    onMount(() => {
+      bootstrap()
+    })
 
     return {
       data: globalStore,
@@ -232,6 +251,7 @@ export const { use: useGlobalSync, provider: GlobalSyncProvider } = createSimple
         return globalStore.ready
       },
       child,
+      bootstrap,
     }
   },
 })

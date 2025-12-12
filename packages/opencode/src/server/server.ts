@@ -10,7 +10,7 @@ import { proxy } from "hono/proxy"
 import { Session } from "../session"
 import z from "zod"
 import { Provider } from "../provider/provider"
-import { mapValues } from "remeda"
+import { filter, mapValues, sortBy, pipe } from "remeda"
 import { NamedError } from "@opencode-ai/util/error"
 import { ModelsDev } from "../provider/models"
 import { Ripgrep } from "../file/ripgrep"
@@ -56,6 +56,7 @@ export namespace Server {
 
   export const Event = {
     Connected: BusEvent.define("server.connected", z.object({})),
+    Disposed: BusEvent.define("global.disposed", z.object({})),
   }
 
   const app = new Hono()
@@ -138,6 +139,35 @@ export namespace Server {
               })
             })
           })
+        },
+      )
+      .post(
+        "/global/dispose",
+        describeRoute({
+          summary: "Dispose instance",
+          description: "Clean up and dispose all OpenCode instances, releasing all resources.",
+          operationId: "global.dispose",
+          responses: {
+            200: {
+              description: "Global disposed",
+              content: {
+                "application/json": {
+                  schema: resolver(z.boolean()),
+                },
+              },
+            },
+          },
+        }),
+        async (c) => {
+          await Instance.disposeAll()
+          GlobalBus.emit("event", {
+            directory: "global",
+            payload: {
+              type: Event.Disposed.type,
+              properties: {},
+            },
+          })
+          return c.json(true)
         },
       )
       .use(async (c, next) => {
@@ -483,6 +513,7 @@ export namespace Server {
                   schema: resolver(
                     z
                       .object({
+                        home: z.string(),
                         state: z.string(),
                         config: z.string(),
                         worktree: z.string(),
@@ -499,6 +530,7 @@ export namespace Server {
         }),
         async (c) => {
           return c.json({
+            home: Global.Path.home,
             state: Global.Path.state,
             config: Global.Path.config,
             worktree: Instance.worktree,
@@ -549,7 +581,11 @@ export namespace Server {
         }),
         async (c) => {
           const sessions = await Array.fromAsync(Session.list())
-          sessions.sort((a, b) => b.time.updated - a.time.updated)
+          pipe(
+            await Array.fromAsync(Session.list()),
+            filter((s) => !s.time.archived),
+            sortBy((s) => s.time.updated),
+          )
           return c.json(sessions)
         },
       )
@@ -755,6 +791,11 @@ export namespace Server {
           "json",
           z.object({
             title: z.string().optional(),
+            time: z
+              .object({
+                archived: z.number().optional(),
+              })
+              .optional(),
           }),
         ),
         async (c) => {
@@ -765,6 +806,7 @@ export namespace Server {
             if (updates.title !== undefined) {
               session.title = updates.title
             }
+            if (updates.time?.archived !== undefined) session.time.archived = updates.time.archived
           })
 
           return c.json(updatedSession)
@@ -1462,12 +1504,15 @@ export namespace Server {
             }
           }
 
-          const providers = mapValues(filteredProviders, (x) => Provider.fromModelsDevProvider(x))
-          const connected = await Provider.list().then((x) => Object.keys(x))
+          const connected = await Provider.list()
+          const providers = Object.assign(
+            mapValues(filteredProviders, (x) => Provider.fromModelsDevProvider(x)),
+            connected,
+          )
           return c.json({
             all: Object.values(providers),
             default: mapValues(providers, (item) => Provider.sort(Object.values(item.models))[0].id),
-            connected,
+            connected: Object.keys(connected),
           })
         },
       )

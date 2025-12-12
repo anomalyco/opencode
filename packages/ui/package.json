@@ -1,6 +1,6 @@
 {
   "name": "@opencode-ai/ui",
-  "version": "1.0.141",
+  "version": "1.0.150",
   "type": "module",
   "exports": {
     "./*": "./src/components/*.tsx",
@@ -17,7 +17,6 @@
   "scripts": {
     "typecheck": "tsgo --noEmit",
     "dev": "vite",
-    "build": "vite build",
     "generate:tailwind": "bun run script/tailwind.ts"
   },
   "devDependencies": {

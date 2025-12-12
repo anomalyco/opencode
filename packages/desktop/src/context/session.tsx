@@ -62,10 +62,10 @@ export const { use: useSession, provider: SessionProvider } = createSimpleContex
     const userMessages = createMemo(() =>
       messages()
         .filter((m) => m.role === "user")
-        .sort((a, b) => b.id.localeCompare(a.id)),
+        .sort((a, b) => a.id.localeCompare(b.id)),
     )
     const lastUserMessage = createMemo(() => {
-      return userMessages()?.at(0)
+      return userMessages()?.at(-1)
     })
     const activeMessage = createMemo(() => {
       if (!store.messageId) return lastUserMessage()
@@ -94,7 +94,7 @@ export const { use: useSession, provider: SessionProvider } = createSimpleContex
       () => messages().findLast((x) => x.role === "assistant" && x.tokens.output > 0) as AssistantMessage,
     )
     const model = createMemo(() =>
-      last() ? sync.data.provider.find((x) => x.id === last().providerID)?.models[last().modelID] : undefined,
+      last() ? sync.data.provider.all.find((x) => x.id === last().providerID)?.models[last().modelID] : undefined,
     )
     const diffs = createMemo(() => (params.id ? (sync.data.session_diff[params.id] ?? []) : []))
 

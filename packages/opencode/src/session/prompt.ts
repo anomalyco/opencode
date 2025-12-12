@@ -5,6 +5,7 @@ import z from "zod"
 import { Identifier } from "../id/id"
 import { MessageV2 } from "./message-v2"
 import { Log } from "../util/log"
+import { Flag } from "../flag/flag"
 import { SessionRevert } from "./revert"
 import { Session } from "."
 import { Agent } from "../agent/agent"
@@ -29,7 +30,7 @@ import PROMPT_PLAN from "../session/prompt/plan.txt"
 import BUILD_SWITCH from "../session/prompt/build-switch.txt"
 import MAX_STEPS from "../session/prompt/max-steps.txt"
 import { defer } from "../util/defer"
-import { mergeDeep, pipe } from "remeda"
+import { clone, mergeDeep, pipe } from "remeda"
 import { ToolRegistry } from "../tool/registry"
 import { Wildcard } from "../util/wildcard"
 import { MCP } from "../mcp"
@@ -338,6 +339,7 @@ export namespace SessionPrompt {
             },
           },
         })) as MessageV2.ToolPart
+        let executionError: Error | undefined
         const result = await taskTool
           .execute(
             {
@@ -362,7 +364,11 @@ export namespace SessionPrompt {
               },
             },
           )
-          .catch(() => {})
+          .catch((error) => {
+            executionError = error
+            log.error("subtask execution failed", { error, agent: task.agent, description: task.description })
+            return undefined
+          })
         assistantMessage.finish = "tool-calls"
         assistantMessage.time.completed = Date.now()
         await Session.updateMessage(assistantMessage)
@@ -388,7 +394,7 @@ export namespace SessionPrompt {
             ...part,
             state: {
               status: "error",
-              error: "Tool execution failed",
+              error: executionError ? `Tool execution failed: ${executionError.message}` : "Tool execution failed",
               time: {
                 start: part.state.status === "running" ? part.state.time.start : Date.now(),
                 end: Date.now(),
@@ -515,28 +521,33 @@ export namespace SessionPrompt {
         })
       }
 
-      const messages = [
+      // Deep copy message history so that modifications made by plugins do not
+      // affect the original messages
+      const sessionMessages = clone(
+        msgs.filter((m) => {
+          if (m.info.role !== "assistant" || m.info.error === undefined) {
+            return true
+          }
+          if (
+            MessageV2.AbortedError.isInstance(m.info.error) &&
+            m.parts.some((part) => part.type !== "step-start" && part.type !== "reasoning")
+          ) {
+            return true
+          }
+          return false
+        }),
+      )
+
+      await Plugin.trigger("experimental.chat.messages.transform", {}, { messages: sessionMessages })
+
+      const messages: ModelMessage[] = [
         ...system.map(
           (x): ModelMessage => ({
             role: "system",
             content: x,
           }),
         ),
-        ...MessageV2.toModelMessage(
-          msgs.filter((m) => {
-            if (m.info.role !== "assistant" || m.info.error === undefined) {
-              return true
-            }
-            if (
-              MessageV2.AbortedError.isInstance(m.info.error) &&
-              m.parts.some((part) => part.type !== "step-start" && part.type !== "reasoning")
-            ) {
-              return true
-            }
-
-            return false
-          }),
-        ),
+        ...MessageV2.toModelMessage(sessionMessages),
         ...(isLastStep
           ? [
               {
@@ -546,6 +557,7 @@ export namespace SessionPrompt {
             ]
           : []),
       ]
+
       const result = await processor.process({
         onError(error) {
           log.error("stream error", {
@@ -579,6 +591,7 @@ export namespace SessionPrompt {
                 "x-opencode-project": Instance.project.id,
                 "x-opencode-session": sessionID,
                 "x-opencode-request": lastUser.id,
+                "x-opencode-client": Flag.OPENCODE_CLIENT,
               }
             : undefined),
           ...model.headers,
@@ -593,7 +606,7 @@ export namespace SessionPrompt {
           OUTPUT_TOKEN_MAX,
         ),
         abortSignal: abort,
-        providerOptions: ProviderTransform.providerOptions(model, params.options, messages),
+        providerOptions: ProviderTransform.providerOptions(model, params.options),
         stopWhen: stepCountIs(1),
         temperature: params.temperature,
         topP: params.topP,
@@ -1475,7 +1488,7 @@ export namespace SessionPrompt {
     await generateText({
       // use higher # for reasoning models since reasoning tokens eat up a lot of the budget
       maxOutputTokens: small.capabilities.reasoning ? 3000 : 20,
-      providerOptions: ProviderTransform.providerOptions(small, options, []),
+      providerOptions: ProviderTransform.providerOptions(small, options),
       messages: [
         ...SystemPrompt.title(small.providerID).map(
           (x): ModelMessage => ({

@@ -10,6 +10,7 @@ import { useSync } from "@tui/context/sync"
 import { Identifier } from "@/id/id"
 import { createStore, produce } from "solid-js/store"
 import { useKeybind } from "@tui/context/keybind"
+import { Keybind } from "@/util/keybind"
 import { usePromptHistory, type PromptInfo } from "./history"
 import { type AutocompleteRef, Autocomplete } from "./autocomplete"
 import { useCommandDialog } from "../dialog-command"
@@ -24,6 +25,7 @@ import { Locale } from "@/util/locale"
 import { createColors, createFrames } from "../../ui/spinner.ts"
 import { useDialog } from "@tui/ui/dialog"
 import { DialogProvider as DialogProviderConnect } from "../dialog-provider"
+import { DialogAlert } from "../../ui/dialog-alert"
 import { useToast } from "../../ui/toast"
 
 export type PromptProps = {
@@ -45,6 +47,61 @@ export type PromptRef = {
 }
 
 const PLACEHOLDERS = ["Fix a TODO in the codebase", "What is the tech stack of this project?", "Fix broken tests"]
+
+const TEXTAREA_ACTIONS = [
+  "submit",
+  "newline",
+  "move-left",
+  "move-right",
+  "move-up",
+  "move-down",
+  "select-left",
+  "select-right",
+  "select-up",
+  "select-down",
+  "line-home",
+  "line-end",
+  "select-line-home",
+  "select-line-end",
+  "visual-line-home",
+  "visual-line-end",
+  "select-visual-line-home",
+  "select-visual-line-end",
+  "buffer-home",
+  "buffer-end",
+  "select-buffer-home",
+  "select-buffer-end",
+  "delete-line",
+  "delete-to-line-end",
+  "delete-to-line-start",
+  "backspace",
+  "delete",
+  "undo",
+  "redo",
+  "word-forward",
+  "word-backward",
+  "select-word-forward",
+  "select-word-backward",
+  "delete-word-forward",
+  "delete-word-backward",
+] as const
+
+function mapTextareaKeybindings(
+  keybinds: Record<string, Keybind.Info[]>,
+  action: (typeof TEXTAREA_ACTIONS)[number],
+): KeyBinding[] {
+  const configKey = `input_${action.replace(/-/g, "_")}`
+  const bindings = keybinds[configKey]
+  if (!bindings) return []
+  return bindings.map((binding) => ({
+    name: binding.name,
+    ctrl: binding.ctrl || undefined,
+    meta: binding.meta || undefined,
+    shift: binding.shift || undefined,
+    super: binding.super || undefined,
+    action,
+  }))
+}
 
 export function Prompt(props: PromptProps) {
   let input: TextareaRenderable
@@ -76,26 +133,12 @@ export function Prompt(props: PromptProps) {
   }
 
   const textareaKeybindings = createMemo(() => {
-    const newlineBindings = keybind.all.input_newline || []
-    const submitBindings = keybind.all.input_submit || []
+    const keybinds = keybind.all
 
     return [
       { name: "return", action: "submit" },
       { name: "return", meta: true, action: "newline" },
-      ...newlineBindings.map((binding) => ({
-        name: binding.name,
-        ctrl: binding.ctrl || undefined,
-        meta: binding.meta || undefined,
-        shift: binding.shift || undefined,
-        action: "newline" as const,
-      })),
-      ...submitBindings.map((binding) => ({
-        name: binding.name,
-        ctrl: binding.ctrl || undefined,
-        meta: binding.meta || undefined,
-        shift: binding.shift || undefined,
-        action: "submit" as const,
-      })),
+      ...TEXTAREA_ACTIONS.flatMap((action) => mapTextareaKeybindings(keybinds, action)),
     ] satisfies KeyBinding[]
   })
 
@@ -199,7 +242,7 @@ export function Prompt(props: PromptProps) {
           const content = await Editor.open({ value, renderer })
           if (!content) return
 
-          input.setText(content, { history: false })
+          input.setText(content)
 
           // Update positions for nonTextParts based on their location in new content
           // Filter out parts whose virtual text was deleted
@@ -390,7 +433,7 @@ export function Prompt(props: PromptProps) {
       input.blur()
     },
     set(prompt) {
-      input.setText(prompt.input, { history: false })
+      input.setText(prompt.input)
       setStore("prompt", prompt)
       restoreExtmarksFromParts(prompt.parts)
       input.gotoBufferEnd()
@@ -410,6 +453,11 @@ export function Prompt(props: PromptProps) {
     if (props.disabled) return
     if (autocomplete.visible) return
     if (!store.prompt.input) return
+    const trimmed = store.prompt.input.trim()
+    if (trimmed === "exit" || trimmed === "quit" || trimmed === ":q") {
+      exit()
+      return
+    }
     const selectedModel = local.model.current()
     if (!selectedModel) {
       promptModelWarning()
@@ -683,17 +731,6 @@ export function Prompt(props: PromptProps) {
                   setStore("extmarkToPartIndex", new Map())
                   return
                 }
-                if (keybind.match("input_forward_delete", e) && store.prompt.input !== "") {
-                  const cursorOffset = input.cursorOffset
-                  if (cursorOffset < input.plainText.length) {
-                    const text = input.plainText
-                    const newText = text.slice(0, cursorOffset) + text.slice(cursorOffset + 1)
-                    input.setText(newText)
-                    input.cursorOffset = cursorOffset
-                  }
-                  e.preventDefault()
-                  return
-                }
                 if (keybind.match("app_exit", e)) {
                   await exit()
                   return
@@ -720,7 +757,7 @@ export function Prompt(props: PromptProps) {
                     const item = history.move(direction, input.plainText)
 
                     if (item) {
-                      input.setText(item.input, { history: false })
+                      input.setText(item.input)
                       setStore("prompt", item)
                       restoreExtmarksFromParts(item.parts)
                       e.preventDefault()
@@ -872,8 +909,13 @@ export function Prompt(props: PromptProps) {
                       if (!r) return
                       if (r.message.includes("exceeded your current quota") && r.message.includes("gemini"))
                         return "gemini is way too hot right now"
-                      if (r.message.length > 50) return r.message.slice(0, 50) + "..."
+                      if (r.message.length > 80) return r.message.slice(0, 80) + "..."
                       return r.message
+                    })
+                    const isTruncated = createMemo(() => {
+                      const r = retry()
+                      if (!r) return false
+                      return r.message.length > 120
                     })
                     const [seconds, setSeconds] = createSignal(0)
                     onMount(() => {
@@ -886,12 +928,28 @@ export function Prompt(props: PromptProps) {
                         clearInterval(timer)
                       })
                     })
+                    const handleMessageClick = () => {
+                      const r = retry()
+                      if (!r) return
+                      if (isTruncated()) {
+                        DialogAlert.show(dialog, "Retry Error", r.message)
+                      }
+                    }
+
+                    const retryText = () => {
+                      const r = retry()
+                      if (!r) return ""
+                      const baseMessage = message()
+                      const truncatedHint = isTruncated() ? " (click to expand)" : ""
+                      const retryInfo = ` [retrying ${seconds() > 0 ? `in ${seconds()}s ` : ""}attempt #${r.attempt}]`
+                      return baseMessage + truncatedHint + retryInfo
+                    }
+
                     return (
                       <Show when={retry()}>
-                        <text fg={theme.error}>
-                          {message()} [retrying {seconds() > 0 ? `in ${seconds()}s ` : ""}
-                          attempt #{retry()!.attempt}]
-                        </text>
+                        <box onMouseUp={handleMessageClick}>
+                          <text fg={theme.error}>{retryText()}</text>
+                        </box>
                       </Show>
                     )
                   })()}

@@ -31,6 +31,31 @@
         ]
       }
     },
+    "/global/dispose": {
+      "post": {
+        "operationId": "global.dispose",
+        "summary": "Dispose instance",
+        "description": "Clean up and dispose all OpenCode instances, releasing all resources.",
+        "responses": {
+          "200": {
+            "description": "Global disposed",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "boolean"
+                }
+              }
+            }
+          }
+        },
+        "x-codeSamples": [
+          {
+            "lang": "js",
+            "source": "import { createOpencodeClient } from \"@opencode-ai/sdk\n\nconst client = createOpencodeClient()\nawait client.global.dispose({\n  ...\n})"
+          }
+        ]
+      }
+    },
     "/project": {
       "get": {
         "operationId": "project.list",
@@ -1156,6 +1181,14 @@
                 "properties": {
                   "title": {
                     "type": "string"
+                  },
+                  "time": {
+                    "type": "object",
+                    "properties": {
+                      "archived": {
+                        "type": "number"
+                      }
+                    }
                   }
                 }
               }
@@ -2786,6 +2819,9 @@
                                   "type": "string"
                                 },
                                 "name": {
+                                  "type": "string"
+                                },
+                                "family": {
                                   "type": "string"
                                 },
                                 "release_date": {
@@ -6379,6 +6415,9 @@
               },
               "compacting": {
                 "type": "number"
+              },
+              "archived": {
+                "type": "number"
               }
             },
             "required": ["created", "updated"]
@@ -6795,6 +6834,20 @@
         },
         "required": ["type", "properties"]
       },
+      "Event.global.disposed": {
+        "type": "object",
+        "properties": {
+          "type": {
+            "type": "string",
+            "const": "global.disposed"
+          },
+          "properties": {
+            "type": "object",
+            "properties": {}
+          }
+        },
+        "required": ["type", "properties"]
+      },
       "Event": {
         "anyOf": [
           {
@@ -6895,6 +6948,9 @@
           },
           {
             "$ref": "#/components/schemas/Event.server.connected"
+          },
+          {
+            "$ref": "#/components/schemas/Event.global.disposed"
           }
         ]
       },
@@ -7134,11 +7190,6 @@
             "default": "ctrl+c",
             "type": "string"
           },
-          "input_forward_delete": {
-            "description": "Forward delete",
-            "default": "ctrl+d",
-            "type": "string"
-          },
           "input_paste": {
             "description": "Paste from clipboard",
             "default": "ctrl+v",
@@ -7151,7 +7202,172 @@
           },
           "input_newline": {
             "description": "Insert newline in input",
-            "default": "shift+return,ctrl+j",
+            "default": "shift+return,ctrl+return,alt+return,ctrl+j",
+            "type": "string"
+          },
+          "input_move_left": {
+            "description": "Move cursor left in input",
+            "default": "left,ctrl+b",
+            "type": "string"
+          },
+          "input_move_right": {
+            "description": "Move cursor right in input",
+            "default": "right,ctrl+f",
+            "type": "string"
+          },
+          "input_move_up": {
+            "description": "Move cursor up in input",
+            "default": "up",
+            "type": "string"
+          },
+          "input_move_down": {
+            "description": "Move cursor down in input",
+            "default": "down",
+            "type": "string"
+          },
+          "input_select_left": {
+            "description": "Select left in input",
+            "default": "shift+left",
+            "type": "string"
+          },
+          "input_select_right": {
+            "description": "Select right in input",
+            "default": "shift+right",
+            "type": "string"
+          },
+          "input_select_up": {
+            "description": "Select up in input",
+            "default": "shift+up",
+            "type": "string"
+          },
+          "input_select_down": {
+            "description": "Select down in input",
+            "default": "shift+down",
+            "type": "string"
+          },
+          "input_line_home": {
+            "description": "Move to start of line in input",
+            "default": "ctrl+a",
+            "type": "string"
+          },
+          "input_line_end": {
+            "description": "Move to end of line in input",
+            "default": "ctrl+e",
+            "type": "string"
+          },
+          "input_select_line_home": {
+            "description": "Select to start of line in input",
+            "default": "ctrl+shift+a",
+            "type": "string"
+          },
+          "input_select_line_end": {
+            "description": "Select to end of line in input",
+            "default": "ctrl+shift+e",
+            "type": "string"
+          },
+          "input_visual_line_home": {
+            "description": "Move to start of visual line in input",
+            "default": "alt+a",
+            "type": "string"
+          },
+          "input_visual_line_end": {
+            "description": "Move to end of visual line in input",
+            "default": "alt+e",
+            "type": "string"
+          },
+          "input_select_visual_line_home": {
+            "description": "Select to start of visual line in input",
+            "default": "alt+shift+a",
+            "type": "string"
+          },
+          "input_select_visual_line_end": {
+            "description": "Select to end of visual line in input",
+            "default": "alt+shift+e",
+            "type": "string"
+          },
+          "input_buffer_home": {
+            "description": "Move to start of buffer in input",
+            "default": "home",
+            "type": "string"
+          },
+          "input_buffer_end": {
+            "description": "Move to end of buffer in input",
+            "default": "end",
+            "type": "string"
+          },
+          "input_select_buffer_home": {
+            "description": "Select to start of buffer in input",
+            "default": "shift+home",
+            "type": "string"
+          },
+          "input_select_buffer_end": {
+            "description": "Select to end of buffer in input",
+            "default": "shift+end",
+            "type": "string"
+          },
+          "input_delete_line": {
+            "description": "Delete line in input",
+            "default": "ctrl+shift+d",
+            "type": "string"
+          },
+          "input_delete_to_line_end": {
+            "description": "Delete to end of line in input",
+            "default": "ctrl+k",
+            "type": "string"
+          },
+          "input_delete_to_line_start": {
+            "description": "Delete to start of line in input",
+            "default": "ctrl+u",
+            "type": "string"
+          },
+          "input_backspace": {
+            "description": "Backspace in input",
+            "default": "backspace,shift+backspace",
+            "type": "string"
+          },
+          "input_delete": {
+            "description": "Delete character in input",
+            "default": "ctrl+d,delete,shift+delete",
+            "type": "string"
+          },
+          "input_undo": {
+            "description": "Undo in input",
+            "default": "ctrl+-,super+z",
+            "type": "string"
+          },
+          "input_redo": {
+            "description": "Redo in input",
+            "default": "ctrl+.,super+shift+z",
+            "type": "string"
+          },
+          "input_word_forward": {
+            "description": "Move word forward in input",
+            "default": "alt+f,alt+right,ctrl+right",
+            "type": "string"
+          },
+          "input_word_backward": {
+            "description": "Move word backward in input",
+            "default": "alt+b,alt+left,ctrl+left",
+            "type": "string"
+          },
+          "input_select_word_forward": {
+            "description": "Select word forward in input",
+            "default": "alt+shift+f,alt+shift+right",
+            "type": "string"
+          },
+          "input_select_word_backward": {
+            "description": "Select word backward in input",
+            "default": "alt+shift+b,alt+shift+left",
+            "type": "string"
+          },
+          "input_delete_word_forward": {
+            "description": "Delete word forward in input",
+            "default": "alt+d,alt+delete,ctrl+delete",
+            "type": "string"
+          },
+          "input_delete_word_backward": {
+            "description": "Delete word backward in input",
+            "default": "ctrl+w,ctrl+backspace,alt+backspace",
             "type": "string"
           },
           "history_previous": {
@@ -7303,6 +7519,9 @@
                   "type": "string"
                 },
                 "name": {
+                  "type": "string"
+                },
+                "family": {
                   "type": "string"
                 },
                 "release_date": {
@@ -8094,6 +8313,9 @@
       "Path": {
         "type": "object",
         "properties": {
+          "home": {
+            "type": "string"
+          },
           "state": {
             "type": "string"
           },
@@ -8107,7 +8329,7 @@
             "type": "string"
           }
         },
-        "required": ["state", "config", "worktree", "directory"]
+        "required": ["home", "state", "config", "worktree", "directory"]
       },
       "VcsInfo": {
         "type": "object",
@@ -8290,6 +8512,9 @@
             "required": ["id", "url", "npm"]
           },
           "name": {
+            "type": "string"
+          },
+          "family": {
             "type": "string"
           },
           "capabilities": {

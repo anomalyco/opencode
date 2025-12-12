@@ -74,23 +74,28 @@ export namespace ProviderTransform {
       return result
     }
 
-    // DeepSeek: Handle reasoning_content for tool call continuations
-    // - With tool calls: Include reasoning_content in providerOptions so model can continue reasoning
-    // - Without tool calls: Strip reasoning (new turn doesn't need previous reasoning)
-    // See: https://api-docs.deepseek.com/guides/thinking_mode
-    if (model.providerID === "deepseek" || model.api.id.toLowerCase().includes("deepseek")) {
+    // TODO: rm later
+    const bugged =
+      (model.id === "kimi-k2-thinking" && model.providerID === "opencode") ||
+      (model.id === "moonshotai/Kimi-K2-Thinking" && model.providerID === "baseten")
+    if (
+      model.providerID === "deepseek" ||
+      model.api.id.toLowerCase().includes("deepseek") ||
+      (model.capabilities.interleaved &&
+        typeof model.capabilities.interleaved === "object" &&
+        model.capabilities.interleaved.field === "reasoning_content" &&
+        !bugged)
+    ) {
       return msgs.map((msg) => {
         if (msg.role === "assistant" && Array.isArray(msg.content)) {
           const reasoningParts = msg.content.filter((part: any) => part.type === "reasoning")
-          const hasToolCalls = msg.content.some((part: any) => part.type === "tool-call")
           const reasoningText = reasoningParts.map((part: any) => part.text).join("")
 
           // Filter out reasoning parts from content
           const filteredContent = msg.content.filter((part: any) => part.type !== "reasoning")
 
-          // If this message has tool calls and reasoning, include reasoning_content
-          // so DeepSeek can continue reasoning after tool execution
-          if (hasToolCalls && reasoningText) {
+          // Include reasoning_content directly on the message for all assistant messages
+          if (reasoningText) {
             return {
               ...msg,
               content: filteredContent,
@@ -104,12 +109,12 @@ export namespace ProviderTransform {
             }
           }
 
-          // For final answers (no tool calls), just strip reasoning
           return {
             ...msg,
             content: filteredContent,
           }
         }
+
         return msg
       })
     }
@@ -212,23 +217,32 @@ export namespace ProviderTransform {
   ): Record<string, any> {
     const result: Record<string, any> = {}
 
-    // switch to providerID later, for now use this
     if (model.api.npm === "@openrouter/ai-sdk-provider") {
       result["usage"] = {
         include: true,
       }
+      if (model.api.id.includes("gemini-3")) {
+        result["reasoning"] = { effort: "high" }
+      }
+    }
+
+    if (
+      model.providerID === "baseten" ||
+      (model.providerID === "opencode" && ["kimi-k2-thinking", "glm-4.6"].includes(model.api.id))
+    ) {
+      result["chat_template_args"] = { enable_thinking: true }
     }
 
     if (model.providerID === "openai" || providerOptions?.setCacheKey) {
       result["promptCacheKey"] = sessionID
     }
 
-    if (
-      model.providerID === "google" ||
-      (model.providerID.startsWith("opencode") && model.api.id.includes("gemini-3"))
-    ) {
+    if (model.api.npm === "@ai-sdk/google" || model.api.npm === "@ai-sdk/google-vertex") {
       result["thinkingConfig"] = {
         includeThoughts: true,
+      }
+      if (model.api.id.includes("gemini-3")) {
+        result["thinkingConfig"]["thinkingLevel"] = "high"
       }
     }
 
@@ -273,23 +287,7 @@ export namespace ProviderTransform {
     return options
   }
 
-  export function providerOptions(model: Provider.Model, options: { [x: string]: any }, messages: ModelMessage[]) {
-    if (model.capabilities.interleaved && typeof model.capabilities.interleaved === "object") {
-      const cot = []
-      const assistantMessages = messages.filter((msg) => msg.role === "assistant")
-      for (const msg of assistantMessages) {
-        for (const part of msg.content) {
-          if (typeof part === "string") {
-            continue
-          }
-          if (part.type === "reasoning") {
-            cot.push(part)
-          }
-        }
-      }
-      options[model.capabilities.interleaved.field] = cot
-    }
-
+  export function providerOptions(model: Provider.Model, options: { [x: string]: any }) {
     switch (model.api.npm) {
       case "@ai-sdk/openai":
       case "@ai-sdk/azure":
