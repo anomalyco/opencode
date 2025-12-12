@@ -84,6 +84,22 @@
     margin: 0;
     padding: 0;
   }
+
+  &[data-scrollable] {
+    height: auto;
+    max-height: 240px;
+    overflow-y: auto;
+    scrollbar-width: none;
+    -ms-overflow-style: none;
+
+    &::-webkit-scrollbar {
+      display: none;
+    }
+
+    [data-component="markdown"] {
+      overflow: visible;
+    }
+  }
 }
 
 [data-component="edit-trigger"],

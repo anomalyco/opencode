@@ -328,7 +328,7 @@ ToolRegistry.register({
           subtitle: props.input.description,
         }}
       >
-        <div data-component="tool-output">
+        <div data-component="tool-output" data-scrollable>
           <Markdown
             text={`\`\`\`command\n$ ${props.input.command}${props.output ? "\n\n" + props.output : ""}\n\`\`\``}
           />
