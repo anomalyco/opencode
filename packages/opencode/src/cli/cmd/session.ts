@@ -7,6 +7,8 @@ import { Locale } from "../../util/locale"
 import { Flag } from "../../flag/flag"
 import { EOL } from "os"
 import path from "path"
+import * as prompts from "@clack/prompts"
+import { formatTranscript } from "./tui/util/transcript"
 
 function pagerCmd(): string[] {
   const lessOptions = ["-R", "-S"]
@@ -38,7 +40,7 @@ function pagerCmd(): string[] {
 export const SessionCommand = cmd({
   command: "session",
   describe: "manage sessions",
-  builder: (yargs: Argv) => yargs.command(SessionListCommand).demandCommand(),
+  builder: (yargs: Argv) => yargs.command(SessionListCommand).command(SessionExportCommand).demandCommand(),
   async handler() {},
 })
 
@@ -133,3 +135,135 @@ function formatSessionJSON(sessions: Session.Info[]): string {
   }))
   return JSON.stringify(jsonData, null, 2)
 }
+
+export const SessionExportCommand = cmd({
+  command: "export [sessionID]",
+  describe: "export session transcript to file",
+  builder: (yargs: Argv) => {
+    return yargs
+      .positional("sessionID", {
+        describe: "session id to export",
+        type: "string",
+      })
+      .option("output", {
+        alias: "o",
+        describe: "output file path",
+        type: "string",
+      })
+      .option("format", {
+        alias: "f",
+        describe: "output format",
+        type: "string",
+        choices: ["markdown", "json"],
+        default: "markdown",
+      })
+      .option("thinking", {
+        describe: "include thinking/reasoning blocks",
+        type: "boolean",
+        default: true,
+      })
+      .option("tool-details", {
+        describe: "include tool input/output details",
+        type: "boolean",
+        default: true,
+      })
+      .option("assistant-metadata", {
+        describe: "include assistant metadata (agent, model, duration)",
+        type: "boolean",
+        default: true,
+      })
+  },
+  handler: async (args) => {
+    await bootstrap(process.cwd(), async () => {
+      let sessionID = args.sessionID
+
+      if (!sessionID) {
+        prompts.intro("Export session", {
+          output: process.stderr,
+        })
+
+        const sessions = []
+        for await (const session of Session.list()) {
+          sessions.push(session)
+        }
+
+        if (sessions.length === 0) {
+          prompts.log.error("No sessions found", {
+            output: process.stderr,
+          })
+          prompts.outro("Done", {
+            output: process.stderr,
+          })
+          return
+        }
+
+        sessions.sort((a, b) => b.time.updated - a.time.updated)
+
+        const selectedSession = await prompts.autocomplete({
+          message: "Select session to export",
+          maxItems: 10,
+          options: sessions.map((session) => ({
+            label: session.title,
+            value: session.id,
+            hint: `${new Date(session.time.updated).toLocaleString()} • ${session.id.slice(-8)}`,
+          })),
+          output: process.stderr,
+        })
+
+        if (prompts.isCancel(selectedSession)) {
+          throw new UI.CancelledError()
+        }
+
+        sessionID = selectedSession as string
+      }
+
+      const sessionInfo = await Session.get(sessionID!)
+
+      let content: string
+      let defaultExtension: string
+
+      const sessionMessages = await Session.messages({ sessionID: sessionID! })
+
+      if (args.format === "json") {
+        const exportData = {
+          info: sessionInfo,
+          messages: sessionMessages.map((msg) => ({
+            info: msg.info,
+            parts: msg.parts,
+          })),
+        }
+        content = JSON.stringify(exportData, null, 2)
+        defaultExtension = "json"
+      } else {
+        content = formatTranscript(sessionInfo, sessionMessages, {
+          thinking: args.thinking,
+          toolDetails: args.toolDetails,
+          assistantMetadata: args.assistantMetadata,
+        })
+        defaultExtension = "md"
+      }
+
+      const outputPath = await (async () => {
+        if (args.output) return args.output
+        const defaultFilename = `session-${sessionInfo.id.slice(0, 8)}.${defaultExtension}`
+        const filenameInput = await prompts.text({
+          message: "Export filename",
+          defaultValue: defaultFilename,
+          output: process.stderr,
+        })
+
+        if (prompts.isCancel(filenameInput)) {
+          throw new UI.CancelledError()
+        }
+
+        return filenameInput.trim()
+      })()
+
+      await Bun.write(outputPath, content)
+
+      prompts.outro(`Session exported to ${outputPath}`, {
+        output: process.stderr,
+      })
+    })
+  },
+})
