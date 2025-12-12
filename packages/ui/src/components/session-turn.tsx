@@ -1,8 +1,9 @@
-import { AssistantMessage } from "@opencode-ai/sdk"
+import { AssistantMessage } from "@opencode-ai/sdk/v2"
 import { useData } from "../context"
-import { Binary } from "@opencode-ai/util/binary"
+import { useDiffComponent } from "../context/diff"
 import { getDirectory, getFilename } from "@opencode-ai/util/path"
-import { createEffect, createMemo, createSignal, For, Match, onMount, ParentProps, Show, Switch } from "solid-js"
+import { checksum } from "@opencode-ai/util/encode"
+import { createEffect, createMemo, createSignal, For, Match, onCleanup, ParentProps, Show, Switch } from "solid-js"
 import { DiffChanges } from "./diff-changes"
 import { Typewriter } from "./typewriter"
 import { Message } from "./message-part"
@@ -11,10 +12,17 @@ import { Accordion } from "./accordion"
 import { StickyAccordionHeader } from "./sticky-accordion-header"
 import { FileIcon } from "./file-icon"
 import { Icon } from "./icon"
-import { Diff } from "./diff"
 import { Card } from "./card"
 import { MessageProgress } from "./message-progress"
 import { Collapsible } from "./collapsible"
+import { Dynamic } from "solid-js/web"
+
+// Track animation state per message ID - persists across re-renders
+// "empty" = first saw with no value (should animate when value arrives)
+// "animating" = currently animating (keep returning true)
+// "done" = already animated or first saw with value (never animate)
+const titleAnimationState = new Map<string, "empty" | "animating" | "done">()
+const summaryAnimationState = new Map<string, "empty" | "animating" | "done">()
 
 export function SessionTurn(
   props: ParentProps<{
@@ -28,18 +36,16 @@ export function SessionTurn(
   }>,
 ) {
   const data = useData()
-  const match = Binary.search(data.store.session, props.sessionID, (s) => s.id)
-  if (!match.found) throw new Error(`Session ${props.sessionID} not found`)
-
+  const diffComponent = useDiffComponent()
   const sanitizer = createMemo(() => (data.directory ? new RegExp(`${data.directory}/`, "g") : undefined))
   const messages = createMemo(() => (props.sessionID ? (data.store.message[props.sessionID] ?? []) : []))
   const userMessages = createMemo(() =>
     messages()
       .filter((m) => m.role === "user")
-      .sort((a, b) => b.id.localeCompare(a.id)),
+      .sort((a, b) => a.id.localeCompare(b.id)),
   )
   const lastUserMessage = createMemo(() => {
-    return userMessages()?.at(0)
+    return userMessages()?.at(-1)
   })
   const message = createMemo(() => userMessages()?.find((m) => m.id === props.messageID))
 
@@ -56,11 +62,37 @@ export function SessionTurn(
       <div data-slot="session-turn-content" class={props.classes?.content}>
         <Show when={message()}>
           {(msg) => {
-            const titleKey = `app:seen:session:${props.sessionID}:${msg().id}:title`
-            const contentKey = `app:seen:session:${props.sessionID}:${msg().id}:content`
             const [detailsExpanded, setDetailsExpanded] = createSignal(false)
-            const [titled, setTitled] = createSignal(true)
-            const [faded, setFaded] = createSignal(true)
+
+            // Animation logic: only animate if we witness the value transition from empty to non-empty
+            // Track in module-level Maps keyed by message ID so it persists across re-renders
+
+            // Initialize animation state for current message (reactive - runs when msg().id changes)
+            createEffect(() => {
+              const id = msg().id
+              if (!titleAnimationState.has(id)) {
+                titleAnimationState.set(id, msg().summary?.title ? "done" : "empty")
+              }
+              if (!summaryAnimationState.has(id)) {
+                const assistantMsgs = messages()?.filter(
+                  (m) => m.role === "assistant" && m.parentID == id,
+                ) as AssistantMessage[]
+                const parts = assistantMsgs?.flatMap((m) => data.store.part[m.id])
+                const lastText = parts?.filter((p) => p?.type === "text")?.at(-1)
+                const summaryValue = msg().summary?.body ?? lastText?.text
+                summaryAnimationState.set(id, summaryValue ? "done" : "empty")
+              }
+
+              // When message changes or component unmounts, mark any "animating" states as "done"
+              onCleanup(() => {
+                if (titleAnimationState.get(id) === "animating") {
+                  titleAnimationState.set(id, "done")
+                }
+                if (summaryAnimationState.get(id) === "animating") {
+                  summaryAnimationState.set(id, "done")
+                }
+              })
+            })
 
             const assistantMessages = createMemo(() => {
               return messages()?.filter((m) => m.role === "assistant" && m.parentID == msg().id) as AssistantMessage[]
@@ -80,27 +112,38 @@ export function SessionTurn(
             const summary = createMemo(() => msg().summary?.body ?? lastTextPart()?.text)
             const lastTextPartShown = createMemo(() => !msg().summary?.body && (lastTextPart()?.text?.length ?? 0) > 0)
 
-            // allowing time for the animations to finish
-            onMount(() => {
-              const titleSeen = sessionStorage.getItem(titleKey) === "true"
-              const contentSeen = sessionStorage.getItem(contentKey) === "true"
-
-              if (!titleSeen) {
-                setTitled(false)
-                const title = msg().summary?.title
-                if (title) setTimeout(() => setTitled(true), 10_000)
-                setTimeout(() => sessionStorage.setItem(titleKey, "true"), 1000)
+            // Should animate: state is "empty" AND value now exists, or state is "animating"
+            // Transition: empty -> animating -> done (done happens on cleanup)
+            const animateTitle = createMemo(() => {
+              const id = msg().id
+              const state = titleAnimationState.get(id)
+              const title = msg().summary?.title
+              if (state === "animating") {
+                return true
               }
-
-              if (!contentSeen) {
-                setFaded(false)
-                setTimeout(() => sessionStorage.setItem(contentKey, "true"), 1000)
+              if (state === "empty" && title) {
+                titleAnimationState.set(id, "animating")
+                return true
               }
+              return false
+            })
+            const animateSummary = createMemo(() => {
+              const id = msg().id
+              const state = summaryAnimationState.get(id)
+              const value = summary()
+              if (state === "animating") {
+                return true
+              }
+              if (state === "empty" && value) {
+                summaryAnimationState.set(id, "animating")
+                return true
+              }
+              return false
             })
 
             createEffect(() => {
-              const completed = !messageWorking()
-              setTimeout(() => setCompleted(completed), 1200)
+              const done = !messageWorking()
+              setTimeout(() => setCompleted(done), 1200)
             })
 
             return (
@@ -109,7 +152,7 @@ export function SessionTurn(
                 <div data-slot="session-turn-message-header">
                   <div data-slot="session-turn-message-title">
                     <Show
-                      when={titled()}
+                      when={!animateTitle()}
                       fallback={<Typewriter as="h1" text={msg().summary?.title} data-slot="session-turn-typewriter" />}
                     >
                       <h1>{msg().summary?.title}</h1>
@@ -134,7 +177,7 @@ export function SessionTurn(
                           <Markdown
                             data-slot="session-turn-markdown"
                             data-diffs={!!msg().summary?.diffs?.length}
-                            data-fade={!msg().summary?.diffs?.length && !faded()}
+                            data-fade={!msg().summary?.diffs?.length && animateSummary()}
                             text={summary()}
                           />
                         )}
@@ -167,14 +210,17 @@ export function SessionTurn(
                               </Accordion.Trigger>
                             </StickyAccordionHeader>
                             <Accordion.Content data-slot="session-turn-accordion-content">
-                              <Diff
+                              <Dynamic
+                                component={diffComponent}
                                 before={{
                                   name: diff.file!,
                                   contents: diff.before!,
+                                  cacheKey: checksum(diff.before!),
                                 }}
                                 after={{
                                   name: diff.file!,
                                   contents: diff.after!,
+                                  cacheKey: checksum(diff.after!),
                                 }}
                               />
                             </Accordion.Content>

@@ -6,28 +6,41 @@ import { DialogSelect, type DialogSelectRef } from "@tui/ui/dialog-select"
 import { useDialog } from "@tui/ui/dialog"
 import { createDialogProviderOptions, DialogProvider } from "./dialog-provider"
 import { Keybind } from "@/util/keybind"
-import { iife } from "@/util/iife"
 
-export function DialogModel() {
+export function useConnected() {
+  const sync = useSync()
+  return createMemo(() =>
+    sync.data.provider.some((x) => x.id !== "opencode" || Object.values(x.models).some((y) => y.cost?.input !== 0)),
+  )
+}
+
+export function DialogModel(props: { providerID?: string }) {
   const local = useLocal()
   const sync = useSync()
   const dialog = useDialog()
   const [ref, setRef] = createSignal<DialogSelectRef<unknown>>()
 
-  const connected = createMemo(() =>
-    sync.data.provider.some((x) => x.id !== "opencode" || Object.values(x.models).some((y) => y.cost?.input !== 0)),
-  )
-
+  const connected = useConnected()
   const providers = createDialogProviderOptions()
+
+  const showExtra = createMemo(() => {
+    if (!connected()) return false
+    if (props.providerID) return false
+    return true
+  })
 
   const options = createMemo(() => {
     const query = ref()?.filter
-    const favorites = connected() ? local.model.favorite() : []
+    const favorites = showExtra() ? local.model.favorite() : []
     const recents = local.model.recent()
 
-    const recentList = recents
-      .filter((item) => !favorites.some((fav) => fav.providerID === item.providerID && fav.modelID === item.modelID))
-      .slice(0, 5)
+    const recentList = showExtra()
+      ? recents
+          .filter(
+            (item) => !favorites.some((fav) => fav.providerID === item.providerID && fav.modelID === item.modelID),
+          )
+          .slice(0, 5)
+      : []
 
     const favoriteOptions = !query
       ? favorites.flatMap((item) => {
@@ -108,6 +121,8 @@ export function DialogModel() {
           pipe(
             provider.models,
             entries(),
+            filter(([_, info]) => info.status !== "deprecated"),
+            filter(([_, info]) => (props.providerID ? info.providerID === props.providerID : true)),
             map(([model, info]) => {
               const value = {
                 providerID: provider.id,
@@ -149,7 +164,10 @@ export function DialogModel() {
               if (inRecents) return false
               return true
             }),
-            sortBy((x) => x.title),
+            sortBy(
+              (x) => x.footer !== "Free",
+              (x) => x.title,
+            ),
           ),
         ),
       ),
@@ -168,11 +186,20 @@ export function DialogModel() {
     ]
   })
 
+  const provider = createMemo(() =>
+    props.providerID ? sync.data.provider.find((x) => x.id === props.providerID) : null,
+  )
+
+  const title = createMemo(() => {
+    if (provider()) return provider()!.name
+    return "Select model"
+  })
+
   return (
     <DialogSelect
       keybind={[
         {
-          keybind: { ctrl: true, name: "a", meta: false, shift: false, leader: false },
+          keybind: Keybind.parse("ctrl+a")[0],
           title: connected() ? "Connect provider" : "View all providers",
           onTrigger() {
             dialog.replace(() => <DialogProvider />)
@@ -188,7 +215,7 @@ export function DialogModel() {
         },
       ]}
       ref={setRef}
-      title="Select model"
+      title={title()}
       current={local.model.current()}
       options={options()}
     />

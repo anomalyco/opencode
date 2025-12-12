@@ -2,13 +2,13 @@ name: "sync-zed-extension"
 
 on:
   workflow_dispatch:
-  release:
-    types: [published]
+  # release:
+  #   types: [published]
 
 jobs:
   zed:
     name: Release Zed Extension
-    runs-on: ubuntu-latest
+    runs-on: blacksmith-4vcpu-ubuntu-2404
     steps:
       - uses: actions/checkout@v4
         with:

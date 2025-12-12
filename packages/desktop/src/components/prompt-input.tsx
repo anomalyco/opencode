@@ -1,9 +1,20 @@
 import { useFilteredList } from "@opencode-ai/ui/hooks"
-import { createEffect, on, Component, Show, For, onMount, onCleanup, Switch, Match } from "solid-js"
+import {
+  createEffect,
+  on,
+  Component,
+  Show,
+  For,
+  onMount,
+  onCleanup,
+  Switch,
+  Match,
+  createSignal,
+  createMemo,
+} from "solid-js"
 import { createStore } from "solid-js/store"
 import { createFocusSignal } from "@solid-primitives/active-element"
 import { useLocal } from "@/context/local"
-import { DateTime } from "luxon"
 import { ContentPart, DEFAULT_PROMPT, isPromptEqual, Prompt, useSession } from "@/context/session"
 import { useSDK } from "@/context/sdk"
 import { useNavigate } from "@solidjs/router"
@@ -15,12 +26,48 @@ import { Icon } from "@opencode-ai/ui/icon"
 import { Tooltip } from "@opencode-ai/ui/tooltip"
 import { IconButton } from "@opencode-ai/ui/icon-button"
 import { Select } from "@opencode-ai/ui/select"
+import { Tag } from "@opencode-ai/ui/tag"
 import { getDirectory, getFilename } from "@opencode-ai/util/path"
+import { useLayout } from "@/context/layout"
+import { popularProviders, useProviders } from "@/hooks/use-providers"
+import { Dialog } from "@opencode-ai/ui/dialog"
+import { List, ListRef } from "@opencode-ai/ui/list"
+import { iife } from "@opencode-ai/util/iife"
+import { ProviderIcon } from "@opencode-ai/ui/provider-icon"
+import { IconName } from "@opencode-ai/ui/icons/provider"
 
 interface PromptInputProps {
   class?: string
   ref?: (el: HTMLDivElement) => void
 }
+
+const PLACEHOLDERS = [
+  "Fix a TODO in the codebase",
+  "What is the tech stack of this project?",
+  "Fix broken tests",
+  "Explain how authentication works",
+  "Find and fix security vulnerabilities",
+  "Add unit tests for the user service",
+  "Refactor this function to be more readable",
+  "What does this error mean?",
+  "Help me debug this issue",
+  "Generate API documentation",
+  "Optimize database queries",
+  "Add input validation",
+  "Create a new component for...",
+  "How do I deploy this project?",
+  "Review my code for best practices",
+  "Add error handling to this function",
+  "Explain this regex pattern",
+  "Convert this to TypeScript",
+  "Add logging throughout the codebase",
+  "What dependencies are outdated?",
+  "Help me write a migration script",
+  "Implement caching for this endpoint",
+  "Add pagination to this list",
+  "Create a CLI command for...",
+  "How do environment variables work here?",
+]
 
 export const PromptInput: Component<PromptInputProps> = (props) => {
   const navigate = useNavigate()
@@ -28,12 +75,23 @@ export const PromptInput: Component<PromptInputProps> = (props) => {
   const sync = useSync()
   const local = useLocal()
   const session = useSession()
+  const layout = useLayout()
+  const providers = useProviders()
   let editorRef!: HTMLDivElement
 
   const [store, setStore] = createStore<{
     popoverIsOpen: boolean
   }>({
     popoverIsOpen: false,
+  })
+
+  const [placeholder, setPlaceholder] = createSignal(Math.floor(Math.random() * PLACEHOLDERS.length))
+
+  onMount(() => {
+    const interval = setInterval(() => {
+      setPlaceholder((prev) => (prev + 1) % PLACEHOLDERS.length)
+    }, 6500)
+    onCleanup(() => clearInterval(interval))
   })
 
   createEffect(() => {
@@ -68,7 +126,7 @@ export const PromptInput: Component<PromptInputProps> = (props) => {
 
   const handleFileSelect = (path: string | undefined) => {
     if (!path) return
-    addPart({ type: "file", path, content: "@" + getFilename(path), start: 0, end: 0 })
+    addPart({ type: "file", path, content: "@" + path, start: 0, end: 0 })
   }
 
   const { flat, active, onInput, onKeyDown, refetch } = useFilteredList<string>({
@@ -235,9 +293,7 @@ export const PromptInput: Component<PromptInputProps> = (props) => {
 
   const abort = () =>
     sdk.client.session.abort({
-      path: {
-        id: session.id!,
-      },
+      sessionID: session.id!,
     })
 
   const handleKeyDown = (event: KeyboardEvent) => {
@@ -329,21 +385,19 @@ export const PromptInput: Component<PromptInputProps> = (props) => {
     session.prompt.set([{ type: "text", content: "", start: 0, end: 0 }], 0)
 
     sdk.client.session.prompt({
-      path: { id: existing.id },
-      body: {
-        agent: local.agent.current()!.name,
-        model: {
-          modelID: local.model.current()!.id,
-          providerID: local.model.current()!.provider.id,
-        },
-        parts: [
-          {
-            type: "text",
-            text,
-          },
-          ...attachmentParts,
-        ],
+      sessionID: existing.id,
+      agent: local.agent.current()!.name,
+      model: {
+        modelID: local.model.current()!.id,
+        providerID: local.model.current()!.provider.id,
       },
+      parts: [
+        {
+          type: "text",
+          text,
+        },
+        ...attachmentParts,
+      ],
     })
   }
 
@@ -407,7 +461,7 @@ export const PromptInput: Component<PromptInputProps> = (props) => {
           />
           <Show when={!session.prompt.dirty()}>
             <div class="absolute top-0 left-0 px-5 py-3 text-14-regular text-text-weak pointer-events-none">
-              Plan and build anything
+              Ask anything... "{PLACEHOLDERS[placeholder()]}"
             </div>
           </Show>
         </div>
@@ -420,55 +474,207 @@ export const PromptInput: Component<PromptInputProps> = (props) => {
               class="capitalize"
               variant="ghost"
             />
-            <SelectDialog
-              title="Select model"
-              placeholder="Search models"
-              emptyMessage="No model results"
-              key={(x) => `${x.provider.id}:${x.id}`}
-              items={local.model.list()}
-              current={local.model.current()}
-              filterKeys={["provider.name", "name", "id"]}
-              groupBy={(x) => (local.model.recent().includes(x) ? "Recent" : x.provider.name)}
-              sortGroupsBy={(a, b) => {
-                const order = ["opencode", "anthropic", "github-copilot", "openai", "google", "openrouter", "vercel"]
-                if (a.category === "Recent" && b.category !== "Recent") return -1
-                if (b.category === "Recent" && a.category !== "Recent") return 1
-                const aProvider = a.items[0].provider.id
-                const bProvider = b.items[0].provider.id
-                if (order.includes(aProvider) && !order.includes(bProvider)) return -1
-                if (!order.includes(aProvider) && order.includes(bProvider)) return 1
-                return order.indexOf(aProvider) - order.indexOf(bProvider)
-              }}
-              onSelect={(x) =>
-                local.model.set(x ? { modelID: x.id, providerID: x.provider.id } : undefined, { recent: true })
-              }
-              trigger={
-                <Button as="div" variant="ghost">
-                  {local.model.current()?.name ?? "Select model"}
-                  <span class="ml-0.5 text-text-weak text-12-regular">{local.model.current()?.provider.name}</span>
-                  <Icon name="chevron-down" size="small" />
-                </Button>
-              }
-            >
-              {(i) => (
-                <div class="w-full flex items-center justify-between gap-x-3">
-                  <div class="flex items-center gap-x-2.5 text-text-muted grow min-w-0">
-                    <img src={`https://models.dev/logos/${i.provider.id}.svg`} class="size-6 p-0.5 shrink-0" />
-                    <div class="flex gap-x-3 items-baseline flex-[1_0_0]">
-                      <span class="text-14-medium text-text-strong overflow-hidden text-ellipsis">{i.name}</span>
-                      <Show when={i.release_date}>
-                        <span class="text-12-medium text-text-weak overflow-hidden text-ellipsis truncate min-w-0">
-                          {DateTime.fromFormat(i.release_date, "yyyy-MM-dd").toFormat("LLL yyyy")}
-                        </span>
-                      </Show>
-                    </div>
-                  </div>
-                  <Show when={!i.cost || i.cost?.input === 0}>
-                    <div class="overflow-hidden text-12-medium text-text-strong">Free</div>
-                  </Show>
-                </div>
-              )}
-            </SelectDialog>
+            <Button as="div" variant="ghost" onClick={() => layout.dialog.open("model")}>
+              {local.model.current()?.name ?? "Select model"}
+              <span class="ml-0.5 text-text-weak text-12-regular">{local.model.current()?.provider.name}</span>
+              <Icon name="chevron-down" size="small" />
+            </Button>
+            <Show when={layout.dialog.opened() === "model"}>
+              <Switch>
+                <Match when={providers.paid().length > 0}>
+                  {iife(() => {
+                    const models = createMemo(() =>
+                      local.model
+                        .list()
+                        .filter((m) =>
+                          layout.connect.state() === "complete" ? m.provider.id === layout.connect.provider() : true,
+                        ),
+                    )
+                    return (
+                      <SelectDialog
+                        defaultOpen
+                        onOpenChange={(open) => {
+                          if (open) {
+                            layout.dialog.open("model")
+                          } else {
+                            layout.dialog.close("model")
+                          }
+                        }}
+                        title="Select model"
+                        placeholder="Search models"
+                        emptyMessage="No model results"
+                        key={(x) => `${x.provider.id}:${x.id}`}
+                        items={models}
+                        current={local.model.current()}
+                        filterKeys={["provider.name", "name", "id"]}
+                        // groupBy={(x) => (local.model.recent().includes(x) ? "Recent" : x.provider.name)}
+                        groupBy={(x) => x.provider.name}
+                        sortGroupsBy={(a, b) => {
+                          if (a.category === "Recent" && b.category !== "Recent") return -1
+                          if (b.category === "Recent" && a.category !== "Recent") return 1
+                          const aProvider = a.items[0].provider.id
+                          const bProvider = b.items[0].provider.id
+                          if (popularProviders.includes(aProvider) && !popularProviders.includes(bProvider)) return -1
+                          if (!popularProviders.includes(aProvider) && popularProviders.includes(bProvider)) return 1
+                          return popularProviders.indexOf(aProvider) - popularProviders.indexOf(bProvider)
+                        }}
+                        onSelect={(x) =>
+                          local.model.set(x ? { modelID: x.id, providerID: x.provider.id } : undefined, {
+                            recent: true,
+                          })
+                        }
+                        actions={
+                          <Button
+                            class="h-7 -my-1 text-14-medium"
+                            icon="plus-small"
+                            tabIndex={-1}
+                            onClick={() => layout.dialog.open("provider")}
+                          >
+                            Connect provider
+                          </Button>
+                        }
+                      >
+                        {(i) => (
+                          <div class="w-full flex items-center gap-x-2.5">
+                            <span>{i.name}</span>
+                            <Show when={i.provider.id === "opencode" && (!i.cost || i.cost?.input === 0)}>
+                              <Tag>Free</Tag>
+                            </Show>
+                            <Show when={i.latest}>
+                              <Tag>Latest</Tag>
+                            </Show>
+                          </div>
+                        )}
+                      </SelectDialog>
+                    )
+                  })}
+                </Match>
+                <Match when={true}>
+                  {iife(() => {
+                    let listRef: ListRef | undefined
+                    const handleKey = (e: KeyboardEvent) => {
+                      if (e.key === "Escape") return
+                      listRef?.onKeyDown(e)
+                    }
+
+                    onMount(() => {
+                      document.addEventListener("keydown", handleKey)
+                      onCleanup(() => {
+                        document.removeEventListener("keydown", handleKey)
+                      })
+                    })
+
+                    return (
+                      <Dialog
+                        modal
+                        defaultOpen
+                        onOpenChange={(open) => {
+                          if (open) {
+                            layout.dialog.open("model")
+                          } else {
+                            layout.dialog.close("model")
+                          }
+                        }}
+                      >
+                        <Dialog.Header>
+                          <Dialog.Title>Select model</Dialog.Title>
+                          <Dialog.CloseButton tabIndex={-1} />
+                        </Dialog.Header>
+                        <Dialog.Body>
+                          <div class="flex flex-col gap-3 px-2.5">
+                            <div class="text-14-medium text-text-base px-2.5">Free models provided by OpenCode</div>
+                            <List
+                              ref={(ref) => (listRef = ref)}
+                              items={local.model.list}
+                              current={local.model.current()}
+                              key={(x) => `${x.provider.id}:${x.id}`}
+                              onSelect={(x) => {
+                                local.model.set(x ? { modelID: x.id, providerID: x.provider.id } : undefined, {
+                                  recent: true,
+                                })
+                                layout.dialog.close("model")
+                              }}
+                            >
+                              {(i) => (
+                                <div class="w-full flex items-center gap-x-2.5">
+                                  <span>{i.name}</span>
+                                  <Tag>Free</Tag>
+                                  <Show when={i.latest}>
+                                    <Tag>Latest</Tag>
+                                  </Show>
+                                </div>
+                              )}
+                            </List>
+                            <div />
+                            <div />
+                          </div>
+                          <div class="px-1.5 pb-1.5">
+                            <div class="w-full rounded-sm border border-border-weak-base bg-surface-raised-base">
+                              <div class="w-full flex flex-col items-start gap-4 px-1.5 pt-4 pb-4">
+                                <div class="px-2 text-14-medium text-text-base">
+                                  Add more models from popular providers
+                                </div>
+                                <div class="w-full">
+                                  <List
+                                    class="w-full"
+                                    key={(x) => x?.id}
+                                    items={providers.popular}
+                                    activeIcon="plus-small"
+                                    sortBy={(a, b) => {
+                                      if (popularProviders.includes(a.id) && popularProviders.includes(b.id))
+                                        return popularProviders.indexOf(a.id) - popularProviders.indexOf(b.id)
+                                      return a.name.localeCompare(b.name)
+                                    }}
+                                    onSelect={(x) => {
+                                      if (!x) return
+                                      layout.dialog.connect(x.id)
+                                    }}
+                                  >
+                                    {(i) => (
+                                      <div class="w-full flex items-center gap-x-4">
+                                        <ProviderIcon
+                                          data-slot="list-item-extra-icon"
+                                          id={i.id as IconName}
+                                          // TODO: clean this up after we update icon in models.dev
+                                          classList={{
+                                            "text-icon-weak-base": true,
+                                            "size-4 mx-0.5": i.id === "opencode",
+                                            "size-5": i.id !== "opencode",
+                                          }}
+                                        />
+                                        <span>{i.name}</span>
+                                        <Show when={i.id === "opencode"}>
+                                          <Tag>Recommended</Tag>
+                                        </Show>
+                                        <Show when={i.id === "anthropic"}>
+                                          <div class="text-14-regular text-text-weak">
+                                            Connect with Claude Pro/Max or API key
+                                          </div>
+                                        </Show>
+                                      </div>
+                                    )}
+                                  </List>
+                                  <Button
+                                    variant="ghost"
+                                    class="w-full justify-start px-[11px] py-3.5 gap-4.5 text-14-medium"
+                                    icon="dot-grid"
+                                    onClick={() => {
+                                      layout.dialog.open("provider")
+                                    }}
+                                  >
+                                    View all providers
+                                  </Button>
+                                </div>
+                              </div>
+                            </div>
+                          </div>
+                        </Dialog.Body>
+                      </Dialog>
+                    )
+                  })}
+                </Match>
+              </Switch>
+            </Show>
           </div>
           <Tooltip
             placement="top"

@@ -7,13 +7,13 @@ import {
   TextPart,
   ToolPart,
   UserMessage,
-} from "@opencode-ai/sdk"
+} from "@opencode-ai/sdk/v2"
+import { useDiffComponent } from "../context/diff"
 import { BasicTool } from "./basic-tool"
 import { GenericTool } from "./basic-tool"
 import { Card } from "./card"
 import { Icon } from "./icon"
 import { Checkbox } from "./checkbox"
-import { Diff } from "./diff"
 import { DiffChanges } from "./diff-changes"
 import { Markdown } from "./markdown"
 import { getDirectory, getFilename } from "@opencode-ai/util/path"
@@ -140,7 +140,7 @@ PART_MAPPING["tool"] = function ToolPartDisplay(props) {
             return (
               <Card variant="error">
                 <div data-component="tool-error">
-                  <Icon name="circle-ban-sign" size="small" data-slot="message-part-tool-error-icon" />
+                  <Icon name="circle-ban-sign" size="small" />
                   <Switch>
                     <Match when={title && title.length < 30}>
                       <div data-slot="message-part-tool-error-content">
@@ -337,6 +337,7 @@ ToolRegistry.register({
 ToolRegistry.register({
   name: "edit",
   render(props) {
+    const diffComponent = useDiffComponent()
     return (
       <BasicTool
         icon="code-lines"
@@ -361,7 +362,8 @@ ToolRegistry.register({
       >
         <Show when={props.metadata.filediff}>
           <div data-component="edit-content">
-            <Diff
+            <Dynamic
+              component={diffComponent}
               before={{
                 name: getFilename(props.metadata.filediff.path),
                 contents: props.metadata.filediff.before,

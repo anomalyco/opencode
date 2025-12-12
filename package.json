@@ -30,16 +30,16 @@
       "@tsconfig/bun": "1.0.9",
       "@cloudflare/workers-types": "4.20251008.0",
       "@openauthjs/openauth": "0.0.0-20250322224806",
-      "@pierre/precision-diffs": "0.5.7",
+      "@pierre/precision-diffs": "0.6.1",
       "@tailwindcss/vite": "4.1.11",
       "diff": "8.0.2",
       "ai": "5.0.97",
-      "hono": "4.7.10",
-      "hono-openapi": "1.1.1",
+      "hono": "4.10.7",
+      "hono-openapi": "1.1.2",
       "fuzzysort": "3.1.0",
       "luxon": "3.6.1",
       "typescript": "5.8.2",
-      "@typescript/native-preview": "7.0.0-dev.20251014.1",
+      "@typescript/native-preview": "7.0.0-dev.20251207.1",
       "zod": "4.1.8",
       "remeda": "2.26.0",
       "solid-list": "0.3.0",
@@ -86,5 +86,8 @@
   "overrides": {
     "@types/bun": "catalog:",
     "@types/node": "catalog:"
+  },
+  "patchedDependencies": {
+    "ghostty-web@0.3.0": "patches/ghostty-web@0.3.0.patch"
   }
 }

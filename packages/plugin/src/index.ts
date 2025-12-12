@@ -6,6 +6,7 @@ import type {
   Provider,
   Permission,
   UserMessage,
+  Message,
   Part,
   Auth,
   Config,
@@ -15,6 +16,12 @@ import type { BunShell } from "./shell"
 import { type ToolDefinition } from "./tool"
 
 export * from "./tool"
+
+export type ProviderContext = {
+  source: "env" | "config" | "custom" | "api"
+  info: Provider
+  options: Record<string, any>
+}
 
 export type PluginInput = {
   client: ReturnType<typeof createOpencodeClient>
@@ -153,7 +160,7 @@ export interface Hooks {
    * Modify parameters sent to LLM
    */
   "chat.params"?: (
-    input: { sessionID: string; agent: string; model: Model; provider: Provider; message: UserMessage },
+    input: { sessionID: string; agent: string; model: Model; provider: ProviderContext; message: UserMessage },
     output: { temperature: number; topP: number; options: Record<string, any> },
   ) => Promise<void>
   "permission.ask"?: (input: Permission, output: { status: "ask" | "deny" | "allow" }) => Promise<void>
@@ -168,5 +175,18 @@ export interface Hooks {
       output: string
       metadata: any
     },
+  ) => Promise<void>
+  "experimental.chat.messages.transform"?: (
+    input: {},
+    output: {
+      messages: {
+        info: Message
+        parts: Part[]
+      }[]
+    },
+  ) => Promise<void>
+  "experimental.text.complete"?: (
+    input: { sessionID: string; messageID: string; partID: string },
+    output: { text: string },
   ) => Promise<void>
 }

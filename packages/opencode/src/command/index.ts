@@ -1,17 +1,15 @@
+import { Bus } from "@/bus"
+import { BusEvent } from "@/bus/bus-event"
 import z from "zod"
 import { Config } from "../config/config"
 import { Instance } from "../project/instance"
-import PROMPT_INITIALIZE from "./template/initialize.txt"
-import { Bus } from "../bus"
 import { Identifier } from "../id/id"
+import PROMPT_INITIALIZE from "./template/initialize.txt"
+import PROMPT_REVIEW from "./template/review.txt"
 
 export namespace Command {
-  export const Default = {
-    INIT: "init",
-  } as const
-
   export const Event = {
-    Executed: Bus.event(
+    Executed: BusEvent.define(
       "command.executed",
       z.object({
         name: z.string(),
@@ -36,10 +34,27 @@ export namespace Command {
     })
   export type Info = z.infer<typeof Info>
 
+  export const Default = {
+    INIT: "init",
+    REVIEW: "review",
+  } as const
+
   const state = Instance.state(async () => {
     const cfg = await Config.get()
 
-    const result: Record<string, Info> = {}
+    const result: Record<string, Info> = {
+      [Default.INIT]: {
+        name: Default.INIT,
+        description: "create/update AGENTS.md",
+        template: PROMPT_INITIALIZE.replace("${path}", Instance.worktree),
+      },
+      [Default.REVIEW]: {
+        name: Default.REVIEW,
+        description: "review changes [commit|branch|pr], defaults to uncommitted",
+        template: PROMPT_REVIEW.replace("${path}", Instance.worktree),
+        subtask: true,
+      },
+    }
 
     for (const [name, command] of Object.entries(cfg.command ?? {})) {
       result[name] = {
@@ -49,14 +64,6 @@ export namespace Command {
         description: command.description,
         template: command.template,
         subtask: command.subtask,
-      }
-    }
-
-    if (result[Default.INIT] === undefined) {
-      result[Default.INIT] = {
-        name: Default.INIT,
-        description: "create/update AGENTS.md",
-        template: PROMPT_INITIALIZE.replace("${path}", Instance.worktree),
       }
     }
 

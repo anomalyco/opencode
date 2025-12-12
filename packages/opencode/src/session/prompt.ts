@@ -5,13 +5,13 @@ import z from "zod"
 import { Identifier } from "../id/id"
 import { MessageV2 } from "./message-v2"
 import { Log } from "../util/log"
+import { Flag } from "../flag/flag"
 import { SessionRevert } from "./revert"
 import { Session } from "."
 import { Agent } from "../agent/agent"
 import { Provider } from "../provider/provider"
 import {
   generateText,
-  streamText,
   type ModelMessage,
   type Tool as AITool,
   tool,
@@ -28,8 +28,9 @@ import { Plugin } from "../plugin"
 
 import PROMPT_PLAN from "../session/prompt/plan.txt"
 import BUILD_SWITCH from "../session/prompt/build-switch.txt"
+import MAX_STEPS from "../session/prompt/max-steps.txt"
 import { defer } from "../util/defer"
-import { mergeDeep, pipe } from "remeda"
+import { clone, mergeDeep, pipe } from "remeda"
 import { ToolRegistry } from "../tool/registry"
 import { Wildcard } from "../util/wildcard"
 import { MCP } from "../mcp"
@@ -43,6 +44,7 @@ import { Command } from "../command"
 import { $, fileURLToPath } from "bun"
 import { ConfigMarkdown } from "../config/markdown"
 import { SessionSummary } from "./summary"
+import { Config } from "../config/config"
 import { NamedError } from "@opencode-ai/util/error"
 import { fn } from "@/util/fn"
 import { SessionProcessor } from "./processor"
@@ -288,6 +290,7 @@ export namespace SessionPrompt {
         })
 
       const model = await Provider.getModel(lastUser.model.providerID, lastUser.model.modelID)
+      const language = await Provider.getLanguage(model)
       const task = tasks.pop()
 
       // pending subtask
@@ -311,7 +314,7 @@ export namespace SessionPrompt {
             reasoning: 0,
             cache: { read: 0, write: 0 },
           },
-          modelID: model.modelID,
+          modelID: model.id,
           providerID: model.providerID,
           time: {
             created: Date.now(),
@@ -336,6 +339,7 @@ export namespace SessionPrompt {
             },
           },
         })) as MessageV2.ToolPart
+        let executionError: Error | undefined
         const result = await taskTool
           .execute(
             {
@@ -360,7 +364,11 @@ export namespace SessionPrompt {
               },
             },
           )
-          .catch(() => {})
+          .catch((error) => {
+            executionError = error
+            log.error("subtask execution failed", { error, agent: task.agent, description: task.description })
+            return undefined
+          })
         assistantMessage.finish = "tool-calls"
         assistantMessage.time.completed = Date.now()
         await Session.updateMessage(assistantMessage)
@@ -386,7 +394,7 @@ export namespace SessionPrompt {
             ...part,
             state: {
               status: "error",
-              error: "Tool execution failed",
+              error: executionError ? `Tool execution failed: ${executionError.message}` : "Tool execution failed",
               time: {
                 start: part.state.status === "running" ? part.state.time.start : Date.now(),
                 end: Date.now(),
@@ -408,7 +416,7 @@ export namespace SessionPrompt {
           agent: lastUser.agent,
           model: {
             providerID: model.providerID,
-            modelID: model.modelID,
+            modelID: model.id,
           },
           sessionID,
           auto: task.auto,
@@ -421,7 +429,7 @@ export namespace SessionPrompt {
       if (
         lastFinished &&
         lastFinished.summary !== true &&
-        SessionCompaction.isOverflow({ tokens: lastFinished.tokens, model: model.info })
+        SessionCompaction.isOverflow({ tokens: lastFinished.tokens, model })
       ) {
         await SessionCompaction.create({
           sessionID,
@@ -433,7 +441,10 @@ export namespace SessionPrompt {
       }
 
       // normal processing
+      const cfg = await Config.get()
       const agent = await Agent.get(lastUser.agent)
+      const maxSteps = agent.maxSteps ?? Infinity
+      const isLastStep = step >= maxSteps
       msgs = insertReminders({
         messages: msgs,
         agent,
@@ -455,7 +466,7 @@ export namespace SessionPrompt {
             reasoning: 0,
             cache: { read: 0, write: 0 },
           },
-          modelID: model.modelID,
+          modelID: model.id,
           providerID: model.providerID,
           time: {
             created: Date.now(),
@@ -463,20 +474,19 @@ export namespace SessionPrompt {
           sessionID,
         })) as MessageV2.Assistant,
         sessionID: sessionID,
-        model: model.info,
-        providerID: model.providerID,
+        model,
         abort,
       })
       const system = await resolveSystemPrompt({
-        providerID: model.providerID,
-        modelID: model.info.id,
+        model,
         agent,
         system: lastUser.system,
+        isLastStep,
       })
       const tools = await resolveTools({
         agent,
         sessionID,
-        model: lastUser.model,
+        model,
         tools: lastUser.tools,
         processor,
       })
@@ -486,21 +496,19 @@ export namespace SessionPrompt {
         {
           sessionID: sessionID,
           agent: lastUser.agent,
-          model: model.info,
+          model: model,
           provider,
           message: lastUser,
         },
         {
-          temperature: model.info.temperature
-            ? (agent.temperature ?? ProviderTransform.temperature(model.providerID, model.modelID))
+          temperature: model.capabilities.temperature
+            ? (agent.temperature ?? ProviderTransform.temperature(model))
             : undefined,
-          topP: agent.topP ?? ProviderTransform.topP(model.providerID, model.modelID),
+          topP: agent.topP ?? ProviderTransform.topP(model),
           options: pipe(
             {},
-            mergeDeep(
-              ProviderTransform.options(model.providerID, model.modelID, model.npm ?? "", sessionID, provider?.options),
-            ),
-            mergeDeep(model.info.options),
+            mergeDeep(ProviderTransform.options(model, sessionID, provider?.options)),
+            mergeDeep(model.options),
             mergeDeep(agent.options),
           ),
         },
@@ -513,112 +521,135 @@ export namespace SessionPrompt {
         })
       }
 
-      const result = await processor.process(() =>
-        streamText({
-          onError(error) {
-            log.error("stream error", {
-              error,
-            })
-          },
-          async experimental_repairToolCall(input) {
-            const lower = input.toolCall.toolName.toLowerCase()
-            if (lower !== input.toolCall.toolName && tools[lower]) {
-              log.info("repairing tool call", {
-                tool: input.toolCall.toolName,
-                repaired: lower,
-              })
-              return {
-                ...input.toolCall,
-                toolName: lower,
-              }
-            }
-            return {
-              ...input.toolCall,
-              input: JSON.stringify({
-                tool: input.toolCall.toolName,
-                error: input.error.message,
-              }),
-              toolName: "invalid",
-            }
-          },
-          headers: {
-            ...(model.providerID.startsWith("opencode")
-              ? {
-                  "x-opencode-session": sessionID,
-                  "x-opencode-request": lastUser.id,
-                }
-              : undefined),
-            ...model.info.headers,
-          },
-          // set to 0, we handle loop
-          maxRetries: 0,
-          activeTools: Object.keys(tools).filter((x) => x !== "invalid"),
-          maxOutputTokens: ProviderTransform.maxOutputTokens(
-            model.providerID,
-            params.options,
-            model.info.limit.output,
-            OUTPUT_TOKEN_MAX,
-          ),
-          abortSignal: abort,
-          providerOptions: ProviderTransform.providerOptions(model.npm, model.providerID, params.options),
-          stopWhen: stepCountIs(1),
-          temperature: params.temperature,
-          topP: params.topP,
-          messages: [
-            ...system.map(
-              (x): ModelMessage => ({
-                role: "system",
-                content: x,
-              }),
-            ),
-            ...MessageV2.toModelMessage(
-              msgs.filter((m) => {
-                if (m.info.role !== "assistant" || m.info.error === undefined) {
-                  return true
-                }
-                if (
-                  MessageV2.AbortedError.isInstance(m.info.error) &&
-                  m.parts.some((part) => part.type !== "step-start" && part.type !== "reasoning")
-                ) {
-                  return true
-                }
-
-                return false
-              }),
-            ),
-          ],
-          tools: model.info.tool_call === false ? undefined : tools,
-          model: wrapLanguageModel({
-            model: model.language,
-            middleware: [
-              {
-                async transformParams(args) {
-                  if (args.type === "stream") {
-                    // @ts-expect-error
-                    args.params.prompt = ProviderTransform.message(args.params.prompt, model.providerID, model.modelID)
-                  }
-                  // Transform tool schemas for provider compatibility
-                  if (args.params.tools && Array.isArray(args.params.tools)) {
-                    args.params.tools = args.params.tools.map((tool: any) => {
-                      // Tools at middleware level have inputSchema, not parameters
-                      if (tool.inputSchema && typeof tool.inputSchema === "object") {
-                        // Transform the inputSchema for provider compatibility
-                        return {
-                          ...tool,
-                          inputSchema: ProviderTransform.schema(model.providerID, model.modelID, tool.inputSchema),
-                        }
-                      }
-                      // If no inputSchema, return tool unchanged
-                      return tool
-                    })
-                  }
-                  return args.params
-                },
-              },
-            ],
-          }),
+      // Deep copy message history so that modifications made by plugins do not
+      // affect the original messages
+      const sessionMessages = clone(
+        msgs.filter((m) => {
+          if (m.info.role !== "assistant" || m.info.error === undefined) {
+            return true
+          }
+          if (
+            MessageV2.AbortedError.isInstance(m.info.error) &&
+            m.parts.some((part) => part.type !== "step-start" && part.type !== "reasoning")
+          ) {
+            return true
+          }
+          return false
         }),
       )
+
+      await Plugin.trigger("experimental.chat.messages.transform", {}, { messages: sessionMessages })
+
+      const messages: ModelMessage[] = [
+        ...system.map(
+          (x): ModelMessage => ({
+            role: "system",
+            content: x,
+          }),
+        ),
+        ...MessageV2.toModelMessage(sessionMessages),
+        ...(isLastStep
+          ? [
+              {
+                role: "assistant" as const,
+                content: MAX_STEPS,
+              },
+            ]
+          : []),
+      ]
+
+      const result = await processor.process({
+        onError(error) {
+          log.error("stream error", {
+            error,
+          })
+        },
+        async experimental_repairToolCall(input) {
+          const lower = input.toolCall.toolName.toLowerCase()
+          if (lower !== input.toolCall.toolName && tools[lower]) {
+            log.info("repairing tool call", {
+              tool: input.toolCall.toolName,
+              repaired: lower,
+            })
+            return {
+              ...input.toolCall,
+              toolName: lower,
+            }
+          }
+          return {
+            ...input.toolCall,
+            input: JSON.stringify({
+              tool: input.toolCall.toolName,
+              error: input.error.message,
+            }),
+            toolName: "invalid",
+          }
+        },
+        headers: {
+          ...(model.providerID.startsWith("opencode")
+            ? {
+                "x-opencode-project": Instance.project.id,
+                "x-opencode-session": sessionID,
+                "x-opencode-request": lastUser.id,
+                "x-opencode-client": Flag.OPENCODE_CLIENT,
+              }
+            : undefined),
+          ...model.headers,
+        },
+        // set to 0, we handle loop
+        maxRetries: 0,
+        activeTools: Object.keys(tools).filter((x) => x !== "invalid"),
+        maxOutputTokens: ProviderTransform.maxOutputTokens(
+          model.api.npm,
+          params.options,
+          model.limit.output,
+          OUTPUT_TOKEN_MAX,
+        ),
+        abortSignal: abort,
+        providerOptions: ProviderTransform.providerOptions(model, params.options),
+        stopWhen: stepCountIs(1),
+        temperature: params.temperature,
+        topP: params.topP,
+        toolChoice: isLastStep ? "none" : undefined,
+        messages,
+        tools: model.capabilities.toolcall === false ? undefined : tools,
+        model: wrapLanguageModel({
+          model: language,
+          middleware: [
+            {
+              async transformParams(args) {
+                if (args.type === "stream") {
+                  // @ts-expect-error - prompt types are compatible at runtime
+                  args.params.prompt = ProviderTransform.message(args.params.prompt, model)
+                }
+                // Transform tool schemas for provider compatibility
+                if (args.params.tools && Array.isArray(args.params.tools)) {
+                  args.params.tools = args.params.tools.map((tool: any) => {
+                    // Tools at middleware level have inputSchema, not parameters
+                    if (tool.inputSchema && typeof tool.inputSchema === "object") {
+                      // Transform the inputSchema for provider compatibility
+                      return {
+                        ...tool,
+                        inputSchema: ProviderTransform.schema(model, tool.inputSchema),
+                      }
+                    }
+                    // If no inputSchema, return tool unchanged
+                    return tool
+                  })
+                }
+                return args.params
+              },
+            },
+          ],
+        }),
+        experimental_telemetry: {
+          isEnabled: cfg.experimental?.openTelemetry,
+          metadata: {
+            userId: cfg.username ?? "unknown",
+            sessionId: sessionID,
+          },
+        },
+      })
       if (result === "stop") break
       continue
     }
@@ -644,19 +675,24 @@ export namespace SessionPrompt {
   async function resolveSystemPrompt(input: {
     system?: string
     agent: Agent.Info
-    providerID: string
-    modelID: string
+    model: Provider.Model
+    isLastStep?: boolean
   }) {
-    let system = SystemPrompt.header(input.providerID)
+    let system = SystemPrompt.header(input.model.providerID)
     system.push(
       ...(() => {
         if (input.system) return [input.system]
         if (input.agent.prompt) return [input.agent.prompt]
-        return SystemPrompt.provider(input.modelID)
+        return SystemPrompt.provider(input.model)
       })(),
     )
     system.push(...(await SystemPrompt.environment()))
     system.push(...(await SystemPrompt.custom()))
+
+    if (input.isLastStep) {
+      system.push(MAX_STEPS)
+    }
+
     // max 2 system prompt messages for caching purposes
     const [first, ...rest] = system
     system = [first, rest.join("\n")]
@@ -665,10 +701,7 @@ export namespace SessionPrompt {
 
   async function resolveTools(input: {
     agent: Agent.Info
-    model: {
-      providerID: string
-      modelID: string
-    }
+    model: Provider.Model
     sessionID: string
     tools?: Record<string, boolean>
     processor: SessionProcessor.Info
@@ -676,16 +709,12 @@ export namespace SessionPrompt {
     const tools: Record<string, AITool> = {}
     const enabledTools = pipe(
       input.agent.tools,
-      mergeDeep(await ToolRegistry.enabled(input.model.providerID, input.model.modelID, input.agent)),
+      mergeDeep(await ToolRegistry.enabled(input.agent)),
       mergeDeep(input.tools ?? {}),
     )
-    for (const item of await ToolRegistry.tools(input.model.providerID, input.model.modelID)) {
+    for (const item of await ToolRegistry.tools(input.model.providerID)) {
       if (Wildcard.all(item.id, enabledTools) === false) continue
-      const schema = ProviderTransform.schema(
-        input.model.providerID,
-        input.model.modelID,
-        z.toJSONSchema(item.parameters),
-      )
+      const schema = ProviderTransform.schema(input.model, z.toJSONSchema(item.parameters))
       tools[item.id] = tool({
         id: item.id as any,
         description: item.description,
@@ -707,7 +736,7 @@ export namespace SessionPrompt {
             abort: options.abortSignal!,
             messageID: input.processor.message.id,
             callID: options.toolCallId,
-            extra: input.model,
+            extra: { model: input.model },
             agent: input.agent.name,
             metadata: async (val) => {
               const match = input.processor.partFromToolCall(options.toolCallId)
@@ -924,12 +953,13 @@ export namespace SessionPrompt {
 
                 await ReadTool.init()
                   .then(async (t) => {
+                    const model = await Provider.getModel(info.model.providerID, info.model.modelID)
                     const result = await t.execute(args, {
                       sessionID: input.sessionID,
                       abort: new AbortController().signal,
                       agent: input.agent!,
                       messageID: info.id,
-                      extra: { bypassCwdCheck: true, ...info.model },
+                      extra: { bypassCwdCheck: true, model },
                       metadata: async () => {},
                     })
                     pieces.push({
@@ -1214,8 +1244,8 @@ export namespace SessionPrompt {
       },
     }
     await Session.updatePart(part)
-    const shell = process.env["SHELL"] ?? "bash"
-    const shellName = path.basename(shell)
+    const shell = process.env["SHELL"] ?? (process.platform === "win32" ? process.env["COMSPEC"] || "cmd.exe" : "bash")
+    const shellName = path.basename(shell).toLowerCase()
 
     const invocations: Record<string, { args: string[] }> = {
       nu: {
@@ -1245,6 +1275,14 @@ export namespace SessionPrompt {
           `,
         ],
       },
+      // Windows cmd.exe
+      "cmd.exe": {
+        args: ["/c", input.command],
+      },
+      // Windows PowerShell
+      "powershell.exe": {
+        args: ["-NoProfile", "-Command", input.command],
+      },
       // Fallback: any shell that doesn't match those above
       "": {
         args: ["-c", "-l", `${input.command}`],
@@ -1256,7 +1294,7 @@ export namespace SessionPrompt {
 
     const proc = spawn(shell, args, {
       cwd: Instance.directory,
-      detached: true,
+      detached: process.platform !== "win32",
       stdio: ["ignore", "pipe", "pipe"],
       env: {
         ...process.env,
@@ -1434,27 +1472,21 @@ export namespace SessionPrompt {
       input.history.filter((m) => m.info.role === "user" && !m.parts.every((p) => "synthetic" in p && p.synthetic))
         .length === 1
     if (!isFirst) return
+    const cfg = await Config.get()
     const small =
       (await Provider.getSmallModel(input.providerID)) ?? (await Provider.getModel(input.providerID, input.modelID))
+    const language = await Provider.getLanguage(small)
     const provider = await Provider.getProvider(small.providerID)
     const options = pipe(
       {},
-      mergeDeep(
-        ProviderTransform.options(
-          small.providerID,
-          small.modelID,
-          small.npm ?? "",
-          input.session.id,
-          provider?.options,
-        ),
-      ),
-      mergeDeep(ProviderTransform.smallOptions({ providerID: small.providerID, modelID: small.modelID })),
-      mergeDeep(small.info.options),
+      mergeDeep(ProviderTransform.options(small, input.session.id, provider?.options)),
+      mergeDeep(ProviderTransform.smallOptions(small)),
+      mergeDeep(small.options),
     )
     await generateText({
       // use higher # for reasoning models since reasoning tokens eat up a lot of the budget
-      maxOutputTokens: small.info.reasoning ? 3000 : 20,
-      providerOptions: ProviderTransform.providerOptions(small.npm, small.providerID, options),
+      maxOutputTokens: small.capabilities.reasoning ? 3000 : 20,
+      providerOptions: ProviderTransform.providerOptions(small, options),
       messages: [
         ...SystemPrompt.title(small.providerID).map(
           (x): ModelMessage => ({
@@ -1485,8 +1517,15 @@ export namespace SessionPrompt {
           },
         ]),
       ],
-      headers: small.info.headers,
-      model: small.language,
+      headers: small.headers,
+      model: language,
+      experimental_telemetry: {
+        isEnabled: cfg.experimental?.openTelemetry,
+        metadata: {
+          userId: cfg.username ?? "unknown",
+          sessionId: input.session.id,
+        },
+      },
     })
       .then((result) => {
         if (result.text)
@@ -1503,7 +1542,7 @@ export namespace SessionPrompt {
           })
       })
       .catch((error) => {
-        log.error("failed to generate title", { error, model: small.info.id })
+        log.error("failed to generate title", { error, model: small.id })
       })
   }
 }

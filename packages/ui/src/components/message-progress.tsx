@@ -2,9 +2,14 @@ import { For, JSXElement, Match, Show, Switch, createEffect, createMemo, createS
 import { Part } from "./message-part"
 import { Spinner } from "./spinner"
 import { useData } from "../context/data"
-import type { AssistantMessage as AssistantMessageType, ToolPart } from "@opencode-ai/sdk"
+import type { AssistantMessage as AssistantMessageType, ToolPart } from "@opencode-ai/sdk/v2"
 
-export function MessageProgress(props: { assistantMessages: () => AssistantMessageType[]; done?: boolean }) {
+export interface MessageProgressProps {
+  assistantMessages: () => AssistantMessageType[]
+  done?: boolean
+}
+
+export function MessageProgress(props: MessageProgressProps) {
   const data = useData()
   const sanitizer = createMemo(() => (data.directory ? new RegExp(`${data.directory}/`, "g") : undefined))
   const parts = createMemo(() => props.assistantMessages().flatMap((m) => data.store.part[m.id]))

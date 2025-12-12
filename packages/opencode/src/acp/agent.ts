@@ -25,11 +25,10 @@ import { Provider } from "../provider/provider"
 import { Installation } from "@/installation"
 import { MessageV2 } from "@/session/message-v2"
 import { Config } from "@/config/config"
-import { MCP } from "@/mcp"
 import { Todo } from "@/session/todo"
 import { z } from "zod"
 import { LoadAPIKeyError } from "ai"
-import type { OpencodeClient } from "@opencode-ai/sdk"
+import type { OpencodeClient, SessionMessageResponse } from "@opencode-ai/sdk/v2"
 
 export namespace ACP {
   const log = Log.create({ service: "acp-agent" })
@@ -68,7 +67,7 @@ export namespace ACP {
         { optionId: "always", kind: "allow_always", name: "Always allow" },
         { optionId: "reject", kind: "reject_once", name: "Reject" },
       ]
-      this.config.sdk.event.subscribe({ query: { directory } }).then(async (events) => {
+      this.config.sdk.event.subscribe({ directory }).then(async (events) => {
         for await (const event of events.stream) {
           switch (event.type) {
             case "permission.updated":
@@ -93,32 +92,29 @@ export namespace ACP {
                       permissionID: permission.id,
                       sessionID: permission.sessionID,
                     })
-                    await this.config.sdk.postSessionIdPermissionsPermissionId({
-                      path: { id: permission.sessionID, permissionID: permission.id },
-                      body: {
-                        response: "reject",
-                      },
-                      query: { directory },
+                    await this.config.sdk.permission.respond({
+                      sessionID: permission.sessionID,
+                      permissionID: permission.id,
+                      response: "reject",
+                      directory,
                     })
                     return
                   })
                 if (!res) return
                 if (res.outcome.outcome !== "selected") {
-                  await this.config.sdk.postSessionIdPermissionsPermissionId({
-                    path: { id: permission.sessionID, permissionID: permission.id },
-                    body: {
-                      response: "reject",
-                    },
-                    query: { directory },
+                  await this.config.sdk.permission.respond({
+                    sessionID: permission.sessionID,
+                    permissionID: permission.id,
+                    response: "reject",
+                    directory,
                   })
                   return
                 }
-                await this.config.sdk.postSessionIdPermissionsPermissionId({
-                  path: { id: permission.sessionID, permissionID: permission.id },
-                  body: {
-                    response: res.outcome.optionId as "once" | "always" | "reject",
-                  },
-                  query: { directory },
+                await this.config.sdk.permission.respond({
+                  sessionID: permission.sessionID,
+                  permissionID: permission.id,
+                  response: res.outcome.optionId as "once" | "always" | "reject",
+                  directory,
                 })
               } catch (err) {
                 log.error("unexpected error when handling permission", { error: err })
@@ -133,14 +129,14 @@ export namespace ACP {
                 const { part } = props
 
                 const message = await this.config.sdk.session
-                  .message({
-                    throwOnError: true,
-                    path: {
-                      id: part.sessionID,
+                  .message(
+                    {
+                      sessionID: part.sessionID,
                       messageID: part.messageID,
+                      directory,
                     },
-                    query: { directory },
-                  })
+                    { throwOnError: true },
+                  )
                   .then((x) => x.data)
                   .catch((err) => {
                     log.error("unexpected error when fetching message", { error: err })
@@ -390,7 +386,7 @@ export namespace ACP {
 
         log.info("creating_session", { sessionId, mcpServers: params.mcpServers.length })
 
-        const load = await this.loadSession({
+        const load = await this.loadSessionMode({
           cwd: directory,
           mcpServers: params.mcpServers,
           sessionId,
@@ -417,12 +413,246 @@ export namespace ACP {
 
     async loadSession(params: LoadSessionRequest) {
       const directory = params.cwd
+      const sessionId = params.sessionId
+
+      try {
+        const model = await defaultModel(this.config, directory)
+
+        // Store ACP session state
+        const state = await this.sessionManager.load(sessionId, params.cwd, params.mcpServers, model)
+
+        log.info("load_session", { sessionId, mcpServers: params.mcpServers.length })
+
+        const mode = await this.loadSessionMode({
+          cwd: directory,
+          mcpServers: params.mcpServers,
+          sessionId,
+        })
+
+        this.setupEventSubscriptions(state)
+
+        // Replay session history
+        const messages = await this.sdk.session
+          .messages(
+            {
+              sessionID: sessionId,
+              directory,
+            },
+            { throwOnError: true },
+          )
+          .then((x) => x.data)
+          .catch((err) => {
+            log.error("unexpected error when fetching message", { error: err })
+            return undefined
+          })
+
+        for (const msg of messages ?? []) {
+          log.debug("replay message", msg)
+          await this.processMessage(msg)
+        }
+
+        return mode
+      } catch (e) {
+        const error = MessageV2.fromError(e, {
+          providerID: this.config.defaultModel?.providerID ?? "unknown",
+        })
+        if (LoadAPIKeyError.isInstance(error)) {
+          throw RequestError.authRequired()
+        }
+        throw e
+      }
+    }
+
+    private async processMessage(message: SessionMessageResponse) {
+      log.debug("process message", message)
+      if (message.info.role !== "assistant" && message.info.role !== "user") return
+      const sessionId = message.info.sessionID
+
+      for (const part of message.parts) {
+        if (part.type === "tool") {
+          switch (part.state.status) {
+            case "pending":
+              await this.connection
+                .sessionUpdate({
+                  sessionId,
+                  update: {
+                    sessionUpdate: "tool_call",
+                    toolCallId: part.callID,
+                    title: part.tool,
+                    kind: toToolKind(part.tool),
+                    status: "pending",
+                    locations: [],
+                    rawInput: {},
+                  },
+                })
+                .catch((err) => {
+                  log.error("failed to send tool pending to ACP", { error: err })
+                })
+              break
+            case "running":
+              await this.connection
+                .sessionUpdate({
+                  sessionId,
+                  update: {
+                    sessionUpdate: "tool_call_update",
+                    toolCallId: part.callID,
+                    status: "in_progress",
+                    locations: toLocations(part.tool, part.state.input),
+                    rawInput: part.state.input,
+                  },
+                })
+                .catch((err) => {
+                  log.error("failed to send tool in_progress to ACP", { error: err })
+                })
+              break
+            case "completed":
+              const kind = toToolKind(part.tool)
+              const content: ToolCallContent[] = [
+                {
+                  type: "content",
+                  content: {
+                    type: "text",
+                    text: part.state.output,
+                  },
+                },
+              ]
+
+              if (kind === "edit") {
+                const input = part.state.input
+                const filePath = typeof input["filePath"] === "string" ? input["filePath"] : ""
+                const oldText = typeof input["oldString"] === "string" ? input["oldString"] : ""
+                const newText =
+                  typeof input["newString"] === "string"
+                    ? input["newString"]
+                    : typeof input["content"] === "string"
+                      ? input["content"]
+                      : ""
+                content.push({
+                  type: "diff",
+                  path: filePath,
+                  oldText,
+                  newText,
+                })
+              }
+
+              if (part.tool === "todowrite") {
+                const parsedTodos = z.array(Todo.Info).safeParse(JSON.parse(part.state.output))
+                if (parsedTodos.success) {
+                  await this.connection
+                    .sessionUpdate({
+                      sessionId,
+                      update: {
+                        sessionUpdate: "plan",
+                        entries: parsedTodos.data.map((todo) => {
+                          const status: PlanEntry["status"] =
+                            todo.status === "cancelled" ? "completed" : (todo.status as PlanEntry["status"])
+                          return {
+                            priority: "medium",
+                            status,
+                            content: todo.content,
+                          }
+                        }),
+                      },
+                    })
+                    .catch((err) => {
+                      log.error("failed to send session update for todo", { error: err })
+                    })
+                } else {
+                  log.error("failed to parse todo output", { error: parsedTodos.error })
+                }
+              }
+
+              await this.connection
+                .sessionUpdate({
+                  sessionId,
+                  update: {
+                    sessionUpdate: "tool_call_update",
+                    toolCallId: part.callID,
+                    status: "completed",
+                    kind,
+                    content,
+                    title: part.state.title,
+                    rawOutput: {
+                      output: part.state.output,
+                      metadata: part.state.metadata,
+                    },
+                  },
+                })
+                .catch((err) => {
+                  log.error("failed to send tool completed to ACP", { error: err })
+                })
+              break
+            case "error":
+              await this.connection
+                .sessionUpdate({
+                  sessionId,
+                  update: {
+                    sessionUpdate: "tool_call_update",
+                    toolCallId: part.callID,
+                    status: "failed",
+                    content: [
+                      {
+                        type: "content",
+                        content: {
+                          type: "text",
+                          text: part.state.error,
+                        },
+                      },
+                    ],
+                    rawOutput: {
+                      error: part.state.error,
+                    },
+                  },
+                })
+                .catch((err) => {
+                  log.error("failed to send tool error to ACP", { error: err })
+                })
+              break
+          }
+        } else if (part.type === "text") {
+          if (part.text) {
+            await this.connection
+              .sessionUpdate({
+                sessionId,
+                update: {
+                  sessionUpdate: message.info.role === "user" ? "user_message_chunk" : "agent_message_chunk",
+                  content: {
+                    type: "text",
+                    text: part.text,
+                  },
+                },
+              })
+              .catch((err) => {
+                log.error("failed to send text to ACP", { error: err })
+              })
+          }
+        } else if (part.type === "reasoning") {
+          if (part.text) {
+            await this.connection
+              .sessionUpdate({
+                sessionId,
+                update: {
+                  sessionUpdate: "agent_thought_chunk",
+                  content: {
+                    type: "text",
+                    text: part.text,
+                  },
+                },
+              })
+              .catch((err) => {
+                log.error("failed to send reasoning to ACP", { error: err })
+              })
+          }
+        }
+      }
+    }
+
+    private async loadSessionMode(params: LoadSessionRequest) {
+      const directory = params.cwd
       const model = await defaultModel(this.config, directory)
       const sessionId = params.sessionId
 
-      const providers = await this.sdk.config
-        .providers({ throwOnError: true, query: { directory } })
-        .then((x) => x.data.providers)
+      const providers = await this.sdk.config.providers({ directory }).then((x) => x.data!.providers)
       const entries = providers.sort((a, b) => {
         const nameA = a.name.toLowerCase()
         const nameB = b.name.toLowerCase()
@@ -439,22 +669,22 @@ export namespace ACP {
       })
 
       const agents = await this.config.sdk.app
-        .agents({
-          throwOnError: true,
-          query: {
+        .agents(
+          {
             directory,
           },
-        })
-        .then((resp) => resp.data)
+          { throwOnError: true },
+        )
+        .then((resp) => resp.data!)
 
       const commands = await this.config.sdk.command
-        .list({
-          throwOnError: true,
-          query: {
+        .list(
+          {
             directory,
           },
-        })
-        .then((resp) => resp.data)
+          { throwOnError: true },
+        )
+        .then((resp) => resp.data!)
 
       const availableCommands = commands.map((command) => ({
         name: command.name,
@@ -503,14 +733,14 @@ export namespace ACP {
       await Promise.all(
         Object.entries(mcpServers).map(async ([key, mcp]) => {
           await this.sdk.mcp
-            .add({
-              throwOnError: true,
-              query: { directory },
-              body: {
+            .add(
+              {
+                directory,
                 name: key,
                 config: mcp,
               },
-            })
+              { throwOnError: true },
+            )
             .catch((error) => {
               log.error("failed to add mcp server", { name: key, error })
             })
@@ -559,7 +789,7 @@ export namespace ACP {
     async setSessionMode(params: SetSessionModeRequest): Promise<SetSessionModeResponse | void> {
       this.sessionManager.get(params.sessionId)
       await this.config.sdk.app
-        .agents({ throwOnError: true })
+        .agents({}, { throwOnError: true })
         .then((x) => x.data)
         .then((agent) => {
           if (!agent) throw new Error(`Agent not found: ${params.modeId}`)
@@ -651,50 +881,42 @@ export namespace ACP {
 
       if (!cmd) {
         await this.sdk.session.prompt({
-          path: { id: sessionID },
-          body: {
-            model: {
-              providerID: model.providerID,
-              modelID: model.modelID,
-            },
-            parts,
-            agent,
+          sessionID,
+          model: {
+            providerID: model.providerID,
+            modelID: model.modelID,
           },
-          query: {
-            directory,
-          },
+          parts,
+          agent,
+          directory,
         })
         return done
       }
 
       const command = await this.config.sdk.command
-        .list({ throwOnError: true, query: { directory } })
-        .then((x) => x.data.find((c) => c.name === cmd.name))
+        .list({ directory }, { throwOnError: true })
+        .then((x) => x.data!.find((c) => c.name === cmd.name))
       if (command) {
         await this.sdk.session.command({
-          path: { id: sessionID },
-          body: {
-            command: command.name,
-            arguments: cmd.args,
-            model: model.providerID + "/" + model.modelID,
-            agent,
-          },
-          query: {
-            directory,
-          },
+          sessionID,
+          command: command.name,
+          arguments: cmd.args,
+          model: model.providerID + "/" + model.modelID,
+          agent,
+          directory,
         })
         return done
       }
 
       switch (cmd.name) {
         case "compact":
-          await this.config.sdk.session.summarize({
-            path: { id: sessionID },
-            throwOnError: true,
-            query: {
+          await this.config.sdk.session.summarize(
+            {
+              sessionID,
               directory,
             },
-          })
+            { throwOnError: true },
+          )
           break
       }
 
@@ -703,13 +925,13 @@ export namespace ACP {
 
     async cancel(params: CancelNotification) {
       const session = this.sessionManager.get(params.sessionId)
-      await this.config.sdk.session.abort({
-        path: { id: params.sessionId },
-        throwOnError: true,
-        query: {
+      await this.config.sdk.session.abort(
+        {
+          sessionID: params.sessionId,
           directory: session.cwd,
         },
-      })
+        { throwOnError: true },
+      )
     }
   }
 
@@ -766,10 +988,10 @@ export namespace ACP {
     if (configured) return configured
 
     const model = await sdk.config
-      .get({ throwOnError: true, query: { directory: cwd } })
+      .get({ directory: cwd }, { throwOnError: true })
       .then((resp) => {
         const cfg = resp.data
-        if (!cfg.model) return undefined
+        if (!cfg || !cfg.model) return undefined
         const parsed = Provider.parseModel(cfg.model)
         return {
           providerID: parsed.providerID,

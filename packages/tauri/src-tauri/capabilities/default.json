@@ -3,5 +3,16 @@
   "identifier": "default",
   "description": "Capability for the main window",
   "windows": ["main"],
-  "permissions": ["core:default", "opener:default"]
+  "permissions": [
+    "core:default",
+    "opener:default",
+    "core:window:allow-start-dragging",
+    "core:webview:allow-set-webview-zoom",
+    "shell:default",
+    "updater:default",
+    "dialog:default",
+    "process:default",
+    "store:default",
+    "window-state:default"
+  ]
 }

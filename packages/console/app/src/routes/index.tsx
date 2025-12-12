@@ -43,7 +43,7 @@ export default function Home() {
   return (
     <main data-page="opencode">
       {/*<HttpHeader name="Cache-Control" value="public, max-age=1, s-maxage=3600, stale-while-revalidate=86400" />*/}
-      <Title>OpenCode | The AI coding agent built for the terminal</Title>
+      <Title>OpenCode | The open source AI coding agent</Title>
       <Link rel="canonical" href={config.baseUrl} />
       <Meta property="og:image" content="/social-share.png" />
       <Meta name="twitter:image" content="/social-share.png" />
@@ -53,25 +53,16 @@ export default function Home() {
         <div data-component="content">
           <section data-component="hero">
             <div data-slot="hero-copy">
-              <a data-slot="releases" href={release()?.url ?? `${config.github.repoUrl}/releases`} target="_blank">
-                What’s new in {release()?.name ?? "the latest release"}
-              </a>
-              <h1>The AI coding agent built for the terminal</h1>
+              {/*<a data-slot="releases"*/}
+              {/*   href={release()?.url ?? `${config.github.repoUrl}/releases`}*/}
+              {/*   target="_blank">*/}
+              {/*  What’s new in {release()?.name ?? "the latest release"}*/}
+              {/*</a>*/}
+              <h1>The open source AI coding agent</h1>
               <p>
-                OpenCode is fully open source, giving you control and freedom to use any provider, any model, and any
-                editor.
+                Free models included or connect any model from any provider, <span data-slot="br"></span>including
+                Claude, GPT, Gemini and more.
               </p>
-              <a href="/docs">
-                <span>Read docs </span>
-                <svg width="24" height="24" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg">
-                  <path
-                    d="M6.5 12L17 12M13 16.5L17.5 12L13 7.5"
-                    stroke="currentColor"
-                    stroke-width="1.5"
-                    stroke-linecap="square"
-                  />
-                </svg>
-              </a>
             </div>
             <div data-slot="installation">
               <Tabs
@@ -162,15 +153,9 @@ export default function Home() {
           <section data-component="what">
             <div data-slot="section-title">
               <h3>What is OpenCode?</h3>
-              <p>OpenCode is an open source agent that helps you write and run code directly from the terminal.</p>
+              <p>OpenCode is an open source agent that helps you write code in your terminal, IDE, or desktop.</p>
             </div>
             <ul>
-              <li>
-                <span>[*]</span>
-                <div>
-                  <strong>Native TUI</strong> A responsive, native, themeable terminal UI
-                </div>
-              </li>
               <li>
                 <span>[*]</span>
                 <div>
@@ -204,10 +189,21 @@ export default function Home() {
               <li>
                 <span>[*]</span>
                 <div>
-                  <strong>Any editor</strong> OpenCode runs in your terminal, pair it with any IDE
+                  <strong>Any editor</strong> Available as a terminal interface, desktop app, and IDE extension
                 </div>
               </li>
             </ul>
+            <a href="/docs">
+              <span>Read docs </span>
+              <svg width="24" height="24" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg">
+                <path
+                  d="M6.5 12L17 12M13 16.5L17.5 12L13 7.5"
+                  stroke="currentColor"
+                  stroke-width="1.5"
+                  stroke-linecap="square"
+                />
+              </svg>
+            </a>
           </section>
 
           <section data-component="growth">
@@ -645,9 +641,8 @@ export default function Home() {
             <ul>
               <li>
                 <Faq question="What is OpenCode?">
-                  OpenCode is an open source agent that helps you write and run code directly from the terminal. You can
-                  pair OpenCode with any AI model, and because it’s terminal-based you can pair it with your preferred
-                  code editor.
+                  OpenCode is an open source agent that helps you write and run code with any AI model. It's available
+                  as a terminal-based interface, desktop app, or IDE extension.
                 </Faq>
               </li>
               <li>
@@ -657,29 +652,38 @@ export default function Home() {
               </li>
               <li>
                 <Faq question="Do I need extra AI subscriptions to use OpenCode?">
-                  Not necessarily, but probably. You’ll need an AI subscription if you want to connect OpenCode to a
-                  paid provider, although you can work with{" "}
+                  Not necessarily, OpenCode comes with a set of free models that you can use without creating an
+                  account. Aside from these, you can use any of the popular coding models by creating a{" "}
+                  <A href="/zen">Zen</A> account. While we encourage users to use Zen, OpenCode also works with all
+                  popular providers such as OpenAI, Anthropic, xAI etc. You can even connect your{" "}
                   <a href="/docs/providers/#lm-studio" target="_blank">
                     local models
-                  </a>{" "}
-                  for free. While we encourage users to use <A href="/zen">Zen</A>, OpenCode works with all popular
-                  providers such as OpenAI, Anthropic, xAI etc.
+                  </a>
+                  .
+                </Faq>
+              </li>
+              <li>
+                <Faq question="Can I use my existing AI subscriptions with OpenCode?">
+                  Yes, OpenCode supports subscription plans from all major providers. You can use your Claude Pro/Max,
+                  ChatGPT Plus/Pro, or GitHub Copilot subscriptions. <a href="/docs/providers/#directory">Learn more</a>
+                  .
                 </Faq>
               </li>
               <li>
                 <Faq question="Can I only use OpenCode in the terminal?">
-                  Yes, for now. We are actively working on a desktop app. Join the waitlist for early access.
+                  Not anymore! OpenCode is now available as an app for your desktop.
                 </Faq>
               </li>
               <li>
                 <Faq question="How much does OpenCode cost?">
-                  OpenCode is 100% free to use. Any additional costs will come from your subscription to a model
-                  provider. While OpenCode works with any model provider, we recommend using <A href="/zen">Zen</A>.
+                  OpenCode is 100% free to use. It also comes with a set of free models. There might be additional costs
+                  if you connect any other provider.
                 </Faq>
               </li>
               <li>
                 <Faq question="What about data and privacy?">
-                  Your data and information is only stored when you create sharable links in OpenCode. Learn more about{" "}
+                  Your data and information is only stored when you use our free models or create sharable links. Learn
+                  more about <a href="/docs/zen/#privacy">our models</a> and{" "}
                   <a href="/docs/share/#privacy">share pages</a>.
                 </Faq>
               </li>
@@ -740,6 +744,17 @@ export default function Home() {
                   </svg>
                 </div>
                 <div>
+                  <svg
+                    width="24"
+                    height="24"
+                    viewBox="0 0 50 50"
+                    fill="currentColor"
+                    xmlns="http://www.w3.org/2000/svg"
+                  >
+                    <path d="M49.04,24.001l-1.082-0.043h-0.001C36.134,23.492,26.508,13.866,26.042,2.043L25.999,0.96C25.978,0.424,25.537,0,25,0	s-0.978,0.424-0.999,0.96l-0.043,1.083C23.492,13.866,13.866,23.492,2.042,23.958L0.96,24.001C0.424,24.022,0,24.463,0,25	c0,0.537,0.424,0.978,0.961,0.999l1.082,0.042c11.823,0.467,21.449,10.093,21.915,21.916l0.043,1.083C24.022,49.576,24.463,50,25,50	s0.978-0.424,0.999-0.96l0.043-1.083c0.466-11.823,10.092-21.449,21.915-21.916l1.082-0.042C49.576,25.978,50,25.537,50,25	C50,24.463,49.576,24.022,49.04,24.001z"></path>
+                  </svg>
+                </div>
+                <div>
                   <svg width="24" height="24" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg">
                     <path
                       d="M9.16861 16.0529L17.2018 9.85156C17.5957 9.54755 18.1586 9.66612 18.3463 10.1384C19.3339 12.6288 18.8926 15.6217 16.9276 17.6766C14.9626 19.7314 12.2285 20.1821 9.72948 19.1557L6.9995 20.4775C10.9151 23.2763 15.6699 22.5841 18.6411 19.4749C20.9979 17.0103 21.7278 13.6508 21.0453 10.6214L21.0515 10.6278C20.0617 6.17736 21.2948 4.39847 23.8207 0.760904C23.8804 0.674655 23.9402 0.588405 24 0.5L20.6762 3.97585V3.96506L9.16658 16.0551"
@@ -766,6 +781,14 @@ export default function Home() {
                     <path
                       d="M12.6241 11.346L20.3848 3.44816C20.5309 3.29931 20.4487 3 20.2601 3H16.0842C16.0388 3 15.9949 3.01897 15.9594 3.05541L7.59764 11.5629C7.46721 11.6944 7.27446 11.5771 7.27446 11.3666V3.25183C7.27446 3.11242 7.18515 3 7.07594 3H4.19843C4.08932 3 4 3.11242 4 3.25183V20.7482C4 20.8876 4.08932 21 4.19843 21H7.07594C7.18515 21 7.27446 20.8876 7.27446 20.7482V17.1834C7.27446 17.1073 7.30136 17.0344 7.34815 16.987L9.94075 14.3486C10.0031 14.2853 10.0895 14.2757 10.159 14.3232L17.0934 19.5573C18.2289 20.3412 19.4975 20.8226 20.786 20.9652C20.9008 20.9778 21 20.8606 21 20.7133V17.3559C21 17.2276 20.9249 17.1232 20.8243 17.1073C20.0659 16.9853 19.326 16.6845 18.6569 16.222L12.6538 11.764C12.5291 11.6785 12.5135 11.4584 12.6241 11.346Z"
                       fill="currentColor"
+                    />
+                  </svg>
+                </div>
+                <div>
+                  <svg width="24" height="24" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg">
+                    <path
+                      d="M12.0962 3L10.0998 5.6577H1.59858L3.59417 3H12.0972H12.0962ZM22.3162 18.3432L20.3215 21H11.8497L13.8425 18.3432H22.3162ZM23 3L9.492 21H1L14.508 3H23Z"
+                      fill="black"
                     />
                   </svg>
                 </div>

@@ -1,6 +1,7 @@
 {
   "$schema": "https://json.schemastore.org/tsconfig",
   "compilerOptions": {
+    "composite": true,
     "target": "ESNext",
     "module": "ESNext",
     "skipLibCheck": true,
@@ -11,10 +12,13 @@
     "jsxImportSource": "solid-js",
     "allowJs": true,
     "strict": true,
-    "noEmit": true,
+    "noEmit": false,
+    "emitDeclarationOnly": true,
+    "outDir": "node_modules/.ts-dist",
     "isolatedModules": true,
     "paths": {
       "@/*": ["./src/*"]
     }
-  }
+  },
+  "exclude": ["dist", "ts-dist"]
 }

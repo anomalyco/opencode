@@ -1,20 +1,21 @@
 import { Bus } from "@/bus"
 import { Config } from "@/config/config"
 import { ulid } from "ulid"
-import type { ModelsDev } from "@/provider/models"
 import { Provider } from "@/provider/provider"
 import { Session } from "@/session"
 import { MessageV2 } from "@/session/message-v2"
 import { Storage } from "@/storage/storage"
 import { Log } from "@/util/log"
-import type * as SDK from "@opencode-ai/sdk"
+import type * as SDK from "@opencode-ai/sdk/v2"
 
 export namespace ShareNext {
   const log = Log.create({ service: "share-next" })
 
+  async function url() {
+    return Config.get().then((x) => x.enterprise?.url ?? "https://opncd.ai")
+  }
+
   export async function init() {
-    const config = await Config.get()
-    if (!config.enterprise) return
     Bus.subscribe(Session.Event.Updated, async (evt) => {
       await sync(evt.properties.info.id, [
         {
@@ -36,7 +37,7 @@ export namespace ShareNext {
             type: "model",
             data: [
               await Provider.getModel(evt.properties.info.model.providerID, evt.properties.info.model.modelID).then(
-                (m) => m.info,
+                (m) => m,
               ),
             ],
           },
@@ -63,8 +64,7 @@ export namespace ShareNext {
 
   export async function create(sessionID: string) {
     log.info("creating share", { sessionID })
-    const url = await Config.get().then((x) => x.enterprise!.url)
-    const result = await fetch(`${url}/api/share`, {
+    const result = await fetch(`${await url()}/api/share`, {
       method: "POST",
       headers: {
         "Content-Type": "application/json",
@@ -105,7 +105,7 @@ export namespace ShareNext {
       }
     | {
         type: "model"
-        data: ModelsDev.Model[]
+        data: SDK.Model[]
       }
 
   const queue = new Map<string, { timeout: NodeJS.Timeout; data: Map<string, Data> }>()
@@ -127,11 +127,10 @@ export namespace ShareNext {
       const queued = queue.get(sessionID)
       if (!queued) return
       queue.delete(sessionID)
-      const url = await Config.get().then((x) => x.enterprise!.url)
       const share = await get(sessionID)
       if (!share) return
 
-      await fetch(`${url}/api/share/${share.id}/sync`, {
+      await fetch(`${await url()}/api/share/${share.id}/sync`, {
         method: "POST",
         headers: {
           "Content-Type": "application/json",
@@ -147,10 +146,9 @@ export namespace ShareNext {
 
   export async function remove(sessionID: string) {
     log.info("removing share", { sessionID })
-    const url = await Config.get().then((x) => x.enterprise!.url)
     const share = await get(sessionID)
     if (!share) return
-    await fetch(`${url}/api/share/${share.id}`, {
+    await fetch(`${await url()}/api/share/${share.id}`, {
       method: "DELETE",
       headers: {
         "Content-Type": "application/json",
@@ -171,7 +169,7 @@ export namespace ShareNext {
       messages
         .filter((m) => m.info.role === "user")
         .map((m) => (m.info as SDK.UserMessage).model)
-        .map((m) => Provider.getModel(m.providerID, m.modelID).then((m) => m.info)),
+        .map((m) => Provider.getModel(m.providerID, m.modelID).then((m) => m)),
     )
     await sync(sessionID, [
       {

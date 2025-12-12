@@ -1,4 +1,4 @@
-{ lib, stdenvNoCC, bun, fzf, ripgrep, makeBinaryWrapper }:
+{ lib, stdenvNoCC, bun, ripgrep, makeBinaryWrapper }:
 args:
 let
   scripts = args.scripts;
@@ -97,7 +97,7 @@ stdenvNoCC.mkDerivation (finalAttrs: {
     makeWrapper ${bun}/bin/bun $out/bin/opencode \
       --add-flags "run" \
       --add-flags "$out/lib/opencode/dist/src/index.js" \
-      --prefix PATH : ${lib.makeBinPath [ fzf ripgrep ]} \
+      --prefix PATH : ${lib.makeBinPath [ ripgrep ]} \
       --argv0 opencode
 
     runHook postInstall

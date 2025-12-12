@@ -209,6 +209,68 @@ export namespace LSPServer {
     },
   }
 
+  export const Biome: Info = {
+    id: "biome",
+    root: NearestRoot([
+      "biome.json",
+      "biome.jsonc",
+      "package-lock.json",
+      "bun.lockb",
+      "bun.lock",
+      "pnpm-lock.yaml",
+      "yarn.lock",
+    ]),
+    extensions: [
+      ".ts",
+      ".tsx",
+      ".js",
+      ".jsx",
+      ".mjs",
+      ".cjs",
+      ".mts",
+      ".cts",
+      ".json",
+      ".jsonc",
+      ".vue",
+      ".astro",
+      ".svelte",
+      ".css",
+      ".graphql",
+      ".gql",
+      ".html",
+    ],
+    async spawn(root) {
+      const localBin = path.join(root, "node_modules", ".bin", "biome")
+      let bin: string | undefined
+      if (await Bun.file(localBin).exists()) bin = localBin
+      if (!bin) {
+        const found = Bun.which("biome")
+        if (found) bin = found
+      }
+
+      let args = ["lsp-proxy", "--stdio"]
+
+      if (!bin) {
+        const resolved = await Bun.resolve("biome", root).catch(() => undefined)
+        if (!resolved) return
+        bin = BunProc.which()
+        args = ["x", "biome", "lsp-proxy", "--stdio"]
+      }
+
+      const proc = spawn(bin, args, {
+        cwd: root,
+        env: {
+          ...process.env,
+          BUN_BE_BUN: "1",
+        },
+      })
+
+      return {
+        process: proc,
+      }
+    },
+  }
+
   export const Gopls: Info = {
     id: "gopls",
     root: async (file) => {
@@ -1181,6 +1243,146 @@ export namespace LSPServer {
         process: spawn(dart, ["language-server", "--lsp"], {
           cwd: root,
         }),
+      }
+    },
+  }
+
+  export const Ocaml: Info = {
+    id: "ocaml-lsp",
+    extensions: [".ml", ".mli"],
+    root: NearestRoot(["dune-project", "dune-workspace", ".merlin", "opam"]),
+    async spawn(root) {
+      const bin = Bun.which("ocamllsp")
+      if (!bin) {
+        log.info("ocamllsp not found, please install ocaml-lsp-server")
+        return
+      }
+      return {
+        process: spawn(bin, {
+          cwd: root,
+        }),
+      }
+    },
+  }
+  export const BashLS: Info = {
+    id: "bash",
+    extensions: [".sh", ".bash", ".zsh", ".ksh"],
+    root: async () => Instance.directory,
+    async spawn(root) {
+      let binary = Bun.which("bash-language-server")
+      const args: string[] = []
+      if (!binary) {
+        const js = path.join(Global.Path.bin, "node_modules", "bash-language-server", "out", "cli.js")
+        if (!(await Bun.file(js).exists())) {
+          if (Flag.OPENCODE_DISABLE_LSP_DOWNLOAD) return
+          await Bun.spawn([BunProc.which(), "install", "bash-language-server"], {
+            cwd: Global.Path.bin,
+            env: {
+              ...process.env,
+              BUN_BE_BUN: "1",
+            },
+            stdout: "pipe",
+            stderr: "pipe",
+            stdin: "pipe",
+          }).exited
+        }
+        binary = BunProc.which()
+        args.push("run", js)
+      }
+      args.push("start")
+      const proc = spawn(binary, args, {
+        cwd: root,
+        env: {
+          ...process.env,
+          BUN_BE_BUN: "1",
+        },
+      })
+      return {
+        process: proc,
+      }
+    },
+  }
+
+  export const TerraformLS: Info = {
+    id: "terraform",
+    extensions: [".tf", ".tfvars"],
+    root: NearestRoot([".terraform.lock.hcl", "terraform.tfstate", "*.tf"]),
+    async spawn(root) {
+      let bin = Bun.which("terraform-ls", {
+        PATH: process.env["PATH"] + ":" + Global.Path.bin,
+      })
+
+      if (!bin) {
+        if (Flag.OPENCODE_DISABLE_LSP_DOWNLOAD) return
+        log.info("downloading terraform-ls from GitHub releases")
+
+        const releaseResponse = await fetch("https://api.github.com/repos/hashicorp/terraform-ls/releases/latest")
+        if (!releaseResponse.ok) {
+          log.error("Failed to fetch terraform-ls release info")
+          return
+        }
+
+        const release = (await releaseResponse.json()) as {
+          tag_name?: string
+          assets?: { name?: string; browser_download_url?: string }[]
+        }
+        const version = release.tag_name?.replace("v", "")
+        if (!version) {
+          log.error("terraform-ls release did not include a version tag")
+          return
+        }
+
+        const platform = process.platform
+        const arch = process.arch
+
+        const tfArch = arch === "arm64" ? "arm64" : "amd64"
+        const tfPlatform = platform === "win32" ? "windows" : platform
+
+        const assetName = `terraform-ls_${version}_${tfPlatform}_${tfArch}.zip`
+
+        const assets = release.assets ?? []
+        const asset = assets.find((a) => a.name === assetName)
+        if (!asset?.browser_download_url) {
+          log.error(`Could not find asset ${assetName} in terraform-ls release`)
+          return
+        }
+
+        const downloadResponse = await fetch(asset.browser_download_url)
+        if (!downloadResponse.ok) {
+          log.error("Failed to download terraform-ls")
+          return
+        }
+
+        const tempPath = path.join(Global.Path.bin, assetName)
+        await Bun.file(tempPath).write(downloadResponse)
+
+        await $`unzip -o -q ${tempPath}`.cwd(Global.Path.bin).nothrow()
+        await fs.rm(tempPath, { force: true })
+
+        bin = path.join(Global.Path.bin, "terraform-ls" + (platform === "win32" ? ".exe" : ""))
+
+        if (!(await Bun.file(bin).exists())) {
+          log.error("Failed to extract terraform-ls binary")
+          return
+        }
+
+        if (platform !== "win32") {
+          await $`chmod +x ${bin}`.nothrow()
+        }
+
+        log.info(`installed terraform-ls`, { bin })
+      }
+
+      return {
+        process: spawn(bin, ["serve"], {
+          cwd: root,
+        }),
+        initialization: {
+          experimentalFeatures: {
+            prefillRequiredFields: true,
+            validateOnSave: true,
+          },
+        },
       }
     },
   }

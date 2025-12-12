@@ -11,15 +11,28 @@ export namespace Flag {
   export const OPENCODE_ENABLE_EXPERIMENTAL_MODELS = truthy("OPENCODE_ENABLE_EXPERIMENTAL_MODELS")
   export const OPENCODE_DISABLE_AUTOCOMPACT = truthy("OPENCODE_DISABLE_AUTOCOMPACT")
   export const OPENCODE_FAKE_VCS = process.env["OPENCODE_FAKE_VCS"]
-  export const OPENCODE_EXPERIMENTAL_BASH_MAX_OUTPUT_LENGTH =
-    process.env["OPENCODE_EXPERIMENTAL_BASH_MAX_OUTPUT_LENGTH"]
+  export const OPENCODE_CLIENT = process.env["OPENCODE_CLIENT"] ?? "cli"
 
   // Experimental
   export const OPENCODE_EXPERIMENTAL = truthy("OPENCODE_EXPERIMENTAL")
+  export const OPENCODE_EXPERIMENTAL_ICON_DISCOVERY =
+    OPENCODE_EXPERIMENTAL || truthy("OPENCODE_EXPERIMENTAL_ICON_DISCOVERY")
   export const OPENCODE_EXPERIMENTAL_WATCHER = OPENCODE_EXPERIMENTAL || truthy("OPENCODE_EXPERIMENTAL_WATCHER")
+  export const OPENCODE_EXPERIMENTAL_DISABLE_COPY_ON_SELECT = truthy("OPENCODE_EXPERIMENTAL_DISABLE_COPY_ON_SELECT")
+  export const OPENCODE_ENABLE_EXA =
+    truthy("OPENCODE_ENABLE_EXA") || OPENCODE_EXPERIMENTAL || truthy("OPENCODE_EXPERIMENTAL_EXA")
+  export const OPENCODE_EXPERIMENTAL_BASH_MAX_OUTPUT_LENGTH = number("OPENCODE_EXPERIMENTAL_BASH_MAX_OUTPUT_LENGTH")
+  export const OPENCODE_EXPERIMENTAL_BASH_DEFAULT_TIMEOUT_MS = number("OPENCODE_EXPERIMENTAL_BASH_DEFAULT_TIMEOUT_MS")
 
   function truthy(key: string) {
     const value = process.env[key]?.toLowerCase()
     return value === "true" || value === "1"
+  }
+
+  function number(key: string) {
+    const value = process.env[key]
+    if (!value) return undefined
+    const parsed = Number(value)
+    return Number.isInteger(parsed) && parsed > 0 ? parsed : undefined
   }
 }
