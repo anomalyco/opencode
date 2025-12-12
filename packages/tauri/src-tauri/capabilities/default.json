@@ -2,7 +2,9 @@
   "$schema": "../gen/schemas/desktop-schema.json",
   "identifier": "default",
   "description": "Capability for the main window",
-  "windows": ["main"],
+  "windows": [
+    "main"
+  ],
   "permissions": [
     "core:default",
     "opener:default",
@@ -11,6 +13,8 @@
     "shell:default",
     "updater:default",
     "dialog:default",
-    "process:default"
+    "process:default",
+    "store:default",
+    "window-state:default"
   ]
 }
