@@ -318,10 +318,7 @@ export default function Layout(props: ParentProps) {
                         )
                       }
                       return (
-                        <A
-                          href={`${slug()}/session/${session.id}`}
-                          class="group/session focus:outline-none cursor-default"
-                        >
+                        <div class="group/session">
                           <Tooltip placement="right" value={session.title}>
                             <div
                               class="relative w-full pl-4 pr-1 py-1 rounded-md
@@ -330,9 +327,12 @@ export default function Layout(props: ParentProps) {
                                      group-focus/session:bg-surface-raised-base-hover"
                             >
                               <div class="flex items-center self-stretch gap-6 justify-between">
-                                <span class="text-14-regular text-text-strong overflow-hidden text-ellipsis truncate">
+                                <A
+                                  href={`${slug()}/session/${session.id}`}
+                                  class="text-14-regular text-text-strong overflow-hidden text-ellipsis truncate focus:outline-none cursor-default grow"
+                                >
                                   {session.title}
-                                </span>
+                                </A>
                                 <div class="shrink-0 group-hover/session:hidden mr-1">
                                   <Switch>
                                     <Match when={hasError()}>
@@ -373,7 +373,7 @@ export default function Layout(props: ParentProps) {
                               </Show>
                             </div>
                           </Tooltip>
-                        </A>
+                        </div>
                       )
                     }}
                   </For>
