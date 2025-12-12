@@ -318,7 +318,7 @@ This path is relative to where the config file is located. So this works for bot
 Use the `model` config to override the model for this agent. Useful for using different models optimized for different tasks. For example, a faster model for planning, a more capable model for implementation.
 
 :::tip
-If you don’t specify a model, primary agents use the [model globally configured](/docs/config#models) while subagents will use the model of the primary agent that invoked the subagent.
+If you don't specify a model, primary agents use the [model globally configured](/docs/config#models) while subagents will use the model of the primary agent that invoked the subagent.
 :::
 
 ```json title="opencode.json"
@@ -377,76 +377,6 @@ You can also use wildcards to control multiple tools at once. For example, to di
 ```
 
 [Learn more about tools](/docs/tools).
-
----
-
-### Subagents
-
-Control which subagents this agent can invoke via the Task tool with the `subagents` config.
-
-By default, all subagents are available. Set a subagent to `false` to hide it from this agent.
-
-```json title="opencode.json"
-{
-  "$schema": "https://opencode.ai/config.json",
-  "agent": {
-    "build": {
-      "subagents": {
-        "code-reviewer": false
-      }
-    }
-  }
-}
-```
-
-You can also use wildcards to control multiple subagents at once:
-
-```json title="opencode.json"
-{
-  "$schema": "https://opencode.ai/config.json",
-  "agent": {
-    "build": {
-      "subagents": {
-        "orchestrator-*": false
-      }
-    }
-  }
-}
-```
-
-Longer patterns take precedence over shorter ones. This allows you to exclude a group while keeping specific exceptions:
-
-```json title="opencode.json"
-{
-  "$schema": "https://opencode.ai/config.json",
-  "agent": {
-    "build": {
-      "subagents": {
-        "orchestrator-*": false,
-        "orchestrator-fast": true
-      }
-    }
-  }
-}
-```
-
-You can also configure subagents in Markdown agents:
-
-```markdown title="~/.config/opencode/agent/focused.md"
----
-description: Agent with limited subagent access
-mode: primary
-subagents:
-  general: true
-  orchestrator-*: false
----
-
-You are a focused agent with limited subagent access.
-```
-
-:::note
-Filtered subagents will not appear in the Task tool description and cannot be invoked.
-:::
 
 ---
 
@@ -556,6 +486,29 @@ Where the specific rule can override the `*` wildcard.
 }
 ```
 
+#### Task permissions
+
+Control which subagents a primary agent can invoke via the Task tool with `permission.task`. Uses the same glob pattern syntax as bash permissions.
+
+```json title="opencode.json"
+{
+  "agent": {
+    "orchestrator": {
+      "mode": "primary",
+      "permission": {
+        "task": {
+          "*": "deny",
+          "orchestrator-*": "allow",
+          "code-reviewer": "ask"
+        }
+      }
+    }
+  }
+}
+```
+
+When set to `deny`, the subagent is removed from the Task tool description entirely.
+
 [Learn more about permissions](/docs/permissions).
 
 ---
@@ -575,6 +528,25 @@ Control the agent's mode with the `mode` config. The `mode` option is used to de
 ```
 
 The `mode` option can be set to `primary`, `subagent`, or `all`. If no `mode` is specified, it defaults to `all`.
+
+---
+
+### Visible
+
+Hide a subagent from the `@` autocomplete with `visible: false`. Useful for internal subagents that should only be invoked by other agents via the Task tool.
+
+```json title="opencode.json"
+{
+  "agent": {
+    "internal-helper": {
+      "mode": "subagent",
+      "visible": false
+    }
+  }
+}
+```
+
+Only applies to `mode: subagent` agents.
 
 ---
 

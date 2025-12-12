@@ -1117,6 +1117,10 @@ export type AgentConfig = {
   description?: string
   mode?: "subagent" | "primary" | "all"
   /**
+   * Whether this subagent appears in the agent menu (default: true, only applies to mode: subagent)
+   */
+  visible?: boolean
+  /**
    * Hex color code for the agent (e.g., #FF5733)
    */
   color?: string
@@ -1136,6 +1140,9 @@ export type AgentConfig = {
     webfetch?: "ask" | "allow" | "deny"
     doom_loop?: "ask" | "allow" | "deny"
     external_directory?: "ask" | "allow" | "deny"
+    task?: {
+      [key: string]: "ask" | "allow" | "deny"
+    }
   }
   [key: string]:
     | unknown
@@ -1162,6 +1169,9 @@ export type AgentConfig = {
         webfetch?: "ask" | "allow" | "deny"
         doom_loop?: "ask" | "allow" | "deny"
         external_directory?: "ask" | "allow" | "deny"
+        task?: {
+          [key: string]: "ask" | "allow" | "deny"
+        }
       }
     | undefined
 }
@@ -1738,6 +1748,7 @@ export type Agent = {
   topP?: number
   temperature?: number
   color?: string
+  visible?: boolean
   permission: {
     edit: "ask" | "allow" | "deny"
     bash: {
@@ -1746,6 +1757,9 @@ export type Agent = {
     webfetch?: "ask" | "allow" | "deny"
     doom_loop?: "ask" | "allow" | "deny"
     external_directory?: "ask" | "allow" | "deny"
+    task?: {
+      [key: string]: "ask" | "allow" | "deny"
+    }
   }
   model?: {
     modelID: string

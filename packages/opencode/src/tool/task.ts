@@ -10,11 +10,15 @@ import { SessionPrompt } from "../session/prompt"
 import { iife } from "@/util/iife"
 import { defer } from "@/util/defer"
 import { Wildcard } from "@/util/wildcard"
+import { Permission } from "../permission"
 
 export { DESCRIPTION as TASK_DESCRIPTION }
 
-export function filterSubagents(agents: Agent.Info[], subagents: Record<string, boolean>) {
-  return agents.filter((a) => Wildcard.all(a.name, subagents) !== false)
+export function filterSubagents(agents: Agent.Info[], permissions: Record<string, Config.Permission>) {
+  return agents.filter((a) => {
+    if (a.visible === false) return false
+    return Wildcard.all(a.name, permissions) !== "deny"
+  })
 }
 import { Config } from "../config/config"
 
@@ -38,8 +42,26 @@ export const TaskTool = Tool.define("task", async () => {
       const agent = await Agent.get(params.subagent_type)
       if (!agent) throw new Error(`Unknown agent type: ${params.subagent_type} is not a valid agent type`)
       const calling = await Agent.get(ctx.agent)
-      if (calling && Wildcard.all(params.subagent_type, calling.subagents) === false)
-        throw new Error(`Agent '${params.subagent_type}' is not available to ${ctx.agent}`)
+      if (calling) {
+        const perm = Wildcard.all(params.subagent_type, calling.permission.task ?? {})
+        if (perm === "deny") {
+          throw new Error(`Agent '${params.subagent_type}' is not available to ${ctx.agent}`)
+        }
+        if (perm === "ask") {
+          await Permission.ask({
+            type: "task",
+            title: `Invoke subagent: ${params.subagent_type}`,
+            pattern: params.subagent_type,
+            callID: ctx.callID,
+            sessionID: ctx.sessionID,
+            messageID: ctx.messageID,
+            metadata: {
+              subagent: params.subagent_type,
+              description: params.description,
+            },
+          })
+        }
+      }
       const session = await iife(async () => {
         if (params.session_id) {
           const found = await Session.get(params.session_id).catch(() => {})

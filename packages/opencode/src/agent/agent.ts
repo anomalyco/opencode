@@ -17,12 +17,14 @@ export namespace Agent {
       topP: z.number().optional(),
       temperature: z.number().optional(),
       color: z.string().optional(),
+      visible: z.boolean().optional(),
       permission: z.object({
         edit: Config.Permission,
         bash: z.record(z.string(), Config.Permission),
         webfetch: Config.Permission.optional(),
         doom_loop: Config.Permission.optional(),
         external_directory: Config.Permission.optional(),
+        task: z.record(z.string(), Config.Permission).optional(),
       }),
       model: z
         .object({
@@ -32,7 +34,6 @@ export namespace Agent {
         .optional(),
       prompt: z.string().optional(),
       tools: z.record(z.string(), z.boolean()),
-      subagents: z.record(z.string(), z.boolean()),
       options: z.record(z.string(), z.any()),
       maxSteps: z.number().int().positive().optional(),
     })
@@ -110,7 +111,6 @@ export namespace Agent {
           todowrite: false,
           ...defaultTools,
         },
-        subagents: {},
         options: {},
         permission: agentPermission,
         mode: "subagent",
@@ -154,7 +154,6 @@ export namespace Agent {
       build: {
         name: "build",
         tools: { ...defaultTools },
-        subagents: {},
         options: {},
         permission: agentPermission,
         mode: "primary",
@@ -167,7 +166,6 @@ export namespace Agent {
         tools: {
           ...defaultTools,
         },
-        subagents: {},
         mode: "primary",
         builtIn: true,
       },
@@ -185,7 +183,6 @@ export namespace Agent {
           permission: agentPermission,
           options: {},
           tools: {},
-          subagents: {},
           builtIn: false,
         }
       const {
@@ -193,7 +190,6 @@ export namespace Agent {
         model,
         prompt,
         tools,
-        subagents,
         description,
         temperature,
         top_p,
@@ -201,6 +197,7 @@ export namespace Agent {
         permission,
         color,
         maxSteps,
+        visible,
         ...extra
       } = value
       item.options = {
@@ -218,16 +215,12 @@ export namespace Agent {
         ...defaultTools,
         ...item.tools,
       }
-      if (subagents)
-        item.subagents = {
-          ...item.subagents,
-          ...subagents,
-        }
       if (description) item.description = description
       if (temperature != undefined) item.temperature = temperature
       if (top_p != undefined) item.topP = top_p
       if (mode) item.mode = mode
       if (color) item.color = color
+      if (visible != undefined) item.visible = visible
       // just here for consistency & to prevent it from being added as an option
       if (name) item.name = name
       if (maxSteps != undefined) item.maxSteps = maxSteps
@@ -314,12 +307,25 @@ function mergeAgentPermissions(basePermission: any, overridePermission: any): Ag
     }
   }
 
+  let mergedTask
+  if (merged.task) {
+    if (typeof merged.task === "object") {
+      mergedTask = mergeDeep(
+        {
+          "*": "allow",
+        },
+        merged.task,
+      )
+    }
+  }
+
   const result: Agent.Info["permission"] = {
     edit: merged.edit ?? "allow",
     webfetch: merged.webfetch ?? "allow",
     bash: mergedBash ?? { "*": "allow" },
     doom_loop: merged.doom_loop,
     external_directory: merged.external_directory,
+    task: mergedTask,
   }
 
   return result

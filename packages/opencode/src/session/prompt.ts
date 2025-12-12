@@ -845,7 +845,7 @@ export namespace SessionPrompt {
     // Regenerate task tool description with filtered subagents
     if (tools.task) {
       const all = await Agent.list().then((x) => x.filter((a) => a.mode !== "primary"))
-      const filtered = filterSubagents(all, input.agent.subagents)
+      const filtered = filterSubagents(all, input.agent.permission.task ?? {})
       const description = TASK_DESCRIPTION.replace(
         "{agents}",
         filtered
