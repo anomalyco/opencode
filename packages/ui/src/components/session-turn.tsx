@@ -25,7 +25,6 @@ import { StickyAccordionHeader } from "./sticky-accordion-header"
 import { FileIcon } from "./file-icon"
 import { Icon } from "./icon"
 import { Card } from "./card"
-import { Collapsible } from "./collapsible"
 import { Dynamic } from "solid-js/web"
 import { Button } from "./button"
 import { Spinner } from "./spinner"
@@ -206,7 +205,7 @@ export function SessionTurn(
 
               const [store, setStore] = createStore({
                 status: rawStatus(),
-                detailsExpanded: true,
+                stepsExpanded: true,
                 duration: duration(),
               })
 
@@ -242,11 +241,10 @@ export function SessionTurn(
                 }
               })
 
-              // Auto-collapse steps when done working (if user hasn't interacted)
               createEffect((prev) => {
                 const isWorking = working()
                 if (prev && !isWorking && !userScrolled()) {
-                  setStore("detailsExpanded", false)
+                  setStore("stepsExpanded", false)
                 }
                 return isWorking
               }, working())
@@ -280,15 +278,15 @@ export function SessionTurn(
                         data-slot="session-turn-collapsible-trigger-content"
                         variant="ghost"
                         size="small"
-                        onClick={() => setStore("detailsExpanded", !store.detailsExpanded)}
+                        onClick={() => setStore("stepsExpanded", !store.stepsExpanded)}
                       >
                         <Show when={working()}>
                           <Spinner />
                         </Show>
                         <Switch>
                           <Match when={working()}>{store.status ?? "Considering next steps..."}</Match>
-                          <Match when={store.detailsExpanded}>Hide steps</Match>
-                          <Match when={!store.detailsExpanded}>Show steps</Match>
+                          <Match when={store.stepsExpanded}>Hide steps</Match>
+                          <Match when={!store.stepsExpanded}>Show steps</Match>
                         </Switch>
                         <span>·</span>
                         <span>{store.duration}</span>
@@ -297,7 +295,7 @@ export function SessionTurn(
                     </div>
                   </div>
                   {/* Response */}
-                  <Show when={store.detailsExpanded}>
+                  <Show when={store.stepsExpanded}>
                     <div data-slot="session-turn-collapsible-content-inner">
                       <For each={assistantMessages()}>
                         {(assistantMessage) => {
@@ -396,7 +394,7 @@ export function SessionTurn(
                       </Accordion>
                     </div>
                   </Show>
-                  <Show when={error() && !store.detailsExpanded}>
+                  <Show when={error() && !store.stepsExpanded}>
                     <Card variant="error" class="error-card">
                       {error()?.data?.message as string}
                     </Card>

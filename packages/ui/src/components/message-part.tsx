@@ -343,6 +343,7 @@ ToolRegistry.register({
     const diffComponent = useDiffComponent()
     return (
       <BasicTool
+        defaultOpen
         icon="code-lines"
         trigger={
           <div data-component="edit-trigger">
