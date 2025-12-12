@@ -1,6 +1,6 @@
 {
   "name": "@opencode-ai/ui",
-  "version": "1.0.150",
+  "version": "1.0.152",
   "type": "module",
   "exports": {
     "./*": "./src/components/*.tsx",
@@ -22,6 +22,7 @@
   },
   "devDependencies": {
     "@types/bun": "catalog:",
+    "@types/luxon": "catalog:",
     "@tsconfig/node22": "catalog:",
     "typescript": "catalog:",
     "vite": "catalog:",
@@ -36,6 +37,8 @@
     "@opencode-ai/util": "workspace:*",
     "@pierre/precision-diffs": "catalog:",
     "@shikijs/transformers": "3.9.2",
+    "@solid-primitives/bounds": "0.1.3",
+    "@solid-primitives/resize-observer": "2.1.3",
     "@solidjs/meta": "catalog:",
     "@typescript/native-preview": "catalog:",
     "fuzzysort": "catalog:",
