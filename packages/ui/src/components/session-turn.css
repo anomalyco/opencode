@@ -270,12 +270,15 @@
   }
 
   [data-slot="session-turn-response-section"] {
-    width: 100%;
+    width: calc(100% + 9px);
     min-width: 0;
+    margin-left: -9px;
+    padding-left: 9px;
   }
 
   [data-slot="session-turn-collapsible"] {
     gap: 32px;
+    overflow: visible;
   }
 
   [data-slot="session-turn-collapsible-trigger-content"] {
@@ -284,6 +287,7 @@
     align-items: center;
     gap: 4px;
     color: var(--text-weak);
+    margin-left: -9px;
 
     [data-component="spinner"] {
       width: 12px;

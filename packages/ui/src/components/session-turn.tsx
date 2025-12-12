@@ -183,7 +183,7 @@ export function SessionTurn(
                   setStore("status", rawStatus())
                   lastStatusChange = Date.now()
                   statusTimeout = undefined
-                }, 1000 - timeSinceLastChange) as unknown as number
+                }, 2500 - timeSinceLastChange) as unknown as number
               }
             })
 
