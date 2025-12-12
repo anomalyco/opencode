@@ -33,7 +33,6 @@ export function SessionTurn(
 ) {
   const data = useData()
   const diffComponent = useDiffComponent()
-  const sanitizer = createMemo(() => (data.directory ? new RegExp(`${data.directory}/`, "g") : undefined))
   const messages = createMemo(() => (props.sessionID ? (data.store.message[props.sessionID] ?? []) : []))
   const userMessages = createMemo(() =>
     messages()
@@ -208,7 +207,7 @@ export function SessionTurn(
                   </div>
                 </div>
                 <div data-slot="session-turn-message-content">
-                  <Message message={message()} parts={parts()} sanitize={sanitizer()} />
+                  <Message message={message()} parts={parts()} />
                 </div>
                 {/* Response */}
                 <div data-slot="session-turn-response-section">
@@ -252,11 +251,10 @@ export function SessionTurn(
                                   <Message
                                     message={assistantMessage}
                                     parts={parts().filter((p) => p?.id !== last()?.id)}
-                                    sanitize={sanitizer()}
                                   />
                                 </Match>
                                 <Match when={true}>
-                                  <Message message={assistantMessage} parts={parts()} sanitize={sanitizer()} />
+                                  <Message message={assistantMessage} parts={parts()} />
                                 </Match>
                               </Switch>
                             )
