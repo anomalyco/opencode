@@ -1,9 +1,9 @@
 import { createEffect, Show, type JSX, splitProps, createSignal } from "solid-js"
 import { Dialog, DialogProps } from "./dialog"
 import { Icon } from "./icon"
-import { Input } from "./input"
 import { IconButton } from "./icon-button"
 import { List, ListRef, ListProps } from "./list"
+import { TextField } from "./text-field"
 
 interface SelectDialogProps<T>
   extends Omit<ListProps<T>, "filter">,
@@ -29,8 +29,8 @@ export function SelectDialog<T>(props: SelectDialogProps<T>) {
     })
   })
 
-  const handleSelect = (item: T | undefined) => {
-    others.onSelect?.(item)
+  const handleSelect = (item: T | undefined, index: number) => {
+    others.onSelect?.(item, index)
     closeButton.click()
   }
 
@@ -55,9 +55,10 @@ export function SelectDialog<T>(props: SelectDialogProps<T>) {
         <div data-component="select-dialog-input">
           <div data-slot="select-dialog-input-container">
             <Icon name="magnifying-glass" />
-            <Input
+            <TextField
               ref={inputRef}
               autofocus
+              variant="ghost"
               data-slot="select-dialog-input"
               type="text"
               value={filter()}

@@ -259,9 +259,11 @@ export function Sidebar(props: { sessionID: string }) {
               flexDirection="row"
               gap={1}
             >
-              <text flexShrink={0}>⬖</text>
+              <text flexShrink={0} fg={theme.text}>
+                ⬖
+              </text>
               <box flexGrow={1} gap={1}>
-                <text>
+                <text fg={theme.text}>
                   <b>Getting started</b>
                 </text>
                 <text fg={theme.textMuted}>OpenCode includes free models so you can start immediately.</text>
@@ -269,7 +271,7 @@ export function Sidebar(props: { sessionID: string }) {
                   Connect from 75+ providers to use other models, including Claude, GPT, Gemini etc
                 </text>
                 <box flexDirection="row" gap={1} justifyContent="space-between">
-                  <text>Connect provider</text>
+                  <text fg={theme.text}>Connect provider</text>
                   <text fg={theme.textMuted}>/connect</text>
                 </box>
               </box>
