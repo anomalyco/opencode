@@ -214,10 +214,10 @@
   }
 
   [data-component="sticky-accordion-header"] {
-    top: 40px;
+    top: var(--sticky-header-height, 40px);
 
     &[data-expanded]::before {
-      top: -40px;
+      top: calc(-1 * var(--sticky-header-height, 40px));
     }
   }
 

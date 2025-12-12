@@ -62,7 +62,9 @@ export function SessionTurn(
 
   let scrollRef: HTMLDivElement | undefined
   let contentRef: HTMLDivElement | undefined
+  let stickyHeaderRef: HTMLDivElement | undefined
   const [userScrolled, setUserScrolled] = createSignal(false)
+  const [stickyHeaderHeight, setStickyHeaderHeight] = createSignal(0)
 
   function handleScroll() {
     if (!scrollRef) return
@@ -90,6 +92,13 @@ export function SessionTurn(
     createResizeObserver(contentRef, () => {
       if (!scrollRef || userScrolled() || !working()) return
       scrollRef.scrollTop = scrollRef.scrollHeight
+    })
+  })
+
+  onMount(() => {
+    if (!stickyHeaderRef) return
+    createResizeObserver(stickyHeaderRef, ({ height }) => {
+      setStickyHeaderHeight(height + 8)
     })
   })
 
@@ -238,9 +247,10 @@ export function SessionTurn(
                   data-message={message().id}
                   data-slot="session-turn-message-container"
                   class={props.classes?.container}
+                  style={{ "--sticky-header-height": `${stickyHeaderHeight()}px` }}
                 >
                   {/* Sticky Header */}
-                  <div data-slot="session-turn-sticky-header">
+                  <div ref={stickyHeaderRef} data-slot="session-turn-sticky-header">
                     <div data-slot="session-turn-message-header">
                       <div data-slot="session-turn-message-title">
                         <Switch>
