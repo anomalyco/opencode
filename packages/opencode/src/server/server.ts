@@ -1234,7 +1234,9 @@ export namespace Server {
           const params = c.req.valid("param")
           const body = c.req.valid("json")
           if (body.id !== params.partID || body.messageID !== params.messageID || body.sessionID !== params.sessionID) {
-            throw new Error("Part IDs in body must match URL parameters")
+            throw new Error(
+              `Part mismatch: body.id='${body.id}' vs partID='${params.partID}', body.messageID='${body.messageID}' vs messageID='${params.messageID}', body.sessionID='${body.sessionID}' vs sessionID='${params.sessionID}'`,
+            )
           }
           const part = await Session.updatePart(body)
           return c.json(part)
