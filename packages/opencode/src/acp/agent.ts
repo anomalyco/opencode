@@ -495,24 +495,20 @@ export namespace ACP {
       }
 
       await Promise.all(
-        Object.entries(mcpServers)
-          .filter((entry): entry is [string, Config.McpLocalConfig | Config.McpRemoteConfig] =>
-            Config.isFullMcpConfig(entry[1]),
-          )
-          .map(async ([key, mcp]) => {
-            await this.sdk.mcp
-              .add(
-                {
-                  directory,
-                  name: key,
-                  config: mcp,
-                },
-                { throwOnError: true },
-              )
-              .catch((error) => {
-                log.error("failed to add mcp server", { name: key, error })
-              })
-          }),
+        Object.entries(mcpServers).map(async ([key, mcp]) => {
+          await this.sdk.mcp
+            .add(
+              {
+                directory,
+                name: key,
+                config: mcp,
+              },
+              { throwOnError: true },
+            )
+            .catch((error) => {
+              log.error("failed to add mcp server", { name: key, error })
+            })
+        }),
       )
 
       setTimeout(() => {

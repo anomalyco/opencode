@@ -379,25 +379,6 @@ export namespace Config {
   export const Mcp = z.union([z.discriminatedUnion("type", [McpLocal, McpRemote]), McpOverride])
   export type Mcp = z.infer<typeof Mcp>
 
-  export type McpLocalConfig = z.infer<typeof McpLocal>
-  export type McpRemoteConfig = z.infer<typeof McpRemote>
-  export type McpOverrideConfig = z.infer<typeof McpOverride>
-
-  /** Type guard to check if MCP config is a full config (local or remote) vs an override */
-  export function isFullMcpConfig(config: Mcp): config is McpLocalConfig | McpRemoteConfig {
-    return "type" in config
-  }
-
-  /** Type guard to check if MCP config is a local config */
-  export function isLocalMcpConfig(config: Mcp): config is McpLocalConfig {
-    return "type" in config && config.type === "local"
-  }
-
-  /** Type guard to check if MCP config is a remote config */
-  export function isRemoteMcpConfig(config: Mcp): config is McpRemoteConfig {
-    return "type" in config && config.type === "remote"
-  }
-
   export const Permission = z.enum(["ask", "allow", "deny"])
   export type Permission = z.infer<typeof Permission>
 
