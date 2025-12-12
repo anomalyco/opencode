@@ -7,11 +7,11 @@ import { ACPClient } from "../../acp/client"
 import { AuthenticationRequiredError } from "../../acp/types"
 
 export const ModelsCommand = cmd({
-  command: "models <agent>",
+  command: "models <agentName>",
   describe: "list available models for an ACP agent",
   builder: (yargs: Argv) => {
     return yargs
-      .positional("agent", {
+      .positional("agentName", {
         describe: "agent name to list models for",
         type: "string",
         demandOption: true,
@@ -22,7 +22,7 @@ export const ModelsCommand = cmd({
       })
   },
   handler: async (args) => {
-    const agentName = args.agent as string
+    const agentName = args.agentName as string
 
     // Find the agent
     const agentMatch = matchAgent(agentName)
