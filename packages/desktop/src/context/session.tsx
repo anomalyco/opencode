@@ -5,9 +5,8 @@ import { useSync } from "./sync"
 import { makePersisted } from "@solid-primitives/storage"
 import { TextSelection } from "./local"
 import { pipe, sumBy } from "remeda"
-import { AssistantMessage, UserMessage } from "@opencode-ai/sdk"
+import { AssistantMessage, UserMessage } from "@opencode-ai/sdk/v2"
 import { useParams } from "@solidjs/router"
-import { base64Encode } from "@/utils"
 import { useSDK } from "./sdk"
 
 export type LocalPTY = {
@@ -25,9 +24,7 @@ export const { use: useSession, provider: SessionProvider } = createSimpleContex
     const sdk = useSDK()
     const params = useParams()
     const sync = useSync()
-    const name = createMemo(
-      () => `${base64Encode(sync.data.project.worktree)}/session${params.id ? "/" + params.id : ""}.v1`,
-    )
+    const name = createMemo(() => `${params.dir}/session${params.id ? "/" + params.id : ""}.v3`)
 
     const [store, setStore] = makePersisted(
       createStore<{
@@ -65,10 +62,10 @@ export const { use: useSession, provider: SessionProvider } = createSimpleContex
     const userMessages = createMemo(() =>
       messages()
         .filter((m) => m.role === "user")
-        .sort((a, b) => b.id.localeCompare(a.id)),
+        .sort((a, b) => a.id.localeCompare(b.id)),
     )
     const lastUserMessage = createMemo(() => {
-      return userMessages()?.at(0)
+      return userMessages()?.at(-1)
     })
     const activeMessage = createMemo(() => {
       if (!store.messageId) return lastUserMessage()
@@ -97,7 +94,7 @@ export const { use: useSession, provider: SessionProvider } = createSimpleContex
       () => messages().findLast((x) => x.role === "assistant" && x.tokens.output > 0) as AssistantMessage,
     )
     const model = createMemo(() =>
-      last() ? sync.data.provider.find((x) => x.id === last().providerID)?.models[last().modelID] : undefined,
+      last() ? sync.data.provider.all.find((x) => x.id === last().providerID)?.models[last().modelID] : undefined,
     )
     const diffs = createMemo(() => (params.id ? (sync.data.session_diff[params.id] ?? []) : []))
 
@@ -198,7 +195,7 @@ export const { use: useSession, provider: SessionProvider } = createSimpleContex
         all: createMemo(() => Object.values(store.terminals.all)),
         active: createMemo(() => store.terminals.active),
         new() {
-          sdk.client.pty.create({ body: { title: `Terminal ${store.terminals.all.length + 1}` } }).then((pty) => {
+          sdk.client.pty.create({ title: `Terminal ${store.terminals.all.length + 1}` }).then((pty) => {
             const id = pty.data?.id
             if (!id) return
             setStore("terminals", "all", [
@@ -214,8 +211,9 @@ export const { use: useSession, provider: SessionProvider } = createSimpleContex
         update(pty: Partial<LocalPTY> & { id: string }) {
           setStore("terminals", "all", (x) => x.map((x) => (x.id === pty.id ? { ...x, ...pty } : x)))
           sdk.client.pty.update({
-            path: { id: pty.id },
-            body: { title: pty.title, size: pty.cols && pty.rows ? { rows: pty.rows, cols: pty.cols } : undefined },
+            ptyID: pty.id,
+            title: pty.title,
+            size: pty.cols && pty.rows ? { rows: pty.rows, cols: pty.cols } : undefined,
           })
         },
         async clone(id: string) {
@@ -223,9 +221,7 @@ export const { use: useSession, provider: SessionProvider } = createSimpleContex
           const pty = store.terminals.all[index]
           if (!pty) return
           const clone = await sdk.client.pty.create({
-            body: {
-              title: pty.title,
-            },
+            title: pty.title,
           })
           if (!clone.data) return
           setStore("terminals", "all", index, {
@@ -252,7 +248,7 @@ export const { use: useSession, provider: SessionProvider } = createSimpleContex
               setStore("terminals", "active", previous)
             }
           })
-          await sdk.client.pty.remove({ path: { id } })
+          await sdk.client.pty.remove({ ptyID: id })
         },
         move(id: string, to: number) {
           const index = store.terminals.all.findIndex((f) => f.id === id)

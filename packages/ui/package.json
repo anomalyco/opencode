@@ -1,6 +1,6 @@
 {
   "name": "@opencode-ai/ui",
-  "version": "1.0.134",
+  "version": "1.0.150",
   "type": "module",
   "exports": {
     "./*": "./src/components/*.tsx",
@@ -10,12 +10,14 @@
     "./context/*": "./src/context/*.tsx",
     "./styles": "./src/styles/index.css",
     "./styles/tailwind": "./src/styles/tailwind/index.css",
-    "./fonts/*": "./src/assets/fonts/*"
+    "./icons/provider": "./src/components/provider-icons/types.ts",
+    "./icons/file-type": "./src/components/file-icons/types.ts",
+    "./fonts/*": "./src/assets/fonts/*",
+    "./audio/*": "./src/assets/audio/*"
   },
   "scripts": {
     "typecheck": "tsgo --noEmit",
     "dev": "vite",
-    "build": "vite build",
     "generate:tailwind": "bun run script/tailwind.ts"
   },
   "devDependencies": {

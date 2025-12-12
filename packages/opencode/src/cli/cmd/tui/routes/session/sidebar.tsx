@@ -4,7 +4,7 @@ import { createStore } from "solid-js/store"
 import { useTheme } from "../../context/theme"
 import { Locale } from "@/util/locale"
 import path from "path"
-import type { AssistantMessage } from "@opencode-ai/sdk"
+import type { AssistantMessage } from "@opencode-ai/sdk/v2"
 import { Global } from "@/global"
 import { Installation } from "@/installation"
 import { useKeybind } from "../../context/keybind"
@@ -104,11 +104,15 @@ export function Sidebar(props: { sessionID: string }) {
                         <text
                           flexShrink={0}
                           style={{
-                            fg: {
-                              connected: theme.success,
-                              failed: theme.error,
-                              disabled: theme.textMuted,
-                            }[item.status],
+                            fg: (
+                              {
+                                connected: theme.success,
+                                failed: theme.error,
+                                disabled: theme.textMuted,
+                                needs_auth: theme.warning,
+                                needs_client_registration: theme.error,
+                              } as Record<string, typeof theme.success>
+                            )[item.status],
                           }}
                         >
                           •
@@ -116,10 +120,14 @@ export function Sidebar(props: { sessionID: string }) {
                         <text fg={theme.text} wrapMode="word">
                           {key}{" "}
                           <span style={{ fg: theme.textMuted }}>
-                            <Switch>
+                            <Switch fallback={item.status}>
                               <Match when={item.status === "connected"}>Connected</Match>
                               <Match when={item.status === "failed" && item}>{(val) => <i>{val().error}</i>}</Match>
-                              <Match when={item.status === "disabled"}>Disabled in configuration</Match>
+                              <Match when={item.status === "disabled"}>Disabled</Match>
+                              <Match when={(item.status as string) === "needs_auth"}>Needs auth</Match>
+                              <Match when={(item.status as string) === "needs_client_registration"}>
+                                Needs client ID
+                              </Match>
                             </Switch>
                           </span>
                         </text>
@@ -240,7 +248,7 @@ export function Sidebar(props: { sessionID: string }) {
           </box>
         </scrollbox>
 
-        <box flexShrink={0} gap={1}>
+        <box flexShrink={0} gap={1} paddingTop={1}>
           <Show when={!hasProviders()}>
             <box
               backgroundColor={theme.backgroundElement}
@@ -251,9 +259,11 @@ export function Sidebar(props: { sessionID: string }) {
               flexDirection="row"
               gap={1}
             >
-              <text flexShrink={0}>⬖</text>
+              <text flexShrink={0} fg={theme.text}>
+                ⬖
+              </text>
               <box flexGrow={1} gap={1}>
-                <text>
+                <text fg={theme.text}>
                   <b>Getting started</b>
                 </text>
                 <text fg={theme.textMuted}>OpenCode includes free models so you can start immediately.</text>
@@ -261,13 +271,13 @@ export function Sidebar(props: { sessionID: string }) {
                   Connect from 75+ providers to use other models, including Claude, GPT, Gemini etc
                 </text>
                 <box flexDirection="row" gap={1} justifyContent="space-between">
-                  <text>Connect provider</text>
+                  <text fg={theme.text}>Connect provider</text>
                   <text fg={theme.textMuted}>/connect</text>
                 </box>
               </box>
             </box>
           </Show>
-          <text fg={theme.textMuted}>{directory()}</text>
+          <text fg={theme.text}>{directory()}</text>
           <text fg={theme.textMuted}>
             <span style={{ fg: theme.success }}>•</span> <b>Open</b>
             <span style={{ fg: theme.text }}>

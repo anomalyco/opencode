@@ -6,6 +6,7 @@ import type {
   Provider,
   Permission,
   UserMessage,
+  Message,
   Part,
   Auth,
   Config,
@@ -174,5 +175,18 @@ export interface Hooks {
       output: string
       metadata: any
     },
+  ) => Promise<void>
+  "experimental.chat.messages.transform"?: (
+    input: {},
+    output: {
+      messages: {
+        info: Message
+        parts: Part[]
+      }[]
+    },
+  ) => Promise<void>
+  "experimental.text.complete"?: (
+    input: { sessionID: string; messageID: string; partID: string },
+    output: { text: string },
   ) => Promise<void>
 }

@@ -9,6 +9,7 @@ import { Icon } from "@opencode-ai/ui/icon"
 import { Tooltip } from "@opencode-ai/ui/tooltip"
 import { DiffChanges } from "@opencode-ai/ui/diff-changes"
 import { ProgressCircle } from "@opencode-ai/ui/progress-circle"
+import { ResizeHandle } from "@opencode-ai/ui/resize-handle"
 import { Tabs } from "@opencode-ai/ui/tabs"
 import { Code } from "@opencode-ai/ui/code"
 import { SessionTurn } from "@opencode-ai/ui/session-turn"
@@ -27,11 +28,11 @@ import {
 import type { DragEvent, Transformer } from "@thisbeyond/solid-dnd"
 import type { JSX } from "solid-js"
 import { useSync } from "@/context/sync"
-import { useSession } from "@/context/session"
+import { useSession, type LocalPTY } from "@/context/session"
 import { useLayout } from "@/context/layout"
 import { getDirectory, getFilename } from "@opencode-ai/util/path"
-import { Diff } from "@opencode-ai/ui/diff"
 import { Terminal } from "@/components/terminal"
+import { checksum } from "@opencode-ai/util/encode"
 
 export default function Page() {
   const layout = useLayout()
@@ -42,6 +43,7 @@ export default function Page() {
     clickTimer: undefined as number | undefined,
     fileSelectOpen: false,
     activeDraggable: undefined as string | undefined,
+    activeTerminalDraggable: undefined as string | undefined,
   })
   let inputRef!: HTMLDivElement
 
@@ -177,6 +179,49 @@ export default function Page() {
     setStore("activeDraggable", undefined)
   }
 
+  const handleTerminalDragStart = (event: unknown) => {
+    const id = getDraggableId(event)
+    if (!id) return
+    setStore("activeTerminalDraggable", id)
+  }
+
+  const handleTerminalDragOver = (event: DragEvent) => {
+    const { draggable, droppable } = event
+    if (draggable && droppable) {
+      const terminals = session.terminal.all()
+      const fromIndex = terminals.findIndex((t) => t.id === draggable.id.toString())
+      const toIndex = terminals.findIndex((t) => t.id === droppable.id.toString())
+      if (fromIndex !== -1 && toIndex !== -1 && fromIndex !== toIndex) {
+        session.terminal.move(draggable.id.toString(), toIndex)
+      }
+    }
+  }
+
+  const handleTerminalDragEnd = () => {
+    setStore("activeTerminalDraggable", undefined)
+  }
+
+  const SortableTerminalTab = (props: { terminal: LocalPTY }): JSX.Element => {
+    const sortable = createSortable(props.terminal.id)
+    return (
+      // @ts-ignore
+      <div use:sortable classList={{ "h-full": true, "opacity-0": sortable.isActiveDraggable }}>
+        <div class="relative h-full">
+          <Tabs.Trigger
+            value={props.terminal.id}
+            closeButton={
+              session.terminal.all().length > 1 && (
+                <IconButton icon="close" variant="ghost" onClick={() => session.terminal.close(props.terminal.id)} />
+              )
+            }
+          >
+            {props.terminal.title}
+          </Tabs.Trigger>
+        </div>
+      </div>
+    )
+  }
+
   const FileVisual = (props: { file: LocalFile; active?: boolean }): JSX.Element => {
     return (
       <div class="flex items-center gap-x-1.5">
@@ -219,7 +264,6 @@ export default function Page() {
     onTabClose: (tab: string) => void
   }): JSX.Element => {
     const sortable = createSortable(props.tab)
-
     const [file] = createResource(
       () => props.tab,
       async (tab) => {
@@ -229,7 +273,6 @@ export default function Page() {
         return undefined
       },
     )
-
     return (
       // @ts-ignore
       <div use:sortable classList={{ "h-full": true, "opacity-0": sortable.isActiveDraggable }}>
@@ -282,7 +325,7 @@ export default function Page() {
   const wide = createMemo(() => layout.review.state() === "tab" || !session.diffs().length)
 
   return (
-    <div class="relative bg-background-base size-full overflow-x-hidden flex flex-col items-start">
+    <div class="relative bg-background-base size-full overflow-x-hidden flex flex-col">
       <div class="min-h-0 grow w-full">
         <DragDropProvider
           onDragStart={handleDragStart}
@@ -372,7 +415,6 @@ export default function Page() {
                           messages={session.messages.user()}
                           current={session.messages.active()}
                           onMessageSelect={session.messages.setActive}
-                          working={session.working()}
                           wide={wide()}
                         />
                         <SessionTurn
@@ -389,7 +431,6 @@ export default function Page() {
                                   ? "pr-6 pl-18"
                                   : "px-6"),
                           }}
-                          diffComponent={Diff}
                         />
                       </div>
                     </Match>
@@ -403,15 +444,19 @@ export default function Page() {
                             <span class="text-text-strong">{getFilename(sync.data.path.directory)}</span>
                           </div>
                         </div>
-                        <div class="flex justify-center items-center gap-3">
-                          <Icon name="pencil-line" size="small" />
-                          <div class="text-12-medium text-text-weak">
-                            Last modified&nbsp;
-                            <span class="text-text-strong">
-                              {DateTime.fromMillis(sync.data.project.time.created).toRelative()}
-                            </span>
-                          </div>
-                        </div>
+                        <Show when={sync.project}>
+                          {(project) => (
+                            <div class="flex justify-center items-center gap-3">
+                              <Icon name="pencil-line" size="small" />
+                              <div class="text-12-medium text-text-weak">
+                                Last modified&nbsp;
+                                <span class="text-text-strong">
+                                  {DateTime.fromMillis(project().time.updated ?? project().time.created).toRelative()}
+                                </span>
+                              </div>
+                            </div>
+                          )}
+                        </Show>
                       </div>
                     </Match>
                   </Switch>
@@ -438,7 +483,6 @@ export default function Page() {
                         container: "px-6",
                       }}
                       diffs={session.diffs()}
-                      diffComponent={Diff}
                       actions={
                         <Tooltip value="Open in tab">
                           <IconButton
@@ -470,7 +514,6 @@ export default function Page() {
                       container: "px-6",
                     }}
                     diffs={session.diffs()}
-                    diffComponent={Diff}
                     split
                   />
                 </div>
@@ -493,7 +536,11 @@ export default function Page() {
                       <Match when={file()}>
                         {(f) => (
                           <Code
-                            file={{ name: f().path, contents: f().content?.content ?? "" }}
+                            file={{
+                              name: f().path,
+                              contents: f().content?.content ?? "",
+                              cacheKey: checksum(f().content?.content ?? ""),
+                            }}
                             overflow="scroll"
                             class="pb-40"
                           />
@@ -574,7 +621,6 @@ export default function Page() {
             onOpenChange={(open) => setStore("fileSelectOpen", open)}
             onSelect={(x) => {
               if (x) {
-                local.file.open(x)
                 return session.layout.openTab("file://" + x)
               }
               return undefined
@@ -606,76 +652,63 @@ export default function Page() {
           class="relative w-full flex flex-col shrink-0 border-t border-border-weak-base"
           style={{ height: `${layout.terminal.height()}px` }}
         >
-          <div
-            class="absolute inset-x-0 top-0 z-10 h-2 -translate-y-1/2 cursor-ns-resize"
-            onMouseDown={(e) => {
-              e.preventDefault()
-              const startY = e.clientY
-              const startHeight = layout.terminal.height()
-              const maxHeight = window.innerHeight * 0.6
-              const minHeight = 100
-              const collapseThreshold = 50
-              let currentHeight = startHeight
-
-              document.body.style.userSelect = "none"
-              document.body.style.overflow = "hidden"
-
-              const onMouseMove = (moveEvent: MouseEvent) => {
-                const deltaY = startY - moveEvent.clientY
-                currentHeight = startHeight + deltaY
-                const clampedHeight = Math.min(maxHeight, Math.max(minHeight, currentHeight))
-                layout.terminal.resize(clampedHeight)
-              }
-
-              const onMouseUp = () => {
-                document.body.style.userSelect = ""
-                document.body.style.overflow = ""
-                document.removeEventListener("mousemove", onMouseMove)
-                document.removeEventListener("mouseup", onMouseUp)
-
-                if (currentHeight < collapseThreshold) {
-                  layout.terminal.close()
-                }
-              }
-
-              document.addEventListener("mousemove", onMouseMove)
-              document.addEventListener("mouseup", onMouseUp)
-            }}
+          <ResizeHandle
+            direction="vertical"
+            size={layout.terminal.height()}
+            min={100}
+            max={window.innerHeight * 0.6}
+            collapseThreshold={50}
+            onResize={layout.terminal.resize}
+            onCollapse={layout.terminal.close}
           />
-          <Tabs variant="alt" value={session.terminal.active()} onChange={session.terminal.open}>
-            <Tabs.List class="h-10">
+          <DragDropProvider
+            onDragStart={handleTerminalDragStart}
+            onDragEnd={handleTerminalDragEnd}
+            onDragOver={handleTerminalDragOver}
+            collisionDetector={closestCenter}
+          >
+            <DragDropSensors />
+            <ConstrainDragYAxis />
+            <Tabs variant="alt" value={session.terminal.active()} onChange={session.terminal.open}>
+              <Tabs.List class="h-10">
+                <SortableProvider ids={session.terminal.all().map((t) => t.id)}>
+                  <For each={session.terminal.all()}>{(terminal) => <SortableTerminalTab terminal={terminal} />}</For>
+                </SortableProvider>
+                <div class="h-full flex items-center justify-center">
+                  <Tooltip value="Open file" class="flex items-center">
+                    <IconButton icon="plus-small" variant="ghost" iconSize="large" onClick={session.terminal.new} />
+                  </Tooltip>
+                </div>
+              </Tabs.List>
               <For each={session.terminal.all()}>
                 {(terminal) => (
-                  <Tabs.Trigger
-                    value={terminal.id}
-                    closeButton={
-                      session.terminal.all().length > 1 && (
-                        <IconButton icon="close" variant="ghost" onClick={() => session.terminal.close(terminal.id)} />
-                      )
-                    }
-                  >
-                    {terminal.title}
-                  </Tabs.Trigger>
+                  <Tabs.Content value={terminal.id}>
+                    <Terminal
+                      pty={terminal}
+                      onCleanup={session.terminal.update}
+                      onConnectError={() => session.terminal.clone(terminal.id)}
+                    />
+                  </Tabs.Content>
                 )}
               </For>
-              <div class="h-full flex items-center justify-center">
-                <Tooltip value="Open file" class="flex items-center">
-                  <IconButton icon="plus-small" variant="ghost" iconSize="large" onClick={session.terminal.new} />
-                </Tooltip>
-              </div>
-            </Tabs.List>
-            <For each={session.terminal.all()}>
-              {(terminal) => (
-                <Tabs.Content value={terminal.id}>
-                  <Terminal
-                    pty={terminal}
-                    onCleanup={session.terminal.update}
-                    onConnectError={() => session.terminal.clone(terminal.id)}
-                  />
-                </Tabs.Content>
-              )}
-            </For>
-          </Tabs>
+            </Tabs>
+            <DragOverlay>
+              <Show when={store.activeTerminalDraggable}>
+                {(draggedId) => {
+                  const terminal = createMemo(() => session.terminal.all().find((t) => t.id === draggedId()))
+                  return (
+                    <Show when={terminal()}>
+                      {(t) => (
+                        <div class="relative p-1 h-10 flex items-center bg-background-stronger text-14-regular">
+                          {t().title}
+                        </div>
+                      )}
+                    </Show>
+                  )
+                }}
+              </Show>
+            </DragOverlay>
+          </DragDropProvider>
         </div>
       </Show>
     </div>
