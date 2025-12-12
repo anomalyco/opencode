@@ -423,9 +423,9 @@ export default function Layout(props: ParentProps) {
   }
 
   return (
-    <div class="relative flex-1 flex flex-col">
+    <div class="relative flex-1 min-h-0 flex flex-col">
       <Header navigateToProject={navigateToProject} navigateToSession={navigateToSession} />
-      <div class="h-[calc(100%-3rem)] flex">
+      <div class="flex-1 min-h-0 flex">
         <div
           classList={{
             "relative @container w-12 pb-5 shrink-0 bg-background-base": true,
