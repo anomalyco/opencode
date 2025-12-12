@@ -435,7 +435,7 @@ export namespace MCP {
       throw new Error(`MCP server not found: ${mcpName}`)
     }
 
-    if (mcpConfig.type !== "remote") {
+    if (!Config.isRemoteMcpConfig(mcpConfig)) {
       throw new Error(`MCP server ${mcpName} is not a remote server`)
     }
 
@@ -573,7 +573,7 @@ export namespace MCP {
   export async function supportsOAuth(mcpName: string): Promise<boolean> {
     const cfg = await Config.get()
     const mcpConfig = cfg.mcp?.[mcpName]
-    return mcpConfig?.type === "remote" && mcpConfig.oauth !== false
+    return !!mcpConfig && Config.isRemoteMcpConfig(mcpConfig) && mcpConfig.oauth !== false
   }
 
   /**
