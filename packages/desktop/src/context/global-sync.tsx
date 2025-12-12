@@ -55,12 +55,14 @@ export const { use: useGlobalSync, provider: GlobalSyncProvider } = createSimple
     const globalSDK = useGlobalSDK()
     const [globalStore, setGlobalStore] = createStore<{
       ready: boolean
+      path: Path
       project: Project[]
       provider: ProviderListResponse
       provider_auth: ProviderAuthResponse
       children: Record<string, State>
     }>({
       ready: false,
+      path: { state: "", config: "", worktree: "", directory: "", home: "" },
       project: [],
       provider: { all: [], connected: [], default: {} },
       provider_auth: {},
@@ -224,6 +226,9 @@ export const { use: useGlobalSync, provider: GlobalSyncProvider } = createSimple
 
     async function bootstrap() {
       return Promise.all([
+        globalSDK.client.path.get().then((x) => {
+          setGlobalStore("path", x.data!)
+        }),
         globalSDK.client.project.list().then(async (x) => {
           setGlobalStore(
             "project",
