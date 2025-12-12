@@ -66,7 +66,7 @@ The `-a, --agent` flag accepts a fuzzy-matched string with space delimited param
 You can chain multiple agents together - when an agent exits a mode, Forge automatically switches to the next agent in the chain.
 
 ```sh
-# Plan with Claude, implement with Codex**
+# Plan with Claude, implement with Codex
 forge --agent "name=claude model=opus mode=plan" --agent "name=codex model=gpt-5.1-codex-max mode=agent" "Identify all of the TODO comments in this project and solve them"
 ```
 
