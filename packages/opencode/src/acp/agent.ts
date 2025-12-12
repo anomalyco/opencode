@@ -914,6 +914,8 @@ export namespace ACP {
             {
               sessionID,
               directory,
+              providerID: model.providerID,
+              modelID: model.modelID,
             },
             { throwOnError: true },
           )
