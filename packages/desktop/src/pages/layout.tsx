@@ -498,7 +498,7 @@ export default function Layout(props: ParentProps) {
                     <Button
                       class="flex w-full text-left justify-start text-12-medium text-text-strong stroke-[1.5px] rounded-lg rounded-t-none shadow-none border-t border-border-weak-base pl-2.25 pb-px"
                       size="large"
-                      icon="plus-small"
+                      icon="plus"
                       onClick={connectProvider}
                     >
                       <Show when={layout.sidebar.opened()}>Connect provider</Show>
@@ -512,7 +512,7 @@ export default function Layout(props: ParentProps) {
                     class="flex w-full text-left justify-start text-12-medium text-text-base stroke-[1.5px] rounded-lg px-2"
                     variant="ghost"
                     size="large"
-                    icon="plus-small"
+                    icon="plus"
                     onClick={connectProvider}
                   >
                     <Show when={layout.sidebar.opened()}>Connect provider</Show>
