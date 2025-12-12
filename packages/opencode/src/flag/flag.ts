@@ -11,6 +11,7 @@ export namespace Flag {
   export const OPENCODE_ENABLE_EXPERIMENTAL_MODELS = truthy("OPENCODE_ENABLE_EXPERIMENTAL_MODELS")
   export const OPENCODE_DISABLE_AUTOCOMPACT = truthy("OPENCODE_DISABLE_AUTOCOMPACT")
   export const OPENCODE_FAKE_VCS = process.env["OPENCODE_FAKE_VCS"]
+  export const OPENCODE_CLIENT = process.env["OPENCODE_CLIENT"] ?? "cli"
 
   // Experimental
   export const OPENCODE_EXPERIMENTAL = truthy("OPENCODE_EXPERIMENTAL")
