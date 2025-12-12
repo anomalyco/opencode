@@ -675,7 +675,7 @@ export default function Page() {
                   <For each={session.terminal.all()}>{(terminal) => <SortableTerminalTab terminal={terminal} />}</For>
                 </SortableProvider>
                 <div class="h-full flex items-center justify-center">
-                  <Tooltip value="Open file" class="flex items-center">
+                  <Tooltip value="New Terminal" class="flex items-center">
                     <IconButton icon="plus-small" variant="ghost" iconSize="large" onClick={session.terminal.new} />
                   </Tooltip>
                 </div>
