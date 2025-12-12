@@ -7,15 +7,10 @@ import { useGlobalSDK } from "./global-sdk"
 import { Project } from "@opencode-ai/sdk/v2"
 
 const AVATAR_COLOR_KEYS = ["pink", "mint", "orange", "purple", "cyan", "lime"] as const
-
 export type AvatarColorKey = (typeof AVATAR_COLOR_KEYS)[number]
 
-export function isAvatarColorKey(value: string): value is AvatarColorKey {
-  return AVATAR_COLOR_KEYS.includes(value as AvatarColorKey)
-}
-
 export function getAvatarColors(key?: string) {
-  if (key && isAvatarColorKey(key)) {
+  if (key && AVATAR_COLOR_KEYS.includes(key as AvatarColorKey)) {
     return {
       background: `var(--avatar-background-${key})`,
       foreground: `var(--avatar-text-${key})`,
@@ -50,7 +45,7 @@ export const { use: useLayout, provider: LayoutProvider } = createSimpleContext(
         },
       }),
       {
-        name: "default-layout.v7",
+        name: "layout.v1",
       },
     )
     const [ephemeral, setEphemeral] = createStore<{

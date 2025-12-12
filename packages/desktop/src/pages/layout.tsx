@@ -1,4 +1,16 @@
-import { createEffect, createMemo, For, Match, onCleanup, onMount, ParentProps, Show, Switch, type JSX } from "solid-js"
+import {
+  createEffect,
+  createMemo,
+  createSignal,
+  For,
+  Match,
+  onCleanup,
+  onMount,
+  ParentProps,
+  Show,
+  Switch,
+  type JSX,
+} from "solid-js"
 import { DateTime } from "luxon"
 import { A, useNavigate, useParams } from "@solidjs/router"
 import { useLayout, getAvatarColors } from "@/context/layout"
@@ -42,6 +54,7 @@ import { TextField } from "@opencode-ai/ui/text-field"
 import { showToast, Toast } from "@opencode-ai/ui/toast"
 import { useGlobalSDK } from "@/context/global-sdk"
 import { Spinner } from "@opencode-ai/ui/spinner"
+import { useNotification } from "@/context/notification"
 
 export default function Layout(props: ParentProps) {
   const [store, setStore] = createStore({
@@ -54,6 +67,7 @@ export default function Layout(props: ParentProps) {
   const globalSync = useGlobalSync()
   const layout = useLayout()
   const platform = usePlatform()
+  const notification = useNotification()
   const navigate = useNavigate()
   const currentDirectory = createMemo(() => base64Decode(params.dir ?? ""))
   const sessions = createMemo(() => globalSync.child(currentDirectory())[0].session ?? [])
@@ -77,9 +91,11 @@ export default function Layout(props: ParentProps) {
   }
 
   function closeProject(directory: string) {
+    const index = layout.projects.list().findIndex((x) => x.worktree === directory)
+    const next = layout.projects.list()[index + 1]
     layout.projects.close(directory)
-    // TODO: more intelligent navigation
-    navigate("/")
+    if (next) navigateToProject(next.worktree)
+    else navigate("/")
   }
 
   async function chooseProject() {
@@ -105,6 +121,7 @@ export default function Layout(props: ParentProps) {
     if (!params.dir || !params.id) return
     const directory = base64Decode(params.dir)
     setStore("lastSession", directory, params.id)
+    notification.session.markViewed(params.id)
   })
 
   createEffect(() => {
@@ -164,6 +181,48 @@ export default function Layout(props: ParentProps) {
     return <></>
   }
 
+  const ProjectAvatar = (props: {
+    project: Project
+    class?: string
+    expandable?: boolean
+    notify?: boolean
+  }): JSX.Element => {
+    const notification = useNotification()
+    const notifications = createMemo(() => notification.project.unseen(props.project.worktree))
+    const hasError = createMemo(() => notifications().some((n) => n.type === "error"))
+    const name = createMemo(() => getFilename(props.project.worktree))
+    const mask = "radial-gradient(circle 5px at calc(100% - 2px) 2px, transparent 5px, black 5.5px)"
+    return (
+      <div class="relative size-6 shrink-0">
+        <Avatar
+          fallback={name()}
+          src={props.project.icon?.url}
+          {...getAvatarColors(props.project.icon?.color)}
+          class={`size-full ${props.class ?? ""}`}
+          style={
+            notifications().length > 0 && props.notify ? { "-webkit-mask-image": mask, "mask-image": mask } : undefined
+          }
+        />
+        <Show when={props.expandable}>
+          <Icon
+            name="chevron-right"
+            size="large"
+            class="hidden size-full items-center justify-center text-text-subtle group-hover/session:flex group-data-[expanded]/trigger:rotate-90 transition-transform duration-50"
+          />
+        </Show>
+        <Show when={notifications().length > 0 && props.notify}>
+          <div
+            classList={{
+              "absolute -top-0.5 -right-0.5 size-1.5 rounded-full": true,
+              "bg-icon-critical-base": hasError(),
+              "bg-text-interactive-base": !hasError(),
+            }}
+          />
+        </Show>
+      </div>
+    )
+  }
+
   const ProjectVisual = (props: { project: Project & { expanded: boolean }; class?: string }): JSX.Element => {
     const name = createMemo(() => getFilename(props.project.worktree))
     return (
@@ -176,14 +235,7 @@ export default function Layout(props: ParentProps) {
             class="flex items-center justify-between gap-3 w-full px-1 self-stretch h-8 border-none rounded-lg"
           >
             <div class="flex items-center gap-3 p-0 text-left min-w-0 grow">
-              <div class="size-6 shrink-0">
-                <Avatar
-                  fallback={name()}
-                  src={props.project.icon?.url}
-                  {...getAvatarColors(props.project.icon?.color)}
-                  class="size-full"
-                />
-              </div>
+              <ProjectAvatar project={props.project} />
               <span class="truncate text-14-medium text-text-strong">{name()}</span>
             </div>
           </Button>
@@ -196,14 +248,7 @@ export default function Layout(props: ParentProps) {
             data-selected={props.project.worktree === currentDirectory()}
             onClick={() => navigateToProject(props.project.worktree)}
           >
-            <div class="size-6 shrink-0">
-              <Avatar
-                fallback={name()}
-                src={props.project.icon?.url}
-                {...getAvatarColors(props.project.icon?.color)}
-                class="size-full"
-              />
-            </div>
+            <ProjectAvatar project={props.project} notify />
           </Button>
         </Match>
       </Switch>
@@ -211,35 +256,30 @@ export default function Layout(props: ParentProps) {
   }
 
   const SortableProject = (props: { project: Project & { expanded: boolean } }): JSX.Element => {
+    const notification = useNotification()
     const sortable = createSortable(props.project.worktree)
     const [projectStore] = globalSync.child(props.project.worktree)
     const slug = createMemo(() => base64Encode(props.project.worktree))
     const name = createMemo(() => getFilename(props.project.worktree))
+    const [expanded, setExpanded] = createSignal(true)
     return (
       // @ts-ignore
       <div use:sortable classList={{ "opacity-30": sortable.isActiveDraggable }}>
         <Switch>
           <Match when={layout.sidebar.opened()}>
-            <Collapsible variant="ghost" defaultOpen class="gap-2 shrink-0">
+            <Collapsible variant="ghost" defaultOpen class="gap-2 shrink-0" onOpenChange={setExpanded}>
               <Button
                 as={"div"}
                 variant="ghost"
                 class="group/session flex items-center justify-between gap-3 w-full px-1 self-stretch h-auto border-none rounded-lg"
               >
                 <Collapsible.Trigger class="group/trigger flex items-center gap-3 p-0 text-left min-w-0 grow border-none">
-                  <div class="size-6 shrink-0">
-                    <Avatar
-                      fallback={name()}
-                      src={props.project.icon?.url}
-                      {...getAvatarColors(props.project.icon?.color)}
-                      class="size-full group-hover/session:hidden"
-                    />
-                    <Icon
-                      name="chevron-right"
-                      size="large"
-                      class="hidden size-full items-center justify-center text-text-subtle group-hover/session:flex group-data-[expanded]/trigger:rotate-90 transition-transform duration-50"
-                    />
-                  </div>
+                  <ProjectAvatar
+                    project={props.project}
+                    class="group-hover/session:hidden"
+                    expandable
+                    notify={!expanded()}
+                  />
                   <span class="truncate text-14-medium text-text-strong">{name()}</span>
                 </Collapsible.Trigger>
                 <div class="flex invisible gap-1 items-center group-hover/session:visible has-[[data-expanded]]:visible">
@@ -263,6 +303,8 @@ export default function Layout(props: ParentProps) {
                   <For each={projectStore.session}>
                     {(session) => {
                       const updated = createMemo(() => DateTime.fromMillis(session.time.updated))
+                      const notifications = createMemo(() => notification.session.unseen(session.id))
+                      const hasError = createMemo(() => notifications().some((n) => n.type === "error"))
                       return (
                         <A
                           data-active={session.id === params.id}
@@ -271,28 +313,38 @@ export default function Layout(props: ParentProps) {
                         >
                           <Tooltip placement="right" value={session.title}>
                             <div
-                              class="w-full pl-4 pr-2 py-1 rounded-md
-                                   group-data-[active=true]/session:bg-surface-raised-base-hover
-                                   group-hover/session:bg-surface-raised-base-hover
-                                   group-focus/session:bg-surface-raised-base-hover"
+                              class="relative w-full pl-4 pr-2 py-1 rounded-md
+                                     group-data-[active=true]/session:bg-surface-raised-base-hover
+                                     group-hover/session:bg-surface-raised-base-hover
+                                     group-focus/session:bg-surface-raised-base-hover"
                             >
                               <div class="flex items-center self-stretch gap-6 justify-between">
                                 <span class="text-14-regular text-text-strong overflow-hidden text-ellipsis truncate">
                                   {session.title}
                                 </span>
-                                <span class="text-12-regular text-text-weak text-right whitespace-nowrap">
-                                  {Math.abs(updated().diffNow().as("seconds")) < 60
-                                    ? "Now"
-                                    : updated()
-                                        .toRelative({
-                                          style: "short",
-                                          unit: ["days", "hours", "minutes"],
-                                        })
-                                        ?.replace(" ago", "")
-                                        ?.replace(/ days?/, "d")
-                                        ?.replace(" min.", "m")
-                                        ?.replace(" hr.", "h")}
-                                </span>
+                                <Switch>
+                                  <Match when={hasError()}>
+                                    <div class="size-1.5 shrink-0 mr-1 rounded-full bg-text-diff-delete-base" />
+                                  </Match>
+                                  <Match when={notifications().length > 0}>
+                                    <div class="size-1.5 shrink-0 mr-1 rounded-full bg-text-interactive-base" />
+                                  </Match>
+                                  <Match when={true}>
+                                    <span class="text-12-regular text-text-weak text-right whitespace-nowrap">
+                                      {Math.abs(updated().diffNow().as("seconds")) < 60
+                                        ? "Now"
+                                        : updated()
+                                            .toRelative({
+                                              style: "short",
+                                              unit: ["days", "hours", "minutes"],
+                                            })
+                                            ?.replace(" ago", "")
+                                            ?.replace(/ days?/, "d")
+                                            ?.replace(" min.", "m")
+                                            ?.replace(" hr.", "h")}
+                                    </span>
+                                  </Match>
+                                </Switch>
                               </div>
                               <div class="hidden _flex justify-between items-center self-stretch">
                                 <span class="text-12-regular text-text-weak">{`${session.summary?.files || "No"} file${session.summary?.files !== 1 ? "s" : ""} changed`}</span>

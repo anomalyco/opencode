@@ -12,7 +12,8 @@
     "./styles/tailwind": "./src/styles/tailwind/index.css",
     "./icons/provider": "./src/components/provider-icons/types.ts",
     "./icons/file-type": "./src/components/file-icons/types.ts",
-    "./fonts/*": "./src/assets/fonts/*"
+    "./fonts/*": "./src/assets/fonts/*",
+    "./audio/*": "./src/assets/audio/*"
   },
   "scripts": {
     "typecheck": "tsgo --noEmit",

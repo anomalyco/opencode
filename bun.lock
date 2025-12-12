@@ -131,6 +131,7 @@
         "@opencode-ai/util": "workspace:*",
         "@shikijs/transformers": "3.9.2",
         "@solid-primitives/active-element": "2.1.3",
+        "@solid-primitives/audio": "1.4.2",
         "@solid-primitives/event-bus": "1.1.2",
         "@solid-primitives/resize-observer": "2.1.3",
         "@solid-primitives/scroll": "2.1.3",
@@ -1547,6 +1548,8 @@
     "@smithy/uuid": ["@smithy/uuid@1.1.0", "", { "dependencies": { "tslib": "^2.6.2" } }, "sha512-4aUIteuyxtBUhVdiQqcDhKFitwfd9hqoSDYY2KRXiWtgoWJ9Bmise+KfEPDiVHWeJepvF8xJO9/9+WDIciMFFw=="],
 
     "@solid-primitives/active-element": ["@solid-primitives/active-element@2.1.3", "", { "dependencies": { "@solid-primitives/event-listener": "^2.4.3", "@solid-primitives/utils": "^6.3.2" }, "peerDependencies": { "solid-js": "^1.6.12" } }, "sha512-9t5K4aR2naVDj950XU8OjnLgOg94a8k5wr6JNOPK+N5ESLsJDq42c1ZP8UKpewi1R+wplMMxiM6OPKRzbxJY7A=="],
+
+    "@solid-primitives/audio": ["@solid-primitives/audio@1.4.2", "", { "dependencies": { "@solid-primitives/static-store": "^0.1.2", "@solid-primitives/utils": "^6.3.2" }, "peerDependencies": { "solid-js": "^1.6.12" } }, "sha512-UMD3ORQfI5Ky8yuKPxidDiEazsjv/dsoiKK5yZxLnsgaeNR1Aym3/77h/qT1jBYeXUgj4DX6t7NMpFUSVr14OQ=="],
 
     "@solid-primitives/event-bus": ["@solid-primitives/event-bus@1.1.2", "", { "dependencies": { "@solid-primitives/utils": "^6.3.2" }, "peerDependencies": { "solid-js": "^1.6.12" } }, "sha512-l+n10/51neGcMaP3ypYt21bXfoeWh8IaC8k7fYuY3ww2a8S1Zv2N2a7FF5Qn+waTu86l0V8/nRHjkyqVIZBYwA=="],
 

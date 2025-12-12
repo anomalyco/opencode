@@ -1,0 +1,130 @@
+import { createStore } from "solid-js/store"
+import { createSimpleContext } from "@opencode-ai/ui/context"
+import { makePersisted } from "@solid-primitives/storage"
+import { useGlobalSDK } from "./global-sdk"
+import { EventSessionError } from "@opencode-ai/sdk/v2"
+import { makeAudioPlayer } from "@solid-primitives/audio"
+import idleSound from "@opencode-ai/ui/audio/staplebops-01.aac"
+
+type NotificationBase = {
+  directory?: string
+  session?: string
+  metadata?: any
+  time: number
+  viewed: boolean
+}
+
+type TurnCompleteNotification = NotificationBase & {
+  type: "turn-complete"
+}
+
+type ErrorNotification = NotificationBase & {
+  type: "error"
+  error: EventSessionError["properties"]["error"]
+}
+
+export type Notification = TurnCompleteNotification | ErrorNotification
+
+export type AudioSettings = {
+  enabled: boolean
+  volume: number
+}
+
+export const { use: useNotification, provider: NotificationProvider } = createSimpleContext({
+  name: "Notification",
+  init: () => {
+    const idlePlayer = makeAudioPlayer(idleSound)
+    const globalSDK = useGlobalSDK()
+
+    const [store, setStore] = makePersisted(
+      createStore({
+        list: [] as Notification[],
+        audio: {
+          enabled: true,
+          volume: 1,
+        } as AudioSettings,
+      }),
+      {
+        name: "notification.v1",
+      },
+    )
+
+    // onMount(() => {
+    //   const daysToKeep = 7
+    //   // setStore("list", (n) => n.filter((n) => !n.viewed && n.time + 1000 * 60 * 60 * 24 * daysToKeep < Date.now()))
+    // })
+
+    globalSDK.event.listen((e) => {
+      const directory = e.name
+      const event = e.details
+      const base = {
+        directory,
+        time: Date.now(),
+        viewed: false,
+      }
+      switch (event.type) {
+        case "session.idle": {
+          if (store.audio.enabled) {
+            idlePlayer.setVolume(store.audio.volume)
+            idlePlayer.play()
+          }
+          const session = event.properties.sessionID
+          setStore("list", store.list.length, {
+            ...base,
+            type: "turn-complete",
+            session,
+          })
+          break
+        }
+        case "session.error": {
+          const session = event.properties.sessionID ?? "global"
+          // errorPlayer.play()
+          setStore("list", store.list.length, {
+            ...base,
+            type: "error",
+            session,
+            error: "error" in event.properties ? event.properties.error : undefined,
+          })
+          break
+        }
+      }
+    })
+
+    return {
+      session: {
+        all(session: string) {
+          return store.list.filter((n) => n.session === session)
+        },
+        unseen(session: string) {
+          return store.list.filter((n) => n.session === session && !n.viewed)
+        },
+        markViewed(session: string) {
+          setStore("list", (n) => n.session === session, "viewed", true)
+        },
+      },
+      project: {
+        all(directory: string) {
+          return store.list.filter((n) => n.directory === directory)
+        },
+        unseen(directory: string) {
+          return store.list.filter((n) => n.directory === directory && !n.viewed)
+        },
+        markViewed(directory: string) {
+          setStore("list", (n) => n.directory === directory, "viewed", true)
+        },
+      },
+      audio: {
+        get settings() {
+          return store.audio
+        },
+        setEnabled(enabled: boolean) {
+          setStore("audio", "enabled", enabled)
+        },
+        setVolume(volume: number) {
+          const clamped = Math.max(0, Math.min(1, volume))
+          setStore("audio", "volume", clamped)
+        },
+      },
+    }
+  },
+})
