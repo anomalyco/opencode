@@ -1,7 +1,7 @@
 import { createEffect, createMemo, For, Match, onCleanup, onMount, ParentProps, Show, Switch, type JSX } from "solid-js"
 import { DateTime } from "luxon"
 import { A, useNavigate, useParams } from "@solidjs/router"
-import { useLayout } from "@/context/layout"
+import { useLayout, getAvatarColors } from "@/context/layout"
 import { useGlobalSync } from "@/context/global-sync"
 import { base64Decode, base64Encode } from "@opencode-ai/util/encode"
 import { Mark } from "@opencode-ai/ui/logo"
@@ -180,7 +180,7 @@ export default function Layout(props: ParentProps) {
                 <Avatar
                   fallback={name()}
                   src={props.project.icon?.url}
-                  background={props.project.icon?.color ?? "var(--surface-info-base)"}
+                  {...getAvatarColors(props.project.icon?.color)}
                   class="size-full"
                 />
               </div>
@@ -200,7 +200,7 @@ export default function Layout(props: ParentProps) {
               <Avatar
                 fallback={name()}
                 src={props.project.icon?.url}
-                background={props.project.icon?.color ?? "var(--surface-info-base)"}
+                {...getAvatarColors(props.project.icon?.color)}
                 class="size-full"
               />
             </div>
@@ -231,7 +231,7 @@ export default function Layout(props: ParentProps) {
                     <Avatar
                       fallback={name()}
                       src={props.project.icon?.url}
-                      background={props.project.icon?.color ?? "var(--surface-info-base)"}
+                      {...getAvatarColors(props.project.icon?.color)}
                       class="size-full group-hover/session:hidden"
                     />
                     <Icon
@@ -536,17 +536,17 @@ export default function Layout(props: ParentProps) {
                 </Button>
               </Tooltip>
             </Show>
-            <Tooltip placement="right" value="Settings" inactive={layout.sidebar.opened()}>
-              <Button
-                disabled
-                class="flex w-full text-left justify-start text-12-medium text-text-base stroke-[1.5px] rounded-lg px-2"
-                variant="ghost"
-                size="large"
-                icon="settings-gear"
-              >
-                <Show when={layout.sidebar.opened()}>Settings</Show>
-              </Button>
-            </Tooltip>
+            {/* <Tooltip placement="right" value="Settings" inactive={layout.sidebar.opened()}> */}
+            {/*   <Button */}
+            {/*     disabled */}
+            {/*     class="flex w-full text-left justify-start text-12-medium text-text-base stroke-[1.5px] rounded-lg px-2" */}
+            {/*     variant="ghost" */}
+            {/*     size="large" */}
+            {/*     icon="settings-gear" */}
+            {/*   > */}
+            {/*     <Show when={layout.sidebar.opened()}>Settings</Show> */}
+            {/*   </Button> */}
+            {/* </Tooltip> */}
             <Tooltip placement="right" value="Share feedback" inactive={layout.sidebar.opened()}>
               <Button
                 as={"a"}

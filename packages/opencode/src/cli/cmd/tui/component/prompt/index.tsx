@@ -25,6 +25,7 @@ import { Locale } from "@/util/locale"
 import { createColors, createFrames } from "../../ui/spinner.ts"
 import { useDialog } from "@tui/ui/dialog"
 import { DialogProvider as DialogProviderConnect } from "../dialog-provider"
+import { DialogAlert } from "../../ui/dialog-alert"
 import { useToast } from "../../ui/toast"
 
 export type PromptProps = {
@@ -908,8 +909,13 @@ export function Prompt(props: PromptProps) {
                       if (!r) return
                       if (r.message.includes("exceeded your current quota") && r.message.includes("gemini"))
                         return "gemini is way too hot right now"
-                      if (r.message.length > 50) return r.message.slice(0, 50) + "..."
+                      if (r.message.length > 80) return r.message.slice(0, 80) + "..."
                       return r.message
+                    })
+                    const isTruncated = createMemo(() => {
+                      const r = retry()
+                      if (!r) return false
+                      return r.message.length > 120
                     })
                     const [seconds, setSeconds] = createSignal(0)
                     onMount(() => {
@@ -922,12 +928,28 @@ export function Prompt(props: PromptProps) {
                         clearInterval(timer)
                       })
                     })
+                    const handleMessageClick = () => {
+                      const r = retry()
+                      if (!r) return
+                      if (isTruncated()) {
+                        DialogAlert.show(dialog, "Retry Error", r.message)
+                      }
+                    }
+
+                    const retryText = () => {
+                      const r = retry()
+                      if (!r) return ""
+                      const baseMessage = message()
+                      const truncatedHint = isTruncated() ? " (click to expand)" : ""
+                      const retryInfo = ` [retrying ${seconds() > 0 ? `in ${seconds()}s ` : ""}attempt #${r.attempt}]`
+                      return baseMessage + truncatedHint + retryInfo
+                    }
+
                     return (
                       <Show when={retry()}>
-                        <text fg={theme.error}>
-                          {message()} [retrying {seconds() > 0 ? `in ${seconds()}s ` : ""}
-                          attempt #{retry()!.attempt}]
-                        </text>
+                        <box onMouseUp={handleMessageClick}>
+                          <text fg={theme.error}>{retryText()}</text>
+                        </box>
                       </Show>
                     )
                   })()}
