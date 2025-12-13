@@ -143,10 +143,10 @@ export const EditTool = Tool.define("edit", {
     for (const [file, issues] of Object.entries(diagnostics)) {
       if (issues.length === 0) continue
       if (file === filePath) {
-        const sorted = issues.toSorted((a, b) => (a.severity ?? 4) - (b.severity ?? 4))
-        const limited = sorted.slice(0, MAX_DIAGNOSTICS_PER_FILE)
+        const errors = issues.filter((item) => item.severity === 1)
+        const limited = errors.slice(0, MAX_DIAGNOSTICS_PER_FILE)
         const suffix =
-          issues.length > MAX_DIAGNOSTICS_PER_FILE ? `\n... and ${issues.length - MAX_DIAGNOSTICS_PER_FILE} more` : ""
+          errors.length > MAX_DIAGNOSTICS_PER_FILE ? `\n... and ${errors.length - MAX_DIAGNOSTICS_PER_FILE} more` : ""
         output += `\nThis file has errors, please fix\n<file_diagnostics>\n${limited.map(LSP.Diagnostic.pretty).join("\n")}${suffix}\n</file_diagnostics>\n`
         continue
       }
