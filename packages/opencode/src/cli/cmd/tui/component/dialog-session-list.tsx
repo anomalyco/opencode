@@ -63,7 +63,7 @@ export function DialogSessionList() {
     <DialogSelect
       title="Sessions"
       options={options()}
-      current={toDelete() ? undefined : currentSessionID()}
+      current={currentSessionID()}
       onMove={() => {
         setToDelete(undefined)
       }}
