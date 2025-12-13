@@ -3,18 +3,7 @@ import { useData } from "../context"
 import { useDiffComponent } from "../context/diff"
 import { getDirectory, getFilename } from "@opencode-ai/util/path"
 import { checksum } from "@opencode-ai/util/encode"
-import {
-  createEffect,
-  createMemo,
-  createSignal,
-  For,
-  Match,
-  onCleanup,
-  onMount,
-  ParentProps,
-  Show,
-  Switch,
-} from "solid-js"
+import { createEffect, createMemo, createSignal, For, Match, onCleanup, ParentProps, Show, Switch } from "solid-js"
 import { createResizeObserver } from "@solid-primitives/resize-observer"
 import { DiffChanges } from "./diff-changes"
 import { Typewriter } from "./typewriter"
@@ -61,12 +50,15 @@ export function SessionTurn(
 
   let scrollRef: HTMLDivElement | undefined
   const [contentRef, setContentRef] = createSignal<HTMLDivElement>()
-  const [stickyHeaderRef, setStickyHeaderRef] = createSignal<HTMLDivElement>()
+  const [stickyTitleRef, setStickyTitleRef] = createSignal<HTMLDivElement>()
+  const [stickyTriggerRef, setStickyTriggerRef] = createSignal<HTMLDivElement>()
   const [userScrolled, setUserScrolled] = createSignal(false)
   const [stickyHeaderHeight, setStickyHeaderHeight] = createSignal(0)
+  const [scrollY, setScrollY] = createSignal(0)
 
   function handleScroll() {
     if (!scrollRef) return
+    setScrollY(scrollRef.scrollTop)
     const { scrollTop, scrollHeight, clientHeight } = scrollRef
     const atBottom = scrollHeight - scrollTop - clientHeight < 50
     if (!atBottom && working()) {
@@ -88,15 +80,24 @@ export function SessionTurn(
 
   createResizeObserver(contentRef, () => {
     if (!scrollRef || userScrolled() || !working()) return
-    scrollRef.scrollTop = scrollRef.scrollHeight
+    requestAnimationFrame(() => {
+      if (!scrollRef) return
+      scrollRef.scrollTop = scrollRef.scrollHeight
+    })
   })
 
-  createResizeObserver(stickyHeaderRef, ({ height }) => {
-    setStickyHeaderHeight(height + 8)
+  createResizeObserver(stickyTitleRef, ({ height }) => {
+    const triggerHeight = stickyTriggerRef()?.offsetHeight ?? 0
+    setStickyHeaderHeight(height + triggerHeight + 8)
+  })
+
+  createResizeObserver(stickyTriggerRef, ({ height }) => {
+    const titleHeight = stickyTitleRef()?.offsetHeight ?? 0
+    setStickyHeaderHeight(titleHeight + height + 8)
   })
 
   return (
-    <div data-component="session-turn" class={props.classes?.root}>
+    <div data-component="session-turn" class={props.classes?.root} style={{ "--scroll-y": `${scrollY()}px` }}>
       <div ref={scrollRef} onScroll={handleScroll} data-slot="session-turn-content" class={props.classes?.content}>
         <div ref={setContentRef} onClick={handleInteraction}>
           <Show when={message()}>
@@ -250,8 +251,8 @@ export function SessionTurn(
                   class={props.classes?.container}
                   style={{ "--sticky-header-height": `${stickyHeaderHeight()}px` }}
                 >
-                  {/* Sticky Header */}
-                  <div ref={setStickyHeaderRef} data-slot="session-turn-sticky-header">
+                  {/* Title (sticky) */}
+                  <div ref={setStickyTitleRef} data-slot="session-turn-sticky-title">
                     <div data-slot="session-turn-message-header">
                       <div data-slot="session-turn-message-title">
                         <Switch>
@@ -264,29 +265,31 @@ export function SessionTurn(
                         </Switch>
                       </div>
                     </div>
-                    <div data-slot="session-turn-message-content">
-                      <Message message={message()} parts={parts()} />
-                    </div>
-                    <div data-slot="session-turn-response-trigger">
-                      <Button
-                        data-slot="session-turn-collapsible-trigger-content"
-                        variant="ghost"
-                        size="small"
-                        onClick={() => setStore("stepsExpanded", !store.stepsExpanded)}
-                      >
-                        <Show when={working()}>
-                          <Spinner />
-                        </Show>
-                        <Switch>
-                          <Match when={working()}>{store.status ?? "Considering next steps..."}</Match>
-                          <Match when={store.stepsExpanded}>Hide steps</Match>
-                          <Match when={!store.stepsExpanded}>Show steps</Match>
-                        </Switch>
-                        <span>·</span>
-                        <span>{store.duration}</span>
-                        <Icon name="chevron-grabber-vertical" size="small" />
-                      </Button>
-                    </div>
+                  </div>
+                  {/* User Message (non-sticky, scrolls under sticky header) */}
+                  <div data-slot="session-turn-message-content">
+                    <Message message={message()} parts={parts()} />
+                  </div>
+                  {/* Trigger (sticky) */}
+                  <div ref={setStickyTriggerRef} data-slot="session-turn-response-trigger">
+                    <Button
+                      data-slot="session-turn-collapsible-trigger-content"
+                      variant="ghost"
+                      size="small"
+                      onClick={() => setStore("stepsExpanded", !store.stepsExpanded)}
+                    >
+                      <Show when={working()}>
+                        <Spinner />
+                      </Show>
+                      <Switch>
+                        <Match when={working()}>{store.status ?? "Considering next steps..."}</Match>
+                        <Match when={store.stepsExpanded}>Hide steps</Match>
+                        <Match when={!store.stepsExpanded}>Show steps</Match>
+                      </Switch>
+                      <span>·</span>
+                      <span>{store.duration}</span>
+                      <Icon name="chevron-grabber-vertical" size="small" />
+                    </Button>
                   </div>
                   {/* Response */}
                   <Show when={store.stepsExpanded}>
