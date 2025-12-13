@@ -12,7 +12,7 @@ export function DialogAgents() {
   const dialog = useDialog()
   const toast = useToast()
 
-  onMount(() => dialog.setSize("small"))
+  onMount(() => dialog.setSize("medium"))
 
   async function openInstallGuide(agentName: string) {
     const agent = getAgent(agentName)
