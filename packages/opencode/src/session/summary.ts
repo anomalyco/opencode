@@ -91,7 +91,7 @@ export namespace SessionSummary {
     if (textPart && !userMsg.summary?.title) {
       const result = await generateText({
         maxOutputTokens: small.capabilities.reasoning ? 1500 : 20,
-        providerOptions: ProviderTransform.providerOptions(small.api.npm, small.providerID, options),
+        providerOptions: ProviderTransform.providerOptions(small, options),
         messages: [
           ...SystemPrompt.title(small.providerID).map(
             (x): ModelMessage => ({
@@ -111,7 +111,13 @@ export namespace SessionSummary {
         ],
         headers: small.headers,
         model: language,
-        experimental_telemetry: { isEnabled: cfg.experimental?.openTelemetry },
+        experimental_telemetry: {
+          isEnabled: cfg.experimental?.openTelemetry,
+          metadata: {
+            userId: cfg.username ?? "unknown",
+            sessionId: assistantMsg.sessionID,
+          },
+        },
       })
       log.info("title", { title: result.text })
       userMsg.summary.title = result.text
@@ -124,10 +130,7 @@ export namespace SessionSummary {
           m.info.role === "assistant" && m.parts.some((p) => p.type === "step-finish" && p.reason !== "tool-calls"),
       )
     ) {
-      let summary = messages
-        .findLast((m) => m.info.role === "assistant")
-        ?.parts.findLast((p) => p.type === "text")?.text
-      if (!summary || diffs.length > 0) {
+      if (diffs.length > 0) {
         for (const msg of messages) {
           for (const part of msg.parts) {
             if (part.type === "tool" && part.state.status === "completed") {
@@ -138,7 +141,7 @@ export namespace SessionSummary {
         const result = await generateText({
           model: language,
           maxOutputTokens: 100,
-          providerOptions: ProviderTransform.providerOptions(small.api.npm, small.providerID, options),
+          providerOptions: ProviderTransform.providerOptions(small, options),
           messages: [
             ...SystemPrompt.summarize(small.providerID).map(
               (x): ModelMessage => ({
@@ -153,12 +156,18 @@ export namespace SessionSummary {
             },
           ],
           headers: small.headers,
-          experimental_telemetry: { isEnabled: cfg.experimental?.openTelemetry },
+          experimental_telemetry: {
+            isEnabled: cfg.experimental?.openTelemetry,
+            metadata: {
+              userId: cfg.username ?? "unknown",
+              sessionId: assistantMsg.sessionID,
+            },
+          },
         }).catch(() => {})
-        if (result) summary = result.text
+        if (result) {
+          userMsg.summary.body = result.text
+        }
       }
-      userMsg.summary.body = summary
-      log.info("body", { body: summary })
       await Session.updateMessage(userMsg)
     }
   }

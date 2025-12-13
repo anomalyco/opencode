@@ -1,18 +1,20 @@
+import { BusEvent } from "@/bus/bus-event"
+import { Bus } from "@/bus"
 import { Log } from "../util/log"
 import { LSPClient } from "./client"
 import path from "path"
+import { pathToFileURL } from "url"
 import { LSPServer } from "./server"
 import z from "zod"
 import { Config } from "../config/config"
 import { spawn } from "child_process"
 import { Instance } from "../project/instance"
-import { Bus } from "../bus"
 
 export namespace LSP {
   const log = Log.create({ service: "lsp" })
 
   export const Event = {
-    Updated: Bus.event("lsp.updated", z.object({})),
+    Updated: BusEvent.define("lsp.updated", z.object({})),
   }
 
   export const Range = z
@@ -269,7 +271,7 @@ export namespace LSP {
     return run((client) => {
       return client.connection.sendRequest("textDocument/hover", {
         textDocument: {
-          uri: `file://${input.file}`,
+          uri: pathToFileURL(input.file).href,
         },
         position: {
           line: input.line,

@@ -28,6 +28,7 @@ import type {
   FindSymbolsResponses,
   FindTextResponses,
   FormatterStatusResponses,
+  GlobalDisposeResponses,
   GlobalEventResponses,
   InstanceDisposeResponses,
   LspStatusResponses,
@@ -51,6 +52,8 @@ import type {
   PermissionRespondResponses,
   ProjectCurrentResponses,
   ProjectListResponses,
+  ProjectUpdateErrors,
+  ProjectUpdateResponses,
   ProviderAuthResponses,
   ProviderListResponses,
   ProviderOauthAuthorizeErrors,
@@ -191,6 +194,18 @@ export class Global extends HeyApiClient {
       ...options,
     })
   }
+
+  /**
+   * Dispose instance
+   *
+   * Clean up and dispose all OpenCode instances, releasing all resources.
+   */
+  public dispose<ThrowOnError extends boolean = false>(options?: Options<never, ThrowOnError>) {
+    return (options?.client ?? this.client).post<GlobalDisposeResponses, unknown, ThrowOnError>({
+      url: "/global/dispose",
+      ...options,
+    })
+  }
 }
 
 export class Project extends HeyApiClient {
@@ -229,6 +244,48 @@ export class Project extends HeyApiClient {
       url: "/project/current",
       ...options,
       ...params,
+    })
+  }
+
+  /**
+   * Update project
+   *
+   * Update project properties such as name, icon and color.
+   */
+  public update<ThrowOnError extends boolean = false>(
+    parameters: {
+      projectID: string
+      directory?: string
+      name?: string
+      icon?: {
+        url?: string
+        color?: string
+      }
+    },
+    options?: Options<never, ThrowOnError>,
+  ) {
+    const params = buildClientParams(
+      [parameters],
+      [
+        {
+          args: [
+            { in: "path", key: "projectID" },
+            { in: "query", key: "directory" },
+            { in: "body", key: "name" },
+            { in: "body", key: "icon" },
+          ],
+        },
+      ],
+    )
+    return (options?.client ?? this.client).patch<ProjectUpdateResponses, ProjectUpdateErrors, ThrowOnError>({
+      url: "/project/{projectID}",
+      ...options,
+      ...params,
+      headers: {
+        "Content-Type": "application/json",
+        ...options?.headers,
+        ...params.headers,
+      },
     })
   }
 }
@@ -768,6 +825,9 @@ export class Session extends HeyApiClient {
       sessionID: string
       directory?: string
       title?: string
+      time?: {
+        archived?: number
+      }
     },
     options?: Options<never, ThrowOnError>,
   ) {
@@ -779,6 +839,7 @@ export class Session extends HeyApiClient {
             { in: "path", key: "sessionID" },
             { in: "query", key: "directory" },
             { in: "body", key: "title" },
+            { in: "body", key: "time" },
           ],
         },
       ],

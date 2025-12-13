@@ -318,6 +318,16 @@ export namespace Provider {
         },
       }
     },
+    cerebras: async () => {
+      return {
+        autoload: false,
+        options: {
+          headers: {
+            "X-Cerebras-3rd-Party-Integration": "opencode",
+          },
+        },
+      }
+    },
   }
 
   export const Model = z
@@ -330,6 +340,7 @@ export namespace Provider {
         npm: z.string(),
       }),
       name: z.string(),
+      family: z.string().optional(),
       capabilities: z.object({
         temperature: z.boolean(),
         reasoning: z.boolean(),
@@ -349,6 +360,12 @@ export namespace Provider {
           video: z.boolean(),
           pdf: z.boolean(),
         }),
+        interleaved: z.union([
+          z.boolean(),
+          z.object({
+            field: z.enum(["reasoning_content", "reasoning_details"]),
+          }),
+        ]),
       }),
       cost: z.object({
         input: z.number(),
@@ -401,6 +418,7 @@ export namespace Provider {
       id: model.id,
       providerID: provider.id,
       name: model.name,
+      family: model.family,
       api: {
         id: model.id,
         url: provider.api!,
@@ -450,6 +468,7 @@ export namespace Provider {
           video: model.modalities?.output?.includes("video") ?? false,
           pdf: model.modalities?.output?.includes("pdf") ?? false,
         },
+        interleaved: model.interleaved ?? false,
       },
     }
   }
@@ -567,6 +586,7 @@ export namespace Provider {
               video: model.modalities?.output?.includes("video") ?? existingModel?.capabilities.output.video ?? false,
               pdf: model.modalities?.output?.includes("pdf") ?? existingModel?.capabilities.output.pdf ?? false,
             },
+            interleaved: model.interleaved ?? false,
           },
           cost: {
             input: model?.cost?.input ?? existingModel?.cost?.input ?? 0,

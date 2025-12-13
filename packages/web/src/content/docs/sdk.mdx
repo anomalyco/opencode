@@ -9,7 +9,7 @@ export const typesUrl = `${config.github}/blob/dev/packages/sdk/js/src/gen/types
 The opencode JS/TS SDK provides a type-safe client for interacting with the server.
 Use it to build integrations and control opencode programmatically.
 
-[Learn more](/docs/server) about how the server works.
+[Learn more](/docs/server) about how the server works. For examples, check out the [projects](/docs/ecosystem#projects) built by the community.
 
 ---
 
@@ -37,13 +37,13 @@ This starts both a server and a client
 
 #### Options
 
-| Option          | Type       | Description                      | Default                 |
-| --------------- | ---------- | -------------------------------- | ----------------------- |
-| `baseUrl`       | `string`   | URL of the server                | `http://localhost:4096` |
-| `fetch`         | `function` | Custom fetch implementation      | `globalThis.fetch`      |
-| `parseAs`       | `string`   | Response parsing method          | `auto`                  |
-| `responseStyle` | `string`   | Return style: `data` or `fields` | `fields`                |
-| `throwOnError`  | `boolean`  | Throw errors instead of return   | `false`                 |
+| Option     | Type          | Description                    | Default     |
+| ---------- | ------------- | ------------------------------ | ----------- |
+| `hostname` | `string`      | Server hostname                | `127.0.0.1` |
+| `port`     | `number`      | Server port                    | `4096`      |
+| `signal`   | `AbortSignal` | Abort signal for cancellation  | `undefined` |
+| `timeout`  | `number`      | Timeout in ms for server start | `5000`      |
+| `config`   | `Config`      | Configuration object           | `{}`        |
 
 ---
 
@@ -81,13 +81,13 @@ const client = createOpencodeClient({
 
 #### Options
 
-| Option     | Type          | Description                    | Default     |
-| ---------- | ------------- | ------------------------------ | ----------- |
-| `hostname` | `string`      | Server hostname                | `127.0.0.1` |
-| `port`     | `number`      | Server port                    | `4096`      |
-| `signal`   | `AbortSignal` | Abort signal for cancellation  | `undefined` |
-| `timeout`  | `number`      | Timeout in ms for server start | `5000`      |
-| `config`   | `Config`      | Configuration object           | `{}`        |
+| Option          | Type       | Description                      | Default                 |
+| --------------- | ---------- | -------------------------------- | ----------------------- |
+| `baseUrl`       | `string`   | URL of the server                | `http://localhost:4096` |
+| `fetch`         | `function` | Custom fetch implementation      | `globalThis.fetch`      |
+| `parseAs`       | `string`   | Response parsing method          | `auto`                  |
+| `responseStyle` | `string`   | Return style: `data` or `fields` | `fields`                |
+| `throwOnError`  | `boolean`  | Throw errors instead of return   | `false`                 |
 
 ---
 

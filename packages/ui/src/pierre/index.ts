@@ -32,6 +32,9 @@ const unsafeCSS = `
   [data-separator-content] {
     height: 24px !important;
   }
+  [data-code] {
+    overflow-x: auto !important;
+  }
 }`
 
 export function createDefaultOptions<T>(style: FileDiffOptions<T>["diffStyle"]) {

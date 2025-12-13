@@ -16,6 +16,7 @@
 [data-component="dialog"] {
   position: fixed;
   inset: 0;
+  margin-left: var(--dialog-left-margin);
   z-index: 50;
   display: flex;
   align-items: center;
@@ -24,7 +25,7 @@
   [data-slot="dialog-container"] {
     position: relative;
     z-index: 50;
-    width: min(calc(100vw - 16px), 624px);
+    width: min(calc(100vw - 16px), 480px);
     height: min(calc(100vh - 16px), 512px);
     display: flex;
     flex-direction: column;
@@ -36,14 +37,14 @@
       flex-direction: column;
       align-items: flex-start;
       align-self: stretch;
-      gap: 8px;
       width: 100%;
       max-height: 100%;
+      min-height: 280px;
 
       /* padding: 8px; */
-      padding: 8px 8px 0 8px;
+      /* padding: 8px 8px 0 8px; */
       border: 1px solid var(--border-base);
-      border-radius: var(--radius-md);
+      border-radius: var(--radius-xl);
       background: var(--surface-raised-stronger-non-alpha);
       box-shadow:
         0 15px 45px 0 rgba(19, 16, 16, 0.22),
@@ -58,8 +59,9 @@
 
       [data-slot="dialog-header"] {
         display: flex;
-        height: 40px;
-        padding: 4px 4px 4px 8px;
+        /* height: 40px; */
+        /* padding: 4px 4px 4px 8px; */
+        padding: 20px;
         justify-content: space-between;
         align-items: center;
         flex-shrink: 0;
@@ -86,7 +88,18 @@
         flex-direction: column;
         flex: 1;
         overflow-y: auto;
+
+        &:focus-visible {
+          outline: none;
+        }
       }
+      &:focus-visible {
+        outline: none;
+      }
+    }
+
+    &:focus-visible {
+      outline: none;
     }
   }
 }
