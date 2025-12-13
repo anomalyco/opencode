@@ -307,8 +307,8 @@ function Option(props: {
         fg={props.active ? fg : props.current ? theme.primary : theme.text}
         attributes={props.active ? TextAttributes.BOLD : undefined}
         overflow="hidden"
-        wrapMode="word"
-        paddingLeft={3}
+        wrapMode="none"
+        maxHeight={1}
       >
         {Locale.truncate(props.title, 62)}
         <Show when={props.description}>
