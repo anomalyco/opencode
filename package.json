@@ -20,7 +20,7 @@
       "packages/slack"
     ],
     "catalog": {
-      "@types/bun": "1.3.3",
+      "@types/bun": "1.3.4",
       "@hono/zod-validator": "0.4.2",
       "ulid": "3.0.1",
       "@kobalte/core": "0.13.11",

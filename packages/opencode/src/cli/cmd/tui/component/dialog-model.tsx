@@ -199,7 +199,7 @@ export function DialogModel(props: { providerID?: string }) {
     <DialogSelect
       keybind={[
         {
-          keybind: { ctrl: true, name: "a", meta: false, shift: false, leader: false },
+          keybind: Keybind.parse("ctrl+a")[0],
           title: connected() ? "Connect provider" : "View all providers",
           onTrigger() {
             dialog.replace(() => <DialogProvider />)
