@@ -694,6 +694,14 @@ export namespace SessionPrompt {
       system.push(MAX_STEPS)
     }
 
+    const original = [...system]
+    await Plugin.trigger("experimental.chat.system.transform", {}, { system })
+
+    if (system.length === 0) {
+      log.error("system prompt is empty after plugin transform, using original")
+      system.push(...original)
+    }
+
     // max 2 system prompt messages for caching purposes
     const [first, ...rest] = system
     system = [first, rest.join("\n")]
