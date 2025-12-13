@@ -1479,13 +1479,7 @@ export namespace LSPServer {
       let binary = Bun.which("docker-langserver")
       const args: string[] = []
       if (!binary) {
-        const js = path.join(
-          Global.Path.bin,
-          "node_modules",
-          "dockerfile-language-server-nodejs",
-          "lib",
-          "server.js",
-        )
+        const js = path.join(Global.Path.bin, "node_modules", "dockerfile-language-server-nodejs", "lib", "server.js")
         if (!(await Bun.file(js).exists())) {
           if (Flag.OPENCODE_DISABLE_LSP_DOWNLOAD) return
           await Bun.spawn([BunProc.which(), "install", "dockerfile-language-server-nodejs"], {
