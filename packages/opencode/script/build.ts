@@ -1,6 +1,6 @@
 #!/usr/bin/env bun
 
-import solidPlugin from "../../../node_modules/@opentui/solid/scripts/solid-plugin.ts"
+import solidPlugin from "../node_modules/@opentui/solid/scripts/solid-plugin.ts"
 import path from "path"
 import fs from "fs"
 import { $ } from "bun"
