@@ -77,11 +77,7 @@ export function SessionTurn(
   }
 
   function scrollToBottom() {
-    if (!scrollRef) return
-    if (state.userScrolled) return
-    if (!working()) return
-    if (state.autoScrolling) return
-
+    if (!scrollRef || state.userScrolled || !working() || state.autoScrolling) return
     setState("autoScrolling", true)
     requestAnimationFrame(() => {
       scrollRef?.scrollTo({ top: scrollRef.scrollHeight, behavior: "auto" })
@@ -199,20 +195,14 @@ export function SessionTurn(
                     default:
                       break
                   }
-                }
-
-                if (last.type === "reasoning") {
+                } else if (last.type === "reasoning") {
                   const text = last.text ?? ""
-                  const trimmed = text.trimStart()
-                  const match = trimmed.match(/^\*\*(.+?)\*\*/)
+                  const match = text.trimStart().match(/^\*\*(.+?)\*\*/)
                   if (match) return `Thinking · ${match[1].trim()}`
                   return "Thinking"
-                }
-
-                if (last.type === "text") {
+                } else if (last.type === "text") {
                   return "Gathering thoughts"
                 }
-
                 return undefined
               })
 
@@ -315,7 +305,7 @@ export function SessionTurn(
                         <Spinner />
                       </Show>
                       <Switch>
-                        <Match when={working()}>{store.status ?? "Considering next steps..."}</Match>
+                        <Match when={working()}>{store.status ?? "Considering next steps"}</Match>
                         <Match when={store.stepsExpanded}>Hide steps</Match>
                         <Match when={!store.stepsExpanded}>Show steps</Match>
                       </Switch>
