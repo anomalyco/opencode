@@ -185,11 +185,20 @@ export function SessionTurn(
                     default:
                       break
                   }
-                } else if (last.type === "reasoning") {
+                }
+
+                if (last.type === "reasoning") {
+                  const text = last.text ?? ""
+                  const trimmed = text.trimStart()
+                  const match = trimmed.match(/^\*\*(.+?)\*\*/)
+                  if (match) return `Thinking · ${match[1].trim()}`
                   return "Thinking"
-                } else if (last.type === "text") {
+                }
+
+                if (last.type === "text") {
                   return "Gathering thoughts"
                 }
+
                 return undefined
               })
 
