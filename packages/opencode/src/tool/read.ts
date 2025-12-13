@@ -123,20 +123,23 @@ export const ReadTool = Tool.define("read", {
     const limit = params.limit ?? DEFAULT_READ_LIMIT
     const offset = params.offset || 0
     const lines = await file.text().then((text) => text.split("\n"))
+    const totalLines = lines.length
+    const lastReadLine = Math.min(offset + limit, totalLines)
+    const hasMoreLines = totalLines > lastReadLine
+
+    // Add line numbers only when paginating or when file is truncated
+    const shouldAddLineNumbers = params.offset !== undefined || params.limit !== undefined || hasMoreLines
+
     const raw = lines.slice(offset, offset + limit).map((line) => {
       return line.length > MAX_LINE_LENGTH ? line.substring(0, MAX_LINE_LENGTH) + "..." : line
     })
-    const content = raw.map((line, index) => {
-      return `${(index + offset + 1).toString().padStart(5, "0")}| ${line}`
-    })
+    const content = shouldAddLineNumbers
+      ? raw.map((line, index) => `${(index + offset + 1).toString().padStart(5, "0")}| ${line}`)
+      : raw
     const preview = raw.slice(0, 20).join("\n")
 
     let output = "<file>\n"
     output += content.join("\n")
-
-    const totalLines = lines.length
-    const lastReadLine = offset + content.length
-    const hasMoreLines = totalLines > lastReadLine
 
     if (hasMoreLines) {
       output += `\n\n(File has more lines. Use 'offset' parameter to read beyond line ${lastReadLine})`
