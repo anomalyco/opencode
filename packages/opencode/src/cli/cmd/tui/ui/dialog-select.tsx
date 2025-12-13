@@ -36,6 +36,7 @@ export interface DialogSelectOption<T = any> {
   category?: string
   disabled?: boolean
   bg?: RGBA
+  gutter?: JSX.Element
   onSelect?: (ctx: DialogContext, trigger?: "prompt") => void
 }
 
@@ -240,7 +241,7 @@ export function DialogSelect<T>(props: DialogSelectProps<T>) {
                         moveTo(index)
                       }}
                       backgroundColor={active() ? (option.bg ?? theme.primary) : RGBA.fromInts(0, 0, 0, 0)}
-                      paddingLeft={current() ? 1 : 3}
+                      paddingLeft={current() || option.gutter ? 1 : 3}
                       paddingRight={3}
                       gap={1}
                     >
@@ -250,6 +251,7 @@ export function DialogSelect<T>(props: DialogSelectProps<T>) {
                         description={option.description !== category ? option.description : undefined}
                         active={active()}
                         current={current()}
+                        gutter={option.gutter}
                       />
                     </box>
                   )
@@ -283,6 +285,7 @@ function Option(props: {
   active?: boolean
   current?: boolean
   footer?: JSX.Element | string
+  gutter?: JSX.Element
   onMouseOver?: () => void
 }) {
   const { theme } = useTheme()
@@ -294,6 +297,11 @@ function Option(props: {
         <text flexShrink={0} fg={props.active ? fg : props.current ? theme.primary : theme.text} marginRight={0.5}>
           ●
         </text>
+      </Show>
+      <Show when={!props.current && props.gutter}>
+        <box flexShrink={0} marginRight={0.5}>
+          {props.gutter}
+        </box>
       </Show>
       <text
         flexGrow={1}
