@@ -98,16 +98,15 @@
             display: block;
           }
           [data-slot="list-item-extra-icon"] {
+            display: block !important;
             color: var(--icon-strong-base) !important;
           }
         }
         &:active {
           background: var(--surface-raised-base-active);
         }
-        &:hover {
-          [data-slot="list-item-extra-icon"] {
-            color: var(--icon-strong-base) !important;
-          }
+        &:focus-visible {
+          outline: none;
         }
       }
     }

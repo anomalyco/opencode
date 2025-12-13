@@ -5,7 +5,7 @@ import {
   DialogCloseButtonProps,
   DialogDescriptionProps,
 } from "@kobalte/core/dialog"
-import { ComponentProps, type JSX, onCleanup, Show, splitProps } from "solid-js"
+import { ComponentProps, type JSX, onCleanup, onMount, Show, splitProps } from "solid-js"
 import { IconButton } from "./icon-button"
 
 export interface DialogProps extends DialogRootProps {
@@ -34,6 +34,11 @@ export function DialogRoot(props: DialogProps) {
       firstChild.removeEventListener("focusout", resetTabIndex)
     })
   }
+
+  onMount(() => {
+    // @ts-ignore
+    document?.activeElement?.blur?.()
+  })
 
   return (
     <Kobalte {...others}>
