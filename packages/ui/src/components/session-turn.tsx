@@ -81,7 +81,6 @@ export function SessionTurn(
   createResizeObserver(contentRef, () => {
     if (!scrollRef || userScrolled() || !working()) return
     requestAnimationFrame(() => {
-      if (!scrollRef) return
       scrollRef.scrollTop = scrollRef.scrollHeight
     })
   })
@@ -266,7 +265,7 @@ export function SessionTurn(
                       </div>
                     </div>
                   </div>
-                  {/* User Message (non-sticky, scrolls under sticky header) */}
+                  {/* User Message */}
                   <div data-slot="session-turn-message-content">
                     <Message message={message()} parts={parts()} />
                   </div>

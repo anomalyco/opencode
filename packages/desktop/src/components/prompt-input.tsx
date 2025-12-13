@@ -13,6 +13,7 @@ import {
   createMemo,
 } from "solid-js"
 import { createStore } from "solid-js/store"
+import { makePersisted } from "@solid-primitives/storage"
 import { createFocusSignal } from "@solid-primitives/active-element"
 import { useLocal } from "@/context/local"
 import { ContentPart, DEFAULT_PROMPT, isPromptEqual, Prompt, useSession } from "@/context/session"
@@ -84,6 +85,69 @@ export const PromptInput: Component<PromptInputProps> = (props) => {
   }>({
     popoverIsOpen: false,
   })
+
+  const MAX_HISTORY = 100
+  const [history, setHistory] = makePersisted(
+    createStore<{
+      entries: Prompt[]
+    }>({
+      entries: [],
+    }),
+    {
+      name: "prompt-history.v1",
+    },
+  )
+  const [historyIndex, setHistoryIndex] = createSignal<number>(-1)
+  const [savedPrompt, setSavedPrompt] = createSignal<Prompt | null>(null)
+
+  const clonePromptParts = (prompt: Prompt): Prompt =>
+    prompt.map((part) =>
+      part.type === "text"
+        ? { ...part }
+        : {
+            ...part,
+            selection: part.selection ? { ...part.selection } : undefined,
+          },
+    )
+
+  const promptLength = (prompt: Prompt) => prompt.reduce((len, part) => len + part.content.length, 0)
+
+  const applyHistoryPrompt = (prompt: Prompt, position: "start" | "end") => {
+    const length = position === "start" ? 0 : promptLength(prompt)
+    session.prompt.set(prompt, length)
+    requestAnimationFrame(() => {
+      editorRef.focus()
+      setCursorPosition(editorRef, length)
+    })
+  }
+
+  const getCaretLineState = () => {
+    const selection = window.getSelection()
+    if (!selection || selection.rangeCount === 0) return { collapsed: false, onFirstLine: false, onLastLine: false }
+    const range = selection.getRangeAt(0)
+    const rect = range.getBoundingClientRect()
+    const editorRect = editorRef.getBoundingClientRect()
+    const style = window.getComputedStyle(editorRef)
+    const paddingTop = parseFloat(style.paddingTop) || 0
+    const paddingBottom = parseFloat(style.paddingBottom) || 0
+    let lineHeight = parseFloat(style.lineHeight)
+    if (!Number.isFinite(lineHeight)) lineHeight = parseFloat(style.fontSize) || 16
+    const scrollTop = editorRef.scrollTop
+    let relativeTop = rect.top - editorRect.top - paddingTop + scrollTop
+    if (!Number.isFinite(relativeTop)) relativeTop = scrollTop
+    relativeTop = Math.max(0, relativeTop)
+    let caretHeight = rect.height
+    if (!caretHeight || !Number.isFinite(caretHeight)) caretHeight = lineHeight
+    const relativeBottom = relativeTop + caretHeight
+    const contentHeight = Math.max(caretHeight, editorRef.scrollHeight - paddingTop - paddingBottom)
+    const threshold = Math.max(2, lineHeight / 2)
+
+    return {
+      collapsed: selection.isCollapsed,
+      onFirstLine: relativeTop <= threshold,
+      onLastLine: contentHeight - relativeBottom <= threshold,
+    }
+  }
 
   const [placeholder, setPlaceholder] = createSignal(Math.floor(Math.random() * PLACEHOLDERS.length))
 
@@ -221,6 +285,11 @@ export const PromptInput: Component<PromptInputProps> = (props) => {
       setStore("popoverIsOpen", false)
     }
 
+    if (historyIndex() >= 0) {
+      setHistoryIndex(-1)
+      setSavedPrompt(null)
+    }
+
     session.prompt.set(rawParts, cursorPosition)
   }
 
@@ -296,12 +365,100 @@ export const PromptInput: Component<PromptInputProps> = (props) => {
       sessionID: session.id!,
     })
 
+  const addToHistory = (prompt: Prompt) => {
+    const text = prompt
+      .map((p) => p.content)
+      .join("")
+      .trim()
+    if (!text) return
+
+    const entry = clonePromptParts(prompt)
+    const lastEntry = history.entries[0]
+    if (lastEntry) {
+      const lastText = lastEntry.map((p) => p.content).join("")
+      if (lastText === text) return
+    }
+
+    setHistory("entries", (entries) => [entry, ...entries].slice(0, MAX_HISTORY))
+  }
+
+  const navigateHistory = (direction: "up" | "down") => {
+    const entries = history.entries
+    const current = historyIndex()
+
+    if (direction === "up") {
+      if (entries.length === 0) return false
+      if (current === -1) {
+        setSavedPrompt(clonePromptParts(session.prompt.current()))
+        setHistoryIndex(0)
+        applyHistoryPrompt(entries[0], "start")
+        return true
+      }
+      if (current < entries.length - 1) {
+        const next = current + 1
+        setHistoryIndex(next)
+        applyHistoryPrompt(entries[next], "start")
+        return true
+      }
+      return false
+    }
+
+    if (current > 0) {
+      const next = current - 1
+      setHistoryIndex(next)
+      applyHistoryPrompt(entries[next], "end")
+      return true
+    }
+    if (current === 0) {
+      setHistoryIndex(-1)
+      const saved = savedPrompt()
+      if (saved) {
+        applyHistoryPrompt(saved, "end")
+        setSavedPrompt(null)
+        return true
+      }
+      applyHistoryPrompt(DEFAULT_PROMPT, "end")
+      return true
+    }
+
+    return false
+  }
+
   const handleKeyDown = (event: KeyboardEvent) => {
     if (store.popoverIsOpen && (event.key === "ArrowUp" || event.key === "ArrowDown" || event.key === "Enter")) {
       onKeyDown(event)
       event.preventDefault()
       return
     }
+
+    if (event.key === "ArrowUp" || event.key === "ArrowDown") {
+      const { collapsed, onFirstLine, onLastLine } = getCaretLineState()
+      if (!collapsed) return
+      const cursorPos = getCursorPosition(editorRef)
+      const textLength = promptLength(session.prompt.current())
+      const inHistory = historyIndex() >= 0
+      const isStart = cursorPos === 0
+      const isEnd = cursorPos === textLength
+      const atAbsoluteStart = onFirstLine && isStart
+      const atAbsoluteEnd = onLastLine && isEnd
+      const allowUp = (inHistory && isEnd) || atAbsoluteStart
+      const allowDown = (inHistory && isStart) || atAbsoluteEnd
+
+      if (event.key === "ArrowUp") {
+        if (!allowUp) return
+        if (navigateHistory("up")) {
+          event.preventDefault()
+        }
+        return
+      }
+
+      if (!allowDown) return
+      if (navigateHistory("down")) {
+        event.preventDefault()
+      }
+      return
+    }
+
     if (event.key === "Enter" && !event.shiftKey) {
       handleSubmit(event)
     }
@@ -322,6 +479,10 @@ export const PromptInput: Component<PromptInputProps> = (props) => {
       if (session.working()) abort()
       return
     }
+
+    addToHistory(prompt)
+    setHistoryIndex(-1)
+    setSavedPrompt(null)
 
     let existing = session.info()
     if (!existing) {
