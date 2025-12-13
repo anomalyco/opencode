@@ -151,7 +151,8 @@ export const PromptInput: Component<PromptInputProps> = (props) => {
 
   const [placeholder, setPlaceholder] = createSignal(Math.floor(Math.random() * PLACEHOLDERS.length))
 
-  onMount(() => {
+  createEffect(() => {
+    if (session.id) return
     const interval = setInterval(() => {
       setPlaceholder((prev) => (prev + 1) % PLACEHOLDERS.length)
     }, 6500)
