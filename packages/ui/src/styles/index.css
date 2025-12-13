@@ -26,7 +26,6 @@
 @import "../components/logo.css" layer(components);
 @import "../components/markdown.css" layer(components);
 @import "../components/message-part.css" layer(components);
-@import "../components/message-progress.css" layer(components);
 @import "../components/message-nav.css" layer(components);
 @import "../components/progress-circle.css" layer(components);
 @import "../components/resize-handle.css" layer(components);

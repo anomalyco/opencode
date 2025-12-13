@@ -17,6 +17,11 @@ inputs:
     description: "Custom prompt to override the default prompt"
     required: false
 
+  use_github_token:
+    description: "Use GITHUB_TOKEN directly instead of OpenCode App token exchange. When true, skips OIDC and uses the GITHUB_TOKEN env var."
+    required: false
+    default: "false"
+
 runs:
   using: "composite"
   steps:
@@ -51,3 +56,4 @@ runs:
         MODEL: ${{ inputs.model }}
         SHARE: ${{ inputs.share }}
         PROMPT: ${{ inputs.prompt }}
+        USE_GITHUB_TOKEN: ${{ inputs.use_github_token }}

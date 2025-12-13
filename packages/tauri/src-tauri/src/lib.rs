@@ -4,9 +4,9 @@ use std::{
     sync::{Arc, Mutex},
     time::{Duration, Instant},
 };
-use tauri::{
-    AppHandle, LogicalSize, Manager, Monitor, RunEvent, TitleBarStyle, WebviewUrl, WebviewWindow,
-};
+use tauri::{AppHandle, LogicalSize, Manager, Monitor, RunEvent, WebviewUrl, WebviewWindow};
+#[cfg(target_os = "macos")]
+use tauri::TitleBarStyle;
 use tauri_plugin_dialog::{DialogExt, MessageDialogButtons, MessageDialogResult};
 use tauri_plugin_shell::process::{CommandChild, CommandEvent};
 use tauri_plugin_shell::ShellExt;
@@ -183,7 +183,6 @@ pub fn run() {
                         .inner_size(size.width as f64, size.height as f64)
                         .decorations(true)
                         .zoom_hotkeys_enabled(true)
-                        .title_bar_style(TitleBarStyle::Overlay)
                         .initialization_script(format!(
                             r#"
                           window.__OPENCODE__ ??= {{}};
@@ -194,7 +193,9 @@ pub fn run() {
 
                 #[cfg(target_os = "macos")]
                 {
-                    window_builder = window_builder.hidden_title(true);
+                    window_builder = window_builder
+                        .title_bar_style(TitleBarStyle::Overlay)
+                        .hidden_title(true);
                 }
 
                 window_builder.build().expect("Failed to create window");
