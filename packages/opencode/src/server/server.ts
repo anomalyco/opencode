@@ -791,9 +791,11 @@ export namespace Server {
           "json",
           z.object({
             title: z.string().optional(),
-            time: z.object({
-              archived: z.number().optional(),
-            }),
+            time: z
+              .object({
+                archived: z.number().optional(),
+              })
+              .optional(),
           }),
         ),
         async (c) => {

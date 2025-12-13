@@ -12,6 +12,16 @@
   }
 }
 
+@keyframes pulse-opacity-dim {
+  0%,
+  100% {
+    opacity: 0;
+  }
+  50% {
+    opacity: 0.3;
+  }
+}
+
 @keyframes fadeUp {
   from {
     opacity: 0;
