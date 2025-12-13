@@ -213,10 +213,9 @@ export function toOaCompatibleRequest(body: CommonRequest) {
 export function fromOaCompatibleResponse(resp: any): CommonResponse {
   if (!resp || typeof resp !== "object") return resp
 
-  if (!Array.isArray((resp as any).choices)) return resp
+  if (!Array.isArray((resp as any).choices) || (resp as any).choices.length === 0) return resp
 
   const choice = (resp as any).choices[0]
-  if (!choice) return resp
 
   const message = choice.message
   if (!message) return resp

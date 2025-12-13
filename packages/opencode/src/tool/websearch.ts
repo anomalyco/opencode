@@ -121,13 +121,18 @@ export const WebSearchTool = Tool.define("websearch", {
       const lines = responseText.split("\n")
       for (const line of lines) {
         if (line.startsWith("data: ")) {
-          const data: McpSearchResponse = JSON.parse(line.substring(6))
-          if (data.result && data.result.content && data.result.content.length > 0) {
-            return {
-              output: data.result.content[0].text,
-              title: `Web search: ${params.query}`,
-              metadata: {},
+          try {
+            const data: McpSearchResponse = JSON.parse(line.substring(6))
+            if (data.result?.content?.[0]?.text) {
+              return {
+                output: data.result.content[0].text,
+                title: `Web search: ${params.query}`,
+                metadata: {},
+              }
             }
+          } catch (err) {
+            console.error("Failed to parse SSE data:", err)
+            continue
           }
         }
       }

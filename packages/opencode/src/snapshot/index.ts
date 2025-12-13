@@ -183,8 +183,8 @@ export namespace Snapshot {
         file,
         before,
         after,
-        additions: parseInt(additions),
-        deletions: parseInt(deletions),
+        additions: parseInt(additions, 10),
+        deletions: parseInt(deletions, 10),
       })
     }
     return result

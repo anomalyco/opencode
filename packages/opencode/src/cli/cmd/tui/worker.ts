@@ -54,9 +54,9 @@ export const rpc = {
   async shutdown() {
     Log.Default.info("worker shutting down")
     await Instance.disposeAll()
-    // TODO: this should be awaited, but ws connections are
-    // causing this to hang, need to revisit this
-    server.stop(true)
+    if (server) {
+      await server.stop(true)
+    }
   },
 }
 

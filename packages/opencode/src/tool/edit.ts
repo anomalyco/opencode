@@ -256,6 +256,10 @@ export const BlockAnchorReplacer: Replacer = function* (content, find) {
     searchLines.pop()
   }
 
+  if (searchLines.length === 0) {
+    return
+  }
+
   const firstLineSearch = searchLines[0].trim()
   const lastLineSearch = searchLines[searchLines.length - 1].trim()
   const searchBlockSize = searchLines.length
@@ -550,6 +554,10 @@ export const ContextAwareReplacer: Replacer = function* (content, find) {
   // Remove trailing empty line if present
   if (findLines[findLines.length - 1] === "") {
     findLines.pop()
+  }
+
+  if (findLines.length === 0) {
+    return null
   }
 
   const contentLines = content.split("\n")

@@ -144,7 +144,7 @@ export namespace Storage {
     const dir = path.join(Global.Path.data, "storage")
     const migration = await Bun.file(path.join(dir, "migration"))
       .json()
-      .then((x) => parseInt(x))
+      .then((x) => parseInt(x, 10))
       .catch(() => 0)
     for (let index = migration; index < MIGRATIONS.length; index++) {
       log.info("running migration", { index })

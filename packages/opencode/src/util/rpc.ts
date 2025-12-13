@@ -5,10 +5,14 @@ export namespace Rpc {
 
   export function listen(rpc: Definition) {
     onmessage = async (evt) => {
-      const parsed = JSON.parse(evt.data)
-      if (parsed.type === "rpc.request") {
-        const result = await rpc[parsed.method](parsed.input)
-        postMessage(JSON.stringify({ type: "rpc.result", result, id: parsed.id }))
+      try {
+        const parsed = JSON.parse(evt.data)
+        if (parsed.type === "rpc.request") {
+          const result = await rpc[parsed.method](parsed.input)
+          postMessage(JSON.stringify({ type: "rpc.result", result, id: parsed.id }))
+        }
+      } catch (err) {
+        console.error("RPC listen error:", err)
       }
     }
   }
@@ -20,13 +24,17 @@ export namespace Rpc {
     const pending = new Map<number, (result: any) => void>()
     let id = 0
     target.onmessage = async (evt) => {
-      const parsed = JSON.parse(evt.data)
-      if (parsed.type === "rpc.result") {
-        const resolve = pending.get(parsed.id)
-        if (resolve) {
-          resolve(parsed.result)
-          pending.delete(parsed.id)
+      try {
+        const parsed = JSON.parse(evt.data)
+        if (parsed.type === "rpc.result") {
+          const resolve = pending.get(parsed.id)
+          if (resolve) {
+            resolve(parsed.result)
+            pending.delete(parsed.id)
+          }
         }
+      } catch (err) {
+        console.error("RPC client error:", err)
       }
     }
     return {

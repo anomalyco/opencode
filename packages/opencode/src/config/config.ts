@@ -909,7 +909,9 @@ export namespace Config {
           const plugin = data.plugin[i]
           try {
             data.plugin[i] = import.meta.resolve!(plugin, configFilepath)
-          } catch (err) {}
+          } catch (err) {
+            console.warn(`Failed to resolve plugin path: ${plugin}`, err)
+          }
         }
       }
       return data
