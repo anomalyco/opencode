@@ -289,6 +289,7 @@ export function Session() {
               if (child) scroll.scrollBy(child.y - scroll.y - 1)
             }}
             sessionID={route.sessionID}
+            setPrompt={(promptInfo) => prompt.set(promptInfo)}
           />
         ))
       },

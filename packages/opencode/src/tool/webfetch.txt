@@ -11,4 +11,3 @@ Usage notes:
   - The prompt should describe what information you want to extract from the page
   - This tool is read-only and does not modify any files
   - Results may be summarized if the content is very large
-  - Includes a self-cleaning 15-minute cache for faster responses when repeatedly accessing the same URL
