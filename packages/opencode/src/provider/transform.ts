@@ -226,7 +226,10 @@ export namespace ProviderTransform {
       }
     }
 
-    if (model.providerID === "baseten") {
+    if (
+      model.providerID === "baseten" ||
+      (model.providerID === "opencode" && ["kimi-k2-thinking", "glm-4.6"].includes(model.api.id))
+    ) {
       result["chat_template_args"] = { enable_thinking: true }
     }
 
@@ -252,7 +255,7 @@ export namespace ProviderTransform {
         result["reasoningEffort"] = "medium"
       }
 
-      if (model.api.id.endsWith("gpt-5.1") && model.providerID !== "azure") {
+      if (model.api.id.endsWith("gpt-5.") && model.providerID !== "azure") {
         result["textVerbosity"] = "low"
       }
 
@@ -269,7 +272,7 @@ export namespace ProviderTransform {
     const options: Record<string, any> = {}
 
     if (model.providerID === "openai" || model.api.id.includes("gpt-5")) {
-      if (model.api.id.includes("5.1")) {
+      if (model.api.id.includes("5.")) {
         options["reasoningEffort"] = "low"
       } else {
         options["reasoningEffort"] = "minimal"
