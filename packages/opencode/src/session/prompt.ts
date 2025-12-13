@@ -602,9 +602,9 @@ export namespace SessionPrompt {
               args,
             },
           )
-          const displayArgs = (args as any).__display ?? args
-          const execArgs = { ...args }
-          delete (execArgs as any).__display
+          const displayArgs = (args as Record<string, unknown>).__display ?? args
+          const execArgs: Record<string, unknown> = { ...args }
+          delete execArgs.__display
           const result = await item.execute(execArgs, {
             sessionID: input.sessionID,
             abort: options.abortSignal!,
