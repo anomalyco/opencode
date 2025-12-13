@@ -1,8 +1,9 @@
 import { Ghostty, Terminal as Term, FitAddon } from "ghostty-web"
-import { ComponentProps, onCleanup, onMount, splitProps } from "solid-js"
+import { ComponentProps, createEffect, onCleanup, onMount, splitProps } from "solid-js"
 import { useSDK } from "@/context/sdk"
 import { SerializeAddon } from "@/addons/serialize"
 import { LocalPTY } from "@/context/session"
+import { usePrefersDark } from "@solid-primitives/media"
 
 export interface TerminalProps extends ComponentProps<"div"> {
   pty: LocalPTY
@@ -21,6 +22,7 @@ export const Terminal = (props: TerminalProps) => {
   let serializeAddon: SerializeAddon
   let fitAddon: FitAddon
   let handleResize: () => void
+  const prefersDark = usePrefersDark()
 
   onMount(async () => {
     ghostty = await Ghostty.load()
@@ -31,10 +33,17 @@ export const Terminal = (props: TerminalProps) => {
       fontSize: 14,
       fontFamily: "TX-02, monospace",
       allowTransparency: true,
-      theme: {
-        background: "#191515",
-        foreground: "#d4d4d4",
-      },
+      theme: prefersDark()
+        ? {
+            background: "#191515",
+            foreground: "#d4d4d4",
+            cursor: "#d4d4d4",
+          }
+        : {
+            background: "#fcfcfc",
+            foreground: "#211e1e",
+            cursor: "#211e1e",
+          },
       scrollback: 10_000,
       ghostty,
     })
