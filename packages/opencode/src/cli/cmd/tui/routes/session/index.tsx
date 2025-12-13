@@ -62,6 +62,7 @@ import { Toast, useToast } from "../../ui/toast"
 import { useKV } from "../../context/kv.tsx"
 import { Editor } from "../../util/editor"
 import stripAnsi from "strip-ansi"
+import { normalizeTerminalOutput } from "@tui/util/output"
 import { Footer } from "./footer.tsx"
 import { usePromptRef } from "../../context/prompt"
 
@@ -1367,7 +1368,11 @@ ToolRegistry.register<typeof BashTool>({
   name: "bash",
   container: "block",
   render(props) {
-    const output = createMemo(() => stripAnsi(props.metadata.output?.trim() ?? ""))
+    const output = createMemo(() => {
+      const raw = props.metadata.output?.trim() ?? ""
+      const sanitized = stripAnsi(raw)
+      return normalizeTerminalOutput(sanitized)
+    })
     const { theme } = useTheme()
     return (
       <>
