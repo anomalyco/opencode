@@ -2657,7 +2657,10 @@
                 "properties": {
                   "response": {
                     "type": "string",
-                    "enum": ["once", "always", "reject"]
+                    "enum": ["once", "always", "reject", "interject"]
+                  },
+                  "interjection": {
+                    "type": "string"
                   }
                 },
                 "required": ["response"]

@@ -189,13 +189,35 @@ export function Session() {
   let prompt: PromptRef
   const keybind = useKeybind()
 
-  useKeyboard((evt) => {
+  useKeyboard(async (evt) => {
     if (dialog.stack.length > 0) return
 
     const first = permissions()[0]
     if (first) {
+      if (evt.ctrl || evt.meta) return
+
+      // Handle interject with "i" key - opens prompt for user suggestion
+      if (evt.name === "i") {
+        const interjection = await DialogPrompt.show(dialog, "Interject", {
+          placeholder: "Enter your suggestion...",
+          description: () => (
+            <text fg={theme.textMuted}>
+              Provide a suggestion or correction for the model to consider
+            </text>
+          ),
+        })
+        if (interjection !== null && interjection.trim()) {
+          sdk.client.permission.respond({
+            permissionID: first.id,
+            sessionID: route.sessionID,
+            response: "interject",
+            interjection: interjection.trim(),
+          })
+        }
+        return
+      }
+
       const response = iife(() => {
-        if (evt.ctrl || evt.meta) return
         if (evt.name === "return") return "once"
         if (evt.name === "a") return "always"
         if (evt.name === "d") return "reject"
@@ -1304,6 +1326,10 @@ function ToolPart(props: { last: boolean; part: ToolPart; message: AssistantMess
               <text fg={theme.text}>
                 <b>d</b>
                 <span style={{ fg: theme.textMuted }}> deny</span>
+              </text>
+              <text fg={theme.text}>
+                <b>i</b>
+                <span style={{ fg: theme.textMuted }}> interject</span>
               </text>
             </box>
           </box>
