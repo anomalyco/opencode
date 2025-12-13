@@ -29,6 +29,16 @@
   }
 }
 
+[data-component="reasoning-part"] {
+  width: 100%;
+  opacity: 0.5;
+
+  [data-component="markdown"] {
+    margin-top: 24px;
+    font-style: italic !important;
+  }
+}
+
 [data-component="tool-error"] {
   display: flex;
   align-items: start;
@@ -73,6 +83,22 @@
   pre {
     margin: 0;
     padding: 0;
+  }
+
+  &[data-scrollable] {
+    height: auto;
+    max-height: 240px;
+    overflow-y: auto;
+    scrollbar-width: none;
+    -ms-overflow-style: none;
+
+    &::-webkit-scrollbar {
+      display: none;
+    }
+
+    [data-component="markdown"] {
+      overflow: visible;
+    }
   }
 }
 

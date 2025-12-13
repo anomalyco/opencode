@@ -14,7 +14,7 @@
     <meta property="og:image" content="/social-share.png" />
     <meta property="twitter:image" content="/social-share.png" />
   </head>
-  <body class="antialiased overscroll-none select-none text-12-regular">
+  <body class="antialiased overscroll-none select-none text-12-regular overflow-hidden">
     <script>
       ;(function () {
         const savedTheme = localStorage.getItem("theme") || "oc-1"
@@ -22,7 +22,7 @@
       })()
     </script>
     <noscript>You need to enable JavaScript to run this app.</noscript>
-    <div id="root"></div>
+    <div id="root" class="flex flex-col h-screen"></div>
     <script src="/src/entry.tsx" type="module"></script>
   </body>
 </html>

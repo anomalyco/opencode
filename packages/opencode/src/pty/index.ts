@@ -6,10 +6,10 @@ import { Identifier } from "../id/id"
 import { Log } from "../util/log"
 import type { WSContext } from "hono/ws"
 import { Instance } from "../project/instance"
-import { shell } from "@opencode-ai/util/shell"
 import { lazy } from "@opencode-ai/util/lazy"
 import {} from "process"
 import { Installation } from "@/installation"
+import { Shell } from "@/shell/shell"
 
 export namespace Pty {
   const log = Log.create({ service: "pty" })
@@ -112,7 +112,7 @@ export namespace Pty {
 
   export async function create(input: CreateInput) {
     const id = Identifier.create("pty", false)
-    const command = input.command || shell()
+    const command = input.command || Shell.preferred()
     const args = input.args || []
     const cwd = input.cwd || Instance.directory
     const env = { ...process.env, ...input.env } as Record<string, string>
