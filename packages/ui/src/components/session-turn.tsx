@@ -3,7 +3,7 @@ import { useData } from "../context"
 import { useDiffComponent } from "../context/diff"
 import { getDirectory, getFilename } from "@opencode-ai/util/path"
 import { checksum } from "@opencode-ai/util/encode"
-import { createEffect, createMemo, createSignal, For, Match, onCleanup, ParentProps, Show, Switch } from "solid-js"
+import { createEffect, createMemo, For, Match, onCleanup, ParentProps, Show, Switch } from "solid-js"
 import { createResizeObserver } from "@solid-primitives/resize-observer"
 import { DiffChanges } from "./diff-changes"
 import { Typewriter } from "./typewriter"
@@ -49,56 +49,67 @@ export function SessionTurn(
   const working = createMemo(() => status()?.type !== "idle")
 
   let scrollRef: HTMLDivElement | undefined
-  const [contentRef, setContentRef] = createSignal<HTMLDivElement>()
-  const [stickyTitleRef, setStickyTitleRef] = createSignal<HTMLDivElement>()
-  const [stickyTriggerRef, setStickyTriggerRef] = createSignal<HTMLDivElement>()
-  const [userScrolled, setUserScrolled] = createSignal(false)
-  const [stickyHeaderHeight, setStickyHeaderHeight] = createSignal(0)
-  const [scrollY, setScrollY] = createSignal(0)
+  const [state, setState] = createStore({
+    contentRef: undefined as HTMLDivElement | undefined,
+    stickyTitleRef: undefined as HTMLDivElement | undefined,
+    stickyTriggerRef: undefined as HTMLDivElement | undefined,
+    userScrolled: false,
+    stickyHeaderHeight: 0,
+    scrollY: 0,
+  })
 
   function handleScroll() {
     if (!scrollRef) return
-    setScrollY(scrollRef.scrollTop)
+    setState("scrollY", scrollRef.scrollTop)
     const { scrollTop, scrollHeight, clientHeight } = scrollRef
     const atBottom = scrollHeight - scrollTop - clientHeight < 50
     if (!atBottom && working()) {
-      setUserScrolled(true)
+      setState("userScrolled", true)
     }
   }
 
   function handleInteraction() {
     if (working()) {
-      setUserScrolled(true)
+      setState("userScrolled", true)
     }
   }
 
   createEffect(() => {
     if (!working()) {
-      setUserScrolled(false)
+      setState("userScrolled", false)
     }
   })
 
-  createResizeObserver(contentRef, () => {
-    if (!scrollRef || userScrolled() || !working()) return
-    requestAnimationFrame(() => {
-      scrollRef.scrollTop = scrollRef.scrollHeight
-    })
-  })
+  createResizeObserver(
+    () => state.contentRef,
+    () => {
+      if (!scrollRef || state.userScrolled || !working()) return
+      requestAnimationFrame(() => {
+        scrollRef.scrollTop = scrollRef.scrollHeight
+      })
+    },
+  )
 
-  createResizeObserver(stickyTitleRef, ({ height }) => {
-    const triggerHeight = stickyTriggerRef()?.offsetHeight ?? 0
-    setStickyHeaderHeight(height + triggerHeight + 8)
-  })
+  createResizeObserver(
+    () => state.stickyTitleRef,
+    ({ height }) => {
+      const triggerHeight = state.stickyTriggerRef?.offsetHeight ?? 0
+      setState("stickyHeaderHeight", height + triggerHeight + 8)
+    },
+  )
 
-  createResizeObserver(stickyTriggerRef, ({ height }) => {
-    const titleHeight = stickyTitleRef()?.offsetHeight ?? 0
-    setStickyHeaderHeight(titleHeight + height + 8)
-  })
+  createResizeObserver(
+    () => state.stickyTriggerRef,
+    ({ height }) => {
+      const titleHeight = state.stickyTitleRef?.offsetHeight ?? 0
+      setState("stickyHeaderHeight", titleHeight + height + 8)
+    },
+  )
 
   return (
-    <div data-component="session-turn" class={props.classes?.root} style={{ "--scroll-y": `${scrollY()}px` }}>
+    <div data-component="session-turn" class={props.classes?.root} style={{ "--scroll-y": `${state.scrollY}px` }}>
       <div ref={scrollRef} onScroll={handleScroll} data-slot="session-turn-content" class={props.classes?.content}>
-        <div ref={setContentRef} onClick={handleInteraction}>
+        <div ref={(el) => setState("contentRef", el)} onClick={handleInteraction}>
           <Show when={message()}>
             {(message) => {
               const assistantMessages = createMemo(() => {
@@ -237,7 +248,7 @@ export function SessionTurn(
 
               createEffect((prev) => {
                 const isWorking = working()
-                if (prev && !isWorking && !userScrolled()) {
+                if (prev && !isWorking && !state.userScrolled) {
                   setStore("stepsExpanded", false)
                 }
                 return isWorking
@@ -248,10 +259,10 @@ export function SessionTurn(
                   data-message={message().id}
                   data-slot="session-turn-message-container"
                   class={props.classes?.container}
-                  style={{ "--sticky-header-height": `${stickyHeaderHeight()}px` }}
+                  style={{ "--sticky-header-height": `${state.stickyHeaderHeight}px` }}
                 >
                   {/* Title (sticky) */}
-                  <div ref={setStickyTitleRef} data-slot="session-turn-sticky-title">
+                  <div ref={(el) => setState("stickyTitleRef", el)} data-slot="session-turn-sticky-title">
                     <div data-slot="session-turn-message-header">
                       <div data-slot="session-turn-message-title">
                         <Switch>
@@ -270,7 +281,7 @@ export function SessionTurn(
                     <Message message={message()} parts={parts()} />
                   </div>
                   {/* Trigger (sticky) */}
-                  <div ref={setStickyTriggerRef} data-slot="session-turn-response-trigger">
+                  <div ref={(el) => setState("stickyTriggerRef", el)} data-slot="session-turn-response-trigger">
                     <Button
                       data-slot="session-turn-collapsible-trigger-content"
                       variant="ghost"
