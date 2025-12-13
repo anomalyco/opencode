@@ -44,10 +44,13 @@ const cli = yargs(hideBin(process.argv))
   // Disable wrapping so help lines don't break
   .wrap(null)
   .option("agent", {
-    describe: 'repeatable agent spec: --agent "name=claude model=opus mode=plan"',
+    describe: 'agent spec: --agent claude or --agent "name=claude model=opus mode=bypassPermissions"',
     alias: "a",
     type: "string",
-    array: true,
+  })
+  .option("plan-agent", {
+    describe: 'plan agent spec: --plan-agent claude or --plan-agent "name=claude model=opus"',
+    type: "string",
   })
   .help("help", "show help")
   .alias("help", "h")

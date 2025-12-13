@@ -16,9 +16,12 @@ describe("run CLI agent flag parsing", () => {
     expect(parsed.agents).toEqual([{ name: "claude", model: "haiku" }])
   })
 
-  test("parses repeatable order", () => {
-    const parsed = parseAgentFlags(["name=one mode=plan", "name=two mode=impl"])
+  test("parses plan-agent and agent order", () => {
+    const parsed = parseAgentFlags("name=two mode=impl", "name=one")
+    // plan-agent is first, then agent
     expect(parsed.agents.map((a) => a.name)).toEqual(["one", "two"])
+    // plan-agent should have mode forced to "plan"
+    expect(parsed.agents[0].mode).toEqual("plan")
   })
 
   test("rejects unknown key", () => {

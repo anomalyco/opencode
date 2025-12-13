@@ -115,7 +115,7 @@ export const TuiThreadCommand = cmd({
     let parsedAgents: ReturnType<typeof parseAgentFlags> | null = null
     if (!args.print) {
       try {
-        parsedAgents = parseAgentFlags(args.agent)
+        parsedAgents = parseAgentFlags(args.agent, args.planAgent)
         validateAgentFlags(parsedAgents.agents, parsedAgents.rawCount, (msg) => {
           UI.error(msg)
           process.exit(1)
@@ -136,6 +136,7 @@ export const TuiThreadCommand = cmd({
         session: args.session,
         share: args.share,
         agent: args.agent,
+        planAgent: args.planAgent,
         file: args.file,
         title: args.title,
         attach: args.attach,
@@ -161,22 +162,29 @@ export const TuiThreadCommand = cmd({
       rawPrompt: args.prompt,
       cliPrompt,
       positional: Array.isArray(args._) ? args._.map((v: any) => String(v)) : [],
-      agentCount: Array.isArray(args.agent) ? args.agent.length : args.agent ? 1 : 0,
+      agent: args.agent ?? null,
+      planAgent: args.planAgent ?? null,
     })
+
+    const workerArgv: string[] = []
+    if (args.planAgent) {
+      workerArgv.push("--plan-agent", args.planAgent)
+    }
+    if (args.agent) {
+      workerArgv.push("--agent", args.agent)
+    }
 
     const worker = new Worker(workerPath, {
       env: Object.fromEntries(
         Object.entries(process.env).filter((entry): entry is [string, string] => entry[1] !== undefined),
       ),
-      argv: (Array.isArray(args.agent) ? args.agent : args.agent ? [args.agent] : []).flatMap((value: string) => [
-        "--agent",
-        value,
-      ]),
+      argv: workerArgv,
     })
-    Log.Default.info("tui-thread.args", {
+    Log.Default.info("tui-thread.worker", {
       prompt: cliPrompt,
       positional: Array.isArray(args._) ? args._.map((v: any) => String(v)) : [],
-      agentCount: Array.isArray(args.agent) ? args.agent.length : args.agent ? 1 : 0,
+      agent: args.agent ?? null,
+      planAgent: args.planAgent ?? null,
     })
     worker.onerror = (e) => {
       Log.Default.error(e)

@@ -25,6 +25,8 @@ export interface AgentConnectionOptions {
   cwd: string
   /** MCP configuration to pass to the agent */
   mcp?: Record<string, import("../config/config").Config.Mcp>
+  /** Abort signal to cancel connection attempt and kill subprocess */
+  abortSignal?: AbortSignal
   /** Existing client to dispose before connecting (for reconnection scenarios) */
   existingClient?: ACPClient.Instance | null
   /** Version number for race condition handling */
@@ -67,14 +69,18 @@ export class ConnectionAbortedError extends Error {
  */
 export class AgentConnector {
   /**
-   * Validates that a system agent is installed
+   * Validates that an agent is installed (or that npx/uvx is available for auto-download)
    */
   static validateInstallation(agentDef: ACPAgentDefinition): void {
-    if (agentDef.installMethod === "system" && agentDef.installCheck) {
-      const checkResult = Bun.spawnSync(["sh", "-c", agentDef.installCheck])
-      if (checkResult.exitCode !== 0) {
-        throw new AgentNotInstalledError(agentDef.name, agentDef.installGuide)
-      }
+    // For npx/uvx agents, check if the package manager is available
+    // (the packages will auto-download on first use)
+    const commandToCheck = (agentDef.command === "npx" || agentDef.command === "uvx")
+      ? agentDef.command
+      : agentDef.command
+
+    const resolved = Bun.which(commandToCheck)
+    if (!resolved) {
+      throw new AgentNotInstalledError(agentDef.name, agentDef.installGuide)
     }
   }
 
@@ -93,7 +99,7 @@ export class AgentConnector {
   static async connect(
     options: AgentConnectionOptions
   ): Promise<AgentConnectionResult> {
-    const { agentDef, cwd, mcp, existingClient, version = 0, onStaleCheck } = options
+    const { agentDef, cwd, mcp, existingClient, version = 0, onStaleCheck, abortSignal } = options
 
     log.debug("agent.connect.start", { agent: agentDef.name })
 
@@ -112,9 +118,10 @@ export class AgentConnector {
       // Create ACP client
       client = await ACPClient.create({
         command: agentDef.command,
-        args: agentDef.args,
+        args: agentDef.acpStartupArgs,
         cwd,
         mcp,
+        abortSignal,
       })
       log.debug("agent.connect.created", { agent: agentDef.name })
 

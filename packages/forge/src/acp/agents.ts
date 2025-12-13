@@ -1,15 +1,11 @@
 import type { MatchResult } from "../util/match.js"
 import { fuzzyMatch } from "../util/match.js"
 
-export type ACPAgentInstallMethod = "npx" | "uvx" | "system" | "skip"
-
 export interface ACPAgentDefinition {
   name: string
   description: string
-  installMethod: ACPAgentInstallMethod
   command: string
-  args: string[]
-  installCheck?: string
+  acpStartupArgs: string[]
   installGuide?: string
 }
 
@@ -17,135 +13,113 @@ export const ACP_AGENTS: ACPAgentDefinition[] = [
   {
     name: "Claude Code",
     description: "Anthropic's official Claude Code agent",
-    installMethod: "npx",
     command: "npx",
-    args: ["@zed-industries/claude-code-acp"],
+    acpStartupArgs: ["@zed-industries/claude-code-acp"],
     installGuide: "https://github.com/zed-industries/claude-code-acp",
   },
   {
     name: "Codex CLI",
     description: "Zed's Codex agent for code editing",
-    installMethod: "npx",
     command: "npx",
-    args: ["@zed-industries/codex-acp"],
+    acpStartupArgs: ["@zed-industries/codex-acp"],
     installGuide: "https://github.com/zed-industries/codex-acp",
   },
   {
     name: "Gemini CLI",
     description: "Google's Gemini code assistant (recommended for ACP testing)",
-    installMethod: "npx",
     command: "npx",
-    args: ["@google/gemini-cli", "--experimental-acp"],
+    acpStartupArgs: ["@google/gemini-cli", "--experimental-acp"],
     installGuide: "https://github.com/google-gemini/gemini-cli",
   },
   {
     name: "Kimi CLI",
     description: "Moonshot AI's Kimi code assistant",
-    installMethod: "uvx",
     command: "uvx",
-    args: ["--python", "3.13", "kimi-cli", "--acp"],
+    acpStartupArgs: ["--python", "3.13", "kimi-cli", "--acp"],
     installGuide: "https://github.com/MoonshotAI/kimi-cli",
   },
   {
     name: "Fast Agent",
     description: "Framework for multimodal agents with ACP support (requires Python 3.13+)",
-    installMethod: "uvx",
     command: "uvx",
-    args: ["--python", "3.13", "fast-agent-acp"],
+    acpStartupArgs: ["fast-agent-acp@latest"],
     installGuide: "https://github.com/evalstate/fast-agent",
   },
   {
     name: "OpenHands",
     description: "All-Hands AI's autonomous coding agent (experimental ACP)",
-    installMethod: "uvx",
     command: "uvx",
-    args: ["openhands", "acp"],
+    acpStartupArgs: ["--python", "3.12", "--from", "openhands-ai", "openhands", "acp"],
     installGuide: "https://docs.openhands.dev/openhands/usage/run-openhands/acp",
   },
   {
     name: "Mistral Vibe",
     description: "Mistral AI's coding agent with ACP support",
-    installMethod: "uvx",
     command: "uvx",
-    args: ["mistral-vibe", "vibe-acp"],
+    acpStartupArgs: ["mistral-vibe", "vibe-acp"],
     installGuide: "https://github.com/mistralai/mistral-vibe",
   },
   {
     name: "Auggie",
     description: "Augment Code's AI coding assistant",
-    installMethod: "system",
-    command: "auggie",
-    args: ["--acp"],
-    installCheck: "which auggie",
+    command: "npx",
+    acpStartupArgs: ["@augmentcode/auggie@latest", "--acp"],
     installGuide: "https://docs.augmentcode.com/cli/acp",
   },
   {
     name: "Goose",
     description: "Block's autonomous coding agent (requires v1.14.2+)",
-    installMethod: "system",
     command: "goose",
-    args: ["acp"],
-    installCheck: "which goose",
-    installGuide: "https://block.github.io/goose/docs/guides/acp-clients",
+    acpStartupArgs: ["acp"],
+    installGuide: "https://block.github.io/goose/docs/getting-started/installation",
   },
   {
     name: "OpenCode",
     description: "SST's open-source code agent",
-    installMethod: "system",
-    command: "opencode",
-    args: ["--acp"],
-    installCheck: "which opencode",
+    command: "npx",
+    acpStartupArgs: ["opencode-ai@latest", "acp"],
     installGuide: "https://github.com/sst/opencode",
   },
   {
     name: "Stakpak",
     description: "Stakpak's AI development agent",
-    installMethod: "system",
     command: "stakpak",
-    args: ["acp"],
-    installCheck: "which stakpak",
+    acpStartupArgs: ["acp"],
     installGuide: "https://github.com/stakpak/agent",
   },
   {
     name: "Docker cagent",
     description: "Docker's container agent (ACP support unclear)",
-    installMethod: "skip",
     command: "",
-    args: [],
+    acpStartupArgs: [],
     installGuide: "https://github.com/docker/cagent",
   },
   {
     name: "Code Assistant",
     description: "Rust-based coding agent with streaming and tool execution support",
-    installMethod: "system",
     command: "code-assistant",
-    args: ["acp"],
-    installCheck: "which code-assistant",
+    acpStartupArgs: ["acp"],
     installGuide: "https://github.com/stippi/code-assistant",
   },
   {
     name: "LLMling-Agent",
     description: "Python-based agent framework with file and terminal access",
-    installMethod: "uvx",
     command: "uvx",
-    args: ["llmling-agent", "acp", "config.yml", "--file-access", "--terminal-access"],
-    installGuide: "https://phil65.github.io/llmling-agent/advanced/acp_integration/",
+    acpStartupArgs: ["--python", "3.13", "llmling-agent[default]@latest", "serve-acp", "config.yml", "--file-access", "--terminal-access"],
+    installGuide: "https://phil65.github.io/llmling-agent/cli/",
   },
   {
     name: "Qwen Code",
     description: "AI-powered coding agent optimized for Qwen3-Coder models (experimental ACP)",
-    installMethod: "npx",
     command: "npx",
-    args: ["@qwen-code/qwen-code@latest", "--experimental-acp"],
+    acpStartupArgs: ["@qwen-code/qwen-code@latest", "--experimental-acp"],
     installGuide: "https://github.com/QwenLM/qwen-code",
   },
   {
     name: "VT Code",
     description: "Rust-based coding agent with ACP support",
-    installMethod: "system",
     command: "vtcode",
-    args: ["acp"],
-    installCheck: "which vtcode",
+    acpStartupArgs: ["acp"],
     installGuide: "https://github.com/vinhnx/vtcode",
   },
 ]
@@ -160,14 +134,6 @@ export function matchAgent(name: string): MatchResult<ACPAgentDefinition> {
 
 export function getAllAgents(): ACPAgentDefinition[] {
   return ACP_AGENTS
-}
-
-export function getInstallableAgents(): ACPAgentDefinition[] {
-  return ACP_AGENTS.filter((agent) => agent.installMethod !== "skip")
-}
-
-export function getAgentsByInstallMethod(method: ACPAgentInstallMethod): ACPAgentDefinition[] {
-  return ACP_AGENTS.filter((agent) => agent.installMethod === method)
 }
 
 // Export the default agent (Claude Code)

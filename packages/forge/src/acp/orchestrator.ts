@@ -253,7 +253,7 @@ export namespace ACPOrchestrator {
 
     const client = await ACPClient.create({
       command: agent.command,
-      args: agent.args,
+      args: agent.acpStartupArgs,
       cwd: Instance.directory,
       onSessionUpdate: async (notification) => {
         log.info("  ┌─ [ORCHESTRATOR] received notification", {

@@ -11,9 +11,36 @@
 
 <img src="packages/site/public/images/terminal-ui.png">
 
+## Quickstart
+
+Install globally using NPM or Homebrew
+
+```sh
+npm i -g @forge-agents/forge
+brew install forge
+```
+
+Then run `forge` to get started:
+
+```sh
+forge
+```
+
+Try running Claude Code with a prompt:
+
+```sh
+forge --agent claude "Create our update my CLAUDE.md"
+```
+
+Try planning with Claude Code, and implementing with Codex:
+
+```sh
+forge --plan-agent "name=claude model=opus" --agent "name=codex model=gpt-5.1-codex-max" "Find all the TODO comments in the codebase and address the top 3"
+```
+
 ## What is Forge/ACP?
 
-Forge is a terminal interface for AI coding agents. It implements the Agent Client Protocol (ACP) - an open standard that lets any editor work with any agent, similar to how LSP standardized language servers.
+Forge is a terminal interface for AI coding agents. It implements the [Agent Client Protocol](https://agentclientprotocol.com/) (ACP) - an open standard that lets any editor work with any agent, similar to how LSP standardized language servers.
 
 **Key features:**
 
@@ -27,7 +54,9 @@ Forge is a terminal interface for AI coding agents. It implements the Agent Clie
 
 Models and their harnesses are co-dependent. ACP lets you run each model in its purpose-built harness (Sonnet in Claude Code, GPT in Codex) instead of a one-size-fits-all solution.
 
-For a deeper dive, see Viv Trivedy's great article [Claude Code SDK: HaaS (Harness as a Service)](https://www.vtrivedy.com/posts/claude-code-sdk-haas-harness-as-a-service).
+This also enables hyper-specialized agents for domain-specific problems - like [Stakpak](https://github.com/stakpak/agent) for DevOps workflows, or custom agents built for your team's specific needs.
+
+For a deeper dive, see Viv Trivedy's great article: [Agents Should Be More Opinionated](https://www.vtrivedy.com/posts/agents-should-be-more-opinionated).
 
 ## Supported Agents
 
@@ -55,20 +84,26 @@ Run `forge agents` to see the full list.
 
 ## Usage
 
-### Multi-Agent Workflows
+### Plan With One Agent, Implement With Another
 
-The `-a, --agent` flag accepts a fuzzy-matched string with space delimited parameters:
+Agents that expose a `plan` session mode today: Claude Code, OpenCode.
+
+Use `--plan-agent` and `--agent` to split planning and implementation. Both accept either an agent name (`--agent claude`) or parameters (`--agent "name=claude model=opus mode=acceptEdits"`):
+
+**Agent parameters**
 
 - `name` (required) - Agent name
-- `model` (optional) - Model identifier (run `forge models <agentName>` to see available models)
-- `mode` (optional) - Session mode like `plan` or `agent` (run `forge modes <agentName>` to see available modes)
+- `model` (optional) - Model identifier (`forge models <agent>` to see options)
+- `mode` (optional) - Session mode (`forge modes <agent>` to see options)
 
-You can chain multiple agents together - when an agent exits a mode, Forge automatically switches to the next agent in the chain.
+When `--plan-agent` [exits plan mode](https://agentclientprotocol.com/protocol/session-modes#exiting-plan-modes), Forge automatically switches to `--agent` for implementation.
 
-**Plan with Claude, implement with Codex**
+> Note that all fields support fuzzy matching
+
+**Example: Plan with Claude, implement with Codex**
 
 ```sh
-forge --agent "name=claude model=opus mode=plan" --agent "name=codex model=gpt-5.1-codex-max mode=agent" "Identify all of the TODO comments in this project and solve them"
+forge --plan-agent "name=claude model=opus" --agent "name=codex model=gpt-5.1-codex-max" "Find all TODOs and address the top 3"
 ```
 
 ### Commands & Flags
@@ -84,7 +119,8 @@ Positionals:
   prompt  prompt to send  [string]
 
 Options:
-  -a, --agent       repeatable agent spec: --agent "name=claude model=opus mode=plan"  [array]
+  -a, --agent       agent spec: --agent claude or --agent "name=claude model=opus mode=bypassPermissions"  [string]
+      --plan-agent  plan agent spec: --plan-agent claude or --plan-agent "name=claude model=opus"  [string]
   -h, --help        show help  [boolean]
   -v, --version     show version number  [boolean]
       --print-logs  print logs to stderr  [boolean]

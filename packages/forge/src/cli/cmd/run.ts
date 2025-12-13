@@ -11,6 +11,7 @@ import { createForgeClient } from "@forge/sdk"
 import { Server } from "../../server/server"
 import { type AgentFlag, applyAgentEntry, parseAgentFlags, validateAgentFlags } from "./session-init"
 import { Log } from "@/util/log"
+import { getAgent } from "@/acp/agents"
 
 const TOOL: Record<string, [string, string]> = {
   todowrite: ["Todo", UI.Style.TEXT_WARNING_BOLD],
@@ -36,7 +37,8 @@ export type RunHandlerArgs = {
   continue?: boolean
   session?: string
   share?: boolean
-  agent?: string | string[]
+  agent?: string
+  planAgent?: string
   format?: "default" | "json"
   file?: string[] | string
   title?: string
@@ -76,8 +78,11 @@ export const RunCommand = cmd({
       .option("agent", {
         type: "string",
         alias: ["a"],
-        array: true,
-        describe: 'repeatable agent spec: --agent "name=claude model=opus mode=plan"',
+        describe: 'agent spec: --agent claude or --agent "name=claude model=opus mode=bypassPermissions"',
+      })
+      .option("plan-agent", {
+        type: "string",
+        describe: 'plan agent spec: --plan-agent claude or --plan-agent "name=claude model=opus"',
       })
       .option("format", {
         type: "string",
@@ -155,7 +160,7 @@ export async function runNonInteractive(args: RunHandlerArgs) {
 
   const { agents: agentQueue, rawCount: agentRaw } = (() => {
     try {
-      return parseAgentFlags(args.agent)
+      return parseAgentFlags(args.agent, args.planAgent)
     } catch (error) {
       const message = error instanceof Error ? error.message : String(error)
       fail(message)
@@ -232,7 +237,10 @@ export async function runNonInteractive(args: RunHandlerArgs) {
         await applyQueueEntry(0, "initial")
       } catch (error) {
         const message = error instanceof Error ? error.message : String(error)
-        UI.error(message)
+        const agentGuide = getAgent(queueState.entries[0]?.name)?.installGuide
+        const hint =
+          agentGuide && /not installed|command not found/i.test(message) ? `${message}\nInstall: ${agentGuide}` : message
+        UI.error(hint)
         process.exit(1)
       }
     }
@@ -254,9 +262,13 @@ export async function runNonInteractive(args: RunHandlerArgs) {
             try {
               await applyQueueEntry(queueState.index + 1, "switch")
             } catch (error) {
-              const message = `Failed to switch agent queue: ${error instanceof Error ? error.message : String(error)}`
-              UI.error(message)
-              errorMsg = errorMsg ? `${errorMsg}${EOL}${message}` : message
+              const base = error instanceof Error ? error.message : String(error)
+              const agentGuide = getAgent(queueState.entries[queueState.index + 1]?.name)?.installGuide
+              const message =
+                agentGuide && /not installed|command not found/i.test(base) ? `${base}\nInstall: ${agentGuide}` : base
+              const wrapped = `Failed to switch agent queue: ${message}`
+              UI.error(wrapped)
+              errorMsg = errorMsg ? `${errorMsg}${EOL}${wrapped}` : wrapped
               break
             }
           }

@@ -64,24 +64,42 @@ function parseBareAgent(input: string): AgentFlag {
 }
 
 /**
- * Parse repeatable --agent strings into structured entries.
+ * Parse --agent and --plan-agent flags into structured entries.
  * Supports either key/value pairs ("name=claude model=opus") or bare values ("claude/opus").
+ * For plan-agent, mode is always forced to "plan" regardless of input.
  */
-export function parseAgentFlags(input?: string | string[] | null): { agents: AgentFlag[]; rawCount: number } {
-  if (input == null) return { agents: [], rawCount: 0 }
-  const values = Array.isArray(input) ? input : [input]
+export function parseAgentFlags(
+  agent?: string | null,
+  planAgent?: string | null
+): { agents: AgentFlag[]; rawCount: number } {
   const agents: AgentFlag[] = []
+  let rawCount = 0
 
-  for (const value of values) {
-    if (typeof value !== "string") continue
-    const trimmed = value.trim()
-    if (!trimmed) continue
-    const hasKeyValue = trimmed.includes("=")
-    const parsed = hasKeyValue ? parseKeyValueAgent(trimmed) : parseBareAgent(trimmed)
-    agents.push(parsed)
+  // Parse plan-agent first (if present)
+  if (planAgent != null && typeof planAgent === "string") {
+    const trimmed = planAgent.trim()
+    if (trimmed) {
+      const hasKeyValue = trimmed.includes("=")
+      const parsed = hasKeyValue ? parseKeyValueAgent(trimmed) : parseBareAgent(trimmed)
+      // Force mode to "plan" for plan-agent
+      parsed.mode = "plan"
+      agents.push(parsed)
+      rawCount++
+    }
   }
 
-  return { agents, rawCount: values.length }
+  // Parse regular agent (if present)
+  if (agent != null && typeof agent === "string") {
+    const trimmed = agent.trim()
+    if (trimmed) {
+      const hasKeyValue = trimmed.includes("=")
+      const parsed = hasKeyValue ? parseKeyValueAgent(trimmed) : parseBareAgent(trimmed)
+      agents.push(parsed)
+      rawCount++
+    }
+  }
+
+  return { agents, rawCount }
 }
 
 export function modelSupported(models: SessionModelState | null | undefined, modelId: string) {

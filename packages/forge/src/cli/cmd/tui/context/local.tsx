@@ -15,6 +15,7 @@ import type { SessionModeId, SessionModeState, SessionModelState, AuthMethod } f
 import { useKV } from "./kv"
 import { ACPAuthManager } from "@/acp/auth"
 import { AgentConnector, AgentNotInstalledError, ConnectionAbortedError } from "@/acp/connection"
+import { AuthenticationRequiredError } from "@/acp/types"
 import { Log } from "@/util/log"
 import { useSDK } from "@tui/context/sdk"
 import { useRoute } from "@tui/context/route"
@@ -84,7 +85,7 @@ export const { use: useLocal, provider: LocalProvider } = createSimpleContext({
     })
 
     const agent = iife(() => {
-      const agents = createMemo(() => getAllAgents().filter((x) => x.installMethod !== "skip"))
+      const agents = createMemo(() => getAllAgents())
       const [agentStore, setAgentStore] = createStore<{
         current: string
       }>({
@@ -210,12 +211,20 @@ export const { use: useLocal, provider: LocalProvider } = createSimpleContext({
             // Check if this is an authentication error
             const authError = ACPAuthManager.isAuthError(error)
             if (authError.isAuthError) {
-              const authMethod = sessionStore.authMethods?.[0]
-              const message = ACPAuthManager.formatAuthMessage(
-                agentDef.name,
-                authError.instruction,
-                authMethod
-              )
+              const authMethodsFromError =
+                error instanceof AuthenticationRequiredError ? error.authMethods : sessionStore.authMethods ?? []
+
+              const lines =
+                authMethodsFromError?.map((method) => {
+                  const name = method.name ?? method.id ?? "Authentication method"
+                  return method.description ? `- ${name}: ${method.description}` : `- ${name}`
+                }) ?? []
+
+              const message =
+                lines.length > 0
+                  ? `${agentDef.name} requires authentication. Available methods:\n${lines.join("\n")}`
+                  : ACPAuthManager.formatAuthMessage(agentDef.name, authError.instruction, authMethodsFromError?.[0])
+
               toast.show({
                 variant: "warning",
                 message,
@@ -262,16 +271,14 @@ export const { use: useLocal, provider: LocalProvider } = createSimpleContext({
           const agentDef = getAgent(agentName)
           if (!agentDef) return false
 
-          // npx/uvx agents are always "available"
-          if (agentDef.installMethod !== "system") return true
-
-          // Check system agents
-          if (agentDef.installCheck) {
-            const checkResult = Bun.spawnSync(["sh", "-c", agentDef.installCheck])
-            return checkResult.exitCode === 0
+          // For npx/uvx agents, check if the package manager is available
+          // (the packages will auto-download on first use)
+          if (agentDef.command === "npx" || agentDef.command === "uvx") {
+            return Bun.which(agentDef.command) !== null
           }
 
-          return false
+          // For system agents, check if the binary exists on PATH
+          return Bun.which(agentDef.command) !== null
         },
       }
 

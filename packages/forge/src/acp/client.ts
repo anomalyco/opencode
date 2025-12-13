@@ -59,6 +59,10 @@ export namespace ACPClient {
      */
     mcp?: Record<string, import("../config/config").Config.Mcp>
     /**
+     * Optional abort signal to forcefully terminate the subprocess
+     */
+    abortSignal?: AbortSignal
+    /**
      * Client capabilities to advertise
      */
     capabilities?: {
@@ -178,6 +182,24 @@ export namespace ACPClient {
       })
 
       log.info("subprocess spawned", { pid: proc.pid })
+
+      if (config.abortSignal) {
+        const abortHandler = () => {
+          log.warn("aborting subprocess via signal", { pid: proc.pid })
+          try {
+            proc.kill("SIGKILL")
+          } catch (error) {
+            log.error("error killing subprocess on abort", {
+              error: error instanceof Error ? error.message : String(error),
+            })
+          }
+        }
+        if (config.abortSignal.aborted) {
+          abortHandler()
+        } else {
+          config.abortSignal.addEventListener("abort", abortHandler, { once: true })
+        }
+      }
     } catch (error) {
       const err = error instanceof Error ? error : new Error(String(error))
       log.error("failed to spawn subprocess", { error: err.message })

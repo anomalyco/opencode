@@ -19,3 +19,6 @@ Session.vim
 opencode.json
 a.out
 packages/sdk/js/.xdg
+
+# Stakpak session files
+.stakpak/session*

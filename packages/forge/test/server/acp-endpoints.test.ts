@@ -32,9 +32,8 @@ function mockState(): MockState {
     agent: {
       name: "Codex CLI",
       description: "",
-      installMethod: "npx",
       command: "npx",
-      args: [],
+      acpStartupArgs: [],
     },
     client: null,
     acpSessionID: "acp-mock",

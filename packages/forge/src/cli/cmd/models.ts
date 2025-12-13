@@ -46,7 +46,7 @@ export const ModelsCommand = cmd({
       // Create ACP client
       client = await ACPClient.create({
         command: agent.command,
-        args: agent.args,
+        args: agent.acpStartupArgs,
         cwd: process.cwd(),
       })
 
