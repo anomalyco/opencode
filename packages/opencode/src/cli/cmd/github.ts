@@ -411,17 +411,30 @@ export const GithubRunCommand = cmd({
       let exitCode = 0
       type PromptFiles = Awaited<ReturnType<typeof getUserPrompt>>["promptFiles"]
       const triggerCommentId = payload.comment.id
+      const useGithubToken = normalizeUseGithubToken()
 
       try {
-        const actionToken = isMock ? args.token! : await getOidcToken()
-        appToken = await exchangeForAppToken(actionToken)
+        if (useGithubToken) {
+          const githubToken = process.env["GITHUB_TOKEN"]
+          if (!githubToken) {
+            throw new Error(
+              "GITHUB_TOKEN environment variable is not set. When using use_github_token, you must provide GITHUB_TOKEN.",
+            )
+          }
+          appToken = githubToken
+        } else {
+          const actionToken = isMock ? args.token! : await getOidcToken()
+          appToken = await exchangeForAppToken(actionToken)
+        }
         octoRest = new Octokit({ auth: appToken })
         octoGraph = graphql.defaults({
           headers: { authorization: `token ${appToken}` },
         })
 
         const { userPrompt, promptFiles } = await getUserPrompt()
-        await configureGit(appToken)
+        if (!useGithubToken) {
+          await configureGit(appToken)
+        }
         await assertPermissions()
 
         await addReaction()
@@ -514,8 +527,10 @@ export const GithubRunCommand = cmd({
         // Also output the clean error message for the action to capture
         //core.setOutput("prepare_error", e.message);
       } finally {
-        await restoreGitConfig()
-        await revokeAppToken()
+        if (!useGithubToken) {
+          await restoreGitConfig()
+          await revokeAppToken()
+        }
       }
       process.exit(exitCode)
 
@@ -542,6 +557,14 @@ export const GithubRunCommand = cmd({
         if (value === "true") return true
         if (value === "false") return false
         throw new Error(`Invalid share value: ${value}. Share must be a boolean.`)
+      }
+
+      function normalizeUseGithubToken() {
+        const value = process.env["USE_GITHUB_TOKEN"]
+        if (!value) return false
+        if (value === "true") return true
+        if (value === "false") return false
+        throw new Error(`Invalid use_github_token value: ${value}. Must be a boolean.`)
       }
 
       function isIssueCommentEvent(
