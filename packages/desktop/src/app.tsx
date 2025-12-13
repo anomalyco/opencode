@@ -14,6 +14,7 @@ import { LayoutProvider } from "./context/layout"
 import { GlobalSDKProvider } from "./context/global-sdk"
 import { SessionProvider } from "./context/session"
 import { Show } from "solid-js"
+import { NotificationProvider } from "./context/notification"
 
 declare global {
   interface Window {
@@ -37,25 +38,27 @@ export function App() {
         <GlobalSDKProvider url={url}>
           <GlobalSyncProvider>
             <LayoutProvider>
-              <MetaProvider>
-                <Font />
-                <Router root={Layout}>
-                  <Route path="/" component={Home} />
-                  <Route path="/:dir" component={DirectoryLayout}>
-                    <Route path="/" component={() => <Navigate href="session" />} />
-                    <Route
-                      path="/session/:id?"
-                      component={(p) => (
-                        <Show when={p.params.id || true} keyed>
-                          <SessionProvider>
-                            <Session />
-                          </SessionProvider>
-                        </Show>
-                      )}
-                    />
-                  </Route>
-                </Router>
-              </MetaProvider>
+              <NotificationProvider>
+                <MetaProvider>
+                  <Font />
+                  <Router root={Layout}>
+                    <Route path="/" component={Home} />
+                    <Route path="/:dir" component={DirectoryLayout}>
+                      <Route path="/" component={() => <Navigate href="session" />} />
+                      <Route
+                        path="/session/:id?"
+                        component={(p) => (
+                          <Show when={p.params.id || true} keyed>
+                            <SessionProvider>
+                              <Session />
+                            </SessionProvider>
+                          </Show>
+                        )}
+                      />
+                    </Route>
+                  </Router>
+                </MetaProvider>
+              </NotificationProvider>
             </LayoutProvider>
           </GlobalSyncProvider>
         </GlobalSDKProvider>
