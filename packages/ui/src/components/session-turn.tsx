@@ -56,11 +56,13 @@ export function SessionTurn(
     userScrolled: false,
     stickyHeaderHeight: 0,
     scrollY: 0,
+    autoScrolling: false,
   })
 
   function handleScroll() {
     if (!scrollRef) return
     setState("scrollY", scrollRef.scrollTop)
+    if (state.autoScrolling) return
     const { scrollTop, scrollHeight, clientHeight } = scrollRef
     const atBottom = scrollHeight - scrollTop - clientHeight < 50
     if (!atBottom && working()) {
@@ -74,6 +76,21 @@ export function SessionTurn(
     }
   }
 
+  function scrollToBottom() {
+    if (!scrollRef) return
+    if (state.userScrolled) return
+    if (!working()) return
+    if (state.autoScrolling) return
+
+    setState("autoScrolling", true)
+    requestAnimationFrame(() => {
+      scrollRef?.scrollTo({ top: scrollRef.scrollHeight, behavior: "auto" })
+      requestAnimationFrame(() => {
+        setState("autoScrolling", false)
+      })
+    })
+  }
+
   createEffect(() => {
     if (!working()) {
       setState("userScrolled", false)
@@ -83,10 +100,7 @@ export function SessionTurn(
   createResizeObserver(
     () => state.contentRef,
     () => {
-      if (!scrollRef || state.userScrolled || !working()) return
-      requestAnimationFrame(() => {
-        scrollRef.scrollTop = scrollRef.scrollHeight
-      })
+      scrollToBottom()
     },
   )
 
