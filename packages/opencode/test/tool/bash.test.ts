@@ -143,25 +143,6 @@ describe("tool.bash", () => {
       },
     })
   })
-
-  // TODO: better test
-  // test("cd ../ should ask for permission for external directory", async () => {
-  //   await Instance.provide({
-  //     directory: projectRoot,
-  //     fn: async () => {
-  //       bash.execute(
-  //         {
-  //           command: "cd ../",
-  //           description: "Try to cd to parent directory",
-  //         },
-  //         ctx,
-  //       )
-  //       // Give time for permission to be asked
-  //       await new Promise((resolve) => setTimeout(resolve, 1000))
-  //       expect(Permission.pending()[ctx.sessionID]).toBeDefined()
-  //     },
-  //   })
-  // })
 })
 
 describe("tool.bash permissions", () => {
