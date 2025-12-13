@@ -126,6 +126,12 @@ describe("tool.bash", () => {
           const bashKsh = await BashTool.init()
           expect(bashKsh.description).toContain("ksh command")
           expect(bashKsh.description).toContain("ksh commands")
+
+          // Mock fish shell environment (fish is now supported, not blacklisted)
+          process.env.SHELL = "/usr/bin/fish"
+          const bashFish = await BashTool.init()
+          expect(bashFish.description).toContain("fish command")
+          expect(bashFish.description).toContain("fish commands")
         } finally {
           // Restore original shell
           if (originalShell) {

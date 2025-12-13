@@ -55,27 +55,18 @@ const parser = lazy(async () => {
 export const BashTool = Tool.define("bash", async () => {
   const shell = (() => {
     const s = process.env.SHELL
-    if (s) {
-      const basename = path.basename(s)
-      if (!new Set(["fish", "nu"]).has(basename)) {
-        return s
-      }
-    }
+    if (s) return s
 
     if (process.platform === "darwin") {
       return "/bin/zsh"
     }
 
     if (process.platform === "win32") {
-      // Let Bun / Node pick COMSPEC (usually cmd.exe)
-      // or explicitly:
       return process.env.COMSPEC || true
     }
 
     const bash = Bun.which("bash")
-    if (bash) {
-      return bash
-    }
+    if (bash) return bash
 
     return true
   })()
