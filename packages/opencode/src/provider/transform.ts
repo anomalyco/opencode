@@ -255,7 +255,7 @@ export namespace ProviderTransform {
         result["reasoningEffort"] = "medium"
       }
 
-      if (model.api.id.endsWith("gpt-5.1") && model.providerID !== "azure") {
+      if (model.api.id.endsWith("gpt-5.") && model.providerID !== "azure") {
         result["textVerbosity"] = "low"
       }
 
