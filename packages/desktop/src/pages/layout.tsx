@@ -318,22 +318,20 @@ export default function Layout(props: ParentProps) {
                         )
                       }
                       return (
-                        <A
-                          href={`${slug()}/session/${session.id}`}
-                          class="group/session focus:outline-none cursor-default"
+                        <div
+                          class="group/session relative w-full pl-4 pr-1 py-1 rounded-md cursor-default transition-colors
+                                 hover:bg-surface-raised-base-hover focus-within:bg-surface-raised-base-hover has-[.active]:bg-surface-raised-base-hover"
                         >
-                          <Tooltip placement="right" value={session.title}>
-                            <div
-                              class="relative w-full pl-4 pr-1 py-1 rounded-md
-                                     group-[.active]/session:bg-surface-raised-base-hover
-                                     group-hover/session:bg-surface-raised-base-hover
-                                     group-focus/session:bg-surface-raised-base-hover"
+                          <Tooltip placement="right" value={session.title} gutter={10}>
+                            <A
+                              href={`${slug()}/session/${session.id}`}
+                              class="flex flex-col min-w-0 text-left w-full focus:outline-none"
                             >
-                              <div class="flex items-center self-stretch gap-6 justify-between">
+                              <div class="flex items-center self-stretch gap-6 justify-between transition-[padding] group-hover/session:pr-7 group-focus-within/session:pr-7 group-active/session:pr-7">
                                 <span class="text-14-regular text-text-strong overflow-hidden text-ellipsis truncate">
                                   {session.title}
                                 </span>
-                                <div class="shrink-0 group-hover/session:hidden mr-1">
+                                <div class="shrink-0 group-hover/session:hidden group-active/session:hidden group-focus-within/session:hidden">
                                   <Switch>
                                     <Match when={hasError()}>
                                       <div class="size-1.5 mr-1.5 rounded-full bg-text-diff-delete-base" />
@@ -358,12 +356,6 @@ export default function Layout(props: ParentProps) {
                                     </Match>
                                   </Switch>
                                 </div>
-                                <div class="hidden group-hover/session:flex group-active/session:flex text-text-base gap-1">
-                                  {/* <IconButton icon="dot-grid" variant="ghost" /> */}
-                                  <Tooltip placement="right" value="Archive session">
-                                    <IconButton icon="archive" variant="ghost" onClick={() => archive(session)} />
-                                  </Tooltip>
-                                </div>
                               </div>
                               <Show when={session.summary?.files}>
                                 <div class="flex justify-between items-center self-stretch">
@@ -371,29 +363,40 @@ export default function Layout(props: ParentProps) {
                                   <Show when={session.summary}>{(summary) => <DiffChanges changes={summary()} />}</Show>
                                 </div>
                               </Show>
-                            </div>
+                            </A>
                           </Tooltip>
-                        </A>
+                          <div class="hidden group-hover/session:flex group-active/session:flex group-focus-within/session:flex text-text-base gap-1 items-center absolute top-1 right-1">
+                            {/* <IconButton icon="dot-grid" variant="ghost" /> */}
+                            <Tooltip placement="right" value="Archive session">
+                              <IconButton icon="archive" variant="ghost" onClick={() => archive(session)} />
+                            </Tooltip>
+                          </div>
+                        </div>
                       )
                     }}
                   </For>
                   <Show when={sessions().length === 0}>
-                    <A href={`${slug()}/session`} class="group/session focus:outline-none cursor-default">
-                      <Tooltip placement="right" value="New session">
-                        <div
-                          class="relative w-full pl-4 pr-1 py-1 rounded-md
-                                 group-[.active]/session:bg-surface-raised-base-hover
-                                 group-hover/session:bg-surface-raised-base-hover
-                                 group-focus/session:bg-surface-raised-base-hover"
-                        >
-                          <div class="flex items-center self-stretch gap-6 justify-between">
-                            <span class="text-14-regular text-text-strong overflow-hidden text-ellipsis truncate">
-                              New session
-                            </span>
-                          </div>
+                    <div
+                      class="group/session relative w-full pl-4 pr-1 py-1 rounded-md cursor-default transition-colors
+                             hover:bg-surface-raised-base-hover focus-within:bg-surface-raised-base-hover has-[.active]:bg-surface-raised-base-hover"
+                    >
+                      <div class="flex items-center self-stretch w-full">
+                        <div class="flex-1 min-w-0">
+                          <Tooltip placement="right" value="New session">
+                            <A
+                              href={`${slug()}/session`}
+                              class="flex flex-col gap-1 min-w-0 text-left w-full focus:outline-none"
+                            >
+                              <div class="flex items-center self-stretch gap-6 justify-between">
+                                <span class="text-14-regular text-text-strong overflow-hidden text-ellipsis truncate">
+                                  New session
+                                </span>
+                              </div>
+                            </A>
+                          </Tooltip>
                         </div>
-                      </Tooltip>
-                    </A>
+                      </div>
+                    </div>
                   </Show>
                 </nav>
               </Collapsible.Content>
