@@ -76,8 +76,17 @@ export namespace Plugin {
   export async function init() {
     const hooks = await state().then((x) => x.hooks)
     const config = await Config.get()
+    // Filter out MCP override entries (those without 'type' property) to match SDK Config type
+    const filteredConfig = {
+      ...config,
+      mcp: config.mcp
+        ? Object.fromEntries(
+            Object.entries(config.mcp).filter(([_, v]) => "type" in v),
+          )
+        : undefined,
+    }
     for (const hook of hooks) {
-      await hook.config?.(config)
+      await hook.config?.(filteredConfig as Parameters<NonNullable<typeof hook.config>>[0])
     }
     Bus.subscribeAll(async (input) => {
       const hooks = await state().then((x) => x.hooks)
