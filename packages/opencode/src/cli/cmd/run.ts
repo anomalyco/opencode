@@ -86,6 +86,10 @@ export const RunCommand = cmd({
         type: "number",
         describe: "port for the local server (defaults to random port if no value provided)",
       })
+      .option("no-session", {
+        type: "boolean",
+        describe: "Ephemeral session: session is created and deleted after run (not truly in-memory)",
+      })
   },
   handler: async (args) => {
     let message = [...args.message, ...(args["--"] || [])].join(" ")
@@ -282,7 +286,36 @@ export const RunCommand = cmd({
         }
       }
 
-      return await execute(sdk, sessionID)
+      let sessionDeleted = false
+      const deleteSession = async () => {
+        if (!sessionDeleted) {
+          sessionDeleted = true
+          try {
+            await sdk.session.delete({ sessionID })
+          } catch (err) {
+            UI.println(UI.Style.TEXT_WARNING_BOLD + "Warning: failed to delete temporary session")
+          }
+        }
+      }
+      if (args["no-session"]) {
+        process.on("SIGINT", async () => {
+          await deleteSession()
+          process.exit(130)
+        })
+        process.on("SIGTERM", async () => {
+          await deleteSession()
+          process.exit(143)
+        })
+        process.on("uncaughtException", async (err) => {
+          await deleteSession()
+          throw err
+        })
+      }
+      const result = await execute(sdk, sessionID)
+      if (args["no-session"]) {
+        await deleteSession()
+      }
+      return result
     }
 
     await bootstrap(process.cwd(), async () => {
@@ -335,7 +368,35 @@ export const RunCommand = cmd({
         }
       }
 
+      let sessionDeleted = false
+      const deleteSession = async () => {
+        if (!sessionDeleted) {
+          sessionDeleted = true
+          try {
+            await sdk.session.delete({ sessionID })
+          } catch (err) {
+            UI.println(UI.Style.TEXT_WARNING_BOLD + "Warning: failed to delete temporary session")
+          }
+        }
+      }
+      if (args["no-session"]) {
+        process.on("SIGINT", async () => {
+          await deleteSession()
+          process.exit(130)
+        })
+        process.on("SIGTERM", async () => {
+          await deleteSession()
+          process.exit(143)
+        })
+        process.on("uncaughtException", async (err) => {
+          await deleteSession()
+          throw err
+        })
+      }
       await execute(sdk, sessionID)
+      if (args["no-session"]) {
+        await deleteSession()
+      }
       server.stop()
     })
   },
