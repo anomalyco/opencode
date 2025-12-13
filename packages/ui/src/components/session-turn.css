@@ -29,20 +29,33 @@
     gap: 32px;
   }
 
+  [data-slot="session-turn-sticky-header"] {
+    width: 100%;
+    position: sticky;
+    top: 0;
+    background-color: var(--background-stronger);
+    z-index: 20;
+    display: flex;
+    flex-direction: column;
+    gap: 8px;
+    padding-bottom: 8px;
+  }
+
   [data-slot="session-turn-message-header"] {
     display: flex;
     align-items: center;
     gap: 8px;
     align-self: stretch;
-    position: sticky;
-    top: 0;
-    background-color: var(--background-stronger);
-    z-index: 20;
     height: 32px;
   }
 
-  [data-slot="session-turn-message-content"] {
-    margin-top: -24px;
+  /* [data-slot="session-turn-message-content"] { */
+  /* } */
+
+  [data-slot="session-turn-response-trigger"] {
+    width: calc(100% + 9px);
+    margin-left: -9px;
+    padding-left: 9px;
   }
 
   [data-slot="session-turn-message-title"] {
@@ -202,10 +215,10 @@
   }
 
   [data-component="sticky-accordion-header"] {
-    top: 40px;
+    top: var(--sticky-header-height, 40px);
 
     &[data-expanded]::before {
-      top: -40px;
+      top: calc(-1 * var(--sticky-header-height, 40px));
     }
   }
 
@@ -270,26 +283,35 @@
   }
 
   [data-slot="session-turn-response-section"] {
-    width: 100%;
+    width: calc(100% + 9px);
     min-width: 0;
+    margin-left: -9px;
+    padding-left: 9px;
+  }
+
+  [data-slot="session-turn-collapsible"] {
+    gap: 32px;
+    overflow: visible;
   }
 
   [data-slot="session-turn-collapsible-trigger-content"] {
-    color: var(--text-weak);
-    cursor: pointer;
-    background: none;
-    border: none;
-    padding: 0;
-    display: flex;
-    align-items: center;
-
-    &:hover {
-      color: var(--text-strong);
-    }
+    width: fit-content;
     display: flex;
     align-items: center;
     gap: 4px;
-    align-self: stretch;
+    color: var(--text-weak);
+    margin-left: -9px;
+
+    [data-component="spinner"] {
+      width: 12px;
+      height: 12px;
+      margin-right: 4px;
+    }
+
+    [data-component="icon"] {
+      width: 14px;
+      height: 14px;
+    }
   }
 
   [data-slot="session-turn-details-text"] {
@@ -308,5 +330,9 @@
     flex-direction: column;
     align-self: stretch;
     gap: 12px;
+
+    > :first-child > [data-component="markdown"]:first-child {
+      margin-top: 0;
+    }
   }
 }

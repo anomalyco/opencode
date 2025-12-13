@@ -255,7 +255,7 @@ export namespace ProviderTransform {
         result["reasoningEffort"] = "medium"
       }
 
-      if (model.api.id.endsWith("gpt-5.1") && model.providerID !== "azure") {
+      if (model.api.id.endsWith("gpt-5.") && model.providerID !== "azure") {
         result["textVerbosity"] = "low"
       }
 
@@ -272,7 +272,7 @@ export namespace ProviderTransform {
     const options: Record<string, any> = {}
 
     if (model.providerID === "openai" || model.api.id.includes("gpt-5")) {
-      if (model.api.id.includes("5.1")) {
+      if (model.api.id.includes("5.")) {
         options["reasoningEffort"] = "low"
       } else {
         options["reasoningEffort"] = "minimal"

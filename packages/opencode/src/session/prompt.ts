@@ -51,6 +51,7 @@ import { fn } from "@/util/fn"
 import { SessionProcessor } from "./processor"
 import { TaskTool } from "@/tool/task"
 import { SessionStatus } from "./status"
+import { Shell } from "@/shell/shell"
 
 // @ts-ignore
 globalThis.AI_SDK_LOG_WARNINGS = false
@@ -1173,6 +1174,12 @@ export namespace SessionPrompt {
   })
   export type ShellInput = z.infer<typeof ShellInput>
   export async function shell(input: ShellInput) {
+    const abort = start(input.sessionID)
+    if (!abort) {
+      throw new Session.BusyError(input.sessionID)
+    }
+    using _ = defer(() => cancel(input.sessionID))
+
     const session = await Session.get(input.sessionID)
     if (session.revert) {
       SessionRevert.cleanup(session)
@@ -1245,8 +1252,10 @@ export namespace SessionPrompt {
       },
     }
     await Session.updatePart(part)
-    const shell = process.env["SHELL"] ?? (process.platform === "win32" ? process.env["COMSPEC"] || "cmd.exe" : "bash")
-    const shellName = path.basename(shell).toLowerCase()
+    const shell = Shell.preferred()
+    const shellName = (
+      process.platform === "win32" ? path.win32.basename(shell, ".exe") : path.basename(shell)
+    ).toLowerCase()
 
     const invocations: Record<string, { args: string[] }> = {
       nu: {
@@ -1276,17 +1285,21 @@ export namespace SessionPrompt {
           `,
         ],
       },
-      // Windows cmd.exe
-      "cmd.exe": {
+      // Windows cmd
+      cmd: {
         args: ["/c", input.command],
       },
       // Windows PowerShell
-      "powershell.exe": {
+      powershell: {
+        args: ["-NoProfile", "-Command", input.command],
+      },
+      pwsh: {
         args: ["-NoProfile", "-Command", input.command],
       },
       // Fallback: any shell that doesn't match those above
+      //  - No -l, for max compatibility
       "": {
-        args: ["-c", "-l", `${input.command}`],
+        args: ["-c", `${input.command}`],
       },
     }
 
@@ -1327,11 +1340,34 @@ export namespace SessionPrompt {
       }
     })
 
+    let aborted = false
+    let exited = false
+
+    const kill = () => Shell.killTree(proc, { exited: () => exited })
+
+    if (abort.aborted) {
+      aborted = true
+      await kill()
+    }
+
+    const abortHandler = () => {
+      aborted = true
+      void kill()
+    }
+
+    abort.addEventListener("abort", abortHandler, { once: true })
+
     await new Promise<void>((resolve) => {
       proc.on("close", () => {
+        exited = true
+        abort.removeEventListener("abort", abortHandler)
         resolve()
       })
     })
+
+    if (aborted) {
+      output += "\n\n" + ["<metadata>", "User aborted the command", "</metadata>"].join("\n")
+    }
     msg.time.completed = Date.now()
     await Session.updateMessage(msg)
     if (part.state.status === "running") {
