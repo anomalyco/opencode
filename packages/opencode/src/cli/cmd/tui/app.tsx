@@ -218,7 +218,7 @@ function App() {
   let continued = false
   createEffect(() => {
     if (continued || sync.status !== "complete" || !args.continue) return
-    const match = sync.data.session.at(0)?.id
+    const match = sync.data.session.find((x) => x.parentID === undefined)?.id
     if (match) {
       continued = true
       route.navigate({ type: "session", sessionID: match })
