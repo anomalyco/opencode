@@ -1,5 +1,9 @@
-import type { LanguageModelV2 } from "@ai-sdk/provider"
-import { OpenAICompatibleChatLanguageModel } from "@ai-sdk/openai-compatible"
+import type { LanguageModelV2, EmbeddingModelV2, ImageModelV2 } from "@ai-sdk/provider"
+import {
+  OpenAICompatibleChatLanguageModel,
+  OpenAICompatibleEmbeddingModel,
+  OpenAICompatibleImageModel,
+} from "@ai-sdk/openai-compatible"
 import { type FetchFunction, withoutTrailingSlash, withUserAgentSuffix } from "@ai-sdk/provider-utils"
 import { OpenAIResponsesLanguageModel } from "./responses/openai-responses-language-model"
 import { OpenAICompatibleChatWithReasoningLanguageModel } from "./openai-compatible-chat-reasoning-model"
@@ -41,8 +45,8 @@ export interface OpenaiCompatibleProvider {
   chat(modelId: OpenaiCompatibleModelId): LanguageModelV2
   responses(modelId: OpenaiCompatibleModelId): LanguageModelV2
   languageModel(modelId: OpenaiCompatibleModelId): LanguageModelV2
-  textEmbeddingModel(modelId: OpenaiCompatibleModelId): never
-  imageModel(modelId: OpenaiCompatibleModelId): never
+  textEmbeddingModel(modelId: OpenaiCompatibleModelId): EmbeddingModelV2<string>
+  imageModel(modelId: OpenaiCompatibleModelId): ImageModelV2
 }
 
 /**
@@ -64,22 +68,28 @@ export function createOpenaiCompatible(options: OpenaiCompatibleProviderSettings
 
   const getHeaders = () => withUserAgentSuffix(headers, `ai-sdk/openai-compatible/${VERSION}`)
 
+  // Helper to create common model config
+  const getCommonModelConfig = (modelType: string) => ({
+    provider: `${options.name ?? "openai-compatible"}.${modelType}`,
+    headers: getHeaders,
+    url: ({ path }: { path: string }) => `${baseURL}${path}`,
+    fetch: options.fetch,
+  })
+
   const createChatModel = (modelId: OpenaiCompatibleModelId) => {
-    return new OpenAICompatibleChatWithReasoningLanguageModel(modelId, {
-      provider: `${options.name ?? "openai-compatible"}.chat`,
-      headers: getHeaders,
-      url: ({ path }) => `${baseURL}${path}`,
-      fetch: options.fetch,
-    })
+    return new OpenAICompatibleChatWithReasoningLanguageModel(modelId, getCommonModelConfig("chat"))
   }
 
   const createResponsesModel = (modelId: OpenaiCompatibleModelId) => {
-    return new OpenAIResponsesLanguageModel(modelId, {
-      provider: `${options.name ?? "openai-compatible"}.responses`,
-      headers: getHeaders,
-      url: ({ path }) => `${baseURL}${path}`,
-      fetch: options.fetch,
-    })
+    return new OpenAIResponsesLanguageModel(modelId, getCommonModelConfig("responses"))
+  }
+
+  const createEmbeddingModel = (modelId: OpenaiCompatibleModelId) => {
+    return new OpenAICompatibleEmbeddingModel(modelId, getCommonModelConfig("embedding"))
+  }
+
+  const createImageModel = (modelId: OpenaiCompatibleModelId) => {
+    return new OpenAICompatibleImageModel(modelId, getCommonModelConfig("image"))
   }
 
   const createLanguageModel = (modelId: OpenaiCompatibleModelId) => createChatModel(modelId)
@@ -91,12 +101,8 @@ export function createOpenaiCompatible(options: OpenaiCompatibleProviderSettings
   provider.languageModel = createLanguageModel
   provider.chat = createChatModel
   provider.responses = createResponsesModel
-  provider.textEmbeddingModel = () => {
-    throw new Error("Text embedding models are not supported by this provider")
-  }
-  provider.imageModel = () => {
-    throw new Error("Image models are not supported by this provider")
-  }
+  provider.textEmbeddingModel = createEmbeddingModel
+  provider.imageModel = createImageModel
 
   return provider as OpenaiCompatibleProvider
 }
