@@ -1382,39 +1382,38 @@ export namespace SessionPrompt {
 
     // Check if this is an MCP prompt
     const { MCP } = await import("../mcp")
-    const mcp_prompts = await MCP.prompts()
     const mcpPrompts = await MCP.prompts()
     const isMcpPrompt = !!mcpPrompts[input.command]
 
     let template = ""
-    if (is_mcp_prompt) {
+    if (isMcpPrompt) {
       // Parse arguments for MCP prompt
       const raw = input.arguments.match(argsRegex) ?? []
       const args = raw.map((arg) => arg.replace(quoteTrimRegex, ""))
 
       // Get the prompt info to extract argument names
-      const prompt_info = mcp_prompts[input.command]
-      const mcp_args: Record<string, unknown> = {}
+      const promptInfo = mcpPrompts[input.command]
+      const mcpArgs: Record<string, unknown> = {}
 
       // Map positional arguments to named arguments
-      if (prompt_info.arguments) {
-        prompt_info.arguments.forEach((arg, index) => {
+      if (promptInfo.arguments) {
+        promptInfo.arguments.forEach((arg, index) => {
           if (index < args.length) {
-            mcp_args[arg.name] = args[index]
+            mcpArgs[arg.name] = args[index]
           }
         })
       }
 
       // Get the actual prompt from the MCP server
-      const mcp_prompt = await MCP.getPrompt(input.command, mcp_args)
-      if (!mcp_prompt) {
+      const mcpPrompt = await MCP.getPrompt(input.command, mcpArgs)
+      if (!mcpPrompt) {
         throw new Error(
           `Failed to load MCP prompt: ${input.command}. The MCP server may be disconnected or the prompt may not exist.`,
         )
       }
 
       // Convert MCP prompt messages to a template string
-      template = mcp_prompt.messages
+      template = mcpPrompt.messages
         .map((msg) => {
           if (msg.content.type === "text") {
             return msg.content.text
