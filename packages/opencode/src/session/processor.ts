@@ -12,6 +12,7 @@ import { SessionRetry } from "./retry"
 import { SessionStatus } from "./status"
 import { Plugin } from "@/plugin"
 import type { Provider } from "@/provider/provider"
+import { Config } from "@/config/config"
 
 export namespace SessionProcessor {
   const DOOM_LOOP_THRESHOLD = 3
@@ -39,7 +40,6 @@ export namespace SessionProcessor {
     let snapshot: string | undefined
     let blocked = false
     let attempt = 0
-    const shouldBreak = (await Config.get()).experimental?.continue_loop_on_deny !== true
 
     const result = {
       get message() {
@@ -50,6 +50,7 @@ export namespace SessionProcessor {
       },
       async process(streamInput: StreamInput) {
         log.info("process")
+        const shouldBreak = (await Config.get()).experimental?.continue_loop_on_deny !== true
         while (true) {
           try {
             let currentText: MessageV2.TextPart | undefined
