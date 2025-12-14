@@ -152,16 +152,13 @@ export const PromptInput: Component<PromptInputProps> = (props) => {
   const [placeholder, setPlaceholder] = createSignal(Math.floor(Math.random() * PLACEHOLDERS.length))
 
   createEffect(() => {
+    session.id
+    editorRef.focus()
     if (session.id) return
     const interval = setInterval(() => {
       setPlaceholder((prev) => (prev + 1) % PLACEHOLDERS.length)
     }, 6500)
     onCleanup(() => clearInterval(interval))
-  })
-
-  createEffect(() => {
-    session.id
-    editorRef.focus()
   })
 
   const isFocused = createFocusSignal(() => editorRef)
@@ -194,15 +191,10 @@ export const PromptInput: Component<PromptInputProps> = (props) => {
     addPart({ type: "file", path, content: "@" + path, start: 0, end: 0 })
   }
 
-  const { flat, active, onInput, onKeyDown, refetch } = useFilteredList<string>({
+  const { flat, active, onInput, onKeyDown } = useFilteredList<string>({
     items: local.file.searchFilesAndDirectories,
     key: (x) => x,
     onSelect: handleFileSelect,
-  })
-
-  createEffect(() => {
-    local.model.recent()
-    refetch()
   })
 
   createEffect(
