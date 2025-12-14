@@ -209,7 +209,7 @@ export namespace ProviderTransform {
     //   if (id.includes("thinking")) return 1.0
     //   return 0.6
     // }
-    return 0
+    return undefined
   }
 
   export function topP(model: Provider.Model) {
