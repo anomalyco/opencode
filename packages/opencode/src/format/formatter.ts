@@ -284,3 +284,12 @@ export const latexindent: Info = {
     return Bun.which("latexindent") !== null
   },
 }
+
+export const gleam: Info = {
+  name: "gleam",
+  command: ["gleam", "format", "$FILE"],
+  extensions: [".gleam"],
+  async enabled() {
+    return Bun.which("gleam") !== null
+  },
+}
