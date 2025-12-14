@@ -30,13 +30,10 @@ export const { use: useLocal, provider: LocalProvider } = createSimpleContext({
         })
         .catch(() => {})
 
-      function snapshot() {
-        return JSON.parse(JSON.stringify(store)) as Record<string, SessionPref>
-      }
-
       function setSession(sessionID: string, value: SessionPref) {
-        setStore(sessionID, value)
-        writePrefs(snapshot())
+        const next = { ...store, [sessionID]: value }
+        setStore(next)
+        writePrefs(next)
       }
 
       return {
