@@ -568,7 +568,16 @@ export namespace Config {
       .enum(["auto", "stacked"])
       .optional()
       .describe("Control diff rendering style: 'auto' adapts to terminal width, 'stacked' always shows single column"),
+    recent_models_count: z
+      .number()
+      .int()
+      .min(1)
+      .max(50)
+      .optional()
+      .default(10)
+      .describe("Number of recent models to store and display in model selection"),
   })
+  export type TUI = z.infer<typeof TUI>
 
   export const Layout = z.enum(["auto", "stretch"]).meta({
     ref: "LayoutConfig",
