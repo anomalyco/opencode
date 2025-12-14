@@ -46,7 +46,7 @@ export const McpListCommand = cmd({
 
         for (const [name, serverConfig] of Object.entries(mcpServers)) {
           const status = statuses[name]
-          const hasOAuth = serverConfig.type === "remote" && !!serverConfig.oauth
+          const hasOAuth = await MCP.supportsOAuth(name)
           const hasStoredTokens = await MCP.hasStoredTokens(name)
 
           let statusIcon: string
@@ -109,7 +109,12 @@ export const McpAuthCommand = cmd({
         const mcpServers = config.mcp ?? {}
 
         // Get OAuth-enabled servers
-        const oauthServers = Object.entries(mcpServers).filter(([_, cfg]) => cfg.type === "remote" && !!cfg.oauth)
+        const oauthServers = []
+        for (const [name, cfg] of Object.entries(mcpServers)) {
+          if (await MCP.supportsOAuth(name)) {
+            oauthServers.push([name, cfg])
+          }
+        }
 
         if (oauthServers.length === 0) {
           prompts.log.warn("No OAuth-enabled MCP servers configured")
@@ -149,7 +154,7 @@ export const McpAuthCommand = cmd({
           return
         }
 
-        if (serverConfig.type !== "remote" || !serverConfig.oauth) {
+        if (!(await MCP.supportsOAuth(serverName))) {
           prompts.log.error(`MCP server ${serverName} does not have OAuth configured`)
           prompts.outro("Done")
           return
