@@ -39,6 +39,7 @@ export namespace SessionProcessor {
     let snapshot: string | undefined
     let blocked = false
     let attempt = 0
+    const shouldBreak = (await Config.get()).experimental?.continue_loop_on_deny !== true
 
     const result = {
       get message() {
@@ -228,7 +229,7 @@ export namespace SessionProcessor {
                     })
 
                     if (value.error instanceof Permission.RejectedError) {
-                      blocked = true
+                      blocked = shouldBreak
                     }
                     delete toolcalls[value.toolCallId]
                   }
