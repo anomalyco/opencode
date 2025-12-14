@@ -99,7 +99,6 @@ export function Session() {
   const { navigate } = useRoute()
   const sync = useSync()
   const local = useLocal()
-  const [lastSessionId, setLastSessionId] = createSignal<string | undefined>(undefined)
   const kv = useKV()
   const { theme } = useTheme()
   const promptRef = usePromptRef()
@@ -169,45 +168,18 @@ export function Session() {
     if (!sync.data.provider.length) return
     if (!sync.data.agent.length) return
     if (!local.model.ready) return
-    const next = route.sessionID
-
-    const lastWithPrefs = messages().findLast((m) => "agent" in m && "model" in m)
-    if (lastWithPrefs) {
-      const pref = lastWithPrefs as unknown as { agent?: string; model?: { providerID: string; modelID: string } }
-      const agent = pref.agent
-      const model = pref.model
-      if (agent && agent !== local.agent.current().name) local.agent.set(agent)
-      if (model && model !== local.model.current()) local.model.set(model)
-    } else {
-      const pref = local.pref.get(next)
-      if (pref?.agent) local.agent.set(pref.agent)
-      if (pref?.model) local.model.set(pref.model)
-      if (!pref?.agent) local.pref.setAgent(next, local.agent.current().name)
-      const currentModel = local.model.current()
-      if (!pref?.model && currentModel) local.pref.setModel(next, currentModel)
+    const last = messages().at(-1)
+    if (!last) return
+    const pref = last as { agent?: string; model?: { providerID: string; modelID: string } }
+    const agent = pref.agent
+    if (agent && agent !== local.agent.current().name) local.agent.set(agent)
+    const model = pref.model
+    if (model) {
+      const current = local.model.current()
+      const same = current && current.providerID === model.providerID && current.modelID === model.modelID
+      if (!same) local.model.set(model)
     }
-
-    setLastSessionId(next)
   })
-
-  createEffect(
-    on(
-      () => [route.sessionID, local.agent.current().name] as const,
-      ([sessionID, agentName]) => {
-        local.pref.setAgent(sessionID, agentName)
-      },
-    ),
-  )
-
-  createEffect(
-    on(
-      () => [route.sessionID, local.model.current()] as const,
-      ([sessionID, model]) => {
-        if (!model) return
-        local.pref.setModel(sessionID, model)
-      },
-    ),
-  )
 
   // Auto-navigate to whichever session currently needs permission input
   createEffect(() => {

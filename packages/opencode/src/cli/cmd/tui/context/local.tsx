@@ -1,5 +1,5 @@
-import { createStore } from "solid-js/store"
 import { batch, createEffect, createMemo } from "solid-js"
+import { createStore } from "solid-js/store"
 import { useSync } from "@tui/context/sync"
 import { useTheme } from "@tui/context/theme"
 import { uniqueBy } from "remeda"
@@ -12,7 +12,13 @@ import { Provider } from "@/provider/provider"
 import { useArgs } from "./args"
 import { useSDK } from "./sdk"
 import { RGBA } from "@opentui/core"
-import { readPrefs, writePrefs, type SessionPref } from "./session-pref"
+import type { SessionPref } from "./session-pref"
+
+type SessionPrefStore = {
+  get(sessionID: string): SessionPref | undefined
+  setAgent(sessionID: string, agent: string): void
+  setModel(sessionID: string, model: { providerID: string; modelID: string }): void
+}
 
 export const { use: useLocal, provider: LocalProvider } = createSimpleContext({
   name: "Local",
@@ -21,33 +27,13 @@ export const { use: useLocal, provider: LocalProvider } = createSimpleContext({
     const sdk = useSDK()
     const toast = useToast()
 
-    const pref = iife(() => {
-      const [store, setStore] = createStore<Record<string, SessionPref>>({})
-
-      readPrefs()
-        .then((data) => {
-          setStore(() => data)
-        })
-        .catch(() => {})
-
-      function setSession(sessionID: string, value: SessionPref) {
-        const next = { ...store, [sessionID]: value }
-        setStore(next)
-        writePrefs(next)
-      }
-
-      return {
-        get(sessionID: string) {
-          return store[sessionID]
-        },
-        setAgent(sessionID: string, agent: string) {
-          setSession(sessionID, { ...(store[sessionID] ?? {}), agent })
-        },
-        setModel(sessionID: string, model: { providerID: string; modelID: string }) {
-          setSession(sessionID, { ...(store[sessionID] ?? {}), model })
-        },
-      }
-    })
+    const pref: SessionPrefStore = {
+      get() {
+        return undefined
+      },
+      setAgent() {},
+      setModel() {},
+    }
 
     function isModelValid(model: { providerID: string; modelID: string }) {
       const provider = sync.data.provider.find((x) => x.id === model.providerID)
