@@ -920,6 +920,14 @@ export namespace ACP {
             { throwOnError: true },
           )
           break
+        case "archive":
+          await this.config.sdk.session.delete(
+            {
+              sessionID,
+            },
+            { throwOnError: true },
+          )
+          break
       }
 
       return done

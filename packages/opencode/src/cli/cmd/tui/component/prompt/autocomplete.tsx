@@ -241,6 +241,12 @@ export function Autocomplete(props: {
           onSelect: () => command.trigger("session.compact"),
         },
         {
+          display: "/archive",
+          aliases: ["/delete"],
+          description: "delete session and go home",
+          onSelect: () => command.trigger("session.archive"),
+        },
+        {
           display: "/unshare",
           disabled: !s.share,
           description: "unshare a session",

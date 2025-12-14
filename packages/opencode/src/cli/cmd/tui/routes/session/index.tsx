@@ -318,6 +318,17 @@ export function Session() {
       },
     },
     {
+      title: "Archive session",
+      value: "session.archive",
+      category: "Session",
+      onSelect: (dialog) => {
+        sdk.client.session.delete({
+          sessionID: route.sessionID,
+        })
+        dialog.clear()
+      },
+    },
+    {
       title: "Unshare session",
       value: "session.unshare",
       keybind: "session_unshare",
