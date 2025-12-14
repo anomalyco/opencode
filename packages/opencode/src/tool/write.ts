@@ -11,7 +11,7 @@ import { Filesystem } from "../util/filesystem"
 import { Instance } from "../project/instance"
 import { Agent } from "../agent/agent"
 
-const MAX_DIAGNOSTICS_PER_FILE = 10
+const MAX_DIAGNOSTICS_PER_FILE = 20
 const MAX_PROJECT_DIAGNOSTICS_FILES = 5
 
 export const WriteTool = Tool.define("write", {
