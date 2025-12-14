@@ -1518,6 +1518,10 @@ export type Config = {
      * Tools that should only be available to primary agents.
      */
     primary_tools?: Array<string>
+    /**
+     * Continue the agent loop when a tool call is denied
+     */
+    continue_loop_on_deny?: boolean
   }
 }
 
