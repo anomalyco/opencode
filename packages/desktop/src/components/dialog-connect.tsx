@@ -1,6 +1,6 @@
 import { Component, createMemo, Match, onCleanup, onMount, Switch } from "solid-js"
 import { createStore, produce } from "solid-js/store"
-import { useLayout } from "@/context/layout"
+import { useDialog } from "@/context/dialog"
 import { useGlobalSync } from "@/context/global-sync"
 import { useGlobalSDK } from "@/context/global-sdk"
 import { usePlatform } from "@/context/platform"
@@ -17,18 +17,19 @@ import { ProviderIcon } from "@opencode-ai/ui/provider-icon"
 import { IconName } from "@opencode-ai/ui/icons/provider"
 import { iife } from "@opencode-ai/util/iife"
 import { Link } from "@/components/link"
+import { DialogSelectProvider } from "./dialog-select-provider"
+import { DialogModel } from "./dialog-model"
 
-export const DialogConnect: Component = () => {
-  const layout = useLayout()
+export const DialogConnect: Component<{ provider: string }> = (props) => {
+  const dialog = useDialog()
   const globalSync = useGlobalSync()
   const globalSDK = useGlobalSDK()
   const platform = usePlatform()
 
-  const providerID = createMemo(() => layout.connect.provider()!)
-  const provider = createMemo(() => globalSync.data.provider.all.find((x) => x.id === providerID())!)
+  const provider = createMemo(() => globalSync.data.provider.all.find((x) => x.id === props.provider)!)
   const methods = createMemo(
     () =>
-      globalSync.data.provider_auth[providerID()] ?? [
+      globalSync.data.provider_auth[props.provider] ?? [
         {
           type: "api",
           label: "API key",
@@ -61,7 +62,7 @@ export const DialogConnect: Component = () => {
       await globalSDK.client.provider.oauth
         .authorize(
           {
-            providerID: providerID(),
+            providerID: props.provider,
             method: index,
           },
           { throwOnError: true },
@@ -116,8 +117,25 @@ export const DialogConnect: Component = () => {
         title: `${provider().name} connected`,
         description: `${provider().name} models are now available to use.`,
       })
-      layout.connect.complete()
+      dialog.replace(() => <DialogModel connectedProvider={props.provider} />)
     }, 500)
+  }
+
+  function goBack() {
+    if (methods().length === 1) {
+      dialog.replace(() => <DialogSelectProvider />)
+      return
+    }
+    if (store.authorization) {
+      setStore("authorization", undefined)
+      setStore("method", undefined)
+      return
+    }
+    if (store.method) {
+      setStore("method", undefined)
+      return
+    }
+    dialog.replace(() => <DialogSelectProvider />)
   }
 
   return (
@@ -125,46 +143,24 @@ export const DialogConnect: Component = () => {
       modal
       defaultOpen
       onOpenChange={(open) => {
-        if (open) {
-          layout.dialog.open("connect")
-        } else {
-          layout.dialog.close("connect")
+        if (!open) {
+          dialog.clear()
         }
       }}
     >
       <Dialog.Header class="px-4.5">
         <Dialog.Title class="flex items-center">
-          <IconButton
-            tabIndex={-1}
-            icon="arrow-left"
-            variant="ghost"
-            onClick={() => {
-              if (methods().length === 1) {
-                layout.dialog.open("provider")
-                return
-              }
-              if (store.authorization) {
-                setStore("authorization", undefined)
-                setStore("method", undefined)
-                return
-              }
-              if (store.method) {
-                setStore("method", undefined)
-                return
-              }
-              layout.dialog.open("provider")
-            }}
-          />
+          <IconButton tabIndex={-1} icon="arrow-left" variant="ghost" onClick={goBack} />
         </Dialog.Title>
         <Dialog.CloseButton tabIndex={-1} />
       </Dialog.Header>
       <Dialog.Body>
         <div class="flex flex-col gap-6 px-2.5 pb-3">
           <div class="px-2.5 flex gap-4 items-center">
-            <ProviderIcon id={providerID() as IconName} class="size-5 shrink-0 icon-strong-base" />
+            <ProviderIcon id={props.provider as IconName} class="size-5 shrink-0 icon-strong-base" />
             <div class="text-16-medium text-text-strong">
               <Switch>
-                <Match when={providerID() === "anthropic" && store.method?.label?.toLowerCase().includes("max")}>
+                <Match when={props.provider === "anthropic" && store.method?.label?.toLowerCase().includes("max")}>
                   Login with Claude Pro/Max
                 </Match>
                 <Match when={true}>Connect {provider().name}</Match>
@@ -233,7 +229,7 @@ export const DialogConnect: Component = () => {
 
                     setFormStore("error", undefined)
                     await globalSDK.client.auth.set({
-                      providerID: providerID(),
+                      providerID: props.provider,
                       auth: {
                         type: "api",
                         key: apiKey,
@@ -320,7 +316,7 @@ export const DialogConnect: Component = () => {
 
                         setFormStore("error", undefined)
                         const { error } = await globalSDK.client.provider.oauth.callback({
-                          providerID: providerID(),
+                          providerID: props.provider,
                           method: methodIndex(),
                           code,
                         })
@@ -369,12 +365,12 @@ export const DialogConnect: Component = () => {
 
                       onMount(async () => {
                         const result = await globalSDK.client.provider.oauth.callback({
-                          providerID: providerID(),
+                          providerID: props.provider,
                           method: methodIndex(),
                         })
                         if (result.error) {
                           // TODO: show error
-                          layout.dialog.close("connect")
+                          dialog.clear()
                           return
                         }
                         await complete()

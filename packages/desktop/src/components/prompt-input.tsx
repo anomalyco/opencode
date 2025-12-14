@@ -15,7 +15,7 @@ import { Tooltip } from "@opencode-ai/ui/tooltip"
 import { IconButton } from "@opencode-ai/ui/icon-button"
 import { Select } from "@opencode-ai/ui/select"
 import { getDirectory, getFilename } from "@opencode-ai/util/path"
-import { useLayout } from "@/context/layout"
+import { useDialog } from "@/context/dialog"
 import { DialogModel } from "@/components/dialog-model"
 
 interface PromptInputProps {
@@ -57,7 +57,7 @@ export const PromptInput: Component<PromptInputProps> = (props) => {
   const sync = useSync()
   const local = useLocal()
   const session = useSession()
-  const layout = useLayout()
+  const dialog = useDialog()
   let editorRef!: HTMLDivElement
 
   const [store, setStore] = createStore<{
@@ -610,14 +610,11 @@ export const PromptInput: Component<PromptInputProps> = (props) => {
               class="capitalize"
               variant="ghost"
             />
-            <Button as="div" variant="ghost" onClick={() => layout.dialog.open("model")}>
+            <Button as="div" variant="ghost" onClick={() => dialog.push(() => <DialogModel />)}>
               {local.model.current()?.name ?? "Select model"}
               <span class="ml-0.5 text-text-weak text-12-regular">{local.model.current()?.provider.name}</span>
               <Icon name="chevron-down" size="small" />
             </Button>
-            <Show when={layout.dialog.opened() === "model"}>
-              <DialogModel />
-            </Show>
           </div>
           <Tooltip
             placement="top"
