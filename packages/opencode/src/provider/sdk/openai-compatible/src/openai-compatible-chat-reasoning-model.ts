@@ -22,6 +22,10 @@ export class OpenAICompatibleChatWithReasoningLanguageModel implements LanguageM
     this.modelId = this.baseModel.modelId
   }
 
+  get supportedUrls() {
+    return this.baseModel.supportedUrls
+  }
+
   async doGenerate(options: Parameters<LanguageModelV2["doGenerate"]>[0]) {
     return this.baseModel.doGenerate(options)
   }

@@ -41,10 +41,8 @@ export interface OpenaiCompatibleProvider {
   chat(modelId: OpenaiCompatibleModelId): LanguageModelV2
   responses(modelId: OpenaiCompatibleModelId): LanguageModelV2
   languageModel(modelId: OpenaiCompatibleModelId): LanguageModelV2
-
-  // embeddingModel(modelId: any): EmbeddingModelV2
-
-  // imageModel(modelId: any): ImageModelV2
+  textEmbeddingModel(modelId: OpenaiCompatibleModelId): never
+  imageModel(modelId: OpenaiCompatibleModelId): never
 }
 
 /**
@@ -93,6 +91,12 @@ export function createOpenaiCompatible(options: OpenaiCompatibleProviderSettings
   provider.languageModel = createLanguageModel
   provider.chat = createChatModel
   provider.responses = createResponsesModel
+  provider.textEmbeddingModel = () => {
+    throw new Error("Text embedding models are not supported by this provider")
+  }
+  provider.imageModel = () => {
+    throw new Error("Image models are not supported by this provider")
+  }
 
   return provider as OpenaiCompatibleProvider
 }
