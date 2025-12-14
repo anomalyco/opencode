@@ -34,6 +34,7 @@ export const LANGUAGE_EXTENSIONS: Record<string, string> = {
   ".gitrebase": "git-rebase",
   ".go": "go",
   ".groovy": "groovy",
+  ".gleam": "gleam",
   ".hbs": "handlebars",
   ".handlebars": "handlebars",
   ".hs": "haskell",
