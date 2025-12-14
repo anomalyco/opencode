@@ -68,6 +68,12 @@ export namespace SessionRetry {
         if (json.code === "Some resource has been exhausted") {
           return "Provider is overloaded"
         }
+        if (json.type === "error" && json.error?.code?.includes("rate_limit")) {
+          return "Rate Limited"
+        }
+        if (json.error?.message?.includes("no_kv_space") || (json.type === "error" && json.error?.type === "server_error")) {
+          return "Provider Server Error"
+        }
       } catch {}
     }
 
