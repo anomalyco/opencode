@@ -1,13 +1,14 @@
 import { Component, Show } from "solid-js"
-import { useLayout } from "@/context/layout"
+import { useDialog } from "@/context/dialog"
 import { popularProviders, useProviders } from "@/hooks/use-providers"
 import { SelectDialog } from "@opencode-ai/ui/select-dialog"
 import { Tag } from "@opencode-ai/ui/tag"
 import { ProviderIcon } from "@opencode-ai/ui/provider-icon"
 import { IconName } from "@opencode-ai/ui/icons/provider"
+import { DialogConnect } from "./dialog-connect"
 
-export const DialogProvider: Component = () => {
-  const layout = useLayout()
+export const DialogSelectProvider: Component = () => {
+  const dialog = useDialog()
   const providers = useProviders()
 
   return (
@@ -32,13 +33,11 @@ export const DialogProvider: Component = () => {
       }}
       onSelect={(x) => {
         if (!x) return
-        layout.dialog.connect(x.id)
+        dialog.replace(() => <DialogConnect provider={x.id} />)
       }}
       onOpenChange={(open) => {
-        if (open) {
-          layout.dialog.open("provider")
-        } else {
-          layout.dialog.close("provider")
+        if (!open) {
+          dialog.clear()
         }
       }}
     >

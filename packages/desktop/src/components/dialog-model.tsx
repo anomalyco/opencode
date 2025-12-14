@@ -1,6 +1,6 @@
 import { Component, createMemo, Match, onCleanup, onMount, Show, Switch } from "solid-js"
 import { useLocal } from "@/context/local"
-import { useLayout } from "@/context/layout"
+import { useDialog } from "@/context/dialog"
 import { popularProviders, useProviders } from "@/hooks/use-providers"
 import { SelectDialog } from "@opencode-ai/ui/select-dialog"
 import { Button } from "@opencode-ai/ui/button"
@@ -10,10 +10,12 @@ import { List, ListRef } from "@opencode-ai/ui/list"
 import { iife } from "@opencode-ai/util/iife"
 import { ProviderIcon } from "@opencode-ai/ui/provider-icon"
 import { IconName } from "@opencode-ai/ui/icons/provider"
+import { DialogSelectProvider } from "./dialog-select-provider"
+import { DialogConnect } from "./dialog-connect"
 
-export const DialogModel: Component = () => {
+export const DialogModel: Component<{ connectedProvider?: string }> = (props) => {
   const local = useLocal()
-  const layout = useLayout()
+  const dialog = useDialog()
   const providers = useProviders()
 
   return (
@@ -24,18 +26,14 @@ export const DialogModel: Component = () => {
             local.model
               .list()
               .filter((m) => m.visible)
-              .filter((m) =>
-                layout.connect.state() === "complete" ? m.provider.id === layout.connect.provider() : true,
-              ),
+              .filter((m) => (props.connectedProvider ? m.provider.id === props.connectedProvider : true)),
           )
           return (
             <SelectDialog
               defaultOpen
               onOpenChange={(open) => {
-                if (open) {
-                  layout.dialog.open("model")
-                } else {
-                  layout.dialog.close("model")
+                if (!open) {
+                  dialog.clear()
                 }
               }}
               title="Select model"
@@ -66,7 +64,7 @@ export const DialogModel: Component = () => {
                   class="h-7 -my-1 text-14-medium"
                   icon="plus-small"
                   tabIndex={-1}
-                  onClick={() => layout.dialog.open("provider")}
+                  onClick={() => dialog.replace(() => <DialogSelectProvider />)}
                 >
                   Connect provider
                 </Button>
@@ -107,10 +105,8 @@ export const DialogModel: Component = () => {
               modal
               defaultOpen
               onOpenChange={(open) => {
-                if (open) {
-                  layout.dialog.open("model")
-                } else {
-                  layout.dialog.close("model")
+                if (!open) {
+                  dialog.clear()
                 }
               }}
             >
@@ -130,7 +126,7 @@ export const DialogModel: Component = () => {
                       local.model.set(x ? { modelID: x.id, providerID: x.provider.id } : undefined, {
                         recent: true,
                       })
-                      layout.dialog.close("model")
+                      dialog.clear()
                     }}
                   >
                     {(i) => (
@@ -163,7 +159,7 @@ export const DialogModel: Component = () => {
                           }}
                           onSelect={(x) => {
                             if (!x) return
-                            layout.dialog.connect(x.id)
+                            dialog.replace(() => <DialogConnect provider={x.id} />)
                           }}
                         >
                           {(i) => (
@@ -193,7 +189,7 @@ export const DialogModel: Component = () => {
                           class="w-full justify-start px-[11px] py-3.5 gap-4.5 text-14-medium"
                           icon="dot-grid"
                           onClick={() => {
-                            layout.dialog.open("provider")
+                            dialog.replace(() => <DialogSelectProvider />)
                           }}
                         >
                           View all providers

@@ -33,8 +33,6 @@ import { useGlobalSDK } from "@/context/global-sdk"
 import { useNotification } from "@/context/notification"
 import { Binary } from "@opencode-ai/util/binary"
 import { Header } from "@/components/header"
-import { DialogProvider } from "@/components/dialog-provider"
-import { DialogConnect } from "@/components/dialog-connect"
 
 export default function Layout(props: ParentProps) {
   const [store, setStore] = createStore({
@@ -88,10 +86,6 @@ export default function Layout(props: ParentProps) {
     } else if (result) {
       openProject(result)
     }
-  }
-
-  async function connectProvider() {
-    layout.dialog.open("provider")
   }
 
   createEffect(() => {
@@ -494,7 +488,7 @@ export default function Layout(props: ParentProps) {
                       class="flex w-full text-left justify-start text-12-medium text-text-strong stroke-[1.5px] rounded-lg rounded-t-none shadow-none border-t border-border-weak-base pl-2.25 pb-px"
                       size="large"
                       icon="plus"
-                      onClick={connectProvider}
+                      // onClick={connectProvider}
                     >
                       <Show when={layout.sidebar.opened()}>Connect provider</Show>
                     </Button>
@@ -508,7 +502,7 @@ export default function Layout(props: ParentProps) {
                     variant="ghost"
                     size="large"
                     icon="plus"
-                    onClick={connectProvider}
+                    // onClick={connectProvider}
                   >
                     <Show when={layout.sidebar.opened()}>Connect provider</Show>
                   </Button>
@@ -555,12 +549,6 @@ export default function Layout(props: ParentProps) {
           </div>
         </div>
         <main class="size-full overflow-x-hidden flex flex-col items-start">{props.children}</main>
-        <Show when={layout.dialog.opened() === "provider"}>
-          <DialogProvider />
-        </Show>
-        <Show when={layout.dialog.opened() === "connect"}>
-          <DialogConnect />
-        </Show>
       </div>
       <Toast.Region />
     </div>
