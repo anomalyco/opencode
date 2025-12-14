@@ -1401,11 +1401,15 @@ The `limit` fields allow OpenCode to understand how much context you have left. 
 
 ## Reasoning Models
 
-Some OpenAI-compatible models (like DeepSeek, Qwen Thinking, and Kimi K2 Thinking) support extended reasoning capabilities where the model shows its thinking process. These models require special configuration.
+Some models (like DeepSeek, Qwen Thinking, and Kimi K2 Thinking) return reasoning content when accessed via **OpenAI-compatible API endpoints**. These require special configuration to display their thinking process properly.
+
+:::note[OpenAI-Compatible APIs Required]
+This feature only works with **OpenAI-compatible API endpoints**. Many providers (like DeepInfra) and some model vendors (like DeepSeek) offer OpenAI-compatible endpoints even if they also have their own native APIs.
+:::
 
 ### What are Reasoning Models?
 
-Reasoning models return their thought process in a `reasoning_content` field separate from the main response. OpenCode displays this reasoning in collapsible blocks in the UI, similar to Claude's Extended Thinking or OpenAI's o1 models.
+When these models are accessed via OpenAI-compatible APIs, they return their thought process in a `reasoning_content` field separate from the main response. OpenCode displays this reasoning in collapsible blocks in the UI, similar to Claude's Extended Thinking or OpenAI's o1 models.
 
 ### Configuration
 
@@ -1477,12 +1481,12 @@ To use reasoning models, you need to:
 
 ### Supported Models
 
-Models that work with the reasoning provider include:
+Models that work when accessed via OpenAI-compatible API endpoints:
 
-- **DeepSeek**: DeepSeek-V3, DeepSeek-R1, deepseek-chat, deepseek-reasoner
-- **Qwen**: Qwen3-235B-A22B-Thinking-2507 and other Qwen thinking models
-- **Kimi**: Kimi-K2-Thinking (moonshotai/Kimi-K2-Thinking)
-- Any OpenAI-compatible model that returns `reasoning_content` in the response
+- **DeepSeek**: DeepSeek-V3, DeepSeek-R1, deepseek-chat, deepseek-reasoner (via DeepInfra or DeepSeek's OpenAI-compatible endpoint)
+- **Qwen**: Qwen3-235B-A22B-Thinking-2507 and other Qwen thinking models (via DeepInfra or compatible providers)
+- **Kimi**: Kimi-K2-Thinking (via compatible providers)
+- Any model that returns `reasoning_content` when accessed via OpenAI-compatible APIs
 
 :::note
 Some models (like Qwen) return reasoning by default, while others (like DeepSeek) require `reasoning.enabled: true` in the provider options.

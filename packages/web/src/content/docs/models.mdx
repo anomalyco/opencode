@@ -73,13 +73,17 @@ These models work out of the box - just select them and OpenCode will automatica
 
 ### OpenAI-Compatible Reasoning Models
 
-Some OpenAI-compatible providers offer reasoning models that require special configuration:
+Some models return reasoning content when accessed via **OpenAI-compatible API endpoints**:
 
-- **DeepSeek**: DeepSeek-V3, DeepSeek-R1, deepseek-reasoner
-- **Qwen**: Qwen3-235B-A22B-Thinking-2507
-- **Kimi**: Kimi-K2-Thinking
+- **DeepSeek**: DeepSeek-V3, DeepSeek-R1, deepseek-reasoner (via DeepInfra or DeepSeek's OpenAI-compatible endpoint)
+- **Qwen**: Qwen3-235B-A22B-Thinking-2507 (via DeepInfra or compatible providers)
+- **Kimi**: Kimi-K2-Thinking (via compatible providers)
 
-To use these models, you need to configure them with the `@ai-sdk/openai-compatible-reasoning` provider. [Learn how to configure reasoning models](/docs/providers#reasoning-models).
+To use these models, configure them with the `@ai-sdk/openai-compatible-reasoning` provider. [Learn how to configure reasoning models](/docs/providers#reasoning-models).
+
+:::note[OpenAI-Compatible APIs Only]
+This feature requires **OpenAI-compatible API endpoints**. Many providers offer these even if the model has its own native API.
+:::
 
 ### When to Use Reasoning Models
 
