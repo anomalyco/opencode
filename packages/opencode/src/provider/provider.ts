@@ -392,6 +392,7 @@ export namespace Provider {
       status: z.enum(["alpha", "beta", "deprecated", "active"]),
       options: z.record(z.string(), z.any()),
       headers: z.record(z.string(), z.string()),
+      release_date: z.string(),
     })
     .meta({
       ref: "Model",
@@ -470,6 +471,7 @@ export namespace Provider {
         },
         interleaved: model.interleaved ?? false,
       },
+      release_date: model.release_date,
     }
   }
 
@@ -602,6 +604,8 @@ export namespace Provider {
             output: model.limit?.output ?? existingModel?.limit?.output ?? 0,
           },
           headers: mergeDeep(existingModel?.headers ?? {}, model.headers ?? {}),
+          family: model.family ?? existingModel?.family ?? "",
+          release_date: model.release_date ?? existingModel?.release_date ?? "",
         }
         parsed.models[modelID] = parsedModel
       }

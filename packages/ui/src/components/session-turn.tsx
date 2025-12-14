@@ -50,19 +50,16 @@ export function SessionTurn(
 
   let scrollRef: HTMLDivElement | undefined
   const [state, setState] = createStore({
-    contentRef: undefined as HTMLDivElement | undefined,
     stickyTitleRef: undefined as HTMLDivElement | undefined,
     stickyTriggerRef: undefined as HTMLDivElement | undefined,
     userScrolled: false,
     stickyHeaderHeight: 0,
     scrollY: 0,
-    autoScrolling: false,
   })
 
   function handleScroll() {
     if (!scrollRef) return
     setState("scrollY", scrollRef.scrollTop)
-    if (state.autoScrolling) return
     const { scrollTop, scrollHeight, clientHeight } = scrollRef
     const atBottom = scrollHeight - scrollTop - clientHeight < 50
     if (!atBottom && working()) {
@@ -77,13 +74,9 @@ export function SessionTurn(
   }
 
   function scrollToBottom() {
-    if (!scrollRef || state.userScrolled || !working() || state.autoScrolling) return
-    setState("autoScrolling", true)
+    if (!scrollRef || state.userScrolled || !working()) return
     requestAnimationFrame(() => {
       scrollRef?.scrollTo({ top: scrollRef.scrollHeight, behavior: "auto" })
-      requestAnimationFrame(() => {
-        setState("autoScrolling", false)
-      })
     })
   }
 
@@ -92,13 +85,6 @@ export function SessionTurn(
       setState("userScrolled", false)
     }
   })
-
-  createResizeObserver(
-    () => state.contentRef,
-    () => {
-      scrollToBottom()
-    },
-  )
 
   createResizeObserver(
     () => state.stickyTitleRef,
@@ -119,7 +105,7 @@ export function SessionTurn(
   return (
     <div data-component="session-turn" class={props.classes?.root} style={{ "--scroll-y": `${state.scrollY}px` }}>
       <div ref={scrollRef} onScroll={handleScroll} data-slot="session-turn-content" class={props.classes?.content}>
-        <div ref={(el) => setState("contentRef", el)} onClick={handleInteraction}>
+        <div onClick={handleInteraction}>
           <Show when={message()}>
             {(message) => {
               const assistantMessages = createMemo(() => {
@@ -220,6 +206,11 @@ export function SessionTurn(
                   showZeros: false,
                 })
               }
+
+              createEffect(() => {
+                lastPart()
+                scrollToBottom()
+              })
 
               const [store, setStore] = createStore({
                 status: rawStatus(),
