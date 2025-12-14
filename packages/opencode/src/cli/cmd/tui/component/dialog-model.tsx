@@ -154,7 +154,6 @@ export function DialogModel(props: { providerID?: string }) {
                 },
               }
             }),
-
             sortBy(
               (x) => x.footer !== "Free",
               (x) => x.title,
