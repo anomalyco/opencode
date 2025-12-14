@@ -199,9 +199,14 @@ export namespace ProviderTransform {
   }
 
   export function temperature(model: Provider.Model) {
-    if (model.api.id.toLowerCase().includes("qwen")) return 0.55
-    if (model.api.id.toLowerCase().includes("claude")) return undefined
-    if (model.api.id.toLowerCase().includes("gemini-3-pro")) return 1.0
+    const id = model.id.toLowerCase()
+    if (id.toLowerCase().includes("qwen")) return 0.55
+    if (id.toLowerCase().includes("claude")) return undefined
+    if (id.toLowerCase().includes("gemini-3-pro")) return 1.0
+    // if (id.toLowerCase().includes("kimi-k2")) {
+    //   if (id.includes("thinking")) return 1.0
+    //   return 0.6
+    // }
     return 0
   }
 
