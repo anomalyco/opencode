@@ -5,7 +5,7 @@ Custom OpenAI-compatible provider implementations for OpenCode.
 ## Purpose
 
 1. **GitHub Copilot** - Provider for GitHub Copilot models
-2. **Reasoning Models** - Wrapper that handles `reasoning_content` field from OpenAI-compatible APIs
+2. **Reasoning Models** - Wrapper that handles `reasoning_content` field from models served via OpenAI-compatible APIs
 
 ## Reasoning Provider (`@ai-sdk/openai-compatible-reasoning`)
 
@@ -13,15 +13,15 @@ Custom OpenAI-compatible provider implementations for OpenCode.
 
 Detects and transforms `reasoning_content` fields from OpenAI-compatible API responses into proper reasoning events that OpenCode displays as collapsible thinking blocks.
 
-**Important**: This only works with **OpenAI-compatible API endpoints**. Some models offer OpenAI-compatible endpoints even if they have their own native API.
+**Important**: This only works with **OpenAI-compatible API endpoints**. Some providers serve models via OpenAI-compatible APIs even if those models have their own native APIs.
 
 ### Supported Models
 
-When accessed via OpenAI-compatible APIs:
-- **DeepSeek** models (via DeepInfra or DeepSeek's OpenAI-compatible endpoint)
-- **Qwen Thinking** models (via DeepInfra or compatible providers)
-- **Kimi K2 Thinking** (via compatible providers)
-- Any model that returns `reasoning_content` in streaming chunks
+When served via OpenAI-compatible APIs:
+- **DeepSeek** (via DeepInfra or DeepSeek's OpenAI-compatible endpoint)
+- **Qwen Thinking** (via DeepInfra or other providers)
+- **Kimi K2 Thinking** (via providers offering OpenAI-compatible APIs)
+- Any model served via OpenAI-compatible APIs that returns `reasoning_content`
 
 ### Configuration
 
