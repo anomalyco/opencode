@@ -506,6 +506,7 @@ export namespace SessionPrompt {
             ? (agent.temperature ?? ProviderTransform.temperature(model))
             : undefined,
           topP: agent.topP ?? ProviderTransform.topP(model),
+          topK: ProviderTransform.topK(model),
           options: pipe(
             {},
             mergeDeep(ProviderTransform.options(model, sessionID, provider?.options)),
@@ -611,6 +612,7 @@ export namespace SessionPrompt {
         stopWhen: stepCountIs(1),
         temperature: params.temperature,
         topP: params.topP,
+        topK: params.topK,
         toolChoice: isLastStep ? "none" : undefined,
         messages,
         tools: model.capabilities.toolcall === false ? undefined : tools,
