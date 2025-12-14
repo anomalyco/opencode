@@ -14,7 +14,7 @@ export interface DialogProps extends DialogRootProps {
   classList?: ComponentProps<"div">["classList"]
 }
 
-export function DialogRoot(props: DialogProps) {
+function DialogRoot(props: DialogProps) {
   let trigger!: HTMLElement
   const [local, others] = splitProps(props, ["trigger", "class", "classList", "children"])
 

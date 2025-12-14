@@ -33,6 +33,8 @@ import { useGlobalSDK } from "@/context/global-sdk"
 import { useNotification } from "@/context/notification"
 import { Binary } from "@opencode-ai/util/binary"
 import { Header } from "@/components/header"
+import { useDialog } from "@/context/dialog"
+import { DialogSelectProvider } from "@/components/dialog-select-provider"
 
 export default function Layout(props: ParentProps) {
   const [store, setStore] = createStore({
@@ -48,6 +50,11 @@ export default function Layout(props: ParentProps) {
   const notification = useNotification()
   const navigate = useNavigate()
   const providers = useProviders()
+  const dialog = useDialog()
+
+  function connectProvider() {
+    dialog.replace(() => <DialogSelectProvider />)
+  }
 
   function navigateToProject(directory: string | undefined) {
     if (!directory) return
@@ -488,7 +495,7 @@ export default function Layout(props: ParentProps) {
                       class="flex w-full text-left justify-start text-12-medium text-text-strong stroke-[1.5px] rounded-lg rounded-t-none shadow-none border-t border-border-weak-base pl-2.25 pb-px"
                       size="large"
                       icon="plus"
-                      // onClick={connectProvider}
+                      onClick={connectProvider}
                     >
                       <Show when={layout.sidebar.opened()}>Connect provider</Show>
                     </Button>
@@ -502,7 +509,7 @@ export default function Layout(props: ParentProps) {
                     variant="ghost"
                     size="large"
                     icon="plus"
-                    // onClick={connectProvider}
+                    onClick={connectProvider}
                   >
                     <Show when={layout.sidebar.opened()}>Connect provider</Show>
                   </Button>
