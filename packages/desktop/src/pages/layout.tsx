@@ -189,11 +189,13 @@ export default function Layout(props: ParentProps) {
     const hasError = createMemo(() => notifications().some((n) => n.type === "error"))
     const name = createMemo(() => getFilename(props.project.worktree))
     const mask = "radial-gradient(circle 5px at calc(100% - 2px) 2px, transparent 5px, black 5.5px)"
+    const opencode = "4b0ea68d7af9a6031a7ffda7ad66e0cb83315750"
+
     return (
       <div class="relative size-6 shrink-0">
         <Avatar
           fallback={name()}
-          src={props.project.icon?.url}
+          src={props.project.id === opencode ? "https://opencode.ai/favicon.svg" : props.project.icon?.url}
           {...getAvatarColors(props.project.icon?.color)}
           class={`size-full ${props.class ?? ""}`}
           style={
