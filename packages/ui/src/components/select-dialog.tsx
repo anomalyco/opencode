@@ -1,4 +1,4 @@
-import { createEffect, Show, type JSX, splitProps, createSignal } from "solid-js"
+import { Show, type JSX, splitProps, createSignal } from "solid-js"
 import { Dialog, DialogProps } from "./dialog"
 import { Icon } from "./icon"
 import { IconButton } from "./icon-button"
@@ -19,15 +19,6 @@ export function SelectDialog<T>(props: SelectDialogProps<T>) {
   let inputRef: HTMLInputElement | undefined
   const [filter, setFilter] = createSignal("")
   let listRef: ListRef | undefined
-
-  createEffect(() => {
-    if (!props.current) return
-    const key = props.key(props.current)
-    requestAnimationFrame(() => {
-      const element = document.querySelector(`[data-key="${key}"]`)
-      element?.scrollIntoView({ block: "center" })
-    })
-  })
 
   const handleSelect = (item: T | undefined, index: number) => {
     others.onSelect?.(item, index)

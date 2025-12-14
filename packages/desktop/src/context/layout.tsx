@@ -22,7 +22,7 @@ export function getAvatarColors(key?: string) {
   }
 }
 
-type Dialog = "provider" | "model" | "connect"
+type Dialog = "provider" | "model" | "connect" | "manage-models"
 
 export const { use: useLayout, provider: LayoutProvider } = createSimpleContext({
   name: "Layout",
@@ -172,12 +172,7 @@ export const { use: useLayout, provider: LayoutProvider } = createSimpleContext(
       dialog: {
         opened: createMemo(() => ephemeral.dialog?.open),
         open(dialog: Dialog) {
-          batch(() => {
-            // if (dialog !== "connect") {
-            //   setEphemeral("connect", {})
-            // }
-            setEphemeral("dialog", "open", dialog)
-          })
+          setEphemeral("dialog", "open", dialog)
         },
         close(dialog: Dialog) {
           if (ephemeral.dialog.open === dialog) {
