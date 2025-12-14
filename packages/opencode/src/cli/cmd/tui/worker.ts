@@ -38,7 +38,7 @@ export const rpc = {
         url: server.url.toString(),
       }
     } catch (e) {
-      console.error(e)
+      Log.Default.error("server start failed", { error: e instanceof Error ? e.message : e })
       throw e
     }
   },
