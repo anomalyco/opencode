@@ -876,12 +876,10 @@ export function Prompt(props: PromptProps) {
             height={1}
             border={["bottom"]}
             borderColor={theme.backgroundElement}
-            customBorderChars={
-              {
-                ...EmptyBorder,
-                horizontal: "▀",
-              }
-            }
+            customBorderChars={{
+              ...EmptyBorder,
+              horizontal: "▀",
+            }}
           />
         </box>
         <box flexDirection="row" justifyContent="space-between">
