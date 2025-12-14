@@ -54,6 +54,7 @@ export default defineConfig({
         "",
         "config",
         "providers",
+        "network",
         "enterprise",
         "troubleshooting",
         "1-0",
