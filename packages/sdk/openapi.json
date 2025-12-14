@@ -8279,6 +8279,10 @@
                 "items": {
                   "type": "string"
                 }
+              },
+              "continue_loop_on_deny": {
+                "description": "Continue the agent loop when a tool call is denied",
+                "type": "boolean"
               }
             }
           }
