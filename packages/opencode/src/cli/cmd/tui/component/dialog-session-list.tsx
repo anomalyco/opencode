@@ -39,13 +39,19 @@ export function DialogSessionList() {
         const isDeleting = toDelete() === x.id
         const status = sync.data.session_status[x.id]
         const isWorking = status?.type === "busy"
+        const isUnread = sync.data.session_unread[x.id]
+        const gutter = isWorking ? (
+          <spinner frames={spinnerFrames} interval={80} color={theme.primary} />
+        ) : isUnread ? (
+          <text fg={theme.primary}>○</text>
+        ) : undefined
         return {
           title: isDeleting ? `Press ${deleteKeybind} again to confirm` : x.title,
           bg: isDeleting ? theme.error : undefined,
           value: x.id,
           category,
           footer: Locale.time(x.time.updated),
-          gutter: isWorking ? <spinner frames={spinnerFrames} interval={80} color={theme.primary} /> : undefined,
+          gutter,
         }
       })
       .slice(0, 150)

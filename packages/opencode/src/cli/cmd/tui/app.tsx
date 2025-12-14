@@ -172,6 +172,15 @@ function App() {
     console.log(JSON.stringify(route.data))
   })
 
+  // Track current session for unread indicator
+  createEffect(() => {
+    if (route.data.type === "session") {
+      sync.session.setCurrentSession(route.data.sessionID)
+    } else {
+      sync.session.setCurrentSession(undefined)
+    }
+  })
+
   // Update terminal window title based on current route and session
   createEffect(() => {
     if (route.data.type === "home") {

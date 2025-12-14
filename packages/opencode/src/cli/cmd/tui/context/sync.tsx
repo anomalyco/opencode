@@ -45,6 +45,9 @@ export const { use: useSync, provider: SyncProvider } = createSimpleContext({
       session_status: {
         [sessionID: string]: SessionStatus
       }
+      session_unread: {
+        [sessionID: string]: boolean
+      }
       session_diff: {
         [sessionID: string]: Snapshot.FileDiff[]
       }
@@ -80,6 +83,7 @@ export const { use: useSync, provider: SyncProvider } = createSimpleContext({
       provider_default: {},
       session: [],
       session_status: {},
+      session_unread: {},
       session_diff: {},
       todo: {},
       message: {},
@@ -92,6 +96,7 @@ export const { use: useSync, provider: SyncProvider } = createSimpleContext({
     })
 
     const sdk = useSDK()
+    let currentSessionID: string | undefined = undefined
 
     sdk.event.listen((e) => {
       const event = e.details
@@ -167,7 +172,13 @@ export const { use: useSync, provider: SyncProvider } = createSimpleContext({
         }
 
         case "session.status": {
-          setStore("session_status", event.properties.sessionID, event.properties.status)
+          const prev = store.session_status[event.properties.sessionID]
+          const next = event.properties.status
+          // Track if session transitioned from busy to idle while user is not viewing it
+          if (prev?.type === "busy" && next.type === "idle" && currentSessionID !== event.properties.sessionID) {
+            setStore("session_unread", event.properties.sessionID, true)
+          }
+          setStore("session_status", event.properties.sessionID, next)
           break
         }
 
@@ -333,6 +344,18 @@ export const { use: useSync, provider: SyncProvider } = createSimpleContext({
           if (!last) return "idle"
           if (last.role === "user") return "working"
           return last.time.completed ? "idle" : "working"
+        },
+        setCurrentSession(sessionID: string | undefined) {
+          currentSessionID = sessionID
+          if (sessionID) {
+            setStore("session_unread", sessionID, false)
+          }
+        },
+        getCurrentSession() {
+          return currentSessionID
+        },
+        markRead(sessionID: string) {
+          setStore("session_unread", sessionID, false)
         },
         async sync(sessionID: string) {
           if (fullSyncedSessions.has(sessionID)) return
