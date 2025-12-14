@@ -48,6 +48,55 @@ Here are several models that work well with OpenCode, in no particular order. (T
 
 ---
 
+## Reasoning Models
+
+Some models support extended reasoning capabilities where they show their thinking process before providing the final answer. These "reasoning models" or "thinking models" can provide better results for complex coding tasks by breaking down problems step by step.
+
+### How Reasoning Models Work
+
+Reasoning models separate their output into two parts:
+
+1. **Reasoning/Thinking**: The model's internal thought process (shown in collapsible blocks in the UI)
+2. **Response**: The final answer or code
+
+This is similar to how humans solve complex problems - thinking through the solution first, then presenting the final result.
+
+### Built-in Reasoning Models
+
+OpenCode natively supports reasoning from these providers:
+
+- **Anthropic**: Claude Sonnet 4.5 with Extended Thinking
+- **OpenAI**: GPT-5, o1, o3 models
+- **Google**: Gemini 3 Pro with thinking mode
+
+These models work out of the box - just select them and OpenCode will automatically display their reasoning.
+
+### OpenAI-Compatible Reasoning Models
+
+Some OpenAI-compatible providers offer reasoning models that require special configuration:
+
+- **DeepSeek**: DeepSeek-V3, DeepSeek-R1, deepseek-reasoner
+- **Qwen**: Qwen3-235B-A22B-Thinking-2507
+- **Kimi**: Kimi-K2-Thinking
+
+To use these models, you need to configure them with the `@ai-sdk/openai-compatible-reasoning` provider. [Learn how to configure reasoning models](/docs/providers#reasoning-models).
+
+### When to Use Reasoning Models
+
+Reasoning models are particularly useful for:
+
+- Complex architectural decisions
+- Debugging difficult issues
+- Performance optimization
+- Code refactoring with multiple considerations
+- Algorithm design and optimization
+
+:::tip
+Reasoning models may be slower and more expensive than regular models, but can provide higher quality results for complex tasks.
+:::
+
+---
+
 ## Set a default
 
 To set one of these as the default model, you can set the `model` key in your

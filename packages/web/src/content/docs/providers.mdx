@@ -1399,6 +1399,97 @@ The `limit` fields allow OpenCode to understand how much context you have left. 
 
 ---
 
+## Reasoning Models
+
+Some OpenAI-compatible models (like DeepSeek, Qwen Thinking, and Kimi K2 Thinking) support extended reasoning capabilities where the model shows its thinking process. These models require special configuration.
+
+### What are Reasoning Models?
+
+Reasoning models return their thought process in a `reasoning_content` field separate from the main response. OpenCode displays this reasoning in collapsible blocks in the UI, similar to Claude's Extended Thinking or OpenAI's o1 models.
+
+### Configuration
+
+To use reasoning models, you need to:
+
+1. Use the `@ai-sdk/openai-compatible-reasoning` npm package
+2. Optionally enable reasoning in the request with the `reasoning` option
+
+#### Example: DeepSeek V3
+
+```json title="opencode.json" {5,8-10}
+{
+  "$schema": "https://opencode.ai/config.json",
+  "provider": {
+    "deepinfra-thinking": {
+      "npm": "@ai-sdk/openai-compatible-reasoning",
+      "name": "DeepInfra Thinking Models",
+      "options": {
+        "baseURL": "https://api.deepinfra.com/v1/openai",
+        "reasoning": {
+          "enabled": true
+        }
+      },
+      "models": {
+        "deepseek-ai/DeepSeek-V3.2": {
+          "name": "DeepSeek V3.2"
+        },
+        "Qwen/Qwen3-235B-A22B-Thinking-2507": {
+          "name": "Qwen3 235B Thinking"
+        }
+      }
+    }
+  }
+}
+```
+
+#### Example: Direct DeepSeek API
+
+```json title="opencode.json" {5,8-10}
+{
+  "$schema": "https://opencode.ai/config.json",
+  "provider": {
+    "deepseek": {
+      "npm": "@ai-sdk/openai-compatible-reasoning",
+      "name": "DeepSeek",
+      "options": {
+        "baseURL": "https://api.deepseek.com/v1",
+        "reasoning": {
+          "enabled": true
+        }
+      },
+      "models": {
+        "deepseek-chat": {
+          "name": "DeepSeek Chat"
+        },
+        "deepseek-reasoner": {
+          "name": "DeepSeek Reasoner"
+        }
+      }
+    }
+  }
+}
+```
+
+### Configuration Options
+
+- **npm**: Must be `@ai-sdk/openai-compatible-reasoning` for reasoning support
+- **options.reasoning.enabled**: Set to `true` to enable reasoning output (required for DeepSeek models)
+
+### Supported Models
+
+Models that work with the reasoning provider include:
+
+- **DeepSeek**: DeepSeek-V3, DeepSeek-R1, deepseek-chat, deepseek-reasoner
+- **Qwen**: Qwen3-235B-A22B-Thinking-2507 and other Qwen thinking models
+- **Kimi**: Kimi-K2-Thinking (moonshotai/Kimi-K2-Thinking)
+- Any OpenAI-compatible model that returns `reasoning_content` in the response
+
+:::note
+Some models (like Qwen) return reasoning by default, while others (like DeepSeek) require `reasoning.enabled: true` in the provider options.
+:::
+
+---
+
 ## Troubleshooting
 
 If you are having trouble with configuring a provider, check the following:
