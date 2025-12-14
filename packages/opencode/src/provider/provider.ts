@@ -24,7 +24,7 @@ import { createVertexAnthropic } from "@ai-sdk/google-vertex/anthropic"
 import { createOpenAI } from "@ai-sdk/openai"
 import { createOpenAICompatible } from "@ai-sdk/openai-compatible"
 import { createOpenRouter, type LanguageModelV2 } from "@openrouter/ai-sdk-provider"
-import { createOpenaiCompatible as createGitHubCopilotOpenAICompatible } from "./sdk/openai-compatible/src"
+import { createOpenaiCompatible as createCustomOpenAICompatible } from "./sdk/openai-compatible/src"
 
 export namespace Provider {
   const log = Log.create({ service: "provider" })
@@ -37,10 +37,13 @@ export namespace Provider {
     "@ai-sdk/google-vertex": createVertex,
     "@ai-sdk/google-vertex/anthropic": createVertexAnthropic,
     "@ai-sdk/openai": createOpenAI,
+    // Official OpenAI-compatible provider for standard models
     "@ai-sdk/openai-compatible": createOpenAICompatible,
+    // Custom provider with reasoning_content support for DeepSeek, Qwen, etc.
+    "@ai-sdk/openai-compatible-reasoning": createCustomOpenAICompatible,
     "@openrouter/ai-sdk-provider": createOpenRouter,
     // @ts-ignore (TODO: kill this code so we dont have to maintain it)
-    "@ai-sdk/github-copilot": createGitHubCopilotOpenAICompatible,
+    "@ai-sdk/github-copilot": createCustomOpenAICompatible,
   }
 
   type CustomModelLoader = (sdk: any, modelID: string, options?: Record<string, any>) => Promise<any>

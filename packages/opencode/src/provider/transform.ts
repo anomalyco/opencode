@@ -232,6 +232,15 @@ export namespace ProviderTransform {
   ): Record<string, any> {
     const result: Record<string, any> = {}
 
+    // Handle reasoning parameter for openai-compatible-reasoning provider
+    if (
+      (model.api.npm === "@ai-sdk/openai-compatible-reasoning" ||
+        model.api.npm === "@ai-sdk/openai-compatible") &&
+      providerOptions?.reasoning
+    ) {
+      result["reasoning"] = providerOptions.reasoning
+    }
+
     if (model.api.npm === "@openrouter/ai-sdk-provider") {
       result["usage"] = {
         include: true,
