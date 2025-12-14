@@ -321,7 +321,7 @@ export default function Layout(props: ParentProps) {
                       }
                       return (
                         <div
-                          class="group/session relative w-full pl-4 pr-1 py-1 rounded-md cursor-default transition-colors
+                          class="group/session relative w-full pl-4 pr-2 py-1 rounded-md cursor-default transition-colors
                                  hover:bg-surface-raised-base-hover focus-within:bg-surface-raised-base-hover has-[.active]:bg-surface-raised-base-hover"
                         >
                           <Tooltip placement="right" value={session.title} gutter={10}>
@@ -379,7 +379,7 @@ export default function Layout(props: ParentProps) {
                   </For>
                   <Show when={sessions().length === 0}>
                     <div
-                      class="group/session relative w-full pl-4 pr-1 py-1 rounded-md cursor-default transition-colors
+                      class="group/session relative w-full pl-4 pr-2 py-1 rounded-md cursor-default transition-colors
                              hover:bg-surface-raised-base-hover focus-within:bg-surface-raised-base-hover has-[.active]:bg-surface-raised-base-hover"
                     >
                       <div class="flex items-center self-stretch w-full">

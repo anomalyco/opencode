@@ -9,6 +9,7 @@
   user-select: none;
   cursor: default;
   outline: none;
+  white-space: nowrap;
 
   &[data-variant="primary"] {
     background-color: var(--icon-strong-base);
