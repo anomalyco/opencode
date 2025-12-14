@@ -32,7 +32,7 @@ import { useSession, type LocalPTY } from "@/context/session"
 import { useLayout } from "@/context/layout"
 import { getDirectory, getFilename } from "@opencode-ai/util/path"
 import { Terminal } from "@/components/terminal"
-
+import { checksum } from "@opencode-ai/util/encode"
 
 export default function Page() {
   const layout = useLayout()
@@ -539,6 +539,7 @@ export default function Page() {
                             file={{
                               name: f().path,
                               contents: f().content?.content ?? "",
+                              cacheKey: checksum(f().content?.content ?? ""),
                             }}
                             overflow="scroll"
                             class="pb-40"
