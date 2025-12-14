@@ -1,18 +1,7 @@
 import { useFilteredList } from "@opencode-ai/ui/hooks"
-import {
-  createEffect,
-  on,
-  Component,
-  Show,
-  For,
-  onMount,
-  onCleanup,
-  Switch,
-  Match,
-  createSignal,
-  createMemo,
-} from "solid-js"
+import { createEffect, on, Component, Show, For, onMount, onCleanup, Switch, Match, createMemo } from "solid-js"
 import { createStore } from "solid-js/store"
+import { makePersisted } from "@solid-primitives/storage"
 import { createFocusSignal } from "@solid-primitives/active-element"
 import { useLocal } from "@/context/local"
 import { ContentPart, DEFAULT_PROMPT, isPromptEqual, Prompt, useSession } from "@/context/session"
@@ -81,22 +70,85 @@ export const PromptInput: Component<PromptInputProps> = (props) => {
 
   const [store, setStore] = createStore<{
     popoverIsOpen: boolean
+    historyIndex: number
+    savedPrompt: Prompt | null
+    placeholder: number
   }>({
     popoverIsOpen: false,
+    historyIndex: -1,
+    savedPrompt: null,
+    placeholder: Math.floor(Math.random() * PLACEHOLDERS.length),
   })
 
-  const [placeholder, setPlaceholder] = createSignal(Math.floor(Math.random() * PLACEHOLDERS.length))
+  const MAX_HISTORY = 100
+  const [history, setHistory] = makePersisted(
+    createStore<{
+      entries: Prompt[]
+    }>({
+      entries: [],
+    }),
+    {
+      name: "prompt-history.v1",
+    },
+  )
 
-  onMount(() => {
-    const interval = setInterval(() => {
-      setPlaceholder((prev) => (prev + 1) % PLACEHOLDERS.length)
-    }, 6500)
-    onCleanup(() => clearInterval(interval))
-  })
+  const clonePromptParts = (prompt: Prompt): Prompt =>
+    prompt.map((part) =>
+      part.type === "text"
+        ? { ...part }
+        : {
+            ...part,
+            selection: part.selection ? { ...part.selection } : undefined,
+          },
+    )
+
+  const promptLength = (prompt: Prompt) => prompt.reduce((len, part) => len + part.content.length, 0)
+
+  const applyHistoryPrompt = (prompt: Prompt, position: "start" | "end") => {
+    const length = position === "start" ? 0 : promptLength(prompt)
+    session.prompt.set(prompt, length)
+    requestAnimationFrame(() => {
+      editorRef.focus()
+      setCursorPosition(editorRef, length)
+    })
+  }
+
+  const getCaretLineState = () => {
+    const selection = window.getSelection()
+    if (!selection || selection.rangeCount === 0) return { collapsed: false, onFirstLine: false, onLastLine: false }
+    const range = selection.getRangeAt(0)
+    const rect = range.getBoundingClientRect()
+    const editorRect = editorRef.getBoundingClientRect()
+    const style = window.getComputedStyle(editorRef)
+    const paddingTop = parseFloat(style.paddingTop) || 0
+    const paddingBottom = parseFloat(style.paddingBottom) || 0
+    let lineHeight = parseFloat(style.lineHeight)
+    if (!Number.isFinite(lineHeight)) lineHeight = parseFloat(style.fontSize) || 16
+    const scrollTop = editorRef.scrollTop
+    let relativeTop = rect.top - editorRect.top - paddingTop + scrollTop
+    if (!Number.isFinite(relativeTop)) relativeTop = scrollTop
+    relativeTop = Math.max(0, relativeTop)
+    let caretHeight = rect.height
+    if (!caretHeight || !Number.isFinite(caretHeight)) caretHeight = lineHeight
+    const relativeBottom = relativeTop + caretHeight
+    const contentHeight = Math.max(caretHeight, editorRef.scrollHeight - paddingTop - paddingBottom)
+    const threshold = Math.max(2, lineHeight / 2)
+
+    return {
+      collapsed: selection.isCollapsed,
+      onFirstLine: relativeTop <= threshold,
+      onLastLine: contentHeight - relativeBottom <= threshold,
+    }
+  }
 
   createEffect(() => {
     session.id
     editorRef.focus()
+    if (session.id) return
+    const interval = setInterval(() => {
+      setStore("placeholder", (prev) => (prev + 1) % PLACEHOLDERS.length)
+    }, 6500)
+    onCleanup(() => clearInterval(interval))
   })
 
   const isFocused = createFocusSignal(() => editorRef)
@@ -129,15 +181,10 @@ export const PromptInput: Component<PromptInputProps> = (props) => {
     addPart({ type: "file", path, content: "@" + path, start: 0, end: 0 })
   }
 
-  const { flat, active, onInput, onKeyDown, refetch } = useFilteredList<string>({
+  const { flat, active, onInput, onKeyDown } = useFilteredList<string>({
     items: local.file.searchFilesAndDirectories,
     key: (x) => x,
     onSelect: handleFileSelect,
-  })
-
-  createEffect(() => {
-    local.model.recent()
-    refetch()
   })
 
   createEffect(
@@ -221,6 +268,11 @@ export const PromptInput: Component<PromptInputProps> = (props) => {
       setStore("popoverIsOpen", false)
     }
 
+    if (store.historyIndex >= 0) {
+      setStore("historyIndex", -1)
+      setStore("savedPrompt", null)
+    }
+
     session.prompt.set(rawParts, cursorPosition)
   }
 
@@ -296,12 +348,100 @@ export const PromptInput: Component<PromptInputProps> = (props) => {
       sessionID: session.id!,
     })
 
+  const addToHistory = (prompt: Prompt) => {
+    const text = prompt
+      .map((p) => p.content)
+      .join("")
+      .trim()
+    if (!text) return
+
+    const entry = clonePromptParts(prompt)
+    const lastEntry = history.entries[0]
+    if (lastEntry) {
+      const lastText = lastEntry.map((p) => p.content).join("")
+      if (lastText === text) return
+    }
+
+    setHistory("entries", (entries) => [entry, ...entries].slice(0, MAX_HISTORY))
+  }
+
+  const navigateHistory = (direction: "up" | "down") => {
+    const entries = history.entries
+    const current = store.historyIndex
+
+    if (direction === "up") {
+      if (entries.length === 0) return false
+      if (current === -1) {
+        setStore("savedPrompt", clonePromptParts(session.prompt.current()))
+        setStore("historyIndex", 0)
+        applyHistoryPrompt(entries[0], "start")
+        return true
+      }
+      if (current < entries.length - 1) {
+        const next = current + 1
+        setStore("historyIndex", next)
+        applyHistoryPrompt(entries[next], "start")
+        return true
+      }
+      return false
+    }
+
+    if (current > 0) {
+      const next = current - 1
+      setStore("historyIndex", next)
+      applyHistoryPrompt(entries[next], "end")
+      return true
+    }
+    if (current === 0) {
+      setStore("historyIndex", -1)
+      const saved = store.savedPrompt
+      if (saved) {
+        applyHistoryPrompt(saved, "end")
+        setStore("savedPrompt", null)
+        return true
+      }
+      applyHistoryPrompt(DEFAULT_PROMPT, "end")
+      return true
+    }
+
+    return false
+  }
+
   const handleKeyDown = (event: KeyboardEvent) => {
     if (store.popoverIsOpen && (event.key === "ArrowUp" || event.key === "ArrowDown" || event.key === "Enter")) {
       onKeyDown(event)
       event.preventDefault()
       return
     }
+
+    if (event.key === "ArrowUp" || event.key === "ArrowDown") {
+      const { collapsed, onFirstLine, onLastLine } = getCaretLineState()
+      if (!collapsed) return
+      const cursorPos = getCursorPosition(editorRef)
+      const textLength = promptLength(session.prompt.current())
+      const inHistory = store.historyIndex >= 0
+      const isStart = cursorPos === 0
+      const isEnd = cursorPos === textLength
+      const atAbsoluteStart = onFirstLine && isStart
+      const atAbsoluteEnd = onLastLine && isEnd
+      const allowUp = (inHistory && isEnd) || atAbsoluteStart
+      const allowDown = (inHistory && isStart) || atAbsoluteEnd
+
+      if (event.key === "ArrowUp") {
+        if (!allowUp) return
+        if (navigateHistory("up")) {
+          event.preventDefault()
+        }
+        return
+      }
+
+      if (!allowDown) return
+      if (navigateHistory("down")) {
+        event.preventDefault()
+      }
+      return
+    }
+
     if (event.key === "Enter" && !event.shiftKey) {
       handleSubmit(event)
     }
@@ -322,6 +462,10 @@ export const PromptInput: Component<PromptInputProps> = (props) => {
       if (session.working()) abort()
       return
     }
+
+    addToHistory(prompt)
+    setStore("historyIndex", -1)
+    setStore("savedPrompt", null)
 
     let existing = session.info()
     if (!existing) {
@@ -461,7 +605,7 @@ export const PromptInput: Component<PromptInputProps> = (props) => {
           />
           <Show when={!session.prompt.dirty()}>
             <div class="absolute top-0 left-0 px-5 py-3 text-14-regular text-text-weak pointer-events-none">
-              Ask anything... "{PLACEHOLDERS[placeholder()]}"
+              Ask anything... "{PLACEHOLDERS[store.placeholder]}"
             </div>
           </Show>
         </div>
@@ -507,6 +651,7 @@ export const PromptInput: Component<PromptInputProps> = (props) => {
                         items={models}
                         current={local.model.current()}
                         filterKeys={["provider.name", "name", "id"]}
+                        sortBy={(a, b) => a.name.localeCompare(b.name)}
                         // groupBy={(x) => (local.model.recent().includes(x) ? "Recent" : x.provider.name)}
                         groupBy={(x) => x.provider.name}
                         sortGroupsBy={(a, b) => {
