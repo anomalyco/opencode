@@ -1,8 +1,5 @@
 import type { LanguageModelV2, LanguageModelV2StreamPart } from "@ai-sdk/provider"
 import { OpenAICompatibleChatLanguageModel } from "@ai-sdk/openai-compatible"
-import { Log } from "@/util/log"
-
-const log = Log.create({ service: "reasoning-model" })
 
 /**
  * Extended OpenAI-compatible chat model that handles reasoning_content field
@@ -23,12 +20,6 @@ export class OpenAICompatibleChatWithReasoningLanguageModel implements LanguageM
     this.baseModel = new OpenAICompatibleChatLanguageModel(modelId, settings)
     this.provider = this.baseModel.provider
     this.modelId = this.baseModel.modelId
-
-    // INFO level - will always show in logs
-    log.info("wrapper initialized", {
-      modelId: this.modelId,
-      provider: this.provider
-    })
   }
 
   async doGenerate(options: Parameters<LanguageModelV2["doGenerate"]>[0]) {
@@ -48,21 +39,15 @@ export class OpenAICompatibleChatWithReasoningLanguageModel implements LanguageM
       },
     }
 
-    // INFO level - will always show in logs
-    log.info("doStream called", { modelId: this.modelId })
     const result = await this.baseModel.doStream(modifiedOptions)
 
     // Track reasoning state
     let currentReasoningId: string | null = null
-    let reasoningStartTime: number | null = null
 
     // Transform the stream to handle reasoning_content
     const transformedStream = result.stream.pipeThrough(
       new TransformStream<LanguageModelV2StreamPart, LanguageModelV2StreamPart>({
         transform(chunk, controller) {
-          // Log all chunk types for debugging
-          log.debug("chunk received", { type: chunk.type })
-
           // Check if this is a raw chunk with reasoning_content
           if (chunk.type === "raw") {
             try {
@@ -70,24 +55,17 @@ export class OpenAICompatibleChatWithReasoningLanguageModel implements LanguageM
               // Parse the chunk if it's a string (SSE format)
               const parsed = typeof rawValue === "string" ? JSON.parse(rawValue) : rawValue
 
-              // Debug logging
-              if (parsed?.choices?.[0]?.delta) {
-                log.debug("delta content", { delta: parsed.choices[0].delta })
-              }
-
               // Check for reasoning_content in delta
               const reasoningContent = parsed?.choices?.[0]?.delta?.reasoning_content
               const regularContent = parsed?.choices?.[0]?.delta?.content
 
               if (reasoningContent !== undefined && reasoningContent !== null) {
-                log.debug("found reasoning_content", { content: reasoningContent })
                 // We have reasoning content
                 const reasoningId = currentReasoningId || `reasoning-${Date.now()}`
 
                 if (!currentReasoningId) {
                   // First reasoning chunk - emit reasoning-start
                   currentReasoningId = reasoningId
-                  reasoningStartTime = Date.now()
 
                   controller.enqueue({
                     type: "reasoning-start",
@@ -109,7 +87,6 @@ export class OpenAICompatibleChatWithReasoningLanguageModel implements LanguageM
                 })
 
                 currentReasoningId = null
-                reasoningStartTime = null
               }
             } catch (e) {
               // Failed to parse or process - just pass through
