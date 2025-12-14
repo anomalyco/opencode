@@ -99,7 +99,7 @@ export function Session() {
   const { navigate } = useRoute()
   const sync = useSync()
   const local = useLocal()
-  const lastSession = { id: undefined as string | undefined }
+  const [lastSessionId, setLastSessionId] = createSignal<string | undefined>(undefined)
   const kv = useKV()
   const { theme } = useTheme()
   const promptRef = usePromptRef()
@@ -164,7 +164,6 @@ export function Session() {
 
   const toast = useToast()
   const sdk = useSDK()
-  const [lastSessionId, setLastSessionId] = createSignal<string | undefined>(undefined)
 
   createEffect(() => {
     if (!sync.data.provider.length) return
@@ -172,19 +171,21 @@ export function Session() {
     if (!local.model.ready) return
     const next = route.sessionID
 
-    if (lastSessionId()) {
-      const prevAgent = local.agent.current().name
-      const prevModel = local.model.current()
-      local.pref.setAgent(lastSessionId()!, prevAgent)
-      if (prevModel) local.pref.setModel(lastSessionId()!, prevModel)
+    const lastWithPrefs = messages().findLast((m) => "agent" in m && "model" in m)
+    if (lastWithPrefs) {
+      const pref = lastWithPrefs as unknown as { agent?: string; model?: { providerID: string; modelID: string } }
+      const agent = pref.agent
+      const model = pref.model
+      if (agent && agent !== local.agent.current().name) local.agent.set(agent)
+      if (model && model !== local.model.current()) local.model.set(model)
+    } else {
+      const pref = local.pref.get(next)
+      if (pref?.agent) local.agent.set(pref.agent)
+      if (pref?.model) local.model.set(pref.model)
+      if (!pref?.agent) local.pref.setAgent(next, local.agent.current().name)
+      const currentModel = local.model.current()
+      if (!pref?.model && currentModel) local.pref.setModel(next, currentModel)
     }
-
-    const pref = local.pref.get(next)
-    if (pref?.agent) local.agent.set(pref.agent)
-    if (pref?.model) local.model.set(pref.model)
-    if (!pref?.agent) local.pref.setAgent(next, local.agent.current().name)
-    const currentModel = local.model.current()
-    if (!pref?.model && currentModel) local.pref.setModel(next, currentModel)
 
     setLastSessionId(next)
   })
