@@ -1,0 +1,21 @@
+Ask the user one or more questions when you need clarification or input before proceeding.
+
+Use this tool when:
+- You need to clarify ambiguous requirements
+- There are multiple valid approaches and user preference matters
+- You need additional context or information to proceed
+- You want to confirm important decisions before implementing
+
+Question types:
+- "select": Single selection from a list of options
+- "multi-select": Multiple selections from a list of options  
+- "confirm": Yes/No question
+- "text": Free-form text input
+
+Guidelines:
+- Each question needs a unique `id` to identify it in the response
+- For select/multi-select, provide clear `options` with `value` and `label`
+- Mark the recommended option with `recommended: true` when appropriate
+- Use `default` to suggest a value (shown as hint, not pre-selected)
+- Keep questions concise and actionable
+- Group related questions in a single call when possible

@@ -17,6 +17,10 @@ export function Footer() {
     if (route.data.type !== "session") return []
     return sync.data.permission[route.data.sessionID] ?? []
   })
+  const questions = createMemo(() => {
+    if (route.data.type !== "session") return []
+    return sync.data.question[route.data.sessionID] ?? []
+  })
   const directory = useDirectory()
   const connected = useConnected()
 
@@ -61,6 +65,12 @@ export function Footer() {
               <text fg={theme.warning}>
                 <span style={{ fg: theme.warning }}>◉</span> {permissions().length} Permission
                 {permissions().length > 1 ? "s" : ""}
+              </text>
+            </Show>
+            <Show when={questions().length > 0}>
+              <text fg={theme.accent}>
+                <span style={{ fg: theme.accent }}>◉</span> {questions().length} Question
+                {questions().length > 1 ? "s" : ""}
               </text>
             </Show>
             <text fg={theme.text}>

@@ -26,6 +26,7 @@ export interface DialogSelectProps<T> {
     onTrigger: (option: DialogSelectOption<T>) => void
   }[]
   current?: T
+  hideSearch?: boolean
 }
 
 export interface DialogSelectOption<T = any> {
@@ -139,17 +140,43 @@ export function DialogSelect<T>(props: DialogSelectProps<T>) {
 
   const keybind = useKeybind()
   useKeyboard((evt) => {
-    if (evt.name === "up" || (evt.ctrl && evt.name === "p")) move(-1)
-    if (evt.name === "down" || (evt.ctrl && evt.name === "n")) move(1)
-    if (evt.name === "pageup") move(-10)
-    if (evt.name === "pagedown") move(10)
+    // Always prevent propagation of navigation keys
+    const isNavigationKey =
+      evt.name === "up" ||
+      evt.name === "down" ||
+      evt.name === "pageup" ||
+      evt.name === "pagedown" ||
+      evt.name === "return" ||
+      (evt.ctrl && evt.name === "p") ||
+      (evt.ctrl && evt.name === "n")
+
+    if (isNavigationKey) {
+      evt.preventDefault()
+    }
+
+    if (evt.name === "up" || (evt.ctrl && evt.name === "p")) {
+      move(-1)
+      return
+    }
+    if (evt.name === "down" || (evt.ctrl && evt.name === "n")) {
+      move(1)
+      return
+    }
+    if (evt.name === "pageup") {
+      move(-10)
+      return
+    }
+    if (evt.name === "pagedown") {
+      move(10)
+      return
+    }
     if (evt.name === "return") {
       const option = selected()
       if (option) {
-        // evt.preventDefault()
         if (option.onSelect) option.onSelect(dialog)
         props.onSelect?.(option)
       }
+      return
     }
 
     for (const item of props.keybind ?? []) {
@@ -186,24 +213,36 @@ export function DialogSelect<T>(props: DialogSelectProps<T>) {
           </text>
           <text fg={theme.textMuted}>esc</text>
         </box>
-        <box paddingTop={1} paddingBottom={1}>
-          <input
-            onInput={(e) => {
-              batch(() => {
-                setStore("filter", e)
-                props.onFilter?.(e)
-              })
-            }}
-            focusedBackgroundColor={theme.backgroundPanel}
-            cursorColor={theme.primary}
-            focusedTextColor={theme.textMuted}
-            ref={(r) => {
-              input = r
-              setTimeout(() => input.focus(), 1)
-            }}
-            placeholder={props.placeholder ?? "Search"}
-          />
-        </box>
+        {!props.hideSearch ? (
+          <box paddingTop={1} paddingBottom={1}>
+            <input
+              onInput={(e) => {
+                batch(() => {
+                  setStore("filter", e)
+                  props.onFilter?.(e)
+                })
+              }}
+              focusedBackgroundColor={theme.backgroundPanel}
+              cursorColor={theme.primary}
+              focusedTextColor={theme.textMuted}
+              ref={(r) => {
+                input = r
+                setTimeout(() => input.focus(), 1)
+              }}
+              placeholder={props.placeholder ?? "Search"}
+            />
+          </box>
+        ) : (
+          <box height={0} overflow="hidden" position="absolute" top={-9999}>
+            <input
+              onInput={() => {}}
+              ref={(r) => {
+                input = r
+                setTimeout(() => input.focus(), 1)
+              }}
+            />
+          </box>
+        )}
       </box>
       <scrollbox
         paddingLeft={1}

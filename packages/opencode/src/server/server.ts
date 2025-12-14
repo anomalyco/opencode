@@ -21,6 +21,7 @@ import { Format } from "../format"
 import { MessageV2 } from "../session/message-v2"
 import { TuiRoute } from "./tui"
 import { Permission } from "../permission"
+import { Question } from "../question"
 import { Instance } from "../project/instance"
 import { Vcs } from "../project/vcs"
 import { Agent } from "../agent/agent"
@@ -1409,6 +1410,76 @@ export namespace Server {
             sessionID,
             permissionID,
             response: c.req.valid("json").response,
+          })
+          return c.json(true)
+        },
+      )
+      .post(
+        "/session/:sessionID/questions/:questionID",
+        describeRoute({
+          summary: "Respond to question",
+          description: "Submit answers to a question asked by the AI assistant.",
+          operationId: "question.respond",
+          responses: {
+            200: {
+              description: "Question answered successfully",
+              content: {
+                "application/json": {
+                  schema: resolver(z.boolean()),
+                },
+              },
+            },
+            ...errors(400, 404),
+          },
+        }),
+        validator(
+          "param",
+          z.object({
+            sessionID: z.string(),
+            questionID: z.string(),
+          }),
+        ),
+        validator("json", z.object({ answers: Question.Answers })),
+        async (c) => {
+          const params = c.req.valid("param")
+          Question.respond({
+            sessionID: params.sessionID,
+            questionID: params.questionID,
+            answers: c.req.valid("json").answers,
+          })
+          return c.json(true)
+        },
+      )
+      .post(
+        "/session/:sessionID/questions/:questionID/reject",
+        describeRoute({
+          summary: "Reject question",
+          description: "Cancel a question asked by the AI assistant.",
+          operationId: "question.reject",
+          responses: {
+            200: {
+              description: "Question rejected successfully",
+              content: {
+                "application/json": {
+                  schema: resolver(z.boolean()),
+                },
+              },
+            },
+            ...errors(400, 404),
+          },
+        }),
+        validator(
+          "param",
+          z.object({
+            sessionID: z.string(),
+            questionID: z.string(),
+          }),
+        ),
+        async (c) => {
+          const params = c.req.valid("param")
+          Question.reject({
+            sessionID: params.sessionID,
+            questionID: params.questionID,
           })
           return c.json(true)
         },

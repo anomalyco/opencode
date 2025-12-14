@@ -6,6 +6,7 @@ export namespace Identifier {
     session: "ses",
     message: "msg",
     permission: "per",
+    question: "qst",
     user: "usr",
     part: "prt",
     pty: "pty",

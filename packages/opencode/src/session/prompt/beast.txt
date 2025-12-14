@@ -94,6 +94,9 @@ Carefully read the issue and think hard about a plan to solve it before coding.
 - Revisit your assumptions if unexpected behavior occurs.
 
 
+# Asking the User Questions
+When you encounter ambiguous requirements or need user input before proceeding, use the Ask tool. This is useful for clarifying unclear requirements, choosing between multiple valid approaches, or confirming important decisions. Keep questions concise and actionable.
+
 # Communication Guidelines
 Always communicate clearly and concisely in a casual, friendly yet professional tone. 
 <examples>

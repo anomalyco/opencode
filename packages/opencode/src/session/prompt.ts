@@ -48,6 +48,7 @@ import { Config } from "../config/config"
 import { NamedError } from "@opencode-ai/util/error"
 import { fn } from "@/util/fn"
 import { SessionProcessor } from "./processor"
+import { Question } from "../question"
 import { TaskTool } from "@/tool/task"
 import { SessionStatus } from "./status"
 import { Shell } from "@/shell/shell"
@@ -230,6 +231,7 @@ export namespace SessionPrompt {
     for (const item of match.callbacks) {
       item.reject()
     }
+    Question.rejectAll(sessionID)
     delete s[sessionID]
     SessionStatus.set(sessionID, { type: "idle" })
     return

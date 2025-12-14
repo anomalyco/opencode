@@ -8,6 +8,7 @@ import {
   on,
   Show,
   Switch,
+  untrack,
   useContext,
   type Component,
 } from "solid-js"
@@ -34,6 +35,7 @@ import type { WriteTool } from "@/tool/write"
 import { BashTool } from "@/tool/bash"
 import type { GlobTool } from "@/tool/glob"
 import { TodoWriteTool } from "@/tool/todo"
+import type { AskTool } from "@/tool/ask"
 import type { GrepTool } from "@/tool/grep"
 import type { ListTool } from "@/tool/ls"
 import type { EditTool } from "@/tool/edit"
@@ -52,6 +54,7 @@ import type { PromptInfo } from "../../component/prompt/history"
 import { iife } from "@/util/iife"
 import { DialogConfirm } from "@tui/ui/dialog-confirm"
 import { DialogPrompt } from "@tui/ui/dialog-prompt"
+import { DialogQuestion } from "@tui/ui/dialog-question"
 import { DialogTimeline } from "./dialog-timeline"
 import { DialogSessionRename } from "../../component/dialog-session-rename"
 import { Sidebar } from "./sidebar"
@@ -104,6 +107,7 @@ export function Session() {
   const session = createMemo(() => sync.session.get(route.sessionID)!)
   const messages = createMemo(() => sync.data.message[route.sessionID] ?? [])
   const permissions = createMemo(() => sync.data.permission[route.sessionID] ?? [])
+  const questions = createMemo(() => sync.data.question[route.sessionID] ?? [])
 
   const pending = createMemo(() => {
     return messages().findLast((x) => x.role === "assistant" && !x.time.completed)?.id
@@ -183,6 +187,41 @@ export function Session() {
         sessionID: targetID,
       })
     }
+  })
+
+  // Auto-open question dialog when question arrives
+  let currentQuestionID: string | null = null
+  createEffect(() => {
+    const pendingQuestions = questions()
+    if (pendingQuestions.length === 0) {
+      currentQuestionID = null
+      return
+    }
+
+    const question = pendingQuestions[0]
+    // Already showing this question
+    if (currentQuestionID === question.id) return
+    // Another dialog is open - use untrack to avoid making this reactive
+    if (untrack(() => dialog.stack.length > 0)) return
+
+    currentQuestionID = question.id
+    DialogQuestion.show(dialog, question as any).then(({ answers, cancelled }) => {
+      currentQuestionID = null
+      const baseUrl = sdk.baseUrl
+      if (cancelled) {
+        // User cancelled - reject the question
+        fetch(`${baseUrl}/session/${route.sessionID}/questions/${question.id}/reject`, {
+          method: "POST",
+        })
+      } else {
+        // User submitted answers
+        fetch(`${baseUrl}/session/${route.sessionID}/questions/${question.id}`, {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ answers }),
+        })
+      }
+    })
   })
 
   let scroll: ScrollBoxRenderable
@@ -1675,6 +1714,61 @@ ToolRegistry.register<typeof TodoWriteTool>({
                   [{todo.status === "completed" ? "✓" : " "}] {todo.content}
                 </text>
               )}
+            </For>
+          </box>
+        </Show>
+      </>
+    )
+  },
+})
+
+ToolRegistry.register<typeof AskTool>({
+  name: "ask",
+  container: "block",
+  render(props) {
+    const { theme } = useTheme()
+    const questions = createMemo(() => props.input.questions ?? [])
+    const answers = createMemo(() => (props.metadata.answers ?? {}) as Record<string, { value: any; comment?: string }>)
+    const pending = createMemo(() => !props.output)
+
+    return (
+      <>
+        <ToolTitle icon="?" fallback="Asking questions..." when={questions().length > 0}>
+          {pending() ? "Asking" : "Asked"} {questions().length} question{questions().length !== 1 ? "s" : ""}
+        </ToolTitle>
+        <Show when={!pending() && questions().length > 0}>
+          <box>
+            <For each={questions()}>
+              {(q) => {
+                const answer = createMemo(() => answers()[q.id])
+                return (
+                  <box>
+                    <text fg={theme.textMuted}>Q: {q.question}</text>
+                    <Show when={answer()}>
+                      <text fg={theme.text}>
+                        A:{" "}
+                        {typeof answer()!.value === "boolean"
+                          ? answer()!.value
+                            ? "Yes"
+                            : "No"
+                          : Array.isArray(answer()!.value)
+                            ? answer()!.value.join(", ")
+                            : answer()!.value}
+                      </text>
+                      <Show when={answer()!.comment}>
+                        <text fg={theme.textMuted}>
+                          <i>"{answer()!.comment}"</i>
+                        </text>
+                      </Show>
+                    </Show>
+                    <Show when={!answer()}>
+                      <text fg={theme.textMuted}>
+                        <i>(skipped)</i>
+                      </text>
+                    </Show>
+                  </box>
+                )
+              }}
             </For>
           </box>
         </Show>
