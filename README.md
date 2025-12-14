@@ -22,7 +22,7 @@
 
 **CPU Requirements:**
 
-- **x64 Linux**: CPU with SSE3 and SSSE3 instruction set support (approximately 2008 or newer)
+- **x64 Linux**: CPU with SSE3 or SSSE3 instruction set support (approximately 2008 or newer)
 
 ### Installation
 

@@ -172,13 +172,10 @@ if [ "$arch" = "x64" ] && [ "$os" = "linux" ]; then
         cpu_flags=$(LC_ALL=C echo "$cpu_flags" | tr '[:upper:]' '[:lower:]')
 
         missing_flags=""
+        # Check for SSSE3 (includes SSE3) or SSE3
         case "$cpu_flags" in
-          *sse3*) ;;
-          *) missing_flags=" sse3" ;;
-        esac
-        case "$cpu_flags" in
-          *ssse3*) ;;
-          *) missing_flags="$missing_flags ssse3" ;;
+          *ssse3*|*sse3*) ;;
+          *) missing_flags=" sse3/ssse3" ;;
         esac
 
         if [ -n "$missing_flags" ]; then
