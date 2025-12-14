@@ -151,19 +151,7 @@ export function DialogModel(props: { providerID?: string }) {
                 },
               }
             }),
-            filter((x) => {
-              if (query) return true
-              const value = x.value
-              const inFavorites = favorites.some(
-                (item) => item.providerID === value.providerID && item.modelID === value.modelID,
-              )
-              if (inFavorites) return false
-              const inRecents = recents.some(
-                (item) => item.providerID === value.providerID && item.modelID === value.modelID,
-              )
-              if (inRecents) return false
-              return true
-            }),
+
             sortBy(
               (x) => x.footer !== "Free",
               (x) => x.title,
