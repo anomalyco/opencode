@@ -580,6 +580,7 @@ export namespace Config {
       whitelist: z.array(z.string()).optional(),
       blacklist: z.array(z.string()).optional(),
       models: z.record(z.string(), ModelsDev.Model.partial()).optional(),
+      profile: z.string().optional().describe("Default auth profile to use for this provider"),
       options: z
         .object({
           apiKey: z.string().optional(),

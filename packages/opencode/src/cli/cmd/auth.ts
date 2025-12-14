@@ -15,10 +15,35 @@ import type { Hooks } from "@opencode-ai/plugin"
 type PluginAuth = NonNullable<Hooks["auth"]>
 
 /**
+ * Prompt for profile name if provider already has a default profile.
+ * Returns undefined for default profile, or the profile name.
+ */
+async function promptForProfile(provider: string): Promise<string | undefined> {
+  const hasDefault = await Auth.hasDefault(provider)
+  if (!hasDefault) return undefined
+
+  const profiles = await Auth.profiles(provider)
+  const existingNames = profiles.map((p) => p.profile ?? "default").join(", ")
+  prompts.log.info(`Existing profiles: ${existingNames}`)
+
+  const profileName = await prompts.text({
+    message: "Enter profile name (leave empty for default)",
+    placeholder: "e.g. work, personal",
+    validate: (x) => {
+      if (!x || x.length === 0) return undefined
+      if (!Auth.validateProfileName(x)) return "Only letters, numbers, hyphens, and underscores allowed"
+      return undefined
+    },
+  })
+  if (prompts.isCancel(profileName)) throw new UI.CancelledError()
+  return profileName || undefined
+}
+
+/**
  * Handle plugin-based authentication flow.
  * Returns true if auth was handled, false if it should fall through to default handling.
  */
-async function handlePluginAuth(plugin: { auth: PluginAuth }, provider: string): Promise<boolean> {
+async function handlePluginAuth(plugin: { auth: PluginAuth }, provider: string, profile?: string): Promise<boolean> {
   let index = 0
   if (plugin.auth.methods.length > 1) {
     const method = await prompts.select({
@@ -83,19 +108,27 @@ async function handlePluginAuth(plugin: { auth: PluginAuth }, provider: string):
         const saveProvider = result.provider ?? provider
         if ("refresh" in result) {
           const { type: _, provider: __, refresh, access, expires, ...extraFields } = result
-          await Auth.set(saveProvider, {
-            type: "oauth",
-            refresh,
-            access,
-            expires,
-            ...extraFields,
-          })
+          await Auth.set(
+            saveProvider,
+            {
+              type: "oauth",
+              refresh,
+              access,
+              expires,
+              ...extraFields,
+            },
+            profile,
+          )
         }
         if ("key" in result) {
-          await Auth.set(saveProvider, {
-            type: "api",
-            key: result.key,
-          })
+          await Auth.set(
+            saveProvider,
+            {
+              type: "api",
+              key: result.key,
+            },
+            profile,
+          )
         }
         spinner.stop("Login successful")
       }
@@ -115,19 +148,27 @@ async function handlePluginAuth(plugin: { auth: PluginAuth }, provider: string):
         const saveProvider = result.provider ?? provider
         if ("refresh" in result) {
           const { type: _, provider: __, refresh, access, expires, ...extraFields } = result
-          await Auth.set(saveProvider, {
-            type: "oauth",
-            refresh,
-            access,
-            expires,
-            ...extraFields,
-          })
+          await Auth.set(
+            saveProvider,
+            {
+              type: "oauth",
+              refresh,
+              access,
+              expires,
+              ...extraFields,
+            },
+            profile,
+          )
         }
         if ("key" in result) {
-          await Auth.set(saveProvider, {
-            type: "api",
-            key: result.key,
-          })
+          await Auth.set(
+            saveProvider,
+            {
+              type: "api",
+              key: result.key,
+            },
+            profile,
+          )
         }
         prompts.log.success("Login successful")
       }
@@ -145,10 +186,14 @@ async function handlePluginAuth(plugin: { auth: PluginAuth }, provider: string):
       }
       if (result.type === "success") {
         const saveProvider = result.provider ?? provider
-        await Auth.set(saveProvider, {
-          type: "api",
-          key: result.key,
-        })
+        await Auth.set(
+          saveProvider,
+          {
+            type: "api",
+            key: result.key,
+          },
+          profile,
+        )
         prompts.log.success("Login successful")
       }
       prompts.outro("Done")
@@ -159,11 +204,82 @@ async function handlePluginAuth(plugin: { auth: PluginAuth }, provider: string):
   return false
 }
 
+export const AuthSetDefaultCommand = cmd({
+  command: "set-default",
+  describe: "set a profile as the default for a provider",
+  async handler() {
+    UI.empty()
+    prompts.intro("Set default profile")
+    const credentials = await Auth.all().then((x) => Object.entries(x))
+    const database = await ModelsDev.get()
+
+    // Group by provider, only show providers with multiple profiles (including at least one named)
+    const grouped: Record<string, Array<{ profile?: string; key: string }>> = {}
+    for (const [key] of credentials) {
+      const parsed = Auth.parseKey(key)
+      if (!grouped[parsed.providerID]) grouped[parsed.providerID] = []
+      grouped[parsed.providerID].push({ profile: parsed.profile, key })
+    }
+
+    // Filter to providers with named profiles
+    const eligibleProviders = Object.entries(grouped).filter(([, profiles]) =>
+      profiles.some((p) => p.profile !== undefined),
+    )
+
+    if (eligibleProviders.length === 0) {
+      prompts.log.error("No providers with multiple profiles found")
+      prompts.outro("Done")
+      return
+    }
+
+    // Select provider
+    const providerID = await prompts.select({
+      message: "Select provider",
+      options: eligibleProviders.map(([id, profiles]) => {
+        const name = database[id]?.name || id
+        const count = profiles.length
+        return {
+          label: `${name} ${UI.Style.TEXT_DIM}(${count} profiles)`,
+          value: id,
+        }
+      }),
+    })
+    if (prompts.isCancel(providerID)) throw new UI.CancelledError()
+
+    // Get named profiles for this provider
+    const namedProfiles = grouped[providerID].filter((p) => p.profile !== undefined)
+    if (namedProfiles.length === 0) {
+      prompts.log.error("No named profiles found for this provider")
+      prompts.outro("Done")
+      return
+    }
+
+    // Select profile to promote
+    const profile = await prompts.select({
+      message: "Select profile to set as default",
+      options: namedProfiles.map((p) => ({
+        label: p.profile!,
+        value: p.profile!,
+      })),
+    })
+    if (prompts.isCancel(profile)) throw new UI.CancelledError()
+
+    await Auth.setDefault(providerID, profile)
+    prompts.log.success(`Profile "${profile}" is now the default for ${database[providerID]?.name || providerID}`)
+    prompts.outro("Done")
+  },
+})
+
 export const AuthCommand = cmd({
   command: "auth",
   describe: "manage credentials",
   builder: (yargs) =>
-    yargs.command(AuthLoginCommand).command(AuthLogoutCommand).command(AuthListCommand).demandCommand(),
+    yargs
+      .command(AuthLoginCommand)
+      .command(AuthLogoutCommand)
+      .command(AuthListCommand)
+      .command(AuthSetDefaultCommand)
+      .demandCommand(),
   async handler() {},
 })
 
@@ -180,9 +296,20 @@ export const AuthListCommand = cmd({
     const results = Object.entries(await Auth.all())
     const database = await ModelsDev.get()
 
-    for (const [providerID, result] of results) {
+    // Group by provider
+    const grouped: Record<string, Array<{ profile?: string; type: string }>> = {}
+    for (const [key, result] of results) {
+      const parsed = Auth.parseKey(key)
+      if (!grouped[parsed.providerID]) grouped[parsed.providerID] = []
+      grouped[parsed.providerID].push({ profile: parsed.profile, type: result.type })
+    }
+
+    for (const [providerID, profiles] of Object.entries(grouped)) {
       const name = database[providerID]?.name || providerID
-      prompts.log.info(`${name} ${UI.Style.TEXT_DIM}${result.type}`)
+      for (const p of profiles) {
+        const profileLabel = p.profile ? `:${p.profile}` : " (default)"
+        prompts.log.info(`${name}${profileLabel} ${UI.Style.TEXT_DIM}${p.type}`)
+      }
     }
 
     prompts.outro(`${results.length} credentials`)
@@ -306,12 +433,6 @@ export const AuthLoginCommand = cmd({
 
         if (prompts.isCancel(provider)) throw new UI.CancelledError()
 
-        const plugin = await Plugin.list().then((x) => x.find((x) => x.auth?.provider === provider))
-        if (plugin && plugin.auth) {
-          const handled = await handlePluginAuth({ auth: plugin.auth }, provider)
-          if (handled) return
-        }
-
         if (provider === "other") {
           provider = await prompts.text({
             message: "Enter provider id",
@@ -320,17 +441,6 @@ export const AuthLoginCommand = cmd({
           if (prompts.isCancel(provider)) throw new UI.CancelledError()
           provider = provider.replace(/^@ai-sdk\//, "")
           if (prompts.isCancel(provider)) throw new UI.CancelledError()
-
-          // Check if a plugin provides auth for this custom provider
-          const customPlugin = await Plugin.list().then((x) => x.find((x) => x.auth?.provider === provider))
-          if (customPlugin && customPlugin.auth) {
-            const handled = await handlePluginAuth({ auth: customPlugin.auth }, provider)
-            if (handled) return
-          }
-
-          prompts.log.warn(
-            `This only stores a credential for ${provider} - you will need configure it in opencode.json, check the docs for examples.`,
-          )
         }
 
         if (provider === "amazon-bedrock") {
@@ -339,6 +449,15 @@ export const AuthLoginCommand = cmd({
           )
           prompts.outro("Done")
           return
+        }
+
+        // Prompt for profile name if provider already has credentials
+        const profile = await promptForProfile(provider)
+
+        const plugin = await Plugin.list().then((x) => x.find((x) => x.auth?.provider === provider))
+        if (plugin && plugin.auth) {
+          const handled = await handlePluginAuth({ auth: plugin.auth }, provider, profile)
+          if (handled) return
         }
 
         if (provider === "opencode") {
@@ -354,10 +473,14 @@ export const AuthLoginCommand = cmd({
           validate: (x) => (x && x.length > 0 ? undefined : "Required"),
         })
         if (prompts.isCancel(key)) throw new UI.CancelledError()
-        await Auth.set(provider, {
-          type: "api",
-          key,
-        })
+        await Auth.set(
+          provider,
+          {
+            type: "api",
+            key,
+          },
+          profile,
+        )
 
         prompts.outro("Done")
       },
@@ -377,15 +500,21 @@ export const AuthLogoutCommand = cmd({
       return
     }
     const database = await ModelsDev.get()
-    const providerID = await prompts.select({
-      message: "Select provider",
-      options: credentials.map(([key, value]) => ({
-        label: (database[key]?.name || key) + UI.Style.TEXT_DIM + " (" + value.type + ")",
-        value: key,
-      })),
+    const selection = await prompts.select({
+      message: "Select credential",
+      options: credentials.map(([key, value]) => {
+        const parsed = Auth.parseKey(key)
+        const providerName = database[parsed.providerID]?.name || parsed.providerID
+        const profileLabel = parsed.profile ? `:${parsed.profile}` : " (default)"
+        return {
+          label: providerName + profileLabel + UI.Style.TEXT_DIM + " " + value.type,
+          value: key,
+        }
+      }),
     })
-    if (prompts.isCancel(providerID)) throw new UI.CancelledError()
-    await Auth.remove(providerID)
+    if (prompts.isCancel(selection)) throw new UI.CancelledError()
+    const parsed = Auth.parseKey(selection)
+    await Auth.remove(parsed.providerID, parsed.profile)
     prompts.outro("Logout successful")
   },
 })

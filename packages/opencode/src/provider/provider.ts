@@ -620,14 +620,19 @@ export namespace Provider {
       })
     }
 
-    // load apikeys
-    for (const [providerID, provider] of Object.entries(await Auth.all())) {
+    // load apikeys - parse composite keys to extract provider and profile
+    for (const [key, authInfo] of Object.entries(await Auth.all())) {
+      const { providerID, profile } = Auth.parseKey(key)
       if (disabled.has(providerID)) continue
-      if (provider.type === "api") {
-        mergeProvider(providerID, {
-          source: "api",
-          key: provider.key,
-        })
+      if (authInfo.type === "api") {
+        // Only use default profile (no profile suffix) for auto-loading
+        // Named profiles are explicitly selected via model string or config
+        if (!profile) {
+          mergeProvider(providerID, {
+            source: "api",
+            key: authInfo.key,
+          })
+        }
       }
     }
 
@@ -968,9 +973,19 @@ export namespace Provider {
   }
 
   export function parseModel(model: string) {
-    const [providerID, ...rest] = model.split("/")
+    const [first, ...rest] = model.split("/")
+    // Check for profile in format: provider:profile/model
+    const colonIdx = first.indexOf(":")
+    if (colonIdx !== -1) {
+      return {
+        providerID: first.slice(0, colonIdx),
+        profile: first.slice(colonIdx + 1),
+        modelID: rest.join("/"),
+      }
+    }
     return {
-      providerID: providerID,
+      providerID: first,
+      profile: undefined,
       modelID: rest.join("/"),
     }
   }
