@@ -148,6 +148,17 @@ export const { use: useSync, provider: SyncProvider } = createSimpleContext({
                 draft.splice(result.index, 1)
               }),
             )
+            break
+          }
+          // Linear search fallback for sort order edge cases
+          const linearIndex = store.session.findIndex((s) => s.id === event.properties.info.id)
+          if (linearIndex !== -1) {
+            setStore(
+              "session",
+              produce((draft) => {
+                draft.splice(linearIndex, 1)
+              }),
+            )
           }
           break
         }
@@ -157,6 +168,13 @@ export const { use: useSync, provider: SyncProvider } = createSimpleContext({
             setStore("session", result.index, reconcile(event.properties.info))
             break
           }
+          // Linear search fallback for sort order edge cases
+          const linearIndex = store.session.findIndex((s) => s.id === event.properties.info.id)
+          if (linearIndex !== -1) {
+            setStore("session", linearIndex, reconcile(event.properties.info))
+            break
+          }
+          // Not found, insert at binary search position
           setStore(
             "session",
             produce((draft) => {
