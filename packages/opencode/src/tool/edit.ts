@@ -18,7 +18,7 @@ import { Instance } from "../project/instance"
 import { Agent } from "../agent/agent"
 import { Snapshot } from "@/snapshot"
 
-const MAX_DIAGNOSTICS_PER_FILE = 10
+const MAX_DIAGNOSTICS_PER_FILE = 20
 
 function normalizeLineEndings(text: string): string {
   return text.replaceAll("\r\n", "\n")
