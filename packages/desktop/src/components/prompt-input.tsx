@@ -651,6 +651,7 @@ export const PromptInput: Component<PromptInputProps> = (props) => {
                         items={models}
                         current={local.model.current()}
                         filterKeys={["provider.name", "name", "id"]}
+                        sortBy={(a, b) => a.name.localeCompare(b.name)}
                         // groupBy={(x) => (local.model.recent().includes(x) ? "Recent" : x.provider.name)}
                         groupBy={(x) => x.provider.name}
                         sortGroupsBy={(a, b) => {
