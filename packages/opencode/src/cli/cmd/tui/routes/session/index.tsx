@@ -58,6 +58,7 @@ import { Sidebar } from "./sidebar"
 import { LANGUAGE_EXTENSIONS } from "@/lsp/language"
 import parsers from "../../../../../../parsers-config.ts"
 import { Clipboard } from "../../util/clipboard"
+import { calculateTokensPerSecond, isValidForTokensPerSecond, totalGeneratedTokens } from "../../util/tokens"
 import { Toast, useToast } from "../../ui/toast"
 import { useKV } from "../../context/kv.tsx"
 import { Editor } from "../../util/editor"
@@ -1096,6 +1097,15 @@ function AssistantMessage(props: { message: AssistantMessage; parts: Part[]; las
     return props.message.time.completed - user.time.created
   })
 
+  const tokensPerSecond = createMemo(() => {
+    if (!isValidForTokensPerSecond(props.message)) return undefined
+    const elapsedMs = props.message.time.completed! - props.message.time.firstToken!
+    return calculateTokensPerSecond({
+      totalTokens: totalGeneratedTokens(props.message.tokens),
+      elapsedMs,
+    })
+  })
+
   return (
     <>
       <For each={props.parts}>
@@ -1136,6 +1146,9 @@ function AssistantMessage(props: { message: AssistantMessage; parts: Part[]; las
               <span style={{ fg: theme.textMuted }}> · {props.message.modelID}</span>
               <Show when={duration()}>
                 <span style={{ fg: theme.textMuted }}> · {Locale.duration(duration())}</span>
+              </Show>
+              <Show when={tokensPerSecond() !== undefined}>
+                <span style={{ fg: theme.textMuted }}> · {tokensPerSecond()?.toLocaleString()} tok/s</span>
               </Show>
             </text>
           </box>

@@ -39,6 +39,17 @@ export namespace SessionProcessor {
     let snapshot: string | undefined
     let blocked = false
     let attempt = 0
+    let firstOutputDeltaTimestamp: number | undefined
+    let lastOutputDeltaTimestamp: number | undefined
+
+    // Helper to track timestamps for all output-producing deltas
+    const markOutputDeltaTimestamp = (now: number) => {
+      if (firstOutputDeltaTimestamp === undefined) {
+        firstOutputDeltaTimestamp = now
+        input.assistantMessage.time.firstToken = now
+      }
+      lastOutputDeltaTimestamp = now
+    }
 
     const result = {
       get message() {
@@ -81,6 +92,8 @@ export namespace SessionProcessor {
 
                 case "reasoning-delta":
                   if (value.id in reasoningMap) {
+                    const now = Date.now()
+                    markOutputDeltaTimestamp(now)
                     const part = reasoningMap[value.id]
                     part.text += value.text
                     if (value.providerMetadata) part.metadata = value.providerMetadata
@@ -120,13 +133,17 @@ export namespace SessionProcessor {
                   toolcalls[value.id] = part as MessageV2.ToolPart
                   break
 
-                case "tool-input-delta":
+                case "tool-input-delta": {
+                  const now = Date.now()
+                  markOutputDeltaTimestamp(now)
                   break
+                }
 
                 case "tool-input-end":
                   break
 
                 case "tool-call": {
+                  markOutputDeltaTimestamp(Date.now())
                   const match = toolcalls[value.toolCallId]
                   if (match) {
                     const part = await Session.updatePart({
@@ -256,7 +273,11 @@ export namespace SessionProcessor {
                   })
                   input.assistantMessage.finish = value.finishReason
                   input.assistantMessage.cost += usage.cost
-                  input.assistantMessage.tokens = usage.tokens
+                  input.assistantMessage.tokens.input += usage.tokens.input
+                  input.assistantMessage.tokens.output += usage.tokens.output
+                  input.assistantMessage.tokens.reasoning += usage.tokens.reasoning
+                  input.assistantMessage.tokens.cache.read += usage.tokens.cache.read
+                  input.assistantMessage.tokens.cache.write += usage.tokens.cache.write
                   await Session.updatePart({
                     id: Identifier.ascending("part"),
                     reason: value.finishReason,
@@ -304,6 +325,8 @@ export namespace SessionProcessor {
 
                 case "text-delta":
                   if (currentText) {
+                    const now = Date.now()
+                    markOutputDeltaTimestamp(now)
                     currentText.text += value.text
                     if (value.providerMetadata) currentText.metadata = value.providerMetadata
                     if (currentText.text)
@@ -389,7 +412,7 @@ export namespace SessionProcessor {
               })
             }
           }
-          input.assistantMessage.time.completed = Date.now()
+          input.assistantMessage.time.completed = lastOutputDeltaTimestamp ?? Date.now()
           await Session.updateMessage(input.assistantMessage)
           if (blocked) return "stop"
           if (input.assistantMessage.error) return "stop"

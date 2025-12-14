@@ -141,6 +141,7 @@ export type AssistantMessage = {
   time: {
     created: number
     completed?: number
+    firstToken?: number
   }
   error?: ProviderAuthError | UnknownError | MessageOutputLengthError | MessageAbortedError | ApiError
   parentID: string
