@@ -832,40 +832,13 @@ export namespace Config {
     return load(text, filepath)
   }
 
-  /**
-   * Loads and parses a JSONC configuration file with optional config substitutions.
-   *
-   * Config substitutions are template-like features that allow dynamic content:
-   * - Environment variable substitution: `{env:VAR_NAME}` → process.env.VAR_NAME
-   * - File inclusion: `{file:path}` → content of external file
-   *
-   * @param text - Raw JSONC content to parse
-   * @param configFilepath - Path to config file (for error reporting and resolving relative paths)
-   * @param enableConfigSubstitutions - Whether to process config substitutions (default: true)
-   *   - Set to `true` for config files (allows env vars and file inclusion)
-   *   - Set to `false` for theme files (security: no env vars or file inclusion)
-   *
-   * @returns Parsed configuration object
-   *
-   * @example
-   * // For config files (enable substitutions)
-   * const config = await load(jsonContent, "/path/to/config.json", true)
-   *
-   * @example
-   * // For theme files (disable substitutions for security)
-   * const theme = await load(jsonContent, "/path/to/theme.json", false)
-   */
   async function load(text: string, configFilepath: string, enableConfigSubstitutions: boolean = true) {
-    // Process environment variable substitutions if enabled
-    // Security: Only enabled for config files, not themes
     if (enableConfigSubstitutions) {
       text = text.replace(/\{env:([^}]+)\}/g, (_, varName) => {
         return process.env[varName] || ""
       })
     }
 
-    // Process file inclusion substitutions if enabled
-    // Security: Only enabled for config files, not themes
     if (enableConfigSubstitutions) {
       const fileMatches = text.match(/\{file:[^}]+\}/g)
       if (fileMatches) {
@@ -875,7 +848,7 @@ export namespace Config {
         for (const match of fileMatches) {
           const lineIndex = lines.findIndex((line) => line.includes(match))
           if (lineIndex !== -1 && lines[lineIndex].trim().startsWith("//")) {
-            continue // Skip if line is commented
+            continue 
           }
           let filePath = match.replace(/^\{file:/, "").replace(/\}$/, "")
           if (filePath.startsWith("~/")) {
@@ -899,7 +872,6 @@ export namespace Config {
                 throw new InvalidError({ path: configFilepath, message: errMsg }, { cause: error })
               })
           ).trim()
-          // escape newlines/quotes, strip outer quotes
           text = text.replace(match, JSON.stringify(fileContent).slice(1, -1))
         }
       }
