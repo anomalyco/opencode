@@ -54,6 +54,7 @@ export function DialogModel(props: { providerID?: string }) {
               value: {
                 providerID: provider.id,
                 modelID: model.id,
+                category: "Favorites",
               },
               title: model.name ?? item.modelID,
               description: provider.name,
@@ -87,6 +88,7 @@ export function DialogModel(props: { providerID?: string }) {
               value: {
                 providerID: provider.id,
                 modelID: model.id,
+                category: "Recent",
               },
               title: model.name ?? item.modelID,
               description: provider.name,
@@ -127,6 +129,7 @@ export function DialogModel(props: { providerID?: string }) {
               const value = {
                 providerID: provider.id,
                 modelID: model,
+                category: provider.name,
               }
               return {
                 value,
@@ -198,7 +201,8 @@ export function DialogModel(props: { providerID?: string }) {
           title: "Favorite",
           disabled: !connected(),
           onTrigger: (option) => {
-            local.model.toggleFavorite(option.value as { providerID: string; modelID: string })
+            const val = option.value as { providerID: string; modelID: string; category: string }
+            local.model.toggleFavorite({ providerID: val.providerID, modelID: val.modelID })
           },
         },
       ]}
