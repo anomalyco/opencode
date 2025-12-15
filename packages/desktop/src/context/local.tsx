@@ -78,7 +78,7 @@ export const { use: useLocal, provider: LocalProvider } = createSimpleContext({
     })
 
     const agent = (() => {
-      const list = createMemo(() => sync.data.agent.filter((x) => x.mode !== "subagent"))
+      const list = createMemo(() => sync.data.agent.filter((x) => x.mode !== "subagent" && !x.hidden))
       const [store, setStore] = createStore<{
         current: string
       }>({
