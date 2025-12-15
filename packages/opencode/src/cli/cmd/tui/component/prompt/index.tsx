@@ -491,6 +491,9 @@ export function Prompt(props: PromptProps) {
     // Filter out text parts (pasted content) since they're now expanded inline
     const nonTextParts = store.prompt.parts.filter((part) => part.type !== "text")
 
+    // Capture mode before it gets reset
+    const currentMode = store.mode
+
     if (store.mode === "shell") {
       sdk.client.session.shell({
         sessionID,
@@ -541,7 +544,7 @@ export function Prompt(props: PromptProps) {
     }
     history.append({
       ...store.prompt,
-      mode: store.mode,
+      mode: currentMode,
     })
     input.extmarks.clear()
     setStore("prompt", {
