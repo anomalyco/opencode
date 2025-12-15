@@ -141,36 +141,10 @@ export function DialogSelect<T>(props: DialogSelectProps<T>) {
 
   const keybind = useKeybind()
   useKeyboard((evt) => {
-    // Always prevent propagation of navigation keys
-    const isNavigationKey =
-      evt.name === "up" ||
-      evt.name === "down" ||
-      evt.name === "pageup" ||
-      evt.name === "pagedown" ||
-      evt.name === "return" ||
-      (evt.ctrl && evt.name === "p") ||
-      (evt.ctrl && evt.name === "n")
-
-    if (isNavigationKey) {
-      evt.preventDefault()
-    }
-
-    if (evt.name === "up" || (evt.ctrl && evt.name === "p")) {
-      move(-1)
-      return
-    }
-    if (evt.name === "down" || (evt.ctrl && evt.name === "n")) {
-      move(1)
-      return
-    }
-    if (evt.name === "pageup") {
-      move(-10)
-      return
-    }
-    if (evt.name === "pagedown") {
-      move(10)
-      return
-    }
+    if (evt.name === "up" || (evt.ctrl && evt.name === "p")) move(-1)
+    if (evt.name === "down" || (evt.ctrl && evt.name === "n")) move(1)
+    if (evt.name === "pageup") move(-10)
+    if (evt.name === "pagedown") move(10)
     if (evt.name === "return") {
       const option = selected()
       if (option) {
