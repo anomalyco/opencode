@@ -372,12 +372,12 @@ export function Autocomplete(props: {
     setStore("selected", 0)
   })
 
-  function move(direction: -1 | 1) {  
-    if (!store.visible) return  
-    if (!options().length) return  
-    let next = store.selected + direction    
-    if (next < 0) next = options().length - 1  
-    if (next >= options().length) next = 0   
+  function move(direction: -1 | 1) {
+    if (!store.visible) return
+    if (!options().length) return
+    let next = store.selected + direction  
+    if (next < 0) next = options().length - 1
+    if (next >= options().length) next = 0
     moveTo(next)
   }
 
@@ -385,7 +385,7 @@ export function Autocomplete(props: {
     setStore("selected", next);
     if (!scroll) return;
     
-    const viewportHeight = Math.min(10, options().length);
+    const viewportHeight = Math.min(height(), options().length);
     const scrollBottom = scroll.scrollTop + viewportHeight;
     
     if (next < scroll.scrollTop) {
