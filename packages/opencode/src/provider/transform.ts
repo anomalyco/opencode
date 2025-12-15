@@ -199,14 +199,29 @@ export namespace ProviderTransform {
   }
 
   export function temperature(model: Provider.Model) {
-    if (model.api.id.toLowerCase().includes("qwen")) return 0.55
-    if (model.api.id.toLowerCase().includes("claude")) return undefined
-    if (model.api.id.toLowerCase().includes("gemini-3-pro")) return 1.0
-    return 0
+    const id = model.id.toLowerCase()
+    if (id.includes("qwen")) return 0.55
+    if (id.includes("claude")) return undefined
+    if (id.includes("gemini-3-pro")) return 1.0
+    if (id.includes("glm-4.6")) return 1.0
+    if (id.includes("minimax-m2")) return 1.0
+    // if (id.includes("kimi-k2")) {
+    //   if (id.includes("thinking")) return 1.0
+    //   return 0.6
+    // }
+    return undefined
   }
 
   export function topP(model: Provider.Model) {
-    if (model.api.id.toLowerCase().includes("qwen")) return 1
+    const id = model.id.toLowerCase()
+    if (id.includes("qwen")) return 1
+    if (id.includes("minimax-m2")) return 0.95
+    return undefined
+  }
+
+  export function topK(model: Provider.Model) {
+    const id = model.id.toLowerCase()
+    if (id.includes("minimax-m2")) return 40
     return undefined
   }
 

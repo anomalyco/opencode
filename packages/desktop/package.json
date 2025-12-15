@@ -1,6 +1,6 @@
 {
   "name": "@opencode-ai/desktop",
-  "version": "1.0.152",
+  "version": "1.0.153",
   "description": "",
   "type": "module",
   "exports": {
@@ -37,6 +37,7 @@
     "@solid-primitives/active-element": "2.1.3",
     "@solid-primitives/audio": "1.4.2",
     "@solid-primitives/event-bus": "1.1.2",
+    "@solid-primitives/media": "2.3.3",
     "@solid-primitives/resize-observer": "2.1.3",
     "@solid-primitives/scroll": "2.1.3",
     "@solid-primitives/storage": "4.3.3",

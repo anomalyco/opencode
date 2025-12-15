@@ -869,25 +869,17 @@ export function Prompt(props: PromptProps) {
           borderColor={highlight()}
           customBorderChars={{
             ...EmptyBorder,
-            // when the background is transparent, don't draw the vertical line
-            vertical: theme.background.a != 0 ? "╹" : " ",
+            vertical: "╹",
           }}
         >
           <box
             height={1}
             border={["bottom"]}
             borderColor={theme.backgroundElement}
-            customBorderChars={
-              theme.background.a != 0
-                ? {
-                    ...EmptyBorder,
-                    horizontal: "▀",
-                  }
-                : {
-                    ...EmptyBorder,
-                    horizontal: " ",
-                  }
-            }
+            customBorderChars={{
+              ...EmptyBorder,
+              horizontal: "▀",
+            }}
           />
         </box>
         <box flexDirection="row" justifyContent="space-between">

@@ -8,7 +8,6 @@ import { Faq } from "~/component/faq"
 import desktopAppIcon from "../../asset/lander/opencode-desktop-icon.png"
 import { Legal } from "~/component/legal"
 import { config } from "~/config"
-import { github } from "~/lib/github"
 
 function CopyStatus() {
   return (
@@ -20,14 +19,7 @@ function CopyStatus() {
 }
 
 export default function Download() {
-  const githubData = createAsync(() => github(), {
-    deferStream: true,
-  })
-  const download = () => {
-    const version = githubData()?.release.tag_name
-    if (!version) return null
-    return `https://github.com/sst/opencode/releases/download/${version}`
-  }
+  const downloadUrl = "https://github.com/sst/opencode/releases/latest/download"
   const handleCopyClick = (command: string) => (event: Event) => {
     const button = event.currentTarget as HTMLButtonElement
     navigator.clipboard.writeText(command)
@@ -115,7 +107,7 @@ export default function Download() {
                     macOS (<span data-slot="hide-narrow">Apple </span>Silicon)
                   </span>
                 </div>
-                <a href={download() + "/opencode-desktop-darwin-aarch64.dmg"} data-component="action-button">
+                <a href={downloadUrl + "/opencode-desktop-darwin-aarch64.dmg"} data-component="action-button">
                   Download
                 </a>
               </div>
@@ -131,7 +123,7 @@ export default function Download() {
                   </span>
                   <span>macOS (Intel)</span>
                 </div>
-                <a href={download() + "/opencode-desktop-darwin-x64.dmg"} data-component="action-button">
+                <a href={downloadUrl + "/opencode-desktop-darwin-x64.dmg"} data-component="action-button">
                   Download
                 </a>
               </div>
@@ -154,7 +146,7 @@ export default function Download() {
                   </span>
                   <span>Windows (x64)</span>
                 </div>
-                <a href={download() + "/opencode-desktop-windows-x64.exe"} data-component="action-button">
+                <a href={downloadUrl + "/opencode-desktop-windows-x64.exe"} data-component="action-button">
                   Download
                 </a>
               </div>
@@ -170,7 +162,7 @@ export default function Download() {
                   </span>
                   <span>Linux (.deb)</span>
                 </div>
-                <a href={download() + "/opencode-desktop-linux-amd64.deb"} data-component="action-button">
+                <a href={downloadUrl + "/opencode-desktop-linux-amd64.deb"} data-component="action-button">
                   Download
                 </a>
               </div>
@@ -186,7 +178,7 @@ export default function Download() {
                   </span>
                   <span>Linux (.rpm)</span>
                 </div>
-                <a href={download() + "/opencode-desktop-linux-x86_64.rpm"} data-component="action-button">
+                <a href={downloadUrl + "/opencode-desktop-linux-x86_64.rpm"} data-component="action-button">
                   Download
                 </a>
               </div>

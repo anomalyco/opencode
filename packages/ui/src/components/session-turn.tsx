@@ -3,18 +3,7 @@ import { useData } from "../context"
 import { useDiffComponent } from "../context/diff"
 import { getDirectory, getFilename } from "@opencode-ai/util/path"
 import { checksum } from "@opencode-ai/util/encode"
-import {
-  createEffect,
-  createMemo,
-  createSignal,
-  For,
-  Match,
-  onCleanup,
-  onMount,
-  ParentProps,
-  Show,
-  Switch,
-} from "solid-js"
+import { createEffect, createMemo, For, Match, onCleanup, ParentProps, Show, Switch } from "solid-js"
 import { createResizeObserver } from "@solid-primitives/resize-observer"
 import { DiffChanges } from "./diff-changes"
 import { Typewriter } from "./typewriter"
@@ -60,45 +49,77 @@ export function SessionTurn(
   const working = createMemo(() => status()?.type !== "idle")
 
   let scrollRef: HTMLDivElement | undefined
-  const [contentRef, setContentRef] = createSignal<HTMLDivElement>()
-  const [stickyHeaderRef, setStickyHeaderRef] = createSignal<HTMLDivElement>()
-  const [userScrolled, setUserScrolled] = createSignal(false)
-  const [stickyHeaderHeight, setStickyHeaderHeight] = createSignal(0)
+  const [state, setState] = createStore({
+    contentRef: undefined as HTMLDivElement | undefined,
+    stickyTitleRef: undefined as HTMLDivElement | undefined,
+    stickyTriggerRef: undefined as HTMLDivElement | undefined,
+    userScrolled: false,
+    stickyHeaderHeight: 0,
+    scrollY: 0,
+    autoScrolling: false,
+  })
 
   function handleScroll() {
     if (!scrollRef) return
+    setState("scrollY", scrollRef.scrollTop)
+    if (state.autoScrolling) return
     const { scrollTop, scrollHeight, clientHeight } = scrollRef
     const atBottom = scrollHeight - scrollTop - clientHeight < 50
     if (!atBottom && working()) {
-      setUserScrolled(true)
+      setState("userScrolled", true)
     }
   }
 
   function handleInteraction() {
     if (working()) {
-      setUserScrolled(true)
+      setState("userScrolled", true)
     }
+  }
+
+  function scrollToBottom() {
+    if (!scrollRef || state.userScrolled || !working() || state.autoScrolling) return
+    setState("autoScrolling", true)
+    requestAnimationFrame(() => {
+      scrollRef?.scrollTo({ top: scrollRef.scrollHeight, behavior: "auto" })
+      requestAnimationFrame(() => {
+        setState("autoScrolling", false)
+      })
+    })
   }
 
   createEffect(() => {
     if (!working()) {
-      setUserScrolled(false)
+      setState("userScrolled", false)
     }
   })
 
-  createResizeObserver(contentRef, () => {
-    if (!scrollRef || userScrolled() || !working()) return
-    scrollRef.scrollTop = scrollRef.scrollHeight
-  })
+  createResizeObserver(
+    () => state.contentRef,
+    () => {
+      scrollToBottom()
+    },
+  )
 
-  createResizeObserver(stickyHeaderRef, ({ height }) => {
-    setStickyHeaderHeight(height + 8)
-  })
+  createResizeObserver(
+    () => state.stickyTitleRef,
+    ({ height }) => {
+      const triggerHeight = state.stickyTriggerRef?.offsetHeight ?? 0
+      setState("stickyHeaderHeight", height + triggerHeight + 8)
+    },
+  )
+
+  createResizeObserver(
+    () => state.stickyTriggerRef,
+    ({ height }) => {
+      const titleHeight = state.stickyTitleRef?.offsetHeight ?? 0
+      setState("stickyHeaderHeight", titleHeight + height + 8)
+    },
+  )
 
   return (
-    <div data-component="session-turn" class={props.classes?.root}>
+    <div data-component="session-turn" class={props.classes?.root} style={{ "--scroll-y": `${state.scrollY}px` }}>
       <div ref={scrollRef} onScroll={handleScroll} data-slot="session-turn-content" class={props.classes?.content}>
-        <div ref={setContentRef} onClick={handleInteraction}>
+        <div ref={(el) => setState("contentRef", el)} onClick={handleInteraction}>
           <Show when={message()}>
             {(message) => {
               const assistantMessages = createMemo(() => {
@@ -175,6 +196,9 @@ export function SessionTurn(
                       break
                   }
                 } else if (last.type === "reasoning") {
+                  const text = last.text ?? ""
+                  const match = text.trimStart().match(/^\*\*(.+?)\*\*/)
+                  if (match) return `Thinking · ${match[1].trim()}`
                   return "Thinking"
                 } else if (last.type === "text") {
                   return "Gathering thoughts"
@@ -237,7 +261,7 @@ export function SessionTurn(
 
               createEffect((prev) => {
                 const isWorking = working()
-                if (prev && !isWorking && !userScrolled()) {
+                if (prev && !isWorking && !state.userScrolled) {
                   setStore("stepsExpanded", false)
                 }
                 return isWorking
@@ -248,10 +272,10 @@ export function SessionTurn(
                   data-message={message().id}
                   data-slot="session-turn-message-container"
                   class={props.classes?.container}
-                  style={{ "--sticky-header-height": `${stickyHeaderHeight()}px` }}
+                  style={{ "--sticky-header-height": `${state.stickyHeaderHeight}px` }}
                 >
-                  {/* Sticky Header */}
-                  <div ref={setStickyHeaderRef} data-slot="session-turn-sticky-header">
+                  {/* Title (sticky) */}
+                  <div ref={(el) => setState("stickyTitleRef", el)} data-slot="session-turn-sticky-title">
                     <div data-slot="session-turn-message-header">
                       <div data-slot="session-turn-message-title">
                         <Switch>
@@ -264,29 +288,31 @@ export function SessionTurn(
                         </Switch>
                       </div>
                     </div>
-                    <div data-slot="session-turn-message-content">
-                      <Message message={message()} parts={parts()} />
-                    </div>
-                    <div data-slot="session-turn-response-trigger">
-                      <Button
-                        data-slot="session-turn-collapsible-trigger-content"
-                        variant="ghost"
-                        size="small"
-                        onClick={() => setStore("stepsExpanded", !store.stepsExpanded)}
-                      >
-                        <Show when={working()}>
-                          <Spinner />
-                        </Show>
-                        <Switch>
-                          <Match when={working()}>{store.status ?? "Considering next steps..."}</Match>
-                          <Match when={store.stepsExpanded}>Hide steps</Match>
-                          <Match when={!store.stepsExpanded}>Show steps</Match>
-                        </Switch>
-                        <span>·</span>
-                        <span>{store.duration}</span>
-                        <Icon name="chevron-grabber-vertical" size="small" />
-                      </Button>
-                    </div>
+                  </div>
+                  {/* User Message */}
+                  <div data-slot="session-turn-message-content">
+                    <Message message={message()} parts={parts()} />
+                  </div>
+                  {/* Trigger (sticky) */}
+                  <div ref={(el) => setState("stickyTriggerRef", el)} data-slot="session-turn-response-trigger">
+                    <Button
+                      data-slot="session-turn-collapsible-trigger-content"
+                      variant="ghost"
+                      size="small"
+                      onClick={() => setStore("stepsExpanded", !store.stepsExpanded)}
+                    >
+                      <Show when={working()}>
+                        <Spinner />
+                      </Show>
+                      <Switch>
+                        <Match when={working()}>{store.status ?? "Considering next steps"}</Match>
+                        <Match when={store.stepsExpanded}>Hide steps</Match>
+                        <Match when={!store.stepsExpanded}>Show steps</Match>
+                      </Switch>
+                      <span>·</span>
+                      <span>{store.duration}</span>
+                      <Icon name="chevron-grabber-vertical" size="small" />
+                    </Button>
                   </div>
                   {/* Response */}
                   <Show when={store.stepsExpanded}>

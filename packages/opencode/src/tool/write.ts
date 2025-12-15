@@ -11,6 +11,9 @@ import { Filesystem } from "../util/filesystem"
 import { Instance } from "../project/instance"
 import { Agent } from "../agent/agent"
 
+const MAX_DIAGNOSTICS_PER_FILE = 20
+const MAX_PROJECT_DIAGNOSTICS_FILES = 5
+
 export const WriteTool = Tool.define("write", {
   description: DESCRIPTION,
   parameters: z.object({
@@ -77,13 +80,20 @@ export const WriteTool = Tool.define("write", {
     let output = ""
     await LSP.touchFile(filepath, true)
     const diagnostics = await LSP.diagnostics()
+    let projectDiagnosticsCount = 0
     for (const [file, issues] of Object.entries(diagnostics)) {
       if (issues.length === 0) continue
+      const sorted = issues.toSorted((a, b) => (a.severity ?? 4) - (b.severity ?? 4))
+      const limited = sorted.slice(0, MAX_DIAGNOSTICS_PER_FILE)
+      const suffix =
+        issues.length > MAX_DIAGNOSTICS_PER_FILE ? `\n... and ${issues.length - MAX_DIAGNOSTICS_PER_FILE} more` : ""
       if (file === filepath) {
-        output += `\nThis file has errors, please fix\n<file_diagnostics>\n${issues.map(LSP.Diagnostic.pretty).join("\n")}\n</file_diagnostics>\n`
+        output += `\nThis file has errors, please fix\n<file_diagnostics>\n${limited.map(LSP.Diagnostic.pretty).join("\n")}${suffix}\n</file_diagnostics>\n`
         continue
       }
-      output += `\n<project_diagnostics>\n${file}\n${issues.map(LSP.Diagnostic.pretty).join("\n")}\n</project_diagnostics>\n`
+      if (projectDiagnosticsCount >= MAX_PROJECT_DIAGNOSTICS_FILES) continue
+      projectDiagnosticsCount++
+      output += `\n<project_diagnostics>\n${file}\n${limited.map(LSP.Diagnostic.pretty).join("\n")}${suffix}\n</project_diagnostics>\n`
     }
 
     return {
