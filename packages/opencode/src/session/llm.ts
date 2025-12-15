@@ -72,10 +72,6 @@ export namespace LLM {
       system.length = 0
       system.push(header, rest.join("\n"))
     }
-      const [first, ...rest] = system
-      system.length = 0
-      system.push(first, rest.join("\n"))
-    }
 
     const params = await Plugin.trigger(
       "chat.params",
