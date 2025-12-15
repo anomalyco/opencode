@@ -68,6 +68,10 @@ export namespace LLM {
     }
     // rejoin to maintain 2-part structure for caching if header unchanged
     if (system.length > 2 && system[0] === header) {
+      const rest = system.slice(1)
+      system.length = 0
+      system.push(header, rest.join("\n"))
+    }
       const [first, ...rest] = system
       system.length = 0
       system.push(first, rest.join("\n"))
