@@ -5,7 +5,7 @@ import { useGlobalSDK } from "./global-sdk"
 import { EventSessionError } from "@opencode-ai/sdk/v2"
 import { makeAudioPlayer } from "@solid-primitives/audio"
 import idleSound from "@opencode-ai/ui/audio/staplebops-01.aac"
-import errorSound from "@opencode-ai/ui/audio/error-3.aac"
+import errorSound from "@opencode-ai/ui/audio/nope-03.aac"
 
 type NotificationBase = {
   directory?: string
