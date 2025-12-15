@@ -34,6 +34,7 @@ import { Terminal } from "@/components/terminal"
 import { checksum } from "@opencode-ai/util/encode"
 import { useDialog } from "@opencode-ai/ui/context/dialog"
 import { DialogSelectFile } from "@/components/dialog-select-file"
+import { DialogSelectModel } from "@/components/dialog-select-model"
 import { useCommand } from "@/context/command"
 import { useNavigate, useParams } from "@solidjs/router"
 import { AssistantMessage, UserMessage } from "@opencode-ai/sdk/v2"
@@ -68,6 +69,25 @@ export default function Page() {
   })
   const setActiveMessage = (message: UserMessage | undefined) => {
     setMessageStore("messageId", message?.id)
+  }
+
+  function navigateMessageByOffset(offset: number) {
+    const messages = userMessages()
+    if (messages.length === 0) return
+
+    const current = activeMessage()
+    const currentIndex = current ? messages.findIndex((m) => m.id === current.id) : -1
+
+    let targetIndex: number
+    if (currentIndex === -1) {
+      targetIndex = offset > 0 ? 0 : messages.length - 1
+    } else {
+      targetIndex = currentIndex + offset
+    }
+
+    if (targetIndex < 0 || targetIndex >= messages.length) return
+
+    setActiveMessage(messages[targetIndex])
   }
 
   const last = createMemo(
@@ -118,7 +138,7 @@ export default function Page() {
       title: "New session",
       description: "Create a new session",
       category: "Session",
-      keybind: "mod+n",
+      keybind: "mod+shift+s",
       slash: "new",
       onSelect: () => navigate(`/${params.dir}/session`),
     },
@@ -162,6 +182,49 @@ export default function Page() {
       category: "Terminal",
       keybind: "ctrl+shift+`",
       onSelect: () => terminal.new(),
+    },
+    {
+      id: "steps.toggle",
+      title: "Toggle steps",
+      description: "Show or hide the steps",
+      category: "View",
+      keybind: "mod+e",
+      slash: "steps",
+      onSelect: () => layout.steps.toggle(),
+    },
+    {
+      id: "message.previous",
+      title: "Previous message",
+      description: "Go to the previous user message",
+      category: "Session",
+      keybind: "mod+arrowup",
+      disabled: !params.id,
+      onSelect: () => navigateMessageByOffset(-1),
+    },
+    {
+      id: "message.next",
+      title: "Next message",
+      description: "Go to the next user message",
+      category: "Session",
+      keybind: "mod+arrowdown",
+      disabled: !params.id,
+      onSelect: () => navigateMessageByOffset(1),
+    },
+    {
+      id: "model.choose",
+      title: "Choose model",
+      description: "Select a different model",
+      category: "Model",
+      slash: "model",
+      onSelect: () => dialog.replace(() => <DialogSelectModel />),
+    },
+    {
+      id: "agent.cycle",
+      title: "Cycle agent",
+      description: "Switch to the next agent",
+      category: "Agent",
+      slash: "agent",
+      onSelect: () => local.agent.move(1),
     },
   ])
 
@@ -492,6 +555,10 @@ export default function Page() {
                           <SessionTurn
                             sessionID={params.id!}
                             messageID={activeMessage()?.id!}
+                            stepsExpanded={layout.steps.expanded()}
+                            onStepsExpandedChange={(expanded) =>
+                              expanded ? layout.steps.expand() : layout.steps.collapse()
+                            }
                             classes={{
                               root: "pb-20 flex-1 min-w-0",
                               content: "pb-20",

@@ -157,6 +157,12 @@ export default function Layout(props: ParentProps) {
         ]
       : []),
     {
+      id: "provider.connect",
+      title: "Connect provider",
+      category: "Provider",
+      onSelect: () => connectProvider(),
+    },
+    {
       id: "session.previous",
       title: "Previous session",
       category: "Session",
