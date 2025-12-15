@@ -40,9 +40,6 @@ export function SessionTurn(
       .sort((a, b) => a.id.localeCompare(b.id)),
   )
   const message = createMemo(() => userMessages()?.find((m) => m.id === props.messageID))
-
-  if (!message()) return null
-
   const status = createMemo(
     () =>
       data.store.session_status[props.sessionID] ?? {
