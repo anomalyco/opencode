@@ -14,7 +14,7 @@
     "@opencode-ai/util": "workspace:*",
     "@opencode-ai/ui": "workspace:*",
     "aws4fetch": "^1.0.20",
-    "@pierre/precision-diffs": "catalog:",
+    "@pierre/diffs": "catalog:",
     "@solidjs/router": "catalog:",
     "@solidjs/start": "catalog:",
     "@solidjs/meta": "catalog:",
