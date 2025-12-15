@@ -278,13 +278,6 @@ export const { use: useLocal, provider: LocalProvider } = createSimpleContext({
           const agentDef = getAgent(agentName)
           if (!agentDef) return false
 
-          // For npx/uvx agents, check if the package manager is available
-          // (the packages will auto-download on first use)
-          if (agentDef.command === "npx" || agentDef.command === "uvx") {
-            return Bun.which(agentDef.command) !== null
-          }
-
-          // For system agents, check if the binary exists on PATH
           return Bun.which(agentDef.command) !== null
         },
       }

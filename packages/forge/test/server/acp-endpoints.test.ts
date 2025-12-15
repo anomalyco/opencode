@@ -34,6 +34,14 @@ function mockState(): MockState {
       description: "",
       command: "npx",
       acpStartupArgs: [],
+      installCommands: {
+        unix: [],
+        windows: [],
+      },
+      uninstallCommands: {
+        unix: [],
+        windows: [],
+      },
     },
     client: null,
     acpSessionID: "acp-mock",

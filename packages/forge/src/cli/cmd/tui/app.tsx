@@ -20,6 +20,7 @@ import { KeybindProvider } from "@tui/context/keybind"
 import { ThemeProvider, useTheme } from "@tui/context/theme"
 import { Home } from "@tui/routes/home"
 import { Session } from "@tui/routes/session"
+import { DialogAgentInstall } from "@tui/component/dialog-agent-install"
 import { PromptHistoryProvider } from "./component/prompt/history"
 import { DialogAlert } from "./ui/dialog-alert"
 import { ToastProvider, useToast } from "./ui/toast"
@@ -271,6 +272,24 @@ function App() {
         type: "session",
         sessionID: args.sessionID,
       })
+    }
+
+    if (args.installAgent) {
+      const agentResult = matchAgent(args.installAgent)
+      if (!agentResult.success) {
+        const available = getAllAgents()
+          .map((a) => a.name)
+          .join(", ")
+        toast.show({
+          variant: "warning",
+          message: `Agent '${args.installAgent}' not found. Available: ${available}.`,
+          duration: 6000,
+        })
+        dialog.replace(() => <DialogAgents />)
+        return
+      }
+
+      dialog.replace(() => <DialogAgentInstall agentName={agentResult.match.name} />)
     }
   })
 

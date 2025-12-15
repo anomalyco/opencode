@@ -6,6 +6,7 @@ import { useToast } from "../ui/toast"
 import { getAgent } from "@/acp/agents"
 import { Keybind } from "@/util/keybind"
 import { spawn } from "bun"
+import { DialogAgentInstall } from "./dialog-agent-install"
 
 export function DialogAgents() {
   const local = useLocal()
@@ -63,8 +64,10 @@ export function DialogAgents() {
         title: agent.name,
         footer: needsInstall ? "Needs install" : undefined,
         onSelect: async () => {
-          // Don't allow selecting uninstalled agents
-          if (needsInstall) return
+          if (needsInstall) {
+            dialog.replace(() => <DialogAgentInstall agentName={agent.name} />)
+            return
+          }
           dialog.clear()
           await local.agent.set(agent.name)
         },

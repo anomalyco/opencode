@@ -69,16 +69,10 @@ export class ConnectionAbortedError extends Error {
  */
 export class AgentConnector {
   /**
-   * Validates that an agent is installed (or that npx/uvx is available for auto-download)
+   * Validates that an agent is installed
    */
   static validateInstallation(agentDef: ACPAgentDefinition): void {
-    // For npx/uvx agents, check if the package manager is available
-    // (the packages will auto-download on first use)
-    const commandToCheck = (agentDef.command === "npx" || agentDef.command === "uvx")
-      ? agentDef.command
-      : agentDef.command
-
-    const resolved = Bun.which(commandToCheck)
+    const resolved = Bun.which(agentDef.command)
     if (!resolved) {
       throw new AgentNotInstalledError(agentDef.name, agentDef.installGuide)
     }

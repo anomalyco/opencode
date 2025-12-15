@@ -24,6 +24,8 @@ import { TuiSpawnCommand } from "./cli/cmd/tui/spawn"
 import { EOL } from "os"
 import { WebCommand } from "./cli/cmd/web"
 import { PrCommand } from "./cli/cmd/pr"
+import { InstallAgentCommand } from "./cli/cmd/install"
+import { UninstallAgentCommand } from "./cli/cmd/uninstall"
 
 process.on("unhandledRejection", (e) => {
   Log.Default.error("rejection", {
@@ -86,6 +88,8 @@ const cli = yargs(hideBin(process.argv))
   })
   .usage("\n" + UI.logo())
   .command(TuiThreadCommand)
+  .command(InstallAgentCommand)
+  .command(UninstallAgentCommand)
   .command(AgentsCommand)
   .command(ModelsCommand)
   .command(AttachCommand)

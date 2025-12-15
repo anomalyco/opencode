@@ -82,6 +82,22 @@ Forge supports all agents listed at [agentclientprotocol.com/overview/agents](ht
 
 Run `forge agents` to see the full list.
 
+### Install/uninstall agents
+
+- **Note:** Claude Code and Codex aren’t ACP-native yet. The `claude` and `codex` entries point to Zed’s ACP wrappers (`@zed-industries/claude-code-acp` and `@zed-industries/codex-acp`), which you’ll need to install.
+
+- Install an agent from the CLI:
+
+```sh
+forge install <agentName>
+```
+
+- Uninstall an agent from the CLI:
+
+```sh
+forge uninstall <agentName>
+```
+
 ## Usage
 
 ### Plan With One Agent, Implement With Another

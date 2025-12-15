@@ -6,6 +6,7 @@ export interface Args {
   prompt?: string
   continue?: boolean
   sessionID?: string
+  installAgent?: string
 }
 
 export const { use: useArgs, provider: ArgsProvider } = createSimpleContext({
