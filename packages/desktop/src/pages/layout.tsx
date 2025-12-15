@@ -299,6 +299,9 @@ export default function Layout(props: ParentProps) {
                             if (match.found) draft.session.splice(match.index, 1)
                           }),
                         )
+                        if (session.id === params.id) {
+                          navigate(`/${params.dir}/session`)
+                        }
                       }
                       return (
                         <div
