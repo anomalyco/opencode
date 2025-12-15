@@ -23,12 +23,9 @@
   max-width: 23rem;
   overflow: hidden;
   border-radius: var(--radius-md);
-  border-width: 1px;
-  border-style: solid;
-  border-color: var(--border-weak-base);
   background-color: var(--surface-raised-stronger-non-alpha);
   padding: 2px;
-  box-shadow: var(--shadow-xs);
+  box-shadow: var(--shadow-xs-border);
   z-index: 50;
 
   &[data-closed] {
@@ -47,10 +44,13 @@
     overflow-x: hidden;
     display: flex;
     flex-direction: column;
-    gap: 2px;
 
     &:focus {
       outline: none;
+    }
+
+    > *:not([role="presentation"]) + *:not([role="presentation"]) {
+      margin-top: 2px;
     }
   }
 
@@ -62,6 +62,7 @@
     display: flex;
     align-items: center;
     padding: 0 6px 0 6px;
+    gap: 12px;
     border-radius: var(--radius-sm);
 
     /* text-12-medium */
