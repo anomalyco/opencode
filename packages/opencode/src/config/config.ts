@@ -589,6 +589,12 @@ export namespace Config {
       whitelist: z.array(z.string()).optional(),
       blacklist: z.array(z.string()).optional(),
       models: z.record(z.string(), ModelsDev.Model.partial()).optional(),
+      export_name: z
+        .string()
+        .optional()
+        .describe(
+          "Name of the export function to use from the npm package. If not specified, auto-detects the first 'create*' function.",
+        ),
       options: z
         .object({
           apiKey: z.string().optional(),

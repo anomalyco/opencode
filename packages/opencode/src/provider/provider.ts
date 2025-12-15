@@ -406,6 +406,7 @@ export namespace Provider {
       source: z.enum(["env", "config", "custom", "api"]),
       env: z.string().array(),
       key: z.string().optional(),
+      export_name: z.string().optional(),
       options: z.record(z.string(), z.any()),
       models: z.record(z.string(), Model),
     })
@@ -437,13 +438,13 @@ export namespace Provider {
         },
         experimentalOver200K: model.cost?.context_over_200k
           ? {
-              cache: {
-                read: model.cost.context_over_200k.cache_read ?? 0,
-                write: model.cost.context_over_200k.cache_write ?? 0,
-              },
-              input: model.cost.context_over_200k.input,
-              output: model.cost.context_over_200k.output,
-            }
+            cache: {
+              read: model.cost.context_over_200k.cache_read ?? 0,
+              write: model.cost.context_over_200k.cache_write ?? 0,
+            },
+            input: model.cost.context_over_200k.input,
+            output: model.cost.context_over_200k.output,
+          }
           : undefined,
       },
       limit: {
@@ -546,6 +547,7 @@ export namespace Provider {
         id: providerID,
         name: provider.name ?? existing?.name ?? providerID,
         env: provider.env ?? existing?.env ?? [],
+        export_name: provider.export_name,
         options: mergeDeep(existing?.options ?? {}, provider.options ?? {}),
         source: "config",
         models: existing?.models ?? {},
@@ -826,7 +828,8 @@ export namespace Provider {
 
       const mod = await import(installedPath)
 
-      const fn = mod[Object.keys(mod).find((key) => key.startsWith("create"))!]
+      const exportName = provider.export_name ?? Object.keys(mod).find((key) => key.startsWith("create"))!
+      const fn = mod[exportName]
       const loaded = fn({
         name: model.providerID,
         ...options,
