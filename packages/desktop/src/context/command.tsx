@@ -139,6 +139,7 @@ function DialogCommand(props: { options: CommandOption[] }) {
         emptyMessage="No commands found"
         items={() => props.options.filter((x) => !x.id.startsWith("suggested.") || !x.disabled)}
         key={(x) => x?.id}
+        filterKeys={["title", "description", "category"]}
         groupBy={(x) => x.category ?? ""}
         onSelect={(option) => {
           if (option) {

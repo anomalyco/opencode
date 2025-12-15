@@ -36,6 +36,7 @@ import { Binary } from "@opencode-ai/util/binary"
 import { Header } from "@/components/header"
 import { useDialog } from "@opencode-ai/ui/context/dialog"
 import { DialogSelectProvider } from "@/components/dialog-select-provider"
+import { useCommand } from "@/context/command"
 
 export default function Layout(props: ParentProps) {
   const [store, setStore] = createStore({
@@ -52,6 +53,137 @@ export default function Layout(props: ParentProps) {
   const navigate = useNavigate()
   const providers = useProviders()
   const dialog = useDialog()
+  const command = useCommand()
+
+  const currentSessions = createMemo(() => {
+    if (!params.dir) return []
+    const directory = base64Decode(params.dir)
+    return globalSync.child(directory)[0].session ?? []
+  })
+
+  function navigateSessionByOffset(offset: number) {
+    const projects = layout.projects.list()
+    if (projects.length === 0) return
+
+    const currentDirectory = params.dir ? base64Decode(params.dir) : undefined
+    const projectIndex = currentDirectory ? projects.findIndex((p) => p.worktree === currentDirectory) : -1
+
+    // If we're not in any project, navigate to the first/last project based on direction
+    if (projectIndex === -1) {
+      const targetProject = offset > 0 ? projects[0] : projects[projects.length - 1]
+      if (targetProject) navigateToProject(targetProject.worktree)
+      return
+    }
+
+    const sessions = currentSessions()
+    const sessionIndex = params.id ? sessions.findIndex((s) => s.id === params.id) : -1
+
+    // Calculate target index within current project
+    let targetIndex: number
+    if (sessionIndex === -1) {
+      // Not on a session - go to first session for "next", last session for "prev"
+      targetIndex = offset > 0 ? 0 : sessions.length - 1
+    } else {
+      targetIndex = sessionIndex + offset
+    }
+
+    // If target is within bounds, navigate to that session
+    if (targetIndex >= 0 && targetIndex < sessions.length) {
+      navigateToSession(sessions[targetIndex])
+      return
+    }
+
+    // Navigate to adjacent project
+    const nextProjectIndex = projectIndex + (offset > 0 ? 1 : -1)
+    const nextProject = projects[nextProjectIndex]
+    if (!nextProject) return
+
+    const nextProjectSessions = globalSync.child(nextProject.worktree)[0].session ?? []
+    if (nextProjectSessions.length === 0) {
+      // Navigate to the project's new session page if no sessions
+      navigateToProject(nextProject.worktree)
+      return
+    }
+
+    // If going down (offset > 0), go to first session; if going up (offset < 0), go to last session
+    const targetSession = offset > 0 ? nextProjectSessions[0] : nextProjectSessions[nextProjectSessions.length - 1]
+    navigate(`/${base64Encode(nextProject.worktree)}/session/${targetSession.id}`)
+  }
+
+  async function archiveSession(session: Session) {
+    const [store, setStore] = globalSync.child(session.directory)
+    const sessions = store.session ?? []
+    const index = sessions.findIndex((s) => s.id === session.id)
+    // Get next session (prefer next, then prev) before removing
+    const nextSession = sessions[index + 1] ?? sessions[index - 1]
+
+    await globalSDK.client.session.update({
+      directory: session.directory,
+      sessionID: session.id,
+      time: { archived: Date.now() },
+    })
+    setStore(
+      produce((draft) => {
+        const match = Binary.search(draft.session, session.id, (s) => s.id)
+        if (match.found) draft.session.splice(match.index, 1)
+      }),
+    )
+    if (session.id === params.id) {
+      if (nextSession) {
+        navigate(`/${params.dir}/session/${nextSession.id}`)
+      } else {
+        navigate(`/${params.dir}/session`)
+      }
+    }
+  }
+
+  command.register(() => [
+    {
+      id: "sidebar.toggle",
+      title: "Toggle sidebar",
+      category: "View",
+      keybind: "mod+b",
+      onSelect: () => layout.sidebar.toggle(),
+    },
+    ...(platform.openDirectoryPickerDialog
+      ? [
+          {
+            id: "project.open",
+            title: "Open project",
+            category: "Project",
+            keybind: "mod+o",
+            onSelect: () => chooseProject(),
+          },
+        ]
+      : []),
+    {
+      id: "session.previous",
+      title: "Previous session",
+      category: "Session",
+      keybind: "alt+arrowup",
+      disabled: !params.dir,
+      onSelect: () => navigateSessionByOffset(-1),
+    },
+    {
+      id: "session.next",
+      title: "Next session",
+      category: "Session",
+      keybind: "alt+arrowdown",
+      disabled: !params.dir,
+      onSelect: () => navigateSessionByOffset(1),
+    },
+    {
+      id: "session.archive",
+      title: "Archive session",
+      category: "Session",
+      keybind: "mod+shift+backspace",
+      disabled: !params.dir || !params.id,
+      onSelect: () => {
+        const session = currentSessions().find((s) => s.id === params.id)
+        if (session) archiveSession(session)
+      },
+    },
+  ])
 
   function connectProvider() {
     dialog.replace(() => <DialogSelectProvider />)
@@ -293,22 +425,6 @@ export default function Layout(props: ParentProps) {
                           session.id !== params.id &&
                           globalSync.child(props.project.worktree)[0].session_status[session.id]?.type === "busy",
                       )
-                      async function archive(session: Session) {
-                        await globalSDK.client.session.update({
-                          directory: session.directory,
-                          sessionID: session.id,
-                          time: { archived: Date.now() },
-                        })
-                        setStore(
-                          produce((draft) => {
-                            const match = Binary.search(draft.session, session.id, (s) => s.id)
-                            if (match.found) draft.session.splice(match.index, 1)
-                          }),
-                        )
-                        if (session.id === params.id) {
-                          navigate(`/${params.dir}/session`)
-                        }
-                      }
                       return (
                         <div
                           class="group/session relative w-full pl-4 pr-2 py-1 rounded-md cursor-default transition-colors
@@ -363,7 +479,7 @@ export default function Layout(props: ParentProps) {
                           <div class="hidden group-hover/session:flex group-active/session:flex group-focus-within/session:flex text-text-base gap-1 items-center absolute top-1 right-1">
                             {/* <IconButton icon="dot-grid" variant="ghost" /> */}
                             <Tooltip placement="right" value="Archive session">
-                              <IconButton icon="archive" variant="ghost" onClick={() => archive(session)} />
+                              <IconButton icon="archive" variant="ghost" onClick={() => archiveSession(session)} />
                             </Tooltip>
                           </div>
                         </div>
