@@ -34,6 +34,7 @@ import { Terminal } from "@/components/terminal"
 import { checksum } from "@opencode-ai/util/encode"
 import { useDialog } from "@opencode-ai/ui/context/dialog"
 import { DialogSelectFile } from "@/components/dialog-select-file"
+import { useCommand } from "@/context/command"
 
 export default function Page() {
   const layout = useLayout()
@@ -41,22 +42,13 @@ export default function Page() {
   const sync = useSync()
   const session = useSession()
   const dialog = useDialog()
+  const command = useCommand()
   const [store, setStore] = createStore({
     clickTimer: undefined as number | undefined,
     activeDraggable: undefined as string | undefined,
     activeTerminalDraggable: undefined as string | undefined,
   })
   let inputRef!: HTMLDivElement
-
-  const MOD = typeof navigator === "object" && /(Mac|iPod|iPhone|iPad)/.test(navigator.platform) ? "Meta" : "Control"
-
-  onMount(() => {
-    document.addEventListener("keydown", handleKeyDown)
-  })
-
-  onCleanup(() => {
-    document.removeEventListener("keydown", handleKeyDown)
-  })
 
   createEffect(() => {
     if (layout.terminal.opened()) {
@@ -66,35 +58,54 @@ export default function Page() {
     }
   })
 
-  const handleKeyDown = (event: KeyboardEvent) => {
-    if (event.getModifierState(MOD) && event.shiftKey && event.key.toLowerCase() === "p") {
-      event.preventDefault()
-      return
-    }
-    if (event.getModifierState(MOD) && event.key.toLowerCase() === "p") {
-      event.preventDefault()
-      dialog.replace(() => <DialogSelectFile />)
-      return
-    }
-    if (event.ctrlKey && event.key.toLowerCase() === "t") {
-      event.preventDefault()
-      const currentTheme = localStorage.getItem("theme") ?? "oc-1"
-      const themes = ["oc-1", "oc-2-paper"]
-      const nextTheme = themes[(themes.indexOf(currentTheme) + 1) % themes.length]
-      localStorage.setItem("theme", nextTheme)
-      document.documentElement.setAttribute("data-theme", nextTheme)
-      return
-    }
-    if (event.ctrlKey && event.key.toLowerCase() === "`") {
-      event.preventDefault()
-      if (event.shiftKey) {
-        session.terminal.new()
-        return
-      }
-      layout.terminal.toggle()
-      return
-    }
+  // Register commands for this page
+  command.register(() => [
+    {
+      id: "file.open",
+      title: "Open file",
+      description: "Search and open a file",
+      category: "File",
+      keybind: "mod+p",
+      slash: "open",
+      onSelect: () => dialog.replace(() => <DialogSelectFile />),
+    },
+    {
+      id: "theme.toggle",
+      title: "Toggle theme",
+      description: "Switch between themes",
+      category: "View",
+      keybind: "ctrl+t",
+      slash: "theme",
+      onSelect: () => {
+        const currentTheme = localStorage.getItem("theme") ?? "oc-1"
+        const themes = ["oc-1", "oc-2-paper"]
+        const nextTheme = themes[(themes.indexOf(currentTheme) + 1) % themes.length]
+        localStorage.setItem("theme", nextTheme)
+        document.documentElement.setAttribute("data-theme", nextTheme)
+      },
+    },
+    {
+      id: "terminal.toggle",
+      title: "Toggle terminal",
+      description: "Show or hide the terminal",
+      category: "View",
+      keybind: "ctrl+`",
+      slash: "terminal",
+      onSelect: () => layout.terminal.toggle(),
+    },
+    {
+      id: "terminal.new",
+      title: "New terminal",
+      description: "Create a new terminal tab",
+      category: "Terminal",
+      keybind: "ctrl+shift+`",
+      onSelect: () => session.terminal.new(),
+    },
+  ])
 
+  // Handle keyboard events that aren't commands
+  const handleKeyDown = (event: KeyboardEvent) => {
+    // Don't interfere with terminal
     // @ts-expect-error
     if (document.activeElement?.dataset?.component === "terminal") {
       return
@@ -108,31 +119,19 @@ export default function Page() {
       return
     }
 
-    // if (local.file.active()) {
-    //   const active = local.file.active()!
-    //   if (event.key === "Enter" && active.selection) {
-    //     local.context.add({
-    //       type: "file",
-    //       path: active.path,
-    //       selection: { ...active.selection },
-    //     })
-    //     return
-    //   }
-    //
-    //   if (event.getModifierState(MOD)) {
-    //     if (event.key.toLowerCase() === "a") {
-    //       return
-    //     }
-    //     if (event.key.toLowerCase() === "c") {
-    //       return
-    //     }
-    //   }
-    // }
-
+    // Focus input when typing characters
     if (event.key.length === 1 && event.key !== "Unidentified" && !(event.ctrlKey || event.metaKey)) {
       inputRef?.focus()
     }
   }
+
+  onMount(() => {
+    document.addEventListener("keydown", handleKeyDown)
+  })
+
+  onCleanup(() => {
+    document.removeEventListener("keydown", handleKeyDown)
+  })
 
   const resetClickTimer = () => {
     if (!store.clickTimer) return
