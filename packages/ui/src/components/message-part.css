@@ -107,15 +107,19 @@
   display: flex;
   align-items: center;
   justify-content: space-between;
+  gap: 8px;
   width: 100%;
 
   [data-slot="message-part-title-area"] {
+    flex-grow: 1;
     display: flex;
     align-items: center;
     gap: 8px;
+    min-width: 0;
   }
 
   [data-slot="message-part-title"] {
+    flex-shrink: 0;
     font-family: var(--font-family-sans);
     font-size: var(--font-size-small);
     font-style: normal;
@@ -128,14 +132,22 @@
 
   [data-slot="message-part-path"] {
     display: flex;
+    flex-grow: 1;
+    min-width: 0;
   }
 
   [data-slot="message-part-directory"] {
     color: var(--text-weak);
+    text-overflow: ellipsis;
+    overflow: hidden;
+    white-space: nowrap;
+    direction: rtl;
+    text-align: left;
   }
 
   [data-slot="message-part-filename"] {
     color: var(--text-strong);
+    flex-shrink: 0;
   }
 
   [data-slot="message-part-actions"] {
