@@ -269,6 +269,10 @@ export function SessionTurn(
 
               createEffect((prev) => {
                 const isWorking = working()
+                if (!prev && isWorking) {
+                  setStore("stepsExpanded", true)
+                  props.onStepsExpandedChange?.(true)
+                }
                 if (prev && !isWorking && !state.userScrolled) {
                   setStore("stepsExpanded", false)
                   props.onStepsExpandedChange?.(false)
