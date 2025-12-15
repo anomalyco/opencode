@@ -108,6 +108,10 @@ export namespace ACPClient {
      */
     sendPrompt(sessionId: string, text: string): Promise<PromptResponse>
     /**
+     * Cancel the current prompt turn for a session.
+     */
+    cancel(sessionId: string): Promise<void>
+    /**
      * Get the current session mode state (available modes and current mode)
      * Returns null if no session has been created yet
      */
@@ -493,6 +497,21 @@ export namespace ACPClient {
         log.info("prompt completed", { sessionId, stopReason: response.stopReason })
 
         return response
+      },
+
+      async cancel(sessionId: string): Promise<void> {
+        if (!initialized) {
+          throw new Error("Must initialize before cancelling session")
+        }
+        if (!currentSessionId) {
+          throw new Error("Must create session before cancelling")
+        }
+
+        log.info("sending cancel", { sessionId })
+
+        await connection.cancel({
+          sessionId,
+        })
       },
 
       getModes(): SessionModeState | null {

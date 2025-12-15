@@ -7,6 +7,7 @@ export interface ACPAgentDefinition {
   command: string
   acpStartupArgs: string[]
   installGuide?: string
+  color?: string // Hex color for UI elements (e.g., prompt border)
 }
 
 export const ACP_AGENTS: ACPAgentDefinition[] = [
@@ -16,6 +17,7 @@ export const ACP_AGENTS: ACPAgentDefinition[] = [
     command: "npx",
     acpStartupArgs: ["@zed-industries/claude-code-acp"],
     installGuide: "https://github.com/zed-industries/claude-code-acp",
+    color: "#da7756",
   },
   {
     name: "Codex CLI",
@@ -23,6 +25,7 @@ export const ACP_AGENTS: ACPAgentDefinition[] = [
     command: "npx",
     acpStartupArgs: ["@zed-industries/codex-acp"],
     installGuide: "https://github.com/zed-industries/codex-acp",
+    color: "#6c908e",
   },
   {
     name: "Gemini CLI",
@@ -30,13 +33,15 @@ export const ACP_AGENTS: ACPAgentDefinition[] = [
     command: "npx",
     acpStartupArgs: ["@google/gemini-cli", "--experimental-acp"],
     installGuide: "https://github.com/google-gemini/gemini-cli",
+    color: "#cda9fc",
   },
   {
     name: "Kimi CLI",
     description: "Moonshot AI's Kimi code assistant",
     command: "uvx",
-    acpStartupArgs: ["--python", "3.13", "kimi-cli", "--acp"],
+    acpStartupArgs: ["--python", "3.13", "--from", "kimi-cli", "kimi", "--acp"],
     installGuide: "https://github.com/MoonshotAI/kimi-cli",
+    color: "#5baefe",
   },
   {
     name: "Fast Agent",
@@ -44,20 +49,23 @@ export const ACP_AGENTS: ACPAgentDefinition[] = [
     command: "uvx",
     acpStartupArgs: ["fast-agent-acp@latest"],
     installGuide: "https://github.com/evalstate/fast-agent",
+    color: "#888888",
   },
   {
     name: "OpenHands",
     description: "All-Hands AI's autonomous coding agent (experimental ACP)",
     command: "uvx",
-    acpStartupArgs: ["--python", "3.12", "--from", "openhands-ai", "openhands", "acp"],
+    acpStartupArgs: ["openhands", "acp"],
     installGuide: "https://docs.openhands.dev/openhands/usage/run-openhands/acp",
+    color: "#feff8c",
   },
   {
     name: "Mistral Vibe",
     description: "Mistral AI's coding agent with ACP support",
     command: "uvx",
-    acpStartupArgs: ["mistral-vibe", "vibe-acp"],
+    acpStartupArgs: ["--from", "mistral-vibe", "vibe-acp"],
     installGuide: "https://github.com/mistralai/mistral-vibe",
+    color: "#FA520F",
   },
   {
     name: "Auggie",
@@ -65,6 +73,7 @@ export const ACP_AGENTS: ACPAgentDefinition[] = [
     command: "npx",
     acpStartupArgs: ["@augmentcode/auggie@latest", "--acp"],
     installGuide: "https://docs.augmentcode.com/cli/acp",
+    color: "#888888",
   },
   {
     name: "Goose",
@@ -72,6 +81,7 @@ export const ACP_AGENTS: ACPAgentDefinition[] = [
     command: "goose",
     acpStartupArgs: ["acp"],
     installGuide: "https://block.github.io/goose/docs/getting-started/installation",
+    color: "#ffffff",
   },
   {
     name: "OpenCode",
@@ -79,6 +89,7 @@ export const ACP_AGENTS: ACPAgentDefinition[] = [
     command: "npx",
     acpStartupArgs: ["opencode-ai@latest", "acp"],
     installGuide: "https://github.com/sst/opencode",
+    color: "#ffba88",
   },
   {
     name: "Stakpak",
@@ -86,6 +97,7 @@ export const ACP_AGENTS: ACPAgentDefinition[] = [
     command: "stakpak",
     acpStartupArgs: ["acp"],
     installGuide: "https://github.com/stakpak/agent",
+    color: "#1a83a0",
   },
   {
     name: "Docker cagent",
@@ -93,6 +105,7 @@ export const ACP_AGENTS: ACPAgentDefinition[] = [
     command: "",
     acpStartupArgs: [],
     installGuide: "https://github.com/docker/cagent",
+    color: "#888888",
   },
   {
     name: "Code Assistant",
@@ -100,6 +113,7 @@ export const ACP_AGENTS: ACPAgentDefinition[] = [
     command: "code-assistant",
     acpStartupArgs: ["acp"],
     installGuide: "https://github.com/stippi/code-assistant",
+    color: "#888888",
   },
   {
     name: "LLMling-Agent",
@@ -107,6 +121,7 @@ export const ACP_AGENTS: ACPAgentDefinition[] = [
     command: "uvx",
     acpStartupArgs: ["--python", "3.13", "llmling-agent[default]@latest", "serve-acp", "config.yml", "--file-access", "--terminal-access"],
     installGuide: "https://phil65.github.io/llmling-agent/cli/",
+    color: "#888888",
   },
   {
     name: "Qwen Code",
@@ -114,6 +129,7 @@ export const ACP_AGENTS: ACPAgentDefinition[] = [
     command: "npx",
     acpStartupArgs: ["@qwen-code/qwen-code@latest", "--experimental-acp"],
     installGuide: "https://github.com/QwenLM/qwen-code",
+    color: "#888888",
   },
   {
     name: "VT Code",
@@ -121,6 +137,7 @@ export const ACP_AGENTS: ACPAgentDefinition[] = [
     command: "vtcode",
     acpStartupArgs: ["acp"],
     installGuide: "https://github.com/vinhnx/vtcode",
+    color: "#888888",
   },
 ]
 

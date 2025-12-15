@@ -94,6 +94,12 @@ export namespace ACPOrchestrator {
     // Send prompt to ACP
     const promptResult = await state.client!.sendPrompt(state.acpSessionID!, promptText)
 
+    if (promptResult.stopReason === "cancelled") {
+      assistantMessage.error = new MessageV2.AbortedError({
+        message: "The operation was aborted.",
+      }).toObject()
+    }
+
     log.info("prompt sent", {
       sessionID: input.sessionID,
       acpSessionID: state.acpSessionID,
@@ -416,6 +422,17 @@ export namespace ACPOrchestrator {
         error: error instanceof Error ? error.message : String(error),
       })
     }
+  }
+
+  export async function cancel(sessionID: string): Promise<void> {
+    const state = sessions.get(sessionID)
+    if (!state || !state.client || !state.acpSessionID) {
+      log.warn("cancel skipped; session not ready", { sessionID })
+      return
+    }
+
+    log.info("sending acp cancel", { sessionID, acpSessionID: state.acpSessionID })
+    await state.client.cancel(state.acpSessionID)
   }
 
   /**

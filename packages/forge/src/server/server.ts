@@ -671,7 +671,10 @@ export namespace Server {
           }),
         ),
         async (c) => {
-          SessionPrompt.cancel(c.req.valid("param").id)
+          const sessionID = c.req.valid("param").id
+          await ACPOrchestrator.cancel(sessionID)
+          SessionPrompt.cancel(sessionID)
+          SessionStatus.set(sessionID, { type: "idle" })
           return c.json(true)
         },
       )

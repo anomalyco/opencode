@@ -881,9 +881,10 @@ function UserMessage(props: {
   const files = createMemo(() => props.parts.flatMap((x) => (x.type === "file" ? [x] : [])))
   const sync = useSync()
   const { theme } = useTheme()
+  const local = useLocal()
   const [hover, setHover] = createSignal(false)
   const queued = createMemo(() => props.pending && props.message.id > props.pending)
-  const color = createMemo(() => (queued() ? theme.accent : theme.secondary))
+  const color = createMemo(() => (queued() ? theme.accent : local.agent.color(props.message.agent)))
 
   const compaction = createMemo(() => props.parts.find((x) => x.type === "compaction"))
 

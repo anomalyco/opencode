@@ -264,7 +264,14 @@ export const { use: useLocal, provider: LocalProvider } = createSimpleContext({
           })
         },
         color(agentName: string) {
+          const agentDef = getAgent(agentName)
+          if (agentDef?.color) {
+            return RGBA.fromHex(agentDef.color)
+          }
           const index = agents().findIndex((x) => x.name === agentName)
+          if (index === -1) {
+            return colors()[0]
+          }
           return colors()[index % colors().length]
         },
         isInstalled(agentName: string) {
