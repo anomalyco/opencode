@@ -1,7 +1,7 @@
 import { Provider } from "@/provider/provider"
 import { Log } from "@/util/log"
 import { streamText, wrapLanguageModel, type ModelMessage, type StreamTextResult, type Tool, type ToolSet } from "ai"
-import { mergeDeep, pipe } from "remeda"
+import { clone, mergeDeep, pipe } from "remeda"
 import { ProviderTransform } from "@/provider/transform"
 import { Config } from "@/config/config"
 import { Instance } from "@/project/instance"
@@ -59,6 +59,12 @@ export namespace LLM {
         .filter((x) => x)
         .join("\n"),
     )
+
+    const original = clone(system)
+    await Plugin.trigger("experimental.chat.system.transform", {}, { system })
+    if (system.length === 0) {
+      system.push(...original)
+    }
 
     const params = await Plugin.trigger(
       "chat.params",
