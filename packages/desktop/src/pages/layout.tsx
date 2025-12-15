@@ -173,7 +173,7 @@ export default function Layout(props: ParentProps) {
     const opencode = "4b0ea68d7af9a6031a7ffda7ad66e0cb83315750"
 
     return (
-      <div class="relative size-6 shrink-0">
+      <div class="relative size-5 shrink-0 rounded-sm overflow-hidden">
         <Avatar
           fallback={name()}
           src={props.project.id === opencode ? "https://opencode.ai/favicon.svg" : props.project.icon?.url}
@@ -186,7 +186,7 @@ export default function Layout(props: ParentProps) {
         <Show when={props.expandable}>
           <Icon
             name="chevron-right"
-            size="large"
+            size="normal"
             class="hidden size-full items-center justify-center text-text-subtle group-hover/session:flex group-data-[expanded]/trigger:rotate-90 transition-transform duration-50"
           />
         </Show>
@@ -253,7 +253,7 @@ export default function Layout(props: ParentProps) {
               <Button
                 as={"div"}
                 variant="ghost"
-                class="group/session flex items-center justify-between gap-3 w-full px-1 self-stretch h-auto border-none rounded-lg"
+                class="group/session flex items-center justify-between gap-3 w-full px-1.5 self-stretch h-auto border-none rounded-lg"
               >
                 <Collapsible.Trigger class="group/trigger flex items-center gap-3 p-0 text-left min-w-0 grow border-none">
                   <ProjectAvatar
