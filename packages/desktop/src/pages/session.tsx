@@ -280,7 +280,11 @@ export default function Page() {
         <div class="relative h-full">
           <Tabs.Trigger
             value={props.tab}
-            closeButton={<IconButton icon="close" variant="ghost" onClick={() => props.onTabClose(props.tab)} />}
+            closeButton={
+              <Tooltip value="Close tab" placement="bottom">
+                <IconButton icon="close" variant="ghost" onClick={() => props.onTabClose(props.tab)} />
+              </Tooltip>
+            }
             hideCloseButton
             onClick={() => props.onTabClick(props.tab)}
           >
@@ -358,7 +362,9 @@ export default function Page() {
                   <Tabs.Trigger
                     value="review"
                     closeButton={
-                      <IconButton icon="collapse" size="normal" variant="ghost" onClick={layout.review.pane} />
+                      <Tooltip value="Close tab" placement="bottom">
+                        <IconButton icon="collapse" size="normal" variant="ghost" onClick={layout.review.pane} />
+                      </Tooltip>
                     }
                   >
                     <div class="flex items-center gap-3">
