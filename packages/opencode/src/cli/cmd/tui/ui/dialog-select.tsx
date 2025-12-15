@@ -27,6 +27,7 @@ export interface DialogSelectProps<T> {
   }[]
   current?: T
   hideSearch?: boolean
+  beforeFooter?: JSX.Element
 }
 
 export interface DialogSelectOption<T = any> {
@@ -299,18 +300,23 @@ export function DialogSelect<T>(props: DialogSelectProps<T>) {
           )}
         </For>
       </scrollbox>
-      <Show when={keybinds().length} fallback={<box flexShrink={0} />}>
-        <box paddingRight={2} paddingLeft={4} flexDirection="row" gap={2} flexShrink={0} paddingTop={1}>
-          <For each={keybinds()}>
-            {(item) => (
-              <text>
-                <span style={{ fg: theme.text }}>
-                  <b>{item.title}</b>{" "}
-                </span>
-                <span style={{ fg: theme.textMuted }}>{Keybind.toString(item.keybind)}</span>
-              </text>
-            )}
-          </For>
+      <Show when={props.beforeFooter || keybinds().length} fallback={<box flexShrink={0} />}>
+        <box paddingTop={1}>
+          <Show when={props.beforeFooter}>{props.beforeFooter}</Show>
+          <Show when={keybinds().length} fallback={<box flexShrink={0} />}>
+            <box paddingRight={2} paddingLeft={4} flexDirection="row" gap={2} flexShrink={0}>
+              <For each={keybinds()}>
+                {(item) => (
+                  <text>
+                    <span style={{ fg: theme.text }}>
+                      <b>{item.title}</b>{" "}
+                    </span>
+                    <span style={{ fg: theme.textMuted }}>{Keybind.toString(item.keybind)}</span>
+                  </text>
+                )}
+              </For>
+            </box>
+          </Show>
         </box>
       </Show>
     </box>

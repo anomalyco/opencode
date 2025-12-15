@@ -182,26 +182,26 @@ function DialogQuestionSelect(props: SingleQuestionProps) {
   )
 
   return (
-    <>
-      <DialogSelect
-        title={props.item.question}
-        options={selectOptions()}
-        current={sortedOptions().find((o) => o.value === currentValue())}
-        hideSearch={true}
-        keybind={[
-          {
-            keybind: { name: "c", ctrl: false, meta: false, shift: false, super: false, leader: false },
-            title: "add comment",
-            onTrigger: () => openComment(),
-          },
-        ]}
-      />
-      <Show when={comment()}>
-        <box paddingLeft={4} paddingRight={4} paddingTop={1} paddingBottom={1}>
-          <text fg={theme.textMuted}>💬 "{truncate(comment()!, 40)}"</text>
-        </box>
-      </Show>
-    </>
+    <DialogSelect
+      title={props.item.question}
+      options={selectOptions()}
+      current={sortedOptions().find((o) => o.value === currentValue())}
+      hideSearch={true}
+      beforeFooter={
+        comment() ? (
+          <box paddingLeft={4} paddingRight={4}>
+            <text fg={theme.textMuted}>💬 "{truncate(comment()!, 40)}"</text>
+          </box>
+        ) : undefined
+      }
+      keybind={[
+        {
+          keybind: { name: "c", ctrl: false, meta: false, shift: false, super: false, leader: false },
+          title: "add comment",
+          onTrigger: () => openComment(),
+        },
+      ]}
+    />
   )
 }
 
@@ -270,31 +270,31 @@ function DialogQuestionMultiSelect(props: SingleQuestionProps) {
   )
 
   return (
-    <>
-      <DialogSelect
-        title={props.item.question}
-        options={selectOptions()}
-        hideSearch={true}
-        onSelect={() => confirmSelection()}
-        keybind={[
-          {
-            keybind: { name: "space", ctrl: false, meta: false, shift: false, super: false, leader: false },
-            title: "toggle",
-            onTrigger: (option) => setChecked(option.value.value, !checked[option.value.value]),
-          },
-          {
-            keybind: { name: "c", ctrl: false, meta: false, shift: false, super: false, leader: false },
-            title: "add comment",
-            onTrigger: () => openComment(),
-          },
-        ]}
-      />
-      <Show when={comment()}>
-        <box paddingLeft={4} paddingRight={4} paddingTop={1} paddingBottom={1}>
-          <text fg={theme.textMuted}>💬 "{truncate(comment()!, 40)}"</text>
-        </box>
-      </Show>
-    </>
+    <DialogSelect
+      title={props.item.question}
+      options={selectOptions()}
+      hideSearch={true}
+      onSelect={() => confirmSelection()}
+      beforeFooter={
+        comment() ? (
+          <box paddingLeft={4} paddingRight={4}>
+            <text fg={theme.textMuted}>💬 "{truncate(comment()!, 40)}"</text>
+          </box>
+        ) : undefined
+      }
+      keybind={[
+        {
+          keybind: { name: "space", ctrl: false, meta: false, shift: false, super: false, leader: false },
+          title: "toggle",
+          onTrigger: (option) => setChecked(option.value.value, !checked[option.value.value]),
+        },
+        {
+          keybind: { name: "c", ctrl: false, meta: false, shift: false, super: false, leader: false },
+          title: "add comment",
+          onTrigger: () => openComment(),
+        },
+      ]}
+    />
   )
 }
 
@@ -348,26 +348,26 @@ function DialogQuestionConfirm(props: SingleQuestionProps) {
   ])
 
   return (
-    <>
-      <DialogSelect
-        title={props.item.question}
-        options={options()}
-        current={typeof currentValue() === "boolean" ? currentValue() : undefined}
-        hideSearch={true}
-        keybind={[
-          {
-            keybind: { name: "c", ctrl: false, meta: false, shift: false, super: false, leader: false },
-            title: "add comment",
-            onTrigger: () => openComment(),
-          },
-        ]}
-      />
-      <Show when={comment()}>
-        <box paddingLeft={4} paddingRight={4} paddingTop={1} paddingBottom={1}>
-          <text fg={theme.textMuted}>💬 "{truncate(comment()!, 40)}"</text>
-        </box>
-      </Show>
-    </>
+    <DialogSelect
+      title={props.item.question}
+      options={options()}
+      current={typeof currentValue() === "boolean" ? currentValue() : undefined}
+      hideSearch={true}
+      beforeFooter={
+        comment() ? (
+          <box paddingLeft={4} paddingRight={4}>
+            <text fg={theme.textMuted}>💬 "{truncate(comment()!, 40)}"</text>
+          </box>
+        ) : undefined
+      }
+      keybind={[
+        {
+          keybind: { name: "c", ctrl: false, meta: false, shift: false, super: false, leader: false },
+          title: "add comment",
+          onTrigger: () => openComment(),
+        },
+      ]}
+    />
   )
 }
 
