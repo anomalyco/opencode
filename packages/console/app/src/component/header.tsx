@@ -119,8 +119,8 @@ export function Header(props: { zen?: boolean; hideGetStarted?: boolean }) {
     <section data-component="top">
       <div onContextMenu={handleLogoContextMenu}>
         <A href="/">
-          <img data-slot="logo light" src={logoLight} alt="opencode logo light" />
-          <img data-slot="logo dark" src={logoDark} alt="opencode logo dark" />
+          <img data-slot="logo light" src={logoLight} alt="opencode logo light" width="189" height="34" />
+          <img data-slot="logo dark" src={logoDark} alt="opencode logo dark" width="189" height="34" />
         </A>
       </div>
 
