@@ -26,16 +26,22 @@ Then run `forge` to get started:
 forge
 ```
 
-Try running Claude Code with a prompt:
+Install your first agent:
 
 ```sh
-forge --agent claude "Create our update my CLAUDE.md"
+forge claude install
 ```
 
-Try planning with Claude Code, and implementing with Codex:
+Run Claude Code with a prompt:
 
 ```sh
-forge --plan-agent "name=claude model=opus" --agent "name=codex model=gpt-5.1-codex-max" "Find all the TODO comments in the codebase and address the top 3"
+forge claude --model opus --mode acceptEdits "Create or update my CLAUDE.md"
+```
+
+Plan with Claude Code, implement with Codex:
+
+```sh
+forge codex "Find all the TODO comments in the codebase and address the top 3" --plan-agent claude
 ```
 
 ## What is Forge/ACP?
@@ -58,7 +64,13 @@ This also enables hyper-specialized agents for domain-specific problems - like [
 
 For a deeper dive, see Viv Trivedy's great article: [Agents Should Be More Opinionated](https://www.vtrivedy.com/posts/agents-should-be-more-opinionated).
 
-## Supported Agents
+## Managing Agents
+
+To view available agents, run:
+
+```sh
+forge agents
+```
 
 Forge supports all agents listed at [agentclientprotocol.com/overview/agents](https://agentclientprotocol.com/overview/agents):
 
@@ -79,71 +91,126 @@ Forge supports all agents listed at [agentclientprotocol.com/overview/agents](ht
 - [Stakpak](https://github.com/stakpak/agent?tab=readme-ov-file#agent-client-protocol-acp)
 - [VT Code](https://github.com/vinhnx/vtcode/blob/main/README.md#zed-ide-integration-agent-client-protocol)
 
-Run `forge agents` to see the full list.
+### Install, uninstall, check installation status for agents
 
-### Install/uninstall agents
+> **Note:** Claude Code and Codex aren't ACP-native yet. The `claude` and `codex` entries point to Zed's ACP wrappers (`@zed-industries/claude-code-acp` and `@zed-industries/codex-acp`), which you'll need to install.
 
-- **Note:** Claude Code and Codex aren’t ACP-native yet. The `claude` and `codex` entries point to Zed’s ACP wrappers (`@zed-industries/claude-code-acp` and `@zed-industries/codex-acp`), which you’ll need to install.
-
-- Install an agent from the CLI:
+Install an agent:
 
 ```sh
-forge install [agent]
+forge <agent> install
 ```
 
-- Uninstall an agent from the CLI:
+Uninstall an agent:
 
 ```sh
-forge uninstall [agent]
+forge <agent> uninstall
+```
+
+Check if a given agent is installed
+
+```sh
+forge <agent> check
 ```
 
 ## Usage
 
-### Plan With One Agent, Implement With Another
-
-Agents that expose a `plan` session mode today: Claude Code, OpenCode.
-
-Use `--plan-agent` and `--agent` to split planning and implementation. Both accept either an agent name (`--agent claude`) or parameters (`--agent "name=claude model=opus mode=acceptEdits"`):
-
-**Agent parameters**
-
-- `name` (required) - Agent name
-- `model` (optional) - Model identifier (`forge models [agent]` to see options)
-- `mode` (optional) - Session mode (`forge modes [agent]` to see options)
-
-When `--plan-agent` [exits plan mode](https://agentclientprotocol.com/protocol/session-modes#exiting-plan-modes), Forge automatically switches to `--agent` for implementation.
-
-> Note that all fields support fuzzy matching
-
-**Example: Plan with Claude, implement with Codex**
+### TUI mode
 
 ```sh
-forge --plan-agent "name=claude model=opus" --agent "name=codex model=gpt-5.1-codex-max" "Find all TODOs and address the top 3"
+forge
 ```
+
+### Run with a prompt
+
+```sh
+forge <agent> "Create or update AGENTS.md"
+```
+
+### Specify model/mode
+
+```
+forge <agent> --model opus --mode acceptEdits "Create or update AGENTS.md"
+```
+
+Supported flags:
+
+- `--model` - Model identifier (run `forge <agent> models` to see options)
+- `--mode` - Session mode (run `forge <agent> modes` to see options)
+
+### Run headless
+
+Prints response and exits:
+
+```sh
+forge <agent> -p "Create or update AGENTS.md"
+```
+
+### Plan With One Agent, Implement With Another
+
+ACP enables planning with one agent and implementing with another. Specify a planning agent using `--plan-agent`
+
+```sh
+forge codex "Find all the TODO comments" --plan-agent claude
+```
+
+Options:
+
+- `--plan-agent` - Planning agent name
+- `--plan-model` - Planning agent model
+
+When the planning agent [exits plan mode](https://agentclientprotocol.com/protocol/session-modes#exiting-plan-modes), Forge automatically switches to the main agent for implementation.
+
+> Agents that expose a `plan` session mode today
+>
+> - `claude`
+> - `opencode`
 
 ### Commands & Flags
 
+#### `forge -h`
+
 ```sh
 Commands:
-  forge [prompt]            start forge tui  [default]
-  forge agents              list all available ACP agents
-  forge models [agent]  list available models for an ACP agent
-  forge upgrade [target]    upgrade forge to the latest or a specific version
-
-Positionals:
-  prompt  prompt to send  [string]
+  forge                       start TUI  [default]
+  forge agents                list all available agents
+  forge <agent> <subcommand>  manage agent <install|uninstall|check|modes|models>
+  forge <agent> [prompt..]    run agent with prompt
 
 Options:
-  -a, --agent       agent spec: --agent claude or --agent "name=claude model=opus mode=bypassPermissions"  [string]
-      --plan-agent  plan agent spec: --plan-agent claude or --plan-agent "name=claude model=opus"  [string]
   -h, --help        show help  [boolean]
   -v, --version     show version number  [boolean]
       --print-logs  print logs to stderr  [boolean]
       --log-level   log level  [string] [choices: "DEBUG", "INFO", "WARN", "ERROR"]
+      --project     path to start forge in  [string]
+  -c, --continue    continue the last session  [boolean]
+  -s, --session     session id to continue  [string]
+
+Examples:
+  forge                                                                                    Start TUI
+  forge claude install                                                                     Install claude
+  forge claude "Update my CLAUDE.md"                                                       Run claude with prompt
+  forge claude --model opus --mode bypassPermissions "Refactor the authentication module"  Run with specific model/mode
+  forge codex "Find all the TODO comments" --plan-agent claude --plan-model opus           Plan with claude, implement with codex
+```
+
+#### `forge <agent> -h`
+
+```sh
+forge <agent> [prompt..]
+
+run agent with prompt
+
+Options:
+      --mode        mode to use for the agent  [string]
+      --model       model to use for the agent  [string]
+      --plan-agent  agent to use for planning  [string]
+      --plan-model  model to use for planning agent  [string]
   -p, --print       Run headless, print response and exit  [boolean]
       --project     path to start forge in  [string]
   -c, --continue    continue the last session  [boolean]
   -s, --session     session id to continue  [string]
+  -h, --help        show help  [boolean]
 ```
 
 ## Share feedback

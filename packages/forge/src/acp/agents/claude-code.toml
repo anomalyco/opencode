@@ -1,4 +1,4 @@
-name = "Claude Code"
+name = "Claude Code ACP"
 description = "ACP adapter for Claude Code Zed Industries"
 command = "claude-code-acp"
 args = []
