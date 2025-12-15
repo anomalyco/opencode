@@ -76,7 +76,7 @@ export const EditTool = Tool.define("edit", {
     let diff = ""
     let contentOld = ""
     let contentNew = ""
-    await (async () => {
+    await FileTime.withLock(filePath, async () => {
       if (params.oldString === "") {
         contentNew = params.newString
         diff = trimDiff(createTwoFilesPatch(filePath, filePath, contentOld, contentNew))
@@ -97,6 +97,7 @@ export const EditTool = Tool.define("edit", {
         await Bus.publish(File.Event.Edited, {
           file: filePath,
         })
+        FileTime.read(ctx.sessionID, filePath)
         return
       }
 
@@ -133,9 +134,8 @@ export const EditTool = Tool.define("edit", {
       diff = trimDiff(
         createTwoFilesPatch(filePath, filePath, normalizeLineEndings(contentOld), normalizeLineEndings(contentNew)),
       )
-    })()
-
-    FileTime.read(ctx.sessionID, filePath)
+      FileTime.read(ctx.sessionID, filePath)
+    })
 
     let output = ""
     await LSP.touchFile(filePath, true)
