@@ -2,7 +2,7 @@ import { Ghostty, Terminal as Term, FitAddon } from "ghostty-web"
 import { ComponentProps, createEffect, onCleanup, onMount, splitProps } from "solid-js"
 import { useSDK } from "@/context/sdk"
 import { SerializeAddon } from "@/addons/serialize"
-import { LocalPTY } from "@/context/session"
+import { LocalPTY } from "@/context/terminal"
 import { usePrefersDark } from "@solid-primitives/media"
 
 export interface TerminalProps extends ComponentProps<"div"> {
