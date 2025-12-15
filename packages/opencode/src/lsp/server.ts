@@ -281,7 +281,7 @@ export namespace LSPServer {
     extensions: [".go"],
     async spawn(root) {
       let bin = Bun.which("gopls", {
-        PATH: process.env["PATH"] + ":" + Global.Path.bin,
+        PATH: process.env["PATH"] + path.delimiter + Global.Path.bin,
       })
       if (!bin) {
         if (!Bun.which("go")) return
@@ -319,7 +319,7 @@ export namespace LSPServer {
     extensions: [".rb", ".rake", ".gemspec", ".ru"],
     async spawn(root) {
       let bin = Bun.which("rubocop", {
-        PATH: process.env["PATH"] + ":" + Global.Path.bin,
+        PATH: process.env["PATH"] + path.delimiter + Global.Path.bin,
       })
       if (!bin) {
         const ruby = Bun.which("ruby")
@@ -470,7 +470,7 @@ export namespace LSPServer {
     root: NearestRoot(["build.zig"]),
     async spawn(root) {
       let bin = Bun.which("zls", {
-        PATH: process.env["PATH"] + ":" + Global.Path.bin,
+        PATH: process.env["PATH"] + path.delimiter + Global.Path.bin,
       })
 
       if (!bin) {
@@ -576,7 +576,7 @@ export namespace LSPServer {
     extensions: [".cs"],
     async spawn(root) {
       let bin = Bun.which("csharp-ls", {
-        PATH: process.env["PATH"] + ":" + Global.Path.bin,
+        PATH: process.env["PATH"] + path.delimiter + Global.Path.bin,
       })
       if (!bin) {
         if (!Bun.which("dotnet")) {
@@ -616,7 +616,7 @@ export namespace LSPServer {
     extensions: [".fs", ".fsi", ".fsx", ".fsscript"],
     async spawn(root) {
       let bin = Bun.which("fsautocomplete", {
-        PATH: process.env["PATH"] + ":" + Global.Path.bin,
+        PATH: process.env["PATH"] + path.delimiter + Global.Path.bin,
       })
       if (!bin) {
         if (!Bun.which("dotnet")) {
@@ -1110,7 +1110,7 @@ export namespace LSPServer {
     extensions: [".lua"],
     async spawn(root) {
       let bin = Bun.which("lua-language-server", {
-        PATH: process.env["PATH"] + ":" + Global.Path.bin,
+        PATH: process.env["PATH"] + path.delimiter + Global.Path.bin,
       })
 
       if (!bin) {
@@ -1349,7 +1349,7 @@ export namespace LSPServer {
     root: NearestRoot([".terraform.lock.hcl", "terraform.tfstate", "*.tf"]),
     async spawn(root) {
       let bin = Bun.which("terraform-ls", {
-        PATH: process.env["PATH"] + ":" + Global.Path.bin,
+        PATH: process.env["PATH"] + path.delimiter + Global.Path.bin,
       })
 
       if (!bin) {
@@ -1433,7 +1433,7 @@ export namespace LSPServer {
     root: NearestRoot([".latexmkrc", "latexmkrc", ".texlabroot", "texlabroot"]),
     async spawn(root) {
       let bin = Bun.which("texlab", {
-        PATH: process.env["PATH"] + ":" + Global.Path.bin,
+        PATH: process.env["PATH"] + path.delimiter + Global.Path.bin,
       })
 
       if (!bin) {
