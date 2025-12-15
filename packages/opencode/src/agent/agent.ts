@@ -256,9 +256,9 @@ export namespace Agent {
     return state().then((x) => Object.values(x))
   }
 
-  export async function generate(input: { description: string }) {
+  export async function generate(input: { description: string; model?: { providerID: string; modelID: string } }) {
     const cfg = await Config.get()
-    const defaultModel = await Provider.defaultModel()
+    const defaultModel = input.model ?? (await Provider.defaultModel())
     const model = await Provider.getModel(defaultModel.providerID, defaultModel.modelID)
     const language = await Provider.getLanguage(model)
     const system = SystemPrompt.header(defaultModel.providerID)
