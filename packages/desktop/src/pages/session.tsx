@@ -49,7 +49,6 @@ export default function Page() {
   const params = useParams()
   const navigate = useNavigate()
 
-  // Session-specific derived state
   const sessionKey = createMemo(() => `${params.dir}${params.id ? "/" + params.id : ""}`)
   const tabs = createMemo(() => layout.tabs(sessionKey()))
 
@@ -132,7 +131,6 @@ export default function Page() {
     }
   })
 
-  // Register commands for this page
   command.register(() => [
     {
       id: "session.new",
@@ -230,28 +228,17 @@ export default function Page() {
     },
   ])
 
-  // Handle keyboard events that aren't commands
   const handleKeyDown = (event: KeyboardEvent) => {
-    // Don't interfere with terminal
     // @ts-expect-error
-    if (document.activeElement?.dataset?.component === "terminal") {
-      return
-    }
-
-    // Don't interfere with dialogs
-    if (dialog.stack.length > 0) {
-      return
-    }
+    if (document.activeElement?.dataset?.component === "terminal") return
+    if (dialog.stack.length > 0) return
 
     const focused = document.activeElement === inputRef
     if (focused) {
-      if (event.key === "Escape") {
-        inputRef?.blur()
-      }
+      if (event.key === "Escape") inputRef?.blur()
       return
     }
 
-    // Focus input when typing characters
     if (event.key.length === 1 && event.key !== "Unidentified" && !(event.ctrlKey || event.metaKey)) {
       inputRef?.focus()
     }
