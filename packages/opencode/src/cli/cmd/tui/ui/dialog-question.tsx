@@ -36,21 +36,17 @@ export function DialogQuestion(props: QuestionDialogProps) {
   const dialog = useDialog()
   const { theme } = useTheme()
   const [answers, setAnswers] = createStore<Answers>(props.initialAnswers ?? {})
+  const [selectRef, setSelectRef] = createSignal<any>()
 
   const questions = () => props.question.questions
   const answeredCount = () =>
     Object.keys(answers).filter((k) => answers[k]?.value !== undefined && answers[k]?.value !== null).length
 
-  console.log("[DialogQuestion] Component CREATED/RENDERED with", questions().length, "questions")
-  console.log("[DialogQuestion] Current answers store:", answers)
-
   onMount(() => {
-    console.log("[DialogQuestion] onMount called")
     dialog.setSize("medium")
   })
 
   function openQuestion(item: Question.QuestionItem) {
-    console.log("[openQuestion] Opening question:", item.id, "current stack length:", dialog.stack.length)
     const Component = {
       select: DialogQuestionSelect,
       "multi-select": DialogQuestionMultiSelect,
@@ -63,16 +59,12 @@ export function DialogQuestion(props: QuestionDialogProps) {
         item={item}
         currentAnswer={answers[item.id]}
         onAnswer={(answer) => {
-          console.log(`[onAnswer] Setting answer for ${item.id}:`, answer)
           setAnswers(item.id, answer)
           // Sync to initialAnswers if provided
           if (props.initialAnswers) {
             props.initialAnswers[item.id] = answer
           }
-          console.log("[onAnswer] After setAnswers, answers:", answers, "keys:", Object.keys(answers))
-          console.log("[onAnswer] About to pop dialog, current stack length:", dialog.stack.length)
           dialog.pop()
-          console.log("[onAnswer] After pop, stack length:", dialog.stack.length)
         }}
         onCancel={() => dialog.pop()}
         onSubmitAll={(answer) => {
@@ -81,13 +73,9 @@ export function DialogQuestion(props: QuestionDialogProps) {
         }}
       />
     ))
-    console.log("[openQuestion] After push, stack length:", dialog.stack.length)
   }
 
   function submit(finalAnswers?: Answers) {
-    console.log("[submit] Called with finalAnswers:", finalAnswers)
-    console.log("[submit] Current answers:", answers)
-    console.log("[submit] Will submit:", finalAnswers ?? answers)
     props.onSubmit(finalAnswers ?? answers)
   }
 
@@ -95,13 +83,11 @@ export function DialogQuestion(props: QuestionDialogProps) {
   const selectOptions = createMemo<DialogSelectOption<Question.QuestionItem>[]>(() => {
     // Access all keys to subscribe to any changes
     const answerKeys = Object.keys(answers)
-    console.log("[selectOptions] memo running, answerKeys:", answerKeys, "answers:", answers)
 
     return questions().map((item) => {
       const answer = answers[item.id]
       const answerPreview = formatAnswerPreview(item, answer)
       const comment = answer?.comment ? ` 💬 "${truncate(answer.comment, 30)}"` : ""
-      console.log(`[selectOptions] item ${item.id}: answer=${JSON.stringify(answer)}, preview="${answerPreview}"`)
 
       return {
         title: item.question,
@@ -115,7 +101,6 @@ export function DialogQuestion(props: QuestionDialogProps) {
   // Handle submission with ctrl+enter keybind
   useKeyboard((evt) => {
     if (evt.ctrl && evt.name === "return") {
-      console.log("[DialogQuestion] Ctrl+Enter pressed, submitting answers:", answers)
       evt.preventDefault()
       submit()
       return
@@ -139,7 +124,6 @@ export function DialogQuestion(props: QuestionDialogProps) {
           keybind: { name: "return", ctrl: true, meta: false, shift: false, super: false, leader: false },
           title: "submit",
           onTrigger: (option) => {
-            console.log("[DialogQuestion] Submit keybind triggered, preventing default")
             submit()
             return false
           },
@@ -221,6 +205,17 @@ function DialogQuestionSelect(props: SingleQuestionProps) {
         current={sortedOptions().find((o) => o.value === currentValue())}
         hideSearch={true}
         keybind={[
+          {
+            keybind: { name: "escape", ctrl: false, meta: false, shift: false, super: false, leader: false },
+            title: "back",
+            onTrigger: () => {
+              if (props.currentAnswer) {
+                props.onAnswer(props.currentAnswer)
+              } else {
+                props.onCancel()
+              }
+            },
+          },
           {
             keybind: { name: "m", ctrl: false, meta: false, shift: false, super: false, leader: false },
             title: "add comment",
@@ -319,6 +314,14 @@ function DialogQuestionMultiSelect(props: SingleQuestionProps) {
         onSelect={() => confirmSelection()}
         keybind={[
           {
+            keybind: { name: "escape", ctrl: false, meta: false, shift: false, super: false, leader: false },
+            title: "back",
+            onTrigger: () => {
+              const currentAnswer = { value: getSelectedValues(), comment: comment() }
+              props.onAnswer(currentAnswer)
+            },
+          },
+          {
             keybind: { name: "space", ctrl: false, meta: false, shift: false, super: false, leader: false },
             title: "toggle",
             onTrigger: (option) => setChecked(option.value.value, !checked[option.value.value]),
@@ -342,38 +345,6 @@ function DialogQuestionMultiSelect(props: SingleQuestionProps) {
       </Show>
     </>
   )
-
-  function openComment() {
-    dialog.push(() => (
-      <DialogQuestionComment
-        value={comment()}
-        onSave={(c) => {
-          setComment(c)
-          dialog.pop()
-        }}
-        onCancel={() => dialog.pop()}
-      />
-    ))
-  }
-
-  function getSelectedValues(): string[] {
-    return sortedOptions()
-      .filter((o) => checked[o.value])
-      .map((o) => o.value)
-  }
-
-  function confirmSelection() {
-    props.onAnswer({ value: getSelectedValues(), comment: comment() })
-  }
-
-  function submitAll() {
-    props.onSubmitAll({ value: getSelectedValues(), comment: comment() })
-  }
-
-  function CheckboxStatus(props: { value: string }) {
-    const isChecked = () => checked[props.value]
-    return <text fg={isChecked() ? theme.success : theme.textMuted}>{isChecked() ? "☑" : "☐"}</text>
-  }
 }
 
 // Confirm (Yes/No) Question Dialog
@@ -415,31 +386,32 @@ function DialogQuestionConfirm(props: SingleQuestionProps) {
   }
 
   useKeyboard((evt) => {
-    if (evt.name === "up" || evt.name === "left" || (evt.ctrl && evt.name === "p")) {
+    if (evt.name === "escape") {
+      if (selected() !== null) {
+        props.onAnswer({ value: selected(), comment: comment() })
+      } else {
+        props.onCancel()
+      }
+      evt.preventDefault()
+    } else if (evt.name === "up" || evt.name === "left" || (evt.ctrl && evt.name === "p")) {
       setSelected(true)
       evt.preventDefault()
-    }
-    if (evt.name === "down" || evt.name === "right" || (evt.ctrl && evt.name === "n")) {
+    } else if (evt.name === "down" || evt.name === "right" || (evt.ctrl && evt.name === "n")) {
       setSelected(false)
       evt.preventDefault()
-    }
-    if (evt.name === "return" && !evt.ctrl) {
+    } else if (evt.name === "return" && !evt.ctrl) {
       confirmSelection()
       evt.preventDefault()
-    }
-    if (evt.ctrl && evt.name === "return") {
+    } else if (evt.ctrl && evt.name === "return") {
       submitAll()
       evt.preventDefault()
-    }
-    if (evt.name === "c" && !evt.ctrl) {
+    } else if (evt.name === "c" && !evt.ctrl) {
       openComment()
       evt.preventDefault()
-    }
-    if (evt.name === "y") {
+    } else if (evt.name === "y") {
       setSelected(true)
       evt.preventDefault()
-    }
-    if (evt.name === "n") {
+    } else if (evt.name === "n") {
       setSelected(false)
       evt.preventDefault()
     }
@@ -545,7 +517,14 @@ function DialogQuestionText(props: SingleQuestionProps) {
         const trimmedValue = value.trim()
         props.onAnswer({ value: trimmedValue || null })
       }}
-      onCancel={() => props.onCancel()}
+      onCancel={() => {
+        // Save current value on escape if we have one
+        if (props.currentAnswer?.value) {
+          props.onAnswer(props.currentAnswer)
+        } else {
+          props.onCancel()
+        }
+      }}
     />
   )
 }
@@ -571,59 +550,38 @@ DialogQuestion.show = (
   dialog: DialogContext,
   question: Question.Info,
 ): Promise<{ answers: Answers; cancelled: boolean }> => {
-  console.log("[DialogQuestion.show] Called with question:", question.id, "questions count:", question.questions.length)
-  console.log("[DialogQuestion.show] Current stack length:", dialog.stack.length)
-
   // Create a persistent answers object that will be shared across re-renders
   const persistentAnswers: Answers = {}
 
   return new Promise((resolve) => {
     let resolved = false
 
-    console.log("[DialogQuestion.show] About to call dialog.replace")
     dialog.replace(
+      () => (
+        <DialogQuestion
+          question={question}
+          initialAnswers={persistentAnswers}
+          onSubmit={(answers) => {
+            if (resolved) return
+            resolved = true
+            resolve({ answers, cancelled: false })
+            // Clear dialog after resolving to prevent onClose from firing
+            setTimeout(() => dialog.clear(), 0)
+          }}
+          onCancel={() => {
+            if (resolved) return
+            resolved = true
+            dialog.clear()
+            resolve({ answers: {}, cancelled: true })
+          }}
+        />
+      ),
       () => {
-        console.log("[DialogQuestion.show] Render function called! Stack length:", dialog.stack.length)
-        return (
-          <DialogQuestion
-            question={question}
-            initialAnswers={persistentAnswers}
-            onSubmit={(answers) => {
-              console.log("[DialogQuestion.show] onSubmit called with answers:", answers)
-              if (resolved) {
-                console.log("[DialogQuestion.show] Already resolved, skipping")
-                return
-              }
-              resolved = true
-              console.log("[DialogQuestion.show] Resolving with cancelled: false")
-              resolve({ answers, cancelled: false })
-              // Clear dialog after resolving to prevent onClose from firing
-              setTimeout(() => dialog.clear(), 0)
-            }}
-            onCancel={() => {
-              console.log("[DialogQuestion.show] onCancel called")
-              if (resolved) {
-                console.log("[DialogQuestion.show] Already resolved, skipping")
-                return
-              }
-              resolved = true
-              dialog.clear()
-              resolve({ answers: {}, cancelled: true })
-            }}
-          />
-        )
-      },
-      () => {
-        console.log("[DialogQuestion.show] onClose callback called")
-        if (resolved) {
-          console.log("[DialogQuestion.show] Already resolved, skipping onClose")
-          return
-        }
+        if (resolved) return
         resolved = true
         resolve({ answers: {}, cancelled: true })
       },
     )
-    console.log("[DialogQuestion.show] After dialog.replace, stack length:", dialog.stack.length)
   })
 }
 
