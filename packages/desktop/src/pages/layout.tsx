@@ -44,6 +44,16 @@ export default function Layout(props: ParentProps) {
     activeDraggable: undefined as string | undefined,
   })
 
+  let scrollContainerRef: HTMLDivElement | undefined
+
+  function scrollToSession(sessionId: string) {
+    if (!scrollContainerRef) return
+    const element = scrollContainerRef.querySelector(`[data-session-id="${sessionId}"]`)
+    if (element) {
+      element.scrollIntoView({ block: "center", behavior: "smooth" })
+    }
+  }
+
   const params = useParams()
   const globalSDK = useGlobalSDK()
   const globalSync = useGlobalSync()
@@ -111,7 +121,9 @@ export default function Layout(props: ParentProps) {
 
     // If target is within bounds, navigate to that session
     if (targetIndex >= 0 && targetIndex < sessions.length) {
-      navigateToSession(sessions[targetIndex])
+      const session = sessions[targetIndex]
+      navigateToSession(session)
+      queueMicrotask(() => scrollToSession(session.id))
       return
     }
 
@@ -130,6 +142,7 @@ export default function Layout(props: ParentProps) {
     // If going down (offset > 0), go to first session; if going up (offset < 0), go to last session
     const targetSession = offset > 0 ? nextProjectSessions[0] : nextProjectSessions[nextProjectSessions.length - 1]
     navigate(`/${base64Encode(nextProject.worktree)}/session/${targetSession.id}`)
+    queueMicrotask(() => scrollToSession(targetSession.id))
   }
 
   async function archiveSession(session: Session) {
@@ -418,6 +431,7 @@ export default function Layout(props: ParentProps) {
     return (
       <>
         <div
+          data-session-id={props.session.id}
           class="group/session relative w-full pr-2 py-1 rounded-md cursor-default transition-colors
                  hover:bg-surface-raised-base-hover focus-within:bg-surface-raised-base-hover has-[.active]:bg-surface-raised-base-hover"
           style={{ "padding-left": `${16 + depth * 12}px` }}
@@ -670,7 +684,10 @@ export default function Layout(props: ParentProps) {
             >
               <DragDropSensors />
               <ConstrainDragXAxis />
-              <div class="w-full min-w-8 flex flex-col gap-2 min-h-0 overflow-y-auto no-scrollbar">
+              <div
+                ref={scrollContainerRef}
+                class="w-full min-w-8 flex flex-col gap-2 min-h-0 overflow-y-auto no-scrollbar"
+              >
                 <SortableProvider ids={layout.projects.list().map((p) => p.worktree)}>
                   <For each={layout.projects.list()}>{(project) => <SortableProject project={project} />}</For>
                 </SortableProvider>
