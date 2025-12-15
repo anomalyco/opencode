@@ -7992,6 +7992,15 @@
               },
               "explore": {
                 "$ref": "#/components/schemas/AgentConfig"
+              },
+              "title": {
+                "$ref": "#/components/schemas/AgentConfig"
+              },
+              "summary": {
+                "$ref": "#/components/schemas/AgentConfig"
+              },
+              "compaction": {
+                "$ref": "#/components/schemas/AgentConfig"
               }
             },
             "additionalProperties": {
