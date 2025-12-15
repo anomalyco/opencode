@@ -144,6 +144,7 @@ describe("ProviderTransform.message - DeepSeek reasoning content", () => {
       status: "active",
       options: {},
       headers: {},
+      release_date: "2023-04-01",
     })
 
     expect(result).toHaveLength(1)
@@ -204,6 +205,7 @@ describe("ProviderTransform.message - DeepSeek reasoning content", () => {
       status: "active",
       options: {},
       headers: {},
+      release_date: "2023-04-01",
     })
 
     expect(result[0].providerOptions?.openaiCompatible?.reasoning_content).toBe("Thinking...")
@@ -250,6 +252,7 @@ describe("ProviderTransform.message - DeepSeek reasoning content", () => {
       status: "active",
       options: {},
       headers: {},
+      release_date: "2023-04-01",
     })
 
     expect(result[0].content).toEqual([
