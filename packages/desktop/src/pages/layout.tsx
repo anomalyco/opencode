@@ -194,7 +194,6 @@ export default function Layout(props: ParentProps) {
       title: "Previous session",
       category: "Session",
       keybind: "alt+arrowup",
-      disabled: !params.dir,
       onSelect: () => navigateSessionByOffset(-1),
     },
     {
@@ -202,7 +201,6 @@ export default function Layout(props: ParentProps) {
       title: "Next session",
       category: "Session",
       keybind: "alt+arrowdown",
-      disabled: !params.dir,
       onSelect: () => navigateSessionByOffset(1),
     },
     {
