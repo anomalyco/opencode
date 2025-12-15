@@ -55,7 +55,7 @@ function init() {
   })
 
   const result = {
-    trigger(name: string, source?: "prompt") {
+    trigger(name: string, source?: { from?: "prompt"; userCompactPrompt?: string }) {
       for (const option of options()) {
         if (option.value === name) {
           option.onSelect?.(dialog, source)

@@ -299,7 +299,7 @@ export function Session() {
       value: "session.compact",
       keybind: "session_compact",
       category: "Session",
-      onSelect: (dialog) => {
+      onSelect: (dialog, trigger) => {
         const selectedModel = local.model.current()
         if (!selectedModel) {
           toast.show({
@@ -313,6 +313,7 @@ export function Session() {
           sessionID: route.sessionID,
           modelID: selectedModel.modelID,
           providerID: selectedModel.providerID,
+          userCompactPrompt: trigger?.userCompactPrompt,
         })
         dialog.clear()
       },

@@ -407,6 +407,7 @@ export namespace SessionPrompt {
           abort,
           sessionID,
           auto: task.auto,
+          userCompactPrompt: task.userCompactPrompt,
         })
         if (result === "stop") break
         continue

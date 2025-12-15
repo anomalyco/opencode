@@ -1127,6 +1127,7 @@ export class Session extends HeyApiClient {
       directory?: string
       providerID?: string
       modelID?: string
+      userCompactPrompt?: string
     },
     options?: Options<never, ThrowOnError>,
   ) {
@@ -1139,6 +1140,7 @@ export class Session extends HeyApiClient {
             { in: "query", key: "directory" },
             { in: "body", key: "providerID" },
             { in: "body", key: "modelID" },
+            { in: "body", key: "userCompactPrompt" },
           ],
         },
       ],

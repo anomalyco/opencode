@@ -239,7 +239,7 @@ export function Prompt(props: PromptProps) {
 
           const nonTextParts = store.prompt.parts.filter((p) => p.type !== "text")
 
-          const value = trigger === "prompt" ? "" : text
+          const value = trigger?.from === "prompt" ? "" : text
           const content = await Editor.open({ value, renderer })
           if (!content) return
 
@@ -509,6 +509,14 @@ export function Prompt(props: PromptProps) {
         command: inputText,
       })
       setStore("mode", "normal")
+    } else if (inputText.match(/^\/(compact|summarize)(\s|$)/)) {
+      const args = inputText.replace(/^\/(compact|summarize)\s*/, "")
+      sdk.client.session.summarize({
+        sessionID,
+        providerID: selectedModel.providerID,
+        modelID: selectedModel.modelID,
+        userCompactPrompt: args || undefined,
+      })
     } else if (
       inputText.startsWith("/") &&
       iife(() => {

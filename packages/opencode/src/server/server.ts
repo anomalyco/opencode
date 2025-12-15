@@ -1041,6 +1041,7 @@ export namespace Server {
           z.object({
             providerID: z.string(),
             modelID: z.string(),
+            userCompactPrompt: z.string().optional(),
           }),
         ),
         async (c) => {
@@ -1063,6 +1064,7 @@ export namespace Server {
               modelID: body.modelID,
             },
             auto: false,
+            userCompactPrompt: body.userCompactPrompt,
           })
           await SessionPrompt.loop(sessionID)
           return c.json(true)

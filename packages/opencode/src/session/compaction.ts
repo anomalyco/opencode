@@ -88,6 +88,7 @@ export namespace SessionCompaction {
     sessionID: string
     abort: AbortSignal
     auto: boolean
+    userCompactPrompt?: string
   }) {
     const userMessage = input.messages.findLast((m) => m.info.id === input.parentID)!.info as MessageV2.User
     const agent = await Agent.get("compaction")
@@ -139,7 +140,11 @@ export namespace SessionCompaction {
           content: [
             {
               type: "text",
-              text: "Provide a detailed prompt for continuing our conversation above. Focus on information that would be helpful for continuing the conversation, including what we did, what we're doing, which files we're working on, and what we're going to do next considering new session will not have access to our conversation.",
+              text:
+                "Provide a detailed prompt for continuing our conversation above. Focus on information that would be helpful for continuing the conversation, including what we did, what we're doing, which files we're working on, and what we're going to do next considering new session will not have access to our conversation." +
+                input.userCompactPrompt
+                  ? "\n\nAdditionally, " + input.userCompactPrompt
+                  : "",
             },
           ],
         },
@@ -185,6 +190,7 @@ export namespace SessionCompaction {
         modelID: z.string(),
       }),
       auto: z.boolean(),
+      userCompactPrompt: z.string().optional(),
     }),
     async (input) => {
       const msg = await Session.updateMessage({
@@ -203,6 +209,7 @@ export namespace SessionCompaction {
         sessionID: msg.sessionID,
         type: "compaction",
         auto: input.auto,
+        userCompactPrompt: input.userCompactPrompt,
       })
     },
   )
