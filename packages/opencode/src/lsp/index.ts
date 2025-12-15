@@ -9,6 +9,7 @@ import z from "zod"
 import { Config } from "../config/config"
 import { spawn } from "child_process"
 import { Instance } from "../project/instance"
+import { Flag } from "@/flag/flag"
 
 export namespace LSP {
   const log = Log.create({ service: "lsp" })
@@ -204,6 +205,11 @@ export namespace LSP {
 
     for (const server of Object.values(s.servers)) {
       if (server.extensions.length && !server.extensions.includes(extension)) continue
+      if (extension === ".py" || extension === ".pyi") {
+        if (Flag.OPENCODE_EXPERIMENTAL_LSP_TY && !server.experimental) continue // If experimental flag is enabled and server is not experimental, skip
+        if (!Flag.OPENCODE_EXPERIMENTAL_LSP_TY && server.experimental) continue // If experimental flag is disabled and server is experimental, skip
+      }
+
       const root = await server.root(file)
       if (!root) continue
       if (s.broken.has(root + server.id)) continue
