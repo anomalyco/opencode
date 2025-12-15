@@ -144,31 +144,31 @@ export function Session() {
     return new CustomSpeedScroll(3)
   })
 
-   createEffect(async () => {
-     await sync.session
-       .sync(route.sessionID)
-       .then(() => {
-         if (scroll) scroll.scrollBy(100_000)
-       })
-       .catch((e) => {
-         console.error(e)
-         toast.show({
-           message: `Session not found: ${route.sessionID}`,
-           variant: "error",
-         })
-         return navigate({ type: "home" })
-       })
-   })
+  createEffect(async () => {
+    await sync.session
+      .sync(route.sessionID)
+      .then(() => {
+        if (scroll) scroll.scrollBy(100_000)
+      })
+      .catch((e) => {
+        console.error(e)
+        toast.show({
+          message: `Session not found: ${route.sessionID}`,
+          variant: "error",
+        })
+        return navigate({ type: "home" })
+      })
+  })
 
-   const toast = useToast()
-   const sdk = useSDK()
+  const toast = useToast()
+  const sdk = useSDK()
 
-   // Handle initial prompt from fork
-   createEffect(() => {
-     if (route.initialPrompt && prompt) {
-       prompt.set(route.initialPrompt)
-     }
-   })
+  // Handle initial prompt from fork
+  createEffect(() => {
+    if (route.initialPrompt && prompt) {
+      prompt.set(route.initialPrompt)
+    }
+  })
 
   // Auto-navigate to whichever session currently needs permission input
   createEffect(() => {
