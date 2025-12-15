@@ -27,18 +27,21 @@ export const DialogManageModels: Component = () => {
         }}
         onSelect={(x) => {
           if (!x) return
-          local.model.setVisibility({ modelID: x.id, providerID: x.provider.id }, !x.visible)
+          const visible = local.model.visible({ modelID: x.id, providerID: x.provider.id })
+          local.model.setVisibility({ modelID: x.id, providerID: x.provider.id }, !visible)
         }}
       >
         {(i) => (
           <div class="w-full flex items-center justify-between gap-x-2.5">
             <span>{i.name}</span>
-            <Switch
-              checked={!!i.visible}
-              onChange={(checked) => {
-                local.model.setVisibility({ modelID: i.id, providerID: i.provider.id }, checked)
-              }}
-            />
+            <div onClick={(e) => e.stopPropagation()}>
+              <Switch
+                checked={!!local.model.visible({ modelID: i.id, providerID: i.provider.id })}
+                onChange={(checked) => {
+                  local.model.setVisibility({ modelID: i.id, providerID: i.provider.id }, checked)
+                }}
+              />
+            </div>
           </div>
         )}
       </List>
