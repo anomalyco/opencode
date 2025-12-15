@@ -64,7 +64,8 @@
   "dependencies": {
     "@aws-sdk/client-s3": "3.933.0",
     "@forge/script": "workspace:*",
-    "@forge/sdk": "workspace:*"
+    "@forge/sdk": "workspace:*",
+    "toml": "3.0.0"
   },
   "repository": {
     "type": "git",

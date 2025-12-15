@@ -1,0 +1,46 @@
+name = "VT Code"
+description = "Rust-based coding agent with ACP support"
+command = "vtcode"
+args = ["acp"]
+install_guide = "https://github.com/vinhnx/vtcode"
+color = "#888888"
+
+[[install_commands.unix]]
+method = "curl"
+command = "curl -fsSL https://raw.githubusercontent.com/vinhnx/vtcode/main/scripts/install.sh | bash"
+description = "Install via official script"
+
+[[install_commands.unix]]
+method = "brew"
+command = "brew install vinhnx/tap/vtcode"
+description = "Install via Homebrew"
+
+[[install_commands.unix]]
+method = "cargo"
+command = "cargo install vtcode"
+description = "Install via Cargo"
+
+[[install_commands.windows]]
+method = "powershell"
+command = "irm https://raw.githubusercontent.com/vinhnx/vtcode/main/scripts/install.ps1 | iex"
+description = "Install via PowerShell script"
+
+[[install_commands.windows]]
+method = "cargo"
+command = "cargo install vtcode"
+description = "Install via Cargo"
+
+[[uninstall_commands.unix]]
+method = "brew"
+command = "brew uninstall vinhnx/tap/vtcode"
+description = "Uninstall via Homebrew"
+
+[[uninstall_commands.unix]]
+method = "cargo"
+command = "cargo uninstall vtcode"
+description = "Uninstall via Cargo"
+
+[[uninstall_commands.windows]]
+method = "cargo"
+command = "cargo uninstall vtcode"
+description = "Uninstall via Cargo"

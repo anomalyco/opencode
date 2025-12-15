@@ -1,0 +1,7 @@
+name = "Docker cagent"
+description = "Docker's container agent (ACP support unclear)"
+install_method = "skip"
+command = ""
+args = []
+install_guide = "https://github.com/docker/cagent"
+

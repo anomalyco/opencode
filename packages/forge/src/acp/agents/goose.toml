@@ -1,0 +1,31 @@
+name = "Goose"
+description = "Block's autonomous coding agent (requires v1.14.2+)"
+command = "goose"
+args = ["acp"]
+install_guide = "https://block.github.io/goose/docs/getting-started/installation"
+color = "#ffffff"
+
+[[install_commands.unix]]
+method = "brew"
+command = "brew install block-goose-cli"
+description = "Install CLI via Homebrew"
+
+[[install_commands.unix]]
+method = "curl"
+command = "curl -fsSL https://github.com/block/goose/releases/download/stable/download_cli.sh | bash"
+description = "Install via official script"
+
+[[install_commands.windows]]
+method = "powershell"
+command = "Invoke-WebRequest -Uri https://github.com/block/goose/releases/download/stable/download_cli.ps1 -OutFile download_cli.ps1; .\\download_cli.ps1"
+description = "Install via PowerShell script"
+
+[[uninstall_commands.unix]]
+method = "brew"
+command = "brew uninstall block-goose-cli"
+description = "Uninstall via Homebrew"
+
+[[uninstall_commands.windows]]
+method = "powershell"
+command = "Write-Output 'Please uninstall Goose CLI manually (no scripted uninstall available)'"
+description = "Manual uninstall required"

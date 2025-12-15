@@ -1,0 +1,27 @@
+name = "Claude Code"
+description = "Anthropic's official Claude Code agent"
+command = "claude-code-acp"
+args = []
+install_guide = "https://github.com/zed-industries/claude-code-acp"
+default = true
+color = "#da7756"
+
+[[install_commands.unix]]
+method = "npm"
+command = "npm install -g @zed-industries/claude-code-acp"
+description = "Install via npm (global)"
+
+[[install_commands.windows]]
+method = "npm"
+command = "npm install -g @zed-industries/claude-code-acp"
+description = "Install via npm (global)"
+
+[[uninstall_commands.unix]]
+method = "npm"
+command = "npm uninstall -g @zed-industries/claude-code-acp"
+description = "Uninstall via npm (global)"
+
+[[uninstall_commands.windows]]
+method = "npm"
+command = "npm uninstall -g @zed-industries/claude-code-acp"
+description = "Uninstall via npm (global)"
