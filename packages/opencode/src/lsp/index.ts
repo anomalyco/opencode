@@ -61,6 +61,22 @@ export namespace LSP {
     })
   export type DocumentSymbol = z.infer<typeof DocumentSymbol>
 
+  const filterExperimentalServers = (servers: Record<string, LSPServer.Info>) => {
+    if (Flag.OPENCODE_EXPERIMENTAL_LSP_TY) {
+      // If experimental flag is enabled, disable pyright
+      if(servers["pyright"]) {
+        log.info("LSP server pyright is disabled because OPENCODE_EXPERIMENTAL_LSP_TY is enabled")
+        delete servers["pyright"]
+      }
+    } else {
+      // If experimental flag is disabled, disable ty
+      if(servers["ty"]) {
+        log.info("LSP server ty is disabled because OPENCODE_EXPERIMENTAL_LSP_TY is disabled")
+        delete servers["ty"]
+      }
+    }
+  }
+
   const state = Instance.state(
     async () => {
       const clients: LSPClient.Info[] = []
@@ -80,6 +96,9 @@ export namespace LSP {
       for (const server of Object.values(LSPServer)) {
         servers[server.id] = server
       }
+
+      filterExperimentalServers(servers)
+
       for (const [name, item] of Object.entries(cfg.lsp ?? {})) {
         const existing = servers[name]
         if (item.disabled) {
@@ -205,10 +224,6 @@ export namespace LSP {
 
     for (const server of Object.values(s.servers)) {
       if (server.extensions.length && !server.extensions.includes(extension)) continue
-      if (extension === ".py" || extension === ".pyi") {
-        if (Flag.OPENCODE_EXPERIMENTAL_LSP_TY && !server.experimental) continue // If experimental flag is enabled and server is not experimental, skip
-        if (!Flag.OPENCODE_EXPERIMENTAL_LSP_TY && server.experimental) continue // If experimental flag is disabled and server is experimental, skip
-      }
 
       const root = await server.root(file)
       if (!root) continue
