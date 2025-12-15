@@ -627,6 +627,7 @@ export const PromptInput: Component<PromptInputProps> = (props) => {
           </div>
           <Tooltip
             placement="top"
+            inactive={!session.prompt.dirty() && !session.working()}
             value={
               <Switch>
                 <Match when={session.working()}>
