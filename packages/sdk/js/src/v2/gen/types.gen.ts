@@ -1413,6 +1413,9 @@ export type Config = {
     build?: AgentConfig
     general?: AgentConfig
     explore?: AgentConfig
+    title?: AgentConfig
+    summary?: AgentConfig
+    compaction?: AgentConfig
     [key: string]: AgentConfig | undefined
   }
   /**
