@@ -34,9 +34,7 @@ interface SingleQuestionProps {
 // Main DialogQuestion - shows list of all questions
 export function DialogQuestion(props: QuestionDialogProps) {
   const dialog = useDialog()
-  const { theme } = useTheme()
   const [answers, setAnswers] = createStore<Answers>(props.initialAnswers ?? {})
-  const [selectRef, setSelectRef] = createSignal<any>()
 
   const questions = () => props.question.questions
   const answeredCount = () =>
@@ -206,17 +204,6 @@ function DialogQuestionSelect(props: SingleQuestionProps) {
         hideSearch={true}
         keybind={[
           {
-            keybind: { name: "escape", ctrl: false, meta: false, shift: false, super: false, leader: false },
-            title: "back",
-            onTrigger: () => {
-              if (props.currentAnswer) {
-                props.onAnswer(props.currentAnswer)
-              } else {
-                props.onCancel()
-              }
-            },
-          },
-          {
             keybind: { name: "m", ctrl: false, meta: false, shift: false, super: false, leader: false },
             title: "add comment",
             onTrigger: () => openComment(),
@@ -314,14 +301,6 @@ function DialogQuestionMultiSelect(props: SingleQuestionProps) {
         onSelect={() => confirmSelection()}
         keybind={[
           {
-            keybind: { name: "escape", ctrl: false, meta: false, shift: false, super: false, leader: false },
-            title: "back",
-            onTrigger: () => {
-              const currentAnswer = { value: getSelectedValues(), comment: comment() }
-              props.onAnswer(currentAnswer)
-            },
-          },
-          {
             keybind: { name: "space", ctrl: false, meta: false, shift: false, super: false, leader: false },
             title: "toggle",
             onTrigger: (option) => setChecked(option.value.value, !checked[option.value.value]),
@@ -386,14 +365,7 @@ function DialogQuestionConfirm(props: SingleQuestionProps) {
   }
 
   useKeyboard((evt) => {
-    if (evt.name === "escape") {
-      if (selected() !== null) {
-        props.onAnswer({ value: selected(), comment: comment() })
-      } else {
-        props.onCancel()
-      }
-      evt.preventDefault()
-    } else if (evt.name === "up" || evt.name === "left" || (evt.ctrl && evt.name === "p")) {
+    if (evt.name === "up" || evt.name === "left" || (evt.ctrl && evt.name === "p")) {
       setSelected(true)
       evt.preventDefault()
     } else if (evt.name === "down" || evt.name === "right" || (evt.ctrl && evt.name === "n")) {
@@ -517,14 +489,7 @@ function DialogQuestionText(props: SingleQuestionProps) {
         const trimmedValue = value.trim()
         props.onAnswer({ value: trimmedValue || null })
       }}
-      onCancel={() => {
-        // Save current value on escape if we have one
-        if (props.currentAnswer?.value) {
-          props.onAnswer(props.currentAnswer)
-        } else {
-          props.onCancel()
-        }
-      }}
+      onCancel={() => props.onCancel()}
     />
   )
 }

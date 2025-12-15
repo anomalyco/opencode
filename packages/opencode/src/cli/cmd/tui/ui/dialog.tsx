@@ -62,7 +62,7 @@ function init() {
       current.onClose?.()
       setStore("stack", store.stack.slice(0, -1))
       evt.preventDefault()
-      refocus()
+      if (store.stack.length === 0) refocus()
     }
   })
 
