@@ -500,17 +500,19 @@ export default function Page() {
                           onMessageSelect={setActiveMessage}
                           wide={wide()}
                         />
-                        <SessionTurn
-                          sessionID={params.id!}
-                          messageID={activeMessage()?.id!}
-                          classes={{
-                            root: "pb-20 flex-1 min-w-0",
-                            content: "pb-20",
-                            container:
-                              "w-full " +
-                              (wide() ? "max-w-146 mx-auto px-6" : userMessages().length > 1 ? "pr-6 pl-18" : "px-6"),
-                          }}
-                        />
+                        <Show when={activeMessage()}>
+                          <SessionTurn
+                            sessionID={params.id!}
+                            messageID={activeMessage()?.id!}
+                            classes={{
+                              root: "pb-20 flex-1 min-w-0",
+                              content: "pb-20",
+                              container:
+                                "w-full " +
+                                (wide() ? "max-w-146 mx-auto px-6" : userMessages().length > 1 ? "pr-6 pl-18" : "px-6"),
+                            }}
+                          />
+                        </Show>
                       </div>
                     </Match>
                     <Match when={true}>
