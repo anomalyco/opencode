@@ -46,9 +46,6 @@ export const { use: useLayout, provider: LayoutProvider } = createSimpleContext(
         review: {
           state: "pane" as "pane" | "tab",
         },
-        steps: {
-          expanded: false,
-        },
         sessionTabs: {} as Record<string, SessionTabs>,
       }),
       {
@@ -162,18 +159,6 @@ export const { use: useLayout, provider: LayoutProvider } = createSimpleContext(
         },
         tab() {
           setStore("review", "state", "tab")
-        },
-      },
-      steps: {
-        expanded: createMemo(() => store.steps?.expanded ?? false),
-        toggle() {
-          setStore("steps", "expanded", (x) => !x)
-        },
-        expand() {
-          setStore("steps", "expanded", true)
-        },
-        collapse() {
-          setStore("steps", "expanded", false)
         },
       },
       tabs(sessionKey: string) {
