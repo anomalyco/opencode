@@ -233,6 +233,19 @@ export default function Page() {
     if (document.activeElement?.dataset?.component === "terminal") return
     if (dialog.stack.length > 0) return
 
+    if (event.key === "PageUp" || event.key === "PageDown") {
+      const scrollContainer = document.querySelector('[data-slot="session-turn-content"]') as HTMLElement
+      if (scrollContainer) {
+        event.preventDefault()
+        const scrollAmount = scrollContainer.clientHeight * 0.8
+        scrollContainer.scrollBy({
+          top: event.key === "PageUp" ? -scrollAmount : scrollAmount,
+          behavior: "instant",
+        })
+      }
+      return
+    }
+
     const focused = document.activeElement === inputRef
     if (focused) {
       if (event.key === "Escape") inputRef?.blur()
