@@ -25,6 +25,11 @@
     "createUpdaterArtifacts": true,
     "macOS": {
       "entitlements": "./entitlements.plist"
+    },
+    "linux": {
+      "rpm": {
+        "postInstallScript": "./scripts/rpm-post-install.sh"
+      }
     }
   },
   "plugins": {
