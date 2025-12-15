@@ -12,6 +12,7 @@ import { GlobalSDKProvider } from "@/context/global-sdk"
 import { SessionProvider } from "@/context/session"
 import { NotificationProvider } from "@/context/notification"
 import { DialogProvider } from "@opencode-ai/ui/context/dialog"
+import { CommandProvider } from "@/context/command"
 import Layout from "@/pages/layout"
 import Home from "@/pages/home"
 import DirectoryLayout from "@/pages/directory-layout"
@@ -40,27 +41,29 @@ export function App() {
           <GlobalSyncProvider>
             <LayoutProvider>
               <DialogProvider>
-                <NotificationProvider>
-                  <MetaProvider>
-                    <Font />
-                    <Router root={Layout}>
-                      <Route path="/" component={Home} />
-                      <Route path="/:dir" component={DirectoryLayout}>
-                        <Route path="/" component={() => <Navigate href="session" />} />
-                        <Route
-                          path="/session/:id?"
-                          component={(p) => (
-                            <Show when={p.params.id || true} keyed>
-                              <SessionProvider>
-                                <Session />
-                              </SessionProvider>
-                            </Show>
-                          )}
-                        />
-                      </Route>
-                    </Router>
-                  </MetaProvider>
-                </NotificationProvider>
+                <CommandProvider>
+                  <NotificationProvider>
+                    <MetaProvider>
+                      <Font />
+                      <Router root={Layout}>
+                        <Route path="/" component={Home} />
+                        <Route path="/:dir" component={DirectoryLayout}>
+                          <Route path="/" component={() => <Navigate href="session" />} />
+                          <Route
+                            path="/session/:id?"
+                            component={(p) => (
+                              <Show when={p.params.id || true} keyed>
+                                <SessionProvider>
+                                  <Session />
+                                </SessionProvider>
+                              </Show>
+                            )}
+                          />
+                        </Route>
+                      </Router>
+                    </MetaProvider>
+                  </NotificationProvider>
+                </CommandProvider>
               </DialogProvider>
             </LayoutProvider>
           </GlobalSyncProvider>

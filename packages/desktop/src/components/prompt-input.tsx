@@ -1,5 +1,5 @@
 import { useFilteredList } from "@opencode-ai/ui/hooks"
-import { createEffect, on, Component, Show, For, onMount, onCleanup, Switch, Match } from "solid-js"
+import { createEffect, on, Component, Show, For, onMount, onCleanup, Switch, Match, createMemo } from "solid-js"
 import { createStore } from "solid-js/store"
 import { makePersisted } from "@solid-primitives/storage"
 import { createFocusSignal } from "@solid-primitives/active-element"
@@ -19,6 +19,7 @@ import { useDialog } from "@opencode-ai/ui/context/dialog"
 import { DialogSelectModel } from "@/components/dialog-select-model"
 import { DialogSelectModelUnpaid } from "@/components/dialog-select-model-unpaid"
 import { useProviders } from "@/hooks/use-providers"
+import { useCommand, formatKeybind } from "@/context/command"
 
 interface PromptInputProps {
   class?: string
@@ -53,6 +54,14 @@ const PLACEHOLDERS = [
   "How do environment variables work here?",
 ]
 
+interface SlashCommand {
+  id: string
+  trigger: string
+  title: string
+  description?: string
+  keybind?: string
+}
+
 export const PromptInput: Component<PromptInputProps> = (props) => {
   const navigate = useNavigate()
   const sdk = useSDK()
@@ -61,18 +70,21 @@ export const PromptInput: Component<PromptInputProps> = (props) => {
   const session = useSession()
   const dialog = useDialog()
   const providers = useProviders()
+  const command = useCommand()
   let editorRef!: HTMLDivElement
 
   const [store, setStore] = createStore<{
-    popoverIsOpen: boolean
+    popover: "file" | "slash" | null
     historyIndex: number
     savedPrompt: Prompt | null
     placeholder: number
+    slashFilter: string
   }>({
-    popoverIsOpen: false,
+    popover: null,
     historyIndex: -1,
     savedPrompt: null,
     placeholder: Math.floor(Math.random() * PLACEHOLDERS.length),
+    slashFilter: "",
   })
 
   const MAX_HISTORY = 100
@@ -157,17 +169,17 @@ export const PromptInput: Component<PromptInputProps> = (props) => {
   }
 
   onMount(() => {
-    editorRef.addEventListener("paste", handlePaste)
+    editorRef?.addEventListener("paste", handlePaste)
   })
   onCleanup(() => {
-    editorRef.removeEventListener("paste", handlePaste)
+    editorRef?.removeEventListener("paste", handlePaste)
   })
 
   createEffect(() => {
     if (isFocused()) {
       handleInput()
     } else {
-      setStore("popoverIsOpen", false)
+      setStore("popover", null)
     }
   })
 
@@ -180,6 +192,53 @@ export const PromptInput: Component<PromptInputProps> = (props) => {
     items: local.file.searchFilesAndDirectories,
     key: (x) => x,
     onSelect: handleFileSelect,
+  })
+
+  // Get slash commands from registered commands (only those with explicit slash trigger)
+  const slashCommands = createMemo<SlashCommand[]>(() =>
+    command.options
+      .filter((opt) => !opt.disabled && !opt.id.startsWith("suggested.") && opt.slash)
+      .map((opt) => ({
+        id: opt.id,
+        trigger: opt.slash!,
+        title: opt.title,
+        description: opt.description,
+        keybind: opt.keybind,
+      })),
+  )
+
+  const handleSlashSelect = (cmd: SlashCommand | undefined) => {
+    if (!cmd) return
+    // Since slash commands only trigger from start, just clear the input
+    editorRef.innerHTML = ""
+    session.prompt.set([{ type: "text", content: "", start: 0, end: 0 }], 0)
+    setStore("popover", null)
+    command.trigger(cmd.id, "slash")
+  }
+
+  const {
+    flat: slashFlat,
+    active: slashActive,
+    onInput: slashOnInput,
+    onKeyDown: slashOnKeyDown,
+  } = useFilteredList<SlashCommand>({
+    items: () => {
+      const filter = store.slashFilter.toLowerCase()
+      return slashCommands().filter(
+        (cmd) =>
+          cmd.trigger.toLowerCase().includes(filter) ||
+          cmd.title.toLowerCase().includes(filter) ||
+          cmd.description?.toLowerCase().includes(filter) ||
+          false,
+      )
+    },
+    key: (x) => x?.id,
+    onSelect: handleSlashSelect,
+  })
+
+  // Update slash filter when store changes
+  createEffect(() => {
+    slashOnInput(store.slashFilter)
   })
 
   createEffect(
@@ -256,11 +315,17 @@ export const PromptInput: Component<PromptInputProps> = (props) => {
     const rawText = rawParts.map((p) => p.content).join("")
 
     const atMatch = rawText.substring(0, cursorPosition).match(/@(\S*)$/)
+    // Slash commands only trigger when / is at the start of input
+    const slashMatch = rawText.match(/^\/(\S*)$/)
+
     if (atMatch) {
       onInput(atMatch[1])
-      setStore("popoverIsOpen", true)
-    } else if (store.popoverIsOpen) {
-      setStore("popoverIsOpen", false)
+      setStore("popover", "file")
+    } else if (slashMatch) {
+      setStore("slashFilter", slashMatch[1])
+      setStore("popover", "slash")
+    } else {
+      setStore("popover", null)
     }
 
     if (store.historyIndex >= 0) {
@@ -294,8 +359,6 @@ export const PromptInput: Component<PromptInputProps> = (props) => {
       const range = selection.getRangeAt(0)
 
       if (atMatch) {
-        // let node: Node | null = range.startContainer
-        // let offset = range.startOffset
         let runningLength = 0
 
         const walker = document.createTreeWalker(editorRef, NodeFilter.SHOW_TEXT, null)
@@ -335,7 +398,7 @@ export const PromptInput: Component<PromptInputProps> = (props) => {
     }
 
     handleInput()
-    setStore("popoverIsOpen", false)
+    setStore("popover", null)
   }
 
   const abort = () =>
@@ -403,8 +466,13 @@ export const PromptInput: Component<PromptInputProps> = (props) => {
   }
 
   const handleKeyDown = (event: KeyboardEvent) => {
-    if (store.popoverIsOpen && (event.key === "ArrowUp" || event.key === "ArrowDown" || event.key === "Enter")) {
-      onKeyDown(event)
+    // Handle popover navigation
+    if (store.popover && (event.key === "ArrowUp" || event.key === "ArrowDown" || event.key === "Enter")) {
+      if (store.popover === "file") {
+        onKeyDown(event)
+      } else {
+        slashOnKeyDown(event)
+      }
       event.preventDefault()
       return
     }
@@ -441,8 +509,8 @@ export const PromptInput: Component<PromptInputProps> = (props) => {
       handleSubmit(event)
     }
     if (event.key === "Escape") {
-      if (store.popoverIsOpen) {
-        setStore("popoverIsOpen", false)
+      if (store.popover) {
+        setStore("popover", null)
       } else if (session.working()) {
         abort()
       }
@@ -470,30 +538,8 @@ export const PromptInput: Component<PromptInputProps> = (props) => {
     }
     if (!existing) return
 
-    // if (!session.id) {
-    // session.layout.setOpenedTabs(
-    // session.layout.copyTabs("", session.id)
-    // }
-
     const toAbsolutePath = (path: string) => (path.startsWith("/") ? path : sync.absolute(path))
     const attachments = prompt.filter((part) => part.type === "file")
-
-    // const activeFile = local.context.active()
-    // if (activeFile) {
-    //   registerAttachment(
-    //     activeFile.path,
-    //     activeFile.selection,
-    //     activeFile.name ?? formatAttachmentLabel(activeFile.path, activeFile.selection),
-    //   )
-    // }
-
-    // for (const contextFile of local.context.all()) {
-    //   registerAttachment(
-    //     contextFile.path,
-    //     contextFile.selection,
-    //     formatAttachmentLabel(contextFile.path, contextFile.selection),
-    //   )
-    // }
 
     const attachmentParts = attachments.map((attachment) => {
       const absolute = toAbsolutePath(attachment.path)
@@ -519,7 +565,6 @@ export const PromptInput: Component<PromptInputProps> = (props) => {
 
     session.layout.setActiveTab(undefined)
     session.messages.setActive(undefined)
-    // Clear the editor DOM directly to ensure it's empty
     editorRef.innerHTML = ""
     session.prompt.set([{ type: "text", content: "", start: 0, end: 0 }], 0)
 
@@ -542,38 +587,66 @@ export const PromptInput: Component<PromptInputProps> = (props) => {
 
   return (
     <div class="relative size-full _max-h-[320px] flex flex-col gap-3">
-      <Show when={store.popoverIsOpen}>
+      {/* Popover for file mentions and slash commands */}
+      <Show when={store.popover}>
         <div
           class="absolute inset-x-0 -top-3 -translate-y-full origin-bottom-left max-h-[252px] min-h-10
                  overflow-auto no-scrollbar flex flex-col p-2 pb-0 rounded-md
                  border border-border-base bg-surface-raised-stronger-non-alpha shadow-md"
         >
-          <Show when={flat().length > 0} fallback={<div class="text-text-weak px-2">No matching files</div>}>
-            <For each={flat()}>
-              {(i) => (
-                <button
-                  classList={{
-                    "w-full flex items-center justify-between rounded-md": true,
-                    "bg-surface-raised-base-hover": active() === i,
-                  }}
-                  onClick={() => handleFileSelect(i)}
-                >
-                  <div class="flex items-center gap-x-2 grow min-w-0">
-                    <FileIcon node={{ path: i, type: "file" }} class="shrink-0 size-4" />
-                    <div class="flex items-center text-14-regular">
-                      <span class="text-text-weak whitespace-nowrap overflow-hidden overflow-ellipsis truncate min-w-0">
-                        {getDirectory(i)}
-                      </span>
-                      <Show when={!i.endsWith("/")}>
-                        <span class="text-text-strong whitespace-nowrap">{getFilename(i)}</span>
+          <Switch>
+            <Match when={store.popover === "file"}>
+              <Show when={flat().length > 0} fallback={<div class="text-text-weak px-2 py-1">No matching files</div>}>
+                <For each={flat()}>
+                  {(i) => (
+                    <button
+                      classList={{
+                        "w-full flex items-center gap-x-2 rounded-md px-2 py-1": true,
+                        "bg-surface-raised-base-hover": active() === i,
+                      }}
+                      onClick={() => handleFileSelect(i)}
+                    >
+                      <FileIcon node={{ path: i, type: "file" }} class="shrink-0 size-4" />
+                      <div class="flex items-center text-14-regular min-w-0">
+                        <span class="text-text-weak whitespace-nowrap truncate min-w-0">{getDirectory(i)}</span>
+                        <Show when={!i.endsWith("/")}>
+                          <span class="text-text-strong whitespace-nowrap">{getFilename(i)}</span>
+                        </Show>
+                      </div>
+                    </button>
+                  )}
+                </For>
+              </Show>
+            </Match>
+            <Match when={store.popover === "slash"}>
+              <Show
+                when={slashFlat().length > 0}
+                fallback={<div class="text-text-weak px-2 py-1">No matching commands</div>}
+              >
+                <For each={slashFlat()}>
+                  {(cmd) => (
+                    <button
+                      classList={{
+                        "w-full flex items-center justify-between gap-4 rounded-md px-2 py-1": true,
+                        "bg-surface-raised-base-hover": slashActive() === cmd.id,
+                      }}
+                      onClick={() => handleSlashSelect(cmd)}
+                    >
+                      <div class="flex items-center gap-2 min-w-0">
+                        <span class="text-14-regular text-text-strong whitespace-nowrap">/{cmd.trigger}</span>
+                        <Show when={cmd.description}>
+                          <span class="text-14-regular text-text-weak truncate">{cmd.description}</span>
+                        </Show>
+                      </div>
+                      <Show when={cmd.keybind}>
+                        <span class="text-12-regular text-text-subtle shrink-0">{formatKeybind(cmd.keybind!)}</span>
                       </Show>
-                    </div>
-                  </div>
-                  <div class="flex items-center gap-x-1 text-text-muted/40 shrink-0"></div>
-                </button>
-              )}
-            </For>
-          </Show>
+                    </button>
+                  )}
+                </For>
+              </Show>
+            </Match>
+          </Switch>
         </div>
       </Show>
       <form
