@@ -133,31 +133,20 @@ export const PromptInput: Component<PromptInputProps> = (props) => {
     })
   }
 
-  const getCaretLineState = () => {
+  const getCaretState = () => {
     const selection = window.getSelection()
-    if (!selection || selection.rangeCount === 0) return { collapsed: false, onFirstLine: false, onLastLine: false }
-    const range = selection.getRangeAt(0)
-    const rect = range.getBoundingClientRect()
-    const editorRect = editorRef.getBoundingClientRect()
-    const style = window.getComputedStyle(editorRef)
-    const paddingTop = parseFloat(style.paddingTop) || 0
-    const paddingBottom = parseFloat(style.paddingBottom) || 0
-    let lineHeight = parseFloat(style.lineHeight)
-    if (!Number.isFinite(lineHeight)) lineHeight = parseFloat(style.fontSize) || 16
-    const scrollTop = editorRef.scrollTop
-    let relativeTop = rect.top - editorRect.top - paddingTop + scrollTop
-    if (!Number.isFinite(relativeTop)) relativeTop = scrollTop
-    relativeTop = Math.max(0, relativeTop)
-    let caretHeight = rect.height
-    if (!caretHeight || !Number.isFinite(caretHeight)) caretHeight = lineHeight
-    const relativeBottom = relativeTop + caretHeight
-    const contentHeight = Math.max(caretHeight, editorRef.scrollHeight - paddingTop - paddingBottom)
-    const threshold = Math.max(2, lineHeight / 2)
-
+    const textLength = promptLength(prompt.current())
+    if (!selection || selection.rangeCount === 0) {
+      return { collapsed: false, cursorPosition: 0, textLength }
+    }
+    const anchorNode = selection.anchorNode
+    if (!anchorNode || !editorRef.contains(anchorNode)) {
+      return { collapsed: false, cursorPosition: 0, textLength }
+    }
     return {
       collapsed: selection.isCollapsed,
-      onFirstLine: relativeTop <= threshold,
-      onLastLine: contentHeight - relativeBottom <= threshold,
+      cursorPosition: getCursorPosition(editorRef),
+      textLength,
     }
   }
 
@@ -505,17 +494,13 @@ export const PromptInput: Component<PromptInputProps> = (props) => {
 
     if (event.key === "ArrowUp" || event.key === "ArrowDown") {
       if (event.altKey || event.ctrlKey || event.metaKey) return
-      const { collapsed, onFirstLine, onLastLine } = getCaretLineState()
+      const { collapsed, cursorPosition, textLength } = getCaretState()
       if (!collapsed) return
-      const cursorPos = getCursorPosition(editorRef)
-      const textLength = promptLength(prompt.current())
       const inHistory = store.historyIndex >= 0
-      const isStart = cursorPos === 0
-      const isEnd = cursorPos === textLength
-      const atAbsoluteStart = onFirstLine && isStart
-      const atAbsoluteEnd = onLastLine && isEnd
-      const allowUp = (inHistory && isEnd) || atAbsoluteStart
-      const allowDown = (inHistory && isStart) || atAbsoluteEnd
+      const atAbsoluteStart = cursorPosition === 0
+      const atAbsoluteEnd = cursorPosition === textLength
+      const allowUp = (inHistory && atAbsoluteEnd) || atAbsoluteStart
+      const allowDown = (inHistory && atAbsoluteStart) || atAbsoluteEnd
 
       if (event.key === "ArrowUp") {
         if (!allowUp) return
