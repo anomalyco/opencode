@@ -12,6 +12,7 @@ import { IconButton } from "@opencode-ai/ui/icon-button"
 import { Tooltip } from "@opencode-ai/ui/tooltip"
 import { Collapsible } from "@opencode-ai/ui/collapsible"
 import { DiffChanges } from "@opencode-ai/ui/diff-changes"
+import { Spinner } from "@opencode-ai/ui/spinner"
 import { getFilename } from "@opencode-ai/util/path"
 import { DropdownMenu } from "@opencode-ai/ui/dropdown-menu"
 import { Session, Project } from "@opencode-ai/sdk/v2/client"
@@ -287,6 +288,11 @@ export default function Layout(props: ParentProps) {
                       const updated = createMemo(() => DateTime.fromMillis(session.time.updated))
                       const notifications = createMemo(() => notification.session.unseen(session.id))
                       const hasError = createMemo(() => notifications().some((n) => n.type === "error"))
+                      const isWorking = createMemo(
+                        () =>
+                          session.id !== params.id &&
+                          globalSync.child(props.project.worktree)[0].session_status[session.id]?.type === "busy",
+                      )
                       async function archive(session: Session) {
                         await globalSDK.client.session.update({
                           directory: session.directory,
@@ -319,6 +325,9 @@ export default function Layout(props: ParentProps) {
                                 </span>
                                 <div class="shrink-0 group-hover/session:hidden group-active/session:hidden group-focus-within/session:hidden">
                                   <Switch>
+                                    <Match when={isWorking()}>
+                                      <Spinner class="size-2.5 mr-0.5" />
+                                    </Match>
                                     <Match when={hasError()}>
                                       <div class="size-1.5 mr-1.5 rounded-full bg-text-diff-delete-base" />
                                     </Match>
