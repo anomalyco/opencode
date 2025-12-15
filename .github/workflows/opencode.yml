@@ -31,30 +31,4 @@ jobs:
           OPENCODE_API_KEY: ${{ secrets.OPENCODE_API_KEY }}
           OPENCODE_PERMISSION: '{"bash": "deny"}'
         with:
-          model: opencode/claude-haiku-4-5
-
-  opencode-smart:
-    if: |
-      contains(github.event.comment.body, ' /soc') ||
-      startsWith(github.event.comment.body, '/soc') ||
-      contains(github.event.comment.body, ' /smart-opencode') ||
-      startsWith(github.event.comment.body, '/smart-opencode')
-    runs-on: blacksmith-4vcpu-ubuntu-2404
-    permissions:
-      id-token: write
-      contents: read
-      pull-requests: read
-      issues: read
-    steps:
-      - name: Checkout repository
-        uses: actions/checkout@v4
-
-      - uses: ./.github/actions/setup-bun
-
-      - name: Run opencode
-        uses: sst/opencode/github@latest
-        env:
-          OPENCODE_API_KEY: ${{ secrets.OPENCODE_API_KEY }}
-          OPENCODE_PERMISSION: '{"bash": "deny"}'
-        with:
           model: opencode/claude-opus-4-5
