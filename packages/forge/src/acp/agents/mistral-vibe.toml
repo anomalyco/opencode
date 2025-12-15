@@ -1,5 +1,5 @@
 name = "Mistral Vibe"
-description = "Mistral AI's coding agent with ACP support"
+description = "CLI coding assistant powered by Mistral's models"
 command = "vibe"
 args = ["--acp"]
 install_guide = "https://github.com/mistralai/mistral-vibe"

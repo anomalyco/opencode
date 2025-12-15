@@ -1,5 +1,5 @@
 name = "Codex CLI"
-description = "Zed's Codex agent for code editing"
+description = "ACP adapter for Codex from Zed Industries"
 command = "codex-acp"
 args = []
 install_guide = "https://github.com/zed-industries/codex-acp"

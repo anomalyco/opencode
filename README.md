@@ -88,13 +88,13 @@ Run `forge agents` to see the full list.
 - Install an agent from the CLI:
 
 ```sh
-forge install <agentName>
+forge install [agent]
 ```
 
 - Uninstall an agent from the CLI:
 
 ```sh
-forge uninstall <agentName>
+forge uninstall [agent]
 ```
 
 ## Usage
@@ -108,8 +108,8 @@ Use `--plan-agent` and `--agent` to split planning and implementation. Both acce
 **Agent parameters**
 
 - `name` (required) - Agent name
-- `model` (optional) - Model identifier (`forge models <agent>` to see options)
-- `mode` (optional) - Session mode (`forge modes <agent>` to see options)
+- `model` (optional) - Model identifier (`forge models [agent]` to see options)
+- `mode` (optional) - Session mode (`forge modes [agent]` to see options)
 
 When `--plan-agent` [exits plan mode](https://agentclientprotocol.com/protocol/session-modes#exiting-plan-modes), Forge automatically switches to `--agent` for implementation.
 
@@ -127,7 +127,7 @@ forge --plan-agent "name=claude model=opus" --agent "name=codex model=gpt-5.1-co
 Commands:
   forge [prompt]            start forge tui  [default]
   forge agents              list all available ACP agents
-  forge models <agentName>  list available models for an ACP agent
+  forge models [agent]  list available models for an ACP agent
   forge upgrade [target]    upgrade forge to the latest or a specific version
 
 Positionals:

@@ -7,6 +7,8 @@ import { AgentCommand } from "./cli/cmd/agent"
 import { AgentsCommand } from "./cli/cmd/agents"
 import { UpgradeCommand } from "./cli/cmd/upgrade"
 import { ModelsCommand } from "./cli/cmd/models"
+import { ModesCommand } from "./cli/cmd/modes"
+import { CheckCommand } from "./cli/cmd/check"
 import { UI } from "./cli/ui"
 import { Installation } from "./installation"
 import { NamedError } from "./util/error"
@@ -91,7 +93,9 @@ const cli = yargs(hideBin(process.argv))
   .command(InstallAgentCommand)
   .command(UninstallAgentCommand)
   .command(AgentsCommand)
+  .command(CheckCommand)
   .command(ModelsCommand)
+  .command(ModesCommand)
   .command(AttachCommand)
   .command(DebugCommand)
   .command(GenerateCommand)

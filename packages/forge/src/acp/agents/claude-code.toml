@@ -1,9 +1,8 @@
 name = "Claude Code"
-description = "Anthropic's official Claude Code agent"
+description = "ACP adapter for Claude Code Zed Industries"
 command = "claude-code-acp"
 args = []
 install_guide = "https://github.com/zed-industries/claude-code-acp"
-default = true
 color = "#da7756"
 
 [[install_commands.unix]]

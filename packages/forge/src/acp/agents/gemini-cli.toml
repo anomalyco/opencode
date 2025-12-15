@@ -1,5 +1,5 @@
 name = "Gemini CLI"
-description = "Google's Gemini code assistant (recommended for ACP testing)"
+description = "Brings the power of Gemini directly into your terminal"
 command = "gemini"
 args = ["--experimental-acp"]
 install_guide = "https://github.com/google-gemini/gemini-cli"
