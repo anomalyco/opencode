@@ -87,9 +87,9 @@ export const { use: useLocal, provider: LocalProvider } = createSimpleContext({
     const agent = iife(() => {
       const agents = createMemo(() => getAllAgents())
       const [agentStore, setAgentStore] = createStore<{
-        current: string
+        current: string | null
       }>({
-        current: kv.get("agent", DEFAULT_AGENT.name),
+        current: kv.get("agent", null),
       })
       let lastSyncedAgent: { sessionID: string; agent: string } | null = null
       let connectVersion = 0
@@ -108,7 +108,8 @@ export const { use: useLocal, provider: LocalProvider } = createSimpleContext({
           return agents()
         },
         current() {
-          return agents().find((x) => x.name === agentStore.current)!
+          if (!agentStore.current) return null
+          return agents().find((x) => x.name === agentStore.current) ?? null
         },
         async set(agentName: string) {
           setSessionStore({
@@ -263,7 +264,10 @@ export const { use: useLocal, provider: LocalProvider } = createSimpleContext({
             setAgentStore("current", value.name)
           })
         },
-        color(agentName: string) {
+        color(agentName: string | null) {
+          if (!agentName) {
+            return theme.textMuted
+          }
           const agentDef = getAgent(agentName)
           if (agentDef?.color) {
             return RGBA.fromHex(agentDef.color)
@@ -286,6 +290,7 @@ export const { use: useLocal, provider: LocalProvider } = createSimpleContext({
         const sessionID = currentSessionID()
         if (!sessionID) return
         const agentName = agentStore.current
+        if (!agentName) return // Don't sync null agent to server
         if (lastSyncedAgent && lastSyncedAgent.sessionID === sessionID && lastSyncedAgent.agent === agentName) return
 
         try {

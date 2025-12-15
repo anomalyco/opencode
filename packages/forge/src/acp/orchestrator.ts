@@ -27,7 +27,7 @@ const log = Log.create({ service: "acp-orchestrator" })
 export namespace ACPOrchestrator {
   interface SessionState {
     sessionID: string
-    agent: ACPAgentDefinition
+    agent: ACPAgentDefinition | null
     client: ACPClient.Instance | null
     acpSessionID: string | null
     models?: SessionModelState
@@ -124,20 +124,15 @@ export namespace ACPOrchestrator {
 
   /**
    * Ensure session state exists and client is ready for the current agent.
+   * Throws an error if no agent has been set for this session.
    */
   async function ensureClient(sessionID: string): Promise<SessionState> {
-    let state = sessions.get(sessionID)
+    const state = sessions.get(sessionID)
 
-    if (!state) {
-      state = {
-        sessionID,
-        agent: DEFAULT_AGENT,
-        client: null,
-        acpSessionID: null,
-        modes: undefined,
-        models: undefined,
-      }
-      sessions.set(sessionID, state)
+    if (!state || !state.agent) {
+      throw new Error(
+        "No agent selected. Please select an agent before sending a prompt."
+      )
     }
 
     if (state.client && state.acpSessionID) {
@@ -174,7 +169,7 @@ export namespace ACPOrchestrator {
         models: undefined,
       }
 
-    if (state.agent.name === agentDef.name && state.client && state.acpSessionID) {
+    if (state.agent && state.agent.name === agentDef.name && state.client && state.acpSessionID) {
       return state
     }
 
@@ -200,7 +195,7 @@ export namespace ACPOrchestrator {
   export async function setMode(sessionID: string, modeId: string): Promise<void> {
     const state = await ensureClient(sessionID)
     if (!state.modes?.availableModes?.some((m) => m.id === modeId)) {
-      throw new Error(`Mode not available for agent ${state.agent.name}: ${modeId}`)
+      throw new Error(`Mode not available for agent ${state.agent!.name}: ${modeId}`)
     }
 
     log.info("changing mode", { sessionID, modeId })
@@ -228,7 +223,7 @@ export namespace ACPOrchestrator {
   export async function setModel(sessionID: string, modelId: string): Promise<void> {
     const state = await ensureClient(sessionID)
     if (!state.models?.availableModels?.some((m) => m.modelId === modelId)) {
-      throw new Error(`Model not available for agent ${state.agent.name}: ${modelId}`)
+      throw new Error(`Model not available for agent ${state.agent!.name}: ${modelId}`)
     }
 
     log.info("changing model", { sessionID, modelId })
@@ -256,6 +251,10 @@ export namespace ACPOrchestrator {
 
   async function createClientForState(state: SessionState) {
     const { sessionID, agent } = state
+
+    if (!agent) {
+      throw new Error("Cannot create client without an agent")
+    }
 
     const client = await ACPClient.create({
       command: agent.command,
@@ -407,7 +406,7 @@ export namespace ACPOrchestrator {
   }
 
   async function publishModeChange(sessionID: string, state: SessionState, previousModeId: string | null) {
-    if (!state.modes?.currentModeId) return
+    if (!state.modes?.currentModeId || !state.agent) return
 
     try {
       await Bus.publish(SessionMode.Event.Changed, {

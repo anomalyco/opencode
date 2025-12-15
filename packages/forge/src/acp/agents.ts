@@ -107,7 +107,7 @@ export const ACP_AGENTS: ACPAgentDefinition[] = [
   },
   {
     name: "Gemini CLI",
-    description: "Google's Gemini code assistant (recommended for ACP testing)",
+    description: "Brings the power of Gemini directly into your terminal",
     command: "gemini",
     acpStartupArgs: ["--experimental-acp"],
     installCommands: {
@@ -192,7 +192,7 @@ export const ACP_AGENTS: ACPAgentDefinition[] = [
   },
   {
     name: "Fast Agent",
-    description: "Framework for multimodal agents with ACP support (requires Python 3.13+)",
+    description: "Define, Prompt and Test MCP enabled Agents and Workflows",
     command: "fast-agent",
     acpStartupArgs: ["acp"],
     installCommands: {
@@ -232,7 +232,7 @@ export const ACP_AGENTS: ACPAgentDefinition[] = [
   },
   {
     name: "OpenHands",
-    description: "All-Hands AI's autonomous coding agent (experimental ACP)",
+    description: "Lightweight, modern CLI to interact with the OpenHands agent",
     command: "openhands",
     acpStartupArgs: ["acp"],
     installCommands: {
@@ -272,7 +272,7 @@ export const ACP_AGENTS: ACPAgentDefinition[] = [
   },
   {
     name: "Mistral Vibe",
-    description: "Mistral AI's coding agent with ACP support",
+    description: "CLI coding assistant powered by Mistral's models",
     command: "vibe",
     acpStartupArgs: ["--acp"],
     installCommands: {
@@ -368,7 +368,7 @@ export const ACP_AGENTS: ACPAgentDefinition[] = [
   },
   {
     name: "Goose",
-    description: "Block's autonomous coding agent (requires v1.14.2+)",
+    description: "Block's autonomous coding agent",
     command: "goose",
     acpStartupArgs: ["acp"],
     installCommands: {
@@ -489,7 +489,7 @@ export const ACP_AGENTS: ACPAgentDefinition[] = [
   },
   {
     name: "Stakpak",
-    description: "Stakpak's AI development agent",
+    description: "Open source AI DevOps Agent",
     command: "stakpak",
     acpStartupArgs: ["acp"],
     installCommands: {
@@ -755,8 +755,6 @@ export function getAllAgents(): ACPAgentDefinition[] {
   return ACP_AGENTS
 }
 
-// Export the default agent (Claude Code)
-export const DEFAULT_AGENT = ACP_AGENTS.find((agent) => agent.name === "Claude Code")!
-if (!DEFAULT_AGENT) {
-  throw new Error("Default agent 'Claude Code' not found in ACP_AGENTS")
-}
+// No default agent - user must select on first launch
+// After selection, their choice is stored in KV as the default for future sessions
+export const DEFAULT_AGENT: ACPAgentDefinition | null = null

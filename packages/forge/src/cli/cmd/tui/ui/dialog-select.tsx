@@ -29,7 +29,9 @@ export interface DialogSelectProps<T> {
 export interface DialogSelectOption<T = any> {
   title: string
   value: T
+  description?: JSX.Element | string
   footer?: JSX.Element | string
+  needsInstall?: boolean
   category?: string
   disabled?: boolean
   bg?: RGBA
@@ -223,7 +225,9 @@ export function DialogSelect<T>(props: DialogSelectProps<T>) {
                     >
                       <Option
                         title={option.title}
+                        description={option.description}
                         footer={option.footer}
+                        needsInstall={option.needsInstall}
                         active={active()}
                         current={current()}
                       />
@@ -253,9 +257,11 @@ export function DialogSelect<T>(props: DialogSelectProps<T>) {
 
 function Option(props: {
   title: string
+  description?: JSX.Element | string
+  footer?: JSX.Element | string
   active?: boolean
   current?: boolean
-  footer?: JSX.Element | string
+  needsInstall?: boolean
   onMouseOver?: () => void
 }) {
   const { theme } = useTheme()
@@ -272,19 +278,42 @@ function Option(props: {
         </text>
       </Show>
       <text
-        flexGrow={1}
+        flexShrink={0}
         fg={props.active ? theme.background : props.current ? theme.primary : theme.text}
         attributes={props.active ? TextAttributes.BOLD : undefined}
         overflow="hidden"
         wrapMode="none"
-        paddingLeft={3}
       >
-        {Locale.truncate(props.title, 62)}
+        {props.title}
       </text>
+      <Show when={props.description}>
+        <text
+          flexGrow={1}
+          fg={props.active ? theme.background : theme.textMuted}
+          overflow="hidden"
+          wrapMode="none"
+          marginLeft={1}
+        >
+          {props.description}
+        </text>
+      </Show>
       <Show when={props.footer}>
-        <box flexShrink={0}>
-          <text fg={props.active ? theme.background : theme.textMuted}>{props.footer}</text>
-        </box>
+        <text
+          flexShrink={0}
+          fg={props.active ? theme.background : theme.textMuted}
+          marginLeft={1}
+        >
+          {props.footer}
+        </text>
+      </Show>
+      <Show when={props.needsInstall}>
+        <text
+          flexShrink={0}
+          fg={props.active ? theme.background : theme.textMuted}
+          marginLeft={1}
+        >
+          ⬇ Install
+        </text>
       </Show>
     </>
   )

@@ -48,7 +48,13 @@ export namespace SessionPromptACP {
   export const prompt = fn(PromptInput, async (input) => {
     const session = await Session.get(input.sessionID)
     const existingState = ACPOrchestrator.getState(input.sessionID)
-    const state = existingState ?? (await ACPOrchestrator.setAgent(input.sessionID, DEFAULT_AGENT.name))
+
+    // Ensure agent is selected - throw error if not
+    if (!existingState || !existingState.agent) {
+      throw new Error("No agent selected. Please select an agent before sending a prompt.")
+    }
+
+    const state = existingState
     await Session.touch(input.sessionID)
 
     // Create user message
@@ -60,7 +66,7 @@ export namespace SessionPromptACP {
       time: {
         created: Date.now(),
       },
-      agent: state.agent.name,
+      agent: state.agent!.name,
       model: {
         providerID: "acp",
         modelID: state.models?.currentModelId ?? "default",

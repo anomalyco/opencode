@@ -168,11 +168,13 @@ function App() {
   const args = useArgs()
   const initialAgent = () => (args.agents && args.agents.length > 0 ? (args.agents[0] as AgentFlag) : undefined)
   onMount(async () => {
-    // Handle agent selection with matching and fallback (use first entry)
-    let agentToUse: string
+    // Handle agent selection - only set if explicitly provided via args or already stored
     const targetAgent = initialAgent()?.name
     const targetModel = initialAgent()?.model
     const targetMode = initialAgent()?.mode
+
+    let agentToUse: string | null = null
+
     if (targetAgent) {
       const agentResult = matchAgent(targetAgent)
       if (!agentResult.success) {
@@ -180,7 +182,7 @@ function App() {
           const matchNames = agentResult.matches.map((a) => a.name).join(", ")
           toast.show({
             variant: "warning",
-            message: `Ambiguous agent '${targetAgent}'. Matches: ${matchNames}. Using default.`,
+            message: `Ambiguous agent '${targetAgent}'. Matches: ${matchNames}. Please select manually.`,
             duration: 5000,
           })
         } else {
@@ -189,18 +191,25 @@ function App() {
             .join(", ")
           toast.show({
             variant: "warning",
-            message: `Agent '${targetAgent}' not found. Available: ${available}. Using default.`,
+            message: `Agent '${targetAgent}' not found. Available: ${available}. Please select manually.`,
             duration: 5000,
           })
         }
-        agentToUse = local.agent.current().name
       } else {
         agentToUse = agentResult.match.name
       }
     } else {
-      agentToUse = local.agent.current().name
+      // Use stored agent from KV if it exists
+      const storedAgent = local.agent.current()
+      if (storedAgent) {
+        agentToUse = storedAgent.name
+      }
     }
-    await local.agent.set(agentToUse)
+
+    // Only set agent if we have one to set
+    if (agentToUse) {
+      await local.agent.set(agentToUse)
+    }
 
     // Handle model selection with matching and fallback (only if agent is connected)
     if (targetModel) {
@@ -329,7 +338,7 @@ function App() {
       },
     },
     {
-      title: "Switch agent",
+      title: "Select agent",
       value: "agent.list",
       keybind: "agent_list",
       category: "Agent",
@@ -338,7 +347,7 @@ function App() {
       },
     },
     {
-      title: "Switch model",
+      title: "Select model",
       value: "model.list",
       keybind: "model_list",
       category: "Model",
@@ -572,9 +581,9 @@ function App() {
             <text fg={theme.textMuted} paddingRight={1}>
               tab
             </text>
-            <text fg={local.agent.color(local.agent.current().name)}>{""}</text>
-            <text bg={local.agent.color(local.agent.current().name)} fg={theme.background} wrapMode={undefined}>
-              <span style={{ bold: true }}> {local.agent.current().name.toUpperCase()}</span>
+            <text fg={local.agent.color(local.agent.current()!.name)}>{""}</text>
+            <text bg={local.agent.color(local.agent.current()!.name)} fg={theme.background} wrapMode={undefined}>
+              <span style={{ bold: true }}> {local.agent.current()!.name.toUpperCase()}</span>
               <span> AGENT </span>
             </text>
           </box>

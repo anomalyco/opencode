@@ -936,7 +936,7 @@ export namespace Server {
           const body = c.req.valid("json")
           const state = await ACPOrchestrator.setAgent(sessionID, body.agent)
           return c.json({
-            agent: state.agent.name,
+            agent: state.agent?.name ?? "unknown",
             modes: state.modes ?? null,
             models: state.models ?? null,
           })
@@ -983,7 +983,7 @@ export namespace Server {
           await ACPOrchestrator.setMode(sessionID, body.mode)
           const state = ACPOrchestrator.getState(sessionID)
           return c.json({
-            agent: state?.agent.name ?? "unknown",
+            agent: state?.agent?.name ?? "unknown",
             modes: state?.modes ?? null,
             models: state?.models ?? null,
           })
@@ -1030,7 +1030,7 @@ export namespace Server {
           await ACPOrchestrator.setModel(sessionID, body.model)
           const state = ACPOrchestrator.getState(sessionID)
           return c.json({
-            agent: state?.agent.name ?? "unknown",
+            agent: state?.agent?.name ?? "unknown",
             modes: state?.modes ?? null,
             models: state?.models ?? null,
           })

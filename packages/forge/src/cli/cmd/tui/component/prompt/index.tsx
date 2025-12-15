@@ -72,7 +72,7 @@ export function Prompt(props: PromptProps) {
   const log = Log.Default
   const toast = useToast()
   const isSwitchingAgent = () => local.session.switching
-  const switchingAgentName = () => local.session.switchingTo ?? local.agent.current().name
+  const switchingAgentName = () => local.session.switchingTo ?? local.agent.current()?.name ?? "agent"
   const [serverSyncing, setServerSyncing] = createSignal(false)
   const isInitializing = () => isSwitchingAgent() || serverSyncing()
   let agentQueue: AgentQueueContext | null = null
@@ -108,7 +108,7 @@ export function Prompt(props: PromptProps) {
   const agentEntries = () => args.agents ?? []
 
   async function syncLocalFromApplied(applied: { agent: string; model: string | null; modeId: string | null }) {
-    if (local.agent.current().name !== applied.agent) {
+    if (local.agent.current()?.name !== applied.agent) {
       await local.agent.set(applied.agent)
     }
     if (applied.model && local.model.current() !== applied.model) {
@@ -524,6 +524,18 @@ export function Prompt(props: PromptProps) {
     if (props.disabled) return
     if (autocomplete.visible) return
     if (!store.prompt.input) return
+
+    // Block submission if no agent selected
+    const currentAgent = local.agent.current()
+    if (!currentAgent) {
+      toast.show({
+        variant: "warning",
+        message: "Please select an agent before sending a prompt",
+        duration: 3000,
+      })
+      return
+    }
+
     const ready = await waitForAgentReady()
     if (!ready) return
     const createdSession = !props.sessionID
@@ -532,7 +544,18 @@ export function Prompt(props: PromptProps) {
     }
     let sessionID = props.sessionID
     try {
-      sessionID = props.sessionID ? props.sessionID : await sdk.client.session.create({}).then((x) => x.data!.id)
+      if (!props.sessionID) {
+        const newSessionID = await sdk.client.session.create({}).then((x) => x.data!.id)
+        sessionID = newSessionID
+
+        // Sync current agent to newly created session
+        await sdk.client.session.agent({
+          path: { id: newSessionID },
+          body: { agent: currentAgent.name },
+        })
+      } else {
+        sessionID = props.sessionID
+      }
     } catch (error) {
       if (createdSession) setServerSyncing(false)
       throw error
@@ -568,7 +591,7 @@ export function Prompt(props: PromptProps) {
             id: sessionID,
           },
           body: {
-            agent: local.agent.current().name,
+            agent: currentAgent.name,
             command: inputText,
           },
         })
@@ -589,7 +612,7 @@ export function Prompt(props: PromptProps) {
         body: {
           command: command.slice(1),
           arguments: args.join(" "),
-          agent: local.agent.current().name,
+          agent: currentAgent.name,
           model: local.model.current() ?? undefined,
           messageID,
         },
@@ -695,7 +718,8 @@ export function Prompt(props: PromptProps) {
   const highlight = createMemo(() => {
     if (keybind.leader) return theme.border
     if (store.mode === "shell") return theme.primary
-    return local.agent.color(local.agent.current().name)
+    const currentAgent = local.agent.current()
+    return local.agent.color(currentAgent?.name ?? null)
   })
 
   createEffect(() => {
@@ -745,7 +769,9 @@ export function Prompt(props: PromptProps) {
             <textarea
               placeholder={
                 props.showPlaceholder
-                  ? t`${dim(fg(theme.primary)("  → up/down"))} ${dim(fg("#64748b")("history"))} ${dim(fg("#a78bfa")("•"))} ${dim(fg(theme.primary)(keybind.print("input_newline")))} ${dim(fg("#64748b")("newline"))} ${dim(fg("#a78bfa")("•"))} ${dim(fg(theme.primary)(keybind.print("input_submit")))} ${dim(fg("#64748b")("submit"))}`
+                  ? local.agent.current()
+                    ? t`${dim(fg(theme.primary)("  → up/down"))} ${dim(fg("#64748b")("history"))} ${dim(fg("#a78bfa")("•"))} ${dim(fg(theme.primary)(keybind.print("input_newline")))} ${dim(fg("#64748b")("newline"))} ${dim(fg("#a78bfa")("•"))} ${dim(fg(theme.primary)(keybind.print("input_submit")))} ${dim(fg("#64748b")("submit"))}`
+                    : t`${dim(fg(theme.textMuted)("Select an agent to begin"))}`
                   : undefined
               }
               textColor={theme.text}
@@ -938,7 +964,7 @@ export function Prompt(props: PromptProps) {
                 }
               >
                 <text fg={highlight()}>
-                  {store.mode === "shell" ? "Shell" : Locale.titlecase(local.agent.current().name)}{" "}
+                  {store.mode === "shell" ? "Shell" : (local.agent.current()?.name ? Locale.titlecase(local.agent.current()!.name) : "No agent selected")}{" "}
                 </text>
                 <Show when={store.mode === "normal" && local.model.current()}>
                   <text flexShrink={0} fg={theme.text}>

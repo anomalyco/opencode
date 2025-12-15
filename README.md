@@ -66,7 +66,6 @@ Forge supports all agents listed at [agentclientprotocol.com/overview/agents](ht
 - [Claude Code](https://docs.anthropic.com/en/docs/claude-code/overview) (via Zed's SDK adapter)
 - [Codex CLI](https://developers.openai.com/codex/cli) (via Zed's adapter)
 - [Code Assistant](https://github.com/stippi/code-assistant?tab=readme-ov-file#configuration)
-- [Docker's cagent](https://github.com/docker/cagent)
 - [fast-agent](https://fast-agent.ai/acp)
 - [Gemini CLI](https://github.com/google-gemini/gemini-cli)
 - [Goose](https://block.github.io/goose/docs/guides/acp-clients)

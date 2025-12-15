@@ -77,8 +77,8 @@ export function Home() {
       <Logo />
       <box width={39}>
         <HelpRow keybind="command_list">Commands</HelpRow>
-        <HelpRow keybind="agent_list">Switch agent</HelpRow>
-        <HelpRow keybind="model_list">Switch model</HelpRow>
+        <HelpRow keybind="agent_list">Select agent</HelpRow>
+        <HelpRow keybind="model_list">Select model</HelpRow>
         <HelpRow keybind="session_list">List sessions</HelpRow>
       </box>
       <box width="100%" maxWidth={75} zIndex={1000} paddingTop={1}>
