@@ -23,12 +23,9 @@
   max-width: 23rem;
   overflow: hidden;
   border-radius: var(--radius-md);
-  border-width: 1px;
-  border-style: solid;
-  border-color: var(--border-weak-base);
   background-color: var(--surface-raised-stronger-non-alpha);
   padding: 2px;
-  box-shadow: var(--shadow-xs);
+  box-shadow: var(--shadow-xs-border);
   z-index: 50;
 
   &[data-closed] {
