@@ -138,7 +138,7 @@ function DialogCommand(props: { options: CommandOption[] }) {
         search={{ placeholder: "Search commands", autofocus: true }}
         emptyMessage="No commands found"
         items={() => props.options.filter((x) => !x.id.startsWith("suggested.") || !x.disabled)}
-        key={(x) => x.id}
+        key={(x) => x?.id}
         groupBy={(x) => x.category ?? ""}
         onSelect={(option) => {
           if (option) {

@@ -27,22 +27,91 @@ import {
 import type { DragEvent, Transformer } from "@thisbeyond/solid-dnd"
 import type { JSX } from "solid-js"
 import { useSync } from "@/context/sync"
-import { useSession, type LocalPTY } from "@/context/session"
+import { useTerminal, type LocalPTY } from "@/context/terminal"
 import { useLayout } from "@/context/layout"
+import { usePrompt } from "@/context/prompt"
 import { getDirectory, getFilename } from "@opencode-ai/util/path"
 import { Terminal } from "@/components/terminal"
 import { checksum } from "@opencode-ai/util/encode"
 import { useDialog } from "@opencode-ai/ui/context/dialog"
 import { DialogSelectFile } from "@/components/dialog-select-file"
 import { useCommand } from "@/context/command"
+import { useParams } from "@solidjs/router"
+import { pipe, sumBy } from "remeda"
+import { AssistantMessage, UserMessage } from "@opencode-ai/sdk/v2"
 
 export default function Page() {
   const layout = useLayout()
   const local = useLocal()
   const sync = useSync()
-  const session = useSession()
+  const terminal = useTerminal()
+  const prompt = usePrompt()
   const dialog = useDialog()
   const command = useCommand()
+  const params = useParams()
+
+  // Session-specific derived state
+  const sessionKey = createMemo(() => `${params.dir}${params.id ? "/" + params.id : ""}`)
+  const tabs = createMemo(() => layout.tabs(sessionKey()))
+
+  const info = createMemo(() => (params.id ? sync.session.get(params.id) : undefined))
+  const messages = createMemo(() => (params.id ? (sync.data.message[params.id] ?? []) : []))
+  const userMessages = createMemo(() =>
+    messages()
+      .filter((m) => m.role === "user")
+      .sort((a, b) => a.id.localeCompare(b.id)),
+  )
+  const lastUserMessage = createMemo(() => userMessages()?.at(-1))
+
+  const [messageStore, setMessageStore] = createStore<{ messageId?: string }>({})
+  const activeMessage = createMemo(() => {
+    if (!messageStore.messageId) return lastUserMessage()
+    return userMessages()?.find((m) => m.id === messageStore.messageId)
+  })
+  const setActiveMessage = (message: UserMessage | undefined) => {
+    setMessageStore("messageId", message?.id)
+  }
+
+  const status = createMemo(
+    () =>
+      sync.data.session_status[params.id ?? ""] ?? {
+        type: "idle",
+      },
+  )
+  const working = createMemo(() => status()?.type !== "idle")
+
+  const cost = createMemo(() => {
+    const total = pipe(
+      messages(),
+      sumBy((x) => (x.role === "assistant" ? x.cost : 0)),
+    )
+    return new Intl.NumberFormat("en-US", {
+      style: "currency",
+      currency: "USD",
+    }).format(total)
+  })
+
+  const last = createMemo(
+    () => messages().findLast((x) => x.role === "assistant" && x.tokens.output > 0) as AssistantMessage,
+  )
+  const model = createMemo(() =>
+    last() ? sync.data.provider.all.find((x) => x.id === last().providerID)?.models[last().modelID] : undefined,
+  )
+  const diffs = createMemo(() => (params.id ? (sync.data.session_diff[params.id] ?? []) : []))
+
+  const tokens = createMemo(() => {
+    if (!last()) return
+    const t = last().tokens
+    return t.input + t.output + t.reasoning + t.cache.read + t.cache.write
+  })
+
+  const context = createMemo(() => {
+    const total = tokens()
+    const limit = model()?.limit.context
+    if (!total || !limit) return 0
+    return Math.round((total / limit) * 100)
+  })
+
   const [store, setStore] = createStore({
     clickTimer: undefined as number | undefined,
     activeDraggable: undefined as string | undefined,
@@ -51,9 +120,14 @@ export default function Page() {
   let inputRef!: HTMLDivElement
 
   createEffect(() => {
+    if (!params.id) return
+    sync.session.sync(params.id)
+  })
+
+  createEffect(() => {
     if (layout.terminal.opened()) {
-      if (session.terminal.all().length === 0) {
-        session.terminal.new()
+      if (terminal.all().length === 0) {
+        terminal.new()
       }
     }
   })
@@ -99,7 +173,7 @@ export default function Page() {
       description: "Create a new terminal tab",
       category: "Terminal",
       keybind: "ctrl+shift+`",
-      onSelect: () => session.terminal.new(),
+      onSelect: () => terminal.new(),
     },
   ])
 
@@ -166,11 +240,11 @@ export default function Page() {
   const handleDragOver = (event: DragEvent) => {
     const { draggable, droppable } = event
     if (draggable && droppable) {
-      const currentTabs = session.layout.tabs.all
+      const currentTabs = tabs().all()
       const fromIndex = currentTabs?.indexOf(draggable.id.toString())
       const toIndex = currentTabs?.indexOf(droppable.id.toString())
       if (fromIndex !== toIndex && toIndex !== undefined) {
-        session.layout.moveTab(draggable.id.toString(), toIndex)
+        tabs().move(draggable.id.toString(), toIndex)
       }
     }
   }
@@ -188,11 +262,11 @@ export default function Page() {
   const handleTerminalDragOver = (event: DragEvent) => {
     const { draggable, droppable } = event
     if (draggable && droppable) {
-      const terminals = session.terminal.all()
-      const fromIndex = terminals.findIndex((t) => t.id === draggable.id.toString())
-      const toIndex = terminals.findIndex((t) => t.id === droppable.id.toString())
+      const terminals = terminal.all()
+      const fromIndex = terminals.findIndex((t: LocalPTY) => t.id === draggable.id.toString())
+      const toIndex = terminals.findIndex((t: LocalPTY) => t.id === droppable.id.toString())
       if (fromIndex !== -1 && toIndex !== -1 && fromIndex !== toIndex) {
-        session.terminal.move(draggable.id.toString(), toIndex)
+        terminal.move(draggable.id.toString(), toIndex)
       }
     }
   }
@@ -210,8 +284,8 @@ export default function Page() {
           <Tabs.Trigger
             value={props.terminal.id}
             closeButton={
-              session.terminal.all().length > 1 && (
-                <IconButton icon="close" variant="ghost" onClick={() => session.terminal.close(props.terminal.id)} />
+              terminal.all().length > 1 && (
+                <IconButton icon="close" variant="ghost" onClick={() => terminal.close(props.terminal.id)} />
               )
             }
           >
@@ -326,7 +400,7 @@ export default function Page() {
     return typeof draggable.id === "string" ? draggable.id : undefined
   }
 
-  const wide = createMemo(() => layout.review.state() === "tab" || !session.diffs().length)
+  const wide = createMemo(() => layout.review.state() === "tab" || !diffs().length)
 
   return (
     <div class="relative bg-background-base size-full overflow-x-hidden flex flex-col">
@@ -339,7 +413,7 @@ export default function Page() {
         >
           <DragDropSensors />
           <ConstrainDragYAxis />
-          <Tabs value={session.layout.tabs.active ?? "chat"} onChange={session.layout.openTab}>
+          <Tabs value={tabs().active() ?? "chat"} onChange={tabs().open}>
             <div class="sticky top-0 shrink-0 flex">
               <Tabs.List>
                 <Tabs.Trigger value="chat">
@@ -349,15 +423,15 @@ export default function Page() {
                       value={`${new Intl.NumberFormat("en-US", {
                         notation: "compact",
                         compactDisplay: "short",
-                      }).format(session.usage.tokens() ?? 0)} Tokens`}
+                      }).format(tokens() ?? 0)} Tokens`}
                       class="flex items-center gap-1.5"
                     >
-                      <ProgressCircle percentage={session.usage.context() ?? 0} />
-                      <div class="text-14-regular text-text-weak text-left w-7">{session.usage.context() ?? 0}%</div>
+                      <ProgressCircle percentage={context() ?? 0} />
+                      <div class="text-14-regular text-text-weak text-left w-7">{context() ?? 0}%</div>
                     </Tooltip>
                   </div>
                 </Tabs.Trigger>
-                <Show when={layout.review.state() === "tab" && session.diffs().length}>
+                <Show when={layout.review.state() === "tab" && diffs().length}>
                   <Tabs.Trigger
                     value="review"
                     closeButton={
@@ -367,25 +441,23 @@ export default function Page() {
                     }
                   >
                     <div class="flex items-center gap-3">
-                      <Show when={session.diffs()}>
-                        <DiffChanges changes={session.diffs()} variant="bars" />
+                      <Show when={diffs()}>
+                        <DiffChanges changes={diffs()} variant="bars" />
                       </Show>
                       <div class="flex items-center gap-1.5">
                         <div>Review</div>
-                        <Show when={session.info()?.summary?.files}>
+                        <Show when={info()?.summary?.files}>
                           <div class="text-12-medium text-text-strong h-4 px-2 flex flex-col items-center justify-center rounded-full bg-surface-base">
-                            {session.info()?.summary?.files ?? 0}
+                            {info()?.summary?.files ?? 0}
                           </div>
                         </Show>
                       </div>
                     </div>
                   </Tabs.Trigger>
                 </Show>
-                <SortableProvider ids={session.layout.tabs.all ?? []}>
-                  <For each={session.layout.tabs.all ?? []}>
-                    {(tab) => (
-                      <SortableTab tab={tab} onTabClick={handleTabClick} onTabClose={session.layout.closeTab} />
-                    )}
+                <SortableProvider ids={tabs().all() ?? []}>
+                  <For each={tabs().all() ?? []}>
+                    {(tab) => <SortableTab tab={tab} onTabClick={handleTabClick} onTabClose={tabs().close} />}
                   </For>
                 </SortableProvider>
                 <div class="bg-background-base h-full flex items-center justify-center border-b border-border-weak-base px-3">
@@ -415,27 +487,23 @@ export default function Page() {
                   }}
                 >
                   <Switch>
-                    <Match when={session.id}>
+                    <Match when={params.id}>
                       <div class="flex items-start justify-start h-full min-h-0">
                         <SessionMessageRail
-                          messages={session.messages.user()}
-                          current={session.messages.active()}
-                          onMessageSelect={session.messages.setActive}
+                          messages={userMessages()}
+                          current={activeMessage()}
+                          onMessageSelect={setActiveMessage}
                           wide={wide()}
                         />
                         <SessionTurn
-                          sessionID={session.id!}
-                          messageID={session.messages.active()?.id!}
+                          sessionID={params.id!}
+                          messageID={activeMessage()?.id!}
                           classes={{
                             root: "pb-20 flex-1 min-w-0",
                             content: "pb-20",
                             container:
                               "w-full " +
-                              (wide()
-                                ? "max-w-146 mx-auto px-6"
-                                : session.messages.user().length > 1
-                                  ? "pr-6 pl-18"
-                                  : "px-6"),
+                              (wide() ? "max-w-146 mx-auto px-6" : userMessages().length > 1 ? "pr-6 pl-18" : "px-6"),
                           }}
                         />
                       </div>
@@ -476,7 +544,7 @@ export default function Page() {
                     </div>
                   </div>
                 </div>
-                <Show when={layout.review.state() === "pane" && session.diffs().length}>
+                <Show when={layout.review.state() === "pane" && diffs().length}>
                   <div
                     classList={{
                       "relative grow pt-3 flex-1 min-h-0 border-l border-border-weak-base": true,
@@ -488,7 +556,7 @@ export default function Page() {
                         header: "px-6",
                         container: "px-6",
                       }}
-                      diffs={session.diffs()}
+                      diffs={diffs()}
                       actions={
                         <Tooltip value="Open in tab">
                           <IconButton
@@ -496,7 +564,7 @@ export default function Page() {
                             variant="ghost"
                             onClick={() => {
                               layout.review.tab()
-                              session.layout.setActiveTab("review")
+                              tabs().setActive("review")
                             }}
                           />
                         </Tooltip>
@@ -506,7 +574,7 @@ export default function Page() {
                 </Show>
               </div>
             </Tabs.Content>
-            <Show when={layout.review.state() === "tab" && session.diffs().length}>
+            <Show when={layout.review.state() === "tab" && diffs().length}>
               <Tabs.Content value="review" class="select-text flex flex-col h-full overflow-hidden">
                 <div
                   classList={{
@@ -519,13 +587,13 @@ export default function Page() {
                       header: "px-6",
                       container: "px-6",
                     }}
-                    diffs={session.diffs()}
+                    diffs={diffs()}
                     split
                   />
                 </div>
               </Tabs.Content>
             </Show>
-            <For each={session.layout.tabs.all}>
+            <For each={tabs().all()}>
               {(tab) => {
                 const [file] = createResource(
                   () => tab,
@@ -579,7 +647,7 @@ export default function Page() {
             </Show>
           </DragOverlay>
         </DragDropProvider>
-        <Show when={session.layout.tabs.active}>
+        <Show when={tabs().active()}>
           <div class="absolute inset-x-0 px-6 max-w-146 flex flex-col justify-center items-center z-50 mx-auto bottom-8">
             <PromptInput
               ref={(el) => {
@@ -639,25 +707,21 @@ export default function Page() {
           >
             <DragDropSensors />
             <ConstrainDragYAxis />
-            <Tabs variant="alt" value={session.terminal.active()} onChange={session.terminal.open}>
+            <Tabs variant="alt" value={terminal.active()} onChange={terminal.open}>
               <Tabs.List class="h-10">
-                <SortableProvider ids={session.terminal.all().map((t) => t.id)}>
-                  <For each={session.terminal.all()}>{(terminal) => <SortableTerminalTab terminal={terminal} />}</For>
+                <SortableProvider ids={terminal.all().map((t: LocalPTY) => t.id)}>
+                  <For each={terminal.all()}>{(pty) => <SortableTerminalTab terminal={pty} />}</For>
                 </SortableProvider>
                 <div class="h-full flex items-center justify-center">
                   <Tooltip value="New Terminal" class="flex items-center">
-                    <IconButton icon="plus-small" variant="ghost" iconSize="large" onClick={session.terminal.new} />
+                    <IconButton icon="plus-small" variant="ghost" iconSize="large" onClick={terminal.new} />
                   </Tooltip>
                 </div>
               </Tabs.List>
-              <For each={session.terminal.all()}>
-                {(terminal) => (
-                  <Tabs.Content value={terminal.id}>
-                    <Terminal
-                      pty={terminal}
-                      onCleanup={session.terminal.update}
-                      onConnectError={() => session.terminal.clone(terminal.id)}
-                    />
+              <For each={terminal.all()}>
+                {(pty) => (
+                  <Tabs.Content value={pty.id}>
+                    <Terminal pty={pty} onCleanup={terminal.update} onConnectError={() => terminal.clone(pty.id)} />
                   </Tabs.Content>
                 )}
               </For>
@@ -665,9 +729,9 @@ export default function Page() {
             <DragOverlay>
               <Show when={store.activeTerminalDraggable}>
                 {(draggedId) => {
-                  const terminal = createMemo(() => session.terminal.all().find((t) => t.id === draggedId()))
+                  const pty = createMemo(() => terminal.all().find((t: LocalPTY) => t.id === draggedId()))
                   return (
-                    <Show when={terminal()}>
+                    <Show when={pty()}>
                       {(t) => (
                         <div class="relative p-1 h-10 flex items-center bg-background-stronger text-14-regular">
                           {t().title}

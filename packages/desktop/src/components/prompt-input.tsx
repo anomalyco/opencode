@@ -4,9 +4,10 @@ import { createStore } from "solid-js/store"
 import { makePersisted } from "@solid-primitives/storage"
 import { createFocusSignal } from "@solid-primitives/active-element"
 import { useLocal } from "@/context/local"
-import { ContentPart, DEFAULT_PROMPT, isPromptEqual, Prompt, useSession } from "@/context/session"
+import { ContentPart, DEFAULT_PROMPT, isPromptEqual, Prompt, usePrompt } from "@/context/prompt"
+import { useLayout } from "@/context/layout"
 import { useSDK } from "@/context/sdk"
-import { useNavigate } from "@solidjs/router"
+import { useNavigate, useParams } from "@solidjs/router"
 import { useSync } from "@/context/sync"
 import { FileIcon } from "@opencode-ai/ui/file-icon"
 import { Button } from "@opencode-ai/ui/button"
@@ -67,11 +68,25 @@ export const PromptInput: Component<PromptInputProps> = (props) => {
   const sdk = useSDK()
   const sync = useSync()
   const local = useLocal()
-  const session = useSession()
+  const prompt = usePrompt()
+  const layout = useLayout()
+  const params = useParams()
   const dialog = useDialog()
   const providers = useProviders()
   const command = useCommand()
   let editorRef!: HTMLDivElement
+
+  // Session-derived state
+  const sessionKey = createMemo(() => `${params.dir}${params.id ? "/" + params.id : ""}`)
+  const tabs = createMemo(() => layout.tabs(sessionKey()))
+  const info = createMemo(() => (params.id ? sync.session.get(params.id) : undefined))
+  const status = createMemo(
+    () =>
+      sync.data.session_status[params.id ?? ""] ?? {
+        type: "idle",
+      },
+  )
+  const working = createMemo(() => status()?.type !== "idle")
 
   const [store, setStore] = createStore<{
     popover: "file" | "slash" | null
@@ -111,9 +126,9 @@ export const PromptInput: Component<PromptInputProps> = (props) => {
 
   const promptLength = (prompt: Prompt) => prompt.reduce((len, part) => len + part.content.length, 0)
 
-  const applyHistoryPrompt = (prompt: Prompt, position: "start" | "end") => {
-    const length = position === "start" ? 0 : promptLength(prompt)
-    session.prompt.set(prompt, length)
+  const applyHistoryPrompt = (p: Prompt, position: "start" | "end") => {
+    const length = position === "start" ? 0 : promptLength(p)
+    prompt.set(p, length)
     requestAnimationFrame(() => {
       editorRef.focus()
       setCursorPosition(editorRef, length)
@@ -149,9 +164,9 @@ export const PromptInput: Component<PromptInputProps> = (props) => {
   }
 
   createEffect(() => {
-    session.id
+    params.id
     editorRef.focus()
-    if (session.id) return
+    if (params.id) return
     const interval = setInterval(() => {
       setStore("placeholder", (prev) => (prev + 1) % PLACEHOLDERS.length)
     }, 6500)
@@ -211,7 +226,7 @@ export const PromptInput: Component<PromptInputProps> = (props) => {
     if (!cmd) return
     // Since slash commands only trigger from start, just clear the input
     editorRef.innerHTML = ""
-    session.prompt.set([{ type: "text", content: "", start: 0, end: 0 }], 0)
+    prompt.set([{ type: "text", content: "", start: 0, end: 0 }], 0)
     setStore("popover", null)
     command.trigger(cmd.id, "slash")
   }
@@ -243,7 +258,7 @@ export const PromptInput: Component<PromptInputProps> = (props) => {
 
   createEffect(
     on(
-      () => session.prompt.current(),
+      () => prompt.current(),
       (currentParts) => {
         const domParts = parseFromDOM()
         if (isPromptEqual(currentParts, domParts)) return
@@ -255,7 +270,7 @@ export const PromptInput: Component<PromptInputProps> = (props) => {
         }
 
         editorRef.innerHTML = ""
-        currentParts.forEach((part) => {
+        currentParts.forEach((part: ContentPart) => {
           if (part.type === "text") {
             editorRef.appendChild(document.createTextNode(part.content))
           } else if (part.type === "file") {
@@ -333,7 +348,7 @@ export const PromptInput: Component<PromptInputProps> = (props) => {
       setStore("savedPrompt", null)
     }
 
-    session.prompt.set(rawParts, cursorPosition)
+    prompt.set(rawParts, cursorPosition)
   }
 
   const addPart = (part: ContentPart) => {
@@ -341,8 +356,8 @@ export const PromptInput: Component<PromptInputProps> = (props) => {
     if (!selection || selection.rangeCount === 0) return
 
     const cursorPosition = getCursorPosition(editorRef)
-    const prompt = session.prompt.current()
-    const rawText = prompt.map((p) => p.content).join("")
+    const currentPrompt = prompt.current()
+    const rawText = currentPrompt.map((p: ContentPart) => p.content).join("")
     const textBeforeCursor = rawText.substring(0, cursorPosition)
     const atMatch = textBeforeCursor.match(/@(\S*)$/)
 
@@ -403,7 +418,7 @@ export const PromptInput: Component<PromptInputProps> = (props) => {
 
   const abort = () =>
     sdk.client.session.abort({
-      sessionID: session.id!,
+      sessionID: params.id!,
     })
 
   const addToHistory = (prompt: Prompt) => {
@@ -430,7 +445,7 @@ export const PromptInput: Component<PromptInputProps> = (props) => {
     if (direction === "up") {
       if (entries.length === 0) return false
       if (current === -1) {
-        setStore("savedPrompt", clonePromptParts(session.prompt.current()))
+        setStore("savedPrompt", clonePromptParts(prompt.current()))
         setStore("historyIndex", 0)
         applyHistoryPrompt(entries[0], "start")
         return true
@@ -481,7 +496,7 @@ export const PromptInput: Component<PromptInputProps> = (props) => {
       const { collapsed, onFirstLine, onLastLine } = getCaretLineState()
       if (!collapsed) return
       const cursorPos = getCursorPosition(editorRef)
-      const textLength = promptLength(session.prompt.current())
+      const textLength = promptLength(prompt.current())
       const inHistory = store.historyIndex >= 0
       const isStart = cursorPos === 0
       const isEnd = cursorPos === textLength
@@ -511,7 +526,7 @@ export const PromptInput: Component<PromptInputProps> = (props) => {
     if (event.key === "Escape") {
       if (store.popover) {
         setStore("popover", null)
-      } else if (session.working()) {
+      } else if (working()) {
         abort()
       }
     }
@@ -519,18 +534,18 @@ export const PromptInput: Component<PromptInputProps> = (props) => {
 
   const handleSubmit = async (event: Event) => {
     event.preventDefault()
-    const prompt = session.prompt.current()
-    const text = prompt.map((part) => part.content).join("")
+    const currentPrompt = prompt.current()
+    const text = currentPrompt.map((part: ContentPart) => part.content).join("")
     if (text.trim().length === 0) {
-      if (session.working()) abort()
+      if (working()) abort()
       return
     }
 
-    addToHistory(prompt)
+    addToHistory(currentPrompt)
     setStore("historyIndex", -1)
     setStore("savedPrompt", null)
 
-    let existing = session.info()
+    let existing = info()
     if (!existing) {
       const created = await sdk.client.session.create()
       existing = created.data ?? undefined
@@ -539,7 +554,9 @@ export const PromptInput: Component<PromptInputProps> = (props) => {
     if (!existing) return
 
     const toAbsolutePath = (path: string) => (path.startsWith("/") ? path : sync.absolute(path))
-    const attachments = prompt.filter((part) => part.type === "file")
+    const attachments = currentPrompt.filter(
+      (part: ContentPart) => part.type === "file",
+    ) as import("@/context/prompt").FileAttachmentPart[]
 
     const attachmentParts = attachments.map((attachment) => {
       const absolute = toAbsolutePath(attachment.path)
@@ -563,10 +580,9 @@ export const PromptInput: Component<PromptInputProps> = (props) => {
       }
     })
 
-    session.layout.setActiveTab(undefined)
-    session.messages.setActive(undefined)
+    tabs().setActive(undefined)
     editorRef.innerHTML = ""
-    session.prompt.set([{ type: "text", content: "", start: 0, end: 0 }], 0)
+    prompt.set([{ type: "text", content: "", start: 0, end: 0 }], 0)
 
     sdk.client.session.prompt({
       sessionID: existing.id,
@@ -671,7 +687,7 @@ export const PromptInput: Component<PromptInputProps> = (props) => {
               "[&>[data-type=file]]:text-icon-info-active": true,
             }}
           />
-          <Show when={!session.prompt.dirty()}>
+          <Show when={!prompt.dirty()}>
             <div class="absolute top-0 left-0 px-5 py-3 text-14-regular text-text-weak pointer-events-none">
               Ask anything... "{PLACEHOLDERS[store.placeholder]}"
             </div>
@@ -703,7 +719,7 @@ export const PromptInput: Component<PromptInputProps> = (props) => {
             inactive={!session.prompt.dirty() && !session.working()}
             value={
               <Switch>
-                <Match when={session.working()}>
+                <Match when={working()}>
                   <div class="flex items-center gap-2">
                     <span>Stop</span>
                     <span class="text-icon-base text-12-medium text-[10px]!">ESC</span>
@@ -720,8 +736,8 @@ export const PromptInput: Component<PromptInputProps> = (props) => {
           >
             <IconButton
               type="submit"
-              disabled={!session.prompt.dirty() && !session.working()}
-              icon={session.working() ? "stop" : "arrow-up"}
+              disabled={!prompt.dirty() && !working()}
+              icon={working() ? "stop" : "arrow-up"}
               variant="primary"
               class="h-10 w-8 absolute right-2 bottom-2"
             />
