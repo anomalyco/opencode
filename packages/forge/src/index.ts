@@ -18,7 +18,6 @@ import { GithubCommand } from "./cli/cmd/github"
 import { ExportCommand } from "./cli/cmd/export"
 import { ImportCommand } from "./cli/cmd/import"
 import { AttachCommand } from "./cli/cmd/tui/attach"
-import { TuiThreadCommand } from "./cli/cmd/tui/thread"
 import { TuiSpawnCommand } from "./cli/cmd/tui/spawn"
 import { EOL } from "os"
 import { WebCommand } from "./cli/cmd/web"
@@ -101,13 +100,6 @@ const cli = yargs(hideBin(process.argv))
   .command(ListCommand)
   .command(AgentRunCommand)
 
-const usage = cli.getInternalMethods().getUsageInstance()
-usage.getCommands().splice(0, usage.getCommands().length)
-usage.command("$0", "start TUI", true)
-usage.command("agents", "list all available agents")
-usage.command("<agent> <subcommand>", "manage agent <install|uninstall|check|modes|models>")
-usage.command("<agent> [prompt..]", "run agent with prompt")
-
 cli
   .example("forge", "Start TUI")
   .example("forge claude install", "Install claude")
@@ -120,7 +112,7 @@ cli
     'forge codex "Find all the TODO comments" --plan-agent claude --plan-model opus ',
     "Plan with claude, implement with codex",
   )
-  .middleware(async (opts, y) => {
+  .middleware(async (opts) => {
     if (!opts.help) return
 
     const agent = typeof opts.agent === "string" ? opts.agent : typeof opts._?.[0] === "string" ? opts._[0] : undefined
@@ -130,16 +122,16 @@ cli
     if (agent && !subcommand) {
       const help = await renderAgentRunHelp()
       console.log(help)
-      y.exit(0)
+      process.exit(0)
     }
 
     if (agent && subcommand) {
       console.log(renderAgentManageHelp())
-      y.exit(0)
+      process.exit(0)
     }
 
     console.log(renderTopLevelHelp())
-    y.exit(0)
+    process.exit(0)
   })
   .command({ ...UpgradeCommand, describe: false })
   .command(AttachCommand)

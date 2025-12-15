@@ -2,7 +2,7 @@ import type { Argv } from "yargs"
 import { cmd } from "./cmd"
 import { UI } from "../ui"
 import { EOL } from "os"
-import { matchAgent, getAllAgents, getInstallCommandsForPlatform, getUninstallCommandsForPlatform } from "@/acp/agents"
+import { matchAgent, getAllAgents, getInstallCommandsForPlatform, getUninstallCommandsForPlatform, type ACPAgentDefinition } from "@/acp/agents"
 import { ACPClient } from "@/acp/client"
 import { AuthenticationRequiredError } from "@/acp/types"
 import * as prompts from "@clack/prompts"
@@ -371,7 +371,7 @@ export async function runWithAgent(args: any) {
   })
 }
 
-async function handleInstall(agent: ReturnType<typeof matchAgent>["match"]) {
+async function handleInstall(agent: ACPAgentDefinition) {
   await upgrade()
 
   const commands = getInstallCommandsForPlatform(agent)
@@ -419,7 +419,7 @@ async function handleInstall(agent: ReturnType<typeof matchAgent>["match"]) {
   process.exit(1)
 }
 
-async function handleUninstall(agent: ReturnType<typeof matchAgent>["match"]) {
+async function handleUninstall(agent: ACPAgentDefinition) {
   await upgrade()
 
   const commands = getUninstallCommandsForPlatform(agent)
@@ -470,7 +470,7 @@ async function handleUninstall(agent: ReturnType<typeof matchAgent>["match"]) {
   process.exit(1)
 }
 
-async function handleCheck(agent: ReturnType<typeof matchAgent>["match"]) {
+async function handleCheck(agent: ACPAgentDefinition) {
   const isInstalled = Bun.which(agent.command) !== null
 
   if (isInstalled) {
@@ -483,7 +483,7 @@ async function handleCheck(agent: ReturnType<typeof matchAgent>["match"]) {
   }
 }
 
-async function handleModels(agent: ReturnType<typeof matchAgent>["match"], verbose: boolean) {
+async function handleModels(agent: ACPAgentDefinition, verbose: boolean) {
   let client: ACPClient.Instance | undefined
   try {
     client = await ACPClient.create({
@@ -552,7 +552,7 @@ async function handleModels(agent: ReturnType<typeof matchAgent>["match"], verbo
   }
 }
 
-async function handleModes(agent: ReturnType<typeof matchAgent>["match"], verbose: boolean) {
+async function handleModes(agent: ACPAgentDefinition, verbose: boolean) {
   let client: ACPClient.Instance | undefined
   try {
     client = await ACPClient.create({
