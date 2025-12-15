@@ -9,6 +9,7 @@ import fs from "fs/promises"
 import { Filesystem } from "../util/filesystem"
 import { Instance } from "../project/instance"
 import { Flag } from "../flag/flag"
+import { Archive } from "../util/archive"
 
 export namespace LSPServer {
   const log = Log.create({ service: "lsp.server" })
@@ -176,7 +177,7 @@ export namespace LSPServer {
         const zipPath = path.join(Global.Path.bin, "vscode-eslint.zip")
         await Bun.file(zipPath).write(response)
 
-        await $`unzip -o -q ${zipPath}`.quiet().cwd(Global.Path.bin).nothrow()
+        await Archive.extractZip(zipPath, Global.Path.bin)
         await fs.rm(zipPath, { force: true })
 
         const extractedPath = path.join(Global.Path.bin, "vscode-eslint-main")
@@ -438,7 +439,7 @@ export namespace LSPServer {
           const zipPath = path.join(Global.Path.bin, "elixir-ls.zip")
           await Bun.file(zipPath).write(response)
 
-          await $`unzip -o -q ${zipPath}`.quiet().cwd(Global.Path.bin).nothrow()
+          await Archive.extractZip(zipPath, Global.Path.bin)
 
           await fs.rm(zipPath, {
             force: true,
@@ -541,7 +542,7 @@ export namespace LSPServer {
         await Bun.file(tempPath).write(downloadResponse)
 
         if (ext === "zip") {
-          await $`unzip -o -q ${tempPath}`.quiet().cwd(Global.Path.bin).nothrow()
+          await Archive.extractZip(tempPath, Global.Path.bin)
         } else {
           await $`tar -xf ${tempPath}`.cwd(Global.Path.bin).nothrow()
         }
@@ -840,7 +841,7 @@ export namespace LSPServer {
       }
 
       if (zip) {
-        await $`unzip -o -q ${archive}`.quiet().cwd(Global.Path.bin).nothrow()
+        await Archive.extractZip(archive, Global.Path.bin)
       }
       if (tar) {
         await $`tar -xf ${archive}`.cwd(Global.Path.bin).nothrow()
@@ -1188,14 +1189,21 @@ export namespace LSPServer {
         await fs.mkdir(installDir, { recursive: true })
 
         if (ext === "zip") {
-          const ok = await $`unzip -o -q ${tempPath} -d ${installDir}`.quiet().catch((error) => {
-            log.error("Failed to extract lua-language-server archive", { error })
-          })
+          const ok = await Archive.extractZip(tempPath, installDir)
+            .then(() => true)
+            .catch((error) => {
+              log.error("Failed to extract lua-language-server archive", { error })
+              return false
+            })
           if (!ok) return
         } else {
-          const ok = await $`tar -xzf ${tempPath} -C ${installDir}`.quiet().catch((error) => {
-            log.error("Failed to extract lua-language-server archive", { error })
-          })
+          const ok = await $`tar -xzf ${tempPath} -C ${installDir}`
+            .quiet()
+            .then(() => true)
+            .catch((error) => {
+              log.error("Failed to extract lua-language-server archive", { error })
+              return false
+            })
           if (!ok) return
         }
 
@@ -1396,7 +1404,7 @@ export namespace LSPServer {
         const tempPath = path.join(Global.Path.bin, assetName)
         await Bun.file(tempPath).write(downloadResponse)
 
-        await $`unzip -o -q ${tempPath}`.cwd(Global.Path.bin).nothrow()
+        await Archive.extractZip(tempPath, Global.Path.bin)
         await fs.rm(tempPath, { force: true })
 
         bin = path.join(Global.Path.bin, "terraform-ls" + (platform === "win32" ? ".exe" : ""))
@@ -1481,7 +1489,7 @@ export namespace LSPServer {
         await Bun.file(tempPath).write(downloadResponse)
 
         if (ext === "zip") {
-          await $`unzip -o -q ${tempPath}`.cwd(Global.Path.bin).nothrow()
+          await Archive.extractZip(tempPath, Global.Path.bin)
         }
         if (ext === "tar.gz") {
           await $`tar -xzf ${tempPath}`.cwd(Global.Path.bin).nothrow()
