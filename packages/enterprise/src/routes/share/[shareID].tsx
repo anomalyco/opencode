@@ -138,18 +138,13 @@ const getData = query(async (shareID) => {
 
 export default function () {
   const params = useParams()
-  const data = createAsync(
-    async () => {
-      if (!params.shareID) throw new Error("Missing shareID")
-      const now = Date.now()
-      const data = getData(params.shareID)
-      console.log("getData", Date.now() - now)
-      return data
-    },
-    {
-      deferStream: true,
-    },
-  )
+  const data = createAsync(async () => {
+    if (!params.shareID) throw new Error("Missing shareID")
+    const now = Date.now()
+    const data = getData(params.shareID)
+    console.log("getData", Date.now() - now)
+    return data
+  })
 
   createEffect(() => {
     console.log(data())
