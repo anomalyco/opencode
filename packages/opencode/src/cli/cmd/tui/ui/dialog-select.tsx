@@ -140,28 +140,31 @@ export function DialogSelect<T>(props: DialogSelectProps<T>) {
   }
 
   const keybind = useKeybind()
+  const allKeybinds = createMemo(() => [
+    ...(props.keybind ?? []),
+    {
+      keybind: { name: "return", ctrl: false, meta: false, shift: false, super: false, leader: false },
+      title: "select",
+      disabled: false,
+      onTrigger: (option?: DialogSelectOption<T>) => {
+        if (option) {
+          props.onSelect?.(option)
+        }
+      },
+    },
+  ])
+
   useKeyboard((evt) => {
     if (evt.name === "up" || (evt.ctrl && evt.name === "p")) move(-1)
     if (evt.name === "down" || (evt.ctrl && evt.name === "n")) move(1)
     if (evt.name === "pageup") move(-10)
     if (evt.name === "pagedown") move(10)
-    if (evt.name === "return") {
-      const option = selected()
-      if (option) {
-        if (option.onSelect) option.onSelect(dialog)
-        props.onSelect?.(option)
-      }
-      return
-    }
 
-    for (const item of props.keybind ?? []) {
+    for (const item of allKeybinds()) {
       if (item.disabled) continue
       if (Keybind.match(item.keybind, keybind.parse(evt))) {
-        const s = selected()
-        if (s) {
-          evt.preventDefault()
-          item.onTrigger(s)
-        }
+        evt.preventDefault()
+        item.onTrigger(selected())
       }
     }
   })
@@ -177,7 +180,7 @@ export function DialogSelect<T>(props: DialogSelectProps<T>) {
   }
   props.ref?.(ref)
 
-  const keybinds = createMemo(() => props.keybind?.filter((x) => !x.disabled) ?? [])
+  const keybinds = createMemo(() => allKeybinds().filter((x) => !x.disabled))
 
   return (
     <box gap={1} paddingBottom={1}>

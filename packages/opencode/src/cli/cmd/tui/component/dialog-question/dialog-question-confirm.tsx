@@ -45,12 +45,10 @@ export function DialogQuestionConfirm(props: SingleQuestionProps) {
     {
       title: "Yes",
       value: true,
-      onSelect: () => confirmSelection(true),
     },
     {
       title: "No",
       value: false,
-      onSelect: () => confirmSelection(false),
     },
   ])
 
@@ -60,6 +58,11 @@ export function DialogQuestionConfirm(props: SingleQuestionProps) {
       options={options()}
       current={typeof currentValue() === "boolean" ? currentValue() : undefined}
       hideSearch={true}
+      onSelect={(option) => {
+        if (typeof option.value === "boolean") {
+          confirmSelection(option.value)
+        }
+      }}
       beforeFooter={
         comment() ? (
           <box paddingLeft={4} paddingRight={4}>

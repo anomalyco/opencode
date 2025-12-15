@@ -52,7 +52,6 @@ export function DialogQuestionSelect(props: SingleQuestionProps) {
       title: option.label,
       value: option,
       footer: option.recommended ? "(Recommended)" : undefined,
-      onSelect: () => confirmSelection(option),
     })),
   )
 
@@ -62,6 +61,7 @@ export function DialogQuestionSelect(props: SingleQuestionProps) {
       options={selectOptions()}
       current={sortedOptions().find((o) => o.value === currentValue())}
       hideSearch={true}
+      onSelect={(option) => confirmSelection(option.value)}
       beforeFooter={
         comment() ? (
           <box paddingLeft={4} paddingRight={4}>

@@ -7,6 +7,7 @@ This document outlines the implementation plan for adding an `ask` tool to OpenC
 ## Feature Summary
 
 The `ask` tool enables Claude to:
+
 - Ask single or multiple questions in one tool call
 - Support different question types (select, multi-select, confirm, text)
 - Mark recommended options
@@ -16,12 +17,12 @@ The `ask` tool enables Claude to:
 
 ### Question Types
 
-| Type | Description | UI Component |
-|------|-------------|--------------|
-| `select` | Single selection from options | DialogQuestionSelect |
+| Type           | Description                      | UI Component              |
+| -------------- | -------------------------------- | ------------------------- |
+| `select`       | Single selection from options    | DialogQuestionSelect      |
 | `multi-select` | Multiple selections from options | DialogQuestionMultiSelect |
-| `confirm` | Yes/No question | DialogQuestionConfirm |
-| `text` | Free-form text input | DialogQuestionText |
+| `confirm`      | Yes/No question                  | DialogQuestionConfirm     |
+| `text`         | Free-form text input             | DialogQuestionText        |
 
 ### Multi-Question Flow
 
@@ -56,6 +57,7 @@ When only 1 question is asked, skip the list view and open the question dialog d
 ### Nested Dialogs
 
 Questions use nested dialogs:
+
 - Main dialog shows question list
 - Selecting a question opens its specific dialog (select, text, etc.)
 - ESC returns to list without saving changes
@@ -95,18 +97,29 @@ Any question can have an optional comment added via the `c` key, providing addit
 
 ```typescript
 parameters: z.object({
-  questions: z.array(z.object({
-    id: z.string().describe("Unique identifier for this question"),
-    type: z.enum(["select", "multi-select", "confirm", "text"]),
-    question: z.string().describe("The question to ask the user"),
-    options: z.array(z.object({
-      value: z.string(),
-      label: z.string(),
-      recommended: z.boolean().optional(),
-    })).optional().describe("Options for select/multi-select types"),
-    default: z.union([z.string(), z.array(z.string()), z.boolean()]).optional()
-      .describe("Default value shown as hint (not pre-selected)"),
-  })).min(1),
+  questions: z
+    .array(
+      z.object({
+        id: z.string().describe("Unique identifier for this question"),
+        type: z.enum(["select", "multi-select", "confirm", "text"]),
+        question: z.string().describe("The question to ask the user"),
+        options: z
+          .array(
+            z.object({
+              value: z.string(),
+              label: z.string(),
+              recommended: z.boolean().optional(),
+            }),
+          )
+          .optional()
+          .describe("Options for select/multi-select types"),
+        default: z
+          .union([z.string(), z.array(z.string()), z.boolean()])
+          .optional()
+          .describe("Default value shown as hint (not pre-selected)"),
+      }),
+    )
+    .min(1),
 })
 ```
 
@@ -324,47 +337,47 @@ export type Question = {
 
 ### Phase 1: Core Infrastructure
 
-| # | Task | File(s) | Description |
-|---|------|---------|-------------|
-| 1 | Add push/pop to dialog | `ui/dialog.tsx` | Enable nested dialog support |
-| 2 | Create Question namespace | `question/index.ts` | State, events, ask/respond functions |
-| 3 | Add server routes | `server/server.ts` | POST /question/respond endpoint |
-| 4 | Add SDK types | `packages/sdk/...` | Question, QuestionItem, QuestionAnswer types |
-| 5 | Add sync state | `context/sync.tsx` | Question state and event handling |
+| #   | Task                      | File(s)             | Description                                  |
+| --- | ------------------------- | ------------------- | -------------------------------------------- |
+| 1   | Add push/pop to dialog    | `ui/dialog.tsx`     | Enable nested dialog support                 |
+| 2   | Create Question namespace | `question/index.ts` | State, events, ask/respond functions         |
+| 3   | Add server routes         | `server/server.ts`  | POST /question/respond endpoint              |
+| 4   | Add SDK types             | `packages/sdk/...`  | Question, QuestionItem, QuestionAnswer types |
+| 5   | Add sync state            | `context/sync.tsx`  | Question state and event handling            |
 
 ### Phase 2: Tool Implementation
 
-| # | Task | File(s) | Description |
-|---|------|---------|-------------|
-| 6 | Create AskTool | `tool/ask.ts` | Tool definition with full schema |
-| 7 | Register tool | `tool/registry.ts` | Add AskTool to built-in tools |
+| #   | Task           | File(s)            | Description                      |
+| --- | -------------- | ------------------ | -------------------------------- |
+| 6   | Create AskTool | `tool/ask.ts`      | Tool definition with full schema |
+| 7   | Register tool  | `tool/registry.ts` | Add AskTool to built-in tools    |
 
 ### Phase 3: TUI Components
 
-| # | Task | File(s) | Description |
-|---|------|---------|-------------|
-| 8 | DialogQuestion | `ui/dialog-question.tsx` | Main question list component |
-| 9 | DialogQuestionSelect | `ui/dialog-question.tsx` | Single select dialog |
-| 10 | DialogQuestionMultiSelect | `ui/dialog-question.tsx` | Multi-select with checkboxes |
-| 11 | DialogQuestionText | `ui/dialog-question.tsx` | Text input dialog |
-| 12 | DialogQuestionConfirm | `ui/dialog-question.tsx` | Yes/No dialog |
-| 13 | DialogQuestionComment | `ui/dialog-question.tsx` | Comment input overlay |
+| #   | Task                      | File(s)                  | Description                  |
+| --- | ------------------------- | ------------------------ | ---------------------------- |
+| 8   | DialogQuestion            | `ui/dialog-question.tsx` | Main question list component |
+| 9   | DialogQuestionSelect      | `ui/dialog-question.tsx` | Single select dialog         |
+| 10  | DialogQuestionMultiSelect | `ui/dialog-question.tsx` | Multi-select with checkboxes |
+| 11  | DialogQuestionText        | `ui/dialog-question.tsx` | Text input dialog            |
+| 12  | DialogQuestionConfirm     | `ui/dialog-question.tsx` | Yes/No dialog                |
+| 13  | DialogQuestionComment     | `ui/dialog-question.tsx` | Comment input overlay        |
 
 ### Phase 4: Integration
 
-| # | Task | File(s) | Description |
-|---|------|---------|-------------|
-| 14 | Session integration | `routes/session/index.tsx` | Auto-open dialog, keyboard handling |
-| 15 | Footer indicator | `routes/session/footer.tsx` | Show "◉ 1 Question" like permissions |
-| 16 | Tool renderer | `routes/session/index.tsx` | Show Q&A summary in message stream |
-| 17 | Abort handling | `question/index.ts` | Auto-reject on session abort |
-| 18 | Single question opt | `ui/dialog-question.tsx` | Skip list for single question |
+| #   | Task                | File(s)                     | Description                          |
+| --- | ------------------- | --------------------------- | ------------------------------------ |
+| 14  | Session integration | `routes/session/index.tsx`  | Auto-open dialog, keyboard handling  |
+| 15  | Footer indicator    | `routes/session/footer.tsx` | Show "◉ 1 Question" like permissions |
+| 16  | Tool renderer       | `routes/session/index.tsx`  | Show Q&A summary in message stream   |
+| 17  | Abort handling      | `question/index.ts`         | Auto-reject on session abort         |
+| 18  | Single question opt | `ui/dialog-question.tsx`    | Skip list for single question        |
 
 ### Phase 5: Documentation
 
-| # | Task | File(s) | Description |
-|---|------|---------|-------------|
-| 19 | System prompt | TBD | Document ask tool usage for Claude |
+| #   | Task          | File(s) | Description                        |
+| --- | ------------- | ------- | ---------------------------------- |
+| 19  | System prompt | TBD     | Document ask tool usage for Claude |
 
 ## Component Details
 
@@ -454,6 +467,7 @@ function DialogQuestionSelect(props: DialogQuestionSelectProps) {
 ### DialogQuestionMultiSelect
 
 Similar to DialogQuestionSelect but:
+
 - Uses checkboxes (☑/☐) instead of radio buttons
 - `space` toggles selection
 - `enter` confirms all selections
@@ -486,11 +500,7 @@ function DialogQuestionText(props: DialogQuestionTextProps) {
 ### DialogQuestionComment
 
 ```typescript
-function DialogQuestionComment(props: {
-  value?: string
-  onSave: (comment: string) => void
-  onCancel: () => void
-}) {
+function DialogQuestionComment(props: { value?: string; onSave: (comment: string) => void; onCancel: () => void }) {
   // Simple textarea dialog
   // enter saves, esc cancels
 }
@@ -577,6 +587,7 @@ ToolRegistry.register<typeof AskTool>({
 ## Dependencies
 
 No new external dependencies required. Uses existing:
+
 - Solid.js for reactivity
 - OpenTUI for rendering
 - Zod for schema validation
@@ -584,18 +595,19 @@ No new external dependencies required. Uses existing:
 
 ## Risks & Mitigations
 
-| Risk | Mitigation |
-|------|------------|
+| Risk                         | Mitigation                                             |
+| ---------------------------- | ------------------------------------------------------ |
 | Nested dialogs complex state | Keep state local to DialogQuestion, use solid-js/store |
-| ESC key conflicts | Check stack depth before handling |
-| Long questions overflow | Use wrapMode and scrolling |
-| Focus management in nested | Leverage existing dialog focus save/restore |
+| ESC key conflicts            | Check stack depth before handling                      |
+| Long questions overflow      | Use wrapMode and scrolling                             |
+| Focus management in nested   | Leverage existing dialog focus save/restore            |
 
 ---
 
 ## Appendix: Example Usage
 
 ### Tool Call (from Claude)
+
 ```json
 {
   "name": "ask",
@@ -641,6 +653,7 @@ No new external dependencies required. Uses existing:
 ```
 
 ### Tool Response (to Claude)
+
 ```json
 {
   "framework": { "value": "react", "comment": "We already use React in other projects" },

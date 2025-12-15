@@ -1,8 +1,7 @@
-import { createEffect, createMemo, createSignal, onMount } from "solid-js"
-import { createStore } from "solid-js/store"
+import { createMemo, createSignal, onMount } from "solid-js"
 import { useTheme } from "@tui/context/theme"
 import { useDialog } from "@tui/ui/dialog"
-import { DialogSelect, type DialogSelectOption } from "@tui/ui/dialog-select"
+import { DialogMultiSelect, type DialogMultiSelectOption } from "@tui/ui/dialog-multiselect"
 import { DialogQuestionComment } from "./dialog-question-comment"
 import { truncate } from "./helpers"
 import type { SingleQuestionProps } from "./types"
@@ -10,22 +9,12 @@ import type { SingleQuestionProps } from "./types"
 export function DialogQuestionMultiSelect(props: SingleQuestionProps) {
   const dialog = useDialog()
   const { theme } = useTheme()
-  const [checked, setChecked] = createStore<Record<string, boolean>>({})
   const [comment, setComment] = createSignal<string | undefined>(props.currentAnswer?.comment)
 
   // Sort options with recommended first
   const sortedOptions = createMemo(() => {
     const opts = props.item.options ?? []
     return [...opts].sort((a, b) => (b.recommended ? 1 : 0) - (a.recommended ? 1 : 0))
-  })
-
-  // Initialize checked state from current answer
-  createEffect(() => {
-    if (Array.isArray(props.currentAnswer?.value)) {
-      for (const v of props.currentAnswer.value) {
-        setChecked(v, true)
-      }
-    }
   })
 
   onMount(() => {
@@ -49,33 +38,35 @@ export function DialogQuestionMultiSelect(props: SingleQuestionProps) {
     ))
   }
 
-  function getSelectedValues(): string[] {
-    return sortedOptions()
-      .filter((o) => checked[o.value])
-      .map((o) => o.value)
-  }
-
-  function confirmSelection() {
-    props.onAnswer({ value: getSelectedValues() })
-    dialog.pop()
-  }
-
-  // Convert options to DialogSelectOption format
-  const selectOptions = createMemo<DialogSelectOption<{ value: string; label: string; recommended?: boolean }>[]>(() =>
+  // Convert options to DialogMultiSelectOption format
+  const selectOptions = createMemo<DialogMultiSelectOption<string>[]>(() =>
     sortedOptions().map((option) => ({
       title: option.label,
-      value: option,
-      footer: checked[option.value] ? "☑" : "☐",
-      onSelect: () => {}, // Don't close on select
+      value: option.value,
+      footer: option.recommended ? "(Recommended)" : undefined,
     })),
   )
 
+  // Get current values as array
+  const currentValues = createMemo(() => {
+    if (Array.isArray(props.currentAnswer?.value)) {
+      return props.currentAnswer.value
+    }
+    return []
+  })
+
+  function confirmSelection(selected: string[]) {
+    props.onAnswer({ value: selected })
+    dialog.pop()
+  }
+
   return (
-    <DialogSelect
+    <DialogMultiSelect
       title={props.item.question}
       options={selectOptions()}
+      current={currentValues()}
       hideSearch={true}
-      onSelect={() => confirmSelection()}
+      onSelect={confirmSelection}
       beforeFooter={
         comment() ? (
           <box paddingLeft={4} paddingRight={4}>
@@ -84,11 +75,6 @@ export function DialogQuestionMultiSelect(props: SingleQuestionProps) {
         ) : undefined
       }
       keybind={[
-        {
-          keybind: { name: "space", ctrl: false, meta: false, shift: false, super: false, leader: false },
-          title: "toggle",
-          onTrigger: (option) => setChecked(option.value.value, !checked[option.value.value]),
-        },
         {
           keybind: { name: "c", ctrl: false, meta: false, shift: false, super: false, leader: false },
           title: "add comment",

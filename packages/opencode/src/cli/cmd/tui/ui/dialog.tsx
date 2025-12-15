@@ -97,6 +97,7 @@ function init() {
       refocus()
     },
     replace(input: any, onClose?: () => void) {
+      console.log("replace dialog", store.stack.length)
       if (store.stack.length === 0) {
         focus = renderer.currentFocusedRenderable
       }
@@ -112,6 +113,7 @@ function init() {
       ])
     },
     push(input: any, onClose?: () => void) {
+      console.log("push dialog", store.stack.length)
       if (store.stack.length === 0) {
         focus = renderer.currentFocusedRenderable
       }
@@ -124,6 +126,7 @@ function init() {
       ])
     },
     pop() {
+      console.log("popping dialog", store.stack.length)
       if (store.stack.length === 0) return
       setStore("stack", store.stack.slice(0, -1))
       if (store.stack.length === 0) refocus()
