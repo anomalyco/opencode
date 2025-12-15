@@ -15,7 +15,6 @@ import { Code } from "@opencode-ai/ui/code"
 import { SessionTurn } from "@opencode-ai/ui/session-turn"
 import { SessionMessageRail } from "@opencode-ai/ui/session-message-rail"
 import { SessionReview } from "@opencode-ai/ui/session-review"
-import { DialogFileSelect } from "@/components/dialog-file-select"
 import {
   DragDropProvider,
   DragDropSensors,
@@ -33,15 +32,17 @@ import { useLayout } from "@/context/layout"
 import { getDirectory, getFilename } from "@opencode-ai/util/path"
 import { Terminal } from "@/components/terminal"
 import { checksum } from "@opencode-ai/util/encode"
+import { useDialog } from "@opencode-ai/ui/context/dialog"
+import { DialogSelectFile } from "@/components/dialog-select-file"
 
 export default function Page() {
   const layout = useLayout()
   const local = useLocal()
   const sync = useSync()
   const session = useSession()
+  const dialog = useDialog()
   const [store, setStore] = createStore({
     clickTimer: undefined as number | undefined,
-    fileSelectOpen: false,
     activeDraggable: undefined as string | undefined,
     activeTerminalDraggable: undefined as string | undefined,
   })
@@ -72,7 +73,7 @@ export default function Page() {
     }
     if (event.getModifierState(MOD) && event.key.toLowerCase() === "p") {
       event.preventDefault()
-      setStore("fileSelectOpen", true)
+      dialog.replace(() => <DialogSelectFile />)
       return
     }
     if (event.ctrlKey && event.key.toLowerCase() === "t") {
@@ -388,7 +389,7 @@ export default function Page() {
                       icon="plus-small"
                       variant="ghost"
                       iconSize="large"
-                      onClick={() => setStore("fileSelectOpen", true)}
+                      onClick={() => dialog.replace(() => <DialogSelectFile />)}
                     />
                   </Tooltip>
                 </div>
@@ -610,12 +611,6 @@ export default function Page() {
             </ul>
           </Show>
         </div>
-        <Show when={store.fileSelectOpen}>
-          <DialogFileSelect
-            onOpenChange={(open) => setStore("fileSelectOpen", open)}
-            onSelect={(path) => session.layout.openTab("file://" + path)}
-          />
-        </Show>
       </div>
       <Show when={layout.terminal.opened()}>
         <div

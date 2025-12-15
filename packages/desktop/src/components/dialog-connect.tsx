@@ -1,10 +1,10 @@
-import { Component, createMemo, Match, onCleanup, onMount, Switch } from "solid-js"
+import { createMemo, Match, onCleanup, onMount, Switch } from "solid-js"
 import { createStore, produce } from "solid-js/store"
-import { useDialog } from "@/context/dialog"
+import { useDialog } from "@opencode-ai/ui/context/dialog"
 import { useGlobalSync } from "@/context/global-sync"
 import { useGlobalSDK } from "@/context/global-sdk"
 import { usePlatform } from "@/context/platform"
-import { ProviderAuthMethod, ProviderAuthAuthorization } from "@opencode-ai/sdk/v2/client"
+import { ProviderAuthAuthorization } from "@opencode-ai/sdk/v2/client"
 import { Dialog } from "@opencode-ai/ui/dialog"
 import { List, ListRef } from "@opencode-ai/ui/list"
 import { Button } from "@opencode-ai/ui/button"
@@ -18,14 +18,13 @@ import { IconName } from "@opencode-ai/ui/icons/provider"
 import { iife } from "@opencode-ai/util/iife"
 import { Link } from "@/components/link"
 import { DialogSelectProvider } from "./dialog-select-provider"
-import { DialogModel } from "./dialog-model"
+import { DialogSelectModel } from "./dialog-select-model"
 
-export const DialogConnect: Component<{ provider: string }> = (props) => {
+export function DialogConnect(props: { provider: string }) {
   const dialog = useDialog()
   const globalSync = useGlobalSync()
   const globalSDK = useGlobalSDK()
   const platform = usePlatform()
-
   const provider = createMemo(() => globalSync.data.provider.all.find((x) => x.id === props.provider)!)
   const methods = createMemo(
     () =>
@@ -37,19 +36,19 @@ export const DialogConnect: Component<{ provider: string }> = (props) => {
       ],
   )
   const [store, setStore] = createStore({
-    method: undefined as undefined | ProviderAuthMethod,
+    methodIndex: undefined as undefined | number,
     authorization: undefined as undefined | ProviderAuthAuthorization,
     state: "pending" as undefined | "pending" | "complete" | "error",
     error: undefined as string | undefined,
   })
 
-  const methodIndex = createMemo(() => methods().findIndex((x) => x.label === store.method?.label))
+  const method = createMemo(() => (store.methodIndex !== undefined ? methods().at(store.methodIndex!) : undefined))
 
   async function selectMethod(index: number) {
     const method = methods()[index]
     setStore(
       produce((draft) => {
-        draft.method = method
+        draft.methodIndex = index
         draft.authorization = undefined
         draft.state = undefined
         draft.error = undefined
@@ -101,7 +100,6 @@ export const DialogConnect: Component<{ provider: string }> = (props) => {
     if (methods().length === 1) {
       selectMethod(0)
     }
-
     document.addEventListener("keydown", handleKey)
     onCleanup(() => {
       document.removeEventListener("keydown", handleKey)
@@ -117,8 +115,8 @@ export const DialogConnect: Component<{ provider: string }> = (props) => {
         title: `${provider().name} connected`,
         description: `${provider().name} models are now available to use.`,
       })
-      dialog.replace(() => <DialogModel provider={props.provider} />)
-    }, 500)
+      dialog.replace(() => <DialogSelectModel provider={props.provider} />)
+    }, 1000)
   }
 
   function goBack() {
@@ -128,275 +126,258 @@ export const DialogConnect: Component<{ provider: string }> = (props) => {
     }
     if (store.authorization) {
       setStore("authorization", undefined)
-      setStore("method", undefined)
+      setStore("methodIndex", undefined)
       return
     }
-    if (store.method) {
-      setStore("method", undefined)
+    if (store.methodIndex) {
+      setStore("methodIndex", undefined)
       return
     }
     dialog.replace(() => <DialogSelectProvider />)
   }
 
   return (
-    <Dialog
-      modal
-      defaultOpen
-      onOpenChange={(open) => {
-        if (!open) {
-          dialog.clear()
-        }
-      }}
-    >
-      <Dialog.Header class="px-4.5">
-        <Dialog.Title class="flex items-center">
-          <IconButton tabIndex={-1} icon="arrow-left" variant="ghost" onClick={goBack} />
-        </Dialog.Title>
-        <Dialog.CloseButton tabIndex={-1} />
-      </Dialog.Header>
-      <Dialog.Body>
-        <div class="flex flex-col gap-6 px-2.5 pb-3">
-          <div class="px-2.5 flex gap-4 items-center">
-            <ProviderIcon id={props.provider as IconName} class="size-5 shrink-0 icon-strong-base" />
-            <div class="text-16-medium text-text-strong">
-              <Switch>
-                <Match when={props.provider === "anthropic" && store.method?.label?.toLowerCase().includes("max")}>
-                  Login with Claude Pro/Max
-                </Match>
-                <Match when={true}>Connect {provider().name}</Match>
-              </Switch>
-            </div>
-          </div>
-          <div class="px-2.5 pb-10 flex flex-col gap-6">
+    <Dialog title={<IconButton tabIndex={-1} icon="arrow-left" variant="ghost" onClick={goBack} />}>
+      <div class="flex flex-col gap-6 px-2.5 pb-3">
+        <div class="px-2.5 flex gap-4 items-center">
+          <ProviderIcon id={props.provider as IconName} class="size-5 shrink-0 icon-strong-base" />
+          <div class="text-16-medium text-text-strong">
             <Switch>
-              <Match when={store.method === undefined}>
-                <div class="text-14-regular text-text-base">Select login method for {provider().name}.</div>
-                <div class="">
-                  <List
-                    ref={(ref) => (listRef = ref)}
-                    items={methods}
-                    key={(m) => m?.label}
-                    onSelect={async (method, index) => {
-                      if (!method) return
-                      selectMethod(index)
-                    }}
-                  >
-                    {(i) => (
-                      <div class="w-full flex items-center gap-x-4">
-                        <div class="w-4 h-2 rounded-[1px] bg-input-base shadow-xs-border-base flex items-center justify-center">
-                          <div class="w-2.5 h-0.5 bg-icon-strong-base hidden" data-slot="list-item-extra-icon" />
-                        </div>
-                        <span>{i.label}</span>
-                      </div>
-                    )}
-                  </List>
-                </div>
+              <Match when={props.provider === "anthropic" && method()?.label?.toLowerCase().includes("max")}>
+                Login with Claude Pro/Max
               </Match>
-              <Match when={store.state === "pending"}>
-                <div class="text-14-regular text-text-base">
-                  <div class="flex items-center gap-x-4">
-                    <Spinner />
-                    <span>Authorization in progress...</span>
-                  </div>
-                </div>
-              </Match>
-              <Match when={store.state === "error"}>
-                <div class="text-14-regular text-text-base">
-                  <div class="flex items-center gap-x-4">
-                    <Icon name="circle-ban-sign" class="text-icon-critical-base" />
-                    <span>Authorization failed: {store.error}</span>
-                  </div>
-                </div>
-              </Match>
-              <Match when={store.method?.type === "api"}>
-                {iife(() => {
-                  const [formStore, setFormStore] = createStore({
-                    value: "",
-                    error: undefined as string | undefined,
-                  })
-
-                  async function handleSubmit(e: SubmitEvent) {
-                    e.preventDefault()
-
-                    const form = e.currentTarget as HTMLFormElement
-                    const formData = new FormData(form)
-                    const apiKey = formData.get("apiKey") as string
-
-                    if (!apiKey?.trim()) {
-                      setFormStore("error", "API key is required")
-                      return
-                    }
-
-                    setFormStore("error", undefined)
-                    await globalSDK.client.auth.set({
-                      providerID: props.provider,
-                      auth: {
-                        type: "api",
-                        key: apiKey,
-                      },
-                    })
-                    await complete()
-                  }
-
-                  return (
-                    <div class="flex flex-col gap-6">
-                      <Switch>
-                        <Match when={provider().id === "opencode"}>
-                          <div class="flex flex-col gap-4">
-                            <div class="text-14-regular text-text-base">
-                              OpenCode Zen gives you access to a curated set of reliable optimized models for coding
-                              agents.
-                            </div>
-                            <div class="text-14-regular text-text-base">
-                              With a single API key you'll get access to models such as Claude, GPT, Gemini, GLM and
-                              more.
-                            </div>
-                            <div class="text-14-regular text-text-base">
-                              Visit{" "}
-                              <Link href="https://opencode.ai/zen" tabIndex={-1}>
-                                opencode.ai/zen
-                              </Link>{" "}
-                              to collect your API key.
-                            </div>
-                          </div>
-                        </Match>
-                        <Match when={true}>
-                          <div class="text-14-regular text-text-base">
-                            Enter your {provider().name} API key to connect your account and use {provider().name}{" "}
-                            models in OpenCode.
-                          </div>
-                        </Match>
-                      </Switch>
-                      <form onSubmit={handleSubmit} class="flex flex-col items-start gap-4">
-                        <TextField
-                          autofocus
-                          type="text"
-                          label={`${provider().name} API key`}
-                          placeholder="API key"
-                          name="apiKey"
-                          value={formStore.value}
-                          onChange={setFormStore.bind(null, "value")}
-                          validationState={formStore.error ? "invalid" : undefined}
-                          error={formStore.error}
-                        />
-                        <Button class="w-auto" type="submit" size="large" variant="primary">
-                          Submit
-                        </Button>
-                      </form>
-                    </div>
-                  )
-                })}
-              </Match>
-              <Match when={store.method?.type === "oauth"}>
-                <Switch>
-                  <Match when={store.authorization?.method === "code"}>
-                    {iife(() => {
-                      const [formStore, setFormStore] = createStore({
-                        value: "",
-                        error: undefined as string | undefined,
-                      })
-
-                      onMount(() => {
-                        if (store.authorization?.method === "code" && store.authorization?.url) {
-                          platform.openLink(store.authorization.url)
-                        }
-                      })
-
-                      async function handleSubmit(e: SubmitEvent) {
-                        e.preventDefault()
-
-                        const form = e.currentTarget as HTMLFormElement
-                        const formData = new FormData(form)
-                        const code = formData.get("code") as string
-
-                        if (!code?.trim()) {
-                          setFormStore("error", "Authorization code is required")
-                          return
-                        }
-
-                        setFormStore("error", undefined)
-                        const { error } = await globalSDK.client.provider.oauth.callback({
-                          providerID: props.provider,
-                          method: methodIndex(),
-                          code,
-                        })
-                        if (!error) {
-                          await complete()
-                          return
-                        }
-                        setFormStore("error", "Invalid authorization code")
-                      }
-
-                      return (
-                        <div class="flex flex-col gap-6">
-                          <div class="text-14-regular text-text-base">
-                            Visit <Link href={store.authorization!.url}>this link</Link> to collect your authorization
-                            code to connect your account and use {provider().name} models in OpenCode.
-                          </div>
-                          <form onSubmit={handleSubmit} class="flex flex-col items-start gap-4">
-                            <TextField
-                              autofocus
-                              type="text"
-                              label={`${store.method?.label} authorization code`}
-                              placeholder="Authorization code"
-                              name="code"
-                              value={formStore.value}
-                              onChange={setFormStore.bind(null, "value")}
-                              validationState={formStore.error ? "invalid" : undefined}
-                              error={formStore.error}
-                            />
-                            <Button class="w-auto" type="submit" size="large" variant="primary">
-                              Submit
-                            </Button>
-                          </form>
-                        </div>
-                      )
-                    })}
-                  </Match>
-                  <Match when={store.authorization?.method === "auto"}>
-                    {iife(() => {
-                      const code = createMemo(() => {
-                        const instructions = store.authorization?.instructions
-                        if (instructions?.includes(":")) {
-                          return instructions?.split(":")[1]?.trim()
-                        }
-                        return instructions
-                      })
-
-                      onMount(async () => {
-                        const result = await globalSDK.client.provider.oauth.callback({
-                          providerID: props.provider,
-                          method: methodIndex(),
-                        })
-                        if (result.error) {
-                          // TODO: show error
-                          dialog.clear()
-                          return
-                        }
-                        await complete()
-                      })
-
-                      return (
-                        <div class="flex flex-col gap-6">
-                          <div class="text-14-regular text-text-base">
-                            Visit <Link href={store.authorization!.url}>this link</Link> and enter the code below to
-                            connect your account and use {provider().name} models in OpenCode.
-                          </div>
-                          <TextField label="Confirmation code" class="font-mono" value={code()} readOnly copyable />
-                          <div class="text-14-regular text-text-base flex items-center gap-4">
-                            <Spinner />
-                            <span>Waiting for authorization...</span>
-                          </div>
-                        </div>
-                      )
-                    })}
-                  </Match>
-                </Switch>
-              </Match>
+              <Match when={true}>Connect {provider().name}</Match>
             </Switch>
           </div>
         </div>
-      </Dialog.Body>
+        <div class="px-2.5 pb-10 flex flex-col gap-6">
+          <Switch>
+            <Match when={store.methodIndex === undefined}>
+              <div class="text-14-regular text-text-base">Select login method for {provider().name}.</div>
+              <div class="">
+                <List
+                  ref={(ref) => (listRef = ref)}
+                  items={methods}
+                  key={(m) => m?.label}
+                  onSelect={async (method, index) => {
+                    if (!method) return
+                    selectMethod(index)
+                  }}
+                >
+                  {(i) => (
+                    <div class="w-full flex items-center gap-x-4">
+                      <div class="w-4 h-2 rounded-[1px] bg-input-base shadow-xs-border-base flex items-center justify-center">
+                        <div class="w-2.5 h-0.5 bg-icon-strong-base hidden" data-slot="list-item-extra-icon" />
+                      </div>
+                      <span>{i.label}</span>
+                    </div>
+                  )}
+                </List>
+              </div>
+            </Match>
+            <Match when={store.state === "pending"}>
+              <div class="text-14-regular text-text-base">
+                <div class="flex items-center gap-x-4">
+                  <Spinner />
+                  <span>Authorization in progress...</span>
+                </div>
+              </div>
+            </Match>
+            <Match when={store.state === "error"}>
+              <div class="text-14-regular text-text-base">
+                <div class="flex items-center gap-x-4">
+                  <Icon name="circle-ban-sign" class="text-icon-critical-base" />
+                  <span>Authorization failed: {store.error}</span>
+                </div>
+              </div>
+            </Match>
+            <Match when={method()?.type === "api"}>
+              {iife(() => {
+                const [formStore, setFormStore] = createStore({
+                  value: "",
+                  error: undefined as string | undefined,
+                })
+
+                async function handleSubmit(e: SubmitEvent) {
+                  e.preventDefault()
+
+                  const form = e.currentTarget as HTMLFormElement
+                  const formData = new FormData(form)
+                  const apiKey = formData.get("apiKey") as string
+
+                  if (!apiKey?.trim()) {
+                    setFormStore("error", "API key is required")
+                    return
+                  }
+
+                  setFormStore("error", undefined)
+                  await globalSDK.client.auth.set({
+                    providerID: props.provider,
+                    auth: {
+                      type: "api",
+                      key: apiKey,
+                    },
+                  })
+                  await complete()
+                }
+
+                return (
+                  <div class="flex flex-col gap-6">
+                    <Switch>
+                      <Match when={provider().id === "opencode"}>
+                        <div class="flex flex-col gap-4">
+                          <div class="text-14-regular text-text-base">
+                            OpenCode Zen gives you access to a curated set of reliable optimized models for coding
+                            agents.
+                          </div>
+                          <div class="text-14-regular text-text-base">
+                            With a single API key you'll get access to models such as Claude, GPT, Gemini, GLM and more.
+                          </div>
+                          <div class="text-14-regular text-text-base">
+                            Visit{" "}
+                            <Link href="https://opencode.ai/zen" tabIndex={-1}>
+                              opencode.ai/zen
+                            </Link>{" "}
+                            to collect your API key.
+                          </div>
+                        </div>
+                      </Match>
+                      <Match when={true}>
+                        <div class="text-14-regular text-text-base">
+                          Enter your {provider().name} API key to connect your account and use {provider().name} models
+                          in OpenCode.
+                        </div>
+                      </Match>
+                    </Switch>
+                    <form onSubmit={handleSubmit} class="flex flex-col items-start gap-4">
+                      <TextField
+                        autofocus
+                        type="text"
+                        label={`${provider().name} API key`}
+                        placeholder="API key"
+                        name="apiKey"
+                        value={formStore.value}
+                        onChange={setFormStore.bind(null, "value")}
+                        validationState={formStore.error ? "invalid" : undefined}
+                        error={formStore.error}
+                      />
+                      <Button class="w-auto" type="submit" size="large" variant="primary">
+                        Submit
+                      </Button>
+                    </form>
+                  </div>
+                )
+              })}
+            </Match>
+            <Match when={method()?.type === "oauth"}>
+              <Switch>
+                <Match when={store.authorization?.method === "code"}>
+                  {iife(() => {
+                    const [formStore, setFormStore] = createStore({
+                      value: "",
+                      error: undefined as string | undefined,
+                    })
+
+                    onMount(() => {
+                      if (store.authorization?.method === "code" && store.authorization?.url) {
+                        platform.openLink(store.authorization.url)
+                      }
+                    })
+
+                    async function handleSubmit(e: SubmitEvent) {
+                      e.preventDefault()
+
+                      const form = e.currentTarget as HTMLFormElement
+                      const formData = new FormData(form)
+                      const code = formData.get("code") as string
+
+                      if (!code?.trim()) {
+                        setFormStore("error", "Authorization code is required")
+                        return
+                      }
+
+                      setFormStore("error", undefined)
+                      const { error } = await globalSDK.client.provider.oauth.callback({
+                        providerID: props.provider,
+                        method: store.methodIndex,
+                        code,
+                      })
+                      if (!error) {
+                        await complete()
+                        return
+                      }
+                      setFormStore("error", "Invalid authorization code")
+                    }
+
+                    return (
+                      <div class="flex flex-col gap-6">
+                        <div class="text-14-regular text-text-base">
+                          Visit <Link href={store.authorization!.url}>this link</Link> to collect your authorization
+                          code to connect your account and use {provider().name} models in OpenCode.
+                        </div>
+                        <form onSubmit={handleSubmit} class="flex flex-col items-start gap-4">
+                          <TextField
+                            autofocus
+                            type="text"
+                            label={`${method()?.label} authorization code`}
+                            placeholder="Authorization code"
+                            name="code"
+                            value={formStore.value}
+                            onChange={setFormStore.bind(null, "value")}
+                            validationState={formStore.error ? "invalid" : undefined}
+                            error={formStore.error}
+                          />
+                          <Button class="w-auto" type="submit" size="large" variant="primary">
+                            Submit
+                          </Button>
+                        </form>
+                      </div>
+                    )
+                  })}
+                </Match>
+                <Match when={store.authorization?.method === "auto"}>
+                  {iife(() => {
+                    const code = createMemo(() => {
+                      const instructions = store.authorization?.instructions
+                      if (instructions?.includes(":")) {
+                        return instructions?.split(":")[1]?.trim()
+                      }
+                      return instructions
+                    })
+
+                    onMount(async () => {
+                      const result = await globalSDK.client.provider.oauth.callback({
+                        providerID: props.provider,
+                        method: store.methodIndex,
+                      })
+                      if (result.error) {
+                        // TODO: show error
+                        dialog.clear()
+                        return
+                      }
+                      await complete()
+                    })
+
+                    return (
+                      <div class="flex flex-col gap-6">
+                        <div class="text-14-regular text-text-base">
+                          Visit <Link href={store.authorization!.url}>this link</Link> and enter the code below to
+                          connect your account and use {provider().name} models in OpenCode.
+                        </div>
+                        <TextField label="Confirmation code" class="font-mono" value={code()} readOnly copyable />
+                        <div class="text-14-regular text-text-base flex items-center gap-4">
+                          <Spinner />
+                          <span>Waiting for authorization...</span>
+                        </div>
+                      </div>
+                    )
+                  })}
+                </Match>
+              </Switch>
+            </Match>
+          </Switch>
+        </div>
+      </div>
     </Dialog>
   )
 }

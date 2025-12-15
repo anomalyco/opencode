@@ -6,7 +6,7 @@ import { LocalProvider } from "@/context/local"
 import { base64Decode } from "@opencode-ai/util/encode"
 import { DataProvider } from "@opencode-ai/ui/context"
 import { iife } from "@opencode-ai/util/iife"
-import { DialogRoot } from "@/context/dialog"
+import { DialogRoot } from "@opencode-ai/ui/context/dialog"
 
 export default function Layout(props: ParentProps) {
   const params = useParams()

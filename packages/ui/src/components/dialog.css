@@ -60,6 +60,7 @@
       [data-slot="dialog-header"] {
         display: flex;
         padding: 16px;
+        padding-left: 20px;
         justify-content: space-between;
         align-items: center;
         flex-shrink: 0;
@@ -82,6 +83,7 @@
       [data-slot="dialog-description"] {
         display: flex;
         padding: 16px;
+        padding-left: 20px;
         padding-top: 0;
         margin-top: -8px;
         justify-content: space-between;

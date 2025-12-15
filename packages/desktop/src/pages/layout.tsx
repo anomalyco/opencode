@@ -33,7 +33,7 @@ import { useGlobalSDK } from "@/context/global-sdk"
 import { useNotification } from "@/context/notification"
 import { Binary } from "@opencode-ai/util/binary"
 import { Header } from "@/components/header"
-import { useDialog } from "@/context/dialog"
+import { useDialog } from "@opencode-ai/ui/context/dialog"
 import { DialogSelectProvider } from "@/components/dialog-select-provider"
 
 export default function Layout(props: ParentProps) {
