@@ -112,6 +112,7 @@
         padding: 4px 10px;
         align-items: center;
         color: var(--text-strong);
+        scroll-margin-top: 28px;
 
         /* text-14-medium */
         font-family: var(--font-family-sans);
