@@ -79,6 +79,7 @@ export const PromptInput: Component<PromptInputProps> = (props) => {
   const providers = useProviders()
   const command = useCommand()
   let editorRef!: HTMLDivElement
+  let fileInputRef!: HTMLInputElement
 
   const sessionKey = createMemo(() => `${params.dir}${params.id ? "/" + params.id : ""}`)
   const tabs = createMemo(() => layout.tabs(sessionKey()))
@@ -791,7 +792,7 @@ export const PromptInput: Component<PromptInputProps> = (props) => {
         <Show when={store.dragging}>
           <div class="absolute inset-0 z-10 flex items-center justify-center bg-surface-raised-stronger-non-alpha/90 pointer-events-none">
             <div class="flex flex-col items-center gap-2 text-text-weak">
-              <Icon name="plus" class="size-8" />
+              <Icon name="photo" class="size-8" />
               <span class="text-14-regular">Drop images or PDFs here</span>
             </div>
           </div>
@@ -871,34 +872,56 @@ export const PromptInput: Component<PromptInputProps> = (props) => {
               <Icon name="chevron-down" size="small" />
             </Button>
           </div>
-          <Tooltip
-            placement="top"
-            inactive={!prompt.dirty() && !working()}
-            value={
-              <Switch>
-                <Match when={working()}>
-                  <div class="flex items-center gap-2">
-                    <span>Stop</span>
-                    <span class="text-icon-base text-12-medium text-[10px]!">ESC</span>
-                  </div>
-                </Match>
-                <Match when={true}>
-                  <div class="flex items-center gap-2">
-                    <span>Send</span>
-                    <Icon name="enter" size="small" class="text-icon-base" />
-                  </div>
-                </Match>
-              </Switch>
-            }
-          >
-            <IconButton
-              type="submit"
-              disabled={!prompt.dirty() && store.imageAttachments.length === 0 && !working()}
-              icon={working() ? "stop" : "arrow-up"}
-              variant="primary"
-              class="h-10 w-8 absolute right-2 bottom-2"
+          <div class="flex items-center gap-1 absolute right-2 bottom-2">
+            <input
+              ref={fileInputRef}
+              type="file"
+              accept={ACCEPTED_IMAGE_TYPES.join(",")}
+              class="hidden"
+              onChange={(e) => {
+                const file = e.currentTarget.files?.[0]
+                if (file) addImageAttachment(file)
+                e.currentTarget.value = ""
+              }}
             />
-          </Tooltip>
+            <Tooltip placement="top" value="Attach image">
+              <IconButton
+                type="button"
+                icon="photo"
+                variant="ghost"
+                class="h-10 w-8"
+                onClick={() => fileInputRef.click()}
+              />
+            </Tooltip>
+            <Tooltip
+              placement="top"
+              inactive={!prompt.dirty() && !working()}
+              value={
+                <Switch>
+                  <Match when={working()}>
+                    <div class="flex items-center gap-2">
+                      <span>Stop</span>
+                      <span class="text-icon-base text-12-medium text-[10px]!">ESC</span>
+                    </div>
+                  </Match>
+                  <Match when={true}>
+                    <div class="flex items-center gap-2">
+                      <span>Send</span>
+                      <Icon name="enter" size="small" class="text-icon-base" />
+                    </div>
+                  </Match>
+                </Switch>
+              }
+            >
+              <IconButton
+                type="submit"
+                disabled={!prompt.dirty() && store.imageAttachments.length === 0 && !working()}
+                icon={working() ? "stop" : "arrow-up"}
+                variant="primary"
+                class="h-10 w-8"
+              />
+            </Tooltip>
+          </div>
         </div>
       </form>
     </div>

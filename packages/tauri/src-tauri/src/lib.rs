@@ -183,6 +183,7 @@ pub fn run() {
                         .inner_size(size.width as f64, size.height as f64)
                         .decorations(true)
                         .zoom_hotkeys_enabled(true)
+                        .disable_drag_drop_handler()
                         .initialization_script(format!(
                             r#"
                           window.__OPENCODE__ ??= {{}};
