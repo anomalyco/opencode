@@ -125,6 +125,12 @@ export namespace Server {
         async (c) => {
           log.info("global event connected")
           return streamSSE(c, async (stream) => {
+            stream.writeSSE({
+              data: JSON.stringify({
+                type: "server.connected",
+                properties: {},
+              }),
+            })
             async function handler(event: any) {
               await stream.writeSSE({
                 data: JSON.stringify(event),
