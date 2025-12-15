@@ -1,5 +1,5 @@
 name = "OpenHands"
-description = "All-Hands AI's autonomous coding agent (experimental ACP)"
+description = "Lightweight, modern CLI to interact with the OpenHands agent"
 command = "openhands"
 args = ["acp"]
 install_guide = "https://docs.openhands.dev/openhands/usage/run-openhands/acp"

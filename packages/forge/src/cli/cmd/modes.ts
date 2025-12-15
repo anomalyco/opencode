@@ -7,7 +7,7 @@ import { ACPClient } from "../../acp/client"
 import { AuthenticationRequiredError } from "../../acp/types"
 
 export const ModesCommand = cmd({
-  command: "modes <agent>",
+  command: "modes [agent]",
   describe: "list available modes for an ACP agent",
   builder: (yargs: Argv) => {
     return yargs
@@ -29,11 +29,11 @@ export const ModesCommand = cmd({
     if (!agentMatch.success) {
       if (agentMatch.error === "not-found") {
         UI.error(`Agent not found: ${agentName}${EOL}`)
-        UI.error(`Available agents: ${agentMatch.available.map(a => a.name).join(", ")}${EOL}`)
+        UI.error(`Available agents: ${agentMatch.available.map((a) => a.name).join(", ")}${EOL}`)
         process.exit(1)
       } else if (agentMatch.error === "ambiguous") {
         UI.error(`Ambiguous agent name: ${agentName}${EOL}`)
-        UI.error(`Did you mean one of: ${agentMatch.matches.map(a => a.name).join(", ")}?${EOL}`)
+        UI.error(`Did you mean one of: ${agentMatch.matches.map((a) => a.name).join(", ")}?${EOL}`)
         process.exit(1)
       }
       return
@@ -74,7 +74,7 @@ export const ModesCommand = cmd({
               label?: string
             }
             UI.error(
-              `Authentication required: Please run '${terminalAuth.command} ${(terminalAuth.args ?? []).join(" ")}' in your terminal${EOL}`
+              `Authentication required: Please run '${terminalAuth.command} ${(terminalAuth.args ?? []).join(" ")}' in your terminal${EOL}`,
             )
             process.exit(1)
           }

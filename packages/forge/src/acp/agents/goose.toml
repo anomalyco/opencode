@@ -1,5 +1,5 @@
 name = "Goose"
-description = "Block's autonomous coding agent (requires v1.14.2+)"
+description = "Block's autonomous coding agent"
 command = "goose"
 args = ["acp"]
 install_guide = "https://block.github.io/goose/docs/getting-started/installation"

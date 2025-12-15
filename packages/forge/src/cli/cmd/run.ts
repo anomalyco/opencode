@@ -180,37 +180,37 @@ export async function runNonInteractive(args: RunHandlerArgs) {
       active: null,
     }
 
-      const applyQueueEntry = async (index: number, reason: "initial" | "switch") => {
-        const entry = queueState.entries[index]
-        if (!entry) return
-        const applied = await applyAgentEntry({ sdk, sessionID, entry, log })
-        queueState.active = applied
-        queueState.index = index
-        if (format === "json") {
-          process.stdout.write(
-            JSON.stringify({
-              type: "agent.apply",
-              timestamp: Date.now(),
-              sessionID,
-              agent: applied.agent,
-              model: applied.model,
-              mode: applied.modeId,
-              reason,
-              index,
-            }) + EOL,
-          )
-        } else {
-          UI.println(
-            UI.Style.TEXT_INFO_BOLD + "~",
-            UI.Style.TEXT_DIM + " agent",
-            "",
-            `${applied.agent}` +
-              (applied.model ? `/${applied.model}` : "") +
-              (applied.modeId ? ` (${applied.modeId})` : ""),
-            UI.Style.TEXT_DIM + ` [${reason}]`,
-          )
-        }
+    const applyQueueEntry = async (index: number, reason: "initial" | "switch") => {
+      const entry = queueState.entries[index]
+      if (!entry) return
+      const applied = await applyAgentEntry({ sdk, sessionID, entry, log })
+      queueState.active = applied
+      queueState.index = index
+      if (format === "json") {
+        process.stdout.write(
+          JSON.stringify({
+            type: "agent.apply",
+            timestamp: Date.now(),
+            sessionID,
+            agent: applied.agent,
+            model: applied.model,
+            mode: applied.modeId,
+            reason,
+            index,
+          }) + EOL,
+        )
+      } else {
+        UI.println(
+          UI.Style.TEXT_INFO_BOLD + "~",
+          UI.Style.TEXT_DIM + " agent",
+          "",
+          `${applied.agent}` +
+            (applied.model ? `/${applied.model}` : "") +
+            (applied.modeId ? ` (${applied.modeId})` : ""),
+          UI.Style.TEXT_DIM + ` [${reason}]`,
+        )
       }
+    }
 
     const printEvent = (color: string, type: string, title: string) => {
       UI.println(
@@ -239,7 +239,9 @@ export async function runNonInteractive(args: RunHandlerArgs) {
         const message = error instanceof Error ? error.message : String(error)
         const agentGuide = getAgent(queueState.entries[0]?.name)?.installGuide
         const hint =
-          agentGuide && /not installed|command not found/i.test(message) ? `${message}\nInstall: ${agentGuide}` : message
+          agentGuide && /not installed|command not found/i.test(message)
+            ? `${message}\nInstall: ${agentGuide}`
+            : message
         UI.error(hint)
         process.exit(1)
       }

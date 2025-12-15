@@ -1,5 +1,5 @@
 name = "Stakpak"
-description = "Stakpak's AI development agent"
+description = "Open source AI DevOps Agent"
 command = "stakpak"
 args = ["acp"]
 install_guide = "https://github.com/stakpak/agent"

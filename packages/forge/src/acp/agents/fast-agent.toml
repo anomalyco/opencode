@@ -1,5 +1,5 @@
 name = "Fast Agent"
-description = "Framework for multimodal agents with ACP support (requires Python 3.13+)"
+description = "Define, Prompt and Test MCP enabled Agents and Workflows"
 command = "fast-agent"
 args = ["acp"]
 install_guide = "https://github.com/evalstate/fast-agent"
