@@ -209,6 +209,32 @@ export namespace LSPServer {
     },
   }
 
+  export const Oxlint: Info = {
+    id: "oxlint",
+    root: NearestRoot([
+      ".oxlintrc.json",
+      "package-lock.json",
+      "bun.lockb",
+      "bun.lock",
+      "pnpm-lock.yaml",
+      "yarn.lock",
+      "package.json",
+    ]),
+    extensions: [".ts", ".tsx", ".js", ".jsx", ".mjs", ".cjs", ".mts", ".cts", ".vue", ".astro", ".svelte"],
+    async spawn(root) {
+      const ext = process.platform === "win32" ? ".cmd" : ""
+      const localBin = path.join(root, "node_modules", ".bin", "oxlint" + ext)
+      const bin = (await Bun.file(localBin).exists()) ? localBin : Bun.which("oxlint")
+      if (!bin) return
+
+      return {
+        process: spawn(bin, ["--lsp"], {
+          cwd: root,
+        }),
+      }
+    },
+  }
+
   export const Biome: Info = {
     id: "biome",
     root: NearestRoot([
