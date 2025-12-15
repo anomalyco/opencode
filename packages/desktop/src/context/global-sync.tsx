@@ -100,11 +100,17 @@ export const { use: useGlobalSync, provider: GlobalSyncProvider } = createSimple
 
     async function loadSessions(directory: string) {
       globalSDK.client.session.list({ directory }).then((x) => {
-        const sessions = (x.data ?? [])
+        const oneHourAgo = Date.now() - 60 * 60 * 1000
+        const nonArchived = (x.data ?? [])
           .slice()
           .filter((s) => !s.time.archived)
           .sort((a, b) => a.id.localeCompare(b.id))
-          .slice(0, 5)
+        // Include at least 5 sessions, plus any updated in the last hour
+        const sessions = nonArchived.filter((s, i) => {
+          if (i < 5) return true
+          const updated = new Date(s.time.updated).getTime()
+          return updated > oneHourAgo
+        })
         const [, setStore] = child(directory)
         setStore("session", sessions)
       })
@@ -220,6 +226,21 @@ export const { use: useGlobalSync, provider: GlobalSyncProvider } = createSimple
           )
           break
         }
+        case "message.removed": {
+          const messages = store.message[event.properties.sessionID]
+          if (!messages) break
+          const result = Binary.search(messages, event.properties.messageID, (m) => m.id)
+          if (result.found) {
+            setStore(
+              "message",
+              event.properties.sessionID,
+              produce((draft) => {
+                draft.splice(result.index, 1)
+              }),
+            )
+          }
+          break
+        }
         case "message.part.updated": {
           const part = event.properties.part
           const parts = store.part[part.messageID]
@@ -239,6 +260,21 @@ export const { use: useGlobalSync, provider: GlobalSyncProvider } = createSimple
               draft.splice(result.index, 0, part)
             }),
           )
+          break
+        }
+        case "message.part.removed": {
+          const parts = store.part[event.properties.messageID]
+          if (!parts) break
+          const result = Binary.search(parts, event.properties.partID, (p) => p.id)
+          if (result.found) {
+            setStore(
+              "part",
+              event.properties.messageID,
+              produce((draft) => {
+                draft.splice(result.index, 1)
+              }),
+            )
+          }
           break
         }
       }

@@ -21,7 +21,15 @@ export interface FileAttachmentPart extends PartBase {
   selection?: TextSelection
 }
 
-export type ContentPart = TextPart | FileAttachmentPart
+export interface ImageAttachmentPart {
+  type: "image"
+  id: string
+  filename: string
+  mime: string
+  dataUrl: string
+}
+
+export type ContentPart = TextPart | FileAttachmentPart | ImageAttachmentPart
 export type Prompt = ContentPart[]
 
 export const DEFAULT_PROMPT: Prompt = [{ type: "text", content: "", start: 0, end: 0 }]
@@ -38,6 +46,9 @@ export function isPromptEqual(promptA: Prompt, promptB: Prompt): boolean {
     if (partA.type === "file" && partA.path !== (partB as FileAttachmentPart).path) {
       return false
     }
+    if (partA.type === "image" && partA.id !== (partB as ImageAttachmentPart).id) {
+      return false
+    }
   }
   return true
 }
@@ -49,6 +60,7 @@ function cloneSelection(selection?: TextSelection) {
 
 function clonePart(part: ContentPart): ContentPart {
   if (part.type === "text") return { ...part }
+  if (part.type === "image") return { ...part }
   return {
     ...part,
     selection: cloneSelection(part.selection),

@@ -406,7 +406,7 @@ export const { use: useLocal, provider: LocalProvider } = createSimpleContext({
           case "file.watcher.updated":
             const relativePath = relative(event.properties.file)
             if (relativePath.startsWith(".git/")) return
-            load(relativePath)
+            if (store.node[relativePath]) load(relativePath)
             break
         }
       })

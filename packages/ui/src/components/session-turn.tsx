@@ -62,11 +62,15 @@ export function SessionTurn(
 
   function handleScroll() {
     if (!scrollRef) return
-    // prevents scroll loops
-    if (working() && scrollRef.scrollTop < 100) return
-    setState("scrollY", scrollRef.scrollTop)
     if (state.autoScrolling) return
     const { scrollTop, scrollHeight, clientHeight } = scrollRef
+    // prevents scroll loops - only update scrollY if we have meaningful scroll room
+    // the gap clamp shrinks by 0.48px per pixel scrolled, hitting min at ~71px scroll
+    // we need at least that much scroll headroom beyond the current scroll position
+    const scrollRoom = scrollHeight - clientHeight
+    if (scrollRoom > 100) {
+      setState("scrollY", scrollTop)
+    }
     const atBottom = scrollHeight - scrollTop - clientHeight < 50
     if (!atBottom && working()) {
       setState("userScrolled", true)

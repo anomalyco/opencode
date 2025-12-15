@@ -14,11 +14,77 @@
   line-height: var(--line-height-large);
   letter-spacing: var(--letter-spacing-normal);
   color: var(--text-base);
-  display: -webkit-box;
-  line-clamp: 3;
-  -webkit-line-clamp: 3;
-  -webkit-box-orient: vertical;
-  overflow: hidden;
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+
+  [data-slot="user-message-attachments"] {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 8px;
+  }
+
+  [data-slot="user-message-attachment"] {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+    border-radius: 6px;
+    overflow: hidden;
+    background: var(--surface-base);
+    border: 1px solid var(--border-base);
+    transition: border-color 0.15s ease;
+
+    &:hover {
+      border-color: var(--border-strong-base);
+    }
+
+    &[data-type="image"] {
+      width: 48px;
+      height: 48px;
+    }
+
+    &[data-type="file"] {
+      width: 48px;
+      height: 48px;
+    }
+  }
+
+  [data-slot="user-message-attachment-image"] {
+    width: 100%;
+    height: 100%;
+    object-fit: cover;
+  }
+
+  [data-slot="user-message-attachment-icon"] {
+    width: 100%;
+    height: 100%;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    color: var(--icon-weak);
+
+    [data-component="icon"] {
+      width: 20px;
+      height: 20px;
+    }
+  }
+
+  [data-slot="user-message-text"] {
+    display: -webkit-box;
+    line-clamp: 3;
+    -webkit-line-clamp: 3;
+    -webkit-box-orient: vertical;
+    overflow: hidden;
+  }
+
+  .text-text-strong {
+    color: var(--text-strong);
+  }
+
+  .font-medium {
+    font-weight: var(--font-weight-medium);
+  }
 }
 
 [data-component="text-part"] {
