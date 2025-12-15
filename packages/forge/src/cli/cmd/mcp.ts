@@ -6,6 +6,7 @@ import { UI } from "../ui"
 
 export const McpCommand = cmd({
   command: "mcp",
+  describe: false as any,
   builder: (yargs) => yargs.command(McpAddCommand).demandCommand(),
   async handler() {},
 })

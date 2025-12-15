@@ -3,9 +3,9 @@ import { cmd } from "./cmd"
 import { getAllAgents } from "../../acp/agents"
 import { EOL } from "os"
 
-export const AgentsCommand = cmd({
+export const ListCommand = cmd({
   command: "agents",
-  describe: "list all available ACP agents",
+  describe: "list all available agents",
   builder: (yargs: Argv) => {
     return yargs
   },

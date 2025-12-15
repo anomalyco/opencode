@@ -1,4 +1,4 @@
-name = "Codex CLI"
+name = "Codex ACP"
 description = "ACP adapter for Codex from Zed Industries"
 command = "codex-acp"
 args = []
