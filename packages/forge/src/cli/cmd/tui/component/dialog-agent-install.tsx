@@ -116,7 +116,7 @@ export function DialogAgentInstall(props: { agentName: string }) {
             when={hasCommands()}
             fallback={<text fg={theme.textMuted}>No install commands available for this platform.</text>}
           >
-            <box gap={0.5}>
+            <box gap={0}>
               <For each={commands()}>
                 {(cmd, index) => {
                   const active = () => selectedIndex() === index()

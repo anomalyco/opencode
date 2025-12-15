@@ -27,7 +27,7 @@ export interface ACPAgentDefinition {
 export const ACP_AGENTS: ACPAgentDefinition[] = [
   {
     name: "Claude Code",
-    description: "ACP adapter for Claude Code",
+    description: "ACP adapter for Claude Code from Zed Industries",
     command: "claude-code-acp",
     acpStartupArgs: [],
     installCommands: {
@@ -67,7 +67,7 @@ export const ACP_AGENTS: ACPAgentDefinition[] = [
   },
   {
     name: "Codex CLI",
-    description: "ACP adapter for Codex",
+    description: "ACP adapter for Codex from Zed Industries",
     command: "codex-acp",
     acpStartupArgs: [],
     installCommands: {
