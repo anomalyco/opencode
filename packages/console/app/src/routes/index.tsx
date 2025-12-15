@@ -213,7 +213,7 @@ export default function Home() {
                 <span>[*]</span>
                 <p>
                   With over <strong>{config.github.starsFormatted.full}</strong> GitHub stars,{" "}
-                  <strong>{config.stats.contributors}</strong> contributors, and almost{" "}
+                  <strong>{config.stats.contributors}</strong> contributors, and over{" "}
                   <strong>{config.stats.commits}</strong> commits, OpenCode is used and trusted by over{" "}
                   <strong>{config.stats.monthlyUsers}</strong> developers every month.
                 </p>
