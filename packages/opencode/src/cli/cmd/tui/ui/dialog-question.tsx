@@ -26,9 +26,8 @@ interface QuestionDialogProps {
 interface SingleQuestionProps {
   item: Question.QuestionItem
   currentAnswer?: Answer
-  onAnswer: (answer: Answer) => void
+  onAnswer: (answer: Partial<Answer>) => void // Merges with current answer
   onCancel: () => void
-  onSubmitAll: (answer: Answer) => void
 }
 
 // Main DialogQuestion - shows list of all questions
@@ -56,19 +55,19 @@ export function DialogQuestion(props: QuestionDialogProps) {
       <Component
         item={item}
         currentAnswer={answers[item.id]}
-        onAnswer={(answer) => {
-          setAnswers(item.id, answer)
+        onAnswer={(partialAnswer) => {
+          // Merge partial answer with existing answer
+          const mergedAnswer = {
+            ...answers[item.id],
+            ...partialAnswer,
+          }
+          setAnswers(item.id, mergedAnswer)
           // Sync to initialAnswers if provided
           if (props.initialAnswers) {
-            props.initialAnswers[item.id] = answer
+            props.initialAnswers[item.id] = mergedAnswer
           }
-          dialog.pop()
         }}
         onCancel={() => dialog.pop()}
-        onSubmitAll={(answer) => {
-          setAnswers(item.id, answer)
-          submit({ ...answers, [item.id]: answer })
-        }}
       />
     ))
   }
@@ -157,12 +156,9 @@ function DialogQuestionSelect(props: SingleQuestionProps) {
         onSave={(c) => {
           const trimmedComment = c.trim() || undefined
           setComment(trimmedComment)
-          // Save comment to store immediately, keeping current value
-          props.onAnswer({
-            value: props.currentAnswer?.value ?? null,
-            comment: trimmedComment,
-          })
-          // dialog.pop()
+          // Update just the comment, merging with existing answer
+          props.onAnswer({ comment: trimmedComment })
+          dialog.pop()
         }}
         onCancel={() => dialog.pop()}
       />
@@ -170,11 +166,8 @@ function DialogQuestionSelect(props: SingleQuestionProps) {
   }
 
   function confirmSelection(option: { value: string; label: string; recommended?: boolean }) {
-    props.onAnswer({ value: option.value, comment: comment() })
-  }
-
-  function submitAll(option: { value: string; label: string; recommended?: boolean }) {
-    props.onSubmitAll({ value: option.value, comment: comment() })
+    props.onAnswer({ value: option.value })
+    dialog.pop()
   }
 
   // Convert options to DialogSelectOption format
@@ -210,14 +203,9 @@ function DialogQuestionSelect(props: SingleQuestionProps) {
         hideSearch={true}
         keybind={[
           {
-            keybind: { name: "m", ctrl: false, meta: false, shift: false, super: false, leader: false },
+            keybind: { name: "c", ctrl: false, meta: false, shift: false, super: false, leader: false },
             title: "add comment",
             onTrigger: () => openComment(),
-          },
-          {
-            keybind: { name: "s", ctrl: false, meta: false, shift: false, super: false, leader: false },
-            title: "submit all",
-            onTrigger: (option) => submitAll(option.value),
           },
         ]}
       />
@@ -263,12 +251,9 @@ function DialogQuestionMultiSelect(props: SingleQuestionProps) {
         onSave={(c) => {
           const trimmedComment = c.trim() || undefined
           setComment(trimmedComment)
-          // Update comment in store without closing the question dialog
-          props.onAnswer({
-            value: props.currentAnswer?.value ?? [],
-            comment: trimmedComment,
-          })
-          // dialog.pop()
+          // Update just the comment, merging with existing answer
+          props.onAnswer({ comment: trimmedComment })
+          dialog.pop()
         }}
         onCancel={() => dialog.pop()}
       />
@@ -282,11 +267,8 @@ function DialogQuestionMultiSelect(props: SingleQuestionProps) {
   }
 
   function confirmSelection() {
-    props.onAnswer({ value: getSelectedValues(), comment: comment() })
-  }
-
-  function submitAll() {
-    props.onSubmitAll({ value: getSelectedValues(), comment: comment() })
+    props.onAnswer({ value: getSelectedValues() })
+    dialog.pop()
   }
 
   // Convert options to DialogSelectOption format
@@ -318,14 +300,9 @@ function DialogQuestionMultiSelect(props: SingleQuestionProps) {
             onTrigger: (option) => setChecked(option.value.value, !checked[option.value.value]),
           },
           {
-            keybind: { name: "m", ctrl: false, meta: false, shift: false, super: false, leader: false },
+            keybind: { name: "c", ctrl: false, meta: false, shift: false, super: false, leader: false },
             title: "add comment",
             onTrigger: () => openComment(),
-          },
-          {
-            keybind: { name: "s", ctrl: false, meta: false, shift: false, super: false, leader: false },
-            title: "submit all",
-            onTrigger: () => submitAll(),
           },
         ]}
       />
@@ -358,12 +335,9 @@ function DialogQuestionConfirm(props: SingleQuestionProps) {
         onSave={(c) => {
           const trimmedComment = c.trim() || undefined
           setComment(trimmedComment)
-          // Update comment in store without closing the question dialog
-          props.onAnswer({
-            value: props.currentAnswer?.value ?? null,
-            comment: trimmedComment,
-          })
-          // dialog.pop()
+          // Update just the comment, merging with existing answer
+          props.onAnswer({ comment: trimmedComment })
+          dialog.pop()
         }}
         onCancel={() => dialog.pop()}
       />
@@ -372,13 +346,8 @@ function DialogQuestionConfirm(props: SingleQuestionProps) {
 
   function confirmSelection() {
     if (selected() !== null) {
-      props.onAnswer({ value: selected(), comment: comment() })
-    }
-  }
-
-  function submitAll() {
-    if (selected() !== null) {
-      props.onSubmitAll({ value: selected(), comment: comment() })
+      props.onAnswer({ value: selected() })
+      dialog.pop()
     }
   }
 
@@ -391,9 +360,6 @@ function DialogQuestionConfirm(props: SingleQuestionProps) {
       evt.preventDefault()
     } else if (evt.name === "return" && !evt.ctrl) {
       confirmSelection()
-      evt.preventDefault()
-    } else if (evt.ctrl && evt.name === "return") {
-      submitAll()
       evt.preventDefault()
     } else if (evt.name === "c" && !evt.ctrl) {
       openComment()
@@ -495,6 +461,7 @@ function DialogQuestionConfirm(props: SingleQuestionProps) {
 
 // Text Input Question Dialog
 function DialogQuestionText(props: SingleQuestionProps) {
+  const dialog = useDialog()
   const placeholder = typeof props.item.default === "string" ? props.item.default : "Enter your response..."
   const initialValue = typeof props.currentAnswer?.value === "string" ? props.currentAnswer.value : ""
 
@@ -506,6 +473,7 @@ function DialogQuestionText(props: SingleQuestionProps) {
       onConfirm={(value) => {
         const trimmedValue = value.trim()
         props.onAnswer({ value: trimmedValue || null })
+        dialog.pop()
       }}
       onCancel={() => props.onCancel()}
     />
