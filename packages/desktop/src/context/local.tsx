@@ -249,6 +249,7 @@ export const { use: useLocal, provider: LocalProvider } = createSimpleContext({
         set(model: ModelKey | undefined, options?: { recent?: boolean }) {
           batch(() => {
             setEphemeral("model", agent.current().name, model ?? fallbackModel())
+            if (model) updateVisibility(model, "show")
             if (options?.recent && model) {
               const uniq = uniqueBy([model, ...store.recent], (x) => x.providerID + x.modelID)
               if (uniq.length > 5) uniq.pop()
