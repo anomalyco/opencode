@@ -115,6 +115,7 @@ export default function Page() {
     clickTimer: undefined as number | undefined,
     activeDraggable: undefined as string | undefined,
     activeTerminalDraggable: undefined as string | undefined,
+    stepsExpanded: false,
   })
   let inputRef!: HTMLDivElement
 
@@ -190,7 +191,8 @@ export default function Page() {
       category: "View",
       keybind: "mod+e",
       slash: "steps",
-      onSelect: () => layout.steps.toggle(),
+      disabled: !params.id,
+      onSelect: () => setStore("stepsExpanded", (x) => !x),
     },
     {
       id: "message.previous",
@@ -555,10 +557,8 @@ export default function Page() {
                           <SessionTurn
                             sessionID={params.id!}
                             messageID={activeMessage()?.id!}
-                            stepsExpanded={layout.steps.expanded()}
-                            onStepsExpandedChange={(expanded) =>
-                              expanded ? layout.steps.expand() : layout.steps.collapse()
-                            }
+                            stepsExpanded={store.stepsExpanded}
+                            onStepsExpandedChange={(expanded) => setStore("stepsExpanded", expanded)}
                             classes={{
                               root: "pb-20 flex-1 min-w-0",
                               content: "pb-20",
