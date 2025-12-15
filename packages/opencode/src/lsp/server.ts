@@ -223,12 +223,51 @@ export namespace LSPServer {
     extensions: [".ts", ".tsx", ".js", ".jsx", ".mjs", ".cjs", ".mts", ".cts", ".vue", ".astro", ".svelte"],
     async spawn(root) {
       const ext = process.platform === "win32" ? ".cmd" : ""
-      const localBin = path.join(root, "node_modules", ".bin", "oxlint" + ext)
-      const bin = (await Bun.file(localBin).exists()) ? localBin : Bun.which("oxlint")
-      if (!bin) return
+
+      const serverTarget = path.join("node_modules", ".bin", "oxc_language_server" + ext)
+      const lintTarget = path.join("node_modules", ".bin", "oxlint" + ext)
+
+      const resolveBin = async (target: string) => {
+        const localBin = path.join(root, target)
+        if (await Bun.file(localBin).exists()) return localBin
+
+        const candidates = Filesystem.up({
+          targets: [target],
+          start: root,
+          stop: Instance.worktree,
+        })
+        const first = await candidates.next()
+        await candidates.return()
+        if (first.value) return first.value
+
+        return undefined
+      }
+
+      let serverBin = await resolveBin(serverTarget)
+      if (!serverBin) {
+        const found = Bun.which("oxc_language_server")
+        if (found) serverBin = found
+      }
+      if (serverBin) {
+        return {
+          process: spawn(serverBin, [], {
+            cwd: root,
+          }),
+        }
+      }
+
+      let lintBin = await resolveBin(lintTarget)
+      if (!lintBin) {
+        const found = Bun.which("oxlint")
+        if (found) lintBin = found
+      }
+      if (!lintBin) {
+        log.info("oxc_language_server/oxlint not found, please install oxlint")
+        return
+      }
 
       return {
-        process: spawn(bin, ["--lsp"], {
+        process: spawn(lintBin, ["--lsp"], {
           cwd: root,
         }),
       }
