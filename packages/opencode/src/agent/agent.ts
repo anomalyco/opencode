@@ -107,6 +107,24 @@ export namespace Agent {
     )
 
     const result: Record<string, Info> = {
+      build: {
+        name: "build",
+        tools: { ...defaultTools },
+        options: {},
+        permission: agentPermission,
+        mode: "primary",
+        native: true,
+      },
+      plan: {
+        name: "plan",
+        options: {},
+        permission: planPermission,
+        tools: {
+          ...defaultTools,
+        },
+        mode: "primary",
+        native: true,
+      },
       general: {
         name: "general",
         description: `General-purpose agent for researching complex questions and executing multi-step tasks. Use this agent to execute multiple units of work in parallel.`,
@@ -149,14 +167,6 @@ export namespace Agent {
         options: {},
         permission: agentPermission,
       },
-      build: {
-        name: "build",
-        tools: { ...defaultTools },
-        options: {},
-        permission: agentPermission,
-        mode: "primary",
-        native: true,
-      },
       title: {
         name: "title",
         mode: "primary",
@@ -176,16 +186,6 @@ export namespace Agent {
         permission: agentPermission,
         prompt: PROMPT_SUMMARY,
         tools: {},
-      },
-      plan: {
-        name: "plan",
-        options: {},
-        permission: planPermission,
-        tools: {
-          ...defaultTools,
-        },
-        mode: "primary",
-        native: true,
       },
     }
     for (const [key, value] of Object.entries(cfg.agent ?? {})) {

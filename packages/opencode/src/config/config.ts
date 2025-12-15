@@ -668,10 +668,16 @@ export namespace Config {
         .describe("@deprecated Use `agent` field instead."),
       agent: z
         .object({
+          // primary
           plan: Agent.optional(),
           build: Agent.optional(),
+          // subagent
           general: Agent.optional(),
           explore: Agent.optional(),
+          // specialized
+          title: Agent.optional(),
+          summary: Agent.optional(),
+          compaction: Agent.optional(),
         })
         .catchall(Agent)
         .optional()
