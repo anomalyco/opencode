@@ -19,6 +19,8 @@ import { Checkbox } from "./checkbox"
 import { DiffChanges } from "./diff-changes"
 import { Markdown } from "./markdown"
 import { getDirectory as _getDirectory, getFilename } from "@opencode-ai/util/path"
+import { Code } from "./code"
+import { checksum } from "@opencode-ai/util/encode"
 
 export interface MessageProps {
   message: MessageType
@@ -301,8 +303,12 @@ ToolRegistry.register({
   render(props) {
     return (
       <BasicTool icon="bullet-list" trigger={{ title: "List", subtitle: getDirectory(props.input.path || "/") }}>
-        <Show when={false && props.output}>
-          <div data-component="tool-output">{props.output}</div>
+        <Show when={props.output}>
+          {(output) => (
+            <div data-component="tool-output" data-scrollable>
+              <Markdown text={output()} />
+            </div>
+          )}
         </Show>
       </BasicTool>
     )
@@ -321,8 +327,12 @@ ToolRegistry.register({
           args: props.input.pattern ? ["pattern=" + props.input.pattern] : [],
         }}
       >
-        <Show when={false && props.output}>
-          <div data-component="tool-output">{props.output}</div>
+        <Show when={props.output}>
+          {(output) => (
+            <div data-component="tool-output" data-scrollable>
+              <Markdown text={output()} />
+            </div>
+          )}
         </Show>
       </BasicTool>
     )
@@ -344,8 +354,12 @@ ToolRegistry.register({
           args,
         }}
       >
-        <Show when={false && props.output}>
-          <div data-component="tool-output">{props.output}</div>
+        <Show when={props.output}>
+          {(output) => (
+            <div data-component="tool-output" data-scrollable>
+              <Markdown text={output()} />
+            </div>
+          )}
         </Show>
       </BasicTool>
     )
@@ -369,8 +383,12 @@ ToolRegistry.register({
           ),
         }}
       >
-        <Show when={false && props.output}>
-          <div data-component="tool-output">{props.output}</div>
+        <Show when={props.output}>
+          {(output) => (
+            <div data-component="tool-output" data-scrollable>
+              <Markdown text={output()} />
+            </div>
+          )}
         </Show>
       </BasicTool>
     )
@@ -384,12 +402,17 @@ ToolRegistry.register({
       <BasicTool
         icon="task"
         trigger={{
-          title: `${props.input.subagent_type || props.tool} Agent: ${props.input.description || ""}`,
+          title: `${props.input.subagent_type || props.tool} Agent`,
           titleClass: "capitalize",
+          subtitle: props.input.description,
         }}
       >
-        <Show when={false && props.output}>
-          <div data-component="tool-output">{props.output}</div>
+        <Show when={props.output}>
+          {(output) => (
+            <div data-component="tool-output" data-scrollable>
+              <Markdown text={output()} />
+            </div>
+          )}
         </Show>
       </BasicTool>
     )
@@ -467,6 +490,7 @@ ToolRegistry.register({
 ToolRegistry.register({
   name: "write",
   render(props) {
+    console.log(props)
     return (
       <BasicTool
         icon="code-lines"
@@ -485,8 +509,18 @@ ToolRegistry.register({
           </div>
         }
       >
-        <Show when={false && props.output}>
-          <div data-component="tool-output">{props.output}</div>
+        <Show when={props.input.content}>
+          <div data-component="write-content">
+            <Code
+              file={{
+                name: props.input.filePath,
+                contents: props.input.content,
+                cacheKey: checksum(props.input.content),
+              }}
+              overflow="scroll"
+              class="pb-40"
+            />
+          </div>
         </Show>
       </BasicTool>
     )
@@ -498,6 +532,7 @@ ToolRegistry.register({
   render(props) {
     return (
       <BasicTool
+        defaultOpen
         icon="checklist"
         trigger={{
           title: "To-dos",
