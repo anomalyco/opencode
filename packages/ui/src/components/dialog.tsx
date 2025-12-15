@@ -20,6 +20,14 @@ export function Dialog(props: DialogProps) {
             ...(props.classList ?? {}),
             [props.class ?? ""]: !!props.class,
           }}
+          onOpenAutoFocus={(e) => {
+            const target = e.currentTarget as HTMLElement | null
+            const autofocusEl = target?.querySelector("[autofocus]") as HTMLElement | null
+            if (autofocusEl) {
+              e.preventDefault()
+              autofocusEl.focus()
+            }
+          }}
         >
           <Show when={props.title || props.action}>
             <div data-slot="dialog-header">

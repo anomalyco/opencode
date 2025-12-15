@@ -185,6 +185,11 @@ export default function Page() {
       return
     }
 
+    // Don't interfere with dialogs
+    if (dialog.stack.length > 0) {
+      return
+    }
+
     const focused = document.activeElement === inputRef
     if (focused) {
       if (event.key === "Escape") {
