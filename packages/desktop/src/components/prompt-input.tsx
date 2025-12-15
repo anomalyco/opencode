@@ -15,9 +15,9 @@ import { Tooltip } from "@opencode-ai/ui/tooltip"
 import { IconButton } from "@opencode-ai/ui/icon-button"
 import { Select } from "@opencode-ai/ui/select"
 import { getDirectory, getFilename } from "@opencode-ai/util/path"
-import { useDialog } from "@/context/dialog"
-import { DialogModel } from "@/components/dialog-model"
-import { DialogModelUnpaid } from "@/components/dialog-model-unpaid"
+import { useDialog } from "@opencode-ai/ui/context/dialog"
+import { DialogSelectModel } from "@/components/dialog-select-model"
+import { DialogSelectModelUnpaid } from "@/components/dialog-select-model-unpaid"
 import { useProviders } from "@/hooks/use-providers"
 
 interface PromptInputProps {
@@ -616,7 +616,9 @@ export const PromptInput: Component<PromptInputProps> = (props) => {
             <Button
               as="div"
               variant="ghost"
-              onClick={() => dialog.push(() => (providers.paid().length > 0 ? <DialogModel /> : <DialogModelUnpaid />))}
+              onClick={() =>
+                dialog.push(() => (providers.paid().length > 0 ? <DialogSelectModel /> : <DialogSelectModelUnpaid />))
+              }
             >
               {local.model.current()?.name ?? "Select model"}
               <span class="ml-0.5 text-text-weak text-12-regular">{local.model.current()?.provider.name}</span>

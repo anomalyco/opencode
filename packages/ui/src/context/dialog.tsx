@@ -1,4 +1,4 @@
-import { createEffect, For, onCleanup, Show, type JSX } from "solid-js"
+import { For, Show, type JSX } from "solid-js"
 import { createStore } from "solid-js/store"
 import { createSimpleContext } from "@opencode-ai/ui/context"
 
@@ -12,23 +12,6 @@ export const { use: useDialog, provider: DialogProvider } = createSimpleContext(
         element: DialogElement
         onClose?: () => void
       }[],
-    })
-
-    function handleKeyDown(e: KeyboardEvent) {
-      if (e.key === "Escape" && store.stack.length > 0) {
-        const current = store.stack.at(-1)!
-        current.onClose?.()
-        setStore("stack", store.stack.slice(0, -1))
-        e.preventDefault()
-        e.stopPropagation()
-      }
-    }
-
-    createEffect(() => {
-      document.addEventListener("keydown", handleKeyDown, true)
-      onCleanup(() => {
-        document.removeEventListener("keydown", handleKeyDown, true)
-      })
     })
 
     return {
@@ -59,6 +42,8 @@ export const { use: useDialog, provider: DialogProvider } = createSimpleContext(
   },
 })
 
+import { Dialog as Kobalte } from "@kobalte/core/dialog"
+
 export function DialogRoot(props: { children?: JSX.Element }) {
   const dialog = useDialog()
   return (
@@ -69,7 +54,21 @@ export function DialogRoot(props: { children?: JSX.Element }) {
           <For each={dialog.stack}>
             {(item, index) => (
               <Show when={index() === dialog.stack.length - 1}>
-                {typeof item.element === "function" ? item.element() : item.element}
+                <Kobalte
+                  modal
+                  defaultOpen
+                  onOpenChange={(open) => {
+                    if (!open) {
+                      item.onClose?.()
+                      dialog.pop()
+                    }
+                  }}
+                >
+                  <Kobalte.Portal>
+                    <Kobalte.Overlay data-component="dialog-overlay" />
+                    {typeof item.element === "function" ? item.element() : item.element}
+                  </Kobalte.Portal>
+                </Kobalte>
               </Show>
             )}
           </For>
