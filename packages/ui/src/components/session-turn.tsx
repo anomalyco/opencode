@@ -228,7 +228,6 @@ export function SessionTurn(
                 duration: duration(),
               })
 
-              // Sync with controlled prop
               createEffect(() => {
                 if (props.stepsExpanded !== undefined) {
                   setStore("stepsExpanded", props.stepsExpanded)

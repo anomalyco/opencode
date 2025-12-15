@@ -77,7 +77,6 @@ export const PromptInput: Component<PromptInputProps> = (props) => {
   const command = useCommand()
   let editorRef!: HTMLDivElement
 
-  // Session-derived state
   const sessionKey = createMemo(() => `${params.dir}${params.id ? "/" + params.id : ""}`)
   const tabs = createMemo(() => layout.tabs(sessionKey()))
   const info = createMemo(() => (params.id ? sync.session.get(params.id) : undefined))
@@ -183,10 +182,10 @@ export const PromptInput: Component<PromptInputProps> = (props) => {
   }
 
   onMount(() => {
-    editorRef?.addEventListener("paste", handlePaste)
+    editorRef.addEventListener("paste", handlePaste)
   })
   onCleanup(() => {
-    editorRef?.removeEventListener("paste", handlePaste)
+    editorRef.removeEventListener("paste", handlePaste)
   })
 
   createEffect(() => {
@@ -208,7 +207,6 @@ export const PromptInput: Component<PromptInputProps> = (props) => {
     onSelect: handleFileSelect,
   })
 
-  // Get slash commands from registered commands (only those with explicit slash trigger)
   const slashCommands = createMemo<SlashCommand[]>(() => {
     const builtin = command.options
       .filter((opt) => !opt.disabled && !opt.id.startsWith("suggested.") && opt.slash)
@@ -237,12 +235,10 @@ export const PromptInput: Component<PromptInputProps> = (props) => {
     setStore("popover", null)
 
     if (cmd.type === "custom") {
-      // For custom commands, insert the command text so user can add arguments
       const text = `/${cmd.trigger} `
       editorRef.innerHTML = ""
       editorRef.textContent = text
       prompt.set([{ type: "text", content: text, start: 0, end: text.length }], text.length)
-      // Set cursor at end
       requestAnimationFrame(() => {
         editorRef.focus()
         const range = document.createRange()
@@ -255,7 +251,6 @@ export const PromptInput: Component<PromptInputProps> = (props) => {
       return
     }
 
-    // For built-in commands, clear input and execute immediately
     editorRef.innerHTML = ""
     prompt.set([{ type: "text", content: "", start: 0, end: 0 }], 0)
     command.trigger(cmd.id, "slash")
@@ -287,7 +282,7 @@ export const PromptInput: Component<PromptInputProps> = (props) => {
         }
 
         editorRef.innerHTML = ""
-        currentParts.forEach((part: ContentPart) => {
+        currentParts.forEach((part) => {
           if (part.type === "text") {
             editorRef.appendChild(document.createTextNode(part.content))
           } else if (part.type === "file") {
@@ -374,7 +369,7 @@ export const PromptInput: Component<PromptInputProps> = (props) => {
 
     const cursorPosition = getCursorPosition(editorRef)
     const currentPrompt = prompt.current()
-    const rawText = currentPrompt.map((p: ContentPart) => p.content).join("")
+    const rawText = currentPrompt.map((p) => p.content).join("")
     const textBeforeCursor = rawText.substring(0, cursorPosition)
     const atMatch = textBeforeCursor.match(/@(\S*)$/)
 
@@ -498,7 +493,6 @@ export const PromptInput: Component<PromptInputProps> = (props) => {
   }
 
   const handleKeyDown = (event: KeyboardEvent) => {
-    // Handle popover navigation
     if (store.popover && (event.key === "ArrowUp" || event.key === "ArrowDown" || event.key === "Enter")) {
       if (store.popover === "file") {
         onKeyDown(event)
@@ -510,7 +504,6 @@ export const PromptInput: Component<PromptInputProps> = (props) => {
     }
 
     if (event.key === "ArrowUp" || event.key === "ArrowDown") {
-      // Skip history navigation when modifier keys are pressed (used for other commands)
       if (event.altKey || event.ctrlKey || event.metaKey) return
       const { collapsed, onFirstLine, onLastLine } = getCaretLineState()
       if (!collapsed) return
@@ -554,7 +547,7 @@ export const PromptInput: Component<PromptInputProps> = (props) => {
   const handleSubmit = async (event: Event) => {
     event.preventDefault()
     const currentPrompt = prompt.current()
-    const text = currentPrompt.map((part: ContentPart) => part.content).join("")
+    const text = currentPrompt.map((part) => part.content).join("")
     if (text.trim().length === 0) {
       if (working()) abort()
       return
@@ -574,7 +567,7 @@ export const PromptInput: Component<PromptInputProps> = (props) => {
 
     const toAbsolutePath = (path: string) => (path.startsWith("/") ? path : sync.absolute(path))
     const attachments = currentPrompt.filter(
-      (part: ContentPart) => part.type === "file",
+      (part) => part.type === "file",
     ) as import("@/context/prompt").FileAttachmentPart[]
 
     const attachmentParts = attachments.map((attachment) => {
@@ -603,7 +596,6 @@ export const PromptInput: Component<PromptInputProps> = (props) => {
     editorRef.innerHTML = ""
     prompt.set([{ type: "text", content: "", start: 0, end: 0 }], 0)
 
-    // Check if this is a custom command
     if (text.startsWith("/")) {
       const [cmdName, ...args] = text.split(" ")
       const commandName = cmdName.slice(1) // Remove leading "/"
@@ -639,7 +631,6 @@ export const PromptInput: Component<PromptInputProps> = (props) => {
 
   return (
     <div class="relative size-full _max-h-[320px] flex flex-col gap-3">
-      {/* Popover for file mentions and slash commands */}
       <Show when={store.popover}>
         <div
           class="absolute inset-x-0 -top-3 -translate-y-full origin-bottom-left max-h-80 min-h-10

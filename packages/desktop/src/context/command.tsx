@@ -6,12 +6,6 @@ import { List } from "@opencode-ai/ui/list"
 
 const IS_MAC = typeof navigator === "object" && /(Mac|iPod|iPhone|iPad)/.test(navigator.platform)
 
-/**
- * Keybind configuration type.
- * Format: "mod+key" where mod can be ctrl, alt, shift, meta (or cmd on mac)
- * Multiple keybinds can be separated by comma: "mod+p,ctrl+shift+p"
- * Use "mod" for platform-appropriate modifier (cmd on mac, ctrl elsewhere)
- */
 export type KeybindConfig = string
 
 export interface Keybind {
@@ -23,23 +17,14 @@ export interface Keybind {
 }
 
 export interface CommandOption {
-  /** Unique identifier for the command */
   id: string
-  /** Display title in the command palette */
   title: string
-  /** Optional description */
   description?: string
-  /** Category for grouping in the palette */
   category?: string
-  /** Keybind string (e.g., "mod+p", "ctrl+shift+t") */
   keybind?: KeybindConfig
-  /** Slash command trigger (e.g., "models" for /models) */
   slash?: string
-  /** Whether to show in the "Suggested" section */
   suggested?: boolean
-  /** Whether the command is disabled */
   disabled?: boolean
-  /** Handler when command is selected */
   onSelect?: (source?: "palette" | "keybind" | "slash") => void
 }
 
@@ -197,7 +182,6 @@ export const { use: useCommand, provider: CommandProvider } = createSimpleContex
     const handleKeyDown = (event: KeyboardEvent) => {
       if (suspended()) return
 
-      // Check for command palette keybind (mod+shift+p)
       const paletteKeybinds = parseKeybind("mod+shift+p")
       if (matchKeybind(paletteKeybinds, event)) {
         event.preventDefault()
@@ -205,7 +189,6 @@ export const { use: useCommand, provider: CommandProvider } = createSimpleContex
         return
       }
 
-      // Check registered command keybinds
       for (const option of options()) {
         if (option.disabled) continue
         if (!option.keybind) continue
