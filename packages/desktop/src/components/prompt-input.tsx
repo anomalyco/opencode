@@ -414,7 +414,6 @@ export const PromptInput: Component<PromptInputProps> = (props) => {
     const rawText = rawParts.map((p) => ("content" in p ? p.content : "")).join("")
 
     const atMatch = rawText.substring(0, cursorPosition).match(/@(\S*)$/)
-    // Slash commands only trigger when / is at the start of input
     const slashMatch = rawText.match(/^\/(\S*)$/)
 
     if (atMatch) {
@@ -675,7 +674,7 @@ export const PromptInput: Component<PromptInputProps> = (props) => {
 
     if (text.startsWith("/")) {
       const [cmdName, ...args] = text.split(" ")
-      const commandName = cmdName.slice(1) // Remove leading "/"
+      const commandName = cmdName.slice(1)
       const customCommand = sync.data.command.find((c) => c.name === commandName)
       if (customCommand) {
         sdk.client.session.command({

@@ -100,7 +100,6 @@ export default function Layout(props: ParentProps) {
     const currentDirectory = params.dir ? base64Decode(params.dir) : undefined
     const projectIndex = currentDirectory ? projects.findIndex((p) => p.worktree === currentDirectory) : -1
 
-    // If we're not in any project, navigate to the first/last project based on direction
     if (projectIndex === -1) {
       const targetProject = offset > 0 ? projects[0] : projects[projects.length - 1]
       if (targetProject) navigateToProject(targetProject.worktree)
@@ -110,16 +109,13 @@ export default function Layout(props: ParentProps) {
     const sessions = currentSessions()
     const sessionIndex = params.id ? sessions.findIndex((s) => s.id === params.id) : -1
 
-    // Calculate target index within current project
     let targetIndex: number
     if (sessionIndex === -1) {
-      // Not on a session - go to first session for "next", last session for "prev"
       targetIndex = offset > 0 ? 0 : sessions.length - 1
     } else {
       targetIndex = sessionIndex + offset
     }
 
-    // If target is within bounds, navigate to that session
     if (targetIndex >= 0 && targetIndex < sessions.length) {
       const session = sessions[targetIndex]
       navigateToSession(session)
@@ -127,19 +123,16 @@ export default function Layout(props: ParentProps) {
       return
     }
 
-    // Navigate to adjacent project
     const nextProjectIndex = projectIndex + (offset > 0 ? 1 : -1)
     const nextProject = projects[nextProjectIndex]
     if (!nextProject) return
 
     const nextProjectSessions = flattenSessions(globalSync.child(nextProject.worktree)[0].session ?? [])
     if (nextProjectSessions.length === 0) {
-      // Navigate to the project's new session page if no sessions
       navigateToProject(nextProject.worktree)
       return
     }
 
-    // If going down (offset > 0), go to first session; if going up (offset < 0), go to last session
     const targetSession = offset > 0 ? nextProjectSessions[0] : nextProjectSessions[nextProjectSessions.length - 1]
     navigate(`/${base64Encode(nextProject.worktree)}/session/${targetSession.id}`)
     queueMicrotask(() => scrollToSession(targetSession.id))
@@ -149,7 +142,6 @@ export default function Layout(props: ParentProps) {
     const [store, setStore] = globalSync.child(session.directory)
     const sessions = store.session ?? []
     const index = sessions.findIndex((s) => s.id === session.id)
-    // Get next session (prefer next, then prev) before removing
     const nextSession = sessions[index + 1] ?? sessions[index - 1]
 
     await globalSDK.client.session.update({

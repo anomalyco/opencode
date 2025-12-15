@@ -145,14 +145,10 @@ export default function Page() {
     }
   })
 
-  // Auto-navigate to new messages when they're added
-  // This handles the case after undo + submit where we want to see the new message
-  // We track the last message ID and only navigate when a NEW message is added (ID increases)
   createEffect(
     on(
       () => visibleUserMessages().at(-1)?.id,
       (lastId, prevLastId) => {
-        // Only navigate if a new message was added (lastId is greater/newer than previous)
         if (lastId && prevLastId && lastId > prevLastId) {
           setMessageStore("messageId", undefined)
         }
@@ -321,8 +317,7 @@ export default function Page() {
   ])
 
   const handleKeyDown = (event: KeyboardEvent) => {
-    // @ts-expect-error
-    if (document.activeElement?.dataset?.component === "terminal") return
+    if ((document.activeElement as HTMLElement)?.dataset?.component === "terminal") return
     if (dialog.stack.length > 0) return
 
     if (event.key === "PageUp" || event.key === "PageDown") {
