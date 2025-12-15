@@ -71,22 +71,38 @@ export function DialogMessage(props: {
             dialog.clear()
           },
         },
-        {
-          title: "Fork",
-          value: "session.fork",
-          description: "create a new session",
-          onSelect: async (dialog) => {
-            const result = await sdk.client.session.fork({
-              sessionID: props.sessionID,
-              messageID: props.messageID,
-            })
-            route.navigate({
-              sessionID: result.data!.id,
-              type: "session",
-            })
-            dialog.clear()
-          },
-        },
+         {
+           title: "Fork",
+           value: "session.fork",
+           description: "create a new session",
+           onSelect: async (dialog) => {
+             const result = await sdk.client.session.fork({
+               sessionID: props.sessionID,
+               messageID: props.messageID,
+             })
+             const msg = message()
+             let initialPrompt: PromptInfo | undefined
+             if (msg) {
+               const parts = sync.data.part[msg.id]
+               initialPrompt = parts.reduce(
+                 (agg, part) => {
+                   if (part.type === "text") {
+                     if (!part.synthetic) agg.input += part.text
+                   }
+                   if (part.type === "file") agg.parts.push(part)
+                   return agg
+                 },
+                 { input: "", parts: [] as PromptInfo["parts"] },
+               )
+             }
+             route.navigate({
+               sessionID: result.data!.id,
+               type: "session",
+               initialPrompt,
+             })
+             dialog.clear()
+           },
+         },
       ]}
     />
   )
