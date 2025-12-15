@@ -580,7 +580,7 @@ export const PromptInput: Component<PromptInputProps> = (props) => {
         onSubmit={handleSubmit}
         classList={{
           "bg-surface-raised-stronger-non-alpha border border-border-strong-base": true,
-          "rounded-md overflow-clip focus-within:border-transparent focus-within:shadow-xs-border-select": true,
+          "rounded-md overflow-clip focus-within:border-transparent focus-within:shadow-xs-border": true,
           [props.class ?? ""]: !!props.class,
         }}
       >
