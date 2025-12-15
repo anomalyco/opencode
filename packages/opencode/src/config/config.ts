@@ -586,6 +586,7 @@ export namespace Config {
 
   export const Provider = ModelsDev.Provider.partial()
     .extend({
+      type: z.string().optional(),
       whitelist: z.array(z.string()).optional(),
       blacklist: z.array(z.string()).optional(),
       models: z.record(z.string(), ModelsDev.Model.partial()).optional(),

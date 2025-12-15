@@ -28,6 +28,7 @@ export namespace SessionProcessor {
     abort: AbortSignal
   }) {
     const toolcalls: Record<string, MessageV2.ToolPart> = {}
+    const providerExecutedTools = new Set<string>()
     let snapshot: string | undefined
     let blocked = false
     let attempt = 0
@@ -96,8 +97,24 @@ export namespace SessionProcessor {
                   }
                   break
 
-                case "tool-input-start":
-                  const part = await Session.updatePart({
+                case "tool-input-start": {
+                  const isProviderExecuted = value.providerExecuted === true
+
+                  if (currentText) {
+                    currentText.text = currentText.text.trimEnd()
+                    currentText.time = {
+                      start: Date.now(),
+                      end: Date.now(),
+                    }
+                    await Session.updatePart(currentText)
+                    currentText = undefined
+                  }
+
+                  if (isProviderExecuted) {
+                    providerExecutedTools.add(value.id)
+                  }
+
+                  const toolPart = await Session.updatePart({
                     id: toolcalls[value.id]?.id ?? Identifier.ascending("part"),
                     messageID: input.assistantMessage.id,
                     sessionID: input.assistantMessage.sessionID,
@@ -110,8 +127,9 @@ export namespace SessionProcessor {
                       raw: "",
                     },
                   })
-                  toolcalls[value.id] = part as MessageV2.ToolPart
+                  toolcalls[value.id] = toolPart as MessageV2.ToolPart
                   break
+                }
 
                 case "tool-input-delta":
                   break
@@ -181,30 +199,67 @@ export namespace SessionProcessor {
                 }
                 case "tool-result": {
                   const match = toolcalls[value.toolCallId]
-                  if (match && match.state.status === "running") {
+                  const canProcess = match && match.state.status === "running"
+                  if (canProcess) {
+                    const startTime = match.state.status === "running" ? match.state.time.start : Date.now()
+                    // Handle different output formats:
+                    // - Regular tools: value.output is { output: string, title, metadata, attachments }
+                    // - ACP tools: value.result is { output: string, title, metadata }
+                    const outputObj = (value as any).result ?? value.output
+                    const outputStr =
+                      typeof outputObj === "string"
+                        ? outputObj
+                        : typeof outputObj?.output === "string"
+                          ? outputObj.output
+                          : ""
+                    const titleStr = typeof outputObj === "object" && outputObj?.title ? String(outputObj.title) : ""
+                    const metadataObj = typeof outputObj === "object" && outputObj?.metadata ? outputObj.metadata : {}
+                    const attachments =
+                      typeof outputObj === "object" && outputObj?.attachments ? outputObj.attachments : undefined
+
+                    log.info("tool-result processing", {
+                      toolCallId: value.toolCallId,
+                      outputObj: JSON.stringify(outputObj).slice(0, 200),
+                      outputStr: outputStr.slice(0, 100),
+                      status: "completed",
+                    })
+
                     await Session.updatePart({
                       ...match,
                       state: {
                         status: "completed",
-                        input: value.input,
-                        output: value.output.output,
-                        metadata: value.output.metadata,
-                        title: value.output.title,
+                        input: value.input ?? match.state.input ?? {},
+                        output: outputStr,
+                        metadata: metadataObj,
+                        title: titleStr,
                         time: {
-                          start: match.state.time.start,
+                          start: startTime,
                           end: Date.now(),
                         },
-                        attachments: value.output.attachments,
+                        attachments,
                       },
                     })
 
                     delete toolcalls[value.toolCallId]
+                    providerExecutedTools.delete(value.toolCallId)
                   }
                   break
                 }
 
                 case "tool-error": {
                   const match = toolcalls[value.toolCallId]
+                  const isProviderExecuted = providerExecutedTools.has(value.toolCallId)
+
+                  // Skip error handling for provider-executed tools (ACP, MCP)
+                  // These tools are handled by the provider, so SDK errors should be ignored
+                  if (isProviderExecuted) {
+                    log.info("skipping tool-error for provider-executed tool", {
+                      toolCallId: value.toolCallId,
+                      tool: match?.tool,
+                    })
+                    break
+                  }
+
                   if (match && match.state.status === "running") {
                     await Session.updatePart({
                       ...match,
@@ -296,15 +351,26 @@ export namespace SessionProcessor {
                   break
 
                 case "text-delta":
-                  if (currentText) {
-                    currentText.text += value.text
-                    if (value.providerMetadata) currentText.metadata = value.providerMetadata
-                    if (currentText.text)
-                      await Session.updatePart({
-                        part: currentText,
-                        delta: value.text,
-                      })
+                  if (!currentText) {
+                    currentText = {
+                      id: Identifier.ascending("part"),
+                      messageID: input.assistantMessage.id,
+                      sessionID: input.assistantMessage.sessionID,
+                      type: "text",
+                      text: "",
+                      time: {
+                        start: Date.now(),
+                      },
+                      metadata: value.providerMetadata,
+                    }
                   }
+                  currentText.text += value.text
+                  if (value.providerMetadata) currentText.metadata = value.providerMetadata
+                  if (currentText.text)
+                    await Session.updatePart({
+                      part: currentText,
+                      delta: value.text,
+                    })
                   break
 
                 case "text-end":
@@ -368,18 +434,43 @@ export namespace SessionProcessor {
           const p = await MessageV2.parts(input.assistantMessage.id)
           for (const part of p) {
             if (part.type === "tool" && part.state.status !== "completed" && part.state.status !== "error") {
-              await Session.updatePart({
-                ...part,
-                state: {
-                  ...part.state,
-                  status: "error",
-                  error: "Tool execution aborted",
-                  time: {
-                    start: Date.now(),
-                    end: Date.now(),
-                  },
-                },
+              // For provider-executed tools (ACP), mark as completed since the provider handled them
+              const isProviderExecuted = providerExecutedTools.has(part.callID)
+              log.info("cleanup: incomplete tool", {
+                callID: part.callID,
+                tool: part.tool,
+                status: part.state.status,
+                isProviderExecuted,
               })
+              if (isProviderExecuted) {
+                await Session.updatePart({
+                  ...part,
+                  state: {
+                    status: "completed",
+                    input: part.state.input ?? {},
+                    output: "Tool completed by provider",
+                    metadata: {},
+                    title: part.tool,
+                    time: {
+                      start: Date.now(),
+                      end: Date.now(),
+                    },
+                  },
+                })
+              } else {
+                await Session.updatePart({
+                  ...part,
+                  state: {
+                    ...part.state,
+                    status: "error",
+                    error: "Tool execution aborted",
+                    time: {
+                      start: Date.now(),
+                      end: Date.now(),
+                    },
+                  },
+                })
+              }
             }
           }
           input.assistantMessage.time.completed = Date.now()

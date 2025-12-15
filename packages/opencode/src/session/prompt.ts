@@ -673,6 +673,7 @@ export namespace SessionPrompt {
 
   async function createUserMessage(input: PromptInput) {
     const agent = await Agent.get(input.agent ?? "build")
+    const lastM = await lastModel(input.sessionID)
     const info: MessageV2.Info = {
       id: input.messageID ?? Identifier.ascending("message"),
       role: "user",
@@ -682,7 +683,7 @@ export namespace SessionPrompt {
       },
       tools: input.tools,
       agent: agent.name,
-      model: input.model ?? agent.model ?? (await lastModel(input.sessionID)),
+      model: input.model ?? agent.model ?? lastM,
       system: input.system,
     }
 
@@ -1135,7 +1136,7 @@ export namespace SessionPrompt {
 
     const proc = spawn(shell, args, {
       cwd: Instance.directory,
-      detached: process.platform !== "win32",
+      detached: true,
       stdio: ["ignore", "pipe", "pipe"],
       env: {
         ...process.env,

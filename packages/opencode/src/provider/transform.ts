@@ -321,38 +321,70 @@ export namespace ProviderTransform {
     return options
   }
 
-  export function providerOptions(model: Provider.Model, options: { [x: string]: any }) {
+  export function providerOptions(
+    model: Provider.Model,
+    options: { [x: string]: any },
+    context?: {
+      sessionID: string
+      messageID: string
+      agentName: string
+      providerInfo?: Provider.Info
+    },
+  ) {
+    let result: Record<string, any>
     switch (model.api.npm) {
       case "@ai-sdk/openai":
       case "@ai-sdk/azure":
-        return {
+        result = {
           ["openai" as string]: options,
         }
+        break
       case "@ai-sdk/amazon-bedrock":
-        return {
+        result = {
           ["bedrock" as string]: options,
         }
+        break
       case "@ai-sdk/anthropic":
-        return {
+        result = {
           ["anthropic" as string]: options,
         }
+        break
       case "@ai-sdk/google":
-        return {
+        result = {
           ["google" as string]: options,
         }
+        break
       case "@ai-sdk/gateway":
-        return {
+        result = {
           ["gateway" as string]: options,
         }
+        break
       case "@openrouter/ai-sdk-provider":
-        return {
+        result = {
           ["openrouter" as string]: options,
         }
+        break
       default:
-        return {
+        result = {
           [model.providerID]: options,
         }
     }
+
+    // Merge ACP context if this is an ACP provider
+    if (context?.providerInfo?.type === "acp") {
+      const providerKey = Object.keys(result)[0] || model.providerID
+      result = {
+        ...result,
+        [providerKey]: {
+          ...result[providerKey],
+          sessionID: context.sessionID,
+          messageID: context.messageID,
+          agentName: context.agentName,
+        },
+      }
+    }
+
+    return result
   }
 
   export function maxOutputTokens(

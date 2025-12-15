@@ -404,6 +404,7 @@ export namespace Provider {
       id: z.string(),
       name: z.string(),
       source: z.enum(["env", "config", "custom", "api"]),
+      type: z.enum(["ai-sdk", "acp"]).optional(),
       env: z.string().array(),
       key: z.string().optional(),
       options: z.record(z.string(), z.any()),
@@ -542,6 +543,9 @@ export namespace Provider {
     // extend database from config
     for (const [providerID, provider] of configProviders) {
       const existing = database[providerID]
+
+      const isACPProvider = provider.type === "acp"
+
       const parsed: Info = {
         id: providerID,
         name: provider.name ?? existing?.name ?? providerID,
@@ -573,7 +577,8 @@ export namespace Provider {
             temperature: model.temperature ?? existingModel?.capabilities.temperature ?? false,
             reasoning: model.reasoning ?? existingModel?.capabilities.reasoning ?? false,
             attachment: model.attachment ?? existingModel?.capabilities.attachment ?? false,
-            toolcall: model.tool_call ?? existingModel?.capabilities.toolcall ?? true,
+            // ACP providers handle tools internally, so disable external toolcall
+            toolcall: isACPProvider ? false : (model.tool_call ?? existingModel?.capabilities.toolcall ?? true),
             input: {
               text: model.modalities?.input?.includes("text") ?? existingModel?.capabilities.input.text ?? true,
               audio: model.modalities?.input?.includes("audio") ?? existingModel?.capabilities.input.audio ?? false,
@@ -739,6 +744,45 @@ export namespace Provider {
       }
 
       log.info("found", { providerID })
+    }
+
+    // Load ACP providers
+    for (const [providerID, providerConfig] of configProviders) {
+      // Check if this is an ACP provider by looking for command and args in options
+      if (providerConfig.options?.command && Array.isArray(providerConfig.options?.args)) {
+        log.info("loading ACP provider", {
+          providerID,
+          command: providerConfig.options.command,
+        })
+
+        // Mark as ACP provider in the providers registry
+        if (providers[providerID]) {
+          providers[providerID].type = "acp"
+        }
+
+        const { createACPProvider } = await import("./acp")
+
+        const acpModels = createACPProvider(providerID, {
+          command: providerConfig.options.command,
+          args: providerConfig.options.args,
+          models: Object.fromEntries(
+            Object.entries(providerConfig.models ?? {}).map(([modelID, model]) => [
+              modelID,
+              {
+                id: model.id ?? modelID,
+                maxTokens: model.limit?.output,
+              },
+            ]),
+          ),
+        })
+
+        // Register each ACP model directly in the languages map
+        for (const [modelID, languageModel] of Object.entries(acpModels)) {
+          const key = `${providerID}/${modelID}`
+          languages.set(key, languageModel)
+          log.info("registered ACP model", { key })
+        }
+      }
     }
 
     return {

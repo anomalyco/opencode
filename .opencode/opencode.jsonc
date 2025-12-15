@@ -9,6 +9,180 @@
     "opencode": {
       "options": {},
     },
+    "cursor-acp": {
+      "name": "Cursor Agent (ACP)",
+      "options": {
+        "command": "cursor-agent",
+        "args": ["acp"],
+      },
+      "models": {
+        "composer-1": {
+          "id": "composer-1",
+          "name": "Composer 1",
+          "tool_call": true,
+          "temperature": true,
+          "attachment": true,
+          "limit": {
+            "context": 200000,
+            "output": 8192,
+          },
+        },
+        "auto": {
+          "id": "auto",
+          "name": "Cursor Auto",
+          "tool_call": true,
+          "temperature": true,
+          "attachment": true,
+          "limit": {
+            "context": 200000,
+            "output": 8192,
+          },
+        },
+        "sonnet-4.5": {
+          "id": "sonnet-4.5",
+          "name": "Claude Sonnet 4.5",
+          "tool_call": true,
+          "temperature": true,
+          "attachment": true,
+          "limit": {
+            "context": 200000,
+            "output": 8192,
+          },
+        },
+        "sonnet-4.5-thinking": {
+          "id": "sonnet-4.5-thinking",
+          "name": "Claude Sonnet 4.5 Thinking",
+          "tool_call": true,
+          "temperature": true,
+          "attachment": true,
+          "limit": {
+            "context": 200000,
+            "output": 8192,
+          },
+        },
+        "opus-4.5": {
+          "id": "opus-4.5",
+          "name": "Claude Opus 4.5",
+          "tool_call": true,
+          "temperature": true,
+          "attachment": true,
+          "limit": {
+            "context": 200000,
+            "output": 8192,
+          },
+        },
+        "opus-4.5-thinking": {
+          "id": "opus-4.5-thinking",
+          "name": "Claude Opus 4.5 Thinking",
+          "tool_call": true,
+          "temperature": true,
+          "attachment": true,
+          "limit": {
+            "context": 200000,
+            "output": 8192,
+          },
+        },
+        "gemini-3-pro": {
+          "id": "gemini-3-pro",
+          "name": "Gemini 3 Pro",
+          "tool_call": true,
+          "temperature": true,
+          "attachment": true,
+          "limit": {
+            "context": 1000000,
+            "output": 8192,
+          },
+        },
+        "gpt-5.1": {
+          "id": "gpt-5.1",
+          "name": "GPT-5.1",
+          "tool_call": true,
+          "temperature": true,
+          "attachment": true,
+          "limit": {
+            "context": 200000,
+            "output": 16384,
+          },
+        },
+        "gpt-5.1-high": {
+          "id": "gpt-5.1-high",
+          "name": "GPT-5.1 High",
+          "tool_call": true,
+          "temperature": true,
+          "attachment": true,
+          "limit": {
+            "context": 200000,
+            "output": 16384,
+          },
+        },
+        "gpt-5.1-codex": {
+          "id": "gpt-5.1-codex",
+          "name": "GPT-5.1 Codex",
+          "tool_call": true,
+          "temperature": true,
+          "attachment": true,
+          "limit": {
+            "context": 200000,
+            "output": 16384,
+          },
+        },
+        "gpt-5.1-codex-high": {
+          "id": "gpt-5.1-codex-high",
+          "name": "GPT-5.1 Codex High",
+          "tool_call": true,
+          "temperature": true,
+          "attachment": true,
+          "limit": {
+            "context": 200000,
+            "output": 16384,
+          },
+        },
+        "gpt-5.1-codex-max": {
+          "id": "gpt-5.1-codex-max",
+          "name": "GPT-5.1 Codex Max",
+          "tool_call": true,
+          "temperature": true,
+          "attachment": true,
+          "limit": {
+            "context": 200000,
+            "output": 16384,
+          },
+        },
+        "gpt-5.1-codex-max-high": {
+          "id": "gpt-5.1-codex-max-high",
+          "name": "GPT-5.1 Codex Max High",
+          "tool_call": true,
+          "temperature": true,
+          "attachment": true,
+          "limit": {
+            "context": 200000,
+            "output": 16384,
+          },
+        },
+        "opus-4.1": {
+          "id": "opus-4.1",
+          "name": "Claude Opus 4.1",
+          "tool_call": true,
+          "temperature": true,
+          "attachment": true,
+          "limit": {
+            "context": 200000,
+            "output": 8192,
+          },
+        },
+        "grok": {
+          "id": "grok",
+          "name": "Grok",
+          "tool_call": true,
+          "temperature": true,
+          "attachment": true,
+          "limit": {
+            "context": 128000,
+            "output": 8192,
+          },
+        },
+      },
+    },
   },
   "mcp": {},
   "tools": {
