@@ -79,7 +79,7 @@ export function List<T>(props: ListProps<T> & { ref?: (ref: ListRef) => void }) 
       return
     }
     const element = scrollRef()?.querySelector(`[data-key="${active()}"]`)
-    element?.scrollIntoView({ block: "nearest", behavior: "smooth" })
+    element?.scrollIntoView({ block: "center", behavior: "smooth" })
   })
 
   const handleSelect = (item: T | undefined, index: number) => {
