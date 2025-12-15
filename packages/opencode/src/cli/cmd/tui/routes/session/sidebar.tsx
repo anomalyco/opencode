@@ -251,7 +251,7 @@ export function Sidebar(props: { sessionID: string }) {
         </scrollbox>
 
         <box flexShrink={0} gap={1} paddingTop={1}>
-          <Show when={!false && !gettingStartedDismissed()}>
+          <Show when={!hasProviders() && !gettingStartedDismissed()}>
             <box
               backgroundColor={theme.backgroundElement}
               paddingTop={1}
