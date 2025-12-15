@@ -141,17 +141,18 @@ export function DialogSelect<T>(props: DialogSelectProps<T>) {
 
   const keybind = useKeybind()
   const allKeybinds = createMemo(() => [
-    ...(props.keybind ?? []),
     {
       keybind: { name: "return", ctrl: false, meta: false, shift: false, super: false, leader: false },
       title: "select",
       disabled: false,
       onTrigger: (option?: DialogSelectOption<T>) => {
         if (option) {
+          option.onSelect?.(dialog)
           props.onSelect?.(option)
         }
       },
     },
+    ...(props.keybind ?? []),
   ])
 
   useKeyboard((evt) => {

@@ -92,13 +92,6 @@ export function DialogQuestion(props: QuestionDialogProps) {
       hideSearch={true}
       keybind={[
         {
-          keybind: { name: "return", ctrl: false, meta: false, shift: false, super: false, leader: false },
-          title: "open question",
-          onTrigger: (option) => {
-            if (option.onSelect) option.onSelect(dialog)
-          },
-        },
-        {
           keybind: { name: "return", ctrl: true, meta: false, shift: false, super: false, leader: false },
           title: "submit",
           onTrigger: () => {

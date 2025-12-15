@@ -153,7 +153,6 @@ export function DialogMultiSelect<T>(props: DialogMultiSelectProps<T>) {
 
   const keybind = useKeybind()
   const allKeybinds = createMemo(() => [
-    ...(props.keybind ?? []),
     {
       keybind: { name: "space", ctrl: false, meta: false, shift: false, super: false, leader: false },
       title: "toggle",
@@ -166,6 +165,7 @@ export function DialogMultiSelect<T>(props: DialogMultiSelectProps<T>) {
       disabled: false,
       onTrigger: () => props.onSelect?.(getSelectedValues()),
     },
+    ...(props.keybind ?? []),
   ])
 
   useKeyboard((evt) => {
