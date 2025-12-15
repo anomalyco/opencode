@@ -13,6 +13,7 @@ import {
   type SessionStatus,
   type ProviderListResponse,
   type ProviderAuthResponse,
+  type Command,
   createOpencodeClient,
 } from "@opencode-ai/sdk/v2/client"
 import { createStore, produce, reconcile } from "solid-js/store"
@@ -24,6 +25,7 @@ import { onMount } from "solid-js"
 type State = {
   ready: boolean
   agent: Agent[]
+  command: Command[]
   project: string
   provider: ProviderListResponse
   config: Config
@@ -79,6 +81,7 @@ export const { use: useGlobalSync, provider: GlobalSyncProvider } = createSimple
           path: { state: "", config: "", worktree: "", directory: "", home: "" },
           ready: false,
           agent: [],
+          command: [],
           session: [],
           session_status: {},
           session_diff: {},
@@ -118,6 +121,7 @@ export const { use: useGlobalSync, provider: GlobalSyncProvider } = createSimple
         provider: () => sdk.provider.list().then((x) => setStore("provider", x.data!)),
         path: () => sdk.path.get().then((x) => setStore("path", x.data!)),
         agent: () => sdk.app.agents().then((x) => setStore("agent", x.data ?? [])),
+        command: () => sdk.command.list().then((x) => setStore("command", x.data ?? [])),
         session: () => loadSessions(directory),
         status: () => sdk.session.status().then((x) => setStore("session_status", x.data!)),
         config: () => sdk.config.get().then((x) => setStore("config", x.data!)),
