@@ -478,6 +478,8 @@ export const PromptInput: Component<PromptInputProps> = (props) => {
     }
 
     if (event.key === "ArrowUp" || event.key === "ArrowDown") {
+      // Skip history navigation when modifier keys are pressed (used for other commands)
+      if (event.altKey || event.ctrlKey || event.metaKey) return
       const { collapsed, onFirstLine, onLastLine } = getCaretLineState()
       if (!collapsed) return
       const cursorPos = getCursorPosition(editorRef)
