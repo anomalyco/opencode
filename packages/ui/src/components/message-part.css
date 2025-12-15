@@ -228,6 +228,23 @@
   border-top: 1px solid var(--border-weaker-base);
 }
 
+[data-component="write-content"] {
+  border-top: 1px solid var(--border-weaker-base);
+  max-height: 240px;
+  overflow-y: auto;
+
+  [data-component="code"] {
+    padding-bottom: 0px !important;
+  }
+
+  /* Hide scrollbar */
+  scrollbar-width: none;
+  -ms-overflow-style: none;
+  &::-webkit-scrollbar {
+    display: none;
+  }
+}
+
 [data-component="tool-action"] {
   width: 24px;
   height: 24px;
