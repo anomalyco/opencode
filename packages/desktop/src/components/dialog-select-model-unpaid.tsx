@@ -9,7 +9,7 @@ import { List, ListRef } from "@opencode-ai/ui/list"
 import { ProviderIcon } from "@opencode-ai/ui/provider-icon"
 import { IconName } from "@opencode-ai/ui/icons/provider"
 import { DialogSelectProvider } from "./dialog-select-provider"
-import { DialogConnect } from "./dialog-connect"
+import { DialogConnectProvider } from "./dialog-connect-provider"
 
 export const DialogSelectModelUnpaid: Component = () => {
   const local = useLocal()
@@ -75,7 +75,7 @@ export const DialogSelectModelUnpaid: Component = () => {
                 }}
                 onSelect={(x) => {
                   if (!x) return
-                  dialog.replace(() => <DialogConnect provider={x.id} />)
+                  dialog.replace(() => <DialogConnectProvider provider={x.id} />)
                 }}
               >
                 {(i) => (

@@ -20,7 +20,7 @@ import { Link } from "@/components/link"
 import { DialogSelectProvider } from "./dialog-select-provider"
 import { DialogSelectModel } from "./dialog-select-model"
 
-export function DialogConnect(props: { provider: string }) {
+export function DialogConnectProvider(props: { provider: string }) {
   const dialog = useDialog()
   const globalSync = useGlobalSync()
   const globalSDK = useGlobalSDK()
