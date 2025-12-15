@@ -8,6 +8,7 @@ import { iife } from "@/util/iife"
 import { Log } from "@/util/log"
 import { runNonInteractive, type RunHandlerArgs } from "../run"
 import { parseAgentFlags, validateAgentFlags } from "../session-init"
+import { matchAgent } from "@/acp/agents"
 
 declare global {
   const FORGE_WORKER_PATH: string
@@ -120,6 +121,19 @@ export const TuiThreadCommand = cmd({
           UI.error(msg)
           process.exit(1)
         })
+        for (const entry of parsedAgents.agents) {
+          const resolved = matchAgent(entry.name)
+          if (!resolved.success) {
+            UI.error(`Agent '${entry.name}' not found. Run "forge agents" to list available agents.`)
+            process.exit(1)
+          }
+          if (!Bun.which(resolved.match.command)) {
+            UI.error(
+              `Agent '${resolved.match.name}' is not installed. Run 'forge install \"${resolved.match.name}\"' to install.`,
+            )
+            process.exit(1)
+          }
+        }
       } catch (error) {
         UI.error(error instanceof Error ? error.message : String(error))
         process.exit(1)

@@ -27,7 +27,7 @@ export interface ACPAgentDefinition {
 export const ACP_AGENTS: ACPAgentDefinition[] = [
   {
     name: "Claude Code",
-    description: "Anthropic's official Claude Code agent",
+    description: "ACP adapter for Claude Code",
     command: "claude-code-acp",
     acpStartupArgs: [],
     installCommands: {
@@ -67,7 +67,7 @@ export const ACP_AGENTS: ACPAgentDefinition[] = [
   },
   {
     name: "Codex CLI",
-    description: "Zed's Codex agent for code editing",
+    description: "ACP adapter for Codex",
     command: "codex-acp",
     acpStartupArgs: [],
     installCommands: {
@@ -296,7 +296,8 @@ export const ACP_AGENTS: ACPAgentDefinition[] = [
       windows: [
         {
           method: "uv",
-          command: 'powershell -ExecutionPolicy ByPass -c "irm https://astral.sh/uv/install.ps1 | iex" && uv tool install mistral-vibe',
+          command:
+            'powershell -ExecutionPolicy ByPass -c "irm https://astral.sh/uv/install.ps1 | iex" && uv tool install mistral-vibe',
           description: "Install uv first, then install mistral-vibe",
         },
       ],
@@ -386,7 +387,8 @@ export const ACP_AGENTS: ACPAgentDefinition[] = [
       windows: [
         {
           method: "powershell",
-          command: "Invoke-WebRequest -Uri https://github.com/block/goose/releases/download/stable/download_cli.ps1 -OutFile download_cli.ps1; .\\download_cli.ps1",
+          command:
+            "Invoke-WebRequest -Uri https://github.com/block/goose/releases/download/stable/download_cli.ps1 -OutFile download_cli.ps1; .\\download_cli.ps1",
           description: "Install via PowerShell script",
         },
       ],
@@ -498,8 +500,7 @@ export const ACP_AGENTS: ACPAgentDefinition[] = [
           description: "Install via Homebrew",
         },
       ],
-      windows: [
-      ],
+      windows: [],
     },
     installGuide: "https://github.com/stakpak/agent",
     color: "#1a83a0",
@@ -524,7 +525,8 @@ export const ACP_AGENTS: ACPAgentDefinition[] = [
         {
           method: "cargo",
           command: "git clone https://github.com/stippi/code-assistant && cd code-assistant && cargo build --release",
-          description: "Build from source (macOS requires Metal toolchain: xcodebuild -downloadComponent MetalToolchain)",
+          description:
+            "Build from source (macOS requires Metal toolchain: xcodebuild -downloadComponent MetalToolchain)",
         },
       ],
       windows: [
@@ -541,14 +543,14 @@ export const ACP_AGENTS: ACPAgentDefinition[] = [
       unix: [
         {
           method: "cargo",
-          command: "echo \"Remove the code-assistant build artifacts manually\"",
+          command: 'echo "Remove the code-assistant build artifacts manually"',
           description: "Manual cleanup required",
         },
       ],
       windows: [
         {
           method: "cargo",
-          command: "echo \"Remove the code-assistant build artifacts manually\"",
+          command: 'echo "Remove the code-assistant build artifacts manually"',
           description: "Manual cleanup required",
         },
       ],
