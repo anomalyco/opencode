@@ -85,6 +85,9 @@ export function DialogQuestion(props: QuestionDialogProps) {
   }
 
   function submit(finalAnswers?: Answers) {
+    console.log("[submit] Called with finalAnswers:", finalAnswers)
+    console.log("[submit] Current answers:", answers)
+    console.log("[submit] Will submit:", finalAnswers ?? answers)
     props.onSubmit(finalAnswers ?? answers)
   }
 
@@ -113,8 +116,9 @@ export function DialogQuestion(props: QuestionDialogProps) {
   useKeyboard((evt) => {
     if (evt.ctrl && evt.name === "return") {
       console.log("[DialogQuestion] Ctrl+Enter pressed, submitting answers:", answers)
-      submit()
       evt.preventDefault()
+      submit()
+      return
     }
   })
 
@@ -134,9 +138,10 @@ export function DialogQuestion(props: QuestionDialogProps) {
         {
           keybind: { name: "return", ctrl: true, meta: false, shift: false, super: false, leader: false },
           title: "submit",
-          onTrigger: () => {
-            console.log("[DialogQuestion] Submit keybind triggered")
+          onTrigger: (option) => {
+            console.log("[DialogQuestion] Submit keybind triggered, preventing default")
             submit()
+            return false
           },
         },
       ]}
@@ -573,6 +578,8 @@ DialogQuestion.show = (
   const persistentAnswers: Answers = {}
 
   return new Promise((resolve) => {
+    let resolved = false
+
     console.log("[DialogQuestion.show] About to call dialog.replace")
     dialog.replace(
       () => {
@@ -582,12 +589,24 @@ DialogQuestion.show = (
             question={question}
             initialAnswers={persistentAnswers}
             onSubmit={(answers) => {
-              console.log("[DialogQuestion.show] onSubmit called")
-              dialog.clear()
+              console.log("[DialogQuestion.show] onSubmit called with answers:", answers)
+              if (resolved) {
+                console.log("[DialogQuestion.show] Already resolved, skipping")
+                return
+              }
+              resolved = true
+              console.log("[DialogQuestion.show] Resolving with cancelled: false")
               resolve({ answers, cancelled: false })
+              // Clear dialog after resolving to prevent onClose from firing
+              setTimeout(() => dialog.clear(), 0)
             }}
             onCancel={() => {
               console.log("[DialogQuestion.show] onCancel called")
+              if (resolved) {
+                console.log("[DialogQuestion.show] Already resolved, skipping")
+                return
+              }
+              resolved = true
               dialog.clear()
               resolve({ answers: {}, cancelled: true })
             }}
@@ -596,6 +615,11 @@ DialogQuestion.show = (
       },
       () => {
         console.log("[DialogQuestion.show] onClose callback called")
+        if (resolved) {
+          console.log("[DialogQuestion.show] Already resolved, skipping onClose")
+          return
+        }
+        resolved = true
         resolve({ answers: {}, cancelled: true })
       },
     )
