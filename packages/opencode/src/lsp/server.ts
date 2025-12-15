@@ -177,7 +177,13 @@ export namespace LSPServer {
         const zipPath = path.join(Global.Path.bin, "vscode-eslint.zip")
         await Bun.file(zipPath).write(response)
 
-        await Archive.extractZip(zipPath, Global.Path.bin)
+        const ok = await Archive.extractZip(zipPath, Global.Path.bin)
+          .then(() => true)
+          .catch((error) => {
+            log.error("Failed to extract vscode-eslint archive", { error })
+            return false
+          })
+        if (!ok) return
         await fs.rm(zipPath, { force: true })
 
         const extractedPath = path.join(Global.Path.bin, "vscode-eslint-main")
@@ -439,7 +445,13 @@ export namespace LSPServer {
           const zipPath = path.join(Global.Path.bin, "elixir-ls.zip")
           await Bun.file(zipPath).write(response)
 
-          await Archive.extractZip(zipPath, Global.Path.bin)
+          const ok = await Archive.extractZip(zipPath, Global.Path.bin)
+            .then(() => true)
+            .catch((error) => {
+              log.error("Failed to extract elixir-ls archive", { error })
+              return false
+            })
+          if (!ok) return
 
           await fs.rm(zipPath, {
             force: true,
@@ -542,7 +554,13 @@ export namespace LSPServer {
         await Bun.file(tempPath).write(downloadResponse)
 
         if (ext === "zip") {
-          await Archive.extractZip(tempPath, Global.Path.bin)
+          const ok = await Archive.extractZip(tempPath, Global.Path.bin)
+            .then(() => true)
+            .catch((error) => {
+              log.error("Failed to extract zls archive", { error })
+              return false
+            })
+          if (!ok) return
         } else {
           await $`tar -xf ${tempPath}`.cwd(Global.Path.bin).nothrow()
         }
@@ -841,7 +859,13 @@ export namespace LSPServer {
       }
 
       if (zip) {
-        await Archive.extractZip(archive, Global.Path.bin)
+        const ok = await Archive.extractZip(archive, Global.Path.bin)
+          .then(() => true)
+          .catch((error) => {
+            log.error("Failed to extract clangd archive", { error })
+            return false
+          })
+        if (!ok) return
       }
       if (tar) {
         await $`tar -xf ${archive}`.cwd(Global.Path.bin).nothrow()
@@ -1404,7 +1428,13 @@ export namespace LSPServer {
         const tempPath = path.join(Global.Path.bin, assetName)
         await Bun.file(tempPath).write(downloadResponse)
 
-        await Archive.extractZip(tempPath, Global.Path.bin)
+        const ok = await Archive.extractZip(tempPath, Global.Path.bin)
+          .then(() => true)
+          .catch((error) => {
+            log.error("Failed to extract terraform-ls archive", { error })
+            return false
+          })
+        if (!ok) return
         await fs.rm(tempPath, { force: true })
 
         bin = path.join(Global.Path.bin, "terraform-ls" + (platform === "win32" ? ".exe" : ""))
@@ -1489,7 +1519,13 @@ export namespace LSPServer {
         await Bun.file(tempPath).write(downloadResponse)
 
         if (ext === "zip") {
-          await Archive.extractZip(tempPath, Global.Path.bin)
+          const ok = await Archive.extractZip(tempPath, Global.Path.bin)
+            .then(() => true)
+            .catch((error) => {
+              log.error("Failed to extract texlab archive", { error })
+              return false
+            })
+          if (!ok) return
         }
         if (ext === "tar.gz") {
           await $`tar -xzf ${tempPath}`.cwd(Global.Path.bin).nothrow()
