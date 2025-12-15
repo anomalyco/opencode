@@ -142,7 +142,7 @@ export const { use: useGlobalSync, provider: GlobalSyncProvider } = createSimple
       const event = e.details
 
       if (directory === "global") {
-        switch (event.type) {
+        switch (event?.type) {
           case "global.disposed": {
             bootstrap()
             break
